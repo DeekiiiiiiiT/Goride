@@ -35,45 +35,36 @@ export const settlementService = {
         
         if (!vehicle) throw new Error(`Vehicle ${report.vehicleId} not found`);
 
-        // 2. Determine Active Scenario
-        const activeScenario = scenarios.find(s => s.id === vehicle.fuelScenarioId) || 
-                               scenarios.find(s => s.isDefault) || 
+        // 2. Determine Active Scenario (kept for metadata/audit trail only — the
+        // actual company/driver split below uses the report's own blended ratio,
+        // not a fresh per-category lookup, so it can never drift from the
+        // category-weighted `driverShare` already shown/frozen for this report)
+        const activeScenario = scenarios.find(s => s.id === vehicle.fuelScenarioId) ||
+                               scenarios.find(s => s.isDefault) ||
                                scenarios[0];
 
-        // Helper for coverage (duplicated from FuelCalculationService to ensure consistency)
-        const getCoverage = (category: 'rideShare' | 'companyUsage' | 'deadhead' | 'personal' | 'misc', amount: number) => {
-            if (!activeScenario) return { company: amount, driver: 0 };
-            
-            const rule = activeScenario.rules.find(r => r.category === 'Fuel');
-            if (!rule) return { company: amount, driver: 0 };
-
-            let coveragePercent = rule.coverageValue;
-            if (category === 'rideShare' && rule.rideShareCoverage !== undefined) coveragePercent = rule.rideShareCoverage;
-            if (category === 'companyUsage' && rule.companyUsageCoverage !== undefined) coveragePercent = rule.companyUsageCoverage;
-            if (category === 'deadhead' && rule.deadheadCoverage !== undefined) coveragePercent = rule.deadheadCoverage;
-            else if (category === 'deadhead' && rule.companyUsageCoverage !== undefined) coveragePercent = rule.companyUsageCoverage;
-            if (category === 'personal' && rule.personalCoverage !== undefined) coveragePercent = rule.personalCoverage;
-            if (category === 'misc' && rule.miscCoverage !== undefined) coveragePercent = rule.miscCoverage;
-
-            if (rule.coverageType === 'Full') {
-                return { company: amount, driver: 0 };
-            } else if (rule.coverageType === 'Percentage') {
-                const companyPay = amount * (coveragePercent / 100);
-                return { company: companyPay, driver: amount - companyPay };
-            } else if (rule.coverageType === 'Fixed_Amount') {
-                const companyPay = Math.min(amount, rule.coverageValue);
-                return { company: companyPay, driver: amount - companyPay };
-            }
-            return { company: amount, driver: 0 };
-        };
+        // Blended driver-share ratio for this report. Individual FuelEntry rows
+        // carry no category (ride share vs personal vs deadhead), so splitting
+        // per-entry by the flat 'rideShare' coverage rule (the old approach) could
+        // diverge sharply from the category-weighted driverShare shown on the
+        // Reconciliation table and frozen into the finalized snapshot. Using the
+        // report's blended ratio guarantees the sum of entry-level driver splits
+        // equals report.driverShare (to rounding).
+        const driverRatio = FuelCalculationService.getBlendedDriverShareRatio(report);
 
         // 3. Process each entry
         for (const entry of entries) {
-            // Skip already reconciled
-            if (entry.reconciliationStatus === 'Verified' || entry.reconciliationStatus === 'Archived') continue;
+            // Skip already reconciled or awaiting review — only genuinely pending
+            // entries should be swept into settlement.
+            if (
+                entry.reconciliationStatus === 'Verified' ||
+                entry.reconciliationStatus === 'Archived' ||
+                entry.reconciliationStatus === 'Flagged' ||
+                entry.reconciliationStatus === 'Observing'
+            ) continue;
 
-            // Apply the 'rideShare' rule as the primary split for the entry
-            const split = getCoverage('rideShare', entry.amount); 
+            const driverAmount = entry.amount * driverRatio;
+            const split = { company: entry.amount - driverAmount, driver: driverAmount };
             
             let walletPayment: Partial<FinancialTransaction> | null = null;
             let payoutDeduction: Partial<FinancialTransaction> | null = null;

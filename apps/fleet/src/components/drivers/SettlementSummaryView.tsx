@@ -20,6 +20,7 @@ import { Trip, FinancialTransaction, DriverMetrics, DisputeRefund } from '../../
 import { api } from '../../services/api';
 import { computeWeeklyCashSettlement, CashWeekData } from '../../utils/cashSettlementCalc';
 import { computePeriodSettlement } from '../../utils/driverPeriodSettlement';
+import { getFuelDeductionForPeriod } from '../../utils/fuelDeductionForPeriod';
 import { exportToCSV } from '../../utils/csvHelpers';
 import { differenceInCalendarDays, format } from 'date-fns';
 import { useFleetTimezone } from '../../utils/timezoneDisplay';
@@ -225,25 +226,10 @@ export function SettlementSummaryView({
       return { amount: tollTotal, reconciled, unreconciled };
     };
 
-    // Helper: finalized fuel deduction for a date range (weekly-only, no daily proration)
-    const getDeductionForPeriod = (periodStart: Date, periodEnd: Date): { deduction: number; finalized: boolean } => {
-      let totalDeduction = 0;
-      let hasFinalized = false;
-
-      for (const report of finalizedReports) {
-        const rStartRaw = report.weekStart ?? report.periodStart ?? '';
-        const rEndRaw = report.weekEnd ?? report.periodEnd ?? '';
-        const rStart = new Date(String(rStartRaw).split('T')[0] + 'T00:00:00');
-        const rEnd = new Date(String(rEndRaw).split('T')[0] + 'T23:59:59');
-
-        if (rStart <= periodEnd && rEnd >= periodStart) {
-          totalDeduction += (report.driverShare ?? 0);
-          hasFinalized = true;
-        }
-      }
-
-      return { deduction: totalDeduction, finalized: hasFinalized };
-    };
+    // Finalized fuel deduction for a date range — canonical shared aggregator
+    // (this view is always weekly, per its ledger fetch above).
+    const getDeductionForPeriod = (periodStart: Date, periodEnd: Date) =>
+      getFuelDeductionForPeriod(finalizedReports, periodStart, periodEnd, 'weekly');
 
     // Build a Map from Monday date string → ledger row for fast lookup
     const ledgerMap = new Map<string, any>();
@@ -327,6 +313,12 @@ export function SettlementSummaryView({
       let cashBalance: number;
       let settlement: number;
 
+      // Fuel settlement credits (cash already reimbursed to the driver for
+      // out-of-pocket fuel) — previously never netted against cash here, which
+      // meant this view's "Settlement" could disagree in magnitude (not just
+      // sign) with Payout Detail / Cash Wallet for the same driver/period.
+      const fuelCredits = cw?.weeklyFuelCredits || 0;
+
       if (unifiedToll) {
         // Unified model: tolls are NOT deducted from payout; they're settled on
         // the cash side per the server's reconciliation-aware disposition.
@@ -338,6 +330,7 @@ export function SettlementSummaryView({
           baseCashPaid: cw?.amountPaid || 0,
           tollCashWash: disp.cashWash || 0,
           tollPersonal: disp.personal || 0,
+          fuelCredits,
         });
         totalDeductions = fuelDeduction;       // fuel only
         netPayout = r.netPayout;
@@ -348,13 +341,15 @@ export function SettlementSummaryView({
         // Display the toll figure that actually hit the driver this period.
         tollExpenses = { amount: r.tollChargedToDriver, reconciled: tollExpensesLegacy.reconciled, unreconciled: tollExpensesLegacy.unreconciled };
       } else {
-        // Legacy behavior (unchanged).
+        // Legacy behavior (toll handling unchanged — tolls stay deducted from
+        // payout directly, per the pre-unified-toll model), now netting fuel
+        // credits against cash the same way the unified branch does.
         totalDeductions = tollExpensesLegacy.amount + fuelDeduction;
         netPayout = driverShare - totalDeductions;
         cashOwed = cw?.amountOwed || 0;
         cashPaid = cw?.amountPaid || 0;
         cashBalance = cw?.balance || 0;
-        settlement = netPayout - cashBalance;
+        settlement = netPayout - (cashBalance - fuelCredits);
       }
 
       // ── Status logic ──
@@ -418,6 +413,12 @@ export function SettlementSummaryView({
   }, [isReady, ledgerRows, cashWeeks, transactions, finalizedReports, disputeRefunds, unifiedToll]);
 
   // ── Step 5.4: Summary totals ──
+  // Note: trueSettlement is a deliberately different aggregate from
+  // Σ row.settlement below — it nets payout from finalized weeks only against
+  // gross cash balance from ALL weeks (including unfinalized ones, since
+  // outstanding cash matters regardless of finalization), and does not net
+  // fuel credits. It is not expected to equal summing the per-row Settlement
+  // column.
   const summaryTotals = useMemo(() => {
     const finalized = settlementRows.filter(r => r.isFinalized);
     return {

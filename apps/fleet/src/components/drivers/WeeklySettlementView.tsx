@@ -144,6 +144,8 @@ export function WeeklySettlementView({ trips = [], transactions = [], csvMetrics
                                             );
                                         }
                                         const s = st.settlement;
+                                        // Sign convention (Step 7): positive = company owes the driver,
+                                        // negative = driver owes the company.
                                         return (
                                             <div className="space-y-0.5 min-w-[100px] max-w-[140px]">
                                                 <p className="text-xs font-medium text-slate-500 uppercase tracking-wide flex items-center gap-1">
@@ -151,7 +153,7 @@ export function WeeklySettlementView({ trips = [], transactions = [], csvMetrics
                                                 </p>
                                                 <p className={cn(
                                                     "text-sm font-bold",
-                                                    s > 0.005 ? "text-rose-600" : s < -0.005 ? "text-blue-600" : "text-emerald-600"
+                                                    s < -0.005 ? "text-rose-600" : s > 0.005 ? "text-blue-600" : "text-emerald-600"
                                                 )}>
                                                     ${s.toFixed(2)}
                                                 </p>
@@ -449,8 +451,10 @@ export function WeeklySettlementView({ trips = [], transactions = [], csvMetrics
                                                 )}
 
                                                 {st && st.finalized === true && (() => {
-                                                    const driverOwes = st.settlement > 0.005;
-                                                    const companyOwes = st.settlement < -0.005;
+                                                    // Sign convention (Step 7): positive settlement = company owes the
+                                                    // driver, negative = driver owes the company (matches computePeriodSettlement).
+                                                    const companyOwes = st.settlement > 0.005;
+                                                    const driverOwes = st.settlement < -0.005;
                                                     const isSettled = !driverOwes && !companyOwes;
                                                     const signedSettlement =
                                                         st.settlement < 0
@@ -464,37 +468,37 @@ export function WeeklySettlementView({ trips = [], transactions = [], csvMetrics
                                                                 <div className="flex items-start justify-between gap-3 px-3 py-2.5">
                                                                     <div className="min-w-0">
                                                                         <p className="text-sm font-medium text-slate-800 flex items-center gap-1.5">
-                                                                            <Banknote className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                                                                            Adj. cash balance
+                                                                            <DollarSign className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                                                                            Net payout
                                                                         </p>
                                                                         <p className="text-[11px] text-slate-500 mt-0.5">
-                                                                            {st.fuelCredits > 0.005
-                                                                                ? `Cash balance ${fmtMoney(st.cashBalance)} minus ${fmtMoney(st.fuelCredits)} fuel credit`
-                                                                                : 'Cash balance for this period (no fuel credit applied)'}
+                                                                            Amount the company owes the driver for this period
                                                                         </p>
                                                                     </div>
-                                                                    <span className="text-sm font-mono font-semibold text-slate-900 tabular-nums shrink-0">
-                                                                        {fmtMoney(st.adjCashBalance)}
+                                                                    <span className="text-sm font-mono font-semibold text-emerald-700 tabular-nums shrink-0">
+                                                                        {fmtMoney(st.netPayoutApplied)}
                                                                     </span>
                                                                 </div>
                                                                 <div className="flex items-start justify-between gap-3 px-3 py-2.5">
                                                                     <div className="min-w-0">
                                                                         <p className="text-sm font-medium text-slate-800 flex items-center gap-1.5">
-                                                                            <DollarSign className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                                                                            Net payout
+                                                                            <Banknote className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                                                                            Adj. cash balance
                                                                         </p>
                                                                         <p className="text-[11px] text-slate-500 mt-0.5">
-                                                                            Subtracted — amount the company owes the driver for this period
+                                                                            {st.fuelCredits > 0.005
+                                                                                ? `Subtracted — cash balance ${fmtMoney(st.cashBalance)} minus ${fmtMoney(st.fuelCredits)} fuel credit`
+                                                                                : 'Subtracted — cash the driver currently holds for this period'}
                                                                         </p>
                                                                     </div>
-                                                                    <span className="text-sm font-mono font-semibold text-emerald-700 tabular-nums shrink-0">
-                                                                        −{fmtMoney(st.netPayoutApplied)}
+                                                                    <span className="text-sm font-mono font-semibold text-slate-900 tabular-nums shrink-0">
+                                                                        −{fmtMoney(st.adjCashBalance)}
                                                                     </span>
                                                                 </div>
                                                             </div>
 
                                                             <p className="text-center text-[11px] text-slate-500 font-medium px-1">
-                                                                Adj. cash balance − Net payout = Net settlement
+                                                                Net payout − Adj. cash balance = Net settlement
                                                             </p>
 
                                                             <div

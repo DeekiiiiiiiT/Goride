@@ -93,6 +93,18 @@ export const FuelCalculationService = {
     },
 
     /**
+     * Blended driver-share ratio for a finalized/draft weekly report, used to split
+     * individual fuel entries at settlement time. Entries carry no category (ride
+     * share vs personal vs deadhead, etc — that split only exists at the aggregated
+     * weekly-report level), so this ratio is the only way to keep entry-level ledger
+     * postings consistent with the category-weighted `driverShare` shown on screen.
+     */
+    getBlendedDriverShareRatio: (report: WeeklyFuelReport): number => {
+        if (!report.totalGasCardCost || report.totalGasCardCost <= 0) return 0;
+        return report.driverShare / report.totalGasCardCost;
+    },
+
+    /**
      * Generates a reconciliation report for a single vehicle.
      */
     calculateReconciliation: (

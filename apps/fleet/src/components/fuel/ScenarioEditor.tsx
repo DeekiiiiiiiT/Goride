@@ -7,16 +7,18 @@ import { Textarea } from "../ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { Switch } from "../ui/switch";
 import { FuelScenario, FuelRule } from '../../types/fuel';
-import { Fuel, Info } from 'lucide-react';
+import { Fuel, Info, AlertTriangle } from 'lucide-react';
 
 interface ScenarioEditorProps {
     isOpen: boolean;
     onClose: () => void;
     onSave: (scenario: FuelScenario) => Promise<void>;
     initialData: FuelScenario | null;
+    /** Number of vehicles currently referencing this scenario — editing it changes their live reconciliation numbers immediately. */
+    affectedVehicleCount?: number;
 }
 
-export function ScenarioEditor({ isOpen, onClose, onSave, initialData }: ScenarioEditorProps) {
+export function ScenarioEditor({ isOpen, onClose, onSave, initialData, affectedVehicleCount = 0 }: ScenarioEditorProps) {
     const [name, setName] = useState('');
     const [description, setDescription] = useState('');
     const [rules, setRules] = useState<FuelRule[]>([]);
@@ -108,6 +110,15 @@ export function ScenarioEditor({ isOpen, onClose, onSave, initialData }: Scenari
                         Configure how fuel expenses are covered for this group.
                     </DialogDescription>
                 </DialogHeader>
+
+                {initialData && affectedVehicleCount > 0 && (
+                    <div className="flex items-start gap-2 p-2.5 bg-amber-50 border border-amber-200 rounded text-amber-900">
+                        <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                        <span className="text-sm">
+                            {affectedVehicleCount} vehicle{affectedVehicleCount !== 1 ? 's' : ''} currently {affectedVehicleCount !== 1 ? 'use' : 'uses'} this scenario. Saving changes here immediately recalculates their live (unfinalized) reconciliation numbers — already-finalized weeks are unaffected.
+                        </span>
+                    </div>
+                )}
 
                 <div className="space-y-6 py-4">
                     {/* Basic Info */}

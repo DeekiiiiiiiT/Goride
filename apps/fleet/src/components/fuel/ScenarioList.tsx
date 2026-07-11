@@ -2,9 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { Button } from "../ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { Badge } from "../ui/badge";
-import { Loader2, Plus, Trash2, Edit2, Star, Fuel, ShieldCheck, AlertCircle } from 'lucide-react';
+import { Loader2, Plus, Trash2, Edit2, Star, Fuel, ShieldCheck, AlertCircle, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 import { fuelService } from '../../services/fuelService';
+import { api } from '../../services/api';
 import { FuelScenario, FuelRule } from '../../types/fuel';
 import { ScenarioEditor } from './ScenarioEditor';
 import {
@@ -20,6 +21,7 @@ import {
 
 export function ScenarioList() {
     const [scenarios, setScenarios] = useState<FuelScenario[]>([]);
+    const [vehicles, setVehicles] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [isEditorOpen, setIsEditorOpen] = useState(false);
     const [editingScenario, setEditingScenario] = useState<FuelScenario | null>(null);
@@ -27,6 +29,7 @@ export function ScenarioList() {
 
     useEffect(() => {
         loadScenarios();
+        api.getVehicles().then(setVehicles).catch(() => setVehicles([]));
     }, []);
 
     const loadScenarios = async () => {
@@ -41,6 +44,16 @@ export function ScenarioList() {
             setLoading(false);
         }
     };
+
+    // Step 9: editing/deleting a scenario immediately and retroactively changes
+    // live/draft reconciliation numbers for every vehicle referencing it (there's
+    // no snapshotting of the coverage-% rules that applied at the time for
+    // unfinalized weeks). Surface how many vehicles are affected before an admin
+    // commits a change, since this isn't otherwise visible anywhere.
+    const getAffectedVehicleCount = (scenario: FuelScenario): number =>
+        vehicles.filter((v: any) =>
+            scenario.isDefault ? !v.fuelScenarioId || v.fuelScenarioId === scenario.id : v.fuelScenarioId === scenario.id
+        ).length;
 
     const handleSave = async (scenario: FuelScenario) => {
         try {
@@ -189,19 +202,35 @@ export function ScenarioList() {
                 ))}
             </div>
 
-            <ScenarioEditor 
+            <ScenarioEditor
                 isOpen={isEditorOpen}
                 onClose={() => { setIsEditorOpen(false); setEditingScenario(null); }}
                 onSave={handleSave}
                 initialData={editingScenario}
+                affectedVehicleCount={editingScenario ? getAffectedVehicleCount(editingScenario) : 0}
             />
 
             <AlertDialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
                 <AlertDialogContent>
                     <AlertDialogHeader>
                         <AlertDialogTitle>Delete Scenario?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            This will permanently remove this configuration. Vehicles assigned to this scenario may revert to default rules.
+                        <AlertDialogDescription asChild>
+                            <div className="space-y-2">
+                                <p>This will permanently remove this configuration. Vehicles assigned to this scenario may revert to default rules.</p>
+                                {(() => {
+                                    const scenario = scenarios.find(s => s.id === deleteId);
+                                    const count = scenario ? getAffectedVehicleCount(scenario) : 0;
+                                    if (count === 0) return null;
+                                    return (
+                                        <div className="flex items-start gap-2 p-2.5 bg-amber-50 border border-amber-200 rounded text-amber-900">
+                                            <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                                            <span className="text-sm">
+                                                {count} vehicle{count !== 1 ? 's' : ''} currently {count !== 1 ? 'use' : 'uses'} this scenario. Their live (unfinalized) reconciliation numbers will change immediately.
+                                            </span>
+                                        </div>
+                                    );
+                                })()}
+                            </div>
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>

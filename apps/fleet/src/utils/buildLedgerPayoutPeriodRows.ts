@@ -10,6 +10,7 @@ import type { CashWeekData } from './cashSettlementCalc';
 import { isTollCategory } from './tollCategoryHelper';
 import { computePeriodSettlement } from './driverPeriodSettlement';
 import { computeDisputeRefundCounts } from './tollWeekPeriod';
+import { getFuelDeductionForPeriod } from './fuelDeductionForPeriod';
 
 type PeriodType = 'daily' | 'weekly' | 'monthly';
 
@@ -37,37 +38,8 @@ export function buildLedgerPayoutPeriodRows(params: {
     unifiedToll = false,
   } = params;
 
-  const getDeductionForPeriod = (
-    periodStart: Date,
-    periodEnd: Date
-  ): { deduction: number; fleetShare: number; finalized: boolean } => {
-    let totalDeduction = 0;
-    let totalFleetShare = 0;
-    let hasFinalized = false;
-
-    for (const report of finalizedReports) {
-      const rStartRaw = report.weekStart ?? report.periodStart ?? '';
-      const rEndRaw = report.weekEnd ?? report.periodEnd ?? '';
-      const rStart = new Date(String(rStartRaw).split('T')[0] + 'T00:00:00');
-      const rEnd = new Date(String(rEndRaw).split('T')[0] + 'T23:59:59');
-
-      if (rStart <= periodEnd && rEnd >= periodStart) {
-        if (periodType === 'daily') {
-          const weekDays = Math.max(1, differenceInCalendarDays(rEnd, rStart) + 1);
-          const dailyShare = (report.driverShare ?? 0) / weekDays;
-          const dailyFleet = (report.companyShare ?? 0) / weekDays;
-          totalDeduction += dailyShare;
-          totalFleetShare += dailyFleet;
-        } else {
-          totalDeduction += report.driverShare ?? 0;
-          totalFleetShare += report.companyShare ?? 0;
-        }
-        hasFinalized = true;
-      }
-    }
-
-    return { deduction: totalDeduction, fleetShare: totalFleetShare, finalized: hasFinalized };
-  };
+  const getDeductionForPeriod = (periodStart: Date, periodEnd: Date) =>
+    getFuelDeductionForPeriod(finalizedReports, periodStart, periodEnd, periodType);
 
   // Include toll-category rows regardless of `type` — toll_ledger-sourced rows
   // (merged in from GET /toll-logs) carry type:'Usage', which the plain

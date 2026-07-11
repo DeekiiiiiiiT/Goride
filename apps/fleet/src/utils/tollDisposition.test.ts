@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { classifyTollLedgerEntry, addToTollDisposition, emptyTollDisposition } from './tollDisposition';
+import { classifyTollLedgerEntry, addToTollDisposition, emptyTollDisposition, isCashPaidToll } from './tollDisposition';
 
 /**
  * The locked toll-responsibility policy, as a matrix. This is the money-critical
@@ -31,6 +31,22 @@ describe('classifyTollLedgerEntry — policy matrix', () => {
   it('tag toll with no resolution and no trip → unresolved', () => {
     expect(classifyTollLedgerEntry({ paymentMethod: 'tag_balance' })).toBe('unresolved');
     expect(classifyTollLedgerEntry({ paymentMethod: 'fleet_account' })).toBe('unresolved');
+  });
+});
+
+describe('isCashPaidToll — payment source (Cash vs Tag column)', () => {
+  it('treats cash and receipt tolls as cash regardless of personal resolution', () => {
+    expect(isCashPaidToll({ paymentMethod: 'cash' })).toBe(true);
+    expect(isCashPaidToll({ paymentMethod: 'Cash' })).toBe(true);
+    expect(isCashPaidToll({ paymentMethod: 'cash' })).toBe(true);
+    expect(isCashPaidToll({ paymentMethod: 'tag_balance', receiptUrl: 'r.jpg' })).toBe(true);
+  });
+
+  it('treats tag / fleet account as non-cash', () => {
+    expect(isCashPaidToll({ paymentMethod: 'tag_balance' })).toBe(false);
+    expect(isCashPaidToll({ paymentMethod: 'Tag Balance' })).toBe(false);
+    expect(isCashPaidToll({ paymentMethod: 'fleet_account' })).toBe(false);
+    expect(isCashPaidToll({ paymentMethod: 'Fleet Account' })).toBe(false);
   });
 });
 

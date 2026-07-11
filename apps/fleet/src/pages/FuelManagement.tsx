@@ -25,7 +25,7 @@ import { FuelReimbursementTable } from '../components/fuel/FuelReimbursementTabl
 import { SubmitExpenseModal } from '../components/fuel/SubmitExpenseModal';
 import { FuelAuditDashboard } from '../components/fuel/FuelAuditDashboard';
 import { IntegrityGapDashboard } from '../components/fuel/IntegrityGapDashboard';
-import { startOfWeek, endOfWeek } from 'date-fns';
+import { startOfWeek, endOfWeek, format } from 'date-fns';
 import { useFuelAnchors } from '../hooks/useFuelAnchors';
 import { fuelService } from '../services/fuelService';
 import { settlementService } from '../services/settlementService';
@@ -48,7 +48,8 @@ import { Checkbox } from '../components/ui/checkbox';
 import { Label } from '../components/ui/label';
 import { toast } from 'sonner@2.0.3';
 import { DateRange } from 'react-day-picker';
-import type { FuelCard, FuelEntry, FuelScenario, MileageAdjustment, FuelDispute, WeeklyFuelReport } from '../types/fuel';
+import type { FuelCard, FuelEntry, FuelScenario, MileageAdjustment, FuelDispute, WeeklyFuelReport, FinalizedFuelReport } from '../types/fuel';
+import { FuelCalculationService } from '../services/fuelCalculationService';
 import type { FinancialTransaction } from '../types/data';
 import type { Trip } from '../types/data';
 import type { Vehicle } from '../types/vehicle';
@@ -119,7 +120,8 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
   const [drivers, setDrivers] = useState<any[]>([]);
   const [trips, setTrips] = useState<Trip[]>([]);
   const [scenarios, setScenarios] = useState<FuelScenario[]>([]);
-  const [finalizedCount, setFinalizedCount] = useState(0);
+  const [finalizedReports, setFinalizedReports] = useState<FinalizedFuelReport[]>([]);
+  const finalizedCount = finalizedReports.length;
 
   // Effect to reload trips when Reconciliation Date Range changes
   useEffect(() => {
@@ -167,7 +169,7 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
           setAdjustments(adjsData);
           setDisputes(disputesData);
           setTransactions(txData);
-          setFinalizedCount(Array.isArray(finalizedData) ? finalizedData.length : 0);
+          setFinalizedReports(Array.isArray(finalizedData) ? finalizedData : []);
 
           if (!silent) toast.success("Data refreshed");
       } catch (e) {
@@ -687,6 +689,26 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
 
 
   const handleSaveAdjustment = async (adj: MileageAdjustment) => {
+      // Guard (Step 8): block adjustments dated inside an already-finalized week
+      // for this vehicle. Without this, the frozen "Finalized" snapshot silently
+      // desyncs from the live Reconciliation table (which always recomputes from
+      // all adjustments regardless of finalization state), with no audit trail
+      // and no re-finalize prompt.
+      const adjDateYmd = adj.date.split('T')[0];
+      const conflictingReport = finalizedReports.find(r =>
+          r.vehicleId === adj.vehicleId &&
+          adjDateYmd >= String(r.weekStart).split('T')[0] &&
+          adjDateYmd <= String(r.weekEnd).split('T')[0]
+      );
+      if (conflictingReport) {
+          const [y, m, d] = adjDateYmd.split('-').map(Number);
+          toast.error("This week is already finalized", {
+              description: `${format(new Date(y, m - 1, d), 'MMM d, yyyy')} falls inside a finalized statement for this vehicle. Re-finalize the week after saving this adjustment, or pick a different date.`,
+              duration: 8000,
+          });
+          return;
+      }
+
       try {
           const savedAdj = await fuelService.saveMileageAdjustment(adj);
           setAdjustments(prev => [...prev, savedAdj]);
@@ -782,51 +804,91 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
   const handleFinalize = async (reports: WeeklyFuelReport[]) => {
       try {
           setIsRefreshing(true);
-          
+
+          // Fetch prior snapshots fresh (not from local state, which may be stale
+          // if this isn't the first finalize pass in the session) so re-finalize
+          // deltas below are computed against the latest posted totals.
+          const priorReports: FinalizedFuelReport[] = await api.getFinalizedReports().catch(() => []);
+          const findPrior = (vehicleId: string, weekStartYmd: string) =>
+              priorReports.find((r: any) => r.vehicleId === vehicleId && String(r.weekStart).split('T')[0] === weekStartYmd);
+
           // Phase 5: Connect to Settlement Engine
           let successCount = 0;
+          const snapshots: FinalizedFuelReport[] = [];
+
           for (const report of reports) {
               // Filter entries for this report period and vehicle
               const rStart = report.weekStart.split('T')[0];
               const rEnd = report.weekEnd.split('T')[0];
-              const relevantEntries = logs.filter(entry => 
-                  entry.vehicleId === report.vehicleId && 
-                  entry.date >= rStart && 
+              const relevantEntries = logs.filter(entry =>
+                  entry.vehicleId === report.vehicleId &&
+                  entry.date >= rStart &&
                   entry.date <= rEnd &&
                   entry.reconciliationStatus === 'Pending' // Only process pending items
               );
-              
+
+              // Same blended ratio settlementService uses to split these entries —
+              // computed here too so the snapshot's cumulative posted totals stay
+              // in lockstep with what actually gets posted to the ledger.
+              const ratio = FuelCalculationService.getBlendedDriverShareRatio(report);
+              const newlyPostedDriverShare = relevantEntries.reduce((sum, e) => sum + e.amount * ratio, 0);
+              const newlyPostedCompanyShare = relevantEntries.reduce((sum, e) => sum + (e.amount - e.amount * ratio), 0);
+
               if (relevantEntries.length > 0) {
                   await settlementService.commitWeeklyStatement(report, relevantEntries);
                   successCount++;
               }
+
+              // Re-finalize safety: driverShare/companyShare are recomputed live from
+              // ALL entries in the week every pass (adding an entry can shift the
+              // week's observed efficiency/price-per-liter, retroactively changing
+              // the cost attributed to already-posted entries). Track the cumulative
+              // total actually posted to the ledger separately so drift is visible
+              // rather than silently overwritten.
+              const prior = findPrior(report.vehicleId, rStart);
+              const postedDriverShare = (prior?.postedDriverShare ?? prior?.driverShare ?? 0) + newlyPostedDriverShare;
+              const postedCompanyShare = (prior?.postedCompanyShare ?? prior?.companyShare ?? 0) + newlyPostedCompanyShare;
+
+              const vehicle = vehicles.find((v: any) => v.id === report.vehicleId);
+              const driver = drivers.find((d: any) => d.id === report.driverId);
+              const driverSpend = logs
+                .filter((e: any) =>
+                  e.vehicleId === report.vehicleId &&
+                  e.date >= rStart && e.date <= rEnd &&
+                  (e.type === 'Reimbursement' || e.type === 'Manual_Entry' || e.type === 'Fuel_Manual_Entry')
+                )
+                .reduce((sum: number, e: any) => sum + e.amount, 0);
+
+              // Step 9 audit trail: scenarios can be edited/deleted after finalize
+              // with no versioning, so the frozen snapshot previously stored only
+              // metadata.scenarioName/scenarioId (informational strings) — not the
+              // actual coverage-% values used. Record them here so "why was
+              // driverShare $X" stays answerable even after the scenario changes.
+              const activeScenario = scenarios.find(s => s.id === vehicle?.fuelScenarioId) ||
+                  scenarios.find(s => s.isDefault) ||
+                  scenarios[0];
+              const appliedFuelRule = activeScenario?.rules.find(r => r.category === 'Fuel');
+
+              snapshots.push({
+                ...report,
+                status: 'Finalized',
+                finalizedAt: new Date().toISOString(),
+                finalizedByUser: 'admin',
+                driverSpend,
+                netPay: driverSpend - report.driverShare,
+                vehiclePlate: vehicle?.licensePlate || 'Unknown',
+                vehicleModel: vehicle?.model || '',
+                driverName: driver?.name || 'Unknown',
+                postedDriverShare,
+                postedCompanyShare,
+                metadata: {
+                  ...report.metadata,
+                  appliedScenario: activeScenario
+                    ? { id: activeScenario.id, name: activeScenario.name, fuelRule: appliedFuelRule }
+                    : undefined,
+                },
+              });
           }
-          
-          // Build frozen snapshots for the Finalized tab
-          const snapshots = reports.map(report => {
-            const vehicle = vehicles.find((v: any) => v.id === report.vehicleId);
-            const driver = drivers.find((d: any) => d.id === report.driverId);
-            const rStart = report.weekStart.split('T')[0];
-            const rEnd = report.weekEnd.split('T')[0];
-            const driverSpend = logs
-              .filter((e: any) =>
-                e.vehicleId === report.vehicleId &&
-                e.date >= rStart && e.date <= rEnd &&
-                (e.type === 'Reimbursement' || e.type === 'Manual_Entry' || e.type === 'Fuel_Manual_Entry')
-              )
-              .reduce((sum: number, e: any) => sum + e.amount, 0);
-            return {
-              ...report,
-              status: 'Finalized',
-              finalizedAt: new Date().toISOString(),
-              finalizedByUser: 'admin',
-              driverSpend,
-              netPay: driverSpend - report.driverShare,
-              vehiclePlate: vehicle?.licensePlate || 'Unknown',
-              vehicleModel: vehicle?.model || '',
-              driverName: driver?.name || 'Unknown',
-            };
-          });
 
           // Persist snapshots to server (non-blocking — settlement is already committed)
           try {
@@ -1020,6 +1082,7 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
                 dateRange={reconciliationDateRange}
                 scenarios={scenarios}
                 drivers={drivers}
+                finalizedReports={finalizedReports}
                 onFinalize={handleFinalize}
                 onAddAdjustment={() => { setAdjustmentDefaults({}); setIsAdjustmentModalOpen(true); }}
                 onResolveDispute={(dispute) => { setSelectedDispute(dispute); setIsResolutionModalOpen(true); }}

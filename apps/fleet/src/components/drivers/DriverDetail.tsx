@@ -3780,13 +3780,15 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                          <Landmark className="h-4 w-4 text-indigo-500" />
                      </CardHeader>
                      <CardContent>
-                         <div className={cn("text-2xl font-bold", walletNetSettlement > 0.005 ? "text-rose-600" : walletNetSettlement < -0.005 ? "text-blue-600" : "text-emerald-600")}>
+                         {/* Sign convention (Step 7): positive = company owes the driver,
+                             negative = driver owes the company (matches Settlement Summary / computePeriodSettlement). */}
+                         <div className={cn("text-2xl font-bold", walletNetSettlement < -0.005 ? "text-rose-600" : walletNetSettlement > 0.005 ? "text-blue-600" : "text-emerald-600")}>
                              ${walletNetSettlement.toFixed(2)}
                          </div>
                          <p className="text-xs text-slate-500 mt-1">
-                             {walletNetSettlement > 0.005
+                             {walletNetSettlement < -0.005
                                ? "Driver owes fleet (after net payout)"
-                               : walletNetSettlement < -0.005
+                               : walletNetSettlement > 0.005
                                  ? "Fleet owes driver"
                                  : "Balanced"}
                          </p>

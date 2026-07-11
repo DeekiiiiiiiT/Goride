@@ -37,10 +37,11 @@ import {
     AlertDialogTitle,
 } from "../ui/alert-dialog";
 import { Progress } from "../ui/progress";
+import { Checkbox } from "../ui/checkbox";
 
 import { Vehicle } from '../../types/vehicle';
 import { Trip } from '../../types/data';
-import { FuelEntry, MileageAdjustment, WeeklyFuelReport, FuelDispute, FuelScenario, OdometerBucket } from '../../types/fuel';
+import { FuelEntry, MileageAdjustment, WeeklyFuelReport, FuelDispute, FuelScenario, OdometerBucket, FinalizedFuelReport } from '../../types/fuel';
 import { FuelCalculationService, VehicleDeadheadInput } from '../../services/fuelCalculationService';
 import { downloadCSV } from '../../utils/export';
 import { ScenarioSplitDashboard } from './ScenarioSplitDashboard';
@@ -55,21 +56,24 @@ interface ReconciliationTableProps {
     dateRange: DateRange | undefined;
     scenarios?: FuelScenario[];
     drivers?: any[];
+    /** Prior finalized snapshots — used to warn when re-finalizing a vehicle/week that was already posted. */
+    finalizedReports?: FinalizedFuelReport[];
     onFinalize?: (reports: WeeklyFuelReport[]) => void;
     onAddAdjustment?: () => void;
     onResolveDispute?: (dispute: FuelDispute) => void;
     onViewBuckets?: (vehicle: Vehicle) => void;
 }
 
-export function ReconciliationTable({ 
-    vehicles, 
-    trips, 
-    fuelEntries, 
+export function ReconciliationTable({
+    vehicles,
+    trips,
+    fuelEntries,
     adjustments = [],
     disputes = [],
     dateRange,
     scenarios = [],
     drivers = [],
+    finalizedReports = [],
     onFinalize,
     onAddAdjustment,
     onResolveDispute,
@@ -186,6 +190,54 @@ export function ReconciliationTable({
         });
     }, [reports]);
 
+    // Re-finalize safety (Step 2): flag reports that already have a prior finalized
+    // snapshot for the same vehicle+week. Re-finalizing recomputes driverShare from
+    // ALL entries in the week — adding a late entry can shift the week's observed
+    // efficiency/price-per-liter and retroactively reallocate cost already posted —
+    // so surface the delta before the admin confirms rather than silently overwriting.
+    const reFinalizeWarnings = useMemo(() => {
+        return reports.reduce((acc, r) => {
+            const rStartYmd = r.weekStart.split('T')[0];
+            const prior = finalizedReports.find(
+                (f) => f.vehicleId === r.vehicleId && String(f.weekStart).split('T')[0] === rStartYmd
+            );
+            if (prior) {
+                const priorDriverShare = prior.postedDriverShare ?? prior.driverShare ?? 0;
+                const delta = r.driverShare - priorDriverShare;
+                acc.push({ vehicleId: r.vehicleId, priorDriverShare, delta });
+            }
+            return acc;
+        }, [] as { vehicleId: string; priorDriverShare: number; delta: number }[]);
+    }, [reports, finalizedReports]);
+
+    // Finalize gating (Step 5): no existing "block on status" pattern exists in
+    // this codebase, so this warns rather than hard-blocks — an admin may need to
+    // override — but requires an explicit acknowledgment when any selected report
+    // has a data-quality flag (Amber/Red health, unresolved pending logs, or an
+    // Open dispute for that vehicle/week).
+    const findDisputeForReport = (report: WeeklyFuelReport) =>
+        disputes.find(d => {
+            if (d.vehicleId !== report.vehicleId) return false;
+            if (d.weekStart !== report.weekStart) return false;
+            if (d.weekEnd) return d.weekEnd === report.weekEnd;
+            return true;
+        });
+
+    const dataQualityWarnings = useMemo(() => {
+        return reports.reduce((acc, r) => {
+            const openDispute = findDisputeForReport(r)?.status === 'Open';
+            const isUnhealthy = r.healthStatus && r.healthStatus !== 'Emerald';
+            const hasPending = (r.pendingCount || 0) > 0;
+            if (openDispute || isUnhealthy || hasPending) {
+                acc.push({ vehicleId: r.vehicleId, healthStatus: r.healthStatus, pendingCount: r.pendingCount || 0, openDispute });
+            }
+            return acc;
+        }, [] as { vehicleId: string; healthStatus?: string; pendingCount: number; openDispute: boolean }[]);
+    }, [reports, disputes]);
+
+    const [financeWarningAcknowledged, setFinanceWarningAcknowledged] = useState(false);
+    const hasBlockingWarnings = dataQualityWarnings.length > 0 || reFinalizeWarnings.some(w => Math.abs(w.delta) > 0.01);
+
     // Handle invalid/loading date range — early return AFTER all hooks
     if (!dateRange || !dateRange.from) {
         return <div className="p-8 text-center text-slate-500">Select a date range to view reconciliation reports.</div>;
@@ -270,7 +322,7 @@ export function ReconciliationTable({
                         <Download className="mr-2 h-4 w-4" />
                         Export
                     </Button>
-                    <Button onClick={() => setIsFinalizeDialogOpen(true)} disabled={reports.length === 0}>
+                    <Button onClick={() => { setFinanceWarningAcknowledged(false); setIsFinalizeDialogOpen(true); }} disabled={reports.length === 0}>
                         <FileCheck className="mr-2 h-4 w-4" />
                         Finalize
                     </Button>
@@ -873,17 +925,87 @@ export function ReconciliationTable({
                                         <span className="font-bold">{formatCurrency(totals.driver)}</span>
                                     </div>
                                 </div>
+
+                                {reFinalizeWarnings.length > 0 && (
+                                    <div className="mt-3 p-3 bg-amber-50 rounded border border-amber-200 text-amber-900 space-y-1.5">
+                                        <div className="flex items-center gap-1.5 font-semibold text-sm">
+                                            <AlertTriangle className="h-4 w-4" />
+                                            {reFinalizeWarnings.length} vehicle{reFinalizeWarnings.length !== 1 ? 's' : ''} already finalized for this week
+                                        </div>
+                                        <p className="text-xs text-amber-800">
+                                            Re-finalizing recomputes driver share from all fuel data in the period, including entries already posted. This can reallocate cost due to updated efficiency/price data since the last finalize. Review the deltas below before proceeding.
+                                        </p>
+                                        <div className="space-y-1 pt-1">
+                                            {reFinalizeWarnings.map((w) => {
+                                                const vehicle = vehicles.find(v => v.id === w.vehicleId);
+                                                return (
+                                                    <div key={w.vehicleId} className="flex justify-between text-xs">
+                                                        <span>{vehicle?.licensePlate || w.vehicleId}</span>
+                                                        <span className={`font-medium ${Math.abs(w.delta) > 0.01 ? 'text-amber-900' : 'text-slate-500'}`}>
+                                                            {Math.abs(w.delta) > 0.01
+                                                                ? `${w.delta > 0 ? '+' : ''}${formatCurrency(w.delta)} vs. prior`
+                                                                : 'No change'}
+                                                        </span>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {dataQualityWarnings.length > 0 && (
+                                    <div className="mt-3 p-3 bg-rose-50 rounded border border-rose-200 text-rose-900 space-y-1.5">
+                                        <div className="flex items-center gap-1.5 font-semibold text-sm">
+                                            <AlertTriangle className="h-4 w-4" />
+                                            {dataQualityWarnings.length} vehicle{dataQualityWarnings.length !== 1 ? 's' : ''} flagged for review
+                                        </div>
+                                        <p className="text-xs text-rose-800">
+                                            These vehicles have an Amber/Red data-health status, unresolved pending logs, or an open dispute for this week. Finalizing will still freeze and post these numbers — review each flag before proceeding.
+                                        </p>
+                                        <div className="space-y-1 pt-1">
+                                            {dataQualityWarnings.map((w) => {
+                                                const vehicle = vehicles.find(v => v.id === w.vehicleId);
+                                                const flags = [
+                                                    w.healthStatus && w.healthStatus !== 'Emerald' ? w.healthStatus : null,
+                                                    w.pendingCount > 0 ? `${w.pendingCount} pending` : null,
+                                                    w.openDispute ? 'open dispute' : null,
+                                                ].filter(Boolean).join(' · ');
+                                                return (
+                                                    <div key={w.vehicleId} className="flex justify-between text-xs">
+                                                        <span>{vehicle?.licensePlate || w.vehicleId}</span>
+                                                        <span className="font-medium text-rose-900">{flags}</span>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {hasBlockingWarnings && (
+                                    <div className="mt-3 flex items-start gap-2">
+                                        <Checkbox
+                                            id="finalize-warning-ack"
+                                            checked={financeWarningAcknowledged}
+                                            onCheckedChange={(checked) => setFinanceWarningAcknowledged(!!checked)}
+                                            className="mt-0.5"
+                                        />
+                                        <label htmlFor="finalize-warning-ack" className="text-xs text-slate-700 cursor-pointer">
+                                            I've reviewed the warnings above and want to finalize anyway.
+                                        </label>
+                                    </div>
+                                )}
                             </div>
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction 
+                        <AlertDialogAction
                             onClick={() => {
                                 onFinalize?.(reports);
                                 setIsFinalizeDialogOpen(false);
                             }}
-                            className="bg-emerald-600 hover:bg-emerald-700"
+                            disabled={hasBlockingWarnings && !financeWarningAcknowledged}
+                            className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             Process Ledger Entries
                         </AlertDialogAction>

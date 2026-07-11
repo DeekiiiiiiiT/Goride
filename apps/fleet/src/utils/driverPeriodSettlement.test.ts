@@ -67,4 +67,49 @@ describe('computePeriodSettlement', () => {
     expect(r.cashBalance).toBe(3);
     expect(r.settlement).toBe(67);      // 70 − 3
   });
+
+  // Step 7: fuelCredits is optional and additive — omitting it must not change
+  // any of the above cases (adjCashBalance falls back to cashBalance).
+  it('omitting fuelCredits leaves cashBalance/settlement unchanged (backward compatible)', () => {
+    const r = computePeriodSettlement({
+      driverShare: 25,
+      fuelDeduction: 0,
+      baseCashOwed: 100,
+      baseCashPaid: 0,
+      tollCashWash: 10,
+      tollPersonal: 0,
+    });
+    expect(r.adjCashBalance).toBe(r.cashBalance);
+    expect(r.settlement).toBe(-65);
+  });
+
+  it('fuelCredits net against the cash side, reducing what the driver owes', () => {
+    // Same as the cash-toll case, but the driver was also given a $20 fuel credit.
+    const r = computePeriodSettlement({
+      driverShare: 25,
+      fuelDeduction: 0,
+      baseCashOwed: 100,
+      baseCashPaid: 0,
+      tollCashWash: 10,
+      tollPersonal: 0,
+      fuelCredits: 20,
+    });
+    expect(r.cashBalance).toBe(90);       // gross, unaffected by fuel credits
+    expect(r.adjCashBalance).toBe(70);    // 90 − 20 fuel credit
+    expect(r.settlement).toBe(-45);       // 25 − 70, driver owes $45 (was $65 without the credit)
+  });
+
+  it('a large fuel credit can flip settlement in the driver\'s favor', () => {
+    const r = computePeriodSettlement({
+      driverShare: 25,
+      fuelDeduction: 0,
+      baseCashOwed: 100,
+      baseCashPaid: 0,
+      tollCashWash: 0,
+      tollPersonal: 0,
+      fuelCredits: 150,
+    });
+    expect(r.adjCashBalance).toBe(-50);   // 100 − 150, driver has a net cash credit
+    expect(r.settlement).toBe(75);        // 25 − (−50) = company owes the driver $75
+  });
 });

@@ -4,21 +4,26 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import { Button } from "../ui/button";
 import { Download, ChevronDown, TrendingDown, Fuel, Navigation, Loader2, CheckCircle, Clock, Info, LinkIcon, Unlink } from "lucide-react";
 import { FinancialTransaction, Trip, DisputeRefund } from "../../types/data";
+import type { FuelEntry, MileageAdjustment, FuelScenario } from "../../types/fuel";
 import { api } from "../../services/api";
+import { fuelService } from "../../services/fuelService";
+import { FuelCalculationService } from "../../services/fuelCalculationService";
 import {
   format,
   startOfDay, endOfDay, startOfMonth, endOfMonth,
-  differenceInCalendarDays
+  subDays
 } from "date-fns";
 import { exportToCSV } from "../../utils/csvHelpers";
 import { toast } from "sonner@2.0.3";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "../ui/tooltip";
 import { isTollCategory } from '../../utils/tollCategoryHelper';
-import { classifyTollLedgerEntry } from '../../utils/tollDisposition';
+import { isCashPaidToll } from '../../utils/tollDisposition';
+import { deriveTollTxIsReconciled } from '../../utils/tollHandledDisplay';
 import { computeDisputeRefundCounts, getDisputeRefundWeekDate, weekBucketForDate } from '../../utils/tollWeekPeriod';
 import { expandDriverTransactionIds } from '../../utils/expandDriverTransactionIds';
 import { isDriverTollChargeRow, netDriverTollCharges } from '../../utils/netDriverTollCharges';
 import { fleetTzDateKey, useFleetTimezone, ymdToLocalDate } from '../../utils/timezoneDisplay';
+import { getFuelDeductionForPeriod } from '../../utils/fuelDeductionForPeriod';
 
 type PeriodType = 'daily' | 'weekly' | 'monthly';
 
@@ -28,12 +33,16 @@ interface ExpensePeriodRow {
   tollExpenses: number;
   tollCharged: number;         // personal-use tolls billed to this driver (Charge Driver)
   fuelDeduction: number;       // Deduction (driverShare) from finalized reports only
+  fuelDriverSpend: number;     // What the driver already paid out-of-pocket for fuel, for finalized periods
+  fuelNetPay: number;          // fuelDriverSpend - fuelDeduction; positive = company owes the driver
+  fuelDraftEstimate: number;   // Live/unfinalized estimate for periods with no finalized report yet
   isFinalized: boolean;        // true if this period has finalized fuel data
   totalExpenses: number;
   transactionCount: number;
   tollReconciled: number;      // Phase 6: count of reconciled toll txns in this period
   tollUnreconciled: number;    // Phase 6: count of unreconciled toll txns in this period
-  tollCashWash: number;        // $ of tolls classifyTollLedgerEntry buckets as cashWash (only shown when unifiedTollSettlementEnabled)
+  tollCashSpent: number;       // $ paid at plaza (cash / receipt) — ignores personal vs wash
+  tollTagSpent: number;        // $ charged via tag / fleet account (not cash)
   disputeRefundMatched: number;   // Uber support-case adjustments already linked to a toll
   disputeRefundUnmatched: number; // Uber support-case adjustments still needing a manual match
 }
@@ -55,26 +64,22 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
   // ── Phase 2: Finalized reports data source ──────────────────
   const [finalizedReports, setFinalizedReports] = useState<any[]>([]);
   const [driverVehicleIds, setDriverVehicleIds] = useState<Set<string>>(new Set());
+  const [driverVehicleList, setDriverVehicleList] = useState<any[]>([]);
   const [disputeRefunds, setDisputeRefunds] = useState<DisputeRefund[]>([]);
 
-  // Cash Wash is additive — only surfaced once the unified settlement model
-  // is trusted, so this tab doesn't silently change for fleets that haven't
-  // opted in yet.
-  const [unifiedTollSettlementEnabled, setUnifiedTollSettlementEnabled] = useState(false);
-  useEffect(() => {
-    let active = true;
-    api.getTollAutomationSettings()
-      .then(res => { if (active) setUnifiedTollSettlementEnabled(res.data.unifiedTollSettlementEnabled === true); })
-      .catch(() => {});
-    return () => { active = false; };
-  }, []);
+  // ── Live/draft reconciliation inputs — used to estimate fuel deduction for
+  // periods that haven't been finalized yet, so a large unresolved draft (like
+  // an Amber/Pending week) is never silently invisible here. ──
+  const [draftFuelEntries, setDraftFuelEntries] = useState<FuelEntry[]>([]);
+  const [draftAdjustments, setDraftAdjustments] = useState<MileageAdjustment[]>([]);
+  const [draftScenarios, setDraftScenarios] = useState<FuelScenario[]>([]);
 
   useEffect(() => {
     let cancelled = false;
     const loadFinalizedData = async () => {
       setFuelDataLoading(true);
       try {
-        const [drivers, vehicles, allReports, disputeRefundsRes] = await Promise.all([
+        const [drivers, vehicles, allReports, disputeRefundsRes, fuelEntries, adjustments, scenarios] = await Promise.all([
           api.getDrivers().catch(() => []),
           api.getVehicles().catch(() => []),
           api.getFinalizedReports().catch(() => []),
@@ -84,6 +89,9 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
           // same expanded ID set used elsewhere, rather than trusting a
           // single-ID server-side match.
           api.getDisputeRefunds().catch(() => ({ data: [] as DisputeRefund[], total: 0 })),
+          fuelService.getFuelEntries().catch(() => []),
+          fuelService.getMileageAdjustments().catch(() => []),
+          fuelService.getFuelScenarios().catch(() => []),
         ]);
         if (cancelled) return;
 
@@ -100,12 +108,18 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
         );
         const vehicleIdSet = new Set<string>(myVehicles.map((v: any) => v.id));
         setDriverVehicleIds(vehicleIdSet);
+        setDriverVehicleList(myVehicles);
 
         // Step 2.2d: Filter finalized reports to this driver's vehicles
         const myReports = (allReports || []).filter(
           (r: any) => r.status === 'Finalized' && vehicleIdSet.has(r.vehicleId)
         );
         setFinalizedReports(myReports);
+
+        // Scope draft reconciliation inputs to this driver's vehicles only.
+        setDraftFuelEntries((fuelEntries || []).filter((e: FuelEntry) => vehicleIdSet.has(e.vehicleId || '')));
+        setDraftAdjustments((adjustments || []).filter((a: MileageAdjustment) => vehicleIdSet.has(a.vehicleId)));
+        setDraftScenarios(scenarios || []);
 
         // Dispute refunds carry the platform-side driver id, so match against
         // the full expanded set (native + Uber + InDrive), not driverIdSet above.
@@ -188,85 +202,94 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
   const periodData: ExpensePeriodRow[] = useMemo(() => {
     if (timeBuckets.length === 0) return [];
 
-    // Only look at expense-type transactions (for Tolls — NOT fuel)
+    // Only look at expense-type transactions (for Tolls — NOT fuel). Explicitly
+    // exclude fuel settlement rows ('Fuel Deduction' / 'Fuel Reimbursement',
+    // created by settlementService.commitWeeklyStatement on Finalize) — they
+    // carry type:'Expense' too, which used to silently inflate transactionCount
+    // even though the fuel $ figure below comes from the finalized-report
+    // snapshot, not from these ledger rows.
     // Include toll-category rows regardless of `type` — toll_ledger-sourced
     // rows (merged in from GET /toll-logs) carry type:'Usage', which the plain
     // Expense/Adjustment gate below silently drops, making post-migration
     // tolls invisible even though they're present in `transactions`.
     const expenseTx = transactions.filter(
-      t => t.type === 'Expense' || (t.type === 'Adjustment' && t.amount < 0) || isTollCategory(t.category)
+      t =>
+        (t.category !== 'Fuel Deduction' && t.category !== 'Fuel Reimbursement') &&
+        (t.type === 'Expense' || (t.type === 'Adjustment' && t.amount < 0) || isTollCategory(t.category))
     );
 
-    // ── Phase 3: Helper to look up finalized deduction for a period ──
-    const getDeductionForPeriod = (periodStart: Date, periodEnd: Date): { deduction: number; finalized: boolean } => {
-      let totalDeduction = 0;
-      let hasFinalized = false;
-
-      for (const report of finalizedReports) {
-        const rStartRaw = report.weekStart ?? report.periodStart ?? '';
-        const rEndRaw = report.weekEnd ?? report.periodEnd ?? '';
-        const rStart = new Date(String(rStartRaw).split('T')[0] + 'T00:00:00');
-        const rEnd = new Date(String(rEndRaw).split('T')[0] + 'T23:59:59');
-
-        // Check overlap: report range intersects period range
-        if (rStart <= periodEnd && rEnd >= periodStart) {
-          if (periodType === 'daily') {
-            // Daily apportionment: spread the week's deduction evenly across its days
-            const weekDays = Math.max(1, differenceInCalendarDays(rEnd, rStart) + 1);
-            const dailyShare = (report.driverShare ?? 0) / weekDays;
-            totalDeduction += dailyShare;
-          } else {
-            totalDeduction += (report.driverShare ?? 0);
-          }
-          hasFinalized = true;
-        }
-      }
-
-      return { deduction: totalDeduction, finalized: hasFinalized };
-    };
+    // Draft estimates are only computed for periods within this window — bounds
+    // the cost of recomputing live reconciliation (odometer buckets etc.) to the
+    // realistic backlog of recently-unresolved weeks, not a driver's entire
+    // unfinalized history.
+    const draftCutoff = subDays(new Date(), 45);
 
     const rows: ExpensePeriodRow[] = timeBuckets.map(({ start: periodStart, end: periodEnd }) => {
-      const pStartTime = periodStart.getTime();
-      const pEndTime = periodEnd.getTime();
+      const periodWeekKey = format(periodStart, 'yyyy-MM-dd');
+      const periodMonthKey = format(periodStart, 'yyyy-MM');
 
-      const periodTx = expenseTx.filter(t => {
-        const d = new Date(t.date).getTime();
-        return d >= pStartTime && d <= pEndTime;
-      });
+      const inThisPeriod = (dateStr: string | undefined | null): boolean => {
+        if (!dateStr) return false;
+        if (periodType === 'daily') {
+          return fleetTzDateKey(dateStr, fleetTz) === periodWeekKey;
+        }
+        if (periodType === 'monthly') {
+          const ymd = fleetTzDateKey(dateStr, fleetTz);
+          return !!ymd && ymd.slice(0, 7) === periodMonthKey;
+        }
+        // Weekly — same Monday key as Toll Reconciliation
+        return weekBucketForDate(dateStr, fleetTz).key === periodWeekKey;
+      };
+
+      const periodTx = expenseTx.filter((t) => inThisPeriod(t.date));
 
       // ── Tolls: from transaction category (Phase 6) ──
       let tollExpenses = 0;
       let tollReconciled = 0;
       let tollUnreconciled = 0;
-      let tollCashWash = 0;
+      let tollCashSpent = 0;
+      let tollTagSpent = 0;
 
       periodTx.forEach(tx => {
         const amt = Math.abs(tx.amount);
         if (isTollCategory(tx.category)) {
           tollExpenses += amt;
-          if (tx.isReconciled) tollReconciled++;
+          if (deriveTollTxIsReconciled(tx as any)) tollReconciled++;
           else tollUnreconciled++;
-          // Additive: agrees with the canonical classifier used by the
-          // Reconciliation tab / Cash Wallet, so a cash toll with no
-          // resolution yet is identified here too, not just counted as
-          // "unmatched" — a different question (link state) than "$ impact".
-          if (classifyTollLedgerEntry(tx as any) === 'cashWash') tollCashWash += amt;
+          // Payment source only — personal cash must not show as Tag.
+          if (isCashPaidToll(tx as any)) tollCashSpent += amt;
+          else tollTagSpent += amt;
         }
       });
 
       // Net wallet Toll Charge projections (include reversals — they are positive
       // Adjustments excluded from expenseTx above).
-      const periodChargeTx = transactions.filter(t => {
-        if (!t?.date || !isDriverTollChargeRow(t)) return false;
-        const d = new Date(t.date).getTime();
-        return d >= pStartTime && d <= pEndTime;
-      });
+      const periodChargeTx = transactions.filter(
+        (t) => t?.date && isDriverTollChargeRow(t) && inThisPeriod(t.date),
+      );
       const tollCharged = netDriverTollCharges(periodChargeTx);
 
-      // ── Fuel: from finalized reports ONLY ──
-      const { deduction, finalized } = getDeductionForPeriod(periodStart, periodEnd);
+      // ── Fuel: from finalized reports (canonical shared aggregator — same
+      // logic used by SettlementSummaryView/PayoutPeriodDetail so all three
+      // surfaces agree) ──
+      const { deduction, driverSpend, netPay, finalized } =
+        getFuelDeductionForPeriod(finalizedReports, periodStart, periodEnd, periodType);
       const fuelDeduction = deduction;
       const isFinalized = finalized;
+
+      // ── Draft estimate: for recent periods with no finalized report yet,
+      // compute a live reconciliation so an unresolved week is never silently
+      // shown as $0. Never counted into totalExpenses below — it's an
+      // unconfirmed estimate, not a posted expense. ──
+      let fuelDraftEstimate = 0;
+      if (!isFinalized && periodEnd >= draftCutoff) {
+        fuelDraftEstimate = driverVehicleList.reduce((sum, vehicle) => {
+          const report = FuelCalculationService.calculateReconciliation(
+            vehicle, periodStart, periodEnd, trips, draftFuelEntries, draftAdjustments, draftScenarios
+          );
+          return sum + (report.driverShare || 0);
+        }, 0);
+      }
 
       const totalExpenses = tollExpenses + fuelDeduction + tollCharged;
 
@@ -279,21 +302,33 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
         tollExpenses,
         tollCharged,
         fuelDeduction,
+        fuelDriverSpend: driverSpend,
+        fuelNetPay: netPay,
+        fuelDraftEstimate,
         isFinalized,
         totalExpenses,
         transactionCount: periodTx.length,
         tollReconciled,
         tollUnreconciled,
-        tollCashWash,
+        tollCashSpent,
+        tollTagSpent,
         disputeRefundMatched,
         disputeRefundUnmatched,
       };
     });
 
     return rows
-      .filter(r => r.transactionCount > 0 || r.fuelDeduction > 0 || r.disputeRefundMatched + r.disputeRefundUnmatched > 0)
+      .filter(r =>
+        r.transactionCount > 0 ||
+        r.fuelDeduction > 0 ||
+        r.fuelDraftEstimate > 0 ||
+        r.disputeRefundMatched + r.disputeRefundUnmatched > 0
+      )
       .reverse();
-  }, [transactions, trips, timeBuckets, finalizedReports, disputeRefunds]);
+  }, [
+    transactions, trips, timeBuckets, finalizedReports, disputeRefunds, periodType, fleetTz,
+    driverVehicleList, draftFuelEntries, draftAdjustments, draftScenarios,
+  ]);
 
   // ────────────────────────────────────────────────────────────
   // Summary totals
@@ -304,6 +339,7 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
         toll: acc.toll + r.tollExpenses,
         tollCharged: acc.tollCharged + r.tollCharged,
         fuel: acc.fuel + r.fuelDeduction,
+        fuelDraftPending: acc.fuelDraftPending + r.fuelDraftEstimate,
         total: acc.total + r.totalExpenses,
         txCount: acc.txCount + r.transactionCount,
         tollReconciled: acc.tollReconciled + r.tollReconciled,
@@ -311,7 +347,7 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
         disputeRefundMatched: acc.disputeRefundMatched + r.disputeRefundMatched,
         disputeRefundUnmatched: acc.disputeRefundUnmatched + r.disputeRefundUnmatched,
       }),
-      { toll: 0, tollCharged: 0, fuel: 0, total: 0, txCount: 0, tollReconciled: 0, tollUnreconciled: 0, disputeRefundMatched: 0, disputeRefundUnmatched: 0 }
+      { toll: 0, tollCharged: 0, fuel: 0, fuelDraftPending: 0, total: 0, txCount: 0, tollReconciled: 0, tollUnreconciled: 0, disputeRefundMatched: 0, disputeRefundUnmatched: 0 }
     );
 
     const finalizedPeriods = periodData.filter(r => r.isFinalized).length;
@@ -347,6 +383,8 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
             : format(row.periodStart, 'MMMM yyyy'),
         'Transactions': row.transactionCount,
         'Toll Expenses': row.tollExpenses.toFixed(2),
+        'Cash Tolls': row.tollCashSpent.toFixed(2),
+        'Tag Tolls': row.tollTagSpent.toFixed(2),
         'Toll Status': (row.tollReconciled + row.tollUnreconciled) === 0
           ? 'N/A'
           : row.tollUnreconciled === 0
@@ -354,6 +392,9 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
             : `${row.tollUnreconciled} Unmatched`,
         'Charged to driver': row.tollCharged.toFixed(2),
         'Fuel Deduction': row.fuelDeduction.toFixed(2),
+        'Fuel Paid by Driver': row.fuelDriverSpend.toFixed(2),
+        'Fuel Net Pay': row.fuelNetPay.toFixed(2),
+        'Fuel Draft Estimate (not yet finalized)': row.fuelDraftEstimate.toFixed(2),
         'Fuel Status': row.isFinalized ? 'Finalized' : 'Pending',
         'Total Expenses': row.totalExpenses.toFixed(2),
       };
@@ -479,6 +520,11 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
                   ? `From ${totals.finalizedPeriods} finalized ${periodLabel}${totals.finalizedPeriods !== 1 ? 's' : ''}`
                   : 'No finalized fuel deductions'}
             </p>
+            {!fuelDataLoading && totals.fuelDraftPending > 0.005 && (
+              <p className="text-[10px] text-amber-600 font-medium mt-0.5">
+                +${totals.fuelDraftPending.toLocaleString(undefined, { minimumFractionDigits: 2 })} pending reconciliation (not yet finalized)
+              </p>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -528,7 +574,22 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
                 <TableHeader>
                   <TableRow>
                     <TableHead>{periodColumnLabel}</TableHead>
-                    <TableHead className="text-right">Tolls</TableHead>
+                    <TableHead className="w-28 text-right whitespace-nowrap">Tolls</TableHead>
+                    <TableHead className="text-right text-xs">
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="inline-flex items-center gap-1 cursor-help">
+                              Cash / Tag
+                              <Info className="h-3 w-3 text-slate-400" />
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-[260px] text-xs">
+                            How the toll was paid at the plaza: Cash = driver paid cash; Tag = fleet tag / account charge. Personal charges do not change this split.
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </TableHead>
                     <TableHead className="text-xs text-center">
                       <TooltipProvider>
                         <Tooltip>
@@ -569,16 +630,27 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
                     <TableRow key={idx} className={!row.isFinalized ? 'bg-amber-50/30' : 'hover:bg-slate-50/60'}>
                       <TableCell className="font-medium text-xs whitespace-nowrap">
                         {formatPeriodLabel(row)}
-                        {row.transactionCount > 0 && (
-                          <span className="ml-1.5 text-slate-400 text-[10px]">
-                            {row.transactionCount} txn{row.transactionCount !== 1 ? 's' : ''}
-                          </span>
-                        )}
                       </TableCell>
-                      <TableCell className="text-right text-amber-600">
+                      <TableCell className="w-28 text-right tabular-nums text-amber-600 whitespace-nowrap">
                         {row.tollExpenses > 0
                           ? `$${row.tollExpenses.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
                           : '-'}
+                      </TableCell>
+                      <TableCell className="text-right text-[11px] leading-tight">
+                        {row.tollExpenses > 0 ? (
+                          <div className="inline-flex flex-col items-end gap-0.5">
+                            <span className="text-sky-700">
+                              Cash ${row.tollCashSpent.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            </span>
+                            <span className="text-slate-600">
+                              Tag ${row.tollTagSpent.toLocaleString(undefined, {
+                                minimumFractionDigits: 2,
+                              })}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-slate-300">-</span>
+                        )}
                       </TableCell>
                       <TableCell className="text-xs text-center">
                         {(row.tollReconciled + row.tollUnreconciled) === 0 ? (
@@ -592,11 +664,6 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
                             <Unlink className="h-3 w-3" /> {row.tollUnreconciled} Unmatched
                           </span>
                         )}
-                        {unifiedTollSettlementEnabled && row.tollCashWash > 0 && (
-                          <p className="text-[10px] text-sky-600 mt-0.5">
-                            ${row.tollCashWash.toLocaleString(undefined, { minimumFractionDigits: 2 })} cash tolls (driver paid)
-                          </p>
-                        )}
                       </TableCell>
                       <TableCell className="text-right text-rose-600">
                         {row.tollCharged > 0
@@ -604,9 +671,38 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
                           : '-'}
                       </TableCell>
                       <TableCell className={`text-right ${row.isFinalized ? 'text-red-600' : 'text-slate-300'}`}>
-                        {row.isFinalized && row.fuelDeduction > 0
-                          ? `$${row.fuelDeduction.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
-                          : '-'}
+                        {row.isFinalized && row.fuelDeduction > 0 ? (
+                          <div className="inline-flex flex-col items-end gap-0.5">
+                            <span>${row.fuelDeduction.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                            {row.fuelDriverSpend > 0.005 && (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className={`text-[10px] font-medium cursor-help ${row.fuelNetPay >= 0 ? 'text-emerald-600' : 'text-slate-500'}`}>
+                                      Net {row.fuelNetPay >= 0 ? '+' : '-'}${Math.abs(row.fuelNetPay).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top" className="max-w-[260px] text-xs">
+                                    Driver already paid ${row.fuelDriverSpend.toLocaleString(undefined, { minimumFractionDigits: 2 })} out-of-pocket for fuel this period. Net = Paid by Driver − Deduction. {row.fuelNetPay >= 0 ? 'Company owes the driver the difference.' : 'The shortfall is deducted from earnings.'}
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
+                          </div>
+                        ) : !row.isFinalized && row.fuelDraftEstimate > 0.005 ? (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="text-amber-600 font-medium cursor-help">
+                                  ~${row.fuelDraftEstimate.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="max-w-[260px] text-xs">
+                                Pending reconciliation — this fuel report has not been finalized yet. Estimate based on current data; the posted amount may change until an admin finalizes this week.
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        ) : '-'}
                       </TableCell>
                       <TableCell className="text-right font-bold text-rose-600">
                         ${row.totalExpenses.toLocaleString(undefined, { minimumFractionDigits: 2 })}

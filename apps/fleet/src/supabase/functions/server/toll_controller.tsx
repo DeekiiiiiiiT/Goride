@@ -1633,6 +1633,7 @@ app.get(`${BASE}/unreconciled`, async (c) => {
           {
             status: "reconciled",
             tripId,
+            isReconciled: true,
             driverId: trip.driverId || tx.driverId,
             driverName: trip.driverName || tx.driverName,
             matchConfidence: best.confidenceScore,
@@ -5917,18 +5918,25 @@ function annotateUnlinkedPoolSuggestions(ranked: any[], tripRefund: number): any
   const allocation = proposeUnlinkedPoolAllocation(tripRefund, poolTargets);
   const shareByToll = new Map(allocation.map((a) => [a.tollId, a.proposedShare]));
   const absorbing = allocation.filter((a) => a.proposedShare > UNLINKED_SHORTFALL_TOLERANCE);
+  // Multi only when the best same-platform shortfall would leave leftover credit
+  // that other underpaid tolls can use — not when a weaker sibling merely has excess.
+  const bestSamePlatform =
+    ranked.find((r) => !r.platformMismatch) || ranked[0] || null;
   const requiresMultiTarget =
     absorbing.length >= 2 &&
-    ranked.some((r) => hasMaterialExcessRefund(tripRefund, r.remainingShortfall));
+    !!bestSamePlatform &&
+    hasMaterialExcessRefund(tripRefund, bestSamePlatform.remainingShortfall);
 
   const multiTargetTollIds = requiresMultiTarget
     ? absorbing.map((a) => a.tollId)
     : undefined;
 
   return ranked.map((r) => {
-    const proposedShare = shareByToll.has(r.tollId)
-      ? shareByToll.get(r.tollId)!
-      : Math.min(tripRefund, r.remainingShortfall);
+    // Pool shares only when splitting; otherwise each candidate is a full single-target apply.
+    const proposedShare =
+      requiresMultiTarget && shareByToll.has(r.tollId)
+        ? shareByToll.get(r.tollId)!
+        : Math.min(tripRefund, r.remainingShortfall);
     const leftoverAfterShare = leftoverAfterApply(r.remainingShortfall, proposedShare);
     // When multi-target, re-score amount proximity against this toll's share (not full refund).
     let confidence = r.confidence;
@@ -6158,7 +6166,8 @@ async function applyUnlinkedRefundToClaim(
   }
 
   // Block dumping a multi-plaza credit onto one shortfall unless forced.
-  if (!opts?.forceSingleTarget && !opts?.skipTripResolution && !opts?.applyShare) {
+  // applyShare: 0 is valid "not provided" in JS truthiness — use nullish check.
+  if (!opts?.forceSingleTarget && !opts?.skipTripResolution && opts?.applyShare == null) {
     const remainingCheck = remainingClaimShortfall(claim);
     if (hasMaterialExcessRefund(tripRefund, remainingCheck)) {
       const ctx = await loadUnlinkedShortfallContext(tollTx);

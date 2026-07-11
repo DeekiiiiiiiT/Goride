@@ -16,6 +16,7 @@ import { api } from '../../../services/api';
 import { toast } from 'sonner@2.0.3';
 import type { ReconciliationPeriod } from '../../../hooks/useTollReconciliationPeriods';
 import { periodConfirmLabelsMatch } from '../../../utils/tollWeekPeriod';
+import { useTollReconBusy } from './tollReconBusyLock';
 
 interface PeriodResetInventory {
   unlinkedApplyTripIds: string[];
@@ -43,6 +44,7 @@ export function PeriodResetDialog({
   preselectedDriverId,
   onComplete,
 }: PeriodResetDialogProps) {
+  const { runExclusive } = useTollReconBusy();
   const [allDrivers, setAllDrivers] = useState(!preselectedDriverId);
   const [selectedDriverIds, setSelectedDriverIds] = useState<Set<string>>(
     () => new Set(preselectedDriverId ? [preselectedDriverId] : []),
@@ -113,13 +115,19 @@ export function PeriodResetDialog({
     setExecuting(true);
     const toastId = toast.loading('Resetting period…');
     try {
-      const res = await api.executePeriodReset(
-        period.startDate,
-        period.endDate,
-        period.label,
-        driverIdsForRequest,
+      const res = await runExclusive('Resetting period…', () =>
+        api.executePeriodReset(
+          period.startDate,
+          period.endDate,
+          period.label,
+          driverIdsForRequest,
+        ),
       );
       toast.dismiss(toastId);
+      if (!res) {
+        toast.message('Another action is still running — try again when it finishes.');
+        return;
+      }
       if (res.errors?.length) {
         toast.warning('Reset completed with some errors', {
           description: res.errors.slice(0, 3).join('; '),

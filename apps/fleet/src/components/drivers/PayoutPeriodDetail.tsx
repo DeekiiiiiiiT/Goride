@@ -207,9 +207,12 @@ export function PayoutPeriodDetail({ row, open, onOpenChange }: PayoutPeriodDeta
   const breakdownSum = b ? sumCashPaidParts(b) : 0;
   const breakdownMatches = b && Math.abs(breakdownSum - row.cashPaid) < 0.5;
 
+  // Sign convention (Step 7): getPeriodSettlementComponents now delegates to the
+  // canonical computePeriodSettlement, where positive settlement = company owes
+  // the driver, negative = driver owes the company (matches Settlement Summary).
   const { settlement, adjCashBalance } = getPeriodSettlementComponents(row);
-  const driverOwes = settlement > 0.005;
-  const companyOwes = settlement < -0.005;
+  const driverOwes = settlement < -0.005;
+  const companyOwes = settlement > 0.005;
   const isSettled = !driverOwes && !companyOwes;
 
   return (
@@ -433,7 +436,7 @@ export function PayoutPeriodDetail({ row, open, onOpenChange }: PayoutPeriodDeta
           {hasCashActivity && (
                 <PayoutSection
                   title="Settlement"
-                  description="Adj. cash balance minus Net Payout — amount owed"
+                  description="Net Payout minus Adj. cash balance — amount owed"
                   variant="indigo"
                   open={secSettlement}
                   onOpenChange={setSecSettlement}

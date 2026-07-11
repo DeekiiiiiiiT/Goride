@@ -40,6 +40,7 @@ import { DriverPicker } from "../../ui/DriverPicker";
 import { TollAutomationSettings } from "./TollAutomationSettings";
 import { RematchCandidatesQueue } from "./RematchCandidatesQueue";
 import { PeriodResetDialog } from "./PeriodResetDialog";
+import { TollReconBusyProvider, useTollReconBusy } from "./tollReconBusyLock";
 import { StepAdvancePrompt } from "./StepAdvancePrompt";
 import { normalizePlatform } from "../../../utils/normalizePlatform";
 import { ReconciliationPeriod } from "../../../hooks/useTollReconciliationPeriods";
@@ -89,7 +90,16 @@ interface ReconciliationWizardProps {
  * hard-gated GatedReconciliationStepper + a Next/Finish control that only
  * advances once the active step's actionable count is zero.
  */
-export function ReconciliationWizard({ period, driverId, drivers, onExit }: ReconciliationWizardProps) {
+export function ReconciliationWizard(props: ReconciliationWizardProps) {
+  return (
+    <TollReconBusyProvider>
+      <ReconciliationWizardInner {...props} />
+    </TollReconBusyProvider>
+  );
+}
+
+function ReconciliationWizardInner({ period, driverId, drivers, onExit }: ReconciliationWizardProps) {
+  const { runExclusive, busy: actionBusy } = useTollReconBusy();
   const handleRunTest = () => {
     const result = runScenarioTest();
     console.log(result);
@@ -967,12 +977,51 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
     await refreshClaims();
   };
 
+  /** One action at a time — blocks the whole wizard UI while money/match work runs. */
+  const lock =
+    <A extends unknown[]>(label: string, fn: (...args: A) => Promise<unknown>) =>
+    (...args: A) =>
+      runExclusive(label, () => fn(...args) as Promise<unknown>);
+
+  const lockedApprove = lock('Matching toll…', handleApprove);
+  const lockedReject = lock('Updating toll…', handleReject);
+  const lockedAcceptPersonal = lock('Saving personal toll…', handleAcceptPersonal);
+  const lockedFlag = lock('Flagging toll…', handleFlag);
+  const lockedManualResolve = lock('Resolving toll…', handleManualResolve);
+  const lockedChargePersonal = lock('Charging driver…', handleChargePersonal);
+  const lockedEditToll = lock('Saving toll…', handleEditToll);
+  const lockedChargeDeadhead = lock('Charging driver…', handleChargeDriverForDeadhead);
+  const lockedSmartReconcile = lock('Matching toll…', handleSmartReconcile);
+  const lockedUndoApply = lock('Undoing apply…', handleUndoApply);
+  const lockedApplyShortfall = lock('Applying credit to underpaid…', handleApplyUnlinkedShortfall);
+  const lockedResolveRefund = lock('Resolving refund…', resolveRefund);
+  const lockedBulkResolve = lock('Resolving refunds…', bulkResolveRefunds);
+  const lockedUndoRefund = lock('Undoing refund…', undoRefund);
+  const lockedAutoMatch = lock('Auto-matching…', async () => {
+    await autoMatchAll();
+  });
+  const lockedRefresh = lock('Refreshing…', async () => {
+    await refresh({ autoMatch: true });
+  });
+  const lockedCreateClaim = lock('Saving claim…', createClaim);
+  const lockedUpdateClaim = lock('Updating claim…', updateClaim);
+  const lockedDeleteClaim = lock('Removing claim…', deleteClaim);
+  const lockedUnreconcile = lock('Unmatching…', unreconcile);
+  const lockedRefundMatch = lock('Updating dispute match…', async (event: DisputeMatchEvent) => {
+    if (event.type === 'match') {
+      applyDisputeMatch(event.refundId, event.tollId);
+    } else {
+      applyDisputeUnmatch(event.refundId);
+    }
+    await Promise.all([refresh(), refreshClaims()]);
+  });
+
   return (
     <TooltipProvider>
-    <div className="space-y-6">
+    <div className={`space-y-6 ${actionBusy ? 'select-none' : ''}`}>
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-            <Button variant="ghost" size="sm" onClick={onExit} className="-ml-2 mb-1 text-slate-500 hover:text-slate-700">
+            <Button variant="ghost" size="sm" onClick={onExit} disabled={actionBusy} className="-ml-2 mb-1 text-slate-500 hover:text-slate-700">
                 <ArrowLeft className="h-4 w-4 mr-1.5" />
                 Back to Periods
             </Button>
@@ -999,7 +1048,7 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
                 Test
             </Button>
             {highConfidenceCount > 0 && (
-                <Button variant="default" size="sm" onClick={autoMatchAll} className="bg-indigo-600 hover:bg-indigo-700">
+                <Button variant="default" size="sm" onClick={() => void lockedAutoMatch()} disabled={actionBusy} className="bg-indigo-600 hover:bg-indigo-700">
                     <Wand2 className="h-4 w-4 mr-2" />
                     Auto-match {highConfidenceCount}
                 </Button>
@@ -1009,12 +1058,13 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
               variant="outline"
               size="sm"
               className="text-red-700 border-red-200 hover:bg-red-50"
+              disabled={actionBusy}
               onClick={() => setResetDialogOpen(true)}
             >
               <RotateCcw className="h-4 w-4 mr-2" />
               Reset Period
             </Button>
-            <Button variant="outline" size="sm" onClick={() => refresh({ autoMatch: true })}>
+            <Button variant="outline" size="sm" disabled={actionBusy} onClick={() => void lockedRefresh()}>
                 <RefreshCw className="h-4 w-4 mr-2" />
                 Refresh Data
             </Button>
@@ -1055,7 +1105,7 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
         <GatedReconciliationStepper
           states={gatedStates}
           activeStepId={activeStepId}
-          onSelect={selectStep}
+          onSelect={actionBusy ? () => undefined : selectStep}
           labels={STEP_LABELS}
           icons={STEP_ICONS}
         />
@@ -1068,13 +1118,13 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
               allTrips={trips}
               drivers={drivers}
               unifiedPeriodView
-              onReconcile={handleSmartReconcile}
-              onApprove={handleApprove}
-              onReject={handleReject}
-              onAcceptPersonal={handleAcceptPersonal}
-              onFlag={handleFlag}
-              onManualResolve={handleManualResolve}
-              onEdit={handleEditToll}
+              onReconcile={lockedSmartReconcile}
+              onApprove={lockedApprove}
+              onReject={lockedReject}
+              onAcceptPersonal={lockedAcceptPersonal}
+              onFlag={lockedFlag}
+              onManualResolve={lockedManualResolve}
+              onEdit={lockedEditToll}
               advancePrompt={showAdvancePrompt ? renderAdvancePrompt(true) : undefined}
               emptyState={{ icon: HelpCircle, title: "No tolls pending review", description: "There are no tolls needing review this period." }}
               listTitle="Needs Review"
@@ -1089,14 +1139,14 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
               drivers={drivers}
               unifiedPeriodView
               stepId="personal-use"
-              onReconcile={handleSmartReconcile}
-              onApprove={handleApprove}
-              onReject={handleReject}
-              onAcceptPersonal={handleAcceptPersonal}
-              onFlag={handleFlag}
-              onManualResolve={handleManualResolve}
-              onChargePersonal={handleChargePersonal}
-              onEdit={handleEditToll}
+              onReconcile={lockedSmartReconcile}
+              onApprove={lockedApprove}
+              onReject={lockedReject}
+              onAcceptPersonal={lockedAcceptPersonal}
+              onFlag={lockedFlag}
+              onManualResolve={lockedManualResolve}
+              onChargePersonal={lockedChargePersonal}
+              onEdit={lockedEditToll}
               advancePrompt={showAdvancePrompt ? renderAdvancePrompt(true) : undefined}
               emptyState={{ icon: CarFront, title: "No personal use tolls this period", description: "No tolls were classified as personal driver use." }}
               listTitle="Personal Use"
@@ -1110,14 +1160,14 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
               allTrips={trips}
               drivers={drivers}
               unifiedPeriodView
-              onReconcile={handleSmartReconcile}
-              onApprove={handleApprove}
-              onReject={handleReject}
-              onAcceptPersonal={handleAcceptPersonal}
-              onFlag={handleFlag}
-              onManualResolve={handleManualResolve}
-              onEdit={handleEditToll}
-              onChargeDriver={handleChargeDriverForDeadhead}
+              onReconcile={lockedSmartReconcile}
+              onApprove={lockedApprove}
+              onReject={lockedReject}
+              onAcceptPersonal={lockedAcceptPersonal}
+              onFlag={lockedFlag}
+              onManualResolve={lockedManualResolve}
+              onEdit={lockedEditToll}
+              onChargeDriver={lockedChargeDeadhead}
               approveLabel="Acknowledge (Fleet Cost)"
               advancePrompt={showAdvancePrompt ? renderAdvancePrompt(true) : undefined}
               emptyState={{ icon: Route, title: "No deadhead tolls this period", description: "No unreimbursed business driving tolls detected." }}
@@ -1128,7 +1178,7 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
           {activeStepId === 'dispute-refunds' && (
             <DisputeRefundsList
               refunds={disputeRefunds}
-              onMatchComplete={handleRefundMatchComplete}
+              onMatchComplete={lockedRefundMatch}
             />
           )}
           {activeStepId === 'unlinked-refunds' && (
@@ -1137,9 +1187,9 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
               suggestions={refundSuggestions}
               shortfallSuggestions={shortfallSuggestions}
               drivers={drivers}
-              onResolve={resolveRefund}
-              onBulkResolve={bulkResolveRefunds}
-              onApplyToShortfall={handleApplyUnlinkedShortfall}
+              onResolve={lockedResolveRefund}
+              onBulkResolve={lockedBulkResolve}
+              onApplyToShortfall={lockedApplyShortfall}
             />
           )}
           {activeStepId === 'underpaid-claims' && (
@@ -1159,11 +1209,11 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
               drivers={drivers}
               loadingTolls={tollsLoading}
               loadingClaims={claimsLoading}
-              createClaim={createClaim}
-              updateClaim={updateClaim}
-              deleteClaim={deleteClaim}
+              createClaim={lockedCreateClaim}
+              updateClaim={lockedUpdateClaim}
+              deleteClaim={lockedDeleteClaim}
               refreshClaims={refreshClaims}
-              onUndoUnlinkedApply={handleUndoApply}
+              onUndoUnlinkedApply={lockedUndoApply}
               busyUnlinkedTripId={busyUnlinkedTripId}
             />
           )}
@@ -1181,14 +1231,14 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
           nothing here needs a decision). */}
       <HistoryPanel
         pResolved={pResolved}
-        onUndoRefund={undoRefund}
-        onUndoApply={handleUndoApply}
+        onUndoRefund={lockedUndoRefund}
+        onUndoApply={lockedUndoApply}
         busyUnlinkedTripId={busyUnlinkedTripId}
         disputeRefunds={disputeRefunds || []}
         pReconciled={pReconciledInPeriod}
         trips={trips}
         pClaims={pPeriodClaims}
-        onUnmatch={unreconcile}
+        onUnmatch={lockedUnreconcile}
         selectedDriverId={driverId || ''}
         periodStartDate={period.startDate}
         periodEndDate={period.endDate}
@@ -1213,15 +1263,17 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
             <Button variant="outline" onClick={() => setPendingPersonalTx(null)}>Cancel</Button>
             <Button
               className="bg-indigo-600 hover:bg-indigo-700"
-              disabled={!pendingDriverId}
-              onClick={async () => {
+              disabled={!pendingDriverId || actionBusy}
+              onClick={() => {
                 const tx = pendingPersonalTx;
                 const driverIdForCharge = pendingDriverId;
                 setPendingPersonalTx(null);
                 if (tx && driverIdForCharge) {
-                  await chargeDriverForPersonalUse(
-                    { ...tx, driverId: driverIdForCharge },
-                    { reason: 'Manual Resolution: Personal (Driver Pays)' },
+                  void runExclusive('Charging driver…', () =>
+                    chargeDriverForPersonalUse(
+                      { ...tx, driverId: driverIdForCharge },
+                      { reason: 'Manual Resolution: Personal (Driver Pays)' },
+                    ),
                   );
                 }
               }}

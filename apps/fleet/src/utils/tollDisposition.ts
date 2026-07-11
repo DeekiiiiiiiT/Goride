@@ -37,6 +37,16 @@ export function classifyTollLedgerEntry(e: TollLedgerLike): TollDispositionClass
   return 'unresolved';
 }
 
+/**
+ * Payment-source split for Cash vs Tag spend columns.
+ * Ignores settlement resolution (personal / business) — a cash plaza payment
+ * stays Cash even when later charged to the driver as personal.
+ */
+export function isCashPaidToll(e: Pick<TollLedgerLike, 'paymentMethod' | 'receiptUrl'>): boolean {
+  const pm = (e.paymentMethod || '').toLowerCase();
+  return pm === 'cash' || !!e.receiptUrl;
+}
+
 export interface TollDisposition {
   cashWash: number;
   personal: number;

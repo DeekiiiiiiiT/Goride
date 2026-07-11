@@ -175,6 +175,33 @@ export interface WeeklyFuelReport {
   odometerBuckets?: OdometerBucket[];
 }
 
+/**
+ * Snapshot shape frozen at Finalize time — extends WeeklyFuelReport with fields
+ * that only exist once a period is settled and posted to the ledger.
+ */
+export interface FinalizedFuelReport extends WeeklyFuelReport {
+  status: 'Finalized';
+  finalizedAt: string;
+  finalizedByUser?: string;
+  /** Total the driver already paid out-of-pocket for fuel in this period (cash/manual entries). */
+  driverSpend: number;
+  /** driverSpend − driverShare. Positive = company owes the driver; negative = driver owes the company. */
+  netPay: number;
+  vehiclePlate?: string;
+  vehicleModel?: string;
+  driverName?: string;
+  /**
+   * Cumulative driver/company share actually posted to the financial ledger across
+   * ALL finalize passes for this vehicle+week. Differs from driverShare/companyShare
+   * (which are recomputed live from current data every finalize) only when a week is
+   * re-finalized after new entries or scenario/adjustment changes shift the week's
+   * observed efficiency or price-per-liter — those recompute the whole week's totals,
+   * not just the delta, so posted totals must be tracked separately to detect drift.
+   */
+  postedDriverShare?: number;
+  postedCompanyShare?: number;
+}
+
 export interface OdometerBucket {
   id: string;
   vehicleId: string;

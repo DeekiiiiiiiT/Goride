@@ -19,6 +19,7 @@ import {
     isWithinInterval,
     parseISO,
     areIntervalsOverlapping,
+    format,
 } from 'date-fns';
 
 // ── Input ──
@@ -149,6 +150,9 @@ export function computeWeeklyCashSettlement(input: CashSettlementInput): CashWee
             : netDriverTollCharges(
                 safeTransactions.filter(t => {
                     if (!t || !t.date || !isDriverTollChargeRow(t)) return false;
+                    if (fleetTz) {
+                      return weekBucketForDate(t.date, fleetTz).key === format(weekStart, 'yyyy-MM-dd');
+                    }
                     return isWithinInterval(new Date(t.date), { start: weekStart, end: weekEnd });
                 }),
             );

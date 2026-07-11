@@ -79,7 +79,10 @@ export function computeTollWorkflowStage(input: WorkflowStageInput): TollWorkflo
         return input.matchReasonCode === "ENROUTE_APPROACH" ? "deadhead_pending" : "personal_use_pending";
       case "PERFECT_MATCH":
       default:
-        return "matched";
+        // Suggestion-only PERFECT_MATCH (matchedTripId set, trip link not
+        // confirmed) must stay in needs_review — otherwise period landing
+        // shows Completed / Expenses shows Unmatched for the same tolls.
+        return input.isReconciled ? "matched" : "needs_review";
     }
   }
 

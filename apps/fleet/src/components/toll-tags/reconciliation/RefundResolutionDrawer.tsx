@@ -296,12 +296,18 @@ export function RefundResolutionDrawer({
     }
     if (!selectedCandidate) return;
     if (selectedMismatch && !acknowledgedMismatch) return;
+    const share =
+      typeof selectedCandidate.proposedShare === "number" && selectedCandidate.proposedShare > 0.05
+        ? selectedCandidate.proposedShare
+        : Math.min(amount, selectedCandidate.remainingShortfall);
+    if (share <= 0.05) return;
     setSubmitting(true);
     try {
       await onApplyToShortfall(trip.id, selectedCandidate, {
         acknowledgedPlatformMismatch: selectedMismatch ? acknowledgedMismatch : undefined,
-        forceSingleTarget: multiMode ? true : undefined,
-        applyShare: selectedCandidate.proposedShare,
+        // Explicit single pick — never re-run multi-plaza dump guard with a $0 share.
+        forceSingleTarget: true,
+        applyShare: share,
       });
       onOpenChange(false);
     } finally {

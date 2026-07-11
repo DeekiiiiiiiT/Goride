@@ -27,6 +27,13 @@ export interface PeriodSettlementInput {
   tollCashWash: number;
   /** Server disposition: personal tag tolls billed to the driver (debit). */
   tollPersonal: number;
+  /**
+   * Fuel settlement credits (cash already reimbursed to the driver for
+   * out-of-pocket fuel purchases) that reduce their cash-owed balance.
+   * Optional — omit for call sites that don't track this separately; defaults
+   * to 0, so existing callers are unaffected.
+   */
+  fuelCredits?: number;
 }
 
 export interface PeriodSettlementResult {
@@ -35,7 +42,11 @@ export interface PeriodSettlementResult {
   tollCashWash: number;
   cashOwed: number;
   cashPaid: number;
+  /** Gross cash balance (cashOwed − cashPaid), before fuel-credit netting. */
   cashBalance: number;
+  /** cashBalance minus fuelCredits — what settlement is actually computed against. */
+  adjCashBalance: number;
+  /** netPayout − adjCashBalance. Positive = company owes the driver; negative = driver owes the company. */
   settlement: number;
 }
 
@@ -45,11 +56,13 @@ export function computePeriodSettlement(i: PeriodSettlementInput): PeriodSettlem
   const netPayout = round((i.driverShare || 0) - (i.fuelDeduction || 0));
   const tollPersonal = round(Math.max(0, i.tollPersonal || 0));
   const tollCashWash = round(Math.max(0, i.tollCashWash || 0));
+  const fuelCredits = round(Math.max(0, i.fuelCredits || 0));
 
   const cashOwed = round((i.baseCashOwed || 0) + tollPersonal);
   const cashPaid = round((i.baseCashPaid || 0) + tollCashWash);
   const cashBalance = round(cashOwed - cashPaid);
-  const settlement = round(netPayout - cashBalance);
+  const adjCashBalance = round(cashBalance - fuelCredits);
+  const settlement = round(netPayout - adjCashBalance);
 
   return {
     netPayout,
@@ -58,6 +71,7 @@ export function computePeriodSettlement(i: PeriodSettlementInput): PeriodSettlem
     cashOwed,
     cashPaid,
     cashBalance,
+    adjCashBalance,
     settlement,
   };
 }
