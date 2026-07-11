@@ -18,7 +18,6 @@ import { useVehicleCatalogAnchorFacets } from '../../hooks/useVehicleCatalogAnch
 import { extractChassisPrefix } from '../../utils/chassisPrefix';
 import type { VehicleCatalogRecord } from '../../types/vehicleCatalog';
 import { TollClassPicker } from './TollClassPicker';
-import { TollClassPicker } from './TollClassPicker';
 
 interface AddVehicleModalProps {
   isOpen: boolean;

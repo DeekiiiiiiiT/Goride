@@ -32,6 +32,17 @@ describe('unlinked shortfall eligibility', () => {
     expect(remainingClaimShortfall({ amount: 285, paidAmount: 275 })).toBe(10);
   });
 
+  it('remainingClaimShortfall prefers expectedAmount − paid after partial unlinked apply', () => {
+    // Apply path rewrites amount → leftover ($10) and paidAmount → cumulative credits.
+    expect(
+      remainingClaimShortfall({
+        expectedAmount: 285,
+        amount: 10,
+        paidAmount: 275,
+      }),
+    ).toBe(10);
+  });
+
   it('scores $275 refund near $285 toll highly (picker + recommended)', () => {
     const sameDay = scoreUnlinkedShortfallMatch({
       tripRefund: 275,

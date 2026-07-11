@@ -64,10 +64,22 @@ export function isRecommendedUnlinkedShortfall(
 export function remainingClaimShortfall(claim: {
   amount?: number;
   paidAmount?: number;
+  expectedAmount?: number;
 }): number {
-  const shortfall = Math.abs(Number(claim.amount) || 0);
+  const expected = Math.abs(Number(claim.expectedAmount) || 0);
   const paid = Math.abs(Number(claim.paidAmount) || 0);
-  return Math.max(0, shortfall - paid);
+  // Canonical: expected toll cost − credits already applied (platform + unlinked).
+  if (expected > UNLINKED_SHORTFALL_TOLERANCE) {
+    return Math.max(0, Math.round((expected - paid) * 100) / 100);
+  }
+  // Legacy rows without expectedAmount: amount is the open shortfall balance.
+  const shortfall = Math.abs(Number(claim.amount) || 0);
+  // After a partial unlinked apply, amount is rewritten to leftover while paidAmount
+  // is cumulative — don't subtract paid again.
+  if (paid > UNLINKED_SHORTFALL_TOLERANCE && shortfall + UNLINKED_SHORTFALL_TOLERANCE < paid) {
+    return shortfall;
+  }
+  return Math.max(0, Math.round((shortfall - paid) * 100) / 100);
 }
 
 export function leftoverAfterApply(remainingShortfall: number, tripRefund: number): number {

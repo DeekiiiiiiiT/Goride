@@ -590,15 +590,16 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
       setActiveStepId(pickInitialStep(gatedStates));
       return;
     }
-    const activeState = gatedStates.find(s => s.id === activeStepId);
-    if (activeState?.complete && holdStepRef.current === activeStepId) {
-      holdStepRef.current = null;
+    // Mid-action hold (e.g. Apply on Unlinked) — never kick the user to an earlier step
+    // when a rematch re-opens Personal Use / Needs Review.
+    if (holdStepRef.current) {
+      return;
     }
+    const activeState = gatedStates.find(s => s.id === activeStepId);
     // Re-lock guard: if the active step just became locked (an earlier step
     // regained an actionable item — e.g. a background rematch), snap back to
-    // the new current step — unless the user just acted on this step.
+    // the new current step.
     if (activeState?.locked) {
-      if (holdStepRef.current === activeStepId) return;
       setActiveStepId(pickInitialStep(gatedStates));
     }
   }, [isLoading, gatedStates, activeStepId]);
@@ -773,6 +774,7 @@ export function ReconciliationWizard({ period, driverId, drivers, onExit }: Reco
   const showBottomAdvancePrompt = showAdvancePrompt && !isBucketStepEmpty;
 
   const handleNext = () => {
+    holdStepRef.current = null;
     const idx = STEP_ORDER.indexOf(activeStepId);
     setActiveStepId(STEP_ORDER[Math.min(idx + 1, STEP_ORDER.length - 1)]);
   };

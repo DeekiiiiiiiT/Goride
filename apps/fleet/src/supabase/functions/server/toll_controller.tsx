@@ -37,6 +37,7 @@ import {
   isEligibleUnlinkedShortfallClaim,
   isEligibleUnlinkedShortfallToll,
   UNLINKED_PICKER_MIN_CONFIDENCE,
+  UNLINKED_SHORTFALL_TOLERANCE,
 } from "./unlinked_shortfall_eligibility.ts";
 import { computeChargeShortfall } from "./claim_charge_guard.ts";
 import {
@@ -5651,8 +5652,11 @@ function computeUnlinkedShortfallSuggestions(
     if (!claim || typeof claim !== "object") continue;
     if (claim.driverId !== driverId) continue;
     if (!isEligibleUnlinkedShortfallClaim(claim)) continue;
-    // Already applied to a different unlinked trip
-    if (claim.unlinkedTripId && claim.unlinkedTripId !== trip.id) continue;
+    // Already applied to a different unlinked trip — still eligible if shortfall remains
+    // (stack additional credits onto leftover). Skip only when nothing left to cover.
+    if (claim.unlinkedTripId && claim.unlinkedTripId !== trip.id) {
+      if (remainingClaimShortfall(claim) <= UNLINKED_SHORTFALL_TOLERANCE) continue;
+    }
 
     const remaining = remainingClaimShortfall(claim);
     const toll = resolveTollFromContext(ctx, claim.transactionId);
@@ -5906,7 +5910,11 @@ async function applyUnlinkedRefundToClaim(
     };
   }
   if (claim.unlinkedTripId && claim.unlinkedTripId !== tripId) {
-    return { ok: false, status: 409, error: `Claim already linked to unlinked trip ${claim.unlinkedTripId}` };
+    // Allow stacking more credits onto leftover shortfall; block only when fully covered.
+    const left = remainingClaimShortfall(claim);
+    if (left <= 0.05) {
+      return { ok: false, status: 409, error: `Claim already linked to unlinked trip ${claim.unlinkedTripId}` };
+    }
   }
 
   resolvedTollId = claim.transactionId || resolvedTollId;
