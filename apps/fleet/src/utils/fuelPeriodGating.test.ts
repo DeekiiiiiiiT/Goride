@@ -56,31 +56,26 @@ describe('buildFuelStepCounts', () => {
     isFinalized: false,
   };
 
-  it('pending logs and open disputes are hard blocks', () => {
+  it('pending logs are informational (post on Finalize) — do not hard-block step 1', () => {
     const counts = buildFuelStepCounts({
       vehicles: [
         { ...base, pendingCount: 2, hasOpenDispute: true, healthStatus: 'Emerald' },
       ],
     });
-    expect(counts['data-quality'].actionable).toBe(2);
+    expect(counts['data-quality'].actionable).toBe(0);
+    expect(counts['data-quality'].informational).toBe(2);
     expect(counts['adjustments-disputes'].actionable).toBe(1);
-    expect(canAdvanceFuelStep('data-quality', counts)).toBe(false);
+    expect(canAdvanceFuelStep('data-quality', counts)).toBe(true);
     expect(canAdvanceFuelStep('adjustments-disputes', counts)).toBe(false);
   });
 
-  it('Amber/Red blocks until health acknowledged', () => {
-    const before = buildFuelStepCounts({
+  it('Amber/Red is informational only — does not block Continue', () => {
+    const counts = buildFuelStepCounts({
       vehicles: [{ ...base, healthStatus: 'Amber' }],
-      healthAcknowledged: false,
     });
-    expect(before['data-quality'].actionable).toBe(1);
-
-    const after = buildFuelStepCounts({
-      vehicles: [{ ...base, healthStatus: 'Amber' }],
-      healthAcknowledged: true,
-    });
-    expect(after['data-quality'].actionable).toBe(0);
-    expect(after['data-quality'].informational).toBe(1);
+    expect(counts['data-quality'].actionable).toBe(0);
+    expect(counts['data-quality'].informational).toBe(1);
+    expect(canAdvanceFuelStep('data-quality', counts)).toBe(true);
   });
 
   it('leakage misc blocks until reviewed', () => {

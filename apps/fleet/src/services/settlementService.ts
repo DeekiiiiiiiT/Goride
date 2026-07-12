@@ -5,6 +5,7 @@ import { FuelCalculationService } from './fuelCalculationService';
 import { format } from 'date-fns';
 import { API_ENDPOINTS } from './apiConfig';
 import { publicAnonKey } from '../utils/supabase/info';
+import { pickScenarioForVehicleWeek, mondayYmdForDate } from '../utils/fuelPolicyVersion';
 
 /** Calendar day YYYY-MM-DD from stored date/datetime strings. */
 function toYmd(d: string | undefined | null): string {
@@ -39,9 +40,12 @@ export const settlementService = {
         // actual company/driver split below uses the report's own blended ratio,
         // not a fresh per-category lookup, so it can never drift from the
         // category-weighted `driverShare` already shown/frozen for this report)
-        const activeScenario = scenarios.find(s => s.id === vehicle.fuelScenarioId) ||
-                               scenarios.find(s => s.isDefault) ||
-                               scenarios[0];
+        const weekStartYmd = String(report.weekStart).split('T')[0];
+        const activeScenario = pickScenarioForVehicleWeek(
+            scenarios,
+            vehicle.fuelScenarioId,
+            weekStartYmd,
+        );
 
         // Blended driver-share ratio for this report. Individual FuelEntry rows
         // carry no category (ride share vs personal vs deadhead), so splitting
@@ -311,9 +315,12 @@ export const settlementService = {
       return null;
     }
 
-    const activeScenario = scenarios.find(s => s.id === vehicle.fuelScenarioId) || 
-                          scenarios.find(s => s.isDefault) || 
-                          scenarios[0];
+    const entryWeekMonday = mondayYmdForDate(new Date(toYmd(date) || date));
+    const activeScenario = pickScenarioForVehicleWeek(
+      scenarios,
+      vehicle.fuelScenarioId,
+      entryWeekMonday,
+    );
 
     if (!activeScenario) {
       console.warn(`[SettlementService] No fuel scenario found for settlement.`);

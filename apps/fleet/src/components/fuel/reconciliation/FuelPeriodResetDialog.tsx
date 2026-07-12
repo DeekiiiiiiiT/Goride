@@ -45,32 +45,75 @@ export function FuelPeriodResetDialog({
     [period.id, finalizedReports, fuelEntries],
   );
 
+  const labelOk = periodConfirmLabelsMatch(confirmText, period.label);
+
   useEffect(() => {
     if (!open) setConfirmText('');
   }, [open]);
 
   const handleExecute = async () => {
-    if (!periodConfirmLabelsMatch(confirmText, period.label)) {
-      toast.error('Week label does not match — copy it exactly from above');
+    if (!labelOk) {
+      toast.error('Week label does not match — use the Fill button or copy it exactly');
       return;
     }
     setExecuting(true);
     const toastId = toast.loading('Resetting period…');
     try {
       const result = await runExclusive('Resetting period…', async () => {
-        for (const snap of inventory.snapshots) {
-          await api.deleteFinalizedReport(String(snap.weekStart), snap.vehicleId);
+        const weekKey = period.startDate || period.id;
+        try {
+          return await api.resetFuelPeriod(weekKey);
+        } catch {
+          // Deployed DELETE path — wipe per vehicle with activity this week
+          const vehicleIds =
+            inventory.vehicleIds.length > 0
+              ? inventory.vehicleIds
+              : [
+                  ...new Set(
+                    fuelEntries
+                      .filter((e) => {
+                        const d = String(e.date || '').split('T')[0];
+                        return d >= period.startDate && d <= period.endDate;
+                      })
+                      .map((e) => e.vehicleId)
+                      .filter(Boolean),
+                  ),
+                ];
+          for (const vehicleId of vehicleIds) {
+            try {
+              await api.deleteFinalizedReport(weekKey, vehicleId);
+            } catch (e: any) {
+              if (!/404|not found/i.test(String(e?.message || ''))) throw e;
+            }
+          }
+          return {
+            success: true,
+            snapshotsDeleted: inventory.snapshots.length,
+            resetFuelEntries: inventory.postedEntryCount,
+            deletedTransactions: 0,
+          };
         }
-        return inventory.snapshots.length;
       });
       if (result === undefined) {
         toast.dismiss(toastId);
         toast.info('Another action is already running');
         return;
       }
-      toast.success(`Reset ${result} snapshot${result === 1 ? '' : 's'} for ${period.label}`, {
-        id: toastId,
-      });
+      const snaps = result.snapshotsDeleted ?? 0;
+      const entries = result.resetFuelEntries ?? 0;
+      const txs = result.deletedTransactions ?? 0;
+      if (snaps === 0 && entries === 0 && txs === 0 && !inventory.hasActivity) {
+        toast.success(`Restarted ${period.label} from Data quality`, { id: toastId });
+      } else if (snaps === 0 && entries === 0 && txs === 0) {
+        toast.success(`Restarted ${period.label} from Data quality (no settlements to reverse)`, {
+          id: toastId,
+        });
+      } else {
+        toast.success(
+          `Reset ${period.label}: ${entries} log(s), ${txs} settlement row(s), ${snaps} snapshot(s) — back to Data quality`,
+          { id: toastId },
+        );
+      }
       onOpenChange(false);
       onComplete();
     } catch (e: any) {
@@ -89,8 +132,11 @@ export function FuelPeriodResetDialog({
             Reset Period
           </DialogTitle>
           <DialogDescription>
-            Re-open <strong>{period.label}</strong> by removing finalized snapshots and reversing linked
-            settlements. This cannot be undone.
+            Re-open <strong>{period.label}</strong>
+            {inventory.canReset
+              ? ' by removing finalized snapshots and reversing linked settlements.'
+              : '. This week has no posted settlements — Reset still clears wizard progress and returns you to the period list.'}{' '}
+            This cannot be undone.
           </DialogDescription>
         </DialogHeader>
 
@@ -101,17 +147,34 @@ export function FuelPeriodResetDialog({
               <p className="font-semibold">Will reverse</p>
               <ul className="mt-1 list-inside list-disc text-xs">
                 <li>{inventory.snapshots.length} finalized snapshot(s)</li>
-                <li>{inventory.postedEntryCount} posted fuel log(s) returned toward Pending via cascade</li>
-                <li>Linked wallet / settlement rows for those snapshots</li>
+                <li>{inventory.postedEntryCount} posted fuel log(s) returned to Pending</li>
+                <li>
+                  {inventory.weekEntryCount} fuel log(s) in this week
+                  {inventory.pendingEntryCount > 0
+                    ? ` (${inventory.pendingEntryCount} still Pending)`
+                    : ''}
+                </li>
+                <li>Linked wallet / settlement rows for this week (if any)</li>
               </ul>
             </div>
           </div>
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="fuel-reset-confirm">
-            Type <span className="font-mono text-xs">{period.label}</span> to confirm
-          </Label>
+          <div className="flex items-center justify-between gap-2">
+            <Label htmlFor="fuel-reset-confirm">
+              Type <span className="font-mono text-xs">{period.label}</span> to confirm
+            </Label>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 text-xs"
+              onClick={() => setConfirmText(period.label)}
+            >
+              Fill label
+            </Button>
+          </div>
           <Input
             id="fuel-reset-confirm"
             value={confirmText}
@@ -119,6 +182,9 @@ export function FuelPeriodResetDialog({
             placeholder={period.label}
             autoComplete="off"
           />
+          {confirmText.length > 0 && !labelOk && (
+            <p className="text-xs text-rose-600">Label does not match yet — click Fill label.</p>
+          )}
         </div>
 
         <DialogFooter className="gap-2">
@@ -128,7 +194,7 @@ export function FuelPeriodResetDialog({
           <Button
             type="button"
             variant="destructive"
-            disabled={executing || inventory.snapshots.length === 0}
+            disabled={executing || !labelOk}
             onClick={handleExecute}
           >
             {executing ? (

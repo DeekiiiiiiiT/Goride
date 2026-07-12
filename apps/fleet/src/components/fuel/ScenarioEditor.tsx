@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "../ui/dialog";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -6,8 +6,17 @@ import { Label } from "../ui/label";
 import { Textarea } from "../ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { FuelScenario, FuelRule } from '../../types/fuel';
-import { Fuel, AlertTriangle } from 'lucide-react';
+import { Fuel, AlertTriangle, Info } from 'lucide-react';
 import { normalizePercentageRule } from '../../utils/fuelCoverageSplit';
+import {
+    applyScenarioSave,
+    coverageRulesEqual,
+    mondayYmdForDate,
+    nextMondayYmd,
+    upcomingMondayOptions,
+} from '../../utils/fuelPolicyVersion';
+import { useFleetTimezone } from '../../utils/timezoneDisplay';
+import { toast } from 'sonner@2.0.3';
 
 /**
  * Validates a Fuel rule before save. Blocks NaN/negative/>100% percentages and
@@ -49,6 +58,8 @@ interface ScenarioEditorProps {
     onSave: (scenario: FuelScenario) => Promise<void>;
     initialData: FuelScenario | null;
     affectedVehicleCount?: number;
+    /** True for brand-new or unsaved duplicate — do not append onto a prior policy history. */
+    isCreate?: boolean;
 }
 
 const GRANULAR_FIELDS: { key: keyof FuelRule; label: string }[] = [
@@ -59,14 +70,38 @@ const GRANULAR_FIELDS: { key: keyof FuelRule; label: string }[] = [
     { key: 'miscCoverage', label: 'Misc / Leakage' },
 ];
 
-export function ScenarioEditor({ isOpen, onClose, onSave, initialData, affectedVehicleCount = 0 }: ScenarioEditorProps) {
+const DEFAULT_RULE = (): FuelRule => ({
+    id: crypto.randomUUID(),
+    category: 'Fuel',
+    coverageType: 'Percentage',
+    coverageValue: 50,
+    rideShareCoverage: 80,
+    companyUsageCoverage: 100,
+    deadheadCoverage: 50,
+    personalCoverage: 0,
+    miscCoverage: 50,
+});
+
+export function ScenarioEditor({ isOpen, onClose, onSave, initialData, affectedVehicleCount = 0, isCreate = false }: ScenarioEditorProps) {
+    const fleetTz = useFleetTimezone();
     const [name, setName] = useState('');
     const [description, setDescription] = useState('');
     const [rules, setRules] = useState<FuelRule[]>([]);
+    const [effectiveFromMonday, setEffectiveFromMonday] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
+
+    const weekOptions = useMemo(
+        () => upcomingMondayOptions(16, fleetTz || undefined),
+        [fleetTz],
+    );
 
     useEffect(() => {
         if (isOpen) {
+            // New policy: this week. Rule edit: next Monday (open week keeps prior rules).
+            const defaultFrom = isCreate
+                ? mondayYmdForDate(new Date(), fleetTz || undefined)
+                : nextMondayYmd(new Date(), fleetTz || undefined);
+            setEffectiveFromMonday(defaultFrom);
             if (initialData) {
                 setName(initialData.name);
                 setDescription(initialData.description || '');
@@ -74,35 +109,15 @@ export function ScenarioEditor({ isOpen, onClose, onSave, initialData, affectedV
                 if (fuelRule) {
                      setRules([fuelRule.coverageType === 'Percentage' ? normalizePercentageRule(fuelRule) : fuelRule]);
                 } else {
-                     setRules([{
-                        id: crypto.randomUUID(),
-                        category: 'Fuel',
-                        coverageType: 'Percentage',
-                        coverageValue: 50,
-                        rideShareCoverage: 80,
-                        companyUsageCoverage: 100,
-                        deadheadCoverage: 50,
-                        personalCoverage: 0,
-                        miscCoverage: 50,
-                    }]);
+                     setRules([DEFAULT_RULE()]);
                 }
             } else {
                 setName('');
                 setDescription('');
-                setRules([{
-                    id: crypto.randomUUID(),
-                    category: 'Fuel',
-                    coverageType: 'Percentage',
-                    coverageValue: 50,
-                    rideShareCoverage: 80,
-                    companyUsageCoverage: 100,
-                    deadheadCoverage: 50,
-                    personalCoverage: 0,
-                    miscCoverage: 50,
-                }]);
+                setRules([DEFAULT_RULE()]);
             }
         }
-    }, [isOpen, initialData]);
+    }, [isOpen, initialData, fleetTz, isCreate]);
 
     const updateFuelRule = (field: keyof FuelRule, value: any) => {
         setRules(prev => prev.map(r => {
@@ -120,20 +135,41 @@ export function ScenarioEditor({ isOpen, onClose, onSave, initialData, affectedV
     const fuelRule = rules.find(r => r.category === 'Fuel');
     const validationError = fuelRule ? validateFuelRule(fuelRule) : null;
 
+    const rulesChanged = useMemo(() => {
+        if (isCreate || !initialData || !fuelRule) return true;
+        const prevRules = initialData.rules || [];
+        const nextRule =
+            fuelRule.coverageType === 'Percentage' ? normalizePercentageRule(fuelRule) : fuelRule;
+        return !coverageRulesEqual(prevRules, [nextRule]);
+    }, [isCreate, initialData, fuelRule]);
+
+    const showEffectivePicker = rulesChanged || isCreate;
+
+    const selectedWeekLabel =
+        weekOptions.find((o) => o.value === effectiveFromMonday)?.label || effectiveFromMonday;
+
     const handleSubmit = async () => {
         if (!name.trim() || !fuelRule || validationError) return;
         setIsSubmitting(true);
         try {
             const ruleToSave =
                 fuelRule.coverageType === 'Percentage' ? normalizePercentageRule(fuelRule) : fuelRule;
-            const scenario: FuelScenario = {
+            const draft: FuelScenario = {
                 id: initialData?.id || crypto.randomUUID(),
                 name,
                 description,
                 rules: [ruleToSave],
-                isDefault: initialData?.isDefault || false
+                isDefault: initialData?.isDefault || false,
+                versions: initialData?.versions,
             };
+            const scenario = applyScenarioSave({
+                previous: isCreate ? null : initialData,
+                next: draft,
+                effectiveFromMonday: showEffectivePicker ? effectiveFromMonday : undefined,
+            });
             await onSave(scenario);
+        } catch (e: any) {
+            toast.error(e?.message || 'Failed to save policy');
         } finally {
             setIsSubmitting(false);
         }
@@ -157,11 +193,16 @@ export function ScenarioEditor({ isOpen, onClose, onSave, initialData, affectedV
                         </DialogDescription>
                     </DialogHeader>
 
-                    {initialData && affectedVehicleCount > 0 && (
-                        <div className="flex items-start gap-2 p-2.5 bg-amber-50 border border-amber-200 rounded text-amber-900">
-                            <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                    {showEffectivePicker && (
+                        <div className="flex items-start gap-2 p-2.5 bg-slate-50 border border-slate-200 rounded text-slate-800">
+                            <Info className="h-4 w-4 shrink-0 mt-0.5 text-indigo-600" />
                             <span className="text-sm">
-                                {affectedVehicleCount} vehicle{affectedVehicleCount !== 1 ? 's' : ''} currently {affectedVehicleCount !== 1 ? 'use' : 'uses'} this policy. Saving changes recalculates live unfinalized weeks — finalized weeks are unaffected.
+                                {isCreate
+                                    ? <>New policy rules take effect from <strong>{selectedWeekLabel}</strong> forward.</>
+                                    : <>Changes apply from <strong>{selectedWeekLabel}</strong> forward. Weeks before that keep the previous rules. Finalized weeks stay frozen.</>}
+                                {affectedVehicleCount > 0 && !isCreate && (
+                                    <> ({affectedVehicleCount} vehicle{affectedVehicleCount !== 1 ? 's' : ''} on this policy.)</>
+                                )}
                             </span>
                         </div>
                     )}
@@ -239,60 +280,70 @@ export function ScenarioEditor({ isOpen, onClose, onSave, initialData, affectedV
                             )}
 
                             {fuelRule.coverageType === 'Percentage' && (
-                                <div className="border rounded-md bg-slate-50 p-4 space-y-3">
-                                    <div>
-                                        <Label className="text-sm font-semibold text-slate-900">Company covers by category</Label>
-                                        <p className="text-xs text-slate-500">Driver pays updates automatically.</p>
-                                    </div>
-                                    {GRANULAR_FIELDS.map(({ key, label }) => {
-                                        const company = companyPct(key);
-                                        const driver = 100 - company;
-                                        return (
-                                            <div key={key} className="flex items-center gap-3">
-                                                <Label className="w-28 shrink-0 text-xs font-medium text-slate-700">{label}</Label>
-                                                <div className="relative w-28">
-                                                    <Input
-                                                        type="number"
-                                                        min="0"
-                                                        max="100"
-                                                        className="pr-8"
-                                                        value={company}
-                                                        onChange={(e) =>
-                                                            updateFuelRule(
-                                                                key,
-                                                                e.target.value === '' ? 0 : parseFloat(e.target.value),
-                                                            )
-                                                        }
-                                                    />
-                                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 font-bold">%</span>
-                                                </div>
-                                                <span className="text-xs text-rose-600 tabular-nums">
-                                                    Driver pays {driver}%
-                                                </span>
-                                            </div>
-                                        );
-                                    })}
+                                <div className="space-y-3">
+                                    <Label className="text-slate-700">Company covers by category</Label>
+                                    {GRANULAR_FIELDS.map(({ key, label }) => (
+                                        <div key={key} className="flex items-center gap-3">
+                                            <span className="w-28 text-sm text-slate-600 shrink-0">{label}</span>
+                                            <Input
+                                                type="number"
+                                                min={0}
+                                                max={100}
+                                                className="h-9 w-20"
+                                                value={companyPct(key) as number}
+                                                onChange={(e) =>
+                                                    updateFuelRule(
+                                                        key,
+                                                        e.target.value === '' ? 0 : Math.min(100, Math.max(0, parseFloat(e.target.value) || 0)),
+                                                    )
+                                                }
+                                            />
+                                            <span className="text-xs text-slate-500">% company</span>
+                                            <span className="text-xs text-rose-600 ml-auto">
+                                                Driver {100 - (companyPct(key) as number)}%
+                                            </span>
+                                        </div>
+                                    ))}
                                 </div>
                             )}
                         </div>
                     </div>
-                </div>
 
-                <div className="shrink-0 space-y-3 border-t border-slate-100 px-6 py-4 bg-white">
-                    {validationError && (
-                        <div className="flex items-start gap-2 p-2.5 bg-rose-50 border border-rose-200 rounded text-rose-900">
-                            <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-                            <span className="text-sm">{validationError}</span>
+                    {showEffectivePicker && (
+                        <div className="space-y-2">
+                            <Label>Takes effect (week starting Monday)</Label>
+                            <Select value={effectiveFromMonday} onValueChange={setEffectiveFromMonday}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select week" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {weekOptions.map((o) => (
+                                        <SelectItem key={o.value} value={o.value}>
+                                            {o.label}
+                                            {o.value === weekOptions[0]?.value ? ' (this week)' : ''}
+                                            {o.value === weekOptions[1]?.value ? ' (next week)' : ''}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            {!isCreate && (
+                              <p className="text-xs text-slate-500 flex items-start gap-1.5">
+                                  <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-600" />
+                                  Default is next Monday so the open week keeps current rules unless you choose this week.
+                              </p>
+                            )}
                         </div>
                     )}
-
-                    <DialogFooter>
-                        <Button variant="outline" onClick={onClose}>Cancel</Button>
-                        <Button onClick={handleSubmit} disabled={isSubmitting || !name.trim() || !!validationError}>
-                            {isSubmitting ? "Saving..." : "Save Policy"}
-                        </Button>
-                    </DialogFooter>
                 </div>
+
+                <DialogFooter className="shrink-0 px-6 py-4 border-t border-slate-100 gap-2">
+                    <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>
+                        Cancel
+                    </Button>
+                    <Button type="button" onClick={handleSubmit} disabled={isSubmitting || !!validationError || !name.trim()}>
+                        {isSubmitting ? 'Saving…' : 'Save Policy'}
+                    </Button>
+                </DialogFooter>
             </DialogContent>
         </Dialog>
     );

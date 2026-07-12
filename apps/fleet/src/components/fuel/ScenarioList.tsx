@@ -26,6 +26,7 @@ import {
   sumSplitTotals,
 } from '../../utils/fuelCoverageSplit';
 import { orphanVehicles, vehiclesForPolicy } from '../../utils/fuelPolicyAssignment';
+import { latestEffectiveFromLabel, normalizeScenarioVersions } from '../../utils/fuelPolicyVersion';
 
 function vehiclePlate(v: any): string {
   return v.licensePlate || v.plate || v.name || v.id?.slice(0, 8) || 'Vehicle';
@@ -149,7 +150,8 @@ export function ScenarioList() {
     };
 
     const handleDuplicate = (scenario: FuelScenario) => {
-        const fuelRule = scenario.rules.find((r) => r.category === 'Fuel');
+        const normalized = normalizeScenarioVersions(scenario);
+        const fuelRule = normalized.rules.find((r) => r.category === 'Fuel');
         const clone: FuelScenario = {
             id: crypto.randomUUID(),
             name: `${scenario.name} (Copy)`,
@@ -158,6 +160,8 @@ export function ScenarioList() {
             rules: fuelRule
                 ? [{ ...fuelRule, id: crypto.randomUUID() }]
                 : [],
+            // Fresh policy — no inherited version history
+            versions: undefined,
         };
         setEditingScenario(clone);
         setIsEditorOpen(true);
@@ -295,9 +299,12 @@ export function ScenarioList() {
             ) : (
                 <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
                     {scenarios.map((scenario) => {
-                        const rule = scenario.rules.find((r) => r.category === 'Fuel');
+                        const normalized = normalizeScenarioVersions(scenario);
+                        const rule = normalized.rules.find((r) => r.category === 'Fuel');
                         const assigned = vehiclesForPolicy(scenario, vehicles);
                         const preview = examplePreview(rule);
+                        const effectiveLabel = latestEffectiveFromLabel(normalized);
+                        const priorCount = Math.max(0, (normalized.versions?.length || 1) - 1);
                         return (
                             <Card
                                 key={scenario.id}
@@ -319,9 +326,19 @@ export function ScenarioList() {
                                                     <Car className="h-3 w-3" />
                                                     {assigned.length} vehicle{assigned.length !== 1 ? 's' : ''}
                                                 </Badge>
+                                                {effectiveLabel && (
+                                                    <Badge variant="outline" className="text-slate-500 font-normal">
+                                                        {effectiveLabel}
+                                                    </Badge>
+                                                )}
                                             </div>
                                             <CardDescription className="line-clamp-2">
                                                 {scenario.description || 'No description provided.'}
+                                                {priorCount > 0 && (
+                                                    <span className="block mt-0.5 text-[11px] text-slate-400">
+                                                        {priorCount} prior rule version{priorCount !== 1 ? 's' : ''} retained for earlier weeks
+                                                    </span>
+                                                )}
                                             </CardDescription>
                                         </div>
                                     </div>
@@ -420,6 +437,7 @@ export function ScenarioList() {
                 onClose={() => { setIsEditorOpen(false); setEditingScenario(null); }}
                 onSave={handleSave}
                 initialData={editingScenario}
+                isCreate={!editingScenario || !scenarios.some((s) => s.id === editingScenario.id)}
                 affectedVehicleCount={editingScenario ? getAffectedVehicleCount(editingScenario) : 0}
             />
 
@@ -447,7 +465,7 @@ export function ScenarioList() {
                                         <div className="flex items-start gap-2 p-2.5 bg-amber-50 border border-amber-200 rounded text-amber-900">
                                             <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
                                             <span className="text-sm">
-                                                {count} vehicle{count !== 1 ? 's' : ''} currently {count !== 1 ? 'use' : 'uses'} this policy. Live (unfinalized) reconciliation numbers will change immediately.
+                                                {count} vehicle{count !== 1 ? 's' : ''} currently {count !== 1 ? 'use' : 'uses'} this policy and will fall back to Default after delete.
                                             </span>
                                         </div>
                                     );

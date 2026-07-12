@@ -10,6 +10,7 @@ import {
   splitAllCategoryCosts,
   type FuelCoverageCategory,
 } from '../utils/fuelCoverageSplit';
+import { pickScenarioForVehicleWeek } from '../utils/fuelPolicyVersion';
 
 export type { FuelCoverageCategory };
 
@@ -139,10 +140,12 @@ export const FuelCalculationService = {
         const startStr = FuelCalculationService.toLocalDateStr(weekStart);
         const endStr = FuelCalculationService.toLocalDateStr(weekEnd);
 
-        // 1. Find the active scenario for this vehicle
-        const activeScenario = scenarios.find(s => s.id === vehicle.fuelScenarioId) || 
-                             scenarios.find(s => s.isDefault) || 
-                             scenarios[0];
+        // 1. Find the active scenario for this vehicle + week (effective-from Monday)
+        const activeScenario = pickScenarioForVehicleWeek(
+            scenarios,
+            vehicle.fuelScenarioId,
+            startStr,
+        );
 
         // Helper to get rule for a specific category
         const fuelRule = activeScenario?.rules.find(r => r.category === 'Fuel');

@@ -312,15 +312,32 @@ app.delete(`${BASE_PATH}/finalized-reports/:weekStart/:vehicleId`, async (c) => 
     // Reset fuel logs finalized in this statement (Pending + strip finalize metadata)
     const allFuelEntries = (await kv.getByPrefix("fuel_entry:")) || [];
     let entriesReset = 0;
-    const rStart = snapshot?.weekStart?.split("T")[0];
-    const rEnd = snapshot?.weekEnd?.split("T")[0];
+    const rStart = snapshot?.weekStart?.split("T")[0] || weekKey;
+    const rEnd =
+      snapshot?.weekEnd?.split("T")[0] ||
+      (() => {
+        const d = new Date(`${weekKey}T12:00:00.000Z`);
+        d.setUTCDate(d.getUTCDate() + 6);
+        return d.toISOString().slice(0, 10);
+      })();
 
     for (const entry of allFuelEntries) {
       if (!entry?.id || entry.vehicleId !== vehicleId) continue;
+      const entryDate = String(entry.date || "").split("T")[0];
+      const inWeek = entryDate >= rStart && entryDate <= rEnd;
       const fbr = entry.metadata?.finalizedByReport;
-      if (!fbr || !reportIdCandidates.has(String(fbr))) continue;
-
-      if (rStart && rEnd && (entry.date < rStart || entry.date > rEnd)) continue;
+      const matchReport = fbr && reportIdCandidates.has(String(fbr));
+      const settledInWeek =
+        inWeek &&
+        (entry.reconciliationStatus === "Verified" ||
+          entry.reconciliationStatus === "Archived" ||
+          Boolean(fbr));
+      if (!matchReport && !settledInWeek) continue;
+      if (!inWeek && matchReport) {
+        // linked to this report but outside week bounds — still clear
+      } else if (!inWeek) {
+        continue;
+      }
 
       const meta = { ...(entry.metadata || {}) };
       delete meta.finalizedAt;
@@ -359,6 +376,186 @@ app.delete(`${BASE_PATH}/finalized-reports/:weekStart/:vehicleId`, async (c) => 
     });
   } catch (e: any) {
     console.log(`[FinalizedReports] DELETE error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+/**
+ * Period reset for Consumption Reconciliation — works even when finalized_report
+ * snapshots are missing but fuel logs were already posted (Verified).
+ * Body: { weekStart: "YYYY-MM-DD" } (Monday period id).
+ */
+app.post(`${BASE_PATH}/finalized-reports/reset-period`, async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const weekKey = String(body.weekStart || "").split("T")[0];
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(weekKey)) {
+      return c.json({ error: "weekStart (YYYY-MM-DD Monday) is required" }, 400);
+    }
+
+    // Mon–Sun local calendar span (same contract as fuel week period id)
+    const startUtc = new Date(`${weekKey}T12:00:00.000Z`);
+    const endUtc = new Date(startUtc);
+    endUtc.setUTCDate(endUtc.getUTCDate() + 6);
+    const endDate = endUtc.toISOString().slice(0, 10);
+
+    const snapshots = ((await kv.getByPrefix("finalized_report:")) || []).filter(
+      (s: any) => s?.weekStart && String(s.weekStart).split("T")[0] === weekKey,
+    );
+
+    const reportIdCandidates = new Set<string>();
+    const vehicleIds = new Set<string>();
+    for (const s of snapshots) {
+      if (s?.id) reportIdCandidates.add(String(s.id));
+      if (s?.vehicleId) {
+        vehicleIds.add(String(s.vehicleId));
+        reportIdCandidates.add(`${s.vehicleId}_${weekKey}`);
+      }
+    }
+
+    const allTransactions = (await kv.getByPrefix("transaction:")) || [];
+    const txIdsToDelete = new Set<string>();
+
+    for (const tx of allTransactions) {
+      if (!tx?.id) continue;
+
+      const rid = tx.metadata?.reportId;
+      if (rid && reportIdCandidates.has(String(rid))) {
+        txIdsToDelete.add(tx.id);
+        if (tx.vehicleId) vehicleIds.add(String(tx.vehicleId));
+        continue;
+      }
+
+      if (tx.metadata?.settlementType === "Enterprise_Fuel_Sync") {
+        const wp = String(tx.metadata?.workPeriodStart || "").split("T")[0];
+        if (wp === weekKey) {
+          txIdsToDelete.add(tx.id);
+          if (tx.vehicleId) vehicleIds.add(String(tx.vehicleId));
+          // Ensure report-id form is covered for entry reset
+          if (tx.vehicleId) reportIdCandidates.add(`${tx.vehicleId}_${weekKey}`);
+        }
+      }
+    }
+
+    // Paired wallet credits
+    for (const tx of allTransactions) {
+      if (!tx?.id) continue;
+      if (tx.category !== "Fuel Reimbursement Credit") continue;
+      const src = tx.metadata?.fuelCreditSourceId;
+      if (src && txIdsToDelete.has(String(src))) txIdsToDelete.add(tx.id);
+    }
+
+    const allFuelEntries = (await kv.getByPrefix("fuel_entry:")) || [];
+    const entriesToReset: any[] = [];
+
+    for (const entry of allFuelEntries) {
+      if (!entry?.id || !entry.vehicleId) continue;
+      const d = String(entry.date || "").split("T")[0];
+      if (!d || d < weekKey || d > endDate) continue;
+
+      const fbr = entry.metadata?.finalizedByReport
+        ? String(entry.metadata.finalizedByReport)
+        : "";
+      const settled =
+        entry.reconciliationStatus === "Verified" ||
+        entry.reconciliationStatus === "Archived" ||
+        Boolean(fbr);
+
+      if (!settled) continue;
+
+      // Prefer explicit report link; otherwise Verified in this week is fair game for period reset
+      if (fbr && reportIdCandidates.size > 0 && !reportIdCandidates.has(fbr)) {
+        const parsed = parseFuelReportId(fbr);
+        if (parsed && parsed.weekKey !== weekKey) continue;
+      }
+
+      entriesToReset.push(entry);
+      vehicleIds.add(String(entry.vehicleId));
+      reportIdCandidates.add(`${entry.vehicleId}_${weekKey}`);
+    }
+
+    // Second pass: txs linked by report id discovered from entries
+    for (const tx of allTransactions) {
+      if (!tx?.id || txIdsToDelete.has(tx.id)) continue;
+      const rid = tx.metadata?.reportId;
+      if (rid && reportIdCandidates.has(String(rid))) txIdsToDelete.add(tx.id);
+    }
+
+    const ledgerTransactionIds = new Set<string>(txIdsToDelete);
+    for (const txId of txIdsToDelete) {
+      try {
+        const fc = await kv.get(`transaction:fuel-credit-${txId}`);
+        if (fc?.id) ledgerTransactionIds.add(String(fc.id));
+        await kv.del(`transaction:fuel-credit-${txId}`);
+      } catch {
+        /* ignore */
+      }
+      try {
+        await kv.del(`transaction:${txId}`);
+      } catch (delErr: any) {
+        console.log(`[FuelResetPeriod] Failed to delete tx ${txId}: ${delErr?.message}`);
+      }
+    }
+
+    try {
+      await deleteCanonicalLedgerBySource("transaction", [...ledgerTransactionIds]);
+    } catch (ledgerErr: any) {
+      console.warn("[FuelResetPeriod] Ledger cleanup failed (non-fatal):", ledgerErr?.message);
+    }
+
+    let entriesReset = 0;
+    for (const entry of entriesToReset) {
+      const meta = { ...(entry.metadata || {}) };
+      delete meta.finalizedAt;
+      delete meta.finalizedByReport;
+      delete meta.splitApplied;
+
+      const updated: Record<string, unknown> = {
+        ...entry,
+        reconciliationStatus: "Pending",
+        metadata: meta,
+      };
+      if (entry.transactionId && txIdsToDelete.has(entry.transactionId)) {
+        delete (updated as { transactionId?: string }).transactionId;
+      }
+
+      await kv.set(`fuel_entry:${entry.id}`, updated);
+      entriesReset++;
+    }
+
+    let snapshotsDeleted = 0;
+    for (const s of snapshots) {
+      if (!s?.vehicleId) continue;
+      try {
+        await kv.del(`finalized_report:${weekKey}:${s.vehicleId}`);
+        snapshotsDeleted++;
+      } catch {
+        /* ignore */
+      }
+    }
+    // Also sweep any leftover keys for vehicles we touched
+    for (const vehicleId of vehicleIds) {
+      try {
+        await kv.del(`finalized_report:${weekKey}:${vehicleId}`);
+      } catch {
+        /* ignore */
+      }
+    }
+
+    console.log(
+      `[FuelResetPeriod] week=${weekKey} snapshots=${snapshotsDeleted} txs=${txIdsToDelete.size} entries=${entriesReset}`,
+    );
+
+    return c.json({
+      success: true,
+      weekStart: weekKey,
+      endDate,
+      snapshotsDeleted,
+      deletedTransactions: txIdsToDelete.size,
+      resetFuelEntries: entriesReset,
+    });
+  } catch (e: any) {
+    console.log(`[FuelResetPeriod] error: ${e.message}`);
     return c.json({ error: e.message }, 500);
   }
 });

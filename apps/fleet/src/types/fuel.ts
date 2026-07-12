@@ -325,10 +325,21 @@ export interface BulkFuelExpenseEntry {
   status: 'Pending' | 'Approved' | 'Rejected';
 }
 
+export interface FuelScenarioVersion {
+  id: string;
+  /** Monday yyyy-MM-dd — version applies to weeks starting on/after this date. */
+  effectiveFrom: string;
+  rules: FuelRule[];
+  createdAt: string;
+}
+
 export interface FuelScenario {
   id: string;
   name: string; // e.g. "Standard Fleet", "Owner Operator", "Rental"
   description?: string;
+  /** Latest version rules (kept in sync for legacy readers). */
   rules: FuelRule[];
   isDefault?: boolean;
+  /** Coverage rule history keyed by effective-from Monday. */
+  versions?: FuelScenarioVersion[];
 }

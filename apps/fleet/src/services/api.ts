@@ -3065,6 +3065,33 @@ export const api = {
     }
   },
 
+  /** Re-open a consumption week: wipe snapshots, reverse settlements, return logs to Pending. */
+  async resetFuelPeriod(weekStart: string): Promise<{
+    success: boolean;
+    snapshotsDeleted?: number;
+    deletedTransactions?: number;
+    resetFuelEntries?: number;
+    error?: string;
+  }> {
+    const weekKey = String(weekStart).split('T')[0];
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fuel}/finalized-reports/reset-period`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${publicAnonKey}`,
+        },
+        body: JSON.stringify({ weekStart: weekKey }),
+      },
+    );
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error((data as { error?: string }).error || 'Failed to reset fuel period');
+    }
+    return data;
+  },
+
   /**
    * One-time maintenance: delete fuel settlement transactions that no longer have a matching
    * finalized reconciliation snapshot (e.g. after deleting finalized reports before cascade-delete).

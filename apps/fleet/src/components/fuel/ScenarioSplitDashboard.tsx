@@ -5,6 +5,7 @@ import { Vehicle } from '../../types/vehicle';
 import { Car, Building2, User, Info, Navigation } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 import { splitAllCategoryCosts, sumSplitTotals } from '../../utils/fuelCoverageSplit';
+import { pickScenarioForVehicleWeek } from '../../utils/fuelPolicyVersion';
 
 interface ScenarioSplitDashboardProps {
     reports: WeeklyFuelReport[];
@@ -78,19 +79,14 @@ export function ScenarioSplitDashboard({ reports, scenarios, vehicles }: Scenari
 
         reports.forEach(report => {
             const vehicle = vehicles.find(v => v.id === report.vehicleId);
-            
-            let scenarioId = vehicle?.fuelScenarioId;
-            let scenario = scenarios.find(s => s.id === scenarioId);
+            const weekStart = String(report.weekStart).split('T')[0];
+            const scenario = pickScenarioForVehicleWeek(
+                scenarios,
+                vehicle?.fuelScenarioId,
+                weekStart,
+            );
 
-            // Phase 10: Fallback to System Default Scenario
-            if (!scenario) {
-                scenario = scenarios.find(s => s.isDefault);
-                if (scenario) {
-                    scenarioId = scenario.id;
-                }
-            }
-
-            const activeScenarioId = scenarioId || 'legacy';
+            const activeScenarioId = scenario?.id || vehicle?.fuelScenarioId || 'legacy';
             const scenarioName = scenario ? scenario.name : 'Default Rule (Legacy)';
 
             if (!groups[activeScenarioId]) {

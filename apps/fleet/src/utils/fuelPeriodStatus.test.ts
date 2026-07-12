@@ -34,7 +34,7 @@ describe('fuelPeriodStatus', () => {
     });
     expect(periods[0].status).toBe('outstanding');
     expect(periods[0].counts.finalize.actionable).toBe(1);
-    expect(periods[0].counts['data-quality'].actionable).toBeGreaterThan(0);
+    expect(periods[0].counts['data-quality'].informational).toBeGreaterThan(0);
   });
 
   it('marks week completed when finalized and clear', () => {
@@ -101,5 +101,28 @@ describe('fuelPeriodStatus', () => {
     );
     expect(inv.snapshots).toHaveLength(1);
     expect(inv.postedEntryCount).toBe(1);
+    expect(inv.canReset).toBe(true);
+  });
+
+  it('reset inventory allows reset when posted logs exist without snapshots', () => {
+    const inv = buildFuelPeriodResetInventory(
+      '2026-06-29',
+      [],
+      [
+        {
+          id: 'e1',
+          vehicleId: 'v1',
+          date: '2026-07-01',
+          amount: 10,
+          reconciliationStatus: 'Verified',
+          metadata: { finalizedByReport: 'v1_2026-06-29' },
+        } as FuelEntry,
+      ],
+    );
+    expect(inv.snapshots).toHaveLength(0);
+    expect(inv.postedEntryCount).toBe(1);
+    expect(inv.weekEntryCount).toBe(1);
+    expect(inv.canReset).toBe(true);
+    expect(inv.vehicleIds).toEqual(['v1']);
   });
 });

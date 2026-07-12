@@ -1,26 +1,28 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+﻿import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { FuelLayout } from '../components/fuel/FuelLayout';
 import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
-import { Fuel, Plus, CreditCard, Banknote, Upload, RefreshCw, Loader2, Link2, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { Fuel, Plus, CreditCard, Banknote, Upload, RefreshCw, History, Loader2, Link2, ShieldCheck, AlertTriangle } from 'lucide-react';
 import { FuelCardList } from '../components/fuel/FuelCardList';
 import { FuelCardModal } from '../components/fuel/FuelCardModal';
 import { FuelLogModal } from '../components/fuel/FuelLogModal';
 import { FuelLogTable } from '../components/fuel/FuelLogTable';
 import { ReportsPage } from '../components/fuel/ReportsPage';
 import { FuelConfiguration } from '../components/fuel/FuelConfiguration';
+import { ReconciliationTable } from '../components/fuel/ReconciliationTable';
+import { BucketReconciliationView } from '../components/fuel/BucketReconciliationView';
+import { PeriodWeekDropdown } from '../components/ui/PeriodWeekDropdown';
 import { MileageAdjustmentModal } from '../components/fuel/MileageAdjustmentModal';
-import { FuelPeriodLandingPage } from '../components/fuel/reconciliation/FuelPeriodLandingPage';
-import { FuelPeriodWizard } from '../components/fuel/reconciliation/FuelPeriodWizard';
-import { FuelPeriodResetDialog } from '../components/fuel/reconciliation/FuelPeriodResetDialog';
-import { FuelReconBusyProvider } from '../components/fuel/reconciliation/fuelReconBusyLock';
 import {
-  deriveFuelReconciliationPeriods,
-  listFuelWeekOptionsForLanding,
-  type FuelReconciliationPeriod,
-} from '../utils/fuelPeriodStatus';
-import { fuelWeekBoundsFromPeriodId } from '../utils/fuelWeekPeriod';
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from '../components/ui/sheet';
+import { pickScenarioForVehicleWeek, resolveVersionForWeek } from '../utils/fuelPolicyVersion';
 import { useFleetTimezone } from '../utils/timezoneDisplay';
+import type { PeriodWeekOption } from '../utils/periodWeekOptions';
 import { DisputeResolutionModal } from '../components/fuel/DisputeResolutionModal';
 import { FuelReimbursementTable } from '../components/fuel/FuelReimbursementTable';
 import { SubmitExpenseModal } from '../components/fuel/SubmitExpenseModal';
@@ -33,6 +35,8 @@ import { settlementService } from '../services/settlementService';
 import { FuelDisputeService } from '../services/fuelDisputeService';
 import { api } from '../services/api';
 import { FinalizedReportsTab } from '../components/fuel/FinalizedReportsTab';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
+import { Badge } from '../components/ui/badge';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -51,6 +55,7 @@ import type { FuelCard, FuelEntry, FuelScenario, MileageAdjustment, FuelDispute,
 import { FuelCalculationService } from '../services/fuelCalculationService';
 import type { FinancialTransaction } from '../types/data';
 import type { Trip } from '../types/data';
+import type { Vehicle } from '../types/vehicle';
 
 export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, onTabChange }: { 
     defaultTab?: string, 
@@ -64,9 +69,6 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
   }, [defaultTab]);
 
   const fleetTz = useFleetTimezone();
-  const [selectedFuelPeriod, setSelectedFuelPeriod] = useState<FuelReconciliationPeriod | null>(null);
-  const [resetFuelPeriod, setResetFuelPeriod] = useState<FuelReconciliationPeriod | null>(null);
-  const [showFuelArchive, setShowFuelArchive] = useState(false);
 
   // Decoupled Date Range States for specific audit views
   const [logDateRange, setLogDateRange] = useState<DateRange | undefined>({
@@ -84,19 +86,23 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
       to: endOfWeek(new Date(), { weekStartsOn: 1 })
   });
 
-  // Anchor reconciliation week to fleet timezone when TZ loads / changes
-  useEffect(() => {
-    if (!fleetTz || selectedFuelPeriod) return;
-    const weeks = listFuelWeekOptionsForLanding(1, fleetTz);
-    const w = weeks[0];
-    if (!w) return;
-    const [sy, sm, sd] = w.startDate.split('-').map(Number);
-    const [ey, em, ed] = w.endDate.split('-').map(Number);
+  const reconciliationPeriodStart = reconciliationDateRange?.from
+    ? format(reconciliationDateRange.from, 'yyyy-MM-dd')
+    : undefined;
+  const reconciliationPeriodEnd = reconciliationDateRange?.to
+    ? format(reconciliationDateRange.to, 'yyyy-MM-dd')
+    : reconciliationPeriodStart;
+
+  const handleReconciliationPeriodSelect = (period: PeriodWeekOption) => {
+    if (!period.startDate || !period.endDate) return;
+    const [sy, sm, sd] = period.startDate.split('-').map(Number);
+    const [ey, em, ed] = period.endDate.split('-').map(Number);
     setReconciliationDateRange({
       from: new Date(sy, sm - 1, sd),
       to: new Date(ey, em - 1, ed),
     });
-  }, [fleetTz]); // eslint-disable-line react-hooks/exhaustive-deps
+  };
+
 
   // Fuel Card State
   const [cards, setCards] = useState<FuelCard[]>([]);
@@ -128,32 +134,18 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
 
+
   // Assignment Data
   const [vehicles, setVehicles] = useState<any[]>([]);
   const [drivers, setDrivers] = useState<any[]>([]);
   const [trips, setTrips] = useState<Trip[]>([]);
   const [scenarios, setScenarios] = useState<FuelScenario[]>([]);
   const [finalizedReports, setFinalizedReports] = useState<FinalizedFuelReport[]>([]);
-  const fuelPeriods = useMemo(() => {
-    const weeks = listFuelWeekOptionsForLanding(16, fleetTz || undefined);
-    return deriveFuelReconciliationPeriods({
-      weekOptions: weeks,
-      vehicles,
-      fuelEntries: logs,
-      disputes,
-      finalizedReports,
-      scenarios,
-    });
-  }, [fleetTz, vehicles, logs, disputes, finalizedReports, scenarios]);
+  const finalizedCount = finalizedReports.length;
 
-  const outstandingFuelPeriods = useMemo(
-    () => fuelPeriods.filter((p) => p.status === 'outstanding'),
-    [fuelPeriods],
-  );
-  const completedFuelPeriods = useMemo(
-    () => fuelPeriods.filter((p) => p.status === 'completed'),
-    [fuelPeriods],
-  );
+  // Phase 3: Bucket View State
+  const [selectedBucketVehicle, setSelectedBucketVehicle] = useState<Vehicle | null>(null);
+  const [isBucketSheetOpen, setIsBucketSheetOpen] = useState(false);
 
   // Effect to reload trips when Reconciliation Date Range changes
   useEffect(() => {
@@ -523,9 +515,9 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
                     try {
                         const creditId = `fuel-credit-${savedTx.id}`;
                         await api.deleteTransaction(creditId);
-                        console.log(`[handleSaveExpense] Deleted orphaned wallet credit ${creditId} — payment source changed from driver_cash to ${actualNewSource}`);
+                        console.log(`[handleSaveExpense] Deleted orphaned wallet credit ${creditId} â€” payment source changed from driver_cash to ${actualNewSource}`);
                     } catch (creditErr: any) {
-                        // Credit may not exist — that's OK, log and continue
+                        // Credit may not exist â€” that's OK, log and continue
                         console.warn(`[handleSaveExpense] Could not delete wallet credit fuel-credit-${savedTx.id}:`, creditErr?.message || creditErr);
                     }
                 }
@@ -867,7 +859,7 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
                   // First-time lock with zero pending still saves a snapshot so the week can Complete
               }
 
-              // Same blended ratio settlementService uses to split these entries —
+              // Same blended ratio settlementService uses to split these entries â€”
               // computed here too so the snapshot's cumulative posted totals stay
               // in lockstep with what actually gets posted to the ledger.
               const ratio = FuelCalculationService.getBlendedDriverShareRatio(report);
@@ -900,13 +892,22 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
 
               // Step 9 audit trail: scenarios can be edited/deleted after finalize
               // with no versioning, so the frozen snapshot previously stored only
-              // metadata.scenarioName/scenarioId (informational strings) — not the
+              // metadata.scenarioName/scenarioId (informational strings) â€” not the
               // actual coverage-% values used. Record them here so "why was
               // driverShare $X" stays answerable even after the scenario changes.
-              const activeScenario = scenarios.find(s => s.id === vehicle?.fuelScenarioId) ||
+              const activeScenario = pickScenarioForVehicleWeek(
+                  scenarios,
+                  vehicle?.fuelScenarioId,
+                  rStart,
+              );
+              const appliedFuelRule = activeScenario?.rules.find(r => r.category === 'Fuel');
+              const rawScenario =
+                  scenarios.find(s => s.id === vehicle?.fuelScenarioId) ||
                   scenarios.find(s => s.isDefault) ||
                   scenarios[0];
-              const appliedFuelRule = activeScenario?.rules.find(r => r.category === 'Fuel');
+              const appliedVersion = rawScenario
+                ? resolveVersionForWeek(rawScenario, rStart)
+                : undefined;
 
               snapshots.push({
                 ...report,
@@ -923,13 +924,19 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
                 metadata: {
                   ...report.metadata,
                   appliedScenario: activeScenario
-                    ? { id: activeScenario.id, name: activeScenario.name, fuelRule: appliedFuelRule }
+                    ? {
+                        id: activeScenario.id,
+                        name: activeScenario.name,
+                        fuelRule: appliedFuelRule,
+                        effectiveFrom: appliedVersion?.effectiveFrom,
+                        versionId: appliedVersion?.id,
+                      }
                     : undefined,
                 },
               });
           }
 
-          // Persist snapshots to server (non-blocking — settlement is already committed)
+          // Persist snapshots to server (non-blocking â€” settlement is already committed)
           if (snapshots.length === 0) {
             toast.info("No pending items found to finalize.");
             return;
@@ -939,16 +946,15 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
             await api.saveFinalizedReports(snapshots);
           } catch (snapErr: any) {
             console.error('[FinalizedReports] Snapshot save failed:', snapErr);
-            toast.warning('Statements finalized but snapshot save failed — finalized tab may be incomplete.');
+            toast.warning('Statements finalized but snapshot save failed â€” finalized tab may be incomplete.');
           }
 
           if (successCount > 0) {
               toast.success(`Successfully finalized ${successCount} statements and posted to ledger.`);
           } else {
-              toast.success(`Week locked — ${snapshots.length} snapshot(s) saved.`);
+              toast.success(`Week locked â€” ${snapshots.length} snapshot(s) saved.`);
           }
 
-          setSelectedFuelPeriod(null);
           await loadData(true); // Reload everything
       } catch (e: any) {
           console.error(e);
@@ -970,7 +976,7 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
       pageDescription = "Forensic analysis of spatial accuracy, cryptographic binding, and systemic drift.";
   } else if (activeTab === 'reconciliation') {
       pageTitle = "Consumption Reconciliation";
-      pageDescription = "Close each Monday–Sunday week with gated steps — Outstanding vs Completed.";
+      pageDescription = "Compare actual gas card charges against estimated operating costs.";
   } else if (activeTab === 'reimbursements') {
       pageTitle = "Review Queue";
       pageDescription = "Review and approve driver fuel submissions.";
@@ -1096,76 +1102,57 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
       )}
 
       {activeTab === 'reconciliation' && (
-        <FuelReconBusyProvider>
-        <div className="space-y-4">
-          {showFuelArchive ? (
-            <div className="space-y-3">
-              <Button type="button" variant="ghost" size="sm" onClick={() => setShowFuelArchive(false)}>
-                ← Back to periods
-              </Button>
-              <FinalizedReportsTab />
+        <Tabs defaultValue="auto-generated" className="space-y-4">
+          <div className="flex flex-col sm:flex-row justify-between items-start gap-3">
+            <TabsList className="flex-wrap">
+              <TabsTrigger value="auto-generated">
+                <span className="hidden sm:inline">Standard Fleet Rule</span>
+                <span className="sm:hidden">Fleet Rule</span>
+              </TabsTrigger>
+              <TabsTrigger value="finalized" className="gap-1.5">
+                Finalized
+                {finalizedCount > 0 && (
+                  <Badge variant="secondary" className="ml-1 h-5 min-w-5 px-1.5 text-xs">
+                    {finalizedCount}
+                  </Badge>
+                )}
+              </TabsTrigger>
+            </TabsList>
+            <div className="flex items-center gap-2">
+              <PeriodWeekDropdown
+                selectedStart={reconciliationPeriodStart}
+                selectedEnd={reconciliationPeriodEnd}
+                onSelect={handleReconciliationPeriodSelect}
+                weekCount={16}
+                timezone={fleetTz || undefined}
+                placeholder="Select week period"
+                buttonClassName="min-h-10 px-3 py-2 text-sm"
+              />
             </div>
-          ) : selectedFuelPeriod && reconciliationDateRange ? (
-            <FuelPeriodWizard
-              period={
-                fuelPeriods.find((p) => p.id === selectedFuelPeriod.id) || selectedFuelPeriod
-              }
-              vehicles={vehicles}
-              trips={trips}
-              fuelEntries={logs}
-              adjustments={adjustments}
-              disputes={disputes}
-              scenarios={scenarios}
-              drivers={drivers}
-              finalizedReports={finalizedReports}
-              dateRange={reconciliationDateRange}
-              isRefreshing={isRefreshing}
-              onBack={() => setSelectedFuelPeriod(null)}
-              onRefresh={() => loadData(true)}
-              onFinalize={handleFinalize}
-              onAddAdjustment={() => { setAdjustmentDefaults({}); setIsAdjustmentModalOpen(true); }}
-              onResolveDispute={(dispute) => { setSelectedDispute(dispute); setIsResolutionModalOpen(true); }}
-              onOpenConfiguration={() => {
-                setActiveTab('configuration');
-                onTabChange?.('configuration');
-              }}
-            />
-          ) : (
-            <FuelPeriodLandingPage
-              outstanding={outstandingFuelPeriods}
-              completed={completedFuelPeriods}
-              loading={isRefreshing && fuelPeriods.length === 0}
-              onSelectPeriod={(period) => {
-                const bounds = fuelWeekBoundsFromPeriodId(period.id);
-                const [sy, sm, sd] = bounds.startDate.split('-').map(Number);
-                const [ey, em, ed] = bounds.endDate.split('-').map(Number);
-                setReconciliationDateRange({
-                  from: new Date(sy, sm - 1, sd),
-                  to: new Date(ey, em - 1, ed),
-                });
-                setSelectedFuelPeriod(period);
-              }}
-              onResetPeriod={(period) => setResetFuelPeriod(period)}
-              onOpenArchive={() => setShowFuelArchive(true)}
-            />
-          )}
+          </div>
 
-          {resetFuelPeriod && (
-            <FuelPeriodResetDialog
-              open={!!resetFuelPeriod}
-              onOpenChange={(open) => !open && setResetFuelPeriod(null)}
-              period={resetFuelPeriod}
-              finalizedReports={finalizedReports}
-              fuelEntries={logs}
-              onComplete={async () => {
-                setResetFuelPeriod(null);
-                setSelectedFuelPeriod(null);
-                await loadData(true);
-              }}
+          <TabsContent value="auto-generated" className="space-y-4">
+            <ReconciliationTable  
+                vehicles={vehicles}
+                trips={trips}
+                fuelEntries={logs}
+                adjustments={adjustments}
+                disputes={disputes}
+                dateRange={reconciliationDateRange}
+                scenarios={scenarios}
+                drivers={drivers}
+                finalizedReports={finalizedReports}
+                onFinalize={handleFinalize}
+                onAddAdjustment={() => { setAdjustmentDefaults({}); setIsAdjustmentModalOpen(true); }}
+                onResolveDispute={(dispute) => { setSelectedDispute(dispute); setIsResolutionModalOpen(true); }}
+                onViewBuckets={(vehicle) => { setSelectedBucketVehicle(vehicle); setIsBucketSheetOpen(true); }}
             />
-          )}
-        </div>
-        </FuelReconBusyProvider>
+          </TabsContent>
+
+          <TabsContent value="finalized">
+            <FinalizedReportsTab />
+          </TabsContent>
+        </Tabs>
       )}
 
       {activeTab === 'cards' && (
@@ -1349,6 +1336,34 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Phase 3: Odometer Bucket Sheet */}
+      <Sheet open={isBucketSheetOpen} onOpenChange={setIsBucketSheetOpen}>
+        <SheetContent className="sm:max-w-[900px] overflow-y-auto">
+          <SheetHeader className="mb-6">
+            <SheetTitle className="flex items-center gap-2">
+              <History className="h-5 w-5 text-blue-600" />
+              Stop-to-Stop Reconciliation
+            </SheetTitle>
+            <SheetDescription>
+              Detailed odometer-anchored analysis for {selectedBucketVehicle?.licensePlate} ({selectedBucketVehicle?.model})
+            </SheetDescription>
+          </SheetHeader>
+
+          {selectedBucketVehicle && (
+            <BucketReconciliationView
+              vehicle={selectedBucketVehicle}
+              fuelEntries={logs}
+              trips={trips}
+              transactions={transactions}
+              adjustments={adjustments}
+              dateRange={reconciliationDateRange}
+              onClose={() => setIsBucketSheetOpen(false)}
+              onRefresh={() => loadData(true)}
+            />
+          )}
+        </SheetContent>
+      </Sheet>
 
     </FuelLayout>
   );

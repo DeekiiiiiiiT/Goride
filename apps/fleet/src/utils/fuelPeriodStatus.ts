@@ -51,15 +51,14 @@ export interface FuelPeriodVehicleSnapshot {
 
 export interface BuildFuelStepCountsInput {
   vehicles: FuelPeriodVehicleSnapshot[];
-  /** When true, Amber/Red no longer block (pending still does). */
-  healthAcknowledged?: boolean;
   /** When true, misc/gap review no longer blocks. */
   leakageReviewed?: boolean;
 }
 
 /**
  * Per-step actionable vs informational for one week.
- * - Pending logs + (unacked Amber/Red) block data-quality
+ * - Amber/Red health is informational only (signal for Leakage / Stop-to-Stop review)
+ * - Pending logs are informational on step 1 (they post on Finalize)
  * - Open disputes block adjustments-disputes
  * - Missing policy assignment is informational (default OK)
  * - Misc > 0 blocks leakage until reviewed
@@ -67,18 +66,16 @@ export interface BuildFuelStepCountsInput {
  */
 export function buildFuelStepCounts(input: BuildFuelStepCountsInput): Record<FuelStepId, FuelStepCounts> {
   const counts = emptyFuelStepCounts();
-  const { vehicles, healthAcknowledged = false, leakageReviewed = false } = input;
+  const { vehicles, leakageReviewed = false } = input;
 
   for (const v of vehicles) {
+    // Pending = not yet posted; expected until Finalize — show as info, do not gate Continue
     if (v.pendingCount > 0) {
-      counts['data-quality'].actionable += v.pendingCount;
+      counts['data-quality'].informational += v.pendingCount;
+      counts.finalize.informational += v.pendingCount;
     }
     if (v.healthStatus && v.healthStatus !== 'Emerald') {
-      if (healthAcknowledged) {
-        counts['data-quality'].informational += 1;
-      } else {
-        counts['data-quality'].actionable += 1;
-      }
+      counts['data-quality'].informational += 1;
     }
 
     if (v.hasOpenDispute) {
@@ -234,6 +231,14 @@ export function listFuelWeekOptionsForLanding(weekCount = 16, timezone?: string)
   return generateFuelWeekOptions(weekCount, timezone);
 }
 
+/** True when a fuel log was settlement-posted (Finalize) for this week. */
+function isSettlementPostedFuelEntry(e: FuelEntry): boolean {
+  if (e.metadata?.finalizedByReport) return true;
+  const status = e.reconciliationStatus;
+  // Anything not Pending was pushed through settlement / audit post paths
+  return Boolean(status && status !== 'Pending');
+}
+
 /** Inventory mapper for Reset Period dialog. */
 export function buildFuelPeriodResetInventory(
   periodId: string,
@@ -243,6 +248,11 @@ export function buildFuelPeriodResetInventory(
   snapshots: FinalizedFuelReport[];
   pendingEntryCount: number;
   postedEntryCount: number;
+  weekEntryCount: number;
+  hasActivity: boolean;
+  /** Vehicles that need DELETE/reset even if local snapshot list is empty. */
+  vehicleIds: string[];
+  canReset: boolean;
 } {
   const start = fuelPeriodIdFromWeekStart(periodId);
   const snapshots = finalizedReports.filter(
@@ -250,9 +260,21 @@ export function buildFuelPeriodResetInventory(
   );
   const { endDate } = fuelWeekBoundsFromPeriodId(start);
   const weekEntries = fuelEntries.filter((e) => isYmdInFuelWeek(e.date, start, endDate));
+  const posted = weekEntries.filter(isSettlementPostedFuelEntry);
+  const vehicleIds = [
+    ...new Set([
+      ...snapshots.map((s) => s.vehicleId).filter(Boolean),
+      ...weekEntries.map((e) => e.vehicleId).filter(Boolean),
+    ]),
+  ] as string[];
   return {
     snapshots,
     pendingEntryCount: weekEntries.filter((e) => e.reconciliationStatus === 'Pending').length,
-    postedEntryCount: weekEntries.filter((e) => e.reconciliationStatus !== 'Pending').length,
+    postedEntryCount: posted.length,
+    weekEntryCount: weekEntries.length,
+    hasActivity: weekEntries.length > 0 || snapshots.length > 0,
+    vehicleIds,
+    // Posted settlements OR any week activity — soft reset always allowed from UI
+    canReset: snapshots.length > 0 || posted.length > 0,
   };
 }
