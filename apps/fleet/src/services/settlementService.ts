@@ -5,7 +5,7 @@ import { FuelCalculationService } from './fuelCalculationService';
 import { format } from 'date-fns';
 import { API_ENDPOINTS } from './apiConfig';
 import { publicAnonKey } from '../utils/supabase/info';
-import { pickScenarioForDriverMembership, mondayYmdForDate } from '../utils/fuelPolicyVersion';
+import { pickScenarioForDriverMembership, mondayYmdForDate, resolveActiveFuelPolicyForDriverWeek } from '../utils/fuelPolicyVersion';
 import { reportWeekYmdBounds, toEntryYmd } from '../utils/fuelWeekPeriod';
 
 /** Calendar day YYYY-MM-DD from stored date/datetime strings. */
@@ -42,11 +42,17 @@ export const settlementService = {
         const driver = (drivers || []).find(
           (d: any) => d.id === report.driverId || d.driverId === report.driverId,
         );
-        const activeScenario = pickScenarioForDriverMembership(
+        const activeScenario =
+          resolveActiveFuelPolicyForDriverWeek(
             scenarios,
             report.driverId || driver?.id,
             weekStartYmd,
-        );
+          )?.scenario ||
+          pickScenarioForDriverMembership(
+            scenarios,
+            report.driverId || driver?.id,
+            weekStartYmd,
+          );
 
         // Blended driver-share ratio for this report. Individual FuelEntry rows
         // carry no category (ride share vs personal vs deadhead), so splitting

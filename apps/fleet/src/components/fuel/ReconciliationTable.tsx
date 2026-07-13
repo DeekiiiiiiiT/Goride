@@ -47,8 +47,9 @@ import { downloadCSV } from '../../utils/export';
 import { ScenarioSplitDashboard } from './ScenarioSplitDashboard';
 import { api } from '../../services/api';
 import { UNASSIGNED_FUEL_DRIVER_ID } from '../../types/fuel';
-import { reportWeekYmdBounds, toEntryYmd } from '../../utils/fuelWeekPeriod';
+import { reportWeekYmdBounds, toEntryYmd, isSameFuelStatement } from '../../utils/fuelWeekPeriod';
 import { sumPaidByDriverForReport } from '../../utils/fuelPaidByDriver';
+import { resolveActiveFuelPolicyForDriverWeek } from '../../utils/fuelPolicyVersion';
 
 interface ReconciliationTableProps {
     vehicles: Vehicle[];
@@ -164,9 +165,14 @@ export function ReconciliationTable({
     }, [reports, onReportsChange]);
 
     // Totals — settlement columns use the same Paid-by-Driver helper as rows
+    const paidByDriverCtx = useMemo(
+      () => ({ vehicles, fuelCards, trips }),
+      [vehicles, fuelCards, trips],
+    );
+
     const totals = useMemo(() => {
         return reports.reduce((acc, r) => {
-            const paidByDriver = sumPaidByDriverForReport(fuelEntries, r, vehicles);
+            const paidByDriver = sumPaidByDriverForReport(fuelEntries, r, vehicles, paidByDriverCtx);
             const netPay = paidByDriver - r.driverShare;
             return {
                 gasCard: acc.gasCard + r.totalGasCardCost,
@@ -192,7 +198,7 @@ export function ReconciliationTable({
             paidByDriver: 0,
             netPay: 0,
         });
-    }, [reports, fuelEntries, vehicles]);
+    }, [reports, fuelEntries, vehicles, paidByDriverCtx]);
 
     // Re-finalize safety (Step 2): flag reports that already have a prior finalized
     // snapshot for the same vehicle+week. Re-finalizing recomputes driverShare from
@@ -201,10 +207,7 @@ export function ReconciliationTable({
     // so surface the delta before the admin confirms rather than silently overwriting.
     const reFinalizeWarnings = useMemo(() => {
         return reports.reduce((acc, r) => {
-            const rStartYmd = reportWeekYmdBounds(r).start;
-            const prior = finalizedReports.find(
-                (f) => f.driverId === r.driverId && reportWeekYmdBounds(f).start === rStartYmd
-            );
+            const prior = finalizedReports.find((f) => isSameFuelStatement(f, r));
             if (prior) {
                 const priorDriverShare = prior.postedDriverShare ?? prior.driverShare ?? 0;
                 const delta = r.driverShare - priorDriverShare;
@@ -270,7 +273,7 @@ export function ReconciliationTable({
         const data = reports.map(report => {
             const vehicle = vehicles.find(v => v.id === report.vehicleId);
             const { start: rStart, end: rEnd } = reportWeekYmdBounds(report);
-            const driverSpend = sumPaidByDriverForReport(fuelEntries, report, vehicles);
+            const driverSpend = sumPaidByDriverForReport(fuelEntries, report, vehicles, paidByDriverCtx);
 
             return {
                 WeekStart: rStart,
@@ -622,7 +625,7 @@ export function ReconciliationTable({
                                         : vehicle?.licensePlate) || 'Unknown';
                                 
                                 // Calculate "Paid by Driver" (Cash/Reimbursement) for this driver-week
-                                const driverSpend = sumPaidByDriverForReport(fuelEntries, report, vehicles);
+                                const driverSpend = sumPaidByDriverForReport(fuelEntries, report, vehicles, paidByDriverCtx);
 
                                 const netPay = driverSpend - report.driverShare;
                                 const rideCalc = report.metadata?.rideShareCalc as
@@ -657,24 +660,34 @@ export function ReconciliationTable({
                                                         {vehicle?.model ? ` · ${vehicle.model}` : ''}
                                                     </span>
                                                     {(() => {
-                                                        const policyId = reportDriver?.fuelScenarioId ?? vehicle?.fuelScenarioId;
-                                                        const assigned = scenarios.find(s => s.id === policyId);
-                                                        const fallback = scenarios.find(s => s.isDefault) || scenarios[0];
-                                                        const policyName = report.metadata?.scenarioName || assigned?.name || fallback?.name;
+                                                        const weekKey = reportWeekYmdBounds(report).start;
+                                                        const policy = resolveActiveFuelPolicyForDriverWeek(
+                                                          scenarios,
+                                                          report.driverId,
+                                                          weekKey,
+                                                        );
+                                                        const policyName =
+                                                          policy?.scenario.name ||
+                                                          report.metadata?.scenarioName;
                                                         if (!policyName) return null;
+                                                        const isExplicitMembership = Boolean(
+                                                          policy?.hit &&
+                                                            report.driverId &&
+                                                            policy.version.driverIds?.includes(report.driverId),
+                                                        );
                                                         return (
                                                         <TooltipProvider>
                                                             <Tooltip>
                                                                 <TooltipTrigger asChild>
-                                                                    <span className={`inline-flex items-center gap-1 text-[10px] cursor-help w-fit ${assigned || report.metadata?.scenarioId ? 'text-slate-500' : 'text-amber-600'}`}>
+                                                                    <span className={`inline-flex items-center gap-1 text-[10px] cursor-help w-fit ${isExplicitMembership ? 'text-slate-500' : 'text-amber-600'}`}>
                                                                         <Info className="h-2.5 w-2.5" />
-                                                                        {assigned || report.metadata?.scenarioId ? policyName : `${policyName} (default)`}
+                                                                        {isExplicitMembership ? policyName : `${policyName} (default)`}
                                                                     </span>
                                                                 </TooltipTrigger>
                                                                 <TooltipContent side="bottom" className="max-w-xs text-xs">
-                                                                    {assigned || report.metadata?.scenarioId
-                                                                      ? `Fuel policy for this driver: ${policyName}.`
-                                                                      : `No fuel policy explicitly assigned — falling back to ${policyName}. Assign one from Fleet Policy Configuration if this isn't intentional.`}
+                                                                    {isExplicitMembership
+                                                                      ? `Fuel policy for this driver-week: ${policyName}.`
+                                                                      : `No schedule membership for this driver-week — using ${policyName}. Assign drivers on the Schedule tab if this isn't intentional.`}
                                                                 </TooltipContent>
                                                             </Tooltip>
                                                         </TooltipProvider>
@@ -723,11 +736,8 @@ export function ReconciliationTable({
                                         <TableCell>
                                             <div className="flex flex-col gap-1 items-start">
                                                 {(() => {
-                                                    const rStartYmd = reportWeekYmdBounds(report).start;
                                                     const isLocked = periodLocked || finalizedReports.some(
-                                                        (f) =>
-                                                          (f.driverId === report.driverId || f.vehicleId === report.vehicleId) &&
-                                                          reportWeekYmdBounds(f).start === rStartYmd
+                                                        (f) => isSameFuelStatement(f, report)
                                                     );
                                                     return (
                                                         <Badge variant={isLocked ? 'secondary' : 'outline'} className="text-[10px]">

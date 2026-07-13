@@ -19,12 +19,12 @@ import {
   SheetTitle,
   SheetDescription,
 } from '../components/ui/sheet';
-import { pickScenarioForDriverMembership, resolveDriverVersionForWeek } from '../utils/fuelPolicyVersion';
-import { UNASSIGNED_FUEL_DRIVER_ID } from '../types/fuel';
+import { resolveActiveFuelPolicyForDriverWeek } from '../utils/fuelPolicyVersion';
+import { reportWeekYmdBounds, toEntryYmd, currentFuelWeekRange, isEntryInInclusiveYmdRange } from '../utils/fuelWeekPeriod';
+import { sumPaidByDriverForReport, entriesBelongingToDriverWeekReport } from '../utils/fuelPaidByDriver';
 import { useFleetTimezone, fleetTzDateKey, ymdToLocalDate } from '../utils/timezoneDisplay';
 import { generateWeekOptionsForDateRange, type PeriodWeekOption } from '../utils/periodWeekOptions';
-import { isEntryInInclusiveYmdRange, reportWeekYmdBounds, toEntryYmd } from '../utils/fuelWeekPeriod';
-import { sumPaidByDriverForReport } from '../utils/fuelPaidByDriver';
+import { format } from 'date-fns';
 
 /** Earliest Monday week for Consumption Reconciliation (fuel data from Dec 2025). */
 const RECON_EARLIEST_WEEK_START = new Date(2025, 11, 1);
@@ -32,7 +32,6 @@ import { DisputeResolutionModal } from '../components/fuel/DisputeResolutionModa
 import { FuelReimbursementTable } from '../components/fuel/FuelReimbursementTable';
 import { SubmitExpenseModal } from '../components/fuel/SubmitExpenseModal';
 import { IntegrityGapDashboard } from '../components/fuel/IntegrityGapDashboard';
-import { startOfWeek, endOfWeek, format } from 'date-fns';
 import { useFuelAnchors } from '../hooks/useFuelAnchors';
 import { fuelService } from '../services/fuelService';
 import { settlementService } from '../services/settlementService';
@@ -76,12 +75,25 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
 
   // Shared active fuel week (Mon–Sun) — Logs / Recon / Reimbursements default from this.
   // Logs may temporarily diverge via allowCustomRange; recon week change resets logs override.
-  const [activeFuelWeek, setActiveFuelWeek] = useState<DateRange | undefined>(() => ({
-    from: startOfWeek(new Date(), { weekStartsOn: 1 }),
-    to: endOfWeek(new Date(), { weekStartsOn: 1 }),
-  }));
+  const [activeFuelWeek, setActiveFuelWeek] = useState<DateRange | undefined>(() => {
+    const range = currentFuelWeekRange();
+    return { from: range.from, to: range.to };
+  });
   const [logCustomOverride, setLogCustomOverride] = useState(false);
   const [logDateRangeOverride, setLogDateRangeOverride] = useState<DateRange | undefined>(undefined);
+
+  // Align active week to fleet TZ once timezone is known
+  useEffect(() => {
+    if (!fleetTz) return;
+    const range = currentFuelWeekRange(fleetTz);
+    setActiveFuelWeek((prev) => {
+      if (logCustomOverride) return prev;
+      const nextStart = toEntryYmd(range.from);
+      const prevStart = prev?.from ? toEntryYmd(prev.from) : '';
+      if (nextStart === prevStart) return prev;
+      return { from: range.from, to: range.to };
+    });
+  }, [fleetTz, logCustomOverride]);
 
   const reconciliationDateRange = activeFuelWeek;
   const reimbursementDateRange = activeFuelWeek;
@@ -184,8 +196,8 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
         try {
             // Using getTripsFiltered is more efficient and accurate for reconciliation than raw getTrips
             const response = await api.getTripsFiltered({
-                startDate: reconciliationDateRange.from.toISOString(),
-                endDate: reconciliationDateRange.to?.toISOString() || new Date().toISOString(),
+                startDate: toEntryYmd(reconciliationDateRange.from),
+                endDate: toEntryYmd(reconciliationDateRange.to || reconciliationDateRange.from),
                 limit: 1500 // Cap at 1500 to prevent browser lag, but cover the week
             });
             setTrips(response.data || []);
@@ -855,16 +867,11 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
           const snapshots: FinalizedFuelReport[] = [];
 
           for (const report of reports) {
-              // Filter entries for this driver-week (shared-car safe)
-              const { start: rStart, end: rEnd } = reportWeekYmdBounds(report);
-              const vehicleIds = report.vehicleIds?.length ? report.vehicleIds : [report.vehicleId];
-              const relevantEntries = logs.filter(entry =>
-                  isEntryInInclusiveYmdRange(entry.date, rStart, rEnd) &&
-                  entry.reconciliationStatus === 'Pending' &&
-                  (report.driverId === UNASSIGNED_FUEL_DRIVER_ID
-                    ? !entry.driverId && vehicleIds.includes(entry.vehicleId || '')
-                    : entry.driverId === report.driverId ||
-                      (vehicleIds.includes(entry.vehicleId || '') && !entry.driverId && entry.vehicleId === report.vehicleId && report.driverId))
+              // Same belonging helper as recon rows / Paid by Driver (resolveFuelFillDriver)
+              const { start: rStart } = reportWeekYmdBounds(report);
+              const attrCtx = { vehicles, fuelCards: cards, trips };
+              const relevantEntries = entriesBelongingToDriverWeekReport(logs, report, attrCtx).filter(
+                (entry) => entry.reconciliationStatus === 'Pending',
               );
 
               const prior = findPrior(report.driverId, rStart);
@@ -898,15 +905,17 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
 
               const vehicle = vehicles.find((v: any) => v.id === report.vehicleId);
               const driver = drivers.find((d: any) => d.id === report.driverId || d.driverId === report.driverId);
-              const driverSpend = sumPaidByDriverForReport(logs, report, vehicles);
+              const driverSpend = sumPaidByDriverForReport(logs, report, vehicles, attrCtx);
 
               // Step 9 audit trail — freeze driver policy coverage used for this week
-              const hit = resolveDriverVersionForWeek(scenarios, report.driverId || driver?.id, rStart);
-              const activeScenario = hit
-                ? { ...hit.scenario, rules: hit.version.rules }
-                : pickScenarioForDriverMembership(scenarios, report.driverId || driver?.id, rStart);
+              const policy = resolveActiveFuelPolicyForDriverWeek(
+                scenarios,
+                report.driverId || driver?.id,
+                rStart,
+              );
+              const activeScenario = policy?.scenario;
               const appliedFuelRule = activeScenario?.rules.find(r => r.category === 'Fuel');
-              const appliedVersion = hit?.version;
+              const appliedVersion = policy?.version;
 
               snapshots.push({
                 ...report,
@@ -1179,12 +1188,25 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
                 getDriverName={getDriverName}
                 dateRange={logDateRange}
                 onDateRangeChange={setLogDateRange}
+                statementWeekDiverged={logCustomOverride}
+                statementWeekLabel={
+                  activeFuelWeek?.from && activeFuelWeek?.to
+                    ? `${format(activeFuelWeek.from, 'MMM d')} – ${format(activeFuelWeek.to, 'MMM d, yyyy')}`
+                    : undefined
+                }
+                onResetToStatementWeek={() => {
+                  setLogCustomOverride(false);
+                  setLogDateRangeOverride(undefined);
+                }}
             />
         </div>
       )}
 
       {activeTab === 'configuration' && (
-          <FuelConfiguration />
+          <FuelConfiguration
+            scenarios={scenarios}
+            onScenariosChange={setScenarios}
+          />
       )}
 
       {/* Modals - Conditionally rendered to prevent mount-time effect cascades */}

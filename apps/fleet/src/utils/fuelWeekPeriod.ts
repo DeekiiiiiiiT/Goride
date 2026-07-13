@@ -109,3 +109,33 @@ export function reportWeekYmdBounds(report: {
   const end = report.weekEnd ? toEntryYmd(report.weekEnd) : start;
   return { start, end };
 }
+
+/** Filter any dated items into an inclusive fuel week using calendar YMD. */
+export function entriesInFuelWeek<T extends { date?: string | null }>(
+  items: T[],
+  startYmd: string,
+  endYmd: string,
+): T[] {
+  return items.filter((item) => isEntryInInclusiveYmdRange(item.date, startYmd, endYmd));
+}
+
+/**
+ * Current Mon–Sun statement week in fleet timezone (falls back to browser local).
+ * Same Monday identity as PeriodWeekDropdown options.
+ */
+export function currentFuelWeekRange(timezone?: string): { from: Date; to: Date } {
+  const bucket = fuelWeekBucketForDate(new Date(), timezone);
+  return { from: bucket.weekStart, to: bucket.weekEnd };
+}
+
+/**
+ * Finalize / lock identity: same driver + Monday YMD only.
+ * Never match on vehicleId alone (shared-car safe).
+ */
+export function isSameFuelStatement(
+  a: { driverId?: string; weekStart: string; weekEnd?: string },
+  b: { driverId?: string; weekStart: string; weekEnd?: string },
+): boolean {
+  if (!a.driverId || !b.driverId || a.driverId !== b.driverId) return false;
+  return reportWeekYmdBounds(a).start === reportWeekYmdBounds(b).start;
+}

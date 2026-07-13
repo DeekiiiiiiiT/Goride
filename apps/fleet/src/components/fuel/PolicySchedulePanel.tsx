@@ -43,11 +43,21 @@ function plateForDriver(vehicles: any[], driverId?: string): string {
 
 export function PolicySchedulePanel({
   initialPolicyId,
+  scenarios: controlledScenarios,
+  onScenariosChange,
 }: {
   initialPolicyId?: string | null;
+  scenarios?: FuelScenario[];
+  onScenariosChange?: (scenarios: FuelScenario[]) => void;
 }) {
   const fleetTz = useFleetTimezone();
-  const [scenarios, setScenarios] = useState<FuelScenario[]>([]);
+  const isControlled = controlledScenarios !== undefined;
+  const [localScenarios, setLocalScenarios] = useState<FuelScenario[]>([]);
+  const scenarios = isControlled ? controlledScenarios! : localScenarios;
+  const commitScenarios = (next: FuelScenario[]) => {
+    if (!isControlled) setLocalScenarios(next);
+    onScenariosChange?.(next);
+  };
   const [drivers, setDrivers] = useState<any[]>([]);
   const [vehicles, setVehicles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -66,7 +76,7 @@ export function PolicySchedulePanel({
         api.getDrivers().catch(() => []),
         api.getVehicles().catch(() => []),
       ]);
-      setScenarios(scen || []);
+      commitScenarios(scen || []);
       setDrivers(drvs || []);
       setVehicles(vehs || []);
       setSelectedId((prev) => {
@@ -120,11 +130,12 @@ export function PolicySchedulePanel({
   const handleSave = async (scenario: FuelScenario) => {
     try {
       const saved = await fuelService.saveFuelScenario(scenario);
-      setScenarios((prev) => {
-        const idx = prev.findIndex((s) => s.id === saved.id);
-        if (idx >= 0) return prev.map((s, i) => (i === idx ? saved : s));
-        return [...prev, saved];
-      });
+      const idx = scenarios.findIndex((s) => s.id === saved.id);
+      commitScenarios(
+        idx >= 0
+          ? scenarios.map((s, i) => (i === idx ? saved : s))
+          : [...scenarios, saved],
+      );
       setSelectedId(saved.id);
       toast.success('Version saved');
       setEditorOpen(false);
@@ -143,7 +154,7 @@ export function PolicySchedulePanel({
     try {
       const next = removeScenarioVersion(selected, versionToDelete.id);
       const saved = await fuelService.saveFuelScenario(next);
-      setScenarios((prev) => prev.map((s) => (s.id === saved.id ? saved : s)));
+      commitScenarios(scenarios.map((s) => (s.id === saved.id ? saved : s)));
       toast.success('Version deleted');
       setVersionToDelete(null);
     } catch (e: any) {

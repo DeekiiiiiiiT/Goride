@@ -18,7 +18,7 @@ import {
 import { resolveFuelFillDriver } from '../utils/resolveFuelFillDriver';
 import { UNASSIGNED_FUEL_DRIVER_ID } from '../types/fuel';
 import type { FuelCard } from '../types/fuel';
-import { isEntryInInclusiveYmdRange } from '../utils/fuelWeekPeriod';
+import { isEntryInInclusiveYmdRange, entriesInFuelWeek } from '../utils/fuelWeekPeriod';
 
 export type { FuelCoverageCategory };
 
@@ -398,7 +398,7 @@ export const FuelCalculationService = {
         const vehicleById = new Map(vehicles.map((v) => [v.id, v]));
         const driverById = new Map(drivers.map((d) => [d.id, d]));
 
-        const weekEntries = fuelEntries.filter((e) => e.date >= startStr && e.date <= endStr);
+        const weekEntries = entriesInFuelWeek(fuelEntries, startStr, endStr);
         type Attr = { entry: FuelEntry; driverId: string };
         const attributed: Attr[] = weekEntries.map((entry) => {
             const resolved = resolveFuelFillDriver({
@@ -450,7 +450,7 @@ export const FuelCalculationService = {
             const policyId = hit?.scenario.id;
 
             const expandedTrips = trips.filter((t) => {
-                if (t.date < startStr || t.date > endStr) return false;
+                if (!isEntryInInclusiveYmdRange(t.date, startStr, endStr)) return false;
                 if (!(t.status === 'Completed' || t.status === 'Cancelled')) return false;
                 if (driverId === UNASSIGNED_FUEL_DRIVER_ID) return false;
                 if (t.driverId === driverId) return true;
@@ -460,8 +460,7 @@ export const FuelCalculationService = {
             const driverAdjustments = adjustments.filter(
                 (a) =>
                     a.driverId === driverId &&
-                    a.date >= startStr &&
-                    a.date <= endStr,
+                    isEntryInInclusiveYmdRange(a.date, startStr, endStr),
             );
 
             // Scope entries to "virtual" filter: pass entries with vehicleId forced through

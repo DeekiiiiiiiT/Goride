@@ -324,6 +324,24 @@ export function pickScenarioForDriverMembership(
   };
 }
 
+/**
+ * Enterprise facade: active policy for a driver-week (money + UI must agree).
+ * Prefer this over legacy pickScenarioForDriverWeek / vehicle.fuelScenarioId.
+ */
+export function resolveActiveFuelPolicyForDriverWeek(
+  scenarios: FuelScenario[],
+  driverId: string | undefined | null,
+  weekStartYmd: string,
+): { scenario: FuelScenario; version: FuelScenarioVersion; hit: DriverVersionHit } | undefined {
+  const hit = resolveDriverVersionForWeek(scenarios, driverId, weekStartYmd);
+  if (!hit) return undefined;
+  const scenario: FuelScenario = {
+    ...hit.scenario,
+    rules: cloneRules(hit.version.rules || hit.scenario.rules || []),
+  };
+  return { scenario, version: hit.version, hit };
+}
+
 /** @deprecated Dual-read cutover — recon should use resolveDriverVersionForWeek. */
 export function resolveDriverFuelScenarioId(
   driver: { fuelScenarioId?: string } | null | undefined,

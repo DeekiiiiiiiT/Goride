@@ -29,8 +29,14 @@ import {
   type FuelStepId,
 } from '../../../utils/fuelPeriodGating';
 import { buildFuelStepCounts, type FuelReconciliationPeriod } from '../../../utils/fuelPeriodStatus';
-import { isEntryInInclusiveYmdRange, reportWeekYmdBounds } from '../../../utils/fuelWeekPeriod';
+import { isEntryInInclusiveYmdRange, reportWeekYmdBounds, isSameFuelStatement } from '../../../utils/fuelWeekPeriod';
 import { sumPaidByDriverForReport } from '../../../utils/fuelPaidByDriver';
+
+/**
+ * Period wizard shell — NOT the production recon entry point.
+ * Production uses ReconciliationTable in FuelManagement. Keep attribution helpers
+ * identical so this cannot invent a second belonging path if wired later.
+ */
 import type {
   FinalizedFuelReport,
   FuelDispute,
@@ -197,10 +203,10 @@ function FuelPeriodWizardInner({
       const pendingCount =
         report?.pendingCount ??
         vEntries.filter((e) => e.reconciliationStatus === 'Pending').length;
-      const isFinalized = finalizedReports.some(
-        (f) =>
-          (f.vehicleId === vehicle.id || f.driverId === vehicle.currentDriverId) &&
-          reportWeekYmdBounds(f).start === start,
+      const isFinalized = finalizedReports.some((f) =>
+        report
+          ? isSameFuelStatement(f, report)
+          : f.vehicleId === vehicle.id && reportWeekYmdBounds(f).start === start,
       );
       const hasOpenDispute = disputes.some(
         (d) =>
@@ -208,7 +214,9 @@ function FuelPeriodWizardInner({
           d.status === 'Open' &&
           reportWeekYmdBounds({ weekStart: d.weekStart || start, weekEnd: d.weekEnd }).start === start,
       );
-      const driverSpend = report ? sumPaidByDriverForReport(fuelEntries, report, vehicles) : 0;
+      const driverSpend = report
+        ? sumPaidByDriverForReport(fuelEntries, report, vehicles, { vehicles, trips })
+        : 0;
       return {
         vehicleId: vehicle.id,
         totalSpend: report?.totalGasCardCost ?? vEntries.reduce((s, e) => s + e.amount, 0),
@@ -228,7 +236,7 @@ function FuelPeriodWizardInner({
         netPay: driverSpend - (report?.driverShare ?? 0),
       };
     });
-  }, [vehicles, liveReports, fuelEntries, disputes, finalizedReports, period, scenarios]);
+  }, [vehicles, liveReports, fuelEntries, disputes, finalizedReports, period, scenarios, trips]);
 
   // Enrich settlement columns from live reports (driver-week Paid by Driver)
   const settlementRows = useMemo(() => {
@@ -236,7 +244,11 @@ function FuelPeriodWizardInner({
       .filter((r) => r.totalGasCardCost > 0.009)
       .map((r) => {
         const v = vehicles.find((x) => x.id === r.vehicleId);
-        const driverSpend = sumPaidByDriverForReport(fuelEntries, r, vehicles);
+        const driverSpend = sumPaidByDriverForReport(fuelEntries, r, vehicles, {
+          vehicles,
+          fuelCards: [],
+          trips,
+        });
         return {
           id: r.driverId || r.vehicleId,
           plate: v?.licensePlate || r.vehicleId,
@@ -247,7 +259,7 @@ function FuelPeriodWizardInner({
           status: periodLocked ? 'Locked' : (r.pendingCount || 0) > 0 ? 'Pending' : 'Draft',
         };
       });
-  }, [liveReports, vehicles, fuelEntries, periodLocked]);
+  }, [liveReports, vehicles, fuelEntries, periodLocked, trips]);
 
   const counts = useMemo(
     () =>

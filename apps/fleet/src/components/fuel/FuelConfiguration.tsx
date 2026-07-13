@@ -5,8 +5,16 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { Info } from 'lucide-react';
 import { ScenarioList } from './ScenarioList';
 import { PolicySchedulePanel } from './PolicySchedulePanel';
+import type { FuelScenario } from '../../types/fuel';
 
-export function FuelConfiguration() {
+export function FuelConfiguration({
+  scenarios,
+  onScenariosChange,
+}: {
+  /** Parent-owned scenarios so Recon updates without Refresh Data. */
+  scenarios?: FuelScenario[];
+  onScenariosChange?: (scenarios: FuelScenario[]) => void;
+}) {
     const [tab, setTab] = useState('rules');
     const [schedulePolicyId, setSchedulePolicyId] = useState<string | null>(null);
 
@@ -29,6 +37,7 @@ export function FuelConfiguration() {
                     <AlertDescription className="text-slate-700">
                         Rules set the split percentages. Schedule sets Monday periods and which
                         drivers use each version. Drivers with no version assignment use Default.
+                        Changes apply to Consumption Reconciliation immediately.
                     </AlertDescription>
                 </Alert>
 
@@ -43,6 +52,8 @@ export function FuelConfiguration() {
                     </TabsList>
                     <TabsContent value="rules" className="mt-6">
                         <ScenarioList
+                            scenarios={scenarios}
+                            onScenariosChange={onScenariosChange}
                             onViewSchedule={(policyId) => {
                                 setSchedulePolicyId(policyId);
                                 setTab('schedule');
@@ -50,7 +61,11 @@ export function FuelConfiguration() {
                         />
                     </TabsContent>
                     <TabsContent value="schedule" className="mt-6">
-                        <PolicySchedulePanel initialPolicyId={schedulePolicyId} />
+                        <PolicySchedulePanel
+                          initialPolicyId={schedulePolicyId}
+                          scenarios={scenarios}
+                          onScenariosChange={onScenariosChange}
+                        />
                     </TabsContent>
                 </Tabs>
             </CardContent>

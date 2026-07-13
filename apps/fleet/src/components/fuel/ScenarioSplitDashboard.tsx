@@ -5,7 +5,8 @@ import { Vehicle } from '../../types/vehicle';
 import { Car, Building2, User, Info, Navigation } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 import { splitAllCategoryCosts, sumSplitTotals } from '../../utils/fuelCoverageSplit';
-import { pickScenarioForDriverWeek } from '../../utils/fuelPolicyVersion';
+import { resolveActiveFuelPolicyForDriverWeek } from '../../utils/fuelPolicyVersion';
+import { reportWeekYmdBounds } from '../../utils/fuelWeekPeriod';
 
 interface ScenarioSplitDashboardProps {
     reports: WeeklyFuelReport[];
@@ -78,15 +79,15 @@ export function ScenarioSplitDashboard({ reports, scenarios, vehicles }: Scenari
         }> = {};
 
         reports.forEach(report => {
-            const vehicle = vehicles.find(v => v.id === report.vehicleId);
-            const weekStart = String(report.weekStart).split('T')[0];
-            const scenario = pickScenarioForDriverWeek(
+            const weekStart = reportWeekYmdBounds(report).start;
+            const policy = resolveActiveFuelPolicyForDriverWeek(
                 scenarios,
-                report.metadata?.scenarioId || vehicle?.fuelScenarioId,
+                report.driverId,
                 weekStart,
             );
+            const scenario = policy?.scenario;
 
-            const activeScenarioId = scenario?.id || report.metadata?.scenarioId || vehicle?.fuelScenarioId || 'legacy';
+            const activeScenarioId = scenario?.id || report.metadata?.scenarioId || 'legacy';
             const scenarioName = scenario ? scenario.name : (report.metadata?.scenarioName || 'Default Rule (Legacy)');
 
             if (!groups[activeScenarioId]) {

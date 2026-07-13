@@ -45,13 +45,24 @@ function driverDisplayName(d: any): string {
 
 export function ScenarioList({
   onViewSchedule,
+  scenarios: controlledScenarios,
+  onScenariosChange,
 }: {
   /** Switch parent to Schedule tab for this policy id. */
   onViewSchedule?: (policyId: string) => void;
+  /** When provided, parent owns scenario list (Config ↔ Recon sync). */
+  scenarios?: FuelScenario[];
+  onScenariosChange?: (scenarios: FuelScenario[]) => void;
 }) {
     const queryClient = useQueryClient();
     const fleetTz = useFleetTimezone();
-    const [scenarios, setScenarios] = useState<FuelScenario[]>([]);
+    const isControlled = controlledScenarios !== undefined;
+    const [localScenarios, setLocalScenarios] = useState<FuelScenario[]>([]);
+    const scenarios = isControlled ? controlledScenarios! : localScenarios;
+    const commitScenarios = (next: FuelScenario[]) => {
+      if (!isControlled) setLocalScenarios(next);
+      onScenariosChange?.(next);
+    };
     const [vehicles, setVehicles] = useState<any[]>([]);
     const [drivers, setDrivers] = useState<any[]>([]);
     const [fuelEntries, setFuelEntries] = useState<FuelEntry[]>([]);
@@ -79,7 +90,7 @@ export function ScenarioList({
                 fuelService.getFuelEntries({ limit: 5000 }).catch(() => []),
                 api.getFinalizedReports().catch(() => []),
             ]);
-            setScenarios(scen);
+            commitScenarios(scen);
             setVehicles(vehs || []);
             setDrivers(drvs || []);
             setFuelEntries(Array.isArray(logs) ? logs : []);
@@ -107,13 +118,14 @@ export function ScenarioList({
     const handleSave = async (scenario: FuelScenario) => {
         try {
             const saved = await fuelService.saveFuelScenario(scenario);
-            setScenarios(prev => {
+            commitScenarios((() => {
+                const prev = scenarios;
                 const index = prev.findIndex(s => s.id === saved.id);
                 if (index >= 0) {
                     return prev.map((s, i) => i === index ? saved : (saved.isDefault ? { ...s, isDefault: false } : s));
                 }
                 return [...(saved.isDefault ? prev.map(s => ({ ...s, isDefault: false })) : prev), saved];
-            });
+            })());
             toast.success("Policy saved");
             setIsEditorOpen(false);
             setEditingScenario(null);
@@ -148,7 +160,7 @@ export function ScenarioList({
 
         try {
             await fuelService.deleteFuelScenario(deleteId);
-            setScenarios(prev => prev.filter(s => s.id !== deleteId));
+            commitScenarios(scenarios.filter(s => s.id !== deleteId));
             await queryClient.invalidateQueries({ queryKey: ['drivers'] });
             toast.success("Policy deleted");
         } catch (e: any) {

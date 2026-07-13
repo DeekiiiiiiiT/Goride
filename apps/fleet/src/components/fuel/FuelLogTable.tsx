@@ -75,6 +75,10 @@ interface FuelLogTableProps {
     getDriverName: (id?: string) => string;
     dateRange?: DateRange;
     onDateRangeChange?: (range: DateRange | undefined) => void;
+    /** When true, Logs week differs from statement week used by Recon. */
+    statementWeekDiverged?: boolean;
+    statementWeekLabel?: string;
+    onResetToStatementWeek?: () => void;
 }
 
 export function FuelLogTable({ 
@@ -87,7 +91,10 @@ export function FuelLogTable({
     getVehicleName, 
     getDriverName,
     dateRange,
-    onDateRangeChange
+    onDateRangeChange,
+    statementWeekDiverged,
+    statementWeekLabel,
+    onResetToStatementWeek,
 }: FuelLogTableProps) {
     const { can } = usePermissions();
     const [searchTerm, setSearchTerm] = useState('');
@@ -377,6 +384,19 @@ export function FuelLogTable({
 
     return (
         <div className="space-y-4">
+            {statementWeekDiverged && (
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                <p>
+                  Logs week differs from the statement week used by Consumption Reconciliation
+                  {statementWeekLabel ? ` (${statementWeekLabel})` : ''}. Totals will not match until weeks align.
+                </p>
+                {onResetToStatementWeek && (
+                  <Button type="button" variant="outline" size="sm" className="shrink-0 border-amber-300 bg-white" onClick={onResetToStatementWeek}>
+                    Reset to statement week
+                  </Button>
+                )}
+              </div>
+            )}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-2">
                 <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm flex items-center gap-4">
                     <div className="h-10 w-10 bg-blue-50 rounded-full flex items-center justify-center shrink-0">
