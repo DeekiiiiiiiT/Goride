@@ -153,7 +153,11 @@ export function deriveFuelReconciliationPeriods(input: DeriveFuelPeriodsInput): 
     const live = liveReportsByWeek?.get(id);
 
     const vehicleSnaps: FuelPeriodVehicleSnapshot[] = vehicles.map((vehicle) => {
-      const liveReport = live?.find((r) => r.vehicleId === vehicle.id);
+      const liveReport = live?.find(
+        (r) =>
+          r.vehicleId === vehicle.id ||
+          (Array.isArray((r as any).vehicleIds) && (r as any).vehicleIds.includes(vehicle.id)),
+      );
       const vEntries = weekEntries.filter((e) => e.vehicleId === vehicle.id);
       const totalSpend =
         liveReport?.totalGasCardCost ??
@@ -163,13 +167,18 @@ export function deriveFuelReconciliationPeriods(input: DeriveFuelPeriodsInput): 
         vEntries.filter((e) => e.reconciliationStatus === 'Pending').length;
       const finalized = finalizedReports.some(
         (f) =>
-          f.vehicleId === vehicle.id &&
-          String(f.weekStart).split('T')[0] === startDate,
+          String(f.weekStart).split('T')[0] === startDate &&
+          (f.vehicleId === vehicle.id ||
+            (vehicle.currentDriverId && f.driverId === vehicle.currentDriverId)),
       );
       const hasOpenDispute = disputes.some(
         (d) => d.vehicleId === vehicle.id && disputeOpenInWeek(d, startDate, endDate),
       );
-      const hasScenarioAssigned = Boolean(vehicle.fuelScenarioId);
+      // Driver-first: explicit driver/vehicle policy OR Default scenario exists
+      const hasScenarioAssigned =
+        Boolean(vehicle.fuelScenarioId) ||
+        Boolean(scenarios?.some((s) => s.isDefault)) ||
+        Boolean(liveReport?.metadata?.scenarioId);
 
       return {
         vehicleId: vehicle.id,

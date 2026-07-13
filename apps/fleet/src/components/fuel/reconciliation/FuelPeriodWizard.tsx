@@ -40,7 +40,7 @@ import type {
 import type { Trip } from '../../../types/data';
 import type { Vehicle } from '../../../types/vehicle';
 import { getCoverageMatrixRows } from '../../../utils/fuelCoverageSplit';
-import { pickScenarioForVehicleWeek, resolveVersionForWeek } from '../../../utils/fuelPolicyVersion';
+import { pickScenarioForDriverWeek, resolveVersionForWeek } from '../../../utils/fuelPolicyVersion';
 import { useFuelReconBusy } from './fuelReconBusyLock';
 
 const STEP_ICONS: Record<FuelStepId, LucideIcon> = {
@@ -211,14 +211,17 @@ function FuelPeriodWizardInner({
         healthStatus: report?.healthStatus,
         pendingCount,
         hasOpenDispute,
-        hasScenarioAssigned: Boolean(vehicle.fuelScenarioId),
+        hasScenarioAssigned:
+          Boolean(vehicle.fuelScenarioId) ||
+          Boolean(scenarios?.some((s) => s.isDefault)) ||
+          Boolean(report?.metadata?.scenarioId),
         isFinalized,
         plate: vehicle.licensePlate || vehicle.id,
         driverSpend: 0,
         netPay: 0,
       };
     });
-  }, [vehicles, liveReports, fuelEntries, disputes, finalizedReports, period]);
+  }, [vehicles, liveReports, fuelEntries, disputes, finalizedReports, period, scenarios]);
 
   // Enrich settlement columns from live reports
   const settlementRows = useMemo(() => {
@@ -351,9 +354,13 @@ function FuelPeriodWizardInner({
     return vehicles
       .filter((v) => vehicleSnaps.some((s) => s.vehicleId === v.id && s.totalSpend > 0.009))
       .map((v) => {
-        const scenario = pickScenarioForVehicleWeek(scenarios, v.fuelScenarioId, period.startDate);
+        const live = liveReports.find(
+          (r) => r.vehicleId === v.id || (r.vehicleIds || []).includes(v.id),
+        );
+        const policyId = live?.metadata?.scenarioId || v.fuelScenarioId;
+        const scenario = pickScenarioForDriverWeek(scenarios, policyId, period.startDate);
         const raw =
-          scenarios.find((s) => s.id === v.fuelScenarioId) ||
+          scenarios.find((s) => s.id === policyId) ||
           scenarios.find((s) => s.isDefault) ||
           scenarios[0];
         const version = raw ? resolveVersionForWeek(raw, period.startDate) : undefined;
@@ -365,7 +372,7 @@ function FuelPeriodWizardInner({
           effectiveFrom: version?.effectiveFrom,
         };
       });
-  }, [vehicles, scenarios, vehicleSnaps, period.startDate]);
+  }, [vehicles, scenarios, vehicleSnaps, period.startDate, liveReports]);
 
   const canContinue = canAdvanceFuelStep(activeStepId, counts);
   const stepIndex = FUEL_STEP_ORDER.indexOf(activeStepId);

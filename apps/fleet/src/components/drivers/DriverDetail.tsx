@@ -149,6 +149,7 @@ import { OverviewMetricsGrid, MetricCard as ExtractedMetricCard, PLATFORM_COLORS
 import { UberCashDebugPanel } from './UberCashDebugPanel';
 import { DriverIndriveWalletTab } from './DriverIndriveWalletTab';
 import { FuelWalletView } from './FuelWalletView';
+import { DriverFuelPolicySelect } from './DriverFuelPolicySelect';
 import { TimeFilterDropdown, TimeFilterValue, isHourInTimeFilter } from './TimeFilterDropdown';
 import { api } from '../../services/api';
 import { tierService } from '../../services/tierService';
@@ -2808,6 +2809,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         </div>
         
         <div className="col-span-1 border-t md:border-t-0 md:border-l pt-4 md:pt-0 md:pl-6 flex flex-col justify-center space-y-3">
+           <DriverFuelPolicySelect driver={driver} driverId={driverId} />
            <div className="flex justify-between items-center">
               <span className="text-sm text-slate-500">Performance Tier</span>
               <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700 flex items-center gap-1">

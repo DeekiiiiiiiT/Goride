@@ -1896,7 +1896,7 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
     const entry = await c.req.json();
     if (!entry.id) entry.id = crypto.randomUUID();
 
-    if (entry.driverId) {
+    if (entry.driverId || entry.vehicleId) {
         const enriched = await enrichRecordWithDriverVehicle(
             entry,
             entry.organizationId as string | undefined,

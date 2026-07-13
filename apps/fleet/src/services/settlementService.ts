@@ -5,7 +5,7 @@ import { FuelCalculationService } from './fuelCalculationService';
 import { format } from 'date-fns';
 import { API_ENDPOINTS } from './apiConfig';
 import { publicAnonKey } from '../utils/supabase/info';
-import { pickScenarioForVehicleWeek, mondayYmdForDate } from '../utils/fuelPolicyVersion';
+import { pickScenarioForDriverWeek, resolveDriverFuelScenarioId, mondayYmdForDate } from '../utils/fuelPolicyVersion';
 
 /** Calendar day YYYY-MM-DD from stored date/datetime strings. */
 function toYmd(d: string | undefined | null): string {
@@ -23,8 +23,9 @@ export const settlementService = {
   async commitWeeklyStatement(report: WeeklyFuelReport, entries: FuelEntry[]): Promise<void> {
     try {
         // 1. Fetch dependencies
-        const [vehicles, scenariosResponse] = await Promise.all([
+        const [vehicles, drivers, scenariosResponse] = await Promise.all([
             api.getVehicles(),
+            api.getDrivers().catch(() => []),
             fetchWithRetry(`${API_ENDPOINTS.fuel}/scenarios`, {
                 headers: { 'Authorization': `Bearer ${publicAnonKey}` }
             })
@@ -36,14 +37,14 @@ export const settlementService = {
         
         if (!vehicle) throw new Error(`Vehicle ${report.vehicleId} not found`);
 
-        // 2. Determine Active Scenario (kept for metadata/audit trail only — the
-        // actual company/driver split below uses the report's own blended ratio,
-        // not a fresh per-category lookup, so it can never drift from the
-        // category-weighted `driverShare` already shown/frozen for this report)
+        // 2. Determine Active Scenario from driver policy (dual-read vehicle fallback)
         const weekStartYmd = String(report.weekStart).split('T')[0];
-        const activeScenario = pickScenarioForVehicleWeek(
+        const driver = (drivers || []).find(
+          (d: any) => d.id === report.driverId || d.driverId === report.driverId,
+        );
+        const activeScenario = pickScenarioForDriverWeek(
             scenarios,
-            vehicle.fuelScenarioId,
+            resolveDriverFuelScenarioId(driver, vehicle),
             weekStartYmd,
         );
 
@@ -316,9 +317,9 @@ export const settlementService = {
     }
 
     const entryWeekMonday = mondayYmdForDate(new Date(toYmd(date) || date));
-    const activeScenario = pickScenarioForVehicleWeek(
+    const activeScenario = pickScenarioForDriverWeek(
       scenarios,
-      vehicle.fuelScenarioId,
+      resolveDriverFuelScenarioId(driver, vehicle),
       entryWeekMonday,
     );
 

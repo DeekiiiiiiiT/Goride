@@ -103,12 +103,19 @@ export interface MileageAdjustment {
   approvedBy?: string;
 }
 
+/** Sentinel driverId for fills that could not be attributed. */
+export const UNASSIGNED_FUEL_DRIVER_ID = '__unassigned__';
+
 export interface WeeklyFuelReport {
-  id: string; // composite: vehicleId_weekStart
+  id: string; // composite: driverId_weekStart (legacy: vehicleId_weekStart)
   weekStart: string; // ISO Date (Monday)
   weekEnd: string; // ISO Date (Sunday)
+  /** Primary vehicle for the week (highest spend); see vehicleIds for shared/multi-car. */
   vehicleId: string;
   driverId: string;
+  /** All vehicles this driver fueled in the week. */
+  vehicleIds?: string[];
+  vehiclePlates?: string[];
 
   // 1. The Truth (Financial)
   totalGasCardCost: number;
@@ -329,6 +336,12 @@ export interface FuelScenarioVersion {
   id: string;
   /** Monday yyyy-MM-dd — version applies to weeks starting on/after this date. */
   effectiveFrom: string;
+  /**
+   * Optional Monday yyyy-MM-dd — exclusive end.
+   * Version applies while weekStart < effectiveUntil.
+   * Unset = never ends (open-ended).
+   */
+  effectiveUntil?: string;
   rules: FuelRule[];
   createdAt: string;
 }

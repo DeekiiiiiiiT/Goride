@@ -24,6 +24,57 @@ export interface ResolvedVehicleAssignment {
   source: VehicleAssignmentSource;
 }
 
+export interface DriverAssignmentHistoryEntry {
+  driverId: string;
+  driverName: string;
+  assignedAt: string;
+  unassignedAt?: string;
+  assignedBy?: string;
+}
+
+/** Close open history rows and optionally append the new assignee (fuel shared-car attribution). */
+export function applyDriverAssignmentChangeOnVehicle(
+  previous: Record<string, unknown> | null | undefined,
+  next: Record<string, unknown>,
+  atIso: string = new Date().toISOString(),
+): Record<string, unknown> {
+  const prevId = previous?.currentDriverId != null ? String(previous.currentDriverId) : "";
+  const nextId = next.currentDriverId != null ? String(next.currentDriverId) : "";
+  if (prevId === nextId) return next;
+
+  const baseHistory = Array.isArray(next.driverAssignmentHistory)
+    ? (next.driverAssignmentHistory as DriverAssignmentHistoryEntry[])
+    : Array.isArray(previous?.driverAssignmentHistory)
+      ? (previous!.driverAssignmentHistory as DriverAssignmentHistoryEntry[])
+      : [];
+
+  const closed = baseHistory.map((e) =>
+    e && !e.unassignedAt ? { ...e, unassignedAt: atIso } : e,
+  );
+
+  if (!nextId) {
+    return { ...next, driverAssignmentHistory: closed };
+  }
+
+  // Avoid duplicate append if client already wrote the open row for nextId
+  const last = closed[closed.length - 1];
+  if (last && last.driverId === nextId && !last.unassignedAt) {
+    return { ...next, driverAssignmentHistory: closed };
+  }
+
+  return {
+    ...next,
+    driverAssignmentHistory: [
+      ...closed,
+      {
+        driverId: nextId,
+        driverName: String(next.currentDriverName || "Unknown"),
+        assignedAt: atIso,
+      },
+    ],
+  };
+}
+
 /** Roam UUID + linked platform IDs + lowercase variants. */
 export async function expandDriverIdVariants(
   raw: string | undefined | null,
@@ -169,7 +220,7 @@ export async function resolveDriverVehicleAssignment(
   return { vehicleId: null, vehicle: null, source: "none" };
 }
 
-/** Stamp vehicleId (and optional plate) on a fuel transaction or fuel_entry payload. */
+/** Stamp vehicleId from driver, or driverId from vehicle (shared-car attribution). */
 export async function enrichRecordWithDriverVehicle<
   T extends Record<string, unknown>,
 >(record: T, organizationId?: string | null): Promise<T> {
@@ -179,6 +230,51 @@ export async function enrichRecordWithDriverVehicle<
   const hint =
     (record.vehicleId as string | undefined) ||
     (record.vehicle_id as string | undefined);
+
+  // Reverse path: vehicle known, driver missing — use assignment history / current
+  if (!driverId && hint) {
+    const vehicle = await kv.get(`vehicle:${hint}`);
+    if (vehicle && typeof vehicle === "object" && orgMatches(vehicle, organizationId)) {
+      const atRaw = record.date || record.timestamp;
+      let atMs = Date.now();
+      if (typeof atRaw === "string" && atRaw) {
+        const ymd = atRaw.split("T")[0];
+        const time =
+          typeof record.time === "string" && /^\d{1,2}:\d{2}/.test(record.time)
+            ? String(record.time)
+            : "12:00:00";
+        const parsed = new Date(`${ymd}T${time}`).getTime();
+        if (!Number.isNaN(parsed)) atMs = parsed;
+      }
+      const history = Array.isArray(vehicle.driverAssignmentHistory)
+        ? (vehicle.driverAssignmentHistory as DriverAssignmentHistoryEntry[])
+        : [];
+      let resolvedDriver: string | undefined;
+      for (let i = history.length - 1; i >= 0; i--) {
+        const h = history[i];
+        if (!h?.driverId || !h.assignedAt) continue;
+        const start = new Date(h.assignedAt).getTime();
+        const end = h.unassignedAt ? new Date(h.unassignedAt).getTime() : Infinity;
+        if (!Number.isNaN(start) && atMs >= start && atMs < end) {
+          resolvedDriver = h.driverId;
+          break;
+        }
+      }
+      if (!resolvedDriver && vehicle.currentDriverId) {
+        resolvedDriver = String(vehicle.currentDriverId);
+      }
+      if (resolvedDriver) {
+        const next = { ...record, driverId: resolvedDriver, vehicleId: hint } as T;
+        const plate = vehicle.plateNumber || vehicle.licensePlate;
+        if (plate && !(next as Record<string, unknown>).vehiclePlate) {
+          (next as Record<string, unknown>).vehiclePlate = plate;
+        }
+        return next;
+      }
+    }
+  }
+
+  if (!driverId) return record;
 
   const resolved = await resolveDriverVehicleAssignment(driverId, {
     organizationId,

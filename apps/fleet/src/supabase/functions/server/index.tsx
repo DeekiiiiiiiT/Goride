@@ -100,6 +100,7 @@ import { validateFuelScenarioPayload } from "./fuel_scenario_validation.ts";
 import {
   enrichRecordWithDriverVehicle,
   syncDriverRecordFromVehicleAssignment,
+  applyDriverAssignmentChangeOnVehicle,
 } from "./driver_vehicle_assignment.ts";
 import { syncLinkedExpenseTransaction } from "./fuel_transaction_sync.ts";
 import auditApp from "./audit_controller.tsx";
@@ -2513,6 +2514,12 @@ app.post("/make-server-37f42386/vehicles", requireAuth(), requirePermission('veh
       console.warn(`[catalog-gate] POST /vehicles warn-only: ${gated.rejected.message} (vehicle=${vehicle.id})`);
     }
     vehicle = gated.vehicle;
+
+    // Shared-car fuel attribution: close/open driverAssignmentHistory when assignee changes
+    vehicle = applyDriverAssignmentChangeOnVehicle(
+      previous as Record<string, unknown> | null | undefined,
+      vehicle as Record<string, unknown>,
+    );
 
     await kv.set(`vehicle:${vehicle.id}`, vehicle);
 

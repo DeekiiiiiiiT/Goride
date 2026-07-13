@@ -13,32 +13,32 @@ import {
 } from '../ui/sheet';
 import { Loader2, Search } from 'lucide-react';
 
-export interface AssignVehicleRow {
+export interface AssignDriverRow {
   id: string;
-  plate: string;
-  driverName: string;
+  name: string;
+  vehicleLabel: string;
   currentPolicyLabel: string;
   /** True when already on this target policy */
   alreadyAssigned: boolean;
 }
 
-interface AssignVehiclesToPolicySheetProps {
+interface AssignDriversToPolicySheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   policyName: string;
   isDefaultPolicy: boolean;
-  vehicles: AssignVehicleRow[];
-  onConfirm: (vehicleIds: string[]) => Promise<void>;
+  drivers: AssignDriverRow[];
+  onConfirm: (driverIds: string[]) => Promise<void>;
 }
 
-export function AssignVehiclesToPolicySheet({
+export function AssignDriversToPolicySheet({
   open,
   onOpenChange,
   policyName,
   isDefaultPolicy,
-  vehicles,
+  drivers,
   onConfirm,
-}: AssignVehiclesToPolicySheetProps) {
+}: AssignDriversToPolicySheetProps) {
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
@@ -46,19 +46,19 @@ export function AssignVehiclesToPolicySheet({
   React.useEffect(() => {
     if (!open) return;
     setSearch('');
-    setSelected(new Set(vehicles.filter((v) => v.alreadyAssigned).map((v) => v.id)));
-  }, [open, vehicles]);
+    setSelected(new Set(drivers.filter((d) => d.alreadyAssigned).map((d) => d.id)));
+  }, [open, drivers]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return vehicles;
-    return vehicles.filter(
-      (v) =>
-        v.plate.toLowerCase().includes(q) ||
-        v.driverName.toLowerCase().includes(q) ||
-        v.currentPolicyLabel.toLowerCase().includes(q),
+    if (!q) return drivers;
+    return drivers.filter(
+      (d) =>
+        d.name.toLowerCase().includes(q) ||
+        d.vehicleLabel.toLowerCase().includes(q) ||
+        d.currentPolicyLabel.toLowerCase().includes(q),
     );
-  }, [vehicles, search]);
+  }, [drivers, search]);
 
   const toggle = (id: string) => {
     setSelected((prev) => {
@@ -83,11 +83,11 @@ export function AssignVehiclesToPolicySheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="flex w-full flex-col sm:max-w-md">
         <SheetHeader>
-          <SheetTitle>Assign vehicles to {policyName}</SheetTitle>
+          <SheetTitle>Assign drivers to {policyName}</SheetTitle>
           <SheetDescription>
             {isDefaultPolicy
-              ? 'Selected vehicles will use the Default policy (custom assignment cleared).'
-              : 'Vehicles moved here leave the Default (or other) policy.'}
+              ? 'Selected drivers will use the Default policy (custom assignment cleared).'
+              : 'Drivers moved here leave the Default (or other) policy.'}
           </SheetDescription>
         </SheetHeader>
 
@@ -95,7 +95,7 @@ export function AssignVehiclesToPolicySheet({
           <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <Input
             className="pl-8"
-            placeholder="Search plate or driver…"
+            placeholder="Search name or plate…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -103,20 +103,20 @@ export function AssignVehiclesToPolicySheet({
 
         <div className="mt-3 flex-1 space-y-1 overflow-y-auto pr-1">
           {filtered.length === 0 ? (
-            <p className="py-8 text-center text-sm text-slate-400">No vehicles match.</p>
+            <p className="py-8 text-center text-sm text-slate-400">No drivers match.</p>
           ) : (
-            filtered.map((v) => (
+            filtered.map((d) => (
               <label
-                key={v.id}
+                key={d.id}
                 className="flex cursor-pointer items-center gap-3 rounded-md border border-slate-200 px-3 py-2.5 hover:bg-slate-50"
               >
-                <Checkbox checked={selected.has(v.id)} onCheckedChange={() => toggle(v.id)} />
+                <Checkbox checked={selected.has(d.id)} onCheckedChange={() => toggle(d.id)} />
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-medium text-slate-900">{v.plate}</div>
-                  <div className="truncate text-xs text-slate-500">{v.driverName}</div>
+                  <div className="truncate text-sm font-medium text-slate-900">{d.name}</div>
+                  <div className="truncate text-xs text-slate-500">{d.vehicleLabel}</div>
                 </div>
                 <Badge variant="outline" className="shrink-0 text-[10px] font-normal">
-                  {v.currentPolicyLabel}
+                  {d.currentPolicyLabel}
                 </Badge>
               </label>
             ))
@@ -136,3 +136,7 @@ export function AssignVehiclesToPolicySheet({
     </Sheet>
   );
 }
+
+/** @deprecated Use AssignDriversToPolicySheet */
+export const AssignVehiclesToPolicySheet = AssignDriversToPolicySheet;
+export type AssignVehicleRow = AssignDriverRow;

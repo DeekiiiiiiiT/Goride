@@ -10,7 +10,10 @@ import {
   splitAllCategoryCosts,
   type FuelCoverageCategory,
 } from '../utils/fuelCoverageSplit';
-import { pickScenarioForVehicleWeek } from '../utils/fuelPolicyVersion';
+import { pickScenarioForDriverWeek, resolveDriverFuelScenarioId } from '../utils/fuelPolicyVersion';
+import { resolveFuelFillDriver } from '../utils/resolveFuelFillDriver';
+import { UNASSIGNED_FUEL_DRIVER_ID } from '../types/fuel';
+import type { FuelCard } from '../types/fuel';
 
 export type { FuelCoverageCategory };
 
@@ -125,7 +128,8 @@ export const FuelCalculationService = {
     },
 
     /**
-     * Generates a reconciliation report for a single vehicle.
+     * Generates a reconciliation report for a single vehicle (legacy vehicle-week path).
+     * Prefer generateDriverFleetReport for driver-first shared-car weeks.
      */
     calculateReconciliation: (
         vehicle: Vehicle,
@@ -135,17 +139,20 @@ export const FuelCalculationService = {
         fuelEntries: FuelEntry[],
         adjustments: MileageAdjustment[],
         scenarios: FuelScenario[] = [],
-        deadheadData?: VehicleDeadheadInput
+        deadheadData?: VehicleDeadheadInput,
+        options?: {
+            driverId?: string;
+            fuelScenarioId?: string;
+            reportId?: string;
+            vehicleIds?: string[];
+            vehiclePlates?: string[];
+        }
     ): WeeklyFuelReport => {
         const startStr = FuelCalculationService.toLocalDateStr(weekStart);
         const endStr = FuelCalculationService.toLocalDateStr(weekEnd);
 
-        // 1. Find the active scenario for this vehicle + week (effective-from Monday)
-        const activeScenario = pickScenarioForVehicleWeek(
-            scenarios,
-            vehicle.fuelScenarioId,
-            startStr,
-        );
+        const policyId = options?.fuelScenarioId ?? vehicle.fuelScenarioId;
+        const activeScenario = pickScenarioForDriverWeek(scenarios, policyId, startStr);
 
         // Helper to get rule for a specific category
         const fuelRule = activeScenario?.rules.find(r => r.category === 'Fuel');
@@ -292,12 +299,20 @@ export const FuelCalculationService = {
             }
         }
 
+        const reportDriverId = options?.driverId ?? vehicle.currentDriverId ?? '';
+        if (reportDriverId === UNASSIGNED_FUEL_DRIVER_ID || !reportDriverId) {
+            healthStatus = healthStatus === 'Emerald' ? 'Amber' : healthStatus;
+            healthScore = Math.min(healthScore, 60);
+        }
+
         return {
-            id: `${vehicle.id}_${startStr}`,
+            id: options?.reportId ?? `${reportDriverId || vehicle.id}_${startStr}`,
             weekStart: weekStart.toISOString(),
             weekEnd: weekEnd.toISOString(),
             vehicleId: vehicle.id,
-            driverId: vehicle.currentDriverId || '',
+            driverId: reportDriverId,
+            vehicleIds: options?.vehicleIds ?? [vehicle.id],
+            vehiclePlates: options?.vehiclePlates,
             totalGasCardCost,
             totalTripDistance,
             rideShareCost,
@@ -343,7 +358,218 @@ export const FuelCalculationService = {
     },
 
     /**
-     * Generates reconciliation reports for the entire fleet.
+     * Driver-first fleet reports: attribute fills, group by driver+week, apply driver policy.
+     * Shared car → one row per driver. Unassigned fills → Amber sentinel row.
+     */
+    generateDriverFleetReport: (
+        vehicles: Vehicle[],
+        drivers: Array<{ id: string; fuelScenarioId?: string; name?: string }>,
+        weekStart: Date,
+        weekEnd: Date,
+        trips: Trip[],
+        fuelEntries: FuelEntry[],
+        adjustments: MileageAdjustment[],
+        scenarios: FuelScenario[],
+        deadheadMap?: Map<string, VehicleDeadheadInput>,
+        fuelCards: FuelCard[] = [],
+    ): WeeklyFuelReport[] => {
+        const startStr = FuelCalculationService.toLocalDateStr(weekStart);
+        const endStr = FuelCalculationService.toLocalDateStr(weekEnd);
+        const vehicleById = new Map(vehicles.map((v) => [v.id, v]));
+        const driverById = new Map(drivers.map((d) => [d.id, d]));
+
+        const weekEntries = fuelEntries.filter((e) => e.date >= startStr && e.date <= endStr);
+        type Attr = { entry: FuelEntry; driverId: string };
+        const attributed: Attr[] = weekEntries.map((entry) => {
+            const resolved = resolveFuelFillDriver({
+                entry,
+                vehicles,
+                fuelCards,
+                trips,
+            });
+            return { entry, driverId: resolved.driverId };
+        });
+
+        const byDriver = new Map<string, Attr[]>();
+        for (const row of attributed) {
+            const list = byDriver.get(row.driverId) || [];
+            list.push(row);
+            byDriver.set(row.driverId, list);
+        }
+
+        // Drivers with trips but no fills still get a zero row only if they have adjustments — skip empty
+        const reports: WeeklyFuelReport[] = [];
+
+        for (const [driverId, rows] of byDriver) {
+            const entries = rows.map((r) => ({
+                ...r.entry,
+                driverId: driverId === UNASSIGNED_FUEL_DRIVER_ID ? r.entry.driverId : driverId,
+            }));
+            const vehicleIds = [...new Set(entries.map((e) => e.vehicleId).filter(Boolean) as string[])];
+            // Primary = highest spend vehicle
+            let primaryId = vehicleIds[0];
+            let maxSpend = -1;
+            for (const vid of vehicleIds) {
+                const spend = entries.filter((e) => e.vehicleId === vid).reduce((s, e) => s + (e.amount || 0), 0);
+                if (spend > maxSpend) {
+                    maxSpend = spend;
+                    primaryId = vid;
+                }
+            }
+            const primaryVehicle =
+                (primaryId && vehicleById.get(primaryId)) ||
+                vehicles[0] ||
+                ({ id: 'unknown', licensePlate: '—', fuelSettings: undefined } as Vehicle);
+
+            const plates = vehicleIds.map((id) => {
+                const v = vehicleById.get(id);
+                return v?.licensePlate || id.slice(0, 8);
+            });
+
+            const driverRecord = driverById.get(driverId);
+            const policyId = resolveDriverFuelScenarioId(driverRecord, primaryVehicle);
+
+            const expandedTrips = trips.filter((t) => {
+                if (t.date < startStr || t.date > endStr) return false;
+                if (!(t.status === 'Completed' || t.status === 'Cancelled')) return false;
+                if (driverId === UNASSIGNED_FUEL_DRIVER_ID) return false;
+                if (t.driverId === driverId) return true;
+                return false;
+            });
+
+            const driverAdjustments = adjustments.filter(
+                (a) =>
+                    a.driverId === driverId &&
+                    a.date >= startStr &&
+                    a.date <= endStr,
+            );
+
+            // Scope entries to "virtual" filter: pass entries with vehicleId forced through
+            // by using a custom path — filter inside calc uses vehicle.id. For multi-vehicle
+            // we compute on primary vehicle entries only then... Better: patch entries to
+            // primary vehicle for distance buckets OR call calc with all entries matching
+            // any of vehicleIds by temporarily using a synthetic filter.
+
+            // Use primary vehicle calc with ONLY this driver's entries (rewrite vehicleId
+            // for bucket calc when multi-vehicle — keep real vehicleId on cost via filter change).
+
+            // Simpler approach: call calculateReconciliation once per vehicle for this driver's
+            // slice, then merge category costs and re-apply policy. For single-vehicle (common):
+            if (vehicleIds.length <= 1) {
+                const scopedEntries = entries.map((e) => ({
+                    ...e,
+                    vehicleId: primaryVehicle.id,
+                }));
+                const scopedTrips = expandedTrips.map((t) => ({
+                    ...t,
+                    vehicleId: t.vehicleId || primaryVehicle.id,
+                }));
+                const report = FuelCalculationService.calculateReconciliation(
+                    primaryVehicle,
+                    weekStart,
+                    weekEnd,
+                    scopedTrips,
+                    scopedEntries,
+                    driverAdjustments.map((a) => ({ ...a, vehicleId: primaryVehicle.id })),
+                    scenarios,
+                    deadheadMap?.get(primaryVehicle.id),
+                    {
+                        driverId,
+                        fuelScenarioId: policyId,
+                        reportId: `${driverId}_${startStr}`,
+                        vehicleIds: vehicleIds.length ? vehicleIds : [primaryVehicle.id],
+                        vehiclePlates: plates,
+                    },
+                );
+                // Restore: pending from original entries
+                report.pendingCount = entries.filter((e) => e.reconciliationStatus === 'Pending').length;
+                if (driverId === UNASSIGNED_FUEL_DRIVER_ID) {
+                    report.healthStatus = 'Amber';
+                    report.metadata = {
+                        ...report.metadata,
+                        scenarioName: 'Unassigned fills',
+                        unassignedFills: true,
+                    };
+                }
+                reports.push(report);
+                continue;
+            }
+
+            // Multi-vehicle driver: sum per-vehicle slices
+            let merged = FuelCalculationService.calculateReconciliation(
+                primaryVehicle,
+                weekStart,
+                weekEnd,
+                [],
+                [],
+                [],
+                scenarios,
+                undefined,
+                {
+                    driverId,
+                    fuelScenarioId: policyId,
+                    reportId: `${driverId}_${startStr}`,
+                    vehicleIds,
+                    vehiclePlates: plates,
+                },
+            );
+            merged.totalGasCardCost = 0;
+            merged.rideShareCost = 0;
+            merged.companyUsageCost = 0;
+            merged.deadheadCost = 0;
+            merged.personalUsageCost = 0;
+            merged.miscellaneousCost = 0;
+            merged.totalTripDistance = 0;
+            merged.companyMiscDistance = 0;
+            merged.deadheadDistance = 0;
+            merged.personalDistance = 0;
+            merged.pendingCount = 0;
+            merged.companyShare = 0;
+            merged.driverShare = 0;
+
+            for (const vid of vehicleIds) {
+                const v = vehicleById.get(vid) || primaryVehicle;
+                const vEntries = entries.filter((e) => e.vehicleId === vid);
+                const vTrips = expandedTrips.filter((t) => t.vehicleId === vid || (!t.vehicleId && t.driverId === driverId));
+                const vAdj = driverAdjustments.filter((a) => a.vehicleId === vid);
+                const slice = FuelCalculationService.calculateReconciliation(
+                    v,
+                    weekStart,
+                    weekEnd,
+                    vTrips,
+                    vEntries,
+                    vAdj,
+                    scenarios,
+                    deadheadMap?.get(vid),
+                    { driverId, fuelScenarioId: policyId },
+                );
+                merged.totalGasCardCost += slice.totalGasCardCost;
+                merged.rideShareCost += slice.rideShareCost;
+                merged.companyUsageCost += slice.companyUsageCost;
+                merged.deadheadCost += slice.deadheadCost || 0;
+                merged.personalUsageCost += slice.personalUsageCost;
+                merged.miscellaneousCost += slice.miscellaneousCost;
+                merged.totalTripDistance += slice.totalTripDistance;
+                merged.companyMiscDistance += slice.companyMiscDistance;
+                merged.deadheadDistance += slice.deadheadDistance || 0;
+                merged.personalDistance += slice.personalDistance;
+                merged.pendingCount = (merged.pendingCount || 0) + (slice.pendingCount || 0);
+                merged.companyShare += slice.companyShare;
+                merged.driverShare += slice.driverShare;
+            }
+            merged.vehicleId = primaryVehicle.id;
+            reports.push(merged);
+        }
+
+        // Include drivers with spend-less trip activity? skip — recon is fuel-spend driven
+        // Also include vehicles with fills that somehow didn't attribute (already in unassigned)
+
+        return reports.sort((a, b) => (b.totalGasCardCost || 0) - (a.totalGasCardCost || 0));
+    },
+
+    /**
+     * Generates reconciliation reports for the entire fleet (legacy vehicle-week).
+     * @deprecated Prefer generateDriverFleetReport
      */
     generateFleetReport: (
         vehicles: Vehicle[],

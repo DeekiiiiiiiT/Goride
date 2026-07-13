@@ -23,7 +23,6 @@ import { TollReconciliation } from './pages/TollReconciliation';
 import { TagInventory } from './pages/TagInventory';
 import { UserManagementPage } from './components/users/UserManagementPage';
 import { TierConfigPage } from './components/tiers/TierConfigPage';
-import { PerformanceDashboard } from './components/performance/PerformanceDashboard';
 import { FuelManagement } from './pages/FuelManagement';
 import { TollLogsPage } from './pages/TollLogs';
 import { TollAnalytics } from './components/toll/TollAnalytics';
@@ -343,11 +342,6 @@ function AppContent() {
             <TollAnalytics />
           </PermissionGate>
         )}
-        {currentPage === 'performance' && (
-          <PermissionGate permission="nav.performance" onNavigate={setCurrentPage}>
-            <PerformanceDashboard />
-          </PermissionGate>
-        )}
         {currentPage === 'tier-config' && (
           <PermissionGate permission="nav.tier_config" onNavigate={setCurrentPage}>
             <TierConfigPage />
@@ -359,17 +353,15 @@ function AppContent() {
           </PermissionGate>
         )}
         
-        {['fuel-management', 'fuel-overview', 'fuel-reconciliation', 'fuel-cards', 'fuel-logs', 'fuel-reports', 'fuel-configuration', 'fuel-reimbursements', 'fuel-audit', 'fuel-integrity-gap'].includes(currentPage) && (
+        {['fuel-management', 'fuel-overview', 'fuel-reconciliation', 'fuel-cards', 'fuel-logs', 'fuel-configuration', 'fuel-reimbursements', 'fuel-integrity-gap'].includes(currentPage) && (
           <PermissionGate permission={PAGE_PERMISSION_MAP[currentPage] || 'nav.fuel_overview'} onNavigate={setCurrentPage}>
             <FuelManagement 
                 defaultTab={
                     currentPage === 'fuel-reconciliation' ? 'reconciliation' :
                     currentPage === 'fuel-reimbursements' ? 'reimbursements' :
-                    currentPage === 'fuel-audit' ? 'audit' :
                     currentPage === 'fuel-integrity-gap' ? 'integrity-gap' :
                     currentPage === 'fuel-cards' ? 'cards' :
                     currentPage === 'fuel-logs' ? 'logs' :
-                    currentPage === 'fuel-reports' ? 'reports' :
                     currentPage === 'fuel-configuration' ? 'configuration' :
                     'dashboard'
                 }

@@ -7,7 +7,6 @@ import { FuelCardList } from '../components/fuel/FuelCardList';
 import { FuelCardModal } from '../components/fuel/FuelCardModal';
 import { FuelLogModal } from '../components/fuel/FuelLogModal';
 import { FuelLogTable } from '../components/fuel/FuelLogTable';
-import { ReportsPage } from '../components/fuel/ReportsPage';
 import { FuelConfiguration } from '../components/fuel/FuelConfiguration';
 import { ReconciliationTable } from '../components/fuel/ReconciliationTable';
 import { BucketReconciliationView } from '../components/fuel/BucketReconciliationView';
@@ -20,13 +19,13 @@ import {
   SheetTitle,
   SheetDescription,
 } from '../components/ui/sheet';
-import { pickScenarioForVehicleWeek, resolveVersionForWeek } from '../utils/fuelPolicyVersion';
+import { pickScenarioForDriverWeek, resolveDriverFuelScenarioId, resolveVersionForWeek } from '../utils/fuelPolicyVersion';
+import { UNASSIGNED_FUEL_DRIVER_ID } from '../types/fuel';
 import { useFleetTimezone } from '../utils/timezoneDisplay';
 import type { PeriodWeekOption } from '../utils/periodWeekOptions';
 import { DisputeResolutionModal } from '../components/fuel/DisputeResolutionModal';
 import { FuelReimbursementTable } from '../components/fuel/FuelReimbursementTable';
 import { SubmitExpenseModal } from '../components/fuel/SubmitExpenseModal';
-import { FuelAuditDashboard } from '../components/fuel/FuelAuditDashboard';
 import { IntegrityGapDashboard } from '../components/fuel/IntegrityGapDashboard';
 import { startOfWeek, endOfWeek, format } from 'date-fns';
 import { useFuelAnchors } from '../hooks/useFuelAnchors';
@@ -833,25 +832,29 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
           // if this isn't the first finalize pass in the session) so re-finalize
           // deltas below are computed against the latest posted totals.
           const priorReports: FinalizedFuelReport[] = await api.getFinalizedReports().catch(() => []);
-          const findPrior = (vehicleId: string, weekStartYmd: string) =>
-              priorReports.find((r: any) => r.vehicleId === vehicleId && String(r.weekStart).split('T')[0] === weekStartYmd);
+          const findPrior = (driverId: string, weekStartYmd: string) =>
+              priorReports.find((r: any) => r.driverId === driverId && String(r.weekStart).split('T')[0] === weekStartYmd);
 
           // Phase 5: Connect to Settlement Engine
           let successCount = 0;
           const snapshots: FinalizedFuelReport[] = [];
 
           for (const report of reports) {
-              // Filter entries for this report period and vehicle
+              // Filter entries for this driver-week (shared-car safe)
               const rStart = report.weekStart.split('T')[0];
               const rEnd = report.weekEnd.split('T')[0];
+              const vehicleIds = report.vehicleIds?.length ? report.vehicleIds : [report.vehicleId];
               const relevantEntries = logs.filter(entry =>
-                  entry.vehicleId === report.vehicleId &&
                   entry.date >= rStart &&
                   entry.date <= rEnd &&
-                  entry.reconciliationStatus === 'Pending' // Only process pending items
+                  entry.reconciliationStatus === 'Pending' &&
+                  (report.driverId === UNASSIGNED_FUEL_DRIVER_ID
+                    ? !entry.driverId && vehicleIds.includes(entry.vehicleId || '')
+                    : entry.driverId === report.driverId ||
+                      (vehicleIds.includes(entry.vehicleId || '') && !entry.driverId && entry.vehicleId === report.vehicleId && report.driverId))
               );
 
-              const prior = findPrior(report.vehicleId, rStart);
+              const prior = findPrior(report.driverId, rStart);
 
               // No-op guard: do not rewrite finalized snapshots when nothing new to post
               if (relevantEntries.length === 0) {
@@ -881,28 +884,27 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
               const postedCompanyShare = (prior?.postedCompanyShare ?? prior?.companyShare ?? 0) + newlyPostedCompanyShare;
 
               const vehicle = vehicles.find((v: any) => v.id === report.vehicleId);
-              const driver = drivers.find((d: any) => d.id === report.driverId);
+              const driver = drivers.find((d: any) => d.id === report.driverId || d.driverId === report.driverId);
               const driverSpend = logs
                 .filter((e: any) =>
-                  e.vehicleId === report.vehicleId &&
                   e.date >= rStart && e.date <= rEnd &&
-                  (e.type === 'Reimbursement' || e.type === 'Manual_Entry' || e.type === 'Fuel_Manual_Entry')
+                  (e.type === 'Reimbursement' || e.type === 'Manual_Entry' || e.type === 'Fuel_Manual_Entry') &&
+                  (report.driverId === UNASSIGNED_FUEL_DRIVER_ID
+                    ? !e.driverId
+                    : e.driverId === report.driverId)
                 )
                 .reduce((sum: number, e: any) => sum + e.amount, 0);
 
-              // Step 9 audit trail: scenarios can be edited/deleted after finalize
-              // with no versioning, so the frozen snapshot previously stored only
-              // metadata.scenarioName/scenarioId (informational strings) â€” not the
-              // actual coverage-% values used. Record them here so "why was
-              // driverShare $X" stays answerable even after the scenario changes.
-              const activeScenario = pickScenarioForVehicleWeek(
+              // Step 9 audit trail — freeze driver policy coverage used for this week
+              const policyId = resolveDriverFuelScenarioId(driver, vehicle);
+              const activeScenario = pickScenarioForDriverWeek(
                   scenarios,
-                  vehicle?.fuelScenarioId,
+                  policyId,
                   rStart,
               );
               const appliedFuelRule = activeScenario?.rules.find(r => r.category === 'Fuel');
               const rawScenario =
-                  scenarios.find(s => s.id === vehicle?.fuelScenarioId) ||
+                  scenarios.find(s => s.id === policyId) ||
                   scenarios.find(s => s.isDefault) ||
                   scenarios[0];
               const appliedVersion = rawScenario
@@ -986,15 +988,9 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
   } else if (activeTab === 'logs') {
       pageTitle = "Transaction Logs";
       pageDescription = "History of all fuel purchases and manual entries.";
-  } else if (activeTab === 'reports') {
-      pageTitle = "Consumption Reports";
-      pageDescription = "View and export detailed fuel consumption reports.";
   } else if (activeTab === 'configuration') {
       pageTitle = "Fleet Policy Configuration";
       pageDescription = "Manage company and driver expense splits for fuel.";
-  } else if (activeTab === 'audit') {
-      pageTitle = "Fleet Integrity Audit";
-      pageDescription = "Audit fleet integrity using Stop-to-Stop odometer verification and behavioral anomaly detection.";
   }
 
   return (
@@ -1093,10 +1089,6 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
           />
       )}
 
-      {activeTab === 'audit' && (
-          <FuelAuditDashboard />
-      )}
-
       {activeTab === 'integrity-gap' && (
           <IntegrityGapDashboard />
       )}
@@ -1141,6 +1133,7 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
                 dateRange={reconciliationDateRange}
                 scenarios={scenarios}
                 drivers={drivers}
+                fuelCards={cards}
                 finalizedReports={finalizedReports}
                 onFinalize={handleFinalize}
                 onAddAdjustment={() => { setAdjustmentDefaults({}); setIsAdjustmentModalOpen(true); }}
@@ -1192,12 +1185,6 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
                 onDateRangeChange={setLogDateRange}
             />
         </div>
-      )}
-
-
-
-      {activeTab === 'reports' && (
-          <ReportsPage entries={logs} vehicles={vehicles} drivers={drivers} isRefreshing={isRefreshing} />
       )}
 
       {activeTab === 'configuration' && (

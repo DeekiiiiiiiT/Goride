@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../services/api';
 import { Trip } from '../../types/data';
 import { Vehicle } from '../../types/vehicle'; // New Type
+import { applyDriverAssignmentChange } from '../../utils/vehicleDriverAssignmentHistory';
 import { VehicleCard } from './VehicleCard'; // New Component
 import { VehicleDetail } from './VehicleDetail'; // New Component
 import { DriverAssignmentModal } from './DriverAssignmentModal';
@@ -330,7 +331,12 @@ export function VehiclesPage() {
         ...vehicleToUpdate,
         currentDriverId: resolvedDriverId,
         currentDriverName: driverName,
-        status: 'Active' // Reactivate vehicle on assignment
+        status: 'Active' as const, // Reactivate vehicle on assignment
+        driverAssignmentHistory: applyDriverAssignmentChange(
+          vehicleToUpdate,
+          resolvedDriverId,
+          driverName,
+        ),
     };
 
     try {

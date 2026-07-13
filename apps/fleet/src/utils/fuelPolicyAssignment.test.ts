@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { orphanVehicles, vehiclesForPolicy } from './fuelPolicyAssignment';
+import {
+  driversForPolicy,
+  orphanDrivers,
+  migrateVehiclePoliciesToDrivers,
+} from './fuelPolicyAssignment';
 import type { FuelScenario } from '../types/fuel';
 
 const defaultPolicy: FuelScenario = {
@@ -11,29 +15,40 @@ const defaultPolicy: FuelScenario = {
 
 const customPolicy: FuelScenario = {
   id: 'custom',
-  name: 'Owner',
+  name: 'Quota Met',
   isDefault: false,
   rules: [],
 };
 
-describe('policy vehicle assignment mappers', () => {
-  const vehicles = [
-    { id: 'v1', fuelScenarioId: undefined },
-    { id: 'v2', fuelScenarioId: 'def' },
-    { id: 'v3', fuelScenarioId: 'custom' },
-    { id: 'v4', fuelScenarioId: 'missing' },
+describe('policy driver assignment mappers', () => {
+  const drivers = [
+    { id: 'd1', fuelScenarioId: undefined },
+    { id: 'd2', fuelScenarioId: 'def' },
+    { id: 'd3', fuelScenarioId: 'custom' },
+    { id: 'd4', fuelScenarioId: 'missing' },
   ];
 
   it('maps default policy to unset and explicit default ids', () => {
-    const onDefault = vehiclesForPolicy(defaultPolicy, vehicles);
-    expect(onDefault.map((v) => v.id).sort()).toEqual(['v1', 'v2']);
+    const onDefault = driversForPolicy(defaultPolicy, drivers);
+    expect(onDefault.map((d) => d.id).sort()).toEqual(['d1', 'd2']);
   });
 
   it('maps custom policy to explicit id only', () => {
-    expect(vehiclesForPolicy(customPolicy, vehicles).map((v) => v.id)).toEqual(['v3']);
+    expect(driversForPolicy(customPolicy, drivers).map((d) => d.id)).toEqual(['d3']);
   });
 
   it('detects orphan fuelScenarioId values', () => {
-    expect(orphanVehicles(vehicles, [defaultPolicy, customPolicy]).map((v) => v.id)).toEqual(['v4']);
+    expect(orphanDrivers(drivers, [defaultPolicy, customPolicy]).map((d) => d.id)).toEqual(['d4']);
+  });
+
+  it('migrates vehicle policies onto current drivers when empty', () => {
+    const vehicles = [
+      { fuelScenarioId: 'custom', currentDriverId: 'd1' },
+      { fuelScenarioId: 'custom', currentDriverId: 'd3' }, // already has custom — skip
+    ];
+    const migrated = migrateVehiclePoliciesToDrivers(vehicles, drivers);
+    expect(migrated).toHaveLength(1);
+    expect(migrated[0].id).toBe('d1');
+    expect(migrated[0].fuelScenarioId).toBe('custom');
   });
 });

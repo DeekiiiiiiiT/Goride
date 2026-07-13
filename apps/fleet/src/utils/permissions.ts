@@ -387,7 +387,6 @@ export const PAGE_PERMISSION_MAP: Record<string, Permission> = {
 
   // Driver Operations
   'drivers':            'nav.drivers',
-  'performance':        'nav.performance',
   'tier-config':        'nav.tier_config',
   'driver-ledger':      'nav.drivers',
 
@@ -400,12 +399,10 @@ export const PAGE_PERMISSION_MAP: Record<string, Permission> = {
   'fuel-management':    'nav.fuel_overview',
   'fuel-overview':      'nav.fuel_overview',
   'fuel-reimbursements':'nav.fuel_review_queue',
-  'fuel-audit':         'nav.fuel_audit',
   'fuel-integrity-gap': 'nav.fuel_integrity_gap',
   'fuel-reconciliation':'nav.fuel_reconciliation',
   'fuel-cards':         'nav.fuel_cards',
   'fuel-logs':          'nav.fuel_logs',
-  'fuel-reports':       'nav.fuel_reports',
   'fuel-configuration': 'nav.fuel_configuration',
 
   // Toll Management

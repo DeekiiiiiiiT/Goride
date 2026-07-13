@@ -1,15 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Button } from "../ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { Badge } from "../ui/badge";
-import { Loader2, Plus, Trash2, Edit2, Star, AlertTriangle, Car, Copy, UserPlus } from 'lucide-react';
+import { Loader2, Plus, Trash2, Edit2, Star, AlertTriangle, Users, Copy, UserPlus, CalendarRange } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 import { fuelService } from '../../services/fuelService';
 import { api } from '../../services/api';
-import { FuelScenario, FuelRule } from '../../types/fuel';
+import { FuelScenario, FuelRule, FuelEntry, FinalizedFuelReport } from '../../types/fuel';
 import { ScenarioEditor } from './ScenarioEditor';
 import { FuelCoverageMatrix } from './FuelCoverageMatrix';
-import { AssignVehiclesToPolicySheet, type AssignVehicleRow } from './AssignVehiclesToPolicySheet';
+import { AssignDriversToPolicySheet, type AssignDriverRow } from './AssignVehiclesToPolicySheet';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,34 +26,65 @@ import {
   splitAllCategoryCosts,
   sumSplitTotals,
 } from '../../utils/fuelCoverageSplit';
-import { orphanVehicles, vehiclesForPolicy } from '../../utils/fuelPolicyAssignment';
-import { latestEffectiveFromLabel, normalizeScenarioVersions } from '../../utils/fuelPolicyVersion';
+import { orphanDrivers, driversForPolicy } from '../../utils/fuelPolicyAssignment';
+import { normalizeScenarioVersions } from '../../utils/fuelPolicyVersion';
+import { runFuelPolicyDriverCutoverOnce } from '../../utils/fuelPolicyCutover';
+import {
+  evaluateFuelPolicyDeleteGuard,
+  type FuelPolicyDeleteGuardResult,
+} from '../../utils/fuelPolicyDeleteGuard';
+import { generateFuelWeekOptions } from '../../utils/fuelWeekPeriod';
+import { useFleetTimezone } from '../../utils/timezoneDisplay';
 
 function vehiclePlate(v: any): string {
   return v.licensePlate || v.plate || v.name || v.id?.slice(0, 8) || 'Vehicle';
 }
 
-export function ScenarioList() {
+function driverDisplayName(d: any): string {
+  return d?.name || [d?.firstName, d?.lastName].filter(Boolean).join(' ') || 'Driver';
+}
+
+export function ScenarioList({
+  onViewSchedule,
+}: {
+  /** Switch parent to Schedule tab for this policy id. */
+  onViewSchedule?: (policyId: string) => void;
+}) {
+    const queryClient = useQueryClient();
+    const fleetTz = useFleetTimezone();
     const [scenarios, setScenarios] = useState<FuelScenario[]>([]);
     const [vehicles, setVehicles] = useState<any[]>([]);
     const [drivers, setDrivers] = useState<any[]>([]);
+    const [fuelEntries, setFuelEntries] = useState<FuelEntry[]>([]);
+    const [finalizedReports, setFinalizedReports] = useState<FinalizedFuelReport[]>([]);
     const [loading, setLoading] = useState(true);
     const [isEditorOpen, setIsEditorOpen] = useState(false);
     const [editingScenario, setEditingScenario] = useState<FuelScenario | null>(null);
     const [deleteId, setDeleteId] = useState<string | null>(null);
+    const [deleteGuard, setDeleteGuard] = useState<FuelPolicyDeleteGuardResult | null>(null);
     const [assignTarget, setAssignTarget] = useState<FuelScenario | null>(null);
+
+    const weekOptions = useMemo(
+      () => generateFuelWeekOptions(16, fleetTz || undefined),
+      [fleetTz],
+    );
 
     const loadAll = async () => {
         setLoading(true);
         try {
-            const [scen, vehs, drvs] = await Promise.all([
+            await runFuelPolicyDriverCutoverOnce().catch(() => 0);
+            const [scen, vehs, drvs, logs, finalized] = await Promise.all([
                 fuelService.getFuelScenarios(),
                 api.getVehicles().catch(() => []),
                 api.getDrivers().catch(() => []),
+                fuelService.getFuelEntries({ limit: 5000 }).catch(() => []),
+                api.getFinalizedReports().catch(() => []),
             ]);
             setScenarios(scen);
             setVehicles(vehs || []);
             setDrivers(drvs || []);
+            setFuelEntries(Array.isArray(logs) ? logs : []);
+            setFinalizedReports(Array.isArray(finalized) ? finalized : []);
         } catch (e) {
             console.error(e);
             toast.error("Failed to load fuel policies");
@@ -65,26 +97,25 @@ export function ScenarioList() {
         loadAll();
     }, []);
 
-    const driverName = (driverId?: string | null) => {
-        if (!driverId) return 'Unassigned';
-        const d = drivers.find((x: any) => x.id === driverId || x.driverId === driverId);
-        if (!d) return 'Unassigned';
-        return d.name || [d.firstName, d.lastName].filter(Boolean).join(' ') || 'Unassigned';
+    const plateForDriver = (driverId?: string | null) => {
+        if (!driverId) return 'No vehicle';
+        const v = vehicles.find((x: any) => x.currentDriverId === driverId);
+        return v ? vehiclePlate(v) : 'No vehicle';
     };
 
-    const policyLabelForVehicle = (v: any): string => {
-        if (!v.fuelScenarioId) {
+    const policyLabelForDriver = (d: any): string => {
+        if (!d.fuelScenarioId) {
             const def = scenarios.find((s) => s.isDefault);
             return def ? `Default · ${def.name}` : 'Default';
         }
-        const s = scenarios.find((x) => x.id === v.fuelScenarioId);
+        const s = scenarios.find((x) => x.id === d.fuelScenarioId);
         return s ? s.name : 'Unknown (orphan)';
     };
 
-    const getAffectedVehicleCount = (scenario: FuelScenario): number =>
-        vehiclesForPolicy(scenario, vehicles).length;
+    const getAffectedDriverCount = (scenario: FuelScenario): number =>
+        driversForPolicy(scenario, drivers).length;
 
-    const orphans = useMemo(() => orphanVehicles(vehicles, scenarios), [vehicles, scenarios]);
+    const orphans = useMemo(() => orphanDrivers(drivers, scenarios), [drivers, scenarios]);
 
     const handleSave = async (scenario: FuelScenario) => {
         try {
@@ -105,35 +136,55 @@ export function ScenarioList() {
         }
     };
 
+    const requestDelete = (policyId: string) => {
+        const guard = evaluateFuelPolicyDeleteGuard({
+            policyId,
+            drivers,
+            fuelEntries,
+            finalizedReports,
+            weekOptions,
+            timezone: fleetTz || undefined,
+        });
+        setDeleteGuard(guard);
+        setDeleteId(policyId);
+    };
+
+    const closeDeleteDialog = () => {
+        setDeleteId(null);
+        setDeleteGuard(null);
+    };
+
     const handleDelete = async () => {
-        if (!deleteId) return;
+        if (!deleteId || !deleteGuard) return;
+        if (!deleteGuard.canHardDelete) return;
+
         try {
-            const orphanIds = vehicles
-                .filter((v: any) => v.fuelScenarioId === deleteId)
-                .map((v: any) => v.id);
+            const orphanIds = drivers
+                .filter((d: any) => d.fuelScenarioId === deleteId)
+                .map((d: any) => d.id);
             await fuelService.deleteFuelScenario(deleteId);
-            // Clear orphan assignments so vehicles fall back to Default cleanly
             for (const id of orphanIds) {
-                const v = vehicles.find((x: any) => x.id === id);
-                if (!v) continue;
+                const d = drivers.find((x: any) => x.id === id);
+                if (!d) continue;
                 try {
-                    await api.saveVehicle({ ...v, fuelScenarioId: undefined });
+                    await api.saveDriver({ ...d, fuelScenarioId: undefined });
                 } catch (err) {
                     console.error('Failed to clear fuelScenarioId after delete', err);
                 }
             }
             setScenarios(prev => prev.filter(s => s.id !== deleteId));
             if (orphanIds.length) {
-                setVehicles((prev) =>
-                    prev.map((v) => (orphanIds.includes(v.id) ? { ...v, fuelScenarioId: undefined } : v)),
+                setDrivers((prev) =>
+                    prev.map((d) => (orphanIds.includes(d.id) ? { ...d, fuelScenarioId: undefined } : d)),
                 );
             }
+            await queryClient.invalidateQueries({ queryKey: ['drivers'] });
             toast.success("Policy deleted");
         } catch (e: any) {
             console.error(e);
             toast.error(e?.message || "Failed to delete policy");
         } finally {
-            setDeleteId(null);
+            closeDeleteDialog();
         }
     };
 
@@ -149,7 +200,7 @@ export function ScenarioList() {
         }
     };
 
-    const handleDuplicate = (scenario: FuelScenario) => {
+    const handleClone = (scenario: FuelScenario) => {
         const normalized = normalizeScenarioVersions(scenario);
         const fuelRule = normalized.rules.find((r) => r.category === 'Fuel');
         const clone: FuelScenario = {
@@ -160,23 +211,22 @@ export function ScenarioList() {
             rules: fuelRule
                 ? [{ ...fuelRule, id: crypto.randomUUID() }]
                 : [],
-            // Fresh policy — no inherited version history
             versions: undefined,
         };
         setEditingScenario(clone);
         setIsEditorOpen(true);
     };
 
-    const assignRows: AssignVehicleRow[] = useMemo(() => {
+    const assignRows: AssignDriverRow[] = useMemo(() => {
         if (!assignTarget) return [];
-        return vehicles.map((v: any) => ({
-            id: v.id,
-            plate: vehiclePlate(v),
-            driverName: driverName(v.currentDriverId),
-            currentPolicyLabel: policyLabelForVehicle(v),
+        return drivers.map((d: any) => ({
+            id: d.id,
+            name: driverDisplayName(d),
+            vehicleLabel: plateForDriver(d.id),
+            currentPolicyLabel: policyLabelForDriver(d),
             alreadyAssigned: assignTarget.isDefault
-                ? !v.fuelScenarioId || v.fuelScenarioId === assignTarget.id
-                : v.fuelScenarioId === assignTarget.id,
+                ? !d.fuelScenarioId || d.fuelScenarioId === assignTarget.id
+                : d.fuelScenarioId === assignTarget.id,
         }));
     }, [assignTarget, vehicles, drivers, scenarios]);
 
@@ -185,36 +235,35 @@ export function ScenarioList() {
         const selected = new Set(selectedIds);
         let ok = 0;
         let fail = 0;
-        const nextVehicles = [...vehicles];
+        const nextDrivers = [...drivers];
 
-        for (let i = 0; i < nextVehicles.length; i++) {
-            const v = nextVehicles[i];
-            let nextId: string | undefined | null = v.fuelScenarioId;
+        for (let i = 0; i < nextDrivers.length; i++) {
+            const d = nextDrivers[i];
+            let nextId: string | undefined | null = d.fuelScenarioId;
 
             if (assignTarget.isDefault) {
-                // Selected → use Default (clear custom id). Unselected left unchanged.
-                if (!selected.has(v.id)) continue;
+                if (!selected.has(d.id)) continue;
                 nextId = undefined;
             } else {
-                if (selected.has(v.id)) {
+                if (selected.has(d.id)) {
                     nextId = assignTarget.id;
-                } else if (v.fuelScenarioId === assignTarget.id) {
-                    nextId = undefined; // unchecked → back to Default
+                } else if (d.fuelScenarioId === assignTarget.id) {
+                    nextId = undefined;
                 } else {
                     continue;
                 }
             }
 
             const same =
-                (nextId === undefined || nextId === null) && !v.fuelScenarioId
+                (nextId === undefined || nextId === null) && !d.fuelScenarioId
                     ? true
-                    : nextId === v.fuelScenarioId;
+                    : nextId === d.fuelScenarioId;
             if (same) continue;
 
-            const updated = { ...v, fuelScenarioId: nextId || undefined };
+            const updated = { ...d, fuelScenarioId: nextId || undefined };
             try {
-                await api.saveVehicle(updated);
-                nextVehicles[i] = updated;
+                await api.saveDriver(updated);
+                nextDrivers[i] = updated;
                 ok++;
             } catch (e) {
                 console.error(e);
@@ -222,19 +271,21 @@ export function ScenarioList() {
             }
         }
 
-        setVehicles(nextVehicles);
-        if (fail === 0) toast.success(`Updated ${ok} vehicle assignment${ok !== 1 ? 's' : ''}`);
+        setDrivers(nextDrivers);
+        await queryClient.invalidateQueries({ queryKey: ['drivers'] });
+        if (fail === 0) toast.success(`Updated ${ok} driver assignment${ok !== 1 ? 's' : ''}`);
         else if (ok === 0) toast.error('Failed to update assignments');
         else toast.error(`Updated ${ok}, failed ${fail}`);
     };
 
-    const clearOrphan = async (vehicleId: string) => {
-        const v = vehicles.find((x) => x.id === vehicleId);
-        if (!v) return;
+    const clearOrphan = async (driverId: string) => {
+        const d = drivers.find((x) => x.id === driverId);
+        if (!d) return;
         try {
-            await api.saveVehicle({ ...v, fuelScenarioId: undefined });
-            setVehicles((prev) => prev.map((x) => (x.id === vehicleId ? { ...x, fuelScenarioId: undefined } : x)));
-            toast.success('Assignment cleared — vehicle uses Default');
+            await api.saveDriver({ ...d, fuelScenarioId: undefined });
+            setDrivers((prev) => prev.map((x) => (x.id === driverId ? { ...x, fuelScenarioId: undefined } : x)));
+            await queryClient.invalidateQueries({ queryKey: ['drivers'] });
+            toast.success('Assignment cleared — driver uses Default');
         } catch (e: any) {
             toast.error(e?.message || 'Failed to clear assignment');
         }
@@ -244,6 +295,10 @@ export function ScenarioList() {
         const split = splitAllCategoryCosts(SAMPLE_WEEK_COSTS, rule);
         return sumSplitTotals(split);
     };
+
+    const deletePolicyName = scenarios.find((s) => s.id === deleteId)?.name || 'this policy';
+    const isBlocked = deleteGuard && !deleteGuard.canHardDelete;
+    const isWarnOnly = deleteGuard?.warnOnly;
 
     if (loading) {
         return (
@@ -257,9 +312,9 @@ export function ScenarioList() {
         <div className="space-y-6">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                    <h3 className="text-lg font-medium text-slate-900">Fuel Policies</h3>
+                    <h3 className="text-lg font-medium text-slate-900">Rules</h3>
                     <p className="text-sm text-slate-500">
-                        Create policies outside Default, then assign vehicles to them.
+                        Named cost-split policies and driver assignments. Change dates/% on the Schedule tab.
                     </p>
                 </div>
                 <Button
@@ -276,14 +331,14 @@ export function ScenarioList() {
                     <div className="flex items-start gap-2 text-amber-900">
                         <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
                         <p className="text-sm font-medium">
-                            {orphans.length} vehicle{orphans.length !== 1 ? 's' : ''} reference a missing policy and fall back to Default.
+                            {orphans.length} driver{orphans.length !== 1 ? 's' : ''} reference a missing policy and fall back to Default.
                         </p>
                     </div>
                     <ul className="space-y-1 pl-6">
-                        {orphans.map((v) => (
-                            <li key={v.id} className="flex items-center justify-between gap-2 text-xs text-amber-900">
-                                <span>{vehiclePlate(v)} · {driverName(v.currentDriverId)}</span>
-                                <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => clearOrphan(v.id)}>
+                        {orphans.map((d) => (
+                            <li key={d.id} className="flex items-center justify-between gap-2 text-xs text-amber-900">
+                                <span>{driverDisplayName(d)} · {plateForDriver(d.id)}</span>
+                                <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => clearOrphan(d.id)}>
                                     Clear assignment
                                 </Button>
                             </li>
@@ -301,10 +356,9 @@ export function ScenarioList() {
                     {scenarios.map((scenario) => {
                         const normalized = normalizeScenarioVersions(scenario);
                         const rule = normalized.rules.find((r) => r.category === 'Fuel');
-                        const assigned = vehiclesForPolicy(scenario, vehicles);
+                        const assigned = driversForPolicy(scenario, drivers);
                         const preview = examplePreview(rule);
-                        const effectiveLabel = latestEffectiveFromLabel(normalized);
-                        const priorCount = Math.max(0, (normalized.versions?.length || 1) - 1);
+                        const versionCount = normalized.versions?.length || 1;
                         return (
                             <Card
                                 key={scenario.id}
@@ -323,22 +377,16 @@ export function ScenarioList() {
                                                     </Badge>
                                                 )}
                                                 <Badge variant="outline" className="gap-1 text-slate-500 font-normal">
-                                                    <Car className="h-3 w-3" />
-                                                    {assigned.length} vehicle{assigned.length !== 1 ? 's' : ''}
+                                                    <Users className="h-3 w-3" />
+                                                    {assigned.length} driver{assigned.length !== 1 ? 's' : ''}
                                                 </Badge>
-                                                {effectiveLabel && (
-                                                    <Badge variant="outline" className="text-slate-500 font-normal">
-                                                        {effectiveLabel}
-                                                    </Badge>
-                                                )}
+                                                <Badge variant="outline" className="gap-1 text-slate-500 font-normal">
+                                                    <CalendarRange className="h-3 w-3" />
+                                                    {versionCount} version{versionCount !== 1 ? 's' : ''}
+                                                </Badge>
                                             </div>
                                             <CardDescription className="line-clamp-2">
                                                 {scenario.description || 'No description provided.'}
-                                                {priorCount > 0 && (
-                                                    <span className="block mt-0.5 text-[11px] text-slate-400">
-                                                        {priorCount} prior rule version{priorCount !== 1 ? 's' : ''} retained for earlier weeks
-                                                    </span>
-                                                )}
                                             </CardDescription>
                                         </div>
                                     </div>
@@ -348,17 +396,17 @@ export function ScenarioList() {
 
                                     <div>
                                         <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                            Assigned vehicles
+                                            Assigned drivers
                                         </p>
                                         {assigned.length === 0 ? (
-                                            <p className="text-xs text-slate-400">No vehicles on this policy yet.</p>
+                                            <p className="text-xs text-slate-400">No drivers on this policy yet.</p>
                                         ) : (
                                             <ul className="space-y-1">
-                                                {assigned.slice(0, 5).map((v: any) => (
-                                                    <li key={v.id} className="text-xs text-slate-700">
-                                                        <span className="font-medium">{vehiclePlate(v)}</span>
+                                                {assigned.slice(0, 5).map((d: any) => (
+                                                    <li key={d.id} className="text-xs text-slate-700">
+                                                        <span className="font-medium">{driverDisplayName(d)}</span>
                                                         <span className="text-slate-400"> · </span>
-                                                        {driverName(v.currentDriverId)}
+                                                        {plateForDriver(d.id)}
                                                     </li>
                                                 ))}
                                                 {assigned.length > 5 && (
@@ -389,9 +437,20 @@ export function ScenarioList() {
                                             <Edit2 className="h-3.5 w-3.5 mr-1.5" />
                                             Edit
                                         </Button>
-                                        <Button variant="outline" size="sm" className="h-8" onClick={() => handleDuplicate(scenario)}>
+                                        {onViewSchedule && (
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="h-8"
+                                                onClick={() => onViewSchedule(scenario.id)}
+                                            >
+                                                <CalendarRange className="h-3.5 w-3.5 mr-1.5" />
+                                                View schedule
+                                            </Button>
+                                        )}
+                                        <Button variant="outline" size="sm" className="h-8" onClick={() => handleClone(scenario)}>
                                             <Copy className="h-3.5 w-3.5 mr-1.5" />
-                                            Duplicate
+                                            Clone as new policy
                                         </Button>
                                         <Button
                                             variant="outline"
@@ -400,7 +459,7 @@ export function ScenarioList() {
                                             onClick={() => setAssignTarget(scenario)}
                                         >
                                             <UserPlus className="h-3.5 w-3.5 mr-1.5" />
-                                            Assign vehicles
+                                            Assign drivers
                                         </Button>
                                         {!scenario.isDefault && (
                                             <Button
@@ -418,7 +477,7 @@ export function ScenarioList() {
                                                 variant="outline"
                                                 size="sm"
                                                 className="h-8 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
-                                                onClick={() => setDeleteId(scenario.id)}
+                                                onClick={() => requestDelete(scenario.id)}
                                             >
                                                 <Trash2 className="h-3.5 w-3.5 mr-1.5" />
                                                 Delete
@@ -438,44 +497,93 @@ export function ScenarioList() {
                 onSave={handleSave}
                 initialData={editingScenario}
                 isCreate={!editingScenario || !scenarios.some((s) => s.id === editingScenario.id)}
-                affectedVehicleCount={editingScenario ? getAffectedVehicleCount(editingScenario) : 0}
+                affectedDriverCount={editingScenario ? getAffectedDriverCount(editingScenario) : 0}
             />
 
-            <AssignVehiclesToPolicySheet
+            <AssignDriversToPolicySheet
                 open={!!assignTarget}
                 onOpenChange={(open) => !open && setAssignTarget(null)}
                 policyName={assignTarget?.name || ''}
                 isDefaultPolicy={!!assignTarget?.isDefault}
-                vehicles={assignRows}
+                drivers={assignRows}
                 onConfirm={handleAssignConfirm}
             />
 
-            <AlertDialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
+            <AlertDialog open={!!deleteId} onOpenChange={(open) => !open && closeDeleteDialog()}>
                 <AlertDialogContent>
                     <AlertDialogHeader>
-                        <AlertDialogTitle>Delete Policy?</AlertDialogTitle>
+                        <AlertDialogTitle>
+                            {isBlocked
+                                ? `Can't delete ${deletePolicyName}`
+                                : isWarnOnly
+                                  ? `Delete ${deletePolicyName}?`
+                                  : `Delete ${deletePolicyName}?`}
+                        </AlertDialogTitle>
                         <AlertDialogDescription asChild>
-                            <div className="space-y-2">
-                                <p>This permanently removes this policy. Assigned vehicles will be cleared back to Default.</p>
-                                {(() => {
-                                    const scenario = scenarios.find(s => s.id === deleteId);
-                                    const count = scenario ? getAffectedVehicleCount(scenario) : 0;
-                                    if (count === 0) return null;
-                                    return (
-                                        <div className="flex items-start gap-2 p-2.5 bg-amber-50 border border-amber-200 rounded text-amber-900">
+                            <div className="space-y-3 text-sm text-slate-600">
+                                {isBlocked && (
+                                    <>
+                                        <p>
+                                            This policy is still in use. Finalize remaining periods or reassign drivers before deleting.
+                                        </p>
+                                        {deleteGuard!.blockingDrivers.length > 0 && (
+                                            <div className="rounded-md border border-rose-200 bg-rose-50 p-2.5 text-rose-900">
+                                                <p className="font-medium mb-1">
+                                                    {deleteGuard!.blockingDrivers.length} assigned driver
+                                                    {deleteGuard!.blockingDrivers.length !== 1 ? 's' : ''}
+                                                </p>
+                                                <ul className="list-disc pl-4 text-xs space-y-0.5">
+                                                    {deleteGuard!.blockingDrivers.slice(0, 8).map((d) => (
+                                                        <li key={d.id}>{d.name}</li>
+                                                    ))}
+                                                </ul>
+                                                <p className="text-xs mt-2">Next: Reassign drivers to another policy (or Default).</p>
+                                            </div>
+                                        )}
+                                        {deleteGuard!.openWeeks.length > 0 && (
+                                            <div className="rounded-md border border-amber-200 bg-amber-50 p-2.5 text-amber-900">
+                                                <p className="font-medium mb-1">
+                                                    {deleteGuard!.openWeeks.length} week
+                                                    {deleteGuard!.openWeeks.length !== 1 ? 's' : ''} not finalized
+                                                </p>
+                                                <ul className="list-disc pl-4 text-xs space-y-0.5">
+                                                    {deleteGuard!.openWeeks.slice(0, 6).map((w) => (
+                                                        <li key={w.startDate}>{w.label}</li>
+                                                    ))}
+                                                </ul>
+                                                <p className="text-xs mt-2">Next: Finalize remaining periods in Consumption Reconciliation.</p>
+                                            </div>
+                                        )}
+                                    </>
+                                )}
+                                {isWarnOnly && (
+                                    <>
+                                        <p>
+                                            No drivers are assigned and no open weeks need this policy, but{' '}
+                                            <strong>{deleteGuard!.finalizedWeeks.length}</strong> finalized week
+                                            {deleteGuard!.finalizedWeeks.length !== 1 ? 's' : ''} used it.
+                                        </p>
+                                        <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-2.5 text-amber-900">
                                             <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-                                            <span className="text-sm">
-                                                {count} vehicle{count !== 1 ? 's' : ''} currently {count !== 1 ? 'use' : 'uses'} this policy and will fall back to Default after delete.
+                                            <span>
+                                                Locked statements stay safe. If you later reset one of those weeks, recalculation will fall back to Default unless you recreate this policy.
                                             </span>
                                         </div>
-                                    );
-                                })()}
+                                    </>
+                                )}
+                                {!isBlocked && !isWarnOnly && (
+                                    <p>This permanently removes the policy. This cannot be undone.</p>
+                                )}
                             </div>
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleDelete} className="bg-red-600 hover:bg-red-700">Delete</AlertDialogAction>
+                        <AlertDialogCancel>{isBlocked ? 'Close' : 'Cancel'}</AlertDialogCancel>
+                        {!isBlocked && (
+                            <AlertDialogAction onClick={handleDelete} className="bg-red-600 hover:bg-red-700">
+                                {isWarnOnly ? 'Delete anyway' : 'Delete'}
+                            </AlertDialogAction>
+                        )}
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>

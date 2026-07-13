@@ -17,7 +17,6 @@ import {
   Trophy,
   Settings,
   History,
-  ChartBar
 } from "lucide-react";
 import { Button } from "../ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
@@ -142,12 +141,6 @@ export function DriverLayout({ children, currentPage, onNavigate, onLogout, isMe
                     onClick={() => onNavigate('equipment')} 
                     color="bg-emerald-100"
                     hasBadge
-                  />
-                  <MenuCard 
-                    icon={<ChartBar className="h-6 w-6 text-purple-600" />} 
-                    title="Performance"
-                    onClick={() => onNavigate('performance')} // Assuming performance page exists or is handled
-                    color="bg-purple-100"
                   />
                    <MenuCard 
                     icon={<History className="h-6 w-6 text-slate-600" />} 

@@ -105,6 +105,15 @@ export interface Vehicle {
   status: VehicleStatus;
   currentDriverId?: string;
   currentDriverName?: string;
+
+  /** Who had this vehicle over time — used to attribute fuel fills on shared cars. */
+  driverAssignmentHistory?: Array<{
+    driverId: string;
+    driverName: string;
+    assignedAt: string;
+    unassignedAt?: string;
+    assignedBy?: string;
+  }>;
   
   // Snapshot Metrics (Computed from daily metrics)
   metrics: {
@@ -161,7 +170,8 @@ export interface Vehicle {
   tollClassNeedsReview?: boolean;
 
   // Fuel Configuration
-  fuelScenarioId?: string; // ID of the assigned FuelScenario
+  /** @deprecated Prefer Driver.fuelScenarioId — kept for dual-read cutover only. */
+  fuelScenarioId?: string;
   fuelSettings?: {
       fuelType: 'Gasoline_87' | 'Gasoline_91' | 'Gasoline_93' | 'Diesel' | 'Electric' | 'Hybrid';
       efficiencyCity: number; // L/100km or MPG

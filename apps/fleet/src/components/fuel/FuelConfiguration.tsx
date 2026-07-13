@@ -1,10 +1,15 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { Info } from 'lucide-react';
 import { ScenarioList } from './ScenarioList';
+import { PolicySchedulePanel } from './PolicySchedulePanel';
 
 export function FuelConfiguration() {
+    const [tab, setTab] = useState('rules');
+    const [schedulePolicyId, setSchedulePolicyId] = useState<string | null>(null);
+
     return (
         <Card className="border-0 shadow-none">
             <CardHeader className="px-0 pt-0">
@@ -17,18 +22,38 @@ export function FuelConfiguration() {
                     </div>
                 </div>
             </CardHeader>
-            <CardContent className="px-0 space-y-8">
+            <CardContent className="px-0 space-y-6">
                 <Alert className="bg-slate-50 border-slate-200 text-slate-900">
                     <Info className="h-4 w-4 text-indigo-600" />
                     <AlertTitle>How policies work</AlertTitle>
                     <AlertDescription className="text-slate-700">
-                        The Default policy applies to vehicles without a custom assignment.
-                        Create additional policies for different company/driver splits, then assign vehicles to them.
-                        Drivers inherit the policy through the vehicle they are on.
+                        The Default policy applies to drivers without a custom assignment.
+                        Create additional policies on Rules, assign drivers there, and manage
+                        effective Mondays / coverage versions on Schedule.
                     </AlertDescription>
                 </Alert>
 
-                <ScenarioList />
+                <Tabs
+                    value={tab}
+                    onValueChange={setTab}
+                    className="w-full"
+                >
+                    <TabsList>
+                        <TabsTrigger value="rules">Rules</TabsTrigger>
+                        <TabsTrigger value="schedule">Schedule</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="rules" className="mt-6">
+                        <ScenarioList
+                            onViewSchedule={(policyId) => {
+                                setSchedulePolicyId(policyId);
+                                setTab('schedule');
+                            }}
+                        />
+                    </TabsContent>
+                    <TabsContent value="schedule" className="mt-6">
+                        <PolicySchedulePanel initialPolicyId={schedulePolicyId} />
+                    </TabsContent>
+                </Tabs>
             </CardContent>
         </Card>
     );

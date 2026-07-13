@@ -96,8 +96,8 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate, onLogout }: { curre
   const { canView } = usePermissions();
   const { isModuleEnabled } = useFeatureFlags();
   const isTollManagementOpen = ['toll-logs', 'toll-tags', 'tag-inventory', 'toll-analytics'].includes(currentPage);
-  const isFuelManagementOpen = ['fuel-management', 'fuel-overview', 'fuel-reconciliation', 'fuel-cards', 'fuel-logs', 'fuel-reports', 'fuel-configuration', 'fuel-reimbursements', 'fuel-audit', 'fuel-integrity-gap'].includes(currentPage);
-  const isDriverOpsOpen = ['drivers', 'performance', 'tier-config', 'driver-ledger'].includes(currentPage);
+  const isFuelManagementOpen = ['fuel-management', 'fuel-overview', 'fuel-reconciliation', 'fuel-cards', 'fuel-logs', 'fuel-configuration', 'fuel-reimbursements', 'fuel-integrity-gap'].includes(currentPage);
+  const isDriverOpsOpen = ['drivers', 'tier-config', 'driver-ledger'].includes(currentPage);
   const isVehicleOpsOpen = ['vehicles', 'maintenance-hub', 'fleet'].includes(currentPage);
 
   return (
@@ -127,7 +127,7 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate, onLogout }: { curre
             onClick={() => onNavigate?.('imports')}
           />
           )}
-          {(canView('drivers') || canView('performance') || canView('tier-config')) && (
+          {(canView('drivers') || canView('tier-config')) && (
           <Collapsible defaultOpen={isDriverOpsOpen} className="group/collapsible">
             <SidebarMenuItem>
               <CollapsibleTrigger asChild>
@@ -144,15 +144,6 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate, onLogout }: { curre
                     <SidebarMenuSubButton asChild isActive={currentPage === 'drivers'} onClick={() => onNavigate?.('drivers')}>
                       <button className="w-full text-left cursor-pointer">
                         <span>{v('drivers')}</span>
-                      </button>
-                    </SidebarMenuSubButton>
-                  </SidebarMenuSubItem>
-                  )}
-                  {isSidebarItemVisible('performance', businessType) && canView('performance') && (
-                  <SidebarMenuSubItem>
-                    <SidebarMenuSubButton asChild isActive={currentPage === 'performance'} onClick={() => onNavigate?.('performance')}>
-                      <button className="w-full text-left cursor-pointer">
-                        <span>{v('sidebarPerformance')}</span>
                       </button>
                     </SidebarMenuSubButton>
                   </SidebarMenuSubItem>
@@ -227,7 +218,7 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate, onLogout }: { curre
           )}
           
           {/* Fuel Management Section */}
-          {isModuleEnabled('fuelManagement') && (canView('fuel-overview') || canView('fuel-reimbursements') || canView('fuel-audit') || canView('fuel-integrity-gap') || canView('fuel-reconciliation') || canView('fuel-cards') || canView('fuel-logs') || canView('fuel-reports') || canView('fuel-configuration')) && (
+          {isModuleEnabled('fuelManagement') && (canView('fuel-overview') || canView('fuel-reimbursements') || canView('fuel-integrity-gap') || canView('fuel-reconciliation') || canView('fuel-cards') || canView('fuel-logs') || canView('fuel-configuration')) && (
           <Collapsible defaultOpen={isFuelManagementOpen} className="group/collapsible">
             <SidebarMenuItem>
               <CollapsibleTrigger asChild>
@@ -253,15 +244,6 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate, onLogout }: { curre
                     <SidebarMenuSubButton asChild isActive={currentPage === 'fuel-reimbursements'} onClick={() => onNavigate?.('fuel-reimbursements')}>
                       <button className="w-full text-left cursor-pointer">
                         <span>Review Queue</span>
-                      </button>
-                    </SidebarMenuSubButton>
-                  </SidebarMenuSubItem>
-                  )}
-                  {canView('fuel-audit') && (
-                  <SidebarMenuSubItem>
-                    <SidebarMenuSubButton asChild isActive={currentPage === 'fuel-audit'} onClick={() => onNavigate?.('fuel-audit')}>
-                      <button className="w-full text-left cursor-pointer">
-                        <span>Audit Trail</span>
                       </button>
                     </SidebarMenuSubButton>
                   </SidebarMenuSubItem>
@@ -301,15 +283,6 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate, onLogout }: { curre
                     <SidebarMenuSubButton asChild isActive={currentPage === 'fuel-logs'} onClick={() => onNavigate?.('fuel-logs')}>
                       <button className="w-full text-left cursor-pointer">
                         <span>Transaction Logs</span>
-                      </button>
-                    </SidebarMenuSubButton>
-                  </SidebarMenuSubItem>
-                  )}
-                  {canView('fuel-reports') && (
-                  <SidebarMenuSubItem>
-                    <SidebarMenuSubButton asChild isActive={currentPage === 'fuel-reports'} onClick={() => onNavigate?.('fuel-reports')}>
-                      <button className="w-full text-left cursor-pointer">
-                        <span>Reports</span>
                       </button>
                     </SidebarMenuSubButton>
                   </SidebarMenuSubItem>

@@ -33,22 +33,38 @@ export function nextMondayYmd(d: Date = new Date(), timezone?: string): string {
   return format(addWeeks(parseISO(thisMon), 1), 'yyyy-MM-dd');
 }
 
-/** Upcoming Mondays for the editor dropdown (includes this Monday + future). */
+/** Earliest Monday offered when setting policy version windows (backfill recon). */
+export const POLICY_VERSION_EARLIEST_MONDAY = '2025-12-01';
+
+/**
+ * Mondays for the version Starts/Ends dropdowns:
+ * from earliestMonday (default Dec 1, 2025) through `futureCount` weeks ahead of this Monday.
+ * Oldest → newest so historical weeks are reachable for first-time recon setup.
+ */
 export function upcomingMondayOptions(
-  count = 12,
+  futureCount = 16,
   timezone?: string,
   from: Date = new Date(),
+  earliestMonday: string = POLICY_VERSION_EARLIEST_MONDAY,
 ): { value: string; label: string }[] {
   const thisMon = mondayYmdForDate(from, timezone);
+  const earliest = isMondayYmd(earliestMonday)
+    ? earliestMonday
+    : mondayYmdForDate(parseISO(earliestMonday), timezone);
+  const startYmd = earliest <= thisMon ? earliest : thisMon;
+  const endYmd = format(addWeeks(parseISO(thisMon), Math.max(0, futureCount - 1)), 'yyyy-MM-dd');
+
   const options: { value: string; label: string }[] = [];
-  for (let i = 0; i < count; i++) {
-    const start = addWeeks(parseISO(thisMon), i);
-    const end = endOfWeek(start, { weekStartsOn: 1 });
-    const value = format(start, 'yyyy-MM-dd');
+  let cursor = parseISO(startYmd);
+  const last = parseISO(endYmd);
+  while (cursor.getTime() <= last.getTime()) {
+    const end = endOfWeek(cursor, { weekStartsOn: 1 });
+    const value = format(cursor, 'yyyy-MM-dd');
     options.push({
       value,
-      label: `${format(start, 'MMM d')} – ${format(end, 'MMM d, yyyy')}`,
+      label: `${format(cursor, 'MMM d')} – ${format(end, 'MMM d, yyyy')}`,
     });
+    cursor = addWeeks(cursor, 1);
   }
   return options;
 }
@@ -94,14 +110,30 @@ export function normalizeScenarioVersions(scenario: FuelScenario): FuelScenario 
   };
 }
 
-/** Latest version whose effectiveFrom <= weekStart (Monday yyyy-MM-dd). */
+/** True when version window covers this Monday weekStart (until is exclusive). */
+export function versionAppliesToWeek(
+  version: FuelScenarioVersion,
+  weekStartYmd: string,
+): boolean {
+  const key = String(weekStartYmd).split('T')[0];
+  const from = String(version.effectiveFrom || '').split('T')[0];
+  if (!from || from > key) return false;
+  const until = version.effectiveUntil ? String(version.effectiveUntil).split('T')[0] : '';
+  if (until && until <= key) return false;
+  return true;
+}
+
+/**
+ * Version active for a week: among windows covering weekStart, pick latest effectiveFrom.
+ * Falls back to earliest version if none cover (legacy safety).
+ */
 export function resolveVersionForWeek(
   scenario: FuelScenario,
   weekStartYmd: string,
 ): FuelScenarioVersion | undefined {
   const normalized = normalizeScenarioVersions(scenario);
   const key = String(weekStartYmd).split('T')[0];
-  const applicable = (normalized.versions || []).filter((v) => v.effectiveFrom <= key);
+  const applicable = (normalized.versions || []).filter((v) => versionAppliesToWeek(v, key));
   if (applicable.length === 0) return normalized.versions?.[0];
   return applicable[applicable.length - 1];
 }
@@ -121,8 +153,20 @@ export function resolveScenarioForWeek(
   };
 }
 
-/** Pick vehicle policy then resolve for week. */
+/** Pick policy by id then resolve for week (shared by vehicle dual-read + driver). */
 export function pickScenarioForVehicleWeek(
+  scenarios: FuelScenario[],
+  fuelScenarioId: string | undefined,
+  weekStartYmd: string,
+): FuelScenario | undefined {
+  return pickScenarioForDriverWeek(scenarios, fuelScenarioId, weekStartYmd);
+}
+
+/**
+ * Driver-first policy: use driver.fuelScenarioId (or dual-read vehicle fallback id),
+ * then Default, then first scenario.
+ */
+export function pickScenarioForDriverWeek(
   scenarios: FuelScenario[],
   fuelScenarioId: string | undefined,
   weekStartYmd: string,
@@ -133,6 +177,14 @@ export function pickScenarioForVehicleWeek(
     scenarios[0];
   if (!raw) return undefined;
   return resolveScenarioForWeek(raw, weekStartYmd);
+}
+
+/** Dual-read: driver policy wins; vehicle.fuelScenarioId only during cutover. */
+export function resolveDriverFuelScenarioId(
+  driver: { fuelScenarioId?: string } | null | undefined,
+  vehicle?: { fuelScenarioId?: string } | null,
+): string | undefined {
+  return driver?.fuelScenarioId ?? vehicle?.fuelScenarioId;
 }
 
 function rulesSignature(rules: FuelRule[]): string {
@@ -158,26 +210,48 @@ export function coverageRulesEqual(a: FuelRule[], b: FuelRule[]): boolean {
 }
 
 /**
- * Persist name/description always. When coverage rules change, append a version
- * at effectiveFromMonday (must be a Monday). Does not mutate prior versions.
+ * Persist name/description always. When coverage rules change (or forceVersion),
+ * append a version at effectiveFromMonday (must be a Monday). Does not mutate prior versions.
  */
 export function applyScenarioSave(params: {
   previous: FuelScenario | null;
   next: Omit<FuelScenario, 'versions'> & { versions?: FuelScenarioVersion[] };
-  /** Required when coverage rules changed vs previous. */
+  /** Required when coverage rules changed vs previous (or forceVersion). */
   effectiveFromMonday?: string;
+  /**
+   * Optional exclusive end Monday. Unset / empty = never ends.
+   * Must be a Monday after effectiveFrom when set.
+   */
+  effectiveUntilMonday?: string | null;
+  /** Schedule "Add version" — append even if coverage % unchanged. */
+  forceVersion?: boolean;
 }): FuelScenario {
-  const { previous, next, effectiveFromMonday } = params;
+  const {
+    previous,
+    next,
+    effectiveFromMonday,
+    effectiveUntilMonday,
+    forceVersion = false,
+  } = params;
   const now = new Date().toISOString();
   const nextRules = cloneRules(next.rules || []);
+
+  const until =
+    effectiveUntilMonday && isMondayYmd(effectiveUntilMonday)
+      ? effectiveUntilMonday
+      : undefined;
 
   if (!previous) {
     const from = effectiveFromMonday && isMondayYmd(effectiveFromMonday)
       ? effectiveFromMonday
       : LEGACY_POLICY_EFFECTIVE_FROM;
+    if (until && until <= from) {
+      throw new Error('Ending period must be after the starting Monday.');
+    }
     const version: FuelScenarioVersion = {
       id: crypto.randomUUID(),
       effectiveFrom: from,
+      ...(until ? { effectiveUntil: until } : {}),
       rules: nextRules,
       createdAt: now,
     };
@@ -191,7 +265,7 @@ export function applyScenarioSave(params: {
   const prevNorm = normalizeScenarioVersions(previous);
   const rulesChanged = !coverageRulesEqual(prevNorm.rules || [], nextRules);
 
-  if (!rulesChanged) {
+  if (!rulesChanged && !forceVersion) {
     return {
       ...prevNorm,
       name: next.name,
@@ -206,45 +280,116 @@ export function applyScenarioSave(params: {
   if (!effectiveFromMonday || !isMondayYmd(effectiveFromMonday)) {
     throw new Error('Effective from must be a Monday when coverage rules change.');
   }
+  if (until && until <= effectiveFromMonday) {
+    throw new Error('Ending period must be after the starting Monday.');
+  }
 
-  const versions = [...(prevNorm.versions || [])];
+  let versions = [...(prevNorm.versions || [])];
   const existingIdx = versions.findIndex((v) => v.effectiveFrom === effectiveFromMonday);
   const newVersion: FuelScenarioVersion = {
     id: crypto.randomUUID(),
     effectiveFrom: effectiveFromMonday,
+    ...(until ? { effectiveUntil: until } : {}),
     rules: nextRules,
     createdAt: now,
   };
 
   if (existingIdx >= 0) {
-    // Same Monday re-edit before that week starts: replace that version only
-    versions[existingIdx] = newVersion;
+    // Same Monday re-edit: replace that version only (preserve id if desired — new id ok)
+    versions[existingIdx] = { ...newVersion, id: versions[existingIdx].id };
   } else {
+    // Close open-ended prior versions that would overlap this start
+    versions = versions.map((v) => {
+      if (v.effectiveUntil) return v;
+      if (v.effectiveFrom >= effectiveFromMonday) return v;
+      return { ...v, effectiveUntil: effectiveFromMonday };
+    });
     versions.push(newVersion);
   }
 
   const sorted = sortVersions(versions);
-  const latest = sorted[sorted.length - 1];
+  // Prefer rules from version that covers "now" if possible, else latest by from
+  const todayKey = mondayYmdForDate(new Date());
+  const current = resolveVersionForWeek({ ...prevNorm, versions: sorted }, todayKey)
+    || sorted[sorted.length - 1];
   return {
     ...prevNorm,
     name: next.name,
     description: next.description,
     isDefault: next.isDefault,
     versions: sorted,
-    rules: cloneRules(latest.rules),
+    rules: cloneRules(current?.rules || nextRules),
   };
 }
 
-/** Label for cards: latest version effective date. */
+/**
+ * Remove one coverage version. Keeps at least one version.
+ * Neighbors closed at this version's start inherit its end (or reopen to Never).
+ */
+export function removeScenarioVersion(
+  scenario: FuelScenario,
+  versionId: string,
+): FuelScenario {
+  const n = normalizeScenarioVersions(scenario);
+  const versions = [...(n.versions || [])];
+  if (versions.length <= 1) {
+    throw new Error('A policy must keep at least one version.');
+  }
+  const idx = versions.findIndex((v) => v.id === versionId);
+  if (idx < 0) {
+    throw new Error('Version not found.');
+  }
+  const removed = versions[idx];
+  versions.splice(idx, 1);
+
+  const healed = versions.map((v) => {
+    if (v.effectiveUntil !== removed.effectiveFrom) return v;
+    const next = { ...v };
+    if (removed.effectiveUntil) {
+      next.effectiveUntil = removed.effectiveUntil;
+    } else {
+      delete next.effectiveUntil;
+    }
+    return next;
+  });
+
+  const sorted = sortVersions(healed);
+  const todayKey = mondayYmdForDate(new Date());
+  const current =
+    resolveVersionForWeek({ ...n, versions: sorted }, todayKey) ||
+    sorted[sorted.length - 1];
+  return {
+    ...n,
+    versions: sorted,
+    rules: cloneRules(current?.rules || n.rules || []),
+  };
+}
+
+/** Human range label for a version window. */
+export function versionWindowLabel(version: FuelScenarioVersion): string {
+  const from =
+    version.effectiveFrom <= LEGACY_POLICY_EFFECTIVE_FROM
+      ? 'Since launch'
+      : (() => {
+          try {
+            return format(parseISO(version.effectiveFrom), 'MMM d, yyyy');
+          } catch {
+            return version.effectiveFrom;
+          }
+        })();
+  if (!version.effectiveUntil) return `${from} → Never`;
+  try {
+    return `${from} → ${format(parseISO(version.effectiveUntil), 'MMM d, yyyy')}`;
+  } catch {
+    return `${from} → ${version.effectiveUntil}`;
+  }
+}
+
+/** Label for cards: latest / current version effective date. */
 export function latestEffectiveFromLabel(scenario: FuelScenario): string {
   const n = normalizeScenarioVersions(scenario);
-  const latest = n.versions?.[n.versions.length - 1];
-  if (!latest) return '';
-  if (latest.effectiveFrom <= LEGACY_POLICY_EFFECTIVE_FROM) return 'Since launch';
-  try {
-    const start = parseISO(latest.effectiveFrom);
-    return `Effective ${format(start, 'MMM d, yyyy')}`;
-  } catch {
-    return `Effective ${latest.effectiveFrom}`;
-  }
+  const todayKey = mondayYmdForDate(new Date());
+  const current = resolveVersionForWeek(n, todayKey) || n.versions?.[n.versions.length - 1];
+  if (!current) return '';
+  return versionWindowLabel(current);
 }

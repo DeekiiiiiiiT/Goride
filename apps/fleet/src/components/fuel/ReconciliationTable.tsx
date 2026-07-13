@@ -41,11 +41,12 @@ import { Checkbox } from "../ui/checkbox";
 
 import { Vehicle } from '../../types/vehicle';
 import { Trip } from '../../types/data';
-import { FuelEntry, MileageAdjustment, WeeklyFuelReport, FuelDispute, FuelScenario, OdometerBucket, FinalizedFuelReport } from '../../types/fuel';
+import { FuelEntry, MileageAdjustment, WeeklyFuelReport, FuelDispute, FuelScenario, OdometerBucket, FinalizedFuelReport, FuelCard } from '../../types/fuel';
 import { FuelCalculationService, VehicleDeadheadInput } from '../../services/fuelCalculationService';
 import { downloadCSV } from '../../utils/export';
 import { ScenarioSplitDashboard } from './ScenarioSplitDashboard';
 import { api } from '../../services/api';
+import { UNASSIGNED_FUEL_DRIVER_ID } from '../../types/fuel';
 
 interface ReconciliationTableProps {
     vehicles: Vehicle[];
@@ -56,6 +57,7 @@ interface ReconciliationTableProps {
     dateRange: DateRange | undefined;
     scenarios?: FuelScenario[];
     drivers?: any[];
+    fuelCards?: FuelCard[];
     /** Prior finalized snapshots — used to warn when re-finalizing a vehicle/week that was already posted. */
     finalizedReports?: FinalizedFuelReport[];
     /** When true, week is locked — hide Add Adjustment / mutate CTAs. */
@@ -79,6 +81,7 @@ export function ReconciliationTable({
     dateRange,
     scenarios = [],
     drivers = [],
+    fuelCards = [],
     finalizedReports = [],
     periodLocked = false,
     hideFinalize = false,
@@ -137,38 +140,22 @@ export function ReconciliationTable({
     }, [weekStart, weekEnd]);
 
     // Calculate Data — hooks must always run (React rules of hooks)
-    // Phase 2: Build a map of vehicleId -> Set of all known driver IDs for that vehicle's assigned driver
-    const driverIdMap = useMemo(() => {
-        const map = new Map<string, Set<string>>();
-        for (const vehicle of vehicles) {
-            const assignedDriverId = vehicle.currentDriverId;
-            if (!assignedDriverId) continue;
-            const idSet = new Set<string>([assignedDriverId]);
-            const driverRecord = drivers.find((d: any) => d.id === assignedDriverId || d.driverId === assignedDriverId);
-            if (driverRecord) {
-                // Roam-only: only use native Roam IDs for driver-vehicle matching
-                // (Uber/InDrive UUIDs were causing 59-vs-57 trip count mismatches)
-                if (driverRecord.id) idSet.add(driverRecord.id);
-                if (driverRecord.driverId) idSet.add(driverRecord.driverId);
-            }
-            map.set(vehicle.id, idSet);
-        }
-        return map;
-    }, [vehicles, drivers]);
-
+    // Driver-first: one report per driver+week (shared cars → multiple rows)
     const reports = useMemo(() => {
         if (!weekStart) return [];
-        return vehicles.map(vehicle => {
-            const driverIds = driverIdMap.get(vehicle.id);
-            // Prefer vehicleId so mid-week driver changes don't undercount trips.
-            const driverTrips = trips.filter((t) => {
-                if (t.vehicleId) return t.vehicleId === vehicle.id;
-                if (driverIds && driverIds.size > 0) return driverIds.has(t.driverId);
-                return false;
-            });
-            return FuelCalculationService.calculateReconciliation(vehicle, weekStart, weekEnd!, driverTrips, fuelEntries, adjustments, scenarios, deadheadMap?.get(vehicle.id));
-        });
-    }, [vehicles, trips, fuelEntries, adjustments, weekStart, weekEnd, scenarios, deadheadMap, driverIdMap]);
+        return FuelCalculationService.generateDriverFleetReport(
+            vehicles,
+            drivers,
+            weekStart,
+            weekEnd!,
+            trips,
+            fuelEntries,
+            adjustments,
+            scenarios,
+            deadheadMap,
+            fuelCards,
+        );
+    }, [vehicles, drivers, trips, fuelEntries, adjustments, weekStart, weekEnd, scenarios, deadheadMap, fuelCards]);
 
     useEffect(() => {
         onReportsChange?.(reports);
@@ -206,15 +193,15 @@ export function ReconciliationTable({
         return reports.reduce((acc, r) => {
             const rStartYmd = r.weekStart.split('T')[0];
             const prior = finalizedReports.find(
-                (f) => f.vehicleId === r.vehicleId && String(f.weekStart).split('T')[0] === rStartYmd
+                (f) => f.driverId === r.driverId && String(f.weekStart).split('T')[0] === rStartYmd
             );
             if (prior) {
                 const priorDriverShare = prior.postedDriverShare ?? prior.driverShare ?? 0;
                 const delta = r.driverShare - priorDriverShare;
-                acc.push({ vehicleId: r.vehicleId, priorDriverShare, delta });
+                acc.push({ vehicleId: r.vehicleId, driverId: r.driverId, priorDriverShare, delta });
             }
             return acc;
-        }, [] as { vehicleId: string; priorDriverShare: number; delta: number }[]);
+        }, [] as { vehicleId: string; driverId: string; priorDriverShare: number; delta: number }[]);
     }, [reports, finalizedReports]);
 
     // Finalize gating (Step 5): no existing "block on status" pattern exists in
@@ -352,7 +339,7 @@ export function ReconciliationTable({
                     <Table>
                         <TableHeader className="bg-slate-50">
                             <TableRow>
-                                <TableHead className="w-[180px]">Vehicle / Driver</TableHead>
+                                <TableHead className="w-[180px]">Driver / Vehicle(s)</TableHead>
                                 <TableHead className="w-[120px] text-center">Data Health</TableHead>
                                 <TableHead className="w-[100px]">Status</TableHead>
                                 <TableHead className="text-right font-medium text-slate-900 border-l border-r border-slate-200 bg-slate-100">
@@ -607,20 +594,36 @@ export function ReconciliationTable({
                         <TableBody>
                             {reports.map((report) => {
                                 const vehicle = vehicles.find(v => v.id === report.vehicleId);
-                                const assignedDriver = vehicle?.currentDriverId
-                                    ? drivers.find((d: any) => d.id === vehicle.currentDriverId || d.driverId === vehicle.currentDriverId)
+                                const reportDriver = report.driverId && report.driverId !== UNASSIGNED_FUEL_DRIVER_ID
+                                    ? drivers.find((d: any) => d.id === report.driverId || d.driverId === report.driverId)
                                     : null;
-                                const driverName = assignedDriver?.name || vehicle?.currentDriverName || null;
+                                const driverName =
+                                    report.driverId === UNASSIGNED_FUEL_DRIVER_ID
+                                        ? 'Unassigned fills'
+                                        : reportDriver?.name ||
+                                          [reportDriver?.firstName, reportDriver?.lastName].filter(Boolean).join(' ') ||
+                                          vehicle?.currentDriverName ||
+                                          null;
+
+                                const plateLabel =
+                                    (report.vehiclePlates && report.vehiclePlates.length > 0
+                                        ? report.vehiclePlates.join(', ')
+                                        : vehicle?.licensePlate) || 'Unknown';
                                 
-                                // Calculate "Paid by Driver" (Cash/Reimbursement)
+                                // Calculate "Paid by Driver" (Cash/Reimbursement) for this driver-week
                                 const rStart = report.weekStart.split('T')[0];
                                 const rEnd = report.weekEnd.split('T')[0];
                                 const driverSpend = fuelEntries
                                     .filter(e => 
-                                        e.vehicleId === report.vehicleId && 
                                         e.date >= rStart && 
                                         e.date <= rEnd &&
-                                        (e.type === 'Reimbursement' || e.type === 'Manual_Entry' || e.type === 'Fuel_Manual_Entry')
+                                        (e.type === 'Reimbursement' || e.type === 'Manual_Entry' || e.type === 'Fuel_Manual_Entry') &&
+                                        (report.driverId === UNASSIGNED_FUEL_DRIVER_ID
+                                          ? !e.driverId
+                                          : e.driverId === report.driverId ||
+                                            ((report.vehicleIds || [report.vehicleId]).includes(e.vehicleId || '') &&
+                                              !e.driverId &&
+                                              report.driverId === vehicle?.currentDriverId))
                                     )
                                     .reduce((sum, e) => sum + e.amount, 0);
 
@@ -628,6 +631,11 @@ export function ReconciliationTable({
 
                                 // Check if dispute overlaps with report period
                                 const dispute = disputes.find(d => {
+                                    if (report.driverId && d.driverId && d.driverId === report.driverId) {
+                                        if (d.weekStart !== report.weekStart) return false;
+                                        if (d.weekEnd) return d.weekEnd === report.weekEnd;
+                                        return true;
+                                    }
                                     if (d.vehicleId !== report.vehicleId) return false;
                                     if (d.weekStart !== report.weekStart) return false;
                                     if (d.weekEnd) return d.weekEnd === report.weekEnd;
@@ -641,34 +649,31 @@ export function ReconciliationTable({
                                                 <div className="flex flex-col">
                                                     <div className="flex items-center gap-2">
                                                         <span className="font-medium text-slate-900">
-                                                            {vehicle?.licensePlate || 'Unknown'} 
+                                                            {driverName || 'Unknown driver'}
                                                         </span>
                                                     </div>
                                                     <span className="text-xs text-slate-500">
-                                                        {vehicle?.model}
+                                                        {plateLabel}
+                                                        {vehicle?.model ? ` · ${vehicle.model}` : ''}
                                                     </span>
-                                                    {driverName && (
-                                                        <span className="text-xs text-indigo-600 font-medium">
-                                                            {driverName}
-                                                        </span>
-                                                    )}
-                                                    {vehicle && (() => {
-                                                        const assigned = scenarios.find(s => s.id === vehicle.fuelScenarioId);
+                                                    {(() => {
+                                                        const policyId = reportDriver?.fuelScenarioId ?? vehicle?.fuelScenarioId;
+                                                        const assigned = scenarios.find(s => s.id === policyId);
                                                         const fallback = scenarios.find(s => s.isDefault) || scenarios[0];
-                                                        const policyName = assigned?.name || fallback?.name;
+                                                        const policyName = report.metadata?.scenarioName || assigned?.name || fallback?.name;
                                                         if (!policyName) return null;
                                                         return (
                                                         <TooltipProvider>
                                                             <Tooltip>
                                                                 <TooltipTrigger asChild>
-                                                                    <span className={`inline-flex items-center gap-1 text-[10px] cursor-help w-fit ${assigned ? 'text-slate-500' : 'text-amber-600'}`}>
+                                                                    <span className={`inline-flex items-center gap-1 text-[10px] cursor-help w-fit ${assigned || report.metadata?.scenarioId ? 'text-slate-500' : 'text-amber-600'}`}>
                                                                         <Info className="h-2.5 w-2.5" />
-                                                                        {assigned ? policyName : `${policyName} (default)`}
+                                                                        {assigned || report.metadata?.scenarioId ? policyName : `${policyName} (default)`}
                                                                     </span>
                                                                 </TooltipTrigger>
                                                                 <TooltipContent side="bottom" className="max-w-xs text-xs">
-                                                                    {assigned
-                                                                      ? `Fuel policy assigned to this vehicle: ${policyName}.`
+                                                                    {assigned || report.metadata?.scenarioId
+                                                                      ? `Fuel policy for this driver: ${policyName}.`
                                                                       : `No fuel policy explicitly assigned — falling back to ${policyName}. Assign one from Fleet Policy Configuration if this isn't intentional.`}
                                                                 </TooltipContent>
                                                             </Tooltip>

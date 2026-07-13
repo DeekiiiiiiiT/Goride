@@ -2,10 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { Button } from "../ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "../ui/card";
 import { Input } from "../ui/input";
-import { Loader2, Trash2, Plus, X } from 'lucide-react';
+import { Loader2, Trash2, Plus } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 import { tierService } from '../../services/tierService';
-import { TierConfig, ExpenseSplitRule, QuotaConfig } from '../../types/data';
+import { TierConfig, QuotaConfig } from '../../types/data';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../ui/tabs";
 import { QuotaConfigTab } from './QuotaConfigTab';
 
@@ -13,7 +13,6 @@ export function TierConfigPage() {
   const [tiers, setTiers] = useState<TierConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [splitRules, setSplitRules] = useState<ExpenseSplitRule[]>([]);
   const [quotas, setQuotas] = useState<QuotaConfig>({
     daily: { enabled: false, amount: 0, workingDays: [0, 1, 2, 3, 4, 5, 6] },
     weekly: { enabled: false, amount: 0, workingDays: [0, 1, 2, 3, 4, 5, 6] },
@@ -27,15 +26,12 @@ export function TierConfigPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [t, s, q] = await Promise.all([
+      const [t, q] = await Promise.all([
          tierService.getTiers(),
-         tierService.getSplitRules(),
          tierService.getQuotaSettings()
       ]);
       setTiers(t);
-      setSplitRules(s);
-      
-      // Ensure defaults for working days if not present
+
       const fullWeek = [0, 1, 2, 3, 4, 5, 6];
       setQuotas({
         ...q,
@@ -51,7 +47,6 @@ export function TierConfigPage() {
   };
 
   const handleSave = async () => {
-    // Validation
     if (
       (quotas.daily.enabled && quotas.daily.amount < 0) ||
       (quotas.weekly.enabled && quotas.weekly.amount < 0) ||
@@ -64,9 +59,8 @@ export function TierConfigPage() {
     setSaving(true);
     try {
       await tierService.saveTiers(tiers);
-      await tierService.saveSplitRules(splitRules);
       await tierService.saveQuotaSettings(quotas);
-      toast.success("Tier, Expense & Quota settings saved");
+      toast.success("Tier & Quota settings saved");
     } catch (e) {
       toast.error("Failed to save settings");
     } finally {
@@ -99,76 +93,18 @@ export function TierConfigPage() {
     setTiers(prev => prev.filter(t => t.id !== id));
   };
 
-  // Helper to calculate driver share
-  const calculateDriverShare = (company: number, custom: {percentage: number}[]) => {
-    const customTotal = custom.reduce((sum, item) => sum + item.percentage, 0);
-    return Math.max(0, 100 - company - customTotal);
-  };
-
-  const updateCompanyShare = (ruleId: string, newVal: number) => {
-    setSplitRules(prev => prev.map(r => {
-      if (r.id === ruleId) {
-        const customSplits = r.customSplits || [];
-        const driverShare = calculateDriverShare(newVal, customSplits);
-        return { ...r, companyShare: newVal, driverShare };
-      }
-      return r;
-    }));
-  };
-
-  const addCustomSplit = (ruleId: string) => {
-    setSplitRules(prev => prev.map(r => {
-      if (r.id === ruleId) {
-        const newSplit = { id: crypto.randomUUID(), name: 'New Party', percentage: 0 };
-        const customSplits = [...(r.customSplits || []), newSplit];
-        const driverShare = calculateDriverShare(r.companyShare, customSplits);
-        return { ...r, customSplits, driverShare };
-      }
-      return r;
-    }));
-  };
-
-  const updateCustomSplit = (ruleId: string, splitId: string, field: 'name' | 'percentage', value: any) => {
-    setSplitRules(prev => prev.map(r => {
-      if (r.id === ruleId) {
-        const customSplits = (r.customSplits || []).map(s => 
-          s.id === splitId ? { ...s, [field]: value } : s
-        );
-        
-        if (field === 'percentage') {
-             const driverShare = calculateDriverShare(r.companyShare, customSplits);
-             return { ...r, customSplits, driverShare };
-        }
-        return { ...r, customSplits };
-      }
-      return r;
-    }));
-  };
-
-  const removeCustomSplit = (ruleId: string, splitId: string) => {
-     setSplitRules(prev => prev.map(r => {
-        if (r.id === ruleId) {
-            const customSplits = (r.customSplits || []).filter(s => s.id !== splitId);
-            const driverShare = calculateDriverShare(r.companyShare, customSplits);
-            return { ...r, customSplits, driverShare };
-        }
-        return r;
-    }));
-  };
-
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Tier Configuration</h2>
         <p className="text-slate-500 dark:text-slate-400">
-          Manage driver earnings thresholds, profit sharing, and expense splits.
+          Manage driver earnings thresholds, profit sharing, and earning quotas.
         </p>
       </div>
 
       <Tabs defaultValue="tiers" className="w-full">
-        <TabsList className="grid w-full grid-cols-3 mb-4">
+        <TabsList className="grid w-full grid-cols-2 mb-4">
           <TabsTrigger value="tiers">Tier Configuration</TabsTrigger>
-          <TabsTrigger value="expenses">Expense Splits</TabsTrigger>
           <TabsTrigger value="quotas">Earning Quota</TabsTrigger>
         </TabsList>
 
@@ -247,128 +183,6 @@ export function TierConfigPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="expenses">
-          <Card>
-             <CardHeader>
-                <CardTitle>Expense Splits</CardTitle>
-                <CardDescription>Default sharing rules for expenses.</CardDescription>
-             </CardHeader>
-             <CardContent>
-                 {loading ? (
-                    <div className="flex justify-center p-8">
-                      <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
-                    </div>
-                 ) : splitRules.filter(r => r.category !== 'Fuel').length === 0 ? (
-                    <div className="text-center p-8 text-slate-500">
-                      No expense categories found.
-                    </div>
-                 ) : (
-                   <Tabs defaultValue={splitRules.find(r => r.category !== 'Fuel')?.category} className="w-full">
-                     <TabsList className="w-full justify-start h-auto p-1 bg-slate-100 dark:bg-slate-800">
-                        {splitRules.filter(r => r.category !== 'Fuel').map(rule => (
-                           <TabsTrigger key={rule.id} value={rule.category} className="flex-1">
-                              {rule.category}
-                           </TabsTrigger>
-                        ))}
-                     </TabsList>
-                     {splitRules.filter(r => r.category !== 'Fuel').map(rule => (
-                         <TabsContent key={rule.id} value={rule.category} className="mt-6">
-                             <div className="border rounded-lg p-6 space-y-6">
-                                 <div className="flex justify-between items-start">
-                                     <div>
-                                         <h3 className="text-lg font-medium text-slate-900">{rule.category} Configuration</h3>
-                                         <p className="text-sm text-slate-500">Adjust the company and driver share for {rule.category.toLowerCase()}.</p>
-                                     </div>
-                                     <Button variant="outline" size="sm" onClick={() => addCustomSplit(rule.id)}>
-                                        <Plus className="h-4 w-4 mr-2" />
-                                        Add Split Column
-                                     </Button>
-                                 </div>
-                                 
-                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                     {/* Company Share */}
-                                     <div className="space-y-2 p-4 bg-slate-50 rounded-lg border">
-                                         <label className="text-sm font-medium text-slate-700">Company Share (%)</label>
-                                         <div className="relative mt-2">
-                                             <Input 
-                                                 type="number" 
-                                                 value={rule.companyShare}
-                                                 onChange={e => {
-                                                     const val = Number(e.target.value);
-                                                     if (val >= 0 && val <= 100) {
-                                                         updateCompanyShare(rule.id, val);
-                                                     }
-                                                 }}
-                                                 className="pr-8"
-                                             />
-                                             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm">%</span>
-                                         </div>
-                                     </div>
-
-                                     {/* Custom Splits */}
-                                     {rule.customSplits?.map(split => (
-                                         <div key={split.id} className="space-y-2 p-4 bg-slate-50 rounded-lg border relative group">
-                                             <div className="flex justify-between items-center mb-2">
-                                                 <Input 
-                                                    value={split.name}
-                                                    onChange={e => updateCustomSplit(rule.id, split.id, 'name', e.target.value)}
-                                                    className="h-7 text-sm font-medium border-transparent hover:border-slate-300 focus:border-primary px-1 -ml-1 w-full"
-                                                 />
-                                                 <Button 
-                                                    variant="ghost" 
-                                                    size="icon" 
-                                                    className="h-6 w-6 -mr-2 opacity-0 group-hover:opacity-100 transition-opacity"
-                                                    onClick={() => removeCustomSplit(rule.id, split.id)}
-                                                 >
-                                                    <X className="h-3 w-3 text-slate-400 hover:text-red-500" />
-                                                 </Button>
-                                             </div>
-                                             
-                                             <div className="relative">
-                                                 <Input 
-                                                     type="number" 
-                                                     value={split.percentage}
-                                                     onChange={e => {
-                                                         const val = Number(e.target.value);
-                                                         if (val >= 0 && val <= 100) {
-                                                             updateCustomSplit(rule.id, split.id, 'percentage', val);
-                                                         }
-                                                     }}
-                                                     className="pr-8"
-                                                 />
-                                                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm">%</span>
-                                             </div>
-                                         </div>
-                                     ))}
-                                     
-                                     {/* Driver Share */}
-                                     <div className="space-y-2 p-4 bg-slate-50 rounded-lg border">
-                                         <label className="text-sm font-medium text-slate-700">Driver Share (%)</label>
-                                         <div className="relative mt-2">
-                                             <Input 
-                                                 type="number" 
-                                                 value={rule.driverShare}
-                                                 disabled
-                                                 className="pr-8 bg-slate-100"
-                                             />
-                                             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm">%</span>
-                                         </div>
-                                     </div>
-                                 </div>
-                             </div>
-                         </TabsContent>
-                     ))}
-                   </Tabs>
-                 )}
-             </CardContent>
-             <CardFooter className="bg-slate-50 border-t px-6 py-4 flex justify-end">
-                <Button onClick={handleSave} disabled={saving}>
-                   {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                   Save Configuration
-                </Button>
-             </CardFooter>
-          </Card>
-        </TabsContent>
         <TabsContent value="quotas">
           {loading ? (
              <div className="flex justify-center p-8">

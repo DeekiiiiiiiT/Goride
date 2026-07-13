@@ -28,6 +28,9 @@ export interface DriverProfile {
   status: 'active' | 'pending' | 'suspended' | 'deactivated';
   onboardingComplete: boolean;
   onboardingStep?: string;
+
+  /** Fuel cost-split policy (FuelScenario id). Unset = fleet Default policy. */
+  fuelScenarioId?: string;
   
   // Profile metadata
   displayName?: string;
