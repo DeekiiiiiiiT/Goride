@@ -5,9 +5,14 @@ import { Input } from "../ui/input";
 import { Loader2, Trash2, Plus } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 import { tierService } from '../../services/tierService';
-import { TierConfig, QuotaConfig } from '../../types/data';
+import { TierConfig, QuotaConfig, PersonalAllowanceTierConfig } from '../../types/data';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../ui/tabs";
 import { QuotaConfigTab } from './QuotaConfigTab';
+import { PersonalAllowanceConfigTab } from './PersonalAllowanceConfigTab';
+import {
+  mergePersonalAllowanceDefaults,
+  validatePersonalAllowanceBands,
+} from '../../utils/personalAllowance';
 
 export function TierConfigPage() {
   const [tiers, setTiers] = useState<TierConfig[]>([]);
@@ -18,6 +23,9 @@ export function TierConfigPage() {
     weekly: { enabled: false, amount: 0, workingDays: [0, 1, 2, 3, 4, 5, 6] },
     monthly: { enabled: false, amount: 0, workingDays: [0, 1, 2, 3, 4, 5, 6] }
   });
+  const [personalAllowance, setPersonalAllowance] = useState<PersonalAllowanceTierConfig>(
+    mergePersonalAllowanceDefaults(null),
+  );
 
   useEffect(() => {
     loadData();
@@ -26,9 +34,10 @@ export function TierConfigPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [t, q] = await Promise.all([
+      const [t, q, pa] = await Promise.all([
          tierService.getTiers(),
-         tierService.getQuotaSettings()
+         tierService.getQuotaSettings(),
+         tierService.getPersonalAllowanceSettings(),
       ]);
       setTiers(t);
 
@@ -39,6 +48,7 @@ export function TierConfigPage() {
         weekly: { ...q.weekly, workingDays: q.weekly.workingDays || fullWeek },
         monthly: { ...q.monthly, workingDays: q.monthly.workingDays || fullWeek }
       });
+      setPersonalAllowance(pa);
     } catch (e) {
       toast.error("Failed to load tier settings");
     } finally {
@@ -56,11 +66,25 @@ export function TierConfigPage() {
       return;
     }
 
+    const bandError = validatePersonalAllowanceBands(personalAllowance.bands);
+    if (bandError) {
+      toast.error(bandError);
+      return;
+    }
+    if (
+      personalAllowance.weeklyQuotaOverrideJmd != null &&
+      personalAllowance.weeklyQuotaOverrideJmd < 0
+    ) {
+      toast.error("Weekly quota override cannot be negative");
+      return;
+    }
+
     setSaving(true);
     try {
       await tierService.saveTiers(tiers);
       await tierService.saveQuotaSettings(quotas);
-      toast.success("Tier & Quota settings saved");
+      await tierService.savePersonalAllowanceSettings(personalAllowance);
+      toast.success("Tier, Quota & Personal Allowance settings saved");
     } catch (e) {
       toast.error("Failed to save settings");
     } finally {
@@ -98,14 +122,15 @@ export function TierConfigPage() {
       <div>
         <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Tier Configuration</h2>
         <p className="text-slate-500 dark:text-slate-400">
-          Manage driver earnings thresholds, profit sharing, and earning quotas.
+          Manage driver earnings thresholds, profit sharing, earning quotas, and Personal Allowance.
         </p>
       </div>
 
       <Tabs defaultValue="tiers" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 mb-4">
+        <TabsList className="grid w-full grid-cols-3 mb-4">
           <TabsTrigger value="tiers">Tier Configuration</TabsTrigger>
           <TabsTrigger value="quotas">Earning Quota</TabsTrigger>
+          <TabsTrigger value="personal">Personal Allowance</TabsTrigger>
         </TabsList>
 
         <TabsContent value="tiers">
@@ -193,6 +218,30 @@ export function TierConfigPage() {
                 <QuotaConfigTab 
                   config={quotas} 
                   onChange={setQuotas} 
+                />
+                <Card className="mt-6">
+                    <CardFooter className="bg-slate-50 border-t px-6 py-4 flex justify-end rounded-b-lg">
+                        <Button onClick={handleSave} disabled={saving}>
+                            {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                            Save Configuration
+                        </Button>
+                    </CardFooter>
+                </Card>
+             </>
+          )}
+        </TabsContent>
+
+        <TabsContent value="personal">
+          {loading ? (
+             <div className="flex justify-center p-8">
+               <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+             </div>
+          ) : (
+             <>
+                <PersonalAllowanceConfigTab
+                  config={personalAllowance}
+                  quotaConfig={quotas}
+                  onChange={setPersonalAllowance}
                 />
                 <Card className="mt-6">
                     <CardFooter className="bg-slate-50 border-t px-6 py-4 flex justify-end rounded-b-lg">

@@ -49,6 +49,7 @@ import { FuelEntry, MileageAdjustment, WeeklyFuelReport, FuelDispute, FuelScenar
 import { FuelCalculationService, VehicleDeadheadInput, FuelBrainClassificationInput } from '../../services/fuelCalculationService';
 import { classifyWeekForRecon } from '../../services/fuelBrainClient';
 import { sumTripRideshareKm } from '../../utils/tripRideshareKm';
+import { resolveDeadheadHintForBrain } from '../../utils/deadheadHintForBrain';
 import { downloadCSV } from '../../utils/export';
 import { ScenarioSplitDashboard } from './ScenarioSplitDashboard';
 import { api } from '../../services/api';
@@ -56,6 +57,9 @@ import { UNASSIGNED_FUEL_DRIVER_ID } from '../../types/fuel';
 import { reportWeekYmdBounds, toEntryYmd, isSameFuelStatement } from '../../utils/fuelWeekPeriod';
 import { sumPaidByDriverForReport } from '../../utils/fuelPaidByDriver';
 import { resolveActiveFuelPolicyForDriverWeek } from '../../utils/fuelPolicyVersion';
+import { tierService } from '../../services/tierService';
+import type { PersonalAllowanceTierConfig, QuotaConfig } from '../../types/data';
+import { mergePersonalAllowanceDefaults, personalAllowanceBonusKey } from '../../utils/personalAllowance';
 
 interface ReconciliationTableProps {
     vehicles: Vehicle[];
@@ -110,6 +114,45 @@ export function ReconciliationTable({
     const [deadheadMap, setDeadheadMap] = useState<Map<string, VehicleDeadheadInput>>(new Map());
     const [deadheadLoading, setDeadheadLoading] = useState(false);
     const [brainByDriverVehicle, setBrainByDriverVehicle] = useState<Map<string, FuelBrainClassificationInput>>(new Map());
+    const [personalAllowanceConfig, setPersonalAllowanceConfig] = useState<PersonalAllowanceTierConfig>(
+        mergePersonalAllowanceDefaults(null),
+    );
+    const [quotaConfig, setQuotaConfig] = useState<QuotaConfig | null>(null);
+    const [bonusByDriverId, setBonusByDriverId] = useState<Map<string, number>>(new Map());
+
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const [pa, quotas, prefs] = await Promise.all([
+                    tierService.getPersonalAllowanceSettings(),
+                    tierService.getQuotaSettings(),
+                    api.getPreferences().catch(() => ({})),
+                ]);
+                if (cancelled) return;
+                setPersonalAllowanceConfig(pa);
+                setQuotaConfig(quotas);
+                const ledger = (prefs.personalAllowanceBonuses || {}) as Record<string, number>;
+                const map = new Map<string, number>();
+                if (weekStart) {
+                    const weekStartYmd = format(weekStart, 'yyyy-MM-dd');
+                    for (const d of drivers) {
+                        const id = d.id || d.driverId;
+                        if (!id) continue;
+                        const key = personalAllowanceBonusKey(id, weekStartYmd);
+                        const km = Number(ledger[key]) || 0;
+                        if (km > 0) map.set(id, km);
+                    }
+                }
+                setBonusByDriverId(map);
+            } catch (e) {
+                console.warn('[PersonalAllowance] failed to load settings', e);
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [weekStart, drivers]);
 
     // Per-period deadhead fetch: use the selected week range directly
     // (previously used broad date range, which overcounted deadhead per week)
@@ -131,6 +174,7 @@ export function ReconciliationTable({
                         deadheadKm: v.deadheadKm || 0,
                         personalKm: v.personalKm || 0,
                         totalOdometerKm: v.totalOdometerKm || 0,
+                        tripKm: v.tripKm || 0,
                         method: v.method || 'fallback',
                         confidenceLevel: v.confidenceLevel || 'low',
                         confidenceReason: v.confidenceReason || 'No data',
@@ -176,15 +220,21 @@ export function ReconciliationTable({
                         .filter((a) => a.type === 'Company_Misc' || a.type === 'Maintenance')
                         .reduce((s, a) => s + (a.distance || 0), 0);
                     const dh = deadheadMap.get(v.id);
+                    const tripRideshareKm = sumTripRideshareKm(vTrips);
                     const classified = await classifyWeekForRecon({
                         driverId,
                         vehicleId: v.id,
                         weekStart: startStr,
                         weekEnd: endStr,
                         totalOdometerKm: dh?.totalOdometerKm || 0,
-                        tripRideshareKm: sumTripRideshareKm(vTrips),
+                        tripRideshareKm,
                         companyOpsKm,
-                        deadheadHintKm: dh?.deadheadKm || 0,
+                        // Root-cause belt: never feed brain a trip-blind full-odo fallback
+                        deadheadHintKm: resolveDeadheadHintForBrain({
+                            server: dh,
+                            clientTripRideshareKm: tripRideshareKm,
+                            companyOpsKm,
+                        }),
                     });
                     map.set(`${driverId}:${v.id}`, {
                         rideShareKm: classified.rideShareKm,
@@ -211,6 +261,13 @@ export function ReconciliationTable({
     // Driver-first: one report per driver+week (shared cars → multiple rows)
     const reports = useMemo(() => {
         if (!weekStart) return [];
+        const personalAllowance = personalAllowanceConfig.enabled
+            ? {
+                config: personalAllowanceConfig,
+                quotaConfig,
+                bonusByDriverId,
+              }
+            : undefined;
         return FuelCalculationService.generateDriverFleetReport(
             vehicles,
             drivers,
@@ -224,8 +281,9 @@ export function ReconciliationTable({
             fuelCards,
             // Only inject into money path when consumer flag is on
             FLEET_USE_FUEL_BRAIN ? brainByDriverVehicle : undefined,
+            personalAllowance,
         );
-    }, [vehicles, drivers, trips, fuelEntries, adjustments, weekStart, weekEnd, scenarios, deadheadMap, fuelCards, brainByDriverVehicle]);
+    }, [vehicles, drivers, trips, fuelEntries, adjustments, weekStart, weekEnd, scenarios, deadheadMap, fuelCards, brainByDriverVehicle, personalAllowanceConfig, quotaConfig, bonusByDriverId]);
 
     useEffect(() => {
         onReportsChange?.(reports);
@@ -373,7 +431,12 @@ export function ReconciliationTable({
         <div className="space-y-4">
             {/* Split Dashboard */}
             {!hideDashboard && (
-              <ScenarioSplitDashboard reports={reports} scenarios={scenarios} vehicles={vehicles} />
+              <ScenarioSplitDashboard
+                reports={reports}
+                scenarios={scenarios}
+                vehicles={vehicles}
+                trips={trips}
+              />
             )}
 
             {/* Header */}
@@ -966,7 +1029,54 @@ export function ReconciliationTable({
                                             </TooltipProvider>
                                         </TableCell>
                                         <TableCell className="text-right text-slate-600 text-sm">
-                                            {formatCurrency(report.personalUsageCost)}
+                                            <TooltipProvider>
+                                                <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                        <div className="inline-flex flex-col items-end gap-0.5">
+                                                            <span>{formatCurrency(report.personalUsageCost)}</span>
+                                                            {report.metadata?.personalAllowance && (
+                                                                <span className="text-[10px] text-slate-500 font-medium">
+                                                                    {Math.round(report.metadata.personalAllowance.earnedKm)} earned /{' '}
+                                                                    {Math.round(report.metadata.personalAllowance.overageKm)} over
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </TooltipTrigger>
+                                                    {report.metadata?.personalAllowance && (
+                                                        <TooltipContent className="max-w-xs">
+                                                            <p className="font-semibold mb-1">Personal Allowance</p>
+                                                            <div className="space-y-1 text-xs">
+                                                                <div className="flex justify-between gap-4">
+                                                                    <span>Measured km</span>
+                                                                    <span>{report.personalDistance.toFixed(1)}</span>
+                                                                </div>
+                                                                <div className="flex justify-between gap-4">
+                                                                    <span>Earned km</span>
+                                                                    <span>{report.metadata.personalAllowance.earnedKm.toFixed(1)}</span>
+                                                                </div>
+                                                                <div className="flex justify-between gap-4">
+                                                                    <span>Overage km</span>
+                                                                    <span>{report.metadata.personalAllowance.overageKm.toFixed(1)}</span>
+                                                                </div>
+                                                                <div className="flex justify-between gap-4">
+                                                                    <span>Quota %</span>
+                                                                    <span>{report.metadata.personalAllowance.quotaPct.toFixed(1)}%</span>
+                                                                </div>
+                                                                <div className="flex justify-between gap-4">
+                                                                    <span>Earnings vs target</span>
+                                                                    <span>
+                                                                        ${Math.round(report.metadata.personalAllowance.weeklyEarnings).toLocaleString()} / $
+                                                                        {Math.round(report.metadata.personalAllowance.weeklyQuota).toLocaleString()}
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                            <p className="mt-2 text-[10px] text-slate-400">
+                                                                Company covers earned personal fuel; driver pays overage at period $/km.
+                                                            </p>
+                                                        </TooltipContent>
+                                                    )}
+                                                </Tooltip>
+                                            </TooltipProvider>
                                         </TableCell>
                                         <TableCell className={`text-right text-sm border-r border-slate-200 ${getLeakageColor(report.miscellaneousCost)}`}>
                                             {formatCurrency(report.miscellaneousCost)}

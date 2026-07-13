@@ -48,3 +48,14 @@ No driver toggles. No Unknown purpose bucket. No driving-session evidence produc
 - `supabase/functions/fuel-brain/classify.ts`
 
 Money layer unchanged: receipts + scenario coverage %. Brain only supplies category km.
+
+## Personal Allowance (Option 2) — Fleet money layer
+
+Separate from Fuel Brain. Brain still measures **Personal km**. When managers enable **Driver Operations → Tier Config → Personal Allowance**:
+
+- Drivers **earn free Personal km** from weekly quota % bands (Uber+InDrive+Roam earnings vs weekly quota).
+- **Company absorbs earned Personal fuel 100%**.
+- Driver pays **overage** Personal km at period fuel $/km.
+- Default **off** (`enabled: false`). Does not change `commitWeeklyStatement` plumbing — only how Personal contributes to company vs driver share before finalize.
+- Settings + Stitch refs: `apps/fleet/design/stitch/personal-allowance/`
+

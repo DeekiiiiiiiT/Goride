@@ -1251,6 +1251,23 @@ export interface QuotaConfig {
   monthly: QuotaPeriod;
 }
 
+/** Option-2 Personal Allowance: earn free Personal km from weekly quota %. */
+export interface PersonalAllowanceBand {
+  minPctInclusive: number;
+  /** null = open-ended top band */
+  maxPctExclusive: number | null;
+  earnedKm: number;
+}
+
+export interface PersonalAllowanceTierConfig {
+  enabled: boolean;
+  /** null = use quotas.weekly.amount */
+  weeklyQuotaOverrideJmd: number | null;
+  /** 0 disables next-week bonus */
+  nextWeekBonusKm: number;
+  bands: PersonalAllowanceBand[];
+}
+
 export interface DriverGoal {
   current: number;
   target: number;

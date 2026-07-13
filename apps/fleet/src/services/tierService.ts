@@ -1,5 +1,9 @@
 import { api } from './api';
-import { TierConfig, ExpenseSplitRule, DriverMetrics, QuotaConfig } from '../types/data';
+import { TierConfig, ExpenseSplitRule, DriverMetrics, QuotaConfig, PersonalAllowanceTierConfig } from '../types/data';
+import {
+  mergePersonalAllowanceDefaults,
+  personalAllowanceBonusKey,
+} from '../utils/personalAllowance';
 
 // Default Tiers if none exist
 const DEFAULT_TIERS: TierConfig[] = [
@@ -94,6 +98,49 @@ export const tierService = {
       ...prefs,
       quotas: settings
     });
-  }
+  },
+
+  async getPersonalAllowanceSettings(): Promise<PersonalAllowanceTierConfig> {
+    try {
+      const prefs = await api.getPreferences();
+      return mergePersonalAllowanceDefaults(prefs.personalAllowance);
+    } catch (error) {
+      console.error('Failed to load personal allowance settings', error);
+      return mergePersonalAllowanceDefaults(null);
+    }
+  },
+
+  async savePersonalAllowanceSettings(settings: PersonalAllowanceTierConfig): Promise<void> {
+    const prefs = await api.getPreferences();
+    await api.savePreferences({
+      ...prefs,
+      personalAllowance: mergePersonalAllowanceDefaults(settings),
+    });
+  },
+
+  /** Prefs-backed bonus ledger (canonical key: personal_allowance_bonus:{driver}:{week}). */
+  async getPersonalAllowanceBonusKm(driverId: string, weekStartYmd: string): Promise<number> {
+    try {
+      const prefs = await api.getPreferences();
+      const ledger = (prefs.personalAllowanceBonuses || {}) as Record<string, number>;
+      const key = personalAllowanceBonusKey(driverId, weekStartYmd);
+      return Math.max(0, Number(ledger[key]) || 0);
+    } catch {
+      return 0;
+    }
+  },
+
+  async setPersonalAllowanceBonusKm(
+    driverId: string,
+    weekStartYmd: string,
+    km: number,
+  ): Promise<void> {
+    const prefs = await api.getPreferences();
+    const ledger = { ...(prefs.personalAllowanceBonuses || {}) } as Record<string, number>;
+    const key = personalAllowanceBonusKey(driverId, weekStartYmd);
+    if (km <= 0) delete ledger[key];
+    else ledger[key] = km;
+    await api.savePreferences({ ...prefs, personalAllowanceBonuses: ledger });
+  },
 };
 

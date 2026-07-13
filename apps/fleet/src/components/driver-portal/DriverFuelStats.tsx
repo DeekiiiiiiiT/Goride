@@ -144,11 +144,35 @@ export function DriverFuelStats() {
                         <div className="space-y-2 text-sm text-indigo-800/80">
                             <div className="flex justify-between">
                                 <span>Personal Usage ({Math.round(report.personalDistance)} km)</span>
-                                <span>${report.personalUsageCost.toFixed(2)}</span>
+                                <span>
+                                  $
+                                  {(
+                                    report.metadata?.personalAllowance?.overageCost ??
+                                    report.personalUsageCost
+                                  ).toFixed(2)}
+                                </span>
                             </div>
+                            {report.metadata?.personalAllowance && (
+                                <div className="flex justify-between text-xs text-indigo-700/70">
+                                    <span>
+                                      Company covers earned (
+                                      {Math.round(report.metadata.personalAllowance.earnedKm)} km)
+                                    </span>
+                                    <span>
+                                      ${Number(report.metadata.personalAllowance.earnedCost || 0).toFixed(2)}
+                                    </span>
+                                </div>
+                            )}
                             <div className="flex justify-between">
-                                <span>Fuel Misc Share</span>
-                                <span>${(report.driverShare - report.personalUsageCost).toFixed(2)}</span>
+                                <span>Other fuel share</span>
+                                <span>
+                                  $
+                                  {(
+                                    report.driverShare -
+                                    (report.metadata?.personalAllowance?.overageCost ??
+                                      report.personalUsageCost)
+                                  ).toFixed(2)}
+                                </span>
                             </div>
                         </div>
                         <div className="mt-4 pt-2 border-t border-indigo-200/50">

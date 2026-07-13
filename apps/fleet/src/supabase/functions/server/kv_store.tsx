@@ -17,6 +17,9 @@ const client = () => createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"),
 );
 
+/** PostgREST default max rows is 1000 — must page or trips/fuel silently truncate. */
+const KV_PAGE_SIZE = 1000;
+
 // Set stores a key-value pair in the database.
 export const set = async (key: string, value: any): Promise<void> => {
   const supabase = client()
@@ -39,7 +42,7 @@ export const get = async (key: string): Promise<any> => {
   return data?.value;
 };
 
-// Delete deletes a key-value pair from the database.
+// Delete deletes a key-value pair in the database.
 export const del = async (key: string): Promise<void> => {
   const supabase = client()
   const { error } = await supabase.from("kv_store_37f42386").delete().eq("key", key);
@@ -57,7 +60,7 @@ export const mset = async (keys: string[], values: any[]): Promise<void> => {
   }
 };
 
-// Gets multiple key-value pairs from the database.
+// Gets multiple key-value pairs in the database.
 // Results are returned in the same order as `keys` (Postgres IN does not guarantee order).
 export const mget = async (keys: string[]): Promise<any[]> => {
   if (keys.length === 0) return [];
@@ -70,7 +73,7 @@ export const mget = async (keys: string[]): Promise<any[]> => {
   return keys.map((k) => byKey.get(k) ?? null);
 };
 
-// Deletes multiple key-value pairs from the database.
+// Deletes multiple key-value pairs in the database.
 export const mdel = async (keys: string[]): Promise<void> => {
   const supabase = client()
   const { error } = await supabase.from("kv_store_37f42386").delete().in("key", keys);
@@ -79,12 +82,28 @@ export const mdel = async (keys: string[]): Promise<void> => {
   }
 };
 
-// Search for key-value pairs by prefix.
+/**
+ * Search for key-value pairs by prefix.
+ * Pages through all matches — never return a silent 1000-row slice.
+ */
 export const getByPrefix = async (prefix: string): Promise<any[]> => {
-  const supabase = client()
-  const { data, error } = await supabase.from("kv_store_37f42386").select("key, value").like("key", prefix + "%");
-  if (error) {
-    throw new Error(error.message);
+  const supabase = client();
+  const out: any[] = [];
+  let from = 0;
+  for (;;) {
+    const { data, error } = await supabase
+      .from("kv_store_37f42386")
+      .select("key, value")
+      .like("key", prefix + "%")
+      .order("key", { ascending: true })
+      .range(from, from + KV_PAGE_SIZE - 1);
+    if (error) {
+      throw new Error(error.message);
+    }
+    const rows = data ?? [];
+    for (const row of rows) out.push(row.value);
+    if (rows.length < KV_PAGE_SIZE) break;
+    from += KV_PAGE_SIZE;
   }
-  return data?.map((d) => d.value) ?? [];
+  return out;
 };

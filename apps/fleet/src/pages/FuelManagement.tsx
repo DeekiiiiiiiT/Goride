@@ -24,7 +24,7 @@ import { reportWeekYmdBounds, toEntryYmd, currentFuelWeekRange, isEntryInInclusi
 import { sumPaidByDriverForReport, entriesBelongingToDriverWeekReport } from '../utils/fuelPaidByDriver';
 import { useFleetTimezone, fleetTzDateKey, ymdToLocalDate } from '../utils/timezoneDisplay';
 import { generateWeekOptionsForDateRange, type PeriodWeekOption } from '../utils/periodWeekOptions';
-import { format } from 'date-fns';
+import { format, addDays, parseISO } from 'date-fns';
 
 /** Earliest Monday week for Consumption Reconciliation (fuel data from Dec 2025). */
 const RECON_EARLIEST_WEEK_START = new Date(2025, 11, 1);
@@ -37,6 +37,7 @@ import { fuelService } from '../services/fuelService';
 import { settlementService } from '../services/settlementService';
 import { FuelDisputeService } from '../services/fuelDisputeService';
 import { api } from '../services/api';
+import { tierService } from '../services/tierService';
 import { FinalizedReportsTab } from '../components/fuel/FinalizedReportsTab';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Badge } from '../components/ui/badge';
@@ -955,6 +956,21 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
           } catch (snapErr: any) {
             console.error('[FinalizedReports] Snapshot save failed:', snapErr);
             toast.warning('Statements finalized but snapshot save failed â€” finalized tab may be incomplete.');
+          }
+
+          // Personal Allowance: non-fatal next-week bonus write when top band hit
+          try {
+            for (const snap of snapshots) {
+              const pa = snap.metadata?.personalAllowance;
+              const bonusKm = Number(pa?.configSnapshot?.nextWeekBonusKm) || 0;
+              if (!pa?.hitTopBand || bonusKm <= 0 || !snap.driverId) continue;
+              const nextWeek = addDays(parseISO(reportWeekYmdBounds(snap).start), 7);
+              const nextYmd = format(nextWeek, 'yyyy-MM-dd');
+              await tierService.setPersonalAllowanceBonusKm(snap.driverId, nextYmd, bonusKm);
+            }
+          } catch (bonusErr) {
+            console.warn('[PersonalAllowance] bonus write failed', bonusErr);
+            toast.warning('Fuel finalized, but next-week Personal Allowance bonus could not be saved.');
           }
 
           if (successCount > 0) {

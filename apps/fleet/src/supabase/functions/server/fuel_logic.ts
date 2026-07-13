@@ -712,6 +712,13 @@ export function calculateDeadheadAttribution(params: {
   // personalKm = whatever remains after trip + deadhead
   personalKm = Math.max(0, totalOdometerKm - tripKm - deadheadKm);
 
+  // Empty trip load with real odo is almost always a data-pipe failure (e.g. KV row truncate),
+  // not a week with zero platform trips. Surface that in confidenceReason for recon diagnostics.
+  if (trips.length === 0 && totalOdometerKm > 0 && method === 'fallback') {
+    confidenceReason +=
+      ' | WARN: 0 trips loaded with positive odometer — deadhead may be overstated if trips were truncated upstream';
+  }
+
   // Unaccounted should be ~0 by construction
   const unaccountedKm = Number(
     (totalOdometerKm - tripKm - deadheadKm - personalKm).toFixed(2)

@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Tier Configuration | Precision Operations</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+            font-size: 20px;
+        }
+        body { font-family: 'Inter', sans-serif; }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "primary-fixed-dim": "#c3c0ff",
+                        "outline-variant": "#c7c4d8",
+                        "on-error": "#ffffff",
+                        "tertiary-fixed-dim": "#ffb95f",
+                        "on-primary": "#ffffff",
+                        "on-background": "#1b1b24",
+                        "tertiary-fixed": "#ffddb8",
+                        "primary-fixed": "#e2dfff",
+                        "surface": "#fcf8ff",
+                        "on-secondary-container": "#00714d",
+                        "secondary-fixed-dim": "#4edea3",
+                        "secondary-fixed": "#6ffbbe",
+                        "background": "#fcf8ff",
+                        "secondary": "#006c49",
+                        "inverse-primary": "#c3c0ff",
+                        "surface-container-high": "#eae6f4",
+                        "surface-container": "#f0ecf9",
+                        "on-tertiary-fixed-variant": "#653e00",
+                        "on-primary-container": "#dad7ff",
+                        "inverse-on-surface": "#f3effc",
+                        "surface-bright": "#fcf8ff",
+                        "surface-container-low": "#f5f2ff",
+                        "surface-container-highest": "#e4e1ee",
+                        "tertiary-container": "#885500",
+                        "primary": "#3525cd",
+                        "on-tertiary-container": "#ffd4a4",
+                        "on-primary-fixed-variant": "#3323cc",
+                        "on-tertiary-fixed": "#2a1700",
+                        "tertiary": "#684000",
+                        "on-surface-variant": "#464555",
+                        "on-secondary": "#ffffff",
+                        "outline": "#777587",
+                        "inverse-surface": "#302f39",
+                        "surface-tint": "#4d44e3",
+                        "surface-variant": "#e4e1ee",
+                        "secondary-container": "#6cf8bb",
+                        "on-secondary-fixed": "#002113",
+                        "on-error-container": "#93000a",
+                        "on-tertiary": "#ffffff",
+                        "error": "#ba1a1a",
+                        "on-surface": "#1b1b24",
+                        "on-secondary-fixed-variant": "#005236",
+                        "surface-dim": "#dcd8e5",
+                        "error-container": "#ffdad6",
+                        "surface-container-lowest": "#ffffff",
+                        "on-primary-fixed": "#0f0069",
+                        "primary-container": "#4f46e5",
+                        "slate": {
+                            "50": "#f8fafc",
+                            "100": "#f1f5f9",
+                            "200": "#e2e8f0",
+                            "500": "#64748b",
+                            "600": "#475569",
+                            "900": "#0f172a"
+                        },
+                        "indigo": {
+                            "50": "#eef2ff",
+                            "100": "#e0e7ff",
+                            "600": "#4f46e5",
+                            "700": "#4338ca"
+                        }
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "unit": "4px",
+                        "density-medium": "12px",
+                        "gutter": "16px",
+                        "density-high": "4px",
+                        "component-gap": "8px",
+                        "container-padding": "24px"
+                    },
+                    "fontFamily": {
+                        "display": ["Inter"],
+                        "headline-md": ["Inter"],
+                        "label-sm": ["Inter"],
+                        "label-md": ["Inter"],
+                        "body-sm": ["Inter"],
+                        "headline-lg": ["Inter"],
+                        "body-md": ["Inter"],
+                        "body-lg": ["Inter"]
+                    },
+                    "fontSize": {
+                        "display": ["36px", {"lineHeight": "44px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "headline-md": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                        "label-sm": ["11px", {"lineHeight": "14px", "fontWeight": "500"}],
+                        "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                        "body-sm": ["13px", {"lineHeight": "18px", "fontWeight": "400"}],
+                        "headline-lg": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                        "body-md": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                        "body-lg": ["16px", {"lineHeight": "24px", "fontWeight": "400"}]
+                    }
+                },
+            },
+        }
+    </script>
+</head>
+<body class="bg-surface text-on-surface">
+<!-- TopNavBar -->
+<header class="flex justify-between items-center w-full pl-72 pr-6 h-16 fixed top-0 z-40 bg-surface border-b border-outline-variant">
+<div class="flex items-center gap-4">
+<h1 class="font-headline-lg text-headline-lg font-black text-primary">Precision Operations</h1>
+<div class="relative flex items-center ml-4">
+<span class="material-symbols-outlined absolute left-3 text-on-surface-variant">search</span>
+<input class="pl-10 pr-4 py-1.5 bg-surface-container-low border border-outline-variant rounded-lg text-body-sm focus:ring-2 focus:ring-primary outline-none w-64" placeholder="Search fleet..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="p-2 hover:bg-surface-container rounded-full transition-colors">
+<span class="material-symbols-outlined text-on-surface-variant">notifications</span>
+</button>
+<button class="p-2 hover:bg-surface-container rounded-full transition-colors">
+<span class="material-symbols-outlined text-on-surface-variant">help</span>
+</button>
+<div class="h-8 w-px bg-outline-variant mx-2"></div>
+<div class="flex items-center gap-2 cursor-pointer">
+<div class="w-8 h-8 rounded-full bg-primary-container flex items-center justify-center text-on-primary-container font-bold text-xs">AD</div>
+<span class="font-label-md text-label-md">Administrator</span>
+</div>
+</div>
+</header>
+<!-- SideNavBar -->
+<aside class="w-64 h-screen fixed left-0 top-0 flex flex-col py-4 bg-surface-container-lowest border-r border-outline-variant z-50">
+<div class="px-6 mb-8">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-3xl" style="font-variation-settings: 'FILL' 1;">local_shipping</span>
+<div>
+<h2 class="font-headline-md text-headline-md font-bold text-primary leading-none">Precision Ops</h2>
+<p class="text-[10px] text-on-surface-variant uppercase tracking-widest font-bold">Fleet Management</p>
+</div>
+</div>
+</div>
+<nav class="flex-1 space-y-1 px-3">
+<a class="flex items-center gap-3 text-on-surface-variant px-4 py-2 hover:bg-surface-container-low transition-colors rounded-lg group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary">dashboard</span>
+<span class="font-body-sm text-body-sm">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 text-on-surface-variant px-4 py-2 hover:bg-surface-container-low transition-colors rounded-lg group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary">local_shipping</span>
+<span class="font-body-sm text-body-sm">Fleet Console</span>
+</a>
+<a class="flex items-center gap-3 text-on-surface-variant px-4 py-2 hover:bg-surface-container-low transition-colors rounded-lg group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary">ev_station</span>
+<span class="font-body-sm text-body-sm">Fuel Management</span>
+</a>
+<a class="flex items-center gap-3 bg-surface-container text-primary border-l-4 border-primary px-4 py-2 rounded-r-lg" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">settings</span>
+<span class="font-body-sm text-body-sm font-semibold">Configuration</span>
+</a>
+<a class="flex items-center gap-3 text-on-surface-variant px-4 py-2 hover:bg-surface-container-low transition-colors rounded-lg group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary">analytics</span>
+<span class="font-body-sm text-body-sm">Reports</span>
+</a>
+</nav>
+<div class="mt-auto px-6 py-4 border-t border-outline-variant">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-lg overflow-hidden bg-slate-100">
+<img class="w-full h-full object-cover" data-alt="A professional circular profile photo of a male fleet administrator wearing a light blue oxford shirt, looking friendly and confident against a blurred corporate office background. High-quality professional headshot for a modern SaaS platform dashboard." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBPxAqqB5q3EiHp8TVbDxRp2FUWEoVKeYETRs2SS9Fuk9QMd1Ol5uVoOfGGJZ3ciC99tWhMT20NtUYbNm0WclGInL2vRrRtkYFxzz8-6NnETIG_Zzmsw2OEsMjSXa748_LrR5hiuSXokiQ4Xy3p8SeEp1E7cq3BTZTsx_ZH-etTH2VTVAdhsmml0V9aFcnFduYF7YKLGjUXZ7tE8k2u0I4sflnJUaHMMy3NhA154etGbgeeRiM85WMeMygqqvyuNhg1lvXI6fWFzPg"/>
+</div>
+<div>
+<p class="font-label-md text-label-md">John Doe</p>
+<p class="text-[11px] text-on-surface-variant">Fleet Supervisor</p>
+</div>
+</div>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="ml-64 pt-20 p-8 min-h-screen">
+<!-- Breadcrumb & Header -->
+<div class="mb-8">
+<div class="flex items-center gap-2 text-on-surface-variant text-label-sm mb-2">
+<span>Configuration</span>
+<span class="material-symbols-outlined text-[14px]">chevron_right</span>
+<span class="text-primary font-semibold">Tier Configuration</span>
+</div>
+<h2 class="font-headline-md text-headline-md text-on-surface mb-1">Tier Configuration</h2>
+<p class="font-body-sm text-body-sm text-slate-500">Manage driver performance tiers and allowance structures.</p>
+</div>
+<!-- Horizontal Tabs -->
+<div class="flex border-b border-slate-200 mb-8 overflow-x-auto">
+<button class="px-6 py-3 font-label-md text-label-md text-slate-500 hover:text-primary border-b-2 border-transparent transition-colors whitespace-nowrap">Tier Configuration</button>
+<button class="px-6 py-3 font-label-md text-label-md text-slate-500 hover:text-primary border-b-2 border-transparent transition-colors whitespace-nowrap">Earning Quota</button>
+<button class="px-6 py-3 font-label-md text-label-md text-primary border-primary border-b-2 font-bold whitespace-nowrap">Personal Allowance</button>
+</div>
+<!-- Personal Allowance Card -->
+<div class="max-w-4xl bg-white border border-slate-200 rounded-[6px] overflow-hidden shadow-sm">
+<!-- Card Header -->
+<div class="p-6 border-b border-slate-200">
+<h3 class="font-headline-md text-headline-md text-on-surface mb-1">Personal Allowance</h3>
+<p class="font-body-sm text-body-sm text-slate-500">Earn free Personal km from weekly quota %. Company covers earned Personal fuel 100%; driver pays overage at period fuel $/km.</p>
+</div>
+<!-- Card Content -->
+<div class="p-6 space-y-8">
+<!-- Toggle Section -->
+<div class="flex items-center justify-between py-2">
+<div class="flex flex-col">
+<span class="font-body-md text-body-md font-semibold text-on-surface">Enable Personal Allowance</span>
+<span class="text-label-sm text-slate-500">Toggle this to activate personal allowance calculation for this tier.</span>
+</div>
+<label class="relative inline-flex items-center cursor-pointer">
+<input class="sr-only peer" type="checkbox" value=""/>
+<div class="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-indigo-600/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+</label>
+</div>
+<!-- Quota Section -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+<div class="space-y-1">
+<label class="font-label-md text-label-md text-on-surface">Weekly quota override (JMD)</label>
+<input class="w-full h-10 px-3 border border-slate-200 rounded-lg text-body-sm focus:ring-1 focus:ring-indigo-600 focus:border-indigo-600 outline-none transition-all" placeholder="Leave blank to use Earning Quota" type="number"/>
+<p class="flex items-center gap-1.5 text-label-sm text-indigo-600 mt-2 font-medium">
+<span class="material-symbols-outlined text-[16px]">info</span>
+                            Uses Earning Quota weekly target: $100,000 JMD
+                        </p>
+</div>
+<div>
+<label class="font-label-md text-label-md text-on-surface">Next week bonus km when hitting top tier</label>
+<div class="relative flex items-center">
+<input class="w-full h-10 px-3 border border-slate-200 rounded-lg text-body-sm focus:ring-1 focus:ring-indigo-600 focus:border-indigo-600 outline-none transition-all" type="number" value="20"/>
+<span class="absolute right-3 text-label-sm text-slate-400">KM</span>
+</div>
+</div>
+</div>
+<!-- Milestone Table -->
+<div class="space-y-4">
+<div class="flex items-center justify-between">
+<h4 class="font-label-md text-label-md text-on-surface uppercase tracking-wider">Performance Milestones</h4>
+<span class="text-label-sm text-slate-500">Bands must be sorted with no overlaps.</span>
+</div>
+<div class="border border-slate-200 rounded-lg overflow-hidden">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-slate-50 border-b border-slate-200">
+<th class="px-4 py-3 font-label-md text-label-md text-slate-600">Min %</th>
+<th class="px-4 py-3 font-label-md text-label-md text-slate-600">Max %</th>
+<th class="px-4 py-3 font-label-md text-label-md text-slate-600">Earned Personal km</th>
+<th class="px-4 py-3 font-label-md text-label-md text-slate-600 text-right">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-slate-100">
+<tr class="hover:bg-slate-50 transition-colors">
+<td class="px-4 py-3"><input class="w-20 h-8 border-slate-200 rounded text-body-sm" type="number" value="0"/></td>
+<td class="px-4 py-3"><input class="w-20 h-8 border-slate-200 rounded text-body-sm" type="number" value="60"/></td>
+<td class="px-4 py-3"><input class="w-24 h-8 border-slate-200 rounded text-body-sm" type="number" value="0"/></td>
+<td class="px-4 py-3 text-right">
+<button class="p-1 text-slate-400 hover:text-error transition-colors">
+<span class="material-symbols-outlined">delete</span>
+</button>
+</td>
+</tr>
+<tr class="hover:bg-slate-50 transition-colors">
+<td class="px-4 py-3"><input class="w-20 h-8 border-slate-200 rounded text-body-sm" type="number" value="60"/></td>
+<td class="px-4 py-3"><input class="w-20 h-8 border-slate-200 rounded text-body-sm" type="number" value="80"/></td>
+<td class="px-4 py-3"><input class="w-24 h-8 border-slate-200 rounded text-body-sm" type="number" value="40"/></td>
+<td class="px-4 py-3 text-right">
+<button class="p-1 text-slate-400 hover:text-error transition-colors">
+<span class="material-symbols-outlined">delete</span>
+</button>
+</td>
+</tr>
+<tr class="hover:bg-slate-50 transition-colors">
+<td class="px-4 py-3"><input class="w-20 h-8 border-slate-200 rounded text-body-sm" type="number" value="80"/></td>
+<td class="px-4 py-3"><input class="w-20 h-8 border-slate-200 rounded text-body-sm" type="number" value="100"/></td>
+<td class="px-4 py-3"><input class="w-24 h-8 border-slate-200 rounded text-body-sm" type="number" value="75"/></td>
+<td class="px-4 py-3 text-right">
+<button class="p-1 text-slate-400 hover:text-error transition-colors">
+<span class="material-symbols-outlined">delete</span>
+</button>
+</td>
+</tr>
+<tr class="hover:bg-slate-50 transition-colors">
+<td class="px-4 py-3"><input class="w-20 h-8 border-slate-200 rounded text-body-sm" type="number" value="100"/></td>
+<td class="px-4 py-3"><input class="w-20 h-8 border-slate-100 bg-slate-50 rounded text-body-sm text-center" disabled="" type="text" value="∞"/></td>
+<td class="px-4 py-3"><input class="w-24 h-8 border-slate-200 rounded text-body-sm" type="number" value="100"/></td>
+<td class="px-4 py-3 text-right">
+<button class="p-1 text-slate-400 hover:text-error transition-colors">
+<span class="material-symbols-outlined">delete</span>
+</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<button class="flex items-center gap-2 px-3 py-1.5 text-indigo-600 font-label-md text-label-md hover:bg-indigo-50 rounded transition-colors">
+<span class="material-symbols-outlined text-[18px]">add</span>
+                        Add row
+                    </button>
+</div>
+<!-- Preview Callout -->
+<div class="bg-indigo-50 border border-indigo-100 p-4 rounded-lg flex items-start gap-4">
+<span class="material-symbols-outlined text-indigo-600 mt-0.5">calculate</span>
+<div>
+<p class="font-body-md text-body-md text-indigo-900 font-semibold mb-0.5">Live Calculation Preview</p>
+<p class="font-body-sm text-body-sm text-indigo-700 leading-relaxed">
+                            At <span class="font-bold underline decoration-indigo-300">72%</span> of <span class="font-bold">$100,000</span> → <span class="bg-indigo-200/50 px-1 rounded">40 km</span> earned. 
+                            Measured <span class="font-bold">162 km</span> → <span class="bg-error-container text-on-error-container px-1 rounded font-bold">122 km overage</span> at fuel $/km.
+                        </p>
+</div>
+</div>
+</div>
+<!-- Card Footer -->
+<div class="bg-slate-50 p-6 flex justify-between items-center border-t border-slate-200">
+<div class="flex items-center gap-2 text-slate-500">
+<span class="material-symbols-outlined text-[18px]">history</span>
+<span class="text-label-sm">Last updated: 2 hours ago by admin</span>
+</div>
+<div class="flex gap-3">
+<button class="px-4 py-2 border border-slate-200 text-slate-700 font-label-md text-label-md hover:bg-white rounded transition-all">Cancel Changes</button>
+<button class="px-6 py-2 bg-indigo-600 text-white font-label-md text-label-md hover:bg-indigo-700 rounded shadow-sm transition-all flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px]">save</span>
+                        Save Configuration
+                    </button>
+</div>
+</div>
+</div>
+<!-- System Alerts / Activity (Optional Dense Sidebar/Section) -->
+<div class="mt-12 grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl">
+<div class="p-4 bg-white border border-slate-200 rounded-[6px]">
+<h5 class="text-label-md font-bold text-on-surface mb-3 flex items-center gap-2">
+<span class="material-symbols-outlined text-indigo-600 text-[18px]">trending_up</span>
+                    Tier Usage
+                </h5>
+<p class="text-display font-display text-primary leading-none mb-1">1,248</p>
+<p class="text-label-sm text-slate-500">Drivers currently assigned</p>
+</div>
+<div class="p-4 bg-white border border-slate-200 rounded-[6px]">
+<h5 class="text-label-md font-bold text-on-surface mb-3 flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary text-[18px]">savings</span>
+                    Total Overage
+                </h5>
+<p class="text-display font-display text-secondary leading-none mb-1">$42.4k</p>
+<p class="text-label-sm text-slate-500">JMD recovered this month</p>
+</div>
+<div class="p-4 bg-white border border-slate-200 rounded-[6px]">
+<h5 class="text-label-md font-bold text-on-surface mb-3 flex items-center gap-2">
+<span class="material-symbols-outlined text-tertiary text-[18px]">warning</span>
+                    Conflicts
+                </h5>
+<p class="text-display font-display text-tertiary leading-none mb-1">0</p>
+<p class="text-label-sm text-slate-500">Validation issues found</p>
+</div>
+</div>
+</main>
+<script>
+        // Simple micro-interactions
+        document.querySelectorAll('input').forEach(input => {
+            input.addEventListener('focus', () => {
+                input.parentElement.classList.add('scale-[1.01]');
+                input.parentElement.classList.add('transition-transform');
+            });
+            input.addEventListener('blur', () => {
+                input.parentElement.classList.remove('scale-[1.01]');
+            });
+        });
+
+        // Toggle state change visual feedback
+        const toggle = document.querySelector('input[type="checkbox"]');
+        toggle.addEventListener('change', (e) => {
+            const card = e.target.closest('.bg-white');
+            if (e.target.checked) {
+                card.classList.add('ring-2', 'ring-indigo-600/10');
+            } else {
+                card.classList.remove('ring-2', 'ring-indigo-600/10');
+            }
+        });
+    </script>
+</body></html>

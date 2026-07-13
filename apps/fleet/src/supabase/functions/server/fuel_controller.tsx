@@ -4521,17 +4521,15 @@ app.get(`${BASE_PATH}/fuel-audit/deadhead/fleet`, async (c) => {
     const periodStart = c.req.query("periodStart") || undefined;
     const periodEnd = c.req.query("periodEnd") || undefined;
 
-    // Load fuel entries, vehicles, and trips in parallel
-    const [entriesResult, vehiclesResult, tripsResult] = await Promise.all([
-      supabase.from("kv_store_37f42386").select("value").like("key", "fuel_entry:%"),
-      supabase.from("kv_store_37f42386").select("value").like("key", "vehicle:%"),
-      supabase.from("kv_store_37f42386").select("value").like("key", "trip:%")
+    // MUST use paginated kv.getByPrefix — raw .select().like truncates at 1000 rows
+    // (fleet has 2000+ trips; missing trips → tripKm=0 → industry fallback over-deadheads).
+    const [allEntries, vehicles, allTrips, brainPolicy] = await Promise.all([
+      kv.getByPrefix("fuel_entry:"),
+      kv.getByPrefix("vehicle:"),
+      kv.getByPrefix("trip:"),
+      loadDeadheadBrainPolicy(),
     ]);
 
-    const allEntries = (entriesResult.data || []).map((d: any) => d.value);
-    const vehicles = (vehiclesResult.data || []).map((d: any) => d.value);
-    const allTrips = (tripsResult.data || []).map((d: any) => d.value);
-    const brainPolicy = await loadDeadheadBrainPolicy();
 
     // Per-vehicle deadhead attribution
     const vehicleResults: any[] = [];
@@ -4612,7 +4610,11 @@ app.get(`${BASE_PATH}/fuel-audit/deadhead/fleet`, async (c) => {
       ? 'high' : confCounts.medium >= confCounts.low ? 'medium' : 'low';
 
     const elapsed = Date.now() - startTime;
-    console.log(`[deadhead/fleet] Completed in ${elapsed}ms â€” ${vehicleResults.length} vehicles, ${allEntries.length} entries, ${allTrips.length} trips`);
+    const zeroTripWithOdo = vehicleResults.filter((vr) => (vr.totalOdometerKm || 0) > 0 && (vr.tripKm || 0) === 0).length;
+    console.log(
+      `[deadhead/fleet] Completed in ${elapsed}ms — ${vehicleResults.length} vehicles, ${allEntries.length} entries, ${allTrips.length} trips` +
+        (zeroTripWithOdo ? ` | WARN ${zeroTripWithOdo} vehicle(s) odo>0 but tripKm=0` : ""),
+    );
 
     return c.json({
       fleet: fleetSummary,
@@ -4636,21 +4638,16 @@ app.get(`${BASE_PATH}/fuel-audit/deadhead/:vehicleId`, async (c) => {
     const periodStart = c.req.query("periodStart") || undefined;
     const periodEnd = c.req.query("periodEnd") || undefined;
 
-    // Load fuel entries and trips for this vehicle in parallel
-    const [entriesResult, tripsResult, vehicleResult] = await Promise.all([
-      supabase.from("kv_store_37f42386").select("value").like("key", "fuel_entry:%"),
-      supabase.from("kv_store_37f42386").select("value").like("key", "trip:%"),
-      supabase.from("kv_store_37f42386").select("value").eq("key", `vehicle:${vehicleId}`)
+    // Paginated KV load — same trap as fleet route (raw like → 1000-row truncate).
+    const [allEntries, allTrips, vehicle, brainPolicy] = await Promise.all([
+      kv.getByPrefix("fuel_entry:"),
+      kv.getByPrefix("trip:"),
+      kv.get(`vehicle:${vehicleId}`),
+      loadDeadheadBrainPolicy(),
     ]);
 
-    const allEntries = (entriesResult.data || []).map((d: any) => d.value);
-    const allTrips = (tripsResult.data || []).map((d: any) => d.value);
-    const vehicle = vehicleResult.data?.[0]?.value;
-
-    // Filter entries by vehicleId
     const vEntries = allEntries.filter((e: any) => e.vehicleId === vehicleId);
 
-    // Filter trips by vehicleId (direct match) OR via driver assignment (Step 7.3)
     const vTrips = allTrips.filter((t: any) =>
       t.vehicleId === vehicleId ||
       (vehicle && (t.vehicleId === vehicle.licensePlate || t.vehicleId === vehicle.plateNumber))
@@ -4664,9 +4661,15 @@ app.get(`${BASE_PATH}/fuel-audit/deadhead/:vehicleId`, async (c) => {
       vTrips.push(...driverTrips);
     }
 
-    // Date filtering
     const filteredEntries = deadheadFilterByDateRange(vEntries, periodStart, periodEnd);
     const filteredTrips = deadheadFilterByDateRange(vTrips, periodStart, periodEnd);
+
+    if ((filteredEntries.length >= 2) && filteredTrips.length === 0) {
+      console.log(
+        `[deadhead/${vehicleId}] WARN odo anchors present but 0 trips in range ` +
+          `(loaded ${allTrips.length} trips total) — period ${periodStart}..${periodEnd}`,
+      );
+    }
 
     const attribution = fuelLogic.calculateDeadheadAttribution({
       vehicleId,
@@ -4674,7 +4677,7 @@ app.get(`${BASE_PATH}/fuel-audit/deadhead/:vehicleId`, async (c) => {
       trips: filteredTrips,
       periodStart,
       periodEnd,
-      policy: await loadDeadheadBrainPolicy(),
+      policy: brainPolicy,
     });
 
     return c.json(attribution);

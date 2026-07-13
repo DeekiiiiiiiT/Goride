@@ -20,8 +20,23 @@ import { UNASSIGNED_FUEL_DRIVER_ID } from '../types/fuel';
 import type { FuelCard } from '../types/fuel';
 import { isEntryInInclusiveYmdRange, entriesInFuelWeek } from '../utils/fuelWeekPeriod';
 import { getTotalTripRideshareKm } from '../utils/tripRideshareKm';
+import { getDriverPortalTripEarnings } from '../utils/tripEarnings';
+import {
+  computePersonalAllowanceSplit,
+  type PersonalAllowanceSplitResult,
+} from '../utils/personalAllowance';
+import type { PersonalAllowanceTierConfig, QuotaConfig } from '../types/data';
 
 export type { FuelCoverageCategory };
+
+export type PersonalAllowanceReconContext = {
+  config: PersonalAllowanceTierConfig;
+  quotaConfig?: QuotaConfig | null;
+  /** Key driverId → bonus km for this week */
+  bonusByDriverId?: Map<string, number>;
+  /** All week trips for driver earnings (when slice trips are vehicle-scoped) */
+  driverWeekTrips?: Trip[];
+};
 
 /** Per-vehicle deadhead attribution passed in from the API (Phase 2) */
 export interface VehicleDeadheadInput {
@@ -29,6 +44,8 @@ export interface VehicleDeadheadInput {
     deadheadKm: number;
     personalKm: number;
     totalOdometerKm: number;
+    /** Server-side trip km used for attribution (0 = trips missing / truncate bug). */
+    tripKm?: number;
     method: 'A' | 'C' | 'combined' | 'fallback';
     confidenceLevel: 'high' | 'medium' | 'low';
     confidenceReason: string;
@@ -161,6 +178,9 @@ export const FuelCalculationService = {
             brainClassification?: FuelBrainClassificationInput;
             /** Force legacy residual path even if brain payload present (tests / rollback). */
             forceLegacyResidual?: boolean;
+            /** Skip allowance (multi-vehicle slices apply once after merge). */
+            skipPersonalAllowance?: boolean;
+            personalAllowance?: PersonalAllowanceReconContext;
         }
     ): WeeklyFuelReport => {
         const startStr = FuelCalculationService.toLocalDateStr(weekStart);
@@ -294,13 +314,41 @@ export const FuelCalculationService = {
         // 6. Misc = Spend − (all four category $) — cash leakage, not a km type
         const miscellaneousCost = totalGasCardCost - (rideShareCost + companyUsageCost + deadheadCost + personalUsageCost);
 
+        // 6b. Personal Allowance (Option 2): company absorbs earned; overage → personal split
+        let personalForSplit = personalUsageCost;
+        let earnedAbsorbCompany = 0;
+        let allowanceSplit: PersonalAllowanceSplitResult | null = null;
+        const paCtx = options?.personalAllowance;
+        if (
+            !options?.skipPersonalAllowance &&
+            paCtx?.config?.enabled
+        ) {
+            const earnTrips = paCtx.driverWeekTrips ?? vehicleTrips;
+            const earningsJmd = earnTrips.reduce((s, t) => s + getDriverPortalTripEarnings(t), 0);
+            const driverIdForBonus = options?.driverId ?? vehicle.currentDriverId ?? '';
+            const priorBonus = paCtx.bonusByDriverId?.get(driverIdForBonus) ?? 0;
+            allowanceSplit = computePersonalAllowanceSplit({
+                measuredKm: personalDistance,
+                efficiencyKmPerL: observedEfficiency,
+                pricePerLiter: actualPricePerLiter,
+                earningsJmd,
+                config: paCtx.config,
+                quotaConfig: paCtx.quotaConfig,
+                priorWeekBonusKm: priorBonus,
+            });
+            if (!allowanceSplit.skip) {
+                personalForSplit = allowanceSplit.overageCost;
+                earnedAbsorbCompany = allowanceSplit.earnedCost;
+            }
+        }
+
         // 7. Split Costs dynamically using Scenario Rules (shared contract)
         const weekSplit = splitAllCategoryCosts(
             {
                 rideShare: rideShareCost,
                 companyUsage: companyUsageCost,
                 deadhead: deadheadCost,
-                personal: personalUsageCost,
+                personal: personalForSplit,
                 misc: miscellaneousCost,
             },
             fuelRule,
@@ -311,7 +359,7 @@ export const FuelCalculationService = {
         const personalSplit = { company: weekSplit.company.personal, driver: weekSplit.driver.personal };
         const miscSplit = { company: weekSplit.company.misc, driver: weekSplit.driver.misc };
 
-        const companyShare = rideShareSplit.company + companyUsageSplit.company + deadheadSplit.company + personalSplit.company + miscSplit.company;
+        const companyShare = rideShareSplit.company + companyUsageSplit.company + deadheadSplit.company + personalSplit.company + miscSplit.company + earnedAbsorbCompany;
         const driverShare = rideShareSplit.driver + companyUsageSplit.driver + deadheadSplit.driver + personalSplit.driver + miscSplit.driver;
 
         // 8. Calculate Health Status (Phase 4)
@@ -407,7 +455,96 @@ export const FuelCalculationService = {
                         availableKm: options.brainClassification.availableKm,
                       }
                     : undefined,
+                personalAllowance:
+                    allowanceSplit && !allowanceSplit.skip
+                        ? {
+                            quotaPct: allowanceSplit.quotaPct,
+                            weeklyEarnings: allowanceSplit.weeklyEarnings,
+                            weeklyQuota: allowanceSplit.weeklyQuota,
+                            earnedKm: allowanceSplit.earnedKm,
+                            overageKm: allowanceSplit.overageKm,
+                            earnedCost: allowanceSplit.earnedCost,
+                            overageCost: allowanceSplit.overageCost,
+                            hitTopBand: allowanceSplit.hitTopBand,
+                            configSnapshot: paCtx?.config,
+                          }
+                        : undefined,
+                personalEarnedCost: allowanceSplit && !allowanceSplit.skip ? allowanceSplit.earnedCost : undefined,
+                personalOverageCost: allowanceSplit && !allowanceSplit.skip ? allowanceSplit.overageCost : undefined,
             }
+        };
+    },
+
+    /**
+     * Apply Personal Allowance once on a merged driver-week report (multi-vehicle).
+     */
+    applyPersonalAllowanceToReport: (
+        report: WeeklyFuelReport,
+        fuelRule: FuelRule | undefined,
+        paCtx: PersonalAllowanceReconContext,
+        driverWeekTrips: Trip[],
+    ): WeeklyFuelReport => {
+        if (!paCtx?.config?.enabled) return report;
+        const calc = report.metadata?.rideShareCalc || {};
+        const efficiency = Number(calc.observedEfficiency) > 0 ? Number(calc.observedEfficiency) : 10;
+        const price = Number(calc.actualPricePerLiter) > 0 ? Number(calc.actualPricePerLiter) : 0;
+        const earningsJmd = driverWeekTrips.reduce((s, t) => s + getDriverPortalTripEarnings(t), 0);
+        const priorBonus = paCtx.bonusByDriverId?.get(report.driverId) ?? 0;
+        const allowanceSplit = computePersonalAllowanceSplit({
+            measuredKm: report.personalDistance,
+            efficiencyKmPerL: efficiency,
+            pricePerLiter: price,
+            earningsJmd,
+            config: paCtx.config,
+            quotaConfig: paCtx.quotaConfig,
+            priorWeekBonusKm: priorBonus,
+        });
+        if (allowanceSplit.skip) return report;
+
+        const weekSplit = splitAllCategoryCosts(
+            {
+                rideShare: report.rideShareCost,
+                companyUsage: report.companyUsageCost,
+                deadhead: report.deadheadCost || 0,
+                personal: allowanceSplit.overageCost,
+                misc: report.miscellaneousCost,
+            },
+            fuelRule,
+        );
+        const companyShare =
+            weekSplit.company.rideShare +
+            weekSplit.company.companyUsage +
+            weekSplit.company.deadhead +
+            weekSplit.company.personal +
+            weekSplit.company.misc +
+            allowanceSplit.earnedCost;
+        const driverShare =
+            weekSplit.driver.rideShare +
+            weekSplit.driver.companyUsage +
+            weekSplit.driver.deadhead +
+            weekSplit.driver.personal +
+            weekSplit.driver.misc;
+
+        return {
+            ...report,
+            companyShare,
+            driverShare,
+            metadata: {
+                ...report.metadata,
+                personalAllowance: {
+                    quotaPct: allowanceSplit.quotaPct,
+                    weeklyEarnings: allowanceSplit.weeklyEarnings,
+                    weeklyQuota: allowanceSplit.weeklyQuota,
+                    earnedKm: allowanceSplit.earnedKm,
+                    overageKm: allowanceSplit.overageKm,
+                    earnedCost: allowanceSplit.earnedCost,
+                    overageCost: allowanceSplit.overageCost,
+                    hitTopBand: allowanceSplit.hitTopBand,
+                    configSnapshot: paCtx.config,
+                },
+                personalEarnedCost: allowanceSplit.earnedCost,
+                personalOverageCost: allowanceSplit.overageCost,
+            },
         };
     },
 
@@ -428,6 +565,7 @@ export const FuelCalculationService = {
         fuelCards: FuelCard[] = [],
         /** Key `${driverId}:${vehicleId}` → brain classification (consumer path only). */
         brainByDriverVehicle?: Map<string, FuelBrainClassificationInput>,
+        personalAllowance?: PersonalAllowanceReconContext,
     ): WeeklyFuelReport[] => {
         const startStr = FuelCalculationService.toLocalDateStr(weekStart);
         const endStr = FuelCalculationService.toLocalDateStr(weekEnd);
@@ -535,6 +673,9 @@ export const FuelCalculationService = {
                         vehicleIds: vehicleIds.length ? vehicleIds : [primaryVehicle.id],
                         vehiclePlates: plates,
                         brainClassification: brainByDriverVehicle?.get(`${driverId}:${primaryVehicle.id}`),
+                        personalAllowance: personalAllowance
+                            ? { ...personalAllowance, driverWeekTrips: expandedTrips }
+                            : undefined,
                     },
                 );
                 // Restore: pending from original entries
@@ -582,6 +723,7 @@ export const FuelCalculationService = {
             merged.pendingCount = 0;
             merged.companyShare = 0;
             merged.driverShare = 0;
+            let sliceMeta: any = null;
 
             for (const vid of vehicleIds) {
                 const v = vehicleById.get(vid) || primaryVehicle;
@@ -601,8 +743,10 @@ export const FuelCalculationService = {
                         driverId,
                         fuelScenarioId: policyId,
                         brainClassification: brainByDriverVehicle?.get(`${driverId}:${vid}`),
+                        skipPersonalAllowance: true,
                     },
                 );
+                if (!sliceMeta && slice.metadata?.rideShareCalc) sliceMeta = slice.metadata;
                 merged.totalGasCardCost += slice.totalGasCardCost;
                 merged.rideShareCost += slice.rideShareCost;
                 merged.companyUsageCost += slice.companyUsageCost;
@@ -618,6 +762,35 @@ export const FuelCalculationService = {
                 merged.driverShare += slice.driverShare;
             }
             merged.vehicleId = primaryVehicle.id;
+            if (sliceMeta) {
+                merged.metadata = { ...merged.metadata, ...sliceMeta };
+            }
+            if (personalAllowance?.config?.enabled) {
+                const activeScenario = pickScenarioForDriverMembership(scenarios, driverId, startStr);
+                const fuelRule = activeScenario?.rules.find((r) => r.category === 'Fuel');
+                const priceGuess =
+                    Number(merged.metadata?.rideShareCalc?.actualPricePerLiter) > 0
+                        ? Number(merged.metadata.rideShareCalc.actualPricePerLiter)
+                        : 1.5;
+                const effGuess =
+                    merged.personalDistance > 0 && merged.personalUsageCost > 0
+                        ? (merged.personalDistance * priceGuess) / merged.personalUsageCost
+                        : Number(merged.metadata?.rideShareCalc?.observedEfficiency) || 10;
+                merged.metadata = {
+                    ...merged.metadata,
+                    rideShareCalc: {
+                        ...(merged.metadata?.rideShareCalc || {}),
+                        observedEfficiency: effGuess,
+                        actualPricePerLiter: priceGuess,
+                    },
+                };
+                merged = FuelCalculationService.applyPersonalAllowanceToReport(
+                    merged,
+                    fuelRule,
+                    personalAllowance,
+                    expandedTrips,
+                );
+            }
             reports.push(merged);
         }
 
