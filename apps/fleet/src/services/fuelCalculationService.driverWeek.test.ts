@@ -20,6 +20,27 @@ const defaultPolicy: FuelScenario = {
       miscCoverage: 50,
     },
   ],
+  versions: [
+    {
+      id: 'vd',
+      effectiveFrom: '2000-01-03',
+      rules: [
+        {
+          id: 'r1',
+          category: 'Fuel',
+          coverageType: 'Percentage',
+          coverageValue: 0,
+          rideShareCoverage: 80,
+          companyUsageCoverage: 100,
+          deadheadCoverage: 50,
+          personalCoverage: 0,
+          miscCoverage: 50,
+        },
+      ],
+      driverIds: ['d1'],
+      createdAt: 'x',
+    },
+  ],
 };
 
 const quotaPolicy: FuelScenario = {
@@ -37,6 +58,27 @@ const quotaPolicy: FuelScenario = {
       deadheadCoverage: 100,
       personalCoverage: 0,
       miscCoverage: 100,
+    },
+  ],
+  versions: [
+    {
+      id: 'vq',
+      effectiveFrom: '2000-01-03',
+      rules: [
+        {
+          id: 'r2',
+          category: 'Fuel',
+          coverageType: 'Percentage',
+          coverageValue: 0,
+          rideShareCoverage: 100,
+          companyUsageCoverage: 100,
+          deadheadCoverage: 100,
+          personalCoverage: 0,
+          miscCoverage: 100,
+        },
+      ],
+      driverIds: ['d2'],
+      createdAt: 'x',
     },
   ],
 };

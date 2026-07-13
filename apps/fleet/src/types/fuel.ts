@@ -108,8 +108,8 @@ export const UNASSIGNED_FUEL_DRIVER_ID = '__unassigned__';
 
 export interface WeeklyFuelReport {
   id: string; // composite: driverId_weekStart (legacy: vehicleId_weekStart)
-  weekStart: string; // ISO Date (Monday)
-  weekEnd: string; // ISO Date (Sunday)
+  weekStart: string; // Local YYYY-MM-DD Monday (legacy: ISO timestamp — normalize via reportWeekYmdBounds)
+  weekEnd: string; // Local YYYY-MM-DD Sunday (legacy: ISO timestamp)
   /** Primary vehicle for the week (highest spend); see vehicleIds for shared/multi-car. */
   vehicleId: string;
   driverId: string;
@@ -280,8 +280,8 @@ export type DisputeReason =
 
 export interface FuelDispute {
   id: string;
-  weekStart: string; // ISO Date (Monday)
-  weekEnd?: string; // ISO Date (Sunday) - Optional for backward compatibility
+  weekStart: string; // Local YYYY-MM-DD Monday (legacy ISO OK via reportWeekYmdBounds)
+  weekEnd?: string; // Local YYYY-MM-DD Sunday - Optional for backward compatibility
   vehicleId: string;
   driverId: string;
   createdAt: string;
@@ -342,7 +342,10 @@ export interface FuelScenarioVersion {
    * Unset = never ends (open-ended).
    */
   effectiveUntil?: string;
+  /** Frozen coverage snapshot (copied from policy template when version is created). */
   rules: FuelRule[];
+  /** Drivers on this version window (Schedule). Empty = no explicit assignees. */
+  driverIds?: string[];
   createdAt: string;
 }
 
@@ -350,9 +353,11 @@ export interface FuelScenario {
   id: string;
   name: string; // e.g. "Standard Fleet", "Owner Operator", "Rental"
   description?: string;
-  /** Latest version rules (kept in sync for legacy readers). */
+  /**
+   * Policy template splits (Rules tab). New Schedule versions freeze a copy into version.rules.
+   */
   rules: FuelRule[];
   isDefault?: boolean;
-  /** Coverage rule history keyed by effective-from Monday. */
+  /** Period + driver windows (Schedule). Overlap allowed only for different drivers. */
   versions?: FuelScenarioVersion[];
 }

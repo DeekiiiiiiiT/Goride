@@ -29,6 +29,8 @@ import {
   type FuelStepId,
 } from '../../../utils/fuelPeriodGating';
 import { buildFuelStepCounts, type FuelReconciliationPeriod } from '../../../utils/fuelPeriodStatus';
+import { isEntryInInclusiveYmdRange, reportWeekYmdBounds } from '../../../utils/fuelWeekPeriod';
+import { sumPaidByDriverForReport } from '../../../utils/fuelPaidByDriver';
 import type {
   FinalizedFuelReport,
   FuelDispute,
@@ -40,7 +42,7 @@ import type {
 import type { Trip } from '../../../types/data';
 import type { Vehicle } from '../../../types/vehicle';
 import { getCoverageMatrixRows } from '../../../utils/fuelCoverageSplit';
-import { pickScenarioForDriverWeek, resolveVersionForWeek } from '../../../utils/fuelPolicyVersion';
+import { pickScenarioForDriverMembership, resolveDriverVersionForWeek } from '../../../utils/fuelPolicyVersion';
 import { useFuelReconBusy } from './fuelReconBusyLock';
 
 const STEP_ICONS: Record<FuelStepId, LucideIcon> = {
@@ -183,25 +185,30 @@ function FuelPeriodWizardInner({
 
   const vehicleSnaps = useMemo(() => {
     return vehicles.map((vehicle) => {
-      const report = liveReports.find((r) => r.vehicleId === vehicle.id);
+      // Prefer report that lists this vehicle (driver-first multi-car safe)
+      const report = liveReports.find(
+        (r) => r.vehicleId === vehicle.id || (r.vehicleIds || []).includes(vehicle.id),
+      );
       const start = period.startDate;
       const end = period.endDate;
       const vEntries = fuelEntries.filter(
-        (e) => e.vehicleId === vehicle.id && e.date >= start && e.date <= end,
+        (e) => e.vehicleId === vehicle.id && isEntryInInclusiveYmdRange(e.date, start, end),
       );
       const pendingCount =
         report?.pendingCount ??
         vEntries.filter((e) => e.reconciliationStatus === 'Pending').length;
       const isFinalized = finalizedReports.some(
         (f) =>
-          f.vehicleId === vehicle.id && String(f.weekStart).split('T')[0] === start,
+          (f.vehicleId === vehicle.id || f.driverId === vehicle.currentDriverId) &&
+          reportWeekYmdBounds(f).start === start,
       );
       const hasOpenDispute = disputes.some(
         (d) =>
           d.vehicleId === vehicle.id &&
           d.status === 'Open' &&
-          String(d.weekStart || '').split('T')[0] === start,
+          reportWeekYmdBounds({ weekStart: d.weekStart || start, weekEnd: d.weekEnd }).start === start,
       );
+      const driverSpend = report ? sumPaidByDriverForReport(fuelEntries, report, vehicles) : 0;
       return {
         vehicleId: vehicle.id,
         totalSpend: report?.totalGasCardCost ?? vEntries.reduce((s, e) => s + e.amount, 0),
@@ -217,33 +224,21 @@ function FuelPeriodWizardInner({
           Boolean(report?.metadata?.scenarioId),
         isFinalized,
         plate: vehicle.licensePlate || vehicle.id,
-        driverSpend: 0,
-        netPay: 0,
+        driverSpend,
+        netPay: driverSpend - (report?.driverShare ?? 0),
       };
     });
   }, [vehicles, liveReports, fuelEntries, disputes, finalizedReports, period, scenarios]);
 
-  // Enrich settlement columns from live reports
+  // Enrich settlement columns from live reports (driver-week Paid by Driver)
   const settlementRows = useMemo(() => {
     return liveReports
       .filter((r) => r.totalGasCardCost > 0.009)
       .map((r) => {
         const v = vehicles.find((x) => x.id === r.vehicleId);
-        const start = String(r.weekStart).split('T')[0];
-        const end = String(r.weekEnd).split('T')[0];
-        const driverSpend = fuelEntries
-          .filter(
-            (e) =>
-              e.vehicleId === r.vehicleId &&
-              e.date >= start &&
-              e.date <= end &&
-              (e.type === 'Reimbursement' ||
-                e.type === 'Manual_Entry' ||
-                e.type === 'Fuel_Manual_Entry'),
-          )
-          .reduce((s, e) => s + e.amount, 0);
+        const driverSpend = sumPaidByDriverForReport(fuelEntries, r, vehicles);
         return {
-          id: r.vehicleId,
+          id: r.driverId || r.vehicleId,
           plate: v?.licensePlate || r.vehicleId,
           paidByDriver: driverSpend,
           deduction: r.driverShare,
@@ -357,19 +352,17 @@ function FuelPeriodWizardInner({
         const live = liveReports.find(
           (r) => r.vehicleId === v.id || (r.vehicleIds || []).includes(v.id),
         );
-        const policyId = live?.metadata?.scenarioId || v.fuelScenarioId;
-        const scenario = pickScenarioForDriverWeek(scenarios, policyId, period.startDate);
-        const raw =
-          scenarios.find((s) => s.id === policyId) ||
-          scenarios.find((s) => s.isDefault) ||
-          scenarios[0];
-        const version = raw ? resolveVersionForWeek(raw, period.startDate) : undefined;
+        const driverId = live?.driverId;
+        const hit = resolveDriverVersionForWeek(scenarios, driverId, period.startDate);
+        const scenario = hit
+          ? { ...hit.scenario, rules: hit.version.rules }
+          : pickScenarioForDriverMembership(scenarios, driverId, period.startDate);
         const fuelRule = scenario?.rules?.find((r) => r.category === 'Fuel');
         return {
           vehicle: v,
           scenario,
           matrix: getCoverageMatrixRows(fuelRule),
-          effectiveFrom: version?.effectiveFrom,
+          effectiveFrom: hit?.version.effectiveFrom,
         };
       });
   }, [vehicles, scenarios, vehicleSnaps, period.startDate, liveReports]);

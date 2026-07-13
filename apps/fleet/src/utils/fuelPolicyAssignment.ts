@@ -1,4 +1,5 @@
 import type { FuelScenario } from '../types/fuel';
+import { normalizeScenarioVersions } from './fuelPolicyVersion';
 
 export type PolicyDriver = {
   id: string;
@@ -9,22 +10,45 @@ export type PolicyDriver = {
   assignedVehicleId?: string;
 };
 
-/** Drivers on this policy: explicit fuelScenarioId, or unset when scenario is default. */
+/** Unique drivers listed on any version of this policy (Schedule membership). */
 export function driversForPolicy(scenario: FuelScenario, drivers: PolicyDriver[]): PolicyDriver[] {
-  return drivers.filter((d) =>
-    scenario.isDefault
-      ? !d.fuelScenarioId || d.fuelScenarioId === scenario.id
-      : d.fuelScenarioId === scenario.id,
-  );
+  const n = normalizeScenarioVersions(scenario);
+  const ids = new Set<string>();
+  for (const v of n.versions || []) {
+    for (const id of v.driverIds || []) ids.add(id);
+  }
+  return drivers.filter((d) => ids.has(d.id));
 }
 
-/** Drivers whose fuelScenarioId points at a missing scenario. */
+/** Count of unique drivers on this policy's versions. */
+export function driverCountOnPolicy(scenario: FuelScenario): number {
+  const n = normalizeScenarioVersions(scenario);
+  const ids = new Set<string>();
+  for (const v of n.versions || []) {
+    for (const id of v.driverIds || []) ids.add(id);
+  }
+  return ids.length;
+}
+
+/** Drivers listed on a specific version. */
+export function driversForVersion(
+  version: { driverIds?: string[] },
+  drivers: PolicyDriver[],
+): PolicyDriver[] {
+  const ids = new Set(version.driverIds || []);
+  return drivers.filter((d) => ids.has(d.id));
+}
+
+/**
+ * Drivers with fuelScenarioId pointing at a missing scenario (legacy field).
+ * Prefer version membership for recon; this is for cleanup UI only.
+ */
 export function orphanDrivers(drivers: PolicyDriver[], scenarios: FuelScenario[]): PolicyDriver[] {
   const ids = new Set(scenarios.map((s) => s.id));
   return drivers.filter((d) => d.fuelScenarioId && !ids.has(d.fuelScenarioId));
 }
 
-/** @deprecated Use driversForPolicy — vehicle assignment retained for cutover reads only. */
+/** @deprecated Vehicle assignment retained for cutover reads only. */
 export function vehiclesForPolicy(scenario: FuelScenario, vehicles: any[]): any[] {
   return vehicles.filter((v: any) =>
     scenario.isDefault
@@ -41,7 +65,6 @@ export function orphanVehicles(vehicles: any[], scenarios: FuelScenario[]): any[
 
 /**
  * One-time cutover: copy vehicle.fuelScenarioId onto currentDriver when driver has no policy.
- * Returns drivers that need saving (mutated copies).
  */
 export function migrateVehiclePoliciesToDrivers(
   vehicles: Array<{ fuelScenarioId?: string; currentDriverId?: string }>,

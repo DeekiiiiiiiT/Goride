@@ -6,16 +6,9 @@ import { Label } from "../ui/label";
 import { Textarea } from "../ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { FuelScenario, FuelRule } from '../../types/fuel';
-import { Fuel, AlertTriangle, Info } from 'lucide-react';
+import { Fuel } from 'lucide-react';
 import { normalizePercentageRule } from '../../utils/fuelCoverageSplit';
-import {
-    applyScenarioSave,
-    coverageRulesEqual,
-    mondayYmdForDate,
-    nextMondayYmd,
-    upcomingMondayOptions,
-} from '../../utils/fuelPolicyVersion';
-import { useFleetTimezone } from '../../utils/timezoneDisplay';
+import { applyPolicyTemplateSave } from '../../utils/fuelPolicyVersion';
 import { toast } from 'sonner@2.0.3';
 
 /**
@@ -57,13 +50,12 @@ interface ScenarioEditorProps {
     onClose: () => void;
     onSave: (scenario: FuelScenario) => Promise<void>;
     initialData: FuelScenario | null;
-    /** @deprecated Use affectedDriverCount */
+    /** @deprecated unused — drivers assigned on Schedule */
     affectedVehicleCount?: number;
+    /** @deprecated unused — drivers assigned on Schedule */
     affectedDriverCount?: number;
-    /** True for brand-new or unsaved clone — do not append onto a prior policy history. */
+    /** True for brand-new or unsaved clone. */
     isCreate?: boolean;
-    /** Force coverage editor + effective Monday (Schedule → Add version). */
-    forceVersionMode?: boolean;
 }
 
 const GRANULAR_FIELDS: { key: keyof FuelRule; label: string }[] = [
@@ -86,53 +78,21 @@ const DEFAULT_RULE = (): FuelRule => ({
     miscCoverage: 50,
 });
 
+/** Rules tab: name + split % only. Periods and drivers live on Schedule. */
 export function ScenarioEditor({
     isOpen,
     onClose,
     onSave,
     initialData,
-    affectedVehicleCount = 0,
-    affectedDriverCount,
     isCreate = false,
-    forceVersionMode = false,
 }: ScenarioEditorProps) {
-    const fleetTz = useFleetTimezone();
     const [name, setName] = useState('');
     const [description, setDescription] = useState('');
     const [rules, setRules] = useState<FuelRule[]>([]);
-    const [effectiveFromMonday, setEffectiveFromMonday] = useState('');
-    const [effectiveUntilMonday, setEffectiveUntilMonday] = useState<string>('__never__');
     const [isSubmitting, setIsSubmitting] = useState(false);
-
-    const driverCount = affectedDriverCount ?? affectedVehicleCount;
-
-    const thisMonday = useMemo(
-        () => mondayYmdForDate(new Date(), fleetTz || undefined),
-        [fleetTz],
-    );
-    const nextMonday = useMemo(
-        () => nextMondayYmd(new Date(), fleetTz || undefined),
-        [fleetTz],
-    );
-
-    // Dec 2025 → ~16 weeks ahead so historical recon weeks can get a version
-    const weekOptions = useMemo(
-        () => upcomingMondayOptions(16, fleetTz || undefined),
-        [fleetTz],
-    );
-
-    const untilOptions = useMemo(() => {
-        return weekOptions.filter((o) => !effectiveFromMonday || o.value > effectiveFromMonday);
-    }, [weekOptions, effectiveFromMonday]);
 
     useEffect(() => {
         if (isOpen) {
-            // New policy: this week. Rule edit: next Monday (open week keeps prior rules).
-            const defaultFrom = isCreate
-                ? mondayYmdForDate(new Date(), fleetTz || undefined)
-                : nextMondayYmd(new Date(), fleetTz || undefined);
-            setEffectiveFromMonday(defaultFrom);
-            setEffectiveUntilMonday('__never__');
             if (initialData) {
                 setName(initialData.name);
                 setDescription(initialData.description || '');
@@ -148,14 +108,7 @@ export function ScenarioEditor({
                 setRules([DEFAULT_RULE()]);
             }
         }
-    }, [isOpen, initialData, fleetTz, isCreate]);
-
-    // If start moves past selected until, reset until to Never
-    useEffect(() => {
-        if (effectiveUntilMonday !== '__never__' && effectiveFromMonday && effectiveUntilMonday <= effectiveFromMonday) {
-            setEffectiveUntilMonday('__never__');
-        }
-    }, [effectiveFromMonday, effectiveUntilMonday]);
+    }, [isOpen, initialData]);
 
     const updateFuelRule = (field: keyof FuelRule, value: any) => {
         setRules(prev => prev.map(r => {
@@ -173,19 +126,6 @@ export function ScenarioEditor({
     const fuelRule = rules.find(r => r.category === 'Fuel');
     const validationError = fuelRule ? validateFuelRule(fuelRule) : null;
 
-    const rulesChanged = useMemo(() => {
-        if (isCreate || !initialData || !fuelRule) return true;
-        const prevRules = initialData.rules || [];
-        const nextRule =
-            fuelRule.coverageType === 'Percentage' ? normalizePercentageRule(fuelRule) : fuelRule;
-        return !coverageRulesEqual(prevRules, [nextRule]);
-    }, [isCreate, initialData, fuelRule]);
-
-    const showEffectivePicker = forceVersionMode || rulesChanged || isCreate;
-
-    const selectedWeekLabel =
-        weekOptions.find((o) => o.value === effectiveFromMonday)?.label || effectiveFromMonday;
-
     const handleSubmit = async () => {
         if (!name.trim() || !fuelRule || validationError) return;
         setIsSubmitting(true);
@@ -200,15 +140,9 @@ export function ScenarioEditor({
                 isDefault: initialData?.isDefault || false,
                 versions: initialData?.versions,
             };
-            const scenario = applyScenarioSave({
+            const scenario = applyPolicyTemplateSave({
                 previous: isCreate ? null : initialData,
                 next: draft,
-                effectiveFromMonday: showEffectivePicker ? effectiveFromMonday : undefined,
-                effectiveUntilMonday:
-                    showEffectivePicker && effectiveUntilMonday !== '__never__'
-                        ? effectiveUntilMonday
-                        : null,
-                forceVersion: forceVersionMode,
             });
             await onSave(scenario);
         } catch (e: any) {
@@ -231,32 +165,12 @@ export function ScenarioEditor({
                 <div className="shrink-0 space-y-3 px-6 pt-6 pb-3 border-b border-slate-100">
                     <DialogHeader>
                         <DialogTitle>
-                            {forceVersionMode
-                                ? 'New version effective from…'
-                                : initialData && !isCreate
-                                  ? 'Edit Policy'
-                                  : 'Create New Policy'}
+                            {initialData && !isCreate ? 'Edit Policy' : 'Create New Policy'}
                         </DialogTitle>
                         <DialogDescription>
-                            {forceVersionMode
-                                ? 'Add a coverage version on this policy. Same policy name — new effective Monday.'
-                                : 'Set how much the company covers vs what the driver pays for each fuel category.'}
+                            Set company vs driver split percentages. Periods and drivers are managed on the Schedule tab.
                         </DialogDescription>
                     </DialogHeader>
-
-                    {showEffectivePicker && (
-                        <div className="flex items-start gap-2 p-2.5 bg-slate-50 border border-slate-200 rounded text-slate-800">
-                            <Info className="h-4 w-4 shrink-0 mt-0.5 text-indigo-600" />
-                            <span className="text-sm">
-                                {isCreate && !forceVersionMode
-                                    ? <>New policy rules take effect from <strong>{selectedWeekLabel}</strong> forward.</>
-                                    : <>New version applies from <strong>{selectedWeekLabel}</strong> forward. Weeks before that keep the previous rules. Finalized weeks stay frozen.</>}
-                                {driverCount > 0 && !isCreate && (
-                                    <> ({driverCount} driver{driverCount !== 1 ? 's' : ''} on this policy.)</>
-                                )}
-                            </span>
-                        </div>
-                    )}
                 </div>
 
                 <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 space-y-6">
@@ -359,53 +273,6 @@ export function ScenarioEditor({
                             )}
                         </div>
                     </div>
-
-                    {showEffectivePicker && (
-                        <div className="space-y-4">
-                            <div className="space-y-2">
-                                <Label>Starts (week starting Monday)</Label>
-                                <Select value={effectiveFromMonday} onValueChange={setEffectiveFromMonday}>
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Select start week" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {weekOptions.map((o) => (
-                                            <SelectItem key={o.value} value={o.value}>
-                                                {o.label}
-                                                {o.value === thisMonday ? ' (this week)' : ''}
-                                                {o.value === nextMonday ? ' (next week)' : ''}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            <div className="space-y-2">
-                                <Label>Ends (week starting Monday)</Label>
-                                <Select value={effectiveUntilMonday} onValueChange={setEffectiveUntilMonday}>
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Never (default)" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="__never__">Never (default)</SelectItem>
-                                        {untilOptions.map((o) => (
-                                            <SelectItem key={o.value} value={o.value}>
-                                                {o.label}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                                <p className="text-xs text-slate-500">
-                                    Ending Monday is exclusive — that week and later use the next version (or Default coverage on this policy). Leave Never for open-ended.
-                                </p>
-                            </div>
-                            {!isCreate && (
-                              <p className="text-xs text-slate-500 flex items-start gap-1.5">
-                                  <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-600" />
-                                  Default start is next Monday so the open week keeps current rules unless you choose this week.
-                              </p>
-                            )}
-                        </div>
-                    )}
                 </div>
 
                 <DialogFooter className="shrink-0 px-6 py-4 border-t border-slate-100 gap-2">

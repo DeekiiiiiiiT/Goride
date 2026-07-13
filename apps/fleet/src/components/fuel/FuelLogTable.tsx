@@ -62,6 +62,7 @@ import { downloadBlob, jsonToCsv } from '../../utils/csv-helper';
 import { FUEL_CSV_COLUMNS } from '../../types/csv-schemas';
 import { Download } from 'lucide-react';
 import { usePermissions } from '../../hooks/usePermissions';
+import { isEntryInInclusiveYmdRange, toEntryYmd } from '../../utils/fuelWeekPeriod';
 
 interface FuelLogTableProps {
     entries: FuelEntry[];
@@ -204,16 +205,9 @@ export function FuelLogTable({
             if (status !== filterStatus) return false;
         }
         if (dateRange?.from || dateRange?.to) {
-            let entryDate: Date;
-            if (entry.date.includes('-') && entry.date.length === 10) {
-                const [y, m, d] = entry.date.split('-').map(Number);
-                entryDate = new Date(y, m - 1, d);
-            } else {
-                entryDate = new Date(entry.date);
-            }
-            entryDate.setHours(0, 0, 0, 0);
-            if (dateRange.from && entryDate < new Date(dateRange.from).setHours(0,0,0,0)) return false;
-            if (dateRange.to && entryDate > new Date(dateRange.to).setHours(23,59,59,999)) return false;
+            const startYmd = dateRange.from ? toEntryYmd(dateRange.from) : '0000-01-01';
+            const endYmd = dateRange.to ? toEntryYmd(dateRange.to) : (dateRange.from ? toEntryYmd(dateRange.from) : '9999-12-31');
+            if (!isEntryInInclusiveYmdRange(entry.date, startYmd, endYmd)) return false;
         }
         return (
             getVehicleName(entry.vehicleId).toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -255,36 +249,27 @@ export function FuelLogTable({
     const stats = useMemo(() => {
         const auditScopeEntries = entries.filter(entry => {
             if (!dateRange?.from && !dateRange?.to) return true;
-            const entryDate = new Date(entry.date);
-            if (dateRange.from && entryDate < dateRange.from) return false;
-            if (dateRange.to && entryDate > dateRange.to) return false;
-            return true;
-        });
-        const manualEntries = auditScopeEntries.filter(e => isManualEntry(e));
-        const anchorEntries = auditScopeEntries.filter(e => validAnchorIds.has(e.id));
-        const cycleScope = allCycles.filter(c => {
-            if (!dateRange?.from && !dateRange?.to) return true;
-            
-            // Robust date parsing for filter comparison
-            const dateStr = c.endDate.includes('-') ? c.endDate : c.endDate.replace(/\//g, '-');
-            const cycleDate = new Date(dateStr);
-            cycleDate.setHours(0, 0, 0, 0);
-
-            const fromDate = dateRange.from ? new Date(dateRange.from) : null;
-            if (fromDate) fromDate.setHours(0, 0, 0, 0);
-
-            const toDate = dateRange.to ? new Date(dateRange.to) : null;
-            if (toDate) toDate.setHours(23, 59, 59, 999);
-
-            if (fromDate && cycleDate < fromDate) return false;
-            if (toDate && cycleDate > toDate) return false;
-            return true;
+            const startYmd = dateRange.from ? toEntryYmd(dateRange.from) : '0000-01-01';
+            const endYmd = dateRange.to ? toEntryYmd(dateRange.to) : (dateRange.from ? toEntryYmd(dateRange.from) : '9999-12-31');
+            return isEntryInInclusiveYmdRange(entry.date, startYmd, endYmd);
         });
         const adminEntries = auditScopeEntries.filter(e => resolveEntrySource(e) === 'admin-manual');
         const adminEdits = auditScopeEntries.filter(e => resolveEntrySource(e) === 'admin-edit');
+        const portalEntries = auditScopeEntries.filter(e => resolveEntrySource(e) === 'driver-portal');
+        // Mutually exclusive volume chips: Portal / Admin / Anchors (admin-edit counted under Admin volume)
+        const manualVolume = portalEntries.length;
+        const adminVolume = adminEntries.length + adminEdits.length;
+        const anchorEntries = auditScopeEntries.filter(e => validAnchorIds.has(e.id));
+        const cycleScope = allCycles.filter(c => {
+            if (!dateRange?.from && !dateRange?.to) return true;
+            const startYmd = dateRange.from ? toEntryYmd(dateRange.from) : '0000-01-01';
+            const endYmd = dateRange.to ? toEntryYmd(dateRange.to) : (dateRange.from ? toEntryYmd(dateRange.from) : '9999-12-31');
+            return isEntryInInclusiveYmdRange(c.endDate, startYmd, endYmd);
+        });
+        const manualEntries = auditScopeEntries.filter(e => isManualEntry(e));
         return {
-            manualCount: manualEntries.length,
-            adminCount: adminEntries.length,
+            manualCount: manualVolume,
+            adminCount: adminVolume,
             adminEditCount: adminEdits.length,
             anchorCount: anchorEntries.length,
             totalSpend: auditScopeEntries.reduce((sum, e) => sum + (Number(e.amount) || 0), 0),
@@ -400,12 +385,12 @@ export function FuelLogTable({
                     <div className="flex-1">
                         <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Log Volume</p>
                         <div className="flex items-baseline gap-3">
-                            <div><p className="text-xl font-bold text-slate-700">{stats.manualCount}</p><p className="text-[10px] text-slate-500">Manual</p></div>
+                            <div><p className="text-xl font-bold text-slate-700">{stats.manualCount}</p><p className="text-[10px] text-slate-500">Portal</p></div>
                             <div className="h-8 w-px bg-slate-100 mx-1"></div>
                             <div><p className="text-xl font-bold text-emerald-600">{stats.anchorCount}</p><p className="text-[10px] text-slate-500">Anchors</p></div>
-                            {(stats.adminCount + stats.adminEditCount) > 0 && (<>
+                            {stats.adminCount > 0 && (<>
                                 <div className="h-8 w-px bg-slate-100 mx-1"></div>
-                                <div><p className="text-xl font-bold text-amber-600">{stats.adminCount + stats.adminEditCount}</p><p className="text-[10px] text-slate-500">Admin</p></div>
+                                <div><p className="text-xl font-bold text-amber-600">{stats.adminCount}</p><p className="text-[10px] text-slate-500">Admin</p></div>
                             </>)}
                         </div>
                     </div>
@@ -525,6 +510,7 @@ export function FuelLogTable({
                             selectedEnd={periodEnd}
                             placeholder="Select week period"
                             buttonClassName="h-9 text-xs"
+                            allowCustomRange
                             onSelect={(period) => {
                                 const [sy, sm, sd] = period.startDate.split('-').map(Number);
                                 const [ey, em, ed] = period.endDate.split('-').map(Number);
@@ -754,11 +740,18 @@ export function FuelLogTable({
                                             const curOdo = (entry.odometer as number) || 0;
                                             const isRegression = curOdo < prev.prevOdo;
                                             const delta = Math.abs(curOdo - prev.prevOdo);
+                                            const isZeroDelta = !isRegression && delta === 0;
                                             return (
                                                 <div className="flex flex-col">
                                                     <span className="text-xs font-medium">{prev.prevOdo.toLocaleString()}</span>
-                                                    <span className={`text-[10px] font-medium ${isRegression ? 'text-red-600' : 'text-green-600'}`}>
-                                                        {isRegression ? `▼ ${delta.toLocaleString()}` : `▲ +${delta.toLocaleString()}`}
+                                                    <span className={`text-[10px] font-medium ${
+                                                      isRegression ? 'text-red-600' : isZeroDelta ? 'text-amber-600' : 'text-green-600'
+                                                    }`}>
+                                                        {isRegression
+                                                          ? `▼ ${delta.toLocaleString()}`
+                                                          : isZeroDelta
+                                                            ? '+0 same odo'
+                                                            : `▲ +${delta.toLocaleString()}`}
                                                     </span>
                                                 </div>
                                             );

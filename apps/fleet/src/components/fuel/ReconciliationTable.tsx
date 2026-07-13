@@ -47,6 +47,8 @@ import { downloadCSV } from '../../utils/export';
 import { ScenarioSplitDashboard } from './ScenarioSplitDashboard';
 import { api } from '../../services/api';
 import { UNASSIGNED_FUEL_DRIVER_ID } from '../../types/fuel';
+import { reportWeekYmdBounds, toEntryYmd } from '../../utils/fuelWeekPeriod';
+import { sumPaidByDriverForReport } from '../../utils/fuelPaidByDriver';
 
 interface ReconciliationTableProps {
     vehicles: Vehicle[];
@@ -161,28 +163,36 @@ export function ReconciliationTable({
         onReportsChange?.(reports);
     }, [reports, onReportsChange]);
 
-    // Totals
+    // Totals — settlement columns use the same Paid-by-Driver helper as rows
     const totals = useMemo(() => {
-        return reports.reduce((acc, r) => ({
-            gasCard: acc.gasCard + r.totalGasCardCost,
-            rideShare: acc.rideShare + r.rideShareCost,
-            companyUsage: acc.companyUsage + r.companyUsageCost,
-            deadhead: acc.deadhead + (r.deadheadCost || 0),
-            personal: acc.personal + r.personalUsageCost,
-            misc: acc.misc + r.miscellaneousCost,
-            company: acc.company + r.companyShare,
-            driver: acc.driver + r.driverShare
-        }), { 
-            gasCard: 0, 
-            rideShare: 0, 
-            companyUsage: 0, 
+        return reports.reduce((acc, r) => {
+            const paidByDriver = sumPaidByDriverForReport(fuelEntries, r, vehicles);
+            const netPay = paidByDriver - r.driverShare;
+            return {
+                gasCard: acc.gasCard + r.totalGasCardCost,
+                rideShare: acc.rideShare + r.rideShareCost,
+                companyUsage: acc.companyUsage + r.companyUsageCost,
+                deadhead: acc.deadhead + (r.deadheadCost || 0),
+                personal: acc.personal + r.personalUsageCost,
+                misc: acc.misc + r.miscellaneousCost,
+                company: acc.company + r.companyShare,
+                driver: acc.driver + r.driverShare,
+                paidByDriver: acc.paidByDriver + paidByDriver,
+                netPay: acc.netPay + netPay,
+            };
+        }, {
+            gasCard: 0,
+            rideShare: 0,
+            companyUsage: 0,
             deadhead: 0,
-            personal: 0, 
-            misc: 0, 
-            company: 0, 
-            driver: 0 
+            personal: 0,
+            misc: 0,
+            company: 0,
+            driver: 0,
+            paidByDriver: 0,
+            netPay: 0,
         });
-    }, [reports]);
+    }, [reports, fuelEntries, vehicles]);
 
     // Re-finalize safety (Step 2): flag reports that already have a prior finalized
     // snapshot for the same vehicle+week. Re-finalizing recomputes driverShare from
@@ -191,9 +201,9 @@ export function ReconciliationTable({
     // so surface the delta before the admin confirms rather than silently overwriting.
     const reFinalizeWarnings = useMemo(() => {
         return reports.reduce((acc, r) => {
-            const rStartYmd = r.weekStart.split('T')[0];
+            const rStartYmd = reportWeekYmdBounds(r).start;
             const prior = finalizedReports.find(
-                (f) => f.driverId === r.driverId && String(f.weekStart).split('T')[0] === rStartYmd
+                (f) => f.driverId === r.driverId && reportWeekYmdBounds(f).start === rStartYmd
             );
             if (prior) {
                 const priorDriverShare = prior.postedDriverShare ?? prior.driverShare ?? 0;
@@ -209,13 +219,21 @@ export function ReconciliationTable({
     // override — but requires an explicit acknowledgment when any selected report
     // has a data-quality flag (Amber/Red health, unresolved pending logs, or an
     // Open dispute for that vehicle/week).
-    const findDisputeForReport = (report: WeeklyFuelReport) =>
-        disputes.find(d => {
+    const findDisputeForReport = (report: WeeklyFuelReport) => {
+        const { start, end } = reportWeekYmdBounds(report);
+        return disputes.find(d => {
+            const dStart = toEntryYmd(d.weekStart);
+            if (report.driverId && d.driverId && d.driverId === report.driverId) {
+                if (dStart !== start) return false;
+                if (d.weekEnd) return toEntryYmd(d.weekEnd) === end;
+                return true;
+            }
             if (d.vehicleId !== report.vehicleId) return false;
-            if (d.weekStart !== report.weekStart) return false;
-            if (d.weekEnd) return d.weekEnd === report.weekEnd;
+            if (dStart !== start) return false;
+            if (d.weekEnd) return toEntryYmd(d.weekEnd) === end;
             return true;
         });
+    };
 
     const dataQualityWarnings = useMemo(() => {
         return reports.reduce((acc, r) => {
@@ -251,20 +269,12 @@ export function ReconciliationTable({
     const handleExport = async () => {
         const data = reports.map(report => {
             const vehicle = vehicles.find(v => v.id === report.vehicleId);
-            const rStart = report.weekStart.split('T')[0];
-            const rEnd = report.weekEnd.split('T')[0];
-            const driverSpend = fuelEntries
-                .filter(e => 
-                    e.vehicleId === report.vehicleId && 
-                    e.date >= rStart && 
-                    e.date <= rEnd &&
-                    (e.type === 'Reimbursement' || e.type === 'Manual_Entry' || e.type === 'Fuel_Manual_Entry')
-                )
-                .reduce((sum, e) => sum + e.amount, 0);
+            const { start: rStart, end: rEnd } = reportWeekYmdBounds(report);
+            const driverSpend = sumPaidByDriverForReport(fuelEntries, report, vehicles);
 
             return {
-                WeekStart: format(new Date(report.weekStart), 'yyyy-MM-dd'),
-                WeekEnd: format(new Date(report.weekEnd), 'yyyy-MM-dd'),
+                WeekStart: rStart,
+                WeekEnd: rEnd,
                 Vehicle: vehicle?.licensePlate || 'Unknown',
                 DriverID: report.driverId,
                 TotalSpend: Number(report.totalGasCardCost.toFixed(2)),
@@ -277,12 +287,13 @@ export function ReconciliationTable({
                 PersonalUsage: Number(report.personalUsageCost.toFixed(2)),
                 Miscellaneous: Number(report.miscellaneousCost.toFixed(2)),
                 CompanyShare: Number(report.companyShare.toFixed(2)),
-                DriverShare: Number(report.driverShare.toFixed(2)), 
-                PaidByDriver: Number(driverSpend.toFixed(2)),      
+                DriverShare: Number(report.driverShare.toFixed(2)),
+                PaidByDriver: Number(driverSpend.toFixed(2)),
                 NetPay: Number((driverSpend - report.driverShare).toFixed(2))
             };
         });
 
+        if (!weekStart) return;
         await downloadCSV(data, `reconciliation-${format(weekStart, 'yyyy-MM-dd')}`, { checksum: true });
     };
 
@@ -383,12 +394,12 @@ export function ReconciliationTable({
                                             <div className="p-3 space-y-2.5 text-xs">
                                                 <div>
                                                     <p className="font-bold text-slate-100 text-sm mb-1">Ride Share</p>
-                                                    <p className="text-slate-300">Fuel cost attributed to logged ride-share trips (Uber, InDrive, etc.). This is the work-related portion of fuel consumption.</p>
+                                                    <p className="text-slate-300">Estimated fuel cost of platform trip kilometers — not a slice of Total Spend receipts.</p>
                                                 </div>
                                                 <div className="border-t border-slate-600 pt-2">
                                                     <p className="font-semibold text-amber-400 text-[11px] uppercase tracking-wide mb-1">How it's calculated</p>
                                                     <p className="text-slate-300">(Trip km ÷ efficiency km/L) × $/L</p>
-                                                    <p className="text-slate-400 mt-1">Efficiency sourced from odometer data, vehicle settings, or system default (12.5 km/L). Price/L from actual fuel purchases in the period.</p>
+                                                    <p className="text-slate-400 mt-1">Efficiency from odometer fills, vehicle settings, or 10 km/L default. Price/L from period purchases. Can exceed Total Spend when trip km or fallbacks inflate the estimate — Leakage then goes negative to balance.</p>
                                                 </div>
                                                 <div className="border-t border-slate-600 pt-2">
                                                     <p className="font-semibold text-amber-400 text-[11px] uppercase tracking-wide mb-1">Company / Driver Split</p>
@@ -491,12 +502,12 @@ export function ReconciliationTable({
                                             <div className="p-3 space-y-2.5 text-xs">
                                                 <div>
                                                     <p className="font-bold text-slate-100 text-sm mb-1">Misc (Leakage)</p>
-                                                    <p className="text-slate-300">Unaccounted fuel that doesn't fit into any known category. A high value here signals potential fraud, data gaps, or untagged usage.</p>
+                                                    <p className="text-slate-300">Residual after estimated categories: Total Spend − Ride Share − Company Ops − Deadhead − Personal. Large negative values mean estimates exceed receipts (often inflated Ride Share), not necessarily fraud.</p>
                                                 </div>
                                                 <div className="border-t border-slate-600 pt-2">
                                                     <p className="font-semibold text-amber-400 text-[11px] uppercase tracking-wide mb-1">How it's calculated</p>
                                                     <p className="text-slate-300">Total Spend − Ride Share − Company Ops − Deadhead − Personal</p>
-                                                    <p className="text-slate-400 mt-1">This is a residual catch-all. Ideally should be $0 or close to it. Non-zero values warrant investigation.</p>
+                                                    <p className="text-slate-400 mt-1">Residual catch-all. Ideally near $0. Large positive or negative values warrant checking trip km, efficiency, and price sources.</p>
                                                 </div>
                                                 <div className="border-t border-slate-600 pt-2">
                                                     <p className="font-semibold text-amber-400 text-[11px] uppercase tracking-wide mb-1">Company / Driver Split</p>
@@ -611,36 +622,25 @@ export function ReconciliationTable({
                                         : vehicle?.licensePlate) || 'Unknown';
                                 
                                 // Calculate "Paid by Driver" (Cash/Reimbursement) for this driver-week
-                                const rStart = report.weekStart.split('T')[0];
-                                const rEnd = report.weekEnd.split('T')[0];
-                                const driverSpend = fuelEntries
-                                    .filter(e => 
-                                        e.date >= rStart && 
-                                        e.date <= rEnd &&
-                                        (e.type === 'Reimbursement' || e.type === 'Manual_Entry' || e.type === 'Fuel_Manual_Entry') &&
-                                        (report.driverId === UNASSIGNED_FUEL_DRIVER_ID
-                                          ? !e.driverId
-                                          : e.driverId === report.driverId ||
-                                            ((report.vehicleIds || [report.vehicleId]).includes(e.vehicleId || '') &&
-                                              !e.driverId &&
-                                              report.driverId === vehicle?.currentDriverId))
-                                    )
-                                    .reduce((sum, e) => sum + e.amount, 0);
+                                const driverSpend = sumPaidByDriverForReport(fuelEntries, report, vehicles);
 
                                 const netPay = driverSpend - report.driverShare;
-
-                                // Check if dispute overlaps with report period
-                                const dispute = disputes.find(d => {
-                                    if (report.driverId && d.driverId && d.driverId === report.driverId) {
-                                        if (d.weekStart !== report.weekStart) return false;
-                                        if (d.weekEnd) return d.weekEnd === report.weekEnd;
-                                        return true;
+                                const rideCalc = report.metadata?.rideShareCalc as
+                                  | {
+                                      totalRideshareKm?: number;
+                                      observedEfficiency?: number;
+                                      actualPricePerLiter?: number;
+                                      efficiencySource?: string;
+                                      priceSource?: string;
+                                      tripsIncluded?: number;
                                     }
-                                    if (d.vehicleId !== report.vehicleId) return false;
-                                    if (d.weekStart !== report.weekStart) return false;
-                                    if (d.weekEnd) return d.weekEnd === report.weekEnd;
-                                    return true;
-                                });
+                                  | undefined;
+                                const estimateExceedsSpend =
+                                  report.rideShareCost > report.totalGasCardCost + 0.01 ||
+                                  Math.abs(report.miscellaneousCost) > report.totalGasCardCost * 0.5;
+
+                                // Check if dispute overlaps with report period (YMD bounds)
+                                const dispute = findDisputeForReport(report);
 
                                 return (
                                     <TableRow key={report.id}>
@@ -723,9 +723,11 @@ export function ReconciliationTable({
                                         <TableCell>
                                             <div className="flex flex-col gap-1 items-start">
                                                 {(() => {
-                                                    const rStartYmd = report.weekStart.split('T')[0];
+                                                    const rStartYmd = reportWeekYmdBounds(report).start;
                                                     const isLocked = periodLocked || finalizedReports.some(
-                                                        (f) => f.vehicleId === report.vehicleId && String(f.weekStart).split('T')[0] === rStartYmd
+                                                        (f) =>
+                                                          (f.driverId === report.driverId || f.vehicleId === report.vehicleId) &&
+                                                          reportWeekYmdBounds(f).start === rStartYmd
                                                     );
                                                     return (
                                                         <Badge variant={isLocked ? 'secondary' : 'outline'} className="text-[10px]">
@@ -763,8 +765,15 @@ export function ReconciliationTable({
                                             <TooltipProvider>
                                                 <Tooltip>
                                                     <TooltipTrigger asChild>
-                                                        <span className={`cursor-help ${report.metadata?.rideShareCalc ? 'underline decoration-dotted decoration-slate-300 underline-offset-2' : ''}`}>
-                                                            {formatCurrency(report.rideShareCost)}
+                                                        <span className={`inline-flex flex-col items-end gap-0.5 cursor-help ${report.metadata?.rideShareCalc ? 'underline decoration-dotted decoration-slate-300 underline-offset-2' : ''}`}>
+                                                            <span className={estimateExceedsSpend ? 'text-amber-700 font-semibold' : ''}>
+                                                              {formatCurrency(report.rideShareCost)}
+                                                            </span>
+                                                            {estimateExceedsSpend && (
+                                                              <span className="text-[9px] font-medium text-amber-600 normal-case no-underline">
+                                                                Est. &gt; spend
+                                                              </span>
+                                                            )}
                                                         </span>
                                                     </TooltipTrigger>
                                                     {report.metadata?.rideShareCalc && (
@@ -773,11 +782,16 @@ export function ReconciliationTable({
                                                                 <div className="font-semibold text-slate-900 border-b border-slate-200 pb-1.5">
                                                                     Ride Share Calculation
                                                                 </div>
+                                                                {estimateExceedsSpend && (
+                                                                  <p className="text-amber-700 bg-amber-50 border border-amber-100 rounded px-2 py-1.5">
+                                                                    Estimate exceeds Total Spend — check km, efficiency source, and $/L below. Leakage absorbs the difference.
+                                                                  </p>
+                                                                )}
                                                                 <div className="space-y-1 text-slate-600">
                                                                     <div className="flex justify-between gap-4">
                                                                         <span>Total Rideshare km</span>
                                                                         <span className="font-medium text-slate-900">
-                                                                            {report.metadata.rideShareCalc.totalRideshareKm?.toFixed(1)} km
+                                                                            {rideCalc?.totalRideshareKm?.toFixed(1) ?? report.metadata.rideShareCalc.totalRideshareKm?.toFixed(1)} km
                                                                         </span>
                                                                     </div>
                                                                     <div className="flex justify-between gap-4">
@@ -916,9 +930,11 @@ export function ReconciliationTable({
                                     {formatCurrency(totals.misc)}
                                 </TableCell>
 
-                                <TableCell className="text-right text-emerald-700">{formatCurrency(totals.company)}</TableCell>
+                                <TableCell className="text-right text-emerald-700">{formatCurrency(totals.paidByDriver)}</TableCell>
                                 <TableCell className="text-right text-amber-700">{formatCurrency(totals.driver)}</TableCell>
-                                <TableCell className="text-right">-</TableCell>
+                                <TableCell className={`text-right ${totals.netPay >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                                    {formatCurrency(totals.netPay)}
+                                </TableCell>
                             </TableRow>
                         </TableFooter>
                     </Table>
@@ -929,7 +945,7 @@ export function ReconciliationTable({
             <div className="grid grid-cols-1 md:grid-cols-5 gap-4 text-sm text-slate-600">
                  <div className="p-3 bg-slate-50 rounded border">
                      <span className="font-semibold block mb-1">Ride Share</span>
-                     Fuel cost for logged trips.
+                     Estimated fuel cost for logged trip km (not a cut of receipts).
                  </div>
                  <div className="p-3 bg-slate-50 rounded border">
                      <span className="font-semibold block mb-1">Company Ops</span>
@@ -945,7 +961,7 @@ export function ReconciliationTable({
                  </div>
                  <div className="p-3 bg-slate-50 rounded border">
                      <span className="font-semibold block mb-1">Misc (Leakage)</span>
-                     Unaccounted fuel (Total - All known categories).
+                     Residual: Total Spend − estimated categories (can be largely negative).
                  </div>
             </div>
 

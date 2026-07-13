@@ -10,10 +10,15 @@ import {
   splitAllCategoryCosts,
   type FuelCoverageCategory,
 } from '../utils/fuelCoverageSplit';
-import { pickScenarioForDriverWeek, resolveDriverFuelScenarioId } from '../utils/fuelPolicyVersion';
+import {
+  pickScenarioForDriverMembership,
+  pickScenarioForDriverWeek,
+  resolveDriverVersionForWeek,
+} from '../utils/fuelPolicyVersion';
 import { resolveFuelFillDriver } from '../utils/resolveFuelFillDriver';
 import { UNASSIGNED_FUEL_DRIVER_ID } from '../types/fuel';
 import type { FuelCard } from '../types/fuel';
+import { isEntryInInclusiveYmdRange } from '../utils/fuelWeekPeriod';
 
 export type { FuelCoverageCategory };
 
@@ -151,17 +156,22 @@ export const FuelCalculationService = {
         const startStr = FuelCalculationService.toLocalDateStr(weekStart);
         const endStr = FuelCalculationService.toLocalDateStr(weekEnd);
 
-        const policyId = options?.fuelScenarioId ?? vehicle.fuelScenarioId;
-        const activeScenario = pickScenarioForDriverWeek(scenarios, policyId, startStr);
+        // Driver-week membership wins; legacy fuelScenarioId / vehicle only when no driverId
+        const activeScenario = options?.driverId
+            ? pickScenarioForDriverMembership(scenarios, options.driverId, startStr)
+            : pickScenarioForDriverWeek(
+                scenarios,
+                options?.fuelScenarioId ?? vehicle.fuelScenarioId,
+                startStr,
+              );
 
         // Helper to get rule for a specific category
         const fuelRule = activeScenario?.rules.find(r => r.category === 'Fuel');
 
-        // 2. Filter data for this vehicle and week
+        // 2. Filter data for this vehicle and week (YMD — ISO timestamps normalize via toEntryYmd)
         const vehicleEntries = fuelEntries.filter(e => 
             e.vehicleId === vehicle.id && 
-            e.date >= startStr && 
-            e.date <= endStr
+            isEntryInInclusiveYmdRange(e.date, startStr, endStr)
         );
 
         // Phase 3: Calculate Pending Count
@@ -169,15 +179,13 @@ export const FuelCalculationService = {
 
         const vehicleTrips = trips.filter(t => 
             t.vehicleId === vehicle.id && 
-            t.date >= startStr && 
-            t.date <= endStr &&
+            isEntryInInclusiveYmdRange(t.date, startStr, endStr) &&
             (t.status === 'Completed' || t.status === 'Cancelled')
         );
 
         const vehicleAdjustments = adjustments.filter(a => 
             a.vehicleId === vehicle.id && 
-            a.date >= startStr && 
-            a.date <= endStr
+            isEntryInInclusiveYmdRange(a.date, startStr, endStr)
         );
 
         // 3. Aggregate Costs
@@ -283,6 +291,13 @@ export const FuelCalculationService = {
 
         // 8. Calculate Health Status (Phase 4)
         // Buckets already computed above in step 4b
+        const efficiencySource: 'odometer' | 'vehicle_settings' | 'default_fallback' =
+            entriesWithOdo.length >= 3
+              ? 'odometer'
+              : (vehicle.fuelSettings?.efficiencyCity ? 'vehicle_settings' : 'default_fallback');
+        const priceSource: 'fuel_entries' | 'default_fallback' =
+            (totalLiters > 0 && totalGasCardCost > 0) ? 'fuel_entries' : 'default_fallback';
+
         let healthStatus: 'Emerald' | 'Amber' | 'Red' = 'Emerald';
         let healthScore = 100;
 
@@ -305,10 +320,16 @@ export const FuelCalculationService = {
             healthScore = Math.min(healthScore, 60);
         }
 
+        // Fallback efficiency/price makes Ride Share estimates unreliable
+        if (efficiencySource === 'default_fallback' || priceSource === 'default_fallback') {
+            healthStatus = healthStatus === 'Emerald' ? 'Amber' : healthStatus;
+            healthScore = Math.min(healthScore, 65);
+        }
+
         return {
             id: options?.reportId ?? `${reportDriverId || vehicle.id}_${startStr}`,
-            weekStart: weekStart.toISOString(),
-            weekEnd: weekEnd.toISOString(),
+            weekStart: startStr,
+            weekEnd: endStr,
             vehicleId: vehicle.id,
             driverId: reportDriverId,
             vehicleIds: options?.vehicleIds ?? [vehicle.id],
@@ -345,9 +366,8 @@ export const FuelCalculationService = {
                     totalRideshareKm: totalTripDistance,
                     observedEfficiency: Number(observedEfficiency.toFixed(2)),
                     actualPricePerLiter: Number(actualPricePerLiter.toFixed(3)),
-                    efficiencySource: entriesWithOdo.length >= 3 ? 'odometer' : 
-                                      (vehicle.fuelSettings?.efficiencyCity ? 'vehicle_settings' : 'default_fallback'),
-                    priceSource: (totalLiters > 0 && totalGasCardCost > 0) ? 'fuel_entries' : 'default_fallback',
+                    efficiencySource,
+                    priceSource,
                     totalLitersInPeriod: Number(totalLiters.toFixed(2)),
                     tripsIncluded: vehicleTrips.length,
                     completedTrips: vehicleTrips.filter(t => t.status === 'Completed').length,
@@ -426,8 +446,8 @@ export const FuelCalculationService = {
                 return v?.licensePlate || id.slice(0, 8);
             });
 
-            const driverRecord = driverById.get(driverId);
-            const policyId = resolveDriverFuelScenarioId(driverRecord, primaryVehicle);
+            const hit = resolveDriverVersionForWeek(scenarios, driverId, startStr);
+            const policyId = hit?.scenario.id;
 
             const expandedTrips = trips.filter((t) => {
                 if (t.date < startStr || t.date > endStr) return false;

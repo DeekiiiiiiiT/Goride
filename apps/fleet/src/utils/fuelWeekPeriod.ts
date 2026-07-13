@@ -69,3 +69,43 @@ export function isYmdInFuelWeek(ymd: string, startDate: string, endDate: string)
   const d = String(ymd).split('T')[0];
   return d >= startDate && d <= endDate;
 }
+
+/** Calendar day YYYY-MM-DD from entry/adjustment date strings or Date objects. */
+export function toEntryYmd(date: string | Date | undefined | null): string {
+  if (date == null) return '';
+  if (typeof date === 'string') {
+    return date.split('T')[0]?.split(' ')[0] || '';
+  }
+  if (date instanceof Date && !isNaN(date.getTime())) {
+    const yyyy = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  }
+  return '';
+}
+
+/** Inclusive week/range check using calendar YMD (safe for ISO timestamps). */
+export function isEntryInInclusiveYmdRange(
+  entryDate: string | Date | undefined | null,
+  startYmd: string,
+  endYmd: string,
+): boolean {
+  if (!startYmd || !endYmd) return true;
+  const d = toEntryYmd(entryDate);
+  if (!d) return false;
+  return d >= startYmd && d <= endYmd;
+}
+
+/**
+ * Normalize report week bounds to local YYYY-MM-DD.
+ * Accepts legacy ISO timestamps (weekStart.toISOString()) and new YMD storage.
+ */
+export function reportWeekYmdBounds(report: {
+  weekStart: string;
+  weekEnd?: string;
+}): { start: string; end: string } {
+  const start = toEntryYmd(report.weekStart);
+  const end = report.weekEnd ? toEntryYmd(report.weekEnd) : start;
+  return { start, end };
+}

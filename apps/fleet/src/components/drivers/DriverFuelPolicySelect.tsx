@@ -5,8 +5,12 @@ import { Fuel, Loader2 } from 'lucide-react';
 import { api } from '../../services/api';
 import { fuelService } from '../../services/fuelService';
 import type { FuelScenario } from '../../types/fuel';
+import {
+  mondayYmdForDate,
+  resolveDriverVersionForWeek,
+} from '../../utils/fuelPolicyVersion';
 
-/** Read-only fuel policy badge for Driver Detail (assign policies on Fleet Policy). */
+/** Read-only fuel policy badge for Driver Detail (assign on Fleet Policy → Schedule). */
 export function DriverFuelPolicySelect({
   driver,
   driverId,
@@ -17,7 +21,6 @@ export function DriverFuelPolicySelect({
 }) {
   const resolvedId = driverId || driver?.id;
   const [scenarios, setScenarios] = useState<FuelScenario[]>([]);
-  const [liveDriver, setLiveDriver] = useState<any>(driver || null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -33,14 +36,9 @@ export function DriverFuelPolicySelect({
     setLoading(true);
     (async () => {
       try {
-        const all = await api.getDrivers();
-        const fresh =
-          (all || []).find((d: any) => d.id === resolvedId || d.driverId === resolvedId) ||
-          driver ||
-          null;
-        if (!cancelled) setLiveDriver(fresh);
+        await api.getDrivers();
       } catch {
-        if (!cancelled) setLiveDriver(driver || null);
+        /* badge still works from scenarios */
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -52,11 +50,10 @@ export function DriverFuelPolicySelect({
 
   if (!resolvedId) return null;
 
-  const policyId = liveDriver?.fuelScenarioId;
-  const assigned = policyId ? scenarios.find((s) => s.id === policyId) : undefined;
-  const defaultScenario = scenarios.find((s) => s.isDefault);
-  const label = assigned?.name || defaultScenario?.name || 'Default';
-  const isCustom = Boolean(assigned && !assigned.isDefault);
+  const thisMonday = mondayYmdForDate(new Date());
+  const hit = resolveDriverVersionForWeek(scenarios, resolvedId, thisMonday);
+  const label = hit?.scenario.name || 'Default';
+  const isCustom = Boolean(hit && !hit.scenario.isDefault);
 
   return (
     <div className="space-y-1.5">
@@ -79,7 +76,7 @@ export function DriverFuelPolicySelect({
           }
         >
           {label}
-          {!isCustom && !policyId ? ' (default)' : ''}
+          {!isCustom ? ' (default)' : ''}
         </Badge>
       )}
     </div>

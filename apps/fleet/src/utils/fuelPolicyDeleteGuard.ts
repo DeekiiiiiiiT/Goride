@@ -1,8 +1,9 @@
 /**
- * Guards Fleet Policy delete: block when drivers are assigned or open weeks need the policy.
+ * Guards Fleet Policy delete: block when drivers are on schedule versions or open weeks need the policy.
  */
 
-import type { FinalizedFuelReport, FuelEntry } from '../types/fuel';
+import type { FinalizedFuelReport, FuelEntry, FuelScenario } from '../types/fuel';
+import { driversForPolicy } from './fuelPolicyAssignment';
 import {
   generateFuelWeekOptions,
   isYmdInFuelWeek,
@@ -24,15 +25,11 @@ export type DeleteGuardWeek = {
 };
 
 export type FuelPolicyDeleteGuardResult = {
-  /** True when no hard blockers (assigned drivers or open weeks). */
   canHardDelete: boolean;
-  /** Drivers currently assigned to this policy (explicit fuelScenarioId). */
+  /** Drivers listed on any version of this policy. */
   blockingDrivers: Array<{ id: string; name: string }>;
-  /** Unfinalized weeks with spend/pending for assigned drivers. */
   openWeeks: DeleteGuardWeek[];
-  /** Finalized snapshots that reference this policy (warn-only). */
   finalizedWeeks: DeleteGuardWeek[];
-  /** True when only finalized refs remain (no hard blockers). */
   warnOnly: boolean;
 };
 
@@ -49,13 +46,9 @@ function scenarioIdFromFinalized(report: FinalizedFuelReport): string | undefine
   );
 }
 
-/**
- * Evaluate whether a fuel policy can be deleted.
- * Hard-block: assigned drivers OR unfinalized weeks with activity for those drivers.
- * Warn-only: finalized snapshots reference the policy and there are no hard blockers.
- */
 export function evaluateFuelPolicyDeleteGuard(params: {
   policyId: string;
+  scenarios?: FuelScenario[];
   drivers: PolicyDriverRef[];
   fuelEntries: FuelEntry[];
   finalizedReports: FinalizedFuelReport[];
@@ -64,6 +57,7 @@ export function evaluateFuelPolicyDeleteGuard(params: {
 }): FuelPolicyDeleteGuardResult {
   const {
     policyId,
+    scenarios = [],
     drivers,
     fuelEntries,
     finalizedReports,
@@ -72,7 +66,10 @@ export function evaluateFuelPolicyDeleteGuard(params: {
   } = params;
   void timezone;
 
-  const assigned = drivers.filter((d) => d.fuelScenarioId === policyId);
+  const policy = scenarios.find((s) => s.id === policyId);
+  const assigned = policy
+    ? driversForPolicy(policy, drivers)
+    : drivers.filter((d) => d.fuelScenarioId === policyId);
   const blockingDrivers = assigned.map((d) => ({ id: d.id, name: driverName(d) }));
   const assignedIds = new Set(assigned.map((d) => d.id));
 

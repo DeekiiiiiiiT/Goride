@@ -1,17 +1,33 @@
 import { describe, expect, it } from 'vitest';
 import { evaluateFuelPolicyDeleteGuard } from './fuelPolicyDeleteGuard';
-import type { FinalizedFuelReport, FuelEntry } from '../types/fuel';
+import type { FinalizedFuelReport, FuelEntry, FuelScenario } from '../types/fuel';
 
 const weeks = [
   { id: '2026-06-29', startDate: '2026-06-29', endDate: '2026-07-05', label: 'Jun 29 – Jul 5' },
   { id: '2026-07-06', startDate: '2026-07-06', endDate: '2026-07-12', label: 'Jul 6 – Jul 12' },
 ];
 
+const quotaPolicy: FuelScenario = {
+  id: 'quota',
+  name: 'Quota',
+  rules: [],
+  versions: [
+    {
+      id: 'v1',
+      effectiveFrom: '2026-01-05',
+      rules: [],
+      driverIds: ['d1'],
+      createdAt: 'x',
+    },
+  ],
+};
+
 describe('evaluateFuelPolicyDeleteGuard', () => {
-  it('blocks when drivers are assigned', () => {
+  it('blocks when drivers are on schedule versions', () => {
     const r = evaluateFuelPolicyDeleteGuard({
       policyId: 'quota',
-      drivers: [{ id: 'd1', fuelScenarioId: 'quota', name: 'Kenny' }],
+      scenarios: [quotaPolicy],
+      drivers: [{ id: 'd1', name: 'Kenny' }],
       fuelEntries: [],
       finalizedReports: [],
       weekOptions: weeks,
@@ -36,7 +52,8 @@ describe('evaluateFuelPolicyDeleteGuard', () => {
     ];
     const r = evaluateFuelPolicyDeleteGuard({
       policyId: 'quota',
-      drivers: [{ id: 'd1', fuelScenarioId: 'quota', name: 'Kenny' }],
+      scenarios: [quotaPolicy],
+      drivers: [{ id: 'd1', name: 'Kenny' }],
       fuelEntries: entries,
       finalizedReports: [],
       weekOptions: weeks,
@@ -85,12 +102,12 @@ describe('evaluateFuelPolicyDeleteGuard', () => {
     ];
     const r = evaluateFuelPolicyDeleteGuard({
       policyId: 'quota',
-      drivers: [{ id: 'd1', fuelScenarioId: 'quota', name: 'Kenny' }],
+      scenarios: [quotaPolicy],
+      drivers: [{ id: 'd1', name: 'Kenny' }],
       fuelEntries: entries,
       finalizedReports: finalized,
       weekOptions: weeks,
     });
-    // Still blocked by assigned driver, but openWeeks should be empty for that week
     expect(r.blockingDrivers).toHaveLength(1);
     expect(r.openWeeks).toHaveLength(0);
   });
@@ -122,9 +139,14 @@ describe('evaluateFuelPolicyDeleteGuard', () => {
         metadata: { scenarioId: 'quota', appliedScenario: { id: 'quota', name: 'Quota Met' } },
       },
     ];
+    const emptyQuota: FuelScenario = {
+      ...quotaPolicy,
+      versions: [{ ...quotaPolicy.versions![0], driverIds: [] }],
+    };
     const r = evaluateFuelPolicyDeleteGuard({
       policyId: 'quota',
-      drivers: [{ id: 'd1', fuelScenarioId: undefined, name: 'Kenny' }],
+      scenarios: [emptyQuota],
+      drivers: [{ id: 'd1', name: 'Kenny' }],
       fuelEntries: [],
       finalizedReports: finalized,
       weekOptions: weeks,
@@ -137,6 +159,7 @@ describe('evaluateFuelPolicyDeleteGuard', () => {
   it('allows clean delete with no refs', () => {
     const r = evaluateFuelPolicyDeleteGuard({
       policyId: 'copy',
+      scenarios: [],
       drivers: [],
       fuelEntries: [],
       finalizedReports: [],

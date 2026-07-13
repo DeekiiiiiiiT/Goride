@@ -1,46 +1,104 @@
 import { describe, expect, it } from 'vitest';
 import {
-  fuelPeriodIdFromWeekStart,
-  fuelWeekBucketForDate,
-  fuelWeekBoundsFromPeriodId,
-  generateFuelWeekOptions,
-  isYmdInFuelWeek,
+  isEntryInInclusiveYmdRange,
+  reportWeekYmdBounds,
+  toEntryYmd,
 } from './fuelWeekPeriod';
+import {
+  entryBelongsToReportDriver,
+  sumPaidByDriverForReport,
+} from './fuelPaidByDriver';
+import { FuelEntry, UNASSIGNED_FUEL_DRIVER_ID } from '../types/fuel';
+import { Vehicle } from '../types/vehicle';
 
-describe('fuelWeekPeriod', () => {
-  it('uses Monday yyyy-MM-dd as period id', () => {
-    // 2026-07-08 is a Wednesday → week starts Monday 2026-07-06
-    const bucket = fuelWeekBucketForDate(new Date(2026, 6, 8));
-    expect(bucket.key).toBe('2026-07-06');
-    expect(fuelPeriodIdFromWeekStart(bucket.key)).toBe('2026-07-06');
+describe('fuelWeekPeriod YMD helpers', () => {
+  it('toEntryYmd strips ISO timestamps to calendar day', () => {
+    expect(toEntryYmd('2026-01-18T23:59:59.000Z')).toBe('2026-01-18');
+    expect(toEntryYmd('2026-01-12')).toBe('2026-01-12');
   });
 
-  it('bounds are Monday–Sunday', () => {
-    const b = fuelWeekBoundsFromPeriodId('2026-07-06');
-    expect(b.startDate).toBe('2026-07-06');
-    expect(b.endDate).toBe('2026-07-12');
+  it('toEntryYmd uses local calendar day for Date objects', () => {
+    expect(toEntryYmd(new Date(2026, 0, 12))).toBe('2026-01-12');
   });
 
-  it('fleet TZ keeps week key stable for same calendar day', () => {
-    const utcEvening = new Date('2026-07-08T23:30:00.000Z');
-    const jamaica = fuelWeekBucketForDate(utcEvening, 'America/Jamaica');
-    const local = fuelWeekBucketForDate(new Date(2026, 6, 8));
-    // Jamaica is UTC-5; Jul 8 23:30Z is still Jul 8 locally → same Monday key as local noon
-    expect(jamaica.key).toBe(local.key);
+  it('includes Monday week-start fills via YMD (not UTC Date parse)', () => {
+    expect(isEntryInInclusiveYmdRange('2026-01-12', '2026-01-12', '2026-01-18')).toBe(true);
+    // Historical ISO adjustment on Sunday still counts when compared as YMD
+    expect(
+      isEntryInInclusiveYmdRange('2026-01-18T22:00:00.000Z', '2026-01-12', '2026-01-18'),
+    ).toBe(true);
   });
 
-  it('generateFuelWeekOptions ids are Monday keys', () => {
-    const opts = generateFuelWeekOptions(4, 'America/Jamaica');
-    expect(opts.length).toBe(4);
-    for (const o of opts) {
-      expect(o.id).toBe(o.startDate);
-      expect(o.startDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-    }
+  it('reportWeekYmdBounds accepts legacy ISO and YMD', () => {
+    expect(
+      reportWeekYmdBounds({
+        weekStart: '2026-01-12T05:00:00.000Z',
+        weekEnd: '2026-01-19T04:59:59.999Z',
+      }),
+    ).toEqual({ start: '2026-01-12', end: '2026-01-19' });
+
+    expect(
+      reportWeekYmdBounds({
+        weekStart: '2026-01-12',
+        weekEnd: '2026-01-18',
+      }),
+    ).toEqual({ start: '2026-01-12', end: '2026-01-18' });
+  });
+});
+
+describe('sumPaidByDriverForReport', () => {
+  const vehicle: Vehicle = {
+    id: 'v1',
+    licensePlate: '5179KZ',
+    currentDriverId: 'd1',
+  } as Vehicle;
+
+  const report = {
+    weekStart: '2026-01-12',
+    weekEnd: '2026-01-18',
+    driverId: 'd1',
+    vehicleId: 'v1',
+    vehicleIds: ['v1'],
+  };
+
+  const baseEntry = (over: Partial<FuelEntry>): FuelEntry =>
+    ({
+      id: 'e1',
+      vehicleId: 'v1',
+      driverId: 'd1',
+      date: '2026-01-15',
+      amount: 1000,
+      type: 'Fuel_Manual_Entry',
+      ...over,
+    }) as FuelEntry;
+
+  it('sums driver-tagged out-of-pocket fills in week', () => {
+    const entries = [
+      baseEntry({ id: 'a', amount: 1000 }),
+      baseEntry({ id: 'b', amount: 500, type: 'Manual_Entry' }),
+      baseEntry({ id: 'c', amount: 2000, type: 'Card_Transaction' as any }),
+    ];
+    expect(sumPaidByDriverForReport(entries, report, [vehicle])).toBe(1500);
   });
 
-  it('isYmdInFuelWeek inclusive', () => {
-    expect(isYmdInFuelWeek('2026-07-06', '2026-07-06', '2026-07-12')).toBe(true);
-    expect(isYmdInFuelWeek('2026-07-12', '2026-07-06', '2026-07-12')).toBe(true);
-    expect(isYmdInFuelWeek('2026-07-13', '2026-07-06', '2026-07-12')).toBe(false);
+  it('includes untagged fills when driver is current assignee', () => {
+    const entries = [baseEntry({ id: 'u', driverId: undefined, amount: 600 })];
+    expect(sumPaidByDriverForReport(entries, report, [vehicle])).toBe(600);
+  });
+
+  it('does not pull another driver cash via vehicle-only', () => {
+    const entries = [baseEntry({ id: 'x', driverId: 'd2', amount: 9000 })];
+    expect(sumPaidByDriverForReport(entries, report, [vehicle])).toBe(0);
+  });
+
+  it('attributes unassigned report only to fills without driverId', () => {
+    const unassignedReport = { ...report, driverId: UNASSIGNED_FUEL_DRIVER_ID };
+    const entries = [
+      baseEntry({ id: 'u1', driverId: undefined, amount: 400 }),
+      baseEntry({ id: 'u2', driverId: 'd1', amount: 400 }),
+    ];
+    expect(sumPaidByDriverForReport(entries, unassignedReport, [vehicle])).toBe(400);
+    expect(entryBelongsToReportDriver(entries[0], unassignedReport, vehicle)).toBe(true);
+    expect(entryBelongsToReportDriver(entries[1], unassignedReport, vehicle)).toBe(false);
   });
 });

@@ -27,9 +27,8 @@ export function FuelConfiguration() {
                     <Info className="h-4 w-4 text-indigo-600" />
                     <AlertTitle>How policies work</AlertTitle>
                     <AlertDescription className="text-slate-700">
-                        The Default policy applies to drivers without a custom assignment.
-                        Create additional policies on Rules, assign drivers there, and manage
-                        effective Mondays / coverage versions on Schedule.
+                        Rules set the split percentages. Schedule sets Monday periods and which
+                        drivers use each version. Drivers with no version assignment use Default.
                     </AlertDescription>
                 </Alert>
 

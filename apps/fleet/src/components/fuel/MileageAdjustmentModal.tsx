@@ -58,7 +58,7 @@ export function MileageAdjustmentModal({
             id: Math.random().toString(36).substr(2, 9),
             vehicleId,
             driverId,
-            date: date.toISOString(),
+            date: format(date, 'yyyy-MM-dd'),
             type,
             distance: parseFloat(distance),
             reason: notes

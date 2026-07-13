@@ -12,11 +12,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '../ui/alert-dialog';
-import { Loader2, Plus, CalendarRange, Info, Users, Trash2 } from 'lucide-react';
+import { Loader2, Plus, CalendarRange, Info, Users, Trash2, Pencil } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 import { fuelService } from '../../services/fuelService';
 import type { FuelScenario, FuelScenarioVersion } from '../../types/fuel';
-import { ScenarioEditor } from './ScenarioEditor';
+import { VersionScheduleEditor } from './VersionScheduleEditor';
 import { FuelCoverageMatrix } from './FuelCoverageMatrix';
 import {
   mondayYmdForDate,
@@ -26,9 +26,10 @@ import {
   versionWindowLabel,
 } from '../../utils/fuelPolicyVersion';
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
-import { driversForPolicy } from '../../utils/fuelPolicyAssignment';
+import { driversForPolicy, driversForVersion } from '../../utils/fuelPolicyAssignment';
 import { api } from '../../services/api';
 import { useFleetTimezone } from '../../utils/timezoneDisplay';
+import { runFuelPolicyVersionDriverCutoverOnce } from '../../utils/fuelPolicyCutover';
 
 function driverDisplayName(d: any): string {
   return d?.name || [d?.firstName, d?.lastName].filter(Boolean).join(' ') || 'Driver';
@@ -52,12 +53,14 @@ export function PolicySchedulePanel({
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(initialPolicyId || null);
   const [editorOpen, setEditorOpen] = useState(false);
+  const [editingVersion, setEditingVersion] = useState<FuelScenarioVersion | null>(null);
   const [versionToDelete, setVersionToDelete] = useState<FuelScenarioVersion | null>(null);
   const [deletingVersion, setDeletingVersion] = useState(false);
 
   const loadAll = async () => {
     setLoading(true);
     try {
+      await runFuelPolicyVersionDriverCutoverOnce().catch(() => 0);
       const [scen, drvs, vehs] = await Promise.all([
         fuelService.getFuelScenarios(),
         api.getDrivers().catch(() => []),
@@ -114,13 +117,6 @@ export function PolicySchedulePanel({
     return list.reverse();
   }, [normalized]);
 
-  const assignedDrivers = useMemo(
-    () => (selected ? driversForPolicy(selected, drivers) : []),
-    [selected, drivers],
-  );
-
-  const affectedDriverCount = assignedDrivers.length;
-
   const handleSave = async (scenario: FuelScenario) => {
     try {
       const saved = await fuelService.saveFuelScenario(scenario);
@@ -132,6 +128,7 @@ export function PolicySchedulePanel({
       setSelectedId(saved.id);
       toast.success('Version saved');
       setEditorOpen(false);
+      setEditingVersion(null);
     } catch (e: any) {
       console.error(e);
       toast.error(e?.message || 'Failed to save version');
@@ -157,6 +154,16 @@ export function PolicySchedulePanel({
     }
   };
 
+  const openAdd = () => {
+    setEditingVersion(null);
+    setEditorOpen(true);
+  };
+
+  const openEdit = (ver: FuelScenarioVersion) => {
+    setEditingVersion(ver);
+    setEditorOpen(true);
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center p-12">
@@ -179,9 +186,9 @@ export function PolicySchedulePanel({
         <Info className="h-4 w-4 text-indigo-600" />
         <AlertTitle>How schedule works</AlertTitle>
         <AlertDescription className="text-slate-700">
-          Each version runs from a start Monday through an optional end Monday (or Never). Drivers
-          listed are assigned to this policy on the Rules tab — they use whichever version covers that
-          week. Resetting a week uses the version active for that week.
+          Each version is a Monday period plus drivers. Splits come from Rules (frozen when the
+          version is created). The same dates can cover different drivers; one driver cannot
+          overlap two versions. Drivers with no version assignment use Default.
         </AlertDescription>
       </Alert>
 
@@ -192,7 +199,7 @@ export function PolicySchedulePanel({
           </p>
           {scenarios.map((s) => {
             const n = normalizeScenarioVersions(s);
-            const count = n.versions?.length || 1;
+            const count = n.versions?.length || 0;
             const nDrivers = driversForPolicy(s, drivers).length;
             return (
               <button
@@ -233,110 +240,134 @@ export function PolicySchedulePanel({
                   </h3>
                   <p className="text-sm text-slate-500">Version windows by Monday period</p>
                 </div>
-                <Button onClick={() => setEditorOpen(true)}>
+                <Button onClick={openAdd}>
                   <Plus className="h-4 w-4 mr-2" />
                   Add version
                 </Button>
               </div>
 
-              <div className="space-y-3">
-                {versionsNewestFirst.map((ver) => {
-                  const fuelRule = ver.rules?.find((r) => r.category === 'Fuel');
-                  const isCurrent = ver.id === currentVersionId;
-                  return (
-                    <Card key={ver.id} className={isCurrent ? 'border-indigo-200' : 'border-slate-200'}>
-                      <CardHeader className="pb-2">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0 space-y-1">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <CardTitle className="text-sm font-semibold">
-                                {versionWindowLabel(ver)}
-                              </CardTitle>
-                              {isCurrent && (
-                                <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-0">
-                                  Current
-                                </Badge>
-                              )}
-                              {!ver.effectiveUntil && (
-                                <Badge variant="outline" className="text-slate-500 font-normal text-[10px]">
-                                  Open-ended
-                                </Badge>
-                              )}
+              {versionsNewestFirst.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-slate-200 py-10 text-center text-sm text-slate-400">
+                  No versions yet. Add a period and assign drivers to use this policy in recon.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {versionsNewestFirst.map((ver) => {
+                    const fuelRule = ver.rules?.find((r) => r.category === 'Fuel');
+                    const isCurrent = ver.id === currentVersionId;
+                    const versionDrivers = driversForVersion(ver, drivers);
+                    return (
+                      <Card key={ver.id} className={isCurrent ? 'border-indigo-200' : 'border-slate-200'}>
+                        <CardHeader className="pb-2">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0 space-y-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <CardTitle className="text-sm font-semibold">
+                                  {versionWindowLabel(ver)}
+                                </CardTitle>
+                                {isCurrent && (
+                                  <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-0">
+                                    Current
+                                  </Badge>
+                                )}
+                                {!ver.effectiveUntil && (
+                                  <Badge variant="outline" className="text-slate-500 font-normal text-[10px]">
+                                    Open-ended
+                                  </Badge>
+                                )}
+                              </div>
+                              <CardDescription className="text-xs">
+                                {ver.effectiveUntil
+                                  ? 'Applies to weeks starting on/after the start Monday and before the end Monday.'
+                                  : 'Applies to weeks starting on/after the start Monday with no end (Never).'}
+                              </CardDescription>
                             </div>
-                            <CardDescription className="text-xs">
-                              {ver.effectiveUntil
-                                ? 'Applies to weeks starting on/after the start Monday and before the end Monday.'
-                                : 'Applies to weeks starting on/after the start Monday with no end (Never).'}
-                            </CardDescription>
+                            <div className="flex shrink-0 gap-1">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="text-slate-600"
+                                title="Edit period and drivers"
+                                onClick={() => openEdit(ver)}
+                              >
+                                <Pencil className="h-4 w-4" />
+                                <span className="sr-only">Edit version</span>
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="text-rose-600 hover:text-rose-700 hover:bg-rose-50"
+                                disabled={!canDeleteVersion}
+                                title={
+                                  canDeleteVersion
+                                    ? 'Delete this version'
+                                    : 'A policy must keep at least one version'
+                                }
+                                onClick={() => setVersionToDelete(ver)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                                <span className="sr-only">Delete version</span>
+                              </Button>
+                            </div>
                           </div>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="shrink-0 text-rose-600 hover:text-rose-700 hover:bg-rose-50"
-                            disabled={!canDeleteVersion}
-                            title={
-                              canDeleteVersion
-                                ? 'Delete this version'
-                                : 'A policy must keep at least one version'
-                            }
-                            onClick={() => setVersionToDelete(ver)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                            <span className="sr-only">Delete version</span>
-                          </Button>
-                        </div>
-                      </CardHeader>
-                      <CardContent className="space-y-3">
-                        <FuelCoverageMatrix rule={fuelRule} compact />
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          <FuelCoverageMatrix rule={fuelRule} compact />
 
-                        <div>
-                          <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500 flex items-center gap-1.5">
-                            <Users className="h-3 w-3" />
-                            Drivers on this policy
-                          </p>
-                          {assignedDrivers.length === 0 ? (
-                            <p className="text-xs text-slate-400">
-                              No drivers assigned — Default covers unset drivers on Rules.
+                          <div>
+                            <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500 flex items-center gap-1.5">
+                              <Users className="h-3 w-3" />
+                              Drivers on this version
                             </p>
-                          ) : (
-                            <ul className="space-y-1">
-                              {assignedDrivers.slice(0, 8).map((d: any) => {
-                                const plate = plateForDriver(vehicles, d.id);
-                                return (
-                                  <li key={d.id} className="text-xs text-slate-700">
-                                    <span className="font-medium">{driverDisplayName(d)}</span>
-                                    {plate ? (
-                                      <>
-                                        <span className="text-slate-400"> · </span>
-                                        {plate}
-                                      </>
-                                    ) : null}
+                            {versionDrivers.length === 0 ? (
+                              <p className="text-xs text-slate-400">
+                                No drivers on this version — edit to assign.
+                              </p>
+                            ) : (
+                              <ul className="space-y-1">
+                                {versionDrivers.slice(0, 8).map((d: any) => {
+                                  const plate = plateForDriver(vehicles, d.id);
+                                  return (
+                                    <li key={d.id} className="text-xs text-slate-700">
+                                      <span className="font-medium">{driverDisplayName(d)}</span>
+                                      {plate ? (
+                                        <>
+                                          <span className="text-slate-400"> · </span>
+                                          {plate}
+                                        </>
+                                      ) : null}
+                                    </li>
+                                  );
+                                })}
+                                {versionDrivers.length > 8 && (
+                                  <li className="text-xs text-slate-400">
+                                    +{versionDrivers.length - 8} more
                                   </li>
-                                );
-                              })}
-                              {assignedDrivers.length > 8 && (
-                                <li className="text-xs text-slate-400">
-                                  +{assignedDrivers.length - 8} more
-                                </li>
-                              )}
-                            </ul>
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
+                                )}
+                              </ul>
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
 
-              <ScenarioEditor
+              <VersionScheduleEditor
                 isOpen={editorOpen}
-                onClose={() => setEditorOpen(false)}
+                onClose={() => {
+                  setEditorOpen(false);
+                  setEditingVersion(null);
+                }}
                 onSave={handleSave}
-                initialData={selected}
-                isCreate={false}
-                forceVersionMode
-                affectedDriverCount={affectedDriverCount}
+                scenario={selected}
+                allScenarios={scenarios}
+                editingVersion={editingVersion}
+                drivers={drivers}
+                vehicles={vehicles}
               />
 
               <AlertDialog
@@ -351,9 +382,8 @@ export function PolicySchedulePanel({
                       <span className="font-medium text-slate-800">
                         {versionToDelete ? versionWindowLabel(versionToDelete) : ''}
                       </span>{' '}
-                      from {selected.name}. Weeks that used it will fall back to the remaining
-                      version that covers that Monday. The policy itself stays; only this coverage
-                      window is removed.
+                      from {selected.name}. Drivers on it will fall back to Default unless they are
+                      on another version for that week.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>

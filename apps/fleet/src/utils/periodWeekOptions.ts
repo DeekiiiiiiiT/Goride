@@ -66,3 +66,4 @@ export function findPeriodWeekOptionByRange(
 }
 
 export const ENTIRE_PERIOD_OPTION_ID = 'all';
+export const CUSTOM_RANGE_OPTION_ID = 'custom';

@@ -25,6 +25,7 @@ import {
   Info,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
+import { reportWeekYmdBounds } from '../../utils/fuelWeekPeriod';
 import { api } from '../../services/api';
 import { toast } from 'sonner@2.0.3';
 import { downloadCSV } from '../../utils/export';
@@ -148,14 +149,15 @@ export function FinalizedReportsTab() {
 
   const formatWeekRange = (weekStart: string, weekEnd: string): string => {
     try {
-      const start = parseISO(weekStart.split('T')[0]);
-      const end = parseISO(weekEnd.split('T')[0]);
-      const startYear = start.getFullYear();
-      const endYear = end.getFullYear();
+      const { start, end } = reportWeekYmdBounds({ weekStart, weekEnd });
+      const startD = parseISO(start);
+      const endD = parseISO(end);
+      const startYear = startD.getFullYear();
+      const endYear = endD.getFullYear();
       if (startYear === endYear) {
-        return `${format(start, 'MMM d')} \u2013 ${format(end, 'MMM d, yyyy')}`;
+        return `${format(startD, 'MMM d')} \u2013 ${format(endD, 'MMM d, yyyy')}`;
       }
-      return `${format(start, 'MMM d, yyyy')} \u2013 ${format(end, 'MMM d, yyyy')}`;
+      return `${format(startD, 'MMM d, yyyy')} \u2013 ${format(endD, 'MMM d, yyyy')}`;
     } catch {
       return `${weekStart} \u2013 ${weekEnd}`;
     }
