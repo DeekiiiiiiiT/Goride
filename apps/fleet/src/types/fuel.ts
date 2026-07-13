@@ -136,10 +136,6 @@ export interface WeeklyFuelReport {
   deadheadDistance: number;
   deadheadCost: number;
 
-  /** Unexplained residual km when Fuel Brain path is on — never silent Personal. */
-  unknownDistance?: number;
-  unknownCost?: number;
-
   // 5. The Leakage (Remainder) -> Miscellaneous
   miscellaneousCost: number; // Previously fuelMiscCost (GasCard - RideShare - CompanyUsage - Personal)
   

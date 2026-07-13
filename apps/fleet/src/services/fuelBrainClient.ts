@@ -1,6 +1,5 @@
 /**
  * Client for Fuel Brain Edge (shadow + consumer paths).
- * When FLEET_USE_FUEL_BRAIN is off, callers must not change recon money.
  */
 
 import type { FuelBrainClassifyWeekInput, FuelBrainClassifyWeekResult } from '@roam/types/fuelBrain';
@@ -16,7 +15,6 @@ function brainBaseUrl(): string {
 
 function internalSecret(): string {
   // Browser cannot hold service secret — prefer local classify mirror for UI path.
-  // Server-side settlement can inject secret via Edge env when calling classify.
   return import.meta.env.VITE_FUEL_BRAIN_INTERNAL_SECRET || '';
 }
 
@@ -47,15 +45,14 @@ export async function classifyWeekForRecon(
         if (FUEL_BRAIN_SHADOW_COMPARE) {
           const delta =
             Math.abs((remote.personalKm || 0) - local.personalKm) +
-            Math.abs((remote.unknownKm || 0) - local.unknownKm) +
-            Math.abs((remote.deadheadKm || 0) - local.deadheadKm);
+            Math.abs((remote.deadheadKm || 0) - local.deadheadKm) +
+            Math.abs((remote.availableKm || 0) - local.availableKm);
           if (delta > 0.5) {
             console.warn('[FuelBrain] shadow mismatch', { local, remote, delta });
           } else {
-            console.info('[FuelBrain] shadow parity ok', { unknownKm: local.unknownKm });
+            console.info('[FuelBrain] shadow parity ok', { personalKm: local.personalKm });
           }
         }
-        // Prefer Edge result when consumer flag is on
         if (FLEET_USE_FUEL_BRAIN) return remote;
       }
     } catch (e) {

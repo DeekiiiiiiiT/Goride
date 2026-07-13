@@ -1,37 +1,25 @@
 /**
- * Fuel Brain types — sessions, classify output, policies.
- * Shared across Dominion, Fleet, Driver, and Edge.
+ * Fuel Brain types — automated residual Personal stack (no driver toggles).
+ * RS → Company Ops → capped Deadhead → Personal residual.
  */
-
-export type FuelDrivingSessionMode = 'personal' | 'off_duty' | 'work';
-export type FuelDrivingSessionSource = 'driver_toggle' | 'driver_declare' | 'admin_override';
-
-export interface FuelDrivingSession {
-  id: string;
-  organizationId?: string | null;
-  driverId: string;
-  vehicleId: string;
-  mode: FuelDrivingSessionMode;
-  source: FuelDrivingSessionSource;
-  startAt: string;
-  endAt?: string | null;
-  startOdo?: number | null;
-  endOdo?: number | null;
-  notes?: string | null;
-  createdBy?: string | null;
-  createdAt?: string;
-  updatedAt?: string;
-}
 
 export interface FuelBrainPolicy {
   id: string;
   name: string;
+  /** Upper bound of “always deadhead” time-gap band (minutes). */
   deadheadGapMaxMinutes: number;
+  /** Gaps longer than this (off-peak) are not treated as deadhead in time fallback. */
   personalGapMinMinutes: number;
   peakHoursStart: number;
   peakHoursEnd: number;
-  unknownFinalizeThresholdKm: number;
-  unknownFinalizeThresholdPct: number;
+  /** Industry fallback % of non-trip km when gap data is weak. */
+  industryFallbackPct: number;
+  /** Method C vs A agreement threshold (percentage points). */
+  crossValidationPp: number;
+  /** Prefer odometer deltas between trips for deadhead (vs time-only). */
+  preferOdoGaps: boolean;
+  /** Ambiguous time-gap split toward deadhead (0–100). */
+  ambiguousDeadheadSplitPct: number;
   isDefault: boolean;
   updatedAt?: string;
 }
@@ -39,10 +27,8 @@ export interface FuelBrainPolicy {
 export type FuelBrainCategory =
   | 'ride_share'
   | 'personal'
-  | 'off_duty'
   | 'deadhead'
-  | 'company_ops'
-  | 'unknown';
+  | 'company_ops';
 
 export interface FuelBrainClassifyWeekInput {
   organizationId?: string;
@@ -53,14 +39,7 @@ export interface FuelBrainClassifyWeekInput {
   totalOdometerKm: number;
   tripRideshareKm: number;
   companyOpsKm: number;
-  sessions: Array<{
-    mode: FuelDrivingSessionMode;
-    startAt: string;
-    endAt?: string | null;
-    startOdo?: number | null;
-    endOdo?: number | null;
-  }>;
-  /** Optional server deadhead hint (capped to residual after personal). */
+  /** Server deadhead estimate (capped to Available_Km). */
   deadheadHintKm?: number;
   policy?: Partial<FuelBrainPolicy>;
 }
@@ -68,34 +47,15 @@ export interface FuelBrainClassifyWeekInput {
 export interface FuelBrainClassifyWeekResult {
   rideShareKm: number;
   personalKm: number;
-  offDutyKm: number;
   companyOpsKm: number;
   deadheadKm: number;
-  unknownKm: number;
   totalOdometerKm: number;
+  /** Available after RS + Company (before deadhead/personal split). */
+  availableKm: number;
   confidence: {
     rideShare: 'high' | 'medium' | 'low';
     personal: 'high' | 'medium' | 'low';
     deadhead: 'high' | 'medium' | 'low';
-    unknown: 'high' | 'medium' | 'low';
   };
-  /** Share of odo km that is Unknown (0–100). */
-  unknownPct: number;
-  method: 'fuel_brain_v1';
-}
-
-export interface FuelUnknownReview {
-  id: string;
-  organizationId?: string | null;
-  driverId: string;
-  vehicleId: string;
-  weekStart: string;
-  weekEnd: string;
-  unknownKm: number;
-  status: 'open' | 'resolved' | 'dismissed';
-  resolutionLabel?: 'personal' | 'deadhead' | 'company' | 'dismissed' | null;
-  resolutionNotes?: string | null;
-  resolvedBy?: string | null;
-  resolvedAt?: string | null;
-  createdAt?: string;
+  method: 'fuel_brain_v2';
 }

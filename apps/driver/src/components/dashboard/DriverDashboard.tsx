@@ -11,7 +11,6 @@ import {
   Zap,
   Building2,
 } from 'lucide-react';
-import { PersonalDrivingToggle } from '../fuel/PersonalDrivingToggle';
 
 interface DriverDashboardProps {
   onNavigate: (page: string) => void;
@@ -19,18 +18,13 @@ interface DriverDashboardProps {
 
 export function DriverDashboard({ onNavigate }: DriverDashboardProps) {
   const { user } = useAuth();
-  const { isFleetDriver, fleet, profile } = useDriver();
+  const { isFleetDriver, fleet } = useDriver();
 
   const firstName = user?.user_metadata?.name?.split(' ')[0] || 
                     user?.email?.split('@')[0] || 
                     'Driver';
 
   const greeting = getGreeting();
-  const driverId = profile?.id || user?.id || '';
-  // Vehicle assignment may come from equipment later; sessions still keyed by driver
-  const vehicleId =
-    (typeof window !== 'undefined' && localStorage.getItem('roam_active_vehicle_id')) ||
-    null;
 
   function getGreeting() {
     const hour = new Date().getHours();
@@ -51,10 +45,6 @@ export function DriverDashboard({ onNavigate }: DriverDashboardProps) {
           </div>
         )}
       </div>
-
-      {isFleetDriver && driverId && (
-        <PersonalDrivingToggle driverId={driverId} vehicleId={vehicleId} />
-      )}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard

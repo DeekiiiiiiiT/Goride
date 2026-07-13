@@ -40,8 +40,7 @@ export interface FuelBrainClassificationInput {
     personalKm: number;
     companyOpsKm: number;
     deadheadKm: number;
-    unknownKm: number;
-    unknownPct?: number;
+    availableKm?: number;
     confidence?: Record<string, string>;
     method?: string;
 }
@@ -261,34 +260,27 @@ export const FuelCalculationService = {
             ? Math.max(0, totalOdometerDelta - totalTripDistance - companyMiscDistance)
             : vehicleAdjustments.filter(a => a.type === 'Personal').reduce((sum, a) => sum + (a.distance || 0), 0);
 
-        // Step 2.3b: Split residual into deadhead + personal using server attribution
-        // OR Fuel Brain path when consumer flag supplies classification (never auto-Personal).
+        // Step 2.3b: Split residual into deadhead + personal (brain residual OR legacy deadhead cap)
         let deadheadDistance = 0;
         let personalDistance = rawResidual;
-        let unknownDistance = 0;
         const useBrain =
             !options?.forceLegacyResidual &&
             !!options?.brainClassification;
 
         if (useBrain && options?.brainClassification) {
             const brain = options.brainClassification;
-            // Ride share / company ops still from trips + adjustments (money layer km sources);
-            // brain supplies personal / deadhead / unknown split of residual purpose.
+            // Brain residual Personal: RS/CO from trips+adj; DH+Personal from Available.
             personalDistance = Math.max(0, brain.personalKm || 0);
             deadheadDistance = Math.max(0, brain.deadheadKm || 0);
-            unknownDistance = Math.max(0, brain.unknownKm || 0);
-            // Cap to residual so we never invent km beyond odometer
             if (totalOdometerDelta > 0) {
-                const purposeSum = personalDistance + deadheadDistance + unknownDistance;
+                const purposeSum = personalDistance + deadheadDistance;
                 if (purposeSum > rawResidual && purposeSum > 0) {
                     const scale = rawResidual / purposeSum;
                     personalDistance *= scale;
                     deadheadDistance *= scale;
-                    unknownDistance *= scale;
                 }
             }
         } else if (deadheadData && totalOdometerDelta > 0) {
-            // Cap deadhead to never exceed the residual (server may have different odometer window)
             deadheadDistance = Math.min(deadheadData.deadheadKm, rawResidual);
             personalDistance = Math.max(0, rawResidual - deadheadDistance);
         }
@@ -298,10 +290,8 @@ export const FuelCalculationService = {
         const companyUsageCost = (companyMiscDistance / observedEfficiency) * actualPricePerLiter;
         const deadheadCost = (deadheadDistance / observedEfficiency) * actualPricePerLiter;
         const personalUsageCost = (personalDistance / observedEfficiency) * actualPricePerLiter;
-        const unknownCost = (unknownDistance / observedEfficiency) * actualPricePerLiter;
 
-        // 6. Calculate Leakage (Miscellaneous) — deadheadCost is now subtracted as an explained category
-        // Unknown km is surfaced separately; misc still balances spend vs estimated categories
+        // 6. Misc = Spend − (all four category $) — cash leakage, not a km type
         const miscellaneousCost = totalGasCardCost - (rideShareCost + companyUsageCost + deadheadCost + personalUsageCost);
 
         // 7. Split Costs dynamically using Scenario Rules (shared contract)
@@ -361,11 +351,6 @@ export const FuelCalculationService = {
             healthScore = Math.min(healthScore, 65);
         }
 
-        if (useBrain && unknownDistance > 0) {
-            healthStatus = healthStatus === 'Emerald' ? 'Amber' : healthStatus;
-            healthScore = Math.min(healthScore, 55);
-        }
-
         return {
             id: options?.reportId ?? `${reportDriverId || vehicle.id}_${startStr}`,
             weekStart: startStr,
@@ -383,8 +368,6 @@ export const FuelCalculationService = {
             deadheadCost,
             personalDistance,
             personalUsageCost,
-            unknownDistance: useBrain ? Number(unknownDistance.toFixed(2)) : undefined,
-            unknownCost: useBrain ? Number(unknownCost.toFixed(2)) : undefined,
             miscellaneousCost,
             companyShare,
             driverShare,
@@ -417,12 +400,11 @@ export const FuelCalculationService = {
                 },
                 fuelBrain: useBrain && options?.brainClassification
                     ? {
-                        method: options.brainClassification.method || 'fuel_brain_v1',
-                        unknownKm: unknownDistance,
-                        unknownPct: options.brainClassification.unknownPct,
+                        method: options.brainClassification.method || 'fuel_brain_v2',
                         confidence: options.brainClassification.confidence,
                         personalKm: personalDistance,
                         deadheadKm: deadheadDistance,
+                        availableKm: options.brainClassification.availableKm,
                       }
                     : undefined,
             }
@@ -597,7 +579,6 @@ export const FuelCalculationService = {
             merged.companyMiscDistance = 0;
             merged.deadheadDistance = 0;
             merged.personalDistance = 0;
-            merged.unknownDistance = 0;
             merged.pendingCount = 0;
             merged.companyShare = 0;
             merged.driverShare = 0;
@@ -632,7 +613,6 @@ export const FuelCalculationService = {
                 merged.companyMiscDistance += slice.companyMiscDistance;
                 merged.deadheadDistance += slice.deadheadDistance || 0;
                 merged.personalDistance += slice.personalDistance;
-                merged.unknownDistance = (merged.unknownDistance || 0) + (slice.unknownDistance || 0);
                 merged.pendingCount = (merged.pendingCount || 0) + (slice.pendingCount || 0);
                 merged.companyShare += slice.companyShare;
                 merged.driverShare += slice.driverShare;

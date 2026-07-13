@@ -1,13 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { classifyFuelWeek } from './fuelBrainClassify';
-import { evaluateUnknownFinalizeGate } from './fuelBrainUnknownGate';
 import { FuelCalculationService } from '../services/fuelCalculationService';
 import type { Vehicle } from '../types/vehicle';
 import type { Trip } from '../types/data';
 import type { FuelEntry } from '../types/fuel';
 
-describe('classifyFuelWeek', () => {
-  it('puts declared personal from odo sessions into Personal, not residual dump', () => {
+describe('classifyFuelWeek residual Personal', () => {
+  it('RS + CO + DH + Personal closes odo', () => {
     const result = classifyFuelWeek({
       driverId: 'd1',
       vehicleId: 'v1',
@@ -16,26 +15,18 @@ describe('classifyFuelWeek', () => {
       totalOdometerKm: 500,
       tripRideshareKm: 300,
       companyOpsKm: 20,
-      sessions: [
-        {
-          mode: 'personal',
-          startAt: '2026-07-07T10:00:00Z',
-          endAt: '2026-07-07T12:00:00Z',
-          startOdo: 1000,
-          endOdo: 1080,
-        },
-      ],
       deadheadHintKm: 50,
     });
-    expect(result.personalKm).toBe(80);
     expect(result.rideShareKm).toBe(300);
     expect(result.companyOpsKm).toBe(20);
-    // residual after known = 500-300-20-80 = 100; deadhead 50; unknown 50
     expect(result.deadheadKm).toBe(50);
-    expect(result.unknownKm).toBe(50);
+    expect(result.personalKm).toBe(130);
+    expect(
+      result.rideShareKm + result.companyOpsKm + result.deadheadKm + result.personalKm,
+    ).toBeCloseTo(500, 5);
   });
 
-  it('never auto-Personal: no sessions → leftover is Unknown', () => {
+  it('leftover after deadhead is Personal (no Unknown)', () => {
     const result = classifyFuelWeek({
       driverId: 'd1',
       vehicleId: 'v1',
@@ -44,30 +35,27 @@ describe('classifyFuelWeek', () => {
       totalOdometerKm: 400,
       tripRideshareKm: 200,
       companyOpsKm: 0,
-      sessions: [],
       deadheadHintKm: 40,
     });
-    expect(result.personalKm).toBe(0);
+    expect(result.personalKm).toBe(160);
     expect(result.deadheadKm).toBe(40);
-    expect(result.unknownKm).toBe(160);
+    expect(result.method).toBe('fuel_brain_v2');
   });
-});
 
-describe('evaluateUnknownFinalizeGate', () => {
-  it('blocks when unknown km above threshold unless acknowledged', () => {
-    const reports = [{ unknownDistance: 40, totalTripDistance: 100 }];
-    const blocked = evaluateUnknownFinalizeGate(reports, {
-      unknownFinalizeThresholdKm: 25,
-      unknownFinalizeThresholdPct: 10,
+  it('caps deadhead so it cannot exceed Available', () => {
+    const result = classifyFuelWeek({
+      driverId: 'd1',
+      vehicleId: 'v1',
+      weekStart: '2026-07-06',
+      weekEnd: '2026-07-12',
+      totalOdometerKm: 100,
+      tripRideshareKm: 80,
+      companyOpsKm: 10,
+      deadheadHintKm: 50,
     });
-    expect(blocked.blocked).toBe(true);
-    const acked = evaluateUnknownFinalizeGate(
-      reports,
-      { unknownFinalizeThresholdKm: 25, unknownFinalizeThresholdPct: 10 },
-      { acknowledge: true },
-    );
-    expect(acked.blocked).toBe(false);
-    expect(acked.warnOnly).toBe(true);
+    expect(result.availableKm).toBe(10);
+    expect(result.deadheadKm).toBe(10);
+    expect(result.personalKm).toBe(0);
   });
 });
 
@@ -79,7 +67,7 @@ describe('flag-off recon parity (legacy residual)', () => {
     fuelSettings: { efficiencyCity: 10 },
   } as unknown as Vehicle;
 
-  const weekStart = new Date(2026, 6, 6); // Jul 6 2026 local Monday-ish
+  const weekStart = new Date(2026, 6, 6);
   const weekEnd = new Date(2026, 6, 12);
 
   const entries: FuelEntry[] = [
@@ -164,10 +152,9 @@ describe('flag-off recon parity (legacy residual)', () => {
         forceLegacyResidual: true,
         brainClassification: {
           rideShareKm: 110,
-          personalKm: 0,
+          personalKm: 240,
           companyOpsKm: 0,
           deadheadKm: 50,
-          unknownKm: 240,
         },
       },
     );
@@ -176,10 +163,9 @@ describe('flag-off recon parity (legacy residual)', () => {
     expect(withIgnoredBrain.deadheadDistance).toBeCloseTo(legacy.deadheadDistance, 5);
     expect(withIgnoredBrain.rideShareCost).toBeCloseTo(legacy.rideShareCost, 5);
     expect(withIgnoredBrain.miscellaneousCost).toBeCloseTo(legacy.miscellaneousCost, 5);
-    expect(withIgnoredBrain.unknownDistance).toBeUndefined();
   });
 
-  it('with brainClassification routes residual to Unknown instead of Personal', () => {
+  it('with brainClassification puts residual in Personal', () => {
     const brain = FuelCalculationService.calculateReconciliation(
       vehicle,
       weekStart,
@@ -200,16 +186,14 @@ describe('flag-off recon parity (legacy residual)', () => {
       {
         brainClassification: {
           rideShareKm: 110,
-          personalKm: 0,
+          personalKm: 240,
           companyOpsKm: 0,
           deadheadKm: 50,
-          unknownKm: 240,
-          method: 'fuel_brain_v1',
+          method: 'fuel_brain_v2',
         },
       },
     );
-    expect(brain.personalDistance).toBe(0);
-    expect(brain.unknownDistance).toBeGreaterThan(0);
-    expect(brain.metadata?.fuelBrain?.unknownKm).toBeGreaterThan(0);
+    expect(brain.personalDistance).toBeGreaterThan(0);
+    expect(brain.unknownDistance).toBeUndefined();
   });
 });

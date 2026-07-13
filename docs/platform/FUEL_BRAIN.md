@@ -1,46 +1,50 @@
 # Fuel Brain
 
-Platform brain for **fuel purpose classification** (Ride Share, Deadhead, Company Ops, Personal, Unknown).
+Platform brain for **fuel purpose classification** — fully automated residual Personal stack.
 
-Fleet owns the **money layer** (receipts, efficiency, policy % splits). The brain supplies **category km + confidence**.
+## Stack (locked)
 
-Architecture: [fuel-brain-architecture.drawio.xml](./fuel-brain-architecture.drawio.xml)  
-Cutover: [FUEL_BRAIN_CUTOVER.md](./FUEL_BRAIN_CUTOVER.md)
+1. **Ride Share** — platform trip km (On Trip + Enroute + Open + Unavailable)
+2. **Company Ops** — admin mileage adjustments (Company Misc / Maintenance)
+3. **Deadhead** — estimate from odo gaps first (time-gap fallback), capped to Available km
+4. **Personal** — residual: `Available − Deadhead` (includes unlabeled miles; no driver input)
+5. **Misc** — cash only: `Spend − (all four category $)` — not a km type
 
-## Components
+Math:
+
+- `Available_Km = max(0, TotalOdo − RideShare − CompanyOps)`
+- `Deadhead = min(DeadheadEstimate, Available_Km)`
+- `Personal = Available_Km − Deadhead`
+
+## Surfaces
 
 | Surface | Role |
-|---------|------|
-| Dominion `FuelBrainPage` | Policies, evidence health, Unknown queue, org allow-list |
-| Edge `supabase/functions/fuel-brain` | Health, policies, classify-week, unknown reviews |
-| Driver `PersonalDrivingToggle` | Personal / Off-duty sessions (`VITE_FUEL_PERSONAL_SESSIONS_ENABLED`) |
-| Fleet recon | Dual path: legacy residual vs brain km (`VITE_FLEET_USE_FUEL_BRAIN`) |
+|---|---|
+| Dominion `FuelBrainPage` | Rule control panel: locked RS/CO/Personal/Misc cards; editable Deadhead tunables |
+| Fleet recon | Consumes brain Personal/Deadhead km when `FLEET_USE_FUEL_BRAIN` is on (default) |
+| Edge `fuel-brain` | Classify twin + policy GET/PUT |
+| Fleet `fuel_logic` | Odo-first deadhead hints wired to `brain_policies` |
 
-## Feature flags (default OFF)
+## Flags
 
-| Flag | Where | Meaning |
-|------|-------|---------|
-| `FUEL_PERSONAL_SESSIONS_ENABLED` / `VITE_FUEL_PERSONAL_SESSIONS_ENABLED` | Edge + clients | Driver toggle + session API |
-| `FUEL_BRAIN_ENABLED` | Edge | Accept classify traffic |
-| `VITE_FUEL_BRAIN_SHADOW_COMPARE` | Fleet | Log brain vs legacy without changing money |
-| `FLEET_USE_FUEL_BRAIN` / `VITE_FLEET_USE_FUEL_BRAIN` | Edge + Fleet | Recon consumes brain km (**last**) |
+| Flag | Default | Meaning |
+|---|---|---|
+| `FUEL_BRAIN_ENABLED` | off until Edge deploy | Edge accepts classify traffic |
+| `VITE_FLEET_USE_FUEL_BRAIN` | **on** unless `=0` | Fleet recon uses brain category km |
 
-## Classifier priority (locked)
+No driver toggles. No Unknown purpose bucket. No driving-session evidence product.
 
-1. Declared personal / off-duty sessions → Personal (high)
-2. Platform trip km (full rideshare stack) → Ride Share (high)
-3. Company Misc / Maintenance adjustments → Company Ops (high)
-4. Deadhead hint on remaining residual → Deadhead (med)
-5. Else → **Unknown** (low) — **never auto-Personal**
+## Schema
 
-## Trip km rule
+- `fuel.brain_policies` — deadhead heuristics (odo-first, gap minutes, peak hours, fallback %, etc.)
+- `fuel.product_profiles` — org allow-list for consumer (optional)
+- Sessions / unknown_reviews tables removed in `20260713140000_fuel_brain_residual_upgrade.sql`
 
-Shared helper: On Trip + Enroute + Open + Unavailable (`tripRideshareKm.ts` + `fuel_logic.getTotalTripRideshareKm`).
+## Classify
 
-## Secrets
+`method: fuel_brain_v2` — mirrored in:
 
-- `FUEL_BRAIN_INTERNAL_SECRET` — Fleet/server → Edge classify (`X-Fuel-Brain-Internal-Secret`)
+- `apps/fleet/src/utils/fuelBrainClassify.ts`
+- `supabase/functions/fuel-brain/classify.ts`
 
-## Migration
-
-`supabase/migrations/20260713120000_fuel_brain_schema.sql` — `fuel.driving_sessions`, `fuel.brain_policies`, `fuel.unknown_reviews`, `fuel.product_profiles` + public views.
+Money layer unchanged: receipts + scenario coverage %. Brain only supplies category km.

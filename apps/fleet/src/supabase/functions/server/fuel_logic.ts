@@ -318,28 +318,53 @@ export function calculateTimeRatioDeadhead(params: {
 }
 
 /**
- * Phase 4 (Deadhead), Step 4.1–4.4: Trip-Gap Timestamp Classifier (Method C)
+ * Phase 4 (Deadhead), Step 4.1–4.4: Trip-Gap Classifier (Method C)
  *
- * Examines the time gaps between consecutive trips and classifies each gap
- * as deadhead (repositioning) or personal (off-duty).
- *
- * Gap classification thresholds:
- *   < 5 min  → deadhead (accepted next trip almost immediately)
- *   5-30 min → deadhead (typical repositioning/cruising to pickup)
- *   30-90 min → ambiguous; resolved by time-of-day:
- *       6AM-10PM → deadhead (driver likely still working during peak hours)
- *       10PM-6AM → personal (likely off-duty)
- *   > 90 min → personal (break, meal, or end of shift)
- *
- * Unaccounted km (totalOdometerKm - tripKm) is distributed across gaps
- * proportionally by gap duration.  Ambiguous km is split 60/40 deadhead.
- *
- * Negative/overlapping gaps (multi-platform) are skipped with a console warning.
+ * Odo-first (preferOdoGaps): between consecutive trips, if prior end odo and next
+ * start odo exist → gap deadhead km = delta. Else fall back to time-gap bands
+ * (tunable via DeadheadBrainPolicy) and distribute unaccounted km by duration.
  */
+export type DeadheadBrainPolicy = {
+  deadheadGapMaxMinutes: number;
+  personalGapMinMinutes: number;
+  peakHoursStart: number;
+  peakHoursEnd: number;
+  industryFallbackPct: number;
+  crossValidationPp: number;
+  preferOdoGaps: boolean;
+  ambiguousDeadheadSplitPct: number;
+};
+
+export const DEFAULT_DEADHEAD_BRAIN_POLICY: DeadheadBrainPolicy = {
+  deadheadGapMaxMinutes: 30,
+  personalGapMinMinutes: 90,
+  peakHoursStart: 6,
+  peakHoursEnd: 22,
+  industryFallbackPct: 35,
+  crossValidationPp: 20,
+  preferOdoGaps: true,
+  ambiguousDeadheadSplitPct: 60,
+};
+
+function tripEndOdo(t: any): number | null {
+  const v = Number(
+    t.endOdometer ?? t.dropoffOdometer ?? t.odometerEnd ?? t.endOdo ?? t.odometer,
+  );
+  return Number.isFinite(v) && v > 0 ? v : null;
+}
+
+function tripStartOdo(t: any): number | null {
+  const v = Number(
+    t.startOdometer ?? t.pickupOdometer ?? t.odometerStart ?? t.startOdo,
+  );
+  return Number.isFinite(v) && v > 0 ? v : null;
+}
+
 export function classifyTripGaps(params: {
   trips: any[];
   totalOdometerKm: number;
   tripKm: number;
+  policy?: Partial<DeadheadBrainPolicy>;
 }): {
   gaps: TripGapClassification[];
   deadheadGapMinutes: number;
@@ -348,7 +373,9 @@ export function classifyTripGaps(params: {
   gapBasedPersonalKm: number;
   dataQuality: 'full' | 'partial' | 'insufficient';
 } {
+  const policy = { ...DEFAULT_DEADHEAD_BRAIN_POLICY, ...(params.policy || {}) };
   const { trips, totalOdometerKm, tripKm } = params;
+  const ambSplit = Math.max(0, Math.min(100, policy.ambiguousDeadheadSplitPct)) / 100;
 
   const EMPTY_RESULT = {
     gaps: [] as TripGapClassification[],
@@ -359,7 +386,6 @@ export function classifyTripGaps(params: {
     dataQuality: 'insufficient' as const
   };
 
-  // Step 1: Filter to trips with BOTH requestTime AND dropoffTime
   const usable = trips.filter(t => {
     const rt = t.requestTime || t.date;
     return rt && t.dropoffTime;
@@ -370,15 +396,16 @@ export function classifyTripGaps(params: {
 
   if (usable.length < 2) return EMPTY_RESULT;
 
-  // Step 2: Sort by requestTime ascending
   usable.sort((a, b) => {
     const ta = new Date(a.requestTime || a.date).getTime();
     const tb = new Date(b.requestTime || b.date).getTime();
     return ta - tb;
   });
 
-  // Step 3: Classify each gap
   const gaps: TripGapClassification[] = [];
+  let odoDeadheadKm = 0;
+  let odoGapCount = 0;
+  let timeGapCount = 0;
 
   for (let i = 0; i < usable.length - 1; i++) {
     const prev = usable[i];
@@ -386,42 +413,70 @@ export function classifyTripGaps(params: {
 
     const gapStartMs = new Date(prev.dropoffTime).getTime();
     const gapEndMs = new Date(next.requestTime || next.date).getTime();
-
     if (isNaN(gapStartMs) || isNaN(gapEndMs)) continue;
 
     const gapMinutes = (gapEndMs - gapStartMs) / (1000 * 60);
-
-    // Skip negative/overlapping gaps (multi-platform concurrency)
     if (gapMinutes < 0) {
-      console.log(`[classifyTripGaps] Skipping negative gap (${gapMinutes.toFixed(1)} min) between trip ${prev.id || '?'} and ${next.id || '?'}`);
+      console.log(`[classifyTripGaps] Skipping negative gap (${gapMinutes.toFixed(1)} min)`);
       continue;
     }
 
-    // Classify by duration + time-of-day for ambiguous band
+    const prevEnd = tripEndOdo(prev);
+    const nextStart = tripStartOdo(next);
+    const odoDelta =
+      prevEnd != null && nextStart != null && nextStart > prevEnd
+        ? nextStart - prevEnd
+        : null;
+
+    // Odo-first: hard km between trips counts as deadhead repositioning
+    // (same rule as apps/fleet/src/utils/fuelDeadheadOdoGaps.ts)
+    if (policy.preferOdoGaps && odoDelta != null) {
+      odoDeadheadKm += odoDelta;
+      odoGapCount++;
+      gaps.push({
+        precedingTripId: prev.id || '',
+        followingTripId: next.id || '',
+        gapStartTime: prev.dropoffTime,
+        gapEndTime: next.requestTime || next.date,
+        gapMinutes: Number(gapMinutes.toFixed(2)),
+        classification: 'deadhead',
+        reason: `Odo gap ${odoDelta.toFixed(1)} km between trips`,
+        estimatedKm: Number(odoDelta.toFixed(2)),
+      });
+      continue;
+    }
+
+    // Time-gap fallback
+    timeGapCount++;
     let classification: 'deadhead' | 'personal' | 'ambiguous';
     let reason: string;
+    const dhMax = policy.deadheadGapMaxMinutes;
+    const persMin = policy.personalGapMinMinutes;
+    const peakStart = policy.peakHoursStart;
+    const peakEnd = policy.peakHoursEnd;
 
     if (gapMinutes < 5) {
       classification = 'deadhead';
       reason = 'Gap < 5min, near-immediate next trip';
-    } else if (gapMinutes <= 30) {
+    } else if (gapMinutes <= dhMax) {
       classification = 'deadhead';
-      reason = 'Gap 5-30min, typical repositioning';
-    } else if (gapMinutes <= 90) {
-      // Step 4.4: Time-of-day enhancement for ambiguous gaps
+      reason = `Gap within deadhead max (${dhMax} min)`;
+    } else if (gapMinutes <= persMin) {
       const gapStartHour = new Date(gapStartMs).getHours();
-      const isDaytime = gapStartHour >= 6 && gapStartHour < 22; // 6AM-10PM
-
+      const isDaytime =
+        peakStart <= peakEnd
+          ? gapStartHour >= peakStart && gapStartHour < peakEnd
+          : gapStartHour >= peakStart || gapStartHour < peakEnd;
       if (isDaytime) {
         classification = 'deadhead';
-        reason = `Gap ${Math.round(gapMinutes)}min during peak hours (${gapStartHour}:00), likely repositioning`;
+        reason = `Gap ${Math.round(gapMinutes)}min during peak hours`;
       } else {
         classification = 'personal';
-        reason = `Gap ${Math.round(gapMinutes)}min during off-peak (${gapStartHour}:00), likely off-duty`;
+        reason = `Gap ${Math.round(gapMinutes)}min during off-peak`;
       }
     } else {
       classification = 'personal';
-      reason = `Gap > 90min (${Math.round(gapMinutes)}min), likely break/end of shift`;
+      reason = `Gap > ${persMin}min (${Math.round(gapMinutes)}min)`;
     }
 
     gaps.push({
@@ -432,32 +487,36 @@ export function classifyTripGaps(params: {
       gapMinutes: Number(gapMinutes.toFixed(2)),
       classification,
       reason,
-      estimatedKm: 0 // filled in Step 4 below
+      estimatedKm: 0,
     });
   }
 
   if (gaps.length === 0) return EMPTY_RESULT;
 
-  // Step 4: Proportional km distribution across gaps
-  const unaccountedKm = Math.max(0, totalOdometerKm - tripKm);
-  const totalGapMinutes = gaps.reduce((sum, g) => sum + g.gapMinutes, 0);
+  // Distribute remaining unaccounted km across time-fallback gaps only
+  const unaccountedKm = Math.max(0, totalOdometerKm - tripKm - odoDeadheadKm);
+  const timeGaps = gaps.filter((g) => !g.reason.startsWith('Odo gap'));
+  const totalTimeGapMinutes = timeGaps.reduce((sum, g) => sum + g.gapMinutes, 0);
 
-  if (totalGapMinutes > 0 && unaccountedKm > 0) {
-    for (const gap of gaps) {
+  if (totalTimeGapMinutes > 0 && unaccountedKm > 0) {
+    for (const gap of timeGaps) {
       gap.estimatedKm = Number(
-        (unaccountedKm * (gap.gapMinutes / totalGapMinutes)).toFixed(2)
+        (unaccountedKm * (gap.gapMinutes / totalTimeGapMinutes)).toFixed(2)
       );
     }
   }
 
-  // Step 5: Aggregate by classification
   let deadheadGapMinutes = 0;
   let personalGapMinutes = 0;
-  let gapBasedDeadheadKm = 0;
+  let gapBasedDeadheadKm = odoDeadheadKm;
   let gapBasedPersonalKm = 0;
   let ambiguousKm = 0;
 
   for (const gap of gaps) {
+    if (gap.reason.startsWith('Odo gap')) {
+      deadheadGapMinutes += gap.gapMinutes;
+      continue;
+    }
     if (gap.classification === 'deadhead') {
       deadheadGapMinutes += gap.gapMinutes;
       gapBasedDeadheadKm += gap.estimatedKm;
@@ -465,23 +524,24 @@ export function classifyTripGaps(params: {
       personalGapMinutes += gap.gapMinutes;
       gapBasedPersonalKm += gap.estimatedKm;
     } else {
-      // 'ambiguous' — split 60/40 toward deadhead (benefit of the doubt)
-      deadheadGapMinutes += gap.gapMinutes * 0.6;
-      personalGapMinutes += gap.gapMinutes * 0.4;
+      deadheadGapMinutes += gap.gapMinutes * ambSplit;
+      personalGapMinutes += gap.gapMinutes * (1 - ambSplit);
       ambiguousKm += gap.estimatedKm;
     }
   }
 
-  // Apply 60/40 split to ambiguous km
-  gapBasedDeadheadKm += ambiguousKm * 0.6;
-  gapBasedPersonalKm += ambiguousKm * 0.4;
+  gapBasedDeadheadKm += ambiguousKm * ambSplit;
+  gapBasedPersonalKm += ambiguousKm * (1 - ambSplit);
 
-  // Determine data quality
   const coverageRatio = totalTrips > 0 ? totalWithTimestamps / totalTrips : 0;
   const dataQuality: 'full' | 'partial' | 'insufficient' =
-    coverageRatio >= 0.8 ? 'full' :
-    coverageRatio >= 0.4 ? 'partial' :
-    'insufficient';
+    odoGapCount >= 1 && coverageRatio >= 0.4
+      ? 'full'
+      : coverageRatio >= 0.8
+        ? 'full'
+        : coverageRatio >= 0.4 || timeGapCount > 0
+          ? 'partial'
+          : 'insufficient';
 
   return {
     gaps,
@@ -516,10 +576,12 @@ export function calculateDeadheadAttribution(params: {
   trips: any[];
   periodStart?: string;
   periodEnd?: string;
+  policy?: Partial<DeadheadBrainPolicy>;
 }): DeadheadAttribution {
   const { vehicleId, fuelEntries, trips, periodStart, periodEnd } = params;
-  const INDUSTRY_FALLBACK_PCT = 35;
-  const CROSS_VALIDATION_THRESHOLD_PP = 20; // percentage points
+  const policy = { ...DEFAULT_DEADHEAD_BRAIN_POLICY, ...(params.policy || {}) };
+  const INDUSTRY_FALLBACK_PCT = policy.industryFallbackPct;
+  const CROSS_VALIDATION_THRESHOLD_PP = policy.crossValidationPp;
 
   // --- Step A: Odometer segments (Method B) ---
   const segments = calculateOdometerSegments(fuelEntries);
@@ -571,8 +633,8 @@ export function calculateDeadheadAttribution(params: {
   // --- Step C: Method A (Time Ratio) ---
   const methodA = calculateTimeRatioDeadhead({ trips, totalOdometerKm });
 
-  // --- Step D: Method C (Trip-Gap Classifier) ---
-  const methodC = classifyTripGaps({ trips, totalOdometerKm, tripKm });
+  // --- Step D: Method C (Trip-Gap Classifier — odo-first when policy says so) ---
+  const methodC = classifyTripGaps({ trips, totalOdometerKm, tripKm, policy });
 
   // --- Step E: Resolve combined result ---
   let deadheadKm = 0;

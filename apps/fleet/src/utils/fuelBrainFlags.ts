@@ -1,14 +1,14 @@
 /**
- * Fuel Brain / personal sessions feature flags (client).
- * Default OFF — enable in order: sessions → brain Edge → fleet consumer.
+ * Fuel Brain client flags.
+ * No driver sessions/toggles — recon uses trips + odo + deadhead only.
+ *
+ * FLEET_USE_FUEL_BRAIN defaults ON. Set VITE_FLEET_USE_FUEL_BRAIN=0 to rollback to legacy residual.
  */
 
-export const FUEL_PERSONAL_SESSIONS_ENABLED =
-  import.meta.env.VITE_FUEL_PERSONAL_SESSIONS_ENABLED === '1';
-
-export const FUEL_BRAIN_SHADOW_COMPARE =
-  import.meta.env.VITE_FUEL_BRAIN_SHADOW_COMPARE === '1';
-
-/** Last flag on — when set, recon consumes brain category km. */
+/** Recon consumes Fuel Brain category km (Ride Share / Company Ops / Deadhead / Personal residual). */
 export const FLEET_USE_FUEL_BRAIN =
-  import.meta.env.VITE_FLEET_USE_FUEL_BRAIN === '1';
+  import.meta.env.VITE_FLEET_USE_FUEL_BRAIN !== '0';
+
+/** Optional: log brain vs legacy without changing money (needs consumer off). */
+export const FUEL_BRAIN_SHADOW_COMPARE =
+  import.meta.env.VITE_FUEL_BRAIN_SHADOW_COMPARE === '1' && !FLEET_USE_FUEL_BRAIN;

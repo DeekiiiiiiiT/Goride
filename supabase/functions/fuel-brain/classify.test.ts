@@ -1,39 +1,31 @@
 /**
- * Deno unit tests for Fuel Brain classifier (Edge mirror).
+ * Deno unit tests for Fuel Brain classifier v2 (residual Personal).
  */
-import { assertEquals } from "https://deno.land/std@0.208.0/assert/mod.ts";
+import { assertEquals, assertAlmostEquals } from "https://deno.land/std@0.208.0/assert/mod.ts";
 import { classifyFuelWeek } from "./classify.ts";
 
-Deno.test("no sessions → Unknown not Personal", () => {
+Deno.test("residual after RS/CO/capped DH goes to Personal", () => {
   const r = classifyFuelWeek({
-    totalOdometerKm: 100,
-    tripRideshareKm: 40,
+    totalOdometerKm: 400,
+    tripRideshareKm: 200,
     companyOpsKm: 0,
-    sessions: [],
-    deadheadHintKm: 10,
+    deadheadHintKm: 40,
   });
-  assertEquals(r.personalKm, 0);
-  assertEquals(r.deadheadKm, 10);
-  assertEquals(r.unknownKm, 50);
+  assertEquals(r.rideShareKm, 200);
+  assertEquals(r.deadheadKm, 40);
+  assertEquals(r.personalKm, 160);
+  assertAlmostEquals(r.rideShareKm + r.companyOpsKm + r.deadheadKm + r.personalKm, 400, 0.01);
 });
 
-Deno.test("declared personal odo session", () => {
+Deno.test("deadhead capped to Available", () => {
   const r = classifyFuelWeek({
-    totalOdometerKm: 200,
-    tripRideshareKm: 100,
-    companyOpsKm: 0,
-    sessions: [
-      {
-        mode: "personal",
-        startAt: "2026-07-01T00:00:00Z",
-        endAt: "2026-07-01T02:00:00Z",
-        startOdo: 0,
-        endOdo: 30,
-      },
-    ],
-    deadheadHintKm: 20,
+    totalOdometerKm: 100,
+    tripRideshareKm: 80,
+    companyOpsKm: 10,
+    deadheadHintKm: 50,
   });
-  assertEquals(r.personalKm, 30);
-  assertEquals(r.deadheadKm, 20);
-  assertEquals(r.unknownKm, 50);
+  // Available = 10; deadhead capped to 10; personal = 0
+  assertEquals(r.availableKm, 10);
+  assertEquals(r.deadheadKm, 10);
+  assertEquals(r.personalKm, 0);
 });
