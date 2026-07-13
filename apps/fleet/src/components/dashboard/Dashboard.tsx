@@ -38,7 +38,6 @@ import { DriverPerformanceView } from './DriverPerformanceView';
 import { FinancialsView } from './FinancialsView';
 import { VehiclePerformanceView } from './VehiclePerformanceView'; // Phase 7.4 Component
 import { ExecutiveDashboard } from './ExecutiveDashboard'; // Phase 7.1 Component
-import { SystemHealthView } from './SystemHealthView'; // Phase 9.1 Component
 import { FleetMetricCards } from './FleetMetricCards';
 import { FleetMap } from './FleetMap';
 import { FleetAlertsPanel } from './FleetAlertsPanel';
@@ -88,13 +87,6 @@ export function Dashboard() {
   }, [initLoading, wave]);
 
   // ── Wave 2 (secondary — fires after Wave 1) ────────────────────────
-  const { data: batches = [], isLoading: batchesLoading, isFetched: batchesFetched } = useQuery({
-    queryKey: ['batches'],
-    queryFn: () => api.getBatches(),
-    staleTime: 1000 * 60 * 5,
-    enabled: wave >= 2,
-  });
-
   const { data: apiNotifications = [], isLoading: notificationsLoading, isFetched: notificationsFetched } = useQuery({
     queryKey: ['notifications'],
     queryFn: () => api.getNotifications(),
@@ -116,7 +108,7 @@ export function Dashboard() {
   });
 
   // Advance to Wave 3 once Wave 2 settles
-  const wave2Done = batchesFetched && notificationsFetched && alertsFetched && rulesFetched;
+  const wave2Done = notificationsFetched && alertsFetched && rulesFetched;
   useEffect(() => {
     if (wave2Done && wave === 2) {
       const t = setTimeout(() => setWave(3), 200);
@@ -301,7 +293,6 @@ export function Dashboard() {
       else if (val === 'driver') setActiveTab('drivers');
       else if (val === 'analytics') setActiveTab('analytics');
       else if (val === 'executive') setActiveTab('executive');
-      else if (val === 'health') setActiveTab('health');
       else setActiveTab('overview');
       toast.info(`Switched to ${val.charAt(0).toUpperCase() + val.slice(1)} View`);
   };
@@ -355,7 +346,6 @@ export function Dashboard() {
               <SelectItem value="maintenance">Maintenance View</SelectItem>
               <SelectItem value="driver">Driver View</SelectItem>
               <SelectItem value="analytics">Analytics View</SelectItem>
-              <SelectItem value="health">System Health & Monitoring</SelectItem>
             </SelectContent>
            </Select>
 
@@ -404,7 +394,6 @@ export function Dashboard() {
           <TabsTrigger value="vehicles">Vehicles</TabsTrigger>
           <TabsTrigger value="alerts">Alerts</TabsTrigger>
           <TabsTrigger value="analytics">Analytics</TabsTrigger>
-          <TabsTrigger value="health">System Health</TabsTrigger>
         </TabsList>
         
         <TabsContent value="overview" className="space-y-6">
@@ -474,16 +463,6 @@ export function Dashboard() {
 
         <TabsContent value="analytics" className="space-y-6">
            <PredictiveAnalyticsPanel trips={trips} />
-        </TabsContent>
-
-        <TabsContent value="health" className="space-y-6">
-          <SystemHealthView 
-             trips={trips}
-             driverMetrics={driverMetrics}
-             vehicleMetrics={vehicleMetrics}
-             notifications={notifications}
-             batches={batches}
-          />
         </TabsContent>
       </Tabs>
 
