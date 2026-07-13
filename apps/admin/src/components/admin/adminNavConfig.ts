@@ -91,6 +91,7 @@ export const ROAM_ENTERPRISE_CHILDREN: NavChild[] = [
 ];
 
 export const FUEL_MANAGEMENT_CHILDREN: NavChild[] = [
+  { id: 'fuel-brain', label: 'Fuel Brain', icon: Brain },
   { id: 'fuel-stations', label: 'Station Database', icon: Database },
   { id: 'fuel-analytics', label: 'Fuel Analytics', icon: BarChart3 },
 ];
@@ -177,6 +178,7 @@ const SHARED_PLATFORM_PAGES = [
   'roam-haul-overview',
   'roam-dash-overview',
   'dash-merchants',
+  'fuel-brain',
   'fuel-stations',
   'fuel-analytics',
   'toll-stations',

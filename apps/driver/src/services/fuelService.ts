@@ -364,5 +364,79 @@ export const fuelService = {
       console.error("[FuelService] Failed to generate cleanup map:", error);
       return { entry: null, relatedTransactions: [] };
     }
-  }
+  },
+
+  // --- Fuel driving sessions (Personal / Off-duty) ---
+  async getActiveDrivingSession(driverId: string, vehicleId?: string): Promise<import('../types/fuelBrain').FuelDrivingSession | null> {
+    const q = new URLSearchParams({ driverId });
+    if (vehicleId) q.set('vehicleId', vehicleId);
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-driving-sessions/active?${q}`, {
+      headers: { Authorization: `Bearer ${publicAnonKey}` },
+    });
+    if (!response.ok) throw new Error('Failed to fetch active driving session');
+    const data = await response.json();
+    return data.session ?? null;
+  },
+
+  async listDrivingSessions(opts: {
+    driverId?: string;
+    vehicleId?: string;
+    weekStart?: string;
+    weekEnd?: string;
+  }): Promise<import('../types/fuelBrain').FuelDrivingSession[]> {
+    const q = new URLSearchParams();
+    if (opts.driverId) q.set('driverId', opts.driverId);
+    if (opts.vehicleId) q.set('vehicleId', opts.vehicleId);
+    if (opts.weekStart) q.set('weekStart', opts.weekStart);
+    if (opts.weekEnd) q.set('weekEnd', opts.weekEnd);
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-driving-sessions?${q}`, {
+      headers: { Authorization: `Bearer ${publicAnonKey}` },
+    });
+    if (!response.ok) throw new Error('Failed to list driving sessions');
+    return response.json();
+  },
+
+  async startDrivingSession(input: {
+    driverId: string;
+    vehicleId: string;
+    mode: 'personal' | 'off_duty' | 'work';
+    source: 'driver_toggle' | 'driver_declare' | 'admin_override';
+    startAt?: string;
+    endAt?: string | null;
+    startOdo?: number | null;
+    endOdo?: number | null;
+    notes?: string;
+  }): Promise<import('../types/fuelBrain').FuelDrivingSession> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-driving-sessions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${publicAnonKey}`,
+      },
+      body: JSON.stringify(input),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to start driving session');
+    }
+    const result = await response.json();
+    return result.data || result;
+  },
+
+  async endDrivingSession(
+    id: string,
+    opts?: { endAt?: string; endOdo?: number | null },
+  ): Promise<import('../types/fuelBrain').FuelDrivingSession> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-driving-sessions/${id}/end`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${publicAnonKey}`,
+      },
+      body: JSON.stringify(opts || {}),
+    });
+    if (!response.ok) throw new Error('Failed to end driving session');
+    const result = await response.json();
+    return result.data || result;
+  },
 };

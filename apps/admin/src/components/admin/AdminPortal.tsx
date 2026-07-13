@@ -37,6 +37,7 @@ import { LEGACY_PAGE_REDIRECTS, settingsTabFromPageId } from './adminNavConfig';
 import { MerchantVerificationManager } from './roam-dash/MerchantVerificationManager';
 import { GlobalIdentitySearch } from './platform/GlobalIdentitySearch';
 import { MatchingBrainPage } from './matching-brain/MatchingBrainPage';
+import { FuelBrainPage } from './fuel-brain/FuelBrainPage';
 import { DriverUsersPage } from './product-users/DriverUsersPage';
 import { DriverUserDetailPage } from './product-users/DriverUserDetailPage';
 import { RiderUsersPage } from './product-users/RiderUsersPage';
@@ -218,6 +219,11 @@ export function AdminPortal() {
       {currentPage === 'matching-brain' && (
         <div className="rounded-xl border border-slate-200 bg-white overflow-hidden min-h-[560px] dark:border-slate-800 dark:bg-slate-900/40">
           <MatchingBrainPage />
+        </div>
+      )}
+      {currentPage === 'fuel-brain' && (
+        <div className="rounded-xl border border-slate-200 bg-white overflow-hidden min-h-[560px] p-6 dark:border-slate-800 dark:bg-slate-900/40">
+          <FuelBrainPage />
         </div>
       )}
       {currentPage === 'activity-log' && <ActivityLog />}

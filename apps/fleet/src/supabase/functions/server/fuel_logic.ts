@@ -7,6 +7,23 @@ const supabase = createClient(
 );
 
 /**
+ * Full rideshare trip km — MUST match apps/fleet/src/utils/tripRideshareKm.ts
+ * (On Trip + Enroute + Open + Unavailable).
+ */
+export function getTotalTripRideshareKm(trip: {
+  distance?: number | null;
+  normalizedEnrouteDistance?: number | null;
+  normalizedOpenDistance?: number | null;
+  normalizedUnavailableDistance?: number | null;
+}): number {
+  const onTrip = Number(trip.distance) || 0;
+  const enroute = Number(trip.normalizedEnrouteDistance) || 0;
+  const open = Number(trip.normalizedOpenDistance) || 0;
+  const unavailable = Number(trip.normalizedUnavailableDistance) || 0;
+  return onTrip + enroute + open + unavailable;
+}
+
+/**
  * Deadhead Mileage Attribution — Phase 1: Data Model & Interface Definitions
  */
 
@@ -509,8 +526,8 @@ export function calculateDeadheadAttribution(params: {
   const segSummary = summarizeSegments(segments);
   const totalOdometerKm = segSummary.totalKm;
 
-  // --- Step B: Trip km ---
-  const tripKm = trips.reduce((sum, t) => sum + (Number(t.distance) || 0), 0);
+  // --- Step B: Trip km (full rideshare stack — must match fleet getTotalTripRideshareKm) ---
+  const tripKm = trips.reduce((sum, t) => sum + getTotalTripRideshareKm(t), 0);
 
   // --- Phase 9 (Step 9.2): Early-exit guards for degenerate data ---
 

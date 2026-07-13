@@ -4701,4 +4701,251 @@ function deadheadFilterByDateRange(records: any[], periodStart?: string, periodE
   });
 }
 
+// -----------------------------------------------------------------------------
+// Fuel driving sessions (Personal / Off-duty evidence) — flag-gated at clients
+// Dual-write: Postgres fuel.driving_sessions + KV mirror for fleet list speed
+// -----------------------------------------------------------------------------
+
+const SESSION_KV_PREFIX = "fuel_driving_session:";
+
+function sessionToApi(row: Record<string, unknown>) {
+  return {
+    id: row.id,
+    organizationId: row.organization_id ?? row.organizationId ?? null,
+    driverId: row.driver_id ?? row.driverId,
+    vehicleId: row.vehicle_id ?? row.vehicleId,
+    mode: row.mode,
+    source: row.source,
+    startAt: row.start_at ?? row.startAt,
+    endAt: row.end_at ?? row.endAt ?? null,
+    startOdo: row.start_odo ?? row.startOdo ?? null,
+    endOdo: row.end_odo ?? row.endOdo ?? null,
+    notes: row.notes ?? null,
+    createdBy: row.created_by ?? row.createdBy ?? null,
+    createdAt: row.created_at ?? row.createdAt,
+    updatedAt: row.updated_at ?? row.updatedAt,
+  };
+}
+
+function sessionToDb(body: Record<string, unknown>) {
+  return {
+    id: body.id || crypto.randomUUID(),
+    organization_id: body.organizationId ?? body.organization_id ?? null,
+    driver_id: String(body.driverId ?? body.driver_id ?? ""),
+    vehicle_id: String(body.vehicleId ?? body.vehicle_id ?? ""),
+    mode: body.mode,
+    source: body.source,
+    start_at: body.startAt ?? body.start_at,
+    end_at: body.endAt ?? body.end_at ?? null,
+    start_odo: body.startOdo ?? body.start_odo ?? null,
+    end_odo: body.endOdo ?? body.end_odo ?? null,
+    notes: body.notes ?? null,
+    created_by: body.createdBy ?? body.created_by ?? null,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+app.get(`${BASE_PATH}/fuel-driving-sessions`, async (c) => {
+  try {
+    const driverId = c.req.query("driverId");
+    const vehicleId = c.req.query("vehicleId");
+    const weekStart = c.req.query("weekStart");
+    const weekEnd = c.req.query("weekEnd");
+    const activeOnly = c.req.query("active") === "1";
+
+    // Prefer Postgres
+    let q = supabase.schema("fuel").from("driving_sessions").select("*");
+    if (driverId) q = q.eq("driver_id", driverId);
+    if (vehicleId) q = q.eq("vehicle_id", vehicleId);
+    if (activeOnly) q = q.is("end_at", null);
+    if (weekStart) q = q.gte("start_at", `${weekStart}T00:00:00`);
+    if (weekEnd) q = q.or(`end_at.is.null,end_at.lte.${weekEnd}T23:59:59`);
+
+    const { data, error } = await q.order("start_at", { ascending: false }).limit(500);
+    if (!error && data) {
+      return c.json(data.map((r) => sessionToApi(r as Record<string, unknown>)));
+    }
+
+    // KV fallback when schema not migrated yet
+    console.log(`[FuelSessions] Postgres read fallback: ${error?.message || "no data"}`);
+    let rows = (await kv.getByPrefix(SESSION_KV_PREFIX)) || [];
+    if (driverId) rows = rows.filter((r: any) => r.driverId === driverId);
+    if (vehicleId) rows = rows.filter((r: any) => r.vehicleId === vehicleId);
+    if (activeOnly) rows = rows.filter((r: any) => !r.endAt);
+    return c.json(rows.map((r: any) => sessionToApi(r)));
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.get(`${BASE_PATH}/fuel-driving-sessions/active`, async (c) => {
+  try {
+    const driverId = c.req.query("driverId");
+    const vehicleId = c.req.query("vehicleId");
+    if (!driverId) return c.json({ error: "driverId required" }, 400);
+
+    const { data, error } = await supabase
+      .schema("fuel")
+      .from("driving_sessions")
+      .select("*")
+      .eq("driver_id", driverId)
+      .is("end_at", null)
+      .order("start_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!error && data) {
+      if (vehicleId && data.vehicle_id !== vehicleId) {
+        return c.json({ session: null });
+      }
+      return c.json({ session: sessionToApi(data as Record<string, unknown>) });
+    }
+
+    const rows = ((await kv.getByPrefix(SESSION_KV_PREFIX)) || []) as any[];
+    const open = rows.find(
+      (r) => r.driverId === driverId && !r.endAt && (!vehicleId || r.vehicleId === vehicleId),
+    );
+    return c.json({ session: open ? sessionToApi(open) : null });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.post(`${BASE_PATH}/fuel-driving-sessions`, async (c) => {
+  try {
+    const body = await c.req.json();
+    if (!body.driverId || !body.vehicleId || !body.mode || !body.source) {
+      return c.json({ error: "driverId, vehicleId, mode, source required" }, 400);
+    }
+    if (!["personal", "off_duty", "work"].includes(body.mode)) {
+      return c.json({ error: "invalid mode" }, 400);
+    }
+    if (!["driver_toggle", "driver_declare", "admin_override"].includes(body.source)) {
+      return c.json({ error: "invalid source" }, 400);
+    }
+
+    const dbRow = sessionToDb({
+      ...body,
+      startAt: body.startAt || new Date().toISOString(),
+    });
+
+    // Close any open session for this driver before opening a new non-work toggle
+    if (!dbRow.end_at && (dbRow.mode === "personal" || dbRow.mode === "off_duty")) {
+      await supabase
+        .schema("fuel")
+        .from("driving_sessions")
+        .update({ end_at: dbRow.start_at, updated_at: new Date().toISOString() })
+        .eq("driver_id", dbRow.driver_id)
+        .is("end_at", null);
+    }
+
+    const { data, error } = await supabase
+      .schema("fuel")
+      .from("driving_sessions")
+      .upsert(dbRow)
+      .select("*")
+      .single();
+
+    const api = sessionToApi((data || {
+      ...dbRow,
+      organizationId: dbRow.organization_id,
+      driverId: dbRow.driver_id,
+      vehicleId: dbRow.vehicle_id,
+      startAt: dbRow.start_at,
+      endAt: dbRow.end_at,
+      startOdo: dbRow.start_odo,
+      endOdo: dbRow.end_odo,
+      createdBy: dbRow.created_by,
+      createdAt: new Date().toISOString(),
+      updatedAt: dbRow.updated_at,
+    }) as Record<string, unknown>);
+
+    await kv.set(`${SESSION_KV_PREFIX}${api.id}`, api);
+
+    if (error) {
+      console.log(`[FuelSessions] Postgres upsert warn: ${error.message} — KV saved`);
+    }
+
+    return c.json({ success: true, data: api });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.patch(`${BASE_PATH}/fuel-driving-sessions/:id`, async (c) => {
+  try {
+    const id = c.req.param("id");
+    const body = await c.req.json();
+    const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    if (body.endAt !== undefined) patch.end_at = body.endAt;
+    if (body.endOdo !== undefined) patch.end_odo = body.endOdo;
+    if (body.startOdo !== undefined) patch.start_odo = body.startOdo;
+    if (body.mode !== undefined) patch.mode = body.mode;
+    if (body.notes !== undefined) patch.notes = body.notes;
+    if (body.source !== undefined) patch.source = body.source;
+
+    const { data, error } = await supabase
+      .schema("fuel")
+      .from("driving_sessions")
+      .update(patch)
+      .eq("id", id)
+      .select("*")
+      .maybeSingle();
+
+    let api: Record<string, unknown>;
+    if (!error && data) {
+      api = sessionToApi(data as Record<string, unknown>);
+    } else {
+      const existing = (await kv.get(`${SESSION_KV_PREFIX}${id}`)) as any;
+      if (!existing) return c.json({ error: "not_found" }, 404);
+      api = sessionToApi({
+        ...existing,
+        endAt: body.endAt ?? existing.endAt,
+        endOdo: body.endOdo ?? existing.endOdo,
+        startOdo: body.startOdo ?? existing.startOdo,
+        mode: body.mode ?? existing.mode,
+        notes: body.notes ?? existing.notes,
+        source: body.source ?? existing.source,
+        updatedAt: new Date().toISOString(),
+      });
+    }
+
+    await kv.set(`${SESSION_KV_PREFIX}${id}`, api);
+    return c.json({ success: true, data: api });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.post(`${BASE_PATH}/fuel-driving-sessions/:id/end`, async (c) => {
+  try {
+    const id = c.req.param("id");
+    const body = await c.req.json().catch(() => ({}));
+    const endAt = body.endAt || new Date().toISOString();
+    const endOdo = body.endOdo ?? null;
+
+    const { data, error } = await supabase
+      .schema("fuel")
+      .from("driving_sessions")
+      .update({ end_at: endAt, end_odo: endOdo, updated_at: new Date().toISOString() })
+      .eq("id", id)
+      .select("*")
+      .maybeSingle();
+
+    let api: any;
+    if (!error && data) {
+      api = sessionToApi(data as Record<string, unknown>);
+    } else {
+      const existing = (await kv.get(`${SESSION_KV_PREFIX}${id}`)) as any;
+      if (!existing) return c.json({ error: "not_found" }, 404);
+      api = { ...existing, endAt, endOdo, updatedAt: new Date().toISOString() };
+    }
+
+    await kv.set(`${SESSION_KV_PREFIX}${id}`, api);
+    return c.json({ success: true, data: api });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
 export default app;

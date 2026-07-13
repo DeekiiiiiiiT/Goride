@@ -38,11 +38,21 @@ import {
 } from "../ui/alert-dialog";
 import { Progress } from "../ui/progress";
 import { Checkbox } from "../ui/checkbox";
+import { WeekSessionPanel } from "./WeekSessionPanel";
+import {
+  FUEL_PERSONAL_SESSIONS_ENABLED,
+  FLEET_USE_FUEL_BRAIN,
+  FUEL_BRAIN_SHADOW_COMPARE,
+} from "../../utils/fuelBrainFlags";
 
 import { Vehicle } from '../../types/vehicle';
 import { Trip } from '../../types/data';
 import { FuelEntry, MileageAdjustment, WeeklyFuelReport, FuelDispute, FuelScenario, OdometerBucket, FinalizedFuelReport, FuelCard } from '../../types/fuel';
-import { FuelCalculationService, VehicleDeadheadInput } from '../../services/fuelCalculationService';
+import { FuelCalculationService, VehicleDeadheadInput, FuelBrainClassificationInput } from '../../services/fuelCalculationService';
+import { classifyWeekForRecon } from '../../services/fuelBrainClient';
+import { fuelService } from '../../services/fuelService';
+import { sumTripRideshareKm } from '../../utils/tripRideshareKm';
+import { evaluateUnknownFinalizeGate } from '../../utils/fuelBrainUnknownGate';
 import { downloadCSV } from '../../utils/export';
 import { ScenarioSplitDashboard } from './ScenarioSplitDashboard';
 import { api } from '../../services/api';
@@ -96,6 +106,7 @@ export function ReconciliationTable({
     onViewBuckets
 }: ReconciliationTableProps) {
     const [isFinalizeDialogOpen, setIsFinalizeDialogOpen] = React.useState(false);
+    const [sessionFocusReportId, setSessionFocusReportId] = React.useState<string | null>(null);
 
     const weekStart = dateRange?.from;
     const weekEnd = dateRange?.to || dateRange?.from;
@@ -103,6 +114,8 @@ export function ReconciliationTable({
     // Phase 3: Deadhead attribution data from server
     const [deadheadMap, setDeadheadMap] = useState<Map<string, VehicleDeadheadInput>>(new Map());
     const [deadheadLoading, setDeadheadLoading] = useState(false);
+    const [brainByDriverVehicle, setBrainByDriverVehicle] = useState<Map<string, FuelBrainClassificationInput>>(new Map());
+    const [unknownAck, setUnknownAck] = useState(false);
 
     // Per-period deadhead fetch: use the selected week range directly
     // (previously used broad date range, which overcounted deadhead per week)
@@ -142,6 +155,80 @@ export function ReconciliationTable({
         return () => { cancelled = true; };
     }, [weekStart, weekEnd]);
 
+    // Fuel Brain classify (consumer or shadow) — flag off → empty map (legacy path)
+    useEffect(() => {
+        if (!weekStart || !weekEnd) return;
+        if (!FLEET_USE_FUEL_BRAIN && !FUEL_BRAIN_SHADOW_COMPARE) {
+            setBrainByDriverVehicle(new Map());
+            return;
+        }
+        let cancelled = false;
+        const startStr = format(weekStart, 'yyyy-MM-dd');
+        const endStr = format(weekEnd, 'yyyy-MM-dd');
+
+        (async () => {
+            const map = new Map<string, FuelBrainClassificationInput>();
+            try {
+                for (const v of vehicles) {
+                    const driverId = v.currentDriverId || '';
+                    if (!driverId) continue;
+                    const vTrips = trips.filter(
+                        (t) =>
+                            t.vehicleId === v.id &&
+                            (t.status === 'Completed' || t.status === 'Cancelled'),
+                    );
+                    const vAdj = adjustments.filter((a) => a.vehicleId === v.id);
+                    const companyOpsKm = vAdj
+                        .filter((a) => a.type === 'Company_Misc' || a.type === 'Maintenance')
+                        .reduce((s, a) => s + (a.distance || 0), 0);
+                    const sessions = await fuelService
+                        .listDrivingSessions({
+                            driverId,
+                            vehicleId: v.id,
+                            weekStart: startStr,
+                            weekEnd: endStr,
+                        })
+                        .catch(() => []);
+                    const dh = deadheadMap.get(v.id);
+                    const classified = await classifyWeekForRecon({
+                        driverId,
+                        vehicleId: v.id,
+                        weekStart: startStr,
+                        weekEnd: endStr,
+                        totalOdometerKm: dh?.totalOdometerKm || 0,
+                        tripRideshareKm: sumTripRideshareKm(vTrips),
+                        companyOpsKm,
+                        sessions: sessions.map((s) => ({
+                            mode: s.mode,
+                            startAt: s.startAt,
+                            endAt: s.endAt,
+                            startOdo: s.startOdo,
+                            endOdo: s.endOdo,
+                        })),
+                        deadheadHintKm: dh?.deadheadKm || 0,
+                    });
+                    map.set(`${driverId}:${v.id}`, {
+                        rideShareKm: classified.rideShareKm,
+                        personalKm: classified.personalKm,
+                        companyOpsKm: classified.companyOpsKm,
+                        deadheadKm: classified.deadheadKm,
+                        unknownKm: classified.unknownKm,
+                        unknownPct: classified.unknownPct,
+                        confidence: classified.confidence as Record<string, string>,
+                        method: classified.method,
+                    });
+                }
+            } catch (e) {
+                console.warn('[FuelBrain] classify batch failed', e);
+            }
+            if (!cancelled) setBrainByDriverVehicle(map);
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [weekStart, weekEnd, vehicles, trips, adjustments, deadheadMap]);
+
     // Calculate Data — hooks must always run (React rules of hooks)
     // Driver-first: one report per driver+week (shared cars → multiple rows)
     const reports = useMemo(() => {
@@ -157,8 +244,10 @@ export function ReconciliationTable({
             scenarios,
             deadheadMap,
             fuelCards,
+            // Only inject into money path when consumer flag is on
+            FLEET_USE_FUEL_BRAIN ? brainByDriverVehicle : undefined,
         );
-    }, [vehicles, drivers, trips, fuelEntries, adjustments, weekStart, weekEnd, scenarios, deadheadMap, fuelCards]);
+    }, [vehicles, drivers, trips, fuelEntries, adjustments, weekStart, weekEnd, scenarios, deadheadMap, fuelCards, brainByDriverVehicle]);
 
     useEffect(() => {
         onReportsChange?.(reports);
@@ -251,7 +340,17 @@ export function ReconciliationTable({
     }, [reports, disputes]);
 
     const [financeWarningAcknowledged, setFinanceWarningAcknowledged] = useState(false);
-    const hasBlockingWarnings = dataQualityWarnings.length > 0 || reFinalizeWarnings.some(w => Math.abs(w.delta) > 0.01);
+    const unknownGate = useMemo(
+      () =>
+        FLEET_USE_FUEL_BRAIN
+          ? evaluateUnknownFinalizeGate(reports, undefined, { acknowledge: unknownAck })
+          : { blocked: false, warnOnly: false, reasons: [] as string[] },
+      [reports, unknownAck],
+    );
+    const hasBlockingWarnings =
+      dataQualityWarnings.length > 0 ||
+      reFinalizeWarnings.some((w) => Math.abs(w.delta) > 0.01) ||
+      (FLEET_USE_FUEL_BRAIN && unknownGate.blocked);
 
     // Handle invalid/loading date range — early return AFTER all hooks
     if (!dateRange || !dateRange.from) {
@@ -333,7 +432,7 @@ export function ReconciliationTable({
                         Export
                     </Button>
                     {!hideFinalize && !periodLocked && (
-                      <Button onClick={() => { setFinanceWarningAcknowledged(false); setIsFinalizeDialogOpen(true); }} disabled={reports.length === 0}>
+                      <Button onClick={() => { setFinanceWarningAcknowledged(false); setUnknownAck(false); setIsFinalizeDialogOpen(true); }} disabled={reports.length === 0}>
                           <FileCheck className="mr-2 h-4 w-4" />
                           Finalize
                       </Button>
@@ -646,7 +745,11 @@ export function ReconciliationTable({
                                 const dispute = findDisputeForReport(report);
 
                                 return (
-                                    <TableRow key={report.id}>
+                                    <TableRow
+                                      key={report.id}
+                                      className={sessionFocusReportId === report.id ? 'bg-amber-50/50' : undefined}
+                                      onClick={() => setSessionFocusReportId(report.id)}
+                                    >
                                         <TableCell>
                                             <div className="flex items-start justify-between">
                                                 <div className="flex flex-col">
@@ -975,6 +1078,22 @@ export function ReconciliationTable({
                  </div>
             </div>
 
+            {FUEL_PERSONAL_SESSIONS_ENABLED && (() => {
+              const focus =
+                reports.find((r) => r.id === sessionFocusReportId) || reports[0];
+              if (!focus?.driverId || !focus.vehicleId) return null;
+              return (
+                <div className="mt-4">
+                  <WeekSessionPanel
+                    driverId={focus.driverId}
+                    vehicleId={focus.vehicleId}
+                    weekStart={String(focus.weekStart).split('T')[0]}
+                    weekEnd={String(focus.weekEnd).split('T')[0]}
+                  />
+                </div>
+              );
+            })()}
+
             {/* Finalize Confirmation */}
             <AlertDialog open={isFinalizeDialogOpen} onOpenChange={setIsFinalizeDialogOpen}>
                 <AlertDialogContent>
@@ -1056,6 +1175,33 @@ export function ReconciliationTable({
                                     </div>
                                 )}
 
+                                {FLEET_USE_FUEL_BRAIN && unknownGate.reasons.length > 0 && (
+                                    <div className="mt-3 p-3 bg-amber-50 rounded border border-amber-200 text-amber-950 space-y-1.5">
+                                        <div className="flex items-center gap-1.5 font-semibold text-sm">
+                                            <AlertTriangle className="h-4 w-4" />
+                                            Unknown km above Fuel Brain threshold
+                                        </div>
+                                        <ul className="text-xs list-disc pl-4 space-y-0.5">
+                                            {unknownGate.reasons.map((r) => (
+                                                <li key={r}>{r}</li>
+                                            ))}
+                                        </ul>
+                                        <p className="text-xs">
+                                            Unexplained residual is Unknown — not Personal. Resolve in Dominion or acknowledge to finalize.
+                                        </p>
+                                        <div className="flex items-start gap-2 pt-1">
+                                            <Checkbox
+                                                id="unknown-ack"
+                                                checked={unknownAck}
+                                                onCheckedChange={(checked) => setUnknownAck(!!checked)}
+                                            />
+                                            <label htmlFor="unknown-ack" className="text-xs cursor-pointer">
+                                                Acknowledge Unknown km and finalize anyway
+                                            </label>
+                                        </div>
+                                    </div>
+                                )}
+
                                 {hasBlockingWarnings && (
                                     <div className="mt-3 flex items-start gap-2">
                                         <Checkbox
@@ -1079,7 +1225,10 @@ export function ReconciliationTable({
                                 onFinalize?.(reports);
                                 setIsFinalizeDialogOpen(false);
                             }}
-                            disabled={hasBlockingWarnings && !financeWarningAcknowledged}
+                            disabled={
+                              (hasBlockingWarnings && !financeWarningAcknowledged) ||
+                              (FLEET_USE_FUEL_BRAIN && unknownGate.blocked && !unknownAck)
+                            }
                             className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             Process Ledger Entries

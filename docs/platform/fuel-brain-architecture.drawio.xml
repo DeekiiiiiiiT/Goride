@@ -1,0 +1,318 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="app.diagrams.net" agent="Roam" version="22.1.0" type="device">
+  <diagram id="fb-home" name="1. Where Fuel Brain Lives">
+    <mxGraphModel dx="1600" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <mxCell id="t1" value="ROAM FUEL BRAIN — WHERE IT LIVES&#xa;Dominion owns the brain · Fleet apps feed from it" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=20;fontStyle=1;fontColor=#0f172a;" vertex="1" parent="1">
+          <mxGeometry x="280" y="20" width="720" height="50" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="dom" value="Roam Dominion&#xa;(apps/admin)&#xa;Super Admin Portal" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1e293b;fontColor=#ffffff;strokeColor=#0f172a;fontStyle=1;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="80" y="100" width="200" height="80" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="fuelSec" value="Fuel Management&#xa;• Station Database&#xa;• Fuel Analytics&#xa;• Fuel Brain ← NEW" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fef3c7;strokeColor=#d97706;fontColor=#92400e;align=left;spacingLeft=12;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="340" y="90" width="240" height="100" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="platform" value="Platform&#xa;• Matching Brain&#xa;(rides / driver apps)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e0e7ff;strokeColor=#4f46e5;fontColor=#312e81;align=left;spacingLeft=12;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="620" y="90" width="220" height="100" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#d97706;" edge="1" parent="1" source="dom" target="fuelSec">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#4f46e5;" edge="1" parent="1" source="dom" target="platform">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="brain" value="FUEL BRAIN ENGINE&#xa;supabase/functions/fuel-brain&#xa;&#xa;Policies · Classifiers · Confidence&#xa;Unknown queue · Feature flags" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f59e0b;fontColor=#111827;strokeColor=#b45309;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="340" y="260" width="280" height="120" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="e3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeWidth=3;strokeColor=#b45309;" edge="1" parent="1" source="fuelSec" target="brain">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e3l" value="configure / enable" style="edgeLabel;html=1;align=center;fontSize=10;fontColor=#92400e;" vertex="1" connectable="0" parent="e3">
+          <mxGeometry x="-0.1" relative="1" as="geometry"><mxPoint as="offset"/></mxGeometry>
+        </mxCell>
+
+        <mxCell id="fleet" value="Fleet App&#xa;roamfleet.co&#xa;Logs · Recon · Policy · Finalize" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#16a34a;fontColor=#14532d;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="80" y="460" width="220" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="driver" value="Driver App&#xa;Personal / Off-duty toggle&#xa;Odo photo · receipts" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dbeafe;strokeColor=#2563eb;fontColor=#1e3a8a;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="360" y="460" width="220" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="future" value="Future feeders&#xa;Telematics GPS&#xa;Fuel card providers" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f1f5f9;strokeColor=#64748b;fontColor=#334155;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="640" y="460" width="200" height="90" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="e4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#16a34a;dashed=1;" edge="1" parent="1" source="brain" target="fleet">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e4l" value="FLEET_USE_FUEL_BRAIN=1" style="edgeLabel;html=1;fontSize=10;" vertex="1" connectable="0" parent="e4">
+          <mxGeometry x="-0.2" relative="1" as="geometry"><mxPoint as="offset"/></mxGeometry>
+        </mxCell>
+        <mxCell id="e5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#2563eb;dashed=1;" edge="1" parent="1" source="brain" target="driver">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeWidth=2;strokeColor=#64748b;dashed=1;" edge="1" parent="1" source="brain" target="future">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="note1" value="Same pattern as Matching Brain:&#xa;Dominion UI → Edge brain → product apps call brain via service role + flag.&#xa;Apps never configure classification rules locally." style="shape=note;whiteSpace=wrap;html=1;size=14;fillColor=#fff7ed;strokeColor=#ea580c;fontColor=#9a3412;align=left;spacingLeft=8;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="900" y="260" width="320" height="100" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+
+  <diagram id="fb-inputs" name="2. Evidence Inputs">
+    <mxGraphModel dx="1600" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1200" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <mxCell id="t2" value="EVIDENCE LAYER — What the brain is allowed to trust" style="text;html=1;align=center;fontSize=18;fontStyle=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="360" y="20" width="560" height="40" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="phA" value="PHASE A (must ship first)&#xa;Without this, brain only guesses" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fecaca;strokeColor=#dc2626;fontColor=#7f1d1d;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="60" y="80" width="420" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="phB" value="PHASE B+ (brain + telematics)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#bbf7d0;strokeColor=#16a34a;fontColor=#14532d;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="560" y="80" width="420" height="50" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="a1" value="Driver Personal / Off-duty toggle&#xa;(app mode while driving)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fee2e2;strokeColor=#ef4444;" vertex="1" parent="1">
+          <mxGeometry x="60" y="160" width="200" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="a2" value="Mandatory declare&#xa;after offline / gap drives&#xa;(contest + confirm)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fee2e2;strokeColor=#ef4444;" vertex="1" parent="1">
+          <mxGeometry x="280" y="160" width="200" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="a3" value="Verified odometer anchors&#xa;(fills + Monday check-in)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffedd5;strokeColor=#ea580c;" vertex="1" parent="1">
+          <mxGeometry x="60" y="260" width="200" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="a4" value="Platform trip export&#xa;(ride-share work km)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffedd5;strokeColor=#ea580c;" vertex="1" parent="1">
+          <mxGeometry x="280" y="260" width="200" height="70" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="b1" value="Continuous GPS trip trail&#xa;(ignition → stop)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#16a34a;" vertex="1" parent="1">
+          <mxGeometry x="560" y="160" width="200" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="b2" value="Home / Office geofences&#xa;+ work-hours windows" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#16a34a;" vertex="1" parent="1">
+          <mxGeometry x="780" y="160" width="200" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="b3" value="Fuel card + ECU fuel used&#xa;(when available)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#16a34a;" vertex="1" parent="1">
+          <mxGeometry x="560" y="260" width="200" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="b4" value="Measured deadhead legs&#xa;(not time-gap heuristics)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#16a34a;" vertex="1" parent="1">
+          <mxGeometry x="780" y="260" width="200" height="70" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="money" value="MONEY TRUTH (already strong — keep)&#xa;Fuel fills $ / L · station GPS integrity · paid-by-driver · policy splits" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e0e7ff;strokeColor=#4f46e5;fontColor=#312e81;" vertex="1" parent="1">
+          <mxGeometry x="60" y="380" width="920" height="60" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="merge" value="Evidence Bundle&#xa;per vehicle · driver · statement week" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fef08a;strokeColor=#ca8a04;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="380" y="500" width="280" height="120" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="ea1" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="a1" target="merge"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="ea2" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="a2" target="merge"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="ea3" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="a3" target="merge"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="ea4" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="a4" target="merge"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="eb1" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;endFill=1;dashed=1;" edge="1" parent="1" source="b1" target="merge"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="eb2" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;endFill=1;dashed=1;" edge="1" parent="1" source="money" target="merge"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+        <mxCell id="out" value="→ Tab 3: Classifier" style="text;html=1;fontStyle=1;fontSize=14;fontColor=#b45309;" vertex="1" parent="1">
+          <mxGeometry x="680" y="540" width="160" height="30" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+
+  <diagram id="fb-class" name="3. Classifier Flow">
+    <mxGraphModel dx="1600" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="1600" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <mxCell id="t3" value="FUEL BRAIN CLASSIFIER — Every km window gets a label + confidence" style="text;html=1;align=center;fontSize=18;fontStyle=1;strokeColor=none;" vertex="1" parent="1">
+          <mxGeometry x="220" y="20" width="700" height="40" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="in" value="Evidence Bundle&#xa;(vehicle, driver, week)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fef08a;strokeColor=#ca8a04;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="480" y="80" width="200" height="60" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="seg" value="1. Build km windows&#xa;Fill→fill odometer segments&#xa;+ declared personal sessions&#xa;+ platform trip intervals" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e2e8f0;strokeColor=#475569;align=left;spacingLeft=10;" vertex="1" parent="1">
+          <mxGeometry x="440" y="180" width="280" height="90" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="e01" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;endFill=1;strokeWidth=2;" edge="1" parent="1" source="in" target="seg"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+        <mxCell id="q1" value="Declared&#xa;Personal / Off-duty?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fecaca;strokeColor=#dc2626;" vertex="1" parent="1">
+          <mxGeometry x="480" y="310" width="200" height="100" as="geometry"/>
+        </mxCell>
+        <mxCell id="e02" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="seg" target="q1"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+        <mxCell id="pers" value="PERSONAL&#xa;confidence: HIGH" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fce7f3;strokeColor=#db2777;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="780" y="330" width="160" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="ey" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;endFill=1;strokeColor=#db2777;" edge="1" parent="1" source="q1" target="pers">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eyl" value="YES" style="edgeLabel;html=1;fontSize=11;fontStyle=1;" vertex="1" connectable="0" parent="ey"><mxGeometry x="-0.2" relative="1" as="geometry"><mxPoint as="offset"/></mxGeometry></mxCell>
+
+        <mxCell id="q2" value="Overlaps platform&#xa;trip (ride-share)?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#dbeafe;strokeColor=#2563eb;" vertex="1" parent="1">
+          <mxGeometry x="480" y="460" width="200" height="100" as="geometry"/>
+        </mxCell>
+        <mxCell id="en" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="q1" target="q2">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="enl" value="NO" style="edgeLabel;html=1;fontSize=11;" vertex="1" connectable="0" parent="en"><mxGeometry x="-0.1" relative="1" as="geometry"><mxPoint as="offset"/></mxGeometry></mxCell>
+
+        <mxCell id="rs" value="RIDE SHARE&#xa;confidence: HIGH&#xa;(same trip km definition&#xa;everywhere)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dbeafe;strokeColor=#2563eb;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="780" y="470" width="180" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="eys2" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;endFill=1;strokeColor=#2563eb;" edge="1" parent="1" source="q2" target="rs">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="eys2l" value="YES" style="edgeLabel;html=1;fontSize=11;fontStyle=1;" vertex="1" connectable="0" parent="eys2"><mxGeometry x="-0.2" relative="1" as="geometry"><mxPoint as="offset"/></mxGeometry></mxCell>
+
+        <mxCell id="q3" value="Company Misc /&#xa;Maintenance adj?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#e0e7ff;strokeColor=#4f46e5;" vertex="1" parent="1">
+          <mxGeometry x="480" y="610" width="200" height="100" as="geometry"/>
+        </mxCell>
+        <mxCell id="en2" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="q2" target="q3">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="en2l" value="NO" style="edgeLabel;html=1;fontSize=11;" vertex="1" connectable="0" parent="en2"><mxGeometry x="-0.1" relative="1" as="geometry"><mxPoint as="offset"/></mxGeometry></mxCell>
+
+        <mxCell id="co" value="COMPANY OPS&#xa;confidence: HIGH" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e0e7ff;strokeColor=#4f46e5;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="780" y="630" width="160" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="ey3" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;endFill=1;strokeColor=#4f46e5;" edge="1" parent="1" source="q3" target="co">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="ey3l" value="YES" style="edgeLabel;html=1;fontSize=11;fontStyle=1;" vertex="1" connectable="0" parent="ey3"><mxGeometry x="-0.2" relative="1" as="geometry"><mxPoint as="offset"/></mxGeometry></mxCell>
+
+        <mxCell id="q4" value="Between trips&#xa;short gap /&#xa;online available?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fef3c7;strokeColor=#d97706;" vertex="1" parent="1">
+          <mxGeometry x="480" y="760" width="200" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="en3" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="q3" target="q4">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="en3l" value="NO" style="edgeLabel;html=1;fontSize=11;" vertex="1" connectable="0" parent="en3"><mxGeometry x="-0.1" relative="1" as="geometry"><mxPoint as="offset"/></mxGeometry></mxCell>
+
+        <mxCell id="dh" value="DEADHEAD&#xa;confidence: MED&#xa;(rules from Dominion)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fef3c7;strokeColor=#d97706;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="780" y="780" width="170" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="ey4" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;endFill=1;strokeColor=#d97706;" edge="1" parent="1" source="q4" target="dh">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="ey4l" value="YES" style="edgeLabel;html=1;fontSize=11;fontStyle=1;" vertex="1" connectable="0" parent="ey4"><mxGeometry x="-0.2" relative="1" as="geometry"><mxPoint as="offset"/></mxGeometry></mxCell>
+
+        <mxCell id="unk" value="UNKNOWN&#xa;confidence: LOW&#xa;→ Human review queue" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fecaca;strokeColor=#b91c1c;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="480" y="940" width="200" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="en4" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;endFill=1;strokeColor=#b91c1c;" edge="1" parent="1" source="q4" target="unk">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="en4l" value="NO / thin evidence" style="edgeLabel;html=1;fontSize=10;" vertex="1" connectable="0" parent="en4"><mxGeometry x="-0.15" relative="1" as="geometry"><mxPoint as="offset"/></mxGeometry></mxCell>
+
+        <mxCell id="note3" value="IMPORTANT:&#xa;Do NOT dump Unknown into Personal.&#xa;That is today’s residual bug.&#xa;Unknown stays Unknown until declared or reviewed." style="shape=note;whiteSpace=wrap;html=1;size=14;fillColor=#fff7ed;strokeColor=#ea580c;align=left;spacingLeft=8;" vertex="1" parent="1">
+          <mxGeometry x="760" y="930" width="280" height="110" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+
+  <diagram id="fb-out" name="4. Outputs to Fleet Recon">
+    <mxGraphModel dx="1600" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1500" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <mxCell id="t4" value="HOW FLEET CONSUMPTION RECON USES THE BRAIN" style="text;html=1;align=center;fontSize=18;fontStyle=1;strokeColor=none;" vertex="1" parent="1">
+          <mxGeometry x="300" y="20" width="600" height="40" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="brainOut" value="Fuel Brain week result&#xa;&#xa;rideShareKm + conf&#xa;companyOpsKm + conf&#xa;deadheadKm + conf&#xa;personalKm + conf&#xa;unknownKm + conf&#xa;&#xa;efficiency / price sources&#xa;review flags" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f59e0b;strokeColor=#b45309;align=left;spacingLeft=12;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="60" y="100" width="260" height="220" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="conv" value="Convert km → $&#xa;(efficiency × price/L)&#xa;&#xa;Same formula as today&#xa;but km come from brain&#xa;not residual leftover" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e2e8f0;strokeColor=#475569;align=left;spacingLeft=10;" vertex="1" parent="1">
+          <mxGeometry x="400" y="140" width="240" height="140" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="e41" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;endFill=1;strokeWidth=2;" edge="1" parent="1" source="brainOut" target="conv"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+        <mxCell id="cards" value="5 recon cards&#xa;Ride Share · Company Ops&#xa;Deadhead · Personal&#xa;Misc (Leakage)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#16a34a;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="720" y="100" width="220" height="100" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="policy" value="Fleet Policy splits&#xa;(company % / driver %)&#xa;unchanged — money layer" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dbeafe;strokeColor=#2563eb;" vertex="1" parent="1">
+          <mxGeometry x="720" y="230" width="220" height="80" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="e42" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="conv" target="cards"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e43" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="cards" target="policy"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+        <mxCell id="misc" value="Misc / Leakage =&#xa;Total Spend − sum(category $)&#xa;&#xa;Still the balancer for&#xa;efficiency / price / theft noise&#xa;&#xa;Unknown km does NOT auto-enter&#xa;Personal — holds finalize if HIGH" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fce7f3;strokeColor=#db2777;align=left;spacingLeft=10;" vertex="1" parent="1">
+          <mxGeometry x="400" y="360" width="280" height="160" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="e44" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;endFill=1;strokeColor=#db2777;" edge="1" parent="1" source="conv" target="misc"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+        <mxCell id="queue" value="Dominion Fuel Brain&#xa;Review Queue&#xa;&#xa;Admin labels Unknown →&#xa;Personal / Deadhead / Company&#xa;&#xa;Driver can contest" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fee2e2;strokeColor=#dc2626;align=left;spacingLeft=10;" vertex="1" parent="1">
+          <mxGeometry x="60" y="380" width="240" height="150" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="e45" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;endFill=1;dashed=1;strokeColor=#dc2626;" edge="1" parent="1" source="brainOut" target="queue"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+        <mxCell id="fin" value="Finalize&#xa;blocked while&#xa;Unknown &gt; threshold&#xa;or health Red" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1e293b;fontColor=#fff;strokeColor=#0f172a;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="760" y="400" width="180" height="100" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="e46" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;endFill=1;" edge="1" parent="1" source="policy" target="fin"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="e47" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;endFill=1;dashed=1;strokeColor=#dc2626;" edge="1" parent="1" source="queue" target="fin"><mxGeometry relative="1" as="geometry"/></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+
+  <diagram id="fb-phases" name="5. Phased Roadmap">
+    <mxGraphModel dx="1600" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <mxCell id="t5" value="ROADMAP — Evidence first, then brain, then polish" style="text;html=1;align=center;fontSize=18;fontStyle=1;strokeColor=none;" vertex="1" parent="1">
+          <mxGeometry x="360" y="30" width="560" height="40" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="pA" value="PHASE A — Capture truth&#xa;&#xa;• Personal / Off-duty toggle in driver app&#xa;• Declare / contest personal after gaps&#xa;• Store sessions as first-class events&#xa;• Dominion Fuel Brain page (policies stub)&#xa;• Unify ride-share km definition&#xa;• Stop dumping residual into Personal&#xa;&#xa;Outcome: personal is measured/declared" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fecaca;strokeColor=#dc2626;align=left;spacingLeft=14;fontSize=12;verticalAlign=top;spacingTop=10;" vertex="1" parent="1">
+          <mxGeometry x="60" y="100" width="340" height="280" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="pB" value="PHASE B — Fuel Brain live&#xa;&#xa;• Edge classifier + confidence&#xa;• Unknown review queue in Dominion&#xa;• Fleet recon reads brain km&#xa;• Feature flag FLEET_USE_FUEL_BRAIN&#xa;• Deadhead rules configurable in Dominion&#xa;&#xa;Outcome: 5 cards fed by classified km" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fef3c7;strokeColor=#d97706;align=left;spacingLeft=14;fontSize=12;verticalAlign=top;spacingTop=10;" vertex="1" parent="1">
+          <mxGeometry x="460" y="100" width="340" height="280" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="pC" value="PHASE C — Enterprise polish&#xa;&#xa;• GPS / telematics optional feed&#xa;• Home/office zones + work hours&#xa;• Fuel card provider sync&#xa;• ECU fuel when available&#xa;• Audit exports for disputes&#xa;&#xa;Outcome: industry-parity personal tracking" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#16a34a;align=left;spacingLeft=14;fontSize=12;verticalAlign=top;spacingTop=10;" vertex="1" parent="1">
+          <mxGeometry x="860" y="100" width="340" height="280" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="ea" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;endFill=1;strokeWidth=3;strokeColor=#dc2626;" edge="1" parent="1" source="pA" target="pB"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <mxCell id="eb" style="edgeStyle=orthogonalEdgeStyle;html=1;endArrow=block;endFill=1;strokeWidth=3;strokeColor=#d97706;" edge="1" parent="1" source="pB" target="pC"><mxGeometry relative="1" as="geometry"/></mxCell>
+
+        <mxCell id="now" value="YOU ARE HERE → start Phase A (see plan).&#xa;Fuel Brain nav already lives under Dominion → Fuel Management." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1e293b;fontColor=#f8fafc;strokeColor=#0f172a;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="60" y="440" width="1140" height="60" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
