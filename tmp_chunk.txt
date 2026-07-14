@@ -1,0 +1,56 @@
+### Product contract (locked)
+- **Measured Personal km** = existing Fuel Brain residual (no new odo method).
+- **Weekly earnings** = Driver-portal style trip earnings (Uber + InDrive + Roam) for that driver+week.
+- **Quota target** = fleet weekly quota (manager-set; default suggestion **100,000 JMD**).
+- **Option 2 bands** (manager-editable). Seed: `<60%→0km`, `60–79%→40`, `80–99%→75`, `≥100%→100` + optional **next-week bonus km** (0 disables).
+- **Earned Personal fuel \$** → company absorbs **100%**.
+- **Overage km** → driver at real fuel $`/km (`(1/efficiency)×`$/L\`).
+- **No finalize plumbing change** — do not change weekly statement commit / blended-ratio consumers; only how Personal contributes to company vs driver share.
+- **Default:** policy `enabled: false` (opt-in).
+### Settings placement
+3rd tab on existing Tier Config (Driver Operations): `Tiers | Earning Quota | Personal Allowance`. No new sidebar route.
+### Implementation phases
+1. **Stitch design only** — Personal Allowance settings + recon Personal insight in Stitch project **roam fleet app**; design system applied; **no TypeScript wiring**.
+2. **Types / prefs / pure engine** — `personalAllowance` on preferences; pure helper + vitests; bonus KV shape; recon money **unchanged**.
+3. **Settings UI** — Port Stitch → `PersonalAllowanceConfigTab`; 3rd tab; save/load only.
+4. **Recon money path** — Inject earned/overage in `calculateReconciliation` after personal \$ / before category cost split; metadata; dashboard/table insight; finalize commit **untouched**.
+5. **Harden / docs / rollout** — Keep default off; docs; Kenny-week-style manual checklist.
+6. **Cleanup** — Single helper, no misleading consumers, focused vitest; no drive-by refactors.
+### Money injection rule (Phase 4)
+When enabled: feed **only overage Personal \$** into existing personal coverage split; add **earned Personal \$ fully to company share**; keep displayed measured Personal cost auditable via explicit earned/overage fields + `metadata.personalAllowance`.
+### Key files (planned)
+<table header-row="true">
+<tr>
+<td>Area</td>
+<td>Path</td>
+</tr>
+<tr>
+<td>Settings shell</td>
+<td>`apps/fleet/src/components/tiers/TierConfigPage.tsx`</td>
+</tr>
+<tr>
+<td>Allowance tab</td>
+<td>`apps/fleet/src/components/tiers/PersonalAllowanceConfigTab.tsx` (new)</td>
+</tr>
+<tr>
+<td>Prefs</td>
+<td>`apps/fleet/src/services/tierService.ts`</td>
+</tr>
+<tr>
+<td>Engine</td>
+<td>`apps/fleet/src/utils/personalAllowance.ts` (new)</td>
+</tr>
+<tr>
+<td>Recon inject</td>
+<td>`apps/fleet/src/services/fuelCalculationService.ts`</td>
+</tr>
+<tr>
+<td>UI insight</td>
+<td>`ScenarioSplitDashboard.tsx`, `ReconciliationTable.tsx`</td>
+</tr>
+</table>
+### Out of scope
+GPS / Geotab / OBD · Dominion Fuel Brain settings · Changing Ride Share / Deadhead platform insight cards · Per-driver overrides (fleet-wide first)
+### Done when
+Managers can configure Option 2 under Tier Config → Personal Allowance; opt-in company covers earned Personal fuel and drivers pay overage at period \$/km; policy off matches today’s finalize math; Stitch gates Phase 1 before wiring; tests green after cleanup.
+---

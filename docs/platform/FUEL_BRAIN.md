@@ -53,7 +53,7 @@ Money layer unchanged: receipts + scenario coverage %. Brain only supplies categ
 
 Separate from Fuel Brain. Brain still measures **Personal km**. When managers enable **Driver Operations → Tier Config → Personal Allowance**:
 
-- Drivers **earn free Personal km** from weekly quota % bands (Uber+InDrive+Roam earnings vs weekly quota).
+- Drivers **earn free Personal km** from weekly quota % bands (**Gross Revenue** from the same ledger source as Earnings History → weekly quota).
 - **Company absorbs earned Personal fuel 100%**.
 - Driver pays **overage** Personal km at period fuel $/km.
 - Default **off** (`enabled: false`). Does not change `commitWeeklyStatement` plumbing — only how Personal contributes to company vs driver share before finalize.

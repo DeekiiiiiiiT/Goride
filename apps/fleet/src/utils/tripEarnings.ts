@@ -63,3 +63,33 @@ export function getDriverPortalTripEarnings(trip: Trip | null | undefined): numb
 
   return trip.netPayout || trip.amount || 0;
 }
+
+/**
+ * Gross fare revenue for a trip — aligns with ledger fare_earning.grossAmount
+ * (Earnings History "Gross Revenue"). Excludes tips (posted as separate tip events).
+ */
+export function getTripGrossRevenue(trip: Trip | null | undefined): number {
+  if (!trip) return 0;
+  const platformNorm = String(trip.platform || '').trim().toLowerCase();
+  const amount = Number(trip.amount) || 0;
+
+  const isUber = platformNorm === 'uber' || platformNorm.startsWith('uber ');
+  if (isUber) {
+    const uberFare = Number(trip.uberFareComponents) || 0;
+    if (uberFare > 0) return uberFare;
+    const tips = Number(trip.uberTips) || 0;
+    const priorAdj = Number(trip.uberPriorPeriodAdjustment) || 0;
+    return Math.max(0, amount - tips - priorAdj);
+  }
+
+  if (platformNorm === 'indrive') {
+    let gross = amount;
+    if (trip.indriveNetIncome != null) {
+      const net = Number(trip.indriveNetIncome) || 0;
+      if (net > gross) gross = net;
+    }
+    return gross;
+  }
+
+  return amount;
+}

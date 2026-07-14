@@ -7,6 +7,10 @@ import {
   earnedPersonalKmFromBands,
   mergePersonalAllowanceDefaults,
   personalAllowanceBonusKey,
+  personalCostForCoverageSplit,
+  personalEarnedCostAbsorbed,
+  driverFacingPersonalCost,
+  driverShareExcludingPersonal,
   resolveWeeklyQuotaJmd,
   validatePersonalAllowanceBands,
 } from './personalAllowance';
@@ -117,5 +121,28 @@ describe('personalAllowance', () => {
         { minPctInclusive: 60, maxPctExclusive: 100, earnedKm: 40 },
       ]),
     ).toMatch(/overlap/i);
+  });
+
+  it('report helpers prefer overage when allowance metadata present', () => {
+    const report = {
+      personalUsageCost: 1000,
+      driverShare: 800,
+      metadata: {
+        personalAllowance: {
+          quotaPct: 72,
+          weeklyEarnings: 72000,
+          weeklyQuota: 100000,
+          earnedKm: 40,
+          overageKm: 60,
+          earnedCost: 400,
+          overageCost: 600,
+          hitTopBand: false,
+        },
+      },
+    };
+    expect(personalCostForCoverageSplit(report)).toBe(600);
+    expect(personalEarnedCostAbsorbed(report)).toBe(400);
+    expect(driverFacingPersonalCost(report)).toBe(600);
+    expect(driverShareExcludingPersonal(report)).toBe(200);
   });
 });

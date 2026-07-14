@@ -14,6 +14,11 @@ import { FuelDisputeService } from '../../services/fuelDisputeService';
 import { WeeklyFuelReport, FuelDispute } from '../../types/fuel';
 import { Separator } from "../ui/separator";
 import { DisputeModal } from "../fuel/DisputeModal";
+import {
+  driverFacingPersonalCost,
+  driverShareExcludingPersonal,
+  personalEarnedCostAbsorbed,
+} from '../../utils/personalAllowance';
 
 export function DriverFuelStats() {
     const { user } = useAuth();
@@ -144,13 +149,7 @@ export function DriverFuelStats() {
                         <div className="space-y-2 text-sm text-indigo-800/80">
                             <div className="flex justify-between">
                                 <span>Personal Usage ({Math.round(report.personalDistance)} km)</span>
-                                <span>
-                                  $
-                                  {(
-                                    report.metadata?.personalAllowance?.overageCost ??
-                                    report.personalUsageCost
-                                  ).toFixed(2)}
-                                </span>
+                                <span>${driverFacingPersonalCost(report).toFixed(2)}</span>
                             </div>
                             {report.metadata?.personalAllowance && (
                                 <div className="flex justify-between text-xs text-indigo-700/70">
@@ -158,21 +157,12 @@ export function DriverFuelStats() {
                                       Company covers earned (
                                       {Math.round(report.metadata.personalAllowance.earnedKm)} km)
                                     </span>
-                                    <span>
-                                      ${Number(report.metadata.personalAllowance.earnedCost || 0).toFixed(2)}
-                                    </span>
+                                    <span>${personalEarnedCostAbsorbed(report).toFixed(2)}</span>
                                 </div>
                             )}
                             <div className="flex justify-between">
                                 <span>Other fuel share</span>
-                                <span>
-                                  $
-                                  {(
-                                    report.driverShare -
-                                    (report.metadata?.personalAllowance?.overageCost ??
-                                      report.personalUsageCost)
-                                  ).toFixed(2)}
-                                </span>
+                                <span>${driverShareExcludingPersonal(report).toFixed(2)}</span>
                             </div>
                         </div>
                         <div className="mt-4 pt-2 border-t border-indigo-200/50">

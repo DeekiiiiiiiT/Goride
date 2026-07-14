@@ -119,6 +119,7 @@ export function ReconciliationTable({
     );
     const [quotaConfig, setQuotaConfig] = useState<QuotaConfig | null>(null);
     const [bonusByDriverId, setBonusByDriverId] = useState<Map<string, number>>(new Map());
+    const [ledgerGrossByDriverId, setLedgerGrossByDriverId] = useState<Map<string, number>>(new Map());
 
     useEffect(() => {
         let cancelled = false;
@@ -153,6 +154,55 @@ export function ReconciliationTable({
             cancelled = true;
         };
     }, [weekStart, drivers]);
+
+    // Same Gross Revenue as Driver Earnings History (ledger fare_earning) for PA quota %
+    useEffect(() => {
+        if (!weekStart || !weekEnd || !personalAllowanceConfig.enabled) {
+            setLedgerGrossByDriverId(new Map());
+            return;
+        }
+        let cancelled = false;
+        const startDate = format(weekStart, 'yyyy-MM-dd');
+        const endDate = format(weekEnd, 'yyyy-MM-dd');
+        const ids = [
+            ...new Set(
+                drivers
+                    .map((d) => d.id || d.driverId)
+                    .filter((id): id is string => !!id && id !== UNASSIGNED_FUEL_DRIVER_ID),
+            ),
+        ];
+        if (!ids.length) {
+            setLedgerGrossByDriverId(new Map());
+            return;
+        }
+        (async () => {
+            const map = new Map<string, number>();
+            await Promise.all(
+                ids.map(async (driverId) => {
+                    try {
+                        const result = await api.getLedgerEarningsHistory({
+                            driverId,
+                            periodType: 'weekly',
+                            startDate,
+                            endDate,
+                        });
+                        const row = (result.data || []).find(
+                            (x: any) => String(x.periodStart || '').slice(0, 10) === startDate,
+                        );
+                        if (row && Number.isFinite(Number(row.grossRevenue))) {
+                            map.set(driverId, Number(row.grossRevenue));
+                        }
+                    } catch {
+                        /* leave missing — PA falls back to trip gross */
+                    }
+                }),
+            );
+            if (!cancelled) setLedgerGrossByDriverId(map);
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [weekStart, weekEnd, drivers, personalAllowanceConfig.enabled]);
 
     // Per-period deadhead fetch: use the selected week range directly
     // (previously used broad date range, which overcounted deadhead per week)
@@ -266,6 +316,7 @@ export function ReconciliationTable({
                 config: personalAllowanceConfig,
                 quotaConfig,
                 bonusByDriverId,
+                ledgerGrossByDriverId,
               }
             : undefined;
         return FuelCalculationService.generateDriverFleetReport(
@@ -283,7 +334,7 @@ export function ReconciliationTable({
             FLEET_USE_FUEL_BRAIN ? brainByDriverVehicle : undefined,
             personalAllowance,
         );
-    }, [vehicles, drivers, trips, fuelEntries, adjustments, weekStart, weekEnd, scenarios, deadheadMap, fuelCards, brainByDriverVehicle, personalAllowanceConfig, quotaConfig, bonusByDriverId]);
+    }, [vehicles, drivers, trips, fuelEntries, adjustments, weekStart, weekEnd, scenarios, deadheadMap, fuelCards, brainByDriverVehicle, personalAllowanceConfig, quotaConfig, bonusByDriverId, ledgerGrossByDriverId]);
 
     useEffect(() => {
         onReportsChange?.(reports);
@@ -1063,7 +1114,7 @@ export function ReconciliationTable({
                                                                     <span>{report.metadata.personalAllowance.quotaPct.toFixed(1)}%</span>
                                                                 </div>
                                                                 <div className="flex justify-between gap-4">
-                                                                    <span>Earnings vs target</span>
+                                                                    <span>Gross vs target</span>
                                                                     <span>
                                                                         ${Math.round(report.metadata.personalAllowance.weeklyEarnings).toLocaleString()} / $
                                                                         {Math.round(report.metadata.personalAllowance.weeklyQuota).toLocaleString()}

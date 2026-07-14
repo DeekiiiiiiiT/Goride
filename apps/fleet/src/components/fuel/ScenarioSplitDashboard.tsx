@@ -6,6 +6,10 @@ import { Trip } from '../../types/data';
 import { Car, Building2, User, Info, Navigation } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 import { splitAllCategoryCosts, sumSplitTotals } from '../../utils/fuelCoverageSplit';
+import {
+  personalCostForCoverageSplit,
+  personalEarnedCostAbsorbed,
+} from '../../utils/personalAllowance';
 import { resolveActiveFuelPolicyForDriverWeek } from '../../utils/fuelPolicyVersion';
 import { reportWeekYmdBounds } from '../../utils/fuelWeekPeriod';
 import {
@@ -67,10 +71,8 @@ export function ScenarioSplitDashboard({
 }: ScenarioSplitDashboardProps) {
     const calculateBreakdown = (report: WeeklyFuelReport, scenario?: FuelScenario): SplitBreakdown => {
         const fuelRule = scenario?.rules.find(r => r.category === 'Fuel');
-        const pa = report.metadata?.personalAllowance;
-        const personalForSplit =
-            pa && typeof pa.overageCost === 'number' ? pa.overageCost : report.personalUsageCost;
-        const earnedAbsorb = pa && typeof pa.earnedCost === 'number' ? pa.earnedCost : 0;
+        const personalForSplit = personalCostForCoverageSplit(report);
+        const earnedAbsorb = personalEarnedCostAbsorbed(report);
         const split = splitAllCategoryCosts(
             {
                 rideShare: report.rideShareCost,
@@ -110,6 +112,13 @@ export function ScenarioSplitDashboard({
             breakdown: SplitBreakdown;
             rideShareByPlatform: PlatformAmountMap;
             deadheadByPlatform: PlatformAmountMap;
+            personalAllowance: {
+              earnedKm: number;
+              overageKm: number;
+              earnedCost: number;
+              overageCost: number;
+              active: boolean;
+            };
         }> = {};
 
         reports.forEach(report => {
@@ -136,6 +145,13 @@ export function ScenarioSplitDashboard({
                     },
                     rideShareByPlatform: emptyPlatformAmounts(),
                     deadheadByPlatform: emptyPlatformAmounts(),
+                    personalAllowance: {
+                      earnedKm: 0,
+                      overageKm: 0,
+                      earnedCost: 0,
+                      overageCost: 0,
+                      active: false,
+                    },
                 };
             }
 
@@ -147,6 +163,7 @@ export function ScenarioSplitDashboard({
             });
             const rideShare$ = allocateAmountByKmShare(report.rideShareCost || 0, kmByPlatform);
             const deadhead$ = allocateAmountByKmShare(report.deadheadCost || 0, kmByPlatform);
+            const pa = report.metadata?.personalAllowance;
 
             groups[activeScenarioId].count++;
             groups[activeScenarioId].totalSpend += report.totalGasCardCost;
@@ -158,6 +175,13 @@ export function ScenarioSplitDashboard({
                 groups[activeScenarioId].deadheadByPlatform,
                 deadhead$,
             );
+            if (pa) {
+              groups[activeScenarioId].personalAllowance.active = true;
+              groups[activeScenarioId].personalAllowance.earnedKm += Number(pa.earnedKm) || 0;
+              groups[activeScenarioId].personalAllowance.overageKm += Number(pa.overageKm) || 0;
+              groups[activeScenarioId].personalAllowance.earnedCost += Number(pa.earnedCost) || 0;
+              groups[activeScenarioId].personalAllowance.overageCost += Number(pa.overageCost) || 0;
+            }
 
             groups[activeScenarioId].breakdown.company.total += bd.company.total;
             groups[activeScenarioId].breakdown.company.rideShare += bd.company.rideShare;
@@ -238,18 +262,40 @@ export function ScenarioSplitDashboard({
                                 </div>
                             }
                         />
-                        <CategoryTile
-                            title="Personal"
-                            icon={User}
-                            companyAmount={group.breakdown.company.personal}
-                            driverAmount={group.breakdown.driver.personal}
-                            tooltip={
-                                <div className="space-y-2 max-w-xs">
-                                    <p className="font-semibold text-slate-100">Personal</p>
-                                    <p>Residual after trips, company ops, and deadhead. When Personal Allowance is on: company covers earned Personal fuel; driver pays overage at period $/km.</p>
-                                </div>
-                            }
-                        />
+                        {group.personalAllowance.active ? (
+                            <PersonalAllowanceTile
+                                totalCost={
+                                  group.breakdown.company.personal + group.breakdown.driver.personal
+                                }
+                                earnedKm={group.personalAllowance.earnedKm}
+                                overageKm={group.personalAllowance.overageKm}
+                                earnedCost={group.personalAllowance.earnedCost}
+                                overageCost={group.personalAllowance.overageCost}
+                                tooltip={
+                                    <div className="space-y-2 max-w-xs">
+                                        <p className="font-semibold text-slate-100">Personal Allowance</p>
+                                        <p>Earned Personal km is covered 100% by the company. Overage km is charged to the driver at period fuel $/km.</p>
+                                        <div className="border-t border-slate-600 pt-1.5 space-y-1">
+                                            <p className="font-medium text-slate-300 text-[11px] uppercase tracking-wide">Bar meaning</p>
+                                            <p>Teal = earned (free) km · Amber = overage km</p>
+                                        </div>
+                                    </div>
+                                }
+                            />
+                        ) : (
+                            <CategoryTile
+                                title="Personal"
+                                icon={User}
+                                companyAmount={group.breakdown.company.personal}
+                                driverAmount={group.breakdown.driver.personal}
+                                tooltip={
+                                    <div className="space-y-2 max-w-xs">
+                                        <p className="font-semibold text-slate-100">Personal</p>
+                                        <p>Residual after trips, company ops, and deadhead (includes unlabeled miles).</p>
+                                    </div>
+                                }
+                            />
+                        )}
                         <CategoryTile
                             title="Misc (Leakage)"
                             companyAmount={group.breakdown.company.misc}
@@ -340,6 +386,83 @@ interface PlatformCategoryTileProps {
     /** When trips are empty, still show category total from company+driver. */
     fallbackTotal: number;
     tooltip: React.ReactNode;
+}
+
+interface PersonalAllowanceTileProps {
+    totalCost: number;
+    earnedKm: number;
+    overageKm: number;
+    earnedCost: number;
+    overageCost: number;
+    tooltip: React.ReactNode;
+}
+
+/** Segmented Personal card: earned vs overage km (matches Ride Share / Deadhead bar style). */
+function PersonalAllowanceTile({
+  totalCost,
+  earnedKm,
+  overageKm,
+  earnedCost,
+  overageCost,
+  tooltip,
+}: PersonalAllowanceTileProps) {
+    const kmTotal = Math.max(0, earnedKm) + Math.max(0, overageKm);
+    const earnedPct = kmTotal > 0 ? (earnedKm / kmTotal) * 100 : 0;
+    const overagePct = kmTotal > 0 ? (overageKm / kmTotal) * 100 : 0;
+    const formatCurrency = (val: number) =>
+        new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val);
+    const formatKm = (val: number) =>
+        `${val.toLocaleString(undefined, { maximumFractionDigits: 0 })} km`;
+
+    return (
+        <Card>
+            <CardContent className="p-4 space-y-3">
+                <div className="flex justify-between items-start">
+                    <div className="flex items-center gap-2 text-slate-600">
+                        <User className="h-4 w-4" />
+                        <span className="text-sm font-medium">Personal</span>
+                        <TooltipProvider>
+                            <Tooltip>
+                                <TooltipTrigger>
+                                    <Info className="h-3 w-3 text-slate-400" />
+                                </TooltipTrigger>
+                                <TooltipContent side="bottom" className="max-w-sm p-3 text-xs">
+                                    {tooltip}
+                                </TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
+                    </div>
+                    <span className={`text-lg font-bold ${totalCost < 0 ? 'text-emerald-600' : 'text-slate-900'}`}>
+                        {formatCurrency(totalCost)}
+                    </span>
+                </div>
+
+                <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden flex">
+                    <div className="h-full bg-teal-500" style={{ width: `${earnedPct}%` }} />
+                    <div className="h-full bg-amber-400" style={{ width: `${overagePct}%` }} />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="flex flex-col min-w-0">
+                        <span className="text-slate-500 mb-0.5 flex items-center gap-1 truncate">
+                            <span className="w-2 h-2 rounded-full shrink-0 bg-teal-500" />
+                            Earned
+                        </span>
+                        <span className="font-semibold text-teal-700 truncate">{formatKm(earnedKm)}</span>
+                        <span className="text-[11px] text-teal-600/80 truncate">{formatCurrency(earnedCost)} covered</span>
+                    </div>
+                    <div className="flex flex-col items-end min-w-0">
+                        <span className="text-slate-500 mb-0.5 flex items-center gap-1 truncate">
+                            Overage
+                            <span className="w-2 h-2 rounded-full shrink-0 bg-amber-400" />
+                        </span>
+                        <span className="font-semibold text-amber-700 truncate">{formatKm(overageKm)}</span>
+                        <span className="text-[11px] text-amber-600/80 truncate">{formatCurrency(overageCost)} driver</span>
+                    </div>
+                </div>
+            </CardContent>
+        </Card>
+    );
 }
 
 function PlatformCategoryTile({

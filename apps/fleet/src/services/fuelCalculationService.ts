@@ -20,9 +20,10 @@ import { UNASSIGNED_FUEL_DRIVER_ID } from '../types/fuel';
 import type { FuelCard } from '../types/fuel';
 import { isEntryInInclusiveYmdRange, entriesInFuelWeek } from '../utils/fuelWeekPeriod';
 import { getTotalTripRideshareKm } from '../utils/tripRideshareKm';
-import { getDriverPortalTripEarnings } from '../utils/tripEarnings';
+import { getTripGrossRevenue } from '../utils/tripEarnings';
 import {
   computePersonalAllowanceSplit,
+  buildPersonalAllowanceMetadata,
   type PersonalAllowanceSplitResult,
 } from '../utils/personalAllowance';
 import type { PersonalAllowanceTierConfig, QuotaConfig } from '../types/data';
@@ -34,7 +35,9 @@ export type PersonalAllowanceReconContext = {
   quotaConfig?: QuotaConfig | null;
   /** Key driverId → bonus km for this week */
   bonusByDriverId?: Map<string, number>;
-  /** All week trips for driver earnings (when slice trips are vehicle-scoped) */
+  /** Earnings History Gross Revenue for this week (driverId → JMD). Preferred over trip sum. */
+  ledgerGrossByDriverId?: Map<string, number>;
+  /** All week trips for driver earnings fallback when ledger gross missing */
   driverWeekTrips?: Trip[];
 };
 
@@ -324,8 +327,13 @@ export const FuelCalculationService = {
             paCtx?.config?.enabled
         ) {
             const earnTrips = paCtx.driverWeekTrips ?? vehicleTrips;
-            const earningsJmd = earnTrips.reduce((s, t) => s + getDriverPortalTripEarnings(t), 0);
             const driverIdForBonus = options?.driverId ?? vehicle.currentDriverId ?? '';
+            const ledgerGross = paCtx.ledgerGrossByDriverId?.get(driverIdForBonus);
+            // Prefer Earnings History ledger Gross; trip sum only if ledger missing
+            const earningsJmd =
+              ledgerGross != null && Number.isFinite(ledgerGross)
+                ? Number(ledgerGross)
+                : earnTrips.reduce((s, t) => s + getTripGrossRevenue(t), 0);
             const priorBonus = paCtx.bonusByDriverId?.get(driverIdForBonus) ?? 0;
             allowanceSplit = computePersonalAllowanceSplit({
                 measuredKm: personalDistance,
@@ -455,22 +463,9 @@ export const FuelCalculationService = {
                         availableKm: options.brainClassification.availableKm,
                       }
                     : undefined,
-                personalAllowance:
-                    allowanceSplit && !allowanceSplit.skip
-                        ? {
-                            quotaPct: allowanceSplit.quotaPct,
-                            weeklyEarnings: allowanceSplit.weeklyEarnings,
-                            weeklyQuota: allowanceSplit.weeklyQuota,
-                            earnedKm: allowanceSplit.earnedKm,
-                            overageKm: allowanceSplit.overageKm,
-                            earnedCost: allowanceSplit.earnedCost,
-                            overageCost: allowanceSplit.overageCost,
-                            hitTopBand: allowanceSplit.hitTopBand,
-                            configSnapshot: paCtx?.config,
-                          }
-                        : undefined,
-                personalEarnedCost: allowanceSplit && !allowanceSplit.skip ? allowanceSplit.earnedCost : undefined,
-                personalOverageCost: allowanceSplit && !allowanceSplit.skip ? allowanceSplit.overageCost : undefined,
+                personalAllowance: allowanceSplit
+                  ? buildPersonalAllowanceMetadata(allowanceSplit, paCtx?.config)
+                  : undefined,
             }
         };
     },
@@ -488,7 +483,11 @@ export const FuelCalculationService = {
         const calc = report.metadata?.rideShareCalc || {};
         const efficiency = Number(calc.observedEfficiency) > 0 ? Number(calc.observedEfficiency) : 10;
         const price = Number(calc.actualPricePerLiter) > 0 ? Number(calc.actualPricePerLiter) : 0;
-        const earningsJmd = driverWeekTrips.reduce((s, t) => s + getDriverPortalTripEarnings(t), 0);
+        const ledgerGross = paCtx.ledgerGrossByDriverId?.get(report.driverId);
+        const earningsJmd =
+          ledgerGross != null && Number.isFinite(ledgerGross)
+            ? Number(ledgerGross)
+            : driverWeekTrips.reduce((s, t) => s + getTripGrossRevenue(t), 0);
         const priorBonus = paCtx.bonusByDriverId?.get(report.driverId) ?? 0;
         const allowanceSplit = computePersonalAllowanceSplit({
             measuredKm: report.personalDistance,
@@ -531,19 +530,7 @@ export const FuelCalculationService = {
             driverShare,
             metadata: {
                 ...report.metadata,
-                personalAllowance: {
-                    quotaPct: allowanceSplit.quotaPct,
-                    weeklyEarnings: allowanceSplit.weeklyEarnings,
-                    weeklyQuota: allowanceSplit.weeklyQuota,
-                    earnedKm: allowanceSplit.earnedKm,
-                    overageKm: allowanceSplit.overageKm,
-                    earnedCost: allowanceSplit.earnedCost,
-                    overageCost: allowanceSplit.overageCost,
-                    hitTopBand: allowanceSplit.hitTopBand,
-                    configSnapshot: paCtx.config,
-                },
-                personalEarnedCost: allowanceSplit.earnedCost,
-                personalOverageCost: allowanceSplit.overageCost,
+                personalAllowance: buildPersonalAllowanceMetadata(allowanceSplit, paCtx.config),
             },
         };
     },

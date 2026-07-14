@@ -196,9 +196,11 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
         if (!reconciliationDateRange?.from) return;
         try {
             // Using getTripsFiltered is more efficient and accurate for reconciliation than raw getTrips
+            const startDate = toEntryYmd(reconciliationDateRange.from);
+            const endDate = toEntryYmd(reconciliationDateRange.to || reconciliationDateRange.from);
             const response = await api.getTripsFiltered({
-                startDate: toEntryYmd(reconciliationDateRange.from),
-                endDate: toEntryYmd(reconciliationDateRange.to || reconciliationDateRange.from),
+                startDate,
+                endDate,
                 limit: 1500 // Cap at 1500 to prevent browser lag, but cover the week
             });
             setTrips(response.data || []);

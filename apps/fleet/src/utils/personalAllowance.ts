@@ -170,3 +170,63 @@ export function validatePersonalAllowanceBands(bands: PersonalAllowanceBand[]): 
   if (openCount > 1) return 'Only one open-ended (top) band is allowed';
   return null;
 }
+
+/** Frozen audit block stored on WeeklyFuelReport.metadata.personalAllowance */
+export type PersonalAllowanceReportMeta = {
+  quotaPct: number;
+  weeklyEarnings: number;
+  weeklyQuota: number;
+  earnedKm: number;
+  overageKm: number;
+  earnedCost: number;
+  overageCost: number;
+  hitTopBand: boolean;
+  configSnapshot?: PersonalAllowanceTierConfig;
+};
+
+export function buildPersonalAllowanceMetadata(
+  split: PersonalAllowanceSplitResult | null | undefined,
+  config?: PersonalAllowanceTierConfig,
+): PersonalAllowanceReportMeta | undefined {
+  if (!split || split.skip) return undefined;
+  return {
+    quotaPct: split.quotaPct,
+    weeklyEarnings: split.weeklyEarnings,
+    weeklyQuota: split.weeklyQuota,
+    earnedKm: split.earnedKm,
+    overageKm: split.overageKm,
+    earnedCost: split.earnedCost,
+    overageCost: split.overageCost,
+    hitTopBand: split.hitTopBand,
+    configSnapshot: config,
+  };
+}
+
+type ReportLike = {
+  personalUsageCost: number;
+  driverShare: number;
+  metadata?: { personalAllowance?: PersonalAllowanceReportMeta | null };
+};
+
+/** Amount fed into scenario personalCoverage split (overage when allowance active). */
+export function personalCostForCoverageSplit(report: ReportLike): number {
+  const overage = report.metadata?.personalAllowance?.overageCost;
+  return typeof overage === 'number' ? overage : report.personalUsageCost;
+}
+
+/** Company-absorbed earned Personal $ (0 when policy off). */
+export function personalEarnedCostAbsorbed(report: ReportLike): number {
+  const earned = report.metadata?.personalAllowance?.earnedCost;
+  return typeof earned === 'number' ? earned : 0;
+}
+
+/** Driver-facing Personal $ line (overage when on; full measured when off). */
+export function driverFacingPersonalCost(report: ReportLike): number {
+  return personalCostForCoverageSplit(report);
+}
+
+/** Residual of driverShare after Personal (overage) line — misc/deadhead/RS driver portions. */
+export function driverShareExcludingPersonal(report: ReportLike): number {
+  return report.driverShare - driverFacingPersonalCost(report);
+}
+
