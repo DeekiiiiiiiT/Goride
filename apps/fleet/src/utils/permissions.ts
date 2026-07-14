@@ -387,7 +387,8 @@ export const PAGE_PERMISSION_MAP: Record<string, Permission> = {
 
   // Driver Operations
   'drivers':            'nav.drivers',
-  'tier-config':        'nav.tier_config',
+  'earnings-policy':    'nav.tier_config',
+  'tier-config-legacy': 'nav.tier_config',
   'driver-ledger':      'nav.drivers',
 
   // Vehicles / Fleet

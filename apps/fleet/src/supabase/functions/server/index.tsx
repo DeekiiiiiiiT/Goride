@@ -97,6 +97,7 @@ import { computeIndriveWalletFeesFromLedgerEntries } from "../../../utils/indriv
 import { parseCatalogMonthFromUnknown } from "../../../utils/catalogMonthParse.ts";
 import fuelApp from "./fuel_controller.tsx";
 import { validateFuelScenarioPayload } from "./fuel_scenario_validation.ts";
+import { validateEarningsPolicyPayload } from "./earnings_policy_validation.ts";
 import {
   enrichRecordWithDriverVehicle,
   syncDriverRecordFromVehicleAssignment,
@@ -7382,6 +7383,63 @@ app.delete("/make-server-37f42386/scenarios/:id", async (c) => {
     }
 
     await kv.del(`fuel_scenario:${id}`);
+    return c.json({ success: true });
+  } catch (e: any) { return c.json({ error: e.message }, 500); }
+});
+
+// --- EARNINGS POLICIES ---
+// Bundled tiers + quotas + personalAllowance with version scheduling.
+// Empty by default — does NOT auto-seed Default on GET.
+// Runtime consumers fall back to legacy prefs when policies empty.
+
+app.get("/make-server-37f42386/earnings-policies", requireAuth(), async (c) => {
+  try {
+    const items = await kv.getByPrefix("earnings_policy:");
+    // NO auto-seed — return empty array when library is empty
+    return c.json(filterByOrg(items || [], c));
+  } catch (e: any) { return c.json({ error: e.message }, 500); }
+});
+
+app.post("/make-server-37f42386/earnings-policies", async (c) => {
+  try {
+    const item = await c.req.json();
+    const validationError = validateEarningsPolicyPayload(item);
+    if (validationError) return c.json({ error: validationError }, 400);
+
+    if (!item.id) item.id = crypto.randomUUID();
+
+    // Enforce single default — clear isDefault from other policies
+    if (item.isDefault) {
+      const existing = (await kv.getByPrefix("earnings_policy:")) || [];
+      for (const other of existing) {
+        if (other?.id && other.id !== item.id && other.isDefault) {
+          await kv.set(`earnings_policy:${other.id}`, { ...other, isDefault: false });
+        }
+      }
+    }
+
+    await kv.set(`earnings_policy:${item.id}`, stampOrg(item, c));
+    return c.json({ success: true, data: item });
+  } catch (e: any) { return c.json({ error: e.message }, 500); }
+});
+
+app.delete("/make-server-37f42386/earnings-policies/:id", async (c) => {
+  const id = c.req.param("id");
+  try {
+    const existing = (await kv.getByPrefix("earnings_policy:")) || [];
+    const target = existing.find((p: any) => p?.id === id);
+    if (!target) return c.json({ success: true });
+
+    // Block deleting last policy
+    if (existing.length <= 1) {
+      return c.json({ error: "Cannot delete the last remaining earnings policy." }, 409);
+    }
+    // Block deleting default
+    if (target.isDefault) {
+      return c.json({ error: "Cannot delete the default policy. Set another policy as default first." }, 409);
+    }
+
+    await kv.del(`earnings_policy:${id}`);
     return c.json({ success: true });
   } catch (e: any) { return c.json({ error: e.message }, 500); }
 });

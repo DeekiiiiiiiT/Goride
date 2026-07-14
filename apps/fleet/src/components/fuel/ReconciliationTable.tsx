@@ -58,8 +58,15 @@ import { reportWeekYmdBounds, toEntryYmd, isSameFuelStatement } from '../../util
 import { sumPaidByDriverForReport } from '../../utils/fuelPaidByDriver';
 import { resolveActiveFuelPolicyForDriverWeek } from '../../utils/fuelPolicyVersion';
 import { tierService } from '../../services/tierService';
-import type { PersonalAllowanceTierConfig, QuotaConfig } from '../../types/data';
+import { earningsPolicyService } from '../../services/earningsPolicyService';
+import type { PersonalAllowanceTierConfig, QuotaConfig, TierConfig } from '../../types/data';
+import type { EarningsPolicy } from '../../types/earningsPolicy';
 import { mergePersonalAllowanceDefaults, personalAllowanceBonusKey } from '../../utils/personalAllowance';
+import {
+  resolveActiveEarningsBundleForDriverWeek,
+  extractEarningsPolicySnapshot,
+} from '../../utils/earningsPolicyResolve';
+import { createDefaultTiers } from '../../utils/earningsPolicyDefaults';
 
 interface ReconciliationTableProps {
     vehicles: Vehicle[];
@@ -118,6 +125,8 @@ export function ReconciliationTable({
         mergePersonalAllowanceDefaults(null),
     );
     const [quotaConfig, setQuotaConfig] = useState<QuotaConfig | null>(null);
+    const [legacyTiers, setLegacyTiers] = useState<TierConfig[]>(createDefaultTiers());
+    const [earningsPolicies, setEarningsPolicies] = useState<EarningsPolicy[]>([]);
     const [bonusByDriverId, setBonusByDriverId] = useState<Map<string, number>>(new Map());
     const [ledgerGrossByDriverId, setLedgerGrossByDriverId] = useState<Map<string, number>>(new Map());
 
@@ -125,14 +134,18 @@ export function ReconciliationTable({
         let cancelled = false;
         (async () => {
             try {
-                const [pa, quotas, prefs] = await Promise.all([
+                const [pa, quotas, tiers, policies, prefs] = await Promise.all([
                     tierService.getPersonalAllowanceSettings(),
                     tierService.getQuotaSettings(),
+                    tierService.getTiers().catch(() => createDefaultTiers()),
+                    earningsPolicyService.getEarningsPolicies().catch(() => [] as EarningsPolicy[]),
                     api.getPreferences().catch(() => ({})),
                 ]);
                 if (cancelled) return;
                 setPersonalAllowanceConfig(pa);
                 setQuotaConfig(quotas);
+                setLegacyTiers(Array.isArray(tiers) && tiers.length ? tiers : createDefaultTiers());
+                setEarningsPolicies(Array.isArray(policies) ? policies : []);
                 const ledger = (prefs.personalAllowanceBonuses || {}) as Record<string, number>;
                 const map = new Map<string, number>();
                 if (weekStart) {
@@ -156,8 +169,13 @@ export function ReconciliationTable({
     }, [weekStart, drivers]);
 
     // Same Gross Revenue as Driver Earnings History (ledger fare_earning) for PA quota %
+    const paMayBeActive = useMemo(() => {
+        if (personalAllowanceConfig.enabled) return true;
+        return earningsPolicies.some((p) => p.personalAllowance?.enabled || p.versions?.some((v) => v.personalAllowance?.enabled));
+    }, [personalAllowanceConfig.enabled, earningsPolicies]);
+
     useEffect(() => {
-        if (!weekStart || !weekEnd || !personalAllowanceConfig.enabled) {
+        if (!weekStart || !weekEnd || !paMayBeActive) {
             setLedgerGrossByDriverId(new Map());
             return;
         }
@@ -202,7 +220,7 @@ export function ReconciliationTable({
         return () => {
             cancelled = true;
         };
-    }, [weekStart, weekEnd, drivers, personalAllowanceConfig.enabled]);
+    }, [weekStart, weekEnd, drivers, paMayBeActive]);
 
     // Per-period deadhead fetch: use the selected week range directly
     // (previously used broad date range, which overcounted deadhead per week)
@@ -311,14 +329,35 @@ export function ReconciliationTable({
     // Driver-first: one report per driver+week (shared cars → multiple rows)
     const reports = useMemo(() => {
         if (!weekStart) return [];
-        const personalAllowance = personalAllowanceConfig.enabled
-            ? {
-                config: personalAllowanceConfig,
-                quotaConfig,
-                bonusByDriverId,
-                ledgerGrossByDriverId,
-              }
-            : undefined;
+        const weekStartYmd = format(weekStart, 'yyyy-MM-dd');
+        const legacy = {
+            tiers: legacyTiers,
+            quotas: quotaConfig || {
+                daily: { enabled: false, amount: 0 },
+                weekly: { enabled: false, amount: 0 },
+                monthly: { enabled: false, amount: 0 },
+            },
+            personalAllowance: personalAllowanceConfig,
+        };
+        const personalAllowance = {
+            config: personalAllowanceConfig,
+            quotaConfig,
+            bonusByDriverId,
+            ledgerGrossByDriverId,
+            resolveForDriver: (driverId: string) => {
+                const bundle = resolveActiveEarningsBundleForDriverWeek({
+                    policies: earningsPolicies,
+                    driverId,
+                    weekStartYmd,
+                    legacy,
+                });
+                return {
+                    config: bundle.personalAllowance,
+                    quotaConfig: bundle.quotas,
+                    earningsPolicy: extractEarningsPolicySnapshot(bundle),
+                };
+            },
+        };
         return FuelCalculationService.generateDriverFleetReport(
             vehicles,
             drivers,
@@ -334,7 +373,7 @@ export function ReconciliationTable({
             FLEET_USE_FUEL_BRAIN ? brainByDriverVehicle : undefined,
             personalAllowance,
         );
-    }, [vehicles, drivers, trips, fuelEntries, adjustments, weekStart, weekEnd, scenarios, deadheadMap, fuelCards, brainByDriverVehicle, personalAllowanceConfig, quotaConfig, bonusByDriverId, ledgerGrossByDriverId]);
+    }, [vehicles, drivers, trips, fuelEntries, adjustments, weekStart, weekEnd, scenarios, deadheadMap, fuelCards, brainByDriverVehicle, personalAllowanceConfig, quotaConfig, bonusByDriverId, ledgerGrossByDriverId, earningsPolicies, legacyTiers]);
 
     useEffect(() => {
         onReportsChange?.(reports);

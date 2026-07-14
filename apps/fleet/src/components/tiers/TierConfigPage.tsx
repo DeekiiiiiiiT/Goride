@@ -13,6 +13,8 @@ import {
   mergePersonalAllowanceDefaults,
   validatePersonalAllowanceBands,
 } from '../../utils/personalAllowance';
+import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
+import { Info } from 'lucide-react';
 
 export function TierConfigPage() {
   const [tiers, setTiers] = useState<TierConfig[]>([]);
@@ -120,11 +122,19 @@ export function TierConfigPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Tier Configuration</h2>
+        <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Legacy Tier Settings</h2>
         <p className="text-slate-500 dark:text-slate-400">
-          Manage driver earnings thresholds, profit sharing, earning quotas, and Personal Allowance.
+          Global fallback for fleets that have not recreated settings as an Earnings Policy yet.
         </p>
       </div>
+
+      <Alert className="bg-slate-50 border-slate-200 text-slate-900">
+        <Info className="h-4 w-4 text-indigo-600" />
+        <AlertTitle>Runtime fallback only</AlertTitle>
+        <AlertDescription className="text-slate-700">
+          Prefer <strong>Earnings Policy Configuration</strong> (Rules + Schedule). These values apply only until you create a Default earnings policy. Recreate your tier ladder, weekly quota, and Personal Allowance there, then Make default.
+        </AlertDescription>
+      </Alert>
 
       <Tabs defaultValue="tiers" className="w-full">
         <TabsList className="grid w-full grid-cols-3 mb-4">

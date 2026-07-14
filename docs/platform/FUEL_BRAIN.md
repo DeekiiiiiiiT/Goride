@@ -51,11 +51,12 @@ Money layer unchanged: receipts + scenario coverage %. Brain only supplies categ
 
 ## Personal Allowance (Option 2) — Fleet money layer
 
-Separate from Fuel Brain. Brain still measures **Personal km**. When managers enable **Driver Operations → Tier Config → Personal Allowance**:
+Separate from Fuel Brain. Brain still measures **Personal km**. When Personal Allowance is enabled on the effective Earnings Policy (or legacy Tier Settings fallback):
 
 - Drivers **earn free Personal km** from weekly quota % bands (**Gross Revenue** from the same ledger source as Earnings History → weekly quota).
 - **Company absorbs earned Personal fuel 100%**.
 - Driver pays **overage** Personal km at period fuel $/km.
 - Default **off** (`enabled: false`). Does not change `commitWeeklyStatement` plumbing — only how Personal contributes to company vs driver share before finalize.
-- Settings + Stitch refs: `apps/fleet/design/stitch/personal-allowance/`
+- **Config source (2026-07):** Driver Operations → **Earnings Policy Configuration** (Rules template + Schedule versions). Empty policy library falls back to legacy prefs (`tierService` / `preferences:general`). Resolution: version membership → Default policy → legacy.
+- Settings + Stitch refs: `apps/fleet/design/stitch-earnings-policy/` (plus prior `apps/fleet/design/stitch/personal-allowance/`)
 

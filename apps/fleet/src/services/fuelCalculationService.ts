@@ -39,6 +39,20 @@ export type PersonalAllowanceReconContext = {
   ledgerGrossByDriverId?: Map<string, number>;
   /** All week trips for driver earnings fallback when ledger gross missing */
   driverWeekTrips?: Trip[];
+  /**
+   * Dual-read: resolve PA+quota per driver-week from Earnings Policy (version → default → legacy).
+   * When omitted, `config` / `quotaConfig` apply to every driver (legacy parity).
+   */
+  resolveForDriver?: (driverId: string) => {
+    config: PersonalAllowanceTierConfig;
+    quotaConfig?: QuotaConfig | null;
+    earningsPolicy?: {
+      policyId?: string;
+      versionId?: string;
+      source: string;
+      policyName?: string;
+    };
+  };
 };
 
 /** Per-vehicle deadhead attribution passed in from the API (Phase 2) */
@@ -479,7 +493,11 @@ export const FuelCalculationService = {
         paCtx: PersonalAllowanceReconContext,
         driverWeekTrips: Trip[],
     ): WeeklyFuelReport => {
-        if (!paCtx?.config?.enabled) return report;
+        const resolved = paCtx.resolveForDriver?.(report.driverId);
+        const config = resolved?.config ?? paCtx.config;
+        const quotaConfig =
+          resolved && 'quotaConfig' in resolved ? resolved.quotaConfig : paCtx.quotaConfig;
+        if (!config?.enabled) return report;
         const calc = report.metadata?.rideShareCalc || {};
         const efficiency = Number(calc.observedEfficiency) > 0 ? Number(calc.observedEfficiency) : 10;
         const price = Number(calc.actualPricePerLiter) > 0 ? Number(calc.actualPricePerLiter) : 0;
@@ -494,8 +512,8 @@ export const FuelCalculationService = {
             efficiencyKmPerL: efficiency,
             pricePerLiter: price,
             earningsJmd,
-            config: paCtx.config,
-            quotaConfig: paCtx.quotaConfig,
+            config,
+            quotaConfig,
             priorWeekBonusKm: priorBonus,
         });
         if (allowanceSplit.skip) return report;
@@ -530,7 +548,8 @@ export const FuelCalculationService = {
             driverShare,
             metadata: {
                 ...report.metadata,
-                personalAllowance: buildPersonalAllowanceMetadata(allowanceSplit, paCtx.config),
+                personalAllowance: buildPersonalAllowanceMetadata(allowanceSplit, config),
+                earningsPolicy: resolved?.earningsPolicy,
             },
         };
     },
@@ -752,7 +771,10 @@ export const FuelCalculationService = {
             if (sliceMeta) {
                 merged.metadata = { ...merged.metadata, ...sliceMeta };
             }
-            if (personalAllowance?.config?.enabled) {
+            if (personalAllowance) {
+                const resolvedPa = personalAllowance.resolveForDriver?.(driverId);
+                const paEnabled = (resolvedPa?.config ?? personalAllowance.config)?.enabled;
+                if (paEnabled) {
                 const activeScenario = pickScenarioForDriverMembership(scenarios, driverId, startStr);
                 const fuelRule = activeScenario?.rules.find((r) => r.category === 'Fuel');
                 const priceGuess =
@@ -777,6 +799,7 @@ export const FuelCalculationService = {
                     personalAllowance,
                     expandedTrips,
                 );
+                }
             }
             reports.push(merged);
         }

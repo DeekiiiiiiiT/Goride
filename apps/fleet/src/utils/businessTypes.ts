@@ -80,6 +80,8 @@ export const SIDEBAR_VISIBILITY: Record<string, BusinessType[]> = {
 
   // Conditionally visible
   'tier-config': ['rideshare'],
+  'earnings-policy': ['rideshare'],
+  'tier-config-legacy': ['rideshare'],
   'toll-management': ['rideshare', 'taxi', 'trucking', 'shipping'],
 };
 
