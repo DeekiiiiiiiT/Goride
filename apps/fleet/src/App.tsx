@@ -22,7 +22,6 @@ import { TransactionsPage } from './components/transactions/TransactionsPage';
 import { TollReconciliation } from './pages/TollReconciliation';
 import { TagInventory } from './pages/TagInventory';
 import { UserManagementPage } from './components/users/UserManagementPage';
-import { TierConfigPage } from './components/tiers/TierConfigPage';
 import { EarningsPolicyConfiguration } from './components/earnings-policy';
 import { FuelManagement } from './pages/FuelManagement';
 import { TollLogsPage } from './pages/TollLogs';
@@ -75,9 +74,11 @@ function AppContent() {
   const [currentPage, setCurrentPage] = useState('dashboard');
   const [driverIdForDetail, setDriverIdForDetail] = useState<string | null>(null);
 
-  // Legacy bookmarks: Tier Config → Earnings Policy Configuration
+  // Old Tier Config / legacy bookmarks → Earnings Policy Configuration
   useEffect(() => {
-    if (currentPage === 'tier-config') setCurrentPage('earnings-policy');
+    if (currentPage === 'tier-config' || currentPage === 'tier-config-legacy') {
+      setCurrentPage('earnings-policy');
+    }
   }, [currentPage]);
 
   // ── Maintenance Mode Check ────────────────────────────────────────────
@@ -351,11 +352,6 @@ function AppContent() {
         {currentPage === 'earnings-policy' && (
           <PermissionGate permission="nav.tier_config" onNavigate={setCurrentPage}>
             <EarningsPolicyConfiguration />
-          </PermissionGate>
-        )}
-        {currentPage === 'tier-config-legacy' && (
-          <PermissionGate permission="nav.tier_config" onNavigate={setCurrentPage}>
-            <TierConfigPage />
           </PermissionGate>
         )}
         {currentPage === 'driver-ledger' && (

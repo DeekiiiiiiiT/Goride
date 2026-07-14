@@ -97,7 +97,7 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate, onLogout }: { curre
   const { isModuleEnabled } = useFeatureFlags();
   const isTollManagementOpen = ['toll-logs', 'toll-tags', 'tag-inventory', 'toll-analytics'].includes(currentPage);
   const isFuelManagementOpen = ['fuel-management', 'fuel-overview', 'fuel-reconciliation', 'fuel-cards', 'fuel-logs', 'fuel-configuration', 'fuel-reimbursements', 'fuel-integrity-gap'].includes(currentPage);
-  const isDriverOpsOpen = ['drivers', 'earnings-policy', 'tier-config-legacy', 'driver-ledger'].includes(currentPage);
+  const isDriverOpsOpen = ['drivers', 'earnings-policy', 'driver-ledger'].includes(currentPage);
   const isVehicleOpsOpen = ['vehicles', 'maintenance-hub', 'fleet'].includes(currentPage);
 
   return (
@@ -148,20 +148,11 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate, onLogout }: { curre
                     </SidebarMenuSubButton>
                   </SidebarMenuSubItem>
                   )}
-                  {isSidebarItemVisible('earnings-policy', businessType) && canView('tier-config') && (
+                  {isSidebarItemVisible('earnings-policy', businessType) && canView('earnings-policy') && (
                   <SidebarMenuSubItem>
                     <SidebarMenuSubButton asChild isActive={currentPage === 'earnings-policy'} onClick={() => onNavigate?.('earnings-policy')}>
                       <button className="w-full text-left cursor-pointer">
                         <span>Earnings Policy Configuration</span>
-                      </button>
-                    </SidebarMenuSubButton>
-                  </SidebarMenuSubItem>
-                  )}
-                  {isSidebarItemVisible('tier-config-legacy', businessType) && canView('tier-config') && (
-                  <SidebarMenuSubItem>
-                    <SidebarMenuSubButton asChild isActive={currentPage === 'tier-config-legacy'} onClick={() => onNavigate?.('tier-config-legacy')}>
-                      <button className="w-full text-left cursor-pointer text-slate-500">
-                        <span>Legacy Tier Settings</span>
                       </button>
                     </SidebarMenuSubButton>
                   </SidebarMenuSubItem>

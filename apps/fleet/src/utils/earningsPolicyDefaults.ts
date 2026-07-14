@@ -1,6 +1,6 @@
 /**
  * Default templates for new earnings policies.
- * Bronze → Diamond tier ladder from legacy TierConfigPage defaults.
+ * Bronze → Diamond tier ladder defaults for new earnings policies.
  */
 
 import type { TierConfig, QuotaConfig, PersonalAllowanceTierConfig } from '../types/data';

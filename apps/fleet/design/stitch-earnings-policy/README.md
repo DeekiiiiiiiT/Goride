@@ -3,7 +3,7 @@
 Project: **Roam Fleet APP** (`3587123323600813385`)  
 Design system: **Precision Operations** (`assets/d393c21ec4be4c768bf9a2e8060fd674`)
 
-## Screens generated (Phase 1)
+## Screens
 
 | Screen | Device | ID |
 |--------|--------|-----|
@@ -12,15 +12,19 @@ Design system: **Precision Operations** (`assets/d393c21ec4be4c768bf9a2e8060fd67
 | Earnings Policy Configuration (Schedule) | DESKTOP | `2a469867766f4413b806a40b17abef7b` |
 | Add / Edit Schedule Version | DESKTOP | `dd53db1a339045da97e99d027ef58004` |
 
-Open in Stitch → Roam Fleet APP to review. Assets downloaded via `download_assets` into this folder.
+React: `apps/fleet/src/components/earnings-policy/`  
+Nav: Driver Operations → **Earnings Policy Configuration** (`earnings-policy`, permission `nav.tier_config`).
 
-React implementation: `apps/fleet/src/components/earnings-policy/`  
-Nav: Driver Operations → **Earnings Policy Configuration** (`earnings-policy`). Legacy escape hatch: **Legacy Tier Settings**.
+## As-built UX
+
+- **Rules / Schedule** tabs (Fleet Policy IA).
+- Create/Edit policy = **5-step wizard**: Basics → Tiers → Quotas → Allowance → Review. Create/Save only on Review.
+- Quota/PA left off require explicit confirm checkboxes so steps cannot be skipped silently.
 
 ## Resolution order (runtime)
 
 1. Version membership (driver on covering Monday window)  
 2. Default policy template/version for the week  
-3. Legacy prefs (`tierService` / `preferences:general`)  
+3. Prefs fallback (`tierService` / `preferences:general`) when library empty or no Default  
 
-Empty GET `/earnings-policies` returns `[]` — no auto-seed.
+Empty GET `/earnings-policies` returns `[]` — no auto-seed. Global Tier Config UI removed.

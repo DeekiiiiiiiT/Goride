@@ -1,25 +1,23 @@
 # Earnings Policy Configuration — Manual Test Checklist
 
 ## Rules Tab
-- [ ] Can create new policy with name, tiers, quotas, and PA bands
-- [ ] Can edit existing policy bundle (tiers/quotas/PA)
-- [ ] Clone creates new policy with copied config
-- [ ] Make default clears isDefault from other policies
-- [ ] Delete blocked when: isDefault, last policy, or drivers on versions
-- [ ] Delete allowed when no assigned drivers and not default/last
+- [ ] Create policy via 5-step wizard (Basics → Tiers → Quotas → Allowance → Review)
+- [ ] Cannot reach Create without completing each gated step
+- [ ] Leaving weekly quota / PA off requires confirm checkbox
+- [ ] Edit uses same wizard; Save Changes only on Review
+- [ ] Clone / Make default / Delete guards work
+- [ ] Empty state offers Create Default Policy
 
 ## Schedule Tab
-- [ ] Policies listed in sidebar, can select
-- [ ] Add version: Monday picker, driver multi-select
-- [ ] Edit version: dates and drivers update, frozen bundle unchanged
-- [ ] Delete version blocked when only one version exists
-- [ ] Driver collision detected across policies
+- [ ] Policy picker + Add version (Monday window + drivers)
+- [ ] Edit version does not pull live template (frozen snapshot)
+- [ ] Driver window collision blocked across policies
 
-## Dual-Read
-- [ ] Empty library → legacy prefs used
-- [ ] Driver on version → version bundle used
-- [ ] Unassigned driver → Default policy used
+## Runtime
+- [ ] Empty library → prefs fallback until Default exists
+- [ ] Assigned driver-week → version bundle
+- [ ] Unassigned → Default policy
 
-## Legacy Tier Settings
-- [ ] Still accessible at tier-config-legacy page
-- [ ] Independent of earnings policies
+## Nav
+- [ ] Only Earnings Policy Configuration under Driver Ops (no Legacy Tier Settings)
+- [ ] Old tier-config bookmarks redirect to earnings-policy

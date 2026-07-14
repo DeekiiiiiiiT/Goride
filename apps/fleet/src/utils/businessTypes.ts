@@ -79,9 +79,9 @@ export const SIDEBAR_VISIBILITY: Record<string, BusinessType[]> = {
   'settings': ['rideshare', 'delivery', 'taxi', 'trucking', 'shipping'],
 
   // Conditionally visible
-  'tier-config': ['rideshare'],
   'earnings-policy': ['rideshare'],
-  'tier-config-legacy': ['rideshare'],
+  // Redirect target only — bookmarks / old page ids
+  'tier-config': ['rideshare'],
   'toll-management': ['rideshare', 'taxi', 'trucking', 'shipping'],
 };
 
