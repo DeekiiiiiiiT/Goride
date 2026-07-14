@@ -1,18 +1,32 @@
 import type { TierConfig, QuotaConfig, PersonalAllowanceTierConfig } from './data';
 
-export interface EarningsPolicyVersion {
-  id: string;
-  /** Monday yyyy-MM-dd — version applies to weeks starting on/after this date. */
+/** Per-driver membership window on a frozen version (hire / move onto plan). */
+export interface EarningsPolicyDriverAssignment {
+  driverId: string;
+  /** Monday yyyy-MM-dd — applies to weeks starting on/after this date. */
   effectiveFrom: string;
   /** Optional Monday yyyy-MM-dd — exclusive end. Unset = never ends. */
   effectiveUntil?: string;
+}
+
+export interface EarningsPolicyVersion {
+  id: string;
+  createdAt: string;
+  /** Optional display label e.g. "Launch ladder". */
+  name?: string;
   /** Frozen bundle snapshot (copied from policy template when version is created). */
   tiers: TierConfig[];
   quotas: QuotaConfig;
   personalAllowance: PersonalAllowanceTierConfig;
-  /** Drivers on this version window (Schedule). Empty = no explicit assignees. */
+  /** Drivers on this version with per-driver Monday windows. */
+  assignments: EarningsPolicyDriverAssignment[];
+  /**
+ * Legacy Schedule shape (pre per-driver periods). Migrated on normalize/read/save;
+ * never written as source of truth after cleanup.
+ */
+  effectiveFrom?: string;
+  effectiveUntil?: string;
   driverIds?: string[];
-  createdAt: string;
 }
 
 export interface EarningsPolicy {
@@ -24,7 +38,7 @@ export interface EarningsPolicy {
   quotas: QuotaConfig;
   personalAllowance: PersonalAllowanceTierConfig;
   isDefault?: boolean;
-  /** Period + driver windows (Schedule). */
+  /** Frozen content snapshots (Schedule). Assignment dates live on assignments[]. */
   versions?: EarningsPolicyVersion[];
 }
 

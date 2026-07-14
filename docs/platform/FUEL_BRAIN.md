@@ -57,6 +57,6 @@ Separate from Fuel Brain. Brain still measures **Personal km**. When Personal Al
 - **Company absorbs earned Personal fuel 100%**.
 - Driver pays **overage** Personal km at period fuel $/km.
 - Default **off** (`enabled: false`). Does not change `commitWeeklyStatement` plumbing — only how Personal contributes to company vs driver share before finalize.
-- **Config source (2026-07):** Driver Operations → **Earnings Policy Configuration** (Rules template + Schedule versions). Empty policy library falls back to stored prefs only until a Default policy exists. Resolution: version membership → Default policy → prefs fallback.
+- **Config source (2026-07):** Driver Operations → **Earnings Policy Configuration** (Rules template + Schedule). A **version** freezes rules only; each **driver** has their own start Monday (and optional end) on that version. Empty policy library falls back to stored prefs only until a Default policy exists. Resolution: covering driver assignment → Default policy (latest version by createdAt) → prefs fallback.
 - Settings + Stitch refs: `apps/fleet/design/stitch-earnings-policy/` (plus prior `apps/fleet/design/stitch/personal-allowance/`)
 

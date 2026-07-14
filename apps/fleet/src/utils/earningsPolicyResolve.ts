@@ -43,7 +43,7 @@ export function resolveActiveEarningsBundleForDriverWeek(params: {
   // Try driver version membership
   const hit = resolveDriverVersionForWeek(policies, driverId, weekStartYmd);
   if (hit) {
-    const isDriverMember = driverId && (hit.version.driverIds || []).includes(driverId);
+    const isDriverMember = !!hit.assignment;
     return {
       tiers: hit.version.tiers,
       quotas: hit.version.quotas,

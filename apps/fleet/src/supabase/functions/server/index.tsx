@@ -97,7 +97,16 @@ import { computeIndriveWalletFeesFromLedgerEntries } from "../../../utils/indriv
 import { parseCatalogMonthFromUnknown } from "../../../utils/catalogMonthParse.ts";
 import fuelApp from "./fuel_controller.tsx";
 import { validateFuelScenarioPayload } from "./fuel_scenario_validation.ts";
-import { validateEarningsPolicyPayload } from "./earnings_policy_validation.ts";
+import {
+  validateEarningsPolicyPayload,
+  normalizeEarningsPolicyForPersist,
+} from "./earnings_policy_validation.ts";
+import {
+  resolveActiveEarningsBundleForDriverWeek,
+  getQuotaTargetForPeriod,
+  getTierForEarningsEH,
+  mondayYmdFromYmd,
+} from "./earnings_policy_runtime.ts";
 import {
   enrichRecordWithDriverVehicle,
   syncDriverRecordFromVehicleAssignment,
@@ -6062,42 +6071,22 @@ app.get("/make-server-37f42386/ledger/driver-earnings-history", requireAuth(), a
       }
     }
 
-    // ── Step 4: Load tiers + quota from preferences ──
+    // ── Step 4: Load earnings policies + legacy prefs (dual-read) ──
     const prefsEH: any = (await kv.get("preferences:general")) || {};
+    const policyItemsRaw = (await kv.getByPrefix("earnings_policy:")) || [];
+    const earningsPoliciesEH = (Array.isArray(policyItemsRaw) ? policyItemsRaw : [])
+      .filter((p: any) => p && typeof p === "object" && p.id);
 
     const defaultTiersEH = [
       { id: "tier_1", name: "Bronze", minEarnings: 0, maxEarnings: 75000, sharePercentage: 25, color: "#CD7F32" },
       { id: "tier_2", name: "Silver", minEarnings: 75000, maxEarnings: 150000, sharePercentage: 27, color: "#C0C0C0" },
       { id: "tier_3", name: "Gold", minEarnings: 150000, maxEarnings: null, sharePercentage: 30, color: "#FFD700" },
     ];
-    const tiersEH: any[] = (prefsEH.tiers && prefsEH.tiers.length > 0) ? prefsEH.tiers : defaultTiersEH;
-    const sortedTiersEH = [...tiersEH].sort((a: any, b: any) => a.minEarnings - b.minEarnings);
-
-    function getTierForEarningsEH(cumulative: number): any {
-      const match = sortedTiersEH.find((t: any) => {
-        if (t.maxEarnings === null) return cumulative >= t.minEarnings;
-        return cumulative >= t.minEarnings && cumulative < t.maxEarnings;
-      });
-      return match || sortedTiersEH[0];
-    }
-
-    const quotaConfigEH: any = prefsEH.quotas || null;
-    function getQuotaTargetEH(pt: string): number | null {
-      if (!quotaConfigEH) return null;
-      if (pt === "daily") {
-        if (!quotaConfigEH.weekly?.enabled) return null;
-        const workingDays = quotaConfigEH.weekly.workingDays?.length || 6;
-        return quotaConfigEH.weekly.amount / workingDays;
-      }
-      if (pt === "weekly") {
-        if (!quotaConfigEH.weekly?.enabled) return null;
-        return quotaConfigEH.weekly.amount;
-      }
-      if (quotaConfigEH.monthly?.enabled) return quotaConfigEH.monthly.amount;
-      if (quotaConfigEH.weekly?.enabled) return quotaConfigEH.weekly.amount * 4.33;
-      return null;
-    }
-    const quotaTargetEH = getQuotaTargetEH(periodType);
+    const legacyEH = {
+      tiers: (prefsEH.tiers && prefsEH.tiers.length > 0) ? prefsEH.tiers : defaultTiersEH,
+      quotas: prefsEH.quotas || null,
+      personalAllowance: prefsEH.personalAllowance || null,
+    };
 
     // ── Step 5: Pre-index entries by date for fast bucket assignment ──
     const parsedEntries = allEntries.map((e: any) => ({
@@ -6176,7 +6165,16 @@ app.get("/make-server-37f42386/ledger/driver-earnings-history", requireAuth(), a
         return s;
       }, 0);
 
-      const tier = getTierForEarningsEH(cumulativeEarnings);
+      // Policy resolve key: Monday of bucket start (daily/weekly = that day/week; monthly = first day in bucket).
+      const weekStartYmd = mondayYmdFromYmd(bucket.startDate);
+      const bundleEH = resolveActiveEarningsBundleForDriverWeek({
+        policies: earningsPoliciesEH,
+        driverId,
+        weekStartYmd,
+        legacy: legacyEH,
+      });
+      const tier = getTierForEarningsEH(cumulativeEarnings, bundleEH.tiers || []);
+      const quotaTargetEH = getQuotaTargetForPeriod(periodType, bundleEH.quotas);
       const driverShare = grossRevenue * (tier.sharePercentage / 100);
       const fleetShare = grossRevenue - driverShare;
       const netEarnings = driverShare - expenses;
@@ -6212,6 +6210,10 @@ app.get("/make-server-37f42386/ledger/driver-earnings-history", requireAuth(), a
         quotaTarget: quotaTargetEH,
         quotaPercent: qPercent !== null ? Math.round(qPercent * 100) / 100 : null,
         ledgerEventCount,
+        policyId: bundleEH.policyId,
+        versionId: bundleEH.versionId,
+        policyName: bundleEH.policyName,
+        policySource: bundleEH.source,
       };
     });
 
@@ -7402,10 +7404,12 @@ app.get("/make-server-37f42386/earnings-policies", requireAuth(), async (c) => {
 
 app.post("/make-server-37f42386/earnings-policies", async (c) => {
   try {
-    const item = await c.req.json();
-    const validationError = validateEarningsPolicyPayload(item);
+    const raw = await c.req.json();
+    const validationError = validateEarningsPolicyPayload(raw);
     if (validationError) return c.json({ error: validationError }, 400);
 
+    // Persist migrated assignments shape (legacy driverIds windows → assignments)
+    const item = normalizeEarningsPolicyForPersist(raw);
     if (!item.id) item.id = crypto.randomUUID();
 
     // Enforce single default — clear isDefault from other policies

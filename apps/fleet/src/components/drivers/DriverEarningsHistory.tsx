@@ -13,7 +13,8 @@ import { ScrollArea } from "../ui/scroll-area";
 import { api } from "../../services/api";
 interface DriverEarningsHistoryProps {
   driverId: string;
-  quotaConfig?: QuotaConfig;   // For Quota % column (Phase 5)
+  /** @deprecated Quota comes from ledger rows (policy resolve). Kept for call-site compat. */
+  quotaConfig?: QuotaConfig;
   /** When set, API week range matches Expenses/Settlement (trips + transactions), not only ledger_event dates. */
   trips?: Trip[];
   transactions?: FinancialTransaction[];
@@ -35,33 +36,10 @@ interface PeriodRow {
   transactionCount: number;
   quotaTarget: number | null;
   quotaPercent: number | null;
-}
-
-// ────────────────────────────────────────────────────────────
-// Derive the quota target for a given period type from quotaConfig.
-//   Daily  → weekly target / working days (derived from weekly config)
-//   Weekly → weekly target directly
-//   Monthly → monthly target if enabled, else weekly * 4.33
-// Returns null if the relevant quota is not enabled.
-// ────────────────────────────────────────────────────────────
-function getQuotaTarget(periodType: PeriodType, quotaConfig?: QuotaConfig): number | null {
-  if (!quotaConfig) return null;
-
-  if (periodType === 'daily') {
-    if (!quotaConfig.weekly?.enabled) return null;
-    const workingDays = quotaConfig.weekly.workingDays?.length || 6;
-    return quotaConfig.weekly.amount / workingDays;
-  }
-
-  if (periodType === 'weekly') {
-    if (!quotaConfig.weekly?.enabled) return null;
-    return quotaConfig.weekly.amount;
-  }
-
-  // monthly
-  if (quotaConfig.monthly?.enabled) return quotaConfig.monthly.amount;
-  if (quotaConfig.weekly?.enabled) return quotaConfig.weekly.amount * 4.33;
-  return null;
+  policyId?: string;
+  versionId?: string;
+  policyName?: string;
+  policySource?: string;
 }
 
 function getQuotaBadgeStyle(percent: number): string {
@@ -70,7 +48,7 @@ function getQuotaBadgeStyle(percent: number): string {
   return 'bg-rose-50 text-rose-700 border-rose-200';
 }
 
-export function DriverEarningsHistory({ driverId, quotaConfig, trips, transactions }: DriverEarningsHistoryProps) {
+export function DriverEarningsHistory({ driverId, trips, transactions }: DriverEarningsHistoryProps) {
   const [periodType, setPeriodType] = useState<PeriodType>('weekly');
   const [selectedRowIdx, setSelectedRowIdx] = useState<number | null>(null);
   const [dateFrom, setDateFrom] = useState<string>('');
@@ -132,8 +110,12 @@ export function DriverEarningsHistory({ driverId, quotaConfig, trips, transactio
             payouts: row.payouts,
             tripCount: row.tripCount,
             transactionCount: row.transactionCount,
-            quotaTarget: row.quotaTarget,
-            quotaPercent: row.quotaPercent,
+            quotaTarget: row.quotaTarget ?? null,
+            quotaPercent: row.quotaPercent ?? null,
+            policyId: row.policyId,
+            versionId: row.versionId,
+            policyName: row.policyName,
+            policySource: row.policySource,
           }));
           setServerPeriodData(converted);
           setServerDataLoaded(true);
@@ -165,17 +147,14 @@ export function DriverEarningsHistory({ driverId, quotaConfig, trips, transactio
     setSelectedRowIdx(null);
   };
 
-  // ────────────────────────────────────────────────────────────
-  // Quota target for the current period type (null = not enabled)
-  // ────────────────────────────────────────────────────────────
-  const quotaTarget = useMemo(() => getQuotaTarget(periodType, quotaConfig), [periodType, quotaConfig]);
-  const quotaEnabled = quotaTarget !== null;
-
-  // ────────────────────────────────────────────────────────────
-  // Step 5.4: Client-side periodData fallback REMOVED.
-  // Earnings History now reads ONLY from the server ledger endpoint.
-  // ────────────────────────────────────────────────────────────
+  // Step 5.4: Client-side periodData fallback REMOVED — ledger only.
   const activePeriodData = serverPeriodData;
+
+  // Quota column / bar: enabled when any ledger row has a policy quota target
+  const quotaEnabled = useMemo(
+    () => activePeriodData.some((r) => r.quotaTarget !== null && r.quotaTarget !== undefined),
+    [activePeriodData],
+  );
 
   // ────────────────────────────────────────────────────────────
   // Date range filter — applied AFTER aggregation
@@ -247,6 +226,7 @@ export function DriverEarningsHistory({ driverId, quotaConfig, trips, transactio
         'Tier Share %': row.tier.sharePercentage + '%',
         'Driver Share': row.driverShare.toFixed(2),
         'Payouts': row.payouts.toFixed(2),
+        'Earnings Policy': row.policyName || (row.policySource === 'legacy' ? 'Legacy prefs' : '-'),
       };
 
       if (quotaEnabled) {
@@ -433,6 +413,11 @@ export function DriverEarningsHistory({ driverId, quotaConfig, trips, transactio
                 >
                   {displayRow.tier.name} ({displayRow.tier.sharePercentage}%)
                 </Badge>
+                {(displayRow.policyName || displayRow.policySource === 'legacy') && (
+                  <Badge variant="outline" className="text-[10px] bg-slate-50 text-slate-600 border-slate-200">
+                    {displayRow.policyName || 'Legacy prefs'}
+                  </Badge>
+                )}
                 {displayRow.tripCount > 0 && (
                   <span>{displayRow.tripCount} trip{displayRow.tripCount !== 1 ? 's' : ''}</span>
                 )}
@@ -506,15 +491,22 @@ export function DriverEarningsHistory({ driverId, quotaConfig, trips, transactio
                     </Badge>
                   </TableCell>
 
-                  {/* Tier Applied */}
+                  {/* Tier Applied + policy */}
                   <TableCell className="text-center">
-                    <Badge
-                      variant="outline"
-                      className="text-xs"
-                      style={{ backgroundColor: row.tier.color ? `${row.tier.color}15` : undefined, borderColor: row.tier.color || undefined, color: row.tier.color || undefined }}
-                    >
-                      {row.tier.name}
-                    </Badge>
+                    <div className="inline-flex flex-col items-center gap-0.5">
+                      <Badge
+                        variant="outline"
+                        className="text-xs"
+                        style={{ backgroundColor: row.tier.color ? `${row.tier.color}15` : undefined, borderColor: row.tier.color || undefined, color: row.tier.color || undefined }}
+                      >
+                        {row.tier.name}
+                      </Badge>
+                      {(row.policyName || row.policySource === 'legacy') && (
+                        <span className="text-[9px] text-slate-400 max-w-[120px] truncate" title={row.policyName || 'Legacy prefs'}>
+                          {row.policyName || 'Legacy prefs'}
+                        </span>
+                      )}
+                    </div>
                   </TableCell>
 
                   {/* Payouts */}

@@ -30,7 +30,7 @@ import { FuelEntry } from '../../types/fuel';
 import { showCatalogGateToastIfApplicable } from '../../utils/catalogGateErrors';
 import { resolveVehicleIdForDriver } from '../../utils/resolveDriverVehicleId';
 import { PendingCatalogRequestsDrawer } from '../vehicles/PendingCatalogRequestsDrawer';
-import { tierService } from '../../services/tierService';
+import { loadResolvedEarningsBundleForDriverWeek } from '../../utils/loadResolvedEarningsBundle';
 import { TierCalculations } from '../../utils/tierCalculations';
 import { generateMonthlyProjection } from '../tiers/quota-utils';
 import { format, isSameWeek } from "date-fns";
@@ -151,16 +151,19 @@ export function DriverDashboard() {
             drivers, 
             flaggedTx, 
             myTrips, 
-            tiers, 
-            quotaConfig
+            earningsBundle
         ] = await Promise.all([
             api.getDriverMetrics().catch(() => []),
             api.getDrivers().catch(() => []),
             api.getFlaggedTransactions().catch(() => []),
             fetchDriverTrips(),
-            tierService.getTiers().catch(() => []),
-            tierService.getQuotaSettings().catch(() => null)
+            loadResolvedEarningsBundleForDriverWeek(
+              driverRecord?.id || user?.id || null,
+            ).catch(() => null),
         ]);
+
+        const tiers = earningsBundle?.tiers || [];
+        const quotaConfig = earningsBundle?.quotas || null;
 
         const myMetrics = allMetrics.find(m => 
             m.driverId === user.id || 

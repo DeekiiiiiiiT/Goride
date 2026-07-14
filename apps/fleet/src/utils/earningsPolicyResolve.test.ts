@@ -22,11 +22,10 @@ const makePolicy = (overrides?: Partial<EarningsPolicy>): EarningsPolicy => ({
 
 const makeVersion = (overrides?: any) => ({
   id: 'v1',
-  effectiveFrom: '2025-12-01',
   tiers: createDefaultTiers(),
   quotas: createEmptyQuotas(),
   personalAllowance: createDefaultPersonalAllowance(),
-  driverIds: [],
+  assignments: [],
   createdAt: new Date().toISOString(),
   ...overrides,
 });
@@ -47,10 +46,17 @@ describe('resolveActiveEarningsBundleForDriverWeek', () => {
   });
 
   describe('version hit', () => {
-    it('returns version when driver is explicitly on a version', () => {
-      const versionTiers = [{ id: 'v-t1', name: 'Version Tier', minEarnings: 0, maxEarnings: null, sharePercentage: 30 }];
+    it('returns version when driver has covering assignment', () => {
+      const versionTiers = [
+        { id: 'v-t1', name: 'Version Tier', minEarnings: 0, maxEarnings: null, sharePercentage: 30 },
+      ];
       const policy = makePolicy({
-        versions: [makeVersion({ driverIds: ['driver-1'], tiers: versionTiers })],
+        versions: [
+          makeVersion({
+            assignments: [{ driverId: 'driver-1', effectiveFrom: '2025-12-01' }],
+            tiers: versionTiers,
+          }),
+        ],
       });
       const result = resolveActiveEarningsBundleForDriverWeek({
         policies: [policy],
@@ -63,14 +69,39 @@ describe('resolveActiveEarningsBundleForDriverWeek', () => {
       expect(result.policyId).toBe('policy-1');
       expect(result.versionId).toBe('v1');
     });
+
+    it('migrates legacy driverIds window into assignment hit', () => {
+      const versionTiers = [
+        { id: 'v-t1', name: 'Version Tier', minEarnings: 0, maxEarnings: null, sharePercentage: 30 },
+      ];
+      const policy = makePolicy({
+        versions: [
+          makeVersion({
+            effectiveFrom: '2025-12-01',
+            driverIds: ['driver-1'],
+            tiers: versionTiers,
+          }),
+        ],
+      });
+      const result = resolveActiveEarningsBundleForDriverWeek({
+        policies: [policy],
+        driverId: 'driver-1',
+        weekStartYmd: '2025-12-08',
+        legacy: makeLegacy(),
+      });
+      expect(result.source).toBe('version');
+      expect(result.tiers[0].name).toBe('Version Tier');
+    });
   });
 
   describe('default hit', () => {
-    it('returns default policy template for unassigned driver', () => {
+    it('returns default policy for unassigned driver', () => {
       const policy = makePolicy({
         isDefault: true,
-        tiers: [{ id: 'def-t1', name: 'Default Tier', minEarnings: 0, maxEarnings: null, sharePercentage: 25 }],
-        versions: [makeVersion({ driverIds: [] })],
+        tiers: [
+          { id: 'def-t1', name: 'Default Tier', minEarnings: 0, maxEarnings: null, sharePercentage: 25 },
+        ],
+        versions: [makeVersion({ assignments: [] })],
       });
       const result = resolveActiveEarningsBundleForDriverWeek({
         policies: [policy],
@@ -84,35 +115,36 @@ describe('resolveActiveEarningsBundleForDriverWeek', () => {
   });
 
   describe('legacy parity', () => {
-    it('returns legacy when no default policy and driver not on any version', () => {
+    it('uses first policy fallback when no default and driver not assigned', () => {
       const policy = makePolicy({
         isDefault: false,
-        versions: [makeVersion({ driverIds: ['driver-1'] })],
+        versions: [
+          makeVersion({
+            assignments: [{ driverId: 'driver-1', effectiveFrom: '2025-12-01' }],
+          }),
+        ],
       });
-      const legacy = makeLegacy();
       const result = resolveActiveEarningsBundleForDriverWeek({
         policies: [policy],
         driverId: 'driver-3',
         weekStartYmd: '2025-12-08',
-        legacy,
+        legacy: makeLegacy(),
       });
       expect(result.source).toBe('default');
     });
 
-    it('falls through to legacy when Default policy has no applicable version', () => {
+    it('uses default template when Default policy has empty tiers and no versions', () => {
       const policy = makePolicy({
         isDefault: true,
         tiers: [],
         versions: [],
       });
-      const legacy = makeLegacy();
       const result = resolveActiveEarningsBundleForDriverWeek({
         policies: [policy],
         driverId: 'driver-1',
         weekStartYmd: '2025-12-08',
-        legacy,
+        legacy: makeLegacy(),
       });
-      // With empty tiers and no versions, should still use default template
       expect(result.source).toBe('default');
     });
   });

@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo } from 'react';
 import type { FinancialTransaction, Trip, DriverMetrics, TierConfig, DisputeRefund } from '../types/data';
 import type { PayoutPeriodRow } from '../types/driverPayoutPeriod';
 import { api } from '../services/api';
-import { tierService } from '../services/tierService';
 import { computeWeeklyCashSettlement, CashWeekData } from '../utils/cashSettlementCalc';
 import { buildLedgerPayoutPeriodRows } from '../utils/buildLedgerPayoutPeriodRows';
 import { expandDriverTransactionIds } from '../utils/expandDriverTransactionIds';
@@ -27,7 +26,6 @@ export function useDriverPayoutPeriodRows(opts: {
   const { driverId, trips, transactions, csvMetrics, periodType } = opts;
   const fleetTz = useFleetTimezone();
 
-  const [tiers, setTiers] = useState<TierConfig[]>([]);
   const [finalizedReports, setFinalizedReports] = useState<any[]>([]);
   const [disputeRefunds, setDisputeRefunds] = useState<DisputeRefund[]>([]);
   const [fuelDataLoading, setFuelDataLoading] = useState(true);
@@ -35,10 +33,6 @@ export function useDriverPayoutPeriodRows(opts: {
   const [ledgerLoaded, setLedgerLoaded] = useState(false);
   const [ledgerError, setLedgerError] = useState(false);
   const [unifiedToll, setUnifiedToll] = useState(false);
-
-  useEffect(() => {
-    tierService.getTiers().then(setTiers);
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -163,7 +157,27 @@ export function useDriverPayoutPeriodRows(opts: {
     ]
   );
 
-  const isReady = tiers.length > 0 && !fuelDataLoading;
+  // Share % comes from ledger rows (policy resolve on server). Ready when ledger + fuel loads finish.
+  const isReady = ledgerLoaded && !fuelDataLoading;
+
+  // Compat: derive display tiers from latest ledger rows if callers still read `tiers`.
+  const tiers: TierConfig[] = useMemo(() => {
+    const seen = new Map<string, TierConfig>();
+    for (const row of ledgerRows) {
+      const t = row?.tier;
+      if (t?.id && !seen.has(t.id)) {
+        seen.set(t.id, {
+          id: t.id,
+          name: t.name,
+          minEarnings: 0,
+          maxEarnings: null,
+          sharePercentage: t.sharePercentage,
+          color: t.color,
+        });
+      }
+    }
+    return Array.from(seen.values());
+  }, [ledgerRows]);
 
   return {
     periodData,

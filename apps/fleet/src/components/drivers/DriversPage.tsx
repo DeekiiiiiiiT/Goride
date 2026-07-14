@@ -65,7 +65,11 @@ import {
 import { Card, CardContent } from "../ui/card";
 import { DriverDetail } from './DriverDetail';
 import { AddDriverModal } from './AddDriverModal';
-import { tierService } from '../../services/tierService';
+import {
+  loadEarningsPolicyRuntimeContext,
+  resolveBundleFromContext,
+  type EarningsPolicyRuntimeContext,
+} from '../../utils/loadResolvedEarningsBundle';
 import { TierCalculations } from '../../utils/tierCalculations';
 import { TierConfig } from '../../types/data';
 import { isSameMonth } from 'date-fns';
@@ -239,12 +243,12 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
     refetchOnMount: false,
   });
 
-  // Phase 7.1: React Query for tiers
-  const { data: tiers = [] } = useQuery({
-    queryKey: ['tiers'],
-    queryFn: () => tierService.getTiers().catch(() => []),
-    staleTime: 10 * 60 * 1000, // 10 minutes (tiers rarely change)
-    gcTime: 30 * 60 * 1000, // 30 minutes
+  // Earnings policy context (per-driver ladder resolve for current week)
+  const { data: earningsPolicyCtx } = useQuery({
+    queryKey: ['earningsPolicyRuntimeContext'],
+    queryFn: () => loadEarningsPolicyRuntimeContext(),
+    staleTime: 10 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
     refetchOnWindowFocus: false,
     refetchOnMount: false,
   });
@@ -503,10 +507,16 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
              driver.acceptanceRate = total > 0 ? Math.round((stats.completed / total) * 100) : 100;
         }
 
-        // Tier Logic
-        if (tiers.length > 0) {
-            // Priority 1: Real-Time Monthly Earnings Calculation (Matches Driver Detail View)
-            const tier = TierCalculations.getTierForEarnings(driver.monthlyEarnings ?? 0, tiers);
+        // Tier Logic — resolve this driver's scheduled policy for the current week
+        if (earningsPolicyCtx) {
+            const bundle = resolveBundleFromContext(
+              earningsPolicyCtx as EarningsPolicyRuntimeContext,
+              driver.id,
+            );
+            const tier = TierCalculations.getTierForEarnings(
+              driver.monthlyEarnings ?? 0,
+              bundle.tiers,
+            );
             driver.tier = tier?.name ?? 'Bronze';
         } else if (metric && metric.tier) {
              // Priority 2: Imported Metric Fallback
@@ -539,7 +549,7 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
         // Use manual driver tier if available, otherwise default
         let tier = d.tier || 'Bronze';
         if (metric && metric.tier) tier = metric.tier;
-        else if (tiers.length > 0 && d.totalEarnings !== undefined) {
+        else if (earningsPolicyCtx && d.totalEarnings !== undefined) {
              // For orphans without trips loaded, we might default to their 'totalEarnings' field 
              // if it represents monthly, but usually it's lifetime.
              // Safest to rely on manual 'tier' field or calculate if we had monthly data.
@@ -547,7 +557,11 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
              // We'll stick to existing logic or manual set tier.
              // If manual driver has a tier set, use it.
              if (!d.tier) {
-                 const t = TierCalculations.getTierForEarnings(0, tiers);
+                 const bundle = resolveBundleFromContext(
+                   earningsPolicyCtx as EarningsPolicyRuntimeContext,
+                   d.id,
+                 );
+                 const t = TierCalculations.getTierForEarnings(0, bundle.tiers);
                  tier = t?.name ?? 'Bronze';
              }
         }
@@ -573,9 +587,13 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
                 orphan.totalEarnings = asNumber(summary.lifetimeEarnings);
                 orphan.todaysEarnings = asNumber(summary.todayEarnings);
                 orphan.monthlyEarnings = asNumber(summary.monthlyEarnings);
-                // Re-calculate tier with ledger monthly earnings
-                if (tiers.length > 0) {
-                    const t = TierCalculations.getTierForEarnings(summary.monthlyEarnings, tiers);
+                // Re-calculate tier with ledger monthly earnings + this driver's policy
+                if (earningsPolicyCtx) {
+                    const bundle = resolveBundleFromContext(
+                      earningsPolicyCtx as EarningsPolicyRuntimeContext,
+                      orphan.id,
+                    );
+                    const t = TierCalculations.getTierForEarnings(summary.monthlyEarnings, bundle.tiers);
                     orphan.tier = t?.name ?? 'Bronze';
                 }
             }
@@ -584,7 +602,7 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
     });
 
     return [...processedDrivers, ...orphanedDrivers].map((d) => normalizeDriverProfile(d));
-  }, [trips, safeManualDrivers, safeImportedMetrics, tiers, ledgerSummary, ledgerLoaded, ledgerError]);
+  }, [trips, safeManualDrivers, safeImportedMetrics, earningsPolicyCtx, ledgerSummary, ledgerLoaded, ledgerError]);
 
   // Phase 5: Apply org validation first, then other filters
   const orgValidatedDrivers = useMemo(() => {

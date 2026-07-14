@@ -20,11 +20,12 @@ Nav: Driver Operations → **Earnings Policy Configuration** (`earnings-policy`,
 - **Rules / Schedule** tabs (Fleet Policy IA).
 - Create/Edit policy = **5-step wizard**: Basics → Tiers → Quotas → Allowance → Review. Create/Save only on Review.
 - Quota/PA left off require explicit confirm checkboxes so steps cannot be skipped silently.
+- **Schedule (per-driver periods):** A version freezes Rules only (optional name). Drivers are assigned under the version with their own Start Monday → Until (optional Never). Hire dates do not require a new version. Legacy `version.effectiveFrom` + `driverIds[]` auto-migrates to `assignments[]` on read/save.
 
 ## Resolution order (runtime)
 
-1. Version membership (driver on covering Monday window)  
-2. Default policy template/version for the week  
+1. Covering assignment for that driver on any version (prefer latest `effectiveFrom` if multiple)  
+2. Default policy → latest version by `createdAt` (or template if none)  
 3. Prefs fallback (`tierService` / `preferences:general`) when library empty or no Default  
 
 Empty GET `/earnings-policies` returns `[]` — no auto-seed. Global Tier Config UI removed.

@@ -152,9 +152,9 @@ import { FuelWalletView } from './FuelWalletView';
 import { DriverFuelPolicySelect } from './DriverFuelPolicySelect';
 import { TimeFilterDropdown, TimeFilterValue, isHourInTimeFilter } from './TimeFilterDropdown';
 import { api } from '../../services/api';
-import { tierService } from '../../services/tierService';
 import { TierCalculations } from '../../utils/tierCalculations';
 import { TierConfig } from '../../types/data';
+import { loadResolvedEarningsBundleForDriverWeek } from '../../utils/loadResolvedEarningsBundle';
 import { getEffectiveTripEarnings } from '../../utils/tripEarnings';
 import { normalizePlatform } from '../../utils/normalizePlatform';
 import { getTripPhysicalCashCollected, sumTripPhysicalCashCollected } from '../../utils/tripPhysicalCash';
@@ -703,14 +703,21 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
     setTripPage(1);
   }, [dateRange?.from, dateRange?.to, selectedPlatforms, timeFilter, tripSearch, filterPlatform, filterStatus, filterCashOnly]);
 
-  // Phase 2: Tier State
+  // Phase 2: Tier from resolved earnings policy for this driver-week
   const [tiers, setTiers] = useState<TierConfig[]>([]);
   const [quotaConfig, setQuotaConfig] = useState<QuotaConfig | null>(null);
 
   useEffect(() => {
-    tierService.getTiers().then(setTiers).catch(console.error);
-    tierService.getQuotaSettings().then(setQuotaConfig).catch(console.error);
-  }, []);
+    let cancelled = false;
+    loadResolvedEarningsBundleForDriverWeek(driverId)
+      .then((bundle) => {
+        if (cancelled) return;
+        setTiers(bundle.tiers || []);
+        setQuotaConfig(bundle.quotas || null);
+      })
+      .catch(console.error);
+    return () => { cancelled = true; };
+  }, [driverId]);
 
   // Calculate Monthly Earnings & Current Tier (Independent of Date Range Selection)
   const { monthlyEarnings, currentTier } = useMemo(() => {

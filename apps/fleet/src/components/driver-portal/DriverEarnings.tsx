@@ -24,7 +24,7 @@ import { Calendar } from "../ui/calendar";
 import { cn } from "../ui/utils";
 import { DateRange } from "react-day-picker";
 import { startOfDay, endOfDay, format, subDays, differenceInDays } from "date-fns";
-import { tierService } from '../../services/tierService';
+import { loadResolvedEarningsBundleForDriverWeek } from '../../utils/loadResolvedEarningsBundle';
 import { TierCalculations } from '../../utils/tierCalculations';
 import { api } from '../../services/api';
 import { getDriverPortalTripEarnings } from '../../utils/tripEarnings';
@@ -125,15 +125,17 @@ export function DriverEarnings() {
              return Array.from(new Map(combined.map(t => [t.id, t])).values());
         };
 
-        const [myTrips, txData, metricsData, tiersData] = await Promise.all([
+        const [myTrips, txData, metricsData, earningsBundle] = await Promise.all([
              fetchDriverTrips(),
              // Pass all relevant IDs
              api.getTransactions([user?.id, driverRecord?.id, driverRecord?.driverId].filter(Boolean) as string[]),
              api.getDriverMetrics(),
-             tierService.getTiers()
+             loadResolvedEarningsBundleForDriverWeek(
+               driverRecord?.id || user?.id || null,
+             ).catch(() => null),
         ]);
         
-        if (tiersData) setTiers(tiersData);
+        if (earningsBundle?.tiers) setTiers(earningsBundle.tiers);
 
         if (myTrips) {
             setTrips(myTrips);
@@ -231,9 +233,11 @@ export function DriverEarnings() {
       // 3. Earnings BEFORE this period
       const beforeEarnings = totalCumulative - periodEarnings;
       
-      // 4. Get Tier
-      const tiers = await tierService.getTiers();
-      const currentTier = TierCalculations.getTierForEarnings(totalCumulative, tiers);
+      // 4. Get Tier from this driver's earnings policy
+      const bundle = await loadResolvedEarningsBundleForDriverWeek(
+        driverRecord?.id || user?.id || null,
+      );
+      const currentTier = TierCalculations.getTierForEarnings(totalCumulative, bundle.tiers);
       
       // 5. Calculate Payout (Simplistic: Period Earnings * Share %)
       // Note: In reality, if they cross a threshold mid-week, the split might change.

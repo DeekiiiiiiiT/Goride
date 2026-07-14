@@ -1,18 +1,20 @@
 /**
- * Earnings policy versioning: Rules = bundle template; Schedule = period + drivers.
- * Mirrors fuelPolicyVersion.ts patterns for consistency.
+ * Earnings policy versioning: Rules = bundle template; Version = frozen snapshot;
+ * assignments = per-driver Monday windows (hire / move onto plan).
  */
 
 import { format, parseISO } from 'date-fns';
 import type { TierConfig, QuotaConfig, PersonalAllowanceTierConfig } from '../types/data';
-import type { EarningsPolicy, EarningsPolicyVersion } from '../types/earningsPolicy';
+import type {
+  EarningsPolicy,
+  EarningsPolicyVersion,
+  EarningsPolicyDriverAssignment,
+} from '../types/earningsPolicy';
 import {
   isMondayYmd,
   mondayYmdForDate,
   upcomingMondayOptions,
   versionWindowsOverlap,
-  LEGACY_POLICY_EFFECTIVE_FROM,
-  POLICY_VERSION_EARLIEST_MONDAY,
 } from './fuelPolicyVersion';
 
 export {
@@ -20,8 +22,6 @@ export {
   mondayYmdForDate,
   upcomingMondayOptions,
   versionWindowsOverlap,
-  LEGACY_POLICY_EFFECTIVE_FROM,
-  POLICY_VERSION_EARLIEST_MONDAY,
 };
 
 function cloneTiers(tiers: TierConfig[]): TierConfig[] {
@@ -43,7 +43,7 @@ function clonePersonalAllowance(pa: PersonalAllowanceTierConfig): PersonalAllowa
   };
 }
 
-function cloneBundle(policy: EarningsPolicy): {
+function cloneBundle(policy: Pick<EarningsPolicy, 'tiers' | 'quotas' | 'personalAllowance'>): {
   tiers: TierConfig[];
   quotas: QuotaConfig;
   personalAllowance: PersonalAllowanceTierConfig;
@@ -55,23 +55,72 @@ function cloneBundle(policy: EarningsPolicy): {
   };
 }
 
+function cloneAssignment(a: EarningsPolicyDriverAssignment): EarningsPolicyDriverAssignment {
+  const next: EarningsPolicyDriverAssignment = {
+    driverId: a.driverId,
+    effectiveFrom: String(a.effectiveFrom).split('T')[0],
+  };
+  if (a.effectiveUntil) next.effectiveUntil = String(a.effectiveUntil).split('T')[0];
+  return next;
+}
+
+/** Convert legacy version.effectiveFrom/Until + driverIds → assignments (idempotent). */
+export function migrateVersionToAssignments(v: EarningsPolicyVersion): EarningsPolicyVersion {
+  if (Array.isArray(v.assignments) && v.assignments.length > 0) {
+    return {
+      ...v,
+      assignments: v.assignments.map(cloneAssignment),
+    };
+  }
+
+  const legacyIds = Array.isArray(v.driverIds) ? v.driverIds.filter(Boolean) : [];
+  const from = v.effectiveFrom ? String(v.effectiveFrom).split('T')[0] : '';
+  if (legacyIds.length > 0 && from) {
+    const until = v.effectiveUntil ? String(v.effectiveUntil).split('T')[0] : undefined;
+    return {
+      ...v,
+      assignments: legacyIds.map((driverId) => {
+        const a: EarningsPolicyDriverAssignment = { driverId, effectiveFrom: from };
+        if (until) a.effectiveUntil = until;
+        return a;
+      }),
+    };
+  }
+
+  return {
+    ...v,
+    assignments: Array.isArray(v.assignments) ? v.assignments.map(cloneAssignment) : [],
+  };
+}
+
 function sortVersions(versions: EarningsPolicyVersion[]): EarningsPolicyVersion[] {
-  return [...versions].sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom));
+  return [...versions].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
 
 function normalizeVersion(v: EarningsPolicyVersion): EarningsPolicyVersion {
+  const migrated = migrateVersionToAssignments(v);
+  // Strip legacy fields from normalized in-memory shape (keep empty assignments)
+  const {
+    effectiveFrom: _ef,
+    effectiveUntil: _eu,
+    driverIds: _ids,
+    ...rest
+  } = migrated as EarningsPolicyVersion & {
+    effectiveFrom?: string;
+    effectiveUntil?: string;
+    driverIds?: string[];
+  };
   return {
-    ...v,
-    tiers: cloneTiers(v.tiers || []),
-    quotas: cloneQuotas(v.quotas),
-    personalAllowance: clonePersonalAllowance(v.personalAllowance),
-    driverIds: Array.isArray(v.driverIds) ? [...v.driverIds] : [],
+    ...rest,
+    tiers: cloneTiers(migrated.tiers || []),
+    quotas: cloneQuotas(migrated.quotas),
+    personalAllowance: clonePersonalAllowance(migrated.personalAllowance),
+    assignments: (migrated.assignments || []).map(cloneAssignment),
   };
 }
 
 /**
- * Ensure version.driverIds arrays exist. Does not invent schedule versions —
- * empty versions means Rules-only until Schedule adds a window.
+ * Normalize policy; migrate legacy version windows → per-driver assignments.
  */
 export function normalizePolicyVersions(policy: EarningsPolicy): EarningsPolicy {
   const bundle = cloneBundle(policy);
@@ -86,47 +135,55 @@ export function normalizePolicyVersions(policy: EarningsPolicy): EarningsPolicy 
   };
 }
 
-/** Synthetic open window from template when Schedule has no versions yet (Default fallback). */
+/** Synthetic version from template when Schedule has no versions (Default fallback). */
 export function templateAsVersion(policy: EarningsPolicy): EarningsPolicyVersion | undefined {
   if (!policy.tiers?.length) return undefined;
   return {
     id: `template-${policy.id}`,
-    effectiveFrom: LEGACY_POLICY_EFFECTIVE_FROM,
     ...cloneBundle(policy),
-    driverIds: [],
+    assignments: [],
     createdAt: policy.versions?.[0]?.createdAt || new Date(0).toISOString(),
   };
 }
 
-/** True when version window covers this Monday weekStart (until is exclusive). */
-export function versionAppliesToWeek(
-  version: EarningsPolicyVersion,
+/** True when assignment window covers this Monday weekStart (until is exclusive). */
+export function assignmentAppliesToWeek(
+  assignment: Pick<EarningsPolicyDriverAssignment, 'effectiveFrom' | 'effectiveUntil'>,
   weekStartYmd: string,
 ): boolean {
   const key = String(weekStartYmd).split('T')[0];
-  const from = String(version.effectiveFrom || '').split('T')[0];
+  const from = String(assignment.effectiveFrom || '').split('T')[0];
   if (!from || from > key) return false;
-  const until = version.effectiveUntil ? String(version.effectiveUntil).split('T')[0] : '';
+  const until = assignment.effectiveUntil ? String(assignment.effectiveUntil).split('T')[0] : '';
   if (until && until <= key) return false;
   return true;
 }
 
+export type DriverAssignmentHit = {
+  policy: EarningsPolicy;
+  version: EarningsPolicyVersion;
+  assignment: EarningsPolicyDriverAssignment;
+};
+
 export type DriverVersionHit = {
   policy: EarningsPolicy;
   version: EarningsPolicyVersion;
+  assignment?: EarningsPolicyDriverAssignment;
 };
 
-/** All version windows (any policy) that list this driver. */
-export function listDriverVersionAssignments(
+/** All assignment windows (any policy/version) for this driver. */
+export function listDriverAssignments(
   policies: EarningsPolicy[],
   driverId: string,
-): DriverVersionHit[] {
-  const hits: DriverVersionHit[] = [];
+): DriverAssignmentHit[] {
+  const hits: DriverAssignmentHit[] = [];
   for (const raw of policies) {
     const p = normalizePolicyVersions(raw);
     for (const v of p.versions || []) {
-      if ((v.driverIds || []).includes(driverId)) {
-        hits.push({ policy: p, version: v });
+      for (const a of v.assignments || []) {
+        if (a.driverId === driverId) {
+          hits.push({ policy: p, version: v, assignment: a });
+        }
       }
     }
   }
@@ -134,39 +191,35 @@ export function listDriverVersionAssignments(
 }
 
 /**
- * Block same driver on overlapping windows (any policy).
- * `ignoreVersionId` = version being edited.
+ * Block same driver on overlapping assignment windows (any policy/version).
+ * `ignoreVersionId` + `ignoreDriverId` skips the assignment being edited.
  */
 export function findDriverWindowCollision(params: {
   policies: EarningsPolicy[];
-  driverIds: string[];
+  driverId: string;
   effectiveFrom: string;
   effectiveUntil?: string | null;
   ignoreVersionId?: string | null;
-  ignorePolicyId?: string | null;
+  ignoreDriverId?: string | null;
 }): { driverId: string; policyName: string; versionLabel: string } | null {
   const window = {
     effectiveFrom: params.effectiveFrom,
     effectiveUntil: params.effectiveUntil || undefined,
   };
-  for (const driverId of params.driverIds) {
-    for (const hit of listDriverVersionAssignments(params.policies, driverId)) {
-      if (params.ignoreVersionId && hit.version.id === params.ignoreVersionId) continue;
-      if (
-        params.ignorePolicyId &&
-        params.ignoreVersionId &&
-        hit.policy.id === params.ignorePolicyId &&
-        hit.version.id === params.ignoreVersionId
-      ) {
-        continue;
-      }
-      if (versionWindowsOverlap(window, hit.version)) {
-        return {
-          driverId,
-          policyName: hit.policy.name,
-          versionLabel: versionWindowLabel(hit.version),
-        };
-      }
+  for (const hit of listDriverAssignments(params.policies, params.driverId)) {
+    if (
+      params.ignoreVersionId &&
+      hit.version.id === params.ignoreVersionId &&
+      hit.assignment.driverId === (params.ignoreDriverId || params.driverId)
+    ) {
+      continue;
+    }
+    if (versionWindowsOverlap(window, hit.assignment)) {
+      return {
+        driverId: params.driverId,
+        policyName: hit.policy.name,
+        versionLabel: assignmentWindowLabel(hit.assignment),
+      };
     }
   }
   return null;
@@ -174,20 +227,21 @@ export function findDriverWindowCollision(params: {
 
 export function assertNoDriverWindowCollision(params: {
   policies: EarningsPolicy[];
-  driverIds: string[];
+  driverId: string;
   effectiveFrom: string;
   effectiveUntil?: string | null;
   ignoreVersionId?: string | null;
+  ignoreDriverId?: string | null;
 }): void {
   const hit = findDriverWindowCollision(params);
   if (!hit) return;
   throw new Error(
-    `Driver already has an overlapping period on "${hit.policyName}" (${hit.versionLabel}). Pick different dates or remove them from the other version first.`,
+    `Driver already has an overlapping period on "${hit.policyName}" (${hit.versionLabel}). Pick different dates or remove them from the other assignment first.`,
   );
 }
 
 /**
- * Explicit version membership for this driver-week, else Default policy for the week.
+ * Explicit assignment membership for this driver-week, else Default policy latest version.
  */
 export function resolveDriverVersionForWeek(
   policies: EarningsPolicy[],
@@ -196,12 +250,13 @@ export function resolveDriverVersionForWeek(
 ): DriverVersionHit | undefined {
   const key = String(weekStartYmd).split('T')[0];
   if (driverId) {
-    const hits = listDriverVersionAssignments(policies, driverId).filter((h) =>
-      versionAppliesToWeek(h.version, key),
+    const hits = listDriverAssignments(policies, driverId).filter((h) =>
+      assignmentAppliesToWeek(h.assignment, key),
     );
     if (hits.length > 0) {
-      hits.sort((a, b) => a.version.effectiveFrom.localeCompare(b.version.effectiveFrom));
-      return hits[hits.length - 1];
+      hits.sort((a, b) => a.assignment.effectiveFrom.localeCompare(b.assignment.effectiveFrom));
+      const best = hits[hits.length - 1];
+      return { policy: best.policy, version: best.version, assignment: best.assignment };
     }
   }
 
@@ -214,25 +269,17 @@ export function resolveDriverVersionForWeek(
 }
 
 /**
- * Version active for a week on a single policy (among covering windows, latest from).
- * Used for Default fallback / display — ignores driverIds.
+ * Latest version on a policy for Default fallback (by createdAt), or template synth.
  */
 export function resolveVersionForWeek(
   policy: EarningsPolicy,
-  weekStartYmd: string,
+  _weekStartYmd?: string,
 ): EarningsPolicyVersion | undefined {
   const normalized = normalizePolicyVersions(policy);
-  const key = String(weekStartYmd).split('T')[0];
-  const list =
-    normalized.versions?.length
-      ? normalized.versions
-      : (() => {
-          const synth = templateAsVersion(normalized);
-          return synth ? [synth] : [];
-        })();
-  const applicable = list.filter((v) => versionAppliesToWeek(v, key));
-  if (applicable.length === 0) return list[0];
-  return applicable[applicable.length - 1];
+  if (normalized.versions?.length) {
+    return normalized.versions[normalized.versions.length - 1];
+  }
+  return templateAsVersion(normalized);
 }
 
 /**
@@ -250,12 +297,14 @@ export function resolveActiveEarningsPolicyForDriverWeek(
 
 function bundleSignature(policy: EarningsPolicy): string {
   return JSON.stringify({
-    tiers: (policy.tiers || []).map((t) => ({
-      name: t.name,
-      minEarnings: t.minEarnings,
-      maxEarnings: t.maxEarnings,
-      sharePercentage: t.sharePercentage,
-    })).sort((a, b) => a.minEarnings - b.minEarnings),
+    tiers: (policy.tiers || [])
+      .map((t) => ({
+        name: t.name,
+        minEarnings: t.minEarnings,
+        maxEarnings: t.maxEarnings,
+        sharePercentage: t.sharePercentage,
+      }))
+      .sort((a, b) => a.minEarnings - b.minEarnings),
     quotas: policy.quotas,
     personalAllowance: {
       enabled: policy.personalAllowance.enabled,
@@ -304,26 +353,70 @@ export function applyPolicyTemplateSave(params: {
 }
 
 /**
- * Schedule: create or update a version window (period + drivers).
- * Freezes policy template bundle into new versions; edits keep existing frozen bundle.
+ * Schedule: create or update a version (frozen content + optional name). No dates/drivers.
  */
 export function upsertPolicyVersion(params: {
   policy: EarningsPolicy;
-  allPolicies: EarningsPolicy[];
   versionId?: string | null;
+  name?: string | null;
+}): EarningsPolicy {
+  const { policy, versionId, name } = params;
+  const n = normalizePolicyVersions(policy);
+  const now = new Date().toISOString();
+  let versions = [...(n.versions || [])];
+  const existingIdx = versionId ? versions.findIndex((v) => v.id === versionId) : -1;
+
+  if (existingIdx >= 0) {
+    const prev = versions[existingIdx];
+    versions[existingIdx] = {
+      ...prev,
+      name: name?.trim() || prev.name,
+      // Keep frozen bundle — do not pull live template
+      tiers: cloneTiers(prev.tiers),
+      quotas: cloneQuotas(prev.quotas),
+      personalAllowance: clonePersonalAllowance(prev.personalAllowance),
+      assignments: (prev.assignments || []).map(cloneAssignment),
+    };
+  } else {
+    versions.push({
+      id: crypto.randomUUID(),
+      ...(name?.trim() ? { name: name.trim() } : {}),
+      ...cloneBundle(n),
+      assignments: [],
+      createdAt: now,
+    });
+  }
+
+  return {
+    ...n,
+    versions: sortVersions(versions),
+  };
+}
+
+/**
+ * Add or update a driver's membership window on a version.
+ */
+export function upsertDriverAssignment(params: {
+  policy: EarningsPolicy;
+  allPolicies: EarningsPolicy[];
+  versionId: string;
+  driverId: string;
   effectiveFromMonday: string;
   effectiveUntilMonday?: string | null;
-  driverIds: string[];
+  /** When editing, same driverId on this version (skip self in collision). */
+  isEdit?: boolean;
 }): EarningsPolicy {
   const {
     policy,
     allPolicies,
     versionId,
+    driverId,
     effectiveFromMonday,
     effectiveUntilMonday,
-    driverIds,
+    isEdit,
   } = params;
 
+  if (!driverId) throw new Error('Driver is required.');
   if (!isMondayYmd(effectiveFromMonday)) {
     throw new Error('Start period must be a Monday.');
   }
@@ -337,59 +430,56 @@ export function upsertPolicyVersion(params: {
 
   assertNoDriverWindowCollision({
     policies: allPolicies,
-    driverIds,
+    driverId,
     effectiveFrom: effectiveFromMonday,
     effectiveUntil: until,
-    ignoreVersionId: versionId || null,
+    ignoreVersionId: isEdit ? versionId : null,
+    ignoreDriverId: isEdit ? driverId : null,
   });
 
   const n = normalizePolicyVersions(policy);
-  const now = new Date().toISOString();
-  const uniqueDrivers = [...new Set(driverIds.filter(Boolean))];
+  const versions = [...(n.versions || [])];
+  const idx = versions.findIndex((v) => v.id === versionId);
+  if (idx < 0) throw new Error('Version not found.');
 
-  let versions = [...(n.versions || [])];
-  const existingIdx = versionId ? versions.findIndex((v) => v.id === versionId) : -1;
+  const version = versions[idx];
+  const assignments = [...(version.assignments || [])];
+  const existingA = assignments.findIndex((a) => a.driverId === driverId);
+  const nextA: EarningsPolicyDriverAssignment = {
+    driverId,
+    effectiveFrom: effectiveFromMonday,
+    ...(until ? { effectiveUntil: until } : {}),
+  };
 
-  if (existingIdx >= 0) {
-    const prev = versions[existingIdx];
-    versions[existingIdx] = {
-      ...prev,
-      effectiveFrom: effectiveFromMonday,
-      ...(until ? { effectiveUntil: until } : {}),
-      driverIds: uniqueDrivers,
-      // Keep frozen bundle — do not pull live template
-      tiers: cloneTiers(prev.tiers),
-      quotas: cloneQuotas(prev.quotas),
-      personalAllowance: clonePersonalAllowance(prev.personalAllowance),
-    };
-    if (!until) {
-      const cleaned = { ...versions[existingIdx] };
-      delete cleaned.effectiveUntil;
-      versions[existingIdx] = cleaned;
-    }
+  if (existingA >= 0) {
+    assignments[existingA] = nextA;
   } else {
-    // New version: freeze current template bundle
-    versions.push({
-      id: crypto.randomUUID(),
-      effectiveFrom: effectiveFromMonday,
-      ...(until ? { effectiveUntil: until } : {}),
-      ...cloneBundle(n),
-      driverIds: uniqueDrivers,
-      createdAt: now,
-    });
+    assignments.push(nextA);
   }
 
-  return {
-    ...n,
-    versions: sortVersions(versions),
+  versions[idx] = { ...version, assignments };
+  return { ...n, versions: sortVersions(versions) };
+}
+
+export function removeDriverAssignment(params: {
+  policy: EarningsPolicy;
+  versionId: string;
+  driverId: string;
+}): EarningsPolicy {
+  const n = normalizePolicyVersions(params.policy);
+  const versions = [...(n.versions || [])];
+  const idx = versions.findIndex((v) => v.id === params.versionId);
+  if (idx < 0) throw new Error('Version not found.');
+  const version = versions[idx];
+  versions[idx] = {
+    ...version,
+    assignments: (version.assignments || []).filter((a) => a.driverId !== params.driverId),
   };
+  return { ...n, versions: sortVersions(versions) };
 }
 
 /** Remove one schedule version. */
-export function removePolicyVersion(
-  policy: EarningsPolicy,
-  versionId: string,
-): EarningsPolicy {
+export function removePolicyVersion(policy: EarningsPolicy, versionId: string): EarningsPolicy {
   const n = normalizePolicyVersions(policy);
   const versions = [...(n.versions || [])];
   if (versions.length <= 1) {
@@ -406,22 +496,19 @@ export function removePolicyVersion(
   };
 }
 
-/** Human range label for a version window. */
-export function versionWindowLabel(version: EarningsPolicyVersion): string {
-  const from =
-    version.effectiveFrom <= LEGACY_POLICY_EFFECTIVE_FROM
-      ? 'Since launch'
-      : (() => {
-          try {
-            return format(parseISO(version.effectiveFrom), 'MMM d, yyyy');
-          } catch {
-            return version.effectiveFrom;
-          }
-        })();
-  if (!version.effectiveUntil) return `${from} → Never`;
+export function assignmentWindowLabel(assignment: EarningsPolicyDriverAssignment): string {
+  const from = (() => {
+    try {
+      return format(parseISO(assignment.effectiveFrom), 'MMM d, yyyy');
+    } catch {
+      return assignment.effectiveFrom;
+    }
+  })();
+  if (!assignment.effectiveUntil) return `${from} → Never`;
   try {
-    return `${from} → ${format(parseISO(version.effectiveUntil), 'MMM d, yyyy')}`;
+    return `${from} → ${format(parseISO(assignment.effectiveUntil), 'MMM d, yyyy')}`;
   } catch {
-    return `${from} → ${version.effectiveUntil}`;
+    return `${from} → ${assignment.effectiveUntil}`;
   }
 }
+

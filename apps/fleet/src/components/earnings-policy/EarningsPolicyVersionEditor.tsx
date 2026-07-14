@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -10,137 +10,49 @@ import {
 import { Button } from '../ui/button';
 import { Label } from '../ui/label';
 import { Input } from '../ui/input';
-import { Checkbox } from '../ui/checkbox';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '../ui/select';
 import { EarningsPolicyCardPreview } from './EarningsPolicyCardPreview';
 import type { EarningsPolicy, EarningsPolicyVersion } from '../../types/earningsPolicy';
-import {
-  mondayYmdForDate,
-  upcomingMondayOptions,
-  upsertPolicyVersion,
-} from '../../utils/earningsPolicyVersion';
-import { nextMondayYmd } from '../../utils/fuelPolicyVersion';
-import { useFleetTimezone } from '../../utils/timezoneDisplay';
+import { upsertPolicyVersion } from '../../utils/earningsPolicyVersion';
 import { toast } from 'sonner@2.0.3';
-import { Search } from 'lucide-react';
 
-function driverDisplayName(d: any): string {
-  return d?.name || [d?.firstName, d?.lastName].filter(Boolean).join(' ') || 'Driver';
-}
-
+/** Create or rename a frozen version (content only — no dates/drivers). */
 export function EarningsPolicyVersionEditor({
   isOpen,
   onClose,
   onSave,
   policy,
-  allPolicies,
   editingVersion,
-  drivers,
-  vehicles,
 }: {
   isOpen: boolean;
   onClose: () => void;
   onSave: (policy: EarningsPolicy) => Promise<void>;
   policy: EarningsPolicy;
-  allPolicies: EarningsPolicy[];
   editingVersion: EarningsPolicyVersion | null;
-  drivers: any[];
-  vehicles: any[];
 }) {
-  const fleetTz = useFleetTimezone();
-  const [effectiveFromMonday, setEffectiveFromMonday] = useState('');
-  const [effectiveUntilMonday, setEffectiveUntilMonday] = useState<string>('__never__');
-  const [selectedDrivers, setSelectedDrivers] = useState<Set<string>>(new Set());
-  const [search, setSearch] = useState('');
+  const [name, setName] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const thisMonday = useMemo(
-    () => mondayYmdForDate(new Date(), fleetTz || undefined),
-    [fleetTz],
-  );
-  const nextMonday = useMemo(
-    () => nextMondayYmd(new Date(), fleetTz || undefined),
-    [fleetTz],
-  );
-  const weekOptions = useMemo(
-    () => upcomingMondayOptions(16, fleetTz || undefined),
-    [fleetTz],
-  );
-  const untilOptions = useMemo(
-    () => weekOptions.filter((o) => !effectiveFromMonday || o.value > effectiveFromMonday),
-    [weekOptions, effectiveFromMonday],
-  );
-
   const displayBundle = editingVersion
-    ? { ...policy, tiers: editingVersion.tiers, quotas: editingVersion.quotas, personalAllowance: editingVersion.personalAllowance }
+    ? {
+        ...policy,
+        tiers: editingVersion.tiers,
+        quotas: editingVersion.quotas,
+        personalAllowance: editingVersion.personalAllowance,
+      }
     : policy;
 
   useEffect(() => {
     if (!isOpen) return;
-    setSearch('');
-    if (editingVersion) {
-      setEffectiveFromMonday(editingVersion.effectiveFrom);
-      setEffectiveUntilMonday(editingVersion.effectiveUntil || '__never__');
-      setSelectedDrivers(new Set(editingVersion.driverIds || []));
-    } else {
-      setEffectiveFromMonday(nextMondayYmd(new Date(), fleetTz || undefined));
-      setEffectiveUntilMonday('__never__');
-      setSelectedDrivers(new Set());
-    }
-  }, [isOpen, editingVersion, fleetTz]);
-
-  useEffect(() => {
-    if (
-      effectiveUntilMonday !== '__never__' &&
-      effectiveFromMonday &&
-      effectiveUntilMonday <= effectiveFromMonday
-    ) {
-      setEffectiveUntilMonday('__never__');
-    }
-  }, [effectiveFromMonday, effectiveUntilMonday]);
-
-  const plateFor = (driverId: string) => {
-    const v = vehicles.find((x: any) => x.currentDriverId === driverId);
-    return v?.licensePlate || v?.plate || '';
-  };
-
-  const filteredDrivers = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return drivers;
-    return drivers.filter((d) => {
-      const name = driverDisplayName(d).toLowerCase();
-      const plate = plateFor(d.id).toLowerCase();
-      return name.includes(q) || plate.includes(q);
-    });
-  }, [drivers, search, vehicles]);
-
-  const toggleDriver = (id: string) => {
-    setSelectedDrivers((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
+    setName(editingVersion?.name || '');
+  }, [isOpen, editingVersion]);
 
   const handleSubmit = async () => {
-    if (!effectiveFromMonday) return;
     setIsSubmitting(true);
     try {
       const next = upsertPolicyVersion({
         policy,
-        allPolicies,
         versionId: editingVersion?.id,
-        effectiveFromMonday,
-        effectiveUntilMonday:
-          effectiveUntilMonday === '__never__' ? null : effectiveUntilMonday,
-        driverIds: Array.from(selectedDrivers),
+        name: name.trim() || null,
       });
       await onSave(next);
     } catch (e: any) {
@@ -152,114 +64,43 @@ export function EarningsPolicyVersionEditor({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-[560px] max-h-[90vh] overflow-hidden flex flex-col gap-0 p-0">
-        <div className="shrink-0 px-6 pt-6 pb-3 border-b border-slate-100">
-          <DialogHeader>
-            <DialogTitle>{editingVersion ? 'Edit version' : 'Add version'}</DialogTitle>
-            <DialogDescription>
-              Set the Monday period and drivers for this policy. Bundle config is frozen from the Rules
-              template (read-only here).
-            </DialogDescription>
-          </DialogHeader>
-        </div>
+      <DialogContent className="sm:max-w-[480px]">
+        <DialogHeader>
+          <DialogTitle>{editingVersion ? 'Rename version' : 'Add version'}</DialogTitle>
+          <DialogDescription>
+            {editingVersion
+              ? 'Optional label only. Frozen rules stay as they were when this version was created.'
+              : 'Freezes today’s Rules (tiers, quotas, personal allowance). Assign drivers with their own start Mondays after.'}
+          </DialogDescription>
+        </DialogHeader>
 
-        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 space-y-5">
+        <div className="space-y-4 py-2">
           <div className="space-y-2">
-            <Label>Starts (week starting Monday)</Label>
-            <Select value={effectiveFromMonday} onValueChange={setEffectiveFromMonday}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select start week" />
-              </SelectTrigger>
-              <SelectContent>
-                {weekOptions.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
-                    {o.value === thisMonday ? ' (this week)' : ''}
-                    {o.value === nextMonday ? ' (next week)' : ''}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Label htmlFor="version-name">Name (optional)</Label>
+            <Input
+              id="version-name"
+              placeholder='e.g. "Launch ladder"'
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
           </div>
 
           <div className="space-y-2">
-            <Label>Ends (week starting Monday)</Label>
-            <Select value={effectiveUntilMonday} onValueChange={setEffectiveUntilMonday}>
-              <SelectTrigger>
-                <SelectValue placeholder="Never (default)" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__never__">Never (default)</SelectItem>
-                {untilOptions.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-slate-500">
-              Ending Monday is exclusive. Leave Never for open-ended. Same dates can be used for
-              different drivers; the same driver cannot overlap another version.
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <Label className="text-slate-500">Bundle config (from Rules — not editable)</Label>
+            <Label className="text-slate-500">
+              {editingVersion ? 'Frozen snapshot (read-only)' : 'Will freeze from Rules'}
+            </Label>
             <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
               <EarningsPolicyCardPreview policy={displayBundle} compact />
             </div>
           </div>
-
-          <div className="space-y-2">
-            <Label>Drivers on this version</Label>
-            <div className="relative">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
-              <Input
-                className="pl-9"
-                placeholder="Search drivers…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </div>
-            <div className="max-h-48 overflow-y-auto rounded-md border border-slate-200 divide-y">
-              {filteredDrivers.length === 0 ? (
-                <p className="p-3 text-xs text-slate-400">No drivers found.</p>
-              ) : (
-                filteredDrivers.map((d) => {
-                  const plate = plateFor(d.id);
-                  const checked = selectedDrivers.has(d.id);
-                  return (
-                    <label
-                      key={d.id}
-                      className="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-slate-50"
-                    >
-                      <Checkbox
-                        checked={checked}
-                        onCheckedChange={() => toggleDriver(d.id)}
-                      />
-                      <span className="text-sm text-slate-800 flex-1 min-w-0 truncate">
-                        {driverDisplayName(d)}
-                        {plate ? (
-                          <span className="text-slate-400"> · {plate}</span>
-                        ) : null}
-                      </span>
-                    </label>
-                  );
-                })
-              )}
-            </div>
-            <p className="text-xs text-slate-500">
-              {selectedDrivers.size} selected. Drivers with no version anywhere use Default.
-            </p>
-          </div>
         </div>
 
-        <DialogFooter className="shrink-0 px-6 py-4 border-t border-slate-100 gap-2">
+        <DialogFooter className="gap-2">
           <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>
             Cancel
           </Button>
-          <Button type="button" onClick={handleSubmit} disabled={isSubmitting || !effectiveFromMonday}>
-            {isSubmitting ? 'Saving…' : editingVersion ? 'Save version' : 'Add version'}
+          <Button type="button" onClick={handleSubmit} disabled={isSubmitting}>
+            {isSubmitting ? 'Saving…' : editingVersion ? 'Save' : 'Add version'}
           </Button>
         </DialogFooter>
       </DialogContent>

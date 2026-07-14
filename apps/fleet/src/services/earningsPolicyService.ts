@@ -1,6 +1,7 @@
 import { publicAnonKey } from '../utils/supabase/info';
 import { API_ENDPOINTS } from './apiConfig';
 import type { EarningsPolicy } from '../types/earningsPolicy';
+import { normalizePolicyVersions } from '../utils/earningsPolicyVersion';
 
 async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 3, backoff = 500): Promise<Response> {
   try {
@@ -24,24 +25,30 @@ export const earningsPolicyService = {
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
     if (!response.ok) throw new Error("Failed to fetch earnings policies");
-    return response.json();
+    const items = await response.json();
+    return (Array.isArray(items) ? items : []).map((p: EarningsPolicy) =>
+      normalizePolicyVersions(p),
+    );
   },
 
   async saveEarningsPolicy(policy: EarningsPolicy): Promise<EarningsPolicy> {
+    // Persist assignment-normalized shape (no legacy driverIds as source of truth)
+    const toSave = normalizePolicyVersions(policy);
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/earnings-policies`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${publicAnonKey}`
       },
-      body: JSON.stringify(policy)
+      body: JSON.stringify(toSave)
     });
     if (!response.ok) {
       const errBody = await response.json().catch(() => null);
       throw new Error(errBody?.error || "Failed to save earnings policy");
     }
     const result = await response.json();
-    return result.data || result;
+    const saved = result.data || result;
+    return normalizePolicyVersions(saved);
   },
 
   async deleteEarningsPolicy(id: string): Promise<void> {
