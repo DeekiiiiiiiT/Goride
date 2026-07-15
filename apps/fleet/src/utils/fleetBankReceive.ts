@@ -98,3 +98,47 @@ export function mergeBankReceiveConfirms(
     };
   });
 }
+
+export function fleetBankConfirmKey(driverId: string, weekStartYmd: string): string {
+  return `${driverId}|${weekStartYmd}`;
+}
+
+/** Lookup map for Settlement display — keyed driverId|weekStartYmd. */
+export function buildFleetBankConfirmLookup(
+  confirms: FleetBankConfirmRecord[] | undefined,
+): Map<string, FleetBankConfirmRecord> {
+  const byKey = new Map<string, FleetBankConfirmRecord>();
+  for (const c of confirms || []) {
+    if (!c?.driverId || !c?.weekStartYmd) continue;
+    byKey.set(fleetBankConfirmKey(c.driverId, c.weekStartYmd), c);
+  }
+  return byKey;
+}
+
+export type BankSettledDisplay =
+  | { kind: 'none' }
+  | { kind: 'pending' }
+  | { kind: 'confirmed'; amount: number };
+
+/**
+ * Settlement Bank Settled column: Pending until Fleet Financials confirms.
+ * Display-only — never feeds Cash Returned / Still Held / Settlement math.
+ */
+export function resolveBankSettledDisplay(input: {
+  driverId: string;
+  weekStartYmd: string;
+  ledgerBankSettled: number;
+  confirmsByKey: Map<string, FleetBankConfirmRecord>;
+}): BankSettledDisplay {
+  const ledger = Math.abs(Number(input.ledgerBankSettled) || 0);
+  const conf = input.confirmsByKey.get(
+    fleetBankConfirmKey(input.driverId, input.weekStartYmd),
+  );
+  if (conf?.status === 'confirmed') {
+    const amount = round2(Number(conf.amountReceived) || 0);
+    return { kind: 'confirmed', amount };
+  }
+  // Expected Uber bank on the week but ops has not confirmed receipt yet.
+  if (ledger > 0.005) return { kind: 'pending' };
+  return { kind: 'none' };
+}

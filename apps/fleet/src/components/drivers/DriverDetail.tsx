@@ -134,6 +134,7 @@ import { LogCashPaymentModal } from './LogCashPaymentModal';
 import { WeeklySettlementView } from './WeeklySettlementView';
 import { useDriverPayoutPeriodRows } from '../../hooks/useDriverPayoutPeriodRows';
 import { useDriverFinancialBundle } from '../../hooks/useDriverFinancialBundle';
+import { buildWalletCallOutstandingByMonday } from '../../utils/walletCallOutstanding';
 import { DriverEarningsHistory } from './DriverEarningsHistory';
 import { DriverExpensesHistory } from './DriverExpensesHistory';
 import { DriverPayoutHistory } from './DriverPayoutHistory';
@@ -2450,6 +2451,12 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
     [walletCashWeeks],
   );
 
+  /** Settlement call-script map (Monday → tell-the-driver amount). Display only. */
+  const callOutstandingByMonday = useMemo(
+    () => buildWalletCallOutstandingByMonday(walletPayoutPeriodRows),
+    [walletPayoutPeriodRows],
+  );
+
   /** Collection desk totals — passenger vs tagged Cash Returned (open weeks with passenger cash). */
   const walletCollectionTotals = useMemo(() => {
     let passengerCash = 0;
@@ -2460,27 +2467,49 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       cashReturned += w.amountPaid || 0;
     }
     const collectionGap = Math.max(0, Math.round((passengerCash - cashReturned) * 100) / 100);
+    let driverOwes = 0;
+    let fleetOwes = 0;
+    let cashWithDriver = 0;
+    for (const w of walletCashWeeks) {
+      if ((w.amountOwed || 0) <= 0.005) continue;
+      const key = format(w.start, 'yyyy-MM-dd');
+      const call = callOutstandingByMonday[key];
+      if (!call) continue;
+      if (call.callDirection === 'driver_owes') driverOwes += call.callAmount;
+      else if (call.callDirection === 'fleet_owes') fleetOwes += call.callAmount;
+      else cashWithDriver += call.callAmount;
+    }
     return {
       passengerCash: Math.round(passengerCash * 100) / 100,
       cashReturned: Math.round(cashReturned * 100) / 100,
       collectionGap,
+      driverOwes: Math.round(driverOwes * 100) / 100,
+      fleetOwes: Math.round(fleetOwes * 100) / 100,
+      cashWithDriver: Math.round(cashWithDriver * 100) / 100,
+      /** Phone-friendly total: finalized debts + unfinalized still-held */
+      callOutstanding: Math.round((driverOwes + cashWithDriver) * 100) / 100,
     };
-  }, [walletCashWeeks]);
+  }, [walletCashWeeks, callOutstandingByMonday]);
 
-  /** Prefer newest week with a collection gap (passenger − cash returned). */
+  /** Prefer newest week with cash still owed (Settlement call amount), not passenger−returned. */
   const openWalletPeriodPrefill = useMemo(() => {
     for (const w of walletCashWeeks) {
-      const gap = (w.amountOwed || 0) - (w.amountPaid || 0);
-      if (gap > 0.005) {
+      const key = format(w.start, 'yyyy-MM-dd');
+      const call = callOutstandingByMonday[key];
+      const owed =
+        call && call.callDirection !== 'fleet_owes'
+          ? call.callAmount
+          : Math.max(0, (w.amountOwed || 0) - (w.amountPaid || 0));
+      if (owed > 0.005) {
         return {
           start: w.start,
           end: w.end,
-          amount: Math.round(gap * 100) / 100,
+          amount: Math.round(owed * 100) / 100,
         };
       }
     }
     return null;
-  }, [walletCashWeeks]);
+  }, [walletCashWeeks, callOutstandingByMonday]);
 
   // ── Auto-Repair: When the completeness guard detects missing ledger platforms,
   // automatically trigger a one-time ledger repair for this driver, then re-fetch.
@@ -3809,19 +3838,36 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
           <TabsContent value="wallet" className="space-y-6">
              ___OLD_FINANCIAL_SUBTABS_BLOCK_2_END___ */}
           <TabsContent value="wallet" className="space-y-6">
-             {/* Cash collection desk — who-owes lives on Financials → Settlement */}
              <p className="text-sm text-slate-500">
-               Cash Wallet tracks passenger cash collection only. Who owes whom is on Financials → Settlement. Uber bank received is on Fleet Operations → Fleet Financials.
+               Cash Wallet tracks <span className="font-medium text-slate-700">cash only</span> — how much cash the fleet is still owed after returns, fuel, and tolls (same as Settlement). Log Cash records handoffs. Uber bank received is on Fleet Operations → Fleet Financials.
              </p>
              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                 <Card className="bg-white border-rose-100">
+                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                         <CardTitle className="text-sm font-medium text-slate-500">Cash still owed</CardTitle>
+                         <Landmark className="h-4 w-4 text-rose-500" />
+                     </CardHeader>
+                     <CardContent>
+                         <div className={cn("text-2xl font-bold tabular-nums", walletCollectionTotals.callOutstanding > 0.005 ? "text-rose-700" : "text-emerald-600")}>
+                             {walletCollectionTotals.callOutstanding.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                         </div>
+                         <p className="text-xs text-slate-500 mt-1">
+                           Fleet cash cut / cash with driver (open weeks)
+                           {walletCollectionTotals.fleetOwes > 0.005
+                             ? ` · fleet also owes ${walletCollectionTotals.fleetOwes.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+                             : ''}
+                         </p>
+                     </CardContent>
+                 </Card>
+
                  <Card className="bg-white">
                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                          <CardTitle className="text-sm font-medium text-slate-500">Passenger Cash</CardTitle>
                          <Wallet className="h-4 w-4 text-slate-400" />
                      </CardHeader>
                      <CardContent>
-                         <div className="text-2xl font-bold text-slate-900">
-                             ${walletCollectionTotals.passengerCash.toFixed(2)}
+                         <div className="text-2xl font-bold text-slate-900 tabular-nums">
+                             {walletCollectionTotals.passengerCash.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                          </div>
                          <p className="text-xs text-slate-500 mt-1">Open weeks</p>
                      </CardContent>
@@ -3833,23 +3879,10 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                          <DollarSign className="h-4 w-4 text-emerald-500" />
                      </CardHeader>
                      <CardContent>
-                         <div className="text-2xl font-bold text-emerald-600">
-                             ${walletCollectionTotals.cashReturned.toFixed(2)}
+                         <div className="text-2xl font-bold text-emerald-600 tabular-nums">
+                             {walletCollectionTotals.cashReturned.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                          </div>
-                         <p className="text-xs text-slate-500 mt-1">Tagged to open weeks</p>
-                     </CardContent>
-                 </Card>
-
-                 <Card className="bg-white">
-                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                         <CardTitle className="text-sm font-medium text-slate-500">Collection Gap</CardTitle>
-                         <Landmark className="h-4 w-4 text-amber-500" />
-                     </CardHeader>
-                     <CardContent>
-                         <div className={cn("text-2xl font-bold", walletCollectionTotals.collectionGap > 0.005 ? "text-rose-600" : "text-emerald-600")}>
-                             ${walletCollectionTotals.collectionGap.toFixed(2)}
-                         </div>
-                         <p className="text-xs text-slate-500 mt-1">Passenger − cash returned</p>
+                         <p className="text-xs text-slate-500 mt-1">Log Cash this period</p>
                      </CardContent>
                  </Card>
 
@@ -3859,8 +3892,8 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                          <Clock className="h-4 w-4 text-blue-500" />
                      </CardHeader>
                      <CardContent>
-                         <div className="text-2xl font-bold text-blue-600">
-                             ${metrics.pendingClearance.toFixed(2)}
+                         <div className="text-2xl font-bold text-blue-600 tabular-nums">
+                             {metrics.pendingClearance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                          </div>
                          <p className="text-xs text-slate-500 mt-1">
                              Pending bank transfers
@@ -3895,6 +3928,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                             transactions={transactions}
                             csvMetrics={csvMetrics}
                             cashWeeks={walletCashWeeks}
+                            callOutstandingByMonday={callOutstandingByMonday}
                             onLogPayment={(start, end, amount) => setPaymentModalState({
                                 isOpen: true,
                                 initialWorkPeriodStart: start.toISOString(),
@@ -3929,7 +3963,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                   isOpen: true,
                                                   initialWorkPeriodStart: openWalletPeriodPrefill?.start.toISOString(),
                                                   initialWorkPeriodEnd: openWalletPeriodPrefill?.end.toISOString(),
-                                                  initialAmount: openWalletPeriodPrefill?.amount ?? walletCollectionTotals.collectionGap,
+                                                  initialAmount: openWalletPeriodPrefill?.amount ?? walletCollectionTotals.callOutstanding,
                                                 })}
                                             >
                                                 <Plus className="mr-2 h-4 w-4" />
@@ -4085,9 +4119,12 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                             <CardTitle className="text-sm font-medium">Collect Cash</CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-3">
-                             <div className="p-3 bg-slate-50 rounded-lg space-y-1">
-                                <p className="text-xs text-slate-500">Collection gap (open weeks)</p>
-                                <p className="text-sm font-semibold">${walletCollectionTotals.collectionGap.toFixed(2)}</p>
+                             <div className="p-3 bg-rose-50 rounded-lg space-y-1">
+                                <p className="text-xs text-slate-500">Cash still owed (open weeks)</p>
+                                <p className="text-sm font-semibold text-rose-800 tabular-nums">
+                                  {walletCollectionTotals.callOutstanding.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </p>
+                                <p className="text-[10px] text-slate-400">Cash only — fuel/tolls already applied</p>
                              </div>
                              <Button
                                className="w-full bg-emerald-600 hover:bg-emerald-700"
@@ -4095,7 +4132,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                  isOpen: true,
                                  initialWorkPeriodStart: openWalletPeriodPrefill?.start.toISOString(),
                                  initialWorkPeriodEnd: openWalletPeriodPrefill?.end.toISOString(),
-                                 initialAmount: openWalletPeriodPrefill?.amount ?? walletCollectionTotals.collectionGap,
+                                 initialAmount: openWalletPeriodPrefill?.amount ?? walletCollectionTotals.callOutstanding,
                                })}
                              >
                                Log Cash Payment
@@ -4868,7 +4905,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         cashOwed={
           paymentModalState.initialAmount != null
             ? paymentModalState.initialAmount
-            : walletCollectionTotals.collectionGap
+            : walletCollectionTotals.callOutstanding
         }
         initialWorkPeriodStart={paymentModalState.initialWorkPeriodStart}
         initialWorkPeriodEnd={paymentModalState.initialWorkPeriodEnd}

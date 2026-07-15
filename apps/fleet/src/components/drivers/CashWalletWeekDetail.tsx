@@ -1,4 +1,6 @@
-// Cash Wallet week detail — collection desk only (no bank / settlement).
+/**
+ * Cash detail overlay — plain add/subtract from passenger cash → cash still owed.
+ */
 import React, { useMemo } from 'react';
 import { format } from 'date-fns';
 import {
@@ -10,7 +12,7 @@ import {
 } from '../ui/sheet';
 import { Separator } from '../ui/separator';
 import { Badge } from '../ui/badge';
-import { Banknote, Wallet, Calendar } from 'lucide-react';
+import { Calendar, Phone } from 'lucide-react';
 import type { CashWeekData } from '../../utils/cashSettlementCalc';
 import type { FinancialTransaction } from '../../types/data';
 import {
@@ -18,21 +20,69 @@ import {
   isCashReturnedForWeek,
   isDriverCashPaymentTransaction,
 } from '../../utils/driverCashPayment';
+import type { WalletCallOutstanding } from '../../utils/walletCallOutstanding';
 import { cn } from '../ui/utils';
 
 interface CashWalletWeekDetailProps {
   week: CashWeekData | null;
   transactions: FinancialTransaction[];
+  callOutstanding?: WalletCallOutstanding;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
 const fmt = (n: number) =>
-  '$' + Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+function Row({
+  label,
+  hint,
+  amount,
+  sign,
+  bold,
+  tone,
+}: {
+  label: string;
+  hint?: string;
+  amount: number;
+  sign?: 'plus' | 'minus' | 'none';
+  bold?: boolean;
+  tone?: 'muted' | 'owed' | 'credit' | 'total';
+}) {
+  const prefix = sign === 'minus' ? '−' : sign === 'plus' ? '+' : '';
+  return (
+    <div className="flex items-start justify-between gap-3 py-2">
+      <div className="min-w-0">
+        <p className={cn('text-sm', bold ? 'font-semibold text-slate-900' : 'text-slate-600')}>
+          {sign === 'minus' || sign === 'plus' ? (
+            <span className="text-slate-400 mr-1">{prefix}</span>
+          ) : null}
+          {label}
+        </p>
+        {hint ? <p className="text-[11px] text-slate-400 mt-0.5">{hint}</p> : null}
+      </div>
+      <span
+        className={cn(
+          'text-sm tabular-nums shrink-0',
+          bold && 'font-bold',
+          tone === 'owed' && 'text-rose-700 font-bold',
+          tone === 'credit' && 'text-emerald-700 font-semibold',
+          tone === 'total' && 'text-slate-900 font-bold',
+          tone === 'muted' && 'text-slate-600',
+          !tone && 'text-slate-800 font-medium',
+        )}
+      >
+        {prefix && amount > 0.0005 ? prefix : ''}
+        {fmt(amount)}
+      </span>
+    </div>
+  );
+}
 
 export function CashWalletWeekDetail({
   week,
   transactions,
+  callOutstanding,
   open,
   onOpenChange,
 }: CashWalletWeekDetailProps) {
@@ -58,111 +108,171 @@ export function CashWalletWeekDetail({
   if (!week) return null;
 
   const periodLabel = `${format(week.start, 'MMM d')} – ${format(week.end, 'MMM d, yyyy')}`;
-  const gap = week.balance;
   const br = week.breakdown;
+  const b = callOutstanding?.breakdown;
+  const cashOwed =
+    callOutstanding && callOutstanding.callDirection !== 'fleet_owes'
+      ? callOutstanding.callAmount
+      : 0;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
         <SheetHeader className="pb-2">
-          <SheetTitle className="text-base">Cash Collection Detail</SheetTitle>
+          <SheetTitle className="text-base">Cash detail</SheetTitle>
           <SheetDescription className="text-xs">{periodLabel}</SheetDescription>
         </SheetHeader>
 
-        <div
-          className={cn(
-            'rounded-lg px-4 py-3 mt-2',
-            gap > 0.005 ? 'bg-amber-50' : 'bg-emerald-50',
-          )}
-        >
-          <div className="flex items-center justify-between gap-2">
-            <div>
-              <p className="text-sm font-semibold text-slate-800">
-                {gap > 0.005 ? 'Collection gap remaining' : 'Cash fully collected'}
-              </p>
-              <p className="text-[11px] text-slate-500 mt-0.5">
-                {week.cashTripCount} cash trips · {week.tripCount} total trips
-              </p>
-            </div>
-            <Badge
-              variant="secondary"
-              className={cn(
-                'font-normal',
-                week.status === 'Paid' && 'bg-emerald-100 text-emerald-700',
-                week.status === 'Partial' && 'bg-amber-100 text-amber-700',
-                week.status === 'Unpaid' && 'bg-red-100 text-red-700',
-              )}
-            >
-              {week.status}
-            </Badge>
-          </div>
-          <p
+        {callOutstanding && (
+          <div
             className={cn(
-              'text-2xl font-bold mt-2 tabular-nums',
-              gap > 0.005 ? 'text-rose-600' : 'text-emerald-600',
+              'rounded-lg px-4 py-3 mt-2 border',
+              callOutstanding.callDirection === 'fleet_owes' && 'bg-emerald-50 border-emerald-100',
+              callOutstanding.callDirection === 'driver_owes' && 'bg-rose-50 border-rose-100',
+              callOutstanding.callDirection === 'cash_with_driver' && 'bg-amber-50 border-amber-100',
             )}
           >
-            {fmt(gap)}
-          </p>
-        </div>
-
-        <div className="mt-5 space-y-1">
-          <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-            Collection
-          </p>
-          <div className="flex items-start justify-between py-2">
-            <div className="flex items-center gap-2">
-              <Banknote className="h-4 w-4 text-slate-400" />
-              <div>
-                <p className="text-sm text-slate-600">Passenger cash</p>
-                <p className="text-[11px] text-slate-400">Uber statement + InDrive/Roam cash</p>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500 uppercase tracking-wide">
+                <Phone className="h-3.5 w-3.5" />
+                Cash still owed
               </div>
+              <Badge
+                variant="secondary"
+                className={cn(
+                  'font-normal',
+                  cashOwed < 0.005 && callOutstanding.callDirection !== 'fleet_owes' && 'bg-emerald-100 text-emerald-700',
+                  callOutstanding.callDirection === 'driver_owes' && cashOwed > 0.005 && 'bg-rose-100 text-rose-700',
+                  callOutstanding.callDirection === 'cash_with_driver' && 'bg-amber-100 text-amber-800',
+                  callOutstanding.callDirection === 'fleet_owes' && 'bg-emerald-100 text-emerald-700',
+                )}
+              >
+                {callOutstanding.callDirection === 'fleet_owes'
+                  ? 'Fleet owes driver'
+                  : callOutstanding.callDirection === 'driver_owes'
+                    ? 'Fleet cash cut'
+                    : cashOwed < 0.005
+                      ? 'Cleared'
+                      : 'With driver'}
+              </Badge>
             </div>
-            <span className="text-sm font-medium tabular-nums">{fmt(week.amountOwed)}</span>
+            <p className="text-2xl font-bold mt-1 tabular-nums text-slate-900">
+              {callOutstanding.callDirection === 'fleet_owes'
+                ? fmt(callOutstanding.callAmount)
+                : cashOwed < 0.005
+                  ? '—'
+                  : fmt(cashOwed)}
+            </p>
+            <p className="text-[11px] text-slate-500 mt-1">
+              Add and subtract the lines below — same math as Financials → Settlement.
+            </p>
           </div>
-          {(br?.uberCash > 0.005 || br?.nonUberTripCash > 0.005) && (
-            <div className="pl-6 pb-1 space-y-1 text-[11px] text-slate-500">
-              {br.uberCash > 0.005 && (
-                <div className="flex justify-between gap-2">
-                  <span>Uber cash</span>
-                  <span className="tabular-nums">{fmt(br.uberCash)}</span>
-                </div>
-              )}
-              {br.nonUberTripCash > 0.005 && (
-                <div className="flex justify-between gap-2">
-                  <span>InDrive / Roam cash</span>
-                  <span className="tabular-nums">{fmt(br.nonUberTripCash)}</span>
-                </div>
-              )}
-            </div>
-          )}
-          <div className="flex items-start justify-between py-2">
-            <div className="flex items-center gap-2">
-              <Wallet className="h-4 w-4 text-emerald-500" />
-              <div>
-                <p className="text-sm font-semibold text-slate-900">− Cash Returned</p>
-                <p className="text-[11px] text-slate-400">
-                  Log Cash rows tagged to this Settlement Week
+        )}
+
+        {b && (
+          <div className="mt-5 rounded-lg border border-slate-100 px-3">
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 pt-3 pb-1">
+              Why this cash is owed
+            </p>
+
+            <Row
+              label="Passenger cash"
+              hint={
+                br && (br.uberCash > 0.005 || br.nonUberTripCash > 0.005)
+                  ? [
+                      br.uberCash > 0.005 ? `Uber ${fmt(br.uberCash)}` : null,
+                      br.nonUberTripCash > 0.005 ? `InDrive/Roam ${fmt(br.nonUberTripCash)}` : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')
+                  : 'Cash taken on trips'
+              }
+              amount={b.passengerCash}
+            />
+
+            {b.personalToll > 0.005 && (
+              <Row
+                label="Personal toll charged"
+                hint="Tag tolls billed to the driver"
+                amount={b.personalToll}
+                sign="plus"
+              />
+            )}
+
+            <Row
+              label="Cash returned"
+              hint="Log Cash tagged to this week"
+              amount={b.cashReturned}
+              sign="minus"
+              tone="credit"
+            />
+
+            <Row
+              label="Fleet fuel credit"
+              hint="Company fuel share (Fuel Reconciliation)"
+              amount={b.fuelCredit}
+              sign="minus"
+              tone="credit"
+            />
+
+            <Row
+              label="Cash toll credit"
+              hint="Cash plaza tolls (Toll Reconciliation)"
+              amount={b.cashTollCredit}
+              sign="minus"
+              tone="credit"
+            />
+
+            <Separator />
+
+            <Row
+              label="Cash still held"
+              hint="Cash left with driver after returns and expense credits"
+              amount={b.stillHeld}
+              bold
+              tone="total"
+            />
+
+            {callOutstanding?.finalized ? (
+              <Row
+                label="Net payout"
+                hint="Driver share after fuel deduction — applied against cash held"
+                amount={b.netPayoutApplied}
+                sign="minus"
+                tone="credit"
+              />
+            ) : (
+              <div className="py-2">
+                <p className="text-sm text-slate-600">Net payout</p>
+                <p className="text-[11px] text-amber-700 mt-0.5">
+                  Pending — earnings not finalized yet. Cash still owed = cash still held for now.
                 </p>
               </div>
-            </div>
-            <span className="text-sm font-bold text-emerald-700 tabular-nums">
-              −{fmt(week.amountPaid)}
-            </span>
+            )}
+
+            <Separator />
+
+            <Row
+              label={
+                callOutstanding?.callDirection === 'fleet_owes'
+                  ? 'Fleet owes driver'
+                  : 'Cash still owed'
+              }
+              hint={
+                callOutstanding?.finalized
+                  ? 'Cash still held − net payout'
+                  : 'Equals cash still held until payout is finalized'
+              }
+              amount={
+                callOutstanding?.callDirection === 'fleet_owes'
+                  ? callOutstanding.callAmount
+                  : cashOwed
+              }
+              bold
+              tone="owed"
+            />
           </div>
-          <Separator />
-          <div className="flex items-start justify-between py-2">
-            <p className="text-sm font-semibold text-slate-900">Collection gap</p>
-            <span
-              className={cn(
-                'text-sm font-bold tabular-nums',
-                gap > 0.005 ? 'text-rose-600' : 'text-emerald-600',
-              )}
-            >
-              {fmt(gap)}
-            </span>
-          </div>
-        </div>
+        )}
 
         <div className="mt-6">
           <div className="flex items-center gap-1.5 mb-2">
@@ -173,7 +283,7 @@ export function CashWalletWeekDetail({
           </div>
           {payments.length === 0 ? (
             <p className="text-sm text-slate-500 py-3">
-              No Log Cash payments tagged to this Settlement Week.
+              No Log Cash payments tagged to this week.
             </p>
           ) : (
             <div className="space-y-2">
@@ -203,15 +313,13 @@ export function CashWalletWeekDetail({
           )}
           {(br?.surplusPayments || 0) > 0.005 && (
             <p className="text-[11px] text-amber-700 mt-3 bg-amber-50 border border-amber-100 rounded-md px-2 py-1.5">
-              {fmt(br.surplusPayments)} untagged cash dated in this week — open Payments Log → Edit →
-              pick Settlement Week so it counts as Cash Returned.
+              {fmt(br.surplusPayments)} untagged cash dated in this week — tag Settlement Week on Payments Log so it counts as Cash Returned.
             </p>
           )}
           {pendingTagged.length > 0 && (
             <p className="text-[11px] text-blue-700 mt-2 bg-blue-50 border border-blue-100 rounded-md px-2 py-1.5">
               {pendingTagged.length} pending transfer
-              {pendingTagged.length !== 1 ? 's' : ''} tagged here — shown under Unverified until
-              verified (not in Cash Returned yet).
+              {pendingTagged.length !== 1 ? 's' : ''} tagged here — under Unverified until verified.
             </p>
           )}
         </div>

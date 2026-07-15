@@ -1,5 +1,6 @@
 // Settlement Summary View — uses shared payout pipeline (useDriverPayoutPeriodRows).
 import React, { useState, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { Button } from "../ui/button";
@@ -14,6 +15,12 @@ import { useDriverPayoutPeriodRows } from '../../hooks/useDriverPayoutPeriodRows
 import type { DriverFinancialBundle, DriverLike } from '../../hooks/useDriverFinancialBundle';
 import type { PayoutPeriodRow } from '../../types/driverPayoutPeriod';
 import { getPeriodSettlementComponents } from '../../utils/driverSettlementMath';
+import { api } from '../../services/api';
+import {
+  buildFleetBankConfirmLookup,
+  resolveBankSettledDisplay,
+  type BankSettledDisplay,
+} from '../../utils/fleetBankReceive';
 
 export type SettlementStatus = 'Settled' | 'Company Owes' | 'Driver Owes' | 'Pending' | 'No Activity';
 
@@ -156,6 +163,16 @@ export function SettlementSummaryView({
       : undefined,
   });
 
+  // Same confirm KV as Fleet Financials — display-only for Bank Settled.
+  const confirmsQuery = useQuery({
+    queryKey: ['fleet-bank-confirms'],
+    queryFn: () => api.getFleetBankConfirms(),
+  });
+  const bankConfirmLookup = useMemo(
+    () => buildFleetBankConfirmLookup(confirmsQuery.data?.data),
+    [confirmsQuery.data?.data],
+  );
+
   const isReady = ledgerReady;
 
   const settlementRows: SettlementRow[] = useMemo(() => {
@@ -166,6 +183,14 @@ export function SettlementSummaryView({
       rows.length - 1 - [...rows].reverse().findIndex((r) => r.settlementStatus !== 'No Activity');
     return firstActive >= 0 ? rows.slice(firstActive, lastActive + 1) : [];
   }, [isReady, periodData]);
+
+  const bankSettledForRow = (row: SettlementRow): BankSettledDisplay =>
+    resolveBankSettledDisplay({
+      driverId,
+      weekStartYmd: format(row.periodStart, 'yyyy-MM-dd'),
+      ledgerBankSettled: row.bankSettled,
+      confirmsByKey: bankConfirmLookup,
+    });
 
   // Note: trueSettlement is a deliberately different aggregate from
   // Σ row.settlement below — it nets payout from finalized weeks only against
@@ -243,27 +268,31 @@ export function SettlementSummaryView({
 
   // ── CSV export handler ──
   const handleExportCSV = () => {
-    const data = settlementRows.map(row => ({
-      'Period Start': format(row.periodStart, 'yyyy-MM-dd'),
-      'Period End': format(row.periodEnd, 'yyyy-MM-dd'),
-      'Ledger Gross Revenue': row.grossRevenue,
-      'Driver Share': row.driverShare,
-      'Fuel Deduction': row.expenseDeductions,
-      'Toll / Charge Share': row.tollExpenses,
-      'Net Payout': row.netPayout,
-      'Is Finalized': row.isFinalized,
-      'Trip Count': row.tripCount,
-      'Passenger Cash': row.passengerCash,
-      'Cash Handbacks': row.cashHandbacks,
-      'Fuel Credits': row.fuelCreditsApplied,
-      'Bank Settled': row.bankSettled,
-      'Cash Returned': row.cashPaid,
-      'Fleet Fuel Credit': row.fuelCreditsApplied,
-      'Cash Toll Credit': row.cashTollCredits,
-      'Cash Still Held': row.cashStillHeld,
-      'Settlement': row.settlement,
-      'Settlement Status': row.settlementStatus,
-    }));
+    const data = settlementRows.map(row => {
+      const bank = bankSettledForRow(row);
+      return {
+        'Period Start': format(row.periodStart, 'yyyy-MM-dd'),
+        'Period End': format(row.periodEnd, 'yyyy-MM-dd'),
+        'Ledger Gross Revenue': row.grossRevenue,
+        'Driver Share': row.driverShare,
+        'Fuel Deduction': row.expenseDeductions,
+        'Toll / Charge Share': row.tollExpenses,
+        'Net Payout': row.netPayout,
+        'Is Finalized': row.isFinalized,
+        'Trip Count': row.tripCount,
+        'Passenger Cash': row.passengerCash,
+        'Cash Handbacks': row.cashHandbacks,
+        'Fuel Credits': row.fuelCreditsApplied,
+        'Bank Settled':
+          bank.kind === 'confirmed' ? bank.amount : bank.kind === 'pending' ? 'Pending' : '',
+        'Cash Returned': row.cashPaid,
+        'Fleet Fuel Credit': row.fuelCreditsApplied,
+        'Cash Toll Credit': row.cashTollCredits,
+        'Cash Still Held': row.cashStillHeld,
+        'Settlement': row.settlement,
+        'Settlement Status': row.settlementStatus,
+      };
+    });
     exportToCSV(data, `settlement_summary_${driverId}.csv`);
     toast.success('CSV export completed');
   };
@@ -484,8 +513,8 @@ export function SettlementSummaryView({
                             </span>
                           </TooltipTrigger>
                           <TooltipContent side="top" className="max-w-[300px] text-xs">
-                            Uber payout already at the company bank. Informational only — not part of cash
-                            still held.
+                            Uber bank amount confirmed in Fleet Financials. Shows Pending until ops confirms
+                            receipt. Informational only — not part of cash still held.
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
@@ -640,9 +669,20 @@ export function SettlementSummaryView({
                           {row.passengerCash > 0.005 ? fmtCurrency(row.passengerCash) : <span className="text-slate-300">—</span>}
                         </TableCell>
 
-                        {/* Bank Settled */}
+                        {/* Bank Settled — Pending until Fleet Financials confirm */}
                         <TableCell className="text-xs text-right tabular-nums text-slate-500">
-                          {row.bankSettled > 0.005 ? fmtCurrency(row.bankSettled) : <span className="text-slate-300">—</span>}
+                          {(() => {
+                            const bank = bankSettledForRow(row);
+                            if (bank.kind === 'confirmed') {
+                              return bank.amount > 0.005
+                                ? fmtCurrency(bank.amount)
+                                : <span className="text-slate-300">—</span>;
+                            }
+                            if (bank.kind === 'pending') {
+                              return <span className="text-amber-700 font-medium">Pending</span>;
+                            }
+                            return <span className="text-slate-300">—</span>;
+                          })()}
                         </TableCell>
 
                         {/* Cash Returned — actual cash logged */}
@@ -717,6 +757,7 @@ export function SettlementSummaryView({
       {/* ── Period detail overlay (Sheet) ── */}
       <SettlementPeriodDetail
         row={selectedRow}
+        bankSettledDisplay={selectedRow ? bankSettledForRow(selectedRow) : undefined}
         open={!!selectedRow}
         onOpenChange={(open) => { if (!open) setSelectedRow(null); }}
       />

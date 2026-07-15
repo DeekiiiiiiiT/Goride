@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
   aggregateExpectedBankByDriverWeek,
+  buildFleetBankConfirmLookup,
   mergeBankReceiveConfirms,
+  resolveBankSettledDisplay,
 } from './fleetBankReceive';
 
 describe('fleetBankReceive', () => {
@@ -74,5 +76,43 @@ describe('fleetBankReceive', () => {
     expect(confirmed[0].variance).toBeCloseTo(-20, 2);
     // Expected unchanged by confirm — confirm must not pad Cash Returned side
     expect(confirmed[0].expected).toBe(500);
+  });
+
+  it('keeps Bank Settled pending until Fleet Financials confirms', () => {
+    const lookup = buildFleetBankConfirmLookup([
+      {
+        driverId: 'd1',
+        weekStartYmd: '2026-06-29',
+        status: 'confirmed',
+        amountReceived: 48168.32,
+      },
+    ]);
+
+    expect(
+      resolveBankSettledDisplay({
+        driverId: 'd1',
+        weekStartYmd: '2026-06-29',
+        ledgerBankSettled: 48168.32,
+        confirmsByKey: lookup,
+      }),
+    ).toEqual({ kind: 'confirmed', amount: 48168.32 });
+
+    expect(
+      resolveBankSettledDisplay({
+        driverId: 'd1',
+        weekStartYmd: '2026-07-06',
+        ledgerBankSettled: 1200,
+        confirmsByKey: lookup,
+      }),
+    ).toEqual({ kind: 'pending' });
+
+    expect(
+      resolveBankSettledDisplay({
+        driverId: 'd1',
+        weekStartYmd: '2026-07-13',
+        ledgerBankSettled: 0,
+        confirmsByKey: lookup,
+      }),
+    ).toEqual({ kind: 'none' });
   });
 });

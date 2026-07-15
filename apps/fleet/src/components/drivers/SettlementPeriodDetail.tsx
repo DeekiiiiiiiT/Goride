@@ -26,9 +26,12 @@ import {
   TrendingDown,
 } from 'lucide-react';
 import type { SettlementRow, SettlementStatus } from './SettlementSummaryView';
+import type { BankSettledDisplay } from '../../utils/fleetBankReceive';
 
 interface SettlementPeriodDetailProps {
   row: SettlementRow | null;
+  /** Fleet Financials confirm gate — Pending until ops confirms bank receipt. */
+  bankSettledDisplay?: BankSettledDisplay;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -116,12 +119,21 @@ function SectionHeader({ title, description }: { title: string; description?: st
   );
 }
 
-export function SettlementPeriodDetail({ row, open, onOpenChange }: SettlementPeriodDetailProps) {
+export function SettlementPeriodDetail({
+  row,
+  bankSettledDisplay,
+  open,
+  onOpenChange,
+}: SettlementPeriodDetailProps) {
   if (!row) return null;
 
   const periodLabel = `${format(row.periodStart, 'MMM d')} – ${format(row.periodEnd, 'MMM d, yyyy')}`;
   const cfg = statusConfig[row.settlementStatus];
   const netApplied = row.isFinalized ? row.netPayout : 0;
+  // Prefer Fleet Financials gate; fall back to ledger-only if confirms not loaded.
+  const bankDisplay: BankSettledDisplay =
+    bankSettledDisplay ??
+    (row.bankSettled > 0.005 ? { kind: 'pending' } : { kind: 'none' });
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -189,17 +201,28 @@ export function SettlementPeriodDetail({ row, open, onOpenChange }: SettlementPe
             sub="Driver’s cut for this week"
           />
 
-          {row.bankSettled > 0.005 && (
+          {bankDisplay.kind !== 'none' && (
             <div className="pt-3">
               <SectionHeader
                 title="Bank (informational)"
-                description="Already at the company bank — not part of cash still held"
+                description="Confirmed in Fleet Financials — not part of cash still held"
               />
               <LineItem
                 icon={<Wallet className="h-4 w-4" />}
                 label="Bank Settled"
-                value={fmt(row.bankSettled)}
-                valueColor="text-slate-600"
+                value={
+                  bankDisplay.kind === 'confirmed'
+                    ? fmt(bankDisplay.amount)
+                    : 'Pending'
+                }
+                valueColor={
+                  bankDisplay.kind === 'confirmed' ? 'text-slate-600' : 'text-amber-600'
+                }
+                sub={
+                  bankDisplay.kind === 'pending'
+                    ? 'Confirm Uber bank receipt on Fleet Financials'
+                    : undefined
+                }
               />
             </div>
           )}

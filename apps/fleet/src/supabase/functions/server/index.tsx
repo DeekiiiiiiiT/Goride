@@ -7494,6 +7494,26 @@ app.put("/make-server-37f42386/fleet-bank-confirms", requireAuth(), async (c) =>
   }
 });
 
+/** Unconfirm — removes ops receive record so Settlement Bank Settled returns to Pending. */
+app.delete("/make-server-37f42386/fleet-bank-confirms", requireAuth(), async (c) => {
+  try {
+    const driverId = String(c.req.query("driverId") || "").trim();
+    const weekStartYmd = String(c.req.query("weekStartYmd") || "").trim();
+    if (!driverId || !/^\d{4}-\d{2}-\d{2}$/.test(weekStartYmd)) {
+      return c.json({ error: "driverId and weekStartYmd (yyyy-MM-dd) are required" }, 400);
+    }
+    const key = `fleet_bank_confirm:${driverId}:${weekStartYmd}`;
+    const existing = await kv.get(key);
+    if (existing && !belongsToOrg(existing as Record<string, unknown>, c)) {
+      return c.json({ error: "Not found" }, 404);
+    }
+    await kv.del(key);
+    return c.json({ success: true });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
 // Client-parsed bank statement batches (re-open / audit). Does not write Cash Returned.
 app.get("/make-server-37f42386/fleet-bank-statements", requireAuth(), async (c) => {
   try {

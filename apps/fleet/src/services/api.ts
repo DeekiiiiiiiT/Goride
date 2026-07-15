@@ -3646,6 +3646,29 @@ export const api = {
     return response.json();
   },
 
+  /** Unconfirm bank receive — Settlement Bank Settled returns to Pending. */
+  async deleteFleetBankConfirm(payload: {
+    driverId: string;
+    weekStartYmd: string;
+  }): Promise<{ success: boolean }> {
+    const params = new URLSearchParams({
+      driverId: payload.driverId,
+      weekStartYmd: payload.weekStartYmd,
+    });
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/fleet-bank-confirms?${params.toString()}`,
+      {
+        method: 'DELETE',
+        headers: await getHeaders(null, { requireAuth: true }),
+      },
+    );
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Fleet bank unconfirm failed: ${errText}`);
+    }
+    return response.json();
+  },
+
   /** Persist a client-parsed bank statement batch (ops reopen). Never feeds Cash Returned. */
   async saveFleetBankStatement(payload: {
     id?: string;

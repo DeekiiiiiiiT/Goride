@@ -32,6 +32,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import {
   Dialog,
   DialogContent,
@@ -41,6 +42,8 @@ import {
 } from '../ui/dialog';
 import { cn } from '../ui/utils';
 import { BankStatementImport } from './BankStatementImport';
+
+type DeskTab = 'outstanding' | 'completed';
 
 const MONEY = (n: number | null | undefined) =>
   n == null || !Number.isFinite(n)
@@ -67,11 +70,118 @@ async function fetchAllPayoutBankEvents(startDate?: string, endDate?: string) {
   return all;
 }
 
+function BankReceiveTable({
+  rows,
+  mode,
+  emptyLabel,
+  savingKey,
+  onConfirm,
+  onEnterAmount,
+  onUnconfirm,
+}: {
+  rows: FleetBankReceiveRow[];
+  mode: DeskTab;
+  emptyLabel: string;
+  savingKey: string | null;
+  onConfirm: (row: FleetBankReceiveRow) => void;
+  onEnterAmount: (row: FleetBankReceiveRow) => void;
+  onUnconfirm?: (row: FleetBankReceiveRow) => void;
+}) {
+  return (
+    <div className="rounded-lg border border-slate-200 dark:border-slate-800 overflow-x-auto">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Week</TableHead>
+            <TableHead>Driver</TableHead>
+            <TableHead className="text-right">Expected (Uber bank)</TableHead>
+            <TableHead className="text-right">Received</TableHead>
+            <TableHead className="text-right">Variance</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead className="text-right">Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={7} className="text-center text-slate-500 py-8">
+                {emptyLabel}
+              </TableCell>
+            </TableRow>
+          ) : (
+            rows.map((row) => {
+              const key = `${row.driverId}|${row.weekStartYmd}`;
+              const weekEnd = addDays(parseISO(row.weekStartYmd), 6);
+              const busy = savingKey === key;
+              return (
+                <TableRow key={key}>
+                  <TableCell className="whitespace-nowrap text-sm">
+                    {format(parseISO(row.weekStartYmd), 'MMM d')} – {format(weekEnd, 'MMM d, yyyy')}
+                  </TableCell>
+                  <TableCell className="font-medium">{row.driverName}</TableCell>
+                  <TableCell className="text-right tabular-nums">{MONEY(row.expected)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{MONEY(row.amountReceived)}</TableCell>
+                  <TableCell
+                    className={cn(
+                      'text-right tabular-nums',
+                      row.variance != null && row.variance !== 0 && 'text-amber-700 dark:text-amber-400',
+                    )}
+                  >
+                    {row.variance == null
+                      ? '—'
+                      : `${row.variance > 0 ? '+' : ''}${MONEY(row.variance)}`}
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={row.status === 'confirmed' ? 'default' : 'secondary'}>
+                      {row.status === 'confirmed' ? 'Confirmed' : 'Unconfirmed'}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right space-x-2 whitespace-nowrap">
+                    {mode === 'outstanding' && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={busy}
+                        onClick={() => onConfirm(row)}
+                      >
+                        {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Confirm'}
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={busy}
+                      onClick={() => onEnterAmount(row)}
+                    >
+                      {mode === 'completed' ? 'Edit amount' : 'Enter amount'}
+                    </Button>
+                    {mode === 'completed' && onUnconfirm && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={busy}
+                        className="text-slate-600 hover:text-rose-700"
+                        onClick={() => onUnconfirm(row)}
+                      >
+                        {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Unconfirm'}
+                      </Button>
+                    )}
+                  </TableCell>
+                </TableRow>
+              );
+            })
+          )}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
 export function FleetFinancialsPage() {
   const fleetTz = useFleetTimezone();
   const queryClient = useQueryClient();
+  const [deskTab, setDeskTab] = useState<DeskTab>('outstanding');
   const [driverFilter, setDriverFilter] = useState<string>('all');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'unconfirmed' | 'confirmed'>('unconfirmed');
   const [weekFrom, setWeekFrom] = useState('');
   const [weekTo, setWeekTo] = useState('');
   const [enterRow, setEnterRow] = useState<FleetBankReceiveRow | null>(null);
@@ -113,19 +223,30 @@ export function FleetFinancialsPage() {
     return mergeBankReceiveConfirms(expected, confirmsQuery.data?.data);
   }, [bankQuery.data, confirmsQuery.data, driverNameById, fleetTz]);
 
-  const filtered = useMemo(() => {
+  const scopedByFilters = useMemo(() => {
     return rows
       .filter((r) => (driverFilter === 'all' ? true : r.driverId === driverFilter))
-      .filter((r) => (statusFilter === 'all' ? true : r.status === statusFilter))
       .filter((r) => (!weekFrom ? true : r.weekStartYmd >= weekFrom))
-      .filter((r) => (!weekTo ? true : r.weekStartYmd <= weekTo))
+      .filter((r) => (!weekTo ? true : r.weekStartYmd <= weekTo));
+  }, [rows, driverFilter, weekFrom, weekTo]);
+
+  const outstandingRows = useMemo(() => {
+    return scopedByFilters
+      .filter((r) => r.status === 'unconfirmed')
       .sort((a, b) => {
-        // Unconfirmed first, then newest week
-        if (a.status !== b.status) return a.status === 'unconfirmed' ? -1 : 1;
         if (a.weekStartYmd !== b.weekStartYmd) return b.weekStartYmd.localeCompare(a.weekStartYmd);
         return a.driverName.localeCompare(b.driverName);
       });
-  }, [rows, driverFilter, statusFilter, weekFrom, weekTo]);
+  }, [scopedByFilters]);
+
+  const completedRows = useMemo(() => {
+    return scopedByFilters
+      .filter((r) => r.status === 'confirmed')
+      .sort((a, b) => {
+        if (a.weekStartYmd !== b.weekStartYmd) return b.weekStartYmd.localeCompare(a.weekStartYmd);
+        return a.driverName.localeCompare(b.driverName);
+      });
+  }, [scopedByFilters]);
 
   const driverOptions = useMemo(() => {
     const seen = new Map<string, string>();
@@ -150,6 +271,23 @@ export function FleetFinancialsPage() {
       setEnterRow(null);
     } catch (e: any) {
       toast.error(e?.message || 'Failed to save');
+    } finally {
+      setSavingKey(null);
+    }
+  }
+
+  async function unconfirm(row: FleetBankReceiveRow) {
+    const key = `${row.driverId}|${row.weekStartYmd}`;
+    setSavingKey(key);
+    try {
+      await api.deleteFleetBankConfirm({
+        driverId: row.driverId,
+        weekStartYmd: row.weekStartYmd,
+      });
+      await queryClient.invalidateQueries({ queryKey: ['fleet-bank-confirms'] });
+      toast.success('Moved back to Outstanding');
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to unconfirm');
     } finally {
       setSavingKey(null);
     }
@@ -203,19 +341,6 @@ export function FleetFinancialsPage() {
             </SelectContent>
           </Select>
         </div>
-        <div className="space-y-1">
-          <label className="text-xs text-slate-500">Status</label>
-          <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as typeof statusFilter)}>
-            <SelectTrigger className="w-44">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="unconfirmed">Unconfirmed first</SelectItem>
-              <SelectItem value="confirmed">Confirmed</SelectItem>
-              <SelectItem value="all">All</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
       </div>
 
       <BankStatementImport
@@ -235,84 +360,55 @@ export function FleetFinancialsPage() {
           No Uber bank payout data found. Import or load the ledger — amounts are not invented here.
         </div>
       ) : (
-        <div className="rounded-lg border border-slate-200 dark:border-slate-800 overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Week</TableHead>
-                <TableHead>Driver</TableHead>
-                <TableHead className="text-right">Expected (Uber bank)</TableHead>
-                <TableHead className="text-right">Received</TableHead>
-                <TableHead className="text-right">Variance</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-center text-slate-500 py-8">
-                    No rows match filters.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filtered.map((row) => {
-                  const key = `${row.driverId}|${row.weekStartYmd}`;
-                  const weekEnd = addDays(parseISO(row.weekStartYmd), 6);
-                  const busy = savingKey === key;
-                  return (
-                    <TableRow key={key}>
-                      <TableCell className="whitespace-nowrap text-sm">
-                        {format(parseISO(row.weekStartYmd), 'MMM d')} – {format(weekEnd, 'MMM d, yyyy')}
-                      </TableCell>
-                      <TableCell className="font-medium">{row.driverName}</TableCell>
-                      <TableCell className="text-right tabular-nums">{MONEY(row.expected)}</TableCell>
-                      <TableCell className="text-right tabular-nums">{MONEY(row.amountReceived)}</TableCell>
-                      <TableCell
-                        className={cn(
-                          'text-right tabular-nums',
-                          row.variance != null && row.variance !== 0 && 'text-amber-700 dark:text-amber-400',
-                        )}
-                      >
-                        {row.variance == null
-                          ? '—'
-                          : `${row.variance > 0 ? '+' : ''}${MONEY(row.variance)}`}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={row.status === 'confirmed' ? 'default' : 'secondary'}>
-                          {row.status === 'confirmed' ? 'Confirmed' : 'Unconfirmed'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right space-x-2 whitespace-nowrap">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={busy}
-                          onClick={() => saveConfirm(row, row.expected)}
-                        >
-                          {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Confirm'}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          disabled={busy}
-                          onClick={() => {
-                            setEnterRow(row);
-                            setEnterAmount(
-                              String(row.amountReceived ?? row.expected ?? ''),
-                            );
-                          }}
-                        >
-                          Enter amount
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })
-              )}
-            </TableBody>
-          </Table>
-        </div>
+        <Tabs
+          value={deskTab}
+          onValueChange={(v) => setDeskTab(v as DeskTab)}
+          className="space-y-4"
+        >
+          <TabsList>
+            <TabsTrigger value="outstanding">
+              Outstanding
+              <Badge variant="secondary" className="ml-2 tabular-nums">
+                {outstandingRows.length}
+              </Badge>
+            </TabsTrigger>
+            <TabsTrigger value="completed">
+              Completed
+              <Badge variant="secondary" className="ml-2 tabular-nums">
+                {completedRows.length}
+              </Badge>
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="outstanding" className="mt-0">
+            <BankReceiveTable
+              rows={outstandingRows}
+              mode="outstanding"
+              emptyLabel="Nothing outstanding — all visible weeks are confirmed."
+              savingKey={savingKey}
+              onConfirm={(row) => void saveConfirm(row, row.expected)}
+              onEnterAmount={(row) => {
+                setEnterRow(row);
+                setEnterAmount(String(row.amountReceived ?? row.expected ?? ''));
+              }}
+            />
+          </TabsContent>
+
+          <TabsContent value="completed" className="mt-0">
+            <BankReceiveTable
+              rows={completedRows}
+              mode="completed"
+              emptyLabel="No confirmed weeks yet for these filters."
+              savingKey={savingKey}
+              onConfirm={(row) => void saveConfirm(row, row.expected)}
+              onEnterAmount={(row) => {
+                setEnterRow(row);
+                setEnterAmount(String(row.amountReceived ?? row.expected ?? ''));
+              }}
+              onUnconfirm={(row) => void unconfirm(row)}
+            />
+          </TabsContent>
+        </Tabs>
       )}
 
       <Dialog open={!!enterRow} onOpenChange={(open) => !open && setEnterRow(null)}>
