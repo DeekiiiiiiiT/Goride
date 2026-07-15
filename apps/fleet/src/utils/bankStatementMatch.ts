@@ -154,17 +154,18 @@ function nameInDescription(desc: string, name: string): boolean {
 }
 
 /**
- * Suggest matches: amount within tolerance, date within window of week Monday,
- * optional driver-name hit in description.
- * One expected row and one line each used at most once (greedy by score).
+ * Suggest matches against org-week Expected (fleet bank deposit).
+ * Score: amount + proximity to Settlement week Monday (no driver name).
+ * One expected week and one line each used at most once (greedy by score).
  */
 export function suggestBankMatches(
   lines: BankStatementLine[],
   expected: FleetBankReceiveRow[],
-  options?: { amountTolerance?: number; dateWindowDays?: number },
+  options?: { amountTolerance?: number; dateWindowDays?: number; orgNameHints?: string[] },
 ): BankMatchSuggestion[] {
   const amountTol = options?.amountTolerance ?? 0.01;
   const dateWindow = options?.dateWindowDays ?? 10;
+  const orgHints = options?.orgNameHints || [];
   const candidates: BankMatchSuggestion[] = [];
 
   for (const line of lines) {
@@ -178,9 +179,12 @@ export function suggestBankMatches(
       let score = 100 - amtDiff * 100 - weekDist;
       reasons.push(`Amount within $${amountTol.toFixed(2)}`);
       reasons.push(`Date ${Math.round(weekDist)}d from week start`);
-      if (nameInDescription(line.description, target.driverName)) {
-        score += 25;
-        reasons.push('Driver name in description');
+      for (const hint of orgHints) {
+        if (nameInDescription(line.description, hint)) {
+          score += 15;
+          reasons.push('Fleet / org name in description');
+          break;
+        }
       }
       candidates.push({ line, target, score, reasons });
     }
@@ -191,7 +195,7 @@ export function suggestBankMatches(
   const usedTargets = new Set<string>();
   const out: BankMatchSuggestion[] = [];
   for (const c of candidates) {
-    const tKey = `${c.target.driverId}|${c.target.weekStartYmd}`;
+    const tKey = c.target.weekStartYmd;
     if (usedLines.has(c.line.lineIndex) || usedTargets.has(tKey)) continue;
     usedLines.add(c.line.lineIndex);
     usedTargets.add(tKey);

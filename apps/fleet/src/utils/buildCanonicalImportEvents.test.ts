@@ -102,9 +102,10 @@ describe('buildCanonicalImportEvents', () => {
     expect(keys).not.toContain(`${batchId}|stmt|${driverId}|TIPS`);
     expect(keys).not.toContain(`${batchId}|stmt|${driverId}|REFUNDS_EXPENSES`);
     
-    // Payout events ARE still emitted
+    // Org bank deposit + unallocated cash fallback (no per-driver cash/bank in ssot)
     expect(keys).toContain(`${batchId}|payout|CASH`);
-    expect(keys).toContain(`${batchId}|payout|BANK`);
+    expect(keys.some((k) => k.startsWith(`${batchId}|payout|bank|org|`))).toBe(true);
+    expect(keys).not.toContain(`${batchId}|payout|BANK`);
     
     // Toll support adjustment IS still emitted
     expect(keys).toContain(`${batchId}|toll_support|${dispute.id}`);
@@ -127,7 +128,7 @@ describe('buildCanonicalImportEvents', () => {
     expect(events[0].sourceType).toBe('import_batch');
     expect(events.every((e) => e.sourceId === batchId)).toBe(true);
     
-    // REFUNDS_TOLL, promotion, payout_cash, payout_bank, toll_support_adjustment
+    // REFUNDS_TOLL, promotion, org bank, unallocated cash, toll_support_adjustment
     expect(events.length).toBe(5);
     const promoEv = events.find((e) => e.eventType === 'promotion');
     expect(promoEv?.netAmount).toBe(5);
@@ -135,9 +136,10 @@ describe('buildCanonicalImportEvents', () => {
     expect(promoEv?.date).toBe('2026-03-01');
   });
 
-  it('emits per-driver payout_cash/payout_bank from payments_driver and skips org primary dump', () => {
+  it('emits org bank deposit + per-driver bank share; never dumps org bank onto a primary driver', () => {
     const batchId = 'batch-33333333-3333-3333-3333-333333333333';
     const driverId = 'ffffffff-ffff-ffff-ffff-ffffffffffff';
+    const orgUuid = '73dfc14d-3798-4a00-8d86-b2a3eb632f54';
     const ssot: Record<string, UberSsotTotals> = {
       [driverId]: {
         periodEarningsGross: 100,
@@ -162,6 +164,8 @@ describe('buildCanonicalImportEvents', () => {
       cashPosition: 0,
       totalCashExposure: 99999,
       bankTransfer: 88888,
+      organizationUuid: orgUuid,
+      organizationName: 'SADIKI ABAYOMI THOMAS',
     };
     const events = buildCanonicalImportEvents({
       batchId,
@@ -173,10 +177,18 @@ describe('buildCanonicalImportEvents', () => {
     expect(events.some((e) => e.idempotencyKey === `${batchId}|payout|CASH`)).toBe(false);
     expect(events.some((e) => e.idempotencyKey === `${batchId}|payout|BANK`)).toBe(false);
     const cash = events.find((e) => e.eventType === 'payout_cash');
-    const bank = events.find((e) => e.eventType === 'payout_bank');
+    const orgBank = events.find(
+      (e) => e.eventType === 'payout_bank' && e.metadata?.recipient === 'org',
+    );
+    const shareBank = events.find(
+      (e) => e.eventType === 'payout_bank' && e.metadata?.bankRole === 'driver_share',
+    );
     expect(cash?.driverId).toBe(driverId);
     expect(cash?.netAmount).toBeCloseTo(34051.85, 2);
-    expect(bank?.netAmount).toBeCloseTo(58668.5, 2);
+    expect(orgBank?.netAmount).toBeCloseTo(88888, 2);
+    expect(orgBank?.driverId).toBe(orgUuid);
+    expect(shareBank?.driverId).toBe(driverId);
+    expect(shareBank?.netAmount).toBeCloseTo(58668.5, 2);
     expect(cash?.idempotencyKey).toBe(`${batchId}|payout|cash|${driverId}`);
   });
 

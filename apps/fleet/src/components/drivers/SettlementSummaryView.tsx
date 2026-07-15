@@ -17,10 +17,10 @@ import type { PayoutPeriodRow } from '../../types/driverPayoutPeriod';
 import { getPeriodSettlementComponents } from '../../utils/driverSettlementMath';
 import { api } from '../../services/api';
 import {
-  buildFleetBankConfirmLookup,
   resolveBankSettledDisplay,
   type BankSettledDisplay,
 } from '../../utils/fleetBankReceive';
+import { useAuth } from '../auth/AuthContext';
 
 export type SettlementStatus = 'Settled' | 'Company Owes' | 'Driver Owes' | 'Pending' | 'No Activity';
 
@@ -150,7 +150,13 @@ export function SettlementSummaryView({
   weeklyPeriodData,
   weeklyCashWeeks,
 }: SettlementSummaryViewProps) {
-  const { periodData, isReady: ledgerReady, fuelDataLoading } = useDriverPayoutPeriodRows({
+  const { organizationId } = useAuth();
+  const {
+    periodData,
+    isReady: ledgerReady,
+    fuelDataLoading,
+    financialBundle: payoutBundle,
+  } = useDriverPayoutPeriodRows({
     driverId,
     driver,
     trips,
@@ -163,17 +169,20 @@ export function SettlementSummaryView({
       : undefined,
   });
 
-  // Same confirm KV as Fleet Financials — display-only for Bank Settled.
+  // Org-week confirms from Fleet Financials — display-only for Bank Settled.
   const confirmsQuery = useQuery({
     queryKey: ['fleet-bank-confirms'],
     queryFn: () => api.getFleetBankConfirms(),
   });
-  const bankConfirmLookup = useMemo(
-    () => buildFleetBankConfirmLookup(confirmsQuery.data?.data),
-    [confirmsQuery.data?.data],
-  );
 
   const isReady = ledgerReady;
+  const resolvedBundle = financialBundle ?? payoutBundle;
+  const bankDriverIds = useMemo(() => {
+    const ids = resolvedBundle?.expandedIds?.length
+      ? resolvedBundle.expandedIds
+      : [driverId];
+    return ids;
+  }, [resolvedBundle?.expandedIds, driverId]);
 
   const settlementRows: SettlementRow[] = useMemo(() => {
     if (!isReady) return [];
@@ -187,9 +196,11 @@ export function SettlementSummaryView({
   const bankSettledForRow = (row: SettlementRow): BankSettledDisplay =>
     resolveBankSettledDisplay({
       driverId,
+      driverIds: bankDriverIds,
       weekStartYmd: format(row.periodStart, 'yyyy-MM-dd'),
       ledgerBankSettled: row.bankSettled,
-      confirmsByKey: bankConfirmLookup,
+      organizationId,
+      confirms: confirmsQuery.data?.data,
     });
 
   // Note: trueSettlement is a deliberately different aggregate from
@@ -513,8 +524,9 @@ export function SettlementSummaryView({
                             </span>
                           </TooltipTrigger>
                           <TooltipContent side="top" className="max-w-[300px] text-xs">
-                            Uber bank amount confirmed in Fleet Financials. Shows Pending until ops confirms
-                            receipt. Informational only — not part of cash still held.
+                            Driver’s Uber bank allocation for this week. Shows Pending until the fleet org
+                            week is confirmed in Fleet Financials (wire goes to the fleet account, not the
+                            driver). Informational only — not part of cash still held.
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>

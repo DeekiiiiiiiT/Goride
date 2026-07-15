@@ -831,6 +831,27 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
               disputeRefunds: processedDisputeRefunds,
           }),
           ];
+
+          // Persist Uber Organization UUID from payments_organization (fleet bank identity).
+          const importedUberOrgUuid = String(orgForCanonical?.organizationUuid || '').trim();
+          if (importedUberOrgUuid) {
+              try {
+                  const existing = await api.getOrganizationSettings();
+                  const stored = String(existing.data?.uberOrganizationUuid || '').trim();
+                  if (stored && stored.toLowerCase() !== importedUberOrgUuid.toLowerCase()) {
+                      toast.warning(
+                          `Uber Organization UUID in CSV (${importedUberOrgUuid}) differs from saved fleet setting (${stored}). Import used CSV identity for ledger events.`,
+                      );
+                  } else if (!stored) {
+                      await api.upsertOrganizationSettings({
+                          uberOrganizationUuid: importedUberOrgUuid,
+                      });
+                  }
+              } catch (orgSettingsErr) {
+                  console.warn('[Import] organization settings upsert skipped', orgSettingsErr);
+              }
+          }
+
           const CANONICAL_APPEND_MAX = 200;
           let canonInserted = 0;
           let canonSkipped = 0;

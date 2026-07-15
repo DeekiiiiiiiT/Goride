@@ -205,7 +205,7 @@ export function SettlementPeriodDetail({
             <div className="pt-3">
               <SectionHeader
                 title="Bank (informational)"
-                description="Confirmed in Fleet Financials — not part of cash still held"
+                description="Driver Uber allocation — wire is confirmed for the fleet org week"
               />
               <LineItem
                 icon={<Wallet className="h-4 w-4" />}
@@ -220,8 +220,8 @@ export function SettlementPeriodDetail({
                 }
                 sub={
                   bankDisplay.kind === 'pending'
-                    ? 'Confirm Uber bank receipt on Fleet Financials'
-                    : undefined
+                    ? 'Confirm fleet bank receipt on Fleet Financials (org week)'
+                    : 'Allocation to this driver — not the fleet wire recipient'
                 }
               />
             </div>

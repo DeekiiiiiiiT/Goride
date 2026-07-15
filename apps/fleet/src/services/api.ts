@@ -3610,13 +3610,15 @@ export const api = {
 
   /** Ops-only Uber bank receive confirms — never touches Cash Returned / Settlement math. */
   async getFleetBankConfirms(): Promise<{ data: Array<{
-    driverId: string;
+    organizationId?: string;
+    driverId?: string;
     weekStartYmd: string;
     status: 'unconfirmed' | 'confirmed';
     amountReceived: number;
     expectedAmount?: number;
     confirmedAt?: string;
     confirmedBy?: string;
+    recipient?: 'org' | 'driver';
   }> }> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/fleet-bank-confirms`, {
       headers: await getHeaders(null, { requireAuth: true }),
@@ -3628,11 +3630,14 @@ export const api = {
     return response.json();
   },
 
+  /** Confirm fleet bank receive for an org week (preferred). Legacy driverId still accepted by server. */
   async upsertFleetBankConfirm(payload: {
-    driverId: string;
+    organizationId?: string;
     weekStartYmd: string;
     amountReceived: number;
     expectedAmount?: number;
+    /** @deprecated Use organizationId — legacy only. */
+    driverId?: string;
   }): Promise<{ success: boolean; data: Record<string, unknown> }> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/fleet-bank-confirms`, {
       method: 'PUT',
@@ -3646,15 +3651,18 @@ export const api = {
     return response.json();
   },
 
-  /** Unconfirm bank receive — Settlement Bank Settled returns to Pending. */
+  /** Unconfirm org-week bank receive — Settlement Bank Settled returns to Pending. */
   async deleteFleetBankConfirm(payload: {
-    driverId: string;
+    organizationId?: string;
     weekStartYmd: string;
+    /** @deprecated Legacy driver-keyed confirms. */
+    driverId?: string;
   }): Promise<{ success: boolean }> {
     const params = new URLSearchParams({
-      driverId: payload.driverId,
       weekStartYmd: payload.weekStartYmd,
     });
+    if (payload.organizationId) params.set('organizationId', payload.organizationId);
+    if (payload.driverId) params.set('driverId', payload.driverId);
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.financial}/fleet-bank-confirms?${params.toString()}`,
       {
@@ -3665,6 +3673,46 @@ export const api = {
     if (!response.ok) {
       const errText = await response.text();
       throw new Error(`Fleet bank unconfirm failed: ${errText}`);
+    }
+    return response.json();
+  },
+
+  async getOrganizationSettings(organizationId?: string): Promise<{
+    data: {
+      organizationId: string;
+      uberOrganizationUuid: string | null;
+      roamOrganizationUuid: string | null;
+      inDriveOrganizationUuid: string | null;
+    };
+  }> {
+    const params = new URLSearchParams();
+    if (organizationId) params.set('organizationId', organizationId);
+    const q = params.toString();
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/organization-settings${q ? `?${q}` : ''}`,
+      { headers: await getHeaders(null, { requireAuth: true }) },
+    );
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Organization settings failed: ${errText}`);
+    }
+    return response.json();
+  },
+
+  async upsertOrganizationSettings(payload: {
+    organizationId?: string;
+    uberOrganizationUuid?: string | null;
+    roamOrganizationUuid?: string | null;
+    inDriveOrganizationUuid?: string | null;
+  }): Promise<{ success: boolean; data: Record<string, unknown> }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/organization-settings`, {
+      method: 'PUT',
+      headers: await getHeaders(),
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Organization settings save failed: ${errText}`);
     }
     return response.json();
   },

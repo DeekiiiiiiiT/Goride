@@ -1,13 +1,63 @@
 import { describe, it, expect } from 'vitest';
 import {
   aggregateExpectedBankByDriverWeek,
-  buildFleetBankConfirmLookup,
+  aggregateExpectedBankByWeek,
   mergeBankReceiveConfirms,
   resolveBankSettledDisplay,
+  isOrgBankEvent,
 } from './fleetBankReceive';
 
 describe('fleetBankReceive', () => {
-  it('aggregates payout_bank by driver + settlement week', () => {
+  it('aggregates Expected bank by fleet week (prefers org deposit over driver shares)', () => {
+    const rows = aggregateExpectedBankByWeek([
+      {
+        eventType: 'payout_bank',
+        driverId: '73dfc14d-3798-4a00-8d86-b2a3eb632f54',
+        date: '2026-07-01',
+        periodStart: '2026-06-29',
+        periodEnd: '2026-07-05',
+        netAmount: 48168.32,
+        metadata: { source: 'payments_organization', recipient: 'org' },
+      },
+      {
+        eventType: 'payout_bank',
+        driverId: 'kenny',
+        date: '2026-07-01',
+        periodStart: '2026-06-29',
+        periodEnd: '2026-07-05',
+        netAmount: 48168.32,
+        metadata: { source: 'payments_driver', bankRole: 'driver_share' },
+      },
+    ]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].weekStartYmd).toBe('2026-06-29');
+    // Must not double-count org + share
+    expect(rows[0].expected).toBeCloseTo(48168.32, 2);
+  });
+
+  it('falls back to summing legacy driver payout_bank when no org deposit event', () => {
+    const rows = aggregateExpectedBankByWeek([
+      {
+        eventType: 'payout_bank',
+        driverId: 'kenny',
+        date: '2026-07-01',
+        periodStart: '2026-06-29',
+        periodEnd: '2026-07-05',
+        netAmount: 1000,
+      },
+      {
+        eventType: 'payout_bank',
+        driverId: 'other',
+        date: '2026-07-01',
+        periodStart: '2026-06-29',
+        periodEnd: '2026-07-05',
+        netAmount: 250.5,
+      },
+    ]);
+    expect(rows[0].expected).toBeCloseTo(1250.5, 2);
+  });
+
+  it('still aggregates per-driver shares for diagnostics (skips org events)', () => {
     const rows = aggregateExpectedBankByDriverWeek(
       [
         {
@@ -20,99 +70,111 @@ describe('fleetBankReceive', () => {
         },
         {
           eventType: 'payout_bank',
-          driverId: 'kenny',
-          date: '2026-07-02',
-          periodStart: '2026-06-29',
-          periodEnd: '2026-07-05',
-          netAmount: 250.5,
-        },
-        {
-          eventType: 'payout_cash',
-          driverId: 'kenny',
+          driverId: 'org',
           date: '2026-07-01',
           periodStart: '2026-06-29',
           periodEnd: '2026-07-05',
           netAmount: 9999,
+          metadata: { recipient: 'org' },
         },
       ],
       { kenny: 'Kenny' },
     );
     expect(rows).toHaveLength(1);
-    expect(rows[0].weekStartYmd).toBe('2026-06-29');
-    expect(rows[0].expected).toBeCloseTo(1250.5, 2);
-    expect(rows[0].driverName).toBe('Kenny');
+    expect(rows[0].driverId).toBe('kenny');
+    expect(rows[0].expected).toBeCloseTo(1000, 2);
   });
 
-  it('merges confirms without inventing expected amounts', () => {
-    const expected = aggregateExpectedBankByDriverWeek(
+  it('merges org-week confirms; dual-reads legacy driver confirms', () => {
+    const expected = aggregateExpectedBankByWeek([
+      {
+        eventType: 'payout_bank',
+        driverId: 'org',
+        date: '2026-06-30',
+        periodStart: '2026-06-29',
+        periodEnd: '2026-07-05',
+        netAmount: 500,
+        metadata: { recipient: 'org' },
+      },
+    ]);
+
+    const unconfirmed = mergeBankReceiveConfirms(expected, [], 'roam-org-1');
+    expect(unconfirmed[0].status).toBe('unconfirmed');
+
+    const orgConfirmed = mergeBankReceiveConfirms(
+      expected,
       [
         {
-          eventType: 'payout_bank',
-          driverId: 'd1',
-          date: '2026-06-30',
-          periodStart: '2026-06-29',
-          periodEnd: '2026-07-05',
-          netAmount: 500,
+          organizationId: 'roam-org-1',
+          weekStartYmd: '2026-06-29',
+          status: 'confirmed',
+          amountReceived: 500,
+          recipient: 'org',
         },
       ],
-      { d1: 'Driver One' },
+      'roam-org-1',
     );
-    const unconfirmed = mergeBankReceiveConfirms(expected, []);
-    expect(unconfirmed[0].status).toBe('unconfirmed');
-    expect(unconfirmed[0].amountReceived).toBeNull();
-    expect(unconfirmed[0].variance).toBeNull();
+    expect(orgConfirmed[0].status).toBe('confirmed');
+    expect(orgConfirmed[0].amountReceived).toBe(500);
 
-    const confirmed = mergeBankReceiveConfirms(expected, [
-      {
-        driverId: 'd1',
-        weekStartYmd: '2026-06-29',
-        status: 'confirmed',
-        amountReceived: 480,
-        confirmedBy: 'ops',
-      },
-    ]);
-    expect(confirmed[0].status).toBe('confirmed');
-    expect(confirmed[0].amountReceived).toBe(480);
-    expect(confirmed[0].variance).toBeCloseTo(-20, 2);
-    // Expected unchanged by confirm — confirm must not pad Cash Returned side
-    expect(confirmed[0].expected).toBe(500);
+    const legacyConfirmed = mergeBankReceiveConfirms(
+      expected,
+      [
+        {
+          driverId: 'kenny-uuid',
+          weekStartYmd: '2026-06-29',
+          status: 'confirmed',
+          amountReceived: 480,
+        },
+      ],
+      'roam-org-1',
+    );
+    expect(legacyConfirmed[0].status).toBe('confirmed');
+    expect(legacyConfirmed[0].amountReceived).toBe(480);
   });
 
-  it('keeps Bank Settled pending until Fleet Financials confirms', () => {
-    const lookup = buildFleetBankConfirmLookup([
-      {
-        driverId: 'd1',
-        weekStartYmd: '2026-06-29',
-        status: 'confirmed',
-        amountReceived: 48168.32,
-      },
-    ]);
-
+  it('gates Settlement Bank Settled on org-week confirm but shows driver share amount', () => {
     expect(
       resolveBankSettledDisplay({
-        driverId: 'd1',
+        driverId: 'kenny',
         weekStartYmd: '2026-06-29',
-        ledgerBankSettled: 48168.32,
-        confirmsByKey: lookup,
+        ledgerBankSettled: 12000,
+        organizationId: 'roam-org-1',
+        confirms: [
+          {
+            organizationId: 'roam-org-1',
+            weekStartYmd: '2026-06-29',
+            status: 'confirmed',
+            amountReceived: 48168.32,
+            recipient: 'org',
+          },
+        ],
       }),
-    ).toEqual({ kind: 'confirmed', amount: 48168.32 });
+    ).toEqual({ kind: 'confirmed', amount: 12000 });
 
     expect(
       resolveBankSettledDisplay({
-        driverId: 'd1',
+        driverId: 'kenny',
         weekStartYmd: '2026-07-06',
         ledgerBankSettled: 1200,
-        confirmsByKey: lookup,
+        organizationId: 'roam-org-1',
+        confirms: [],
       }),
     ).toEqual({ kind: 'pending' });
+  });
 
+  it('identifies org bank events', () => {
     expect(
-      resolveBankSettledDisplay({
-        driverId: 'd1',
-        weekStartYmd: '2026-07-13',
-        ledgerBankSettled: 0,
-        confirmsByKey: lookup,
+      isOrgBankEvent({
+        eventType: 'payout_bank',
+        metadata: { source: 'payments_organization', recipient: 'org' },
       }),
-    ).toEqual({ kind: 'none' });
+    ).toBe(true);
+    expect(
+      isOrgBankEvent({
+        eventType: 'payout_bank',
+        metadata: { bankRole: 'driver_share' },
+      }),
+    ).toBe(false);
   });
 });

@@ -1,6 +1,7 @@
 /**
  * Fleet Operations → Fleet Financials
- * Confirm Uber bank amounts actually received. Does NOT change Cash Returned / Settlement.
+ * Confirm Uber bank amounts actually received by the FLEET org (not a driver).
+ * Does NOT change Cash Returned / Settlement math.
  */
 import React, { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -9,11 +10,12 @@ import { Loader2, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 import { api } from '../../services/api';
 import {
-  aggregateExpectedBankByDriverWeek,
+  aggregateExpectedBankByWeek,
   mergeBankReceiveConfirms,
   type FleetBankReceiveRow,
 } from '../../utils/fleetBankReceive';
 import { useFleetTimezone } from '../../utils/timezoneDisplay';
+import { useAuth } from '../auth/AuthContext';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
@@ -25,13 +27,6 @@ import {
   TableHeader,
   TableRow,
 } from '../ui/table';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '../ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import {
   Dialog,
@@ -93,8 +88,7 @@ function BankReceiveTable({
         <TableHeader>
           <TableRow>
             <TableHead>Week</TableHead>
-            <TableHead>Driver</TableHead>
-            <TableHead className="text-right">Expected (Uber bank)</TableHead>
+            <TableHead className="text-right">Expected (fleet bank)</TableHead>
             <TableHead className="text-right">Received</TableHead>
             <TableHead className="text-right">Variance</TableHead>
             <TableHead>Status</TableHead>
@@ -104,13 +98,13 @@ function BankReceiveTable({
         <TableBody>
           {rows.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={7} className="text-center text-slate-500 py-8">
+              <TableCell colSpan={6} className="text-center text-slate-500 py-8">
                 {emptyLabel}
               </TableCell>
             </TableRow>
           ) : (
             rows.map((row) => {
-              const key = `${row.driverId}|${row.weekStartYmd}`;
+              const key = row.weekStartYmd;
               const weekEnd = addDays(parseISO(row.weekStartYmd), 6);
               const busy = savingKey === key;
               return (
@@ -118,7 +112,6 @@ function BankReceiveTable({
                   <TableCell className="whitespace-nowrap text-sm">
                     {format(parseISO(row.weekStartYmd), 'MMM d')} – {format(weekEnd, 'MMM d, yyyy')}
                   </TableCell>
-                  <TableCell className="font-medium">{row.driverName}</TableCell>
                   <TableCell className="text-right tabular-nums">{MONEY(row.expected)}</TableCell>
                   <TableCell className="text-right tabular-nums">{MONEY(row.amountReceived)}</TableCell>
                   <TableCell
@@ -179,19 +172,14 @@ function BankReceiveTable({
 
 export function FleetFinancialsPage() {
   const fleetTz = useFleetTimezone();
+  const { organizationId } = useAuth();
   const queryClient = useQueryClient();
   const [deskTab, setDeskTab] = useState<DeskTab>('outstanding');
-  const [driverFilter, setDriverFilter] = useState<string>('all');
   const [weekFrom, setWeekFrom] = useState('');
   const [weekTo, setWeekTo] = useState('');
   const [enterRow, setEnterRow] = useState<FleetBankReceiveRow | null>(null);
   const [enterAmount, setEnterAmount] = useState('');
   const [savingKey, setSavingKey] = useState<string | null>(null);
-
-  const driversQuery = useQuery({
-    queryKey: ['drivers', 'fleet-financials'],
-    queryFn: () => api.getDrivers(),
-  });
 
   const bankQuery = useQuery({
     queryKey: ['fleet-bank-expected', weekFrom || null, weekTo || null],
@@ -203,71 +191,77 @@ export function FleetFinancialsPage() {
     queryFn: () => api.getFleetBankConfirms(),
   });
 
-  const driverNameById = useMemo(() => {
-    const map: Record<string, string> = {};
-    const list = Array.isArray(driversQuery.data) ? driversQuery.data : driversQuery.data?.data || [];
-    for (const d of list) {
-      const id = String(d?.id || d?.roamId || '').trim();
-      if (!id) continue;
-      map[id] = d?.name || d?.fullName || id;
+  const orgSettingsQuery = useQuery({
+    queryKey: ['organization-settings', organizationId],
+    queryFn: () => api.getOrganizationSettings(organizationId || undefined),
+    enabled: Boolean(organizationId),
+  });
+  const [uberOrgUuidDraft, setUberOrgUuidDraft] = useState('');
+  const [roamOrgUuidDraft, setRoamOrgUuidDraft] = useState('');
+  const [savingOrgSettings, setSavingOrgSettings] = useState(false);
+
+  React.useEffect(() => {
+    const d = orgSettingsQuery.data?.data;
+    if (!d) return;
+    setUberOrgUuidDraft(d.uberOrganizationUuid || '');
+    setRoamOrgUuidDraft(d.roamOrganizationUuid || '');
+  }, [orgSettingsQuery.data?.data]);
+
+  async function saveOrgPlatformIds() {
+    setSavingOrgSettings(true);
+    try {
+      await api.upsertOrganizationSettings({
+        organizationId: organizationId || undefined,
+        uberOrganizationUuid: uberOrgUuidDraft.trim() || null,
+        roamOrganizationUuid: roamOrgUuidDraft.trim() || null,
+        inDriveOrganizationUuid: null,
+      });
+      await queryClient.invalidateQueries({ queryKey: ['organization-settings', organizationId] });
+      toast.success('Fleet platform IDs saved');
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to save platform IDs');
+    } finally {
+      setSavingOrgSettings(false);
     }
-    return map;
-  }, [driversQuery.data]);
+  }
 
   const rows = useMemo(() => {
-    const expected = aggregateExpectedBankByDriverWeek(
-      bankQuery.data,
-      driverNameById,
-      fleetTz,
-    );
-    return mergeBankReceiveConfirms(expected, confirmsQuery.data?.data);
-  }, [bankQuery.data, confirmsQuery.data, driverNameById, fleetTz]);
+    const expected = aggregateExpectedBankByWeek(bankQuery.data, fleetTz);
+    return mergeBankReceiveConfirms(expected, confirmsQuery.data?.data, organizationId);
+  }, [bankQuery.data, confirmsQuery.data, fleetTz, organizationId]);
 
   const scopedByFilters = useMemo(() => {
     return rows
-      .filter((r) => (driverFilter === 'all' ? true : r.driverId === driverFilter))
       .filter((r) => (!weekFrom ? true : r.weekStartYmd >= weekFrom))
       .filter((r) => (!weekTo ? true : r.weekStartYmd <= weekTo));
-  }, [rows, driverFilter, weekFrom, weekTo]);
+  }, [rows, weekFrom, weekTo]);
 
   const outstandingRows = useMemo(() => {
     return scopedByFilters
       .filter((r) => r.status === 'unconfirmed')
-      .sort((a, b) => {
-        if (a.weekStartYmd !== b.weekStartYmd) return b.weekStartYmd.localeCompare(a.weekStartYmd);
-        return a.driverName.localeCompare(b.driverName);
-      });
+      .sort((a, b) => b.weekStartYmd.localeCompare(a.weekStartYmd));
   }, [scopedByFilters]);
 
   const completedRows = useMemo(() => {
     return scopedByFilters
       .filter((r) => r.status === 'confirmed')
-      .sort((a, b) => {
-        if (a.weekStartYmd !== b.weekStartYmd) return b.weekStartYmd.localeCompare(a.weekStartYmd);
-        return a.driverName.localeCompare(b.driverName);
-      });
+      .sort((a, b) => b.weekStartYmd.localeCompare(a.weekStartYmd));
   }, [scopedByFilters]);
 
-  const driverOptions = useMemo(() => {
-    const seen = new Map<string, string>();
-    for (const r of rows) seen.set(r.driverId, r.driverName);
-    return [...seen.entries()].sort((a, b) => a[1].localeCompare(b[1]));
-  }, [rows]);
-
-  const loading = driversQuery.isLoading || bankQuery.isLoading || confirmsQuery.isLoading;
+  const loading = bankQuery.isLoading || confirmsQuery.isLoading;
 
   async function saveConfirm(row: FleetBankReceiveRow, amountReceived: number) {
-    const key = `${row.driverId}|${row.weekStartYmd}`;
+    const key = row.weekStartYmd;
     setSavingKey(key);
     try {
       await api.upsertFleetBankConfirm({
-        driverId: row.driverId,
+        organizationId: organizationId || undefined,
         weekStartYmd: row.weekStartYmd,
         amountReceived,
         expectedAmount: row.expected,
       });
       await queryClient.invalidateQueries({ queryKey: ['fleet-bank-confirms'] });
-      toast.success('Bank amount saved');
+      toast.success('Fleet bank amount saved');
       setEnterRow(null);
     } catch (e: any) {
       toast.error(e?.message || 'Failed to save');
@@ -277,11 +271,11 @@ export function FleetFinancialsPage() {
   }
 
   async function unconfirm(row: FleetBankReceiveRow) {
-    const key = `${row.driverId}|${row.weekStartYmd}`;
+    const key = row.weekStartYmd;
     setSavingKey(key);
     try {
       await api.deleteFleetBankConfirm({
-        driverId: row.driverId,
+        organizationId: organizationId || undefined,
         weekStartYmd: row.weekStartYmd,
       });
       await queryClient.invalidateQueries({ queryKey: ['fleet-bank-confirms'] });
@@ -299,7 +293,8 @@ export function FleetFinancialsPage() {
         <div>
           <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">Fleet Financials</h1>
           <p className="mt-1 text-sm text-slate-500 max-w-xl">
-            Confirm Uber bank amounts actually received. Driver Cash Wallet is collection only; who owes whom stays on Financials → Settlement. This desk never changes Cash Returned.
+            Confirm Uber bank deposits into the fleet account (org week). Drivers do not receive this wire —
+            Cash Wallet stays collection-only; who owes whom stays on Financials → Settlement.
           </p>
         </div>
         <Button
@@ -325,26 +320,48 @@ export function FleetFinancialsPage() {
           <label className="text-xs text-slate-500">Week to (Monday)</label>
           <Input type="date" value={weekTo} onChange={(e) => setWeekTo(e.target.value)} className="w-44" />
         </div>
-        <div className="space-y-1">
-          <label className="text-xs text-slate-500">Driver</label>
-          <Select value={driverFilter} onValueChange={setDriverFilter}>
-            <SelectTrigger className="w-52">
-              <SelectValue placeholder="All drivers" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All drivers</SelectItem>
-              {driverOptions.map(([id, name]) => (
-                <SelectItem key={id} value={id}>
-                  {name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+      </div>
+
+      <div className="rounded-lg border border-slate-200 dark:border-slate-800 p-4 space-y-3">
+        <div>
+          <h2 className="text-sm font-semibold text-slate-900">Fleet platform IDs</h2>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Organization UUIDs identify the fleet bank account. Drivers are separate — even if the owner also drives.
+            InDrive has no fleet program yet.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-3 items-end">
+          <div className="space-y-1 min-w-[280px] flex-1">
+            <label className="text-xs text-slate-500">Uber Organization UUID</label>
+            <Input
+              value={uberOrgUuidDraft}
+              onChange={(e) => setUberOrgUuidDraft(e.target.value)}
+              placeholder="From payments_organization.csv"
+            />
+          </div>
+          <div className="space-y-1 min-w-[280px] flex-1">
+            <label className="text-xs text-slate-500">Roam Organization UUID</label>
+            <Input
+              value={roamOrgUuidDraft}
+              onChange={(e) => setRoamOrgUuidDraft(e.target.value)}
+              placeholder="Native fleet identity"
+            />
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={savingOrgSettings || !organizationId}
+            onClick={() => void saveOrgPlatformIds()}
+          >
+            {savingOrgSettings ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Save IDs'}
+          </Button>
         </div>
       </div>
 
       <BankStatementImport
         expectedRows={rows}
+        organizationId={organizationId}
         onConfirmed={() => {
           void queryClient.invalidateQueries({ queryKey: ['fleet-bank-confirms'] });
         }}
@@ -353,11 +370,12 @@ export function FleetFinancialsPage() {
       {loading ? (
         <div className="flex items-center gap-2 text-slate-500 py-16 justify-center">
           <Loader2 className="h-5 w-5 animate-spin" />
-          Loading bank payouts…
+          Loading fleet bank payouts…
         </div>
       ) : rows.length === 0 ? (
         <div className="rounded-lg border border-dashed border-slate-200 dark:border-slate-700 p-10 text-center text-slate-500 text-sm">
-          No Uber bank payout data found. Import or load the ledger — amounts are not invented here.
+          No Uber bank payout data found. Import payments_organization (and driver statements) — amounts are
+          not invented here.
         </div>
       ) : (
         <Tabs
@@ -418,9 +436,7 @@ export function FleetFinancialsPage() {
           </DialogHeader>
           {enterRow && (
             <div className="space-y-3 text-sm">
-              <p className="text-slate-500">
-                {enterRow.driverName} · week of {enterRow.weekStartYmd}
-              </p>
+              <p className="text-slate-500">Fleet bank · week of {enterRow.weekStartYmd}</p>
               <p>
                 Expected from Uber:{' '}
                 <span className="font-medium tabular-nums">{MONEY(enterRow.expected)}</span>

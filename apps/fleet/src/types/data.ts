@@ -505,12 +505,12 @@ export interface OrganizationMetrics {
     balanceStart: number;
     balanceEnd: number;
     bankTransfer?: number;
-    
+
     // Calculated
     periodChange: number;       // End - Start
     fleetProfitMargin: number;  // (NetFare / TotalEarnings) * 100
     cashPosition: number;       // CashCollected / TotalEarnings
-    
+
     // Phase 6: Fleet Analytics
     activeDrivers?: number;
     activeVehicles?: number;
@@ -522,6 +522,11 @@ export interface OrganizationMetrics {
     refundsToll?: number;
     /** From `payments_organization` / `payments_driver`: tip total for the period. */
     totalTips?: number;
+
+    /** Uber Organization UUID from payments_organization — bank recipient identity (not a driver). */
+    organizationUuid?: string;
+    /** Organization name from payments_organization (fleet account display name). */
+    organizationName?: string;
 }
 
 export interface DriverQualitySnapshot {

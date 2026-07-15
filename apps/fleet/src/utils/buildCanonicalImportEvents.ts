@@ -1,6 +1,7 @@
 import type { CanonicalLedgerEventInput } from '../types/ledgerCanonical';
 import type { Trip, OrganizationMetrics, DisputeRefund } from '../types/data';
 import type { UberSsotTotals } from './uberSsot';
+import { orgBankLedgerDriverId } from './fleetOrgIdentity';
 
 const LINE = {
   /** From `OrganizationMetrics.refundsToll` (payments_organization). */
@@ -109,7 +110,9 @@ export interface BuildCanonicalImportEventsParams {
  *
  * This function creates:
  * - promotion (driver statement total from uberStatementsByDriverId / payments_driver)
- * - payout_cash / payout_bank (per-driver from payments_driver when present; else org→primary fallback)
+ * - payout_bank org deposit from payments_organization (recipient: org)
+ * - payout_cash / payout_bank driver share from payments_driver (bankRole: driver_share)
+ * - org-only cash fallback to primary driver when no per-driver cash (never dumps org bank onto a driver)
  * - toll refund lines (REFUNDS_TOLL)
  * - toll_support_adjustment / dispute_refund events
  * 
@@ -184,8 +187,41 @@ export function buildCanonicalImportEvents(
     }
   }
 
-  // ─── PAYOUTS (prefer per-driver payments_driver; org→primary only as fallback) ─
-  let emittedPerDriverPayout = false;
+  // ─── ORG BANK DEPOSIT (payments_organization — fleet account wire, not a driver) ─
+  if (org) {
+    const orgBank = Math.abs(Number(org.bankTransfer) || 0);
+    if (orgBank > 1e-9) {
+      const orgLedgerId = orgBankLedgerDriverId(org.organizationUuid);
+      out.push({
+        idempotencyKey: `${batchId}|payout|bank|org|${orgLedgerId.toLowerCase()}`,
+        date: ledgerPostingDate,
+        driverId: orgLedgerId,
+        eventType: 'payout_bank',
+        direction: 'inflow',
+        netAmount: orgBank,
+        grossAmount: orgBank,
+        currency: 'JMD',
+        sourceType: 'import_batch',
+        sourceId: batchId,
+        batchId,
+        sourceFileHash,
+        periodStart,
+        periodEnd,
+        platform: 'Uber',
+        description: 'Fleet bank deposit (payments_organization)',
+        metadata: {
+          source: 'payments_organization',
+          recipient: 'org',
+          bankRole: 'org_deposit',
+          organizationUuid: org.organizationUuid || orgLedgerId,
+          organizationName: org.organizationName || undefined,
+        },
+      });
+    }
+  }
+
+  // ─── DRIVER PAYOUT SHARES (payments_driver — allocation / cash risk, not org wire) ─
+  let emittedPerDriverCash = false;
   if (ssot && Object.keys(ssot).length > 0) {
     const driverIds = Object.keys(ssot).sort((a, b) => a.localeCompare(b));
     for (const driverId of driverIds) {
@@ -196,8 +232,8 @@ export function buildCanonicalImportEvents(
       const cash = Math.abs(Number(totals.cashCollected) || 0);
       const bank = Math.abs(Number(totals.bankTransferred) || 0);
       if (cash < 1e-9 && bank < 1e-9) continue;
-      emittedPerDriverPayout = true;
       if (cash > 1e-9) {
+        emittedPerDriverCash = true;
         out.push({
           idempotencyKey: `${batchId}|payout|cash|${did.toLowerCase()}`,
           date: ledgerPostingDate,
@@ -218,9 +254,10 @@ export function buildCanonicalImportEvents(
           metadata: { source: 'payments_driver' },
         });
       }
+      // Driver bank share — informational allocation for Settlement; not the fleet wire.
       if (bank > 1e-9) {
         out.push({
-          idempotencyKey: `${batchId}|payout|bank|${did.toLowerCase()}`,
+          idempotencyKey: `${batchId}|payout|bank|share|${did.toLowerCase()}`,
           date: ledgerPostingDate,
           driverId: did,
           eventType: 'payout_bank',
@@ -235,15 +272,19 @@ export function buildCanonicalImportEvents(
           periodStart,
           periodEnd,
           platform: 'Uber',
-          description: 'Bank transfer (payments_driver)',
-          metadata: { source: 'payments_driver' },
+          description: 'Bank allocation (payments_driver share)',
+          metadata: {
+            source: 'payments_driver',
+            bankRole: 'driver_share',
+            recipient: 'driver_share',
+          },
         });
       }
     }
   }
-  if (!emittedPerDriverPayout && org && primary) {
+  // Org-only cash fallback (no per-driver statement) — never dump org bank onto a primary driver.
+  if (!emittedPerDriverCash && org && primary) {
     const cash = org.totalCashExposure ?? 0;
-    const bank = org.bankTransfer ?? 0;
     if (Math.abs(cash) > 1e-9) {
       out.push({
         idempotencyKey: `${batchId}|payout|CASH`,
@@ -261,27 +302,8 @@ export function buildCanonicalImportEvents(
         periodStart,
         periodEnd,
         platform: 'Uber',
-        description: 'Cash collected (organization import)',
-      });
-    }
-    if (Math.abs(bank) > 1e-9) {
-      out.push({
-        idempotencyKey: `${batchId}|payout|BANK`,
-        date: ledgerPostingDate,
-        driverId: primary,
-        eventType: 'payout_bank',
-        direction: 'inflow',
-        netAmount: Math.abs(bank),
-        grossAmount: Math.abs(bank),
-        currency: 'JMD',
-        sourceType: 'import_batch',
-        sourceId: batchId,
-        batchId,
-        sourceFileHash,
-        periodStart,
-        periodEnd,
-        platform: 'Uber',
-        description: 'Bank transfer (organization import)',
+        description: 'Cash collected (organization import — unallocated)',
+        metadata: { source: 'payments_organization', cashRole: 'unallocated_org' },
       });
     }
   }

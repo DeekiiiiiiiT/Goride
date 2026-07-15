@@ -39,10 +39,11 @@ const MONEY = (n: number) =>
 
 type Props = {
   expectedRows: FleetBankReceiveRow[];
+  organizationId?: string | null;
   onConfirmed: () => void;
 };
 
-export function BankStatementImport({ expectedRows, onConfirmed }: Props) {
+export function BankStatementImport({ expectedRows, organizationId, onConfirmed }: Props) {
   const [fileName, setFileName] = useState('');
   const [csvRows, setCsvRows] = useState<string[][]>([]);
   const [hasHeader, setHasHeader] = useState(true);
@@ -113,7 +114,7 @@ export function BankStatementImport({ expectedRows, onConfirmed }: Props) {
     setBusy(true);
     try {
       await api.upsertFleetBankConfirm({
-        driverId: s.target.driverId,
+        organizationId: organizationId || undefined,
         weekStartYmd: s.target.weekStartYmd,
         amountReceived: s.line.amount,
         expectedAmount: s.target.expected,
@@ -244,7 +245,7 @@ export function BankStatementImport({ expectedRows, onConfirmed }: Props) {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Statement</TableHead>
-                    <TableHead>Expected week / driver</TableHead>
+                    <TableHead>Expected week</TableHead>
                     <TableHead className="text-right">Amount</TableHead>
                     <TableHead>Why</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
@@ -262,7 +263,7 @@ export function BankStatementImport({ expectedRows, onConfirmed }: Props) {
                         ) : null}
                       </TableCell>
                       <TableCell className="text-sm">
-                        {s.target.weekStartYmd} · {s.target.driverName}
+                        {s.target.weekStartYmd}
                         <span className="block text-xs text-slate-400">
                           Expected {MONEY(s.target.expected)}
                         </span>

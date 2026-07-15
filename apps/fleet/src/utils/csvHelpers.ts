@@ -60,9 +60,21 @@ export const DEFAULT_SYSTEM_FIELDS: FieldDefinition[] = [
 
 export const DEFAULT_FIELDS = DEFAULT_SYSTEM_FIELDS;
 
-// Fleet Organization UUID (Source of Truth)
-// This UUID represents the Fleet Entity and must NEVER be treated as a Driver.
-export const FLEET_ORG_UUID = '73dfc14d-3798-4a00-8d86-b2a3eb632f54';
+import { FLEET_ORG_UUID, isFleetOrgUuid } from './fleetOrgIdentity';
+export { FLEET_ORG_UUID };
+
+/** Never treat fleet Organization UUID (hardcoded or from this import’s org metrics) as a driver. */
+function isExcludedFleetOrgDriverId(
+  id: string | null | undefined,
+  organizationMetrics?: OrganizationMetrics[],
+): boolean {
+  if (isFleetOrgUuid(id)) return true;
+  const key = String(id || '').trim().toLowerCase();
+  if (!key) return false;
+  return (organizationMetrics || []).some(
+    (m) => String(m.organizationUuid || '').trim().toLowerCase() === key,
+  );
+}
 
 /** Uber `trip_activity.csv` (and payment rows if column exists): `cash` vs `braintree` / other → app labels. */
 export function mapUberTripActivityPaymentType(raw: unknown): 'Cash' | 'Digital (card/Bank)' | undefined {
@@ -1268,7 +1280,7 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                 if (file.type === 'uber_payment') {
                     // Lowercase UUID so this merges with payments_driver rows (they use .toLowerCase()).
                     const driverIdForCashSum = cleanId(row['Driver UUID'] || row['driver uuid'] || '').toLowerCase();
-                    if (driverIdForCashSum && driverIdForCashSum !== FLEET_ORG_UUID) {
+                    if (driverIdForCashSum && !isExcludedFleetOrgDriverId(driverIdForCashSum, organizationMetrics)) {
                         const parseCurrencyCashSum = (val: unknown) =>
                             parseFloat(String(val || '0').replace(/[^0-9.-]/g, '')) || 0;
                         const cashColRaw =
@@ -1424,7 +1436,7 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                     // Phase 4: Global Exclusion - Check Trip Data
                     if (row[schema.driverId]) {
                         const rawId = String(row[schema.driverId]).trim();
-                        if (rawId.toLowerCase() !== FLEET_ORG_UUID) {
+                        if (!isExcludedFleetOrgDriverId(rawId, organizationMetrics)) {
                              current.driverId = rawId;
                         }
                     }
@@ -1832,7 +1844,7 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                  const dId = String(row['Driver UUID'] || '').trim().toLowerCase();
 
                  // Phase 4: Global Exclusion - STRICTLY IGNORE FLEET ORG UUID
-                 if (dId === FLEET_ORG_UUID) return;
+                 if (isExcludedFleetOrgDriverId(dId, organizationMetrics)) return;
 
                  if (dId) {
                      const driverId = dId;
@@ -1963,9 +1975,12 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                  // Phase 3: Strict Organization Parsing
                  // Verified Isolation - This block strictly updates OrganizationMetrics and does NOT touch DriverMetrics.
                  
-                 // 1. Organization Name Extraction
+                 // 1. Organization Name + UUID Extraction (bank recipient — not a driver)
                  const extractedOrgName = String(row['Organization Name'] || row['Organization'] || row['Account Name'] || row['Organization Description'] || '').trim();
                  if (extractedOrgName && !organizationName) organizationName = extractedOrgName;
+                 const extractedOrgUuid = String(
+                   row['Organization UUID'] || row['OrganizationUUID'] || row['Org UUID'] || '',
+                 ).trim();
 
                  // Helper for case-insensitive and fuzzy lookup
                  const getValue = (keys: string[]) => {
@@ -2041,6 +2056,8 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                      totalCashExposure: cashCollected, // Explicitly store from Summary Report
                      ...(refundsToll > 0.005 ? { refundsToll } : {}),
                      ...(totalTips > 0.005 ? { totalTips } : {}),
+                     ...(extractedOrgUuid ? { organizationUuid: extractedOrgUuid } : {}),
+                     ...(extractedOrgName ? { organizationName: extractedOrgName } : {}),
                      
                      // Calculations
                      periodChange: balanceEnd - balanceStart,
@@ -2054,7 +2071,7 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                  const dId = String(row['Driver UUID'] || row['Driver UUID (Driver)'] || '').trim().toLowerCase();
                  
                  // Phase 4: Global Exclusion - STRICTLY IGNORE FLEET ORG UUID
-                 if (dId === FLEET_ORG_UUID) return;
+                 if (isExcludedFleetOrgDriverId(dId, organizationMetrics)) return;
 
                  if (dId || file.type === 'uber_driver_activity') { // Allow activity even if UUID matches loosely
                      const driverId = dId || `unknown-${Math.random()}`;
@@ -2819,7 +2836,7 @@ export function processData(rows: ParsedRow[], mapping: CsvMapping, availableFie
 
     // Phase 4 FIX: Global Exclusion in Generic Parsing
     // If the Generic Parser extracts the Fleet UUID, strictly ignore it.
-    if (trip.driverId && String(trip.driverId).trim().toLowerCase() === FLEET_ORG_UUID) {
+    if (trip.driverId && isExcludedFleetOrgDriverId(trip.driverId)) {
          trip.driverId = 'fleet-org-ignore'; 
          trip.driverName = 'Fleet Organization';
     }
