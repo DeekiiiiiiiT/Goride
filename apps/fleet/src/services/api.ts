@@ -3608,6 +3608,74 @@ export const api = {
     return response.json();
   },
 
+  /** Ops-only Uber bank receive confirms — never touches Cash Returned / Settlement math. */
+  async getFleetBankConfirms(): Promise<{ data: Array<{
+    driverId: string;
+    weekStartYmd: string;
+    status: 'unconfirmed' | 'confirmed';
+    amountReceived: number;
+    expectedAmount?: number;
+    confirmedAt?: string;
+    confirmedBy?: string;
+  }> }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/fleet-bank-confirms`, {
+      headers: await getHeaders(null, { requireAuth: true }),
+    });
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Fleet bank confirms failed: ${errText}`);
+    }
+    return response.json();
+  },
+
+  async upsertFleetBankConfirm(payload: {
+    driverId: string;
+    weekStartYmd: string;
+    amountReceived: number;
+    expectedAmount?: number;
+  }): Promise<{ success: boolean; data: Record<string, unknown> }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/fleet-bank-confirms`, {
+      method: 'PUT',
+      headers: await getHeaders(),
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Fleet bank confirm save failed: ${errText}`);
+    }
+    return response.json();
+  },
+
+  /** Persist a client-parsed bank statement batch (ops reopen). Never feeds Cash Returned. */
+  async saveFleetBankStatement(payload: {
+    id?: string;
+    fileName: string;
+    lines: Array<{ lineIndex: number; dateYmd: string; amount: number; description: string }>;
+    dismissedLineIndexes?: number[];
+  }): Promise<{ success: boolean; data: Record<string, unknown> }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/fleet-bank-statements`, {
+      method: 'PUT',
+      headers: await getHeaders(),
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Fleet bank statement save failed: ${errText}`);
+    }
+    return response.json();
+  },
+
+  async getFleetBankStatements(): Promise<{ data: Array<Record<string, unknown>> }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/fleet-bank-statements`, {
+      headers: await getHeaders(null, { requireAuth: true }),
+    });
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Fleet bank statements failed: ${errText}`);
+    }
+    return response.json();
+  },
+
   async updateLedgerEntry(id: string, updates: Partial<LedgerEntry>): Promise<{ success: boolean; data?: LedgerEntry }> {
     console.log('[Ledger] Updating entry:', id, Object.keys(updates));
     const response = await fetchWithRetry(

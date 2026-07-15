@@ -7446,6 +7446,91 @@ app.delete("/make-server-37f42386/earnings-policies/:id", async (c) => {
   } catch (e: any) { return c.json({ error: e.message }, 500); }
 });
 
+// ─── Fleet bank receive confirms (ops only — never feeds Cash Returned / Settlement) ──
+// Key: fleet_bank_confirm:{driverId}:{weekStartYmd}
+
+app.get("/make-server-37f42386/fleet-bank-confirms", requireAuth(), async (c) => {
+  try {
+    const items = (await kv.getByPrefix("fleet_bank_confirm:")) || [];
+    return c.json({ data: filterByOrg(items, c) });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.put("/make-server-37f42386/fleet-bank-confirms", requireAuth(), async (c) => {
+  try {
+    const body = await c.req.json();
+    const driverId = String(body?.driverId || "").trim();
+    const weekStartYmd = String(body?.weekStartYmd || "").trim();
+    if (!driverId || !/^\d{4}-\d{2}-\d{2}$/.test(weekStartYmd)) {
+      return c.json({ error: "driverId and weekStartYmd (yyyy-MM-dd) are required" }, 400);
+    }
+    const amountReceived = Number(body?.amountReceived);
+    if (!Number.isFinite(amountReceived) || amountReceived < 0) {
+      return c.json({ error: "amountReceived must be a non-negative number" }, 400);
+    }
+    const rbacUser = c.get("rbacUser") as RbacUser | undefined;
+    const record = stampOrg(
+      {
+        id: `${driverId}:${weekStartYmd}`,
+        driverId,
+        weekStartYmd,
+        status: "confirmed" as const,
+        amountReceived: Math.round(amountReceived * 100) / 100,
+        expectedAmount:
+          body?.expectedAmount != null && Number.isFinite(Number(body.expectedAmount))
+            ? Math.round(Number(body.expectedAmount) * 100) / 100
+            : undefined,
+        confirmedAt: new Date().toISOString(),
+        confirmedBy: rbacUser?.userId || rbacUser?.email || "unknown",
+      },
+      c,
+    );
+    await kv.set(`fleet_bank_confirm:${driverId}:${weekStartYmd}`, record);
+    return c.json({ success: true, data: record });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// Client-parsed bank statement batches (re-open / audit). Does not write Cash Returned.
+app.get("/make-server-37f42386/fleet-bank-statements", requireAuth(), async (c) => {
+  try {
+    const items = (await kv.getByPrefix("fleet_bank_statement:")) || [];
+    return c.json({ data: filterByOrg(items, c) });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.put("/make-server-37f42386/fleet-bank-statements", requireAuth(), async (c) => {
+  try {
+    const body = await c.req.json();
+    const fileName = String(body?.fileName || "statement.csv").trim();
+    const lines = Array.isArray(body?.lines) ? body.lines : [];
+    const id = String(body?.id || crypto.randomUUID());
+    const rbacUser = c.get("rbacUser") as RbacUser | undefined;
+    const record = stampOrg(
+      {
+        id,
+        fileName,
+        lines,
+        dismissedLineIndexes: Array.isArray(body?.dismissedLineIndexes)
+          ? body.dismissedLineIndexes
+          : [],
+        uploadedAt: new Date().toISOString(),
+        uploadedBy: rbacUser?.userId || rbacUser?.email || "unknown",
+      },
+      c,
+    );
+    await kv.set(`fleet_bank_statement:${id}`, record);
+    return c.json({ success: true, data: record });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
 // Storage Upload Endpoint
 app.post("/make-server-37f42386/upload", async (c) => {
   try {

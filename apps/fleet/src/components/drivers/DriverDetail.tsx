@@ -131,10 +131,9 @@ import { Calendar } from "../ui/calendar";
 import { toast } from "sonner@2.0.3";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../ui/dialog";
 import { LogCashPaymentModal } from './LogCashPaymentModal';
-import { WeeklySettlementView, type WeekSettlementMap } from './WeeklySettlementView';
+import { WeeklySettlementView } from './WeeklySettlementView';
 import { useDriverPayoutPeriodRows } from '../../hooks/useDriverPayoutPeriodRows';
 import { useDriverFinancialBundle } from '../../hooks/useDriverFinancialBundle';
-import { getPeriodSettlementComponents } from '../../utils/driverSettlementMath';
 import { DriverEarningsHistory } from './DriverEarningsHistory';
 import { DriverExpensesHistory } from './DriverExpensesHistory';
 import { DriverPayoutHistory } from './DriverPayoutHistory';
@@ -2451,28 +2450,6 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
     [walletCashWeeks],
   );
 
-  /** Key = Monday yyyy-MM-dd for matching WeeklySettlementView weeks to Payout rows. */
-  const weekSettlementByMonday = useMemo(() => {
-    const map: WeekSettlementMap = {};
-    for (const row of walletPayoutPeriodRows) {
-      const key = format(row.periodStart, 'yyyy-MM-dd');
-      if (!row.isFinalized) {
-        map[key] = { finalized: false };
-        continue;
-      }
-      const comp = getPeriodSettlementComponents(row);
-      map[key] = {
-        finalized: true,
-        settlement: comp.settlement,
-        adjCashBalance: comp.adjCashBalance,
-        netPayoutApplied: comp.netPayoutApplied,
-        cashBalance: row.cashBalance,
-        fuelCredits: row.fuelCredits,
-      };
-    }
-    return map;
-  }, [walletPayoutPeriodRows]);
-
   /** Collection desk totals — passenger vs tagged Cash Returned (open weeks with passenger cash). */
   const walletCollectionTotals = useMemo(() => {
     let passengerCash = 0;
@@ -3833,6 +3810,9 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
              ___OLD_FINANCIAL_SUBTABS_BLOCK_2_END___ */}
           <TabsContent value="wallet" className="space-y-6">
              {/* Cash collection desk — who-owes lives on Financials → Settlement */}
+             <p className="text-sm text-slate-500">
+               Cash Wallet tracks passenger cash collection only. Who owes whom is on Financials → Settlement. Uber bank received is on Fleet Operations → Fleet Financials.
+             </p>
              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                  <Card className="bg-white">
                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -3915,8 +3895,6 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                             transactions={transactions}
                             csvMetrics={csvMetrics}
                             cashWeeks={walletCashWeeks}
-                            payoutPeriodRows={walletPayoutPeriodRows}
-                            weekSettlementByMonday={weekSettlementByMonday}
                             onLogPayment={(start, end, amount) => setPaymentModalState({
                                 isOpen: true,
                                 initialWorkPeriodStart: start.toISOString(),

@@ -95,8 +95,14 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate, onLogout }: { curre
   const { v, businessType } = useVocab();
   const { canView } = usePermissions();
   const { isModuleEnabled } = useFeatureFlags();
-  const isTollManagementOpen = ['toll-logs', 'toll-tags', 'tag-inventory', 'toll-analytics'].includes(currentPage);
-  const isFuelManagementOpen = ['fuel-management', 'fuel-overview', 'fuel-reconciliation', 'fuel-cards', 'fuel-logs', 'fuel-configuration', 'fuel-reimbursements', 'fuel-integrity-gap'].includes(currentPage);
+  const fuelPageIds = ['fuel-management', 'fuel-overview', 'fuel-reconciliation', 'fuel-cards', 'fuel-logs', 'fuel-configuration', 'fuel-reimbursements', 'fuel-integrity-gap'];
+  const tollPageIds = ['toll-logs', 'toll-tags', 'tag-inventory', 'toll-analytics'];
+  const isTollManagementOpen = tollPageIds.includes(currentPage);
+  const isFuelManagementOpen = fuelPageIds.includes(currentPage);
+  const canSeeFuelDesk = isModuleEnabled('fuelManagement') && (canView('fuel-overview') || canView('fuel-reimbursements') || canView('fuel-integrity-gap') || canView('fuel-reconciliation') || canView('fuel-cards') || canView('fuel-logs') || canView('fuel-configuration'));
+  const canSeeTollDesk = isModuleEnabled('tollManagement') && isSidebarItemVisible('toll-management', businessType) && (canView('toll-logs') || canView('toll-tags') || canView('tag-inventory') || canView('toll-analytics'));
+  const isFleetOpsOpen = ['fleet-financials', 'cash-retag', ...fuelPageIds, ...tollPageIds].includes(currentPage);
+  const canSeeFleetOps = canView('fleet-financials') || canView('cash-retag') || canSeeFuelDesk || canSeeTollDesk;
   const isDriverOpsOpen = ['drivers', 'earnings-policy', 'driver-ledger'].includes(currentPage);
   const isVehicleOpsOpen = ['vehicles', 'maintenance-hub', 'fleet'].includes(currentPage);
 
@@ -127,6 +133,165 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate, onLogout }: { curre
             onClick={() => onNavigate?.('imports')}
           />
           )}
+          {canSeeFleetOps && (
+          <Collapsible defaultOpen={isFleetOpsOpen} className="group/collapsible">
+            <SidebarMenuItem>
+              <CollapsibleTrigger asChild>
+                <SidebarMenuButton tooltip="Fleet Operations">
+                  <CreditCard className="h-4 w-4" />
+                  <span>Fleet Operations</span>
+                  <ChevronRight className="ml-auto h-4 w-4 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
+                </SidebarMenuButton>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <SidebarMenuSub>
+                  {canView('fleet-financials') && (
+                  <SidebarMenuSubItem>
+                    <SidebarMenuSubButton asChild isActive={currentPage === 'fleet-financials'} onClick={() => onNavigate?.('fleet-financials')}>
+                      <button className="w-full text-left cursor-pointer">
+                        <span>Fleet Financials</span>
+                      </button>
+                    </SidebarMenuSubButton>
+                  </SidebarMenuSubItem>
+                  )}
+                  {canView('cash-retag') && (
+                  <SidebarMenuSubItem>
+                    <SidebarMenuSubButton asChild isActive={currentPage === 'cash-retag'} onClick={() => onNavigate?.('cash-retag')}>
+                      <button className="w-full text-left cursor-pointer">
+                        <span>Cash Retag</span>
+                      </button>
+                    </SidebarMenuSubButton>
+                  </SidebarMenuSubItem>
+                  )}
+                </SidebarMenuSub>
+
+                {canSeeFuelDesk && (
+                <Collapsible defaultOpen={isFuelManagementOpen} className="group/fuel-ops mt-1">
+                  <SidebarMenuItem>
+                    <CollapsibleTrigger asChild>
+                      <SidebarMenuButton className="pl-4" tooltip="Fuel Management">
+                        <Fuel className="h-4 w-4" />
+                        <span>Fuel Management</span>
+                        <ChevronRight className="ml-auto h-4 w-4 transition-transform duration-200 group-data-[state=open]/fuel-ops:rotate-90" />
+                      </SidebarMenuButton>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <SidebarMenuSub>
+                        {canView('fuel-overview') && (
+                        <SidebarMenuSubItem>
+                          <SidebarMenuSubButton asChild isActive={currentPage === 'fuel-overview' || currentPage === 'fuel-management'} onClick={() => onNavigate?.('fuel-overview')}>
+                            <button className="w-full text-left cursor-pointer"><span>Overview</span></button>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                        )}
+                        {canView('fuel-reimbursements') && (
+                        <SidebarMenuSubItem>
+                          <SidebarMenuSubButton asChild isActive={currentPage === 'fuel-reimbursements'} onClick={() => onNavigate?.('fuel-reimbursements')}>
+                            <button className="w-full text-left cursor-pointer"><span>Review Queue</span></button>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                        )}
+                        {canView('fuel-integrity-gap') && (
+                        <SidebarMenuSubItem>
+                          <SidebarMenuSubButton asChild isActive={currentPage === 'fuel-integrity-gap'} onClick={() => onNavigate?.('fuel-integrity-gap')}>
+                            <button className="w-full text-left cursor-pointer">
+                              <span className="flex items-center gap-2">
+                                Integrity Gap
+                                <Badge className="bg-emerald-500 text-white border-none h-4 px-1 text-[8px]">PRO</Badge>
+                              </span>
+                            </button>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                        )}
+                        {canView('fuel-reconciliation') && (
+                        <SidebarMenuSubItem>
+                          <SidebarMenuSubButton asChild isActive={currentPage === 'fuel-reconciliation'} onClick={() => onNavigate?.('fuel-reconciliation')}>
+                            <button className="w-full text-left cursor-pointer"><span>Consumption Reconciliation</span></button>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                        )}
+                        {canView('fuel-cards') && (
+                        <SidebarMenuSubItem>
+                          <SidebarMenuSubButton asChild isActive={currentPage === 'fuel-cards'} onClick={() => onNavigate?.('fuel-cards')}>
+                            <button className="w-full text-left cursor-pointer"><span>Fuel Cards</span></button>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                        )}
+                        {canView('fuel-logs') && (
+                        <SidebarMenuSubItem>
+                          <SidebarMenuSubButton asChild isActive={currentPage === 'fuel-logs'} onClick={() => onNavigate?.('fuel-logs')}>
+                            <button className="w-full text-left cursor-pointer"><span>Transaction Logs</span></button>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                        )}
+                        {canView('fuel-configuration') && (
+                        <SidebarMenuSubItem>
+                          <SidebarMenuSubButton asChild isActive={currentPage === 'fuel-configuration'} onClick={() => onNavigate?.('fuel-configuration')}>
+                            <button className="w-full text-left cursor-pointer"><span>Configuration</span></button>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                        )}
+                      </SidebarMenuSub>
+                    </CollapsibleContent>
+                  </SidebarMenuItem>
+                </Collapsible>
+                )}
+
+                {canSeeTollDesk && (
+                <Collapsible defaultOpen={isTollManagementOpen} className="group/toll-ops mt-1">
+                  <SidebarMenuItem>
+                    <CollapsibleTrigger asChild>
+                      <SidebarMenuButton className="pl-4" tooltip="Toll Management">
+                        <Receipt className="h-4 w-4" />
+                        <span>Toll Management</span>
+                        <ChevronRight className="ml-auto h-4 w-4 transition-transform duration-200 group-data-[state=open]/toll-ops:rotate-90" />
+                      </SidebarMenuButton>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <SidebarMenuSub>
+                        {canView('toll-logs') && (
+                        <SidebarMenuSubItem>
+                          <SidebarMenuSubButton asChild isActive={currentPage === 'toll-logs'} onClick={() => onNavigate?.('toll-logs')}>
+                            <button className="w-full text-left cursor-pointer"><span>Toll Logs</span></button>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                        )}
+                        {canView('toll-tags') && (
+                        <SidebarMenuSubItem>
+                          <SidebarMenuSubButton asChild isActive={currentPage === 'toll-tags'} onClick={() => onNavigate?.('toll-tags')}>
+                            <button className="w-full text-left cursor-pointer"><span>Toll Reconciliation</span></button>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                        )}
+                        {canView('tag-inventory') && (
+                        <SidebarMenuSubItem>
+                          <SidebarMenuSubButton asChild isActive={currentPage === 'tag-inventory'} onClick={() => onNavigate?.('tag-inventory')}>
+                            <button className="w-full text-left cursor-pointer"><span>Tag Inventory</span></button>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                        )}
+                        {canView('toll-analytics') && (
+                        <SidebarMenuSubItem>
+                          <SidebarMenuSubButton asChild isActive={currentPage === 'toll-analytics'} onClick={() => onNavigate?.('toll-analytics')}>
+                            <button className="w-full text-left cursor-pointer">
+                              <span className="flex items-center gap-2">
+                                Toll Analytics
+                                <Badge className="bg-indigo-500 text-white border-none h-4 px-1 text-[8px]">New</Badge>
+                              </span>
+                            </button>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                        )}
+                      </SidebarMenuSub>
+                    </CollapsibleContent>
+                  </SidebarMenuItem>
+                </Collapsible>
+                )}
+              </CollapsibleContent>
+            </SidebarMenuItem>
+          </Collapsible>
+          )}
+
           {(canView('drivers') || canView('earnings-policy')) && (
           <Collapsible defaultOpen={isDriverOpsOpen} className="group/collapsible">
             <SidebarMenuItem>
@@ -217,149 +382,6 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate, onLogout }: { curre
           </Collapsible>
           )}
           
-          {/* Fuel Management Section */}
-          {isModuleEnabled('fuelManagement') && (canView('fuel-overview') || canView('fuel-reimbursements') || canView('fuel-integrity-gap') || canView('fuel-reconciliation') || canView('fuel-cards') || canView('fuel-logs') || canView('fuel-configuration')) && (
-          <Collapsible defaultOpen={isFuelManagementOpen} className="group/collapsible">
-            <SidebarMenuItem>
-              <CollapsibleTrigger asChild>
-                <SidebarMenuButton tooltip="Fuel Management">
-                  <Fuel className="h-4 w-4" />
-                  <span>Fuel Management</span>
-                  <ChevronRight className="ml-auto h-4 w-4 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
-                </SidebarMenuButton>
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <SidebarMenuSub>
-                  {canView('fuel-overview') && (
-                  <SidebarMenuSubItem>
-                    <SidebarMenuSubButton asChild isActive={currentPage === 'fuel-overview' || currentPage === 'fuel-management'} onClick={() => onNavigate?.('fuel-overview')}>
-                      <button className="w-full text-left cursor-pointer">
-                        <span>Overview</span>
-                      </button>
-                    </SidebarMenuSubButton>
-                  </SidebarMenuSubItem>
-                  )}
-                  {canView('fuel-reimbursements') && (
-                  <SidebarMenuSubItem>
-                    <SidebarMenuSubButton asChild isActive={currentPage === 'fuel-reimbursements'} onClick={() => onNavigate?.('fuel-reimbursements')}>
-                      <button className="w-full text-left cursor-pointer">
-                        <span>Review Queue</span>
-                      </button>
-                    </SidebarMenuSubButton>
-                  </SidebarMenuSubItem>
-                  )}
-                  {canView('fuel-integrity-gap') && (
-                  <SidebarMenuSubItem>
-                    <SidebarMenuSubButton asChild isActive={currentPage === 'fuel-integrity-gap'} onClick={() => onNavigate?.('fuel-integrity-gap')}>
-                      <button className="w-full text-left cursor-pointer">
-                        <span className="flex items-center gap-2">
-                            Integrity Gap
-                            <Badge className="bg-emerald-500 text-white border-none h-4 px-1 text-[8px]">PRO</Badge>
-                        </span>
-                      </button>
-                    </SidebarMenuSubButton>
-                  </SidebarMenuSubItem>
-                  )}
-                  {canView('fuel-reconciliation') && (
-                  <SidebarMenuSubItem>
-                    <SidebarMenuSubButton asChild isActive={currentPage === 'fuel-reconciliation'} onClick={() => onNavigate?.('fuel-reconciliation')}>
-                      <button className="w-full text-left cursor-pointer">
-                        <span>Consumption Reconciliation</span>
-                      </button>
-                    </SidebarMenuSubButton>
-                  </SidebarMenuSubItem>
-                  )}
-                  {canView('fuel-cards') && (
-                  <SidebarMenuSubItem>
-                    <SidebarMenuSubButton asChild isActive={currentPage === 'fuel-cards'} onClick={() => onNavigate?.('fuel-cards')}>
-                      <button className="w-full text-left cursor-pointer">
-                        <span>Fuel Cards</span>
-                      </button>
-                    </SidebarMenuSubButton>
-                  </SidebarMenuSubItem>
-                  )}
-                  {canView('fuel-logs') && (
-                  <SidebarMenuSubItem>
-                    <SidebarMenuSubButton asChild isActive={currentPage === 'fuel-logs'} onClick={() => onNavigate?.('fuel-logs')}>
-                      <button className="w-full text-left cursor-pointer">
-                        <span>Transaction Logs</span>
-                      </button>
-                    </SidebarMenuSubButton>
-                  </SidebarMenuSubItem>
-                  )}
-                  {canView('fuel-configuration') && (
-                  <SidebarMenuSubItem>
-                    <SidebarMenuSubButton asChild isActive={currentPage === 'fuel-configuration'} onClick={() => onNavigate?.('fuel-configuration')}>
-                      <button className="w-full text-left cursor-pointer">
-                        <span>Configuration</span>
-                      </button>
-                    </SidebarMenuSubButton>
-                  </SidebarMenuSubItem>
-                  )}
-                </SidebarMenuSub>
-              </CollapsibleContent>
-            </SidebarMenuItem>
-          </Collapsible>
-          )}
-
-          {/* Toll Management Section */}
-          {isModuleEnabled('tollManagement') && isSidebarItemVisible('toll-management', businessType) && (canView('toll-logs') || canView('toll-tags') || canView('tag-inventory') || canView('toll-analytics')) && (
-          <Collapsible defaultOpen={isTollManagementOpen} className="group/collapsible">
-            <SidebarMenuItem>
-              <CollapsibleTrigger asChild>
-                <SidebarMenuButton tooltip="Toll Management">
-                  <Receipt className="h-4 w-4" />
-                  <span>Toll Management</span>
-                  <ChevronRight className="ml-auto h-4 w-4 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
-                </SidebarMenuButton>
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <SidebarMenuSub>
-                  {canView('toll-logs') && (
-                  <SidebarMenuSubItem>
-                    <SidebarMenuSubButton asChild isActive={currentPage === 'toll-logs'} onClick={() => onNavigate?.('toll-logs')}>
-                      <button className="w-full text-left cursor-pointer">
-                        <span>Toll Logs</span>
-                      </button>
-                    </SidebarMenuSubButton>
-                  </SidebarMenuSubItem>
-                  )}
-                  {canView('toll-tags') && (
-                  <SidebarMenuSubItem>
-                    <SidebarMenuSubButton asChild isActive={currentPage === 'toll-tags'} onClick={() => onNavigate?.('toll-tags')}>
-                      <button className="w-full text-left cursor-pointer">
-                        <span>Toll Reconciliation</span>
-                      </button>
-                    </SidebarMenuSubButton>
-                  </SidebarMenuSubItem>
-                  )}
-                  {canView('tag-inventory') && (
-                  <SidebarMenuSubItem>
-                    <SidebarMenuSubButton asChild isActive={currentPage === 'tag-inventory'} onClick={() => onNavigate?.('tag-inventory')}>
-                      <button className="w-full text-left cursor-pointer">
-                        <span>Tag Inventory</span>
-                      </button>
-                    </SidebarMenuSubButton>
-                  </SidebarMenuSubItem>
-                  )}
-                  {canView('toll-analytics') && (
-                  <SidebarMenuSubItem>
-                    <SidebarMenuSubButton asChild isActive={currentPage === 'toll-analytics'} onClick={() => onNavigate?.('toll-analytics')}>
-                      <button className="w-full text-left cursor-pointer">
-                        <span className="flex items-center gap-2">
-                           Toll Analytics
-                           <Badge className="bg-indigo-500 text-white border-none h-4 px-1 text-[8px]">New</Badge>
-                        </span>
-                      </button>
-                    </SidebarMenuSubButton>
-                  </SidebarMenuSubItem>
-                  )}
-                </SidebarMenuSub>
-              </CollapsibleContent>
-            </SidebarMenuItem>
-          </Collapsible>
-          )}
-
           {canView('trips') && (
           <NavItem 
             icon={<FileText className="h-4 w-4" />} 

@@ -253,6 +253,7 @@ export function computeWeeklyCashSettlement(input: CashSettlementInput): CashWee
 
         // Cash Returned SSOT = Settlement Week–tagged Log Cash Payment rows only.
         // Fuel reimbursements and tolls belong to Fuel / Toll desks — never here.
+        // Fleet Financials bank confirms / bank CSV match must NEVER feed this sum.
         const allocatedPaymentsOnly = allocatedPayments.reduce((sum, t) => sum + (t.amount || 0), 0);
 
         return {

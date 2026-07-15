@@ -282,7 +282,7 @@ export function SettlementSummaryView({
           <div>
             <CardTitle>Weekly Settlement Summary</CardTitle>
             <CardDescription className="text-xs text-slate-500">
-              Combined payout and cash settlement view — what actually needs to change hands each week.
+              Who owes whom after fuel and tolls. Cash collection is on Cash Wallet; Uber bank received is on Fleet Operations → Fleet Financials.
             </CardDescription>
           </div>
           {isReady && settlementRows.length > 0 && (

@@ -27,6 +27,8 @@ import { FuelManagement } from './pages/FuelManagement';
 import { TollLogsPage } from './pages/TollLogs';
 import { TollAnalytics } from './components/toll/TollAnalytics';
 import { DriverLedgerPage } from './components/drivers/DriverLedgerPage';
+import { FleetFinancialsPage } from './components/fleet-financials/FleetFinancialsPage';
+import { CashRetagPage } from './components/fleet-financials/CashRetagPage';
 
 import { useAlertPusher } from './hooks/useAlertPusher';
 import { OfflineProvider } from './components/providers/OfflineProvider';
@@ -357,6 +359,16 @@ function AppContent() {
         {currentPage === 'driver-ledger' && (
           <PermissionGate permission="nav.drivers" onNavigate={setCurrentPage}>
             <DriverLedgerPage />
+          </PermissionGate>
+        )}
+        {currentPage === 'fleet-financials' && (
+          <PermissionGate permission="nav.drivers" onNavigate={setCurrentPage}>
+            <FleetFinancialsPage />
+          </PermissionGate>
+        )}
+        {currentPage === 'cash-retag' && (
+          <PermissionGate permission="nav.drivers" onNavigate={setCurrentPage}>
+            <CashRetagPage />
           </PermissionGate>
         )}
         

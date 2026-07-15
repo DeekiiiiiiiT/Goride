@@ -20,6 +20,7 @@ export function getAdjCashBalance(cashBalance: number, fuelCredits: number): num
  *     = Settlement (+ fleet owes driver; − driver owes fleet)
  *
  * Sign convention: positive settlement = company owes the driver.
+ * Fleet Financials bank confirms / bank CSV match must NEVER feed this function.
  */
 export function getPeriodSettlementComponents(row: PayoutPeriodRow): {
   adjCashBalance: number;

@@ -1,4 +1,4 @@
-// Cash Wallet week detail — collection desk only (not Settlement who-owes).
+// Cash Wallet week detail — collection desk only (no bank / settlement).
 import React, { useMemo } from 'react';
 import { format } from 'date-fns';
 import {
@@ -10,7 +10,7 @@ import {
 } from '../ui/sheet';
 import { Separator } from '../ui/separator';
 import { Badge } from '../ui/badge';
-import { Banknote, Wallet, Calendar, Info } from 'lucide-react';
+import { Banknote, Wallet, Calendar } from 'lucide-react';
 import type { CashWeekData } from '../../utils/cashSettlementCalc';
 import type { FinancialTransaction } from '../../types/data';
 import {
@@ -20,24 +20,11 @@ import {
 } from '../../utils/driverCashPayment';
 import { cn } from '../ui/utils';
 
-type WalletSettlementEntry =
-  | { finalized: false }
-  | {
-      finalized: true;
-      settlement: number;
-      adjCashBalance: number;
-      netPayoutApplied: number;
-      cashBalance: number;
-      fuelCredits: number;
-    };
-
 interface CashWalletWeekDetailProps {
   week: CashWeekData | null;
   transactions: FinancialTransaction[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Settlement still-held for this Monday (from shared pipeline). */
-  settlementEntry?: WalletSettlementEntry | null;
 }
 
 const fmt = (n: number) =>
@@ -48,7 +35,6 @@ export function CashWalletWeekDetail({
   transactions,
   open,
   onOpenChange,
-  settlementEntry = null,
 }: CashWalletWeekDetailProps) {
   const payments = useMemo(() => {
     if (!week) return [];
@@ -178,51 +164,6 @@ export function CashWalletWeekDetail({
           </div>
         </div>
 
-        {settlementEntry && (
-          <div className="mt-4 rounded-lg border border-slate-100 px-3 py-2.5 space-y-1">
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-              Settlement (Financials)
-            </p>
-            {settlementEntry.finalized === false ? (
-              <p className="text-sm font-medium text-amber-600">Awaiting Cash / not finalized</p>
-            ) : (
-              <>
-                <div className="flex justify-between gap-2">
-                  <span className="text-sm text-slate-600">Cash Still Held</span>
-                  <span
-                    className={cn(
-                      'text-sm font-bold tabular-nums',
-                      settlementEntry.adjCashBalance > 0.005 ? 'text-rose-600' : 'text-emerald-600',
-                    )}
-                  >
-                    {fmt(settlementEntry.adjCashBalance)}
-                  </span>
-                </div>
-                <p className="text-[11px] text-slate-400">
-                  After fleet fuel + cash toll credits — same number as Financials → Settlement
-                </p>
-              </>
-            )}
-          </div>
-        )}
-
-        {(week.bankSettled || 0) > 0.005 && (
-          <div className="mt-4 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2.5">
-            <div className="flex items-start justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <Info className="h-3.5 w-3.5 text-slate-400" />
-                <div>
-                  <p className="text-xs font-medium text-slate-600">Bank Settled</p>
-                  <p className="text-[11px] text-slate-400">Informational — not cash collected</p>
-                </div>
-              </div>
-              <span className="text-xs font-semibold text-slate-500 tabular-nums">
-                {fmt(week.bankSettled)}
-              </span>
-            </div>
-          </div>
-        )}
-
         <div className="mt-6">
           <div className="flex items-center gap-1.5 mb-2">
             <Calendar className="h-3.5 w-3.5 text-slate-400" />
@@ -274,10 +215,6 @@ export function CashWalletWeekDetail({
             </p>
           )}
         </div>
-
-        <p className="text-[11px] text-slate-400 mt-6 leading-relaxed">
-          Who owes whom (fuel + toll credits) lives on Financials → Settlement — not this desk.
-        </p>
       </SheetContent>
     </Sheet>
   );

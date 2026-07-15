@@ -48,6 +48,7 @@ export interface PeriodSettlementResult {
   adjCashBalance: number;
   /** netPayout − adjCashBalance. Positive = company owes the driver; negative = driver owes the company. */
   settlement: number;
+  // Still Held = adjCashBalance. Bank confirm / CSV match must never alter these inputs.
 }
 
 const round = (n: number) => Math.round(n * 100) / 100;
