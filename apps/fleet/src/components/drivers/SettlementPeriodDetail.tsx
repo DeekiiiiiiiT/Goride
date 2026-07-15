@@ -238,8 +238,16 @@ export function SettlementPeriodDetail({ row, open, onOpenChange }: SettlementPe
             label="− Cash toll credit"
             value={row.cashTollCredits > 0.005 ? `−${fmt(row.cashTollCredits)}` : '$0.00'}
             valueColor={row.cashTollCredits > 0.005 ? 'text-emerald-700' : 'text-slate-400'}
-            sub="Cash plaza tolls — separate from Cash Returned"
+            sub="Cash plaza tolls from Toll Reconciliation — separate from Cash Returned"
           />
+          {(row.chargedToDriver || 0) > 0.005 && (
+            <LineItem
+              label="+ Personal toll charged"
+              value={`+${fmt(row.chargedToDriver)}`}
+              valueColor="text-rose-700"
+              sub="Tag tolls marked Personal in Toll Reconciliation — billed to driver"
+            />
+          )}
 
           <Separator className="my-1" />
 

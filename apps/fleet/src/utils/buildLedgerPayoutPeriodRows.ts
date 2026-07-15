@@ -276,22 +276,28 @@ export function buildLedgerPayoutPeriodRows(params: {
       const tollCharged = netDriverTollCharges(periodChargeTx);
       const expenseDeductions = fuelDeduction + tollCharged;
 
-      // Full cash-plaza spend (paymentMethod cash / receipt) — credits still held.
-      // Do not gate on disposition: personal-flagged cash plaza still washes settlement.
+      // Toll Reconciliation disposition on the ledger row is SSOT when present.
+      const disp = (lr as any).tollDisposition;
+      const hasDisp = disp != null && typeof disp === 'object';
+
+      // Cash plaza credit — disposition object is Toll Reconciliation SSOT (including zeros).
       let periodCashTollWash = 0;
-      for (const tx of expenseTx) {
-        if (!tollBelongsToPeriod(tx.date, periodStart, periodEnd)) continue;
-        if (!isTollCategory(tx.category)) continue;
-        if (!isCashPaidToll(tx as any)) continue;
-        periodCashTollWash += Math.abs(Number(tx.amount) || 0);
-      }
-      // Fallback when cash flags missing but disposition already classified wash.
-      if (!(periodCashTollWash > 0.005)) {
+      if (hasDisp) {
+        periodCashTollWash = Math.max(0, Number(disp.cashWash) || 0);
+      } else {
         for (const tx of expenseTx) {
           if (!tollBelongsToPeriod(tx.date, periodStart, periodEnd)) continue;
           if (!isTollCategory(tx.category)) continue;
-          if (classifyTollLedgerEntry(tx as any) !== 'cashWash') continue;
+          if (!isCashPaidToll(tx as any)) continue;
           periodCashTollWash += Math.abs(Number(tx.amount) || 0);
+        }
+        if (!(periodCashTollWash > 0.005)) {
+          for (const tx of expenseTx) {
+            if (!tollBelongsToPeriod(tx.date, periodStart, periodEnd)) continue;
+            if (!isTollCategory(tx.category)) continue;
+            if (classifyTollLedgerEntry(tx as any) !== 'cashWash') continue;
+            periodCashTollWash += Math.abs(Number(tx.amount) || 0);
+          }
         }
       }
 
@@ -300,12 +306,13 @@ export function buildLedgerPayoutPeriodRows(params: {
       const washAlreadyInPaid = cashPaidBreakdown?.tollCredits ?? 0;
       const cashTollWashExtra = Math.max(0, periodCashTollWash - washAlreadyInPaid);
 
+      // Personal bill — disposition.personal; Toll Charge rows only when disposition missing.
+      const tollPersonal = hasDisp
+        ? Math.max(0, Number(disp.personal) || 0)
+        : tollCharged;
+
       if (unifiedToll) {
-        // Keep Cash Returned = payments only; cash plaza wash applied in settlement math.
-        // Personal tag charges show as Charged to Driver — not as Passenger Cash.
-        const disp = (lr as any).tollDisposition || { cashWash: 0, personal: 0 };
-        const tollPersonal =
-          Number(disp.personal) > 0.005 ? Number(disp.personal) : tollCharged;
+        // Keep Cash Returned = payments only; cash wash + personal applied in settlement math.
         const r = computePeriodSettlement({
           driverShare,
           fuelDeduction,
@@ -313,7 +320,7 @@ export function buildLedgerPayoutPeriodRows(params: {
           baseCashPaid,
           tollCashWash: 0,
           tollPersonal: 0,
-          fuelCredits: 0, // applied in getPeriodSettlementComponents via fuelCredits field
+          fuelCredits: 0, // applied in getPeriodSettlementComponents
         });
         totalDeductions = fuelDeduction;
         netPayout = r.netPayout;
@@ -332,7 +339,7 @@ export function buildLedgerPayoutPeriodRows(params: {
       // Still-held preview for status (same formula as getPeriodSettlementComponents).
       const stillHeldPreview =
         Math.round(
-          (passengerCash - baseCashPaid - cashTollWashExtra - effectiveFuelCredits) * 100,
+          (passengerCash + tollPersonal - baseCashPaid - cashTollWashExtra - effectiveFuelCredits) * 100,
         ) / 100;
 
       return {
@@ -359,6 +366,7 @@ export function buildLedgerPayoutPeriodRows(params: {
         cashBalance,
         passengerCash,
         cashTollWash: cashTollWashExtra,
+        personalTollCharge: tollPersonal,
         bankSettled,
         cashPaidBreakdown,
         status: (!isFinalized

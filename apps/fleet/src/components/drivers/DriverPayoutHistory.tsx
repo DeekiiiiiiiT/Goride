@@ -26,6 +26,8 @@ interface DriverPayoutHistoryProps {
   trips?: Trip[];
   csvMetrics?: DriverMetrics[];
   financialBundle?: DriverFinancialBundle;
+  /** Shared weekly rows from DriverDetail — used when periodType is weekly. */
+  weeklyPeriodData?: PayoutPeriodRow[];
 }
 
 // ────────────────────────────────────────────────────────────
@@ -39,6 +41,7 @@ export function DriverPayoutHistory({
   trips = [],
   csvMetrics = [],
   financialBundle,
+  weeklyPeriodData,
 }: DriverPayoutHistoryProps) {
 
   const [periodType, setPeriodType] = useState<PeriodType>('weekly');
@@ -52,6 +55,10 @@ export function DriverPayoutHistory({
     csvMetrics,
     periodType,
     financialBundle,
+    sharedWeekly:
+      periodType === 'weekly' && weeklyPeriodData
+        ? { periodData: weeklyPeriodData }
+        : undefined,
   });
 
   const defaultPageSize = (pt: PeriodType) => pt === 'daily' ? 14 : pt === 'monthly' ? 6 : 12;

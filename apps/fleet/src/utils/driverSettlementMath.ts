@@ -11,15 +11,13 @@ export function getAdjCashBalance(cashBalance: number, fuelCredits: number): num
 /**
  * Locked week formula (Financials + Cash Wallet SSOT):
  *
- *   Passenger cash − Cash returned − Fleet fuel credit − Cash toll wash
+ *   (Passenger cash + Personal toll charged)
+ *     − Cash returned (Settlement Week–tagged Log Cash only)
+ *     − Fleet fuel credit (Fuel Reconciliation companyShare)
+ *     − Cash toll wash (cash plaza from Toll Reconciliation)
  *     = Cash still held
  *   Net Payout − Cash still held
  *     = Settlement (+ fleet owes driver; − driver owes fleet)
- *
- * Cash returned is the full Cash Paid / Cash Returned column (includes any $2k
- * fuel reimbursement payment). Fleet fuel credit is the full finalized
- * companyShare — do NOT reduce it by fuel already inside Cash Paid (those are
- * different credits: cash handed back vs fuel spend attribution).
  *
  * Sign convention: positive settlement = company owes the driver.
  */
@@ -36,7 +34,7 @@ export function getPeriodSettlementComponents(row: PayoutPeriodRow): {
       ? row.passengerCash
       : row.cashOwed;
 
-  // Full Cash Returned column — never strip fuel reimbursements out of handbacks.
+  // Cash Returned = Settlement Week–tagged cash payments only (never fuel/toll).
   const cashReturned = Math.max(0, row.cashPaid || 0);
 
   // Cash plaza tolls: prefer explicit field; else breakdown toll credits already
@@ -44,6 +42,9 @@ export function getPeriodSettlementComponents(row: PayoutPeriodRow): {
   const washAlreadyInPaid = Math.max(0, br?.tollCredits ?? 0);
   const explicitWash = Math.max(0, row.cashTollWash ?? 0);
   const cashTollWash = Math.max(0, explicitWash - washAlreadyInPaid);
+
+  // Personal tag tolls from Toll Reconciliation disposition.
+  const tollPersonal = Math.max(0, row.personalTollCharge ?? 0);
 
   const fuelCredits = Math.max(0, row.fuelCredits || 0);
 
@@ -53,7 +54,7 @@ export function getPeriodSettlementComponents(row: PayoutPeriodRow): {
     baseCashOwed: passengerCash,
     baseCashPaid: cashReturned,
     tollCashWash: cashTollWash,
-    tollPersonal: 0,
+    tollPersonal,
     fuelCredits,
   });
 

@@ -76,7 +76,8 @@ describe('getPeriodSettlementComponents', () => {
       cashPaid: 7500,
       cashBalance: 62497.45 - 7500,
       fuelCredits: 21415.26,
-      cashTollWash: 3705,
+      cashTollWash: 1710,
+      personalTollCharge: 0,
       cashPaidBreakdown: {
         allocatedPayments: 7500,
         tollCredits: 0,
@@ -86,8 +87,25 @@ describe('getPeriodSettlementComponents', () => {
       },
     });
     const r = getPeriodSettlementComponents(row);
-    expect(r.adjCashBalance).toBeCloseTo(29877.19, 2);
-    expect(r.settlement).toBeCloseTo(-203.81, 2);
+    expect(r.adjCashBalance).toBeCloseTo(31872.19, 2);
+    expect(r.settlement).toBeCloseTo(-2198.81, 2);
+  });
+
+  it('personal toll from Toll Reconciliation bills the driver (raises still held)', () => {
+    const row = makeRow({
+      isFinalized: true,
+      netPayout: 100,
+      passengerCash: 100,
+      cashOwed: 100,
+      cashPaid: 0,
+      cashBalance: 100,
+      fuelCredits: 0,
+      cashTollWash: 0,
+      personalTollCharge: 10,
+    });
+    const r = getPeriodSettlementComponents(row);
+    expect(r.adjCashBalance).toBe(110);
+    expect(r.settlement).toBe(-10); // 100 − 110
   });
 
   it('treats netPayout as 0 until the period is finalized', () => {

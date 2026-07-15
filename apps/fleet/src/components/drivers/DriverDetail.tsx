@@ -133,6 +133,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { LogCashPaymentModal } from './LogCashPaymentModal';
 import { WeeklySettlementView, type WeekSettlementMap } from './WeeklySettlementView';
 import { useDriverPayoutPeriodRows } from '../../hooks/useDriverPayoutPeriodRows';
+import { useDriverFinancialBundle } from '../../hooks/useDriverFinancialBundle';
 import { getPeriodSettlementComponents } from '../../utils/driverSettlementMath';
 import { DriverEarningsHistory } from './DriverEarningsHistory';
 import { DriverExpensesHistory } from './DriverExpensesHistory';
@@ -339,7 +340,6 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       initialAmount?: number;
       editingTransaction?: FinancialTransaction;
   }>({ isOpen: false });
-  const [settlementWeeks, setSettlementWeeks] = useState<Array<{ start: Date; end: Date; amountOwed: number; amountPaid: number; balance: number; status: string }>>([]);
   const [walletView, setWalletView] = useState<'ledger' | 'settlements'>('settlements');
   const [transactions, setTransactions] = useState<FinancialTransaction[]>([]);
   const [claims, setClaims] = useState<any[]>([]);
@@ -953,6 +953,11 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       const isCash = payment.paymentMethod === 'Cash';
       const isIncomingPayment = payment.transactionType === 'payment';
       const initialStatus = (isIncomingPayment && !isCash) ? 'Pending' : 'Completed';
+
+      // Cash Collection Cash Returned SSOT = Settlement Week you selected in Log Cash.
+      if (payment.transactionType === 'payment' && (!payment.workPeriodStart || !payment.workPeriodEnd)) {
+        throw new Error('Settlement Week is required for cash payments');
+      }
 
       const metadata: any = {};
       if (payment.workPeriodStart && payment.workPeriodEnd) {
@@ -2418,7 +2423,10 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
     return { netOutstanding, lifetimeCashCollected };
   }, [allTrips, resolvedFinancials.lifetimeCashCollected, metrics.totalCashCollected, metrics.floatHeld, metrics.cashReceived, transactions]);
 
-  /** Same ledger + cash weeks pipeline as Financials → Settlement / Payout. */
+  /** Single Financials+Wallet core bundle for this driver profile. */
+  const sharedFinancialBundle = useDriverFinancialBundle(driverId, driver);
+
+  /** One weekly money pipeline — shared by Cash Wallet + Financials Settlement/Payout. */
   const { periodData: walletPayoutPeriodRows, cashWeeks: walletCashWeeks } = useDriverPayoutPeriodRows({
     driverId,
     driver,
@@ -2426,7 +2434,22 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
     transactions,
     csvMetrics: csvMetrics || [],
     periodType: 'weekly',
+    financialBundle: sharedFinancialBundle,
   });
+
+  /** Live Log Cash period list (never a stale Weekly Settlements snapshot). */
+  const logCashPeriods = useMemo(
+    () =>
+      walletCashWeeks.map((w) => ({
+        start: w.start,
+        end: w.end,
+        amountOwed: w.amountOwed,
+        amountPaid: w.amountPaid,
+        balance: w.balance,
+        status: w.status,
+      })),
+    [walletCashWeeks],
+  );
 
   /** Key = Monday yyyy-MM-dd for matching WeeklySettlementView weeks to Payout rows. */
   const weekSettlementByMonday = useMemo(() => {
@@ -3688,6 +3711,9 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
              uberLedgerReconciliation={resolvedFinancials.uberLedgerReconciliation}
              periodFrom={dateRange?.from}
              periodTo={dateRange?.to}
+             financialBundle={sharedFinancialBundle}
+             weeklyPeriodData={walletPayoutPeriodRows}
+             weeklyCashWeeks={walletCashWeeks}
            />
             {/* ___OLD_FINANCIAL_SUBTABS_BLOCK_1___ <Tabs defaultValue="earnings" className="space-y-4">
              <TabsList className="grid w-full grid-cols-3 max-w-[450px]">
@@ -3891,7 +3917,6 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                             cashWeeks={walletCashWeeks}
                             payoutPeriodRows={walletPayoutPeriodRows}
                             weekSettlementByMonday={weekSettlementByMonday}
-                            onWeeksComputed={setSettlementWeeks}
                             onLogPayment={(start, end, amount) => setPaymentModalState({
                                 isOpen: true,
                                 initialWorkPeriodStart: start.toISOString(),
@@ -3955,13 +3980,40 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                                 {(() => {
                                                                   const s = tx.metadata?.workPeriodStart;
                                                                   const e = tx.metadata?.workPeriodEnd;
-                                                                  if (!s) return <span className="text-slate-400">Untagged</span>;
+                                                                  if (!s) {
+                                                                    return (
+                                                                      <button
+                                                                        type="button"
+                                                                        className="text-left text-amber-700 hover:underline text-xs font-medium"
+                                                                        onClick={() => handleEditTransaction(tx)}
+                                                                        title="Tag a Settlement Week so this counts as Cash Returned"
+                                                                      >
+                                                                        Untagged — Edit to tag
+                                                                      </button>
+                                                                    );
+                                                                  }
                                                                   const sd = parseTripDate(String(s).split('T')[0]);
                                                                   const ed = e ? parseTripDate(String(e).split('T')[0]) : null;
-                                                                  if (!sd) return <span className="text-slate-400">Untagged</span>;
-                                                                  return ed
-                                                                    ? `${format(sd, 'MMM d')} – ${format(ed, 'MMM d')}`
-                                                                    : format(sd, 'MMM d, yyyy');
+                                                                  if (!sd) {
+                                                                    return (
+                                                                      <button
+                                                                        type="button"
+                                                                        className="text-left text-amber-700 hover:underline text-xs font-medium"
+                                                                        onClick={() => handleEditTransaction(tx)}
+                                                                      >
+                                                                        Untagged — Edit to tag
+                                                                      </button>
+                                                                    );
+                                                                  }
+                                                                  const pending = String(tx.status || '').toLowerCase() === 'pending';
+                                                                  return (
+                                                                    <span className={pending ? 'text-blue-700' : undefined}>
+                                                                      {ed
+                                                                        ? `${format(sd, 'MMM d')} – ${format(ed, 'MMM d')}`
+                                                                        : format(sd, 'MMM d, yyyy')}
+                                                                      {pending ? ' · Unverified' : ''}
+                                                                    </span>
+                                                                  );
                                                                 })()}
                                                             </TableCell>
                                                             <TableCell>
@@ -4838,15 +4890,13 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         cashOwed={
           paymentModalState.initialAmount != null
             ? paymentModalState.initialAmount
-            : walletCollectionTotals.collectionGap > 0.005
-              ? walletCollectionTotals.collectionGap
-              : walletMetrics.netOutstanding
+            : walletCollectionTotals.collectionGap
         }
         initialWorkPeriodStart={paymentModalState.initialWorkPeriodStart}
         initialWorkPeriodEnd={paymentModalState.initialWorkPeriodEnd}
         initialAmount={paymentModalState.initialAmount}
         initialTransaction={paymentModalState.editingTransaction}
-        periods={settlementWeeks}
+        periods={logCashPeriods}
       />
         {/* Delete Confirmation Dialog */}
         <AlertDialog open={!!transactionToDelete} onOpenChange={(open) => !open && setTransactionToDelete(null)}>

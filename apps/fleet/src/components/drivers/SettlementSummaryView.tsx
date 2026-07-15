@@ -85,9 +85,14 @@ export function payoutToSettlementRow(row: PayoutPeriodRow): SettlementRow {
   const payoutDeductions = row.isFinalized
     ? Math.round((row.driverShare - row.netPayout) * 100) / 100
     : row.fuelDeduction;
+  // Prefer Toll Reconciliation disposition personal; fallback to Toll Charge rows.
   const chargedToDriver = Math.max(
     0,
-    Math.round(((row.expenseDeductions ?? 0) - row.fuelDeduction) * 100) / 100,
+    Math.round(
+      (row.personalTollCharge != null
+        ? row.personalTollCharge
+        : (row.expenseDeductions ?? 0) - row.fuelDeduction) * 100,
+    ) / 100,
   );
 
   return {
@@ -123,6 +128,9 @@ interface SettlementSummaryViewProps {
   csvMetrics: DriverMetrics[];
   driver?: DriverLike | null;
   financialBundle?: DriverFinancialBundle;
+  /** Shared weekly pipeline from DriverDetail — avoids a second compute. */
+  weeklyPeriodData?: PayoutPeriodRow[];
+  weeklyCashWeeks?: import('../../utils/cashSettlementCalc').CashWeekData[];
 }
 
 export function SettlementSummaryView({
@@ -132,6 +140,8 @@ export function SettlementSummaryView({
   csvMetrics = [],
   driver = null,
   financialBundle,
+  weeklyPeriodData,
+  weeklyCashWeeks,
 }: SettlementSummaryViewProps) {
   const { periodData, isReady: ledgerReady, fuelDataLoading } = useDriverPayoutPeriodRows({
     driverId,
@@ -141,6 +151,9 @@ export function SettlementSummaryView({
     csvMetrics,
     periodType: 'weekly',
     financialBundle,
+    sharedWeekly: weeklyPeriodData
+      ? { periodData: weeklyPeriodData, cashWeeks: weeklyCashWeeks }
+      : undefined,
   });
 
   const isReady = ledgerReady;

@@ -50,6 +50,11 @@ export interface PayoutPeriodRow {
    * Independent of disposition personal/business flags.
    */
   cashTollWash?: number;
+  /**
+   * Personal tag tolls billed to the driver (reconciliation disposition).
+   * Increases Cash Still Held; never pads Cash Returned.
+   */
+  personalTollCharge?: number;
   /** Uber bank settled for the period — informational; never part of cash risk. */
   bankSettled: number;
   status: PayoutStatus;

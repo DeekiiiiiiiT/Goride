@@ -28,3 +28,45 @@ export function isDriverCashPaymentTransaction(
 
   return false;
 }
+
+/**
+ * Cash Returned gate: money must be cleared.
+ * - Cash: Completed / Verified (legacy blank status treated as completed)
+ * - Bank / Mobile Money / Check: Completed or Verified only — never Pending
+ */
+export function isClearedDriverCashPayment(
+  t: Pick<
+    FinancialTransaction,
+    'amount' | 'category' | 'type' | 'description' | 'paymentMethod' | 'status'
+  > | null | undefined,
+): boolean {
+  if (!isDriverCashPaymentTransaction(t)) return false;
+  const status = String(t!.status || '').toLowerCase().trim();
+  const pm = String(t!.paymentMethod || 'Cash').toLowerCase().trim();
+
+  const cleared = status === 'completed' || status === 'verified';
+  if (pm === 'cash' || pm === '') {
+    return cleared || status === '';
+  }
+  return cleared;
+}
+
+/** Settlement Week Monday key (yyyy-MM-dd) from workPeriodStart metadata. */
+export function cashPaymentWeekKey(
+  t: Pick<FinancialTransaction, 'metadata'> | null | undefined,
+): string | null {
+  const raw = t?.metadata?.workPeriodStart;
+  if (!raw) return null;
+  const ymd = String(raw).split('T')[0];
+  return /^\d{4}-\d{2}-\d{2}$/.test(ymd) ? ymd : null;
+}
+
+/** True when cleared payment is tagged exactly to this Settlement Week Monday. */
+export function isCashReturnedForWeek(
+  t: FinancialTransaction | null | undefined,
+  weekMondayYmd: string,
+): boolean {
+  if (!t || !isClearedDriverCashPayment(t)) return false;
+  const key = cashPaymentWeekKey(t);
+  return key != null && key === weekMondayYmd;
+}

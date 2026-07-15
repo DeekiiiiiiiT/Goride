@@ -9,7 +9,11 @@
 
 import { Trip, FinancialTransaction, DriverMetrics } from '../types/data';
 import { getTripPhysicalCashCollected } from './tripPhysicalCash';
-import { isDriverCashPaymentTransaction } from './driverCashPayment';
+import {
+    isCashReturnedForWeek,
+    isClearedDriverCashPayment,
+    isDriverCashPaymentTransaction,
+} from './driverCashPayment';
 import { isDriverTollChargeRow, netDriverTollCharges } from './netDriverTollCharges';
 import { weekBucketForDate } from './tollWeekPeriod';
 import { buildWeeklyCashRisk } from './buildWeeklyCashRisk';
@@ -23,7 +27,6 @@ import {
     endOfWeek,
     eachWeekOfInterval,
     isWithinInterval,
-    areIntervalsOverlapping,
     format,
 } from 'date-fns';
 
@@ -197,17 +200,11 @@ export function computeWeeklyCashSettlement(input: CashSettlementInput): CashWee
 
         // --- Calculate Credits (Allocated Payments + Approved Cash Tolls) ---
 
-        // 1. Work-period cash payments only (never fuel/toll accounting credits).
-        const allocatedPayments = safeTransactions.filter(t => {
-            if (!t?.metadata?.workPeriodStart) return false;
-            if (!isDriverCashPaymentTransaction(t)) return false;
-            // Strip time and reconstruct as local noon to avoid UTC-midnight timezone day-shift
-            const startStr = t.metadata.workPeriodStart.split('T')[0];
-            const endStr = t.metadata.workPeriodEnd ? t.metadata.workPeriodEnd.split('T')[0] : startStr;
-            const payStart = new Date(startStr + 'T12:00:00');
-            const payEnd = new Date(endStr + 'T12:00:00');
-            return areIntervalsOverlapping({ start: payStart, end: payEnd }, { start: weekStart, end: weekEnd });
-        });
+        // 1. Cleared Log Cash tagged exactly to this Settlement Week Monday.
+        const weekMondayYmd = format(weekStart, 'yyyy-MM-dd');
+        const allocatedPayments = safeTransactions.filter(t =>
+            isCashReturnedForWeek(t, weekMondayYmd),
+        );
 
         // 2. Approved Cash Toll Expenses (Treated as Credit/Payment)
         const weeklyExpenses = excludeToll ? 0 : safeTransactions
@@ -297,7 +294,8 @@ export function computeWeeklyCashSettlement(input: CashSettlementInput): CashWee
         const isToll = t.category === 'Toll Usage' || t.category === 'Toll' || t.category === 'Tolls';
         if (isToll) return false;
         if (t.metadata?.workPeriodStart) return false;
-        return isDriverCashPaymentTransaction(t);
+        // Untagged visibility — cleared only (Pending bank stays Unverified)
+        return isClearedDriverCashPayment(t);
     });
 
     for (const tx of unallocatedTransactions) {

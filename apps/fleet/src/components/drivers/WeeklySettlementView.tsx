@@ -14,6 +14,7 @@ import {
 import { useFleetTimezone } from '../../utils/timezoneDisplay';
 import type { PayoutPeriodRow } from '../../types/driverPayoutPeriod';
 import { SettlementPeriodDetail } from './SettlementPeriodDetail';
+import { CashWalletWeekDetail } from './CashWalletWeekDetail';
 import { payoutToSettlementRow, type SettlementRow } from './SettlementSummaryView';
 
 /** Monday key yyyy-MM-dd → Payout ledger settlement (same math as Settlement tab). */
@@ -39,7 +40,7 @@ interface WeeklySettlementViewProps {
      * When provided, skips a second computeWeeklyCashSettlement with different inputs.
      */
     cashWeeks?: CashWeekData[];
-    /** Same period rows as Settlement/Payout — powers shared week detail sheet. */
+    /** Same period rows as Settlement/Payout — Settlement link only. */
     payoutPeriodRows?: PayoutPeriodRow[];
     /** Optional: net settlement per week from `useDriverPayoutPeriodRows` (weekly). */
     weekSettlementByMonday?: WeekSettlementMap;
@@ -66,6 +67,7 @@ export function WeeklySettlementView({
         return computeWeeklyCashSettlement({ trips, transactions, csvMetrics, timezone: fleetTz });
     }, [cashWeeksProp, trips, transactions, csvMetrics, fleetTz]);
 
+    const [selectedWalletWeek, setSelectedWalletWeek] = useState<CashWeekData | null>(null);
     const [selectedSettlementRow, setSelectedSettlementRow] = useState<SettlementRow | null>(null);
 
     const payoutByMonday = useMemo(() => {
@@ -89,7 +91,11 @@ export function WeeklySettlementView({
         }
     }, [weeks, onWeeksComputed]);
 
-    const openWeekDetail = (week: CashWeekData) => {
+    const openWalletDetail = (week: CashWeekData) => {
+        setSelectedWalletWeek(week);
+    };
+
+    const openSettlementDetail = (week: CashWeekData) => {
         const key = format(week.start, 'yyyy-MM-dd');
         const payoutRow = payoutByMonday.get(key);
         if (payoutRow) {
@@ -185,8 +191,9 @@ export function WeeklySettlementView({
                                             <button
                                                 type="button"
                                                 className="space-y-0.5 min-w-[90px] text-left hover:opacity-80"
-                                                onClick={(e) => { e.stopPropagation(); openWeekDetail(week); }}
-                                                title="Open Settlement detail"
+                                                onClick={(e) => { e.stopPropagation(); openSettlementDetail(week); }}
+                                                title="Open Settlement detail (Financials)"
+                                                disabled={!payoutByMonday.has(key)}
                                             >
                                                 <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wide flex items-center gap-1">
                                                     <Scale className="h-3 w-3" /> Settlement
@@ -208,9 +215,8 @@ export function WeeklySettlementView({
                                     <Button
                                         variant="outline"
                                         size="sm"
-                                        className="gap-1.5 text-xs border-slate-300 hover:bg-slate-100 hover:border-blue-300 hover:text-blue-700 transition-colors"
-                                        onClick={(e) => { e.stopPropagation(); openWeekDetail(week); }}
-                                        disabled={!payoutByMonday.has(format(week.start, 'yyyy-MM-dd'))}
+                                        className="gap-1.5 text-xs border-slate-300 hover:bg-slate-100 hover:border-emerald-300 hover:text-emerald-700 transition-colors"
+                                        onClick={(e) => { e.stopPropagation(); openWalletDetail(week); }}
                                     >
                                         <Eye className="h-3.5 w-3.5" />
                                         Details
@@ -232,18 +238,49 @@ export function WeeklySettlementView({
                                 </div>
                             </div>
                             
-                            {/* Progress Bar for Partial */}
-                            {week.status === 'Partial' && (
-                                <div className="mt-4">
-                                    <div className="flex justify-between text-xs mb-1.5">
-                                        <span className="text-slate-500">Repayment Progress</span>
-                                        <span className="text-slate-700 font-medium">{Math.round((week.amountPaid / week.amountOwed) * 100)}%</span>
+                            {/* Collection progress + settlement still held (shared pipeline) */}
+                            {week.amountOwed > 0.005 && (
+                                <div className="mt-4 space-y-2">
+                                    <div>
+                                        <div className="flex justify-between text-xs mb-1.5">
+                                            <span className="text-slate-500">Collection progress</span>
+                                            <span className="text-slate-700 font-medium">
+                                                {Math.round((week.amountPaid / week.amountOwed) * 100)}%
+                                                <span className="text-slate-400 font-normal">
+                                                    {' '}· ${week.amountPaid.toFixed(0)} / ${week.amountOwed.toFixed(0)}
+                                                </span>
+                                            </span>
+                                        </div>
+                                        <Progress 
+                                            value={(week.amountPaid / week.amountOwed) * 100} 
+                                            className="h-2" 
+                                            indicatorClassName="bg-gradient-to-r from-orange-400 to-amber-600"
+                                        />
                                     </div>
-                                    <Progress 
-                                        value={(week.amountPaid / week.amountOwed) * 100} 
-                                        className="h-2" 
-                                        indicatorClassName="bg-gradient-to-r from-orange-400 to-amber-600"
-                                    />
+                                    {weekSettlementByMonday && (() => {
+                                        const key = format(week.start, 'yyyy-MM-dd');
+                                        const st = weekSettlementByMonday[key];
+                                        if (!st) return null;
+                                        if (!st.finalized) {
+                                            return (
+                                                <p className="text-[11px] text-amber-600">
+                                                    Settlement: Awaiting Cash / not finalized
+                                                </p>
+                                            );
+                                        }
+                                        return (
+                                            <p className="text-[11px] text-slate-500">
+                                                Cash Still Held{' '}
+                                                <span className={cn(
+                                                    'font-semibold',
+                                                    st.adjCashBalance > 0.005 ? 'text-rose-600' : 'text-emerald-600',
+                                                )}>
+                                                    ${st.adjCashBalance.toFixed(2)}
+                                                </span>
+                                                <span className="text-slate-400"> · same as Financials → Settlement</span>
+                                            </p>
+                                        );
+                                    })()}
                                 </div>
                             )}
                         </CardContent>
@@ -257,7 +294,20 @@ export function WeeklySettlementView({
                 )}
             </div>
 
-            {/* Shared with Settlement + Payout tabs */}
+            {/* Cash Wallet collection desk */}
+            <CashWalletWeekDetail
+                week={selectedWalletWeek}
+                transactions={transactions}
+                open={!!selectedWalletWeek}
+                onOpenChange={(open) => { if (!open) setSelectedWalletWeek(null); }}
+                settlementEntry={
+                    selectedWalletWeek && weekSettlementByMonday
+                        ? weekSettlementByMonday[format(selectedWalletWeek.start, 'yyyy-MM-dd')] ?? null
+                        : null
+                }
+            />
+
+            {/* Settlement who-owes — only from the secondary Settlement link */}
             <SettlementPeriodDetail
                 row={selectedSettlementRow}
                 open={!!selectedSettlementRow}

@@ -29,6 +29,13 @@ export function useDriverPayoutPeriodRows(opts: {
    * When omitted, this hook mounts its own useDriverFinancialBundle (still RQ-cached).
    */
   financialBundle?: DriverFinancialBundle;
+  /**
+   * Parent-owned weekly rows (DriverDetail single pipeline). Skips ledger/cash recompute.
+   */
+  sharedWeekly?: {
+    periodData: PayoutPeriodRow[];
+    cashWeeks?: CashWeekData[];
+  };
 }): {
   periodData: PayoutPeriodRow[];
   cashWeeks: CashWeekData[];
@@ -42,9 +49,18 @@ export function useDriverPayoutPeriodRows(opts: {
   ledgerError: boolean;
   financialBundle: DriverFinancialBundle;
 } {
-  const { driverId, driver, trips, transactions, csvMetrics, periodType, financialBundle: bundleProp } =
-    opts;
+  const {
+    driverId,
+    driver,
+    trips,
+    transactions,
+    csvMetrics,
+    periodType,
+    financialBundle: bundleProp,
+    sharedWeekly,
+  } = opts;
   const fleetTz = useFleetTimezone();
+  const useSharedWeekly = Boolean(sharedWeekly?.periodData) && periodType === 'weekly';
 
   const localBundle = useDriverFinancialBundle(driverId, driver);
   const financialBundle = bundleProp ?? localBundle;
@@ -60,6 +76,7 @@ export function useDriverPayoutPeriodRows(opts: {
     queryKey: ['ledgerEarningsHistory', driverId, periodType],
     queryFn: () => api.getLedgerEarningsHistory({ driverId, periodType }),
     staleTime: DRIVER_FINANCIAL_STALE_MS,
+    enabled: Boolean(driverId) && !useSharedWeekly,
   });
 
   const ledgerLoaded = !ledgerQuery.isLoading && (ledgerQuery.isSuccess || ledgerQuery.isError);
@@ -84,11 +101,11 @@ export function useDriverPayoutPeriodRows(opts: {
       });
     },
     staleTime: DRIVER_FINANCIAL_STALE_MS,
-    enabled: Boolean(driverId),
+    enabled: Boolean(driverId) && !useSharedWeekly,
   });
 
   const payoutBankEvents = payoutBankQuery.data ?? [];
-  const payoutBankReady = !payoutBankQuery.isLoading;
+  const payoutBankReady = useSharedWeekly || !payoutBankQuery.isLoading;
   const hasPayoutCashEvents = payoutBankEvents.some((e) => String(e.eventType || '') === 'payout_cash');
   const hasPayoutBankEvents = payoutBankEvents.some((e) => String(e.eventType || '') === 'payout_bank');
 
@@ -140,6 +157,7 @@ export function useDriverPayoutPeriodRows(opts: {
     // Only when event path incomplete — avoid 40 overview calls when payout_* events work.
     enabled:
       Boolean(driverId) &&
+      !useSharedWeekly &&
       periodType === 'weekly' &&
       payoutBankReady &&
       (!hasPayoutBankEvents || !hasPayoutCashEvents) &&
@@ -148,6 +166,7 @@ export function useDriverPayoutPeriodRows(opts: {
   });
 
   const cashWeeks: CashWeekData[] = useMemo(() => {
+    if (useSharedWeekly) return sharedWeekly?.cashWeeks ?? [];
     const overviewMap = overviewCashBankByWeekQuery.data || {};
     const overviewUberCashByWeek: Record<string, number> = {};
     for (const [k, v] of Object.entries(overviewMap)) {
@@ -184,6 +203,8 @@ export function useDriverPayoutPeriodRows(opts: {
       };
     });
   }, [
+    useSharedWeekly,
+    sharedWeekly?.cashWeeks,
     trips,
     transactions,
     csvMetrics,
@@ -194,21 +215,9 @@ export function useDriverPayoutPeriodRows(opts: {
     overviewCashBankByWeekQuery.data,
   ]);
 
-  const periodData: PayoutPeriodRow[] = useMemo(
-    () =>
-      buildLedgerPayoutPeriodRows({
-        ledgerLoaded,
-        ledgerError,
-        ledgerRows,
-        cashWeeks,
-        transactions,
-        finalizedReports,
-        disputeRefunds,
-        periodType,
-        unifiedToll,
-        timezone: fleetTz,
-      }),
-    [
+  const periodData: PayoutPeriodRow[] = useMemo(() => {
+    if (useSharedWeekly && sharedWeekly?.periodData) return sharedWeekly.periodData;
+    return buildLedgerPayoutPeriodRows({
       ledgerLoaded,
       ledgerError,
       ledgerRows,
@@ -218,13 +227,26 @@ export function useDriverPayoutPeriodRows(opts: {
       disputeRefunds,
       periodType,
       unifiedToll,
-      fleetTz,
-    ]
-  );
+      timezone: fleetTz,
+    });
+  }, [
+    useSharedWeekly,
+    sharedWeekly?.periodData,
+    ledgerLoaded,
+    ledgerError,
+    ledgerRows,
+    cashWeeks,
+    transactions,
+    finalizedReports,
+    disputeRefunds,
+    periodType,
+    unifiedToll,
+    fleetTz,
+  ]);
 
   // Progressive: paint when ledger is ready; fuel deductions fill as core bundle arrives.
-  const isReady = ledgerLoaded;
-  const isFullyReady = ledgerLoaded && !fuelDataLoading;
+  const isReady = useSharedWeekly ? true : ledgerLoaded;
+  const isFullyReady = useSharedWeekly ? !fuelDataLoading : ledgerLoaded && !fuelDataLoading;
 
   const tiers: TierConfig[] = useMemo(() => {
     const seen = new Map<string, TierConfig>();

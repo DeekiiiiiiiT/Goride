@@ -450,7 +450,7 @@ export function LogCashPaymentModal({
               </div>
             ) : transactionType === 'payment' ? (
               <p className="text-[11px] text-slate-500 leading-tight">
-                Cash payments classified as Cash Returned only when tagged to a Settlement Week.
+                The Settlement Week you pick is where this cash counts as Cash Returned. Receipt date is only when you received it.
               </p>
             ) : null}
           </div>

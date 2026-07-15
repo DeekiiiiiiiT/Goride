@@ -117,6 +117,12 @@ describe('computeWeeklyCashSettlement — Cash Returned is sticky', () => {
       metadata: { workPeriodStart: '2026-03-09', workPeriodEnd: '2026-03-15' } as any,
     });
     const dated = cashPayment(3326.25, { id: 'dated' });
+    const pendingBank = cashPayment(2000, {
+      id: 'pending-bank',
+      paymentMethod: 'Bank Transfer',
+      status: 'Pending',
+      metadata: { workPeriodStart: '2026-03-09', workPeriodEnd: '2026-03-15' } as any,
+    });
     const fuelHandback = {
       id: 'fuel-hb',
       driverId: 'D1',
@@ -131,7 +137,7 @@ describe('computeWeeklyCashSettlement — Cash Returned is sticky', () => {
     const w = weekOf(
       computeWeeklyCashSettlement({
         trips: [trip()],
-        transactions: [tagged, dated, fuelHandback],
+        transactions: [tagged, dated, pendingBank, fuelHandback],
         csvMetrics: [],
         excludeTollEffects: true,
       }),

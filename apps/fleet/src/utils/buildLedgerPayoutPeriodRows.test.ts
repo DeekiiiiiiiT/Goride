@@ -107,4 +107,86 @@ describe('buildLedgerPayoutPeriodRows toll week bucketing', () => {
     expect(rows[0].expenseDeductions).toBeCloseTo(5084.745 + 1075, 2);
     expect(rows[0].expenseDeductions).toBeLessThan(3705 + 5084.745 + 1075);
   });
+
+  it('uses Toll Reconciliation disposition for cash wash + personal (not Toll Charge noise)', () => {
+    const rows = buildLedgerPayoutPeriodRows({
+      ledgerLoaded: true,
+      ledgerError: false,
+      ledgerRows: [
+        {
+          periodStart: '2026-06-29',
+          periodEnd: '2026-07-05',
+          grossRevenue: 10000,
+          driverShare: 5000,
+          tripCount: 10,
+          tier: { name: 'T', sharePercentage: 50 },
+          tollDisposition: { cashWash: 1710, personal: 250, fleet: 0, unresolved: 0 },
+        },
+      ],
+      cashWeeks: [],
+      transactions: [
+        {
+          id: 'noise-charge',
+          date: '2026-07-02',
+          amount: -9999,
+          type: 'Deduction',
+          category: 'Toll Charge',
+          metadata: { projection: 'driver_toll_charge' },
+        } as any,
+        {
+          id: 'plaza-fallback',
+          date: '2026-07-01',
+          amount: -3705,
+          type: 'Usage',
+          category: 'Toll Usage',
+          paymentMethod: 'Cash',
+        } as any,
+      ],
+      finalizedReports: [],
+      periodType: 'weekly',
+      unifiedToll: true,
+      timezone: 'America/Jamaica',
+    });
+
+    expect(rows).toHaveLength(1);
+    // Disposition wins even when client plaza sum is larger
+    expect(rows[0].cashTollWash).toBeCloseTo(1710, 2);
+    expect(rows[0].personalTollCharge).toBeCloseTo(250, 2);
+    expect(rows[0].tollExpenses).toBeCloseTo(250, 2);
+  });
+
+  it('disposition cashWash=0 is respected (no client plaza fallback)', () => {
+    const rows = buildLedgerPayoutPeriodRows({
+      ledgerLoaded: true,
+      ledgerError: false,
+      ledgerRows: [
+        {
+          periodStart: '2026-06-29',
+          periodEnd: '2026-07-05',
+          grossRevenue: 100,
+          driverShare: 50,
+          tripCount: 1,
+          tier: { name: 'T', sharePercentage: 50 },
+          tollDisposition: { cashWash: 0, personal: 0, fleet: 100, unresolved: 0 },
+        },
+      ],
+      cashWeeks: [],
+      transactions: [
+        {
+          id: 'plaza',
+          date: '2026-07-01',
+          amount: -500,
+          type: 'Usage',
+          category: 'Toll Usage',
+          paymentMethod: 'Cash',
+        } as any,
+      ],
+      finalizedReports: [],
+      periodType: 'weekly',
+      unifiedToll: true,
+      timezone: 'America/Jamaica',
+    });
+
+    expect(rows[0].cashTollWash).toBe(0);
+  });
 });

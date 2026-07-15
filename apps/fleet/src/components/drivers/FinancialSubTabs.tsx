@@ -15,7 +15,9 @@ import { DriverExpensesHistory } from './DriverExpensesHistory';
 import { DriverPayoutHistory } from './DriverPayoutHistory';
 import { SettlementSummaryView } from './SettlementSummaryView';
 import { api } from '../../services/api';
-import { useDriverFinancialBundle, type DriverLike } from '../../hooks/useDriverFinancialBundle';
+import { useDriverFinancialBundle, type DriverFinancialBundle, type DriverLike } from '../../hooks/useDriverFinancialBundle';
+import type { PayoutPeriodRow } from '../../types/driverPayoutPeriod';
+import type { CashWeekData } from '../../utils/cashSettlementCalc';
 import { endOfWeek, format, startOfWeek } from 'date-fns';
 
 interface DriverTollChargeTotals {
@@ -47,6 +49,11 @@ interface FinancialSubTabsProps {
   /** Overview date range — SSOT Uber panel matches ledger period when provided. */
   periodFrom?: Date;
   periodTo?: Date;
+  /** Shared DriverDetail bundle — avoids a second Financials core fetch. */
+  financialBundle?: DriverFinancialBundle;
+  /** Shared weekly payout rows from DriverDetail pipeline. */
+  weeklyPeriodData?: PayoutPeriodRow[];
+  weeklyCashWeeks?: CashWeekData[];
 }
 
 // ────────────────────────────────────────────────────────────
@@ -65,9 +72,13 @@ export function FinancialSubTabs({
   uberLedgerReconciliation = null,
   periodFrom,
   periodTo,
+  financialBundle: financialBundleProp,
+  weeklyPeriodData,
+  weeklyCashWeeks,
 }: FinancialSubTabsProps) {
-  // Shared Financials core — stays mounted across Expenses/Settlement/Payout switches.
-  const financialBundle = useDriverFinancialBundle(driverId, driver);
+  // Prefer parent shared bundle; fallback keeps FinancialSubTabs usable alone.
+  const localBundle = useDriverFinancialBundle(driverId, driver);
+  const financialBundle = financialBundleProp ?? localBundle;
 
   // Toll cards default to all-time; toggle This week so admins aren't misled.
   const [reconScope, setReconScope] = React.useState<ReconScope>('all');
@@ -275,6 +286,7 @@ export function FinancialSubTabs({
           trips={allTrips}
           csvMetrics={csvMetrics}
           financialBundle={financialBundle}
+          weeklyPeriodData={weeklyPeriodData}
         />
       </TabsContent>
 
@@ -287,6 +299,8 @@ export function FinancialSubTabs({
           transactions={transactions}
           csvMetrics={csvMetrics}
           financialBundle={financialBundle}
+          weeklyPeriodData={weeklyPeriodData}
+          weeklyCashWeeks={weeklyCashWeeks}
         />
       </TabsContent>
 
