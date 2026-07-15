@@ -40,6 +40,16 @@ export interface PayoutPeriodRow {
   cashOwed: number;
   cashPaid: number;
   cashBalance: number;
+  /**
+   * Physical passenger cash only (Uber payout_cash + InDrive/Roam trip cash).
+   * Does not include float or personal tag charges.
+   */
+  passengerCash?: number;
+  /**
+   * Cash plaza tolls for the week (full amount) — credits Cash Still Held.
+   * Independent of disposition personal/business flags.
+   */
+  cashTollWash?: number;
   /** Uber bank settled for the period — informational; never part of cash risk. */
   bankSettled: number;
   status: PayoutStatus;

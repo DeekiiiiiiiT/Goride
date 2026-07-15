@@ -14,7 +14,7 @@ import { getFuelDeductionForPeriod } from './fuelDeductionForPeriod';
 import { deriveTollTxIsReconciled } from './tollHandledDisplay';
 import { fleetTzDateKey } from './timezoneDisplay';
 import { isDriverTollChargeRow, netDriverTollCharges } from './netDriverTollCharges';
-import { classifyTollLedgerEntry } from './tollDisposition';
+import { classifyTollLedgerEntry, isCashPaidToll } from './tollDisposition';
 
 type PeriodType = 'daily' | 'weekly' | 'monthly';
 
@@ -116,7 +116,7 @@ export function buildLedgerPayoutPeriodRows(params: {
       return {
         allocatedPayments: b?.allocatedPayments ?? 0,
         tollCredits: b?.tollExpenses ?? 0,
-        fuelCreditsInCashPaid: b?.fuelCredits ?? 0,
+        fuelCreditsInCashPaid: 0, // fuel never pads Cash Returned
         fifoPayments: b?.fifoPayments ?? 0,
         surplusPayments: b?.surplusPayments ?? 0,
       };
@@ -131,10 +131,19 @@ export function buildLedgerPayoutPeriodRows(params: {
       cashBalance: number;
       fuelCredits: number;
       bankSettled: number;
+      /** Physical trip/statement cash only (excludes float / personal). */
+      passengerCash: number;
       cashPaidBreakdown?: CashPaidBreakdown;
     } => {
       if (periodType === 'daily') {
-        return { cashOwed: 0, cashPaid: 0, cashBalance: 0, fuelCredits: 0, bankSettled: 0 };
+        return {
+          cashOwed: 0,
+          cashPaid: 0,
+          cashBalance: 0,
+          fuelCredits: 0,
+          bankSettled: 0,
+          passengerCash: 0,
+        };
       }
 
       if (periodType === 'monthly') {
@@ -144,7 +153,8 @@ export function buildLedgerPayoutPeriodRows(params: {
           paid = 0,
           bal = 0,
           fCred = 0,
-          bank = 0;
+          bank = 0,
+          passenger = 0;
         const agg = emptyBreakdown();
         for (const cw of cashWeeks) {
           if (cw.start >= mStart && cw.start <= mEnd) {
@@ -153,6 +163,7 @@ export function buildLedgerPayoutPeriodRows(params: {
             bal += cw.balance;
             fCred += cw.weeklyFuelCredits;
             bank += cw.bankSettled || 0;
+            passenger += cw.breakdown?.cashCollected ?? cw.amountOwed;
             const br = breakdownFromWeek(cw);
             agg.allocatedPayments += br.allocatedPayments;
             agg.tollCredits += br.tollCredits;
@@ -167,6 +178,7 @@ export function buildLedgerPayoutPeriodRows(params: {
           cashBalance: bal,
           fuelCredits: fCred,
           bankSettled: bank,
+          passengerCash: passenger,
           cashPaidBreakdown: agg,
         };
       }
@@ -184,16 +196,26 @@ export function buildLedgerPayoutPeriodRows(params: {
         }
       }
       if (cw) {
+        const passengerCash = cw.breakdown?.cashCollected ?? cw.amountOwed;
         return {
-          cashOwed: cw.amountOwed,
+          // Prefer physical passenger cash for settlement owed (not float/personal).
+          cashOwed: passengerCash,
           cashPaid: cw.amountPaid,
-          cashBalance: cw.balance,
+          cashBalance: passengerCash - cw.amountPaid,
           fuelCredits: cw.weeklyFuelCredits,
           bankSettled: cw.bankSettled || 0,
+          passengerCash,
           cashPaidBreakdown: breakdownFromWeek(cw),
         };
       }
-      return { cashOwed: 0, cashPaid: 0, cashBalance: 0, fuelCredits: 0, bankSettled: 0 };
+      return {
+        cashOwed: 0,
+        cashPaid: 0,
+        cashBalance: 0,
+        fuelCredits: 0,
+        bankSettled: 0,
+        passengerCash: 0,
+      };
     };
 
     const rows: PayoutPeriodRow[] = ledgerRows.map((lr: any) => {
@@ -229,6 +251,7 @@ export function buildLedgerPayoutPeriodRows(params: {
         cashBalance: legacyCashBalance,
         fuelCredits: txFuelCredits,
         bankSettled,
+        passengerCash: periodPassengerCash,
         cashPaidBreakdown,
       } = getCashForPeriod(periodStart, periodEnd);
 
@@ -253,50 +276,64 @@ export function buildLedgerPayoutPeriodRows(params: {
       const tollCharged = netDriverTollCharges(periodChargeTx);
       const expenseDeductions = fuelDeduction + tollCharged;
 
-      // Cash-paid plaza tolls in the period (credits cash still held).
+      // Full cash-plaza spend (paymentMethod cash / receipt) — credits still held.
+      // Do not gate on disposition: personal-flagged cash plaza still washes settlement.
       let periodCashTollWash = 0;
       for (const tx of expenseTx) {
         if (!tollBelongsToPeriod(tx.date, periodStart, periodEnd)) continue;
         if (!isTollCategory(tx.category)) continue;
-        if (isDriverTollChargeRow(tx)) continue;
-        if (classifyTollLedgerEntry(tx as any) !== 'cashWash') continue;
+        if (!isCashPaidToll(tx as any)) continue;
         periodCashTollWash += Math.abs(Number(tx.amount) || 0);
       }
+      // Fallback when cash flags missing but disposition already classified wash.
+      if (!(periodCashTollWash > 0.005)) {
+        for (const tx of expenseTx) {
+          if (!tollBelongsToPeriod(tx.date, periodStart, periodEnd)) continue;
+          if (!isTollCategory(tx.category)) continue;
+          if (classifyTollLedgerEntry(tx as any) !== 'cashWash') continue;
+          periodCashTollWash += Math.abs(Number(tx.amount) || 0);
+        }
+      }
+
+      const passengerCash = periodPassengerCash > 0.005 ? periodPassengerCash : baseCashOwed;
+      // Toll credits already inside Cash Returned (legacy weeklyExpenses path).
+      const washAlreadyInPaid = cashPaidBreakdown?.tollCredits ?? 0;
+      const cashTollWashExtra = Math.max(0, periodCashTollWash - washAlreadyInPaid);
 
       if (unifiedToll) {
-        // Tolls leave the payout deduction; settled once on the cash side per the
-        // server's reconciliation-aware disposition (cashWeeks are toll-neutral).
+        // Keep Cash Returned = payments only; cash plaza wash applied in settlement math.
+        // Personal tag charges show as Charged to Driver — not as Passenger Cash.
         const disp = (lr as any).tollDisposition || { cashWash: 0, personal: 0 };
-        const dispWash = Number(disp.cashWash) || 0;
-        const tollCashWash = dispWash > 0.005 ? dispWash : periodCashTollWash;
         const tollPersonal =
           Number(disp.personal) > 0.005 ? Number(disp.personal) : tollCharged;
         const r = computePeriodSettlement({
           driverShare,
           fuelDeduction,
-          baseCashOwed,
+          baseCashOwed: passengerCash,
           baseCashPaid,
-          tollCashWash,
-          tollPersonal,
+          tollCashWash: 0,
+          tollPersonal: 0,
           fuelCredits: 0, // applied in getPeriodSettlementComponents via fuelCredits field
         });
         totalDeductions = fuelDeduction;
         netPayout = r.netPayout;
-        cashOwed = r.cashOwed;
-        cashPaid = r.cashPaid;
-        cashBalance = r.cashBalance;
-        displayTollExpenses = r.tollChargedToDriver;
+        cashOwed = passengerCash;
+        cashPaid = baseCashPaid;
+        cashBalance = passengerCash - baseCashPaid;
+        displayTollExpenses = tollPersonal;
       } else {
         totalDeductions = tollExpenses + fuelDeduction;
         netPayout = driverShare - totalDeductions;
-        // Legacy: if cash tolls weren't already counted in cashPaid, credit them here.
-        const tollAlreadyInPaid = cashPaidBreakdown?.tollCredits ?? 0;
-        const tollExtra = Math.max(0, periodCashTollWash - tollAlreadyInPaid);
-        if (tollExtra > 0.005) {
-          cashPaid = cashPaid + tollExtra;
-          cashBalance = cashOwed - cashPaid;
-        }
+        cashOwed = passengerCash;
+        cashPaid = baseCashPaid;
+        cashBalance = passengerCash - baseCashPaid;
       }
+
+      // Still-held preview for status (same formula as getPeriodSettlementComponents).
+      const stillHeldPreview =
+        Math.round(
+          (passengerCash - baseCashPaid - cashTollWashExtra - effectiveFuelCredits) * 100,
+        ) / 100;
 
       return {
         periodStart,
@@ -320,11 +357,13 @@ export function buildLedgerPayoutPeriodRows(params: {
         cashOwed,
         cashPaid,
         cashBalance,
+        passengerCash,
+        cashTollWash: cashTollWashExtra,
         bankSettled,
         cashPaidBreakdown,
         status: (!isFinalized
           ? 'Pending'
-          : cashBalance - effectiveFuelCredits > 0.005
+          : stillHeldPreview > 0.005
             ? 'Awaiting Cash'
             : 'Finalized') as PayoutStatus,
       };

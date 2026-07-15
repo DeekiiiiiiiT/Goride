@@ -76,33 +76,44 @@ export function LogCashPaymentModal({
   const [referenceNumber, setReferenceNumber] = useState('');
   const [workPeriodStart, setWorkPeriodStart] = useState('');
   const [workPeriodEnd, setWorkPeriodEnd] = useState('');
-  const [selectedPeriod, setSelectedPeriod] = useState('general');
+  const [selectedPeriod, setSelectedPeriod] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const activePeriods = periods.filter(p => p.amountOwed > 0);
 
   // Helper: find a period key that matches a given start date ISO string
   const findPeriodKey = (startIso: string): string => {
-    if (!startIso || periods.length === 0) return 'general';
+    if (!startIso || periods.length === 0) return '';
     const targetDate = new Date(startIso).toISOString().split('T')[0];
     const match = periods.find(p => {
       const pDate = new Date(p.start).toISOString().split('T')[0];
       return pDate === targetDate;
     });
-    return match ? new Date(match.start).toISOString() : 'general';
+    return match ? new Date(match.start).toISOString() : '';
+  };
+
+  const applyPeriodSelection = (value: string, preferInitialAmount?: boolean) => {
+    setSelectedPeriod(value);
+    if (!value) {
+      setWorkPeriodStart('');
+      setWorkPeriodEnd('');
+      return;
+    }
+    const period = periods.find(p => new Date(p.start).toISOString() === value);
+    if (period) {
+      setWorkPeriodStart(format(new Date(period.start), 'yyyy-MM-dd'));
+      setWorkPeriodEnd(format(new Date(period.end), 'yyyy-MM-dd'));
+      // Prefill = collection gap (passenger − cash returned), not settlement residual
+      if (!preferInitialAmount || !initialAmount) {
+        const gap = Math.max(0, period.balance);
+        if (gap > 0.005) setAmount(gap.toFixed(2));
+      }
+    }
   };
 
   // Handle period dropdown change
   const handlePeriodChange = (value: string) => {
-    setSelectedPeriod(value);
-    if (value === 'general') {
-      setWorkPeriodStart('');
-      setWorkPeriodEnd('');
-    } else {
-      const period = periods.find(p => new Date(p.start).toISOString() === value);
-      if (period) {
-        setWorkPeriodStart(format(new Date(period.start), 'yyyy-MM-dd'));
-        setWorkPeriodEnd(format(new Date(period.end), 'yyyy-MM-dd'));
-      }
-    }
+    applyPeriodSelection(value, false);
   };
 
   // Reset form when opened
@@ -132,7 +143,7 @@ export function LogCashPaymentModal({
             setSelectedPeriod(findPeriodKey(initialTransaction.metadata.workPeriodStart));
         } else {
             setWorkPeriodStart('');
-            setSelectedPeriod('general');
+            setSelectedPeriod('');
         }
         
         if (initialTransaction.metadata?.workPeriodEnd) {
@@ -152,21 +163,25 @@ export function LogCashPaymentModal({
 
         if (initialWorkPeriodStart) {
           const key = findPeriodKey(initialWorkPeriodStart);
-          setSelectedPeriod(key);
-          if (key !== 'general') {
-            const period = periods.find(p => new Date(p.start).toISOString() === key);
-            if (period) {
-              setWorkPeriodStart(format(new Date(period.start), 'yyyy-MM-dd'));
-              setWorkPeriodEnd(format(new Date(period.end), 'yyyy-MM-dd'));
-            }
+          if (key) {
+            applyPeriodSelection(key, true);
+            if (initialAmount) setAmount(initialAmount.toFixed(2));
           } else {
             setWorkPeriodStart(initialWorkPeriodStart.split('T')[0]);
             setWorkPeriodEnd(initialWorkPeriodEnd ? initialWorkPeriodEnd.split('T')[0] : '');
+            setSelectedPeriod('');
           }
         } else {
-          setSelectedPeriod('general');
-          setWorkPeriodStart('');
-          setWorkPeriodEnd('');
+          // Default to newest open collection gap week
+          const open = activePeriods.find(p => p.balance > 0.005) || activePeriods[0];
+          if (open) {
+            applyPeriodSelection(new Date(open.start).toISOString(), !!initialAmount);
+            if (initialAmount) setAmount(initialAmount.toFixed(2));
+          } else {
+            setSelectedPeriod('');
+            setWorkPeriodStart('');
+            setWorkPeriodEnd('');
+          }
         }
       }
     }
@@ -176,6 +191,12 @@ export function LogCashPaymentModal({
     e.preventDefault();
     if (!amount || parseFloat(amount) <= 0) {
       toast.error("Please enter a valid amount");
+      return;
+    }
+
+    // Cash Collection must be tagged to a Settlement Week (Cash Returned SSOT)
+    if (transactionType === 'payment' && (!workPeriodStart || !workPeriodEnd)) {
+      toast.error("Select a Settlement Week for this cash payment");
       return;
     }
 
@@ -234,18 +255,15 @@ export function LogCashPaymentModal({
   };
 
   const formatPeriodSublabel = (period: SettlementPeriod): string => {
-    if (period.status === 'Paid' || period.status === 'Overpaid') return 'Settled';
-    if (period.status === 'Partial') return `$${period.balance.toFixed(2)} remaining`;
-    return `$${period.balance.toFixed(2)} unpaid`;
+    if (period.status === 'Paid' || period.status === 'Overpaid') return 'Collected';
+    if (period.balance > 0.005) return `$${period.balance.toFixed(2)} collection gap`;
+    return 'No gap';
   };
 
   // Get the currently selected period object (for the detail card)
-  const selectedPeriodObj = selectedPeriod !== 'general' 
+  const selectedPeriodObj = selectedPeriod
     ? periods.find(p => new Date(p.start).toISOString() === selectedPeriod) 
     : null;
-
-  // Periods with activity, sorted most recent first (already sorted from WeeklySettlementView)
-  const activePeriods = periods.filter(p => p.amountOwed > 0);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -340,12 +358,12 @@ export function LogCashPaymentModal({
             </div>
           </div>
           
-          {/* Settlement Period Dropdown */}
+          {/* Settlement Week — required for Cash Collection */}
           <div className="space-y-2">
             <Label htmlFor="settlement-period">
               <span className="flex items-center gap-1.5">
                 <Calendar className="h-3.5 w-3.5 text-slate-400" />
-                Apply to Settlement Period
+                Settlement Week{transactionType === 'payment' ? ' *' : ''}
               </span>
             </Label>
             {activePeriods.length > 0 ? (
@@ -354,29 +372,29 @@ export function LogCashPaymentModal({
                 value={selectedPeriod}
                 onChange={(e) => handlePeriodChange(e.target.value)}
                 className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                required={transactionType === 'payment'}
               >
-                <option value="general">🔵 General (Waterfall Pool)</option>
-                <optgroup label="Settlement Weeks">
-                  {activePeriods.map((period) => {
-                    const key = new Date(period.start).toISOString();
-                    const emoji = getStatusEmoji(period);
-                    const label = formatPeriodLabel(period);
-                    const sublabel = formatPeriodSublabel(period);
-                    return (
-                      <option key={key} value={key}>
-                        {emoji} {label} — {sublabel}
-                      </option>
-                    );
-                  })}
-                </optgroup>
+                <option value="" disabled>
+                  Select settlement week…
+                </option>
+                {activePeriods.map((period) => {
+                  const key = new Date(period.start).toISOString();
+                  const emoji = getStatusEmoji(period);
+                  const label = formatPeriodLabel(period);
+                  const sublabel = formatPeriodSublabel(period);
+                  return (
+                    <option key={key} value={key}>
+                      {emoji} {label} — {sublabel}
+                    </option>
+                  );
+                })}
               </select>
             ) : (
               <div className="flex h-9 w-full items-center rounded-md border border-input bg-slate-50 px-3 text-sm text-slate-500">
-                🔵 General (Waterfall Pool) — no settlement data yet
+                No settlement weeks available yet
               </div>
             )}
 
-            {/* Detail card when a specific period is selected */}
             {selectedPeriodObj ? (
               <div className={`rounded-lg border p-3 text-xs space-y-2 ${
                 selectedPeriodObj.status === 'Paid' || selectedPeriodObj.status === 'Overpaid'
@@ -399,21 +417,20 @@ export function LogCashPaymentModal({
                 </div>
                 <div className="grid grid-cols-3 gap-2 text-center">
                   <div>
-                    <p className="text-slate-400 text-[10px] uppercase tracking-wide">Owed</p>
+                    <p className="text-slate-400 text-[10px] uppercase tracking-wide">Passenger</p>
                     <p className="font-semibold text-slate-700">${selectedPeriodObj.amountOwed.toFixed(2)}</p>
                   </div>
                   <div>
-                    <p className="text-slate-400 text-[10px] uppercase tracking-wide">Paid</p>
+                    <p className="text-slate-400 text-[10px] uppercase tracking-wide">Returned</p>
                     <p className="font-semibold text-emerald-600">${selectedPeriodObj.amountPaid.toFixed(2)}</p>
                   </div>
                   <div>
-                    <p className="text-slate-400 text-[10px] uppercase tracking-wide">Balance</p>
+                    <p className="text-slate-400 text-[10px] uppercase tracking-wide">Gap</p>
                     <p className={`font-semibold ${selectedPeriodObj.balance > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
                       ${selectedPeriodObj.balance.toFixed(2)}
                     </p>
                   </div>
                 </div>
-                {/* Mini progress bar */}
                 {selectedPeriodObj.amountOwed > 0 && (
                   <div className="pt-0.5">
                     <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
@@ -431,11 +448,11 @@ export function LogCashPaymentModal({
                   </div>
                 )}
               </div>
-            ) : (
-              <p className="text-[11px] text-slate-400 leading-tight">
-                Payment will be applied oldest-debt-first via the waterfall pool.
+            ) : transactionType === 'payment' ? (
+              <p className="text-[11px] text-slate-500 leading-tight">
+                Cash payments classified as Cash Returned only when tagged to a Settlement Week.
               </p>
-            )}
+            ) : null}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

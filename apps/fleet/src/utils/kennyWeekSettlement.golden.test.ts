@@ -5,8 +5,13 @@ import type { CashWeekData } from './cashSettlementCalc';
 import type { FinancialTransaction } from '../types/data';
 
 /**
- * Kenny Jun 29–Jul 5 2026 golden: after passenger cash − handbacks − fleet fuel − cash tolls − net payout,
- * fleet owes the driver (~+$5k), not driver owes ~$22k.
+ * Kenny Jun 29–Jul 5 2026 — Cash Returned = Settlement Week–tagged cash only ($7,500).
+ * Fuel reimbursements never pad Cash Returned; fleet fuel + cash tolls credit on Settlement.
+ *
+ *   62,497.45 passenger − 7,500 cash returned − 21,415.26 fleet fuel − 3,705 cash tolls
+ *     = 29,877.19 still held
+ *   29,673.38 net payout − 29,877.19
+ *     ≈ −203.81 (near even; small driver owing)
  */
 describe('Kenny Jun 29 week settlement golden', () => {
   const weekStart = new Date('2026-06-29T00:00:00');
@@ -16,24 +21,23 @@ describe('Kenny Jun 29 week settlement golden', () => {
     {
       start: weekStart,
       end: weekEnd,
-      // Uber payout_cash 33947.45 + InDrive 15350 + Roam 13200
       amountOwed: 62497.45,
-      amountPaid: 12826.25,
-      balance: 62497.45 - 12826.25,
+      amountPaid: 7500,
+      balance: 62497.45 - 7500,
       bankSettled: 48168.32,
       status: 'Partial',
       tripCount: 95,
       cashTripCount: 54,
       isFromCsv: true,
-      weeklyFuelCredits: 2000,
+      weeklyFuelCredits: 0,
       breakdown: {
         cashCollected: 62497.45,
-        floatIssued: 0,
+        floatIssued: 1995,
         allocatedPayments: 7500,
-        fifoPayments: 3326.25,
+        fifoPayments: 0,
         surplusPayments: 0,
         tollExpenses: 0,
-        fuelCredits: 2000,
+        fuelCredits: 0,
         tollCharges: 0,
         bankSettled: 48168.32,
         uberCash: 33947.45,
@@ -53,7 +57,7 @@ describe('Kenny Jun 29 week settlement golden', () => {
     status: 'pending',
   } as FinancialTransaction;
 
-  it('uses fleet fuel share (not $2k reimbursement) + cash toll wash → Company Owes ~$5k', () => {
+  it('Cash Returned is tagged cash only; fleet fuel + tolls stay outside Cash Returned', () => {
     const rows = buildLedgerPayoutPeriodRows({
       ledgerLoaded: true,
       ledgerError: false,
@@ -88,15 +92,14 @@ describe('Kenny Jun 29 week settlement golden', () => {
     expect(rows).toHaveLength(1);
     const row = rows[0];
     expect(row.isFinalized).toBe(true);
+    expect(row.passengerCash).toBeCloseTo(62497.45, 2);
+    expect(row.cashPaid).toBeCloseTo(7500, 2);
     expect(row.fuelCredits).toBeCloseTo(21415.26, 2);
+    expect(row.cashTollWash).toBeCloseTo(3705, 2);
     expect(row.netPayout).toBeCloseTo(34758.12 - 5084.74, 2);
 
     const { adjCashBalance, settlement } = getPeriodSettlementComponents(row);
-    // Still held ≈ passenger − handbacks − fleet fuel − cash tolls
-    // (Cash Paid includes $2k fuel credit already; fleet credit is the full companyShare.)
-    expect(adjCashBalance).toBeCloseTo(26550.94, 0);
-    // Fleet owes driver (positive settlement)
-    expect(settlement).toBeCloseTo(3122.44, 0);
-    expect(settlement).toBeGreaterThan(0);
+    expect(adjCashBalance).toBeCloseTo(29877.19, 2);
+    expect(settlement).toBeCloseTo(-203.81, 2);
   });
 });

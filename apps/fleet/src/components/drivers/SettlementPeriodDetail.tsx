@@ -220,10 +220,10 @@ export function SettlementPeriodDetail({ row, open, onOpenChange }: SettlementPe
           />
           <LineItem
             icon={<Wallet className="h-4 w-4" />}
-            label="− Cash handed back"
+            label="− Cash Returned"
             value={row.cashHandbacks > 0.005 ? `−${fmt(row.cashHandbacks)}` : '$0.00'}
             valueColor={row.cashHandbacks > 0.005 ? 'text-emerald-700' : 'text-slate-400'}
-            sub="Cash returned to the fleet this week"
+            sub="Log Cash Payment rows tagged to this Settlement Week only"
           />
           <LineItem
             icon={<Fuel className="h-4 w-4" />}
@@ -232,13 +232,13 @@ export function SettlementPeriodDetail({ row, open, onOpenChange }: SettlementPe
               row.fuelCreditsApplied > 0.005 ? `−${fmt(row.fuelCreditsApplied)}` : '$0.00'
             }
             valueColor={row.fuelCreditsApplied > 0.005 ? 'text-emerald-700' : 'text-slate-400'}
-            sub="Company fuel share / cash fuel already covered"
+            sub="Company fuel share — separate from Cash Returned"
           />
           <LineItem
-            label="− Cash-toll credits"
+            label="− Cash toll credit"
             value={row.cashTollCredits > 0.005 ? `−${fmt(row.cashTollCredits)}` : '$0.00'}
             valueColor={row.cashTollCredits > 0.005 ? 'text-emerald-700' : 'text-slate-400'}
-            sub="Cash tolls washed (when applicable)"
+            sub="Cash plaza tolls — separate from Cash Returned"
           />
 
           <Separator className="my-1" />

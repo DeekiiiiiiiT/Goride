@@ -53,8 +53,12 @@ export interface CashSettlementInput {
 export interface CashWeekData {
     start: Date;
     end: Date;
-    amountOwed: number;     // cash risk (statement/trip cash + float + personal tolls) — never bank
-    amountPaid: number;     // allocated payments + FIFO + surplus + toll credits + fuel credits
+    amountOwed: number;     // passenger cash (Uber payout_cash + InDrive/Roam) — never bank/float/personal
+    /**
+     * Cash Returned — Log Cash Payment rows tagged to this Settlement Week only.
+     * Never includes fuel reimbursements, toll wash, fleet fuel share, or untagged date buckets.
+     */
+    amountPaid: number;
     balance: number;        // amountOwed - amountPaid
     /** Uber bank settled for the week — informational; not debt. */
     bankSettled: number;
@@ -67,9 +71,12 @@ export interface CashWeekData {
         cashCollected: number;
         floatIssued: number;
         allocatedPayments: number;
+        /** @deprecated Deficit FIFO removed — always 0; kept for overlay compat. */
         fifoPayments: number;
+        /** Untagged cash payments whose transaction date falls in this week. */
         surplusPayments: number;
         tollExpenses: number;
+        /** Always 0 in Cash Returned path — fuel credits live on Settlement / Fuel desk. */
         fuelCredits: number;
         tollCharges: number;   // personal-use tolls billed to the driver (debit → increases owed)
         bankSettled: number;
@@ -183,23 +190,23 @@ export function computeWeeklyCashSettlement(input: CashSettlementInput): CashWee
             ledgerBankSettled,
             ledgerUberCash,
         });
-        const amountOwed = risk.cashRisk;
+        // Passenger cash = Uber statement cash + InDrive/Roam only (never float / personal / bank).
+        // Personal tag charges are applied later on Settlement; float stays on the Float desk.
+        const amountOwed = risk.cashCollected;
         const isFromCsv = risk.breakdown.uberFromStatement;
 
         // --- Calculate Credits (Allocated Payments + Approved Cash Tolls) ---
 
-        // 1. Allocated Payments (Metadata based)
+        // 1. Work-period cash payments only (never fuel/toll accounting credits).
         const allocatedPayments = safeTransactions.filter(t => {
-            if (!t) return false;
-            if (t.metadata?.workPeriodStart) {
-                // Strip time and reconstruct as local noon to avoid UTC-midnight timezone day-shift
-                const startStr = t.metadata.workPeriodStart.split('T')[0];
-                const endStr = t.metadata.workPeriodEnd ? t.metadata.workPeriodEnd.split('T')[0] : startStr;
-                const payStart = new Date(startStr + 'T12:00:00');
-                const payEnd = new Date(endStr + 'T12:00:00');
-                return areIntervalsOverlapping({ start: payStart, end: payEnd }, { start: weekStart, end: weekEnd });
-            }
-            return false;
+            if (!t?.metadata?.workPeriodStart) return false;
+            if (!isDriverCashPaymentTransaction(t)) return false;
+            // Strip time and reconstruct as local noon to avoid UTC-midnight timezone day-shift
+            const startStr = t.metadata.workPeriodStart.split('T')[0];
+            const endStr = t.metadata.workPeriodEnd ? t.metadata.workPeriodEnd.split('T')[0] : startStr;
+            const payStart = new Date(startStr + 'T12:00:00');
+            const payEnd = new Date(endStr + 'T12:00:00');
+            return areIntervalsOverlapping({ start: payStart, end: payEnd }, { start: weekStart, end: weekEnd });
         });
 
         // 2. Approved Cash Toll Expenses (Treated as Credit/Payment)
@@ -214,150 +221,102 @@ export function computeWeeklyCashSettlement(input: CashSettlementInput): CashWee
             })
             .reduce((sum, t) => sum + Math.abs(t.amount || 0), 0);
 
-        // 3. Fuel Credits for this week
-        // Primary source: 'Fuel Settlement' created at finalization — uses report.companyShare
-        // (the fleet's share after driver share deducted), matching the reconciliation table.
-        // Fallback: 'Fuel Reimbursement' from settlementService (enterprise sync) if no settlement exists.
-        // NOTE: We intentionally EXCLUDE 'Fuel Reimbursement Credit' (created at individual approval)
-        // because those use the full tx.amount (driver's total cash outlay), not the fleet share.
+        // Fuel accounting credits (companyShare) — NEVER Cash Returned; Settlement applies fleet fuel separately.
+        const fuelInWeek = (t: FinancialTransaction): boolean => {
+            if (!t || (t.amount || 0) <= 0) return false;
+            if (t.metadata?.reportId) {
+                const parts = String(t.metadata.reportId).split('_');
+                const dateStr = parts[parts.length - 1];
+                if (dateStr && dateStr.length === 10 && dateStr.includes('-')) {
+                    const reportStart = new Date(dateStr + 'T12:00:00');
+                    return isWithinInterval(reportStart, { start: weekStart, end: weekEnd });
+                }
+            }
+            if (t.metadata?.workPeriodStart) {
+                const startStr = String(t.metadata.workPeriodStart).split('T')[0];
+                const payStart = new Date(startStr + 'T12:00:00');
+                return isWithinInterval(payStart, { start: weekStart, end: weekEnd });
+            }
+            if (!t.date) return false;
+            return isWithinInterval(new Date(t.date), { start: weekStart, end: weekEnd });
+        };
+
         const weeklyFuelCredits = safeTransactions
             .filter(t => {
-                if (!t) return false;
-                // Primary: Fuel Settlement Credit (finalization) — correct fleet share (companyShare)
-                // Secondary: Fuel Settlement (legacy finalization) — check metadata.companyShare
-                // Tertiary: Fuel Reimbursement (enterprise sync) — also correct
-                const isFuelCredit = t.category === 'Fuel Settlement Credit' || t.category === 'Fuel Settlement' || t.category === 'Fuel Reimbursement';
-                if (!isFuelCredit || (t.amount || 0) <= 0) return false;
-
-                // Priority 1: Report ID from metadata (Fuel Settlement stores reportId)
-                if (t.metadata?.reportId) {
-                    // reportId format: "<vehicleId>_<weekStart>" e.g. "abc123_2026-02-16"
-                    const parts = t.metadata.reportId.split('_');
-                    const dateStr = parts[parts.length - 1]; // e.g. "2026-02-16"
-                    if (dateStr && dateStr.length === 10 && dateStr.includes('-')) {
-                        const reportStart = new Date(dateStr + 'T12:00:00');
-                        return isWithinInterval(reportStart, { start: weekStart, end: weekEnd });
-                    }
-                }
-
-                // Priority 2: Work Period Metadata (Enterprise Sync)
-                if (t.metadata?.workPeriodStart) {
-                    const startStr = t.metadata.workPeriodStart.split('T')[0];
-                    const payStart = new Date(startStr + 'T12:00:00');
-                    return isWithinInterval(payStart, { start: weekStart, end: weekEnd });
-                }
-
-                // Priority 3: Transaction Date (Fallback)
-                if (!t.date) return false;
-                const tDate = new Date(t.date);
-                return isWithinInterval(tDate, { start: weekStart, end: weekEnd });
+                if (!t || !fuelInWeek(t)) return false;
+                return t.category === 'Fuel Settlement Credit' || t.category === 'Fuel Settlement';
             })
             .reduce((sum, t) => {
-                // For Fuel Settlement Credit, use amount directly (it's already companyShare)
-                if (t.category === 'Fuel Settlement Credit') {
-                    return sum + (t.amount || 0);
-                }
-                // For legacy Fuel Settlement, prefer metadata.companyShare if available
+                if (t.category === 'Fuel Settlement Credit') return sum + (t.amount || 0);
                 if (t.category === 'Fuel Settlement' && t.metadata?.companyShare) {
-                    return sum + (t.metadata.companyShare || 0);
+                    return sum + (Number(t.metadata.companyShare) || 0);
                 }
-                // Fallback: use transaction amount (may be netAdjustment for old Fuel Settlement)
                 return sum + (t.amount || 0);
             }, 0);
 
-        const allocatedPaid = allocatedPayments.reduce((sum, t) => sum + (t.amount || 0), 0) + weeklyExpenses + weeklyFuelCredits;
+        // Cash Returned SSOT = Settlement Week–tagged Log Cash Payment rows only.
+        // Fuel reimbursements and tolls belong to Fuel / Toll desks — never here.
+        const allocatedPaymentsOnly = allocatedPayments.reduce((sum, t) => sum + (t.amount || 0), 0);
 
         return {
             start: weekStart,
             end: weekEnd,
             amountOwed,
-            allocatedPaid,
+            allocatedPaid: allocatedPaymentsOnly,
             weeklyFuelCredits,
             weekTrips,
             isFromCsv,
             bankSettled: risk.bankSettled,
-            debtPaid: 0,      // Will be filled in Phase 2 (FIFO)
-            surplusPaid: 0,   // Will be filled in Phase 2 (Surplus)
-            // Breakdown detail fields
+            debtPaid: 0,
+            surplusPaid: 0, // untagged cash tracked for visibility; not Cash Returned
             _cashCollected: risk.cashCollected,
             _floatIssued: weeklyFloat,
-            _allocatedPaymentsOnly: allocatedPayments.reduce((sum, t) => sum + (t.amount || 0), 0),
+            _allocatedPaymentsOnly: allocatedPaymentsOnly,
             _tollExpenses: weeklyExpenses,
-            _fuelCredits: weeklyFuelCredits,
+            _fuelCredits: 0,
             _tollCharges: weeklyTollCharges,
             _uberCash: risk.breakdown.uberCash,
             _nonUberTripCash: risk.breakdown.nonUberTripCash,
         };
     });
 
-    // Phase 2: Distribute Unallocated Payments (FIFO)
-    // 1. Identify Unallocated Transactions
+    // Phase 2: Track untagged cash by payment date (ops visibility only — does NOT inflate Cash Returned).
     const unallocatedTransactions = safeTransactions.filter(t => {
         if (!t) return false;
-        // Exclude Float Issue (Debt)
         if (t.category === 'Float Issue') return false;
-        // Exclude Fuel Credits (already date-allocated above in Phase 1)
-        if (t.category === 'Fuel Settlement Credit' || t.category === 'Fuel Settlement' || t.category === 'Fuel Reimbursement' || t.category === 'Fuel Reimbursement Credit') return false;
-
-        // Strict Safety: Never include Tag Balance operations as Driver Credits
+        if (
+            t.category === 'Fuel Settlement Credit' ||
+            t.category === 'Fuel Settlement' ||
+            t.category === 'Fuel Reimbursement' ||
+            t.category === 'Fuel Reimbursement Credit'
+        ) {
+            return false;
+        }
         if (t.paymentMethod === 'Tag Balance') return false;
         if (t.description?.toLowerCase().includes('top-up')) return false;
-
-        // Exclude Tolls (Expenses)
         const isToll = t.category === 'Toll Usage' || t.category === 'Toll' || t.category === 'Tolls';
         if (isToll) return false;
-
-        // Exclude Allocated (Metadata)
         if (t.metadata?.workPeriodStart) return false;
-
-        const isPayment = isDriverCashPaymentTransaction(t);
-
-        return isPayment && (t.amount || 0) > 0;
+        return isDriverCashPaymentTransaction(t);
     });
 
-    let totalUnallocatedPool = unallocatedTransactions.reduce((sum, t) => sum + (t.amount || 0), 0);
-
-    // 2. Pay off Debt (Oldest Week First)
-    weeksData.forEach(week => {
-        const deficit = week.amountOwed - week.allocatedPaid;
-        if (deficit > 0 && totalUnallocatedPool > 0) {
-            const payment = Math.min(deficit, totalUnallocatedPool);
-            week.debtPaid = payment;
-            totalUnallocatedPool -= payment;
-        }
-    });
-
-    // 3. Distribute Surplus (If any pool remains)
-    if (totalUnallocatedPool > 0) {
-        const sortedTx = [...unallocatedTransactions].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
-        for (const tx of sortedTx) {
-            if (totalUnallocatedPool <= 0) break;
-
-            const amountToAssign = Math.min(tx.amount || 0, totalUnallocatedPool);
-
-            const txDate = new Date(tx.date);
-            const targetWeek = weeksData.find(w => isWithinInterval(txDate, { start: w.start, end: w.end }));
-
-            if (targetWeek) {
-                targetWeek.surplusPaid += amountToAssign;
-            } else {
-                if (weeksData.length > 0) {
-                    weeksData[weeksData.length - 1].surplusPaid += amountToAssign;
-                }
-            }
-
-            totalUnallocatedPool -= amountToAssign;
+    for (const tx of unallocatedTransactions) {
+        if (!tx?.date) continue;
+        const txDate = new Date(tx.date);
+        const targetWeek = weeksData.find(w => isWithinInterval(txDate, { start: w.start, end: w.end }));
+        if (targetWeek) {
+            targetWeek.surplusPaid += tx.amount || 0;
+        } else if (weeksData.length > 0) {
+            weeksData[weeksData.length - 1].surplusPaid += tx.amount || 0;
         }
     }
 
-    // Phase 3: Final Assembly
+    // Phase 3: amountPaid = Cash Returned = work-period tagged cash only
     return weeksData.map(week => {
-        const amountPaid = week.allocatedPaid + week.debtPaid + week.surplusPaid;
+        const amountPaid = week.allocatedPaid;
 
         const cashTripCount = week.weekTrips.filter(t => getTripPhysicalCashCollected(t) > 0).length;
 
-        // Status Logic
         let status: 'Paid' | 'Partial' | 'Unpaid' | 'Overpaid' | 'No Activity' = 'Unpaid';
         if (week.amountOwed === 0 && amountPaid === 0) status = 'No Activity';
         else if (amountPaid >= week.amountOwed - 0.01) status = 'Paid';
@@ -377,12 +336,11 @@ export function computeWeeklyCashSettlement(input: CashSettlementInput): CashWee
             cashTripCount,
             isFromCsv: week.isFromCsv,
             weeklyFuelCredits: week.weeklyFuelCredits,
-            // Breakdown details for overlay
             breakdown: {
                 cashCollected: week._cashCollected,
                 floatIssued: week._floatIssued,
                 allocatedPayments: week._allocatedPaymentsOnly,
-                fifoPayments: week.debtPaid,
+                fifoPayments: 0,
                 surplusPayments: week.surplusPaid,
                 tollExpenses: week._tollExpenses,
                 fuelCredits: week._fuelCredits,

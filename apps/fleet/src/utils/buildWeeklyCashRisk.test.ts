@@ -112,7 +112,7 @@ describe('buildWeeklyCashRisk', () => {
     expect(r.cashRisk).toBeCloseTo(49401.85, 2);
   });
 
-  it('computeWeeklyCashSettlement amountOwed matches cash risk (not Math.max inflated trip sum)', () => {
+  it('computeWeeklyCashSettlement amountOwed matches passenger cash collected (not inflated trip sum)', () => {
     const weeks = computeWeeklyCashSettlement({
       trips,
       transactions: [],

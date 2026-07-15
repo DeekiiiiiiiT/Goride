@@ -56,14 +56,9 @@ interface PayoutPeriodDetailProps {
 const fmt = (n: number) =>
   '$' + Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+/** Cash Returned = Settlement Week–tagged allocations only. */
 function sumCashPaidParts(b: CashPaidBreakdown): number {
-  return (
-    b.allocatedPayments +
-    b.tollCredits +
-    b.fuelCreditsInCashPaid +
-    b.fifoPayments +
-    b.surplusPayments
-  );
+  return b.allocatedPayments;
 }
 
 const statusConfig: Record<PayoutStatus, { icon: React.ReactNode; color: string; bg: string; label: string; description: string }> = {
@@ -557,28 +552,13 @@ export function PayoutPeriodDetail({ row, open, onOpenChange }: PayoutPeriodDeta
           <div className="space-y-1 pt-2">
             {[
               {
-                label: 'Allocated payments',
-                sub: 'Cash collections / payments tagged to this work period',
+                label: 'Cash Collection payments',
+                sub: 'Log Cash Payment rows tagged to this Settlement Week',
                 value: row.cashPaidBreakdown.allocatedPayments,
               },
               {
-                label: 'Cash toll credits',
-                sub: 'Approved cash tolls applied as credits',
-                value: row.cashPaidBreakdown.tollCredits,
-              },
-              {
-                label: 'Fuel credits (in cash paid)',
-                sub: 'Fuel settlement credits included in this total',
-                value: row.cashPaidBreakdown.fuelCreditsInCashPaid,
-              },
-              {
-                label: 'FIFO payments',
-                sub: 'Unallocated payments applied to older weeks first',
-                value: row.cashPaidBreakdown.fifoPayments,
-              },
-              {
-                label: 'Surplus payments',
-                sub: 'Remaining pool assigned to this week',
+                label: 'Untagged (not in Cash Returned)',
+                sub: 'Payments dated in week without a Settlement Week tag',
                 value: row.cashPaidBreakdown.surplusPayments,
               },
             ].map((line) => (

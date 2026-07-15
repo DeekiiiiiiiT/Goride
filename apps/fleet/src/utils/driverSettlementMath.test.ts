@@ -3,13 +3,8 @@ import { getPeriodSettlementComponents, getAdjCashBalance, aggregateFinalizedNet
 import type { PayoutPeriodRow } from '../types/driverPayoutPeriod';
 
 /**
- * Pins the Step 7 fix: getPeriodSettlementComponents used to compute
- * settlement = adjCashBalance − netPayout (a competing formula with the
- * opposite sign of driverPeriodSettlement.ts's computePeriodSettlement, which
- * SettlementSummaryView and buildLedgerPayoutPeriodRows already use). It now
- * delegates to computePeriodSettlement, so positive settlement = company owes
- * the driver, negative = driver owes the company — matching every other
- * settlement surface.
+ * Pins locked settlement: passenger − cash returned − fleet fuel − cash tolls.
+ * Positive settlement = company owes the driver.
  */
 function makeRow(overrides: Partial<PayoutPeriodRow>): PayoutPeriodRow {
   return {
@@ -52,7 +47,7 @@ describe('getAdjCashBalance', () => {
 
 describe('getPeriodSettlementComponents', () => {
   it('positive settlement = company owes the driver (driver holds less cash than they are owed)', () => {
-    const row = makeRow({ isFinalized: true, netPayout: 100, cashBalance: 10, fuelCredits: 0 });
+    const row = makeRow({ isFinalized: true, netPayout: 100, cashBalance: 10, cashOwed: 10, cashPaid: 0, fuelCredits: 0 });
     const r = getPeriodSettlementComponents(row);
     expect(r.adjCashBalance).toBe(10);
     expect(r.netPayoutApplied).toBe(100);
@@ -60,39 +55,43 @@ describe('getPeriodSettlementComponents', () => {
   });
 
   it('negative settlement = driver owes the company (driver holds more cash than they are owed)', () => {
-    const row = makeRow({ isFinalized: true, netPayout: 25, cashBalance: 90, fuelCredits: 0 });
+    const row = makeRow({ isFinalized: true, netPayout: 25, cashBalance: 90, cashOwed: 90, cashPaid: 0, fuelCredits: 0 });
     const r = getPeriodSettlementComponents(row);
     expect(r.settlement).toBe(-65); // 25 - 90, driver owes $65
   });
 
   it('nets fuelCredits out of the cash balance before computing settlement', () => {
-    const row = makeRow({ isFinalized: true, netPayout: 25, cashBalance: 90, fuelCredits: 20 });
+    const row = makeRow({ isFinalized: true, netPayout: 25, cashOwed: 90, cashPaid: 0, cashBalance: 90, fuelCredits: 20 });
     const r = getPeriodSettlementComponents(row);
     expect(r.adjCashBalance).toBe(70); // 90 - 20
-    expect(r.settlement).toBe(-45);    // 25 - 70 (was -65 without the fuel credit)
+    expect(r.settlement).toBe(-45);    // 25 - 70
   });
 
-  it('does not double-subtract fuel already counted in cashPaid', () => {
+  it('Cash Returned is tagged cash only; fleet fuel + cash tolls apply separately', () => {
     const row = makeRow({
       isFinalized: true,
-      netPayout: 25,
-      cashBalance: 70, // already net of $20 fuel in cashPaid
-      fuelCredits: 20,
+      netPayout: 29673.38,
+      passengerCash: 62497.45,
+      cashOwed: 62497.45,
+      cashPaid: 7500,
+      cashBalance: 62497.45 - 7500,
+      fuelCredits: 21415.26,
+      cashTollWash: 3705,
       cashPaidBreakdown: {
-        allocatedPayments: 0,
+        allocatedPayments: 7500,
         tollCredits: 0,
-        fuelCreditsInCashPaid: 20,
+        fuelCreditsInCashPaid: 0,
         fifoPayments: 0,
         surplusPayments: 0,
       },
     });
     const r = getPeriodSettlementComponents(row);
-    expect(r.adjCashBalance).toBe(70);
-    expect(r.settlement).toBe(-45);
+    expect(r.adjCashBalance).toBeCloseTo(29877.19, 2);
+    expect(r.settlement).toBeCloseTo(-203.81, 2);
   });
 
   it('treats netPayout as 0 until the period is finalized', () => {
-    const row = makeRow({ isFinalized: false, netPayout: 500, cashBalance: 10, fuelCredits: 0 });
+    const row = makeRow({ isFinalized: false, netPayout: 500, cashOwed: 10, cashPaid: 0, cashBalance: 10, fuelCredits: 0 });
     const r = getPeriodSettlementComponents(row);
     expect(r.netPayoutApplied).toBe(0);
     expect(r.settlement).toBe(-10); // 0 - 10, not 500 - 10
@@ -102,9 +101,9 @@ describe('getPeriodSettlementComponents', () => {
 describe('aggregateFinalizedNetSettlement / countPendingEarningsPeriods', () => {
   it('sums settlement across finalized rows only, and counts the rest as pending', () => {
     const rows: PayoutPeriodRow[] = [
-      makeRow({ isFinalized: true, netPayout: 100, cashBalance: 10 }),  // settlement +90
-      makeRow({ isFinalized: true, netPayout: 25, cashBalance: 90 }),   // settlement -65
-      makeRow({ isFinalized: false, netPayout: 500, cashBalance: 0 }),  // excluded (pending)
+      makeRow({ isFinalized: true, netPayout: 100, cashOwed: 10, cashPaid: 0, cashBalance: 10 }),  // +90
+      makeRow({ isFinalized: true, netPayout: 25, cashOwed: 90, cashPaid: 0, cashBalance: 90 }),   // -65
+      makeRow({ isFinalized: false, netPayout: 500, cashOwed: 0, cashPaid: 0, cashBalance: 0 }),  // excluded
     ];
     expect(aggregateFinalizedNetSettlement(rows)).toBe(25); // 90 + (-65)
     expect(countPendingEarningsPeriods(rows)).toBe(1);

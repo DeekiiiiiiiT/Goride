@@ -138,76 +138,67 @@ export function WeeklySettlementView({
                                             <span>{week.cashTripCount} cash trips • {week.tripCount} total trips</span>
                                         )}
                                     </p>
-                                    {week.weeklyFuelCredits > 0 && (
-                                        <p className="text-xs text-emerald-600 font-medium">
-                                            Includes ${week.weeklyFuelCredits.toFixed(2)} fuel credit
-                                        </p>
-                                    )}
                                 </div>
 
-                                {/* Financials — same labels as Settlement tab */}
+                                {/* Collection desk metrics — Settlement decision stays secondary */}
                                 <div className="flex flex-col sm:flex-row gap-4 sm:gap-8">
                                     <div className="space-y-0.5">
                                         <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Passenger cash</p>
                                         <p className="text-lg font-bold text-slate-900">${week.amountOwed.toFixed(2)}</p>
                                     </div>
+                                    <div className="space-y-0.5">
+                                        <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Cash returned</p>
+                                        <p className="text-lg font-bold text-emerald-600">${week.amountPaid.toFixed(2)}</p>
+                                        <p className="text-[10px] text-slate-400">Tagged to this week</p>
+                                    </div>
+                                    <div className="space-y-0.5 min-w-[80px]">
+                                        <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">
+                                            Collection gap
+                                        </p>
+                                        <p className={cn("text-lg font-bold", week.balance > 0.005 ? "text-red-600" : "text-slate-400")}>
+                                            ${week.balance.toFixed(2)}
+                                        </p>
+                                    </div>
                                     {(week.bankSettled || 0) > 0.005 && (
                                         <div className="space-y-0.5">
                                             <p className="text-xs font-medium text-slate-400 uppercase tracking-wide">Bank Settled</p>
                                             <p className="text-sm font-semibold text-slate-400">${week.bankSettled.toFixed(2)}</p>
+                                            <p className="text-[10px] text-slate-400">Info only</p>
                                         </div>
                                     )}
-                                    <div className="space-y-0.5">
-                                        <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Cash returned</p>
-                                        <p className="text-lg font-bold text-emerald-600">${week.amountPaid.toFixed(2)}</p>
-                                    </div>
-                                    {(() => {
-                                        const key = format(week.start, 'yyyy-MM-dd');
-                                        const st = weekSettlementByMonday?.[key];
-                                        const held =
-                                            st?.finalized === true ? st.adjCashBalance : week.balance;
-                                        return (
-                                            <div className="space-y-0.5 min-w-[80px]">
-                                                <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">
-                                                    Cash still held
-                                                </p>
-                                                <p className={cn("text-lg font-bold", held > 0.005 ? "text-red-600" : "text-slate-400")}>
-                                                    ${held.toFixed(2)}
-                                                </p>
-                                            </div>
-                                        );
-                                    })()}
                                     {weekSettlementByMonday && (() => {
                                         const key = format(week.start, 'yyyy-MM-dd');
                                         const st = weekSettlementByMonday[key];
                                         if (!st) return null;
                                         if (!st.finalized) {
                                             return (
-                                                <div className="space-y-0.5 min-w-[100px] max-w-[140px]">
-                                                    <p className="text-xs font-medium text-slate-500 uppercase tracking-wide flex items-center gap-1">
+                                                <div className="space-y-0.5 min-w-[90px]">
+                                                    <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wide flex items-center gap-1">
                                                         <Scale className="h-3 w-3" /> Settlement
                                                     </p>
-                                                    <p className="text-xs font-medium text-amber-600">Pending</p>
+                                                    <p className="text-[11px] font-medium text-amber-600">Pending</p>
                                                 </div>
                                             );
                                         }
                                         const s = st.settlement;
                                         return (
-                                            <div className="space-y-0.5 min-w-[100px] max-w-[140px]">
-                                                <p className="text-xs font-medium text-slate-500 uppercase tracking-wide flex items-center gap-1">
+                                            <button
+                                                type="button"
+                                                className="space-y-0.5 min-w-[90px] text-left hover:opacity-80"
+                                                onClick={(e) => { e.stopPropagation(); openWeekDetail(week); }}
+                                                title="Open Settlement detail"
+                                            >
+                                                <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wide flex items-center gap-1">
                                                     <Scale className="h-3 w-3" /> Settlement
                                                 </p>
                                                 <p className={cn(
-                                                    "text-lg font-bold",
-                                                    s < -0.005 ? "text-rose-600" : s > 0.005 ? "text-blue-600" : "text-emerald-600"
+                                                    "text-sm font-semibold",
+                                                    s < -0.005 ? "text-rose-500" : s > 0.005 ? "text-blue-500" : "text-emerald-500"
                                                 )}>
                                                     {s < -0.005 ? '−' : s > 0.005 ? '+' : ''}
                                                     ${Math.abs(s).toFixed(2)}
                                                 </p>
-                                                <p className="text-[10px] text-slate-400">
-                                                    {s < -0.005 ? 'Driver owes' : s > 0.005 ? 'Fleet owes' : 'Even'}
-                                                </p>
-                                            </div>
+                                            </button>
                                         );
                                     })()}
                                 </div>
@@ -229,17 +220,13 @@ export function WeeklySettlementView({
                                             size="sm" 
                                             className="bg-emerald-600 hover:bg-emerald-700 shrink-0"
                                             onClick={() => {
-                                                const key = format(week.start, 'yyyy-MM-dd');
-                                                const st = weekSettlementByMonday?.[key];
-                                                const amt =
-                                                    st?.finalized === true
-                                                        ? Math.max(0, st.adjCashBalance)
-                                                        : week.balance;
+                                                // Prefill collection gap only (not settlement residual after fuel/tolls)
+                                                const amt = Math.max(0, week.balance);
                                                 onLogPayment(week.start, week.end, amt);
                                             }}
                                         >
                                             <DollarSign className="h-4 w-4 mr-2" />
-                                            Settle
+                                            Log Cash
                                         </Button>
                                     )}
                                 </div>

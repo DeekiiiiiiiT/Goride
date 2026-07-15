@@ -44,14 +44,14 @@ function weekOf(rows: CashWeekData[]): CashWeekData {
 }
 
 describe('computeWeeklyCashSettlement — driver toll charge', () => {
-  it('adds the toll charge to amountOwed and balance (delta = charge)', () => {
+  it('tracks personal toll charges in breakdown without inflating passenger cash (amountOwed)', () => {
     const base = weekOf(computeWeeklyCashSettlement({ trips: [trip()], transactions: [], csvMetrics: [] }));
     const withCharge = weekOf(
       computeWeeklyCashSettlement({ trips: [trip()], transactions: [tollCharge(12.34)], csvMetrics: [] }),
     );
 
-    expect(+(withCharge.amountOwed - base.amountOwed).toFixed(2)).toBe(12.34);
-    expect(+(withCharge.balance - base.balance).toFixed(2)).toBe(12.34);
+    // Passenger cash = trip/statement cash only; personal charges settle on Settlement math.
+    expect(+(withCharge.amountOwed - base.amountOwed).toFixed(2)).toBe(0);
     expect(withCharge.breakdown.tollCharges).toBe(12.34);
     expect(base.breakdown.tollCharges).toBe(0);
   });
@@ -62,17 +62,17 @@ describe('computeWeeklyCashSettlement — driver toll charge', () => {
     const withCharge = weekOf(
       computeWeeklyCashSettlement({ trips: [trip()], transactions: [viaMeta], csvMetrics: [] }),
     );
-    expect(+(withCharge.amountOwed - base.amountOwed).toFixed(2)).toBe(5);
+    expect(+(withCharge.amountOwed - base.amountOwed).toFixed(2)).toBe(0);
     expect(withCharge.breakdown.tollCharges).toBe(5);
   });
 
   it('does not treat the toll charge as a cash payment credit', () => {
-    // A debit must never reduce what the driver owes (i.e. never counted as amountPaid).
+    const base = weekOf(computeWeeklyCashSettlement({ trips: [trip()], transactions: [], csvMetrics: [] }));
     const withCharge = weekOf(
       computeWeeklyCashSettlement({ trips: [trip()], transactions: [tollCharge(20)], csvMetrics: [] }),
     );
-    // amountPaid should not include the charge; balance must be >= the charge.
-    expect(withCharge.balance).toBeGreaterThanOrEqual(20 - 0.001);
+    expect(withCharge.amountPaid).toBeCloseTo(base.amountPaid, 2);
+    expect(withCharge.breakdown.tollCharges).toBe(20);
   });
 
   it('non-breakage: no toll-charge txns ⇒ tollCharges is 0', () => {
@@ -80,7 +80,7 @@ describe('computeWeeklyCashSettlement — driver toll charge', () => {
     expect(w.breakdown.tollCharges).toBe(0);
   });
 
-  it('nets charge + reversal to zero debt', () => {
+  it('nets charge + reversal to zero toll charge debt', () => {
     const charge = tollCharge(50, { id: 'c1', metadata: { projection: 'driver_toll_charge' } as any });
     const reversal = tollCharge(50, {
       id: 'r1',
@@ -93,5 +93,79 @@ describe('computeWeeklyCashSettlement — driver toll charge', () => {
     );
     expect(+(withPair.amountOwed - base.amountOwed).toFixed(2)).toBe(0);
     expect(withPair.breakdown.tollCharges).toBe(0);
+  });
+});
+
+describe('computeWeeklyCashSettlement — Cash Returned is sticky', () => {
+  const cashPayment = (amount: number, over: Partial<FinancialTransaction> = {}): FinancialTransaction =>
+    ({
+      id: `pay-${amount}`,
+      driverId: 'D1',
+      date: WEEK_DAY,
+      description: 'Cash payment from driver',
+      category: 'Cash Collection',
+      type: 'Payment_Received',
+      amount,
+      status: 'Completed',
+      paymentMethod: 'Cash',
+      ...over,
+    }) as unknown as FinancialTransaction;
+
+  it('Cash Returned = Settlement Week–tagged cash only (not fuel, not untagged dated)', () => {
+    const tagged = cashPayment(7500, {
+      id: 'tagged',
+      metadata: { workPeriodStart: '2026-03-09', workPeriodEnd: '2026-03-15' } as any,
+    });
+    const dated = cashPayment(3326.25, { id: 'dated' });
+    const fuelHandback = {
+      id: 'fuel-hb',
+      driverId: 'D1',
+      date: WEEK_DAY,
+      category: 'Fuel Reimbursement',
+      type: 'Adjustment',
+      amount: 2000,
+      status: 'Completed',
+      metadata: { workPeriodStart: '2026-03-09', workPeriodEnd: '2026-03-15' },
+    } as unknown as FinancialTransaction;
+
+    const w = weekOf(
+      computeWeeklyCashSettlement({
+        trips: [trip()],
+        transactions: [tagged, dated, fuelHandback],
+        csvMetrics: [],
+        excludeTollEffects: true,
+      }),
+    );
+
+    expect(w.amountPaid).toBeCloseTo(7500, 2);
+    expect(w.breakdown.allocatedPayments).toBeCloseTo(7500, 2);
+    expect(w.breakdown.surplusPayments).toBeCloseTo(3326.25, 2); // tracked, not Cash Returned
+    expect(w.breakdown.fuelCredits).toBe(0);
+    expect(w.breakdown.fifoPayments).toBe(0);
+  });
+
+  it('does not count Fuel Settlement Credit (companyShare) as Cash Returned', () => {
+    const settlementCredit = {
+      id: 'fleet-fuel',
+      driverId: 'D1',
+      date: WEEK_DAY,
+      category: 'Fuel Settlement Credit',
+      type: 'Adjustment',
+      amount: 21415.26,
+      status: 'Completed',
+      metadata: { reportId: 'veh_2026-03-09', companyShare: 21415.26 },
+    } as unknown as FinancialTransaction;
+
+    const w = weekOf(
+      computeWeeklyCashSettlement({
+        trips: [trip()],
+        transactions: [settlementCredit],
+        csvMetrics: [],
+        excludeTollEffects: true,
+      }),
+    );
+
+    expect(w.amountPaid).toBe(0);
+    expect(w.weeklyFuelCredits).toBeCloseTo(21415.26, 2);
   });
 });

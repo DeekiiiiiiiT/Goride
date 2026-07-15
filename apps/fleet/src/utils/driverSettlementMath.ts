@@ -9,26 +9,19 @@ export function getAdjCashBalance(cashBalance: number, fuelCredits: number): num
 }
 
 /**
- * Settlement components for one payout period, delegating to
- * driverPeriodSettlement.ts's computePeriodSettlement — the canonical, tested
- * settlement formula also used by SettlementSummaryView and
- * buildLedgerPayoutPeriodRows. This function used to have its own competing
- * formula (settlement = adjCashBalance − netPayout, the inverse sign of the
- * canonical settlement = netPayout − adjCashBalance), so the same driver/period
- * could show opposite-signed "Settlement" figures depending which tab you were
- * on. It's now a thin adapter: row.netPayout/row.cashBalance are already the
- * final, policy-correct values computed upstream (toll disposition may already
- * be applied depending on the unifiedToll flag), so they're passed through
- * computePeriodSettlement's driverShare/baseCashOwed slots (with fuelDeduction
- * and toll terms zeroed) purely to reuse its netPayout-minus-fuel-credit-
- * adjusted-cash-balance arithmetic without re-deriving toll policy here.
+ * Locked week formula (Financials + Cash Wallet SSOT):
  *
- * Fuel credits already counted inside cashPaid (Cash Wallet) must not be
- * subtracted again here — otherwise Cash Still Held / Settlement double-credit fuel.
+ *   Passenger cash − Cash returned − Fleet fuel credit − Cash toll wash
+ *     = Cash still held
+ *   Net Payout − Cash still held
+ *     = Settlement (+ fleet owes driver; − driver owes fleet)
  *
- * Sign convention (matches computePeriodSettlement): positive settlement =
- * company owes the driver; negative = driver owes the company. netPayout is
- * treated as 0 until the period is finalized.
+ * Cash returned is the full Cash Paid / Cash Returned column (includes any $2k
+ * fuel reimbursement payment). Fleet fuel credit is the full finalized
+ * companyShare — do NOT reduce it by fuel already inside Cash Paid (those are
+ * different credits: cash handed back vs fuel spend attribution).
+ *
+ * Sign convention: positive settlement = company owes the driver.
  */
 export function getPeriodSettlementComponents(row: PayoutPeriodRow): {
   adjCashBalance: number;
@@ -37,46 +30,38 @@ export function getPeriodSettlementComponents(row: PayoutPeriodRow): {
 } {
   const netPayoutApplied = row.isFinalized ? row.netPayout : 0;
   const br = row.cashPaidBreakdown;
-  const fuelInPaid = br?.fuelCreditsInCashPaid ?? 0;
-  const tollInPaid = br?.tollCredits ?? 0;
-  const handbacks =
-    (br?.allocatedPayments ?? 0) + (br?.fifoPayments ?? 0) + (br?.surplusPayments ?? 0);
 
-  // Prefer reconstruct from parts so fleet fuel credit is never under-applied when a
-  // partial Fuel Reimbursement sits inside cashPaid (Kenny: $2k vs $21k companyShare).
-  if (
-    row.cashOwed > 0.005 &&
-    br &&
-    (handbacks > 0.005 || fuelInPaid > 0.005 || tollInPaid > 0.005 || (row.fuelCredits || 0) > 0.005)
-  ) {
-    const fuelCredits = Math.max(row.fuelCredits || 0, fuelInPaid);
-    // cashPaid may already include fuel + toll credits and/or cash-wash from unified rows.
-    const tollAlreadyInCashPaidRow = Math.max(0, (row.cashPaid || 0) - handbacks - fuelInPaid);
-    const tollCredit = Math.max(tollInPaid, tollAlreadyInCashPaidRow);
-    const r = computePeriodSettlement({
-      driverShare: netPayoutApplied,
-      fuelDeduction: 0,
-      baseCashOwed: row.cashOwed,
-      baseCashPaid: handbacks,
-      tollCashWash: tollCredit,
-      tollPersonal: 0,
-      fuelCredits,
-    });
-    return { adjCashBalance: r.adjCashBalance, netPayoutApplied, settlement: r.settlement };
-  }
+  const passengerCash =
+    row.passengerCash != null && row.passengerCash > 0.005
+      ? row.passengerCash
+      : row.cashOwed;
 
-  // Legacy fallback: cashBalance already nets paid; subtract remaining fuel credit only.
-  const fuelCreditsForAdj = Math.max(0, (row.fuelCredits || 0) - fuelInPaid);
+  // Full Cash Returned column — never strip fuel reimbursements out of handbacks.
+  const cashReturned = Math.max(0, row.cashPaid || 0);
+
+  // Cash plaza tolls: prefer explicit field; else breakdown toll credits already
+  // counted inside cashReturned (avoid double-credit).
+  const washAlreadyInPaid = Math.max(0, br?.tollCredits ?? 0);
+  const explicitWash = Math.max(0, row.cashTollWash ?? 0);
+  const cashTollWash = Math.max(0, explicitWash - washAlreadyInPaid);
+
+  const fuelCredits = Math.max(0, row.fuelCredits || 0);
+
   const r = computePeriodSettlement({
     driverShare: netPayoutApplied,
     fuelDeduction: 0,
-    baseCashOwed: row.cashBalance,
-    baseCashPaid: 0,
-    tollCashWash: 0,
+    baseCashOwed: passengerCash,
+    baseCashPaid: cashReturned,
+    tollCashWash: cashTollWash,
     tollPersonal: 0,
-    fuelCredits: fuelCreditsForAdj,
+    fuelCredits,
   });
-  return { adjCashBalance: r.adjCashBalance, netPayoutApplied, settlement: r.settlement };
+
+  return {
+    adjCashBalance: r.adjCashBalance,
+    netPayoutApplied,
+    settlement: r.settlement,
+  };
 }
 
 /** Sum settlement across periods with finalized fuel/earnings (same rows included in Payout detail settlement). */

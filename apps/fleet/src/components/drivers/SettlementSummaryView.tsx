@@ -74,17 +74,12 @@ export function payoutToSettlementRow(row: PayoutPeriodRow): SettlementRow {
   }
 
   const br = row.cashPaidBreakdown;
-  const fuelInPaid = br?.fuelCreditsInCashPaid ?? 0;
-  const cashTollCredits = br?.tollCredits ?? 0;
-  const handbacksFromBr =
-    (br?.allocatedPayments ?? 0) + (br?.fifoPayments ?? 0) + (br?.surplusPayments ?? 0);
-  const cashHandbacks =
-    handbacksFromBr > 0.005
-      ? handbacksFromBr
-      : Math.max(0, row.cashPaid - fuelInPaid - cashTollCredits);
-  const fuelAlreadyInPaid = fuelInPaid;
-  const fuelCreditsApplied =
-    fuelAlreadyInPaid + Math.max(0, (row.fuelCredits || 0) - fuelAlreadyInPaid);
+  const washInPaid = br?.tollCredits ?? 0;
+  const cashTollCredits = Math.max(0, row.cashTollWash ?? washInPaid);
+  // Cash Returned column = Settlement Week–tagged cash only — fuel/toll credits stay their own lines.
+  const cashHandbacks = Math.max(0, row.cashPaid - washInPaid);
+  // Full fleet companyShare (not reduced by $2k reimbursement inside Cash Returned).
+  const fuelCreditsApplied = Math.max(0, row.fuelCredits || 0);
 
   // Deductions column must match Share − Net Payout (not Charged-to-Driver on cash side).
   const payoutDeductions = row.isFinalized
@@ -108,7 +103,7 @@ export function payoutToSettlementRow(row: PayoutPeriodRow): SettlementRow {
     netPayout: row.netPayout,
     isFinalized: row.isFinalized,
     tripCount: row.tripCount,
-    passengerCash: row.cashOwed,
+    passengerCash: row.passengerCash != null && row.passengerCash > 0.005 ? row.passengerCash : row.cashOwed,
     cashHandbacks,
     fuelCreditsApplied,
     cashTollCredits,
@@ -250,6 +245,8 @@ export function SettlementSummaryView({
       'Fuel Credits': row.fuelCreditsApplied,
       'Bank Settled': row.bankSettled,
       'Cash Returned': row.cashPaid,
+      'Fleet Fuel Credit': row.fuelCreditsApplied,
+      'Cash Toll Credit': row.cashTollCredits,
       'Cash Still Held': row.cashStillHeld,
       'Settlement': row.settlement,
       'Settlement Status': row.settlementStatus,
@@ -490,7 +487,40 @@ export function SettlementSummaryView({
                             </span>
                           </TooltipTrigger>
                           <TooltipContent side="top" className="max-w-[300px] text-xs">
-                            Cash handed back to the fleet this week (Cash Wallet payments + related credits).
+                            Actual cash logged from the driver for this week (work-period or payment date). Not
+                            reduced by fleet fuel credit, cash tolls, or payment reallocation.
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </TableHead>
+                    <TableHead className="text-xs text-right">
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="inline-flex items-center gap-1 cursor-help justify-end w-full">
+                              Fleet Fuel Credit
+                              <Info className="h-3 w-3 text-slate-400" />
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-[300px] text-xs">
+                            Company share of finalized fuel spend — credits Cash Still Held. Not cash collected
+                            from the driver.
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </TableHead>
+                    <TableHead className="text-xs text-right">
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="inline-flex items-center gap-1 cursor-help justify-end w-full">
+                              Cash Toll Credit
+                              <Info className="h-3 w-3 text-slate-400" />
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-[300px] text-xs">
+                            Cash plaza tolls for the week — credits Cash Still Held. Shown separately so Cash
+                            Returned stays the true cash collected figure.
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
@@ -505,9 +535,8 @@ export function SettlementSummaryView({
                             </span>
                           </TooltipTrigger>
                           <TooltipContent side="top" className="max-w-[300px] text-xs">
-                            Passenger cash still in hand after handbacks and credits (before Net Payout). Open
-                            the row for the full waterfall: cash in → paid → credits → still held → minus Net →
-                            Settlement.
+                            Passenger cash − Cash Returned − Fleet Fuel Credit − Cash Toll Credit (before Net
+                            Payout). Open the row for the full waterfall.
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
@@ -603,10 +632,28 @@ export function SettlementSummaryView({
                           {row.bankSettled > 0.005 ? fmtCurrency(row.bankSettled) : <span className="text-slate-300">—</span>}
                         </TableCell>
 
-                        {/* Cash Returned */}
+                        {/* Cash Returned — actual cash logged */}
                         <TableCell className="text-xs text-right tabular-nums">
                           {row.cashPaid > 0.005 ? (
-                            <span className="text-emerald-700">{fmtCurrency(row.cashPaid)}</span>
+                            <span className="text-emerald-700 font-medium">{fmtCurrency(row.cashPaid)}</span>
+                          ) : (
+                            <span className="text-slate-300">—</span>
+                          )}
+                        </TableCell>
+
+                        {/* Fleet Fuel Credit */}
+                        <TableCell className="text-xs text-right tabular-nums text-slate-600">
+                          {row.fuelCreditsApplied > 0.005 ? (
+                            fmtCurrency(row.fuelCreditsApplied)
+                          ) : (
+                            <span className="text-slate-300">—</span>
+                          )}
+                        </TableCell>
+
+                        {/* Cash Toll Credit */}
+                        <TableCell className="text-xs text-right tabular-nums text-slate-600">
+                          {row.cashTollCredits > 0.005 ? (
+                            fmtCurrency(row.cashTollCredits)
                           ) : (
                             <span className="text-slate-300">—</span>
                           )}
