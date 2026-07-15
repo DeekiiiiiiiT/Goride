@@ -1,12 +1,17 @@
 import { api, fetchWithRetry } from './api';
-import { FuelEntry, FuelScenario, WeeklyFuelReport } from '../types/fuel';
+import { FuelEntry, FuelScenario, WeeklyFuelReport, OdometerBucket } from '../types/fuel';
 import { FinancialTransaction } from '../types/data';
 import { FuelCalculationService } from './fuelCalculationService';
-import { format } from 'date-fns';
 import { API_ENDPOINTS } from './apiConfig';
 import { publicAnonKey } from '../utils/supabase/info';
-import { pickScenarioForDriverMembership, mondayYmdForDate, resolveActiveFuelPolicyForDriverWeek } from '../utils/fuelPolicyVersion';
+import { pickScenarioForDriverMembership, resolveActiveFuelPolicyForDriverWeek } from '../utils/fuelPolicyVersion';
 import { reportWeekYmdBounds, toEntryYmd } from '../utils/fuelWeekPeriod';
+import { isGasCardFuelEntry } from '../utils/fuelPaidByDriver';
+import {
+  isCashStyleFuelPaymentSource,
+  normalizeFuelPaymentSourceEnum,
+  fuelPaymentSourceToMeta,
+} from '../utils/fuelPaymentSource';
 
 /** Calendar day YYYY-MM-DD from stored date/datetime strings. */
 function toYmd(d: string | undefined | null): string {
@@ -15,10 +20,95 @@ function toYmd(d: string | undefined | null): string {
 
 /**
  * Service to handle automated financial settlements for fuel and other expenses.
- * Specifically handles the logic of crediting drivers for out-of-pocket expenses
- * paid with RideShare cash.
+ * Wallet credits / fuel deductions are written ONLY at Finalize (commitWeeklyStatement).
  */
 export const settlementService = {
+  /**
+   * Reverse Enterprise_Fuel_Sync (and related finalize posts) for a locked week
+   * so re-finalize can repost all fills at current ratios.
+   */
+  async reverseEnterpriseFuelSyncForReport(report: WeeklyFuelReport): Promise<number> {
+    const driverId = report.driverId?.trim();
+    if (!driverId) return 0;
+
+    const { start: weekKey, end: weekEnd } = reportWeekYmdBounds(report);
+    const reportIdCandidates = new Set<string>([
+      report.id,
+      `${driverId}_${weekKey}`,
+      ...(report.vehicleId ? [`${report.vehicleId}_${weekKey}`] : []),
+    ].filter(Boolean));
+
+    const txPage = await api.getTransactions(driverId, { limit: 5000 });
+    const allTransactions: FinancialTransaction[] = Array.isArray(txPage) ? txPage : [];
+    const toDelete: string[] = [];
+
+    for (const tx of allTransactions) {
+      if (!tx?.id) continue;
+      const rid = tx.metadata?.reportId ? String(tx.metadata.reportId) : '';
+      if (rid && reportIdCandidates.has(rid)) {
+        toDelete.push(tx.id);
+        continue;
+      }
+      if (tx.metadata?.settlementType === 'Enterprise_Fuel_Sync') {
+        const wp = String(tx.metadata?.workPeriodStart || '').split('T')[0];
+        if (wp === weekKey) toDelete.push(tx.id);
+      }
+    }
+
+    for (const id of toDelete) {
+      try {
+        await api.deleteTransaction(id);
+      } catch (e) {
+        console.warn(`[SettlementService] Failed to reverse tx ${id}:`, e);
+      }
+    }
+
+    // Reset fuel entries previously finalized into this statement so they can repost
+    try {
+      const res = await fetchWithRetry(
+        `${API_ENDPOINTS.fuel}/fuel-entries?startDate=${weekKey}&endDate=${weekEnd}&limit=2000`,
+        { headers: { Authorization: `Bearer ${publicAnonKey}` } },
+      );
+      if (res.ok) {
+        const entries: FuelEntry[] = await res.json();
+        for (const entry of entries || []) {
+          const fbr = entry.metadata?.finalizedByReport
+            ? String(entry.metadata.finalizedByReport)
+            : '';
+          const match =
+            (fbr && reportIdCandidates.has(fbr)) ||
+            (entry.reconciliationStatus === 'Verified' &&
+              entry.driverId === driverId &&
+              String(entry.date || '').split('T')[0] >= weekKey &&
+              String(entry.date || '').split('T')[0] <= weekEnd);
+          if (!match) continue;
+
+          const meta = { ...(entry.metadata || {}) };
+          delete (meta as any).finalizedAt;
+          delete (meta as any).finalizedByReport;
+          delete (meta as any).splitApplied;
+          const updated = {
+            ...entry,
+            reconciliationStatus: 'Pending' as const,
+            metadata: meta,
+          };
+          await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${publicAnonKey}`,
+            },
+            body: JSON.stringify(updated),
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('[SettlementService] Failed to reset fuel entries after reverse:', e);
+    }
+
+    return toDelete.length;
+  },
+
   // --- Phase 4: Commit Weekly Statement ---
   async commitWeeklyStatement(report: WeeklyFuelReport, entries: FuelEntry[]): Promise<void> {
     try {
@@ -54,13 +144,10 @@ export const settlementService = {
             weekStartYmd,
           );
 
-        // Blended driver-share ratio for this report. Individual FuelEntry rows
-        // carry no category (ride share vs personal vs deadhead), so splitting
-        // per-entry by the flat 'rideShare' coverage rule (the old approach) could
-        // diverge sharply from the category-weighted driverShare shown on the
-        // Reconciliation table and frozen into the finalized snapshot. Using the
-        // report's blended ratio guarantees the sum of entry-level driver splits
-        // equals report.driverShare (to rounding).
+        if (!activeScenario?.id) {
+          throw new Error(`No fuel scenario for driver ${report.driverId} week ${weekStartYmd}`);
+        }
+
         const driverRatio = FuelCalculationService.getBlendedDriverShareRatio(report);
 
         // 3. Process each entry
@@ -74,15 +161,40 @@ export const settlementService = {
                 entry.reconciliationStatus === 'Observing'
             ) continue;
 
+            // Normalize blank payment source before money write
+            const paymentSource = normalizeFuelPaymentSourceEnum(
+              entry.paymentSource || (entry.metadata as any)?.paymentSource
+            );
+            const entryForSettle = { ...entry, paymentSource };
+
             const driverAmount = entry.amount * driverRatio;
             const split = { company: entry.amount - driverAmount, driver: driverAmount };
             
             let walletPayment: Partial<FinancialTransaction> | null = null;
             let payoutDeduction: Partial<FinancialTransaction> | null = null;
             
-            if (entry.paymentSource === 'Gas_Card') {
-                // Case A: Company Paid (Gas Card)
-                // We only need to deduct the driver's portion from their paycheck.
+            if (isGasCardFuelEntry(entryForSettle as FuelEntry)) {
+                // Case A: Company Paid (Gas Card) — deduct driver share only
+                if (split.driver > 0.01) {
+                    payoutDeduction = {
+                        type: 'Expense',
+                        category: 'Fuel Deduction',
+                        description: `Fuel Deduction: Driver Share of ${entry.location || 'Fuel'}`,
+                        amount: -Math.abs(split.driver),
+                        paymentMethod: 'Cash',
+                    };
+                }
+            } else if (isCashStyleFuelPaymentSource(paymentSource)) {
+                // Case B: Driver OOP / RideShare / Personal — reimburse full + deduct share
+                walletPayment = {
+                    type: 'Payment_Received',
+                    category: 'Fuel Reimbursement',
+                    description: `Fuel Credit: Spent cash on ${entry.location || 'Fuel'}`,
+                    amount: Math.abs(entry.amount),
+                    paymentMethod: 'Cash',
+                    metadata: { isFuelCredit: true }
+                };
+
                 if (split.driver > 0.01) {
                     payoutDeduction = {
                         type: 'Expense',
@@ -93,27 +205,10 @@ export const settlementService = {
                     };
                 }
             } else {
-                // Case B: Driver Paid (RideShare Cash)
-                // 1. Credit the WALLET for the FULL amount spent (because that cash is gone).
-                walletPayment = {
-                    type: 'Payment_Received',
-                    category: 'Fuel Reimbursement',
-                    description: `Fuel Credit: Spent cash on ${entry.location || 'Fuel'}`,
-                    amount: Math.abs(entry.amount),
-                    paymentMethod: 'Cash',
-                    metadata: { isFuelCredit: true }
-                };
-
-                // 2. Deduct the DRIVER'S SHARE from their payout.
-                if (split.driver > 0.01) {
-                    payoutDeduction = {
-                        type: 'Expense',
-                        category: 'Fuel Deduction',
-                        description: `Fuel Deduction: Driver Share of ${entry.location || 'Fuel'}`,
-                        amount: -Math.abs(split.driver),
-                        paymentMethod: 'Cash',
-                    };
-                }
+                console.warn(
+                  `[SettlementService] Skipping unsettled paymentSource '${paymentSource}' for entry ${entry.id}`
+                );
+                continue;
             }
 
             const processTx = async (tx: Partial<FinancialTransaction>) => {
@@ -135,7 +230,6 @@ export const settlementService = {
                         companyShare: split.company,
                         driverShare: split.driver,
                         reportId: report.id,
-                        // Enterprise Sync: Attach work period for correct weekly bucketing
                         workPeriodStart: report.weekStart,
                         workPeriodEnd: report.weekEnd
                     }
@@ -156,10 +250,12 @@ export const settlementService = {
             // 4. Update Fuel Entry
             const updatedEntry = {
                 ...entry,
+                paymentSource,
                 reconciliationStatus: 'Verified',
-                transactionId: savedTxId || entry.transactionId, // Keep old if exists, else new
+                transactionId: savedTxId || entry.transactionId,
                 metadata: {
                     ...entry.metadata,
+                    paymentSource: fuelPaymentSourceToMeta(paymentSource),
                     finalizedAt: new Date().toISOString(),
                     finalizedByReport: report.id,
                     splitApplied: split
@@ -253,183 +349,12 @@ export const settlementService = {
   },
 
   /**
-   * Processes a fuel entry and creates the corresponding financial settlement
-   * if it was paid with RideShare cash.
+   * @deprecated Money posts only at Finalize via commitWeeklyStatement.
+   * Kept as a no-op so portal/legacy callers do not create early RideShare_Cash_Offset rows.
    */
-  async processFuelSettlement(entryOrTx: FuelEntry | FinancialTransaction, scenarios: FuelScenario[]): Promise<FinancialTransaction | null> {
-    // 1. Normalize input (Handle both FuelEntry and FinancialTransaction)
-    let driverId = '';
-    let vehicleId = '';
-    let amount = 0;
-    let date = '';
-    let location = '';
-    let liters = 0;
-    let paymentSource = '';
-    let entryId = '';
-    let existingTxId: string | undefined;
-
-    if ('paymentSource' in entryOrTx) {
-      // It's a FuelEntry
-      const entry = entryOrTx as FuelEntry;
-      driverId = entry.driverId || '';
-      vehicleId = entry.vehicleId || '';
-      amount = entry.amount || 0;
-      date = entry.date;
-      location = entry.location || '';
-      liters = entry.liters || 0;
-      paymentSource = entry.paymentSource;
-      entryId = entry.id;
-      existingTxId = entry.transactionId;
-    } else {
-      // It's a FinancialTransaction (likely coming from a manual approval flow)
-      const tx = entryOrTx as FinancialTransaction;
-      driverId = tx.driverId || '';
-      vehicleId = tx.vehicleId || '';
-      amount = Math.abs(tx.amount || 0);
-      date = tx.date;
-      location = tx.merchant || tx.description || '';
-      liters = tx.quantity || 0;
-      entryId = tx.id;
-      existingTxId = tx.id; // If it's already a tx, we might be updating it
-      
-      if (tx.paymentMethod === 'Cash' || tx.type === 'Reimbursement') {
-        paymentSource = 'RideShare_Cash';
-      }
-    }
-
-    // 2. Check if this is a cash-based settlement candidate
-    if (paymentSource !== 'RideShare_Cash') {
-      return null;
-    }
-
-    if (!driverId || !vehicleId) {
-        console.warn("[SettlementService] Missing driver or vehicle ID for settlement.");
-        return null;
-    }
-
-    // 3. Identify the active scenario for the vehicle
-    const [vehicles, allDrivers, allTransactions] = await Promise.all([
-      api.getVehicles(),
-      api.getDrivers(),
-      api.getTransactions()
-    ]);
-    
-    const vehicle = vehicles.find(v => v.id === vehicleId);
-    const driver = allDrivers.find(d => d.id === driverId);
-    
-    if (!vehicle) {
-      console.warn(`[SettlementService] Vehicle ${vehicleId} not found for settlement.`);
-      return null;
-    }
-
-    const entryWeekMonday = mondayYmdForDate(new Date(toYmd(date) || date));
-    const activeScenario = pickScenarioForDriverMembership(
-      scenarios,
-      driverId || driver?.id,
-      entryWeekMonday,
-    );
-
-    if (!activeScenario) {
-      console.warn(`[SettlementService] No fuel scenario found for settlement.`);
-      return null;
-    }
-
-    // 4. Calculate Company Share
-    const fuelRule = activeScenario.rules.find(r => r.category === 'Fuel');
-    let creditAmount = 0;
-
-    if (fuelRule) {
-      if (fuelRule.coverageType === 'Full') {
-        creditAmount = amount;
-      } else if (fuelRule.coverageType === 'Percentage') {
-        const percent = fuelRule.rideShareCoverage !== undefined ? fuelRule.rideShareCoverage : fuelRule.coverageValue;
-        creditAmount = amount * (percent / 100);
-      } else if (fuelRule.coverageType === 'Fixed_Amount') {
-        creditAmount = Math.min(amount, fuelRule.coverageValue);
-      }
-    } else {
-      creditAmount = amount;
-    }
-
-    if (creditAmount <= 0) return null;
-
-    // 5. Phase 4: Automated Settlement Validation & Audit
-    let auditFlags: string[] = [];
-    let reconciliationStatus: 'Verified' | 'Flagged' | 'Observing' = 'Verified';
-
-    // Validation: Suspicious Fuel Volume
-    if (liters > 100) {
-        auditFlags.push("High volume (>100L) detected");
-        reconciliationStatus = 'Flagged';
-    }
-
-    // Validation: Suspicious Price Per Liter (assuming USD/standard range)
-    const pPl = amount / (liters || 1);
-    if (pPl > 5 || pPl < 0.5) {
-        auditFlags.push(`Suspicious price per liter: $${pPl.toFixed(2)}`);
-        reconciliationStatus = 'Flagged';
-    }
-
-    // Validation: Duplicate Check (Same driver, vehicle, and date/time/amount)
-    const isDuplicate = allTransactions.some(t => 
-        t.driverId === driverId && 
-        t.vehicleId === vehicleId && 
-        t.date === date.split('T')[0] && 
-        Math.abs(t.amount) === amount && 
-        t.id !== entryId && 
-        t.metadata?.sourceId !== entryId
-    );
-
-    if (isDuplicate) {
-        auditFlags.push("Possible duplicate transaction detected");
-        reconciliationStatus = 'Flagged';
-    }
-
-    // 6. Check for existing settlement transaction to avoid duplicates during edits
-    // IMPORTANT: The settlement is a SEPARATE transaction from the expense.
-    // If we're passed a transaction, we shouldn't use its ID as our settlement ID.
-    const settlementTxId = (entryOrTx as any).metadata?.settlementTxId || 
-                          allTransactions.find(t => t.metadata?.sourceId === entryId && t.type === 'Reimbursement')?.id || 
-                          crypto.randomUUID();
-
-    // 7. Create or Update the Financial Transaction (Credit)
-    const settlementTx: Partial<FinancialTransaction> = {
-      id: settlementTxId,
-      date: date.split('T')[0],
-      time: date.includes('T') ? date.split('T')[1].substring(0, 8) : (entryOrTx as any).time || undefined,
-      driverId: driverId,
-      driverName: driver?.name || 'Unknown Driver',
-      vehicleId: vehicleId,
-      type: 'Reimbursement',
-      category: 'Fuel Reimbursement',
-      description: `Fuel Reimbursement: ${location || 'Unknown Station'}${liters ? ` - ${liters}L @ $${(amount / liters).toFixed(3)}/L` : ''}`,
-      merchant: location,
-      amount: Number(creditAmount.toFixed(2)), 
-      paymentMethod: 'Cash',
-      status: reconciliationStatus === 'Flagged' ? 'Pending' : 'Approved', 
-      quantity: liters,
-      isReconciled: reconciliationStatus === 'Verified',
-      metadata: {
-        sourceId: entryId,
-        settlementType: 'RideShare_Cash_Offset',
-        scenarioId: activeScenario.id,
-        totalCost: amount,
-        coveragePercent: (creditAmount / amount) * 100,
-        automated: true,
-        auditFlags: auditFlags.length > 0 ? auditFlags : undefined,
-        reconciliationStatus: reconciliationStatus,
-        // Carry over audit flags if it's an update
-        isEdited: (entryOrTx as any).metadata?.isEdited,
-        lastEditedAt: (entryOrTx as any).metadata?.lastEditedAt,
-        editReason: (entryOrTx as any).metadata?.editReason,
-        syncSource: 'fuel_log',
-        // Phase 3: Preservation of Manual Origin
-        isManual: true,
-        portal_type: 'Manual_Entry'
-      }
-    };
-
-    return await api.saveTransaction(settlementTx);
+  async processFuelSettlement(_entryOrTx: FuelEntry | FinancialTransaction, _scenarios: FuelScenario[]): Promise<FinancialTransaction | null> {
+    console.log('[SettlementService] processFuelSettlement skipped — Finalize-only settlement writer');
+    return null;
   },
 
   /**

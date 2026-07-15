@@ -1,8 +1,9 @@
 import { differenceInCalendarDays } from 'date-fns';
+import { resolveReportGasCardSpend } from './fuelPaidByDriver';
 
 /**
  * The ONE shared period-overlap aggregator for finalized fuel reconciliation reports.
- * Sums driverShare/companyShare/driverSpend/netPay for every finalized report whose
+ * Sums driverShare/companyShare/driverSpend/gasCardSpend/netPay for every finalized report whose
  * week overlaps a given period, with optional daily apportionment.
  *
  * This replaces three independently-drifted copies of the same logic that used to
@@ -22,6 +23,8 @@ export interface PeriodDeductionResult {
   fleetShare: number;
   /** Sum of driverSpend (cash the driver already paid out-of-pocket for fuel) for reports overlapping the period. */
   driverSpend: number;
+  /** Sum of company gas-card charges for reports overlapping the period. */
+  gasCardSpend: number;
   /** Sum of netPay (driverSpend − driverShare; positive = company owes the driver) for reports overlapping the period. */
   netPay: number;
   /** True if at least one finalized report overlaps this period. */
@@ -37,6 +40,7 @@ export function getFuelDeductionForPeriod(
   let totalDeduction = 0;
   let totalFleetShare = 0;
   let totalDriverSpend = 0;
+  let totalGasCardSpend = 0;
   let totalNetPay = 0;
   let hasFinalized = false;
 
@@ -48,17 +52,19 @@ export function getFuelDeductionForPeriod(
 
     // Check overlap: report range intersects period range
     if (rStart <= periodEnd && rEnd >= periodStart) {
+      const gasCard = resolveReportGasCardSpend(report);
       if (periodType === 'daily') {
-        // Daily apportionment: spread the week's totals evenly across its days
         const weekDays = Math.max(1, differenceInCalendarDays(rEnd, rStart) + 1);
         totalDeduction += (report.driverShare ?? 0) / weekDays;
         totalFleetShare += (report.companyShare ?? 0) / weekDays;
         totalDriverSpend += (report.driverSpend ?? 0) / weekDays;
+        totalGasCardSpend += gasCard / weekDays;
         totalNetPay += (report.netPay ?? 0) / weekDays;
       } else {
         totalDeduction += report.driverShare ?? 0;
         totalFleetShare += report.companyShare ?? 0;
         totalDriverSpend += report.driverSpend ?? 0;
+        totalGasCardSpend += gasCard;
         totalNetPay += report.netPay ?? 0;
       }
       hasFinalized = true;
@@ -69,6 +75,7 @@ export function getFuelDeductionForPeriod(
     deduction: totalDeduction,
     fleetShare: totalFleetShare,
     driverSpend: totalDriverSpend,
+    gasCardSpend: totalGasCardSpend,
     netPay: totalNetPay,
     finalized: hasFinalized,
   };

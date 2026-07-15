@@ -1915,11 +1915,16 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         })
         .reduce((sum, t) => sum + Math.abs(t?.amount || 0), 0);
 
-     // 3b. Calculate Approved Fuel Reimbursement Credits
+     // 3b. Fuel reimbursements from Finalize only (exclude orphan approve-time credits)
      const approvedFuelCredits = (transactions || [])
         .filter(t => {
             if (!t) return false;
-            const isFuelCredit = t.category === 'Fuel Reimbursement Credit' || t.category === 'Fuel Reimbursement';
+            if (t.category === 'Fuel Reimbursement Credit') return false; // approve-era orphans
+            if (t.metadata?.settlementType === 'RideShare_Cash_Offset') return false; // portal early posts
+            const isFuelCredit =
+              t.category === 'Fuel Reimbursement' ||
+              t.category === 'Fuel Settlement Credit' ||
+              t.category === 'Fuel Settlement';
             return isFuelCredit && t.amount > 0;
         })
         .reduce((sum, t) => sum + (t?.amount || 0), 0);
@@ -2421,9 +2426,10 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
   /** Same ledger + cash weeks pipeline as Financials → Payout (weekly), for net settlement on Cash Wallet. */
   const { periodData: walletPayoutPeriodRows } = useDriverPayoutPeriodRows({
     driverId,
+    driver,
     trips: allTrips,
     transactions,
-    csvMetrics,
+    csvMetrics: csvMetrics || [],
     periodType: 'weekly',
   });
 
@@ -3655,6 +3661,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
          <TabsContent value="financial" className="space-y-6">
            <FinancialSubTabs
              driverId={driverId}
+             driver={driver}
              transactions={transactions}
              allTrips={allTrips}
              quotaConfig={quotaConfig}

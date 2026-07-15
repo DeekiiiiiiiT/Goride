@@ -21,6 +21,20 @@ export function isOutOfPocketFuelEntry(entry: FuelEntry): boolean {
   return OUT_OF_POCKET_TYPES.has(entry.type);
 }
 
+/** Company / fleet gas-card charges (not driver cash). Explicit paymentSource wins over type. */
+export function isGasCardFuelEntry(entry: FuelEntry): boolean {
+  if (entry.paymentSource === 'Gas_Card') return true;
+  if (
+    entry.paymentSource === 'RideShare_Cash' ||
+    entry.paymentSource === 'Personal' ||
+    entry.paymentSource === 'Petty_Cash'
+  ) {
+    return false;
+  }
+  if (entry.type === 'Card_Transaction') return true;
+  return false;
+}
+
 /**
  * True when resolveFuelFillDriver attributes this fill to the report's driver
  * (or Unassigned sentinel). Does not use weaker primary-vehicle-only checks.
@@ -93,4 +107,55 @@ export function sumPaidByDriverForReport(
   return entriesBelongingToDriverWeekReport(entries, report, attribution)
     .filter(isOutOfPocketFuelEntry)
     .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+}
+
+/** Company gas-card charge total for fills belonging to this driver-week report. */
+export function sumGasCardSpendForReport(
+  entries: FuelEntry[],
+  report: Pick<WeeklyFuelReport, 'weekStart' | 'weekEnd' | 'driverId' | 'vehicleId' | 'vehicleIds'>,
+  vehicles: Vehicle[] = [],
+  ctx?: DriverWeekAttributionContext,
+): number {
+  const attribution: DriverWeekAttributionContext = ctx || { vehicles };
+  return entriesBelongingToDriverWeekReport(entries, report, attribution)
+    .filter(isGasCardFuelEntry)
+    .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+}
+
+/** Estimated total fill spend from recon category buckets (card + cash combined). */
+export function getReportTotalFuelSpend(report: {
+  rideShareCost?: number;
+  companyUsageCost?: number;
+  deadheadCost?: number;
+  personalUsageCost?: number;
+  miscellaneousCost?: number;
+}): number {
+  return (
+    (Number(report.rideShareCost) || 0) +
+    (Number(report.companyUsageCost) || 0) +
+    (Number(report.deadheadCost) || 0) +
+    (Number(report.personalUsageCost) || 0) +
+    (Number(report.miscellaneousCost) || 0)
+  );
+}
+
+/**
+ * Gas card spend frozen on the snapshot, or inferred for legacy finalized rows:
+ * total recon spend − driver out-of-pocket cash.
+ */
+export function resolveReportGasCardSpend(report: {
+  gasCardSpend?: number;
+  driverSpend?: number;
+  rideShareCost?: number;
+  companyUsageCost?: number;
+  deadheadCost?: number;
+  personalUsageCost?: number;
+  miscellaneousCost?: number;
+}): number {
+  if (typeof report.gasCardSpend === 'number' && Number.isFinite(report.gasCardSpend)) {
+    return report.gasCardSpend;
+  }
+  const total = getReportTotalFuelSpend(report);
+  const driverCash = Number(report.driverSpend) || 0;
+  return Math.max(0, total - driverCash);
 }

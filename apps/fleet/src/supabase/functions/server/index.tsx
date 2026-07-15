@@ -113,6 +113,7 @@ import {
   applyDriverAssignmentChangeOnVehicle,
 } from "./driver_vehicle_assignment.ts";
 import { syncLinkedExpenseTransaction } from "./fuel_transaction_sync.ts";
+import { resolveFuelPaymentSource } from "./fuel_payment_source.ts";
 import auditApp from "./audit_controller.tsx";
 import safetyApp from "./safety_controller.tsx";
 import syncApp from "./sync_controller.tsx";
@@ -3367,6 +3368,10 @@ app.post("/make-server-37f42386/transactions", requireAuth(), async (c) => {
 
         // Resolve vendor name: smart-matched station > transaction vendor > description > fallback
         const resolvedVendor = smartMatchedStation?.name || transaction.vendor || transaction.description || 'Reimbursement';
+        // Ambiguous/missing → RideShare_Cash (business trip cash), never silent Personal
+        const paySrc = resolveFuelPaymentSource(
+          transaction.metadata?.paymentSource || transaction.paymentSource || transaction.paymentMethod
+        );
 
         const fuelEntry: any = {
             id: crypto.randomUUID(),
@@ -3390,8 +3395,7 @@ app.post("/make-server-37f42386/transactions", requireAuth(), async (c) => {
             isVerified: true, // Key Requirement: Anchor
             source: 'Fuel Log',
             matchedStationId: transaction.metadata?.matchedStationId,
-            // Fix: Set paymentSource from transaction so Paid By shows correct value immediately
-            paymentSource: (() => { const m: Record<string,string> = { 'driver_cash':'Personal','rideshare_cash':'RideShare_Cash','company_card':'Gas_Card','petty_cash':'Petty_Cash' }; const r = transaction.metadata?.paymentSource || transaction.paymentSource; return r ? (m[r] || r) : 'Personal'; })(),
+            paymentSource: paySrc.enum,
             metadata: {
                 receiptUrl: transaction.receiptUrl || transaction.metadata?.receiptUrl,
                 odometerProofUrl: transaction.odometerProofUrl || transaction.metadata?.odometerProofUrl,
@@ -3404,8 +3408,7 @@ app.post("/make-server-37f42386/transactions", requireAuth(), async (c) => {
                 verificationMethod: transaction.metadata?.verificationMethod,
                 matchDistance: transaction.metadata?.matchDistance,
                 matchConfidence: transaction.metadata?.matchConfidence,
-                // Fix: Copy paymentSource so backfill and display read it correctly
-                paymentSource: transaction.metadata?.paymentSource || transaction.paymentSource || 'driver_cash'
+                paymentSource: paySrc.meta
             }
         };
 
@@ -6519,6 +6522,10 @@ app.post("/make-server-37f42386/expenses/approve", requireAuth(), requirePermiss
             tx.merchant ||
             tx.description ||
             "Reimbursement";
+        // Ambiguous/missing → RideShare_Cash; money posts at Finalize only (no approve credit)
+        const approvePaySrc = resolveFuelPaymentSource(
+          tx.metadata?.paymentSource || tx.paymentSource || tx.paymentMethod
+        );
 
         const fuelEntry = {
             id: crypto.randomUUID(),
@@ -6540,6 +6547,7 @@ app.post("/make-server-37f42386/expenses/approve", requireAuth(), requirePermiss
             odometerProofUrl: tx.odometerProofUrl || tx.metadata?.odometerProofUrl,
             isVerified: true, // Matches auto-approve path (line 1974)
             source: 'Manual Approval', // Distinguishes from auto-approve 'Fuel Log'
+            paymentSource: approvePaySrc.enum,
             metadata: {
                 ...tx.metadata,
                 portal_type: tx.metadata?.portal_type || 'Manual_Entry',
@@ -6551,6 +6559,7 @@ app.post("/make-server-37f42386/expenses/approve", requireAuth(), requirePermiss
                 locationStatus: tx.metadata?.locationStatus || ((tx.matchedStationId || tx.metadata?.matchedStationId) ? 'verified' : 'unknown'),
                 matchedStationId: tx.matchedStationId || tx.metadata?.matchedStationId,
                 verificationMethod: tx.metadata?.verificationMethod || ((tx.matchedStationId || tx.metadata?.matchedStationId) ? 'manual_station_picker' : undefined),
+                paymentSource: approvePaySrc.meta,
             }
         };
 
@@ -6605,54 +6614,9 @@ app.post("/make-server-37f42386/expenses/approve", requireAuth(), requirePermiss
         }
     }
 
-    // Phase 4: Auto-create Cash Wallet credit for approved fuel reimbursements
-    const paymentSource = tx.metadata?.paymentSource || 'driver_cash'; // default to driver_cash for legacy entries
-    const isDriverCash = paymentSource === 'driver_cash';
-
-    if (!isDriverCash) {
-        console.log(`[FuelCredit] Skipping wallet credit: payment source is '${paymentSource}' (not driver_cash) for transaction ${id}`);
-    }
-
-    if ((tx.category === 'Fuel' || tx.category === 'Fuel Reimbursement') && tx.status === 'Approved' && isDriverCash) {
-        if (!tx.driverId) {
-            console.log('[FuelCredit] Skipping wallet credit: no driverId on transaction ' + id);
-        } else {
-            const creditId = `fuel-credit-${id}`;
-            const existingCredit = await kv.get(`transaction:${creditId}`);
-
-            if (!existingCredit) {
-                const walletCredit = {
-                    id: creditId,
-                    driverId: tx.driverId,
-                    driverName: tx.driverName || '',
-                    vehicleId: tx.vehicleId,
-                    date: new Date().toISOString().split('T')[0],
-                    time: new Date().toISOString().split('T')[1].substring(0, 8),
-                    type: 'Payment_Received',
-                    category: 'Fuel Reimbursement Credit',
-                    description: `Fuel Reimbursement Credit: ${tx.vendor || tx.description || tx.merchant || 'Fuel Purchase'}`,
-                    amount: Math.abs(Number(tx.amount) || Number(tx.metadata?.totalCost) || 0),
-                    paymentMethod: 'Cash',
-                    status: 'Completed',
-                    isReconciled: true,
-                    referenceNumber: tx.id,
-                    metadata: {
-                        fuelCreditSourceId: tx.id,
-                        source: 'fuel_reimbursement_approval',
-                        automated: true,
-                        approvedAt: new Date().toISOString(),
-                        originalAmount: tx.amount,
-                        originalCategory: tx.category
-                    }
-                };
-
-                await kv.set(`transaction:${creditId}`, stampOrg(walletCredit, c));
-                await appendCanonicalFuelReimbursementIfEligible(walletCredit, c);
-                console.log(`[FuelCredit] Created wallet credit ${creditId} for driver ${tx.driverId}, amount: ${walletCredit.amount}`);
-            } else {
-                console.log(`[FuelCredit] Wallet credit already exists for ${id}, skipping (idempotent)`);
-            }
-        }
+    // Fuel wallet money posts only at Finalize (commitWeeklyStatement) — not on approve.
+    if ((tx.category === 'Fuel' || tx.category === 'Fuel Reimbursement') && tx.status === 'Approved') {
+        console.log(`[FuelCredit] Skipped approve-time wallet credit for ${id} (Finalize-only settlement)`);
     }
 
     // Phase 4b: Auto-create Cash Wallet credit for approved Toll reimbursements (Manual Resolve: WriteOff/Business)

@@ -8,7 +8,13 @@ const weeklyReport = {
   driverShare: 140,
   companyShare: 60,
   driverSpend: 100,
+  gasCardSpend: 250,
   netPay: -40, // driverSpend(100) - driverShare(140)
+  rideShareCost: 200,
+  companyUsageCost: 0,
+  deadheadCost: 0,
+  personalUsageCost: 50,
+  miscellaneousCost: 100,
 };
 
 describe('getFuelDeductionForPeriod', () => {
@@ -22,7 +28,21 @@ describe('getFuelDeductionForPeriod', () => {
     expect(r.deduction).toBe(140);
     expect(r.fleetShare).toBe(60);
     expect(r.driverSpend).toBe(100);
+    expect(r.gasCardSpend).toBe(250);
     expect(r.netPay).toBe(-40);
+  });
+
+  it('infers gasCardSpend for legacy snapshots without the field (total − driverSpend)', () => {
+    const legacy = {
+      ...weeklyReport,
+      gasCardSpend: undefined,
+    };
+    delete (legacy as any).gasCardSpend;
+    const periodStart = new Date('2026-07-06T00:00:00');
+    const periodEnd = new Date('2026-07-12T23:59:59');
+    const r = getFuelDeductionForPeriod([legacy], periodStart, periodEnd, 'weekly');
+    // total category spend = 200+0+0+50+100 = 350; driverSpend 100 → gas card 250
+    expect(r.gasCardSpend).toBe(250);
   });
 
   it('returns finalized: false and all-zero totals when nothing overlaps', () => {

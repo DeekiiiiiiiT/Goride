@@ -25,8 +25,8 @@ import { projectId, publicAnonKey } from '../../utils/supabase/info';
 import { API_ENDPOINTS } from '../../services/apiConfig';
 import { api } from '../../services/api';
 import { fuelService } from '../../services/fuelService';
-import { settlementService } from '../../services/settlementService';
 import { FuelEntry } from '../../types/fuel';
+import { resolveFuelPaymentSource } from '../../utils/fuelPaymentSource';
 import { showCatalogGateToastIfApplicable } from '../../utils/catalogGateErrors';
 import { resolveVehicleIdForDriver } from '../../utils/resolveDriverVehicleId';
 import { PendingCatalogRequestsDrawer } from '../vehicles/PendingCatalogRequestsDrawer';
@@ -368,15 +368,17 @@ export function DriverDashboard() {
           const method = data.paymentMethod || 'reimbursement';
           
           let entryMode: 'Anchor' | 'Floating' = data.odometer ? 'Anchor' : 'Floating';
-          let paymentSource: any = 'Personal';
-
-          if (method === 'reimbursement') {
-              paymentSource = 'RideShare_Cash';
-          } else if (method === 'card') {
-              paymentSource = 'Gas_Card';
-          } else if (method === 'personal') {
-              paymentSource = 'Personal';
-          }
+          // Map portal method → enum; ambiguous/missing → RideShare_Cash
+          const rawMethod =
+            method === 'reimbursement'
+              ? 'rideshare_cash'
+              : method === 'card'
+                ? 'company_card'
+                : method === 'personal'
+                  ? 'driver_cash'
+                  : method;
+          const paySrc = resolveFuelPaymentSource(rawMethod);
+          const paymentSource = paySrc.enum;
 
           const vehicles = await api.getVehicles().catch(() => []);
           const vehicleId =
@@ -384,7 +386,7 @@ export function DriverDashboard() {
             driverRecord?.vehicleId ||
             data.vehicleId;
 
-          // 1. Save Fuel Entry (Core Record)
+          // Save Fuel Entry only — wallet money posts at admin Finalize
           const fuelEntry: Partial<FuelEntry> = {
               id: crypto.randomUUID(),
               date: data.date || new Date().toISOString(),
@@ -399,18 +401,18 @@ export function DriverDashboard() {
               entryMode: entryMode,
               paymentSource: paymentSource,
               source: 'Driver Portal',
+              reconciliationStatus: 'Pending',
               geofenceMetadata: (data as any).geofenceMetadata,
-              deviationReason: (data as any).deviationReason
+              deviationReason: (data as any).deviationReason,
+              metadata: {
+                paymentSource: paySrc.meta,
+              },
           } as any;
 
-          const savedEntry = await fuelService.saveFuelEntry(fuelEntry as FuelEntry);
-
-          // 2. Process Settlement (Financial Ledger)
-          const scenarios = await fuelService.getFuelScenarios();
-          await settlementService.processFuelSettlement(savedEntry, scenarios);
+          await fuelService.saveFuelEntry(fuelEntry as FuelEntry);
           
           const successMsg = paymentSource === 'RideShare_Cash' 
-                ? "Fuel logged and cash liability reduced!" 
+                ? "Fuel logged — cash reimbursement posts when your week is finalized." 
                 : "Fuel log saved successfully!";
 
           toast.success(successMsg, {

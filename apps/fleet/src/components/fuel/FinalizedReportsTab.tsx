@@ -64,7 +64,12 @@ export function FinalizedReportsTab() {
   const [loading, setLoading] = useState(true);
   const [expandedWeek, setExpandedWeek] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<{ weekStart: string; vehicleId: string; label: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{
+    weekStart: string;
+    vehicleId: string;
+    driverId?: string;
+    label: string;
+  } | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [cleanupBusy, setCleanupBusy] = useState(false);
   const [orphanRunOpen, setOrphanRunOpen] = useState(false);
@@ -131,10 +136,18 @@ export function FinalizedReportsTab() {
     if (!deleteTarget) return;
     setIsDeleting(true);
     try {
-      await api.deleteFinalizedReport(deleteTarget.weekStart, deleteTarget.vehicleId);
+      await api.deleteFinalizedReport(
+        deleteTarget.weekStart,
+        deleteTarget.driverId || deleteTarget.vehicleId
+      );
       setReports((prev) =>
         prev.filter(
-          (r) => !(r.weekStart === deleteTarget.weekStart && r.vehicleId === deleteTarget.vehicleId)
+          (r) =>
+            !(
+              r.weekStart === deleteTarget.weekStart &&
+              (r.driverId === deleteTarget.driverId ||
+                (!deleteTarget.driverId && r.vehicleId === deleteTarget.vehicleId))
+            )
         )
       );
       toast.success(`Removed finalized report for ${deleteTarget.label}`);
@@ -499,7 +512,8 @@ export function FinalizedReportsTab() {
                                 setDeleteTarget({
                                   weekStart: r.weekStart,
                                   vehicleId: r.vehicleId,
-                                  label: `${r.vehiclePlate || r.vehicleId}`,
+                                  driverId: r.driverId,
+                                  label: `${r.driverName || r.vehiclePlate || r.driverId || r.vehicleId}`,
                                 });
                               }}
                             >

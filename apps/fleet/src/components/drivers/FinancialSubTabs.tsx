@@ -14,6 +14,7 @@ import { DriverExpensesHistory } from './DriverExpensesHistory';
 import { DriverPayoutHistory } from './DriverPayoutHistory';
 import { SettlementSummaryView } from './SettlementSummaryView';
 import { api } from '../../services/api';
+import { useDriverFinancialBundle, type DriverLike } from '../../hooks/useDriverFinancialBundle';
 
 interface DriverTollChargeTotals {
   chargedToDriver: number;
@@ -31,6 +32,7 @@ interface DriverTollChargeTotals {
 
 interface FinancialSubTabsProps {
   driverId: string;
+  driver?: DriverLike | null;
   transactions: FinancialTransaction[];
   allTrips: Trip[];
   quotaConfig: QuotaConfig | null;
@@ -46,6 +48,7 @@ interface FinancialSubTabsProps {
 
 export function FinancialSubTabs({
   driverId,
+  driver = null,
   transactions,
   allTrips,
   quotaConfig,
@@ -54,6 +57,9 @@ export function FinancialSubTabs({
   csvMetrics = [],
   uberLedgerReconciliation = null,
 }: FinancialSubTabsProps) {
+  // Shared Financials core — stays mounted across Expenses/Settlement/Payout switches.
+  const financialBundle = useDriverFinancialBundle(driverId, driver);
+
   // Driver toll disposition (charged / written-off / business / refunded /
   // reconciled) — server-computed from toll_ledger for the Reconciliation tab.
   const [tollTotals, setTollTotals] = React.useState<DriverTollChargeTotals | null>(null);
@@ -69,14 +75,7 @@ export function FinancialSubTabs({
   // Cash Wash is a new bucket that only appears once the unified settlement
   // model is trusted — gate its display so the card grid doesn't change for
   // fleets that haven't opted in yet.
-  const [unifiedTollSettlementEnabled, setUnifiedTollSettlementEnabled] = React.useState(false);
-  React.useEffect(() => {
-    let active = true;
-    api.getTollAutomationSettings()
-      .then(res => { if (active) setUnifiedTollSettlementEnabled(res.data.unifiedTollSettlementEnabled === true); })
-      .catch(() => {});
-    return () => { active = false; };
-  }, []);
+  const unifiedTollSettlementEnabled = financialBundle.unifiedToll;
 
   const uberSsotReconciliation = React.useMemo(() => {
     let fareComponents = 0;
@@ -221,8 +220,10 @@ export function FinancialSubTabs({
       <TabsContent value="expenses" className="space-y-6">
         <DriverExpensesHistory
           driverId={driverId}
+          driver={driver}
           transactions={transactions}
           trips={allTrips}
+          financialBundle={financialBundle}
         />
       </TabsContent>
 
@@ -230,9 +231,11 @@ export function FinancialSubTabs({
       <TabsContent value="payout" className="space-y-6">
         <DriverPayoutHistory
           driverId={driverId}
+          driver={driver}
           transactions={transactions}
           trips={allTrips}
           csvMetrics={csvMetrics}
+          financialBundle={financialBundle}
         />
       </TabsContent>
 
@@ -240,9 +243,11 @@ export function FinancialSubTabs({
       <TabsContent value="settlement" className="space-y-6">
         <SettlementSummaryView
           driverId={driverId}
+          driver={driver}
           trips={allTrips}
           transactions={transactions}
           csvMetrics={csvMetrics}
+          financialBundle={financialBundle}
         />
       </TabsContent>
 

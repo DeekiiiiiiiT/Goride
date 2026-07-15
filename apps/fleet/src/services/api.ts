@@ -2631,10 +2631,18 @@ export const api = {
     return response.json();
   },
 
-  async getDisputeRefunds(params?: { status?: string; driverId?: string; dateFrom?: string; dateTo?: string }): Promise<{ data: DisputeRefund[]; total: number }> {
+  async getDisputeRefunds(params?: {
+    status?: string;
+    driverId?: string;
+    /** Expanded native + platform UUIDs — scopes the fleet scan for a single driver page. */
+    driverIds?: string[];
+    dateFrom?: string;
+    dateTo?: string;
+  }): Promise<{ data: DisputeRefund[]; total: number }> {
     const qs = new URLSearchParams();
     if (params?.status) qs.set('status', params.status);
     if (params?.driverId) qs.set('driverId', params.driverId);
+    if (params?.driverIds?.length) qs.set('driverIds', params.driverIds.join(','));
     if (params?.dateFrom) qs.set('dateFrom', params.dateFrom);
     if (params?.dateTo) qs.set('dateTo', params.dateTo);
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/dispute-refunds?${qs.toString()}`, {
@@ -3025,8 +3033,19 @@ export const api = {
 
   // --- Finalized Reports ---
 
-  async getFinalizedReports(): Promise<any[]> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/finalized-reports`, {
+  async getFinalizedReports(opts?: {
+    vehicleId?: string;
+    vehicleIds?: string[];
+    driverId?: string;
+    driverIds?: string[];
+  }): Promise<any[]> {
+    const qs = new URLSearchParams();
+    if (opts?.vehicleId) qs.set('vehicleId', opts.vehicleId);
+    if (opts?.vehicleIds?.length) qs.set('vehicleIds', opts.vehicleIds.join(','));
+    if (opts?.driverId) qs.set('driverId', opts.driverId);
+    if (opts?.driverIds?.length) qs.set('driverIds', opts.driverIds.join(','));
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/finalized-reports${suffix}`, {
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
     if (!response.ok) {
@@ -3052,10 +3071,10 @@ export const api = {
     return response.json();
   },
 
-  async deleteFinalizedReport(weekStart: string, vehicleId: string): Promise<void> {
-    // Same date key as POST/snapshot: YYYY-MM-DD only (avoids colons in URL path + matches KV key)
+  /** Delete by driverId (preferred) or legacy vehicleId — same path param. */
+  async deleteFinalizedReport(weekStart: string, identityId: string): Promise<void> {
     const weekKey = String(weekStart).split('T')[0];
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/finalized-reports/${encodeURIComponent(weekKey)}/${encodeURIComponent(vehicleId)}`, {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/finalized-reports/${encodeURIComponent(weekKey)}/${encodeURIComponent(identityId)}`, {
       method: 'DELETE',
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });

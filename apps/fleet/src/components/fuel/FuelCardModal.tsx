@@ -4,10 +4,8 @@ import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
-import { Textarea } from "../ui/textarea";
+import { Checkbox } from "../ui/checkbox";
 import { FuelCard } from '../../types/fuel';
-import { Vehicle } from '../../types/vehicle';
-import { Driver } from '../../types/driver'; // Assuming this exists, if not I'll define a minimal interface locally
 
 // Minimal interfaces if full types aren't available yet or to decouple
 interface ModalDriver {
@@ -31,7 +29,13 @@ interface FuelCardModalProps {
     drivers?: ModalDriver[];
 }
 
-const PROVIDERS = ['Shell', 'FleetCor', 'Wex', 'PetroJam', 'Total', 'Esso', 'Rubis', 'Texaco'];
+const PROVIDERS = [
+    'Jamaica Automobile Association (JAA) Advance',
+    'TotalEnergies Card',
+    'FESCO Prepaid Fleet Management',
+    'RUBiS Card',
+    'RPL Gas Club Cards',
+];
 
 export function FuelCardModal({ isOpen, onClose, onSave, initialData, vehicles = [], drivers = [] }: FuelCardModalProps) {
     const [formData, setFormData] = useState<Partial<FuelCard>>({
@@ -39,26 +43,29 @@ export function FuelCardModal({ isOpen, onClose, onSave, initialData, vehicles =
         cardNumber: '',
         status: 'Active',
         expiryDate: '',
-        notes: '',
         assignedVehicleId: 'unassigned', // Use string 'unassigned' for Select handling
         assignedDriverId: 'unassigned',
     });
+    const [noExpiration, setNoExpiration] = useState(false);
 
     useEffect(() => {
         if (!isOpen) return; // Guard: don't reset state when modal is closed
         if (initialData) {
+            const hasNoExpiry = !initialData.expiryDate;
+            setNoExpiration(hasNoExpiry);
             setFormData({
                 ...initialData,
+                expiryDate: initialData.expiryDate || '',
                 assignedVehicleId: initialData.assignedVehicleId || 'unassigned',
                 assignedDriverId: initialData.assignedDriverId || 'unassigned',
             });
         } else {
+            setNoExpiration(false);
             setFormData({
                 provider: '',
                 cardNumber: '',
                 status: 'Active',
                 expiryDate: '',
-                notes: '',
                 assignedVehicleId: 'unassigned',
                 assignedDriverId: 'unassigned',
             });
@@ -76,8 +83,7 @@ export function FuelCardModal({ isOpen, onClose, onSave, initialData, vehicles =
             provider: formData.provider,
             cardNumber: formData.cardNumber,
             status: formData.status as 'Active' | 'Inactive' | 'Lost',
-            expiryDate: formData.expiryDate,
-            notes: formData.notes,
+            expiryDate: noExpiration ? undefined : formData.expiryDate || undefined,
             assignedVehicleId: formData.assignedVehicleId === 'unassigned' ? undefined : formData.assignedVehicleId,
             assignedDriverId: formData.assignedDriverId === 'unassigned' ? undefined : formData.assignedDriverId,
         };
@@ -144,12 +150,24 @@ export function FuelCardModal({ isOpen, onClose, onSave, initialData, vehicles =
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="expiry">Expiry Date</Label>
-                            <Input 
-                                id="expiry" 
+                            <Input
+                                id="expiry"
                                 type="date"
-                                value={formData.expiryDate}
+                                disabled={noExpiration}
+                                value={noExpiration ? '' : (formData.expiryDate || '')}
                                 onChange={(e) => setFormData(prev => ({ ...prev, expiryDate: e.target.value }))}
                             />
+                            <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer">
+                                <Checkbox
+                                    checked={noExpiration}
+                                    onCheckedChange={(checked) => {
+                                        const on = checked === true;
+                                        setNoExpiration(on);
+                                        if (on) setFormData(prev => ({ ...prev, expiryDate: '' }));
+                                    }}
+                                />
+                                No expiration
+                            </label>
                         </div>
                     </div>
 
@@ -194,17 +212,6 @@ export function FuelCardModal({ isOpen, onClose, onSave, initialData, vehicles =
                         <p className="text-[10px] text-slate-500 mt-1">
                             Assigning to a vehicle is preferred for clearer expense tracking. Assign to a driver only if they switch vehicles often.
                         </p>
-                    </div>
-
-                    <div className="space-y-2">
-                        <Label htmlFor="notes">Notes</Label>
-                        <Textarea 
-                            id="notes" 
-                            placeholder="Optional notes..." 
-                            className="resize-none h-20"
-                            value={formData.notes}
-                            onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
-                        />
                     </div>
                 </div>
 

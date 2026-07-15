@@ -18,6 +18,7 @@
  */
 
 import { Hono } from "npm:hono";
+import { createClient } from "npm:@supabase/supabase-js@2";
 import * as kv from "./kv_store.tsx";
 import { isTollCategory } from "./toll_category_flags.ts";
 import { getFleetTimezone, hasTzSuffix } from "./timezone_helper.tsx";
@@ -44,6 +45,11 @@ import {
 } from "./dispute_match_toll_enrichment.ts";
 
 const app = new Hono();
+
+const supabase = createClient(
+  Deno.env.get("SUPABASE_URL")!,
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+);
 
 const BASE = "/make-server-37f42386/dispute-refunds";
 
@@ -432,10 +438,39 @@ app.get(`${BASE}`, async (c) => {
   try {
     const status = c.req.query("status");
     const driverId = c.req.query("driverId");
+    // Comma-separated expanded IDs (native + Uber + InDrive) for driver Financials.
+    const driverIdsRaw = c.req.query("driverIds") || "";
+    const driverIdSet = new Set(
+      driverIdsRaw.split(",").map((s) => s.trim()).filter(Boolean)
+    );
+    if (driverId) driverIdSet.add(driverId);
     const dateFrom = c.req.query("dateFrom");
     const dateTo = c.req.query("dateTo");
 
-    const raw = await loadAllByPrefix("dispute-refund:");
+    let raw: any[];
+    if (driverIdSet.size > 0) {
+      // Driver Financials: filter at the DB instead of shipping the fleet dump.
+      const ids = Array.from(driverIdSet);
+      const scoped: any[] = [];
+      let offset = 0;
+      const pageSize = 1000;
+      for (;;) {
+        const { data, error } = await supabase
+          .from("kv_store_37f42386")
+          .select("value")
+          .like("key", "dispute-refund:%")
+          .in("value->>driverId", ids)
+          .range(offset, offset + pageSize - 1);
+        if (error) throw error;
+        const page = (data || []).map((d: any) => d.value).filter(Boolean);
+        scoped.push(...page);
+        if (page.length < pageSize) break;
+        offset += pageSize;
+      }
+      raw = scoped;
+    } else {
+      raw = await loadAllByPrefix("dispute-refund:");
+    }
     // Filter out dedup keys (they store string references, not objects)
     let refunds = raw.filter(
       (item: any) => item && typeof item === "object" && item.id && item.supportCaseId
@@ -445,8 +480,10 @@ app.get(`${BASE}`, async (c) => {
     if (status) {
       refunds = refunds.filter((r: any) => r.status === status);
     }
-    if (driverId) {
-      refunds = refunds.filter((r: any) => r.driverId === driverId);
+    // When driverIdSet was used for the DB query, records already match those IDs.
+    // Re-apply for the unscoped path if a single driverId was provided (covered above).
+    if (driverIdSet.size > 0) {
+      refunds = refunds.filter((r: any) => driverIdSet.has(r.driverId));
     }
     // Date range is an inclusive fleet-tz calendar-day window (yyyy-MM-dd). Each
     // refund's date is resolved to its fleet-tz day so the boundaries line up

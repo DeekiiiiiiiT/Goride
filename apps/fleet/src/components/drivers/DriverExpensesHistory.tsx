@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, startTransition } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { Button } from "../ui/button";
@@ -11,7 +11,6 @@ import { FuelCalculationService } from "../../services/fuelCalculationService";
 import {
   format,
   startOfDay, endOfDay, startOfMonth, endOfMonth,
-  subDays
 } from "date-fns";
 import { exportToCSV } from "../../utils/csvHelpers";
 import { toast } from "sonner@2.0.3";
@@ -20,10 +19,11 @@ import { isTollCategory } from '../../utils/tollCategoryHelper';
 import { isCashPaidToll } from '../../utils/tollDisposition';
 import { deriveTollTxIsReconciled } from '../../utils/tollHandledDisplay';
 import { computeDisputeRefundCounts, getDisputeRefundWeekDate, weekBucketForDate } from '../../utils/tollWeekPeriod';
-import { expandDriverTransactionIds } from '../../utils/expandDriverTransactionIds';
 import { isDriverTollChargeRow, netDriverTollCharges } from '../../utils/netDriverTollCharges';
 import { fleetTzDateKey, useFleetTimezone, ymdToLocalDate } from '../../utils/timezoneDisplay';
 import { getFuelDeductionForPeriod } from '../../utils/fuelDeductionForPeriod';
+import type { DriverFinancialBundle, DriverLike } from '../../hooks/useDriverFinancialBundle';
+import { useDriverFinancialBundle } from '../../hooks/useDriverFinancialBundle';
 
 type PeriodType = 'daily' | 'weekly' | 'monthly';
 
@@ -33,7 +33,8 @@ interface ExpensePeriodRow {
   tollExpenses: number;
   tollCharged: number;         // personal-use tolls billed to this driver (Charge Driver)
   fuelDeduction: number;       // Deduction (driverShare) from finalized reports only
-  fuelDriverSpend: number;     // What the driver already paid out-of-pocket for fuel, for finalized periods
+  fuelDriverSpend: number;     // Cash the driver paid out-of-pocket for fuel (finalized)
+  fuelGasCardSpend: number;    // Company gas-card charges for fills (finalized)
   fuelNetPay: number;          // fuelDriverSpend - fuelDeduction; positive = company owes the driver
   fuelDraftEstimate: number;   // Live/unfinalized estimate for periods with no finalized report yet
   isFinalized: boolean;        // true if this period has finalized fuel data
@@ -49,107 +50,84 @@ interface ExpensePeriodRow {
 
 interface DriverExpensesHistoryProps {
   driverId: string;
+  driver?: DriverLike | null;
   transactions: FinancialTransaction[];
   trips?: Trip[];
+  /** Prefetched Financials core bundle — skip fleet re-fetch when provided. */
+  financialBundle?: DriverFinancialBundle;
 }
 
 type ExpenseView = 'toll' | 'fuel';
 
-export function DriverExpensesHistory({ driverId, transactions = [], trips = [] }: DriverExpensesHistoryProps) {
+export function DriverExpensesHistory({
+  driverId,
+  driver = null,
+  transactions = [],
+  trips = [],
+  financialBundle: bundleProp,
+}: DriverExpensesHistoryProps) {
   const [periodType, setPeriodType] = React.useState<PeriodType>('weekly');
   const [visibleCount, setVisibleCount] = React.useState(12);
   const [expenseView, setExpenseView] = React.useState<ExpenseView>('toll');
   const fleetTz = useFleetTimezone();
 
-  // ── Fuel data loading flag ──
-  const [fuelDataLoading, setFuelDataLoading] = useState(false);
+  const localBundle = useDriverFinancialBundle(driverId, driver);
+  const financialBundle = bundleProp ?? localBundle;
 
-  // ── Phase 2: Finalized reports data source ──────────────────
-  const [finalizedReports, setFinalizedReports] = useState<any[]>([]);
-  const [driverVehicleIds, setDriverVehicleIds] = useState<Set<string>>(new Set());
-  const [driverVehicleList, setDriverVehicleList] = useState<any[]>([]);
-  const [disputeRefunds, setDisputeRefunds] = useState<DisputeRefund[]>([]);
+  const fuelCoreLoading = financialBundle.isCoreLoading;
+  const finalizedReports = financialBundle.finalizedReports;
+  const driverVehicleList = financialBundle.vehicles;
+  const disputeRefunds = financialBundle.disputeRefunds;
+  const vehicleIdSet = useMemo(
+    () => new Set(financialBundle.vehicleIds),
+    [financialBundle.vehicleIds]
+  );
 
-  // ── Live/draft reconciliation inputs — used to estimate fuel deduction for
-  // periods that haven't been finalized yet, so a large unresolved draft (like
-  // an Amber/Pending week) is never silently invisible here. ──
+  // Draft estimates — only when Fuel view selected (not on toll-first paint).
+  const [fuelDraftLoading, setFuelDraftLoading] = useState(false);
   const [draftFuelEntries, setDraftFuelEntries] = useState<FuelEntry[]>([]);
   const [draftAdjustments, setDraftAdjustments] = useState<MileageAdjustment[]>([]);
   const [draftScenarios, setDraftScenarios] = useState<FuelScenario[]>([]);
 
   useEffect(() => {
+    if (expenseView !== 'fuel') return;
+    if (fuelCoreLoading) return;
+
     let cancelled = false;
-    const loadFinalizedData = async () => {
-      setFuelDataLoading(true);
+    const loadDraft = async () => {
+      setFuelDraftLoading(true);
       try {
-        const [drivers, vehicles, allReports, disputeRefundsRes, fuelEntries, adjustments, scenarios] = await Promise.all([
-          api.getDrivers().catch(() => []),
-          api.getVehicles().catch(() => []),
-          api.getFinalizedReports().catch(() => []),
-          // Unscoped fetch — DisputeRefund.driverId comes from the raw Uber CSV
-          // "Driver UUID" column with no server-side normalization, so it may
-          // not match this driver's native id. Filter client-side below by the
-          // same expanded ID set used elsewhere, rather than trusting a
-          // single-ID server-side match.
-          api.getDisputeRefunds().catch(() => ({ data: [] as DisputeRefund[], total: 0 })),
-          fuelService.getFuelEntries().catch(() => []),
+        const vehicleIds = Array.from(vehicleIdSet);
+        const [entryLists, adjustments, scenarios] = await Promise.all([
+          Promise.all(
+            vehicleIds.map((vid) => api.getFuelEntriesByVehicle(vid).catch(() => [] as FuelEntry[]))
+          ),
           fuelService.getMileageAdjustments().catch(() => []),
           fuelService.getFuelScenarios().catch(() => []),
         ]);
         if (cancelled) return;
 
-        // Step 2.2a: Find the driver record by native Roam ID
-        const driverRecord = (drivers || []).find((d: any) => d.id === driverId);
-
-        // Step 2.2b: Build ID set using ONLY native Roam IDs (no Uber/InDrive IDs per core rules)
-        const driverIdSet = new Set<string>([driverId]);
-        if (driverRecord?.driverId) driverIdSet.add(driverRecord.driverId);
-
-        // Step 2.2c: Find vehicles belonging to this driver
-        const myVehicles = (vehicles || []).filter(
-          (v: any) => v.currentDriverId && driverIdSet.has(v.currentDriverId)
-        );
-        const vehicleIdSet = new Set<string>(myVehicles.map((v: any) => v.id));
-        setDriverVehicleIds(vehicleIdSet);
-        setDriverVehicleList(myVehicles);
-
-        // Step 2.2d: Filter finalized reports to this driver's vehicles
-        const myReports = (allReports || []).filter(
-          (r: any) => r.status === 'Finalized' && vehicleIdSet.has(r.vehicleId)
-        );
-        setFinalizedReports(myReports);
-
-        // Scope draft reconciliation inputs to this driver's vehicles only.
-        setDraftFuelEntries((fuelEntries || []).filter((e: FuelEntry) => vehicleIdSet.has(e.vehicleId || '')));
-        setDraftAdjustments((adjustments || []).filter((a: MileageAdjustment) => vehicleIdSet.has(a.vehicleId)));
-        setDraftScenarios(scenarios || []);
-
-        // Dispute refunds carry the platform-side driver id, so match against
-        // the full expanded set (native + Uber + InDrive), not driverIdSet above.
-        const expandedIdSet = new Set(
-          expandDriverTransactionIds([driverId, driverRecord?.driverId, driverRecord?.uberDriverId, driverRecord?.inDriveDriverId])
-        );
-        setDisputeRefunds((disputeRefundsRes.data || []).filter((r) => expandedIdSet.has(r.driverId)));
-
-        // Step 2.3: Diagnostic logging
-        console.log(
-          `[DriverExpensesHistory] Fetched ${(allReports || []).length} total finalized reports, ` +
-          `${myReports.length} matched this driver's ${vehicleIdSet.size} vehicle(s)`,
-          { driverId, driverIdSet: Array.from(driverIdSet), vehicleIds: Array.from(vehicleIdSet) }
-        );
-        if (myReports.length > 0) {
-          const weekRanges = myReports.map((r: any) => `${r.weekStart?.split('T')[0]} → ${r.weekEnd?.split('T')[0]}`);
-          console.log(`[DriverExpensesHistory] Finalized week ranges:`, weekRanges);
+        const entries = (entryLists as FuelEntry[][]).flat();
+        const byId = new Map<string, FuelEntry>();
+        for (const e of entries) {
+          if (e?.id) byId.set(e.id, e);
         }
+        startTransition(() => {
+          setDraftFuelEntries(Array.from(byId.values()));
+          setDraftAdjustments(
+            (adjustments || []).filter((a: MileageAdjustment) => vehicleIdSet.has(a.vehicleId))
+          );
+          setDraftScenarios(scenarios || []);
+          if (!cancelled) setFuelDraftLoading(false);
+        });
       } catch (e) {
-        console.error('[DriverExpensesHistory] Failed to load finalized reports:', e);
-      } finally {
-        if (!cancelled) setFuelDataLoading(false);
+        console.error('[DriverExpensesHistory] Failed to load draft fuel estimates:', e);
+        if (!cancelled) setFuelDraftLoading(false);
       }
     };
-    loadFinalizedData();
+    loadDraft();
     return () => { cancelled = true; };
-  }, [driverId]);
+  }, [expenseView, fuelCoreLoading, vehicleIdSet, driverId]);
 
   // ── Compute time buckets (fleet timezone — same Monday keys as Reconciliation) ──
   const timeBuckets: { start: Date; end: Date }[] = useMemo(() => {
@@ -221,12 +199,7 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
         (t.type === 'Expense' || (t.type === 'Adjustment' && t.amount < 0) || isTollCategory(t.category))
     );
 
-    // Draft estimates are only computed for periods within this window — bounds
-    // the cost of recomputing live reconciliation (odometer buckets etc.) to the
-    // realistic backlog of recently-unresolved weeks, not a driver's entire
-    // unfinalized history.
-    const draftCutoff = subDays(new Date(), 45);
-
+    // Draft estimates for every unfinalized period with expense activity (no date cutoff).
     const rows: ExpensePeriodRow[] = timeBuckets.map(({ start: periodStart, end: periodEnd }) => {
       const periodWeekKey = format(periodStart, 'yyyy-MM-dd');
       const periodMonthKey = format(periodStart, 'yyyy-MM');
@@ -275,17 +248,16 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
       // ── Fuel: from finalized reports (canonical shared aggregator — same
       // logic used by SettlementSummaryView/PayoutPeriodDetail so all three
       // surfaces agree) ──
-      const { deduction, driverSpend, netPay, finalized } =
+      const { deduction, driverSpend, gasCardSpend, netPay, finalized } =
         getFuelDeductionForPeriod(finalizedReports, periodStart, periodEnd, periodType);
       const fuelDeduction = deduction;
       const isFinalized = finalized;
 
-      // ── Draft estimate: for recent periods with no finalized report yet,
-      // compute a live reconciliation so an unresolved week is never silently
-      // shown as $0. Never counted into totalExpenses below — it's an
-      // unconfirmed estimate, not a posted expense. ──
+      // ── Draft estimate: for periods with no finalized report yet, compute a
+      // live reconciliation so unresolved weeks are never silently shown as $0.
+      // Never counted into totalExpenses — unconfirmed estimate only. ──
       let fuelDraftEstimate = 0;
-      if (!isFinalized && periodEnd >= draftCutoff) {
+      if (!isFinalized) {
         fuelDraftEstimate = driverVehicleList.reduce((sum, vehicle) => {
           const report = FuelCalculationService.calculateReconciliation(
             vehicle, periodStart, periodEnd, trips, draftFuelEntries, draftAdjustments, draftScenarios
@@ -306,6 +278,7 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
         tollCharged,
         fuelDeduction,
         fuelDriverSpend: driverSpend,
+        fuelGasCardSpend: gasCardSpend,
         fuelNetPay: netPay,
         fuelDraftEstimate,
         isFinalized,
@@ -395,7 +368,8 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
             : `${row.tollUnreconciled} Unmatched`,
         'Charged to driver': row.tollCharged.toFixed(2),
         'Fuel Deduction': row.fuelDeduction.toFixed(2),
-        'Fuel Paid by Driver': row.fuelDriverSpend.toFixed(2),
+        'Gas Card (Company)': row.fuelGasCardSpend.toFixed(2),
+        'Paid by Driver (Cash)': row.fuelDriverSpend.toFixed(2),
         'Fuel Net Pay': row.fuelNetPay.toFixed(2),
         'Fuel Draft Estimate (not yet finalized)': row.fuelDraftEstimate.toFixed(2),
         'Fuel Status': row.isFinalized ? 'Finalized' : 'Pending',
@@ -435,7 +409,7 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
               </div>
             </div>
             <p className="text-[10px] text-slate-400 mt-1">{totals.txCount} transaction{totals.txCount !== 1 ? 's' : ''}</p>
-            {!fuelDataLoading && totals.unfinalizedPeriods > 0 && (
+            {!fuelCoreLoading && totals.unfinalizedPeriods > 0 && (
               <p className="text-[10px] text-slate-400 mt-0.5">
                 {totals.finalizedPeriods} of {totals.totalPeriods} {periodLabel}{totals.totalPeriods !== 1 ? 's' : ''} finalized
               </p>
@@ -505,7 +479,7 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs text-slate-500 font-medium">Fuel (Deduction)</p>
-                {fuelDataLoading ? (
+                {fuelCoreLoading ? (
                   <div className="flex items-center gap-1.5 mt-1">
                     <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-400" />
                     <span className="text-xs text-slate-400">Loading...</span>
@@ -523,13 +497,19 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
               </div>
             </div>
             <p className="text-[10px] text-slate-400 mt-1">
-              {fuelDataLoading
+              {fuelCoreLoading
                 ? 'Loading finalized data...'
                 : totals.fuel > 0
                   ? `From ${totals.finalizedPeriods} finalized ${periodLabel}${totals.finalizedPeriods !== 1 ? 's' : ''}`
                   : 'No finalized fuel deductions'}
             </p>
-            {!fuelDataLoading && totals.fuelDraftPending > 0.005 && (
+            {!fuelCoreLoading && fuelDraftLoading && (
+              <p className="text-[10px] text-slate-400 mt-0.5 inline-flex items-center gap-1">
+                <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                Estimating pending weeks…
+              </p>
+            )}
+            {!fuelCoreLoading && !fuelDraftLoading && totals.fuelDraftPending > 0.005 && (
               <p className="text-[10px] text-amber-600 font-medium mt-0.5">
                 +${totals.fuelDraftPending.toLocaleString(undefined, { minimumFractionDigits: 2 })} pending reconciliation (not yet finalized)
               </p>
@@ -751,9 +731,24 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
                     <Table className="table-fixed">
                       <TableHeader>
                         <TableRow>
-                          <TableHead className="w-[22%] px-3">{periodColumnLabel}</TableHead>
-                          <TableHead className="w-[20%] px-3 text-right">Fuel Deduction</TableHead>
-                          <TableHead className="w-[20%] px-3 text-right">
+                          <TableHead className="w-[18%] px-3">{periodColumnLabel}</TableHead>
+                          <TableHead className="w-[16%] px-3 text-right">Fuel Deduction</TableHead>
+                          <TableHead className="w-[16%] px-3 text-right">
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="inline-flex items-center gap-1 cursor-help">
+                                    Gas Card
+                                    <Info className="h-3 w-3 text-slate-400" />
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="max-w-[280px] text-xs">
+                                  Company / fleet gas-card charges for this period — money the company put on the card. Finalized reports only.
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </TableHead>
+                          <TableHead className="w-[16%] px-3 text-right">
                             <TooltipProvider>
                               <Tooltip>
                                 <TooltipTrigger asChild>
@@ -762,13 +757,13 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
                                     <Info className="h-3 w-3 text-slate-400" />
                                   </span>
                                 </TooltipTrigger>
-                                <TooltipContent side="top" className="max-w-[260px] text-xs">
-                                  What the driver already paid out-of-pocket for fuel this period (finalized reports only).
+                                <TooltipContent side="top" className="max-w-[280px] text-xs">
+                                  Cash the driver spent out-of-pocket for fuel this period (not gas card). Finalized reports only.
                                 </TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
                           </TableHead>
-                          <TableHead className="w-[18%] px-3 text-right">
+                          <TableHead className="w-[16%] px-3 text-right">
                             <TooltipProvider>
                               <Tooltip>
                                 <TooltipTrigger asChild>
@@ -777,13 +772,13 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
                                     <Info className="h-3 w-3 text-slate-400" />
                                   </span>
                                 </TooltipTrigger>
-                                <TooltipContent side="top" className="max-w-[260px] text-xs">
-                                  Net = Paid by Driver − Deduction. Positive means the company owes the driver; negative means the shortfall is deducted from earnings.
+                                <TooltipContent side="top" className="max-w-[280px] text-xs">
+                                  Net = Paid by Driver (cash) − Deduction. Positive means the company owes the driver; negative means the shortfall is deducted from earnings.
                                 </TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
                           </TableHead>
-                          <TableHead className="w-[20%] px-3 text-center">
+                          <TableHead className="w-[18%] px-3 text-center">
                             <TooltipProvider>
                               <Tooltip>
                                 <TooltipTrigger asChild>
@@ -822,7 +817,14 @@ export function DriverExpensesHistory({ driverId, transactions = [], trips = [] 
                                     </TooltipContent>
                                   </Tooltip>
                                 </TooltipProvider>
+                              ) : !row.isFinalized && fuelDraftLoading ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-300 ml-auto" />
                               ) : <span className="text-slate-300">-</span>}
+                            </TableCell>
+                            <TableCell className="px-3 text-right tabular-nums text-slate-600">
+                              {row.isFinalized && row.fuelGasCardSpend > 0.005
+                                ? `$${row.fuelGasCardSpend.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+                                : <span className="text-slate-300">-</span>}
                             </TableCell>
                             <TableCell className="px-3 text-right tabular-nums text-slate-600">
                               {row.isFinalized && row.fuelDriverSpend > 0.005

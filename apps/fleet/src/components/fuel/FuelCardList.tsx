@@ -123,7 +123,7 @@ export function FuelCardList({ cards, drivers, onEdit, onDelete, getVehicleName,
                                         </div>
                                     </TableCell>
                                     <TableCell>
-                                        {card.expiryDate ? new Date(card.expiryDate).toLocaleDateString() : '-'}
+                                        {card.expiryDate ? new Date(card.expiryDate).toLocaleDateString() : 'No expiration'}
                                     </TableCell>
                                     <TableCell className="text-right">
                                         <DropdownMenu>

@@ -64,7 +64,15 @@ export function FuelPeriodResetDialog({
         try {
           return await api.resetFuelPeriod(weekKey);
         } catch {
-          // Deployed DELETE path — wipe per vehicle with activity this week
+          // Fallback when reset-period unavailable: wipe by driver (preferred) then vehicle
+          const driverIds = [
+            ...new Set(
+              (finalizedReports || [])
+                .filter((r: any) => String(r.weekStart || '').split('T')[0] === weekKey)
+                .map((r: any) => r.driverId)
+                .filter(Boolean),
+            ),
+          ] as string[];
           const vehicleIds =
             inventory.vehicleIds.length > 0
               ? inventory.vehicleIds
@@ -79,9 +87,9 @@ export function FuelPeriodResetDialog({
                       .filter(Boolean),
                   ),
                 ];
-          for (const vehicleId of vehicleIds) {
+          for (const id of [...driverIds, ...vehicleIds]) {
             try {
-              await api.deleteFinalizedReport(weekKey, vehicleId);
+              await api.deleteFinalizedReport(weekKey, id);
             } catch (e: any) {
               if (!/404|not found/i.test(String(e?.message || ''))) throw e;
             }

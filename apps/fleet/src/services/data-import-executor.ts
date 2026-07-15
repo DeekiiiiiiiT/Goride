@@ -97,7 +97,7 @@ export const importExecutor = {
             // If data.id is missing, backend or helper might generate it, but let's be safe.
             id: data.id || crypto.randomUUID(),
             entryMode: 'Anchor', // Force Anchor mode for imported historical data
-            reconciliationStatus: 'Verified', // Assume imported history is verified
+            reconciliationStatus: 'Pending',
             date: new Date(data.date).toISOString() // Ensure ISO format
         };
 

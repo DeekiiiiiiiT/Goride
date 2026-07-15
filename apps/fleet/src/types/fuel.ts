@@ -192,6 +192,8 @@ export interface FinalizedFuelReport extends WeeklyFuelReport {
   finalizedByUser?: string;
   /** Total the driver already paid out-of-pocket for fuel in this period (cash/manual entries). */
   driverSpend: number;
+  /** Company / fleet gas-card charges for fills in this period. */
+  gasCardSpend?: number;
   /** driverSpend − driverShare. Positive = company owes the driver; negative = driver owes the company. */
   netPay: number;
   vehiclePlate?: string;

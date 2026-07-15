@@ -18,6 +18,11 @@ import {
   syncLinkedExpenseTransaction,
 } from "./fuel_transaction_sync.ts";
 import { applyEvidenceResolution } from "./evidence_routes.ts";
+import {
+  resolveFuelPaymentSource,
+  normalizeFuelPaymentSourceEnum,
+  fuelPaymentSourceToMeta,
+} from "./fuel_payment_source.ts";
 
 const app = new Hono();
 
@@ -66,6 +71,60 @@ app.delete(`${BASE_PATH}/fuel-cards/:id`, async (c) => {
 // --- FINALIZED REPORTS ---
 app.get(`${BASE_PATH}/finalized-reports`, async (c) => {
   try {
+    // Optional scope: vehicleId(s) and/or driverId(s). Driver-week keys are primary;
+    // vehicle filter still matches snapshot.vehicleId for Financials + legacy keys.
+    const single = c.req.query("vehicleId");
+    const multiRaw = c.req.query("vehicleIds") || "";
+    const driverSingle = c.req.query("driverId");
+    const driverMultiRaw = c.req.query("driverIds") || "";
+    const vehicleIds = [
+      ...(single ? [single] : []),
+      ...multiRaw.split(",").map((s) => s.trim()).filter(Boolean),
+    ];
+    const driverIds = [
+      ...(driverSingle ? [driverSingle] : []),
+      ...driverMultiRaw.split(",").map((s) => s.trim()).filter(Boolean),
+    ];
+    const uniqueVehicleIds = Array.from(new Set(vehicleIds));
+    const uniqueDriverIds = Array.from(new Set(driverIds));
+
+    if (uniqueDriverIds.length > 0 || uniqueVehicleIds.length > 0) {
+      const all: any[] = [];
+      const seenKeys = new Set<string>();
+
+      const pushPages = async (filterCol: string, filterVal: string) => {
+        let offset = 0;
+        const pageSize = 1000;
+        for (;;) {
+          const { data, error } = await supabase
+            .from("kv_store_37f42386")
+            .select("value")
+            .like("key", "finalized_report:%")
+            .eq(filterCol, filterVal)
+            .range(offset, offset + pageSize - 1);
+          if (error) throw error;
+          for (const d of data || []) {
+            const v = d.value;
+            if (!v) continue;
+            const dedupe = `${v.weekStart || ""}:${v.driverId || ""}:${v.vehicleId || ""}:${v.id || ""}`;
+            if (seenKeys.has(dedupe)) continue;
+            seenKeys.add(dedupe);
+            all.push(v);
+          }
+          if ((data || []).length < pageSize) break;
+          offset += pageSize;
+        }
+      };
+
+      for (const driverId of uniqueDriverIds) {
+        await pushPages("value->>driverId", driverId);
+      }
+      for (const vehicleId of uniqueVehicleIds) {
+        await pushPages("value->>vehicleId", vehicleId);
+      }
+      return c.json(all);
+    }
+
     const reports = await kv.getByPrefix("finalized_report:");
     return c.json(reports || []);
   } catch (e: any) {
@@ -73,6 +132,11 @@ app.get(`${BASE_PATH}/finalized-reports`, async (c) => {
     return c.json({ error: e.message }, 500);
   }
 });
+
+/** Driver-week KV key (shared-car safe). Legacy vehicle-keyed rows migrate on write. */
+function finalizedReportKey(weekKey: string, driverId: string): string {
+  return `finalized_report:${weekKey}:${driverId}`;
+}
 
 app.post(`${BASE_PATH}/finalized-reports`, async (c) => {
   try {
@@ -83,17 +147,25 @@ app.post(`${BASE_PATH}/finalized-reports`, async (c) => {
 
     let saved = 0;
     for (const report of reports) {
-      if (!report.weekStart || !report.vehicleId) {
-        console.log(`[FinalizedReports] Skipping report missing weekStart or vehicleId`);
+      if (!report.weekStart || !report.driverId) {
+        console.log(`[FinalizedReports] Skipping report missing weekStart or driverId`);
         continue;
       }
       const weekKey = report.weekStart.split('T')[0];
-      const key = `finalized_report:${weekKey}:${report.vehicleId}`;
+      const key = finalizedReportKey(weekKey, report.driverId);
       await kv.set(key, report);
+      // Drop legacy vehicle-keyed duplicate if present (last-writer-wins on shared cars)
+      if (report.vehicleId && report.vehicleId !== report.driverId) {
+        try {
+          await kv.del(`finalized_report:${weekKey}:${report.vehicleId}`);
+        } catch {
+          /* ignore */
+        }
+      }
       saved++;
     }
 
-    console.log(`[FinalizedReports] Saved ${saved} finalized report snapshots`);
+    console.log(`[FinalizedReports] Saved ${saved} finalized report snapshots (driver-week keys)`);
     return c.json({ success: true, saved });
   } catch (e: any) {
     console.log(`[FinalizedReports] POST error: ${e.message}`);
@@ -101,14 +173,72 @@ app.post(`${BASE_PATH}/finalized-reports`, async (c) => {
   }
 });
 
-/** Parse `WeeklyFuelReport` id format: `<vehicleId>_<YYYY-MM-DD>` (date is last segment). */
-function parseFuelReportId(reportId: string): { vehicleId: string; weekKey: string } | null {
+/** Parse report id: `<driverOrVehicleId>_<YYYY-MM-DD>` (date is last segment). */
+function parseFuelReportId(reportId: string): { identityId: string; weekKey: string } | null {
   const idx = reportId.lastIndexOf("_");
   if (idx <= 0) return null;
   const weekKey = reportId.slice(idx + 1);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(weekKey)) return null;
-  return { vehicleId: reportId.slice(0, idx), weekKey };
+  return { identityId: reportId.slice(0, idx), weekKey };
 }
+
+/** One-time: copy vehicle-keyed snapshots → driver-keyed when driverId is present. */
+app.post(`${BASE_PATH}/finalized-reports/migrate-driver-keys`, async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const dryRun = !!body.dryRun;
+    const snapshots = (await kv.getByPrefix("finalized_report:")) || [];
+    let migrated = 0;
+    let skipped = 0;
+    const details: { from: string; to: string }[] = [];
+
+    for (const s of snapshots) {
+      if (!s?.weekStart || !s?.driverId) {
+        skipped++;
+        continue;
+      }
+      const weekKey = String(s.weekStart).split("T")[0];
+      const driverKey = finalizedReportKey(weekKey, s.driverId);
+      const vehicleKey =
+        s.vehicleId && s.vehicleId !== s.driverId
+          ? `finalized_report:${weekKey}:${s.vehicleId}`
+          : null;
+
+      const existingDriver = await kv.get(driverKey);
+      // Only migrate when this row still lives under the vehicle key (or no driver key yet)
+      const storedUnderVehicle =
+        vehicleKey &&
+        (await kv.get(vehicleKey)) &&
+        String((await kv.get(vehicleKey))?.driverId || "") === String(s.driverId);
+
+      if (existingDriver && !storedUnderVehicle) {
+        skipped++;
+        continue;
+      }
+
+      if (!existingDriver || (storedUnderVehicle && !existingDriver)) {
+        details.push({ from: vehicleKey || "(prefix scan)", to: driverKey });
+        if (!dryRun) {
+          await kv.set(driverKey, s);
+          if (vehicleKey) {
+            try {
+              await kv.del(vehicleKey);
+            } catch {
+              /* ignore */
+            }
+          }
+        }
+        migrated++;
+      } else {
+        skipped++;
+      }
+    }
+
+    return c.json({ success: true, dryRun, migrated, skipped, details: details.slice(0, 50) });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
 
 /**
  * One-time / maintenance: remove Enterprise fuel settlement rows that no longer have a
@@ -132,8 +262,11 @@ app.post(`${BASE_PATH}/finalized-reports/cleanup-orphaned-settlements`, async (c
     const snapshots = (await kv.getByPrefix("finalized_report:")) || [];
     const finalizedKeys = new Set<string>();
     for (const s of snapshots) {
-      if (!s?.vehicleId || !s?.weekStart) continue;
-      finalizedKeys.add(`${String(s.weekStart).split("T")[0]}:${s.vehicleId}`);
+      if (!s?.weekStart) continue;
+      const wk = String(s.weekStart).split("T")[0];
+      if (s.driverId) finalizedKeys.add(`${wk}:${s.driverId}`);
+      if (s.vehicleId) finalizedKeys.add(`${wk}:${s.vehicleId}`); // legacy vehicle-week keys
+      if (s.id) finalizedKeys.add(String(s.id));
     }
 
     const allTransactions = (await kv.getByPrefix("transaction:")) || [];
@@ -145,10 +278,16 @@ app.post(`${BASE_PATH}/finalized-reports/cleanup-orphaned-settlements`, async (c
       let marked = false;
       const rid = tx.metadata?.reportId;
       if (rid) {
-        const parsed = parseFuelReportId(String(rid));
-        if (parsed) {
-          const key = `${parsed.weekKey}:${parsed.vehicleId}`;
-          if (!finalizedKeys.has(key) && tx.vehicleId === parsed.vehicleId) {
+        const ridStr = String(rid);
+        if (!finalizedKeys.has(ridStr)) {
+          const parsed = parseFuelReportId(ridStr);
+          if (parsed) {
+            const key = `${parsed.weekKey}:${parsed.identityId}`;
+            if (!finalizedKeys.has(key)) {
+              txIdsToDelete.add(tx.id);
+              marked = true;
+            }
+          } else {
             txIdsToDelete.add(tx.id);
             marked = true;
           }
@@ -158,12 +297,20 @@ app.post(`${BASE_PATH}/finalized-reports/cleanup-orphaned-settlements`, async (c
       if (
         !marked &&
         tx.metadata?.settlementType === "Enterprise_Fuel_Sync" &&
-        tx.vehicleId
+        (tx.driverId || tx.vehicleId)
       ) {
         const wp = tx.metadata?.workPeriodStart?.split("T")[0];
         if (wp) {
-          const key = `${wp}:${tx.vehicleId}`;
-          if (!finalizedKeys.has(key)) txIdsToDelete.add(tx.id);
+          const driverKey = tx.driverId ? `${wp}:${tx.driverId}` : "";
+          const vehicleKey = tx.vehicleId ? `${wp}:${tx.vehicleId}` : "";
+          const ridKey = rid ? String(rid) : "";
+          if (
+            (!driverKey || !finalizedKeys.has(driverKey)) &&
+            (!vehicleKey || !finalizedKeys.has(vehicleKey)) &&
+            (!ridKey || !finalizedKeys.has(ridKey))
+          ) {
+            txIdsToDelete.add(tx.id);
+          }
         }
       }
     }
@@ -181,14 +328,14 @@ app.post(`${BASE_PATH}/finalized-reports/cleanup-orphaned-settlements`, async (c
     const entryIdsToReset: string[] = [];
 
     for (const entry of allFuelEntries) {
-      if (!entry?.id || !entry.vehicleId) continue;
+      if (!entry?.id) continue;
       const fbr = entry.metadata?.finalizedByReport;
       if (!fbr) continue;
-      const parsed = parseFuelReportId(String(fbr));
-      if (!parsed) continue;
-      if (parsed.vehicleId !== entry.vehicleId) continue;
-      const key = `${parsed.weekKey}:${parsed.vehicleId}`;
-      if (!finalizedKeys.has(key)) entryIdsToReset.push(entry.id);
+      const fbrStr = String(fbr);
+      if (finalizedKeys.has(fbrStr)) continue;
+      const parsed = parseFuelReportId(fbrStr);
+      if (parsed && finalizedKeys.has(`${parsed.weekKey}:${parsed.identityId}`)) continue;
+      entryIdsToReset.push(entry.id);
     }
 
     if (dryRun) {
@@ -252,46 +399,137 @@ app.post(`${BASE_PATH}/finalized-reports/cleanup-orphaned-settlements`, async (c
   }
 });
 
-app.delete(`${BASE_PATH}/finalized-reports/:weekStart/:vehicleId`, async (c) => {
+app.delete(`${BASE_PATH}/finalized-reports/:weekStart/:identityId`, async (c) => {
   try {
-    // Must match POST key: `finalized_report:${report.weekStart.split('T')[0]}:${vehicleId}`
+    // identityId = driverId (preferred) or legacy vehicleId; try both KV keys
     const weekStartRaw = decodeURIComponent(c.req.param("weekStart"));
-    const vehicleId = decodeURIComponent(c.req.param("vehicleId"));
+    const identityId = decodeURIComponent(c.req.param("identityId"));
     const weekKey = weekStartRaw.split("T")[0];
-    const snapshotKey = `finalized_report:${weekKey}:${vehicleId}`;
+    const driverKey = finalizedReportKey(weekKey, identityId);
+    const legacyVehicleKey = `finalized_report:${weekKey}:${identityId}`;
 
-    // Read snapshot before delete â€” carries authoritative `id` (vehicleId_localDate) for ledger links
-    const snapshot = await kv.get(snapshotKey);
+    let snapshot = await kv.get(driverKey);
+    let snapshotKey = driverKey;
+    if (!snapshot) {
+      snapshot = await kv.get(legacyVehicleKey);
+      snapshotKey = legacyVehicleKey;
+    }
+    // Also resolve when callers pass vehicleId but snapshot is driver-keyed
+    if (!snapshot && identityId) {
+      const byPrefix = ((await kv.getByPrefix("finalized_report:")) || []).filter(
+        (s: any) =>
+          s?.weekStart &&
+          String(s.weekStart).split("T")[0] === weekKey &&
+          (s.vehicleId === identityId || s.driverId === identityId),
+      );
+      if (byPrefix[0]) {
+        snapshot = byPrefix[0];
+        snapshotKey = snapshot.driverId
+          ? finalizedReportKey(weekKey, snapshot.driverId)
+          : `finalized_report:${weekKey}:${snapshot.vehicleId}`;
+      }
+    }
+
     const reportIdCandidates = new Set<string>();
+    const driverIds = new Set<string>();
+    const vehicleIds = new Set<string>();
     if (snapshot?.id) reportIdCandidates.add(String(snapshot.id));
-    reportIdCandidates.add(`${vehicleId}_${weekKey}`);
+    if (snapshot?.driverId) {
+      driverIds.add(String(snapshot.driverId));
+      reportIdCandidates.add(`${snapshot.driverId}_${weekKey}`);
+    }
+    if (snapshot?.vehicleId) {
+      vehicleIds.add(String(snapshot.vehicleId));
+      reportIdCandidates.add(`${snapshot.vehicleId}_${weekKey}`);
+    }
+    reportIdCandidates.add(`${identityId}_${weekKey}`);
+    driverIds.add(identityId);
+    vehicleIds.add(identityId);
 
     const allTransactions = (await kv.getByPrefix("transaction:")) || [];
+    const allFuelEntries = (await kv.getByPrefix("fuel_entry:")) || [];
     const txIdsToDelete = new Set<string>();
 
-    for (const tx of allTransactions) {
-      if (!tx?.id || tx.vehicleId !== vehicleId) continue;
+    const rStart = snapshot?.weekStart?.split("T")[0] || weekKey;
+    const rEnd =
+      snapshot?.weekEnd?.split("T")[0] ||
+      (() => {
+        const d = new Date(`${weekKey}T12:00:00.000Z`);
+        d.setUTCDate(d.getUTCDate() + 6);
+        return d.toISOString().slice(0, 10);
+      })();
 
-      const rid = tx.metadata?.reportId;
-      if (rid && reportIdCandidates.has(String(rid))) {
+    const weekFillIds = new Set<string>();
+    for (const entry of allFuelEntries) {
+      if (!entry?.id) continue;
+      const entryDate = String(entry.date || "").split("T")[0];
+      if (entryDate < rStart || entryDate > rEnd) continue;
+      const matchDriver = entry.driverId && driverIds.has(String(entry.driverId));
+      const matchVehicle = entry.vehicleId && vehicleIds.has(String(entry.vehicleId));
+      const matchReport =
+        entry.metadata?.finalizedByReport &&
+        reportIdCandidates.has(String(entry.metadata.finalizedByReport));
+      if (matchDriver || matchVehicle || matchReport) weekFillIds.add(entry.id);
+    }
+
+    for (const tx of allTransactions) {
+      if (!tx?.id) continue;
+
+      const rid = tx.metadata?.reportId ? String(tx.metadata.reportId) : "";
+      if (rid && reportIdCandidates.has(rid)) {
         txIdsToDelete.add(tx.id);
         continue;
       }
 
-      if (tx.metadata?.settlementType === "Enterprise_Fuel_Sync") {
-        const wp = tx.metadata?.workPeriodStart?.split("T")[0];
-        if (wp === weekKey) {
+      const st = tx.metadata?.settlementType;
+      const wp = String(tx.metadata?.workPeriodStart || "").split("T")[0];
+      const sameDriver = tx.driverId && driverIds.has(String(tx.driverId));
+      const sameVehicle = tx.vehicleId && vehicleIds.has(String(tx.vehicleId));
+
+      if (st === "Enterprise_Fuel_Sync" && wp === weekKey && (sameDriver || sameVehicle)) {
+        txIdsToDelete.add(tx.id);
+        continue;
+      }
+
+      // Reverse all fuel money legs for fills in this week (approve credits, offsets, deductions)
+      const sourceFill =
+        tx.metadata?.sourceId ||
+        tx.metadata?.linkedFuelId ||
+        tx.metadata?.fuelCreditSourceId;
+      const cat = tx.category || "";
+      const isFuelMoney =
+        st === "RideShare_Cash_Offset" ||
+        cat === "Fuel Reimbursement Credit" ||
+        cat === "Fuel Reimbursement" ||
+        cat === "Fuel Deduction" ||
+        cat === "Fuel Settlement" ||
+        cat === "Fuel Settlement Credit";
+
+      if (isFuelMoney && (sameDriver || sameVehicle)) {
+        if (sourceFill && weekFillIds.has(String(sourceFill))) {
+          txIdsToDelete.add(tx.id);
+          continue;
+        }
+        const txDate = String(tx.date || "").split("T")[0];
+        if (wp === weekKey || (txDate >= rStart && txDate <= rEnd)) {
           txIdsToDelete.add(tx.id);
         }
       }
     }
 
-    const ledgerTransactionIds = new Set<string>(txIdsToDelete);
-    // Remove paired Cash Wallet credits (fuel-credit-<sourceTxId>) before deleting source txs
-    for (const txId of txIdsToDelete) {
+    // Paired fuel-credit-* keys
+    for (const txId of [...txIdsToDelete]) {
       try {
         const fc = await kv.get(`transaction:fuel-credit-${txId}`);
-        if (fc?.id) ledgerTransactionIds.add(String(fc.id));
+        if (fc?.id) txIdsToDelete.add(String(fc.id));
+      } catch {
+        /* ignore */
+      }
+    }
+
+    const ledgerTransactionIds = new Set<string>(txIdsToDelete);
+    for (const txId of txIdsToDelete) {
+      try {
         await kv.del(`transaction:fuel-credit-${txId}`);
       } catch {
         /* ignore missing */
@@ -309,54 +547,34 @@ app.delete(`${BASE_PATH}/finalized-reports/:weekStart/:vehicleId`, async (c) => 
       console.warn("[FinalizedReports] Ledger cleanup failed (non-fatal):", ledgerErr?.message);
     }
 
-    // Reset fuel logs finalized in this statement (Pending + strip finalize metadata)
-    const allFuelEntries = (await kv.getByPrefix("fuel_entry:")) || [];
     let entriesReset = 0;
-    const rStart = snapshot?.weekStart?.split("T")[0] || weekKey;
-    const rEnd =
-      snapshot?.weekEnd?.split("T")[0] ||
-      (() => {
-        const d = new Date(`${weekKey}T12:00:00.000Z`);
-        d.setUTCDate(d.getUTCDate() + 6);
-        return d.toISOString().slice(0, 10);
-      })();
-
     for (const entry of allFuelEntries) {
-      if (!entry?.id || entry.vehicleId !== vehicleId) continue;
+      if (!entry?.id) continue;
       const entryDate = String(entry.date || "").split("T")[0];
       const inWeek = entryDate >= rStart && entryDate <= rEnd;
       const fbr = entry.metadata?.finalizedByReport;
       const matchReport = fbr && reportIdCandidates.has(String(fbr));
+      const matchDriver = entry.driverId && driverIds.has(String(entry.driverId));
+      const matchVehicle = entry.vehicleId && vehicleIds.has(String(entry.vehicleId));
       const settledInWeek =
         inWeek &&
+        (matchDriver || matchVehicle) &&
         (entry.reconciliationStatus === "Verified" ||
           entry.reconciliationStatus === "Archived" ||
           Boolean(fbr));
       if (!matchReport && !settledInWeek) continue;
-      if (!inWeek && matchReport) {
-        // linked to this report but outside week bounds â€” still clear
-      } else if (!inWeek) {
-        continue;
-      }
 
       const meta = { ...(entry.metadata || {}) };
       delete meta.finalizedAt;
       delete meta.finalizedByReport;
       delete meta.splitApplied;
 
-      const clearedTx =
-        entry.transactionId && txIdsToDelete.has(entry.transactionId)
-          ? undefined
-          : entry.transactionId;
-
       const updated: Record<string, unknown> = {
         ...entry,
         reconciliationStatus: "Pending",
         metadata: meta,
       };
-      if (clearedTx !== undefined) {
-        updated.transactionId = clearedTx;
-      } else {
+      if (entry.transactionId && txIdsToDelete.has(entry.transactionId)) {
         delete (updated as { transactionId?: string }).transactionId;
       }
 
@@ -364,9 +582,25 @@ app.delete(`${BASE_PATH}/finalized-reports/:weekStart/:vehicleId`, async (c) => 
       entriesReset++;
     }
 
-    await kv.del(snapshotKey);
+    // Delete driver-keyed + legacy vehicle-keyed snapshots
+    for (const key of [
+      snapshotKey,
+      driverKey,
+      legacyVehicleKey,
+      ...(snapshot?.driverId ? [finalizedReportKey(weekKey, snapshot.driverId)] : []),
+      ...(snapshot?.vehicleId
+        ? [`finalized_report:${weekKey}:${snapshot.vehicleId}`]
+        : []),
+    ]) {
+      try {
+        await kv.del(key);
+      } catch {
+        /* ignore */
+      }
+    }
+
     console.log(
-      `[FinalizedReports] Deleted ${snapshotKey}; txs=${txIdsToDelete.size}; fuelEntriesReset=${entriesReset}`
+      `[FinalizedReports] Deleted driver/vehicle week ${weekKey}/${identityId}; txs=${txIdsToDelete.size}; fuelEntriesReset=${entriesReset}`
     );
 
     return c.json({
@@ -381,9 +615,10 @@ app.delete(`${BASE_PATH}/finalized-reports/:weekStart/:vehicleId`, async (c) => 
 });
 
 /**
- * Period reset for Consumption Reconciliation â€” works even when finalized_report
+ * Period reset for Consumption Reconciliation — works even when finalized_report
  * snapshots are missing but fuel logs were already posted (Verified).
  * Body: { weekStart: "YYYY-MM-DD" } (Monday period id).
+ * Reverses ALL fuel credit/deduction legs for the week (Approve + Finalize eras).
  */
 app.post(`${BASE_PATH}/finalized-reports/reset-period`, async (c) => {
   try {
@@ -393,7 +628,6 @@ app.post(`${BASE_PATH}/finalized-reports/reset-period`, async (c) => {
       return c.json({ error: "weekStart (YYYY-MM-DD Monday) is required" }, 400);
     }
 
-    // Monâ€“Sun local calendar span (same contract as fuel week period id)
     const startUtc = new Date(`${weekKey}T12:00:00.000Z`);
     const endUtc = new Date(startUtc);
     endUtc.setUTCDate(endUtc.getUTCDate() + 6);
@@ -405,51 +639,25 @@ app.post(`${BASE_PATH}/finalized-reports/reset-period`, async (c) => {
 
     const reportIdCandidates = new Set<string>();
     const vehicleIds = new Set<string>();
+    const driverIds = new Set<string>();
     for (const s of snapshots) {
       if (s?.id) reportIdCandidates.add(String(s.id));
+      if (s?.driverId) {
+        driverIds.add(String(s.driverId));
+        reportIdCandidates.add(`${s.driverId}_${weekKey}`);
+      }
       if (s?.vehicleId) {
         vehicleIds.add(String(s.vehicleId));
         reportIdCandidates.add(`${s.vehicleId}_${weekKey}`);
       }
     }
 
-    const allTransactions = (await kv.getByPrefix("transaction:")) || [];
-    const txIdsToDelete = new Set<string>();
-
-    for (const tx of allTransactions) {
-      if (!tx?.id) continue;
-
-      const rid = tx.metadata?.reportId;
-      if (rid && reportIdCandidates.has(String(rid))) {
-        txIdsToDelete.add(tx.id);
-        if (tx.vehicleId) vehicleIds.add(String(tx.vehicleId));
-        continue;
-      }
-
-      if (tx.metadata?.settlementType === "Enterprise_Fuel_Sync") {
-        const wp = String(tx.metadata?.workPeriodStart || "").split("T")[0];
-        if (wp === weekKey) {
-          txIdsToDelete.add(tx.id);
-          if (tx.vehicleId) vehicleIds.add(String(tx.vehicleId));
-          // Ensure report-id form is covered for entry reset
-          if (tx.vehicleId) reportIdCandidates.add(`${tx.vehicleId}_${weekKey}`);
-        }
-      }
-    }
-
-    // Paired wallet credits
-    for (const tx of allTransactions) {
-      if (!tx?.id) continue;
-      if (tx.category !== "Fuel Reimbursement Credit") continue;
-      const src = tx.metadata?.fuelCreditSourceId;
-      if (src && txIdsToDelete.has(String(src))) txIdsToDelete.add(tx.id);
-    }
-
     const allFuelEntries = (await kv.getByPrefix("fuel_entry:")) || [];
     const entriesToReset: any[] = [];
+    const weekFillIds = new Set<string>();
 
     for (const entry of allFuelEntries) {
-      if (!entry?.id || !entry.vehicleId) continue;
+      if (!entry?.id) continue;
       const d = String(entry.date || "").split("T")[0];
       if (!d || d < weekKey || d > endDate) continue;
 
@@ -461,24 +669,84 @@ app.post(`${BASE_PATH}/finalized-reports/reset-period`, async (c) => {
         entry.reconciliationStatus === "Archived" ||
         Boolean(fbr);
 
+      weekFillIds.add(entry.id);
+      if (entry.vehicleId) vehicleIds.add(String(entry.vehicleId));
+      if (entry.driverId) {
+        driverIds.add(String(entry.driverId));
+        reportIdCandidates.add(`${entry.driverId}_${weekKey}`);
+      }
+      if (entry.vehicleId) reportIdCandidates.add(`${entry.vehicleId}_${weekKey}`);
+
       if (!settled) continue;
 
-      // Prefer explicit report link; otherwise Verified in this week is fair game for period reset
       if (fbr && reportIdCandidates.size > 0 && !reportIdCandidates.has(fbr)) {
         const parsed = parseFuelReportId(fbr);
         if (parsed && parsed.weekKey !== weekKey) continue;
       }
 
       entriesToReset.push(entry);
-      vehicleIds.add(String(entry.vehicleId));
-      reportIdCandidates.add(`${entry.vehicleId}_${weekKey}`);
     }
 
-    // Second pass: txs linked by report id discovered from entries
+    const allTransactions = (await kv.getByPrefix("transaction:")) || [];
+    const txIdsToDelete = new Set<string>();
+
     for (const tx of allTransactions) {
-      if (!tx?.id || txIdsToDelete.has(tx.id)) continue;
+      if (!tx?.id) continue;
+
       const rid = tx.metadata?.reportId;
-      if (rid && reportIdCandidates.has(String(rid))) txIdsToDelete.add(tx.id);
+      if (rid && reportIdCandidates.has(String(rid))) {
+        txIdsToDelete.add(tx.id);
+        continue;
+      }
+
+      const st = tx.metadata?.settlementType;
+      const wp = String(tx.metadata?.workPeriodStart || "").split("T")[0];
+      const sameDriver = tx.driverId && driverIds.has(String(tx.driverId));
+      const sameVehicle = tx.vehicleId && vehicleIds.has(String(tx.vehicleId));
+
+      if (st === "Enterprise_Fuel_Sync" && wp === weekKey) {
+        txIdsToDelete.add(tx.id);
+        if (tx.vehicleId) vehicleIds.add(String(tx.vehicleId));
+        if (tx.driverId) driverIds.add(String(tx.driverId));
+        continue;
+      }
+
+      const sourceFill =
+        tx.metadata?.sourceId ||
+        tx.metadata?.linkedFuelId ||
+        tx.metadata?.fuelCreditSourceId;
+      const cat = tx.category || "";
+      const isFuelMoney =
+        st === "RideShare_Cash_Offset" ||
+        cat === "Fuel Reimbursement Credit" ||
+        cat === "Fuel Reimbursement" ||
+        cat === "Fuel Deduction" ||
+        cat === "Fuel Settlement" ||
+        cat === "Fuel Settlement Credit";
+
+      if (!isFuelMoney) continue;
+
+      if (sourceFill && weekFillIds.has(String(sourceFill))) {
+        txIdsToDelete.add(tx.id);
+        continue;
+      }
+
+      if ((sameDriver || sameVehicle) && (wp === weekKey || (() => {
+        const txDate = String(tx.date || "").split("T")[0];
+        return txDate >= weekKey && txDate <= endDate;
+      })())) {
+        txIdsToDelete.add(tx.id);
+      }
+    }
+
+    // Paired wallet credits by source id
+    for (const tx of allTransactions) {
+      if (!tx?.id) continue;
+      if (tx.category !== "Fuel Reimbursement Credit") continue;
+      const src = tx.metadata?.fuelCreditSourceId;
+      if (src && (txIdsToDelete.has(String(src)) || weekFillIds.has(String(src)))) {
+        txIdsToDelete.add(tx.id);
+      }
     }
 
     const ledgerTransactionIds = new Set<string>(txIdsToDelete);
@@ -525,15 +793,26 @@ app.post(`${BASE_PATH}/finalized-reports/reset-period`, async (c) => {
 
     let snapshotsDeleted = 0;
     for (const s of snapshots) {
-      if (!s?.vehicleId) continue;
+      const keys = [
+        s?.driverId ? finalizedReportKey(weekKey, s.driverId) : null,
+        s?.vehicleId ? `finalized_report:${weekKey}:${s.vehicleId}` : null,
+      ].filter(Boolean) as string[];
+      for (const key of keys) {
+        try {
+          await kv.del(key);
+          snapshotsDeleted++;
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+    for (const driverId of driverIds) {
       try {
-        await kv.del(`finalized_report:${weekKey}:${s.vehicleId}`);
-        snapshotsDeleted++;
+        await kv.del(finalizedReportKey(weekKey, driverId));
       } catch {
         /* ignore */
       }
     }
-    // Also sweep any leftover keys for vehicles we touched
     for (const vehicleId of vehicleIds) {
       try {
         await kv.del(`finalized_report:${weekKey}:${vehicleId}`);
@@ -759,33 +1038,9 @@ async function releaseHeldTransaction(learnt: any, resolvedStationId: string, st
     const pricePerLiter = tx.metadata?.pricePerLiter || (quantity > 0 ? Number((amount / quantity).toFixed(3)) : 0);
 
     // Resolve paymentSource from the original transaction
-    const rawPaymentSource = tx.metadata?.paymentSource || tx.paymentMethod;
-    const paymentSourceEnum = (() => {
-        const map: Record<string, string> = {
-            'driver_cash': 'Personal',
-            'rideshare_cash': 'RideShare_Cash',
-            'company_card': 'Gas_Card',
-            'petty_cash': 'Petty_Cash',
-            'Cash': 'Personal',
-            'RideShare Cash': 'RideShare_Cash',
-            'Gas Card': 'Gas_Card',
-            'Other': 'Petty_Cash',
-            'Personal': 'Personal',
-            'RideShare_Cash': 'RideShare_Cash',
-            'Gas_Card': 'Gas_Card',
-            'Petty_Cash': 'Petty_Cash',
-        };
-        return map[rawPaymentSource] || 'Personal';
-    })();
-    const metadataPaymentSource = (() => {
-        const map: Record<string, string> = {
-            'Personal': 'driver_cash',
-            'RideShare_Cash': 'rideshare_cash',
-            'Gas_Card': 'company_card',
-            'Petty_Cash': 'petty_cash',
-        };
-        return map[paymentSourceEnum] || 'driver_cash';
-    })();
+    const paySrc = resolveFuelPaymentSource(tx.metadata?.paymentSource || tx.paymentMethod);
+    const paymentSourceEnum = paySrc.enum;
+    const metadataPaymentSource = paySrc.meta;
 
     const fuelEntry: any = {
         id: crypto.randomUUID(),
@@ -1074,32 +1329,9 @@ async function ensureFuelEntryLinkedToTransaction(tx: any, station: any): Promis
         tx.metadata?.pricePerLiter || (quantity > 0 ? Number((amount / quantity).toFixed(3)) : 0);
 
     const rawPaymentSource = tx.metadata?.paymentSource || tx.paymentMethod;
-    const paymentSourceEnum = (() => {
-        const map: Record<string, string> = {
-            driver_cash: "Personal",
-            rideshare_cash: "RideShare_Cash",
-            company_card: "Gas_Card",
-            petty_cash: "Petty_Cash",
-            Cash: "Personal",
-            "RideShare Cash": "RideShare_Cash",
-            "Gas Card": "Gas_Card",
-            Other: "Petty_Cash",
-            Personal: "Personal",
-            RideShare_Cash: "RideShare_Cash",
-            Gas_Card: "Gas_Card",
-            Petty_Cash: "Petty_Cash",
-        };
-        return map[rawPaymentSource] || "Personal";
-    })();
-    const metadataPaymentSource = (() => {
-        const map: Record<string, string> = {
-            Personal: "driver_cash",
-            RideShare_Cash: "rideshare_cash",
-            Gas_Card: "company_card",
-            Petty_Cash: "petty_cash",
-        };
-        return map[paymentSourceEnum] || "driver_cash";
-    })();
+    const paySrc = resolveFuelPaymentSource(rawPaymentSource);
+    const paymentSourceEnum = paySrc.enum;
+    const metadataPaymentSource = paySrc.meta;
 
     const fuelEntryId = crypto.randomUUID();
     const fuelEntry: any = {
@@ -1896,6 +2128,16 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
     const entry = await c.req.json();
     if (!entry.id) entry.id = crypto.randomUUID();
 
+    // Persist top-level + metadata paymentSource; blank → RideShare_Cash
+    {
+      const paySrc = resolveFuelPaymentSource(
+        entry.paymentSource || entry.metadata?.paymentSource ||
+          (entry.type === 'Card_Transaction' ? 'Gas_Card' : undefined),
+      );
+      entry.paymentSource = paySrc.enum;
+      entry.metadata = { ...(entry.metadata || {}), paymentSource: paySrc.meta };
+    }
+
     if (entry.driverId || entry.vehicleId) {
         const enriched = await enrichRecordWithDriverVehicle(
             entry,
@@ -2536,32 +2778,10 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
                 return c.json({ success: true, patched: 0, message: "No fuel entries found." });
             }
 
-            const metaToEnum: Record<string, string> = {
-                'driver_cash': 'Personal',
-                'rideshare_cash': 'RideShare_Cash',
-                'company_card': 'Gas_Card',
-                'petty_cash': 'Petty_Cash',
-                'Cash': 'Personal',
-                'RideShare Cash': 'RideShare_Cash',
-                'Gas Card': 'Gas_Card',
-                'Other': 'Petty_Cash',
-                'Personal': 'Personal',
-                'RideShare_Cash': 'RideShare_Cash',
-                'Gas_Card': 'Gas_Card',
-                'Petty_Cash': 'Petty_Cash',
-            };
-            const enumToDropdown: Record<string, string> = {
-                'Personal': 'driver_cash',
-                'RideShare_Cash': 'rideshare_cash',
-                'Gas_Card': 'company_card',
-                'Petty_Cash': 'petty_cash',
-            };
-
             let patched = 0;
             for (const entry of allEntries) {
                 if (entry.paymentSource) continue; // Already has a value, skip
 
-                let inferredEnum: string;
                 let rawMeta = entry.metadata?.paymentSource;
                 // Fix: If no paymentSource in metadata, look up the linked transaction
                 if (!rawMeta && entry.transactionId) {
@@ -2573,19 +2793,21 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
                         }
                     } catch (e) { /* ignore lookup failures */ }
                 }
-                if (rawMeta && metaToEnum[rawMeta]) {
-                    inferredEnum = metaToEnum[rawMeta];
+
+                let inferredEnum: string;
+                if (rawMeta) {
+                    inferredEnum = normalizeFuelPaymentSourceEnum(rawMeta);
                 } else if (entry.type === 'Card_Transaction') {
                     inferredEnum = 'Gas_Card';
                 } else {
-                    // Reimbursement, Fuel_Manual_Entry, Manual_Entry, etc.
-                    inferredEnum = 'Personal';
+                    // Ambiguous → RideShare_Cash (business trip cash), not Personal
+                    inferredEnum = 'RideShare_Cash';
                 }
 
                 entry.paymentSource = inferredEnum;
                 entry.metadata = {
                     ...(entry.metadata || {}),
-                    paymentSource: enumToDropdown[inferredEnum] || 'driver_cash',
+                    paymentSource: fuelPaymentSourceToMeta(inferredEnum as any),
                 };
 
                 await kv.set(`fuel_entry:${entry.id}`, entry);

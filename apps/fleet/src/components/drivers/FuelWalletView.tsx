@@ -57,16 +57,22 @@ export function FuelWalletView({ transactions, onBackfill }: FuelWalletViewProps
     const [selectedGroup, setSelectedGroup] = useState<DateGroup | null>(null);
 
     // ── Step 1: Filter to only fuel-related financial transactions ──
+    // Prefer Finalize Enterprise sync; hide orphan approve credits / early portal offsets from live totals
     const fuelTransactions: FinancialTransaction[] = useMemo(() => {
         return transactions
             .filter(t => {
                 if (!t) return false;
+                if (t.category === 'Fuel Reimbursement Credit') return false;
+                if (t.metadata?.settlementType === 'RideShare_Cash_Offset') return false;
                 const cat = (t.category || '').toLowerCase();
                 const desc = (t.description || '').toLowerCase();
                 const isFuelCategory = cat.includes('fuel');
                 const isFuelDescription = desc.includes('fuel');
-                const isAutoSettlement = t.metadata?.settlementType === 'RideShare_Cash_Offset';
-                return isFuelCategory || isFuelDescription || isAutoSettlement;
+                const isEnterprise =
+                  t.metadata?.settlementType === 'Enterprise_Fuel_Sync' ||
+                  t.category === 'Fuel Reimbursement' ||
+                  t.category === 'Fuel Deduction';
+                return isEnterprise || isFuelCategory || isFuelDescription;
             })
             .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     }, [transactions]);

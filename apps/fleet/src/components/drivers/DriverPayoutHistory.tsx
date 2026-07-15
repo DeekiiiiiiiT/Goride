@@ -12,6 +12,7 @@ import { PayoutPeriodDetail } from './PayoutPeriodDetail';
 import type { PayoutPeriodRow } from '../../types/driverPayoutPeriod';
 import { useDriverPayoutPeriodRows, type PeriodType } from '../../hooks/useDriverPayoutPeriodRows';
 import { getPeriodSettlementComponents } from '../../utils/driverSettlementMath';
+import type { DriverFinancialBundle, DriverLike } from '../../hooks/useDriverFinancialBundle';
 
 // ────────────────────────────────────────────────────────────
 // Props
@@ -19,26 +20,37 @@ import { getPeriodSettlementComponents } from '../../utils/driverSettlementMath'
 
 interface DriverPayoutHistoryProps {
   driverId: string;
+  driver?: DriverLike | null;
   transactions: FinancialTransaction[];
   trips?: Trip[];
   csvMetrics?: DriverMetrics[];
+  financialBundle?: DriverFinancialBundle;
 }
 
 // ────────────────────────────────────────────────────────────
 // Component
 // ────────────────────────────────────────────────────────────
 
-export function DriverPayoutHistory({ driverId, transactions = [], trips = [], csvMetrics = [] }: DriverPayoutHistoryProps) {
+export function DriverPayoutHistory({
+  driverId,
+  driver = null,
+  transactions = [],
+  trips = [],
+  csvMetrics = [],
+  financialBundle,
+}: DriverPayoutHistoryProps) {
 
   const [periodType, setPeriodType] = useState<PeriodType>('weekly');
   const [visibleCount, setVisibleCount] = useState(12);
 
-  const { periodData, isReady } = useDriverPayoutPeriodRows({
+  const { periodData, isReady, fuelDataLoading } = useDriverPayoutPeriodRows({
     driverId,
+    driver,
     trips,
     transactions,
     csvMetrics,
     periodType,
+    financialBundle,
   });
 
   const defaultPageSize = (pt: PeriodType) => pt === 'daily' ? 14 : pt === 'monthly' ? 6 : 12;
@@ -126,7 +138,7 @@ export function DriverPayoutHistory({ driverId, transactions = [], trips = [], c
   // ── Period detail overlay state ──
   const [selectedRow, setSelectedRow] = useState<PayoutPeriodRow | null>(null);
 
-  // ── Loading state ──
+  // ── Loading state — paint when ledger is ready; fuel columns fill progressively
   if (!isReady) {
     return (
       <Card>
@@ -152,6 +164,12 @@ export function DriverPayoutHistory({ driverId, transactions = [], trips = [], c
 
   return (
     <div className="space-y-6">
+      {fuelDataLoading && (
+        <p className="text-xs text-slate-400 inline-flex items-center gap-1.5 px-1">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          Updating fuel deductions…
+        </p>
+      )}
       {/* ── Phase 5: Summary Cards ── */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Card 1 — Net Payout (green) */}

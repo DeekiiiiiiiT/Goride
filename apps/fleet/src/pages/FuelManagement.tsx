@@ -1,4 +1,5 @@
 ﻿import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { FuelLayout } from '../components/fuel/FuelLayout';
 import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -21,7 +22,7 @@ import {
 } from '../components/ui/sheet';
 import { resolveActiveFuelPolicyForDriverWeek } from '../utils/fuelPolicyVersion';
 import { reportWeekYmdBounds, toEntryYmd, currentFuelWeekRange, isEntryInInclusiveYmdRange } from '../utils/fuelWeekPeriod';
-import { sumPaidByDriverForReport, entriesBelongingToDriverWeekReport } from '../utils/fuelPaidByDriver';
+import { sumPaidByDriverForReport, sumGasCardSpendForReport, entriesBelongingToDriverWeekReport } from '../utils/fuelPaidByDriver';
 import { useFleetTimezone, fleetTzDateKey, ymdToLocalDate } from '../utils/timezoneDisplay';
 import { generateWeekOptionsForDateRange, type PeriodWeekOption } from '../utils/periodWeekOptions';
 import { format, addDays, parseISO } from 'date-fns';
@@ -66,6 +67,7 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
     onViewDriverLedger?: (driverId: string) => void,
     onTabChange?: (tab: string) => void
 }) {
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState(defaultTab);
 
   useEffect(() => {
@@ -873,11 +875,28 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
               // Same belonging helper as recon rows / Paid by Driver (resolveFuelFillDriver)
               const { start: rStart } = reportWeekYmdBounds(report);
               const attrCtx = { vehicles, fuelCards: cards, trips };
-              const relevantEntries = entriesBelongingToDriverWeekReport(logs, report, attrCtx).filter(
-                (entry) => entry.reconciliationStatus === 'Pending',
-              );
-
               const prior = findPrior(report.driverId, rStart);
+
+              // Re-finalize: reverse prior Enterprise sync, then repost ALL week fills atomically
+              if (prior) {
+                  await settlementService.reverseEnterpriseFuelSyncForReport(report);
+              }
+
+              // After reverse, local `logs` may still show Verified — treat previously-finalized
+              // + Pending as postable on re-finalize; first finalize uses Pending only.
+              const weekEntries = entriesBelongingToDriverWeekReport(logs, report, attrCtx);
+              const relevantEntries = prior
+                ? weekEntries.filter(
+                    (entry) =>
+                      entry.reconciliationStatus === 'Pending' ||
+                      entry.reconciliationStatus === 'Verified' ||
+                      entry.metadata?.finalizedByReport,
+                  ).map((e) => ({
+                    ...e,
+                    // Force Pending so commitWeeklyStatement will post
+                    reconciliationStatus: 'Pending' as const,
+                  }))
+                : weekEntries.filter((entry) => entry.reconciliationStatus === 'Pending');
 
               // No-op guard: do not rewrite finalized snapshots when nothing new to post
               if (relevantEntries.length === 0) {
@@ -897,18 +916,14 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
                   successCount++;
               }
 
-              // Re-finalize safety: driverShare/companyShare are recomputed live from
-              // ALL entries in the week every pass (adding an entry can shift the
-              // week's observed efficiency/price-per-liter, retroactively changing
-              // the cost attributed to already-posted entries). Track the cumulative
-              // total actually posted to the ledger separately so drift is visible
-              // rather than silently overwritten.
-              const postedDriverShare = (prior?.postedDriverShare ?? prior?.driverShare ?? 0) + newlyPostedDriverShare;
-              const postedCompanyShare = (prior?.postedCompanyShare ?? prior?.companyShare ?? 0) + newlyPostedCompanyShare;
+              // Re-finalize: absolute posted totals (full-week repost), not cumulative add
+              const postedDriverShare = newlyPostedDriverShare;
+              const postedCompanyShare = newlyPostedCompanyShare;
 
               const vehicle = vehicles.find((v: any) => v.id === report.vehicleId);
               const driver = drivers.find((d: any) => d.id === report.driverId || d.driverId === report.driverId);
               const driverSpend = sumPaidByDriverForReport(logs, report, vehicles, attrCtx);
+              const gasCardSpend = sumGasCardSpendForReport(logs, report, vehicles, attrCtx);
 
               // Step 9 audit trail — freeze driver policy coverage used for this week
               const policy = resolveActiveFuelPolicyForDriverWeek(
@@ -926,6 +941,7 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
                 finalizedAt: new Date().toISOString(),
                 finalizedByUser: 'admin',
                 driverSpend,
+                gasCardSpend,
                 netPay: driverSpend - report.driverShare,
                 vehiclePlate: vehicle?.licensePlate || 'Unknown',
                 vehicleModel: vehicle?.model || '',
@@ -955,6 +971,8 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
 
           try {
             await api.saveFinalizedReports(snapshots);
+            // Driver Financials tabs share React Query cache for finalized snapshots.
+            await queryClient.invalidateQueries({ queryKey: ['finalizedReports'] });
           } catch (snapErr: any) {
             console.error('[FinalizedReports] Snapshot save failed:', snapErr);
             toast.warning('Statements finalized but snapshot save failed â€” finalized tab may be incomplete.');

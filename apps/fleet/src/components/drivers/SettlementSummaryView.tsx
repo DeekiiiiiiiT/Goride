@@ -1,418 +1,130 @@
-// ════════════════════════════════════════════════════════════════════════════
-// Settlement Summary View — Phase 7 (Polish, Export, Hardening)
-// ════════════════════════════════════════════════════════════════════════════
-// Shows the combined Payout + Cash picture per weekly period.
-// Phase 4: fetches ledger + finalized reports, computes cash via shared
-//          utility, merges into unified SettlementRow[].
-// Phase 5: summary cards added.
-// Phase 6: period-by-period settlement table with pagination.
-// Phase 7: CSV export, info tooltip, fuzzy week matching, NaN guards.
-// ════════════════════════════════════════════════════════════════════════════
-
-import React, { useState, useEffect, useMemo } from 'react';
+// Settlement Summary View — uses shared payout pipeline (useDriverPayoutPeriodRows).
+import React, { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "../ui/tooltip";
 import { Loader2, CheckCircle, DollarSign, Wallet, ArrowUpCircle, ArrowDownCircle, ChevronDown, Clock, MinusCircle, Download, Info } from "lucide-react";
 import { toast } from "sonner@2.0.3";
-import { Trip, FinancialTransaction, DriverMetrics, DisputeRefund } from '../../types/data';
-import { api } from '../../services/api';
-import { computeWeeklyCashSettlement, CashWeekData } from '../../utils/cashSettlementCalc';
-import { computePeriodSettlement } from '../../utils/driverPeriodSettlement';
-import { getFuelDeductionForPeriod } from '../../utils/fuelDeductionForPeriod';
+import { Trip, FinancialTransaction, DriverMetrics } from '../../types/data';
 import { exportToCSV } from '../../utils/csvHelpers';
-import { differenceInCalendarDays, format } from 'date-fns';
-import { useFleetTimezone } from '../../utils/timezoneDisplay';
+import { format } from 'date-fns';
 import { SettlementPeriodDetail } from './SettlementPeriodDetail';
-import { isTollCategory } from '../../utils/tollCategoryHelper';
-import { computeDisputeRefundCounts, groupDisputeRefundsByWeek } from '../../utils/tollWeekPeriod';
-import { expandDriverTransactionIds } from '../../utils/expandDriverTransactionIds';
-// ────────────────────────────────────────────────────────────
-// Types
-// ────────────────────────────────────────────────────────────
+import { useDriverPayoutPeriodRows } from '../../hooks/useDriverPayoutPeriodRows';
+import type { DriverFinancialBundle, DriverLike } from '../../hooks/useDriverFinancialBundle';
+import type { PayoutPeriodRow } from '../../types/driverPayoutPeriod';
+import { getPeriodSettlementComponents } from '../../utils/driverSettlementMath';
 
 export type SettlementStatus = 'Settled' | 'Company Owes' | 'Driver Owes' | 'Pending' | 'No Activity';
 
 export interface SettlementRow {
   periodStart: Date;
   periodEnd: Date;
-  // Payout side
   grossRevenue: number;
   driverShare: number;
   tollExpenses: number;
-  tollReconciled: number;      // Phase 7: count of reconciled toll txns
-  tollUnreconciled: number;    // Phase 7: count of unreconciled toll txns
-  disputeRefundMatched: number;   // Uber support-case adjustments already linked to a toll
-  disputeRefundUnmatched: number; // Uber support-case adjustments still needing a manual match
+  tollReconciled: number;
+  tollUnreconciled: number;
+  disputeRefundMatched: number;
+  disputeRefundUnmatched: number;
   fuelDeduction: number;
-  totalDeductions: number;   // tolls + fuel
-  netPayout: number;         // driverShare - totalDeductions
+  totalDeductions: number;
+  netPayout: number;
   isFinalized: boolean;
   tripCount: number;
-  // Cash side
-  cashOwed: number;          // from cashWeeks.amountOwed
-  cashPaid: number;          // from cashWeeks.amountPaid
-  cashBalance: number;       // from cashWeeks.balance (amountOwed - amountPaid)
-  cashStatus: string;        // from cashWeeks.status
-  // Combined
-  settlement: number;        // netPayout - cashBalance
+  cashOwed: number;
+  cashPaid: number;
+  cashBalance: number;
+  cashStatus: string;
+  settlement: number;
   settlementStatus: SettlementStatus;
 }
-
-// ────────────────────────────────────────────────────────────
-// Props
-// ────────────────────────────────────────────────────────────
 
 interface SettlementSummaryViewProps {
   driverId: string;
   trips: Trip[];
   transactions: FinancialTransaction[];
   csvMetrics: DriverMetrics[];
+  driver?: DriverLike | null;
+  financialBundle?: DriverFinancialBundle;
 }
 
-// ────────────────────────────────────────────────────────────
-// Component
-// ────────────────────────────────────────────────────────────
+function payoutToSettlementRow(row: PayoutPeriodRow): SettlementRow {
+  const { settlement } = getPeriodSettlementComponents(row);
+  const hasActivity =
+    row.tripCount > 0 ||
+    row.cashOwed > 0.01 ||
+    row.cashPaid > 0.01 ||
+    row.driverShare > 0.01 ||
+    row.tollExpenses > 0.01 ||
+    row.fuelDeduction > 0.01 ||
+    Math.abs(row.cashBalance) > 0.01;
+
+  let settlementStatus: SettlementStatus;
+  if (!hasActivity) settlementStatus = 'No Activity';
+  else if (!row.isFinalized) settlementStatus = 'Pending';
+  else if (Math.abs(settlement) < 1) settlementStatus = 'Settled';
+  else if (settlement > 0) settlementStatus = 'Company Owes';
+  else settlementStatus = 'Driver Owes';
+
+  let cashStatus = 'No Activity';
+  if (Math.abs(row.cashBalance) > 0.01 || row.cashOwed > 0.01 || row.cashPaid > 0.01) {
+    cashStatus = Math.abs(row.cashBalance) < 0.01 ? 'Settled' : 'Outstanding';
+  }
+
+  return {
+    periodStart: row.periodStart,
+    periodEnd: row.periodEnd,
+    grossRevenue: row.grossRevenue,
+    driverShare: row.driverShare,
+    tollExpenses: row.tollExpenses,
+    tollReconciled: row.tollReconciled,
+    tollUnreconciled: row.tollUnreconciled,
+    disputeRefundMatched: row.disputeRefundMatched,
+    disputeRefundUnmatched: row.disputeRefundUnmatched,
+    fuelDeduction: row.fuelDeduction,
+    totalDeductions: row.totalDeductions,
+    netPayout: row.netPayout,
+    isFinalized: row.isFinalized,
+    tripCount: row.tripCount,
+    cashOwed: row.cashOwed,
+    cashPaid: row.cashPaid,
+    cashBalance: row.cashBalance,
+    cashStatus,
+    settlement,
+    settlementStatus,
+  };
+}
 
 export function SettlementSummaryView({
   driverId,
   trips = [],
   transactions = [],
   csvMetrics = [],
+  driver = null,
+  financialBundle,
 }: SettlementSummaryViewProps) {
+  const { periodData, isReady: ledgerReady, fuelDataLoading } = useDriverPayoutPeriodRows({
+    driverId,
+    driver,
+    trips,
+    transactions,
+    csvMetrics,
+    periodType: 'weekly',
+    financialBundle,
+  });
 
-  // ── Unified toll settlement flag (default OFF → legacy behavior) ──
-  const [unifiedToll, setUnifiedToll] = useState(false);
-  const fleetTz = useFleetTimezone();
-  useEffect(() => {
-    let cancelled = false;
-    api.getTollAutomationSettings()
-      .then(res => { if (!cancelled) setUnifiedToll(res.data.unifiedTollSettlementEnabled === true); })
-      .catch(() => { /* default OFF */ });
-    return () => { cancelled = true; };
-  }, []);
+  const isReady = ledgerReady;
 
-  // ── Step 4.1: Ledger payout data ──
-  const [ledgerRows, setLedgerRows] = useState<any[]>([]);
-  const [ledgerLoaded, setLedgerLoaded] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    setLedgerLoaded(false);
-
-    api.getLedgerEarningsHistory({
-      driverId,
-      periodType: 'weekly',
-    })
-      .then((result) => {
-        if (cancelled) return;
-        if (result.success && result.data) {
-          setLedgerRows(result.data);
-          console.log(`[SettlementSummaryView] Ledger loaded: ${result.data.length} weekly rows (${result.durationMs}ms)`);
-        } else {
-          setLedgerRows([]);
-          console.log('[SettlementSummaryView] Ledger returned no data');
-        }
-        setLedgerLoaded(true);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        console.error('[SettlementSummaryView] Ledger fetch failed:', err);
-        setLedgerRows([]);
-        setLedgerLoaded(true);
-      });
-
-    return () => { cancelled = true; };
-  }, [driverId]);
-
-  // ── Step 4.3: Finalized fuel reports ──
-  const [finalizedReports, setFinalizedReports] = useState<any[]>([]);
-  const [fuelDataLoading, setFuelDataLoading] = useState(true);
-  const [disputeRefunds, setDisputeRefunds] = useState<DisputeRefund[]>([]);
-
-  useEffect(() => {
-    let cancelled = false;
-    const loadFinalizedData = async () => {
-      setFuelDataLoading(true);
-      try {
-        const [drivers, vehicles, allReports, disputeRefundsRes] = await Promise.all([
-          api.getDrivers().catch(() => []),
-          api.getVehicles().catch(() => []),
-          api.getFinalizedReports().catch(() => []),
-          // Unscoped fetch — DisputeRefund.driverId comes from the raw Uber CSV
-          // "Driver UUID" column with no server-side normalization, so it may
-          // not match this driver's native id. Filter client-side below by the
-          // same expanded ID set used elsewhere, rather than trusting a
-          // single-ID server-side match.
-          api.getDisputeRefunds().catch(() => ({ data: [] as DisputeRefund[], total: 0 })),
-        ]);
-        if (cancelled) return;
-
-        const driverRecord = (drivers || []).find((d: any) => d.id === driverId);
-
-        // Build ID set using ONLY native Roam IDs
-        const driverIdSet = new Set<string>([driverId]);
-        if (driverRecord?.driverId) driverIdSet.add(driverRecord.driverId);
-
-        const myVehicles = (vehicles || []).filter(
-          (v: any) => v.currentDriverId && driverIdSet.has(v.currentDriverId)
-        );
-        const vehicleIdSet = new Set<string>(myVehicles.map((v: any) => v.id));
-
-        const myReports = (allReports || []).filter(
-          (r: any) => r.status === 'Finalized' && vehicleIdSet.has(r.vehicleId)
-        );
-        setFinalizedReports(myReports);
-
-        const expandedIdSet = new Set(
-          expandDriverTransactionIds([driverId, driverRecord?.driverId, driverRecord?.uberDriverId, driverRecord?.inDriveDriverId])
-        );
-        setDisputeRefunds((disputeRefundsRes.data || []).filter((r) => expandedIdSet.has(r.driverId)));
-      } catch (e) {
-        console.error('[SettlementSummaryView] Failed to load finalized reports:', e);
-      } finally {
-        if (!cancelled) setFuelDataLoading(false);
-      }
-    };
-    loadFinalizedData();
-    return () => { cancelled = true; };
-  }, [driverId]);
-
-  // ── Step 4.2: Cash data from shared utility ──
-  // Unified mode makes the cash calc toll-NEUTRAL so the shared settlement calc
-  // applies the server's reconciliation-aware toll disposition exactly once.
-  const cashWeeks: CashWeekData[] = useMemo(() => {
-    return computeWeeklyCashSettlement({
-      trips,
-      transactions,
-      csvMetrics,
-      excludeTollEffects: unifiedToll,
-      timezone: fleetTz,
-    });
-  }, [trips, transactions, csvMetrics, unifiedToll, fleetTz]);
-
-  // ── Loading gate ──
-  const isReady = ledgerLoaded && !fuelDataLoading;
-
-  // ── Step 4.4: Merge into unified SettlementRow[] ──
   const settlementRows: SettlementRow[] = useMemo(() => {
     if (!isReady) return [];
+    const rows = periodData.map(payoutToSettlementRow);
+    const firstActive = rows.findIndex((r) => r.settlementStatus !== 'No Activity');
+    const lastActive =
+      rows.length - 1 - [...rows].reverse().findIndex((r) => r.settlementStatus !== 'No Activity');
+    return firstActive >= 0 ? rows.slice(firstActive, lastActive + 1) : [];
+  }, [isReady, periodData]);
 
-    // Pre-filter expense transactions for toll keyword matching
-    // Include toll-category rows regardless of `type` — toll_ledger-sourced
-    // rows (merged in from GET /toll-logs) carry type:'Usage', which the plain
-    // Expense/Adjustment gate below silently drops, making post-migration
-    // tolls invisible even though they're present in `transactions`.
-    const expenseTx = transactions.filter(
-      t => t.type === 'Expense' || (t.type === 'Adjustment' && t.amount < 0) || isTollCategory(t.category)
-    );
-
-    // Helper: toll expenses for a date range
-    const getTollsForPeriod = (pStartTime: number, pEndTime: number): { amount: number; reconciled: number; unreconciled: number } => {
-      let tollTotal = 0;
-      let reconciled = 0;
-      let unreconciled = 0;
-      expenseTx.forEach(tx => {
-        const d = new Date(tx.date).getTime();
-        if (d >= pStartTime && d <= pEndTime) {
-          if (isTollCategory(tx.category)) {
-            tollTotal += Math.abs(tx.amount);
-            if (tx.isReconciled) reconciled++;
-            else unreconciled++;
-          }
-        }
-      });
-      return { amount: tollTotal, reconciled, unreconciled };
-    };
-
-    // Finalized fuel deduction for a date range — canonical shared aggregator
-    // (this view is always weekly, per its ledger fetch above).
-    const getDeductionForPeriod = (periodStart: Date, periodEnd: Date) =>
-      getFuelDeductionForPeriod(finalizedReports, periodStart, periodEnd, 'weekly');
-
-    // Build a Map from Monday date string → ledger row for fast lookup
-    const ledgerMap = new Map<string, any>();
-    for (const lr of ledgerRows) {
-      // Key by periodStart (YYYY-MM-DD)
-      const key = lr.periodStart; // already "YYYY-MM-DD" from server
-      ledgerMap.set(key, lr);
-    }
-
-    // Build a Map from Monday date string → cash week for fast lookup
-    const cashMap = new Map<string, CashWeekData>();
-    for (const cw of cashWeeks) {
-      const key = format(cw.start, 'yyyy-MM-dd');
-      cashMap.set(key, cw);
-    }
-
-    // Collect all unique Monday keys from all three sides — a period whose
-    // ONLY activity is a dispute refund must still get a row, otherwise the
-    // Dispute Status column added below is unreachable for exactly the
-    // periods most in need of it.
-    const allKeys = new Set<string>();
-    ledgerMap.forEach((_, k) => allKeys.add(k));
-    cashMap.forEach((_, k) => allKeys.add(k));
-    for (const week of groupDisputeRefundsByWeek(disputeRefunds)) {
-      allKeys.add(week.key);
-    }
-
-    // Merge
-    const rows: SettlementRow[] = [];
-    for (const key of allKeys) {
-      const lr = ledgerMap.get(key);
-      // Phase 7 (Step 7.3): Fuzzy match — if no exact cash key, look for a
-      // cash week within ±2 days (handles timezone-shifted Monday boundaries).
-      let cw = cashMap.get(key);
-      if (!cw) {
-        const keyDate = new Date(key + 'T00:00:00');
-        for (const [ck, cv] of cashMap.entries()) {
-          const ckDate = new Date(ck + 'T00:00:00');
-          if (Math.abs(differenceInCalendarDays(keyDate, ckDate)) <= 2) {
-            cw = cv;
-            break;
-          }
-        }
-      }
-
-      // Determine period boundaries
-      let periodStart: Date;
-      let periodEnd: Date;
-      if (lr) {
-        periodStart = new Date(lr.periodStart + 'T00:00:00');
-        periodEnd = new Date(lr.periodEnd + 'T23:59:59');
-      } else if (cw) {
-        periodStart = cw.start;
-        periodEnd = cw.end;
-      } else {
-        // Dispute-refund-only period — key is itself a Monday "YYYY-MM-DD".
-        periodStart = new Date(key + 'T00:00:00');
-        periodEnd = new Date(periodStart);
-        periodEnd.setDate(periodEnd.getDate() + 6);
-        periodEnd.setHours(23, 59, 59, 999);
-      }
-
-      const pStartTime = periodStart.getTime();
-      const pEndTime = periodEnd.getTime();
-
-      // ── Payout side ──
-      const grossRevenue = lr?.grossRevenue || 0;
-      const driverShare = lr?.driverShare || 0;
-      const tripCount = lr?.tripCount || 0;
-      const tollExpensesLegacy = getTollsForPeriod(pStartTime, pEndTime);
-      const { deduction: fuelDeduction, finalized: isFinalized } = getDeductionForPeriod(periodStart, periodEnd);
-      const { matched: disputeRefundMatched, unmatched: disputeRefundUnmatched } =
-        computeDisputeRefundCounts(disputeRefunds, periodStart, periodEnd);
-      const cashStatus = cw?.status || 'No Activity';
-
-      let tollExpenses = tollExpensesLegacy;
-      let totalDeductions: number;
-      let netPayout: number;
-      let cashOwed: number;
-      let cashPaid: number;
-      let cashBalance: number;
-      let settlement: number;
-
-      // Fuel settlement credits (cash already reimbursed to the driver for
-      // out-of-pocket fuel) — previously never netted against cash here, which
-      // meant this view's "Settlement" could disagree in magnitude (not just
-      // sign) with Payout Detail / Cash Wallet for the same driver/period.
-      const fuelCredits = cw?.weeklyFuelCredits || 0;
-
-      if (unifiedToll) {
-        // Unified model: tolls are NOT deducted from payout; they're settled on
-        // the cash side per the server's reconciliation-aware disposition.
-        const disp = lr?.tollDisposition || { cashWash: 0, personal: 0 };
-        const r = computePeriodSettlement({
-          driverShare,
-          fuelDeduction,
-          baseCashOwed: cw?.amountOwed || 0,   // toll-neutral (excludeTollEffects)
-          baseCashPaid: cw?.amountPaid || 0,
-          tollCashWash: disp.cashWash || 0,
-          tollPersonal: disp.personal || 0,
-          fuelCredits,
-        });
-        totalDeductions = fuelDeduction;       // fuel only
-        netPayout = r.netPayout;
-        cashOwed = r.cashOwed;
-        cashPaid = r.cashPaid;
-        cashBalance = r.cashBalance;
-        settlement = r.settlement;
-        // Display the toll figure that actually hit the driver this period.
-        tollExpenses = { amount: r.tollChargedToDriver, reconciled: tollExpensesLegacy.reconciled, unreconciled: tollExpensesLegacy.unreconciled };
-      } else {
-        // Legacy behavior (toll handling unchanged — tolls stay deducted from
-        // payout directly, per the pre-unified-toll model), now netting fuel
-        // credits against cash the same way the unified branch does.
-        totalDeductions = tollExpensesLegacy.amount + fuelDeduction;
-        netPayout = driverShare - totalDeductions;
-        cashOwed = cw?.amountOwed || 0;
-        cashPaid = cw?.amountPaid || 0;
-        cashBalance = cw?.balance || 0;
-        settlement = netPayout - (cashBalance - fuelCredits);
-      }
-
-      // ── Status logic ──
-      let settlementStatus: SettlementStatus;
-      // A period with no payout/cash activity but a real dispute refund still
-      // needs to surface — otherwise the very periods most in need of the new
-      // Dispute Status column get trimmed off the visible range below.
-      const bothSidesZero =
-        grossRevenue === 0 && driverShare === 0 && cashOwed === 0 &&
-        disputeRefundMatched === 0 && disputeRefundUnmatched === 0;
-      if (bothSidesZero) {
-        settlementStatus = 'No Activity';
-      } else if (!isFinalized && grossRevenue > 0) {
-        settlementStatus = 'Pending';
-      } else if (Math.abs(settlement) < 1) {
-        settlementStatus = 'Settled';
-      } else if (settlement > 1) {
-        settlementStatus = 'Company Owes';
-      } else {
-        settlementStatus = 'Driver Owes';
-      }
-
-      rows.push({
-        periodStart,
-        periodEnd,
-        grossRevenue,
-        driverShare,
-        tollExpenses: tollExpenses.amount,
-        tollReconciled: tollExpenses.reconciled,
-        tollUnreconciled: tollExpenses.unreconciled,
-        disputeRefundMatched,
-        disputeRefundUnmatched,
-        fuelDeduction,
-        totalDeductions,
-        netPayout,
-        isFinalized,
-        tripCount,
-        cashOwed,
-        cashPaid,
-        cashBalance,
-        cashStatus,
-        settlement,
-        settlementStatus,
-      });
-    }
-
-    // Sort newest first
-    rows.sort((a, b) => b.periodStart.getTime() - a.periodStart.getTime());
-
-    // Filter out "No Activity" rows at the tail (keep only rows with some data)
-    // But keep no-activity rows that are sandwiched between active rows
-    const firstActive = rows.findIndex(r => r.settlementStatus !== 'No Activity');
-    const lastActive = rows.length - 1 - [...rows].reverse().findIndex(r => r.settlementStatus !== 'No Activity');
-    const trimmedRows = firstActive >= 0
-      ? rows.slice(firstActive, lastActive + 1)
-      : [];
-
-    console.log(`[SettlementSummaryView] Merged ${trimmedRows.length} settlement rows (${ledgerRows.length} ledger, ${cashWeeks.length} cash weeks)`);
-
-    return trimmedRows;
-  }, [isReady, ledgerRows, cashWeeks, transactions, finalizedReports, disputeRefunds, unifiedToll]);
-
-  // ── Step 5.4: Summary totals ──
   // Note: trueSettlement is a deliberately different aggregate from
   // Σ row.settlement below — it nets payout from finalized weeks only against
   // gross cash balance from ALL weeks (including unfinalized ones, since
@@ -555,7 +267,7 @@ export function SettlementSummaryView({
           <div className="flex flex-col items-center justify-center py-16 text-slate-400">
             <Loader2 className="h-8 w-8 animate-spin mb-3" />
             <p className="text-sm font-medium">Loading settlement data…</p>
-            <p className="text-xs mt-1">Combining payout and cash records</p>
+            <p className="text-xs mt-1">Loading earnings ledger…</p>
           </div>
         ) : settlementRows.length === 0 ? (
           /* Empty state */
@@ -565,6 +277,12 @@ export function SettlementSummaryView({
           </div>
         ) : (
           <div className="space-y-6">
+            {fuelDataLoading && (
+              <p className="text-xs text-slate-400 inline-flex items-center gap-1.5">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Updating fuel deductions…
+              </p>
+            )}
             {/* ── Phase 5: Summary Cards ── */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 
