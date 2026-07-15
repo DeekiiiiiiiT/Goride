@@ -14,6 +14,7 @@ import { getFuelDeductionForPeriod } from './fuelDeductionForPeriod';
 import { deriveTollTxIsReconciled } from './tollHandledDisplay';
 import { fleetTzDateKey } from './timezoneDisplay';
 import { isDriverTollChargeRow, netDriverTollCharges } from './netDriverTollCharges';
+import { classifyTollLedgerEntry } from './tollDisposition';
 
 type PeriodType = 'daily' | 'weekly' | 'monthly';
 
@@ -231,8 +232,11 @@ export function buildLedgerPayoutPeriodRows(params: {
         cashPaidBreakdown,
       } = getCashForPeriod(periodStart, periodEnd);
 
-      const effectiveFuelCredits =
-        txFuelCredits > 0 ? txFuelCredits : isFinalized ? fleetShare : 0;
+      // Prefer finalized fleet fuel share (companyShare) over partial Fuel Reimbursement
+      // txs — otherwise Kenny-style weeks credit ~$2k instead of ~$21k fleet fuel.
+      const effectiveFuelCredits = isFinalized
+        ? Math.max(txFuelCredits || 0, fleetShare || 0)
+        : txFuelCredits || 0;
 
       let displayTollExpenses = tollExpenses;
       let totalDeductions: number;
@@ -249,17 +253,32 @@ export function buildLedgerPayoutPeriodRows(params: {
       const tollCharged = netDriverTollCharges(periodChargeTx);
       const expenseDeductions = fuelDeduction + tollCharged;
 
+      // Cash-paid plaza tolls in the period (credits cash still held).
+      let periodCashTollWash = 0;
+      for (const tx of expenseTx) {
+        if (!tollBelongsToPeriod(tx.date, periodStart, periodEnd)) continue;
+        if (!isTollCategory(tx.category)) continue;
+        if (isDriverTollChargeRow(tx)) continue;
+        if (classifyTollLedgerEntry(tx as any) !== 'cashWash') continue;
+        periodCashTollWash += Math.abs(Number(tx.amount) || 0);
+      }
+
       if (unifiedToll) {
         // Tolls leave the payout deduction; settled once on the cash side per the
         // server's reconciliation-aware disposition (cashWeeks are toll-neutral).
         const disp = (lr as any).tollDisposition || { cashWash: 0, personal: 0 };
+        const dispWash = Number(disp.cashWash) || 0;
+        const tollCashWash = dispWash > 0.005 ? dispWash : periodCashTollWash;
+        const tollPersonal =
+          Number(disp.personal) > 0.005 ? Number(disp.personal) : tollCharged;
         const r = computePeriodSettlement({
           driverShare,
           fuelDeduction,
           baseCashOwed,
           baseCashPaid,
-          tollCashWash: disp.cashWash || 0,
-          tollPersonal: disp.personal || 0,
+          tollCashWash,
+          tollPersonal,
+          fuelCredits: 0, // applied in getPeriodSettlementComponents via fuelCredits field
         });
         totalDeductions = fuelDeduction;
         netPayout = r.netPayout;
@@ -270,6 +289,13 @@ export function buildLedgerPayoutPeriodRows(params: {
       } else {
         totalDeductions = tollExpenses + fuelDeduction;
         netPayout = driverShare - totalDeductions;
+        // Legacy: if cash tolls weren't already counted in cashPaid, credit them here.
+        const tollAlreadyInPaid = cashPaidBreakdown?.tollCredits ?? 0;
+        const tollExtra = Math.max(0, periodCashTollWash - tollAlreadyInPaid);
+        if (tollExtra > 0.005) {
+          cashPaid = cashPaid + tollExtra;
+          cashBalance = cashOwed - cashPaid;
+        }
       }
 
       return {

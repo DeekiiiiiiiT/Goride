@@ -33,6 +33,7 @@ interface ExpensePeriodRow {
   tollExpenses: number;
   tollCharged: number;         // personal-use tolls billed to this driver (Charge Driver)
   fuelDeduction: number;       // Deduction (driverShare) from finalized reports only
+  fuelFleetShare: number;      // companyShare — credits cash still held when finalized
   fuelDriverSpend: number;     // Cash the driver paid out-of-pocket for fuel (finalized)
   fuelGasCardSpend: number;    // Company gas-card charges for fills (finalized)
   fuelNetPay: number;          // fuelDriverSpend - fuelDeduction; positive = company owes the driver
@@ -248,7 +249,7 @@ export function DriverExpensesHistory({
       // ── Fuel: from finalized reports (canonical shared aggregator — same
       // logic used by SettlementSummaryView/PayoutPeriodDetail so all three
       // surfaces agree) ──
-      const { deduction, driverSpend, gasCardSpend, netPay, finalized } =
+      const { deduction, fleetShare, driverSpend, gasCardSpend, netPay, finalized } =
         getFuelDeductionForPeriod(finalizedReports, periodStart, periodEnd, periodType);
       const fuelDeduction = deduction;
       const isFinalized = finalized;
@@ -277,6 +278,7 @@ export function DriverExpensesHistory({
         tollExpenses,
         tollCharged,
         fuelDeduction,
+        fuelFleetShare: fleetShare,
         fuelDriverSpend: driverSpend,
         fuelGasCardSpend: gasCardSpend,
         fuelNetPay: netPay,
@@ -368,9 +370,10 @@ export function DriverExpensesHistory({
             : `${row.tollUnreconciled} Unmatched`,
         'Charged to driver': row.tollCharged.toFixed(2),
         'Fuel Deduction': row.fuelDeduction.toFixed(2),
+        'Fleet Fuel Share': row.fuelFleetShare.toFixed(2),
         'Gas Card (Company)': row.fuelGasCardSpend.toFixed(2),
         'Paid by Driver (Cash)': row.fuelDriverSpend.toFixed(2),
-        'Fuel Net Pay': row.fuelNetPay.toFixed(2),
+        'Driver Fuel Net': row.fuelNetPay.toFixed(2),
         'Fuel Draft Estimate (not yet finalized)': row.fuelDraftEstimate.toFixed(2),
         'Fuel Status': row.isFinalized ? 'Finalized' : 'Pending',
         'Total Expenses': row.totalExpenses.toFixed(2),
@@ -731,9 +734,24 @@ export function DriverExpensesHistory({
                     <Table className="table-fixed">
                       <TableHeader>
                         <TableRow>
-                          <TableHead className="w-[18%] px-3">{periodColumnLabel}</TableHead>
-                          <TableHead className="w-[16%] px-3 text-right">Fuel Deduction</TableHead>
-                          <TableHead className="w-[16%] px-3 text-right">
+                          <TableHead className="w-[14%] px-3">{periodColumnLabel}</TableHead>
+                          <TableHead className="w-[14%] px-3 text-right">Fuel Deduction</TableHead>
+                          <TableHead className="w-[14%] px-3 text-right">
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="inline-flex items-center gap-1 cursor-help">
+                                    Fleet Fuel Share
+                                    <Info className="h-3 w-3 text-slate-400" />
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="max-w-[280px] text-xs">
+                                  Company share of fuel spend this week. Credits cash still held on Settlement (not a payout deduction).
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </TableHead>
+                          <TableHead className="w-[14%] px-3 text-right">
                             <TooltipProvider>
                               <Tooltip>
                                 <TooltipTrigger asChild>
@@ -748,7 +766,7 @@ export function DriverExpensesHistory({
                               </Tooltip>
                             </TooltipProvider>
                           </TableHead>
-                          <TableHead className="w-[16%] px-3 text-right">
+                          <TableHead className="w-[14%] px-3 text-right">
                             <TooltipProvider>
                               <Tooltip>
                                 <TooltipTrigger asChild>
@@ -763,22 +781,22 @@ export function DriverExpensesHistory({
                               </Tooltip>
                             </TooltipProvider>
                           </TableHead>
-                          <TableHead className="w-[16%] px-3 text-right">
+                          <TableHead className="w-[14%] px-3 text-right">
                             <TooltipProvider>
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <span className="inline-flex items-center gap-1 cursor-help">
-                                    Net
+                                    Driver Fuel Net
                                     <Info className="h-3 w-3 text-slate-400" />
                                   </span>
                                 </TooltipTrigger>
                                 <TooltipContent side="top" className="max-w-[280px] text-xs">
-                                  Net = Paid by Driver (cash) − Deduction. Positive means the company owes the driver; negative means the shortfall is deducted from earnings.
+                                  Paid by Driver (cash) − Fuel Deduction. Positive means the company owes the driver; negative means shortfall is deducted from earnings.
                                 </TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
                           </TableHead>
-                          <TableHead className="w-[18%] px-3 text-center">
+                          <TableHead className="w-[16%] px-3 text-center">
                             <TooltipProvider>
                               <Tooltip>
                                 <TooltipTrigger asChild>
@@ -820,6 +838,11 @@ export function DriverExpensesHistory({
                               ) : !row.isFinalized && fuelDraftLoading ? (
                                 <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-300 ml-auto" />
                               ) : <span className="text-slate-300">-</span>}
+                            </TableCell>
+                            <TableCell className="px-3 text-right tabular-nums text-slate-700">
+                              {row.isFinalized && row.fuelFleetShare > 0.005
+                                ? `$${row.fuelFleetShare.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+                                : <span className="text-slate-300">-</span>}
                             </TableCell>
                             <TableCell className="px-3 text-right tabular-nums text-slate-600">
                               {row.isFinalized && row.fuelGasCardSpend > 0.005

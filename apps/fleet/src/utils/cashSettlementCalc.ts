@@ -13,7 +13,11 @@ import { isDriverCashPaymentTransaction } from './driverCashPayment';
 import { isDriverTollChargeRow, netDriverTollCharges } from './netDriverTollCharges';
 import { weekBucketForDate } from './tollWeekPeriod';
 import { buildWeeklyCashRisk } from './buildWeeklyCashRisk';
-import { sumLedgerBankSettledForWeek, type PayoutBankEventLike } from './ledgerBankSettled';
+import {
+    sumLedgerBankSettledForWeek,
+    sumLedgerCashCollectedForWeek,
+    type PayoutBankEventLike,
+} from './ledgerBankSettled';
 import {
     startOfWeek,
     endOfWeek,
@@ -38,8 +42,10 @@ export interface CashSettlementInput {
     excludeTollEffects?: boolean;
     /** Fleet IANA tz — Monday–Sunday weeks match Toll Reconciliation. */
     timezone?: string;
-    /** Ledger `payout_bank` rows — same SSOT as PERIOD Transferred to Bank. */
+    /** Ledger `payout_bank` / `payout_cash` rows — same SSOT as PERIOD bank + Uber cash. */
     payoutBankEvents?: PayoutBankEventLike[];
+    /** Optional overview fallbacks when payout_* events are empty (weekStart ymd → amount). */
+    overviewUberCashByWeek?: Record<string, number>;
 }
 
 // ── Output ──
@@ -81,6 +87,7 @@ export function computeWeeklyCashSettlement(input: CashSettlementInput): CashWee
     const safeCsvMetrics = Array.isArray(input.csvMetrics) ? input.csvMetrics.filter(Boolean) : [];
     const excludeToll = input.excludeTollEffects === true;
     const payoutBankEvents = Array.isArray(input.payoutBankEvents) ? input.payoutBankEvents : [];
+    const overviewUberCashByWeek = input.overviewUberCashByWeek || {};
 
     // If we have CSV metrics but no trips, we should still show something
     if (safeTrips.length === 0 && safeCsvMetrics.length === 0) return [];
@@ -149,7 +156,23 @@ export function computeWeeklyCashSettlement(input: CashSettlementInput): CashWee
             );
 
         // Cash risk SSOT — PERIOD Uber cash + non-Uber trip cash (+ float/tolls). Never bank.
-        const ledgerBankSettled = sumLedgerBankSettledForWeek(payoutBankEvents, weekStart, weekEnd);
+        const ledgerBankSettled = sumLedgerBankSettledForWeek(
+            payoutBankEvents,
+            weekStart,
+            weekEnd,
+            fleetTz,
+        );
+        let ledgerUberCash = sumLedgerCashCollectedForWeek(
+            payoutBankEvents,
+            weekStart,
+            weekEnd,
+            fleetTz,
+        );
+        if (!(ledgerUberCash > 0.005)) {
+            const weekKey = format(weekStart, 'yyyy-MM-dd');
+            const fromOverview = Math.abs(Number(overviewUberCashByWeek[weekKey]) || 0);
+            if (fromOverview > 0.005) ledgerUberCash = fromOverview;
+        }
         const risk = buildWeeklyCashRisk({
             weekStart,
             weekEnd,
@@ -158,6 +181,7 @@ export function computeWeeklyCashSettlement(input: CashSettlementInput): CashWee
             floatIssued: weeklyFloat,
             tollCharges: weeklyTollCharges,
             ledgerBankSettled,
+            ledgerUberCash,
         });
         const amountOwed = risk.cashRisk;
         const isFromCsv = risk.breakdown.uberFromStatement;

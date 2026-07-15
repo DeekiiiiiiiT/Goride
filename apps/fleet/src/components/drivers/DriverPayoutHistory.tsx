@@ -8,7 +8,8 @@ import { format } from "date-fns";
 import { exportToCSV } from "../../utils/csvHelpers";
 import { toast } from "sonner@2.0.3";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "../ui/tooltip";
-import { PayoutPeriodDetail } from './PayoutPeriodDetail';
+import { SettlementPeriodDetail } from './SettlementPeriodDetail';
+import { payoutToSettlementRow } from './SettlementSummaryView';
 import type { PayoutPeriodRow } from '../../types/driverPayoutPeriod';
 import { useDriverPayoutPeriodRows, type PeriodType } from '../../hooks/useDriverPayoutPeriodRows';
 import { getPeriodSettlementComponents } from '../../utils/driverSettlementMath';
@@ -115,17 +116,21 @@ export function DriverPayoutHistory({
       return {
         [periodColumnLabel]: periodLabel,
         'Trips': row.tripCount,
-        'Gross Revenue': row.grossRevenue.toFixed(2),
+        'Ledger Gross Revenue': row.grossRevenue.toFixed(2),
         'Tier': row.tierName,
         'Driver Share %': row.driverSharePercent + '%',
         'Driver Share': row.driverShare.toFixed(2),
-        'Deductions': row.isFinalized ? row.totalDeductions.toFixed(2) : 'Pending',
+        'Fuel Deduction': row.isFinalized
+          ? (Math.round((row.driverShare - row.netPayout) * 100) / 100).toFixed(2)
+          : 'Pending',
         'Net Payout': row.isFinalized ? row.netPayout.toFixed(2) : 'Pending',
-        'Cash Owed': row.cashOwed.toFixed(2),
+        'Passenger Cash': row.cashOwed.toFixed(2),
         'Bank Settled': (row.bankSettled ?? 0).toFixed(2),
-        'Cash Paid': row.cashPaid.toFixed(2),
-        'Cash Balance': row.cashBalance.toFixed(2),
-        'Net Settlement': row.isFinalized
+        'Cash Returned': row.cashPaid.toFixed(2),
+        'Cash Still Held': row.isFinalized
+          ? getPeriodSettlementComponents(row).adjCashBalance.toFixed(2)
+          : 'Pending',
+        'Settlement': row.isFinalized
           ? getPeriodSettlementComponents(row).settlement.toFixed(2)
           : 'Pending',
         'Status': row.status,
@@ -200,12 +205,12 @@ export function DriverPayoutHistory({
           <CardContent className="pt-6">
             <div className="flex items-start justify-between">
               <div className="space-y-1">
-                <p className="text-sm font-medium text-slate-500">Total Deductions</p>
+                <p className="text-sm font-medium text-slate-500">Fuel Deductions</p>
                 <p className="text-2xl font-bold text-rose-700">
                   ${summaryTotals.totalDeductions.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </p>
                 <p className="text-xs text-slate-400">
-                  Tolls + Fuel across finalized periods
+                  Driver fuel share across finalized periods
                 </p>
               </div>
               <div className="rounded-lg bg-rose-50 p-2.5">
@@ -334,12 +339,12 @@ export function DriverPayoutHistory({
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <span className="inline-flex items-center gap-1 cursor-help justify-end">
-                              Gross Revenue
+                              Ledger Gross
                               <Info className="h-3 w-3 text-slate-400" />
                             </span>
                           </TooltipTrigger>
                           <TooltipContent side="top" className="max-w-[280px] text-xs">
-                            Total trip earnings before any commission split or deductions.
+                            Week ledger revenue before split — not the same as Overview Period Earnings.
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
@@ -364,12 +369,12 @@ export function DriverPayoutHistory({
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <span className="inline-flex items-center gap-1 cursor-help justify-end">
-                              Deductions
+                              Fuel Deduction
                               <Info className="h-3 w-3 text-slate-400" />
                             </span>
                           </TooltipTrigger>
                           <TooltipContent side="top" className="max-w-[300px] text-xs">
-                            Total deductions subtracted from Driver Share (tolls + fuel). Shows '—' if the fuel report isn't finalized yet.
+                            Driver fuel share subtracted from Driver Share to get Net Payout. Shows '—' until the fuel report is finalized.
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
@@ -384,7 +389,22 @@ export function DriverPayoutHistory({
                             </span>
                           </TooltipTrigger>
                           <TooltipContent side="top" className="max-w-[300px] text-xs">
-                            Driver Share minus Deductions. This is what the company owes the driver before accounting for cash. Shows 'Pending' if expenses aren't finalized.
+                            Driver Share minus Fuel Deduction — the driver’s cut before cash. Shows 'Pending' if fuel isn’t finalized.
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </TableHead>
+                    <TableHead className="text-xs text-right">
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="inline-flex items-center gap-1 cursor-help justify-end">
+                              Settlement
+                              <Info className="h-3 w-3 text-slate-400" />
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-[300px] text-xs">
+                            Net Payout minus Cash Still Held. Positive = fleet owes driver; negative = driver owes fleet.
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
@@ -424,9 +444,12 @@ export function DriverPayoutHistory({
                       </TableCell>
                       <TableCell className="text-xs text-right tabular-nums">
                         {row.isFinalized
-                          ? (row.totalDeductions > 0
-                              ? <span className="text-rose-600">-${row.totalDeductions.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                              : <span className="text-slate-400">$0.00</span>)
+                          ? (() => {
+                              const fuelDed = Math.round((row.driverShare - row.netPayout) * 100) / 100;
+                              return fuelDed > 0.005
+                                ? <span className="text-rose-600">-${fuelDed.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                : <span className="text-slate-400">$0.00</span>;
+                            })()
                           : <span className="text-slate-300">—</span>}
                       </TableCell>
                       <TableCell className="text-xs text-right tabular-nums font-semibold">
@@ -434,6 +457,19 @@ export function DriverPayoutHistory({
                           ? <span className={row.netPayout >= 0 ? 'text-emerald-700' : 'text-rose-700'}>
                               ${row.netPayout.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </span>
+                          : <span className="text-amber-600 font-normal italic">Pending</span>}
+                      </TableCell>
+                      <TableCell className="text-xs text-right tabular-nums font-semibold">
+                        {row.isFinalized
+                          ? (() => {
+                              const s = getPeriodSettlementComponents(row).settlement;
+                              return (
+                                <span className={s < -0.005 ? 'text-rose-700' : s > 0.005 ? 'text-blue-700' : 'text-emerald-700'}>
+                                  {s < -0.005 ? '−' : s > 0.005 ? '+' : ''}
+                                  ${Math.abs(s).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </span>
+                              );
+                            })()
                           : <span className="text-amber-600 font-normal italic">Pending</span>}
                       </TableCell>
                       <TableCell className="text-xs text-center">
@@ -480,9 +516,9 @@ export function DriverPayoutHistory({
         </CardContent>
       </Card>
 
-      {/* ── Period detail overlay (Sheet) ── */}
-      <PayoutPeriodDetail
-        row={selectedRow}
+      {/* ── Same week detail sheet as Settlement / Cash Wallet ── */}
+      <SettlementPeriodDetail
+        row={selectedRow ? payoutToSettlementRow(selectedRow) : null}
         open={!!selectedRow}
         onOpenChange={(open) => { if (!open) setSelectedRow(null); }}
       />

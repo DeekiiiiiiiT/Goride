@@ -72,6 +72,25 @@ describe('getPeriodSettlementComponents', () => {
     expect(r.settlement).toBe(-45);    // 25 - 70 (was -65 without the fuel credit)
   });
 
+  it('does not double-subtract fuel already counted in cashPaid', () => {
+    const row = makeRow({
+      isFinalized: true,
+      netPayout: 25,
+      cashBalance: 70, // already net of $20 fuel in cashPaid
+      fuelCredits: 20,
+      cashPaidBreakdown: {
+        allocatedPayments: 0,
+        tollCredits: 0,
+        fuelCreditsInCashPaid: 20,
+        fifoPayments: 0,
+        surplusPayments: 0,
+      },
+    });
+    const r = getPeriodSettlementComponents(row);
+    expect(r.adjCashBalance).toBe(70);
+    expect(r.settlement).toBe(-45);
+  });
+
   it('treats netPayout as 0 until the period is finalized', () => {
     const row = makeRow({ isFinalized: false, netPayout: 500, cashBalance: 10, fuelCredits: 0 });
     const r = getPeriodSettlementComponents(row);

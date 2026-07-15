@@ -1,5 +1,5 @@
 // ════════════════════════════════════════════════════════════════════════════
-// Settlement Period Detail — Overlay showing full breakdown for one week
+// Settlement Period Detail — Version A waterfall (cash in → credits → Net → who owes)
 // ════════════════════════════════════════════════════════════════════════════
 
 import React from 'react';
@@ -19,7 +19,6 @@ import {
   Clock,
   MinusCircle,
   Wallet,
-  Receipt,
   Fuel,
   Car,
   DollarSign,
@@ -34,12 +33,13 @@ interface SettlementPeriodDetailProps {
   onOpenChange: (open: boolean) => void;
 }
 
-// ── Currency formatter ──
 const fmt = (n: number) =>
   '$' + Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-// ── Status config ──
-const statusConfig: Record<SettlementStatus, { icon: React.ReactNode; color: string; bg: string; label: string }> = {
+const statusConfig: Record<
+  SettlementStatus,
+  { icon: React.ReactNode; color: string; bg: string; label: string }
+> = {
   Settled: {
     icon: <CheckCircle className="h-4 w-4" />,
     color: 'text-emerald-700',
@@ -72,7 +72,6 @@ const statusConfig: Record<SettlementStatus, { icon: React.ReactNode; color: str
   },
 };
 
-// ── Line item helper ──
 function LineItem({
   icon,
   label,
@@ -108,7 +107,6 @@ function LineItem({
   );
 }
 
-// ── Section header ──
 function SectionHeader({ title, description }: { title: string; description?: string }) {
   return (
     <div className="pt-1 pb-2">
@@ -123,6 +121,7 @@ export function SettlementPeriodDetail({ row, open, onOpenChange }: SettlementPe
 
   const periodLabel = `${format(row.periodStart, 'MMM d')} – ${format(row.periodEnd, 'MMM d, yyyy')}`;
   const cfg = statusConfig[row.settlementStatus];
+  const netApplied = row.isFinalized ? row.netPayout : 0;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -132,7 +131,6 @@ export function SettlementPeriodDetail({ row, open, onOpenChange }: SettlementPe
           <SheetDescription className="text-xs">{periodLabel}</SheetDescription>
         </SheetHeader>
 
-        {/* ── Status banner ── */}
         <div className={`mx-4 rounded-lg px-4 py-3 flex items-center gap-3 ${cfg.bg}`}>
           <span className={cfg.color}>{cfg.icon}</span>
           <div>
@@ -145,61 +143,41 @@ export function SettlementPeriodDetail({ row, open, onOpenChange }: SettlementPe
         </div>
 
         <div className="px-4 pt-4 pb-6 space-y-1">
-          {/* ── Payout Section ── */}
-          <SectionHeader title="Payout Breakdown" description="Revenue and deductions for this period" />
+          <SectionHeader
+            title="1. Driver earnings"
+            description="Share minus payout deductions = Net Payout (driver’s cut)"
+          />
 
           <LineItem
             icon={<Car className="h-4 w-4" />}
-            label="Gross Revenue"
+            label="Ledger Gross Revenue"
             value={fmt(row.grossRevenue)}
             valueColor="text-slate-700"
+            sub="Week ledger total — not the same as Overview Period Earnings"
           />
           <LineItem
             icon={<DollarSign className="h-4 w-4" />}
             label="Driver Share"
             value={fmt(row.driverShare)}
             valueColor="text-emerald-700"
-            sub="After commission split"
-          />
-
-          <Separator className="my-1" />
-
-          <LineItem
-            icon={<Receipt className="h-4 w-4" />}
-            label="Toll / charges"
-            value={row.tollExpenses > 0.005 ? `−${fmt(row.tollExpenses)}` : '$0.00'}
-            valueColor={row.tollExpenses > 0.005 ? 'text-rose-600' : 'text-slate-400'}
-          />
-          <LineItem
-            icon={<Fuel className="h-4 w-4" />}
-            label="Fuel Deduction"
-            value={
-              row.isFinalized
-                ? row.fuelDeduction > 0.005
-                  ? `−${fmt(row.fuelDeduction)}`
-                  : '$0.00'
-                : 'Pending'
-            }
-            valueColor={
-              !row.isFinalized
-                ? 'text-amber-600'
-                : row.fuelDeduction > 0.005
-                  ? 'text-rose-600'
-                  : 'text-slate-400'
-            }
-            sub={!row.isFinalized ? 'Awaiting fuel report finalization' : undefined}
           />
           <LineItem
             icon={<TrendingDown className="h-4 w-4" />}
-            label="Deductions"
+            label="Fuel Deduction"
             value={
-              row.expenseDeductions > 0.005
-                ? `−${fmt(row.expenseDeductions)}`
-                : '$0.00'
+              row.expenseDeductions > 0.005 ? `−${fmt(row.expenseDeductions)}` : '$0.00'
             }
             valueColor={row.expenseDeductions > 0.005 ? 'text-rose-600' : 'text-slate-400'}
-            sub="Fuel + Charged to Driver (excludes plaza toll spend)"
+            sub="Driver fuel share — Share − Fuel Deduction = Net Payout"
           />
+          {row.chargedToDriver > 0.005 && (
+            <LineItem
+              label="Charged to Driver"
+              value={fmt(row.chargedToDriver)}
+              valueColor="text-slate-500"
+              sub="Personal tolls — settles on the cash side below, not in Net Payout"
+            />
+          )}
 
           <Separator className="my-1" />
 
@@ -208,55 +186,86 @@ export function SettlementPeriodDetail({ row, open, onOpenChange }: SettlementPe
             value={row.isFinalized ? fmt(row.netPayout) : 'Pending'}
             valueColor={row.isFinalized ? 'text-emerald-700' : 'text-amber-600'}
             bold
-            sub="Driver Share minus payout deductions"
+            sub="Driver’s cut for this week"
           />
 
-          {/* ── Cash Section ── */}
+          {row.bankSettled > 0.005 && (
+            <div className="pt-3">
+              <SectionHeader
+                title="Bank (informational)"
+                description="Already at the company bank — not part of cash still held"
+              />
+              <LineItem
+                icon={<Wallet className="h-4 w-4" />}
+                label="Bank Settled"
+                value={fmt(row.bankSettled)}
+                valueColor="text-slate-600"
+              />
+            </div>
+          )}
+
           <div className="pt-3">
-            <SectionHeader title="Cash Settlement" description="Physical cash risk vs. bank already at company" />
+            <SectionHeader
+              title="2. Cash waterfall"
+              description="Passenger cash → handbacks & credits → still in hand → minus Net Payout"
+            />
           </div>
 
           <LineItem
             icon={<Banknote className="h-4 w-4" />}
-            label="Cash Owed"
-            value={row.cashOwed > 0.005 ? fmt(row.cashOwed) : '$0.00'}
-            valueColor={row.cashOwed > 0.005 ? 'text-slate-700' : 'text-slate-400'}
-            sub="Passenger cash the driver still holds (not bank transfers)"
+            label="Passenger cash"
+            value={fmt(row.passengerCash)}
+            valueColor="text-slate-700"
+            sub="Uber statement cash + InDrive/Roam cash (+ float / personal charges)"
           />
-          {row.bankSettled > 0.005 && (
-            <LineItem
-              icon={<Wallet className="h-4 w-4" />}
-              label="Bank Settled"
-              value={fmt(row.bankSettled)}
-              valueColor="text-slate-600"
-              sub="Already transferred to company bank — not cash owed"
-            />
-          )}
           <LineItem
             icon={<Wallet className="h-4 w-4" />}
-            label="Cash Paid"
-            value={row.cashPaid > 0.005 ? fmt(row.cashPaid) : '$0.00'}
-            valueColor={row.cashPaid > 0.005 ? 'text-emerald-700' : 'text-slate-400'}
-            sub="Returned to company"
+            label="− Cash handed back"
+            value={row.cashHandbacks > 0.005 ? `−${fmt(row.cashHandbacks)}` : '$0.00'}
+            valueColor={row.cashHandbacks > 0.005 ? 'text-emerald-700' : 'text-slate-400'}
+            sub="Cash returned to the fleet this week"
+          />
+          <LineItem
+            icon={<Fuel className="h-4 w-4" />}
+            label="− Fleet fuel credit"
+            value={
+              row.fuelCreditsApplied > 0.005 ? `−${fmt(row.fuelCreditsApplied)}` : '$0.00'
+            }
+            valueColor={row.fuelCreditsApplied > 0.005 ? 'text-emerald-700' : 'text-slate-400'}
+            sub="Company fuel share / cash fuel already covered"
+          />
+          <LineItem
+            label="− Cash-toll credits"
+            value={row.cashTollCredits > 0.005 ? `−${fmt(row.cashTollCredits)}` : '$0.00'}
+            valueColor={row.cashTollCredits > 0.005 ? 'text-emerald-700' : 'text-slate-400'}
+            sub="Cash tolls washed (when applicable)"
           />
 
           <Separator className="my-1" />
 
           <LineItem
-            label="Cash Balance"
-            value={fmt(row.cashBalance)}
-            valueColor={row.cashBalance > 0.005 ? 'text-rose-700' : 'text-slate-400'}
+            label="Cash Still Held"
+            value={fmt(row.cashStillHeld)}
+            valueColor={row.cashStillHeld > 0.005 ? 'text-rose-700' : 'text-slate-400'}
             bold
-            sub={
-              row.cashBalance > 0.005
-                ? 'Driver still holding this cash'
-                : 'All cash returned'
-            }
+            sub="Cash left in hand before applying Net Payout"
           />
 
-          {/* ── Bottom Line ── */}
+          <LineItem
+            label="− Net Payout (driver keeps)"
+            value={
+              row.isFinalized
+                ? netApplied > 0.005
+                  ? `−${fmt(netApplied)}`
+                  : '$0.00'
+                : 'Pending (treated as $0)'
+            }
+            valueColor={row.isFinalized ? 'text-emerald-700' : 'text-amber-600'}
+            sub="Driver’s earned cut subtracted from cash still held"
+          />
+
           <div className="pt-3">
-            <SectionHeader title="Bottom Line" description="Net Payout minus Cash Balance" />
+            <SectionHeader title="3. Bottom line" description="Who owes whom after Net Payout" />
           </div>
 
           <div className={`rounded-lg px-4 py-4 ${row.settlement >= 0 ? 'bg-emerald-50' : 'bg-rose-50'}`}>
@@ -273,8 +282,11 @@ export function SettlementPeriodDetail({ row, open, onOpenChange }: SettlementPe
                         : 'Driver needs to return to company'}
                 </p>
               </div>
-              <p className={`text-xl font-bold tabular-nums ${row.settlement >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
-                {row.settlement < 0 ? '−' : ''}{fmt(row.settlement)}
+              <p
+                className={`text-xl font-bold tabular-nums ${row.settlement >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}
+              >
+                {row.settlement < 0 ? '−' : ''}
+                {fmt(row.settlement)}
               </p>
             </div>
           </div>

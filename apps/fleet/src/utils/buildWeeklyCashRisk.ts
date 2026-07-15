@@ -23,7 +23,7 @@ export interface WeeklyCashRiskBreakdown {
   tollCharges: number;
   /** Platform bank payout for the week — informational, not part of cashRisk. */
   bankSettled: number;
-  /** True when Uber cash came from statement metrics (not trip fallback). */
+  /** True when Uber cash came from ledger or statement metrics (not trip fallback). */
   uberFromStatement: boolean;
 }
 
@@ -47,6 +47,11 @@ export function buildWeeklyCashRisk(input: {
    * DriverMetrics.bankTransferred so historical weeks work without re-import.
    */
   ledgerBankSettled?: number;
+  /**
+   * From ledger `payout_cash` (PERIOD "Cash Collected"). Preferred over
+   * DriverMetrics / payments_transaction column sum — prevents ~$64k vs ~$49k drift.
+   */
+  ledgerUberCash?: number;
 }): WeeklyCashRiskResult {
   const { weekStart, weekEnd, trips, csvMetrics, floatIssued, tollCharges } = input;
 
@@ -79,8 +84,16 @@ export function buildWeeklyCashRisk(input: {
   const bankSettled =
     ledgerBank > 0.005 ? ledgerBank : metricsBank > 0.005 ? metricsBank : tripBank;
 
-  const uberFromStatement = uberResolved.magnitude != null && uberResolved.magnitude > 0.005;
-  const uberCash = uberFromStatement ? uberResolved.magnitude! : 0;
+  const ledgerUber = Math.abs(Number(input.ledgerUberCash) || 0);
+  const metricsUber =
+    uberResolved.magnitude != null && uberResolved.magnitude > 0.005
+      ? uberResolved.magnitude
+      : 0;
+  const uberFromLedger = ledgerUber > 0.005;
+  const uberFromMetrics = !uberFromLedger && metricsUber > 0.005;
+  const uberFromStatement = uberFromLedger || uberFromMetrics;
+  const uberCash = uberFromLedger ? ledgerUber : metricsUber;
+
   // When statement Uber cash is missing, keep Uber trip cash so wallet isn't blank.
   const cashCollected =
     (uberFromStatement ? uberCash : uberTripCashFallback) + nonUberTripCash;

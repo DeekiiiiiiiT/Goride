@@ -66,19 +66,22 @@ export function useDriverPayoutPeriodRows(opts: {
   const ledgerError = ledgerQuery.isError;
   const ledgerRows = ledgerQuery.data?.success && ledgerQuery.data?.data ? ledgerQuery.data.data : [];
 
-  // Prefer ledger `payout_bank` events (needs edge deploy with eventTypes filter).
+  // Prefer ledger payout_bank + payout_cash (PERIOD SSOT for Bank Settled / Uber Cash Collected).
   const payoutBankQuery = useQuery({
-    queryKey: ['ledgerPayoutBank', driverId, financialBundle.expandedIds.join(',')],
+    queryKey: ['ledgerPayoutCashBank', driverId, financialBundle.expandedIds.join(',')],
     queryFn: async () => {
       const ids = financialBundle.expandedIds.length
         ? financialBundle.expandedIds.join(',')
         : driverId;
       const page = await api.getCanonicalLedgerEvents({
         driverId: ids,
-        eventTypes: 'payout_bank',
+        eventTypes: 'payout_bank,payout_cash',
         limit: 500,
       });
-      return (page.data || []).filter((e) => String(e.eventType || '') === 'payout_bank');
+      return (page.data || []).filter((e) => {
+        const et = String(e.eventType || '');
+        return et === 'payout_bank' || et === 'payout_cash';
+      });
     },
     staleTime: DRIVER_FINANCIAL_STALE_MS,
     enabled: Boolean(driverId),
@@ -86,6 +89,8 @@ export function useDriverPayoutPeriodRows(opts: {
 
   const payoutBankEvents = payoutBankQuery.data ?? [];
   const payoutBankReady = !payoutBankQuery.isLoading;
+  const hasPayoutCashEvents = payoutBankEvents.some((e) => String(e.eventType || '') === 'payout_cash');
+  const hasPayoutBankEvents = payoutBankEvents.some((e) => String(e.eventType || '') === 'payout_bank');
 
   // Fallback: same GET /ledger/driver-overview PERIOD uses (already live — no deploy needed).
   const overviewWeekKeys = useMemo(() => {
@@ -104,8 +109,14 @@ export function useDriverPayoutPeriodRows(opts: {
     return keys;
   }, [ledgerRows, periodType]);
 
-  const bankByWeekQuery = useQuery({
-    queryKey: ['ledgerBankByWeekOverview', driverId, overviewWeekKeys.map((k) => k.start).join('|')],
+  const overviewCashBankByWeekQuery = useQuery({
+    queryKey: [
+      'ledgerCashBankByWeekOverview',
+      driverId,
+      overviewWeekKeys.map((k) => k.start).join('|'),
+      hasPayoutCashEvents,
+      hasPayoutBankEvents,
+    ],
     queryFn: async () => {
       const entries = await Promise.all(
         overviewWeekKeys.map(async ({ start, end }) => {
@@ -116,25 +127,32 @@ export function useDriverPayoutPeriodRows(opts: {
               endDate: end,
             });
             const bank = Math.abs(Number(ov?.period?.bankTransferred) || 0);
-            return [start, bank] as const;
+            // Uber-only — InDrive trip cash is still added in buildWeeklyCashRisk.
+            const uberCash = Math.abs(Number(ov?.platformStats?.Uber?.cashCollected) || 0);
+            return [start, { bank, uberCash }] as const;
           } catch {
-            return [start, 0] as const;
+            return [start, { bank: 0, uberCash: 0 }] as const;
           }
         }),
       );
-      return Object.fromEntries(entries) as Record<string, number>;
+      return Object.fromEntries(entries) as Record<string, { bank: number; uberCash: number }>;
     },
-    // Only when event path empty/unavailable — avoid 40 overview calls when payout_bank works.
+    // Only when event path incomplete — avoid 40 overview calls when payout_* events work.
     enabled:
       Boolean(driverId) &&
       periodType === 'weekly' &&
       payoutBankReady &&
-      payoutBankEvents.length === 0 &&
+      (!hasPayoutBankEvents || !hasPayoutCashEvents) &&
       overviewWeekKeys.length > 0,
     staleTime: DRIVER_FINANCIAL_STALE_MS,
   });
 
   const cashWeeks: CashWeekData[] = useMemo(() => {
+    const overviewMap = overviewCashBankByWeekQuery.data || {};
+    const overviewUberCashByWeek: Record<string, number> = {};
+    for (const [k, v] of Object.entries(overviewMap)) {
+      if (v.uberCash > 0.005) overviewUberCashByWeek[k] = v.uberCash;
+    }
     const base = computeWeeklyCashSettlement({
       trips,
       transactions,
@@ -142,18 +160,18 @@ export function useDriverPayoutPeriodRows(opts: {
       excludeTollEffects: unifiedToll,
       timezone: fleetTz,
       payoutBankEvents,
+      overviewUberCashByWeek: hasPayoutCashEvents ? undefined : overviewUberCashByWeek,
     });
-    const bankMap = bankByWeekQuery.data;
-    if (!bankMap || Object.keys(bankMap).length === 0) return base;
+    if (!Object.keys(overviewMap).length) return base;
 
     return base.map((week) => {
       const key = format(week.start, 'yyyy-MM-dd');
-      let bank = bankMap[key];
+      let bank = overviewMap[key]?.bank ?? 0;
       if (!(bank > 0.005)) {
-        for (const [k, v] of Object.entries(bankMap)) {
+        for (const [k, v] of Object.entries(overviewMap)) {
           const kd = new Date(`${k}T00:00:00`);
-          if (Math.abs(differenceInCalendarDays(week.start, kd)) <= 2 && v > 0.005) {
-            bank = v;
+          if (Math.abs(differenceInCalendarDays(week.start, kd)) <= 2 && v.bank > 0.005) {
+            bank = v.bank;
             break;
           }
         }
@@ -172,7 +190,8 @@ export function useDriverPayoutPeriodRows(opts: {
     unifiedToll,
     fleetTz,
     payoutBankEvents,
-    bankByWeekQuery.data,
+    hasPayoutCashEvents,
+    overviewCashBankByWeekQuery.data,
   ]);
 
   const periodData: PayoutPeriodRow[] = useMemo(

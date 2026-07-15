@@ -56,7 +56,33 @@ describe("resolveUberPeriodCashCollected", () => {
       isAllPlatforms: true,
     });
     expect(result.magnitude).toBe(4863.83);
-    expect(result.branch).toBe("transaction_column_sum");
+    expect(result.branch).toBe("payment_driver_cash");
+  });
+
+  it("prefers payments_driver cash over inflated transaction column sum", () => {
+    const result = resolveUberPeriodCashCollected({
+      csvMetrics: [
+        paymentOnlyMetric({
+          cashCollected: 34051.85,
+          uberPaymentsTransactionCashColumnSum: 49246.85,
+        }),
+      ],
+      rangeFrom: weekStart,
+      rangeTo: weekEnd,
+      trips: [
+        {
+          id: "t1",
+          driverId: "driver-1",
+          date: "2026-06-30T12:00:00.000Z",
+          platform: "Uber",
+          status: "Completed",
+          amount: 25,
+        },
+      ],
+      isAllPlatforms: true,
+    });
+    expect(result.magnitude).toBeCloseTo(34051.85, 2);
+    expect(result.branch).toBe("payment_driver_cash");
   });
 
   it("does not match prior-week statement that only overlaps the range end", () => {

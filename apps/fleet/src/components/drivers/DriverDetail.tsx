@@ -2423,8 +2423,8 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
     return { netOutstanding, lifetimeCashCollected };
   }, [allTrips, resolvedFinancials.lifetimeCashCollected, metrics.totalCashCollected, metrics.floatHeld, metrics.cashReceived, transactions]);
 
-  /** Same ledger + cash weeks pipeline as Financials → Payout (weekly), for net settlement on Cash Wallet. */
-  const { periodData: walletPayoutPeriodRows } = useDriverPayoutPeriodRows({
+  /** Same ledger + cash weeks pipeline as Financials → Settlement / Payout. */
+  const { periodData: walletPayoutPeriodRows, cashWeeks: walletCashWeeks } = useDriverPayoutPeriodRows({
     driverId,
     driver,
     trips: allTrips,
@@ -2463,6 +2463,33 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       };
     }
     return map;
+  }, [walletPayoutPeriodRows]);
+
+  /** Σ cash still held across finalized open weeks (not lifetime float). */
+  const walletCashStillHeld = useMemo(() => {
+    let sum = 0;
+    for (const entry of Object.values(weekSettlementByMonday)) {
+      if (entry.finalized === true && entry.adjCashBalance > 0.005) {
+        sum += entry.adjCashBalance;
+      }
+    }
+    return Math.round(sum * 100) / 100;
+  }, [weekSettlementByMonday]);
+
+  /** Prefer newest open week for Log Cash Payment when not settling from a week card. */
+  const openWalletPeriodPrefill = useMemo(() => {
+    for (const row of walletPayoutPeriodRows) {
+      if (!row.isFinalized) continue;
+      const comp = getPeriodSettlementComponents(row);
+      if (comp.adjCashBalance > 0.005) {
+        return {
+          start: row.periodStart,
+          end: row.periodEnd,
+          amount: Math.round(comp.adjCashBalance * 100) / 100,
+        };
+      }
+    }
+    return null;
   }, [walletPayoutPeriodRows]);
 
   // ── Auto-Repair: When the completeness guard detects missing ledger platforms,
@@ -3669,6 +3696,8 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
              platformTotalEarnings={platformTotalEarnings}
              csvMetrics={csvMetrics}
              uberLedgerReconciliation={resolvedFinancials.uberLedgerReconciliation}
+             periodFrom={dateRange?.from}
+             periodTo={dateRange?.to}
            />
             {/* ___OLD_FINANCIAL_SUBTABS_BLOCK_1___ <Tabs defaultValue="earnings" className="space-y-4">
              <TabsList className="grid w-full grid-cols-3 max-w-[450px]">
@@ -3787,89 +3816,48 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
           <TabsContent value="wallet" className="space-y-6">
              ___OLD_FINANCIAL_SUBTABS_BLOCK_2_END___ */}
           <TabsContent value="wallet" className="space-y-6">
-             {/* Summary Cards Row (Phase 5) */}
-             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-                 {/* Card 1: Net settlement (matches Payout period settlement, finalized weeks only) */}
+             {/* Ops desk header — same True Settlement math as Financials → Settlement */}
+             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                  <Card className="bg-white border-indigo-100/80 shadow-sm ring-1 ring-indigo-100/60">
                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                         <CardTitle className="text-sm font-medium text-slate-500">Net Settlement</CardTitle>
+                         <CardTitle className="text-sm font-medium text-slate-500">Who Owes Whom</CardTitle>
                          <Landmark className="h-4 w-4 text-indigo-500" />
                      </CardHeader>
                      <CardContent>
-                         {/* Sign convention (Step 7): positive = company owes the driver,
-                             negative = driver owes the company (matches Settlement Summary / computePeriodSettlement). */}
                          <div className={cn("text-2xl font-bold", walletNetSettlement < -0.005 ? "text-rose-600" : walletNetSettlement > 0.005 ? "text-blue-600" : "text-emerald-600")}>
-                             ${walletNetSettlement.toFixed(2)}
+                             {walletNetSettlement < -0.005 ? '−' : walletNetSettlement > 0.005 ? '+' : ''}
+                             ${Math.abs(walletNetSettlement).toFixed(2)}
                          </div>
                          <p className="text-xs text-slate-500 mt-1">
                              {walletNetSettlement < -0.005
-                               ? "Driver owes fleet (after net payout)"
+                               ? "Driver owes fleet"
                                : walletNetSettlement > 0.005
                                  ? "Fleet owes driver"
                                  : "Balanced"}
                          </p>
                          {walletPendingEarningsWeeks > 0 && (
                            <p className="text-[11px] text-amber-600 mt-1">
-                             {walletPendingEarningsWeeks} week{walletPendingEarningsWeeks !== 1 ? 's' : ''} not finalized — excluded from total
+                             {walletPendingEarningsWeeks} week{walletPendingEarningsWeeks !== 1 ? 's' : ''} not finalized — excluded
                            </p>
                          )}
                      </CardContent>
                  </Card>
 
-                 {/* Card 2: Cash position (gross — before netting earnings) */}
                  <Card className="bg-white">
                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                         <CardTitle className="text-sm font-medium text-slate-500">Cash Position (gross)</CardTitle>
-                         <DollarSign className="h-4 w-4 text-slate-500" />
-                     </CardHeader>
-                     <CardContent>
-                         <div className={cn("text-2xl font-bold", walletMetrics.netOutstanding > 0 ? "text-rose-600" : "text-emerald-600")}>
-                             ${walletMetrics.netOutstanding.toFixed(2)}
-                         </div>
-                         <p className="text-xs text-slate-500 mt-1">
-                             Ledger cash + float − payments − cash tolls (pre–net payout)
-                         </p>
-                     </CardContent>
-                 </Card>
-
-                 {/* Card 2: Net Reimbursements (Tolls + Fuel Credits) */}
-                 <Card className="bg-white">
-                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                         <CardTitle className="text-sm font-medium text-slate-500">Net Reimbursements</CardTitle>
-                         <TrendingUp className="h-4 w-4 text-emerald-500" />
-                     </CardHeader>
-                     <CardContent>
-                         <div className="text-2xl font-bold text-emerald-600">
-                             ${(netTollReimbursement + metrics.approvedFuelCredits).toFixed(2)}
-                         </div>
-                         <p className="text-xs text-slate-500 mt-1">
-                             Tolls: <span className="font-medium">${netTollReimbursement.toFixed(2)}</span> | Fuel: <span className="font-medium text-emerald-600">${metrics.approvedFuelCredits.toFixed(2)}</span>
-                         </p>
-                         {disputeCharges > 0 && (
-                             <p className="text-xs text-slate-500 mt-0.5">
-                                 Includes <span className="text-red-600 font-medium">-${disputeCharges.toFixed(2)}</span> in disputes
-                             </p>
-                         )}
-                     </CardContent>
-                 </Card>
-
-                 {/* Card 3: Float Held */}
-                 <Card>
-                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                         <CardTitle className="text-sm font-medium text-slate-500">Float Held</CardTitle>
+                         <CardTitle className="text-sm font-medium text-slate-500">Cash Still Held</CardTitle>
                          <Wallet className="h-4 w-4 text-amber-500" />
                      </CardHeader>
                      <CardContent>
-                         <div className="text-2xl font-bold text-amber-600">
-                             ${metrics.floatHeld.toFixed(2)}
+                         <div className={cn("text-2xl font-bold", walletCashStillHeld > 0.005 ? "text-rose-600" : "text-emerald-600")}>
+                             ${walletCashStillHeld.toFixed(2)}
                          </div>
                          <p className="text-xs text-slate-500 mt-1">
-                             Active cash float
+                             Open weeks after handbacks, fleet fuel credit & cash tolls
                          </p>
                      </CardContent>
                  </Card>
 
-                  {/* Card 3: Unverified Payments */}
                   <Card>
                       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                          <CardTitle className="text-sm font-medium text-slate-500">Unverified Payments</CardTitle>
@@ -3911,6 +3899,8 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                             trips={allTrips}
                             transactions={transactions}
                             csvMetrics={csvMetrics}
+                            cashWeeks={walletCashWeeks}
+                            payoutPeriodRows={walletPayoutPeriodRows}
                             weekSettlementByMonday={weekSettlementByMonday}
                             onWeeksComputed={setSettlementWeeks}
                             onLogPayment={(start, end, amount) => setPaymentModalState({
@@ -4407,7 +4397,12 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                             <Button 
                                                 size="sm"
                                                 className="bg-emerald-600 hover:bg-emerald-700 text-white shrink-0"
-                                                onClick={() => setPaymentModalState({ isOpen: true })}
+                                                onClick={() => setPaymentModalState({
+                                                  isOpen: true,
+                                                  initialWorkPeriodStart: openWalletPeriodPrefill?.start.toISOString(),
+                                                  initialWorkPeriodEnd: openWalletPeriodPrefill?.end.toISOString(),
+                                                  initialAmount: openWalletPeriodPrefill?.amount ?? walletCashStillHeld,
+                                                })}
                                             >
                                                 <Plus className="mr-2 h-4 w-4" />
                                                 Log New Payment
@@ -4529,37 +4524,37 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                     )}
                 </div>
 
-                {/* Right Column: Actions & Risk */}
+                {/* Right Column: quick actions (risk % moved off week settlement desk) */}
                 <div className="space-y-6">
-                     {/* Cash Risk Card */}
                     <Card>
                         <CardHeader>
-                            <CardTitle className="text-sm font-medium">Cash Risk Analysis</CardTitle>
+                            <CardTitle className="text-sm font-medium">Collect Cash</CardTitle>
                         </CardHeader>
-                        <CardContent className="space-y-4">
-                             <div className="space-y-2">
-                                <div className="flex justify-between text-sm">
-                                   <span className="text-slate-500">Cash Collected</span>
-                                   <span className="font-medium">${resolvedFinancials.cashCollected.toFixed(2)}</span>
-                                </div>
-                                <Progress 
-                                    value={resolvedFinancials.periodEarnings > 0 ? (resolvedFinancials.cashCollected / resolvedFinancials.periodEarnings) * 100 : 0} 
-                                    className="h-2 bg-slate-100" 
-                                    indicatorClassName="bg-amber-500" 
-                                />
-                                <p className="text-xs text-amber-600 font-medium">
-                                    {resolvedFinancials.periodEarnings > 0 ? ((resolvedFinancials.cashCollected / resolvedFinancials.periodEarnings) * 100).toFixed(1) : 0}% of earnings
-                                </p>
+                        <CardContent className="space-y-3">
+                             <div className="p-3 bg-slate-50 rounded-lg space-y-1">
+                                <p className="text-xs text-slate-500">Cash still held (open weeks)</p>
+                                <p className="text-sm font-semibold">${walletCashStillHeld.toFixed(2)}</p>
                              </div>
-                             <div className="pt-2">
-                                <div className="p-3 bg-slate-50 rounded-lg space-y-1">
-                                    <p className="text-xs text-slate-500">Total Period Earnings</p>
-                                    <p className="text-sm font-semibold">${resolvedFinancials.periodEarnings.toFixed(2)}</p>
-                                </div>
-                             </div>
-                             <Separator />
-                             <Button className="w-full bg-emerald-600 hover:bg-emerald-700" onClick={() => setPaymentModalState({ isOpen: true })}>
-                                 Log Cash Payment</Button></CardContent></Card></div></div></TabsContent>{/* __DEAD_EXPENSES_WRAP_START__
+                             <p className="text-[11px] text-slate-400">
+                               Overview Period Earnings (${resolvedFinancials.periodEarnings.toFixed(2)}) is a date-range trip roll-up — not the same figure as week Ledger Gross on Settlement.
+                             </p>
+                             <Button
+                               className="w-full bg-emerald-600 hover:bg-emerald-700"
+                               onClick={() => setPaymentModalState({
+                                 isOpen: true,
+                                 initialWorkPeriodStart: openWalletPeriodPrefill?.start.toISOString(),
+                                 initialWorkPeriodEnd: openWalletPeriodPrefill?.end.toISOString(),
+                                 initialAmount: openWalletPeriodPrefill?.amount ?? walletCashStillHeld,
+                               })}
+                             >
+                               Log Cash Payment
+                             </Button>
+                        </CardContent>
+                    </Card>
+                </div>
+            </div>
+          </TabsContent>
+          {/* __DEAD_EXPENSES_WRAP_START__
                              </Button>
                         </CardContent>
                     </Card>
@@ -5319,7 +5314,13 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         onClose={() => setPaymentModalState({ isOpen: false })}
         onSave={handleSavePayment}
         driverName={driverName}
-        cashOwed={walletMetrics.netOutstanding} // Phase 4: Use ledger-sourced net outstanding
+        cashOwed={
+          paymentModalState.initialAmount != null
+            ? paymentModalState.initialAmount
+            : walletCashStillHeld > 0.005
+              ? walletCashStillHeld
+              : walletMetrics.netOutstanding
+        }
         initialWorkPeriodStart={paymentModalState.initialWorkPeriodStart}
         initialWorkPeriodEnd={paymentModalState.initialWorkPeriodEnd}
         initialAmount={paymentModalState.initialAmount}

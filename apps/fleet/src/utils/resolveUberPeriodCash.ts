@@ -113,6 +113,21 @@ export function computeUberCsvCashMagnitudeFromMetrics(
     return { magnitude: null, branch: "skipped_no_overlap" };
   }
 
+  // Prefer payments_driver Cash Collected — same figure PERIOD / payout_cash uses.
+  // payments_transaction column sum can be larger and, when stacked with InDrive
+  // trip cash, inflates Settlement Cash Still Held (~$64k vs ~$49k for Kenny).
+  let sumDriver = 0;
+  let hasDriver = false;
+  for (const m of metrics) {
+    if (m.dataSources?.includes("payment") && m.cashCollected != null) {
+      sumDriver += Number(m.cashCollected) || 0;
+      hasDriver = true;
+    }
+  }
+  if (hasDriver) {
+    return { magnitude: Math.abs(sumDriver), branch: "payment_driver_cash" };
+  }
+
   let sumTx = 0;
   let hasTx = false;
   for (const m of metrics) {
@@ -124,18 +139,6 @@ export function computeUberCsvCashMagnitudeFromMetrics(
   }
   if (hasTx) {
     return { magnitude: Math.abs(sumTx), branch: "transaction_column_sum" };
-  }
-
-  let sumDriver = 0;
-  let hasDriver = false;
-  for (const m of metrics) {
-    if (m.dataSources?.includes("payment") && m.cashCollected != null) {
-      sumDriver += Number(m.cashCollected) || 0;
-      hasDriver = true;
-    }
-  }
-  if (hasDriver) {
-    return { magnitude: Math.abs(sumDriver), branch: "payment_driver_cash" };
   }
 
   return { magnitude: null, branch: "skipped_no_overlap" };

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
+import { Button } from "../ui/button";
 import {
   PieChart,
   Pie,
@@ -15,6 +16,7 @@ import { DriverPayoutHistory } from './DriverPayoutHistory';
 import { SettlementSummaryView } from './SettlementSummaryView';
 import { api } from '../../services/api';
 import { useDriverFinancialBundle, type DriverLike } from '../../hooks/useDriverFinancialBundle';
+import { endOfWeek, format, startOfWeek } from 'date-fns';
 
 interface DriverTollChargeTotals {
   chargedToDriver: number;
@@ -25,6 +27,8 @@ interface DriverTollChargeTotals {
   cashWash: number;
   unresolved: number;
 }
+
+type ReconScope = 'week' | 'all';
 
 // ────────────────────────────────────────────────────────────
 // Props
@@ -40,6 +44,9 @@ interface FinancialSubTabsProps {
   platformTotalEarnings: number;
   csvMetrics?: import('../../types/data').DriverMetrics[];
   uberLedgerReconciliation?: LedgerDriverOverview['period']['uber'] | null;
+  /** Overview date range — SSOT Uber panel matches ledger period when provided. */
+  periodFrom?: Date;
+  periodTo?: Date;
 }
 
 // ────────────────────────────────────────────────────────────
@@ -56,9 +63,22 @@ export function FinancialSubTabs({
   platformTotalEarnings,
   csvMetrics = [],
   uberLedgerReconciliation = null,
+  periodFrom,
+  periodTo,
 }: FinancialSubTabsProps) {
   // Shared Financials core — stays mounted across Expenses/Settlement/Payout switches.
   const financialBundle = useDriverFinancialBundle(driverId, driver);
+
+  // Toll cards default to all-time; toggle This week so admins aren't misled.
+  const [reconScope, setReconScope] = React.useState<ReconScope>('all');
+
+  const weekBounds = React.useMemo(() => {
+    const now = new Date();
+    return {
+      from: startOfWeek(now, { weekStartsOn: 1 }),
+      to: endOfWeek(now, { weekStartsOn: 1 }),
+    };
+  }, []);
 
   // Driver toll disposition (charged / written-off / business / refunded /
   // reconciled) — server-computed from toll_ledger for the Reconciliation tab.
@@ -66,11 +86,19 @@ export function FinancialSubTabs({
   React.useEffect(() => {
     let active = true;
     if (!driverId) return;
-    api.getDriverTollCharges(driverId)
-      .then(res => { if (active) setTollTotals(res.data.totals); })
+    setTollTotals(null);
+    const opts =
+      reconScope === 'week'
+        ? {
+            from: format(weekBounds.from, 'yyyy-MM-dd'),
+            to: format(weekBounds.to, 'yyyy-MM-dd'),
+          }
+        : undefined;
+    api.getDriverTollCharges(driverId, opts)
+      .then(res => { if (active) setTollTotals(res.data.totals as DriverTollChargeTotals); })
       .catch(err => console.error('[FinancialSubTabs] driver toll charges load failed', err));
     return () => { active = false; };
-  }, [driverId]);
+  }, [driverId, reconScope, weekBounds.from, weekBounds.to]);
 
   // Cash Wash is a new bucket that only appears once the unified settlement
   // model is trusted — gate its display so the card grid doesn't change for
@@ -83,9 +111,20 @@ export function FinancialSubTabs({
     let promotions = 0;
     let refundExpense = 0;
 
+    const fromMs = periodFrom ? startOfWeek(periodFrom, { weekStartsOn: 1 }).getTime() : null;
+    const toMs = periodTo
+      ? endOfWeek(periodTo, { weekStartsOn: 1 }).getTime()
+      : periodFrom
+        ? endOfWeek(periodFrom, { weekStartsOn: 1 }).getTime()
+        : null;
+
     for (const t of allTrips) {
       const platformNorm = String(t.platform || '').toLowerCase();
       if (platformNorm !== 'uber') continue;
+      if (fromMs != null && toMs != null) {
+        const tripMs = new Date(t.date || t.requestTime || 0).getTime();
+        if (!Number.isFinite(tripMs) || tripMs < fromMs || tripMs > toMs) continue;
+      }
       fareComponents += Number(t.uberFareComponents) || 0;
       tips += Number(t.uberTips) || 0;
       promotions += Number(t.uberPromotionsAmount) || 0;
@@ -94,7 +133,7 @@ export function FinancialSubTabs({
 
     const netEarnings = fareComponents + tips + promotions - refundExpense;
     return { fareComponents, tips, promotions, refundExpense, netEarnings };
-  }, [allTrips]);
+  }, [allTrips, periodFrom, periodTo]);
 
   const reconciliationStatus = React.useMemo(() => {
     if (!uberLedgerReconciliation) return { label: 'No ledger reconciliation data', ok: false };
@@ -253,12 +292,47 @@ export function FinancialSubTabs({
 
       {/* ── Reconciliation Sub-Tab ── */}
       <TabsContent value="reconciliation" className="space-y-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-xs text-slate-500">
+            Toll disposition cards follow the scope below. Uber SSOT vs Ledger uses the Overview date range
+            (not lifetime).
+          </p>
+          <div className="flex p-1 bg-slate-100 rounded-lg">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className={`h-7 px-3 text-xs ${reconScope === 'week' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500'}`}
+              onClick={() => setReconScope('week')}
+            >
+              This week
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className={`h-7 px-3 text-xs ${reconScope === 'all' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500'}`}
+              onClick={() => setReconScope('all')}
+            >
+              All-time
+            </Button>
+          </div>
+        </div>
+
         {/* Toll disposition — how this driver's tolls were resolved. */}
         <Card>
           <CardHeader>
-            <CardTitle>Toll Reconciliation</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              Toll Reconciliation
+              <span className="text-[10px] font-medium uppercase tracking-wider text-slate-400 bg-slate-100 px-2 py-0.5 rounded">
+                {reconScope === 'week' ? 'This week' : 'All-time'}
+              </span>
+            </CardTitle>
             <CardDescription className="text-xs text-slate-500">
-              How this driver's tolls were resolved by the admin.
+              How this driver's tolls were resolved by the admin
+              {reconScope === 'week'
+                ? ` (${format(weekBounds.from, 'MMM d')} – ${format(weekBounds.to, 'MMM d')}).`
+                : ' across all time.'}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -292,9 +366,17 @@ export function FinancialSubTabs({
 
         <Card>
           <CardHeader>
-            <CardTitle>Uber Reconciliation (SSOT vs Ledger)</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              Uber Reconciliation (SSOT vs Ledger)
+              <span className="text-[10px] font-medium uppercase tracking-wider text-slate-400 bg-slate-100 px-2 py-0.5 rounded">
+                Overview period
+              </span>
+            </CardTitle>
             <CardDescription className="text-xs text-slate-500">
               {reconciliationStatus.label}
+              {periodFrom
+                ? ` · ${format(periodFrom, 'MMM d')}${periodTo ? ` – ${format(periodTo, 'MMM d')}` : ''}`
+                : ''}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">

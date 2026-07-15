@@ -24,32 +24,33 @@ export interface SettlementRow {
   driverShare: number;
   tollExpenses: number;
   fuelDeduction: number;
-  /** Fuel deduction + Charged to Driver (excludes gross plaza toll spend). */
+  /** Payout-path deductions only (Driver Share − Net Payout). Not Charged-to-Driver. */
   expenseDeductions: number;
+  /** Personal toll charges settled on the cash side (informational). */
+  chargedToDriver: number;
   totalDeductions: number;
   netPayout: number;
   isFinalized: boolean;
   tripCount: number;
-  cashOwed: number;
+  /** Step 1 — passenger cash risk for the week (PERIOD Uber + InDrive + float/personal). */
+  passengerCash: number;
+  /** Step 2 — cash handed back to fleet (excludes fuel/toll credits already in cashPaid). */
+  cashHandbacks: number;
+  /** Step 3a — fuel credits reducing cash still held. */
+  fuelCreditsApplied: number;
+  /** Step 3b — cash-toll wash credits. */
+  cashTollCredits: number;
   cashPaid: number;
-  cashBalance: number;
+  /** Step 4 — cash still in hand after handbacks + credits (before Net Payout). */
+  cashStillHeld: number;
   bankSettled: number;
   cashStatus: string;
   settlement: number;
   settlementStatus: SettlementStatus;
 }
 
-interface SettlementSummaryViewProps {
-  driverId: string;
-  trips: Trip[];
-  transactions: FinancialTransaction[];
-  csvMetrics: DriverMetrics[];
-  driver?: DriverLike | null;
-  financialBundle?: DriverFinancialBundle;
-}
-
-function payoutToSettlementRow(row: PayoutPeriodRow): SettlementRow {
-  const { settlement } = getPeriodSettlementComponents(row);
+export function payoutToSettlementRow(row: PayoutPeriodRow): SettlementRow {
+  const { settlement, adjCashBalance } = getPeriodSettlementComponents(row);
   const hasActivity =
     row.tripCount > 0 ||
     row.cashOwed > 0.01 ||
@@ -57,7 +58,8 @@ function payoutToSettlementRow(row: PayoutPeriodRow): SettlementRow {
     row.driverShare > 0.01 ||
     row.tollExpenses > 0.01 ||
     row.fuelDeduction > 0.01 ||
-    Math.abs(row.cashBalance) > 0.01;
+    Math.abs(row.cashBalance) > 0.01 ||
+    Math.abs(adjCashBalance) > 0.01;
 
   let settlementStatus: SettlementStatus;
   if (!hasActivity) settlementStatus = 'No Activity';
@@ -67,9 +69,31 @@ function payoutToSettlementRow(row: PayoutPeriodRow): SettlementRow {
   else settlementStatus = 'Driver Owes';
 
   let cashStatus = 'No Activity';
-  if (Math.abs(row.cashBalance) > 0.01 || row.cashOwed > 0.01 || row.cashPaid > 0.01) {
-    cashStatus = Math.abs(row.cashBalance) < 0.01 ? 'Settled' : 'Outstanding';
+  if (Math.abs(adjCashBalance) > 0.01 || row.cashPaid > 0.01) {
+    cashStatus = Math.abs(adjCashBalance) < 0.01 ? 'Settled' : 'Outstanding';
   }
+
+  const br = row.cashPaidBreakdown;
+  const fuelInPaid = br?.fuelCreditsInCashPaid ?? 0;
+  const cashTollCredits = br?.tollCredits ?? 0;
+  const handbacksFromBr =
+    (br?.allocatedPayments ?? 0) + (br?.fifoPayments ?? 0) + (br?.surplusPayments ?? 0);
+  const cashHandbacks =
+    handbacksFromBr > 0.005
+      ? handbacksFromBr
+      : Math.max(0, row.cashPaid - fuelInPaid - cashTollCredits);
+  const fuelAlreadyInPaid = fuelInPaid;
+  const fuelCreditsApplied =
+    fuelAlreadyInPaid + Math.max(0, (row.fuelCredits || 0) - fuelAlreadyInPaid);
+
+  // Deductions column must match Share − Net Payout (not Charged-to-Driver on cash side).
+  const payoutDeductions = row.isFinalized
+    ? Math.round((row.driverShare - row.netPayout) * 100) / 100
+    : row.fuelDeduction;
+  const chargedToDriver = Math.max(
+    0,
+    Math.round(((row.expenseDeductions ?? 0) - row.fuelDeduction) * 100) / 100,
+  );
 
   return {
     periodStart: row.periodStart,
@@ -78,19 +102,32 @@ function payoutToSettlementRow(row: PayoutPeriodRow): SettlementRow {
     driverShare: row.driverShare,
     tollExpenses: row.tollExpenses,
     fuelDeduction: row.fuelDeduction,
-    expenseDeductions: row.expenseDeductions ?? row.totalDeductions ?? 0,
+    expenseDeductions: payoutDeductions,
+    chargedToDriver,
     totalDeductions: row.totalDeductions,
     netPayout: row.netPayout,
     isFinalized: row.isFinalized,
     tripCount: row.tripCount,
-    cashOwed: row.cashOwed,
+    passengerCash: row.cashOwed,
+    cashHandbacks,
+    fuelCreditsApplied,
+    cashTollCredits,
     cashPaid: row.cashPaid,
-    cashBalance: row.cashBalance,
+    cashStillHeld: adjCashBalance,
     bankSettled: row.bankSettled ?? 0,
     cashStatus,
     settlement,
     settlementStatus,
   };
+}
+
+interface SettlementSummaryViewProps {
+  driverId: string;
+  trips: Trip[];
+  transactions: FinancialTransaction[];
+  csvMetrics: DriverMetrics[];
+  driver?: DriverLike | null;
+  financialBundle?: DriverFinancialBundle;
 }
 
 export function SettlementSummaryView({
@@ -132,11 +169,12 @@ export function SettlementSummaryView({
     const finalized = settlementRows.filter(r => r.isFinalized);
     return {
       totalNetPayout: finalized.reduce((s, r) => s + r.netPayout, 0),
-      totalCashOutstanding: settlementRows.reduce((s, r) => s + r.cashBalance, 0),
-      trueSettlement: finalized.reduce((s, r) => s + r.netPayout, 0) - settlementRows.reduce((s, r) => s + r.cashBalance, 0),
+      totalCashOutstanding: settlementRows.reduce((s, r) => s + Math.max(0, r.cashStillHeld), 0),
+      // Sum of the same Settlement column (not a competing formula).
+      trueSettlement: finalized.reduce((s, r) => s + r.settlement, 0),
       finalizedCount: finalized.length,
       totalWeeks: settlementRows.length,
-      cashActiveWeeks: settlementRows.filter(r => r.cashOwed > 0).length,
+      cashActiveWeeks: settlementRows.filter(r => r.cashStillHeld > 0.01 || r.cashPaid > 0.01).length,
     };
   }, [settlementRows]);
 
@@ -200,19 +238,19 @@ export function SettlementSummaryView({
     const data = settlementRows.map(row => ({
       'Period Start': format(row.periodStart, 'yyyy-MM-dd'),
       'Period End': format(row.periodEnd, 'yyyy-MM-dd'),
-      'Gross Revenue': row.grossRevenue,
+      'Ledger Gross Revenue': row.grossRevenue,
       'Driver Share': row.driverShare,
-      'Deductions': row.expenseDeductions,
-      'Fuel Deduction': row.fuelDeduction,
+      'Fuel Deduction': row.expenseDeductions,
       'Toll / Charge Share': row.tollExpenses,
       'Net Payout': row.netPayout,
       'Is Finalized': row.isFinalized,
       'Trip Count': row.tripCount,
-      'Cash Owed': row.cashOwed,
+      'Passenger Cash': row.passengerCash,
+      'Cash Handbacks': row.cashHandbacks,
+      'Fuel Credits': row.fuelCreditsApplied,
       'Bank Settled': row.bankSettled,
-      'Cash Paid': row.cashPaid,
-      'Cash Balance': row.cashBalance,
-      'Cash Status': row.cashStatus,
+      'Cash Returned': row.cashPaid,
+      'Cash Still Held': row.cashStillHeld,
       'Settlement': row.settlement,
       'Settlement Status': row.settlementStatus,
     }));
@@ -301,14 +339,14 @@ export function SettlementSummaryView({
                 <CardContent className="pt-6">
                   <div className="flex items-start justify-between">
                     <div className="space-y-1">
-                      <p className="text-sm font-medium text-slate-500">Cash Outstanding</p>
+                      <p className="text-sm font-medium text-slate-500">Cash Still Held</p>
                       <p className={`text-2xl font-bold ${summaryTotals.totalCashOutstanding > 0.01 ? 'text-rose-700' : 'text-slate-500'}`}>
                         {fmtCurrency(summaryTotals.totalCashOutstanding)}
                       </p>
                       <p className="text-xs text-slate-400">
                         {summaryTotals.cashActiveWeeks > 0
                           ? `Across ${summaryTotals.cashActiveWeeks} week${summaryTotals.cashActiveWeeks !== 1 ? 's' : ''} with cash activity`
-                          : 'No cash activity recorded'}
+                          : 'No cash still held'}
                       </p>
                     </div>
                     <div className={`rounded-lg p-2.5 ${summaryTotals.totalCashOutstanding > 0.01 ? 'bg-rose-50' : 'bg-slate-100'}`}>
@@ -383,14 +421,13 @@ export function SettlementSummaryView({
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <span className="inline-flex items-center gap-1 cursor-help justify-end w-full">
-                              Deductions
+                              Fuel Deduction
                               <Info className="h-3 w-3 text-slate-400" />
                             </span>
                           </TooltipTrigger>
                           <TooltipContent side="top" className="max-w-[300px] text-xs">
-                            Money that hits the driver’s settlement: fuel deduction + Charged to Driver
-                            (personal tolls). Does not include plaza toll spend after reconcile — that washes
-                            through cash / fleet. Fuel only appears after the week is finalized.
+                            Amount subtracted from Driver Share to get Net Payout (driver fuel share). Share −
+                            Fuel Deduction = Net Payout when finalized. Personal tolls stay on the cash side.
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
@@ -405,7 +442,8 @@ export function SettlementSummaryView({
                             </span>
                           </TooltipTrigger>
                           <TooltipContent side="top" className="max-w-[300px] text-xs">
-                            The amount the company owes the driver for this period before accounting for cash. Calculated as: Driver Share minus payout deductions. Shows "Pending" if the fuel report for this week hasn't been finalized yet.
+                            Driver Share minus Fuel Deduction. The driver’s cut for the week — what they keep
+                            in the cash waterfall. Shows Pending until fuel is finalized.
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
@@ -415,14 +453,13 @@ export function SettlementSummaryView({
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <span className="inline-flex items-center gap-1 cursor-help justify-end w-full">
-                              Cash Owed
+                              Passenger Cash
                               <Info className="h-3 w-3 text-slate-400" />
                             </span>
                           </TooltipTrigger>
                           <TooltipContent side="top" className="max-w-[300px] text-xs">
-                            Physical cash risk for this week — Uber statement cash collected + InDrive/Roam cash
-                            trips (+ float / personal toll charges). Does not include money already transferred
-                            to the company bank.
+                            Physical cash collected this week (Uber statement cash + InDrive/Roam cash). Bank
+                            transfers are listed separately and are not included here.
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
@@ -437,8 +474,8 @@ export function SettlementSummaryView({
                             </span>
                           </TooltipTrigger>
                           <TooltipContent side="top" className="max-w-[300px] text-xs">
-                            Uber payout already transferred to the company bank for this week. Informational
-                            only — not part of Cash Owed.
+                            Uber payout already at the company bank. Informational only — not part of cash
+                            still held.
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
@@ -448,12 +485,12 @@ export function SettlementSummaryView({
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <span className="inline-flex items-center gap-1 cursor-help justify-end w-full">
-                              Cash Paid
+                              Cash Returned
                               <Info className="h-3 w-3 text-slate-400" />
                             </span>
                           </TooltipTrigger>
                           <TooltipContent side="top" className="max-w-[300px] text-xs">
-                            Total cash the driver has returned to the company for this period. This is the sum of all logged cash payments (recorded via the "Log Cash Payment" action in the Cash Wallet tab). Shows "—" if no payments have been logged yet.
+                            Cash handed back to the fleet this week (Cash Wallet payments + related credits).
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
@@ -463,12 +500,14 @@ export function SettlementSummaryView({
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <span className="inline-flex items-center gap-1 cursor-help justify-end w-full">
-                              Cash Balance
+                              Cash Still Held
                               <Info className="h-3 w-3 text-slate-400" />
                             </span>
                           </TooltipTrigger>
                           <TooltipContent side="top" className="max-w-[300px] text-xs">
-                            How much cash the driver still holds for this period. Calculated as: Cash Owed minus Cash Paid. A positive number (shown in red) means the driver still has cash to return. Zero means all collected cash has been returned.
+                            Passenger cash still in hand after handbacks and credits (before Net Payout). Open
+                            the row for the full waterfall: cash in → paid → credits → still held → minus Net →
+                            Settlement.
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
@@ -483,7 +522,8 @@ export function SettlementSummaryView({
                             </span>
                           </TooltipTrigger>
                           <TooltipContent side="top" className="max-w-[300px] text-xs">
-                            The final amount that needs to change hands after combining the digital payout with the cash position. Calculated as: (Driver Share minus Deductions) minus Cash Balance. A positive number means the company owes the driver that amount. A negative number means the driver owes the company (typically because they are holding more cash than their payout covers).
+                            Who owes whom: Net Payout minus Cash Still Held. Positive = company owes driver.
+                            Negative = driver owes company.
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
@@ -535,7 +575,7 @@ export function SettlementSummaryView({
                           )}
                         </TableCell>
 
-                        {/* Deductions — fuel + Charged to Driver only */}
+                        {/* Fuel Deduction — payout path only (matches Share − Net) */}
                         <TableCell className="text-xs text-right tabular-nums">
                           {row.expenseDeductions > 0.005 ? (
                             <span className="text-slate-700 font-medium">{fmtCurrency(row.expenseDeductions)}</span>
@@ -553,9 +593,9 @@ export function SettlementSummaryView({
                           )}
                         </TableCell>
 
-                        {/* Cash Owed */}
-                        <TableCell className="text-xs text-right tabular-nums text-slate-600">
-                          {row.cashOwed > 0.005 ? fmtCurrency(row.cashOwed) : <span className="text-slate-300">—</span>}
+                        {/* Passenger Cash */}
+                        <TableCell className="text-xs text-right tabular-nums text-slate-700">
+                          {row.passengerCash > 0.005 ? fmtCurrency(row.passengerCash) : <span className="text-slate-300">—</span>}
                         </TableCell>
 
                         {/* Bank Settled */}
@@ -563,7 +603,7 @@ export function SettlementSummaryView({
                           {row.bankSettled > 0.005 ? fmtCurrency(row.bankSettled) : <span className="text-slate-300">—</span>}
                         </TableCell>
 
-                        {/* Cash Paid */}
+                        {/* Cash Returned */}
                         <TableCell className="text-xs text-right tabular-nums">
                           {row.cashPaid > 0.005 ? (
                             <span className="text-emerald-700">{fmtCurrency(row.cashPaid)}</span>
@@ -572,10 +612,10 @@ export function SettlementSummaryView({
                           )}
                         </TableCell>
 
-                        {/* Cash Balance */}
+                        {/* Cash Still Held */}
                         <TableCell className="text-xs text-right tabular-nums">
-                          <span className={row.cashBalance > 0.005 ? 'text-rose-700' : 'text-slate-400'}>
-                            {fmtCurrency(row.cashBalance)}
+                          <span className={row.cashStillHeld > 0.005 ? 'text-rose-700' : 'text-slate-400'}>
+                            {fmtCurrency(row.cashStillHeld)}
                           </span>
                         </TableCell>
 

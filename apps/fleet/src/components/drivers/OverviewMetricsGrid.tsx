@@ -1224,14 +1224,14 @@ export function OverviewMetricsGrid({
       </Dialog>
 
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 [&>:nth-child(1)]:order-1 [&>:nth-child(2)]:order-2 [&>:nth-child(3)]:order-3 [&>:nth-child(4)]:order-4 [&>:nth-child(5)]:order-5 [&>:nth-child(6)]:order-6 [&>:nth-child(7)]:hidden [&>:nth-child(8)]:order-7">
-      {/* Card 1: Period Earnings — breakdown now from resolvedFinancials */}
+      {/* Card 1: Period Earnings — date-range trip/overview roll-up (≠ week Ledger Gross) */}
       <MetricCard
         title={isToday ? "Today's Earnings" : "Period Earnings"}
         subtext={
           resolvedFinancials.tripFallback
-            ? "Trip logs (ledger summary unavailable for this period)"
+            ? "Trip logs for selected dates — not week Ledger Gross on Settlement"
             : resolvedFinancials.source === "ledger"
-              ? `Ledger${resolvedFinancials.dataIncomplete ? `${resolvedFinancials.missingPlatforms?.length > 0 ? ` incomplete (missing: ${resolvedFinancials.missingPlatforms.join(", ")})` : " incomplete"}` : ""}`
+              ? `Overview period roll-up${resolvedFinancials.dataIncomplete ? `${resolvedFinancials.missingPlatforms?.length > 0 ? ` incomplete (missing: ${resolvedFinancials.missingPlatforms.join(", ")})` : " incomplete"}` : ""} · ≠ Settlement Ledger Gross`
               : resolvedFinancials.dataIncomplete
                 ? `Ledger incomplete${resolvedFinancials.missingPlatforms?.length > 0 ? ` (missing: ${resolvedFinancials.missingPlatforms.join(", ")})` : ""}`
                 : "Unavailable"

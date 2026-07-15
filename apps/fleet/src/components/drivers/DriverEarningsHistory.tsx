@@ -221,11 +221,12 @@ export function DriverEarningsHistory({ driverId, trips, transactions }: DriverE
             ? format(row.periodStart, 'dd/MM/yyyy')
             : format(row.periodStart, 'MMMM yyyy'),
         'Trip Count': row.tripCount,
-        'Gross Revenue': row.grossRevenue.toFixed(2),
+        'Ledger Gross Revenue': row.grossRevenue.toFixed(2),
         'Tier Name': row.tier.name,
         'Tier Share %': row.tier.sharePercentage + '%',
         'Driver Share': row.driverShare.toFixed(2),
-        'Payouts': row.payouts.toFixed(2),
+        'Fleet Share': row.fleetShare.toFixed(2),
+        'Ledger Bank/Cash Payouts': row.payouts.toFixed(2),
         'Earnings Policy': row.policyName || (row.policySource === 'legacy' ? 'Legacy prefs' : '-'),
       };
 
@@ -269,7 +270,7 @@ export function DriverEarningsHistory({ driverId, trips, transactions }: DriverE
         <p className="text-sm font-medium text-slate-800">No earnings history in the canonical ledger</p>
         <p className="text-xs text-slate-500 leading-relaxed">
           This table is built only from <span className="font-medium text-slate-700">ledger_event</span> rows (Uber CSV import / canonical append).
-          The chart above can still use trip records and other summaries — they are not the same data source.
+          Ledger Gross here is not the same figure as Overview Period Earnings (date-range trip roll-up).
         </p>
       </div>
     );
@@ -286,7 +287,7 @@ export function DriverEarningsHistory({ driverId, trips, transactions }: DriverE
           {dataSource === 'ledger' && (
             <Badge variant="outline" className="text-[10px] px-1.5 py-0.5 bg-emerald-50 text-emerald-600 border-emerald-200 font-normal">
               <Database className="h-3 w-3 mr-1" />
-              Ledger
+              Ledger Gross
             </Badge>
           )}
           {dataSource === 'error' && (
@@ -445,10 +446,12 @@ export function DriverEarningsHistory({ driverId, trips, transactions }: DriverE
             <TableHeader>
               <TableRow>
                 <TableHead>{periodColumnLabel}</TableHead>
-                <TableHead className="text-right">Gross Revenue</TableHead>
+                <TableHead className="text-right">Trips</TableHead>
+                <TableHead className="text-right">Ledger Gross</TableHead>
                 <TableHead className="text-right">Driver Share</TableHead>
-                <TableHead className="text-center">Tier Applied</TableHead>
-                <TableHead className="text-right">Payouts</TableHead>
+                <TableHead className="text-right">Fleet Share</TableHead>
+                <TableHead className="text-center">Tier</TableHead>
+                <TableHead className="text-right text-slate-400">Ledger Payouts</TableHead>
                 {quotaEnabled && <TableHead className="text-right">Quota %</TableHead>}
               </TableRow>
             </TableHeader>
@@ -469,14 +472,13 @@ export function DriverEarningsHistory({ driverId, trips, transactions }: DriverE
                       <span className="inline-block w-1.5 h-1.5 rounded-full bg-indigo-500 mr-1.5 align-middle" />
                     )}
                     {formatPeriodLabel(row)}
-                    {row.tripCount > 0 && (
-                      <span className="ml-1.5 text-slate-400 text-[10px]">
-                        {row.tripCount} trip{row.tripCount !== 1 ? 's' : ''}
-                      </span>
-                    )}
                   </TableCell>
 
-                  {/* Gross Revenue */}
+                  <TableCell className="text-right text-slate-600 tabular-nums text-xs">
+                    {row.tripCount > 0 ? row.tripCount : <span className="text-slate-300">—</span>}
+                  </TableCell>
+
+                  {/* Ledger Gross — distinct from Overview Period Earnings */}
                   <TableCell className="text-right text-slate-600">
                     ${row.grossRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                   </TableCell>
@@ -489,6 +491,12 @@ export function DriverEarningsHistory({ driverId, trips, transactions }: DriverE
                     <Badge variant="outline" className="ml-1.5 text-[10px] px-1 py-0 bg-emerald-50 text-emerald-600 border-emerald-200">
                       {row.tier.sharePercentage}%
                     </Badge>
+                  </TableCell>
+
+                  <TableCell className="text-right text-slate-600 tabular-nums">
+                    {row.fleetShare > 0.005
+                      ? `$${row.fleetShare.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+                      : <span className="text-slate-300">—</span>}
                   </TableCell>
 
                   {/* Tier Applied + policy */}
@@ -509,8 +517,8 @@ export function DriverEarningsHistory({ driverId, trips, transactions }: DriverE
                     </div>
                   </TableCell>
 
-                  {/* Payouts */}
-                  <TableCell className="text-right text-slate-500">
+                  {/* Ledger bank/cash payouts — informational, not Net Payout */}
+                  <TableCell className="text-right text-slate-400 text-xs">
                     {row.payouts > 0
                       ? `$${row.payouts.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
                       : '-'}

@@ -66,6 +66,28 @@ describe('buildWeeklyCashRisk', () => {
     expect(r.breakdown.uberTripCashFallback).toBe(0);
   });
 
+  it('prefers ledger payout_cash over inflated metrics Uber cash', () => {
+    const inflated: DriverMetrics[] = [
+      {
+        ...metrics[0],
+        cashCollected: 49246.85,
+        uberPaymentsTransactionCashColumnSum: 49246.85,
+      } as DriverMetrics,
+    ];
+    const r = buildWeeklyCashRisk({
+      weekStart,
+      weekEnd,
+      trips,
+      csvMetrics: inflated,
+      floatIssued: 0,
+      tollCharges: 0,
+      ledgerUberCash: 34051.85,
+    });
+    expect(r.breakdown.uberCash).toBeCloseTo(34051.85, 2);
+    expect(r.cashRisk).toBeCloseTo(49401.85, 2);
+    expect(r.cashRisk).toBeLessThan(64596);
+  });
+
   it('prefers ledger payout_bank over empty DriverMetrics bank (no re-import)', () => {
     const metricsNoBank: DriverMetrics[] = [
       {
