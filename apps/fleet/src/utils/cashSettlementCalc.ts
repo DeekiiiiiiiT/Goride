@@ -12,12 +12,13 @@ import { getTripPhysicalCashCollected } from './tripPhysicalCash';
 import { isDriverCashPaymentTransaction } from './driverCashPayment';
 import { isDriverTollChargeRow, netDriverTollCharges } from './netDriverTollCharges';
 import { weekBucketForDate } from './tollWeekPeriod';
+import { buildWeeklyCashRisk } from './buildWeeklyCashRisk';
+import { sumLedgerBankSettledForWeek, type PayoutBankEventLike } from './ledgerBankSettled';
 import {
     startOfWeek,
     endOfWeek,
     eachWeekOfInterval,
     isWithinInterval,
-    parseISO,
     areIntervalsOverlapping,
     format,
 } from 'date-fns';
@@ -37,6 +38,8 @@ export interface CashSettlementInput {
     excludeTollEffects?: boolean;
     /** Fleet IANA tz — Monday–Sunday weeks match Toll Reconciliation. */
     timezone?: string;
+    /** Ledger `payout_bank` rows — same SSOT as PERIOD Transferred to Bank. */
+    payoutBankEvents?: PayoutBankEventLike[];
 }
 
 // ── Output ──
@@ -44,9 +47,11 @@ export interface CashSettlementInput {
 export interface CashWeekData {
     start: Date;
     end: Date;
-    amountOwed: number;     // cash collected + float issued
+    amountOwed: number;     // cash risk (statement/trip cash + float + personal tolls) — never bank
     amountPaid: number;     // allocated payments + FIFO + surplus + toll credits + fuel credits
     balance: number;        // amountOwed - amountPaid
+    /** Uber bank settled for the week — informational; not debt. */
+    bankSettled: number;
     status: 'Paid' | 'Partial' | 'Unpaid' | 'Overpaid' | 'No Activity';
     tripCount: number;
     cashTripCount: number;
@@ -61,6 +66,9 @@ export interface CashWeekData {
         tollExpenses: number;
         fuelCredits: number;
         tollCharges: number;   // personal-use tolls billed to the driver (debit → increases owed)
+        bankSettled: number;
+        uberCash: number;
+        nonUberTripCash: number;
     };
 }
 
@@ -72,6 +80,7 @@ export function computeWeeklyCashSettlement(input: CashSettlementInput): CashWee
     const safeTransactions = Array.isArray(input.transactions) ? input.transactions.filter(Boolean) : [];
     const safeCsvMetrics = Array.isArray(input.csvMetrics) ? input.csvMetrics.filter(Boolean) : [];
     const excludeToll = input.excludeTollEffects === true;
+    const payoutBankEvents = Array.isArray(input.payoutBankEvents) ? input.payoutBankEvents : [];
 
     // If we have CSV metrics but no trips, we should still show something
     if (safeTrips.length === 0 && safeCsvMetrics.length === 0) return [];
@@ -111,28 +120,10 @@ export function computeWeeklyCashSettlement(input: CashSettlementInput): CashWee
             ? weekBucketForDate(weekStart, fleetTz).weekEnd
             : endOfWeek(weekStart, { weekStartsOn: 1 });
 
-        // --- Calculate Owed (Cash Collected + Float Issued) ---
-        const relevantCsvMetrics = safeCsvMetrics.filter(m => {
-            if (!m || !m.periodStart || !m.periodEnd) return false;
-            const mStart = parseISO(m.periodStart);
-            const mEnd = parseISO(m.periodEnd);
-            const overlaps = areIntervalsOverlapping({ start: mStart, end: mEnd }, { start: weekStart, end: weekEnd });
-            if (!overlaps) return false;
-            const overlapStart = mStart > weekStart ? mStart : weekStart;
-            const overlapEnd = mEnd < weekEnd ? mEnd : weekEnd;
-            const overlapDuration = overlapEnd.getTime() - overlapStart.getTime();
-            const oneDay = 24 * 60 * 60 * 1000;
-            return overlapDuration > (oneDay * 0.5);
-        });
-
-        const csvCash = relevantCsvMetrics.reduce((sum, m) => sum + (m.cashCollected || 0), 0);
-
         const weekTrips = safeTrips.filter(t => {
             if (!t || !t.date) return false;
             return isWithinInterval(new Date(t.date), { start: weekStart, end: weekEnd });
         });
-
-        const tripCalculatedCash = weekTrips.reduce((sum, t) => sum + getTripPhysicalCashCollected(t), 0);
 
         // Float Issued in this week (Increases Debt)
         const weeklyFloat = safeTransactions
@@ -157,8 +148,19 @@ export function computeWeeklyCashSettlement(input: CashSettlementInput): CashWee
                 }),
             );
 
-        const amountOwed = Math.max(csvCash, tripCalculatedCash) + weeklyFloat + weeklyTollCharges;
-        const isFromCsv = csvCash > tripCalculatedCash;
+        // Cash risk SSOT — PERIOD Uber cash + non-Uber trip cash (+ float/tolls). Never bank.
+        const ledgerBankSettled = sumLedgerBankSettledForWeek(payoutBankEvents, weekStart, weekEnd);
+        const risk = buildWeeklyCashRisk({
+            weekStart,
+            weekEnd,
+            trips: weekTrips,
+            csvMetrics: safeCsvMetrics,
+            floatIssued: weeklyFloat,
+            tollCharges: weeklyTollCharges,
+            ledgerBankSettled,
+        });
+        const amountOwed = risk.cashRisk;
+        const isFromCsv = risk.breakdown.uberFromStatement;
 
         // --- Calculate Credits (Allocated Payments + Approved Cash Tolls) ---
 
@@ -249,15 +251,18 @@ export function computeWeeklyCashSettlement(input: CashSettlementInput): CashWee
             weeklyFuelCredits,
             weekTrips,
             isFromCsv,
+            bankSettled: risk.bankSettled,
             debtPaid: 0,      // Will be filled in Phase 2 (FIFO)
             surplusPaid: 0,   // Will be filled in Phase 2 (Surplus)
             // Breakdown detail fields
-            _cashCollected: Math.max(csvCash, tripCalculatedCash),
+            _cashCollected: risk.cashCollected,
             _floatIssued: weeklyFloat,
             _allocatedPaymentsOnly: allocatedPayments.reduce((sum, t) => sum + (t.amount || 0), 0),
             _tollExpenses: weeklyExpenses,
             _fuelCredits: weeklyFuelCredits,
             _tollCharges: weeklyTollCharges,
+            _uberCash: risk.breakdown.uberCash,
+            _nonUberTripCash: risk.breakdown.nonUberTripCash,
         };
     });
 
@@ -342,6 +347,7 @@ export function computeWeeklyCashSettlement(input: CashSettlementInput): CashWee
             amountOwed: week.amountOwed,
             amountPaid,
             balance: week.amountOwed - amountPaid,
+            bankSettled: week.bankSettled || 0,
             status,
             tripCount: week.weekTrips.length,
             cashTripCount,
@@ -357,6 +363,9 @@ export function computeWeeklyCashSettlement(input: CashSettlementInput): CashWee
                 tollExpenses: week._tollExpenses,
                 fuelCredits: week._fuelCredits,
                 tollCharges: week._tollCharges,
+                bankSettled: week.bankSettled || 0,
+                uberCash: week._uberCash || 0,
+                nonUberTripCash: week._nonUberTripCash || 0,
             },
         };
     }).reverse(); // Most recent first

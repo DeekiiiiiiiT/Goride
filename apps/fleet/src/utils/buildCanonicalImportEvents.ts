@@ -109,7 +109,7 @@ export interface BuildCanonicalImportEventsParams {
  *
  * This function creates:
  * - promotion (driver statement total from uberStatementsByDriverId / payments_driver)
- * - payout_cash / payout_bank (actual cash/bank payout totals from org)
+ * - payout_cash / payout_bank (per-driver from payments_driver when present; else org→primary fallback)
  * - toll refund lines (REFUNDS_TOLL)
  * - toll_support_adjustment / dispute_refund events
  * 
@@ -184,8 +184,64 @@ export function buildCanonicalImportEvents(
     }
   }
 
-  // ─── PAYOUTS (actual cash/bank payout totals) ───────────────────────────────
-  if (org && primary) {
+  // ─── PAYOUTS (prefer per-driver payments_driver; org→primary only as fallback) ─
+  let emittedPerDriverPayout = false;
+  if (ssot && Object.keys(ssot).length > 0) {
+    const driverIds = Object.keys(ssot).sort((a, b) => a.localeCompare(b));
+    for (const driverId of driverIds) {
+      const totals = ssot[driverId];
+      if (!totals) continue;
+      const did = String(driverId).trim();
+      if (!did) continue;
+      const cash = Math.abs(Number(totals.cashCollected) || 0);
+      const bank = Math.abs(Number(totals.bankTransferred) || 0);
+      if (cash < 1e-9 && bank < 1e-9) continue;
+      emittedPerDriverPayout = true;
+      if (cash > 1e-9) {
+        out.push({
+          idempotencyKey: `${batchId}|payout|cash|${did.toLowerCase()}`,
+          date: ledgerPostingDate,
+          driverId: did,
+          eventType: 'payout_cash',
+          direction: 'inflow',
+          netAmount: cash,
+          grossAmount: cash,
+          currency: 'JMD',
+          sourceType: 'import_batch',
+          sourceId: batchId,
+          batchId,
+          sourceFileHash,
+          periodStart,
+          periodEnd,
+          platform: 'Uber',
+          description: 'Cash collected (payments_driver)',
+          metadata: { source: 'payments_driver' },
+        });
+      }
+      if (bank > 1e-9) {
+        out.push({
+          idempotencyKey: `${batchId}|payout|bank|${did.toLowerCase()}`,
+          date: ledgerPostingDate,
+          driverId: did,
+          eventType: 'payout_bank',
+          direction: 'inflow',
+          netAmount: bank,
+          grossAmount: bank,
+          currency: 'JMD',
+          sourceType: 'import_batch',
+          sourceId: batchId,
+          batchId,
+          sourceFileHash,
+          periodStart,
+          periodEnd,
+          platform: 'Uber',
+          description: 'Bank transfer (payments_driver)',
+          metadata: { source: 'payments_driver' },
+        });
+      }
+    }
+  }
+  if (!emittedPerDriverPayout && org && primary) {
     const cash = org.totalCashExposure ?? 0;
     const bank = org.bankTransfer ?? 0;
     if (Math.abs(cash) > 1e-9) {

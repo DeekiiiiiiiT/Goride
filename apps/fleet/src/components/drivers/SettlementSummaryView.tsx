@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../ui
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "../ui/tooltip";
-import { Loader2, CheckCircle, DollarSign, Wallet, ArrowUpCircle, ArrowDownCircle, ChevronDown, Clock, MinusCircle, Download, Info } from "lucide-react";
+import { Loader2, DollarSign, Wallet, ArrowUpCircle, ArrowDownCircle, ChevronDown, Clock, MinusCircle, Download, Info, CheckCircle } from "lucide-react";
 import { toast } from "sonner@2.0.3";
 import { Trip, FinancialTransaction, DriverMetrics } from '../../types/data';
 import { exportToCSV } from '../../utils/csvHelpers';
@@ -23,11 +23,9 @@ export interface SettlementRow {
   grossRevenue: number;
   driverShare: number;
   tollExpenses: number;
-  tollReconciled: number;
-  tollUnreconciled: number;
-  disputeRefundMatched: number;
-  disputeRefundUnmatched: number;
   fuelDeduction: number;
+  /** Fuel deduction + Charged to Driver (excludes gross plaza toll spend). */
+  expenseDeductions: number;
   totalDeductions: number;
   netPayout: number;
   isFinalized: boolean;
@@ -35,6 +33,7 @@ export interface SettlementRow {
   cashOwed: number;
   cashPaid: number;
   cashBalance: number;
+  bankSettled: number;
   cashStatus: string;
   settlement: number;
   settlementStatus: SettlementStatus;
@@ -78,11 +77,8 @@ function payoutToSettlementRow(row: PayoutPeriodRow): SettlementRow {
     grossRevenue: row.grossRevenue,
     driverShare: row.driverShare,
     tollExpenses: row.tollExpenses,
-    tollReconciled: row.tollReconciled,
-    tollUnreconciled: row.tollUnreconciled,
-    disputeRefundMatched: row.disputeRefundMatched,
-    disputeRefundUnmatched: row.disputeRefundUnmatched,
     fuelDeduction: row.fuelDeduction,
+    expenseDeductions: row.expenseDeductions ?? row.totalDeductions ?? 0,
     totalDeductions: row.totalDeductions,
     netPayout: row.netPayout,
     isFinalized: row.isFinalized,
@@ -90,6 +86,7 @@ function payoutToSettlementRow(row: PayoutPeriodRow): SettlementRow {
     cashOwed: row.cashOwed,
     cashPaid: row.cashPaid,
     cashBalance: row.cashBalance,
+    bankSettled: row.bankSettled ?? 0,
     cashStatus,
     settlement,
     settlementStatus,
@@ -205,23 +202,14 @@ export function SettlementSummaryView({
       'Period End': format(row.periodEnd, 'yyyy-MM-dd'),
       'Gross Revenue': row.grossRevenue,
       'Driver Share': row.driverShare,
-      'Toll Expenses': row.tollExpenses,
-      'Toll Status': (row.tollReconciled + row.tollUnreconciled) === 0
-        ? 'N/A'
-        : row.tollUnreconciled === 0
-          ? `Reconciled (${row.tollReconciled})`
-          : `${row.tollUnreconciled} Unmatched`,
-      'Dispute Status': (row.disputeRefundMatched + row.disputeRefundUnmatched) === 0
-        ? 'N/A'
-        : row.disputeRefundUnmatched === 0
-          ? `Matched (${row.disputeRefundMatched})`
-          : `${row.disputeRefundUnmatched} Unmatched`,
+      'Deductions': row.expenseDeductions,
       'Fuel Deduction': row.fuelDeduction,
-      'Total Deductions': row.totalDeductions,
+      'Toll / Charge Share': row.tollExpenses,
       'Net Payout': row.netPayout,
       'Is Finalized': row.isFinalized,
       'Trip Count': row.tripCount,
       'Cash Owed': row.cashOwed,
+      'Bank Settled': row.bankSettled,
       'Cash Paid': row.cashPaid,
       'Cash Balance': row.cashBalance,
       'Cash Status': row.cashStatus,
@@ -395,42 +383,29 @@ export function SettlementSummaryView({
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <span className="inline-flex items-center gap-1 cursor-help justify-end w-full">
+                              Deductions
+                              <Info className="h-3 w-3 text-slate-400" />
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-[300px] text-xs">
+                            Money that hits the driver’s settlement: fuel deduction + Charged to Driver
+                            (personal tolls). Does not include plaza toll spend after reconcile — that washes
+                            through cash / fleet. Fuel only appears after the week is finalized.
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </TableHead>
+                    <TableHead className="text-xs text-right">
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="inline-flex items-center gap-1 cursor-help justify-end w-full">
                               Net Payout
                               <Info className="h-3 w-3 text-slate-400" />
                             </span>
                           </TooltipTrigger>
                           <TooltipContent side="top" className="max-w-[300px] text-xs">
-                            The amount the company owes the driver for this period before accounting for cash. Calculated as: Driver Share minus Total Deductions (toll expenses + fuel deductions). Shows "Pending" if the fuel report for this week hasn't been finalized yet, since deductions can't be fully computed.
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    </TableHead>
-                    <TableHead className="text-xs text-center">
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="inline-flex items-center gap-1 cursor-help">
-                              Toll Status
-                              <Info className="h-3 w-3 text-slate-400" />
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent side="top" className="max-w-[250px] text-xs">
-                            Whether toll expenses for this period have been matched to a trip in the Toll Reconciliation system. "Reconciled" = all tolls linked; "X Unmatched" = some tolls still need matching.
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    </TableHead>
-                    <TableHead className="text-xs text-center">
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="inline-flex items-center gap-1 cursor-help">
-                              Dispute Status
-                              <Info className="h-3 w-3 text-slate-400" />
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent side="top" className="max-w-[250px] text-xs">
-                            Whether Uber support-case refunds for this period have been matched to a toll in the Dispute Refunds tab. "Matched" = all linked; "X Unmatched" = some still need a manual match.
+                            The amount the company owes the driver for this period before accounting for cash. Calculated as: Driver Share minus payout deductions. Shows "Pending" if the fuel report for this week hasn't been finalized yet.
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
@@ -445,7 +420,25 @@ export function SettlementSummaryView({
                             </span>
                           </TooltipTrigger>
                           <TooltipContent side="top" className="max-w-[300px] text-xs">
-                            Total cash the driver collected on behalf of the company during this period. This is the sum of all cash trip payments from passengers that the driver received but needs to return to the company. Sourced from the cash wallet system.
+                            Physical cash risk for this week — Uber statement cash collected + InDrive/Roam cash
+                            trips (+ float / personal toll charges). Does not include money already transferred
+                            to the company bank.
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </TableHead>
+                    <TableHead className="text-xs text-right">
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="inline-flex items-center gap-1 cursor-help justify-end w-full">
+                              Bank Settled
+                              <Info className="h-3 w-3 text-slate-400" />
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-[300px] text-xs">
+                            Uber payout already transferred to the company bank for this week. Informational
+                            only — not part of Cash Owed.
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
@@ -542,6 +535,15 @@ export function SettlementSummaryView({
                           )}
                         </TableCell>
 
+                        {/* Deductions — fuel + Charged to Driver only */}
+                        <TableCell className="text-xs text-right tabular-nums">
+                          {row.expenseDeductions > 0.005 ? (
+                            <span className="text-slate-700 font-medium">{fmtCurrency(row.expenseDeductions)}</span>
+                          ) : (
+                            <span className="text-slate-300">—</span>
+                          )}
+                        </TableCell>
+
                         {/* Net Payout */}
                         <TableCell className="text-xs text-right tabular-nums">
                           {row.isFinalized ? (
@@ -551,39 +553,14 @@ export function SettlementSummaryView({
                           )}
                         </TableCell>
 
-                        {/* Toll Status */}
-                        <TableCell className="text-xs text-center" onClick={(e) => e.stopPropagation()}>
-                          {(row.tollReconciled + row.tollUnreconciled) === 0 ? (
-                            <span className="text-slate-300">-</span>
-                          ) : row.tollUnreconciled === 0 ? (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
-                              <CheckCircle className="h-3 w-3" /> Reconciled
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
-                              {row.tollUnreconciled} Unmatched
-                            </span>
-                          )}
-                        </TableCell>
-
-                        {/* Dispute Status */}
-                        <TableCell className="text-xs text-center" onClick={(e) => e.stopPropagation()}>
-                          {(row.disputeRefundMatched + row.disputeRefundUnmatched) === 0 ? (
-                            <span className="text-slate-300">-</span>
-                          ) : row.disputeRefundUnmatched === 0 ? (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
-                              <CheckCircle className="h-3 w-3" /> Matched
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
-                              {row.disputeRefundUnmatched} Unmatched
-                            </span>
-                          )}
-                        </TableCell>
-
                         {/* Cash Owed */}
                         <TableCell className="text-xs text-right tabular-nums text-slate-600">
                           {row.cashOwed > 0.005 ? fmtCurrency(row.cashOwed) : <span className="text-slate-300">—</span>}
+                        </TableCell>
+
+                        {/* Bank Settled */}
+                        <TableCell className="text-xs text-right tabular-nums text-slate-500">
+                          {row.bankSettled > 0.005 ? fmtCurrency(row.bankSettled) : <span className="text-slate-300">—</span>}
                         </TableCell>
 
                         {/* Cash Paid */}

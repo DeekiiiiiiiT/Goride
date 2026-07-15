@@ -5103,6 +5103,8 @@ app.get("/make-server-37f42386/ledger/canonical-events", requireAuth(), async (c
     const driverId = c.req.query("driverId");
     const startDate = c.req.query("startDate");
     const endDate = c.req.query("endDate");
+    // Comma-separated event types, e.g. payout_bank,payout_cash — keeps Settlement from paging fare noise.
+    const eventTypesParam = c.req.query("eventTypes");
     const limitParam = c.req.query("limit");
     const offsetParam = c.req.query("offset");
     const limit = Math.min(Math.max(limitParam ? parseInt(limitParam, 10) : 50, 1), 500);
@@ -5113,7 +5115,39 @@ app.get("/make-server-37f42386/ledger/canonical-events", requireAuth(), async (c
       .select("key, value")
       .like("key", "ledger_event:%");
 
-    if (driverId) query = query.eq("value->>driverId", driverId);
+    if (driverId) {
+      const ids = String(driverId)
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (ids.length === 1) {
+        const only = ids[0];
+        const lc = only.toLowerCase();
+        if (lc !== only) {
+          query = query.or(`value->>driverId.eq.${only},value->>driverId.eq.${lc}`);
+        } else {
+          query = query.eq("value->>driverId", only);
+        }
+      } else if (ids.length > 1) {
+        const expanded = new Set<string>();
+        for (const id of ids) {
+          expanded.add(id);
+          expanded.add(id.toLowerCase());
+        }
+        query = query.or([...expanded].map((id) => `value->>driverId.eq.${id}`).join(","));
+      }
+    }
+    if (eventTypesParam) {
+      const types = String(eventTypesParam)
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (types.length === 1) {
+        query = query.eq("value->>eventType", types[0]);
+      } else if (types.length > 1) {
+        query = query.or(types.map((t) => `value->>eventType.eq.${t}`).join(","));
+      }
+    }
     if (startDate) query = query.gte("value->>date", startDate);
     if (endDate) query = query.lte("value->>date", endDate);
 

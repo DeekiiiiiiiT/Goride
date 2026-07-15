@@ -3576,9 +3576,12 @@ export const api = {
   },
 
   async getCanonicalLedgerEvents(params: {
+    /** One id or comma-separated Roam/Uber/InDrive ids (server expands case). */
     driverId?: string;
     startDate?: string;
     endDate?: string;
+    /** Comma-separated, e.g. `payout_bank` — same ledger source as PERIOD Transferred to Bank. */
+    eventTypes?: string;
     limit?: number;
     offset?: number;
   }): Promise<{
@@ -3591,6 +3594,7 @@ export const api = {
     if (params.driverId) qp.set('driverId', params.driverId);
     if (params.startDate) qp.set('startDate', params.startDate);
     if (params.endDate) qp.set('endDate', params.endDate);
+    if (params.eventTypes) qp.set('eventTypes', params.eventTypes);
     if (params.limit != null) qp.set('limit', String(params.limit));
     if (params.offset != null) qp.set('offset', String(params.offset));
     const response = await fetchWithRetry(

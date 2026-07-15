@@ -1852,7 +1852,7 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                          driverName: 'Unknown Driver',
                          periodStart: initPayPeriod.periodStart,
                          periodEnd: initPayPeriod.periodEnd,
-                         totalEarnings: 0, refundsAndExpenses: 0, cashCollected: 0,
+                         totalEarnings: 0, refundsAndExpenses: 0, cashCollected: 0, bankTransferred: 0,
                          netEarnings: 0, cashFlowRisk: 'OK', expenseRatio: 0,
                          acceptanceRate: 0, cancellationRate: 0, completionRate: 0,
                          ratingLast500: 0, ratingLast4Weeks: 0,
@@ -1882,7 +1882,7 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                             '0'
                         ).replace(/[^0-9.-]/g, '')
                     ) || 0;
-                     const cashCollected =
+                     const cashCollectedRaw =
                          parseFloat(
                              String(
                                  row['Payouts : Cash Collected'] ||
@@ -1892,10 +1892,24 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                                      '0',
                              ).replace(/[^0-9.-]/g, ''),
                          ) || 0;
-                     
+                     const bankTransferredRaw =
+                         parseFloat(
+                             String(
+                                 row['Payouts : Transferred To Bank Account'] ||
+                                     row['Payouts: Transferred To Bank Account'] ||
+                                     row['Transferred To Bank Account'] ||
+                                     row['Bank Transfer'] ||
+                                     '0',
+                             ).replace(/[^0-9.-]/g, ''),
+                         ) || 0;
+                     // Persist absolute payout magnitudes — cash risk vs bank settled (not signed CSV).
+                     const cashCollected = Math.abs(cashCollectedRaw);
+                     const bankTransferred = Math.abs(bankTransferredRaw);
+
                      current.totalEarnings = (current.totalEarnings || 0) + totalEarnings;
                      current.refundsAndExpenses = (current.refundsAndExpenses || 0) + refundsAndExpenses;
                      current.cashCollected = (current.cashCollected || 0) + cashCollected;
+                     current.bankTransferred = (current.bankTransferred || 0) + bankTransferred;
 
                     // Phase 2: store canonical statement SSOT totals for later reconciliation/ledger generation.
                     // These are statement-level (period) totals per driver from `payments_driver.csv`.
@@ -1913,7 +1927,11 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
 
                     const prevSsot = uberStatementsByDriverId.get(driverId);
                     if (!prevSsot) {
-                        uberStatementsByDriverId.set(driverId, { ...ssotStatement });
+                        uberStatementsByDriverId.set(driverId, {
+                            ...ssotStatement,
+                            cashCollected,
+                            bankTransferred,
+                        });
                     } else {
                         uberStatementsByDriverId.set(driverId, {
                             periodEarningsGross: prevSsot.periodEarningsGross + ssotStatement.periodEarningsGross,
@@ -1927,6 +1945,8 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
                             netEarnings:
                                 (prevSsot.periodEarningsGross + ssotStatement.periodEarningsGross) -
                                 (prevSsot.refundsAndExpenses + ssotStatement.refundsAndExpenses),
+                            cashCollected: (prevSsot.cashCollected || 0) + cashCollected,
+                            bankTransferred: (prevSsot.bankTransferred || 0) + bankTransferred,
                         });
                     }
                      

@@ -26,7 +26,13 @@ export interface PayoutPeriodRow {
   disputeRefundUnmatched: number;
   fuelDeduction: number;
   fuelCredits: number;
+  /** Payout-math deductions (may omit tag tolls in unified mode). */
   totalDeductions: number;
+  /**
+   * Driver take-home deductions for Settlement: fuel deduction + Charged to Driver.
+   * Excludes gross plaza toll spend (cash wash / fleet after reconcile).
+   */
+  expenseDeductions: number;
   netPayout: number;
   isFinalized: boolean;
   tripCount: number;
@@ -34,6 +40,8 @@ export interface PayoutPeriodRow {
   cashOwed: number;
   cashPaid: number;
   cashBalance: number;
+  /** Uber bank settled for the period — informational; never part of cash risk. */
+  bankSettled: number;
   status: PayoutStatus;
   /** From weekly cash settlement — drives Cash Paid drill-down */
   cashPaidBreakdown?: CashPaidBreakdown;

@@ -24,6 +24,10 @@ export interface UberSsotTotals {
   tips: number;
   refundsAndExpenses: number;
   netEarnings?: number; // optional: periodEarningsGross - refundsAndExpenses
+  /** Absolute `Payouts : Cash Collected` from payments_driver (cash risk). */
+  cashCollected?: number;
+  /** Absolute `Payouts : Transferred To Bank Account` from payments_driver (not cash risk). */
+  bankTransferred?: number;
 }
 
 function toNum(val: unknown): number {

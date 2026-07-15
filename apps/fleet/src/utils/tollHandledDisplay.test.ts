@@ -56,6 +56,36 @@ describe('deriveTollTxIsReconciled', () => {
       }),
     ).toBe(false);
   });
+
+  it('treats terminal workflow stages as handled (Settlement vs Completed alignment)', () => {
+    for (const workflowStage of [
+      'matched',
+      'claim_filed',
+      'claim_resolved',
+      'personal_use_resolved',
+      'deadhead_resolved',
+    ]) {
+      expect(
+        deriveTollTxIsReconciled({
+          isReconciled: false,
+          status: 'pending',
+          tripId: null,
+          workflowStage,
+        }),
+      ).toBe(true);
+    }
+  });
+
+  it('keeps pending workflow stages unmatched when ledger flag is false', () => {
+    expect(
+      deriveTollTxIsReconciled({
+        isReconciled: false,
+        status: 'pending',
+        tripId: null,
+        workflowStage: 'needs_review',
+      }),
+    ).toBe(false);
+  });
 });
 
 describe('top-level resolution + classifyTollLedgerEntry', () => {

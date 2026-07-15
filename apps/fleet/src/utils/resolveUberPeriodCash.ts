@@ -141,6 +141,19 @@ export function computeUberCsvCashMagnitudeFromMetrics(
   return { magnitude: null, branch: "skipped_no_overlap" };
 }
 
+/** Absolute bank settled from payment-sourced DriverMetrics (never cash risk). */
+export function computeUberCsvBankMagnitudeFromMetrics(metrics: DriverMetrics[]): number {
+  let sum = 0;
+  let has = false;
+  for (const m of metrics) {
+    if (!m.dataSources?.includes("payment")) continue;
+    if (m.bankTransferred == null) continue;
+    sum += Number(m.bankTransferred) || 0;
+    has = true;
+  }
+  return has ? Math.abs(sum) : 0;
+}
+
 /**
  * Single source of truth for Uber period cash on the driver overview.
  * Stale payment import rows cannot surface cash without trip evidence in the range.

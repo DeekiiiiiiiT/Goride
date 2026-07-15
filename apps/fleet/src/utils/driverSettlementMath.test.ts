@@ -26,6 +26,7 @@ function makeRow(overrides: Partial<PayoutPeriodRow>): PayoutPeriodRow {
     fuelDeduction: 0,
     fuelCredits: 0,
     totalDeductions: 0,
+    expenseDeductions: 0,
     netPayout: 0,
     isFinalized: false,
     tripCount: 0,
@@ -33,6 +34,7 @@ function makeRow(overrides: Partial<PayoutPeriodRow>): PayoutPeriodRow {
     cashOwed: 0,
     cashPaid: 0,
     cashBalance: 0,
+    bankSettled: 0,
     status: 'Pending',
     ...overrides,
   };

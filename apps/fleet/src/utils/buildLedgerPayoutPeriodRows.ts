@@ -9,8 +9,11 @@ import type { CashPaidBreakdown, PayoutPeriodRow, PayoutStatus } from '../types/
 import type { CashWeekData } from './cashSettlementCalc';
 import { isTollCategory } from './tollCategoryHelper';
 import { computePeriodSettlement } from './driverPeriodSettlement';
-import { computeDisputeRefundCounts } from './tollWeekPeriod';
+import { computeDisputeRefundCounts, weekBucketForDate } from './tollWeekPeriod';
 import { getFuelDeductionForPeriod } from './fuelDeductionForPeriod';
+import { deriveTollTxIsReconciled } from './tollHandledDisplay';
+import { fleetTzDateKey } from './timezoneDisplay';
+import { isDriverTollChargeRow, netDriverTollCharges } from './netDriverTollCharges';
 
 type PeriodType = 'daily' | 'weekly' | 'monthly';
 
@@ -25,6 +28,8 @@ export function buildLedgerPayoutPeriodRows(params: {
   periodType: PeriodType;
   /** Unified toll settlement: tolls leave the payout deduction, settled on cash side. */
   unifiedToll?: boolean;
+  /** Fleet IANA tz — required so weekly Toll Status matches Toll Reconciliation buckets. */
+  timezone?: string;
 }): PayoutPeriodRow[] {
   const {
     ledgerLoaded,
@@ -36,6 +41,7 @@ export function buildLedgerPayoutPeriodRows(params: {
     disputeRefunds = [],
     periodType,
     unifiedToll = false,
+    timezone,
   } = params;
 
   const getDeductionForPeriod = (periodStart: Date, periodEnd: Date) =>
@@ -49,21 +55,41 @@ export function buildLedgerPayoutPeriodRows(params: {
     (t) => t.type === 'Expense' || (t.type === 'Adjustment' && t.amount < 0) || isTollCategory(t.category)
   );
 
+  const tollBelongsToPeriod = (
+    txDate: string | undefined | null,
+    periodStart: Date,
+    periodEnd: Date,
+  ): boolean => {
+    if (!txDate) return false;
+    if (periodType === 'daily') {
+      const dayKey = timezone
+        ? fleetTzDateKey(txDate, timezone)
+        : String(txDate).split('T')[0];
+      return dayKey === format(periodStart, 'yyyy-MM-dd');
+    }
+    if (periodType === 'monthly') {
+      const ymd = timezone ? fleetTzDateKey(txDate, timezone) : String(txDate).slice(0, 10);
+      return !!ymd && ymd.slice(0, 7) === format(periodStart, 'yyyy-MM');
+    }
+    // Weekly — same Monday key as Toll Reconciliation / Expenses (avoids
+    // browser-local Date ranges pulling next-Monday tolls into this week).
+    const periodWeekKey = format(periodStart, 'yyyy-MM-dd');
+    return weekBucketForDate(txDate as any, timezone).key === periodWeekKey;
+  };
+
   const getTollsForPeriod = (
-    pStartTime: number,
-    pEndTime: number
+    periodStart: Date,
+    periodEnd: Date,
   ): { amount: number; reconciled: number; unreconciled: number } => {
     let tollAmount = 0;
     let reconciled = 0;
     let unreconciled = 0;
     expenseTx.forEach((tx) => {
-      const d = new Date(tx.date).getTime();
-      if (d >= pStartTime && d <= pEndTime) {
-        if (isTollCategory(tx.category)) {
-          tollAmount += Math.abs(tx.amount);
-          if (tx.isReconciled) reconciled++;
-          else unreconciled++;
-        }
+      if (!tollBelongsToPeriod(tx.date, periodStart, periodEnd)) return;
+      if (isTollCategory(tx.category)) {
+        tollAmount += Math.abs(tx.amount);
+        if (deriveTollTxIsReconciled(tx as any)) reconciled++;
+        else unreconciled++;
       }
     });
     return { amount: tollAmount, reconciled, unreconciled };
@@ -103,10 +129,11 @@ export function buildLedgerPayoutPeriodRows(params: {
       cashPaid: number;
       cashBalance: number;
       fuelCredits: number;
+      bankSettled: number;
       cashPaidBreakdown?: CashPaidBreakdown;
     } => {
       if (periodType === 'daily') {
-        return { cashOwed: 0, cashPaid: 0, cashBalance: 0, fuelCredits: 0 };
+        return { cashOwed: 0, cashPaid: 0, cashBalance: 0, fuelCredits: 0, bankSettled: 0 };
       }
 
       if (periodType === 'monthly') {
@@ -115,7 +142,8 @@ export function buildLedgerPayoutPeriodRows(params: {
         let owed = 0,
           paid = 0,
           bal = 0,
-          fCred = 0;
+          fCred = 0,
+          bank = 0;
         const agg = emptyBreakdown();
         for (const cw of cashWeeks) {
           if (cw.start >= mStart && cw.start <= mEnd) {
@@ -123,6 +151,7 @@ export function buildLedgerPayoutPeriodRows(params: {
             paid += cw.amountPaid;
             bal += cw.balance;
             fCred += cw.weeklyFuelCredits;
+            bank += cw.bankSettled || 0;
             const br = breakdownFromWeek(cw);
             agg.allocatedPayments += br.allocatedPayments;
             agg.tollCredits += br.tollCredits;
@@ -136,6 +165,7 @@ export function buildLedgerPayoutPeriodRows(params: {
           cashPaid: paid,
           cashBalance: bal,
           fuelCredits: fCred,
+          bankSettled: bank,
           cashPaidBreakdown: agg,
         };
       }
@@ -158,17 +188,16 @@ export function buildLedgerPayoutPeriodRows(params: {
           cashPaid: cw.amountPaid,
           cashBalance: cw.balance,
           fuelCredits: cw.weeklyFuelCredits,
+          bankSettled: cw.bankSettled || 0,
           cashPaidBreakdown: breakdownFromWeek(cw),
         };
       }
-      return { cashOwed: 0, cashPaid: 0, cashBalance: 0, fuelCredits: 0 };
+      return { cashOwed: 0, cashPaid: 0, cashBalance: 0, fuelCredits: 0, bankSettled: 0 };
     };
 
     const rows: PayoutPeriodRow[] = ledgerRows.map((lr: any) => {
       const periodStart = new Date(lr.periodStart + 'T00:00:00');
       const periodEnd = new Date(lr.periodEnd + 'T23:59:59');
-      const pStartTime = periodStart.getTime();
-      const pEndTime = periodEnd.getTime();
 
       const grossRevenue = lr.grossRevenue || 0;
       const tripCount = lr.tripCount || 0;
@@ -180,7 +209,7 @@ export function buildLedgerPayoutPeriodRows(params: {
         amount: tollExpenses,
         reconciled: tollReconciled,
         unreconciled: tollUnreconciled,
-      } = getTollsForPeriod(pStartTime, pEndTime);
+      } = getTollsForPeriod(periodStart, periodEnd);
 
       const {
         matched: disputeRefundMatched,
@@ -198,6 +227,7 @@ export function buildLedgerPayoutPeriodRows(params: {
         cashPaid: baseCashPaid,
         cashBalance: legacyCashBalance,
         fuelCredits: txFuelCredits,
+        bankSettled,
         cashPaidBreakdown,
       } = getCashForPeriod(periodStart, periodEnd);
 
@@ -210,6 +240,14 @@ export function buildLedgerPayoutPeriodRows(params: {
       let cashOwed = baseCashOwed;
       let cashPaid = baseCashPaid;
       let cashBalance = legacyCashBalance;
+
+      // Driver settlement deductions = fuel + personal toll charges only.
+      // Gross plaza toll spend is cash wash / fleet cost after reconcile — not driver take-home.
+      const periodChargeTx = transactions.filter(
+        (t) => t?.date && isDriverTollChargeRow(t) && tollBelongsToPeriod(t.date, periodStart, periodEnd),
+      );
+      const tollCharged = netDriverTollCharges(periodChargeTx);
+      const expenseDeductions = fuelDeduction + tollCharged;
 
       if (unifiedToll) {
         // Tolls leave the payout deduction; settled once on the cash side per the
@@ -248,6 +286,7 @@ export function buildLedgerPayoutPeriodRows(params: {
         fuelDeduction,
         fuelCredits: effectiveFuelCredits,
         totalDeductions,
+        expenseDeductions,
         netPayout,
         isFinalized,
         tripCount,
@@ -255,6 +294,7 @@ export function buildLedgerPayoutPeriodRows(params: {
         cashOwed,
         cashPaid,
         cashBalance,
+        bankSettled,
         cashPaidBreakdown,
         status: (!isFinalized
           ? 'Pending'

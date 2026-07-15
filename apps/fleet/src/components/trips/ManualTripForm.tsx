@@ -527,10 +527,13 @@ export function ManualTripForm({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Cash">Cash</SelectItem>
-                  <SelectItem value="Card">Card / Digital</SelectItem>
+                  <SelectItem value="Cash">Cash (driver holds cash)</SelectItem>
+                  <SelectItem value="Card">Card / Digital (not cash owed)</SelectItem>
                 </SelectContent>
               </Select>
+              <p className="text-[10px] text-slate-500">
+                Pick carefully — Card / Digital never counts toward Cash Owed. Only Cash trips create cash risk.
+              </p>
             </div>
           </div>
 

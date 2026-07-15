@@ -116,9 +116,15 @@ export function WeeklySettlementView({ trips = [], transactions = [], csvMetrics
                                 {/* Financials */}
                                 <div className="flex flex-col sm:flex-row gap-4 sm:gap-8">
                                     <div className="space-y-0.5">
-                                        <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Owed</p>
+                                        <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Cash Owed</p>
                                         <p className="text-lg font-bold text-slate-900">${week.amountOwed.toFixed(2)}</p>
                                     </div>
+                                    {(week.bankSettled || 0) > 0.005 && (
+                                        <div className="space-y-0.5">
+                                            <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Bank Settled</p>
+                                            <p className="text-lg font-bold text-slate-600">${week.bankSettled.toFixed(2)}</p>
+                                        </div>
+                                    )}
                                     <div className="space-y-0.5">
                                         <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Paid</p>
                                         <p className="text-lg font-bold text-emerald-600">${week.amountPaid.toFixed(2)}</p>

@@ -25,9 +25,6 @@ import {
   DollarSign,
   Banknote,
   TrendingDown,
-  LinkIcon,
-  Unlink,
-  ShieldCheck,
 } from 'lucide-react';
 import type { SettlementRow, SettlementStatus } from './SettlementSummaryView';
 
@@ -169,34 +166,10 @@ export function SettlementPeriodDetail({ row, open, onOpenChange }: SettlementPe
 
           <LineItem
             icon={<Receipt className="h-4 w-4" />}
-            label="Toll Expenses"
+            label="Toll / charges"
             value={row.tollExpenses > 0.005 ? `−${fmt(row.tollExpenses)}` : '$0.00'}
             valueColor={row.tollExpenses > 0.005 ? 'text-rose-600' : 'text-slate-400'}
-            sub={
-              (row.tollReconciled + row.tollUnreconciled) > 0
-                ? row.tollUnreconciled === 0
-                  ? `${row.tollReconciled}/${row.tollReconciled} matched to trips`
-                  : `${row.tollReconciled}/${row.tollReconciled + row.tollUnreconciled} matched · ${row.tollUnreconciled} unmatched`
-                : undefined
-            }
           />
-          {row.disputeRefundMatched + row.disputeRefundUnmatched > 0 && (
-            <LineItem
-              icon={<ShieldCheck className="h-4 w-4" />}
-              label="Dispute Refunds"
-              value={
-                row.disputeRefundUnmatched === 0
-                  ? `${row.disputeRefundMatched}/${row.disputeRefundMatched} matched`
-                  : `${row.disputeRefundMatched}/${row.disputeRefundMatched + row.disputeRefundUnmatched} matched`
-              }
-              valueColor={row.disputeRefundUnmatched === 0 ? 'text-emerald-600' : 'text-amber-600'}
-              sub={
-                row.disputeRefundUnmatched > 0
-                  ? `${row.disputeRefundUnmatched} still need a manual match`
-                  : undefined
-              }
-            />
-          )}
           <LineItem
             icon={<Fuel className="h-4 w-4" />}
             label="Fuel Deduction"
@@ -218,17 +191,14 @@ export function SettlementPeriodDetail({ row, open, onOpenChange }: SettlementPe
           />
           <LineItem
             icon={<TrendingDown className="h-4 w-4" />}
-            label="Total Deductions"
+            label="Deductions"
             value={
-              row.isFinalized
-                ? row.totalDeductions > 0.005
-                  ? `−${fmt(row.totalDeductions)}`
-                  : '$0.00'
-                : 'Pending'
+              row.expenseDeductions > 0.005
+                ? `−${fmt(row.expenseDeductions)}`
+                : '$0.00'
             }
-            valueColor={
-              !row.isFinalized ? 'text-amber-600' : row.totalDeductions > 0.005 ? 'text-rose-600' : 'text-slate-400'
-            }
+            valueColor={row.expenseDeductions > 0.005 ? 'text-rose-600' : 'text-slate-400'}
+            sub="Fuel + Charged to Driver (excludes plaza toll spend)"
           />
 
           <Separator className="my-1" />
@@ -238,12 +208,12 @@ export function SettlementPeriodDetail({ row, open, onOpenChange }: SettlementPe
             value={row.isFinalized ? fmt(row.netPayout) : 'Pending'}
             valueColor={row.isFinalized ? 'text-emerald-700' : 'text-amber-600'}
             bold
-            sub="Driver Share minus Deductions"
+            sub="Driver Share minus payout deductions"
           />
 
           {/* ── Cash Section ── */}
           <div className="pt-3">
-            <SectionHeader title="Cash Settlement" description="Cash collected vs. returned" />
+            <SectionHeader title="Cash Settlement" description="Physical cash risk vs. bank already at company" />
           </div>
 
           <LineItem
@@ -251,8 +221,17 @@ export function SettlementPeriodDetail({ row, open, onOpenChange }: SettlementPe
             label="Cash Owed"
             value={row.cashOwed > 0.005 ? fmt(row.cashOwed) : '$0.00'}
             valueColor={row.cashOwed > 0.005 ? 'text-slate-700' : 'text-slate-400'}
-            sub="Cash collected from passengers"
+            sub="Passenger cash the driver still holds (not bank transfers)"
           />
+          {row.bankSettled > 0.005 && (
+            <LineItem
+              icon={<Wallet className="h-4 w-4" />}
+              label="Bank Settled"
+              value={fmt(row.bankSettled)}
+              valueColor="text-slate-600"
+              sub="Already transferred to company bank — not cash owed"
+            />
+          )}
           <LineItem
             icon={<Wallet className="h-4 w-4" />}
             label="Cash Paid"

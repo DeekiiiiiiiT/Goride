@@ -135,6 +135,51 @@ describe('buildCanonicalImportEvents', () => {
     expect(promoEv?.date).toBe('2026-03-01');
   });
 
+  it('emits per-driver payout_cash/payout_bank from payments_driver and skips org primary dump', () => {
+    const batchId = 'batch-33333333-3333-3333-3333-333333333333';
+    const driverId = 'ffffffff-ffff-ffff-ffff-ffffffffffff';
+    const ssot: Record<string, UberSsotTotals> = {
+      [driverId]: {
+        periodEarningsGross: 100,
+        fareComponents: 90,
+        statementNetFare: 90,
+        promotions: 0,
+        tips: 0,
+        refundsAndExpenses: 0,
+        cashCollected: 34051.85,
+        bankTransferred: 58668.5,
+      },
+    };
+    const org: OrganizationMetrics = {
+      periodStart: '2026-06-29T00:00:00.000Z',
+      periodEnd: '2026-07-05T23:59:59.999Z',
+      totalEarnings: 100,
+      netFare: 90,
+      balanceStart: 0,
+      balanceEnd: 0,
+      periodChange: 0,
+      fleetProfitMargin: 0,
+      cashPosition: 0,
+      totalCashExposure: 99999,
+      bankTransfer: 88888,
+    };
+    const events = buildCanonicalImportEvents({
+      batchId,
+      trips: [baseTrip({ driverId, date: '2026-07-01' })],
+      organizationMetrics: org,
+      uberStatementsByDriverId: ssot,
+      disputeRefunds: [],
+    });
+    expect(events.some((e) => e.idempotencyKey === `${batchId}|payout|CASH`)).toBe(false);
+    expect(events.some((e) => e.idempotencyKey === `${batchId}|payout|BANK`)).toBe(false);
+    const cash = events.find((e) => e.eventType === 'payout_cash');
+    const bank = events.find((e) => e.eventType === 'payout_bank');
+    expect(cash?.driverId).toBe(driverId);
+    expect(cash?.netAmount).toBeCloseTo(34051.85, 2);
+    expect(bank?.netAmount).toBeCloseTo(58668.5, 2);
+    expect(cash?.idempotencyKey).toBe(`${batchId}|payout|cash|${driverId}`);
+  });
+
   it('posts import_batch promotion on earliest trip date when org period starts earlier than trips', () => {
     const batchId = 'batch-22222222-2222-2222-2222-222222222222';
     const driverId = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee';

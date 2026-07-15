@@ -22,6 +22,17 @@ describe('tripPhysicalCash', () => {
     ).toBe(0);
   });
 
+  it('explicit Card wins over stale cashCollected', () => {
+    expect(
+      getTripPhysicalCashCollected({
+        platform: 'InDrive',
+        amount: 1500,
+        paymentMethod: 'Card',
+        cashCollected: 1500,
+      }),
+    ).toBe(0);
+  });
+
   it('counts Roam trips with paymentMethod Cash', () => {
     expect(
       getTripPhysicalCashCollected({

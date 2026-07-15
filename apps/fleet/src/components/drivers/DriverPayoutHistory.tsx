@@ -122,6 +122,7 @@ export function DriverPayoutHistory({
         'Deductions': row.isFinalized ? row.totalDeductions.toFixed(2) : 'Pending',
         'Net Payout': row.isFinalized ? row.netPayout.toFixed(2) : 'Pending',
         'Cash Owed': row.cashOwed.toFixed(2),
+        'Bank Settled': (row.bankSettled ?? 0).toFixed(2),
         'Cash Paid': row.cashPaid.toFixed(2),
         'Cash Balance': row.cashBalance.toFixed(2),
         'Net Settlement': row.isFinalized

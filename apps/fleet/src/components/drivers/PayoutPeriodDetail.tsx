@@ -376,7 +376,7 @@ export function PayoutPeriodDetail({ row, open, onOpenChange }: PayoutPeriodDeta
           {hasCashActivity && (
             <PayoutSection
               title="Cash Position"
-              description="Cash collected vs. returned for this period"
+              description="Physical cash risk vs. bank already at company"
               variant="sky"
               open={secCash}
               onOpenChange={setSecCash}
@@ -386,8 +386,17 @@ export function PayoutPeriodDetail({ row, open, onOpenChange }: PayoutPeriodDeta
                 label="Cash Owed"
                 value={row.cashOwed > 0.005 ? fmt(row.cashOwed) : '$0.00'}
                 valueColor={row.cashOwed > 0.005 ? 'text-slate-700' : 'text-slate-400'}
-                sub="Cash collected from passengers"
+                sub="Passenger cash the driver still holds (not bank transfers)"
               />
+              {row.bankSettled > 0.005 && (
+                <LineItem
+                  icon={<Wallet className="h-4 w-4" />}
+                  label="Bank Settled"
+                  value={fmt(row.bankSettled)}
+                  valueColor="text-slate-600"
+                  sub="Already at company bank — not cash owed"
+                />
+              )}
               {row.cashPaid > 0.005 ? (
                 <button
                   type="button"
