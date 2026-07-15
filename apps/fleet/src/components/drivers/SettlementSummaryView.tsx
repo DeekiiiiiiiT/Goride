@@ -92,14 +92,11 @@ export function payoutToSettlementRow(row: PayoutPeriodRow): SettlementRow {
   const payoutDeductions = row.isFinalized
     ? Math.round((row.driverShare - row.netPayout) * 100) / 100
     : row.fuelDeduction;
-  // Prefer Toll Reconciliation disposition personal; fallback to Toll Charge rows.
+  // Prefer Toll Charge rows (Expenses / Toll Recon Charge Driver). disposition.personal
+  // is plaza classification and must not overwrite the billed amount.
   const chargedToDriver = Math.max(
     0,
-    Math.round(
-      (row.personalTollCharge != null
-        ? row.personalTollCharge
-        : (row.expenseDeductions ?? 0) - row.fuelDeduction) * 100,
-    ) / 100,
+    Math.round((row.personalTollCharge ?? 0) * 100) / 100,
   );
 
   return {
@@ -287,6 +284,7 @@ export function SettlementSummaryView({
         'Ledger Gross Revenue': row.grossRevenue,
         'Driver Share': row.driverShare,
         'Fuel Deduction': row.expenseDeductions,
+        'Charged to Driver': row.chargedToDriver,
         'Toll / Charge Share': row.tollExpenses,
         'Net Payout': row.netPayout,
         'Is Finalized': row.isFinalized,
@@ -461,7 +459,9 @@ export function SettlementSummaryView({
                             </span>
                           </TooltipTrigger>
                           <TooltipContent side="top" className="max-w-[300px] text-xs">
-                            The driver's earned share of gross revenue for this period, before any deductions (tolls, fuel). This comes from the ledger report and is based on the driver's commission split. It is not the final take-home — deductions and cash adjustments happen in the Settlement column.
+                            The driver's earned share of gross revenue for this period, before fuel. This comes
+                            from the ledger report and commission split. Personal tolls charged to the driver
+                            settle on the cash side — they are not subtracted here.
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
@@ -478,6 +478,23 @@ export function SettlementSummaryView({
                           <TooltipContent side="top" className="max-w-[300px] text-xs">
                             Amount subtracted from Driver Share to get Net Payout (driver fuel share). Share −
                             Fuel Deduction = Net Payout when finalized. Personal tolls stay on the cash side.
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </TableHead>
+                    <TableHead className="text-xs text-right">
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="inline-flex items-center gap-1 cursor-help justify-end w-full">
+                              Charged to Driver
+                              <Info className="h-3 w-3 text-slate-400" />
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-[300px] text-xs">
+                            Personal / non-trip tolls billed via Toll Charge (same total as Expenses and
+                            Toll Reconciliation Charge Driver). Not subtracted from Net Payout — added into
+                            Cash Still Held so settle-up charges the driver once.
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
@@ -589,8 +606,8 @@ export function SettlementSummaryView({
                             </span>
                           </TooltipTrigger>
                           <TooltipContent side="top" className="max-w-[300px] text-xs">
-                            Passenger cash − Cash Returned − Fleet Fuel Credit − Cash Toll Credit (before Net
-                            Payout). Open the row for the full waterfall.
+                            Passenger cash + Charged to Driver − Cash Returned − Fleet Fuel Credit − Cash Toll
+                            Credit. Open the row for the full waterfall.
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
@@ -662,6 +679,15 @@ export function SettlementSummaryView({
                         <TableCell className="text-xs text-right tabular-nums">
                           {row.expenseDeductions > 0.005 ? (
                             <span className="text-slate-700 font-medium">{fmtCurrency(row.expenseDeductions)}</span>
+                          ) : (
+                            <span className="text-slate-300">—</span>
+                          )}
+                        </TableCell>
+
+                        {/* Charged to Driver — cash-side bill (not Net Payout) */}
+                        <TableCell className="text-xs text-right tabular-nums">
+                          {row.chargedToDriver > 0.005 ? (
+                            <span className="text-rose-700 font-medium">{fmtCurrency(row.chargedToDriver)}</span>
                           ) : (
                             <span className="text-slate-300">—</span>
                           )}

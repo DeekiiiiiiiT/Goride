@@ -31,6 +31,11 @@ export function buildLedgerPayoutPeriodRows(params: {
   unifiedToll?: boolean;
   /** Fleet IANA tz — required so weekly Toll Status matches Toll Reconciliation buckets. */
   timezone?: string;
+  /**
+   * Optional draft driver fuel share by period start key (yyyy-MM-dd).
+   * Used for Payout estimates when no finalized fuel report overlaps the period.
+   */
+  draftFuelByPeriod?: Record<string, { deduction: number; fleetShare?: number }>;
 }): PayoutPeriodRow[] {
   const {
     ledgerLoaded,
@@ -43,6 +48,7 @@ export function buildLedgerPayoutPeriodRows(params: {
     periodType,
     unifiedToll = false,
     timezone,
+    draftFuelByPeriod,
   } = params;
 
   const getDeductionForPeriod = (periodStart: Date, periodEnd: Date) =>
@@ -240,10 +246,18 @@ export function buildLedgerPayoutPeriodRows(params: {
       } = computeDisputeRefundCounts(disputeRefunds, periodStart, periodEnd);
 
       const {
-        deduction: fuelDeduction,
+        deduction: finalizedFuelDeduction,
         fleetShare,
         finalized: isFinalized,
       } = getDeductionForPeriod(periodStart, periodEnd);
+
+      const periodKey = format(periodStart, 'yyyy-MM-dd');
+      const draft = !isFinalized ? draftFuelByPeriod?.[periodKey] : undefined;
+      const fuelDeduction = isFinalized
+        ? finalizedFuelDeduction
+        : Math.max(0, Number(draft?.deduction) || 0);
+      const isEstimate = !isFinalized;
+      const draftFleetShare = Math.max(0, Number(draft?.fleetShare) || 0);
 
       const {
         cashOwed: baseCashOwed,
@@ -257,9 +271,10 @@ export function buildLedgerPayoutPeriodRows(params: {
 
       // Prefer finalized fleet fuel share (companyShare) over partial Fuel Reimbursement
       // txs — otherwise Kenny-style weeks credit ~$2k instead of ~$21k fleet fuel.
+      // Draft fleet share can preview credits for Payout estimates only.
       const effectiveFuelCredits = isFinalized
         ? Math.max(txFuelCredits || 0, fleetShare || 0)
-        : txFuelCredits || 0;
+        : Math.max(txFuelCredits || 0, draftFleetShare);
 
       let displayTollExpenses = tollExpenses;
       let totalDeductions: number;
@@ -306,10 +321,10 @@ export function buildLedgerPayoutPeriodRows(params: {
       const washAlreadyInPaid = cashPaidBreakdown?.tollCredits ?? 0;
       const cashTollWashExtra = Math.max(0, periodCashTollWash - washAlreadyInPaid);
 
-      // Personal bill — disposition.personal; Toll Charge rows only when disposition missing.
-      const tollPersonal = hasDisp
-        ? Math.max(0, Number(disp.personal) || 0)
-        : tollCharged;
+      // Charged to Driver SSOT = Toll Charge wallet rows (same as Expenses + Toll Recon
+      // "Charge Driver" claims). Do NOT use disposition.personal — that sums plaza
+      // amounts marked personal and overstates vs the actual bill (e.g. $1995 vs $1075).
+      const tollPersonal = tollCharged;
 
       if (unifiedToll) {
         // Keep Cash Returned = payments only; cash wash + personal applied in settlement math.
@@ -359,6 +374,7 @@ export function buildLedgerPayoutPeriodRows(params: {
         expenseDeductions,
         netPayout,
         isFinalized,
+        isEstimate,
         tripCount,
         tierName,
         cashOwed,

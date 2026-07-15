@@ -6,6 +6,7 @@ import type { PayoutPeriodRow } from '../types/driverPayoutPeriod';
 import { api } from '../services/api';
 import { computeWeeklyCashSettlement, CashWeekData } from '../utils/cashSettlementCalc';
 import { buildLedgerPayoutPeriodRows } from '../utils/buildLedgerPayoutPeriodRows';
+import { deriveDriverFinancialDateRange } from '../utils/driverFinancialDateRange';
 import { useFleetTimezone } from '../utils/timezoneDisplay';
 import {
   DRIVER_FINANCIAL_STALE_MS,
@@ -36,6 +37,14 @@ export function useDriverPayoutPeriodRows(opts: {
     periodData: PayoutPeriodRow[];
     cashWeeks?: CashWeekData[];
   };
+  /**
+   * Optional activity window (yyyy-MM-dd) — aligns daily/monthly ledger coverage with Earnings.
+   * When omitted, derived from trips + transactions.
+   */
+  startDate?: string;
+  endDate?: string;
+  /** Draft fuel by period start key — Payout estimates for non-finalized weeks. */
+  draftFuelByPeriod?: Record<string, { deduction: number; fleetShare?: number }>;
 }): {
   periodData: PayoutPeriodRow[];
   cashWeeks: CashWeekData[];
@@ -58,6 +67,9 @@ export function useDriverPayoutPeriodRows(opts: {
     periodType,
     financialBundle: bundleProp,
     sharedWeekly,
+    startDate: startDateProp,
+    endDate: endDateProp,
+    draftFuelByPeriod,
   } = opts;
   const fleetTz = useFleetTimezone();
   const useSharedWeekly = Boolean(sharedWeekly?.periodData) && periodType === 'weekly';
@@ -72,9 +84,22 @@ export function useDriverPayoutPeriodRows(opts: {
     isCoreLoading: fuelDataLoading,
   } = financialBundle;
 
+  const activityRange = useMemo(
+    () => deriveDriverFinancialDateRange(trips, transactions),
+    [trips, transactions],
+  );
+  const startDate = startDateProp || activityRange?.startDate;
+  const endDate = endDateProp || activityRange?.endDate;
+
   const ledgerQuery = useQuery({
-    queryKey: ['ledgerEarningsHistory', driverId, periodType],
-    queryFn: () => api.getLedgerEarningsHistory({ driverId, periodType }),
+    queryKey: ['ledgerEarningsHistory', driverId, periodType, startDate || '', endDate || ''],
+    queryFn: () =>
+      api.getLedgerEarningsHistory({
+        driverId,
+        periodType,
+        startDate,
+        endDate,
+      }),
     staleTime: DRIVER_FINANCIAL_STALE_MS,
     enabled: Boolean(driverId) && !useSharedWeekly,
   });
@@ -228,6 +253,7 @@ export function useDriverPayoutPeriodRows(opts: {
       periodType,
       unifiedToll,
       timezone: fleetTz,
+      draftFuelByPeriod,
     });
   }, [
     useSharedWeekly,
@@ -242,6 +268,7 @@ export function useDriverPayoutPeriodRows(opts: {
     periodType,
     unifiedToll,
     fleetTz,
+    draftFuelByPeriod,
   ]);
 
   // Progressive: paint when ledger is ready; fuel deductions fill as core bundle arrives.

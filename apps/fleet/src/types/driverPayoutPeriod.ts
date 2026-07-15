@@ -34,7 +34,13 @@ export interface PayoutPeriodRow {
    */
   expenseDeductions: number;
   netPayout: number;
+  /** True when a finalized fuel reconciliation report overlaps this period. */
   isFinalized: boolean;
+  /**
+   * Payout-only: fuel not locked — fuelDeduction/netPayout may be draft (or share-only).
+   * Settlement must still treat Amount Due as locked until isFinalized.
+   */
+  isEstimate?: boolean;
   tripCount: number;
   tierName: string;
   cashOwed: number;
@@ -51,8 +57,8 @@ export interface PayoutPeriodRow {
    */
   cashTollWash?: number;
   /**
-   * Personal tag tolls billed to the driver (reconciliation disposition).
-   * Increases Cash Still Held; never pads Cash Returned.
+   * Charged to Driver — net Toll Charge wallet rows for the period (same as Expenses /
+   * Toll Recon Charge Driver). Increases Cash Still Held; never pads Cash Returned.
    */
   personalTollCharge?: number;
   /** Uber bank settled for the period — informational; never part of cash risk. */

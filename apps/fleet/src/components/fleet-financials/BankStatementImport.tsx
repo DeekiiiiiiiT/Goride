@@ -34,8 +34,13 @@ import {
   TableRow,
 } from '../ui/table';
 
-const MONEY = (n: number) =>
-  n.toLocaleString(undefined, { style: 'currency', currency: 'USD' });
+const MONEY = (n: number) => {
+  const body = Math.abs(n).toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  return `${n < 0 ? '-' : ''}$${body}`;
+};
 
 type Props = {
   expectedRows: FleetBankReceiveRow[];

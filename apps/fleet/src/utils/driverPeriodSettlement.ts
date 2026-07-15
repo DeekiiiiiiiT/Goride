@@ -6,15 +6,12 @@
  * Locked model (see plan): each toll affects the driver in exactly ONE place.
  *   - Payout   = driverShare − fuelDeduction        (tolls are NOT deducted here)
  *   - Cash side carries all toll effects:
- *       cashOwed  = baseCashOwed + personal tag tolls  (driver owes)
+ *       cashOwed  = baseCashOwed + Charged to Driver (Toll Charge rows / Recon claims)
  *       cashPaid  = baseCashPaid + cash-wash tolls      (driver credited)
  *   - Settlement = netPayout − cashBalance
  *
- * `base*` figures are the toll-NEUTRAL physical cash (collected, payments,
- * float, fuel credits) — the toll numbers come from the server's
- * reconciliation-aware disposition, applied here exactly once.
- *
- * Pure + dependency-free so it is unit-testable and identical across tabs.
+ * Charged to Driver must match Expenses + Toll Reconciliation "Charge Driver"
+ * totals (wallet Toll Charge rows) — never disposition.personal plaza sums.
  */
 
 export interface PeriodSettlementInput {
@@ -25,7 +22,7 @@ export interface PeriodSettlementInput {
   baseCashPaid: number;
   /** Server disposition: cash tolls the driver paid (credit). */
   tollCashWash: number;
-  /** Server disposition: personal tag tolls billed to the driver (debit). */
+  /** Amount billed to driver — Toll Charge rows / Recon Charge Driver (not plaza personal sum). */
   tollPersonal: number;
   /**
    * Fuel settlement credits (cash already reimbursed to the driver for

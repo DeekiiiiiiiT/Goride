@@ -22,12 +22,17 @@ export function getAdjCashBalance(cashBalance: number, fuelCredits: number): num
  * Sign convention: positive settlement = company owes the driver.
  * Fleet Financials bank confirms / bank CSV match must NEVER feed this function.
  */
-export function getPeriodSettlementComponents(row: PayoutPeriodRow): {
+export function getPeriodSettlementComponents(
+  row: PayoutPeriodRow,
+  opts?: { includeEstimate?: boolean },
+): {
   adjCashBalance: number;
   netPayoutApplied: number;
   settlement: number;
 } {
-  const netPayoutApplied = row.isFinalized ? row.netPayout : 0;
+  // Settlement ops stay locked until fuel final; Payout paycheck can use estimates.
+  const netPayoutApplied =
+    row.isFinalized || (opts?.includeEstimate && row.isEstimate) ? row.netPayout : 0;
   const br = row.cashPaidBreakdown;
 
   const passengerCash =
@@ -44,7 +49,7 @@ export function getPeriodSettlementComponents(row: PayoutPeriodRow): {
   const explicitWash = Math.max(0, row.cashTollWash ?? 0);
   const cashTollWash = Math.max(0, explicitWash - washAlreadyInPaid);
 
-  // Personal tag tolls from Toll Reconciliation disposition.
+  // Personal tag / Charge Driver bills from Toll Charge rows (Expenses / Recon SSOT).
   const tollPersonal = Math.max(0, row.personalTollCharge ?? 0);
 
   const fuelCredits = Math.max(0, row.fuelCredits || 0);

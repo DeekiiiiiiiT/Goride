@@ -182,14 +182,12 @@ export function SettlementPeriodDetail({
             valueColor={row.expenseDeductions > 0.005 ? 'text-rose-600' : 'text-slate-400'}
             sub="Driver fuel share — Share − Fuel Deduction = Net Payout"
           />
-          {row.chargedToDriver > 0.005 && (
-            <LineItem
-              label="Charged to Driver"
-              value={fmt(row.chargedToDriver)}
-              valueColor="text-slate-500"
-              sub="Personal tolls — settles on the cash side below, not in Net Payout"
-            />
-          )}
+          <LineItem
+            label="Charged to Driver"
+            value={row.chargedToDriver > 0.005 ? fmt(row.chargedToDriver) : '$0.00'}
+            valueColor={row.chargedToDriver > 0.005 ? 'text-rose-700' : 'text-slate-400'}
+            sub="Personal / non-trip tag tolls — settles on the cash side below, not in Net Payout"
+          />
 
           <Separator className="my-1" />
 
@@ -263,12 +261,19 @@ export function SettlementPeriodDetail({
             valueColor={row.cashTollCredits > 0.005 ? 'text-emerald-700' : 'text-slate-400'}
             sub="Cash plaza tolls from Toll Reconciliation — separate from Cash Returned"
           />
-          {(row.chargedToDriver || 0) > 0.005 && (
+          {(row.chargedToDriver || 0) > 0.005 ? (
             <LineItem
               label="+ Personal toll charged"
               value={`+${fmt(row.chargedToDriver)}`}
               valueColor="text-rose-700"
-              sub="Tag tolls marked Personal in Toll Reconciliation — billed to driver"
+              sub="Same as Charged to Driver — company tag bill the driver owes back"
+            />
+          ) : (
+            <LineItem
+              label="+ Personal toll charged"
+              value="$0.00"
+              valueColor="text-slate-400"
+              sub="Same as Charged to Driver when personal tag tolls are billed"
             />
           )}
 
@@ -279,7 +284,7 @@ export function SettlementPeriodDetail({
             value={fmt(row.cashStillHeld)}
             valueColor={row.cashStillHeld > 0.005 ? 'text-rose-700' : 'text-slate-400'}
             bold
-            sub="Cash left in hand before applying Net Payout"
+            sub="Passenger cash + Charged to Driver − returns & credits (before Net Payout)"
           />
 
           <LineItem
@@ -292,7 +297,7 @@ export function SettlementPeriodDetail({
                 : 'Pending (treated as $0)'
             }
             valueColor={row.isFinalized ? 'text-emerald-700' : 'text-amber-600'}
-            sub="Driver’s earned cut subtracted from cash still held"
+            sub="Driver’s earned cut netted against cash still held"
           />
 
           <div className="pt-3">

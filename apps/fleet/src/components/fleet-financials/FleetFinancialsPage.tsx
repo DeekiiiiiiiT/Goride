@@ -40,10 +40,14 @@ import { BankStatementImport } from './BankStatementImport';
 
 type DeskTab = 'outstanding' | 'completed';
 
-const MONEY = (n: number | null | undefined) =>
-  n == null || !Number.isFinite(n)
-    ? '—'
-    : n.toLocaleString(undefined, { style: 'currency', currency: 'USD' });
+const MONEY = (n: number | null | undefined) => {
+  if (n == null || !Number.isFinite(n)) return '—';
+  const body = Math.abs(n).toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  return `${n < 0 ? '-' : ''}$${body}`;
+};
 
 async function fetchAllPayoutBankEvents(startDate?: string, endDate?: string) {
   const all: Record<string, unknown>[] = [];
