@@ -29,6 +29,7 @@ import { TollAnalytics } from './components/toll/TollAnalytics';
 import { DriverLedgerPage } from './components/drivers/DriverLedgerPage';
 import { FleetFinancialsPage } from './components/fleet-financials/FleetFinancialsPage';
 import { CashRetagPage } from './components/fleet-financials/CashRetagPage';
+import { IndriveWalletCenterPage } from './components/fleet-financials/IndriveWalletCenterPage';
 
 import { useAlertPusher } from './hooks/useAlertPusher';
 import { OfflineProvider } from './components/providers/OfflineProvider';
@@ -369,6 +370,11 @@ function AppContent() {
         {currentPage === 'cash-retag' && (
           <PermissionGate permission="nav.drivers" onNavigate={setCurrentPage}>
             <CashRetagPage />
+          </PermissionGate>
+        )}
+        {currentPage === 'indrive-wallet' && (
+          <PermissionGate permission="nav.drivers" onNavigate={setCurrentPage}>
+            <IndriveWalletCenterPage />
           </PermissionGate>
         )}
         

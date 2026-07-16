@@ -388,6 +388,7 @@ export const PAGE_PERMISSION_MAP: Record<string, Permission> = {
   // Fleet Operations — same role that logs cash today (v1)
   'fleet-financials':   'nav.drivers',
   'cash-retag':         'nav.drivers',
+  'indrive-wallet':     'nav.drivers',
 
   // Driver Operations
   'drivers':            'nav.drivers',

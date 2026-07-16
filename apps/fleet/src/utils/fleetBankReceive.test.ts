@@ -5,6 +5,7 @@ import {
   mergeBankReceiveConfirms,
   resolveBankSettledDisplay,
   isOrgBankEvent,
+  fleetBankDisplayStatus,
 } from './fleetBankReceive';
 
 describe('fleetBankReceive', () => {
@@ -100,6 +101,8 @@ describe('fleetBankReceive', () => {
 
     const unconfirmed = mergeBankReceiveConfirms(expected, [], 'roam-org-1');
     expect(unconfirmed[0].status).toBe('unconfirmed');
+    expect(unconfirmed[0].platform).toBe('uber');
+    expect(unconfirmed[0].confirmMethod).toBeNull();
 
     const orgConfirmed = mergeBankReceiveConfirms(
       expected,
@@ -110,12 +113,19 @@ describe('fleetBankReceive', () => {
           status: 'confirmed',
           amountReceived: 500,
           recipient: 'org',
+          confirmMethod: 'statement',
+          bankDateYmd: '2026-06-30',
+          statementFileName: 'june.PDF',
         },
       ],
       'roam-org-1',
     );
     expect(orgConfirmed[0].status).toBe('confirmed');
     expect(orgConfirmed[0].amountReceived).toBe(500);
+    expect(orgConfirmed[0].confirmMethod).toBe('statement');
+    expect(orgConfirmed[0].bankDateYmd).toBe('2026-06-30');
+    expect(orgConfirmed[0].statementFileName).toBe('june.PDF');
+    expect(fleetBankDisplayStatus(orgConfirmed[0])).toBe('statement_matched');
 
     const legacyConfirmed = mergeBankReceiveConfirms(
       expected,
@@ -131,6 +141,8 @@ describe('fleetBankReceive', () => {
     );
     expect(legacyConfirmed[0].status).toBe('confirmed');
     expect(legacyConfirmed[0].amountReceived).toBe(480);
+    expect(legacyConfirmed[0].confirmMethod).toBe('manual');
+    expect(fleetBankDisplayStatus(legacyConfirmed[0])).toBe('manual_confirmed');
   });
 
   it('gates Settlement Bank Settled on org-week confirm but shows driver share amount', () => {

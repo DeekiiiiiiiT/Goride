@@ -395,20 +395,20 @@ export function DriverIndriveWalletTab({
           {walletData && rangeReady && (
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
               <div>
-                <p className="text-[11px] uppercase tracking-wide text-slate-500">Period loads</p>
-                <p className="text-lg font-semibold text-slate-900 dark:text-slate-100 tabular-nums">
+                <p className="text-[11px] uppercase tracking-wide text-slate-500">Period top ups</p>
+                <p className="text-lg font-semibold text-emerald-700 dark:text-emerald-400 tabular-nums">
                   ${fmtMoney(walletData.periodLoads)}
                 </p>
               </div>
               <div>
                 <p className="text-[11px] uppercase tracking-wide text-slate-500">Period fees</p>
-                <p className="text-lg font-semibold text-slate-900 dark:text-slate-100 tabular-nums">
-                  ${fmtMoney(walletData.periodFees)}
+                <p className="text-lg font-semibold text-rose-700 dark:text-rose-400 tabular-nums">
+                  −${fmtMoney(walletData.periodFees)}
                 </p>
               </div>
               <div>
                 <p className="text-[11px] uppercase tracking-wide text-slate-500">Est. balance</p>
-                <p className="text-lg font-semibold text-emerald-700 dark:text-emerald-400 tabular-nums">
+                <p className="text-lg font-semibold text-slate-900 dark:text-slate-100 tabular-nums">
                   ${fmtMoney(walletData.estimatedBalance)}
                 </p>
               </div>

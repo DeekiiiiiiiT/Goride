@@ -3619,6 +3619,10 @@ export const api = {
     confirmedAt?: string;
     confirmedBy?: string;
     recipient?: 'org' | 'driver';
+    confirmMethod?: 'statement' | 'manual';
+    bankDateYmd?: string;
+    statementFileName?: string;
+    platform?: 'uber' | 'indrive' | 'roam';
   }> }> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/fleet-bank-confirms`, {
       headers: await getHeaders(null, { requireAuth: true }),
@@ -3636,6 +3640,10 @@ export const api = {
     weekStartYmd: string;
     amountReceived: number;
     expectedAmount?: number;
+    confirmMethod?: 'statement' | 'manual';
+    bankDateYmd?: string;
+    statementFileName?: string;
+    platform?: 'uber' | 'indrive' | 'roam';
     /** @deprecated Use organizationId — legacy only. */
     driverId?: string;
   }): Promise<{ success: boolean; data: Record<string, unknown> }> {

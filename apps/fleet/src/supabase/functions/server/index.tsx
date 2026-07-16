@@ -7475,6 +7475,17 @@ app.put("/make-server-37f42386/fleet-bank-confirms", requireAuth(), async (c) =>
     const legacyDriverId = String(body?.driverId || "").trim();
 
     // Prefer org-week confirm (bank deposits are fleet money).
+    const confirmMethod =
+      String(body?.confirmMethod || "").toLowerCase() === "statement" ? "statement" : "manual";
+    const bankDateYmdRaw = String(body?.bankDateYmd || "").trim();
+    const bankDateYmd = /^\d{4}-\d{2}-\d{2}$/.test(bankDateYmdRaw) ? bankDateYmdRaw : undefined;
+    const statementFileName = String(body?.statementFileName || "").trim() || undefined;
+    const platformRaw = String(body?.platform || "uber").toLowerCase();
+    const platform =
+      platformRaw === "indrive" || platformRaw === "roam" || platformRaw === "uber"
+        ? platformRaw
+        : "uber";
+
     if (orgId) {
       const record = stampOrg(
         {
@@ -7488,6 +7499,10 @@ app.put("/make-server-37f42386/fleet-bank-confirms", requireAuth(), async (c) =>
             body?.expectedAmount != null && Number.isFinite(Number(body.expectedAmount))
               ? Math.round(Number(body.expectedAmount) * 100) / 100
               : undefined,
+          confirmMethod,
+          bankDateYmd,
+          statementFileName,
+          platform,
           confirmedAt: new Date().toISOString(),
           confirmedBy: rbacUser?.userId || rbacUser?.email || "unknown",
         },
@@ -7513,6 +7528,10 @@ app.put("/make-server-37f42386/fleet-bank-confirms", requireAuth(), async (c) =>
           body?.expectedAmount != null && Number.isFinite(Number(body.expectedAmount))
             ? Math.round(Number(body.expectedAmount) * 100) / 100
             : undefined,
+        confirmMethod,
+        bankDateYmd,
+        statementFileName,
+        platform,
         confirmedAt: new Date().toISOString(),
         confirmedBy: rbacUser?.userId || rbacUser?.email || "unknown",
       },

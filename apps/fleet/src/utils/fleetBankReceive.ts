@@ -8,6 +8,18 @@ import { payoutBankEventWeekKey, type PayoutBankEventLike } from './ledgerBankSe
 
 export type FleetBankConfirmStatus = 'unconfirmed' | 'confirmed';
 
+/** How ops verified the bank receive (Fleet Financials only). */
+export type FleetBankConfirmMethod = 'statement' | 'manual';
+
+/** Platform that produced the expected fleet bank deposit. */
+export type FleetBankPlatform = 'uber' | 'indrive' | 'roam';
+
+/** Ops-facing status (richer than raw confirmed/unconfirmed). */
+export type FleetBankDisplayStatus =
+  | 'needs_statement'
+  | 'statement_matched'
+  | 'manual_confirmed';
+
 /** New writes are org-keyed; driverId remains for legacy dual-read. */
 export type FleetBankConfirmRecord = {
   organizationId?: string;
@@ -21,6 +33,13 @@ export type FleetBankConfirmRecord = {
   confirmedBy?: string;
   /** Explicit org recipient on new confirms. */
   recipient?: 'org' | 'driver';
+  /** statement = PDF/CSV Accept; manual = Confirm / Enter amount. Legacy = treat as manual. */
+  confirmMethod?: FleetBankConfirmMethod;
+  /** Posted date from bank statement line when matched. */
+  bankDateYmd?: string;
+  /** Source statement file name when matched from upload. */
+  statementFileName?: string;
+  platform?: FleetBankPlatform;
 };
 
 export type FleetBankReceiveRow = {
@@ -31,7 +50,39 @@ export type FleetBankReceiveRow = {
   status: FleetBankConfirmStatus;
   confirmedAt?: string;
   confirmedBy?: string;
+  platform: FleetBankPlatform;
+  confirmMethod: FleetBankConfirmMethod | null;
+  bankDateYmd: string | null;
+  statementFileName: string | null;
 };
+
+export function fleetBankDisplayStatus(row: FleetBankReceiveRow): FleetBankDisplayStatus {
+  if (row.status !== 'confirmed') return 'needs_statement';
+  if (row.confirmMethod === 'statement') return 'statement_matched';
+  return 'manual_confirmed';
+}
+
+export function fleetBankDisplayStatusLabel(status: FleetBankDisplayStatus): string {
+  switch (status) {
+    case 'needs_statement':
+      return 'Needs statement';
+    case 'statement_matched':
+      return 'Statement matched';
+    case 'manual_confirmed':
+      return 'Manual confirm';
+  }
+}
+
+export function fleetBankPlatformLabel(platform: FleetBankPlatform): string {
+  switch (platform) {
+    case 'uber':
+      return 'Uber';
+    case 'indrive':
+      return 'InDrive';
+    case 'roam':
+      return 'Roam';
+  }
+}
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
@@ -74,13 +125,33 @@ export function fleetBankConfirmKey(driverId: string, weekStartYmd: string): str
 /**
  * Aggregate Expected Uber bank by Settlement week (fleet deposit).
  * Prefer org-recipient payout_bank when present for a week; else sum all payout_bank (legacy).
+ * Platform defaults to Uber (payments_organization wire) unless metadata says otherwise.
  */
+export function inferFleetBankPlatform(raw: PayoutBankEventLike): FleetBankPlatform {
+  const meta = eventMeta(raw);
+  const platform = String(meta.platform || meta.sourcePlatform || '').toLowerCase();
+  if (platform.includes('indrive') || platform.includes('in_drive')) return 'indrive';
+  if (platform.includes('roam')) return 'roam';
+  return 'uber';
+}
+
 export function aggregateExpectedBankByWeek(
   events: PayoutBankEventLike[] | undefined,
   timezone?: string,
-): Omit<FleetBankReceiveRow, 'amountReceived' | 'variance' | 'status' | 'confirmedAt' | 'confirmedBy'>[] {
+): Omit<
+  FleetBankReceiveRow,
+  | 'amountReceived'
+  | 'variance'
+  | 'status'
+  | 'confirmedAt'
+  | 'confirmedBy'
+  | 'confirmMethod'
+  | 'bankDateYmd'
+  | 'statementFileName'
+>[] {
   const orgByWeek = new Map<string, number>();
   const allByWeek = new Map<string, number>();
+  const platformByWeek = new Map<string, FleetBankPlatform>();
 
   for (const raw of events || []) {
     if (!raw || typeof raw !== 'object') continue;
@@ -90,6 +161,9 @@ export function aggregateExpectedBankByWeek(
     const add = Math.abs(Number(raw.netAmount) || 0);
     if (add < 1e-9) continue;
     allByWeek.set(weekStartYmd, round2((allByWeek.get(weekStartYmd) || 0) + add));
+    if (!platformByWeek.has(weekStartYmd) || isOrgBankEvent(raw)) {
+      platformByWeek.set(weekStartYmd, inferFleetBankPlatform(raw));
+    }
     if (isOrgBankEvent(raw)) {
       orgByWeek.set(weekStartYmd, round2((orgByWeek.get(weekStartYmd) || 0) + add));
     }
@@ -102,7 +176,11 @@ export function aggregateExpectedBankByWeek(
       // Prefer org deposit when present so driver shares are not double-counted.
       const expected =
         orgAmt != null && orgAmt > 0.005 ? orgAmt : allByWeek.get(weekStartYmd) || 0;
-      return { weekStartYmd, expected: round2(expected) };
+      return {
+        weekStartYmd,
+        expected: round2(expected),
+        platform: platformByWeek.get(weekStartYmd) || 'uber',
+      };
     })
     .filter((r) => r.expected > 0.005)
     .sort((a, b) => b.weekStartYmd.localeCompare(a.weekStartYmd));
@@ -219,16 +297,25 @@ export function mergeBankReceiveConfirms(
         amountReceived: null,
         variance: null,
         status: 'unconfirmed' as const,
+        confirmMethod: null,
+        bankDateYmd: null,
+        statementFileName: null,
       };
     }
     const amountReceived = round2(Number(conf.amountReceived) || 0);
+    const method: FleetBankConfirmMethod =
+      conf.confirmMethod === 'statement' ? 'statement' : 'manual';
     return {
       ...row,
+      platform: conf.platform || row.platform,
       amountReceived,
       variance: round2(amountReceived - row.expected),
       status: 'confirmed' as const,
       confirmedAt: conf.confirmedAt,
       confirmedBy: conf.confirmedBy,
+      confirmMethod: method,
+      bankDateYmd: conf.bankDateYmd || null,
+      statementFileName: conf.statementFileName || null,
     };
   });
 }

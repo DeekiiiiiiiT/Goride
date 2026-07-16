@@ -1,12 +1,7 @@
 import { useIndriveWallet, type IndriveWalletDateRange } from '../../hooks/useIndriveWallet';
 import { usePermissions } from '../../hooks/usePermissions';
 import { api } from '../../services/api';
-import {
-  INDRIVE_WALLET_LOAD_CATEGORY,
-  INDRIVE_WALLET_PLATFORM,
-  INDRIVE_WALLET_LOAD_TRANSACTION_TYPE,
-} from '../../constants/indriveWallet';
-import type { FinancialTransaction } from '../../types/data';
+import { buildIndriveWalletLoadTransaction } from '../../utils/indriveWalletLoad';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   DollarSign,
@@ -491,19 +486,12 @@ export function OverviewMetricsGrid({
     const desc = loadNote.trim();
     setLoadSubmitting(true);
     try {
-      const payload: Partial<FinancialTransaction> & { platform?: string } = {
-        id: crypto.randomUUID(),
+      const payload = buildIndriveWalletLoadTransaction({
         driverId,
         date: loadDate,
         amount: amt,
-        category: INDRIVE_WALLET_LOAD_CATEGORY,
-        platform: INDRIVE_WALLET_PLATFORM,
-        type: INDRIVE_WALLET_LOAD_TRANSACTION_TYPE,
-        description: desc || 'Fleet load — InDrive digital wallet',
-        paymentMethod: 'Digital Wallet',
-        status: 'Completed',
-        isReconciled: true,
-      };
+        description: desc,
+      });
       await api.saveTransaction(payload);
       toast.success('InDrive wallet load recorded');
       setLogLoadOpen(false);
@@ -1285,7 +1273,7 @@ export function OverviewMetricsGrid({
                   ? 'No InDrive fee lines, wallet loads in this period, or estimated balance — zeros below are expected.'
                   : 'Fees are platform charges for this range; the headline is fleet top-ups you log.'
           }
-          tooltip="Headline: est. balance (fleet model). Breakdown: period fees, period loads. Est. balance = lifetime loads minus lifetime InDrive fees (same ledger rule as period fees, all-time). Estimate only — not InDrive’s official balance. Not Roam cash or other platforms."
+          tooltip="Headline: est. balance (fleet model). Breakdown: period fees, period top ups. Est. balance = lifetime top ups minus lifetime InDrive fees (same ledger rule as period fees, all-time). Estimate only — not InDrive’s official balance. Not Roam cash or other platforms."
           value={
             !rangeReady || (rangeReady && walletError)
               ? '—'
@@ -1298,7 +1286,7 @@ export function OverviewMetricsGrid({
               ? []
               : [
                   { label: 'Period fees', value: `$${fmtMoney(walletData.periodFees)}`, color: '#94a3b8' },
-                  { label: 'Period loads', value: `$${fmtMoney(walletData.periodLoads)}`, color: PLATFORM_COLORS.InDrive },
+                  { label: 'Period top ups', value: `$${fmtMoney(walletData.periodLoads)}`, color: PLATFORM_COLORS.InDrive },
                 ]
           }
           action={

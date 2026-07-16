@@ -12,6 +12,10 @@ import { api } from '../../services/api';
 import {
   aggregateExpectedBankByWeek,
   mergeBankReceiveConfirms,
+  fleetBankDisplayStatus,
+  fleetBankDisplayStatusLabel,
+  fleetBankPlatformLabel,
+  type FleetBankDisplayStatus,
   type FleetBankReceiveRow,
 } from '../../utils/fleetBankReceive';
 import { useFleetTimezone } from '../../utils/timezoneDisplay';
@@ -39,6 +43,7 @@ import { cn } from '../ui/utils';
 import { BankStatementImport } from './BankStatementImport';
 
 type DeskTab = 'outstanding' | 'completed';
+type StatusFilter = 'all' | FleetBankDisplayStatus;
 
 const MONEY = (n: number | null | undefined) => {
   if (n == null || !Number.isFinite(n)) return '—';
@@ -69,6 +74,37 @@ async function fetchAllPayoutBankEvents(startDate?: string, endDate?: string) {
   return all;
 }
 
+function StatusCell({ row }: { row: FleetBankReceiveRow }) {
+  const display = fleetBankDisplayStatus(row);
+  const hasVariance = row.variance != null && Math.abs(row.variance) > 0.005;
+  return (
+    <div className="space-y-1 min-w-[140px]">
+      <div className="flex flex-wrap gap-1.5 items-center">
+        <Badge
+          variant={display === 'needs_statement' ? 'secondary' : 'default'}
+          className={cn(
+            display === 'needs_statement' && 'bg-amber-100 text-amber-900 hover:bg-amber-100',
+            display === 'statement_matched' && 'bg-emerald-600 hover:bg-emerald-600',
+            display === 'manual_confirmed' && 'bg-slate-700 hover:bg-slate-700',
+          )}
+        >
+          {fleetBankDisplayStatusLabel(display)}
+        </Badge>
+        {hasVariance && (
+          <Badge variant="outline" className="border-amber-300 text-amber-800">
+            Variance
+          </Badge>
+        )}
+      </div>
+      {row.statementFileName ? (
+        <p className="text-[11px] text-slate-400 truncate max-w-[180px]" title={row.statementFileName}>
+          {row.statementFileName}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 function BankReceiveTable({
   rows,
   mode,
@@ -92,9 +128,11 @@ function BankReceiveTable({
         <TableHeader>
           <TableRow>
             <TableHead>Week</TableHead>
+            <TableHead>Platform</TableHead>
             <TableHead className="text-right">Expected (fleet bank)</TableHead>
             <TableHead className="text-right">Received</TableHead>
             <TableHead className="text-right">Variance</TableHead>
+            <TableHead>Bank date</TableHead>
             <TableHead>Status</TableHead>
             <TableHead className="text-right">Actions</TableHead>
           </TableRow>
@@ -102,7 +140,7 @@ function BankReceiveTable({
         <TableBody>
           {rows.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={6} className="text-center text-slate-500 py-8">
+              <TableCell colSpan={8} className="text-center text-slate-500 py-8">
                 {emptyLabel}
               </TableCell>
             </TableRow>
@@ -116,6 +154,9 @@ function BankReceiveTable({
                   <TableCell className="whitespace-nowrap text-sm">
                     {format(parseISO(row.weekStartYmd), 'MMM d')} – {format(weekEnd, 'MMM d, yyyy')}
                   </TableCell>
+                  <TableCell>
+                    <Badge variant="outline">{fleetBankPlatformLabel(row.platform)}</Badge>
+                  </TableCell>
                   <TableCell className="text-right tabular-nums">{MONEY(row.expected)}</TableCell>
                   <TableCell className="text-right tabular-nums">{MONEY(row.amountReceived)}</TableCell>
                   <TableCell
@@ -128,10 +169,13 @@ function BankReceiveTable({
                       ? '—'
                       : `${row.variance > 0 ? '+' : ''}${MONEY(row.variance)}`}
                   </TableCell>
+                  <TableCell className="whitespace-nowrap text-sm text-slate-600">
+                    {row.bankDateYmd
+                      ? format(parseISO(row.bankDateYmd), 'MMM d, yyyy')
+                      : '—'}
+                  </TableCell>
                   <TableCell>
-                    <Badge variant={row.status === 'confirmed' ? 'default' : 'secondary'}>
-                      {row.status === 'confirmed' ? 'Confirmed' : 'Unconfirmed'}
-                    </Badge>
+                    <StatusCell row={row} />
                   </TableCell>
                   <TableCell className="text-right space-x-2 whitespace-nowrap">
                     {mode === 'outstanding' && (
@@ -179,6 +223,7 @@ export function FleetFinancialsPage() {
   const { organizationId } = useAuth();
   const queryClient = useQueryClient();
   const [deskTab, setDeskTab] = useState<DeskTab>('outstanding');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [weekFrom, setWeekFrom] = useState('');
   const [weekTo, setWeekTo] = useState('');
   const [enterRow, setEnterRow] = useState<FleetBankReceiveRow | null>(null);
@@ -240,29 +285,71 @@ export function FleetFinancialsPage() {
       .filter((r) => (!weekTo ? true : r.weekStartYmd <= weekTo));
   }, [rows, weekFrom, weekTo]);
 
-  const outstandingRows = useMemo(() => {
-    return scopedByFilters
-      .filter((r) => r.status === 'unconfirmed')
-      .sort((a, b) => b.weekStartYmd.localeCompare(a.weekStartYmd));
+  const statusCounts = useMemo(() => {
+    const counts = {
+      all: scopedByFilters.length,
+      needs_statement: 0,
+      statement_matched: 0,
+      manual_confirmed: 0,
+    };
+    for (const r of scopedByFilters) {
+      counts[fleetBankDisplayStatus(r)] += 1;
+    }
+    return counts;
   }, [scopedByFilters]);
 
+  const filteredByStatus = useMemo(() => {
+    if (statusFilter === 'all') return scopedByFilters;
+    return scopedByFilters.filter((r) => fleetBankDisplayStatus(r) === statusFilter);
+  }, [scopedByFilters, statusFilter]);
+
+  const outstandingRows = useMemo(() => {
+    return filteredByStatus
+      .filter((r) => r.status === 'unconfirmed')
+      .sort((a, b) => b.weekStartYmd.localeCompare(a.weekStartYmd));
+  }, [filteredByStatus]);
+
   const completedRows = useMemo(() => {
-    return scopedByFilters
+    return filteredByStatus
       .filter((r) => r.status === 'confirmed')
       .sort((a, b) => b.weekStartYmd.localeCompare(a.weekStartYmd));
-  }, [scopedByFilters]);
+  }, [filteredByStatus]);
+
+  const outstandingTotal = useMemo(
+    () => scopedByFilters.filter((r) => r.status === 'unconfirmed').length,
+    [scopedByFilters],
+  );
+  const completedTotal = useMemo(
+    () => scopedByFilters.filter((r) => r.status === 'confirmed').length,
+    [scopedByFilters],
+  );
 
   const loading = bankQuery.isLoading || confirmsQuery.isLoading;
 
-  async function saveConfirm(row: FleetBankReceiveRow, amountReceived: number) {
+  async function saveConfirm(
+    row: FleetBankReceiveRow,
+    amountReceived: number,
+    method: 'manual' | 'statement' = 'manual',
+  ) {
     const key = row.weekStartYmd;
     setSavingKey(key);
+    // Editing a statement-matched row keeps statement audit trail unless ops forces manual.
+    const effectiveMethod =
+      method === 'manual' && row.confirmMethod === 'statement' && row.status === 'confirmed'
+        ? 'statement'
+        : method;
     try {
       await api.upsertFleetBankConfirm({
         organizationId: organizationId || undefined,
         weekStartYmd: row.weekStartYmd,
         amountReceived,
         expectedAmount: row.expected,
+        confirmMethod: effectiveMethod,
+        bankDateYmd:
+          effectiveMethod === 'statement' ? row.bankDateYmd || undefined : undefined,
+        statementFileName:
+          effectiveMethod === 'statement' ? row.statementFileName || undefined : undefined,
+        platform: row.platform,
       });
       await queryClient.invalidateQueries({ queryKey: ['fleet-bank-confirms'] });
       toast.success('Fleet bank amount saved');
@@ -290,6 +377,13 @@ export function FleetFinancialsPage() {
       setSavingKey(null);
     }
   }
+
+  const filterChips: Array<{ id: StatusFilter; label: string }> = [
+    { id: 'all', label: 'All' },
+    { id: 'needs_statement', label: 'Needs statement' },
+    { id: 'statement_matched', label: 'Statement' },
+    { id: 'manual_confirmed', label: 'Manual' },
+  ];
 
   return (
     <div className="space-y-6">
@@ -387,28 +481,48 @@ export function FleetFinancialsPage() {
           onValueChange={(v) => setDeskTab(v as DeskTab)}
           className="space-y-4"
         >
-          <TabsList>
-            <TabsTrigger value="outstanding">
-              Outstanding
-              <Badge variant="secondary" className="ml-2 tabular-nums">
-                {outstandingRows.length}
-              </Badge>
-            </TabsTrigger>
-            <TabsTrigger value="completed">
-              Completed
-              <Badge variant="secondary" className="ml-2 tabular-nums">
-                {completedRows.length}
-              </Badge>
-            </TabsTrigger>
-          </TabsList>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <TabsList>
+              <TabsTrigger value="outstanding">
+                Outstanding
+                <Badge variant="secondary" className="ml-2 tabular-nums">
+                  {outstandingTotal}
+                </Badge>
+              </TabsTrigger>
+              <TabsTrigger value="completed">
+                Completed
+                <Badge variant="secondary" className="ml-2 tabular-nums">
+                  {completedTotal}
+                </Badge>
+              </TabsTrigger>
+            </TabsList>
+
+            <div className="flex flex-wrap gap-1.5">
+              {filterChips.map((chip) => (
+                <Button
+                  key={chip.id}
+                  type="button"
+                  size="sm"
+                  variant={statusFilter === chip.id ? 'default' : 'outline'}
+                  className="h-8"
+                  onClick={() => setStatusFilter(chip.id)}
+                >
+                  {chip.label}
+                  <span className="ml-1.5 tabular-nums text-xs opacity-80">
+                    {statusCounts[chip.id]}
+                  </span>
+                </Button>
+              ))}
+            </div>
+          </div>
 
           <TabsContent value="outstanding" className="mt-0">
             <BankReceiveTable
               rows={outstandingRows}
               mode="outstanding"
-              emptyLabel="Nothing outstanding — all visible weeks are confirmed."
+              emptyLabel="Nothing outstanding for this filter."
               savingKey={savingKey}
-              onConfirm={(row) => void saveConfirm(row, row.expected)}
+              onConfirm={(row) => void saveConfirm(row, row.expected, 'manual')}
               onEnterAmount={(row) => {
                 setEnterRow(row);
                 setEnterAmount(String(row.amountReceived ?? row.expected ?? ''));
@@ -420,9 +534,9 @@ export function FleetFinancialsPage() {
             <BankReceiveTable
               rows={completedRows}
               mode="completed"
-              emptyLabel="No confirmed weeks yet for these filters."
+              emptyLabel="No confirmed weeks for this filter."
               savingKey={savingKey}
-              onConfirm={(row) => void saveConfirm(row, row.expected)}
+              onConfirm={(row) => void saveConfirm(row, row.expected, 'manual')}
               onEnterAmount={(row) => {
                 setEnterRow(row);
                 setEnterAmount(String(row.amountReceived ?? row.expected ?? ''));
@@ -440,9 +554,11 @@ export function FleetFinancialsPage() {
           </DialogHeader>
           {enterRow && (
             <div className="space-y-3 text-sm">
-              <p className="text-slate-500">Fleet bank · week of {enterRow.weekStartYmd}</p>
+              <p className="text-slate-500">
+                {fleetBankPlatformLabel(enterRow.platform)} · week of {enterRow.weekStartYmd}
+              </p>
               <p>
-                Expected from Uber:{' '}
+                Expected:{' '}
                 <span className="font-medium tabular-nums">{MONEY(enterRow.expected)}</span>
               </p>
               <div className="space-y-1">
@@ -455,6 +571,9 @@ export function FleetFinancialsPage() {
                   onChange={(e) => setEnterAmount(e.target.value)}
                 />
               </div>
+              <p className="text-xs text-slate-400">
+                Saves as Manual confirm (use Upload PDF/CSV Accept for statement-matched).
+              </p>
             </div>
           )}
           <DialogFooter>
@@ -470,7 +589,7 @@ export function FleetFinancialsPage() {
                   toast.error('Enter a valid amount');
                   return;
                 }
-                void saveConfirm(enterRow, n);
+                void saveConfirm(enterRow, n, 'manual');
               }}
             >
               Save

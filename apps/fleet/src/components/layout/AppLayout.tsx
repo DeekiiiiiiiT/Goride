@@ -101,8 +101,8 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate, onLogout }: { curre
   const isFuelManagementOpen = fuelPageIds.includes(currentPage);
   const canSeeFuelDesk = isModuleEnabled('fuelManagement') && (canView('fuel-overview') || canView('fuel-reimbursements') || canView('fuel-integrity-gap') || canView('fuel-reconciliation') || canView('fuel-cards') || canView('fuel-logs') || canView('fuel-configuration'));
   const canSeeTollDesk = isModuleEnabled('tollManagement') && isSidebarItemVisible('toll-management', businessType) && (canView('toll-logs') || canView('toll-tags') || canView('tag-inventory') || canView('toll-analytics'));
-  const isFleetOpsOpen = ['fleet-financials', 'cash-retag', ...fuelPageIds, ...tollPageIds].includes(currentPage);
-  const canSeeFleetOps = canView('fleet-financials') || canView('cash-retag') || canSeeFuelDesk || canSeeTollDesk;
+  const isFleetOpsOpen = ['fleet-financials', 'cash-retag', 'indrive-wallet', ...fuelPageIds, ...tollPageIds].includes(currentPage);
+  const canSeeFleetOps = canView('fleet-financials') || canView('cash-retag') || canView('indrive-wallet') || canSeeFuelDesk || canSeeTollDesk;
   const isDriverOpsOpen = ['drivers', 'earnings-policy', 'driver-ledger'].includes(currentPage);
   const isVehicleOpsOpen = ['vehicles', 'maintenance-hub', 'fleet'].includes(currentPage);
 
@@ -159,6 +159,15 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate, onLogout }: { curre
                     <SidebarMenuSubButton asChild isActive={currentPage === 'cash-retag'} onClick={() => onNavigate?.('cash-retag')}>
                       <button className="w-full text-left cursor-pointer">
                         <span>Cash Retag</span>
+                      </button>
+                    </SidebarMenuSubButton>
+                  </SidebarMenuSubItem>
+                  )}
+                  {canView('indrive-wallet') && (
+                  <SidebarMenuSubItem>
+                    <SidebarMenuSubButton asChild isActive={currentPage === 'indrive-wallet'} onClick={() => onNavigate?.('indrive-wallet')}>
+                      <button className="w-full text-left cursor-pointer">
+                        <span>InDrive Wallet</span>
                       </button>
                     </SidebarMenuSubButton>
                   </SidebarMenuSubItem>
