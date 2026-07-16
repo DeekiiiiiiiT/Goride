@@ -231,10 +231,17 @@ export function BatchDeleteModal({ isOpen, batchId, onClose, onSuccess }: BatchD
                   {formatType(preview.batch.type)}
                 </Badge>
               </div>
-              <div className="flex items-center gap-3 text-[11px] text-slate-500">
+              <div className="flex items-center gap-3 text-[11px] text-slate-500 flex-wrap">
                 <span>Imported {new Date(preview.batch.uploadDate).toLocaleDateString()}</span>
                 <span>{preview.batch.recordCount.toLocaleString()} records</span>
               </div>
+              <p className="text-[11px] text-slate-700 font-medium mt-1">
+                {preview.batch.dataPeriodStart && preview.batch.dataPeriodEnd
+                  ? `Data: ${preview.batch.dataPeriodStart} → ${preview.batch.dataPeriodEnd}`
+                  : preview.batch.periodStart && preview.batch.periodEnd
+                  ? `Period: ${preview.batch.periodStart} → ${preview.batch.periodEnd}`
+                  : 'Data period: not recorded'}
+              </p>
               <p className="text-[10px] text-slate-400 font-mono mt-1">ID: {preview.batch.id}</p>
             </div>
 

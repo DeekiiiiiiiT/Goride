@@ -108,7 +108,7 @@ export function ImportBatchAuditPanel() {
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
                   <TableHead className="text-xs font-medium text-slate-600 w-[28%]">File</TableHead>
-                  <TableHead className="text-xs font-medium text-slate-600">Period</TableHead>
+                  <TableHead className="text-xs font-medium text-slate-600">Data period</TableHead>
                   <TableHead className="text-xs font-medium text-slate-600">Fingerprint</TableHead>
                   <TableHead className="text-xs font-medium text-slate-600 text-right">Append</TableHead>
                   <TableHead className="text-xs font-medium text-slate-600 w-[120px] text-right">
@@ -137,9 +137,20 @@ export function ImportBatchAuditPanel() {
                           )}
                         </TableCell>
                         <TableCell className="align-top py-3 text-xs text-slate-600 whitespace-nowrap">
-                          {b.periodStart && b.periodEnd
+                          {b.dataPeriodStart && b.dataPeriodEnd
+                            ? `${b.dataPeriodStart} → ${b.dataPeriodEnd}`
+                            : b.periodStart && b.periodEnd
                             ? `${b.periodStart} → ${b.periodEnd}`
                             : '—'}
+                          {b.dataPeriodStart &&
+                            b.dataPeriodEnd &&
+                            b.periodStart &&
+                            b.periodEnd &&
+                            (b.dataPeriodStart !== b.periodStart || b.dataPeriodEnd !== b.periodEnd) && (
+                            <div className="text-[10px] text-slate-400 mt-0.5">
+                              Org: {b.periodStart} → {b.periodEnd}
+                            </div>
+                          )}
                         </TableCell>
                         <TableCell className="align-top py-3 text-xs font-mono text-slate-600">
                           {fpShort(b.contentFingerprint)}

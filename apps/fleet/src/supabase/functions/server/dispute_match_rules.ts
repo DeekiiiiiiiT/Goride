@@ -4,6 +4,7 @@
 import {
   DISPUTE_SHORTFALL_TOLERANCE,
   isBareTollEligibleForDisputeMatch,
+  isFullyReimbursedViaTrip,
   isTollBlockedForDisputeMatch,
   tollShortfallAmount,
 } from "./dispute_refund_eligibility.ts";
@@ -123,10 +124,17 @@ export async function evaluateDisputeClaimCandidate(input: {
 
   const tollCost = Math.abs(claim.expectedAmount ?? toll.amount ?? 0);
   const tripCtx = await resolveTripContextForToll(toll, claim, trips, fleetTz);
+  const liveCtx = await resolveLiveTripContextForToll(toll, fleetTz, {
+    suggestedTripId: tripCtx.tripId,
+  });
+  const liveTripRefund = liveCtx?.tripRefund ?? null;
   const tripRefund =
+    liveTripRefund ??
     tripCtx.tripRefund ??
     (claimAmount > 0 && tollCost > 0 ? Math.max(0, tollCost - claimAmount) : null);
   const shortfall = tollShortfallAmount(tollCost, tripRefund ?? 0);
+  const liveShortfall =
+    liveTripRefund != null ? tollShortfallAmount(tollCost, liveTripRefund) : null;
 
   const anchorDateMs = new Date(toll.date || claim.createdAt || refund.date).getTime();
   const confidence = computeDisputeMatchConfidence({
@@ -149,13 +157,22 @@ export async function evaluateDisputeClaimCandidate(input: {
     eligibleForSuggestion = false;
   }
 
-  const autoReject = passesAutoHardGates({
+  let autoReject = passesAutoHardGates({
     refundAmount,
-    shortfall,
+    shortfall: liveShortfall ?? shortfall,
     claimAmount,
     tripId: tripCtx.tripId,
     timeDifferenceMinutes: tripCtx.timeDifferenceMinutes,
   });
+  if (autoReject == null && liveTripRefund == null) {
+    autoReject = "Live trip refund required for auto-match";
+  } else if (
+    autoReject == null &&
+    liveTripRefund != null &&
+    isFullyReimbursedViaTrip(tollCost, liveTripRefund)
+  ) {
+    autoReject = "Toll already fully paid on trip — no shortfall to fix";
+  }
 
   return {
     tollId,

@@ -62,11 +62,23 @@ function formatWeekPeriod(weekStartYmd: string): string {
 type ImportSource = 'csv' | 'pdf' | null;
 type PendingAccept = { mode: 'one'; suggestion: BankMatchSuggestion } | { mode: 'all' };
 
+/** Manual match picker for a bank line the auto-matcher skipped. */
+type PendingManualMatch = {
+  line: BankStatementLine;
+  weekStartYmd: string;
+};
+
 type Props = {
   expectedRows: FleetBankReceiveRow[];
   organizationId?: string | null;
   onConfirmed: () => void;
 };
+
+function daysBetweenYmd(aYmd: string, bYmd: string): number {
+  const a = new Date(`${aYmd}T12:00:00`).getTime();
+  const b = new Date(`${bYmd}T12:00:00`).getTime();
+  return Math.abs(a - b) / (24 * 60 * 60 * 1000);
+}
 
 export function BankStatementImport({ expectedRows, organizationId, onConfirmed }: Props) {
   const [fileName, setFileName] = useState('');
@@ -83,6 +95,7 @@ export function BankStatementImport({ expectedRows, organizationId, onConfirmed 
   const [parsing, setParsing] = useState(false);
   const [statementId, setStatementId] = useState<string | null>(null);
   const [pendingAccept, setPendingAccept] = useState<PendingAccept | null>(null);
+  const [pendingManual, setPendingManual] = useState<PendingManualMatch | null>(null);
 
   const header = csvRows[0] || [];
   const colCount = header.length || 3;
@@ -92,6 +105,23 @@ export function BankStatementImport({ expectedRows, organizationId, onConfirmed 
   );
 
   const hasImport = source === 'csv' ? csvRows.length > 0 : pdfLines.length > 0;
+
+  /** Open weeks still available for manual match (not already in suggestions). */
+  const openWeeksForManual = useMemo(() => {
+    const claimed = new Set(suggestions.map((s) => s.target.weekStartYmd));
+    return expectedRows
+      .filter((r) => r.status === 'unconfirmed' && !claimed.has(r.weekStartYmd))
+      .slice()
+      .sort((a, b) => a.weekStartYmd.localeCompare(b.weekStartYmd));
+  }, [expectedRows, suggestions]);
+
+  const manualTarget = pendingManual
+    ? openWeeksForManual.find((r) => r.weekStartYmd === pendingManual.weekStartYmd) ?? null
+    : null;
+  const manualVariance =
+    pendingManual && manualTarget
+      ? pendingManual.line.amount - manualTarget.expected
+      : null;
 
   function resetMatchState() {
     setSuggestions([]);
@@ -108,6 +138,7 @@ export function BankStatementImport({ expectedRows, organizationId, onConfirmed 
     setPdfLines([]);
     setPdfFormatLabel('');
     setPendingAccept(null);
+    setPendingManual(null);
     resetMatchState();
   }
 
@@ -115,6 +146,23 @@ export function BankStatementImport({ expectedRows, organizationId, onConfirmed 
     if (source === 'pdf') return pdfLines;
     if (source === 'csv' && csvRows.length > 0) return mapCsvRowsToLines(csvRows, colMap, hasHeader);
     return [];
+  }
+
+  function pickClosestWeek(line: BankStatementLine): string {
+    if (openWeeksForManual.length === 0) return '';
+    return [...openWeeksForManual].sort(
+      (a, b) =>
+        daysBetweenYmd(line.dateYmd, a.weekStartYmd) -
+        daysBetweenYmd(line.dateYmd, b.weekStartYmd),
+    )[0].weekStartYmd;
+  }
+
+  function openManualMatch(line: BankStatementLine) {
+    if (openWeeksForManual.length === 0) {
+      toast.error('No open Expected weeks in this date range — widen Week from/to or refresh');
+      return;
+    }
+    setPendingManual({ line, weekStartYmd: pickClosestWeek(line) });
   }
 
   function applyMatch(lines: BankStatementLine[]) {
@@ -182,6 +230,13 @@ export function BankStatementImport({ expectedRows, organizationId, onConfirmed 
     applyMatch(currentLines());
   }
 
+  function dismissUnmatched(line: BankStatementLine) {
+    setDismissed((prev) => new Set(prev).add(line.lineIndex));
+    const nextUnmatched = unmatched.filter((l) => l.lineIndex !== line.lineIndex);
+    setUnmatched(nextUnmatched);
+    maybeClearImport(suggestions.length, nextUnmatched.length);
+  }
+
   async function persistStatement(lines: BankStatementLine[]) {
     const res = await api.saveFleetBankStatement({
       id: statementId || undefined,
@@ -211,6 +266,11 @@ export function BankStatementImport({ expectedRows, organizationId, onConfirmed 
     });
   }
 
+  /** Keep statement loaded if unmatched lines still need attention. */
+  function maybeClearImport(remainingSuggestions: number, remainingUnmatched: number) {
+    if (remainingSuggestions === 0 && remainingUnmatched === 0) clearImport();
+  }
+
   async function acceptOne(s: BankMatchSuggestion) {
     setBusy(true);
     try {
@@ -220,12 +280,42 @@ export function BankStatementImport({ expectedRows, organizationId, onConfirmed 
       setSuggestions(remaining);
       onConfirmed();
       toast.success('Match accepted — bank received saved (Cash Returned unchanged)');
-      if (remaining.length === 0) clearImport();
+      maybeClearImport(remaining.length, unmatched.length);
     } catch (e: any) {
       toast.error(e?.message || 'Accept failed');
     } finally {
       setBusy(false);
       setPendingAccept(null);
+    }
+  }
+
+  async function acceptManualMatch() {
+    if (!pendingManual) return;
+    const target = openWeeksForManual.find((r) => r.weekStartYmd === pendingManual.weekStartYmd);
+    if (!target) {
+      toast.error('Selected week is no longer available');
+      return;
+    }
+    const suggestion: BankMatchSuggestion = {
+      line: pendingManual.line,
+      target,
+      score: 0,
+      reasons: ['Manual match'],
+    };
+    setBusy(true);
+    try {
+      await confirmSuggestion(suggestion);
+      await persistStatement(currentLines());
+      const nextUnmatched = unmatched.filter((l) => l.lineIndex !== pendingManual.line.lineIndex);
+      setUnmatched(nextUnmatched);
+      onConfirmed();
+      toast.success('Deposit matched — bank received saved (Cash Returned unchanged)');
+      setPendingManual(null);
+      maybeClearImport(suggestions.length, nextUnmatched.length);
+    } catch (e: any) {
+      toast.error(e?.message || 'Match failed');
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -245,7 +335,7 @@ export function BankStatementImport({ expectedRows, organizationId, onConfirmed 
       toast.success(
         `Accepted ${ok} match${ok === 1 ? '' : 'es'} — bank received saved (Cash Returned unchanged)`,
       );
-      clearImport();
+      maybeClearImport(0, unmatched.length);
     } catch (e: any) {
       if (ok > 0) {
         const acceptedIndexes = new Set(batch.slice(0, ok).map((s) => s.line.lineIndex));
@@ -501,20 +591,140 @@ export function BankStatementImport({ expectedRows, organizationId, onConfirmed 
             <Badge variant="secondary">{unmatched.length}</Badge>
           </h3>
           <p className="text-xs text-slate-500">
-            Use Enter amount on the table above for these, or rematch after fixing columns.
+            Assign each deposit to an open Expected week, or dismiss if it does not belong here.
           </p>
-          <ul className="text-sm text-slate-600 space-y-1 max-h-40 overflow-y-auto">
+          <ul className="text-sm text-slate-600 space-y-1 max-h-56 overflow-y-auto">
             {unmatched.slice(0, 40).map((l) => (
-              <li key={l.lineIndex} className="flex justify-between gap-4 border-b border-slate-50 py-1">
-                <span className="truncate">
+              <li
+                key={l.lineIndex}
+                className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-50 py-2"
+              >
+                <span className="truncate min-w-0 flex-1">
                   {l.dateYmd} · {l.description || '—'}
                 </span>
-                <span className="tabular-nums shrink-0">{MONEY(l.amount)}</span>
+                <span className="tabular-nums shrink-0 font-medium">{MONEY(l.amount)}</span>
+                <span className="shrink-0 space-x-1">
+                  <Button size="sm" disabled={busy} onClick={() => openManualMatch(l)}>
+                    Match to week
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={busy}
+                    onClick={() => dismissUnmatched(l)}
+                  >
+                    Dismiss
+                  </Button>
+                </span>
               </li>
             ))}
           </ul>
         </div>
       )}
+
+      <Dialog
+        open={!!pendingManual}
+        onOpenChange={(open) => {
+          if (!open && !busy) setPendingManual(null);
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Match deposit to week</DialogTitle>
+            <DialogDescription>
+              Pick the Expected week this bank deposit belongs to. Saves as statement-matched Received.
+              Cash Returned and Settlement stay unchanged.
+            </DialogDescription>
+          </DialogHeader>
+
+          {pendingManual && (
+            <div className="space-y-4">
+              <div className="rounded-md border border-slate-200 bg-slate-50 p-3 space-y-2 text-sm">
+                <div className="flex justify-between gap-4">
+                  <span className="text-slate-500">Bank deposit</span>
+                  <span className="tabular-nums text-right">
+                    {pendingManual.line.dateYmd} · {MONEY(pendingManual.line.amount)}
+                  </span>
+                </div>
+                {pendingManual.line.description ? (
+                  <p className="text-xs text-slate-400 truncate" title={pendingManual.line.description}>
+                    {pendingManual.line.description}
+                  </p>
+                ) : null}
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs text-slate-500">Expected week</label>
+                <Select
+                  value={pendingManual.weekStartYmd}
+                  onValueChange={(v) =>
+                    setPendingManual((prev) => (prev ? { ...prev, weekStartYmd: v } : prev))
+                  }
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select week" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {openWeeksForManual.map((row) => {
+                      const variance = pendingManual.line.amount - row.expected;
+                      const varianceLabel =
+                        Math.abs(variance) < 0.005
+                          ? 'exact'
+                          : `${variance > 0 ? '+' : ''}${MONEY(variance)} vs expected`;
+                      return (
+                        <SelectItem key={row.weekStartYmd} value={row.weekStartYmd}>
+                          {formatWeekPeriod(row.weekStartYmd)} · Expected {MONEY(row.expected)} (
+                          {varianceLabel})
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {manualTarget && pendingManual && manualVariance != null && (
+                  <div className="rounded-md border border-slate-200 p-3 space-y-2 text-sm">
+                    <div className="flex justify-between gap-4">
+                      <span className="text-slate-500">Expected</span>
+                      <span className="tabular-nums">{MONEY(manualTarget.expected)}</span>
+                    </div>
+                    <div className="flex justify-between gap-4">
+                      <span className="text-slate-500">Will record received</span>
+                      <span className="tabular-nums font-medium">
+                        {MONEY(pendingManual.line.amount)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between gap-4">
+                      <span className="text-slate-500">Variance</span>
+                      <span
+                        className={`tabular-nums ${
+                          Math.abs(manualVariance) >= 0.005 ? 'text-amber-700' : 'text-slate-600'
+                        }`}
+                      >
+                        {Math.abs(manualVariance) < 0.005
+                          ? '—'
+                          : `${manualVariance > 0 ? '+' : ''}${MONEY(manualVariance)}`}
+                      </span>
+                    </div>
+                  </div>
+                )}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" disabled={busy} onClick={() => setPendingManual(null)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={busy || !pendingManual?.weekStartYmd}
+              onClick={() => void acceptManualMatch()}
+            >
+              {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" /> : null}
+              Confirm match
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={!!pendingAccept}

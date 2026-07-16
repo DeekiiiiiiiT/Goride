@@ -98,7 +98,7 @@ import { ImpactAnalysis } from './ImpactAnalysis';
 import type { UberSsotTotals } from '../../utils/uberSsot';
 import { computeImportBundleFingerprint } from '../../utils/importBundleFingerprint';
 import { validateMergedImportPreview } from '../../utils/importValidation';
-import { buildCanonicalImportEvents } from '../../utils/buildCanonicalImportEvents';
+import { buildCanonicalImportEvents, tripDateBounds } from '../../utils/buildCanonicalImportEvents';
 import { buildPaymentLedgerCanonicalEvents } from '../../utils/buildPaymentLedgerCanonicalEvents';
 import type { PaymentLedgerLine } from '@roam/types/paymentLedgerLine';
 import type { DriverQualitySnapshot } from '../../types/data';
@@ -715,6 +715,7 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
           const periodEndYmd = orgForBatch?.periodEnd
               ? String(orgForBatch.periodEnd).slice(0, 10)
               : undefined;
+          const tripBounds = tripDateBounds(calibratedTrips);
           const { data: { session } } = await supabase.auth.getSession();
           const uploadedBy =
               session?.user?.email?.trim() || session?.user?.id || undefined;
@@ -731,6 +732,9 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
             contentFingerprint,
             periodStart: periodStartYmd,
             periodEnd: periodEndYmd,
+            // Trip span in the CSV — used by Delete Center period filter
+            dataPeriodStart: tripBounds.min,
+            dataPeriodEnd: tripBounds.max,
             uploadedBy,
             usesPaymentLineSsot: processedPaymentLedgerLines.length > 0,
             paymentLedgerLineCount: processedPaymentLedgerLines.length,

@@ -30,7 +30,10 @@ import {
   getRefundAutomationSettings,
   reconcileTollForDisputeMatch,
 } from "./toll_controller.tsx";
-import { isFullyReimbursedViaTrip } from "./dispute_refund_eligibility.ts";
+import {
+  DISPUTE_SHORTFALL_TOLERANCE,
+  isFullyReimbursedViaTrip,
+} from "./dispute_refund_eligibility.ts";
 import {
   candidateToSuggestion,
   DEFAULT_DISPUTE_REFUND_AUTO_MIN_CONFIDENCE,
@@ -508,10 +511,10 @@ app.get(`${BASE}`, async (c) => {
       return db - da;
     });
 
-    // ── Auto-link (flagged): match high-confidence unmatched refunds to their
-    //    open underpaid claim, closing the loop automatically. Same Automation
-    //    flag + threshold as refund auto-resolution. Integrity-safe: only links
-    //    to an EXISTING claim, and unmatch fully reverts it.
+    // ── Auto-link (flagged): only during an active wizard period (dateFrom +
+    //    dateTo both required). Refunds are already period-scoped above; toll
+    //    candidates must fall in the same window. Never auto when live shortfall
+    //    is already $0. Manual cross-period matching is unchanged.
     let autoMatched = 0;
     try {
       const settings = await getRefundAutomationSettings();
@@ -519,24 +522,39 @@ app.get(`${BASE}`, async (c) => {
       const minConf = typeof settings.disputeRefundAutoMinConfidence === "number"
         ? settings.disputeRefundAutoMinConfidence
         : DEFAULT_DISPUTE_REFUND_AUTO_MIN_CONFIDENCE;
-      if (enabled) {
+      const periodFrom = dateFrom ? String(dateFrom).slice(0, 10) : "";
+      const periodTo = dateTo ? String(dateTo).slice(0, 10) : "";
+      const autoPeriodActive = Boolean(periodFrom && periodTo);
+      if (enabled && autoPeriodActive) {
+        const fleetTz = await getFleetTimezone();
         for (const refund of refunds) {
           if (refund.status !== "unmatched" || !refund.driverId) continue;
-          const candidates = await buildDisputeCandidates(refund);
+          const candidates = (await buildDisputeCandidates(refund)).filter((c) => {
+            const d = fleetTzDay(c.date, fleetTz);
+            return Boolean(d && d >= periodFrom && d <= periodTo);
+          });
           const best = pickDisputeMatchCandidate(candidates, { mode: "auto", minConfidence: minConf });
-          if (best?.claimId) {
-            const res = await matchRefundToClaim(
-              refund,
-              best.tollId,
-              best.claimId,
-              true,
-              c,
-              { tripId: best.tripId },
-            );
-            if (res.ok) {
-              Object.assign(refund, res.data);
-              autoMatched++;
-            }
+          if (!best?.claimId) continue;
+          if (best.shortfall <= DISPUTE_SHORTFALL_TOLERANCE) continue;
+          const tollForAuto = await loadTollForClaim(best.tollId);
+          if (tollForAuto) {
+            const liveRefund = await computeLiveTripRefundForToll(tollForAuto, fleetTz, {
+              suggestedTripId: best.tripId,
+            });
+            const tollAmt = Math.abs(tollForAuto.amount || 0);
+            if (liveRefund != null && isFullyReimbursedViaTrip(tollAmt, liveRefund)) continue;
+          }
+          const res = await matchRefundToClaim(
+            refund,
+            best.tollId,
+            best.claimId,
+            true,
+            c,
+            { tripId: best.tripId },
+          );
+          if (res.ok) {
+            Object.assign(refund, res.data);
+            autoMatched++;
           }
         }
         if (autoMatched > 0) console.log(`[DisputeRefund] Auto-linked ${autoMatched} refund(s) to underpaid claims`);

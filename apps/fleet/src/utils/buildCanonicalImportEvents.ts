@@ -18,7 +18,8 @@ function toYmd(iso: string | undefined, fallback: string): string {
   return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : fallback;
 }
 
-function tripDateBounds(trips: Trip[]): { min: string; max: string } {
+/** Min/max trip `date` (YYYY-MM-DD) across a batch — used for Import History period matching. */
+export function tripDateBounds(trips: Trip[]): { min: string; max: string } {
   let min = '9999-12-31';
   let max = '0000-01-01';
   for (const t of trips) {

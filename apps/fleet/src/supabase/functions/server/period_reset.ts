@@ -9,6 +9,7 @@ import { getFleetTimezone } from "./timezone_helper.tsx";
 import {
   applyRefundResolution,
   executeTollResetForReconciliation,
+  getDriverAliasMap,
   getRefundAutomationSettings,
   loadAllByPrefix,
   loadAllTollLedgerWithTrips,
@@ -89,10 +90,19 @@ export function claimPeriodWeekKeyServer(
   return null;
 }
 
-function driverMatches(entityDriverId: string | undefined, driverIds?: string[]): boolean {
+function driverMatches(
+  entityDriverId: string | undefined,
+  driverIds?: string[],
+  aliasMap?: Map<string, string>,
+): boolean {
   if (!driverIds || driverIds.length === 0) return true;
   if (!entityDriverId) return false;
-  return driverIds.includes(String(entityDriverId));
+  const entityId = String(entityDriverId);
+  const canonicalEntityId = aliasMap?.get(entityId) ?? entityId;
+  return driverIds.some((driverId) => {
+    const canonicalRequestedId = aliasMap?.get(String(driverId)) ?? String(driverId);
+    return canonicalRequestedId === canonicalEntityId;
+  });
 }
 
 function isUnlinkedApplyTrip(trip: any): boolean {
@@ -145,6 +155,7 @@ export async function buildPeriodResetInventory(opts: {
   const { tollTx, trips } = await loadAllTollLedgerWithTrips();
   const allClaims = (await loadAllByPrefix("claim:")) as any[];
   const disputeRefunds = await loadDisputeRefundRecords();
+  const driverAliasMap = await getDriverAliasMap();
 
   const tollDateById = new Map<string, string>();
   for (const tx of tollTx) {
@@ -155,7 +166,7 @@ export async function buildPeriodResetInventory(opts: {
     .filter((tx: any) => {
       if (!tx?.id || !tx?.date) return false;
       if (weekKeyForDateStr(tx.date, fleetTz) !== periodWeekKey) return false;
-      return driverMatches(tx.driverId, driverIds);
+      return driverMatches(tx.driverId, driverIds, driverAliasMap);
     })
     .map((tx: any) => String(tx.id));
 
@@ -165,7 +176,7 @@ export async function buildPeriodResetInventory(opts: {
     .filter((cl: any) => {
       if (!cl?.id) return false;
       if (claimPeriodWeekKeyServer(cl, tollDateById, fleetTz) !== periodWeekKey) return false;
-      return driverMatches(cl.driverId, driverIds);
+      return driverMatches(cl.driverId, driverIds, driverAliasMap);
     })
     .map((cl: any) => String(cl.id));
 
@@ -176,7 +187,7 @@ export async function buildPeriodResetInventory(opts: {
   const unlinkedApplyTripIds = trips
     .filter((t: any) => {
       if (!t?.id || !isUnlinkedApplyTrip(t)) return false;
-      if (!driverMatches(t.driverId, driverIds)) return false;
+      if (!driverMatches(t.driverId, driverIds, driverAliasMap)) return false;
       const res = t.tollRefundResolution;
       const tollId = res?.appliedToTollId || res?.linkedTollLedgerId;
       const claimId = res?.appliedToClaimId;
@@ -195,7 +206,7 @@ export async function buildPeriodResetInventory(opts: {
     .filter((r: any) => {
       if (!r?.id) return false;
       if (r.status !== "matched" && r.status !== "auto_resolved") return false;
-      if (!driverMatches(r.driverId, driverIds)) return false;
+      if (!driverMatches(r.driverId, driverIds, driverAliasMap)) return false;
       if (r.matchedTollId && tollIdSet.has(String(r.matchedTollId))) return true;
       if (r.matchedClaimId && claimIdSet.has(String(r.matchedClaimId))) return true;
       return r.date && weekKeyForDateStr(r.date, fleetTz) === periodWeekKey;
@@ -209,7 +220,7 @@ export async function buildPeriodResetInventory(opts: {
       if (unlinkedApplySet.has(String(t.id))) return false;
       const res = t?.tollRefundResolution;
       if (!res || res.status === "pending") return false;
-      if (!driverMatches(t.driverId, driverIds)) return false;
+      if (!driverMatches(t.driverId, driverIds, driverAliasMap)) return false;
       return t.date && weekKeyForDateStr(t.date, fleetTz) === periodWeekKey;
     })
     .map((t: any) => String(t.id));

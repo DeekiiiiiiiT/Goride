@@ -5705,6 +5705,7 @@ type UnlinkedShortfallContext = {
   tollById: Map<string, any>;
   trips: any[];
   tripById: Map<string, any>;
+  disputeCoveredTollIds: Set<string>;
 };
 
 /** Shared claim+ledger snapshot — load claims once; reuse ledger already in memory when provided. */
@@ -5713,9 +5714,10 @@ async function loadUnlinkedShortfallContext(ledgerHint?: any[]): Promise<Unlinke
     ledgerHint && ledgerHint.length > 0
       ? ledgerHint
       : ((await loadAllByPrefix("toll_ledger:")) as any[]);
-  const [claims, trips] = await Promise.all([
+  const [claims, trips, disputeRefunds] = await Promise.all([
     loadAllByPrefix("claim:"),
     loadAllTrips(),
+    loadDisputeRefundRecords(),
   ]);
   const tollById = new Map<string, any>();
   for (const toll of ledger) {
@@ -5725,7 +5727,23 @@ async function loadUnlinkedShortfallContext(ledgerHint?: any[]): Promise<Unlinke
   for (const t of trips || []) {
     if (t?.id) tripById.set(t.id, t);
   }
-  return { claims, ledger, tollById, trips: trips || [], tripById };
+  const disputeCoveredTollIds = new Set(
+    disputeRefunds
+      .filter(
+        (refund: any) =>
+          refund?.matchedTollId &&
+          (refund.status === "matched" || refund.status === "auto_resolved"),
+      )
+      .map((refund: any) => String(refund.matchedTollId)),
+  );
+  return {
+    claims,
+    ledger,
+    tollById,
+    trips: trips || [],
+    tripById,
+    disputeCoveredTollIds,
+  };
 }
 
 function resolveTollFromContext(ctx: UnlinkedShortfallContext, transactionId: string | undefined): any | null {
@@ -5801,6 +5819,10 @@ function computeUnlinkedShortfallSuggestions(
   for (const claim of ctx.claims) {
     if (!claim || typeof claim !== "object") continue;
     if (claim.driverId !== driverId) continue;
+    if (
+      claim.transactionId &&
+      ctx.disputeCoveredTollIds.has(String(claim.transactionId))
+    ) continue;
     if (!isEligibleUnlinkedShortfallClaim(claim)) continue;
     // Already applied to a different unlinked trip — still eligible if shortfall remains
     // (stack additional credits onto leftover). Skip only when nothing left to cover.
@@ -5867,6 +5889,7 @@ function computeUnlinkedShortfallSuggestions(
 
   for (const toll of ctx.ledger) {
     if (!toll || typeof toll !== "object" || toll.driverId !== driverId) continue;
+    if (toll.id && ctx.disputeCoveredTollIds.has(String(toll.id))) continue;
     if (!isEligibleUnlinkedShortfallToll(toll)) continue;
     // Prefer the claim row when one already exists for this toll
     if (toll.id && claimTollIds.has(toll.id)) continue;
@@ -6158,6 +6181,7 @@ async function applyUnlinkedRefundToClaim(
     tollById: new Map(tollTx.filter((t: any) => t?.id).map((t: any) => [t.id, t])),
     trips: trips || [],
     tripById,
+    disputeCoveredTollIds: new Set(),
   };
   const tripPlatform = trip.platform ? String(trip.platform) : null;
   const tollPlatform = extractTollPlatform(tollForPlatform, claim, ctxForPlatform);
@@ -6683,7 +6707,17 @@ app.get(`${BASE}/unlinked-shortfall-suggestions`, async (c) => {
     const ctx = await loadUnlinkedShortfallContext(tollTx);
     const suggestions: Record<string, any[]> = {};
     for (const t of unresolved) {
-      const ranked = computeUnlinkedShortfallSuggestions(t, ctx);
+      let ranked = computeUnlinkedShortfallSuggestions(t, ctx);
+      // Wizard is period-scoped: never one-click suggest underpaid tolls outside this week.
+      if (from || to) {
+        ranked = ranked.filter((r: any) => {
+          const d = String(r?.date || "").slice(0, 10);
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return false;
+          if (from && d < from) return false;
+          if (to && d > to) return false;
+          return true;
+        });
+      }
       if (ranked.length > 0) suggestions[t.id] = ranked;
     }
     return c.json({ success: true, suggestions });

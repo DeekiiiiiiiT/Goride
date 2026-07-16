@@ -242,6 +242,12 @@ export interface ImportBatch {
   /** Phase 7: org period (YYYY-MM-DD) from financials at import time. */
   periodStart?: string;
   periodEnd?: string;
+  /**
+   * Actual min/max trip dates (YYYY-MM-DD) inside this batch — what users mean by "period"
+   * when finding a CSV week to delete/re-upload. Prefer over periodStart/End for filtering.
+   */
+  dataPeriodStart?: string;
+  dataPeriodEnd?: string;
   /** Phase 7: uploader identity when session available. */
   uploadedBy?: string;
   /** Phase 7: totals from last canonical ledger append for this batch. */

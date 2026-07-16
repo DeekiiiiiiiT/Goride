@@ -76,7 +76,7 @@ const CATEGORY_SEARCH_TERMS: Record<string, string> = {
   odometer: "odometer history readings mileage fuel service check-in manual delete remove purge",
   checkins: "weekly check-ins checkins submissions odometer vehicle condition inspection delete remove purge",
   factoryReset: "factory reset wipe all data nuclear dangerous everything delete remove purge erase",
-  importHistory: "import batch history upload csv file delete remove purge undo rollback",
+  importHistory: "import batch history upload csv file period week delete remove purge undo rollback",
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -624,6 +624,9 @@ export function DeleteCenter() {
   const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
   const [batchDateFrom, setBatchDateFrom] = useState('');
   const [batchDateTo, setBatchDateTo] = useState('');
+  /** Org period saved on the batch at import time (not upload date). */
+  const [periodDateFrom, setPeriodDateFrom] = useState('');
+  const [periodDateTo, setPeriodDateTo] = useState('');
 
   const { data: evidenceSummary, isLoading: evidenceSummaryLoading } = useQuery({
     queryKey: ['evidenceStorageSummary'],
@@ -1073,15 +1076,19 @@ export function DeleteCenter() {
         );
       }
 
-      // Filter by search + date range
+      // Filter by search + upload date + org period
       const filteredBatches = batches.filter(b => {
-        // Text search
+        // Text search (include trip data period + org period)
         if (searchQuery.trim()) {
           const q = searchQuery.toLowerCase();
-          const haystack = `${b.fileName} ${b.type} ${b.id} ${b.status} ${b.uploadDate} ${(b as any).platform || ''}`.toLowerCase();
+          const dataPeriod = b.dataPeriodStart && b.dataPeriodEnd
+            ? `${b.dataPeriodStart} ${b.dataPeriodEnd}`
+            : '';
+          const orgPeriod = b.periodStart && b.periodEnd ? `${b.periodStart} ${b.periodEnd}` : '';
+          const haystack = `${b.fileName} ${b.type} ${b.id} ${b.status} ${b.uploadDate} ${dataPeriod} ${orgPeriod} ${(b as any).platform || ''}`.toLowerCase();
           if (!haystack.includes(q)) return false;
         }
-        // Date range filter (on upload date)
+        // Upload date filter
         if (batchDateFrom) {
           const from = new Date(batchDateFrom);
           from.setHours(0, 0, 0, 0);
@@ -1092,32 +1099,16 @@ export function DeleteCenter() {
           to.setHours(23, 59, 59, 999);
           if (new Date(b.uploadDate) > to) return false;
         }
+        // Period filter — prefer actual trip dates in the batch (dataPeriod*), fall back to org period
+        if (periodDateFrom || periodDateTo) {
+          const rangeStart = b.dataPeriodStart || b.periodStart;
+          const rangeEnd = b.dataPeriodEnd || b.periodEnd;
+          if (!rangeStart || !rangeEnd) return false;
+          if (periodDateTo && rangeStart > periodDateTo) return false;
+          if (periodDateFrom && rangeEnd < periodDateFrom) return false;
+        }
         return true;
       });
-
-      if (filteredBatches.length === 0) {
-        const hasFilters = searchQuery.trim() || batchDateFrom || batchDateTo;
-        return (
-          <div className="text-center py-10 text-slate-400">
-            <Search className="h-8 w-8 mx-auto mb-2 opacity-50" />
-            <p className="text-sm font-medium">
-              {hasFilters ? 'No batches match your filters' : 'No batches found'}
-            </p>
-            <p className="text-xs mt-1">
-              {searchQuery.trim() ? `Search: "${searchQuery}"` : ''}
-              {searchQuery.trim() && (batchDateFrom || batchDateTo) ? ' · ' : ''}
-              {batchDateFrom || batchDateTo ? `Date: ${batchDateFrom || '…'} to ${batchDateTo || '…'}` : ''}
-              {!hasFilters ? 'Import data from the Import tab first' : ''}
-            </p>
-            {hasFilters && (
-              <Button variant="outline" size="sm" className="mt-3"
-                onClick={() => { setSearchQuery(''); setBatchDateFrom(''); setBatchDateTo(''); }}>
-                Clear all filters
-              </Button>
-            )}
-          </div>
-        );
-      }
 
       // Format the batch type for display
       const formatType = (type: string) => {
@@ -1133,186 +1124,267 @@ export function DeleteCenter() {
         return map[type] || type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
       };
 
+      const hasDateFilters = !!(batchDateFrom || batchDateTo || periodDateFrom || periodDateTo);
+      const hasFilters = !!(searchQuery.trim() || hasDateFilters);
+      const clearDateFilters = () => {
+        setBatchDateFrom('');
+        setBatchDateTo('');
+        setPeriodDateFrom('');
+        setPeriodDateTo('');
+      };
+      const clearAllFilters = () => {
+        setSearchQuery('');
+        clearDateFilters();
+      };
+
+      // Keep filter inputs mounted even when 0 results — otherwise the native
+      // date picker unmounts mid-selection (e.g. after picking Period "from").
       return (
         <div className="space-y-3">
-          {/* Date range filter */}
-          <div className="flex flex-wrap items-center gap-2">
-            <label className="text-xs font-medium text-slate-500">Upload date:</label>
-            <Input
-              type="date"
-              value={batchDateFrom}
-              onChange={e => setBatchDateFrom(e.target.value)}
-              className="h-8 text-xs w-[140px]"
-              placeholder="From"
-            />
-            <span className="text-xs text-slate-400">to</span>
-            <Input
-              type="date"
-              value={batchDateTo}
-              onChange={e => setBatchDateTo(e.target.value)}
-              className="h-8 text-xs w-[140px]"
-              placeholder="To"
-            />
-            {(batchDateFrom || batchDateTo) && (
-              <button
-                onClick={() => { setBatchDateFrom(''); setBatchDateTo(''); }}
-                className="text-xs text-slate-400 hover:text-slate-600 transition-colors flex items-center gap-0.5"
-              >
-                <XIcon className="h-3 w-3" /> Clear dates
-              </button>
-            )}
-          </div>
-          {/* Selection toolbar */}
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-xs text-slate-500">
-              {filteredBatches.length} batch{filteredBatches.length !== 1 ? 'es' : ''} found
-              {selectedBatchIds.size > 0 && (
-                <span className="ml-1 font-semibold text-rose-600">
-                  · {selectedBatchIds.size} selected
-                </span>
-              )}
-            </p>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline" size="sm"
-                className="text-xs h-7"
-                onClick={() => {
-                  const allFilteredIds = new Set(filteredBatches.map(b => b.id));
-                  const allSelected = filteredBatches.every(b => selectedBatchIds.has(b.id));
-                  if (allSelected) {
-                    // Deselect all filtered
-                    setSelectedBatchIds(prev => {
-                      const next = new Set(prev);
-                      allFilteredIds.forEach(id => next.delete(id));
-                      return next;
-                    });
-                  } else {
-                    // Select all filtered
-                    setSelectedBatchIds(prev => {
-                      const next = new Set(prev);
-                      allFilteredIds.forEach(id => next.add(id));
-                      return next;
-                    });
-                  }
-                }}
-              >
-                {filteredBatches.every(b => selectedBatchIds.has(b.id)) && filteredBatches.length > 0
-                  ? <><CheckSquare className="h-3.5 w-3.5 mr-1" /> Deselect All</>
-                  : <><Square className="h-3.5 w-3.5 mr-1" /> Select All</>
-                }
-              </Button>
-              {selectedBatchIds.size > 0 && (
-                <Button
-                  variant="destructive" size="sm"
-                  className="text-xs h-7"
-                  onClick={() => {
-                    setBulkDeleteConfirmText('');
-                    setBulkDeleteProgress(null);
-                    setShowBulkDeleteModal(true);
-                  }}
+          {/* Upload date + org period filters */}
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="text-xs font-medium text-slate-500 w-[72px] shrink-0">Upload:</label>
+              <Input
+                type="date"
+                value={batchDateFrom}
+                onChange={e => setBatchDateFrom(e.target.value)}
+                className="h-8 text-xs w-[140px]"
+                placeholder="From"
+              />
+              <span className="text-xs text-slate-400">to</span>
+              <Input
+                type="date"
+                value={batchDateTo}
+                onChange={e => setBatchDateTo(e.target.value)}
+                className="h-8 text-xs w-[140px]"
+                placeholder="To"
+              />
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="text-xs font-medium text-slate-500 w-[72px] shrink-0" title="Trip dates inside the CSV batch (Uber week), not upload day">
+                Period:
+              </label>
+              <Input
+                type="date"
+                value={periodDateFrom}
+                onChange={e => setPeriodDateFrom(e.target.value)}
+                className="h-8 text-xs w-[140px]"
+                placeholder="From"
+              />
+              <span className="text-xs text-slate-400">to</span>
+              <Input
+                type="date"
+                value={periodDateTo}
+                onChange={e => setPeriodDateTo(e.target.value)}
+                className="h-8 text-xs w-[140px]"
+                placeholder="To"
+              />
+              {hasDateFilters && (
+                <button
+                  type="button"
+                  onClick={clearDateFilters}
+                  className="text-xs text-slate-400 hover:text-slate-600 transition-colors flex items-center gap-0.5"
                 >
-                  <Trash2 className="h-3.5 w-3.5 mr-1" />
-                  Delete Selected ({selectedBatchIds.size})
-                </Button>
+                  <XIcon className="h-3 w-3" /> Clear dates
+                </button>
               )}
             </div>
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-            {filteredBatches.map(batch => {
-              const isSelected = selectedBatchIds.has(batch.id);
-              return (
-              <div
-                key={batch.id}
-                className={`border rounded-lg p-4 bg-white hover:shadow-sm transition-all cursor-pointer ${
-                  isSelected
-                    ? 'border-rose-400 bg-rose-50/30 ring-1 ring-rose-200'
-                    : 'border-slate-200 hover:border-rose-300'
-                }`}
-                onClick={() => {
-                  setSelectedBatchIds(prev => {
-                    const next = new Set(prev);
-                    if (next.has(batch.id)) next.delete(batch.id);
-                    else next.add(batch.id);
-                    return next;
-                  });
-                }}
-              >
-                <div className="flex items-start gap-3">
-                  <div className="shrink-0 pt-0.5">
-                    {isSelected
-                      ? <CheckSquare className="h-5 w-5 text-rose-600" />
-                      : <Square className="h-5 w-5 text-slate-300" />
-                    }
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h4 className="text-sm font-semibold text-slate-900 truncate max-w-[200px]" title={batch.fileName}>
-                        {batch.fileName}
-                      </h4>
-                      <Badge variant="outline" className="text-[10px] font-normal px-1.5 py-0">
-                        {formatType(batch.type)}
-                      </Badge>
-                      {(batch as any).platform && (
-                        <Badge
-                          className={`text-[10px] font-medium px-1.5 py-0 border-0 ${
-                            (batch as any).platform === 'Uber'
-                              ? 'bg-black text-white'
-                              : (batch as any).platform === 'InDrive'
-                              ? 'bg-emerald-600 text-white'
-                              : (batch as any).platform === 'Roam'
-                              ? 'bg-indigo-600 text-white'
-                              : 'bg-slate-200 text-slate-600'
-                          }`}
-                        >
-                          {(batch as any).platform}
-                        </Badge>
-                      )}
-                      {batch.status === 'error' && (
-                        <Badge variant="destructive" className="text-[10px] font-normal px-1.5 py-0">
-                          Error
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-3 mt-1.5 text-xs text-slate-500">
-                      <span className="flex items-center gap-1">
-                        <Calendar className="h-3 w-3" />
-                        {new Date(batch.uploadDate).toLocaleDateString()}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <HardDrive className="h-3 w-3" />
-                        {batch.recordCount.toLocaleString()} record{batch.recordCount !== 1 ? 's' : ''}
-                      </span>
-                    </div>
-                    {(batch.canonicalAppendCompletedAt != null ||
-                      batch.canonicalEventsInserted != null) && (
-                      <p className="text-[10px] text-slate-500 mt-1">
-                        Canonical ledger: +{batch.canonicalEventsInserted ?? '—'} / ↺
-                        {batch.canonicalEventsSkipped ?? '—'}
-                        {(batch.canonicalEventsFailed ?? 0) > 0 && (
-                          <span className="text-amber-700"> / failed {batch.canonicalEventsFailed}</span>
-                        )}
-                      </p>
-                    )}
-                    <p className="text-[10px] text-slate-400 mt-1 font-mono truncate" title={batch.id}>
-                      ID: {batch.id}
-                    </p>
-                  </div>
+
+          {filteredBatches.length === 0 ? (
+            <div className="text-center py-10 text-slate-400">
+              <Search className="h-8 w-8 mx-auto mb-2 opacity-50" />
+              <p className="text-sm font-medium">
+                {hasFilters ? 'No batches match your filters' : 'No batches found'}
+              </p>
+              <p className="text-xs mt-1">
+                {searchQuery.trim() ? `Search: "${searchQuery}"` : ''}
+                {searchQuery.trim() && hasDateFilters ? ' · ' : ''}
+                {batchDateFrom || batchDateTo ? `Upload: ${batchDateFrom || '…'} to ${batchDateTo || '…'}` : ''}
+                {(batchDateFrom || batchDateTo) && (periodDateFrom || periodDateTo) ? ' · ' : ''}
+                {periodDateFrom || periodDateTo ? `Period: ${periodDateFrom || '…'} to ${periodDateTo || '…'}` : ''}
+                {!hasFilters ? 'Import data from the Import tab first' : ''}
+              </p>
+              {hasFilters && (
+                <Button variant="outline" size="sm" className="mt-3" onClick={clearAllFilters}>
+                  Clear all filters
+                </Button>
+              )}
+            </div>
+          ) : (
+            <>
+              {/* Selection toolbar */}
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs text-slate-500">
+                  {filteredBatches.length} batch{filteredBatches.length !== 1 ? 'es' : ''} found
+                  {selectedBatchIds.size > 0 && (
+                    <span className="ml-1 font-semibold text-rose-600">
+                      · {selectedBatchIds.size} selected
+                    </span>
+                  )}
+                </p>
+                <div className="flex items-center gap-2">
                   <Button
                     variant="outline" size="sm"
-                    className="shrink-0 text-rose-600 border-rose-200 hover:bg-rose-50 hover:border-rose-300 text-xs"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedBatchId(batch.id);
-                      setActiveModal('deleteBatch');
+                    className="text-xs h-7"
+                    onClick={() => {
+                      const allFilteredIds = new Set(filteredBatches.map(b => b.id));
+                      const allSelected = filteredBatches.every(b => selectedBatchIds.has(b.id));
+                      if (allSelected) {
+                        setSelectedBatchIds(prev => {
+                          const next = new Set(prev);
+                          allFilteredIds.forEach(id => next.delete(id));
+                          return next;
+                        });
+                      } else {
+                        setSelectedBatchIds(prev => {
+                          const next = new Set(prev);
+                          allFilteredIds.forEach(id => next.add(id));
+                          return next;
+                        });
+                      }
                     }}
                   >
-                    <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete Batch
+                    {filteredBatches.every(b => selectedBatchIds.has(b.id)) && filteredBatches.length > 0
+                      ? <><CheckSquare className="h-3.5 w-3.5 mr-1" /> Deselect All</>
+                      : <><Square className="h-3.5 w-3.5 mr-1" /> Select All</>
+                    }
                   </Button>
+                  {selectedBatchIds.size > 0 && (
+                    <Button
+                      variant="destructive" size="sm"
+                      className="text-xs h-7"
+                      onClick={() => {
+                        setBulkDeleteConfirmText('');
+                        setBulkDeleteProgress(null);
+                        setShowBulkDeleteModal(true);
+                      }}
+                    >
+                      <Trash2 className="h-3.5 w-3.5 mr-1" />
+                      Delete Selected ({selectedBatchIds.size})
+                    </Button>
+                  )}
                 </div>
               </div>
-              );
-            })}
-          </div>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                {filteredBatches.map(batch => {
+                  const isSelected = selectedBatchIds.has(batch.id);
+                  return (
+                  <div
+                    key={batch.id}
+                    className={`border rounded-lg p-4 bg-white hover:shadow-sm transition-all cursor-pointer ${
+                      isSelected
+                        ? 'border-rose-400 bg-rose-50/30 ring-1 ring-rose-200'
+                        : 'border-slate-200 hover:border-rose-300'
+                    }`}
+                    onClick={() => {
+                      setSelectedBatchIds(prev => {
+                        const next = new Set(prev);
+                        if (next.has(batch.id)) next.delete(batch.id);
+                        else next.add(batch.id);
+                        return next;
+                      });
+                    }}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="shrink-0 pt-0.5">
+                        {isSelected
+                          ? <CheckSquare className="h-5 w-5 text-rose-600" />
+                          : <Square className="h-5 w-5 text-slate-300" />
+                        }
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h4 className="text-sm font-semibold text-slate-900 truncate max-w-[200px]" title={batch.fileName}>
+                            {batch.fileName}
+                          </h4>
+                          <Badge variant="outline" className="text-[10px] font-normal px-1.5 py-0">
+                            {formatType(batch.type)}
+                          </Badge>
+                          {(batch as any).platform && (
+                            <Badge
+                              className={`text-[10px] font-medium px-1.5 py-0 border-0 ${
+                                (batch as any).platform === 'Uber'
+                                  ? 'bg-black text-white'
+                                  : (batch as any).platform === 'InDrive'
+                                  ? 'bg-emerald-600 text-white'
+                                  : (batch as any).platform === 'Roam'
+                                  ? 'bg-indigo-600 text-white'
+                                  : 'bg-slate-200 text-slate-600'
+                              }`}
+                            >
+                              {(batch as any).platform}
+                            </Badge>
+                          )}
+                          {batch.status === 'error' && (
+                            <Badge variant="destructive" className="text-[10px] font-normal px-1.5 py-0">
+                              Error
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3 mt-1.5 text-xs text-slate-500 flex-wrap">
+                          <span className="flex items-center gap-1" title="When this batch was uploaded">
+                            <Calendar className="h-3 w-3" />
+                            Uploaded {new Date(batch.uploadDate).toLocaleDateString()}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <HardDrive className="h-3 w-3" />
+                            {batch.recordCount.toLocaleString()} record{batch.recordCount !== 1 ? 's' : ''}
+                          </span>
+                        </div>
+                        <p
+                          className="text-[11px] mt-1 font-medium text-slate-700"
+                          title="Trip dates inside this import (Uber / platform week)"
+                        >
+                          {batch.dataPeriodStart && batch.dataPeriodEnd
+                            ? `Data: ${batch.dataPeriodStart} → ${batch.dataPeriodEnd}`
+                            : batch.periodStart && batch.periodEnd
+                            ? `Period: ${batch.periodStart} → ${batch.periodEnd}`
+                            : 'Data period: not recorded'}
+                        </p>
+                        {batch.dataPeriodStart &&
+                          batch.dataPeriodEnd &&
+                          batch.periodStart &&
+                          batch.periodEnd &&
+                          (batch.dataPeriodStart !== batch.periodStart ||
+                            batch.dataPeriodEnd !== batch.periodEnd) && (
+                          <p className="text-[10px] text-slate-400 mt-0.5" title="Organization financial period at import time">
+                            Org at import: {batch.periodStart} → {batch.periodEnd}
+                          </p>
+                        )}
+                        {(batch.canonicalAppendCompletedAt != null ||
+                          batch.canonicalEventsInserted != null) && (
+                          <p className="text-[10px] text-slate-500 mt-1">
+                            Canonical ledger: +{batch.canonicalEventsInserted ?? '—'} / ↺
+                            {batch.canonicalEventsSkipped ?? '—'}
+                            {(batch.canonicalEventsFailed ?? 0) > 0 && (
+                              <span className="text-amber-700"> / failed {batch.canonicalEventsFailed}</span>
+                            )}
+                          </p>
+                        )}
+                        <p className="text-[10px] text-slate-400 mt-1 font-mono truncate" title={batch.id}>
+                          ID: {batch.id}
+                        </p>
+                      </div>
+                      <Button
+                        variant="outline" size="sm"
+                        className="shrink-0 text-rose-600 border-rose-200 hover:bg-rose-50 hover:border-rose-300 text-xs"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedBatchId(batch.id);
+                          setActiveModal('deleteBatch');
+                        }}
+                      >
+                        <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete Batch
+                      </Button>
+                    </div>
+                  </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
         </div>
       );
     }
@@ -1765,7 +1837,16 @@ export function DeleteCenter() {
                 {batches.filter(b => selectedBatchIds.has(b.id)).map(b => (
                   <div key={b.id} className="flex items-start gap-2 px-3 py-2 text-xs">
                     <FileText className="h-3.5 w-3.5 text-slate-400 shrink-0 mt-0.5" />
-                    <span className="flex-1 font-medium text-slate-700 break-all">{b.fileName}</span>
+                    <div className="flex-1 min-w-0">
+                      <span className="font-medium text-slate-700 break-all block">{b.fileName}</span>
+                      <span className="text-[10px] text-slate-500">
+                        {b.dataPeriodStart && b.dataPeriodEnd
+                          ? `Data: ${b.dataPeriodStart} → ${b.dataPeriodEnd}`
+                          : b.periodStart && b.periodEnd
+                          ? `Period: ${b.periodStart} → ${b.periodEnd}`
+                          : 'Data period: not recorded'}
+                      </span>
+                    </div>
                     {(b as any).platform && (
                       <Badge className={`text-[9px] font-medium px-1.5 py-0 border-0 shrink-0 ${
                         (b as any).platform === 'Uber' ? 'bg-black text-white'

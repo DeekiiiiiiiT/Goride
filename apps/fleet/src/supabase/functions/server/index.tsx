@@ -8388,17 +8388,42 @@ app.get("/make-server-37f42386/batches", requireAuth(), async (c) => {
     if (error) throw error;
     const batches = data?.map((d: any) => d.value) || [];
 
-    // Enrich each batch with platform info by sampling one trip per batch
+    // Enrich: platform + actual trip date span (data period users filter by)
     const enriched = await Promise.all(batches.map(async (batch: any) => {
       try {
-        const { data: tripRows } = await supabase
-          .from("kv_store_37f42386")
-          .select("value")
-          .like("key", "trip:%")
-          .eq("value->>batchId", batch.id)
-          .limit(1);
-        const platform = tripRows?.[0]?.value?.platform || null;
-        return { ...batch, platform };
+        const batchId = batch.id;
+        const [minRes, maxRes] = await Promise.all([
+          supabase
+            .from("kv_store_37f42386")
+            .select("value")
+            .like("key", "trip:%")
+            .eq("value->>batchId", batchId)
+            .order("value->>date", { ascending: true })
+            .limit(1),
+          supabase
+            .from("kv_store_37f42386")
+            .select("value")
+            .like("key", "trip:%")
+            .eq("value->>batchId", batchId)
+            .order("value->>date", { ascending: false })
+            .limit(1),
+        ]);
+        const minTrip = minRes.data?.[0]?.value;
+        const maxTrip = maxRes.data?.[0]?.value;
+        const toYmd = (v: unknown) => {
+          if (typeof v !== "string") return null;
+          const s = v.trim().slice(0, 10);
+          return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
+        };
+        const dataPeriodStart = toYmd(minTrip?.date) || batch.dataPeriodStart || null;
+        const dataPeriodEnd = toYmd(maxTrip?.date) || batch.dataPeriodEnd || null;
+        const platform = minTrip?.platform || maxTrip?.platform || null;
+        return {
+          ...batch,
+          platform,
+          ...(dataPeriodStart ? { dataPeriodStart } : {}),
+          ...(dataPeriodEnd ? { dataPeriodEnd } : {}),
+        };
       } catch {
         return { ...batch, platform: null };
       }

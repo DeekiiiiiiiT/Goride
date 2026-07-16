@@ -1038,8 +1038,10 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
       if (targetToll) {
         const periodCheck = assertTollInWizardPeriod(targetToll, period.startDate, fleetTz);
         if (!periodCheck.ok) {
-          toast.error(`This toll belongs to ${periodCheck.weekLabel}. Switch to that period to apply.`);
-          return;
+          // Throw so UnclaimedRefundsList does not show a false success toast.
+          throw new Error(
+            `This toll belongs to ${periodCheck.weekLabel}. Switch to that period to apply.`,
+          );
         }
       }
     }
