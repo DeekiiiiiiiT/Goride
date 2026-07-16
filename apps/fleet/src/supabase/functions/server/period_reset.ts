@@ -325,6 +325,30 @@ export async function executePeriodReconciliationReset(
     driverIds: opts.driverIds,
   });
 
+  // Cross-period safety net: a refund dated in ANOTHER week can still hold a
+  // claim/toll this reset is about to delete. Unmatch it first or the refund
+  // goes dangling (matched → deleted claim) and blocks future re-matching.
+  try {
+    const allRefunds = await loadDisputeRefundRecords();
+    const claimIdSet = new Set(freshInventory.claimIds.map(String));
+    const tollIdSetForRefunds = new Set(freshInventory.tollIds.map(String));
+    for (const r of allRefunds) {
+      if (!r?.id) continue;
+      if (r.status !== "matched" && r.status !== "auto_resolved") continue;
+      const holdsClaim = r.matchedClaimId && claimIdSet.has(String(r.matchedClaimId));
+      const holdsToll = r.matchedTollId && tollIdSetForRefunds.has(String(r.matchedTollId));
+      if (!holdsClaim && !holdsToll) continue;
+      try {
+        await unmatchDisputeRefundById(String(r.id), c);
+        summary.disputeRefundsUnmatched++;
+      } catch (e: any) {
+        errors.push(`unmatch cross-period dispute ${r.id}: ${e.message}`);
+      }
+    }
+  } catch (e: any) {
+    errors.push(`cross-period dispute sweep: ${e.message}`);
+  }
+
   for (const claimId of freshInventory.claimIds) {
     try {
       await deleteClaim(claimId, c, { syncMode: claimSyncMode as "force" | "skip" });

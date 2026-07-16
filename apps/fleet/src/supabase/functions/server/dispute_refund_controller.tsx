@@ -511,6 +511,25 @@ app.get(`${BASE}`, async (c) => {
       return db - da;
     });
 
+    // ── Self-heal dangling matches: a period reset (or manual claim delete)
+    //    can erase the claim a refund was resolved against. Left matched, the
+    //    refund silently holds its toll hostage and blocks re-matching, so
+    //    revert it to unmatched here before listing/auto-linking.
+    for (const refund of refunds) {
+      if (refund.status !== "matched" && refund.status !== "auto_resolved") continue;
+      if (!refund.matchedClaimId) continue;
+      const missingClaimId = String(refund.matchedClaimId);
+      const claimStillExists = await kv.get(`claim:${missingClaimId}`);
+      if (claimStillExists) continue;
+      try {
+        const healed = await unmatchDisputeRefundById(String(refund.id), c);
+        Object.assign(refund, healed);
+        console.log(`[DisputeRefund] Healed dangling match ${refund.id} (claim ${missingClaimId} missing)`);
+      } catch (healErr: any) {
+        console.log(`[DisputeRefund] Heal failed for ${refund.id}: ${healErr.message}`);
+      }
+    }
+
     // ── Auto-link (flagged): only during an active wizard period (dateFrom +
     //    dateTo both required). Refunds are already period-scoped above; toll
     //    candidates must fall in the same window. Never auto when live shortfall
@@ -883,13 +902,15 @@ app.get(`${BASE}/match-candidates`, async (c) => {
       if (!toll || typeof toll !== "object" || !toll.id) continue;
       if (toll.type && toll.type !== "usage") continue;
       if (claimTollIds.has(toll.id) || linkedTollIds.has(toll.id) || anyClaimTollIds.has(toll.id)) continue;
-      // Only tolls still needing a claim decision (untriaged) or already
-      // flagged underpaid belong here — Deadhead never gets a claim at all
-      // (fleet-absorbed by design) and a resolved Personal-Use claim isn't
-      // "open" (excluded above), so both would otherwise slip through as if
-      // they still needed a dispute-refund match.
+      // Only tolls that can still take a dispute refund belong here:
+      // untriaged, flagged underpaid, or trip-linked ("matched"/"underpaid")
+      // with a leftover shortfall — a prior unmatch keeps the trip link, so
+      // a $10-short toll lands back at "matched" and must stay searchable.
+      // enrichAndFilterDisputeBareTolls drops fully-reimbursed ones below.
+      // Personal Use / Deadhead / resolved stages stay excluded.
       const stage = toll.workflowStage;
-      if (stage && stage !== "needs_review" && stage !== "underpaid_pending") continue;
+      const MATCHABLE_STAGES = ["needs_review", "underpaid_pending", "underpaid", "matched"];
+      if (stage && !MATCHABLE_STAGES.includes(stage)) continue;
       rawTollById.set(toll.id, toll);
       tollCandidates.push({
         matchType: "toll",

@@ -138,11 +138,11 @@ export function DisputeRefundDetailDialog({
   }, [open, refund?.id]);
 
   const statusLabel =
-    refund?.status === 'auto_resolved'
-      ? 'Auto-Resolved'
-      : refund?.status === 'matched'
-        ? 'Matched'
-        : 'Unmatched';
+    refund?.status === 'unmatched'
+      ? 'Unmatched'
+      : refund?.resolvedBy === 'system-auto'
+        ? 'Auto-Matched'
+        : 'Matched';
 
   const fin = detail?.financials;
   const matchOk = fin?.coversShortfallFully;

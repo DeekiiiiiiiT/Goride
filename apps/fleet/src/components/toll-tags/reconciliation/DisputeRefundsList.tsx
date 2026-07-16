@@ -216,10 +216,10 @@ export function DisputeRefundsList({ refunds, onMatchComplete }: DisputeRefundsL
                                   <TableCell>
                                     {refund.status === 'unmatched' ? (
                                       <Badge className="bg-amber-100 text-amber-700 border-amber-200 text-[10px]">Unmatched</Badge>
-                                    ) : refund.status === 'matched' ? (
-                                      <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 text-[10px]">Matched</Badge>
+                                    ) : refund.resolvedBy === 'system-auto' ? (
+                                      <Badge className="bg-blue-100 text-blue-700 border-blue-200 text-[10px]">Auto-Matched</Badge>
                                     ) : (
-                                      <Badge className="bg-blue-100 text-blue-700 border-blue-200 text-[10px]">Auto-Resolved</Badge>
+                                      <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 text-[10px]">Matched</Badge>
                                     )}
                                   </TableCell>
                                   <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
