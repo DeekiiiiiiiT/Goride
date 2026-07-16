@@ -953,8 +953,12 @@ app.get(`${BASE}/match-candidates`, async (c) => {
     const claims = claimCandidates.filter(keep).sort(byDate).slice(0, LIMIT);
 
     // Enrich + eligibility-filter BEFORE slice so fully-reimbursed tolls don't
-    // consume the result cap (Dispute Refunds is shortfall-only).
-    const ENRICH_CAP = 100;
+    // consume the result cap (Dispute Refunds is shortfall-only). Enrichment
+    // (per-toll trip matching) is CPU-heavy, so cap it tightly: enriching more
+    // than we can return just risks the edge CPU limit (HTTP 546) on wide /
+    // all-period searches. Candidates are date-desc, so the newest shortfall
+    // tolls win the cap; scoped weekly searches stay well under it.
+    const ENRICH_CAP = LIMIT;
     let tolls = tollCandidates.filter(keep).sort(byDate).slice(0, ENRICH_CAP);
     try {
       tolls = await enrichAndFilterDisputeBareTolls(tolls, rawTollById, fleetTz);

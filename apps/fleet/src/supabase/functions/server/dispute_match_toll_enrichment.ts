@@ -97,15 +97,6 @@ function persistedTripLink(rawToll: any): string | null {
   return null;
 }
 
-async function siblingsForTripPool(
-  tripId: string,
-  rawTollById: Map<string, any>,
-  focusToll: any,
-): Promise<TollPoolRow[]> {
-  const rows = await gatherSiblingsForTripPool(tripId, focusToll, rawTollById);
-  return rows;
-}
-
 /** All tolls sharing a trip link (persisted tripId or matchedTripId). */
 async function gatherSiblingsForTripPool(
   tripId: string,
@@ -188,7 +179,7 @@ export async function enrichAndFilterDisputeBareTolls(
 ): Promise<BareTollCandidate[]> {
   if (candidates.length === 0) return [];
 
-  const [{ trips }, driverAliasMap] = await Promise.all([
+  const [{ trips, tollTx }, driverAliasMap] = await Promise.all([
     loadAllTollLedgerWithTrips(),
     getDriverAliasMap(),
   ]);
@@ -243,11 +234,43 @@ export async function enrichAndFilterDisputeBareTolls(
       list.push(r);
       byTrip.set(r.tripId, list);
     }
+
+    // Build every trip's sibling-toll pool from a SINGLE ledger scan, reusing
+    // the ledger we already loaded above. The prior per-trip
+    // siblingsForTripPool() reloaded the whole ledger once per trip —
+    // O(trips × ledger), which timed out the edge fn (HTTP 546) on multi-week
+    // ranges. One pass, grouped by both the stored tripId and any persisted
+    // trip link, is equivalent and bounded.
+    const fullLedger = tollTx || [];
+    const siblingsByTrip = new Map<string, Map<string, TollPoolRow>>();
+    const addSibling = (trip: string | null, t: any) => {
+      if (!trip) return;
+      const id = tollLedgerId(t);
+      if (!id) return;
+      let pool = siblingsByTrip.get(trip);
+      if (!pool) {
+        pool = new Map<string, TollPoolRow>();
+        siblingsByTrip.set(trip, pool);
+      }
+      if (!pool.has(id)) {
+        pool.set(id, {
+          id,
+          date: String(t.date || ""),
+          time: t.time,
+          amount: Math.abs(Number(t.amount) || 0),
+        });
+      }
+    };
+    for (const t of fullLedger) {
+      if (!t || typeof t !== "object") continue;
+      if (t.tripId) addSibling(String(t.tripId), t);
+      addSibling(persistedTripLink(t), t);
+    }
+
     for (const [tripId, group] of byTrip) {
       const tripDetail = tripDetailsById.get(tripId);
       const pool = Math.abs(tripDetail?.tollCharges || 0);
-      const focusRaw = rawTollById.get(group[0].toll.tollId) || group[0];
-      const siblings = await siblingsForTripPool(tripId, rawTollById, focusRaw);
+      const siblings = [...(siblingsByTrip.get(tripId)?.values() ?? [])];
       for (const r of group) {
         r.toll.tripRefund = allocateTripRefundShare(pool, r.toll.tollId, siblings);
         if (tripDetail) attachTripDisplayFields(r.toll, tripDetail);
