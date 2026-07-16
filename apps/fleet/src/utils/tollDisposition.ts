@@ -8,6 +8,10 @@
  *   - tag toll business / write_off / refunded / matched → fleet (no driver effect)
  *   - otherwise                                          → unresolved (pending)
  *
+ * Cash stays cashWash even when resolution is personal: the Charge Driver
+ * wallet debit is the personal bill. Moving cash into disposition.personal
+ * would drop the wash and double-count alongside that debit.
+ *
  * Kept byte-for-byte in behavior with the server copy (guarded by matching
  * tests). The client consumes the server's per-period disposition numbers at
  * runtime; this mirror exists so the policy is unit-testable in Vitest.
@@ -25,13 +29,14 @@ export interface TollLedgerLike {
 }
 
 export function classifyTollLedgerEntry(e: TollLedgerLike): TollDispositionClass {
+  const pm = (e.paymentMethod || '').toLowerCase();
+  const isCash = pm === 'cash' || !!e.receiptUrl;
+  // Cash plaza spend always washes — personal cash liability is Toll Charge rows.
+  if (isCash) return 'cashWash';
+
   const res = (e.resolution || '').toLowerCase();
   if (res === 'personal') return 'personal';
   if (res === 'business' || res === 'write_off' || res === 'refunded') return 'fleet';
-
-  const pm = (e.paymentMethod || '').toLowerCase();
-  const isCash = pm === 'cash' || !!e.receiptUrl;
-  if (isCash) return 'cashWash';
 
   if (e.tripId || e.isReconciled) return 'fleet';
   return 'unresolved';

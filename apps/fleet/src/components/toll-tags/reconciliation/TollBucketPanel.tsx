@@ -11,6 +11,7 @@ import {
   Search,
   Sparkles,
   Tag,
+  Trash2,
   User,
   UserMinus,
   type LucideIcon,
@@ -71,6 +72,8 @@ export interface TollBucketPanelProps {
   onOpenDispute?: (tx: FinancialTransaction, match: MatchResult) => void;
   onApprove?: (tx: FinancialTransaction) => void;
   onReject?: (tx: FinancialTransaction) => void;
+  /** Cash/receipt: discard invalid claim (no charge, no reimbursement). */
+  onDiscardReceipt?: (tx: FinancialTransaction) => void;
   onFlag?: (tx: FinancialTransaction) => void;
   /** Personal step: fleet covers cost (reimburse receipt or write off tag). */
   onAcceptPersonal?: (tx: FinancialTransaction) => void;
@@ -97,7 +100,7 @@ export interface TollBucketPanelProps {
 }
 
 export function TollBucketPanel({
-  tolls, suggestions, onReconcile, allTrips, onApprove, onReject, onFlag, onManualResolve, onEdit, drivers = [],
+  tolls, suggestions, onReconcile, allTrips, onApprove, onReject, onDiscardReceipt, onFlag, onManualResolve, onEdit, drivers = [],
   emptyState, listTitle = 'Tolls', listDescription = "Toll provider charges that haven't been linked to a specific trip.",
   approveLabel = 'Approve', onChargeDriver, onChargePersonal, onAcceptPersonal, stepId, unifiedPeriodView = false, advancePrompt,
 }: TollBucketPanelProps) {
@@ -242,6 +245,17 @@ export function TollBucketPanel({
                             <DropdownMenuItem onClick={() => onManualResolve?.(tx, 'Business')}>
                                 <Briefcase className="mr-2 h-4 w-4 text-slate-600" /> Business Expense
                             </DropdownMenuItem>
+                            {onDiscardReceipt && (tx.paymentMethod === 'Cash' || !!tx.receiptUrl) && (
+                                <>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem
+                                        className="text-rose-700 focus:text-rose-800"
+                                        onClick={() => onDiscardReceipt(tx)}
+                                    >
+                                        <Trash2 className="mr-2 h-4 w-4" /> Discard (invalid receipt)
+                                    </DropdownMenuItem>
+                                </>
+                            )}
                             {onEdit && (
                                 <>
                                     <DropdownMenuSeparator />
@@ -280,14 +294,14 @@ export function TollBucketPanel({
                                  {isClaim ? 'Approve' : 'Fleet Pays'}
                              </Button>
                          )}
-                         {isClaim && onReject && (
-                             <Button size="sm" variant="outline" className="border-rose-300 text-rose-700 hover:bg-rose-50" onClick={() => onReject(tx)}>
-                                 Reject
-                             </Button>
-                         )}
-                         {!isClaim && onChargePersonal && (
+                         {onChargePersonal && (
                              <Button size="sm" variant="outline" className="border-purple-300 text-purple-700 hover:bg-purple-50" onClick={() => onChargePersonal(tx, match)}>
                                  Charge Driver
+                             </Button>
+                         )}
+                         {isClaim && onDiscardReceipt && (
+                             <Button size="sm" variant="ghost" className="text-rose-600 hover:bg-rose-50" onClick={() => onDiscardReceipt(tx)}>
+                                 Discard
                              </Button>
                          )}
                      </div>
@@ -298,6 +312,11 @@ export function TollBucketPanel({
                      <div className="flex items-center justify-end gap-2">
                          {onApprove && <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" onClick={() => onApprove(tx)}>{approveLabel}</Button>}
                          <Button size="sm" variant="outline" className="border-purple-300 text-purple-700 hover:bg-purple-50" onClick={() => onChargeDriver(tx, match)}>Charge Driver</Button>
+                         {isClaim && onDiscardReceipt && (
+                             <Button size="sm" variant="ghost" className="text-rose-600 hover:bg-rose-50" onClick={() => onDiscardReceipt(tx)}>
+                                 Discard
+                             </Button>
+                         )}
                      </div>
                  );
             }
@@ -440,6 +459,7 @@ export function TollBucketPanel({
                 }}
                 onApprove={onApprove ? () => onApprove(tx) : undefined}
                 onReject={onReject ? () => onReject(tx) : undefined}
+                onDiscard={onDiscardReceipt && (tx.paymentMethod === 'Cash' || !!tx.receiptUrl) ? () => onDiscardReceipt(tx) : undefined}
                 onAcceptPersonal={onAcceptPersonal ? () => onAcceptPersonal(tx) : undefined}
                 onFlag={onFlag ? () => onFlag(tx) : undefined}
                 onChargeDriver={onChargeDriver ? () => onChargeDriver(tx, match) : undefined}
@@ -585,7 +605,14 @@ export function TollBucketPanel({
                 match={detailMatch}
                 allMatches={detailMatches}
                 onConfirm={detailTx && detailMatch && !needsTripPick(detailTx, detailMatch) ? () => {
-                    onReconcile(detailTx, detailMatch.trip);
+                    if (detailMatch.matchType === 'PERSONAL_MATCH' && onChargePersonal) {
+                        onChargePersonal(detailTx, detailMatch);
+                    } else {
+                        onReconcile(detailTx, detailMatch.trip);
+                    }
+                    closeDetail();
+                } : detailTx && stepId === 'personal-use' && onChargePersonal ? () => {
+                    onChargePersonal(detailTx, detailMatch || undefined);
                     closeDetail();
                 } : undefined}
                 onApprove={detailTx && onApprove ? () => {
@@ -594,6 +621,10 @@ export function TollBucketPanel({
                 } : undefined}
                 onReject={detailTx && onReject ? () => {
                     onReject(detailTx);
+                    closeDetail();
+                } : undefined}
+                onDiscard={detailTx && onDiscardReceipt && (detailTx.paymentMethod === 'Cash' || !!detailTx.receiptUrl) ? () => {
+                    onDiscardReceipt(detailTx);
                     closeDetail();
                 } : undefined}
                 onAcceptPersonal={detailTx && onAcceptPersonal ? () => {

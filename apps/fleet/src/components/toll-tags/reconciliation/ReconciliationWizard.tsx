@@ -23,6 +23,7 @@ import { MatchResult, calculateTollFinancials, buildTollFinancialsContext, build
 import {
   resolveWizardBucket,
   isTollExcludedFromWizardBuckets,
+  isOrphanPersonalMatch,
   TollBucket,
 } from "../../../utils/tollBucket";
 import { StepId, StepCounts, STEP_ORDER, computeStepCounts } from "../../../utils/tollPeriodGating";
@@ -197,35 +198,66 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
     }
     try {
       const tollCost = Math.abs(tx.amount);
-      if (opts.trip?.id) {
-        await reconcile(tx, opts.trip);
-      } else {
-        await reject(tx, opts.reason);
+      const isCashClaim = tx.paymentMethod === 'Cash' || !!tx.receiptUrl;
+      let linkedOrRejected = false;
+      try {
+        if (opts.trip?.id) {
+          await reconcile(tx, opts.trip);
+          linkedOrRejected = true;
+        } else {
+          await reject(tx, opts.reason);
+          linkedOrRejected = true;
+        }
+        await createClaim({
+          transactionId: tx.id,
+          driverId: resolvedDriverId,
+          amount: tollCost,
+          expectedAmount: tollCost,
+          paidAmount: 0,
+          status: 'Resolved',
+          type: 'Toll_Refund',
+          resolutionReason: 'Charge Driver',
+          subject: opts.subject || (isCashClaim
+            ? 'Cash Personal Toll - Charged to Driver'
+            : 'Unmatched Toll - Personal Use'),
+          message: opts.message || (isCashClaim
+            ? 'Driver used trip cash for a personal toll — charged to driver (no reimbursement).'
+            : 'This toll was identified as personal usage and charged to your account.'),
+          tripId: opts.trip?.id,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          date: tx.date,
+        });
+        await Promise.all([refresh(), refreshClaims()]);
+        toast.success(
+          isCashClaim
+            ? 'Cash personal toll charged to driver'
+            : opts.trip?.id
+              ? 'Linked to trip & charged to driver'
+              : 'Marked as personal (driver liability)',
+        );
+      } catch (error) {
+        // Charge failed after queue mutation — put the toll back so the step stays open.
+        if (linkedOrRejected && opts.trip?.id) {
+          try {
+            await unreconcile({ ...tx, tripId: opts.trip.id, isReconciled: true });
+            await refresh();
+          } catch (rollbackErr) {
+            console.error('Personal charge rollback failed', rollbackErr);
+          }
+        } else if (linkedOrRejected) {
+          await refresh();
+        }
+        throw error;
       }
-      await createClaim({
-        transactionId: tx.id,
-        driverId: resolvedDriverId,
-        amount: tollCost,
-        expectedAmount: tollCost,
-        paidAmount: 0,
-        status: 'Resolved',
-        type: 'Toll_Refund',
-        resolutionReason: 'Charge Driver',
-        subject: opts.subject || 'Unmatched Toll - Personal Use',
-        message: opts.message || 'This toll was identified as personal usage and charged to your account.',
-        tripId: opts.trip?.id,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        date: tx.date,
-      });
-      await Promise.all([refresh(), refreshClaims()]);
-      toast.success(opts.trip?.id ? 'Linked to trip & charged to driver' : 'Marked as personal (driver liability)');
     } catch (error) {
       console.error('Personal charge failed', error);
-      toast.error('Failed to charge driver for personal toll');
+      toast.error('Failed to charge driver for personal toll', {
+        description: error instanceof Error ? error.message : undefined,
+      });
       throw error;
     }
-  }, [reconcile, reject, createClaim, refresh, refreshClaims, confirmChargeSyncOrAbort]);
+  }, [reconcile, reject, unreconcile, createClaim, refresh, refreshClaims, confirmChargeSyncOrAbort]);
 
   const handleApprove = async (tx: FinancialTransaction) => {
       const match = suggestions.get(tx.id)?.[0];
@@ -239,6 +271,20 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
       const match = suggestions.get(tx.id)?.[0];
       const reason = match?.matchType === 'PERSONAL_MATCH' ? "Identified as Personal Trip" : "Rejected by Admin";
       await reject(tx, reason);
+  };
+
+  /** Cash/receipt claim is bogus — leave queue with no driver charge and no reimbursement. */
+  const handleDiscardReceipt = async (tx: FinancialTransaction) => {
+    try {
+      await reject(tx, 'Invalid receipt — discarded');
+      toast.success('Receipt discarded', {
+        description: 'No driver charge. Any Uber trip refund stays available in Unlinked Refunds.',
+      });
+      await refresh();
+    } catch (error) {
+      console.error('Discard receipt failed', error);
+      toast.error('Failed to discard receipt');
+    }
   };
 
   const handleAcceptPersonal = useCallback(async (tx: FinancialTransaction) => {
@@ -344,8 +390,10 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
   };
 
   const handleChargePersonal = useCallback(async (tx: FinancialTransaction, match?: MatchResult) => {
+    // Orphan/nearby personal: do not link the nearby trip — reject + Charge Driver claim only.
+    const linkTrip = match?.trip?.id && !isOrphanPersonalMatch(match) ? match.trip : undefined;
     await chargeDriverForPersonalUse(tx, {
-      trip: match?.trip?.id ? match.trip : undefined,
+      trip: linkTrip,
       reason: match?.reason || 'Identified as Personal Trip',
       message: match?.reason || undefined,
     });
@@ -860,14 +908,29 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
    * the fleet absorbing it (the step's default via handleApprove). Same
    * shape as handleSmartReconcile's PERSONAL_MATCH branch — reconcile the
    * toll to its trip, then a resolved "Charge Driver" claim.
+   *
+   * If the claim fails after reconcile, unmatch so the toll stays in
+   * Deadhead (avoids "complete" + charge-failed toast contradiction).
    */
   const handleChargeDriverForDeadhead = async (tx: FinancialTransaction, match: MatchResult) => {
+      const driverId = match.trip.driverId || tx.driverId;
+      if (!driverId) {
+          toast.error('Cannot charge deadhead toll — no driver on this trip');
+          return;
+      }
+      if (!(await confirmChargeSyncOrAbort())) {
+          toast.message('Charge cancelled — turn on driver charge sync for Expenses/Cash Wallet parity.');
+          return;
+      }
+
+      let linked = false;
       try {
           await reconcile(tx, match.trip);
+          linked = true;
           const tollCost = Math.abs(tx.amount);
           await createClaim({
               transactionId: tx.id,
-              driverId: match.trip.driverId || tx.driverId || 'unknown',
+              driverId,
               amount: tollCost,
               expectedAmount: tollCost,
               paidAmount: 0,
@@ -879,13 +942,28 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
               tripId: match.trip.id,
               createdAt: new Date().toISOString(),
               updatedAt: new Date().toISOString(),
-              date: tx.date
+              date: tx.date,
           });
-          toast.success("Deadhead toll charged to driver");
-          refreshClaims();
+          await Promise.all([refresh(), refreshClaims()]);
+          toast.success('Deadhead toll charged to driver');
       } catch (e) {
           console.error(e);
-          toast.error("Failed to charge driver for deadhead toll");
+          if (linked) {
+              try {
+                  // Put the toll back in Deadhead — charge never landed.
+                  await unreconcile({ ...tx, tripId: match.trip.id, isReconciled: true });
+                  await refresh();
+              } catch (rollbackErr) {
+                  console.error('Deadhead charge rollback failed', rollbackErr);
+                  toast.error('Charge failed and could not undo the trip link — unmatch this toll manually', {
+                      description: e instanceof Error ? e.message : undefined,
+                  });
+                  return;
+              }
+          }
+          toast.error('Failed to charge driver for deadhead toll', {
+              description: e instanceof Error ? e.message : undefined,
+          });
       }
   };
 
@@ -985,6 +1063,7 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
 
   const lockedApprove = lock('Matching toll…', handleApprove);
   const lockedReject = lock('Updating toll…', handleReject);
+  const lockedDiscardReceipt = lock('Discarding receipt…', handleDiscardReceipt);
   const lockedAcceptPersonal = lock('Saving personal toll…', handleAcceptPersonal);
   const lockedFlag = lock('Flagging toll…', handleFlag);
   const lockedManualResolve = lock('Resolving toll…', handleManualResolve);
@@ -1142,6 +1221,7 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
               onReconcile={lockedSmartReconcile}
               onApprove={lockedApprove}
               onReject={lockedReject}
+              onDiscardReceipt={lockedDiscardReceipt}
               onAcceptPersonal={lockedAcceptPersonal}
               onFlag={lockedFlag}
               onManualResolve={lockedManualResolve}
@@ -1160,9 +1240,11 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
               allTrips={trips}
               drivers={drivers}
               unifiedPeriodView
+              stepId="deadhead"
               onReconcile={lockedSmartReconcile}
               onApprove={lockedApprove}
               onReject={lockedReject}
+              onDiscardReceipt={lockedDiscardReceipt}
               onAcceptPersonal={lockedAcceptPersonal}
               onFlag={lockedFlag}
               onManualResolve={lockedManualResolve}

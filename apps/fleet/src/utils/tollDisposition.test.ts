@@ -13,8 +13,11 @@ describe('classifyTollLedgerEntry — policy matrix', () => {
 
   it('tag toll resolved Personal → personal (billed to driver)', () => {
     expect(classifyTollLedgerEntry({ paymentMethod: 'tag_balance', resolution: 'personal' })).toBe('personal');
-    // resolution wins even for a cash payment method
-    expect(classifyTollLedgerEntry({ paymentMethod: 'cash', resolution: 'personal' })).toBe('personal');
+  });
+
+  it('cash toll stays cashWash even when resolution is personal (Charge Driver is the bill)', () => {
+    expect(classifyTollLedgerEntry({ paymentMethod: 'cash', resolution: 'personal' })).toBe('cashWash');
+    expect(classifyTollLedgerEntry({ paymentMethod: 'tag_balance', receiptUrl: 'r.jpg', resolution: 'personal' })).toBe('cashWash');
   });
 
   it('business / write_off / refunded → fleet (no driver effect)', () => {

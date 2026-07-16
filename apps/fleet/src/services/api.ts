@@ -1748,7 +1748,10 @@ export const api = {
         },
         body: JSON.stringify(claim)
     });
-    if (!response.ok) throw new Error("Failed to save claim");
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || err.message || 'Failed to save claim');
+    }
     return response.json();
   },
 

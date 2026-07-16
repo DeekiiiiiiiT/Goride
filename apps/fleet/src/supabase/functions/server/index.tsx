@@ -10767,7 +10767,10 @@ app.get("/make-server-37f42386/claims", requireAuth(), async (c) => {
 app.post("/make-server-37f42386/claims", async (c) => {
   try {
     const claimInput = await c.req.json();
-    const claim = await upsertClaim(claimInput, c);
+    // Per-toll platform credit allocation needs fleetTz (avoids blocking
+    // deadhead/personal charges with the trip's full tollCharges pool).
+    const fleetTz = await getFleetTimezone();
+    const claim = await upsertClaim(claimInput, c, { fleetTz });
     return c.json({ success: true, data: claim });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);

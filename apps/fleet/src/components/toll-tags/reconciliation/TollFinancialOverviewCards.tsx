@@ -125,7 +125,7 @@ export function TollFinancialOverviewCards({
                   </TooltipTrigger>
                   <TooltipContent>
                     <p className="max-w-[240px] text-xs">
-                      Fleet recovery from resolved &quot;Charge Driver&quot; claims. Driver Financials → Expenses / Cash Wallet use posted wallet Toll Charge rows (requires charge sync ON for parity).
+                      Fleet recovery from resolved &quot;Charge Driver&quot; claims — including tag personal, deadhead, underpaid shortfalls, and cash personal (no reimbursement). Driver Financials → Expenses / Cash Wallet use posted wallet Toll Charge rows (requires charge sync ON for parity).
                     </p>
                   </TooltipContent>
                 </Tooltip>

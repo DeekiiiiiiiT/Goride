@@ -2,6 +2,7 @@
  * Client-parse bank CSV or Sagicor PDF → suggested matches → Accept writes fleet_bank_confirm only.
  */
 import React, { useMemo, useState } from 'react';
+import { format, parseISO, addDays } from 'date-fns';
 import { Loader2, Upload } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 import { api } from '../../services/api';
@@ -34,6 +35,14 @@ import {
   TableHeader,
   TableRow,
 } from '../ui/table';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '../ui/dialog';
 
 const MONEY = (n: number) => {
   const body = Math.abs(n).toLocaleString(undefined, {
@@ -43,7 +52,15 @@ const MONEY = (n: number) => {
   return `${n < 0 ? '-' : ''}$${body}`;
 };
 
+/** Mon–Sun settlement period label from week-start Monday. */
+function formatWeekPeriod(weekStartYmd: string): string {
+  const start = parseISO(weekStartYmd);
+  const end = addDays(start, 6);
+  return `${format(start, 'MMM d')} – ${format(end, 'MMM d, yyyy')}`;
+}
+
 type ImportSource = 'csv' | 'pdf' | null;
+type PendingAccept = { mode: 'one'; suggestion: BankMatchSuggestion } | { mode: 'all' };
 
 type Props = {
   expectedRows: FleetBankReceiveRow[];
@@ -65,6 +82,7 @@ export function BankStatementImport({ expectedRows, organizationId, onConfirmed 
   const [busy, setBusy] = useState(false);
   const [parsing, setParsing] = useState(false);
   const [statementId, setStatementId] = useState<string | null>(null);
+  const [pendingAccept, setPendingAccept] = useState<PendingAccept | null>(null);
 
   const header = csvRows[0] || [];
   const colCount = header.length || 3;
@@ -80,6 +98,17 @@ export function BankStatementImport({ expectedRows, organizationId, onConfirmed 
     setUnmatched([]);
     setDismissed(new Set());
     setStatementId(null);
+  }
+
+  /** Clear loaded file so ops can upload the next statement. */
+  function clearImport() {
+    setFileName('');
+    setSource(null);
+    setCsvRows([]);
+    setPdfLines([]);
+    setPdfFormatLabel('');
+    setPendingAccept(null);
+    resetMatchState();
   }
 
   function currentLines(): BankStatementLine[] {
@@ -169,28 +198,78 @@ export function BankStatementImport({ expectedRows, organizationId, onConfirmed 
     if (id) setStatementId(id);
   }
 
+  async function confirmSuggestion(s: BankMatchSuggestion) {
+    await api.upsertFleetBankConfirm({
+      organizationId: organizationId || undefined,
+      weekStartYmd: s.target.weekStartYmd,
+      amountReceived: s.line.amount,
+      expectedAmount: s.target.expected,
+      confirmMethod: 'statement',
+      bankDateYmd: s.line.dateYmd,
+      statementFileName: fileName || undefined,
+      platform: s.target.platform || 'uber',
+    });
+  }
+
   async function acceptOne(s: BankMatchSuggestion) {
     setBusy(true);
     try {
-      await api.upsertFleetBankConfirm({
-        organizationId: organizationId || undefined,
-        weekStartYmd: s.target.weekStartYmd,
-        amountReceived: s.line.amount,
-        expectedAmount: s.target.expected,
-        confirmMethod: 'statement',
-        bankDateYmd: s.line.dateYmd,
-        statementFileName: fileName || undefined,
-        platform: s.target.platform || 'uber',
-      });
+      await confirmSuggestion(s);
       await persistStatement(currentLines());
-      setSuggestions((prev) => prev.filter((x) => x.line.lineIndex !== s.line.lineIndex));
+      const remaining = suggestions.filter((x) => x.line.lineIndex !== s.line.lineIndex);
+      setSuggestions(remaining);
       onConfirmed();
       toast.success('Match accepted — bank received saved (Cash Returned unchanged)');
+      if (remaining.length === 0) clearImport();
     } catch (e: any) {
       toast.error(e?.message || 'Accept failed');
     } finally {
       setBusy(false);
+      setPendingAccept(null);
     }
+  }
+
+  async function acceptAll() {
+    if (suggestions.length === 0) return;
+    setBusy(true);
+    const batch = [...suggestions];
+    let ok = 0;
+    try {
+      for (const s of batch) {
+        await confirmSuggestion(s);
+        ok += 1;
+      }
+      await persistStatement(currentLines());
+      setSuggestions([]);
+      onConfirmed();
+      toast.success(
+        `Accepted ${ok} match${ok === 1 ? '' : 'es'} — bank received saved (Cash Returned unchanged)`,
+      );
+      clearImport();
+    } catch (e: any) {
+      if (ok > 0) {
+        const acceptedIndexes = new Set(batch.slice(0, ok).map((s) => s.line.lineIndex));
+        setSuggestions((prev) => prev.filter((x) => !acceptedIndexes.has(x.line.lineIndex)));
+        onConfirmed();
+      }
+      toast.error(
+        ok > 0
+          ? `Accepted ${ok}, then failed: ${e?.message || 'Accept failed'}`
+          : e?.message || 'Accept all failed',
+      );
+    } finally {
+      setBusy(false);
+      setPendingAccept(null);
+    }
+  }
+
+  function confirmPendingAccept() {
+    if (!pendingAccept) return;
+    if (pendingAccept.mode === 'one') {
+      void acceptOne(pendingAccept.suggestion);
+      return;
+    }
+    void acceptAll();
   }
 
   function dismissSuggestion(s: BankMatchSuggestion) {
@@ -222,7 +301,7 @@ export function BankStatementImport({ expectedRows, organizationId, onConfirmed 
             ) : (
               <Upload className="h-4 w-4 mr-2" />
             )}
-            {source === 'pdf' && fileName ? fileName : 'Upload PDF'}
+            Upload PDF
           </Button>
           <Button
             type="button"
@@ -232,8 +311,13 @@ export function BankStatementImport({ expectedRows, organizationId, onConfirmed 
             onClick={() => document.getElementById('fleet-bank-csv-input')?.click()}
           >
             <Upload className="h-4 w-4 mr-2" />
-            {source === 'csv' && fileName ? fileName : 'Upload CSV'}
+            Upload CSV
           </Button>
+          {hasImport && (
+            <Button type="button" variant="ghost" size="sm" disabled={parsing || busy} onClick={clearImport}>
+              Clear
+            </Button>
+          )}
         </div>
         <input
           id="fleet-bank-pdf-input"
@@ -260,6 +344,11 @@ export function BankStatementImport({ expectedRows, organizationId, onConfirmed 
       {source === 'pdf' && pdfLines.length > 0 && (
         <div className="flex flex-wrap items-center gap-3">
           <Badge variant="secondary">{pdfFormatLabel}</Badge>
+          {fileName ? (
+            <span className="text-xs text-slate-500 truncate max-w-[240px]" title={fileName}>
+              {fileName}
+            </span>
+          ) : null}
           <span className="text-xs text-slate-500">
             {pdfLines.length} Uber deposit{pdfLines.length === 1 ? '' : 's'} extracted
           </span>
@@ -342,12 +431,24 @@ export function BankStatementImport({ expectedRows, organizationId, onConfirmed 
 
       {hasImport && suggestions.length > 0 && (
         <div className="space-y-2">
-          <h3 className="text-xs font-medium text-slate-500 uppercase tracking-wide">Suggested matches</h3>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-xs font-medium text-slate-500 uppercase tracking-wide">
+              Suggested matches
+            </h3>
+            <Button
+              size="sm"
+              disabled={busy}
+              onClick={() => setPendingAccept({ mode: 'all' })}
+            >
+              Accept all ({suggestions.length})
+            </Button>
+          </div>
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Statement</TableHead>
-                <TableHead>Expected week</TableHead>
+                <TableHead>Period</TableHead>
+                <TableHead className="text-right">Expected</TableHead>
                 <TableHead className="text-right">Amount</TableHead>
                 <TableHead>Why</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
@@ -364,19 +465,23 @@ export function BankStatementImport({ expectedRows, organizationId, onConfirmed 
                       </span>
                     ) : null}
                   </TableCell>
-                  <TableCell className="text-sm">
-                    {s.target.weekStartYmd}
-                    <span className="block text-xs text-slate-400">
-                      Expected {MONEY(s.target.expected)}
-                    </span>
+                  <TableCell className="text-sm whitespace-nowrap">
+                    {formatWeekPeriod(s.target.weekStartYmd)}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums text-sm">
+                    {MONEY(s.target.expected)}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">{MONEY(s.line.amount)}</TableCell>
                   <TableCell className="text-xs text-slate-500 max-w-[200px]">
                     {s.reasons.join(' · ')}
                   </TableCell>
                   <TableCell className="text-right space-x-2 whitespace-nowrap">
-                    <Button size="sm" disabled={busy} onClick={() => void acceptOne(s)}>
-                      {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Accept'}
+                    <Button
+                      size="sm"
+                      disabled={busy}
+                      onClick={() => setPendingAccept({ mode: 'one', suggestion: s })}
+                    >
+                      Accept
                     </Button>
                     <Button size="sm" variant="ghost" disabled={busy} onClick={() => dismissSuggestion(s)}>
                       Dismiss
@@ -410,6 +515,76 @@ export function BankStatementImport({ expectedRows, organizationId, onConfirmed 
           </ul>
         </div>
       )}
+
+      <Dialog
+        open={!!pendingAccept}
+        onOpenChange={(open) => {
+          if (!open && !busy) setPendingAccept(null);
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              {pendingAccept?.mode === 'all'
+                ? `Accept ${suggestions.length} matches?`
+                : 'Confirm match'}
+            </DialogTitle>
+            <DialogDescription>
+              This marks fleet bank Received for the period(s) below. Cash Returned and Settlement stay unchanged.
+            </DialogDescription>
+          </DialogHeader>
+
+          {pendingAccept?.mode === 'one' && (
+            <div className="rounded-md border border-slate-200 bg-slate-50 p-3 space-y-2 text-sm">
+              <div className="flex justify-between gap-4">
+                <span className="text-slate-500">Period</span>
+                <span className="font-medium text-right">
+                  {formatWeekPeriod(pendingAccept.suggestion.target.weekStartYmd)}
+                </span>
+              </div>
+              <div className="flex justify-between gap-4">
+                <span className="text-slate-500">Bank deposit</span>
+                <span className="tabular-nums text-right">
+                  {pendingAccept.suggestion.line.dateYmd} · {MONEY(pendingAccept.suggestion.line.amount)}
+                </span>
+              </div>
+              <div className="flex justify-between gap-4">
+                <span className="text-slate-500">Expected</span>
+                <span className="tabular-nums text-right">
+                  {MONEY(pendingAccept.suggestion.target.expected)}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {pendingAccept?.mode === 'all' && (
+            <ul className="max-h-56 overflow-y-auto space-y-2 text-sm border border-slate-200 rounded-md p-3">
+              {suggestions.map((s) => (
+                <li
+                  key={s.line.lineIndex}
+                  className="flex justify-between gap-3 border-b border-slate-100 last:border-0 pb-2 last:pb-0"
+                >
+                  <span>
+                    <span className="font-medium block">{formatWeekPeriod(s.target.weekStartYmd)}</span>
+                    <span className="text-xs text-slate-400">Bank {s.line.dateYmd}</span>
+                  </span>
+                  <span className="tabular-nums shrink-0">{MONEY(s.line.amount)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" disabled={busy} onClick={() => setPendingAccept(null)}>
+              Cancel
+            </Button>
+            <Button disabled={busy} onClick={confirmPendingAccept}>
+              {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" /> : null}
+              {pendingAccept?.mode === 'all' ? 'Accept all' : 'Confirm accept'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

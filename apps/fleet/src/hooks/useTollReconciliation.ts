@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../services/api';
 import { FinancialTransaction, Trip, DisputeRefund } from '../types/data';
 import { findTollMatches, MatchResult } from '../utils/tollReconciliation';
+import { demoteSpuriousDeadheadMatch } from '../utils/deadheadMatchGuard';
 import { toast } from 'sonner@2.0.3';
 
 /**
@@ -87,40 +88,49 @@ function convertServerSuggestions(
     const tx = txLookup.get(txId);
     if (!tx) continue;
 
-    const converted: MatchResult[] = matches.map((m: any) => ({
-      transaction: tx,
-      trip: {
-        id: m.tripId,
-        date: m.tripDate,
-        amount: m.tripAmount,
-        tollCharges: m.tripTollCharges,
-        pickupLocation: m.tripPickup,
-        dropoffLocation: m.tripDropoff,
-        platform: m.tripPlatform,
-        driverId: m.tripDriverId,
-        driverName: m.tripDriverName,
-        // Phase 3: Trip timing & detail fields for overlay display
-        requestTime: m.tripRequestTime,
-        dropoffTime: m.tripDropoffTime,
-        vehicleId: m.tripVehicleId,
-        duration: m.tripDuration,
-        distance: m.tripDistance,
-        serviceType: m.tripServiceType,
-      } as Trip,
-      confidence: m.confidence,
-      reason: m.reason,
-      timeDifferenceMinutes: m.timeDifferenceMinutes,
-      matchType: m.matchType,
-      varianceAmount: m.varianceAmount,
-      // Phase 1 enrichment fields (server-populated)
-      confidenceScore: m.confidenceScore,
-      vehicleMatch: m.vehicleMatch,
-      driverMatch: m.driverMatch,
-      dataQuality: m.dataQuality,
-      windowHit: m.windowHit,
-      isAmbiguous: m.isAmbiguous,
-      reasonCode: m.reasonCode,
-    }));
+    const converted: MatchResult[] = matches.map((m: any) => {
+      const base: MatchResult = {
+        transaction: tx,
+        trip: {
+          id: m.tripId,
+          date: m.tripDate,
+          amount: m.tripAmount,
+          tollCharges: m.tripTollCharges,
+          pickupLocation: m.tripPickup,
+          dropoffLocation: m.tripDropoff,
+          platform: m.tripPlatform,
+          driverId: m.tripDriverId,
+          driverName: m.tripDriverName,
+          // Phase 3: Trip timing & detail fields for overlay display
+          requestTime: m.tripRequestTime,
+          dropoffTime: m.tripDropoffTime,
+          vehicleId: m.tripVehicleId,
+          duration: m.tripDuration,
+          distance: m.tripDistance,
+          serviceType: m.tripServiceType,
+        } as Trip,
+        confidence: m.confidence,
+        reason: m.reason,
+        timeDifferenceMinutes: m.timeDifferenceMinutes,
+        matchType: m.matchType,
+        varianceAmount: m.varianceAmount,
+        // Phase 1 enrichment fields (server-populated)
+        confidenceScore: m.confidenceScore,
+        vehicleMatch: m.vehicleMatch,
+        driverMatch: m.driverMatch,
+        dataQuality: m.dataQuality,
+        windowHit: m.windowHit,
+        isAmbiguous: m.isAmbiguous,
+        reasonCode: m.reasonCode,
+      };
+      // Client-side belt: keep bogus deadhead out of the Deadhead step even
+      // before edge functions pick up the same demotion.
+      return demoteSpuriousDeadheadMatch({
+        ...base,
+        tripTollCharges: m.tripTollCharges,
+        tollAmount: Math.abs(Number(tx.amount) || 0),
+      });
+    });
 
     result.set(txId, converted);
   }

@@ -24,6 +24,7 @@ import { classifyOrphanToll } from "./orphanTollClassifier.ts";
 import { emitDriverTollCharge, isUnifiedTollSettlementEnabled } from "./driver_toll_charge.ts";
 import { mapResolutionReasonToTollResolution } from "./claim_resolution_sync.ts";
 import { classifyTollLedgerEntry } from "./driver_toll_disposition.ts";
+import { demoteSpuriousDeadheadMatch } from "./deadhead_match_guard.ts";
 import { computeTollWorkflowStage, type TollWorkflowStage } from "./toll_workflow_stage.ts";
 import { findTripsInDateRange, findTollsInDateRange, findTollsByMatchedTripId } from "./toll_match_index.ts";
 import { appendCanonicalTollReconciledBatch, type TollReconcileAuditEntry } from "./canonical_from_ops.ts";
@@ -709,26 +710,42 @@ function findTollMatchesServer(
     });
 
     // Structured reason code derived from the window hit (drives client buckets).
-    const reasonCode: MatchResult["reasonCode"] =
+    let reasonCode: MatchResult["reasonCode"] =
       scoreResult.windowHit === "ON_TRIP" ? "ON_TRIP" :
       scoreResult.windowHit === "ENROUTE" ? "ENROUTE_APPROACH" :
       scoreResult.windowHit === "POST_TRIP" ? "POST_TRIP_GAP" : undefined;
 
+    // Deadhead must be unreimbursed true approach — demote huge gaps / trip refunds.
+    const demoted = demoteSpuriousDeadheadMatch({
+      matchType: scoreResult.matchType,
+      reasonCode,
+      reason,
+      timeDifferenceMinutes: diff,
+      varianceAmount,
+      windowHit: scoreResult.windowHit,
+      tripTollCharges: tripRefundAmount,
+      tollAmount: txAmountAbs,
+    });
+
     matches.push({
       tripId: trip.id,
       confidence: scoreResult.confidence,
-      reason,
+      reason: demoted.reason || reason,
       timeDifferenceMinutes: diff,
-      matchType: scoreResult.matchType,
+      matchType: demoted.matchType as MatchType,
       varianceAmount:
-        scoreResult.matchType === "AMOUNT_VARIANCE" ? varianceAmount : undefined,
+        demoted.matchType === "AMOUNT_VARIANCE"
+          ? (demoted.varianceAmount ?? varianceAmount)
+          : scoreResult.matchType === "AMOUNT_VARIANCE"
+          ? varianceAmount
+          : undefined,
       // New Phase 2 fields — now populated
       confidenceScore: scoreResult.confidenceScore,
       vehicleMatch: scoreResult.vehicleMatch,
       driverMatch: scoreResult.driverMatch,
       dataQuality: scoreResult.dataQuality,
-      windowHit: scoreResult.windowHit,
-      reasonCode,
+      windowHit: (demoted.windowHit || scoreResult.windowHit) as ScoreResult["windowHit"],
+      reasonCode: demoted.reasonCode as MatchResult["reasonCode"],
       // Existing trip info fields (unchanged)
       tripDate: trip.date,
       tripAmount: trip.amount,

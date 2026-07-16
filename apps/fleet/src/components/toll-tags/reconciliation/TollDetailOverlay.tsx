@@ -12,7 +12,7 @@ import { Separator } from "../../ui/separator";
 import {
   Clock, DollarSign, MapPin, Camera, Car, User, Gauge, AlertTriangle,
   Check, X, ArrowRight, Calendar, Hash, CreditCard, FileText, Tag,
-  Navigation, Route, Timer, Zap, Shield, Info, Search
+  Navigation, Route, Timer, Zap, Shield, Info, Search, Trash2
 } from "lucide-react";
 import { FinancialTransaction, Trip } from "../../../types/data";
 import { MatchResult, MatchType } from "../../../utils/tollReconciliation";
@@ -34,6 +34,8 @@ interface TollDetailOverlayProps {
   onDismiss?: () => void;
   onApprove?: () => void;
   onReject?: () => void;
+  /** Cash/receipt: discard invalid claim. */
+  onDiscard?: () => void;
   onFlag?: () => void;
   /** Personal: fleet covers cost (reimburse receipt or write off tag). */
   onAcceptPersonal?: () => void;
@@ -63,6 +65,7 @@ export function TollDetailOverlay({
   onDismiss,
   onApprove,
   onReject,
+  onDiscard,
   onFlag,
   onAcceptPersonal,
   onChargeDriver,
@@ -190,14 +193,14 @@ export function TollDetailOverlay({
                 <Check className="h-4 w-4 mr-2" /> {isClaim ? 'Approve Reimbursement' : 'Fleet Pays'}
               </Button>
             )}
-            {isClaim && onReject && (
-              <Button onClick={onReject} variant="outline" className="border-rose-300 text-rose-700 hover:bg-rose-50 flex-1">
-                <X className="h-4 w-4 mr-2" /> Reject Claim
-              </Button>
-            )}
-            {!isClaim && onConfirm && (
+            {onConfirm && (
               <Button onClick={onConfirm} variant="outline" className="border-purple-300 text-purple-700 hover:bg-purple-50 flex-1">
                 <User className="h-4 w-4 mr-2" /> Charge Driver
+              </Button>
+            )}
+            {isClaim && onDiscard && (
+              <Button onClick={onDiscard} variant="ghost" className="text-rose-600 hover:bg-rose-50 flex-1">
+                <Trash2 className="h-4 w-4 mr-2" /> Discard
               </Button>
             )}
           </>
@@ -214,6 +217,11 @@ export function TollDetailOverlay({
             <Button onClick={onChargeDriver} variant="outline" className="border-purple-300 text-purple-700 hover:bg-purple-50 flex-1">
               <User className="h-4 w-4 mr-2" /> Charge Driver
             </Button>
+            {isClaim && onDiscard && (
+              <Button onClick={onDiscard} variant="ghost" className="text-rose-600 hover:bg-rose-50 flex-1">
+                <Trash2 className="h-4 w-4 mr-2" /> Discard
+              </Button>
+            )}
           </>
         );
       }

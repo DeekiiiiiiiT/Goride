@@ -12,9 +12,16 @@ Deno.test("cash toll → cashWash", () => {
   assertEquals(classifyTollLedgerEntry({ paymentMethod: "tag_balance", receiptUrl: "r.jpg" }), "cashWash");
 });
 
-Deno.test("personal resolution → personal (wins over cash)", () => {
+Deno.test("tag personal resolution → personal", () => {
   assertEquals(classifyTollLedgerEntry({ paymentMethod: "tag_balance", resolution: "personal" }), "personal");
-  assertEquals(classifyTollLedgerEntry({ paymentMethod: "cash", resolution: "personal" }), "personal");
+});
+
+Deno.test("cash stays cashWash even when resolution is personal", () => {
+  assertEquals(classifyTollLedgerEntry({ paymentMethod: "cash", resolution: "personal" }), "cashWash");
+  assertEquals(
+    classifyTollLedgerEntry({ paymentMethod: "tag_balance", receiptUrl: "r.jpg", resolution: "personal" }),
+    "cashWash",
+  );
 });
 
 Deno.test("business / write_off / refunded → fleet", () => {

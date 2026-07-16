@@ -2,7 +2,7 @@ import React from 'react';
 import { Card, CardContent } from "../../ui/card";
 import { Button } from "../../ui/button";
 import { Badge } from "../../ui/badge";
-import { ArrowRight, Check, X, Clock, DollarSign, MapPin, Camera, AlertTriangle, Car, User, Gauge, Search } from "lucide-react";
+import { ArrowRight, Check, X, Clock, DollarSign, MapPin, Camera, AlertTriangle, Car, User, Gauge, Search, Trash2 } from "lucide-react";
 import { FinancialTransaction, Trip } from "../../../types/data";
 import { normalizePlatform } from '../../../utils/normalizePlatform';
 import { format } from "date-fns";
@@ -20,6 +20,8 @@ interface SuggestedMatchCardProps {
   onConfirm: () => void;
   onApprove?: () => void;
   onReject?: () => void;
+  /** Cash/receipt: discard invalid claim. */
+  onDiscard?: () => void;
   onFlag?: () => void;
   /** Personal step: fleet covers cost (reimburse receipt or write off tag). */
   onAcceptPersonal?: () => void;
@@ -32,7 +34,7 @@ interface SuggestedMatchCardProps {
 }
 
 export function SuggestedMatchCard({
-  transaction, match, allMatches, orphanMode = false, onConfirm, onApprove, onReject, onFlag, onChargeDriver,
+  transaction, match, allMatches, orphanMode = false, onConfirm, onApprove, onReject, onDiscard, onFlag, onChargeDriver,
   onClickDetail, onFindMatch, onAcceptPersonal,
 }: SuggestedMatchCardProps) {
   const { trip, confidence, reason, timeDifferenceMinutes, matchType, varianceAmount, confidenceScore, vehicleMatch, driverMatch, dataQuality, windowHit, isAmbiguous, reasonCode, rateDrift, officialAmount, tagAmount, usedOfficialRate } = match as any;
@@ -117,9 +119,23 @@ export function SuggestedMatchCard({
                               <Check className="h-4 w-4 mr-2" /> Approve Reimbursement
                           </Button>
                       )}
-                      {onReject && (
-                          <Button size="sm" onClick={onReject} variant="outline" className="border-rose-300 text-rose-700 hover:bg-rose-50 w-full lg:w-auto">
-                              <X className="h-4 w-4 mr-2" /> Reject Claim
+                      {/* Cash personal: Charge Driver (not bare reject) so Charged to Drivers updates */}
+                      <Button
+                          size="sm"
+                          onClick={onConfirm}
+                          variant="outline"
+                          className="border-purple-300 text-purple-700 hover:bg-purple-50 w-full lg:w-auto"
+                      >
+                          <User className="h-4 w-4 mr-2" /> Charge Driver
+                      </Button>
+                      {onDiscard && (
+                          <Button
+                              size="sm"
+                              onClick={onDiscard}
+                              variant="ghost"
+                              className="text-rose-600 hover:bg-rose-50 w-full lg:w-auto"
+                          >
+                              <Trash2 className="h-4 w-4 mr-2" /> Discard
                           </Button>
                       )}
                   </>
@@ -134,6 +150,16 @@ export function SuggestedMatchCard({
                       <Button size="sm" onClick={onChargeDriver} variant="outline" className="border-purple-300 text-purple-700 hover:bg-purple-50 w-full lg:w-auto">
                           <User className="h-4 w-4 mr-2" /> Charge Driver
                       </Button>
+                      {onDiscard && (
+                          <Button
+                              size="sm"
+                              onClick={onDiscard}
+                              variant="ghost"
+                              className="text-rose-600 hover:bg-rose-50 w-full lg:w-auto"
+                          >
+                              <Trash2 className="h-4 w-4 mr-2" /> Discard
+                          </Button>
+                      )}
                   </>
               );
           }
@@ -162,6 +188,16 @@ export function SuggestedMatchCard({
                   >
                       <User className="h-4 w-4 mr-2" /> Charge Driver
                   </Button>
+                  {onDiscard && (
+                      <Button
+                          size="sm"
+                          onClick={onDiscard}
+                          variant="ghost"
+                          className="text-rose-600 hover:bg-rose-50 w-full lg:w-auto"
+                      >
+                          <Trash2 className="h-4 w-4 mr-2" /> Discard
+                      </Button>
+                  )}
               </>
           );
       }
@@ -178,6 +214,16 @@ export function SuggestedMatchCard({
               {matchType === 'DEADHEAD_MATCH' && onChargeDriver && (
                   <Button size="sm" onClick={onChargeDriver} variant="outline" className="border-purple-300 text-purple-700 hover:bg-purple-50 w-full lg:w-auto">
                       <User className="h-4 w-4 mr-2" /> Charge Driver
+                  </Button>
+              )}
+              {onDiscard && (
+                  <Button
+                      size="sm"
+                      onClick={onDiscard}
+                      variant="ghost"
+                      className="text-rose-600 hover:bg-rose-50 w-full lg:w-auto"
+                  >
+                      <Trash2 className="h-4 w-4 mr-2" /> Discard
                   </Button>
               )}
           </>
