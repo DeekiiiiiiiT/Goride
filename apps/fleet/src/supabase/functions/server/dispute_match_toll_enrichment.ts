@@ -266,6 +266,12 @@ export async function enrichAndFilterDisputeBareTolls(
       if (t.tripId) addSibling(String(t.tripId), t);
       addSibling(persistedTripLink(t), t);
     }
+    // REGRESSION GUARD: a candidate whose trip link is only live-suggested
+    // (not persisted on the toll row) never enters the ledger-scan pool above,
+    // so allocateTripRefundShare would hand it $0 (old add(focusToll) semantics).
+    for (const r of resolved) {
+      addSibling(r.tripId, rawTollById.get(r.toll.tollId));
+    }
 
     for (const [tripId, group] of byTrip) {
       const tripDetail = tripDetailsById.get(tripId);

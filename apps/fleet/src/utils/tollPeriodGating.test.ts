@@ -5,12 +5,22 @@ import {
   computeStepCounts,
   classifyPeriodUnderpaidClaim,
   countUnclaimedUnderpaidAsPeriodActionable,
+  STEP_ORDER,
 } from './tollPeriodGating';
 import type { Claim, DisputeRefund, FinancialTransaction, Trip } from '../types/data';
 import type { TollBucket } from './tollBucket';
 import { resolveWizardBucket } from './tollBucket';
 
 const claim = (status: Claim['status']): Pick<Claim, 'status'> => ({ status });
+
+describe('STEP_ORDER', () => {
+  it('applies Unlinked Refunds before Dispute Refunds', () => {
+    expect(STEP_ORDER.indexOf('unlinked-refunds')).toBeLessThan(
+      STEP_ORDER.indexOf('dispute-refunds'),
+    );
+    expect(STEP_ORDER[STEP_ORDER.length - 1]).toBe('underpaid-claims');
+  });
+});
 
 describe('isClaimActionableNow / isClaimInformationalOnly', () => {
   it('Rejected blocks (actionable), never informational', () => {

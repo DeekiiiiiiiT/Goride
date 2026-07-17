@@ -44,6 +44,13 @@ import { applyEvidenceResolution } from "./evidence_routes.ts";
 } from "./unlinked_shortfall_eligibility.ts";
 import { computeChargeShortfall } from "./claim_charge_guard.ts";
 import {
+  applySettlementAllocation,
+  isCorrectSettlementOrderEnabled,
+  reverseSettlementsForSource,
+  projectClaimFromSettlement,
+  getRemainingShortfall,
+} from "./toll_settlement.ts";
+import {
   getFleetTimezone,
   naiveToUtc,
   hasTzSuffix,
@@ -5727,15 +5734,21 @@ async function loadUnlinkedShortfallContext(ledgerHint?: any[]): Promise<Unlinke
   for (const t of trips || []) {
     if (t?.id) tripById.set(t.id, t);
   }
-  const disputeCoveredTollIds = new Set(
-    disputeRefunds
-      .filter(
-        (refund: any) =>
-          refund?.matchedTollId &&
-          (refund.status === "matched" || refund.status === "auto_resolved"),
-      )
-      .map((refund: any) => String(refund.matchedTollId)),
-  );
+  // Dispute-first legacy: hide tolls already linked to a dispute refund.
+  // Correct settlement order (unlinked first) uses live remaining shortfall
+  // instead — a dispute top-up must not block applying the normal trip credit.
+  const settlementOrder = await isCorrectSettlementOrderEnabled();
+  const disputeCoveredTollIds = settlementOrder
+    ? new Set<string>()
+    : new Set(
+        disputeRefunds
+          .filter(
+            (refund: any) =>
+              refund?.matchedTollId &&
+              (refund.status === "matched" || refund.status === "auto_resolved"),
+          )
+          .map((refund: any) => String(refund.matchedTollId)),
+      );
   return {
     claims,
     ledger,
@@ -6160,12 +6173,28 @@ async function applyUnlinkedRefundToClaim(
   }
 
   resolvedTollId = claim.transactionId || resolvedTollId;
+  // Legacy dispute-first guard. Correct order allows trip credit first; a
+  // prior dispute only blocks when the toll is already fully settled.
   if (resolvedTollId && (await isTollLinkedToMatchedDisputeRefund(resolvedTollId))) {
-    return {
-      ok: false,
-      status: 409,
-      error: "This toll already has a matched dispute refund.",
-    };
+    const settlementOrder = await isCorrectSettlementOrderEnabled();
+    if (!settlementOrder) {
+      return {
+        ok: false,
+        status: 409,
+        error: "This toll already has a matched dispute refund.",
+      };
+    }
+    const tollCostCheck = Math.abs(
+      Number(claim.expectedAmount ?? (await loadTollForUnlinkedMatch(resolvedTollId))?.amount ?? claim.amount) || 0,
+    );
+    const left = await getRemainingShortfall(resolvedTollId, tollCostCheck);
+    if (left <= UNLINKED_SHORTFALL_TOLERANCE) {
+      return {
+        ok: false,
+        status: 409,
+        error: "This toll is already fully settled (dispute + prior credits).",
+      };
+    }
   }
   const tollForPlatform = resolvedTollId
     ? (await loadTollForUnlinkedMatch(resolvedTollId)) || tollTx.find((t: any) => t.id === resolvedTollId)
@@ -6247,9 +6276,57 @@ async function applyUnlinkedRefundToClaim(
   const priorStatus = claim.status;
   const priorReason = claim.resolutionReason || null;
   const priorAmount = claim.amount;
+  const tollCostForAlloc = Math.abs(
+    Number(claim.expectedAmount ?? claim.amount) || remaining || 0,
+  );
+
+  // Canonical allocation (idempotent). Soft-caps to remaining shortfall.
+  if (resolvedTollId && applied > UNLINKED_SHORTFALL_TOLERANCE) {
+    try {
+      await applySettlementAllocation({
+        sourceType: "unlinked_trip",
+        sourceId: tripId,
+        tollId: String(resolvedTollId),
+        claimId: claim.id,
+        amount: applied,
+        tollCost: tollCostForAlloc,
+        tollPeriodAnchor: String(claim.date || trip.date || "").slice(0, 10) || null,
+        actor: "admin",
+        notes: `Unlinked trip refund applied $${applied.toFixed(2)}`,
+        metadata: { tripId, shareCap },
+      });
+    } catch (allocErr: any) {
+      console.warn(`[UnlinkedShortfall] allocation warn: ${allocErr?.message}`);
+    }
+  }
 
   if (alreadyReimbursed) {
     // Claim already manually reimbursed — only clear the unlinked trip link.
+  } else if (await isCorrectSettlementOrderEnabled()) {
+    // Project from remaining shortfall — never mark Reimbursed when leftover > 0.
+    const projected = projectClaimFromSettlement({
+      tollCost: tollCostForAlloc,
+      remaining: leftover,
+      priorPaid: nextPaid,
+    });
+    await upsertClaimFn(
+      {
+        ...claim,
+        status: projected.status,
+        resolutionReason: projected.resolutionReason,
+        paidAmount: projected.paidAmount,
+        amount: projected.amount,
+        expectedAmount: projected.expectedAmount,
+        unlinkedTripId: tripId,
+        unlinkedSourcePlatform: tripPlatform,
+        preUnlinkedStatus: priorStatus,
+        preUnlinkedResolutionReason: priorReason,
+        preUnlinkedPaidAmount: priorPaid,
+        preUnlinkedAmount: priorAmount,
+      },
+      c,
+      { syncMode: "force" },
+    );
   } else if (fullyCovered) {
     await upsertClaimFn(
       {
@@ -6355,6 +6432,21 @@ async function applyUnlinkedRefundToTargets(
   const trip = await kv.get(`trip:${tripId}`);
   if (!trip) return { ok: false, status: 404, error: `Trip ${tripId} not found` };
   const tripRefund = Math.abs(Number(trip.tollCharges) || 0);
+
+  // Server-side multi-target validation (duplicate / over-budget shares).
+  const { validateMultiTargetShares } = await import("../../../utils/tollSettlement.ts");
+  const shareCheck = validateMultiTargetShares(
+    tripRefund,
+    targets
+      .filter((t) => t.tollId && typeof t.share === "number" && t.share > 0)
+      .map((t) => ({ tollId: String(t.tollId), share: Number(t.share) })),
+  );
+  if (
+    targets.every((t) => typeof t.share === "number" && t.share > 0) &&
+    !shareCheck.ok
+  ) {
+    return { ok: false, status: 409, error: shareCheck.error };
+  }
 
   // If shares not provided, compute pool allocation from live suggestions.
   let planned = targets;
@@ -6566,6 +6658,15 @@ async function undoApplyUnlinkedRefundToClaim(
         error: "Undo Apply to Underpaid is disabled. Enable unlinkedRefundUndoEnabled in Toll Automation Settings.",
       };
     }
+  }
+
+  // Reverse canonical allocations for this trip credit (idempotent).
+  try {
+    await reverseSettlementsForSource("unlinked_trip", tripId, {
+      actor: "undo-unlinked-apply",
+    });
+  } catch (e: any) {
+    console.warn(`[UnlinkedShortfall:Undo] allocation reverse warn: ${e?.message}`);
   }
 
   const trip = await kv.get(`trip:${tripId}`);
@@ -7477,6 +7578,128 @@ async function reconcileTollForDisputeMatch(transactionId: string, tripId: strin
     console.log(`[TollReconciliation] reconcileTollForDisputeMatch failed for toll ${transactionId} → trip ${tripId}: ${err.message}`);
   }
 }
+
+/**
+ * Dry-run / apply backfill of historical trip+dispute settlements into
+ * toll_alloc:* rows. Does not change claim/toll totals — only writes missing
+ * allocation provenance for the correct settlement order.
+ *
+ * POST body: { dryRun?: boolean, tollIds?: string[] }
+ */
+app.post(`${BASE}/settlement-allocations/backfill`, async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const dryRun = body?.dryRun !== false;
+    const filterTollIds: Set<string> | null = Array.isArray(body?.tollIds)
+      ? new Set(body.tollIds.map(String))
+      : null;
+
+    const [ledger, disputeRefunds, trips] = await Promise.all([
+      loadAllByPrefix("toll_ledger:"),
+      loadDisputeRefundRecords(),
+      loadAllTrips(),
+    ]);
+    const tripById = new Map<string, any>();
+    for (const t of trips || []) {
+      if (t?.id) tripById.set(String(t.id), t);
+    }
+
+    const report: {
+      dryRun: boolean;
+      wouldWrite: number;
+      written: number;
+      exceptions: Array<{ tollId: string; reason: string }>;
+      samples: Array<{ tollId: string; sourceType: string; amount: number }>;
+    } = { dryRun, wouldWrite: 0, written: 0, exceptions: [], samples: [] };
+
+    // 1) Unlinked applies stored on trip resolutions
+    for (const trip of trips || []) {
+      const res = trip?.tollRefundResolution;
+      if (!res || res.status !== "expense_logged") continue;
+      const source = String(res.source || "");
+      if (!source.startsWith("system:unlinked_shortfall:")) continue;
+      const targets: Array<{ tollId?: string; claimId?: string; share?: number }> =
+        Array.isArray(res.appliedTargets) && res.appliedTargets.length
+          ? res.appliedTargets
+          : [{ tollId: res.appliedToTollId, claimId: res.appliedToClaimId, share: Math.abs(Number(trip.tollCharges) || 0) }];
+      for (const t of targets) {
+        const tollId = t.tollId ? String(t.tollId) : "";
+        if (!tollId) continue;
+        if (filterTollIds && !filterTollIds.has(tollId)) continue;
+        const toll = ledger.find((x: any) => x?.id === tollId);
+        const tollCost = Math.abs(Number(toll?.amount) || 0);
+        const amount = Math.abs(Number(t.share) || Number(trip.tollCharges) || 0);
+        if (!(amount > 0) || !(tollCost > 0)) {
+          report.exceptions.push({ tollId, reason: "missing amount or toll cost" });
+          continue;
+        }
+        report.wouldWrite++;
+        report.samples.push({ tollId, sourceType: "unlinked_trip", amount });
+        if (!dryRun) {
+          const r = await applySettlementAllocation({
+            sourceType: "unlinked_trip",
+            sourceId: String(trip.id),
+            tollId,
+            claimId: t.claimId || null,
+            amount,
+            tollCost,
+            actor: "backfill",
+            notes: "Historical unlinked apply backfill",
+          });
+          if (r.ok && !r.duplicate && r.applyAmount > 0) report.written++;
+        }
+      }
+    }
+
+    // 2) Matched dispute refunds
+    for (const refund of disputeRefunds) {
+      if (!refund?.matchedTollId) continue;
+      if (refund.status !== "matched" && refund.status !== "auto_resolved") continue;
+      const tollId = String(refund.matchedTollId);
+      if (filterTollIds && !filterTollIds.has(tollId)) continue;
+      const toll = ledger.find((x: any) => x?.id === tollId);
+      const tollCost = Math.abs(Number(toll?.amount) || 0);
+      const amount = Math.abs(Number(refund.amount) || 0);
+      if (!(amount > 0) || !(tollCost > 0)) {
+        report.exceptions.push({ tollId, reason: "dispute missing amount/cost" });
+        continue;
+      }
+      // Overpaid / ambiguous: credit would exceed cost with no prior unlinked — flag only.
+      const remaining = await getRemainingShortfall(tollId, tollCost);
+      if (amount > remaining + UNLINKED_SHORTFALL_TOLERANCE && remaining <= UNLINKED_SHORTFALL_TOLERANCE) {
+        // Already fully credited — skip duplicate
+        continue;
+      }
+      if (amount > remaining + 1) {
+        report.exceptions.push({
+          tollId,
+          reason: `dispute $${amount} exceeds remaining $${remaining}`,
+        });
+        continue;
+      }
+      report.wouldWrite++;
+      report.samples.push({ tollId, sourceType: "dispute_refund", amount: Math.min(amount, remaining || amount) });
+      if (!dryRun) {
+        const r = await applySettlementAllocation({
+          sourceType: "dispute_refund",
+          sourceId: String(refund.id),
+          tollId,
+          claimId: refund.matchedClaimId || null,
+          amount: Math.min(amount, remaining || amount),
+          tollCost,
+          actor: "backfill",
+          notes: "Historical dispute match backfill",
+        });
+        if (r.ok && !r.duplicate && r.applyAmount > 0) report.written++;
+      }
+    }
+
+    return c.json({ success: true, report });
+  } catch (e: any) {
+    console.log(`[TollReconciliation] settlement backfill error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
 
 export default app;
 

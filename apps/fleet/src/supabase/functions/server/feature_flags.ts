@@ -44,6 +44,8 @@ export const FEATURE_FLAGS = {
   STRICT_AUTH: "strict_auth",
   STRICT_ORG_FILTER: "strict_org_filter",
   PRODUCT_LINE_FILTER: "product_line_filter",
+  /** Unlinked trip credits first, then dispute top-ups; allocation-backed balances. */
+  CORRECT_TOLL_SETTLEMENT_ORDER: "correct_toll_settlement_order",
 } as const;
 
 export type FeatureFlagName = typeof FEATURE_FLAGS[keyof typeof FEATURE_FLAGS];
@@ -353,6 +355,12 @@ export async function initializeDefaultFlags(): Promise<void> {
       enabled: false,
       description: "Filter data by product line (fleet vs enterprise)",
     },
+    {
+      name: FEATURE_FLAGS.CORRECT_TOLL_SETTLEMENT_ORDER,
+      enabled: true,
+      description:
+        "Apply unlinked trip refunds before dispute refunds; settle via allocation ledger",
+    },
   ];
 
   for (const def of defaults) {
@@ -377,6 +385,7 @@ export async function emergencyDisableAll(updatedBy?: string): Promise<void> {
   await setFeatureFlag(FEATURE_FLAGS.STRICT_AUTH, false, { updatedBy });
   await setFeatureFlag(FEATURE_FLAGS.STRICT_ORG_FILTER, false, { updatedBy });
   await setFeatureFlag(FEATURE_FLAGS.PRODUCT_LINE_FILTER, false, { updatedBy });
+  await setFeatureFlag(FEATURE_FLAGS.CORRECT_TOLL_SETTLEMENT_ORDER, false, { updatedBy });
 
   console.log("[FeatureFlags] All strict flags disabled");
 }

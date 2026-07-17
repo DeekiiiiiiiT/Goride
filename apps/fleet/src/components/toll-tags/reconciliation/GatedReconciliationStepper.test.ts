@@ -16,7 +16,34 @@ const counts = (overrides: Partial<Record<StepId, StepCounts>>): Record<StepId, 
   return { ...base, ...overrides };
 };
 
+describe('STEP_ORDER', () => {
+  it('places Unlinked Refunds before Dispute Refunds (correct settlement order)', () => {
+    expect(ORDER.indexOf('unlinked-refunds')).toBeLessThan(ORDER.indexOf('dispute-refunds'));
+    expect(ORDER.indexOf('dispute-refunds')).toBeLessThan(ORDER.indexOf('underpaid-claims'));
+    expect(ORDER).toEqual([
+      'needs-review',
+      'personal-use',
+      'deadhead',
+      'unlinked-refunds',
+      'dispute-refunds',
+      'underpaid-claims',
+    ]);
+  });
+});
+
 describe('computeGatedStepStates', () => {
+  it('locks Dispute while Unlinked still has actionable items', () => {
+    const states = computeGatedStepStates(
+      counts({ 'unlinked-refunds': { actionable: 3, informational: 0 } }),
+      ORDER,
+    );
+    const byId = Object.fromEntries(states.map((s) => [s.id, s]));
+    expect(byId['unlinked-refunds'].locked).toBe(false);
+    expect(byId['unlinked-refunds'].isCurrent).toBe(true);
+    expect(byId['dispute-refunds'].locked).toBe(true);
+    expect(byId['underpaid-claims'].locked).toBe(true);
+  });
+
   it('when every step is clear, nothing is locked and the last step is current', () => {
     const states = computeGatedStepStates(counts({}), ORDER);
     expect(states.every((s) => !s.locked)).toBe(true);

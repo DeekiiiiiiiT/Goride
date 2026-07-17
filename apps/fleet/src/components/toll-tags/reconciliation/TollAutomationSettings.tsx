@@ -220,8 +220,9 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
                 <div>
                   <h4 className="text-sm font-semibold text-slate-900">Refund auto-resolution</h4>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Auto-clears integrity-safe cash washes, and auto-links high-confidence dispute
-                    refunds to their underpaid claim. Everything else waits for review.
+                    Runs in wizard order: Unlinked Refunds (normal trip credits) first, then
+                    Dispute Refunds (Support Adjustment top-ups) against the remaining shortfall.
+                    Integrity-safe cash washes only when no toll can take the credit.
                   </p>
                 </div>
 
@@ -270,7 +271,8 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
                     className="w-full mt-2 accent-indigo-600"
                   />
                   <p className="text-xs text-slate-500 mt-1">
-                    Dispute auto-match uses a higher bar than cash-wash. Shortfall and trip-time rules still apply.
+                    Dispute auto-match runs after Unlinked credits and uses a higher bar than
+                    cash-wash. It only settles the live remaining shortfall.
                   </p>
                 </div>
 

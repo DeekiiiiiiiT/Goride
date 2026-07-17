@@ -46,6 +46,13 @@ import {
   enrichAndFilterDisputeBareTolls,
   resolveLiveTripContextForToll,
 } from "./dispute_match_toll_enrichment.ts";
+import {
+  applySettlementAllocation,
+  isCorrectSettlementOrderEnabled,
+  reverseSettlementsForSource,
+  getRemainingShortfall,
+  projectClaimFromSettlement,
+} from "./toll_settlement.ts";
 
 const app = new Hono();
 
@@ -306,32 +313,89 @@ async function matchRefundToClaim(
       } else {
         const priorPaid = Math.abs(Number((claim as any).paidAmount) || 0);
         const disputeAmount = Math.abs(Number(refund.amount) || 0);
+        const tollCost = Math.abs(
+          Number((claim as any).expectedAmount ?? (claim as any).amount) || 0,
+        );
+        const settlementOrder = await isCorrectSettlementOrderEnabled();
+
+        // Settle only the live remaining shortfall (after trip/unlinked credits).
+        let remainingBefore = Math.abs(Number((claim as any).amount) || 0);
+        if (settlementOrder && tollTransactionId) {
+          remainingBefore = await getRemainingShortfall(tollTransactionId, tollCost);
+          if (remainingBefore <= DISPUTE_SHORTFALL_TOLERANCE && cs !== "Resolved") {
+            // Fall back to claim amount when no allocations yet (legacy rows).
+            remainingBefore = Math.max(
+              remainingBefore,
+              Math.abs(Number((claim as any).amount) || 0),
+            );
+          }
+        }
+        const applyAmt = Math.min(disputeAmount, remainingBefore || disputeAmount);
+
+        if (settlementOrder && tollTransactionId && applyAmt > DISPUTE_SHORTFALL_TOLERANCE) {
+          try {
+            await applySettlementAllocation({
+              sourceType: "dispute_refund",
+              sourceId: id,
+              tollId: tollTransactionId,
+              claimId: resolvedClaimId,
+              amount: applyAmt,
+              tollCost,
+              tollPeriodAnchor: String((claim as any).date || "").slice(0, 10) || null,
+              actor: auto ? "system-auto" : "admin",
+              notes: `Dispute refund $${applyAmt.toFixed(2)}`,
+            });
+          } catch (e: any) {
+            console.warn(`[DisputeRefund] allocation warn: ${e?.message}`);
+          }
+        }
+
+        const remainingAfter = Math.max(
+          0,
+          Math.round(((remainingBefore || disputeAmount) - applyAmt) * 100) / 100,
+        );
+        const projected = settlementOrder
+          ? projectClaimFromSettlement({
+              tollCost,
+              remaining: remainingAfter,
+              priorPaid: priorPaid + applyAmt,
+              disputeRefundId: id,
+            })
+          : {
+              status: "Resolved" as const,
+              resolutionReason: "Reimbursed" as const,
+              amount: 0,
+              paidAmount: Math.max(priorPaid, disputeAmount),
+              expectedAmount: tollCost,
+            };
+
         await upsertClaim(
           {
             ...(claim as any),
-            status: "Resolved",
-            resolutionReason: "Reimbursed",
+            status: projected.status,
+            resolutionReason: projected.resolutionReason,
             disputeRefundId: id,
-            amount: 0,
-            paidAmount: Math.max(priorPaid, disputeAmount),
-            preDisputeStatus: cs, // so unmatch can restore it
-            // Prior resolutionReason (e.g. "Charge Driver") — lets unmatch
-            // restore the exact prior reason, not just null. Only meaningful
-            // once cs === "Resolved" was reachable here at all.
+            amount: projected.amount,
+            paidAmount: projected.paidAmount,
+            expectedAmount: projected.expectedAmount || tollCost,
+            preDisputeStatus: cs,
             preDisputeResolutionReason: cs === "Resolved" ? (claim as any).resolutionReason : (claim as any).preDisputeResolutionReason,
+            preDisputeAmount: (claim as any).amount,
+            preDisputePaidAmount: priorPaid,
           },
           c,
-          // disputeRefundTripSyncEnabled is this cascade's OWN outer gate,
-          // independent of the system-wide driverTollChargeSyncEnabled —
-          // force the sync when it's on (never fall back to upsertClaim's
-          // legacy branch, which this cascade never had), or skip entirely
-          // when off (matches this cascade's prior conservative behavior of
-          // doing nothing financial while its flag is off).
           { syncMode: "force", suggestedTripId: opts?.tripId ?? (claim as any).tripId, fleetTz: await getFleetTimezone() },
         );
-        updated = { ...updated, status: "auto_resolved", matchedClaimId: resolvedClaimId };
+        // Only auto_resolved when the shortfall is fully closed.
+        if (projected.status === "Resolved") {
+          updated = { ...updated, status: "auto_resolved", matchedClaimId: resolvedClaimId };
+        } else {
+          updated = { ...updated, status: "matched", matchedClaimId: resolvedClaimId };
+        }
         await kv.set(recordKey, updated);
-        console.log(`[DisputeRefund] ${auto ? "Auto-" : ""}resolved claim ${resolvedClaimId} as Reimbursed (refund ${id})`);
+        console.log(
+          `[DisputeRefund] ${auto ? "Auto-" : ""}matched claim ${resolvedClaimId} (apply $${applyAmt}, remaining $${remainingAfter}) via refund ${id}`,
+        );
       }
     }
   }
@@ -546,8 +610,25 @@ app.get(`${BASE}`, async (c) => {
       const autoPeriodActive = Boolean(periodFrom && periodTo);
       if (enabled && autoPeriodActive) {
         const fleetTz = await getFleetTimezone();
+        const settlementOrder = await isCorrectSettlementOrderEnabled();
+        // Unlinked-first: do not auto-match disputes while the driver still has
+        // unresolved trip-refund credits that should settle the fare half first.
+        let blockingUnlinkedDrivers: Set<string> | null = null;
+        if (settlementOrder) {
+          blockingUnlinkedDrivers = new Set();
+          const { trips, tollTx } = await loadAllTollLedgerWithTrips();
+          const linkedTripIds = new Set(
+            (tollTx || []).filter((t: any) => t?.tripId).map((t: any) => t.tripId),
+          );
+          for (const trip of trips || []) {
+            if (!trip?.driverId || !(Number(trip.tollCharges) > 0)) continue;
+            if (!isUnresolvedRefund(trip, linkedTripIds)) continue;
+            blockingUnlinkedDrivers.add(String(trip.driverId));
+          }
+        }
         for (const refund of refunds) {
           if (refund.status !== "unmatched" || !refund.driverId) continue;
+          if (blockingUnlinkedDrivers?.has(String(refund.driverId))) continue;
           const candidates = (await buildDisputeCandidates(refund)).filter((c) => {
             const d = fleetTzDay(c.date, fleetTz);
             return Boolean(d && d >= periodFrom && d <= periodTo);
@@ -715,6 +796,12 @@ export async function unmatchDisputeRefundById(id: string, c: unknown): Promise<
     throw Object.assign(new Error(`Dispute refund not found: ${id}`), { status: 404 });
   }
 
+  try {
+    await reverseSettlementsForSource("dispute_refund", id, { actor: "unmatch-dispute" });
+  } catch (e: any) {
+    console.warn(`[DisputeRefund] allocation reverse warn: ${e?.message}`);
+  }
+
   const settings = await getRefundAutomationSettings();
 
   const claimId = refund.matchedClaimId;
@@ -734,9 +821,18 @@ export async function unmatchDisputeRefundById(id: string, c: unknown): Promise<
             ...claim,
             status: claim.preDisputeStatus || "Sent_to_Driver",
             resolutionReason: revertReason || null,
+            // Restore pre-dispute shortfall amounts when present (settlement order).
+            amount:
+              typeof claim.preDisputeAmount === "number" ? claim.preDisputeAmount : claim.amount,
+            paidAmount:
+              typeof claim.preDisputePaidAmount === "number"
+                ? claim.preDisputePaidAmount
+                : claim.paidAmount,
             disputeRefundId: null,
             preDisputeStatus: null,
             preDisputeResolutionReason: null,
+            preDisputeAmount: null,
+            preDisputePaidAmount: null,
             preIsReconciled: revertReason === undefined ? undefined : claim.preIsReconciled,
           },
           c,

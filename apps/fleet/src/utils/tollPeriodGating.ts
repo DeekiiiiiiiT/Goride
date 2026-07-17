@@ -17,17 +17,18 @@ export type StepId =
   | 'unlinked-refunds';
 
 /**
- * Platform payments before Underpaid & Claims:
- * - Dispute Refunds: Uber Support corrections — matching can auto-reimburse a shortfall claim.
- * - Unlinked Refunds: trip toll credits with no linked expense — apply to underpaid claims
- *   before Charge Driver so leftover shortfall is all that remains to decide.
+ * Platform payments before Underpaid & Claims (correct settlement order):
+ * - Unlinked Refunds: normal trip toll credits first — apply/link to the toll,
+ *   leave only the true shortfall.
+ * - Dispute Refunds: Support Adjustment top-ups settle that remaining shortfall.
+ * - Underpaid & Claims: Charge Driver / write-off only on what is still open.
  */
 export const STEP_ORDER: StepId[] = [
   'needs-review',
   'personal-use',
   'deadhead',
-  'dispute-refunds',
   'unlinked-refunds',
+  'dispute-refunds',
   'underpaid-claims',
 ];
 

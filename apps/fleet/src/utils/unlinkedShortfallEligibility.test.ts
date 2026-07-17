@@ -148,6 +148,21 @@ describe('unlinked shortfall eligibility', () => {
         workflowStage: 'underpaid_pending',
       }),
     ).toBe(true);
+    // Unlinked-first: needs_review / matched can still receive a trip credit
+    expect(
+      isEligibleUnlinkedShortfallToll({
+        type: 'usage',
+        amount: 380,
+        workflowStage: 'needs_review',
+      }),
+    ).toBe(true);
+    expect(
+      isEligibleUnlinkedShortfallToll({
+        type: 'usage',
+        amount: 380,
+        workflowStage: 'matched',
+      }),
+    ).toBe(true);
   });
 
   it('detects Apply-to-Underpaid resolutions for undo routing', () => {

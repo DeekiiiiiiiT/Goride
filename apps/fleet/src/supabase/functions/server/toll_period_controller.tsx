@@ -56,8 +56,8 @@ const STEP_IDS: StepId[] = [
   "needs-review",
   "personal-use",
   "deadhead",
-  "dispute-refunds",
   "unlinked-refunds",
+  "dispute-refunds",
   "underpaid-claims",
 ];
 

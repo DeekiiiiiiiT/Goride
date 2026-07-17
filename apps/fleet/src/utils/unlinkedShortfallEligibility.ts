@@ -226,18 +226,23 @@ export function isEligibleUnlinkedShortfallToll(toll: {
   if (
     stage.startsWith('personal_use') ||
     stage.startsWith('deadhead') ||
-    stage === 'matched' ||
     stage === 'claim_resolved'
   ) {
     return false;
   }
 
-  // True underpaid path only (underpaid_pending / AMOUNT_VARIANCE / open claim_filed)
+  // Unlinked-first settlement: needs_review / matched tolls can still take a
+  // trip credit when a live shortfall remains (fully reimbursed rows are
+  // filtered later by remaining shortfall). Prior path only allowed
+  // underpaid_* / AMOUNT_VARIANCE / claim_filed.
   return (
     toll.matchTypeCode === 'AMOUNT_VARIANCE' ||
+    stage === 'needs_review' ||
     stage === 'underpaid_pending' ||
     stage === 'underpaid' ||
-    stage === 'claim_filed'
+    stage === 'claim_filed' ||
+    stage === 'matched' ||
+    !stage
   );
 }
 

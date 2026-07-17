@@ -17,6 +17,10 @@ import {
   recomputeAndPersistWorkflowStage,
   undoApplyUnlinkedRefundToClaim,
 } from "./toll_controller.tsx";
+import {
+  isCorrectSettlementOrderEnabled,
+  reverseSettlementsForTolls,
+} from "./toll_settlement.ts";
 
 function fleetTzDay(dateStr: string, tz: string): string {
   const s = String(dateStr);
@@ -283,6 +287,20 @@ export async function executePeriodReconciliationReset(
 
   const settings = await getRefundAutomationSettings();
   const claimSyncMode = settings.driverTollChargeSyncEnabled ? "force" : "skip";
+  const settlementOrder = await isCorrectSettlementOrderEnabled();
+
+  // Correct order applies unlinked → dispute; reverse dependency-first:
+  // dispute allocations → unlinked allocations → claims/tolls.
+  if (settlementOrder) {
+    for (const refundId of inventory.disputeRefundIds) {
+      try {
+        await unmatchDisputeRefundById(refundId, c);
+        summary.disputeRefundsUnmatched++;
+      } catch (e: any) {
+        errors.push(`unmatch dispute ${refundId}: ${e.message}`);
+      }
+    }
+  }
 
   const unlinkedApplyStillResolved = new Set<string>();
   for (const tripId of inventory.unlinkedApplyTripIds) {
@@ -311,12 +329,23 @@ export async function executePeriodReconciliationReset(
     }
   }
 
-  for (const refundId of inventory.disputeRefundIds) {
+  if (!settlementOrder) {
+    for (const refundId of inventory.disputeRefundIds) {
+      try {
+        await unmatchDisputeRefundById(refundId, c);
+        summary.disputeRefundsUnmatched++;
+      } catch (e: any) {
+        errors.push(`unmatch dispute ${refundId}: ${e.message}`);
+      }
+    }
+  }
+
+  // Clear any leftover allocation rows owned by period tolls.
+  if (settlementOrder && inventory.tollIds.length > 0) {
     try {
-      await unmatchDisputeRefundById(refundId, c);
-      summary.disputeRefundsUnmatched++;
+      await reverseSettlementsForTolls(inventory.tollIds, { actor: "period_reset" });
     } catch (e: any) {
-      errors.push(`unmatch dispute ${refundId}: ${e.message}`);
+      errors.push(`reverse toll allocations: ${e.message}`);
     }
   }
 
