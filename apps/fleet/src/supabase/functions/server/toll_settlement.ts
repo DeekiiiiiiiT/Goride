@@ -143,11 +143,20 @@ export async function applySettlementAllocation(
   const applyAmount = softCap ? clamp.applyAmount : Math.abs(input.amount);
 
   // Idempotency via KV first (works even before SQL migration).
-  const priorIdem = await kv.get(`${KV_IDEM_PREFIX}${idem}`);
-  if (priorIdem?.id) {
-    const prior = await kv.get(`${KV_PREFIX}${priorIdem.id}`);
-    if (prior) {
-      const allocs = await loadAllocationsForToll(input.tollId);
+  // Reversed rows must NOT satisfy idempotency: a period reset reverses the
+  // allocation, and redoing the same apply (same source/toll/amount) has to
+  // produce a fresh ACTIVE row — otherwise redone work silently records
+  // nothing. Walk the reapply chain to a deterministic next-generation key.
+  let effectiveIdem = idem;
+  for (let gen = 0; gen < 8; gen++) {
+    const pointer = await kv.get(`${KV_IDEM_PREFIX}${effectiveIdem}`);
+    if (!pointer?.id) break;
+    const prior = await kv.get(`${KV_PREFIX}${pointer.id}`);
+    if (!prior) break;
+    const priorReversed = existing.some(
+      (a) => a.sourceType === "reversal" && String(a.reversesId || "") === String(prior.id),
+    );
+    if (!priorReversed) {
       return {
         ok: true,
         duplicate: true,
@@ -160,10 +169,13 @@ export async function applySettlementAllocation(
           amount: prior.amount,
           idempotency_key: prior.idempotencyKey,
         }),
-        remainingAfter: remainingTollShortfall(input.tollCost, allocs, input.tollId),
+        remainingAfter: remainingTollShortfall(input.tollCost, existing, input.tollId),
         applyAmount: Math.abs(Number(prior.amount) || 0),
       };
     }
+    // Deterministic per reversed generation — a double-click after the same
+    // reset lands on the same key and stays idempotent.
+    effectiveIdem = `${idem}:reapply:${prior.id}`;
   }
 
   let sqlAllocation: SettlementAllocationLike | null = null;
@@ -177,7 +189,7 @@ export async function applySettlementAllocation(
         amount: applyAmount,
         toll_cost: input.tollCost,
         toll_period_anchor: input.tollPeriodAnchor || null,
-        idempotency_key: idem,
+        idempotency_key: effectiveIdem,
         actor: input.actor || null,
         notes: input.notes || null,
         metadata: input.metadata || {},
@@ -199,7 +211,7 @@ export async function applySettlementAllocation(
     claimId: input.claimId || null,
     amount: applyAmount,
     tollPeriodAnchor: input.tollPeriodAnchor || null,
-    idempotencyKey: idem,
+    idempotencyKey: effectiveIdem,
     reversesId: null,
     actor: input.actor || null,
     notes: input.notes || null,
@@ -219,7 +231,7 @@ export async function applySettlementAllocation(
       toll_id: input.tollId,
       claim_id: input.claimId,
       amount: applyAmount,
-      idempotency_key: idem,
+      idempotency_key: effectiveIdem,
     }),
     remainingAfter: remainingTollShortfall(input.tollCost, after, input.tollId),
     applyAmount,

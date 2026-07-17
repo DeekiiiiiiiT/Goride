@@ -283,4 +283,20 @@ describe('unlinked shortfall eligibility', () => {
       }),
     ).toBe(false);
   });
+
+  it('recommended shortcut hidden when share is a tiny slice of a large credit', () => {
+    // $370 credit vs $10 leftover — applying $10 would strand $360 and consume
+    // a shortfall a dispute refund should settle. Must route to Review.
+    expect(
+      isRecommendedUnlinkedShortfall({
+        confidence: 97,
+        tripPlatform: 'Uber',
+        tollPlatform: 'Uber',
+        platformMismatch: false,
+        tripRefund: 370,
+        remainingShortfall: 10,
+        proposedShare: 10,
+      }),
+    ).toBe(false);
+  });
 });

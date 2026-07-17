@@ -6271,6 +6271,21 @@ async function applyUnlinkedRefundToClaim(
   const leftover = leftoverAfterApply(remaining || shareCap, applied);
   const fullyCovered = coversShortfallFully(remaining || shareCap, applied);
 
+  // Guard: never resolve the trip while material credit is stranded. Without
+  // this, a $370 credit applied to a $10 leftover closes the trip with $360
+  // unaccounted AND consumes the shortfall a dispute refund should settle.
+  // Applies even to forceSingleTarget (explicit picks) — stranding money is
+  // never a valid outcome. Multi-target path (skipTripResolution) validates
+  // the pool total itself before applying.
+  if (!opts?.skipTripResolution && hasMaterialExcessRefund(tripRefund, applied)) {
+    const stranded = Math.max(0, tripRefund - applied);
+    return {
+      ok: false,
+      status: 409,
+      error: `Only $${applied.toFixed(2)} of this $${tripRefund.toFixed(2)} trip credit fits here — $${stranded.toFixed(2)} would be left unaccounted. Split it across underpaid tolls in Review, or resolve this refund as cash wash / dismissed instead.`,
+    };
+  }
+
   const priorPaid = Math.abs(Number(claim.paidAmount) || 0);
   const nextPaid = priorPaid + applied;
   const priorStatus = claim.status;
@@ -6465,6 +6480,21 @@ async function applyUnlinkedRefundToTargets(
         share: row?.proposedShare,
       };
     });
+  }
+
+  // Pool must consume the credit — resolving the trip with material leftover
+  // strands money and eats shortfalls that dispute refunds should settle.
+  const totalPlanned = planned.reduce(
+    (sum, t) => sum + (typeof t.share === "number" && t.share > 0 ? t.share : 0),
+    0,
+  );
+  if (hasMaterialExcessRefund(tripRefund, totalPlanned)) {
+    const stranded = Math.max(0, tripRefund - totalPlanned);
+    return {
+      ok: false,
+      status: 409,
+      error: `Selected tolls only absorb $${totalPlanned.toFixed(2)} of this $${tripRefund.toFixed(2)} credit — $${stranded.toFixed(2)} would be left unaccounted. Add more underpaid tolls, or resolve this refund as cash wash / dismissed instead.`,
+    };
   }
 
   const appliedTargets: Array<{ claimId: string; tollId: string | null; share: number }> = [];

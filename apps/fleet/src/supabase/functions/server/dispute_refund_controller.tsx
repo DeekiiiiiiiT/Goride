@@ -51,8 +51,10 @@ import {
   isCorrectSettlementOrderEnabled,
   reverseSettlementsForSource,
   getRemainingShortfall,
+  loadAllocationsForToll,
   projectClaimFromSettlement,
 } from "./toll_settlement.ts";
+import { remainingTollShortfall } from "../../../utils/tollSettlement.ts";
 
 const app = new Hono();
 
@@ -283,7 +285,14 @@ async function matchRefundToClaim(
   }
 
   // Toll-only match: resolve the linked claim so partial shortfall rows clear.
+  // A stale claimId (e.g. UI list captured before a period reset recreated the
+  // claim) must not produce a dangling matchedClaimId — fall back to the live
+  // claim for this toll.
   let resolvedClaimId = claimId;
+  if (resolvedClaimId && !(await kv.get(`claim:${resolvedClaimId}`))) {
+    console.warn(`[DisputeRefund] Claim ${resolvedClaimId} no longer exists — resolving live claim for toll ${tollTransactionId}`);
+    resolvedClaimId = null;
+  }
   if (!resolvedClaimId) {
     resolvedClaimId = await findExistingClaimIdForToll(tollTransactionId);
   }
@@ -684,15 +693,36 @@ app.patch(`${BASE}/:id/match`, async (c) => {
 
     const tollForGuard = await loadTollForClaim(tollTransactionId);
     if (tollForGuard) {
-      const fleetTz = await getFleetTimezone();
-      const liveRefund = await computeLiveTripRefundForToll(tollForGuard, fleetTz, {
-        suggestedTripId: suggestedTripId ?? null,
-      });
       const tollAmount = Math.abs(tollForGuard.amount || 0);
-      if (liveRefund != null && isFullyReimbursedViaTrip(tollAmount, liveRefund)) {
-        return c.json({
-          error: "This toll was already fully reimbursed on the trip fare — use Needs Review or Underpaid & Claims, not Dispute Refunds.",
-        }, 409);
+      // Cheap canonical guard first: settlement allocations are the source of
+      // truth for what's already credited. The legacy live-refund guard did a
+      // full-ledger geo-match scan (O(tolls × trips)) that blew the edge CPU
+      // budget — only use it when no allocations exist, and never let it
+      // infer trip links from scratch.
+      let guardedByAllocations = false;
+      if (await isCorrectSettlementOrderEnabled()) {
+        const allocs = await loadAllocationsForToll(tollTransactionId);
+        if (allocs.length > 0) {
+          guardedByAllocations = true;
+          const remaining = remainingTollShortfall(tollAmount, allocs, tollTransactionId);
+          if (remaining <= DISPUTE_SHORTFALL_TOLERANCE) {
+            return c.json({
+              error: "This toll is already fully settled (trip credits + adjustments cover the full cost) — nothing left for a dispute refund.",
+            }, 409);
+          }
+        }
+      }
+      if (!guardedByAllocations) {
+        const fleetTz = await getFleetTimezone();
+        const liveRefund = await computeLiveTripRefundForToll(tollForGuard, fleetTz, {
+          suggestedTripId: suggestedTripId ?? null,
+          skipInferred: true,
+        });
+        if (liveRefund != null && isFullyReimbursedViaTrip(tollAmount, liveRefund)) {
+          return c.json({
+            error: "This toll was already fully reimbursed on the trip fare — use Needs Review or Underpaid & Claims, not Dispute Refunds.",
+          }, 409);
+        }
       }
     }
 

@@ -298,7 +298,7 @@ export async function enrichAndFilterDisputeBareTolls(
 export async function computeLiveTripRefundForToll(
   rawToll: any,
   fleetTz: string,
-  opts?: { suggestedTripId?: string | null },
+  opts?: { suggestedTripId?: string | null; skipInferred?: boolean },
 ): Promise<number | null> {
   const ctx = await resolveLiveTripContextForToll(rawToll, fleetTz, opts);
   return ctx?.tripRefund ?? null;
@@ -308,7 +308,12 @@ export async function computeLiveTripRefundForToll(
 export async function resolveLiveTripContextForToll(
   rawToll: any,
   fleetTz: string,
-  opts?: { suggestedTripId?: string | null },
+  opts?: {
+    suggestedTripId?: string | null;
+    /** Skip the full-ledger geo-match inference (O(tolls × trips) CPU) —
+     *  guards must stay cheap; return null when no known trip link. */
+    skipInferred?: boolean;
+  },
 ): Promise<{
   tripId: string;
   trip: any;
@@ -340,6 +345,8 @@ export async function resolveLiveTripContextForToll(
       : Math.max(0, Math.min(pool, tollCost));
     return { tripId, trip, tripRefund, tripLinkSource };
   }
+
+  if (opts?.skipInferred) return null;
 
   const { tollTx, trips } = await loadAllTollLedgerWithTrips();
 

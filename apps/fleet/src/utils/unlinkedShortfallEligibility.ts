@@ -138,6 +138,11 @@ export function isRecommendedUnlinkedShortfall(
     // Full refund dumped on one shortfall with material leftover — not one-click.
     return false;
   }
+  // Tiny slice of a large credit — applying strands the rest of the money and
+  // consumes a shortfall a dispute refund should settle. Route to Review.
+  if (hasMaterialExcessRefund(candidate.tripRefund, share ?? 0)) {
+    return false;
+  }
   return true;
 }
 
