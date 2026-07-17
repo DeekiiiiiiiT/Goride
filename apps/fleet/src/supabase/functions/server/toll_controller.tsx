@@ -1134,6 +1134,28 @@ async function loadMergedTollTxArray(): Promise<any[]> {
 }
 
 /**
+ * Reconciliation processes toll USAGE only. Tag-ledger credits (balance
+ * top-ups, refunds, adjustments, transfers) live in the Tag section — letting
+ * them into the wizard created fake $2500 "underpaid tolls" and phantom
+ * periods (e.g. Nov 10–16 2025 built around one CSV-imported top-up).
+ * Handles both shapes: ledger tx (type "Top-up"/"Refund"), raw ledger record
+ * (type "top_up" etc.), and legacy transaction:* rows (category "Toll Top-up").
+ */
+function isReconcilableTollExpense(tx: any): boolean {
+  const type = String(tx?.type || "").toLowerCase().replace("-", "_");
+  if (
+    type === "top_up" ||
+    type === "refund" ||
+    type === "adjustment" ||
+    type === "balance_transfer"
+  ) {
+    return false;
+  }
+  const category = String(tx?.category || "").toLowerCase().trim();
+  return category !== "toll top-up" && category !== "toll refund" && category !== "toll adjustment";
+}
+
+/**
  * Phase 5+ loader: merged toll rows + all trips (for reconciliation views).
  */
 async function loadAllTollLedgerWithTrips(): Promise<{ tollTx: any[]; trips: any[] }> {
@@ -1582,6 +1604,7 @@ app.get(`${BASE}/unreconciled`, async (c) => {
 
     // Unreconciled filter (same logic as the hook)
     let unreconciled = tollTx.filter((tx: any) => {
+      if (!isReconcilableTollExpense(tx)) return false;
       const isCashClaim =
         tx.paymentMethod === "Cash" || !!tx.receiptUrl;
       if (isCashClaim) {
@@ -2058,7 +2081,7 @@ app.get(`${BASE}/reconciled`, async (c) => {
     const allTollTx = await loadMergedTollTxArray();
 
     let reconciled = allTollTx.filter(
-      (tx: any) => tx.isReconciled && tx.tripId,
+      (tx: any) => isReconcilableTollExpense(tx) && tx.isReconciled && tx.tripId,
     );
 
     if (driverId) {
@@ -2488,6 +2511,61 @@ async function saveTollLedgerEntry(entry: TollLedgerRecord): Promise<void> {
   } catch (e) {
     console.error("[TollLedgerStorage] unified dual-write failed:", e);
   }
+
+  // Unified financial ledger — usage / top-up / refund as typed events.
+  // Failures must not block operational write; outbox/retry covers lag.
+  try {
+    const { postFinancialEvent } = await import("./financial_ledger.ts");
+    const t = String(entry.type || "").toLowerCase();
+    const abs = Math.abs(Number(entry.amount) || 0);
+    if (abs > 0 && entry.driverId) {
+      if (t === "usage") {
+        await postFinancialEvent({
+          idempotencyKey: `toll_ledger:${entry.id}|toll_usage`,
+          domain: "toll",
+          eventType: "toll_usage",
+          sourceSystem: "toll_workflow",
+          sourceId: String(entry.id),
+          driverId: String(entry.driverId),
+          vehicleId: entry.vehicleId || null,
+          occurredAt: entry.date,
+          amountMajor: -abs,
+          direction: "outflow",
+          debitAccountKey: "platform:fleet_toll_expense",
+          creditAccountKey: "platform:toll_tag_clearing",
+          payload: {
+            description: entry.location || entry.plaza,
+            paymentMethod: entry.paymentMethod,
+            workflowStage: entry.workflowStage,
+          },
+        });
+      } else if (t === "top_up") {
+        await postFinancialEvent({
+          idempotencyKey: `toll_ledger:${entry.id}|tag_top_up`,
+          domain: "toll",
+          eventType: "tag_top_up",
+          sourceSystem: "toll_workflow",
+          sourceId: String(entry.id),
+          driverId: String(entry.driverId),
+          vehicleId: entry.vehicleId || null,
+          occurredAt: entry.date,
+          amountMajor: abs,
+          direction: "inflow",
+          debitAccountKey: "platform:bank_clearing",
+          creditAccountKey: "platform:toll_tag_clearing",
+          allocations: [{
+            allocation_type: "tag_top_up",
+            amount_minor: Math.round(abs * 100),
+            toll_id: String(entry.id),
+            driver_id: String(entry.driverId),
+          }],
+          payload: { description: entry.location || "Balance Top-up" },
+        });
+      }
+    }
+  } catch (e) {
+    console.error("[TollLedgerStorage] financial event post failed:", e);
+  }
 }
 
 /**
@@ -2496,6 +2574,30 @@ async function saveTollLedgerEntry(entry: TollLedgerRecord): Promise<void> {
 async function getTollLedgerEntry(id: string): Promise<TollLedgerRecord | null> {
   const entry = await kv.get(`${TOLL_LEDGER_PREFIX}${id}`);
   return entry as TollLedgerRecord | null;
+}
+
+/**
+ * Ledger row, hydrating from a legacy `transaction:*` toll on demand.
+ * Read paths merge legacy rows in (loadMergedTollTxArray), so the wizard can
+ * show tolls that never migrated — write endpoints must promote them instead
+ * of 404ing ("Toll ... not found" on Charge Driver / approve / reject).
+ */
+async function getTollLedgerEntryOrHydrate(id: string): Promise<TollLedgerRecord | null> {
+  const existing = await getTollLedgerEntry(id);
+  if (existing) return existing;
+  const legacy = await kv.get(`transaction:${id}`);
+  if (
+    !legacy ||
+    typeof legacy !== "object" ||
+    !isTollCategory((legacy as { category?: string }).category)
+  ) {
+    return null;
+  }
+  // Status normalization (legacy "Completed" → pending) lives in
+  // transactionToTollLedgerServer so backfill and hydration agree.
+  await saveTollLedgerEntry(transactionToTollLedgerServer(legacy));
+  console.log(`[TollReconciliation] Hydrated toll_ledger:${id} from transaction:*`);
+  return getTollLedgerEntry(id);
 }
 
 /**
@@ -3117,6 +3219,18 @@ function transactionToTollLedgerServer(tx: any): TollLedgerRecord {
   else if (txStatus === "rejected") status = "rejected";
   else if (tx.isReconciled) status = "reconciled";
   else if (txStatus === "completed" || txStatus === "resolved") status = "resolved";
+
+  // Legacy "Completed" is a bank-style import status, not a handled toll.
+  // tollLedgerToTxShape treats resolved as reconciled, so an untouched toll
+  // would vanish from the wizard — keep it pending unless genuinely handled.
+  if (
+    status === "resolved" &&
+    !tx.isReconciled &&
+    !tx.metadata?.resolution &&
+    !tx.tripId
+  ) {
+    status = "pending";
+  }
 
   // Extract resolution
   let resolution: TollResolution | null = null;
@@ -4285,8 +4399,8 @@ app.post(`${BASE}/reconcile`, async (c) => {
       );
     }
 
-    // Phase 6: Read from toll_ledger (single source of truth)
-    const tollEntry = await getTollLedgerEntry(transactionId);
+    // Read from toll_ledger, promoting legacy transaction:* rows on demand
+    const tollEntry = await getTollLedgerEntryOrHydrate(transactionId);
     if (!tollEntry) return c.json({ error: `Toll ${transactionId} not found` }, 404);
 
     // Convert to tx shape for response compatibility
@@ -4372,8 +4486,8 @@ app.post(`${BASE}/unreconcile`, async (c) => {
       return c.json({ error: "transactionId is required" }, 400);
     }
 
-    // Phase 6: Read from toll_ledger (single source of truth)
-    const tollEntry = await getTollLedgerEntry(transactionId);
+    // Read from toll_ledger, promoting legacy transaction:* rows on demand
+    const tollEntry = await getTollLedgerEntryOrHydrate(transactionId);
     if (!tollEntry) return c.json({ error: `Toll ${transactionId} not found` }, 404);
 
     // Convert to tx shape for response compatibility
@@ -4459,8 +4573,8 @@ app.patch(`${BASE}/edit`, async (c) => {
       return c.json({ error: "updates object is required" }, 400);
     }
 
-    // Phase 6: Read from toll_ledger (single source of truth)
-    const tollEntry = await getTollLedgerEntry(transactionId);
+    // Read from toll_ledger, promoting legacy transaction:* rows on demand
+    const tollEntry = await getTollLedgerEntryOrHydrate(transactionId);
     if (!tollEntry) return c.json({ error: `Toll ${transactionId} not found` }, 404);
 
     // Convert to tx shape for response compatibility
@@ -4788,8 +4902,8 @@ app.post(`${BASE}/approve`, async (c) => {
       return c.json({ error: "transactionId is required" }, 400);
     }
 
-    // Phase 6: Read from toll_ledger (single source of truth)
-    const tollEntry = await getTollLedgerEntry(transactionId);
+    // Read from toll_ledger, promoting legacy transaction:* rows on demand
+    const tollEntry = await getTollLedgerEntryOrHydrate(transactionId);
     if (!tollEntry) return c.json({ error: `Toll ${transactionId} not found` }, 404);
 
     // Convert to tx shape for response compatibility
@@ -4863,8 +4977,8 @@ app.post(`${BASE}/reject`, async (c) => {
       return c.json({ error: "transactionId is required" }, 400);
     }
 
-    // Phase 6: Read from toll_ledger (single source of truth)
-    const tollEntry = await getTollLedgerEntry(transactionId);
+    // Read from toll_ledger, promoting legacy transaction:* rows on demand
+    const tollEntry = await getTollLedgerEntryOrHydrate(transactionId);
     if (!tollEntry) return c.json({ error: `Toll ${transactionId} not found` }, 404);
 
     // Convert to tx shape for response compatibility
@@ -4965,8 +5079,8 @@ app.post(`${BASE}/resolve`, async (c) => {
     const isSystemSuggested = source === "system_suggested";
     const resolutionSource = isSystemSuggested ? "system_suggested" : "human_confirmed";
 
-    // Phase 6: Read from toll_ledger (single source of truth)
-    const tollEntry = await getTollLedgerEntry(transactionId);
+    // Read from toll_ledger, promoting legacy transaction:* rows on demand
+    const tollEntry = await getTollLedgerEntryOrHydrate(transactionId);
     if (!tollEntry) return c.json({ error: `Toll ${transactionId} not found` }, 404);
 
     // Convert to tx shape for response compatibility
@@ -7822,7 +7936,7 @@ export type { RefundAutomationSettings };
 export { recomputeAndPersistWorkflowStage, undoApplyUnlinkedRefundToClaim };
 
 // ── Exported helpers for the period aggregation endpoint (Phase F2) ────────
-export { loadAllByPrefix, loadDisputeRefundRecords, filterByDriver };
+export { loadAllByPrefix, loadDisputeRefundRecords, filterByDriver, isReconcilableTollExpense };
 
 // ── Exported helpers for dispute-refund match candidates ───────────────────
 export { findTollMatchesServer, pickBestValidTollMatch, reconcileTollForDisputeMatch, getDriverAliasMap };

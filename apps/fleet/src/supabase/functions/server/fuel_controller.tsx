@@ -153,7 +153,8 @@ app.post(`${BASE_PATH}/finalized-reports`, async (c) => {
       }
       const weekKey = report.weekStart.split('T')[0];
       const key = finalizedReportKey(weekKey, report.driverId);
-      await kv.set(key, report);
+      const stamped = { ...report, status: report.status || "Finalized" };
+      await kv.set(key, stamped);
       // Drop legacy vehicle-keyed duplicate if present (last-writer-wins on shared cars)
       if (report.vehicleId && report.vehicleId !== report.driverId) {
         try {
@@ -161,6 +162,99 @@ app.post(`${BASE_PATH}/finalized-reports`, async (c) => {
         } catch {
           /* ignore */
         }
+      }
+      // Unified financial ledger — versioned fuel close events (append-only).
+      try {
+        const { postFinancialEvent } = await import("./financial_ledger.ts");
+        const { rebuildDriverFinancialPeriod } = await import("./driver_financial_periods.ts");
+        const deduction = Math.abs(Number(report.driverShare) || 0);
+        const fleetShare = Math.abs(Number(report.companyShare) || 0);
+        const driverSpend = Math.abs(Number(report.driverCashSpend) || Number(report.cashSpend) || 0);
+        const gasCard = Math.abs(Number(report.gasCardSpend) || 0);
+        const keyBase = `fuel_finalized:${report.driverId}:${weekKey}`;
+        await postFinancialEvent({
+          idempotencyKey: `${keyBase}|finalized`,
+          domain: "fuel",
+          eventType: "fuel_finalized",
+          sourceSystem: "fuel_ops",
+          sourceId: String(report.id || keyBase),
+          driverId: String(report.driverId),
+          vehicleId: report.vehicleId || null,
+          occurredAt: weekKey,
+          amountMajor: 0,
+          direction: "neutral",
+          payload: { reportId: report.id, weekStart: weekKey },
+        });
+        if (deduction > 0) {
+          await postFinancialEvent({
+            idempotencyKey: `${keyBase}|deduction`,
+            domain: "fuel",
+            eventType: "fuel_deduction",
+            sourceSystem: "fuel_ops",
+            sourceId: String(report.id || keyBase),
+            driverId: String(report.driverId),
+            occurredAt: weekKey,
+            amountMajor: -deduction,
+            direction: "outflow",
+            debitAccountKey: "platform:driver_receivable",
+            creditAccountKey: "platform:fleet_fuel_expense",
+            allocations: [{
+              allocation_type: "driver_share",
+              amount_minor: Math.round(deduction * 100),
+              driver_id: String(report.driverId),
+              fuel_entry_id: String(report.id || ""),
+            }],
+          });
+        }
+        if (fleetShare > 0) {
+          await postFinancialEvent({
+            idempotencyKey: `${keyBase}|fleet_share`,
+            domain: "fuel",
+            eventType: "fuel_fleet_share",
+            sourceSystem: "fuel_ops",
+            sourceId: String(report.id || keyBase),
+            driverId: String(report.driverId),
+            occurredAt: weekKey,
+            amountMajor: -fleetShare,
+            direction: "outflow",
+            allocations: [{
+              allocation_type: "fleet_share",
+              amount_minor: Math.round(fleetShare * 100),
+              driver_id: String(report.driverId),
+            }],
+          });
+        }
+        if (driverSpend > 0) {
+          await postFinancialEvent({
+            idempotencyKey: `${keyBase}|driver_spend`,
+            domain: "fuel",
+            eventType: "fuel_driver_spend",
+            sourceSystem: "fuel_ops",
+            sourceId: String(report.id || keyBase),
+            driverId: String(report.driverId),
+            occurredAt: weekKey,
+            amountMajor: -driverSpend,
+            direction: "outflow",
+          });
+        }
+        if (gasCard > 0) {
+          await postFinancialEvent({
+            idempotencyKey: `${keyBase}|gas_card`,
+            domain: "fuel",
+            eventType: "fuel_gas_card_spend",
+            sourceSystem: "fuel_ops",
+            sourceId: String(report.id || keyBase),
+            driverId: String(report.driverId),
+            occurredAt: weekKey,
+            amountMajor: -gasCard,
+            direction: "outflow",
+            debitAccountKey: "platform:fleet_fuel_expense",
+            creditAccountKey: "platform:fuel_card_clearing",
+          });
+        }
+        await rebuildDriverFinancialPeriod(String(report.driverId), weekKey);
+      } catch (finErr: any) {
+        console.error(`[FinalizedReports] financial ledger post failed: ${finErr?.message || finErr}`);
       }
       saved++;
     }

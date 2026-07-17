@@ -35,6 +35,7 @@
 import * as kv from "./kv_store.tsx";
 import { appendCanonicalLedgerEvents } from "./ledger_canonical.ts";
 import { stampOrg } from "./org_scope.ts";
+import { postFinancialEvent } from "./financial_ledger.ts";
 
 const SETTINGS_KEY = "toll_reconciliation:settings";
 const PROJECTION_MARKER_PREFIX = "toll_charge_projection:";
@@ -180,10 +181,55 @@ export async function emitDriverTollCharge(
   const canonicalEvent = buildChargeCanonicalEvent(p, version, amountAbs, dateOnly, description);
   let canonicalWritten = false;
   try {
-    await appendCanonicalLedgerEvents([canonicalEvent], { get: () => undefined } as never);
-    canonicalWritten = true;
+    const appendResult = await appendCanonicalLedgerEvents(
+      [canonicalEvent],
+      { get: () => undefined } as never,
+    );
+    // Honor insert/skip/fail — never claim success when validation rejected the event.
+    canonicalWritten = !!(appendResult?.success && (appendResult.failed || 0) === 0);
   } catch (err) {
     console.error("[DriverTollCharge] canonical write failed:", err);
+  }
+
+  // Always post to SQL unified financial ledger (not behind the projection flag).
+  try {
+    const fin = await postFinancialEvent({
+      idempotencyKey: `toll_charge:${p.tollId}:v${version}`,
+      domain: "toll",
+      eventType: "toll_charged_to_driver",
+      sourceSystem: "driver_charge",
+      sourceId: p.tollId,
+      driverId: p.driverId,
+      vehicleId: p.vehicleId,
+      occurredAt: dateOnly,
+      amountMajor: -amountAbs,
+      direction: "outflow",
+      product: "roam_driver",
+      debitAccountKey: p.driverId?.match(/^[0-9a-f-]{36}$/i)
+        ? `user:${p.driverId}:driver:digital`
+        : "platform:driver_receivable",
+      creditAccountKey: "platform:clearing",
+      allocations: [{
+        allocation_type: "driver_charge",
+        amount_minor: Math.round(amountAbs * 100),
+        toll_id: p.tollId,
+        claim_id: p.claimId,
+        driver_id: p.driverId,
+      }],
+      payload: {
+        description,
+        claimId: p.claimId,
+        version,
+        source: p.source,
+      },
+    });
+    if (!fin.ok && !fin.skipped) {
+      console.error("[DriverTollCharge] financial ledger post failed:", fin.error);
+    } else {
+      canonicalWritten = canonicalWritten || fin.ok;
+    }
+  } catch (err) {
+    console.error("[DriverTollCharge] financial ledger exception:", err);
   }
 
   if (!(await isDriverTollChargeSyncEnabled())) {

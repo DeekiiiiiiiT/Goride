@@ -134,6 +134,7 @@ import tollApp, {
 import { resolveDriverFromFleetRecords } from "./driver_identity.ts";
 import disputeRefundApp from "./dispute_refund_controller.tsx";
 import tollPeriodApp from "./toll_period_controller.tsx";
+import driverFinancialPeriodApp from "./driver_financial_period_controller.tsx";
 import paymentLedgerLineApp from "./payment_ledger_line_controller.tsx";
 import apiCenterApp from "./api_command_center.tsx";
 import { getFleetTimezone } from "./timezone_helper.tsx";
@@ -1454,6 +1455,7 @@ app.route("/", syncApp);
 app.route("/", tollApp);
 app.route("/", disputeRefundApp);
 app.route("/", tollPeriodApp);
+app.route("/", driverFinancialPeriodApp);
 app.route("/", paymentLedgerLineApp);
 app.route("/", apiCenterApp);
 

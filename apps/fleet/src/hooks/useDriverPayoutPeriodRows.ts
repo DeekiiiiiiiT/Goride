@@ -14,6 +14,10 @@ import {
   type DriverFinancialBundle,
   type DriverLike,
 } from './useDriverFinancialBundle';
+import {
+  overlaySharedPeriodsOntoPayoutRows,
+  useDriverFinancialPeriods,
+} from './useDriverFinancialPeriods';
 
 export type PeriodType = 'daily' | 'weekly' | 'monthly';
 
@@ -76,6 +80,7 @@ export function useDriverPayoutPeriodRows(opts: {
 
   const localBundle = useDriverFinancialBundle(driverId, driver);
   const financialBundle = bundleProp ?? localBundle;
+  const sharedPeriodsQuery = useDriverFinancialPeriods(driverId);
 
   const {
     finalizedReports,
@@ -241,20 +246,27 @@ export function useDriverPayoutPeriodRows(opts: {
   ]);
 
   const periodData: PayoutPeriodRow[] = useMemo(() => {
-    if (useSharedWeekly && sharedWeekly?.periodData) return sharedWeekly.periodData;
-    return buildLedgerPayoutPeriodRows({
-      ledgerLoaded,
-      ledgerError,
-      ledgerRows,
-      cashWeeks,
-      transactions,
-      finalizedReports,
-      disputeRefunds,
-      periodType,
-      unifiedToll,
-      timezone: fleetTz,
-      draftFuelByPeriod,
-    });
+    const base =
+      useSharedWeekly && sharedWeekly?.periodData
+        ? sharedWeekly.periodData
+        : buildLedgerPayoutPeriodRows({
+            ledgerLoaded,
+            ledgerError,
+            ledgerRows,
+            cashWeeks,
+            transactions,
+            finalizedReports,
+            disputeRefunds,
+            periodType,
+            unifiedToll,
+            timezone: fleetTz,
+            draftFuelByPeriod,
+          });
+    // Weekly SSOT: toll/fuel from shared projection so Settlement/Payout match Expenses.
+    if (periodType === 'weekly') {
+      return overlaySharedPeriodsOntoPayoutRows(base, sharedPeriodsQuery.data);
+    }
+    return base;
   }, [
     useSharedWeekly,
     sharedWeekly?.periodData,
@@ -269,6 +281,7 @@ export function useDriverPayoutPeriodRows(opts: {
     unifiedToll,
     fleetTz,
     draftFuelByPeriod,
+    sharedPeriodsQuery.data,
   ]);
 
   // Progressive: paint when ledger is ready; fuel deductions fill as core bundle arrives.

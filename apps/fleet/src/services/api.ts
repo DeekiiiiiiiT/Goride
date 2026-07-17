@@ -1850,6 +1850,95 @@ export const api = {
 
   // ── Phase 4: Server-side Toll Reconciliation API ──────────────────────
 
+  // ── Unified driver financial periods (Expenses / Settlement / Payout SSOT) ──
+  async getDriverFinancialPeriods(driverId: string) {
+    const qs = new URLSearchParams({ driverId });
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/driver-financial-periods?${qs.toString()}`,
+      { headers: { Authorization: `Bearer ${publicAnonKey}` } },
+    );
+    if (!response.ok) throw new Error("Failed to fetch driver financial periods");
+    return response.json();
+  },
+
+  async getDriverFinancialPeriodDetail(driverId: string, periodAnchor: string) {
+    const qs = new URLSearchParams({ driverId });
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/driver-financial-periods/${periodAnchor}?${qs.toString()}`,
+      { headers: { Authorization: `Bearer ${publicAnonKey}` } },
+    );
+    if (!response.ok) throw new Error("Failed to fetch driver financial period detail");
+    return response.json();
+  },
+
+  async rebuildDriverFinancialPeriods(driverId: string, periodAnchor?: string) {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/driver-financial-periods/rebuild`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${publicAnonKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ driverId, periodAnchor }),
+      },
+    );
+    if (!response.ok) throw new Error("Failed to rebuild driver financial periods");
+    return response.json();
+  },
+
+  async backfillDriverFinancialPeriods(opts?: { driverId?: string; dryRun?: boolean }) {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/driver-financial-periods/backfill`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${publicAnonKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ dryRun: opts?.dryRun !== false, driverId: opts?.driverId }),
+      },
+    );
+    if (!response.ok) throw new Error("Failed to backfill driver financial periods");
+    return response.json();
+  },
+
+  async getDriverFinancialPeriodsHealth() {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/driver-financial-periods/health`,
+      { headers: { Authorization: `Bearer ${publicAnonKey}` } },
+    );
+    if (!response.ok) throw new Error("Failed to fetch financial period health");
+    return response.json();
+  },
+
+  async verifyDriverFinancialPeriodsParity(driverId?: string) {
+    const qs = new URLSearchParams();
+    if (driverId) qs.set("driverId", driverId);
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/driver-financial-periods/verify-parity?${qs.toString()}`,
+      { headers: { Authorization: `Bearer ${publicAnonKey}` } },
+    );
+    if (!response.ok) throw new Error("Failed to verify financial period parity");
+    return response.json();
+  },
+
+  async processDriverFinancialOutbox(limit = 50) {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/driver-financial-periods/process-outbox`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${publicAnonKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ limit }),
+      },
+    );
+    if (!response.ok) throw new Error("Failed to process financial outbox");
+    return response.json();
+  },
+
   async getTollLogs(params?: {
     vehicleId?: string;
     tagNumber?: string;

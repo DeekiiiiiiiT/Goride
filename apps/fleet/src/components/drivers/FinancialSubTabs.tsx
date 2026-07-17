@@ -16,6 +16,7 @@ import { DriverPayoutHistory } from './DriverPayoutHistory';
 import { SettlementSummaryView } from './SettlementSummaryView';
 import { api } from '../../services/api';
 import { useDriverFinancialBundle, type DriverFinancialBundle, type DriverLike } from '../../hooks/useDriverFinancialBundle';
+import { useDriverFinancialPeriods } from '../../hooks/useDriverFinancialPeriods';
 import type { PayoutPeriodRow } from '../../types/driverPayoutPeriod';
 import type { CashWeekData } from '../../utils/cashSettlementCalc';
 import { endOfWeek, format, startOfWeek } from 'date-fns';
@@ -79,6 +80,7 @@ export function FinancialSubTabs({
   // Prefer parent shared bundle; fallback keeps FinancialSubTabs usable alone.
   const localBundle = useDriverFinancialBundle(driverId, driver);
   const financialBundle = financialBundleProp ?? localBundle;
+  const sharedPeriodsQuery = useDriverFinancialPeriods(driverId);
 
   // Toll cards default to all-time; toggle This week so admins aren't misled.
   const [reconScope, setReconScope] = React.useState<ReconScope>('all');
@@ -90,6 +92,13 @@ export function FinancialSubTabs({
       to: endOfWeek(now, { weekStartsOn: 1 }),
     };
   }, []);
+
+  const thisWeekSharedPeriod = React.useMemo(() => {
+    const anchor = format(weekBounds.from, 'yyyy-MM-dd');
+    return (sharedPeriodsQuery.data || []).find(
+      (p) => String(p.periodAnchor || '').slice(0, 10) === anchor,
+    ) || null;
+  }, [sharedPeriodsQuery.data, weekBounds.from]);
 
   // Driver toll disposition (charged / written-off / business / refunded /
   // reconciled) — server-computed from toll_ledger for the Reconciliation tab.
@@ -332,6 +341,51 @@ export function FinancialSubTabs({
             </Button>
           </div>
         </div>
+
+        {/* Shared weekly period SSOT — same projection as Expenses / Settlement / Payout. */}
+        {reconScope === 'week' && thisWeekSharedPeriod && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                Weekly Financial Period
+                <span className="text-[10px] font-medium uppercase tracking-wider text-slate-400 bg-slate-100 px-2 py-0.5 rounded">
+                  {String(thisWeekSharedPeriod.status || 'open')}
+                </span>
+              </CardTitle>
+              <CardDescription className="text-xs text-slate-500">
+                Shared projection for this Monday–Sunday week (toll status: {thisWeekSharedPeriod.tollStatus || '—'}).
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="rounded-lg border border-slate-200 p-3">
+                  <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Toll spend</p>
+                  <p className="text-lg font-bold mt-1 text-slate-800">
+                    ${(Number(thisWeekSharedPeriod.tollSpend) || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-slate-200 p-3">
+                  <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Unmatched</p>
+                  <p className="text-lg font-bold mt-1 text-amber-600">
+                    {Number(thisWeekSharedPeriod.tollUnmatchedCount) || 0}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-slate-200 p-3">
+                  <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Charged to driver</p>
+                  <p className="text-lg font-bold mt-1 text-rose-600">
+                    ${(Number(thisWeekSharedPeriod.tollChargedToDriver) || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-slate-200 p-3">
+                  <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Fuel deduction</p>
+                  <p className="text-lg font-bold mt-1 text-slate-800">
+                    ${(Number(thisWeekSharedPeriod.fuelDeduction) || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Toll disposition — how this driver's tolls were resolved. */}
         <Card>

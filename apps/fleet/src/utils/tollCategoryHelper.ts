@@ -7,10 +7,21 @@
 export function isTollCategory(category: string | undefined | null): boolean {
   if (!category) return false;
   const lower = category.toLowerCase().trim();
+  // Usage / plaza charges only. Tag top-ups & refunds are tag-ledger activity
+  // and must not inflate Driver Expenses "Toll Status" / weekly toll spend.
   return (
     lower === 'toll usage' ||
     lower === 'tolls' ||
-    lower === 'toll' ||
+    lower === 'toll'
+  );
+}
+
+/** Broader matcher for Tag section / Toll Logs (includes credits). */
+export function isTollLedgerCategory(category: string | undefined | null): boolean {
+  if (!category) return false;
+  const lower = category.toLowerCase().trim();
+  return (
+    isTollCategory(lower) ||
     lower === 'toll top-up' ||
     lower === 'toll refund' ||
     lower === 'toll adjustment'

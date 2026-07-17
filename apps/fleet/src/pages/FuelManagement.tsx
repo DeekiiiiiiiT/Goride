@@ -973,6 +973,7 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
             await api.saveFinalizedReports(snapshots);
             // Driver Financials tabs share React Query cache for finalized snapshots.
             await queryClient.invalidateQueries({ queryKey: ['finalizedReports'] });
+            await queryClient.invalidateQueries({ queryKey: ['driverFinancialPeriods'] });
           } catch (snapErr: any) {
             console.error('[FinalizedReports] Snapshot save failed:', snapErr);
             toast.warning('Statements finalized but snapshot save failed â€” finalized tab may be incomplete.');

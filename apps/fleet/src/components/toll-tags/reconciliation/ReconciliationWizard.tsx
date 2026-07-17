@@ -1,6 +1,8 @@
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../ui/tabs";
 import { TooltipProvider } from "../../ui/tooltip";
+import { DRIVER_FINANCIAL_PERIODS_KEY } from '../../../hooks/useDriverFinancialPeriods';
 import { TollBucketPanel } from "./TollBucketPanel";
 import { TollFinancialOverviewCards } from "./TollFinancialOverviewCards";
 import { UnderpaidClaimsStep } from "./UnderpaidClaimsStep";
@@ -141,6 +143,13 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
   } = useTollReconciliation(driverId, { startDate: period.startDate, endDate: period.endDate });
 
   const { claims, loading: claimsLoading, refresh: refreshClaims, createClaim, updateClaim, deleteClaim } = useClaims();
+  const queryClient = useQueryClient();
+  const invalidateSharedPeriods = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: [DRIVER_FINANCIAL_PERIODS_KEY] });
+    if (driverId) {
+      void api.rebuildDriverFinancialPeriods(driverId, period.startDate).catch(() => undefined);
+    }
+  }, [queryClient, driverId, period.startDate]);
 
   const handleRefundMatchComplete = useCallback((event: DisputeMatchEvent) => {
     if (event.type === 'match') {
@@ -148,8 +157,8 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
     } else {
       applyDisputeUnmatch(event.refundId);
     }
-    void Promise.all([refresh(), refreshClaims()]);
-  }, [applyDisputeMatch, applyDisputeUnmatch, refresh, refreshClaims]);
+    void Promise.all([refresh(), refreshClaims()]).then(() => invalidateSharedPeriods());
+  }, [applyDisputeMatch, applyDisputeUnmatch, refresh, refreshClaims, invalidateSharedPeriods]);
 
   const [pendingPersonalTx, setPendingPersonalTx] = React.useState<FinancialTransaction | null>(null);
   const [pendingDriverId, setPendingDriverId] = React.useState<string>('');
@@ -1383,6 +1392,7 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
         drivers={drivers.map((d) => ({ id: d.id, name: d.name }))}
         preselectedDriverId={driverId}
         onComplete={() => {
+          invalidateSharedPeriods();
           // Back to period list so Outstanding/Completed counts refresh after undo.
           onExit();
         }}

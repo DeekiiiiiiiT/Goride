@@ -39,11 +39,33 @@ const VALID_CANONICAL_EVENT_TYPES = new Set([
   "toll_unreconciled",
   "toll_approved",
   "toll_rejected",
+  "toll_usage",
+  "toll_charged_to_driver",
+  "toll_charge_reversed",
+  "fuel_deduction",
+  "fuel_fleet_share",
+  "fuel_driver_spend",
+  "fuel_gas_card_spend",
+  "fuel_finalized",
+  "cash_collected",
+  "cash_returned",
 ]);
 
 const VALID_DIRECTIONS = new Set(["inflow", "outflow", "neutral"]);
 
-const VALID_SOURCE_TYPES = new Set(["trip", "statement", "import_batch", "transaction", "adjustment", "reconciliation"]);
+const VALID_SOURCE_TYPES = new Set([
+  "trip",
+  "statement",
+  "import_batch",
+  "transaction",
+  "adjustment",
+  "reconciliation",
+  "toll_resolution",
+  "toll_workflow",
+  "fuel_ops",
+  "backfill",
+  "financial_event",
+]);
 
 async function sha256Hex(text: string): Promise<string> {
   const msgUint8 = new TextEncoder().encode(text);

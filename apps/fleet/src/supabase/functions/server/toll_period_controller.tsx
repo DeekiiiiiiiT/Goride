@@ -37,6 +37,7 @@ import {
   loadDisputeRefundRecords,
   filterByDriver,
   loadAllByPrefix,
+  isReconcilableTollExpense,
 } from "./toll_controller.tsx";
 
 const app = new Hono();
@@ -303,7 +304,8 @@ app.get(`${BASE}/periods`, async (c) => {
     const timezone = await getFleetTimezone();
 
     const { tollTx, trips } = await loadAllTollLedgerWithTrips();
-    const scopedTollTx = filterByDriver(tollTx, driverId);
+    // Tag credits (top-ups/refunds/adjustments) must not spawn periods or counts.
+    const scopedTollTx = filterByDriver(tollTx, driverId).filter(isReconcilableTollExpense);
     const scopedTrips = filterByDriver(trips, driverId);
 
     const allClaims = (await loadAllByPrefix("claim:")) as any[];

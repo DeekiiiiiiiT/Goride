@@ -24,6 +24,7 @@ import { fleetTzDateKey, useFleetTimezone, ymdToLocalDate } from '../../utils/ti
 import { getFuelDeductionForPeriod } from '../../utils/fuelDeductionForPeriod';
 import type { DriverFinancialBundle, DriverLike } from '../../hooks/useDriverFinancialBundle';
 import { useDriverFinancialBundle } from '../../hooks/useDriverFinancialBundle';
+import { useDriverFinancialPeriods } from '../../hooks/useDriverFinancialPeriods';
 
 type PeriodType = 'daily' | 'weekly' | 'monthly';
 
@@ -83,6 +84,10 @@ export function DriverExpensesHistory({
     () => new Set(financialBundle.vehicleIds),
     [financialBundle.vehicleIds]
   );
+
+  // Shared weekly financial projection (SQL) — same SSOT as Settlement/Payout/Toll Recon.
+  const sharedPeriodsQuery = useDriverFinancialPeriods(driverId);
+  const sharedPeriods = sharedPeriodsQuery.isError ? null : (sharedPeriodsQuery.data ?? null);
 
   // Draft estimates — only when Fuel view selected (not on toll-first paint).
   const [fuelDraftLoading, setFuelDraftLoading] = useState(false);
@@ -180,8 +185,42 @@ export function DriverExpensesHistory({
 
   // ────────────────────────────────────────────────────────────
   // Aggregate expense transactions into period buckets
+  // Prefer shared SQL projection when available (enterprise SSOT).
   // ────────────────────────────────────────────────────────────
   const periodData: ExpensePeriodRow[] = useMemo(() => {
+    if (periodType === 'weekly' && sharedPeriods && sharedPeriods.length > 0) {
+      return sharedPeriods.map((p: any) => {
+        const start = ymdToLocalDate(String(p.periodAnchor).slice(0, 10));
+        const end = ymdToLocalDate(String(p.periodEnd).slice(0, 10));
+        const unmatched = Number(p.tollUnmatchedCount) || 0;
+        const reconciled = Number(p.tollReconciledCount) || 0;
+        return {
+          periodStart: start,
+          periodEnd: end,
+          tollExpenses: Number(p.tollSpend) || 0,
+          tollCharged: Number(p.tollChargedToDriver) || 0,
+          fuelDeduction: Number(p.fuelDeduction) || 0,
+          fuelFleetShare: Number(p.fuelFleetShare) || 0,
+          fuelDriverSpend: Number(p.fuelDriverSpend) || 0,
+          fuelGasCardSpend: Number(p.fuelGasCardSpend) || 0,
+          fuelNetPay: Number(p.fuelNetPay) || 0,
+          fuelDraftEstimate: 0,
+          isFinalized: !!p.fuelFinalized,
+          totalExpenses:
+            (Number(p.tollSpend) || 0) +
+            (Number(p.fuelDeduction) || 0) +
+            (Number(p.tollChargedToDriver) || 0),
+          transactionCount: reconciled + unmatched,
+          tollReconciled: reconciled,
+          tollUnreconciled: unmatched,
+          tollCashSpent: Number(p.tollCashSpend) || 0,
+          tollTagSpent: Number(p.tollTagSpend) || 0,
+          disputeRefundMatched: Number(p.disputeRefundMatched) || 0,
+          disputeRefundUnmatched: Number(p.disputeRefundUnmatched) || 0,
+        } as ExpensePeriodRow;
+      });
+    }
+
     if (timeBuckets.length === 0) return [];
 
     // Only look at expense-type transactions (for Tolls — NOT fuel). Explicitly
@@ -194,10 +233,15 @@ export function DriverExpensesHistory({
     // rows (merged in from GET /toll-logs) carry type:'Usage', which the plain
     // Expense/Adjustment gate below silently drops, making post-migration
     // tolls invisible even though they're present in `transactions`.
+    // Exclude tag top-ups/refunds — they belong in the Tag section, not Expenses.
     const expenseTx = transactions.filter(
       t =>
         (t.category !== 'Fuel Deduction' && t.category !== 'Fuel Reimbursement') &&
-        (t.type === 'Expense' || (t.type === 'Adjustment' && t.amount < 0) || isTollCategory(t.category))
+        (t.type === 'Expense' || (t.type === 'Adjustment' && t.amount < 0) || isTollCategory(t.category)) &&
+        String(t.category || '').toLowerCase() !== 'toll top-up' &&
+        String(t.category || '').toLowerCase() !== 'toll refund' &&
+        String(t.type || '').toLowerCase() !== 'top-up' &&
+        String(t.type || '').toLowerCase() !== 'top_up'
     );
 
     // Draft estimates for every unfinalized period with expense activity (no date cutoff).
@@ -305,7 +349,7 @@ export function DriverExpensesHistory({
       .reverse();
   }, [
     transactions, trips, timeBuckets, finalizedReports, disputeRefunds, periodType, fleetTz,
-    driverVehicleList, draftFuelEntries, draftAdjustments, draftScenarios,
+    driverVehicleList, draftFuelEntries, draftAdjustments, draftScenarios, sharedPeriods,
   ]);
 
   // ────────────────────────────────────────────────────────────
