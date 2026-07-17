@@ -4,11 +4,12 @@ import {
   isTollInWizardPeriod,
   isVisiblePartialShortfallClaim,
 } from './tollWeekPeriod';
-import { buildTripRefundAllocation } from './tollReconciliation';
+import { buildTripRefundAllocation, spentUnlinkedCreditsByTripId } from './tollReconciliation';
 import {
   countListablePendingUnderpaid,
   evaluateListableUnderpaidShortfall,
   linkPendingUnderpaidToTrips,
+  resolvePendingUnderpaidTrip,
   type PendingUnderpaidSuggestions,
   type PendingUnderpaidTx,
 } from './pendingUnderpaidListable';
@@ -58,9 +59,20 @@ export function computeUnderpaidPipelineCounts(input: {
   const claimByTollId = buildClaimByTollId(allClaims);
   const reconciledTollById = new Map(reconciledTolls.map((t) => [t.id, t]));
   const linkedPending = linkPendingUnderpaidToTrips(pendingUnderpaidTolls, suggestions);
+  for (const tx of linkedPending) {
+    if (tripMap.has(tx.tripId)) continue;
+    const trip = resolvePendingUnderpaidTrip(tx, tripMap, suggestions);
+    if (trip) tripMap.set(trip.id, trip);
+  }
+  const spentByTripId = spentUnlinkedCreditsByTripId({
+    claims: allClaims,
+    disputeRefunds,
+    tolls: reconciledTolls,
+  });
   const allocation = buildTripRefundAllocation(
     [...reconciledTolls, ...linkedPending],
     tripMap,
+    spentByTripId,
   );
 
   const visibleTollIds = new Set<string>();

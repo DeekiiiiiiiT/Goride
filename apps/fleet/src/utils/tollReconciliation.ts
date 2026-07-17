@@ -253,17 +253,75 @@ export function buildTollFinancialsContext(
 }
 
 /**
+ * Credits already taken from a trip's tollCharges by Unlinked Refund applies.
+ * paidAmount on those claims includes later dispute matches — subtract those.
+ */
+export function spentUnlinkedCreditsByTripId(input: {
+    claims?: Array<{
+        unlinkedTripId?: string | null;
+        transactionId?: string | null;
+        paidAmount?: number | null;
+    }>;
+    disputeRefunds?: Array<{
+        matchedTollId?: string | null;
+        amount?: number | null;
+        status?: string | null;
+    }>;
+    /** Fallback when claim paidAmount is missing — uses full toll cost (never under-subtracts). */
+    tolls?: Array<{
+        id?: string;
+        unlinkedSourceTripId?: string | null;
+        amount?: number | null;
+    }>;
+}): Map<string, number> {
+    const disputeByToll = new Map<string, number>();
+    for (const r of input.disputeRefunds || []) {
+        if (!r.matchedTollId) continue;
+        if (r.status !== 'matched' && r.status !== 'auto_resolved') continue;
+        const id = String(r.matchedTollId);
+        disputeByToll.set(id, (disputeByToll.get(id) || 0) + finiteAmount(r.amount));
+    }
+
+    const spent = new Map<string, number>();
+    const countedTollIds = new Set<string>();
+    for (const c of input.claims || []) {
+        const tripId = c.unlinkedTripId ? String(c.unlinkedTripId) : '';
+        if (!tripId) continue;
+        const paid = finiteAmount(c.paidAmount);
+        const dispute = c.transactionId ? (disputeByToll.get(String(c.transactionId)) || 0) : 0;
+        const unlinkedPortion = Math.max(0, Math.round((paid - dispute) * 100) / 100);
+        if (unlinkedPortion <= 0) continue;
+        spent.set(tripId, Math.round(((spent.get(tripId) || 0) + unlinkedPortion) * 100) / 100);
+        if (c.transactionId) countedTollIds.add(String(c.transactionId));
+    }
+
+    for (const tx of input.tolls || []) {
+        const tripId = tx.unlinkedSourceTripId ? String(tx.unlinkedSourceTripId) : '';
+        if (!tripId || !tx.id || countedTollIds.has(String(tx.id))) continue;
+        const portion = Math.abs(Number(tx.amount) || 0);
+        if (portion <= 0) continue;
+        spent.set(tripId, Math.round(((spent.get(tripId) || 0) + portion) * 100) / 100);
+    }
+    return spent;
+}
+
+/**
  * Builds trip refund pool map + allocation across reconciled tolls sharing a trip.
+ * `spentByTripId` removes Unlinked applies so leftover trip credit is not double-counted.
  */
 export function buildTripRefundAllocation(
     reconciledTolls: Array<Pick<FinancialTransaction, 'id' | 'tripId' | 'date' | 'time' | 'amount'>>,
     tripById: Map<string, Trip>,
+    spentByTripId?: Map<string, number>,
 ): Map<string, number> {
     const tripRefundById = new Map<string, number>();
     for (const tx of reconciledTolls) {
         if (!tx.tripId || tripRefundById.has(tx.tripId)) continue;
         const trip = tripById.get(tx.tripId);
-        if (trip) tripRefundById.set(tx.tripId, finiteAmount(trip.tollCharges));
+        if (!trip) continue;
+        const raw = finiteAmount(trip.tollCharges);
+        const spent = spentByTripId?.get(tx.tripId) ?? 0;
+        tripRefundById.set(tx.tripId, Math.max(0, Math.round((raw - spent) * 100) / 100));
     }
     return allocateTripRefundAcrossTolls(reconciledTolls, tripRefundById);
 }

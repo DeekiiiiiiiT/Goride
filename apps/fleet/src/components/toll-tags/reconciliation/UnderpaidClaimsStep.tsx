@@ -16,13 +16,13 @@ import { DisputeModal } from "../../claimable-loss/DisputeModal";
 import { ClaimDetailOverlay } from "../../claimable-loss/ClaimDetailOverlay";
 import { StatCard } from "../../claimable-loss/StatCard";
 import { FinancialTransaction, Trip, Claim, DisputeRefund } from "../../../types/data";
-import { MatchResult, calculateTollFinancials, buildTollFinancialsContext, buildTripRefundAllocation } from "../../../utils/tollReconciliation";
+import { MatchResult, calculateTollFinancials, buildTollFinancialsContext, buildTripRefundAllocation, spentUnlinkedCreditsByTripId } from "../../../utils/tollReconciliation";
 import { hasBlockingUnlinkedRefund } from "../../../utils/unlinkedShortfallEligibility";
 import { buildClaimByTollId, dedupeClaimsForDisplay, collectDuplicateClaimIds } from "../../../utils/claimByToll";
 import { isVisiblePartialShortfallClaim, isTollCoveredByDisputeRefund, isTollInWizardPeriod, assertTollInWizardPeriod } from "../../../utils/tollWeekPeriod";
 import {
   evaluateListableUnderpaidShortfall,
-  resolvePendingUnderpaidTripId,
+  resolvePendingUnderpaidTrip,
   linkPendingUnderpaidToTrips,
 } from "../../../utils/pendingUnderpaidListable";
 import { guardClaimChargeAmount } from "../../../utils/claimChargeGuard";
@@ -147,9 +147,34 @@ export function UnderpaidClaimsStep({
     [pendingUnderpaidTolls, suggestions],
   );
 
+  const tripMapWithSuggestionFallback = useMemo(() => {
+    const map = new Map(tripMap);
+    for (const tx of linkedPending) {
+      if (map.has(tx.tripId)) continue;
+      const trip = resolvePendingUnderpaidTrip(tx, tripMap, suggestions);
+      if (trip) map.set(trip.id, trip);
+    }
+    return map;
+  }, [tripMap, linkedPending, suggestions]);
+
+  const spentByTripId = useMemo(
+    () =>
+      spentUnlinkedCreditsByTripId({
+        claims: allClaims,
+        disputeRefunds,
+        tolls: reconciledTolls,
+      }),
+    [allClaims, disputeRefunds, reconciledTolls],
+  );
+
   const allocation = useMemo(
-    () => buildTripRefundAllocation([...reconciledTolls, ...linkedPending], tripMap),
-    [reconciledTolls, linkedPending, tripMap],
+    () =>
+      buildTripRefundAllocation(
+        [...reconciledTolls, ...linkedPending],
+        tripMapWithSuggestionFallback,
+        spentByTripId,
+      ),
+    [reconciledTolls, linkedPending, tripMapWithSuggestionFallback, spentByTripId],
   );
 
   const visibleTollIds = useMemo(() => {
@@ -223,7 +248,7 @@ export function UnderpaidClaimsStep({
 
     for (const tx of reconciledTolls) {
       if (!tx.tripId) continue;
-      const trip = tripMap.get(tx.tripId);
+      const trip = tripMapWithSuggestionFallback.get(tx.tripId);
       if (!trip) continue;
       pushLoss(tx, trip);
     }
@@ -231,11 +256,9 @@ export function UnderpaidClaimsStep({
     // After period reset: tripId cleared but matchedTripId / suggestion remain.
     for (const tx of pendingUnderpaidTolls) {
       if (seenTollIds.has(tx.id)) continue;
-      const suggestedTripId = resolvePendingUnderpaidTripId(tx, suggestions);
-      if (!suggestedTripId) continue;
-      const trip = tripMap.get(suggestedTripId);
+      const trip = resolvePendingUnderpaidTrip(tx, tripMap, suggestions);
       if (!trip) continue;
-      pushLoss({ ...tx, tripId: suggestedTripId }, trip);
+      pushLoss({ ...tx, tripId: trip.id }, trip);
     }
 
     return items.sort(
@@ -246,6 +269,7 @@ export function UnderpaidClaimsStep({
     pendingUnderpaidTolls,
     suggestions,
     tripMap,
+    tripMapWithSuggestionFallback,
     claimByTollId,
     partialByTollId,
     trips,

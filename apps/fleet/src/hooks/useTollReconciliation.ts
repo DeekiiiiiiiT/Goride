@@ -193,6 +193,8 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
 
   // Ignore stale shortfall responses when overlapping refreshes race.
   const shortfallFetchGen = useRef(0);
+  // Period switches / Refresh can overlap — only the newest fetch may write state.
+  const fetchGen = useRef(0);
 
   const fetchData = useCallback(async (opts?: { autoMatch?: boolean }) => {
     const blockUi = isInitialLoad.current;
@@ -200,12 +202,14 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
     // Keep prior shortfall chips until the new fetch lands — clearing here made
     // Accept flash first, then orange Apply only after Accept/refresh.
     const shortfallGen = ++shortfallFetchGen.current;
+    const gen = ++fetchGen.current;
     try {
       const dateParams = period ? { from: period.startDate, to: period.endDate } : {};
       const filterParams = { ...(driverId ? { driverId } : {}), ...dateParams, autoMatch: opts?.autoMatch };
 
       // Step 1: Fetch unreconciled in pages (server caps page size; avoids edge timeout)
       const unreconciledRes = await fetchAllUnreconciled(filterParams);
+      if (gen !== fetchGen.current) return;
 
       // Step 2: Now fetch reconciled + refunds + trips (after auto-reconciliation writes have persisted)
       const [reconciledRes, reconciledAllRes, refundsRes, allTrips] = await Promise.all([
@@ -216,6 +220,7 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
         api.getTollUnclaimedRefunds({ limit: 1000, ...(driverId ? { driverId } : {}), ...dateParams }),
         fetchAllTrips()
       ]);
+      if (gen !== fetchGen.current) return;
 
       const unreconciled: FinancialTransaction[] = unreconciledRes.data || [];
       const reconciled: FinancialTransaction[] = reconciledRes.data || [];
@@ -257,8 +262,10 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
         const drRes = await api.getDisputeRefunds(
           period ? { dateFrom: period.startDate, dateTo: period.endDate } : undefined,
         );
+        if (gen !== fetchGen.current) return;
         setDisputeRefunds(drRes.data || []);
       } catch (drErr) {
+        if (gen !== fetchGen.current) return;
         console.error('[Reconciliation] Failed to fetch dispute refunds:', drErr);
         setDisputeRefunds([]);
       }
@@ -274,6 +281,7 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
             ...(period ? { from: period.startDate, to: period.endDate } : {}),
           }),
         ]);
+        if (gen !== fetchGen.current) return;
         const sugMap = new Map<string, RefundSuggestion>();
         const rawSug = sugRes?.suggestions || {};
         for (const [tripId, s] of Object.entries(rawSug)) {
@@ -291,6 +299,7 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
           setShortfallSuggestions(shortMap);
         }
       } catch (refErr) {
+        if (gen !== fetchGen.current) return;
         console.error('[Reconciliation] Failed to fetch refund/shortfall suggestions:', refErr);
         setRefundSuggestions(new Map());
         setResolvedRefunds([]);
@@ -300,10 +309,14 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
       }
 
     } catch (error) {
-      console.error("Failed to fetch reconciliation data", error);
+      if (gen === fetchGen.current) {
+        console.error("Failed to fetch reconciliation data", error);
+      }
     } finally {
-      isInitialLoad.current = false;
-      if (blockUi) setLoading(false);
+      if (gen === fetchGen.current) {
+        isInitialLoad.current = false;
+        if (blockUi) setLoading(false);
+      }
     }
   }, [driverId, period?.startDate, period?.endDate]);
 

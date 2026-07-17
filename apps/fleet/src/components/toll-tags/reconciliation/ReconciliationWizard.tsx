@@ -19,7 +19,7 @@ import { Button } from "../../ui/button";
 import { runScenarioTest } from "../../../utils/testScenario";
 import { UnifiedTollActivityTable } from "./UnifiedTollActivityTable";
 import { FinancialTransaction, Claim } from "../../../types/data";
-import { MatchResult, calculateTollFinancials, buildTollFinancialsContext, buildTripRefundAllocation } from "../../../utils/tollReconciliation";
+import { MatchResult, calculateTollFinancials, buildTollFinancialsContext, buildTripRefundAllocation, spentUnlinkedCreditsByTripId } from "../../../utils/tollReconciliation";
 import {
   resolveWizardBucket,
   isTollExcludedFromWizardBuckets,
@@ -823,7 +823,15 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
   // one trip (e.g. two toll plazas on the same route) from each showing the
   // full trip.tollCharges amount, which both double-counts the same money
   // AND can show a refund bigger than the toll itself ever cost.
-  const tollRefundAllocation = buildTripRefundAllocation(reconciledTolls, tripMap);
+  const tollRefundAllocation = buildTripRefundAllocation(
+    reconciledTolls,
+    tripMap,
+    spentUnlinkedCreditsByTripId({
+      claims,
+      disputeRefunds: disputeRefunds || [],
+      tolls: reconciledTolls,
+    }),
+  );
   reconciledTolls.forEach(tx => {
       const trip = tripMap.get(tx.tripId || '');
       const claim = periodClaims.find(c => c.transactionId === tx.id);

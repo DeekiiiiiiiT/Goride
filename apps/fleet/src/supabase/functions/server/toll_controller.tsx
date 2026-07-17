@@ -1797,6 +1797,72 @@ app.get(`${BASE}/unreconciled`, async (c) => {
       }
     }
 
+    // Unlinked Refund applies already spent part (or all) of a trip's
+    // tollCharges onto a different toll. Reduce the suggestion pool BEFORE
+    // the shared-sibling split so Finish cannot treat leftovers as covered.
+    const suggestedTripIds = new Set<string>();
+    for (const matches of Object.values(suggestionsMap)) {
+      const tid = matches?.[0]?.tripId;
+      if (tid) suggestedTripIds.add(String(tid));
+    }
+    if (suggestedTripIds.size > 0) {
+      const spentByTrip = new Map<string, number>();
+      try {
+        const { data: allocRows } = await supabase
+          .from("toll_settlement_allocations")
+          .select("id, source_id, amount, source_type, reverses_id")
+          .eq("source_type", "unlinked_trip")
+          .in("source_id", [...suggestedTripIds]);
+        if (Array.isArray(allocRows) && allocRows.length > 0) {
+          const creditIds = allocRows.map((r: any) => String(r.id));
+          const reversed = new Set<string>();
+          const { data: revRows } = await supabase
+            .from("toll_settlement_allocations")
+            .select("reverses_id")
+            .eq("source_type", "reversal")
+            .in("reverses_id", creditIds);
+          for (const r of revRows || []) {
+            if (r?.reverses_id) reversed.add(String(r.reverses_id));
+          }
+          for (const r of allocRows) {
+            if (!r || reversed.has(String(r.id))) continue;
+            const tid = String(r.source_id);
+            spentByTrip.set(
+              tid,
+              Math.round(((spentByTrip.get(tid) || 0) + Math.abs(Number(r.amount) || 0)) * 100) / 100,
+            );
+          }
+        }
+      } catch {
+        // table missing — fall through to toll-row approximation
+      }
+      if (spentByTrip.size === 0) {
+        for (const tx of tollTx) {
+          const tid = tx?.unlinkedSourceTripId ? String(tx.unlinkedSourceTripId) : "";
+          if (!tid || !suggestedTripIds.has(tid)) continue;
+          spentByTrip.set(
+            tid,
+            Math.round(((spentByTrip.get(tid) || 0) + Math.abs(Number(tx.amount) || 0)) * 100) / 100,
+          );
+        }
+      }
+      for (const tx of page) {
+        const top = suggestionsMap[tx.id]?.[0];
+        if (!top?.tripId) continue;
+        const spent = spentByTrip.get(String(top.tripId)) || 0;
+        if (spent <= 0) continue;
+        const raw = Number(top.tripTollCharges) || 0;
+        const remaining = Math.max(0, Math.round((raw - spent) * 100) / 100);
+        if (remaining === raw) continue;
+        top.tripTollCharges = remaining;
+        const txAmountAbs = Math.abs(Number(tx.amount) || 0);
+        top.varianceAmount = remaining - txAmountAbs;
+        if (top.matchType === "PERFECT_MATCH" || top.matchType === "AMOUNT_VARIANCE") {
+          top.matchType = "AMOUNT_VARIANCE";
+        }
+      }
+    }
+
     // ── Shared-trip-refund correction ────────────────────────────────────
     // A trip's `tollCharges` is ONE refund amount, but multiple distinct
     // tolls (e.g. two toll plazas on the same route) can each independently

@@ -5,6 +5,7 @@ import {
   buildTollFinancialsContext,
   buildTripRefundAllocation,
   calculateTollFinancials,
+  spentUnlinkedCreditsByTripId,
   type TollFinancials,
 } from './tollReconciliation';
 
@@ -13,10 +14,10 @@ type TripRefundAllocation = Map<string, number>;
 
 export type PendingUnderpaidTx = FinancialTransaction & { matchedTripId?: string | null };
 
-/** Suggestion map shape used by UnderpaidClaimsStep / wizard (trip id only). */
+/** Suggestion map — embedded trip is a fallback when the trips dump omitted the row. */
 export type PendingUnderpaidSuggestions = Map<
   string,
-  Array<{ trip?: { id?: string } | null }>
+  Array<{ trip?: (Partial<Trip> & { id?: string }) | null }>
 >;
 
 /** Trip id for a post-reset underpaid toll: live suggestion, else matchedTripId. */
@@ -25,6 +26,42 @@ export function resolvePendingUnderpaidTripId(
   suggestions?: PendingUnderpaidSuggestions | null,
 ): string | null {
   return suggestions?.get(tx.id)?.[0]?.trip?.id || tx.matchedTripId || null;
+}
+
+/**
+ * Resolve the trip used for underpaid financials. Prefer the full trips list;
+ * fall back to the suggestion stub so Finish cannot hide open tolls when the
+ * trips dump is incomplete or still loading.
+ */
+export function resolvePendingUnderpaidTrip(
+  tx: PendingUnderpaidTx,
+  tripMap: Map<string, Trip>,
+  suggestions?: PendingUnderpaidSuggestions | null,
+): Trip | null {
+  const tripId = resolvePendingUnderpaidTripId(tx, suggestions);
+  if (!tripId) return null;
+  const fromMap = tripMap.get(tripId);
+  if (fromMap) return fromMap;
+  const stub = suggestions?.get(tx.id)?.[0]?.trip;
+  if (!stub || stub.id !== tripId) return null;
+  return {
+    id: tripId,
+    date: stub.date || tx.date,
+    platform: stub.platform || 'Uber',
+    status: stub.status || 'Completed',
+    tollCharges: Number(stub.tollCharges) || 0,
+    driverId: stub.driverId || tx.driverId,
+    driverName: stub.driverName || tx.driverName,
+    pickupLocation: stub.pickupLocation,
+    dropoffLocation: stub.dropoffLocation,
+    amount: stub.amount,
+    requestTime: stub.requestTime,
+    dropoffTime: stub.dropoffTime,
+    vehicleId: stub.vehicleId,
+    duration: stub.duration,
+    distance: stub.distance,
+    serviceType: stub.serviceType,
+  } as Trip;
 }
 
 export interface ListableUnderpaidCtx {
@@ -113,12 +150,23 @@ function buildPendingAwareCtx(input: {
     input.pendingUnderpaidTolls,
     input.suggestions,
   );
+  const reconciled = [...input.reconciledTollById.values()];
+  const spentByTripId = spentUnlinkedCreditsByTripId({
+    claims: [...input.claimByTollId.values()],
+    disputeRefunds: input.disputeRefunds,
+    tolls: reconciled,
+  });
+  // Suggestion stubs must seed tripById so spent-adjusted pools still build
+  // when the trips dump omitted the row.
+  const tripById = new Map(input.tripMap);
+  for (const tx of linkedPending) {
+    if (tripById.has(tx.tripId)) continue;
+    const trip = resolvePendingUnderpaidTrip(tx, input.tripMap, input.suggestions);
+    if (trip) tripById.set(trip.id, trip);
+  }
   const allocation =
     input.allocation ??
-    buildTripRefundAllocation(
-      [...input.reconciledTollById.values(), ...linkedPending],
-      input.tripMap,
-    );
+    buildTripRefundAllocation([...reconciled, ...linkedPending], tripById, spentByTripId);
   return {
     linkedPending,
     ctx: {
@@ -155,7 +203,7 @@ export function countListablePendingUnderpaid(input: {
   const seen = new Set<string>();
   for (const tx of linkedPending) {
     if (seen.has(tx.id)) continue;
-    const trip = input.tripMap.get(tx.tripId);
+    const trip = resolvePendingUnderpaidTrip(tx, input.tripMap, input.suggestions);
     if (!trip) continue;
     if (evaluateListableUnderpaidShortfall(tx, trip, ctx).ok) {
       seen.add(tx.id);
@@ -202,7 +250,7 @@ export function listFullyCoveredPendingUnderpaid(input: {
       continue;
     }
 
-    const trip = input.tripMap.get(tx.tripId);
+    const trip = resolvePendingUnderpaidTrip(tx, input.tripMap, input.suggestions);
     if (!trip) continue;
 
     const finCtx = buildTollFinancialsContext(
