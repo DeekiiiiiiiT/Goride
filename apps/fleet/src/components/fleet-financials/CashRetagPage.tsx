@@ -1,5 +1,5 @@
 /**
- * Fleet Operations → Cash Retag
+ * Fleet Operations → Fleet Financials → Cash Retag
  * Preview then apply Settlement Week tags on historical Log Cash. Uses saveTransaction path only.
  */
 import React, { useMemo, useState } from 'react';

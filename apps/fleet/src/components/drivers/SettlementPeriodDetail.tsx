@@ -218,7 +218,7 @@ export function SettlementPeriodDetail({
                 }
                 sub={
                   bankDisplay.kind === 'pending'
-                    ? 'Confirm fleet bank receipt on Fleet Financials (org week)'
+                    ? 'Confirm fleet bank receipt on Bank Deposits (org week)'
                     : 'Allocation to this driver — not the fleet wire recipient'
                 }
               />

@@ -47,6 +47,10 @@ export function TransactionsPage({ mode = 'analytics' }: { mode?: 'analytics' | 
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
+      <div className="rounded-md border border-indigo-200 bg-indigo-50 px-3 py-2.5 text-sm text-indigo-950 dark:border-indigo-900 dark:bg-indigo-950/40 dark:text-indigo-100">
+        Prefer <span className="font-semibold">Business Finance</span> in the sidebar for owner P&amp;L, cash, and expenses.
+        This Analytics desk stays available; some older cash KPIs may be incomplete.
+      </div>
       <div>
         <h2 className="text-3xl font-bold tracking-tight text-slate-900">Financial Analytics</h2>
         <p className="text-slate-500">Manage cash flow, expenses, payroll, and generate financial reports.</p>

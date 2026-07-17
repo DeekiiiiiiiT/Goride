@@ -424,6 +424,7 @@ export const PAGE_PERMISSION_MAP: Record<string, Permission> = {
   'trips':              'nav.trips',
   'reports':            'nav.reports',
   'transactions':       'nav.financial_analytics',
+  'business-finance':   'nav.financial_analytics',
   'transaction-list':   'nav.transaction_list',
 
   // System

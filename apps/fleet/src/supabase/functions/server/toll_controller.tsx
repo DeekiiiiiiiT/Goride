@@ -6093,14 +6093,21 @@ function computeUnlinkedShortfallSuggestions(
     }
 
     const tollAmount = Math.abs(Number(toll.amount) || 0);
+    // Matched tolls already carry their trip's platform refund — suggest only
+    // the live remaining shortfall, never the raw toll amount (apply path
+    // recomputes this and would 409 on fully-covered rows).
+    const matchedTripForToll = toll.tripId ? ctx.tripById.get(String(toll.tripId)) : null;
+    const matchedPlatformRefund = Math.abs(Number(matchedTripForToll?.tollCharges) || 0);
+    const remainingTollShortfall = computeChargeShortfall(tollAmount, matchedPlatformRefund, 0);
+    if (remainingTollShortfall <= UNLINKED_SHORTFALL_TOLERANCE) continue;
     const confidence = scoreUnlinkedShortfallMatch({
       tripRefund,
       tripDate: trip.date,
-      remainingShortfall: tollAmount,
+      remainingShortfall: remainingTollShortfall,
       tollAmount,
       claimOrTollDate: toll.date || trip.date,
     });
-    const leftover = leftoverAfterApply(tollAmount, tripRefund);
+    const leftover = leftoverAfterApply(remainingTollShortfall, tripRefund);
     const tollPlatform = extractTollPlatform(toll, null, ctx);
     const tollPlatformNorm = normalizePlatformServer(tollPlatform);
     pushCandidate({
@@ -6109,9 +6116,9 @@ function computeUnlinkedShortfallSuggestions(
       tripId: trip.id,
       tripRefund,
       tollAmount,
-      remainingShortfall: tollAmount,
+      remainingShortfall: remainingTollShortfall,
       leftoverShortfall: leftover,
-      coversFully: coversShortfallFully(tollAmount, tripRefund),
+      coversFully: coversShortfallFully(remainingTollShortfall, tripRefund),
       confidence,
       date: toll.date,
       claimStatus: null,
@@ -6309,6 +6316,15 @@ async function applyUnlinkedRefundToClaim(
     const matchedTrip = toll.tripId ? trips.find((t: any) => t?.id === toll.tripId) : null;
     const platformRefund = Math.abs(Number(matchedTrip?.tollCharges) || 0);
     const initialShortfall = computeChargeShortfall(tollAmount, platformRefund, 0);
+    // Fully covered by its matched trip — reject BEFORE creating a claim, or a
+    // stale suggestion strands an orphan Open claim on every failed attempt.
+    if (initialShortfall <= 0.05) {
+      return {
+        ok: false,
+        status: 409,
+        error: "That toll is already fully covered by its matched trip refund — no shortfall remains. Refresh and pick an open underpaid shortfall instead.",
+      };
+    }
     claim = await upsertClaimFn(
       {
         type: "Toll_Refund",

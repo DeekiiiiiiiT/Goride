@@ -44,6 +44,7 @@ interface ExpensePeriodRow {
   transactionCount: number;
   tollReconciled: number;      // Phase 6: count of reconciled toll txns in this period
   tollUnreconciled: number;    // Phase 6: count of unreconciled toll txns in this period
+  tollInProgress?: boolean;    // rows handled but open claims/disputes remain (wizard not Completed)
   tollCashSpent: number;       // $ paid at plaza (cash / receipt) — ignores personal vs wash
   tollTagSpent: number;        // $ charged via tag / fleet account (not cash)
   disputeRefundMatched: number;   // Uber support-case adjustments already linked to a toll
@@ -213,6 +214,7 @@ export function DriverExpensesHistory({
           transactionCount: reconciled + unmatched,
           tollReconciled: reconciled,
           tollUnreconciled: unmatched,
+          tollInProgress: String(p.tollStatus || '') === 'in_progress',
           tollCashSpent: Number(p.tollCashSpend) || 0,
           tollTagSpent: Number(p.tollTagSpend) || 0,
           disputeRefundMatched: Number(p.disputeRefundMatched) || 0,
@@ -409,9 +411,11 @@ export function DriverExpensesHistory({
         'Tag Tolls': row.tollTagSpent.toFixed(2),
         'Toll Status': (row.tollReconciled + row.tollUnreconciled) === 0
           ? 'N/A'
-          : row.tollUnreconciled === 0
-            ? `Reconciled (${row.tollReconciled})`
-            : `${row.tollUnreconciled} Unmatched`,
+          : row.tollUnreconciled > 0
+            ? `${row.tollUnreconciled} Unmatched`
+            : row.tollInProgress
+              ? 'In Progress'
+              : `Reconciled (${row.tollReconciled})`,
         'Charged to driver': row.tollCharged.toFixed(2),
         'Fuel Deduction': row.fuelDeduction.toFixed(2),
         'Fleet Fuel Share': row.fuelFleetShare.toFixed(2),
@@ -720,7 +724,7 @@ export function DriverExpensesHistory({
                                   </span>
                                 </TooltipTrigger>
                                 <TooltipContent side="top" className="max-w-[250px] text-xs">
-                                  Whether toll expenses for this period have been matched to a trip in the Toll Reconciliation system. "Reconciled" = all tolls linked; "X Unmatched" = some tolls still need matching.
+                                  Whether toll expenses for this period have been matched to a trip in the Toll Reconciliation system. "Reconciled" = all work done; "In Progress" = tolls matched but a claim or dispute is still open; "X Unmatched" = some tolls still need matching.
                                 </TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
@@ -752,13 +756,17 @@ export function DriverExpensesHistory({
                             <TableCell className="px-3 text-xs text-center">
                               {(row.tollReconciled + row.tollUnreconciled) === 0 ? (
                                 <span className="text-slate-300">-</span>
-                              ) : row.tollUnreconciled === 0 ? (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
-                                  <CheckCircle className="h-3 w-3" /> Reconciled
-                                </span>
-                              ) : (
+                              ) : row.tollUnreconciled > 0 ? (
                                 <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
                                   <Unlink className="h-3 w-3" /> {row.tollUnreconciled} Unmatched
+                                </span>
+                              ) : row.tollInProgress ? (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-medium text-sky-700">
+                                  <Clock className="h-3 w-3" /> In Progress
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+                                  <CheckCircle className="h-3 w-3" /> Reconciled
                                 </span>
                               )}
                             </TableCell>

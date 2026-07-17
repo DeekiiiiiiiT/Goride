@@ -14,6 +14,14 @@ import {
   loadAllByPrefix,
 } from "./toll_controller.tsx";
 import { periodAnchorFor, periodEndForAnchor, minorToMajor } from "./financial_ledger.ts";
+import {
+  resolveActiveEarningsBundleForDriverWeek,
+} from "./earnings_policy_runtime.ts";
+import { computePeriodSettlement } from "./driver_period_settlement.ts";
+import {
+  computeWeekCommissionShare,
+  computeWeekCashBase,
+} from "./period_share_cash.ts";
 
 function sb() {
   return createClient(
@@ -97,6 +105,12 @@ export type DriverFinancialPeriodRow = {
   fuelNetPay: number;
   fuelFinalized: boolean;
   earningsGross: number;
+  driverShare: number;
+  fleetShare: number;
+  driverSharePercent: number;
+  tripCount: number;
+  tierId: string | null;
+  tierName: string | null;
   cashCollected: number;
   cashReturned: number;
   cashStillHeld: number;
@@ -126,40 +140,150 @@ type RebuildContext = {
   scopedTolls: any[];
   scopedTrips: any[];
   chargeTxAll: any[];
+  driverTxAll: any[];
   disputes: any[];
   fuelReports: any[];
+  claims: any[];
+  fareEntries: any[];
+  tipEntries: any[];
+  payoutCashByAnchor: Map<string, number>;
+  earningsPolicies: any[];
+  legacyEarnings: {
+    tiers: any[];
+    quotas: any;
+    personalAllowance: any;
+  };
   persistLines?: boolean;
 };
 
+const DEFAULT_TIERS_EH = [
+  { id: "tier_1", name: "Bronze", minEarnings: 0, maxEarnings: 75000, sharePercentage: 25, color: "#CD7F32" },
+  { id: "tier_2", name: "Silver", minEarnings: 75000, maxEarnings: 150000, sharePercentage: 27, color: "#C0C0C0" },
+  { id: "tier_3", name: "Gold", minEarnings: 150000, maxEarnings: null, sharePercentage: 30, color: "#FFD700" },
+];
+
+async function resolveDriverAliasIds(driverId: string): Promise<string[]> {
+  const ids = new Set<string>([String(driverId).trim()]);
+  try {
+    const dr: any = await kv.get(`driver:${driverId}`);
+    if (dr?.uberDriverId) ids.add(String(dr.uberDriverId).trim());
+    if (dr?.inDriveDriverId) ids.add(String(dr.inDriveDriverId).trim());
+  } catch {
+    /* ignore */
+  }
+  return Array.from(ids);
+}
+
+/** Paginate ledger_event:* for driver alias IDs (fare/tip/payout_cash). */
+async function loadLedgerEventsForDriverIds(driverIds: string[]): Promise<any[]> {
+  if (!driverIds.length) return [];
+  const PAGE = 1000;
+  const MAX_ROWS = 40000;
+  const all: any[] = [];
+  let offset = 0;
+  const orFilter =
+    driverIds.length === 1 ? null : driverIds.map((id) => `value->>driverId.eq.${id}`).join(",");
+  while (offset < MAX_ROWS) {
+    let q = sb().from("kv_store_37f42386").select("value").like("key", "ledger_event:%");
+    if (orFilter) q = q.or(orFilter);
+    else q = q.eq("value->>driverId", driverIds[0]);
+    const { data, error } = await q.range(offset, offset + PAGE - 1);
+    if (error) {
+      console.error("[DriverFinancialPeriods] ledger_event load:", error.message);
+      break;
+    }
+    const page = data || [];
+    all.push(...page.map((d: any) => d.value).filter(Boolean));
+    if (page.length < PAGE) break;
+    offset += PAGE;
+  }
+  return all;
+}
+
 async function loadRebuildContext(driverId: string): Promise<RebuildContext> {
   const timezone = await getFleetTimezone();
-  const [{ tollTx, trips }, disputesAll, allTx, fuelAll] = await Promise.all([
+  const driverIds = await resolveDriverAliasIds(driverId);
+  const idSet = new Set(driverIds.map(String));
+
+  const [
+    { tollTx, trips },
+    disputesAll,
+    allTx,
+    fuelAll,
+    claimsAll,
+    ledgerEvents,
+    prefsEH,
+    policyItemsRaw,
+  ] = await Promise.all([
     loadAllTollLedgerWithTrips(),
     loadDisputeRefundRecords(),
     kv.getByPrefix("transaction:"),
     loadAllByPrefix("finalized_report:"),
+    loadAllByPrefix("claim:"),
+    loadLedgerEventsForDriverIds(driverIds),
+    kv.get("preferences:general"),
+    kv.getByPrefix("earnings_policy:"),
   ]);
+
   const scopedTolls = filterByDriver(tollTx, driverId).filter(
     (tx: any) => isReconcilableTollExpense(tx) && !isTopUpLike(tx),
   );
   const scopedTrips = filterByDriver(trips, driverId);
-  const chargeTxAll = (allTx || []).filter(
-    (t: any) =>
-      t &&
-      String(t.driverId) === String(driverId) &&
-      String(t.category || "") === "Toll Charge",
+  const driverTxAll = (allTx || []).filter(
+    (t: any) => t && idSet.has(String(t.driverId)),
+  );
+  const chargeTxAll = driverTxAll.filter(
+    (t: any) => String(t.category || "") === "Toll Charge",
   );
   const disputes = filterByDriver(disputesAll, driverId);
   const fuelReports = (fuelAll || []).filter(
     (r: any) => r?.status === "Finalized" && String(r.driverId) === String(driverId),
   );
+  const claims = (claimsAll || []).filter(
+    (cl: any) => cl && String(cl.driverId) === String(driverId),
+  );
+
+  const fareEntries = (ledgerEvents || []).filter(
+    (e: any) => e && String(e.eventType || "") === "fare_earning",
+  );
+  const tipEntries = (ledgerEvents || []).filter(
+    (e: any) => e && String(e.eventType || "") === "tip",
+  );
+
+  const payoutCashByAnchor = new Map<string, number>();
+  for (const e of ledgerEvents || []) {
+    if (!e || String(e.eventType || "") !== "payout_cash") continue;
+    const d = String(e.date || "").slice(0, 10);
+    if (!d) continue;
+    const anchor = await periodAnchorFor(d, timezone);
+    const amt = Math.abs(Number(e.netAmount) || Number(e.grossAmount) || 0);
+    payoutCashByAnchor.set(anchor, round2((payoutCashByAnchor.get(anchor) || 0) + amt));
+  }
+
+  const prefs: any = prefsEH || {};
+  const earningsPolicies = (Array.isArray(policyItemsRaw) ? policyItemsRaw : []).filter(
+    (p: any) => p && typeof p === "object" && p.id,
+  );
+  const legacyEarnings = {
+    tiers: prefs.tiers?.length ? prefs.tiers : DEFAULT_TIERS_EH,
+    quotas: prefs.quotas || null,
+    personalAllowance: prefs.personalAllowance || null,
+  };
+
   return {
     timezone,
     scopedTolls,
     scopedTrips,
     chargeTxAll,
+    driverTxAll,
     disputes,
     fuelReports,
+    claims,
+    fareEntries,
+    tipEntries,
+    payoutCashByAnchor,
+    earningsPolicies,
+    legacyEarnings,
     persistLines: false,
   };
 }
@@ -275,6 +399,33 @@ export async function rebuildDriverFinancialPeriod(
     }
   }
 
+  // Open claims keep the week actionable even when every toll row is "handled"
+  // (claim_filed is terminal per-toll, but the claim itself may still be Open).
+  let tollOpenClaimCount = 0;
+  for (const cl of context.claims) {
+    if (String(cl?.status || "") !== "Open") continue;
+    const tollId = String(cl.transactionId || "");
+    const toll = tollId ? scopedTolls.find((t: any) => String(t.id) === tollId) : null;
+    const d = toll?.date
+      ? String(toll.date).slice(0, 10)
+      : String(cl.date || cl.createdAt || "").slice(0, 10);
+    if (d >= periodAnchor && d <= periodEnd) {
+      tollOpenClaimCount++;
+      tollWorkflowActionable++;
+      if (persistLines) {
+        lines.push({
+          lineType: "claim_open",
+          domain: "toll",
+          sourceSystem: "claim",
+          sourceId: String(cl.id),
+          description: `Open claim${toll ? ` on toll ${tollId}` : ""}`,
+          amount: -(Math.abs(Number(cl.amount) || 0)),
+          occurredAt: d,
+        });
+      }
+    }
+  }
+
   const { data: finEvents } = await sb()
     .from("financial_events")
     .select("id, event_type, domain, source_system, source_id, amount_minor, occurred_at, payload")
@@ -287,9 +438,6 @@ export async function rebuildDriverFinancialPeriod(
   let fuelDriverSpend = 0;
   let fuelGasCardSpend = 0;
   let fuelFinalized = false;
-  let earningsGross = 0;
-  let cashCollected = 0;
-  let cashReturned = 0;
 
   for (const ev of finEvents || []) {
     const major = minorToMajor(Number(ev.amount_minor) || 0);
@@ -305,9 +453,6 @@ export async function rebuildDriverFinancialPeriod(
     if (et === "fuel_driver_spend") fuelDriverSpend = round2(fuelDriverSpend + Math.abs(major));
     if (et === "fuel_gas_card_spend") fuelGasCardSpend = round2(fuelGasCardSpend + Math.abs(major));
     if (et === "fuel_finalized") fuelFinalized = true;
-    if (et === "fare_earning" || et === "tip") earningsGross = round2(earningsGross + Math.abs(major));
-    if (et === "cash_collected") cashCollected = round2(cashCollected + Math.abs(major));
-    if (et === "cash_returned" || et === "payout_cash") cashReturned = round2(cashReturned + Math.abs(major));
   }
 
   // Fallback: finalized fuel reports when no fuel events yet
@@ -323,32 +468,86 @@ export async function rebuildDriverFinancialPeriod(
     }
   }
 
-  // Earnings fallback from trips in week
-  if (earningsGross === 0) {
+  // Commission Driver Share — same tier math as /ledger/driver-earnings-history
+  const bundleEH = resolveActiveEarningsBundleForDriverWeek({
+    policies: context.earningsPolicies || [],
+    driverId,
+    weekStartYmd: periodAnchor,
+    legacy: context.legacyEarnings,
+  });
+  const share = computeWeekCommissionShare({
+    fareEntries: context.fareEntries || [],
+    tipEntries: context.tipEntries || [],
+    periodAnchor,
+    periodEnd,
+    tiers: bundleEH.tiers || context.legacyEarnings.tiers,
+  });
+  let earningsGross = share.earningsGross;
+  let driverShare = share.driverShare;
+  let fleetShare = share.fleetShare;
+  let driverSharePercent = share.driverSharePercent;
+  let tripCount = share.tripCount;
+  let tierId: string | null = share.tierId;
+  let tierName: string | null = share.tierName;
+
+  // Trip fallback when no ledger fare_earning rows yet
+  if (earningsGross < 0.005 && tripCount === 0) {
+    let tripGross = 0;
+    let nTrips = 0;
     for (const t of context.scopedTrips) {
       const d = String(t.date || "").slice(0, 10);
       if (!(d >= periodAnchor && d <= periodEnd)) continue;
       const status = String(t.status || "").toLowerCase();
       if (status.includes("cancel")) continue;
-      earningsGross = round2(earningsGross + Math.abs(Number(t.amount) || 0));
-      const cash = Math.abs(Number(t.cashCollected) || 0);
-      if (cash > 0) cashCollected = round2(cashCollected + cash);
+      tripGross += Math.abs(Number(t.amount) || 0);
+      nTrips++;
+    }
+    if (tripGross > 0.005) {
+      earningsGross = round2(tripGross);
+      tripCount = nTrips;
+      const tier = (bundleEH.tiers || context.legacyEarnings.tiers || [])[0];
+      const pct = Number(tier?.sharePercentage) || 25;
+      driverSharePercent = pct;
+      driverShare = round2(tripGross * (pct / 100));
+      fleetShare = round2(tripGross - driverShare);
+      tierId = String(tier?.id || "tier_fallback");
+      tierName = String(tier?.name || "Default");
     }
   }
 
+  // Settlement cash base — passenger cash + Settlement-Week Log Cash
+  const cashBase = computeWeekCashBase({
+    periodAnchor,
+    periodEnd,
+    trips: context.scopedTrips || [],
+    transactions: context.driverTxAll || [],
+    uberPayoutCash: context.payoutCashByAnchor?.get(periodAnchor) || 0,
+  });
+  const cashCollected = cashBase.passengerCash;
+  const cashReturned = cashBase.cashReturned;
+
   const fuelNetPay = round2(fuelDriverSpend - fuelDeduction);
-  const cashStillHeld = round2(
-    Math.max(0, cashCollected + tollChargedToDriver - cashReturned - fuelFleetShare - tollCashSpend),
-  );
-  const payoutNet = round2(earningsGross - fuelDeduction);
-  const settlementAmount = round2(payoutNet - cashStillHeld);
+  const settled = computePeriodSettlement({
+    driverShare,
+    fuelDeduction,
+    baseCashOwed: cashCollected,
+    baseCashPaid: cashReturned,
+    tollCashWash: tollCashSpend,
+    tollPersonal: Math.max(0, tollChargedToDriver),
+    fuelCredits: fuelFleetShare,
+  });
+  const cashStillHeld = settled.adjCashBalance;
+  const payoutNet = settled.netPayout;
+  const settlementAmount = settled.settlement;
 
   const tollStatus =
     weekTolls.length === 0
       ? "n/a"
-      : tollUnmatchedCount === 0
-        ? "reconciled"
-        : "unmatched";
+      : tollUnmatchedCount > 0
+        ? "unmatched"
+        : tollWorkflowActionable > 0
+          ? "in_progress" // rows handled but open claims / unmatched disputes remain
+          : "reconciled";
 
   let settlementStatus = "pending";
   if (fuelFinalized) {
@@ -365,7 +564,7 @@ export async function rebuildDriverFinancialPeriod(
   const periodStatus: "open" | "closed" | "reopened" =
     tollWorkflowActionable > 0 || tollUnmatchedCount > 0
       ? "open"
-      : fuelFinalized && tollStatus === "reconciled"
+      : fuelFinalized && (tollStatus === "reconciled" || tollStatus === "n/a")
         ? "closed"
         : "open";
 
@@ -376,6 +575,9 @@ export async function rebuildDriverFinancialPeriod(
     fuelDeduction,
     fuelFinalized,
     disputeRefundUnmatched,
+    driverShare,
+    cashCollected,
+    cashReturned,
     lineCount: lines.length,
   });
   const sourceEventHash = await sha256Hex(hashPayload);
@@ -403,11 +605,17 @@ export async function rebuildDriverFinancialPeriod(
     fuelNetPay,
     fuelFinalized,
     earningsGross: round2(earningsGross),
+    driverShare: round2(driverShare),
+    fleetShare: round2(fleetShare),
+    driverSharePercent,
+    tripCount,
+    tierId,
+    tierName,
     cashCollected: round2(cashCollected),
     cashReturned: round2(cashReturned),
-    cashStillHeld,
-    settlementAmount,
-    payoutNet,
+    cashStillHeld: round2(cashStillHeld),
+    settlementAmount: round2(settlementAmount),
+    payoutNet: round2(payoutNet),
     settlementStatus,
     payoutStatus,
     tollStatus,
@@ -417,14 +625,18 @@ export async function rebuildDriverFinancialPeriod(
     lines,
   };
 
-  // Drop phantom weeks (top-up-only) — earnings alone must not create a toll expense week.
-  const hasExpenseActivity =
+  // Keep weeks with settlement activity (earnings/cash/fuel/tolls); drop empty phantoms.
+  const hasSettlementActivity =
     weekTolls.length > 0 ||
     chargeTx.length > 0 ||
     fuelFinalized ||
     disputeRefundMatched > 0 ||
-    disputeRefundUnmatched > 0;
-  if (!hasExpenseActivity) {
+    disputeRefundUnmatched > 0 ||
+    driverShare > 0.005 ||
+    cashCollected > 0.005 ||
+    cashReturned > 0.005 ||
+    tripCount > 0;
+  if (!hasSettlementActivity) {
     const { data: phantom } = await sb()
       .from("driver_financial_periods")
       .select("id")
@@ -470,6 +682,12 @@ export async function rebuildDriverFinancialPeriod(
     fuel_net_pay: row.fuelNetPay,
     fuel_finalized: row.fuelFinalized,
     earnings_gross: row.earningsGross,
+    driver_share: row.driverShare,
+    fleet_share: row.fleetShare,
+    driver_share_percent: row.driverSharePercent,
+    trip_count: row.tripCount,
+    tier_id: row.tierId,
+    tier_name: row.tierName,
     cash_collected: row.cashCollected,
     cash_returned: row.cashReturned,
     cash_still_held: row.cashStillHeld,
@@ -496,8 +714,8 @@ export async function rebuildDriverFinancialPeriod(
     .single();
 
   if (error) {
-    console.error("[DriverFinancialPeriods] upsert failed:", error.message);
-    return { ...row, projectionVersion: nextVersion };
+    console.error("[DriverFinancialPeriods] upsert failed:", error.message, error.details || "");
+    throw new Error(`driver_financial_periods upsert failed: ${error.message}`);
   }
 
   const periodId = saved?.id as string;
@@ -657,6 +875,12 @@ function mapDbPeriod(r: any): DriverFinancialPeriodRow {
     fuelNetPay: Number(r.fuel_net_pay) || 0,
     fuelFinalized: !!r.fuel_finalized,
     earningsGross: Number(r.earnings_gross) || 0,
+    driverShare: Number(r.driver_share) || 0,
+    fleetShare: Number(r.fleet_share) || 0,
+    driverSharePercent: Number(r.driver_share_percent) || 0,
+    tripCount: Number(r.trip_count) || 0,
+    tierId: r.tier_id ?? null,
+    tierName: r.tier_name ?? null,
     cashCollected: Number(r.cash_collected) || 0,
     cashReturned: Number(r.cash_returned) || 0,
     cashStillHeld: Number(r.cash_still_held) || 0,
@@ -703,7 +927,7 @@ export async function getDriverFinancialPeriodDetail(
   return row;
 }
 
-/** Discover period anchors for a driver (usage tolls + charges + fuel — never top-ups alone). */
+/** Discover period anchors for a driver (tolls, charges, fuel, earnings, cash). */
 export async function rebuildAllPeriodsForDriver(driverId: string): Promise<number> {
   const ctx = await loadRebuildContext(driverId);
   const anchors = new Set<string>();
@@ -719,7 +943,25 @@ export async function rebuildAllPeriodsForDriver(driverId: string): Promise<numb
     const start = String(r.periodStart || r.startDate || "").slice(0, 10);
     if (start) anchors.add(await periodAnchorFor(start, ctx.timezone));
   }
-  // Do not invent weeks from trips/top-ups alone — Expenses weeks require toll/fuel/charge activity.
+  for (const e of ctx.fareEntries) {
+    if (!e?.date) continue;
+    anchors.add(await periodAnchorFor(e.date, ctx.timezone));
+  }
+  for (const e of ctx.tipEntries) {
+    if (!e?.date) continue;
+    anchors.add(await periodAnchorFor(e.date, ctx.timezone));
+  }
+  for (const anchor of ctx.payoutCashByAnchor.keys()) {
+    anchors.add(anchor);
+  }
+  for (const t of ctx.driverTxAll) {
+    const weekKey = t?.metadata?.workPeriodStart
+      ? String(t.metadata.workPeriodStart).slice(0, 10)
+      : null;
+    if (weekKey && /^\d{4}-\d{2}-\d{2}$/.test(weekKey)) {
+      anchors.add(weekKey);
+    }
+  }
 
   let n = 0;
   for (const anchor of [...anchors].sort()) {

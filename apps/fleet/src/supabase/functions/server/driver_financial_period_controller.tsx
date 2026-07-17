@@ -143,14 +143,33 @@ app.get(`${BASE}/verify-parity`, async (c) => {
         tollUnmatchedCount: jun?.tollUnmatchedCount ?? null,
         status: jun?.status ?? null,
         tollStatus: jun?.tollStatus ?? null,
-        // Invariant: never closed while unmatched; when unmatched>0 must show open/unmatched.
-        // When live week is fully handled, reconciled+open is correct (reopen only on new receipts).
-        pass: !!jun && (
+        tollWorkflowActionable: jun?.tollWorkflowActionable ?? null,
+        driverShare: jun?.driverShare ?? null,
+        // Invariant: unmatched → "unmatched"; handled-but-open-claims → "in_progress";
+        // fully done → "reconciled". Never closed while any work remains.
+        pass: !!jun && jun.status !== "closed" && (
           (Number(jun.tollUnmatchedCount) || 0) > 0
-            ? jun.status !== "closed" && jun.tollStatus === "unmatched"
-            : jun.tollStatus === "reconciled" && jun.status !== "closed"
+            ? jun.tollStatus === "unmatched"
+            : (Number(jun.tollWorkflowActionable) || 0) > 0
+              ? jun.tollStatus === "in_progress"
+              : jun.tollStatus === "reconciled"
         ),
-        note: "Unmatched tolls keep period open; late receipts reopen (never stuck closed)",
+        note: "Week must not claim Reconciled while unmatched tolls or open claims remain",
+      },
+      {
+        id: "jun29_share_cash_present",
+        periodAnchor: "2026-06-29",
+        present: !!jun,
+        driverShare: jun?.driverShare ?? null,
+        cashCollected: jun?.cashCollected ?? null,
+        payoutNet: jun?.payoutNet ?? null,
+        settlementAmount: jun?.settlementAmount ?? null,
+        pass: !!jun && (
+          Number(jun.driverShare) > 0 ||
+          Number(jun.cashCollected) > 0 ||
+          Number(jun.tollSpend) > 0
+        ),
+        note: "Phase 2: share/cash fields populated on active settlement weeks",
       },
       {
         id: "dec8_completed_no_topup_unmatched",

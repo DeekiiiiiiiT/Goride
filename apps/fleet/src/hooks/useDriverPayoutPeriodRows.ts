@@ -16,6 +16,7 @@ import {
 } from './useDriverFinancialBundle';
 import {
   overlaySharedPeriodsOntoPayoutRows,
+  periodsToPayoutPeriodRows,
   useDriverFinancialPeriods,
 } from './useDriverFinancialPeriods';
 
@@ -246,6 +247,13 @@ export function useDriverPayoutPeriodRows(opts: {
   ]);
 
   const periodData: PayoutPeriodRow[] = useMemo(() => {
+    // Weekly SSOT: shared period projection (Driver Share + cash + tolls + fuel).
+    if (periodType === 'weekly') {
+      const fromPeriods = periodsToPayoutPeriodRows(sharedPeriodsQuery.data);
+      if (fromPeriods.length > 0) return fromPeriods;
+      // First paint / empty projection — fall back to ledger builder until rebuild lands.
+    }
+
     const base =
       useSharedWeekly && sharedWeekly?.periodData
         ? sharedWeekly.periodData
@@ -262,7 +270,6 @@ export function useDriverPayoutPeriodRows(opts: {
             timezone: fleetTz,
             draftFuelByPeriod,
           });
-    // Weekly SSOT: toll/fuel from shared projection so Settlement/Payout match Expenses.
     if (periodType === 'weekly') {
       return overlaySharedPeriodsOntoPayoutRows(base, sharedPeriodsQuery.data);
     }
@@ -284,12 +291,35 @@ export function useDriverPayoutPeriodRows(opts: {
     sharedPeriodsQuery.data,
   ]);
 
-  // Progressive: paint when ledger is ready; fuel deductions fill as core bundle arrives.
-  const isReady = useSharedWeekly ? true : ledgerLoaded;
-  const isFullyReady = useSharedWeekly ? !fuelDataLoading : ledgerLoaded && !fuelDataLoading;
+  // Progressive: weekly paints from shared periods; otherwise wait for ledger.
+  const isReady =
+    periodType === 'weekly'
+      ? Boolean(sharedPeriodsQuery.data) || ledgerLoaded || useSharedWeekly
+      : useSharedWeekly
+        ? true
+        : ledgerLoaded;
+  const isFullyReady =
+    periodType === 'weekly'
+      ? !fuelDataLoading && (Boolean(sharedPeriodsQuery.data?.length) || ledgerLoaded)
+      : useSharedWeekly
+        ? !fuelDataLoading
+        : ledgerLoaded && !fuelDataLoading;
 
   const tiers: TierConfig[] = useMemo(() => {
     const seen = new Map<string, TierConfig>();
+    for (const p of sharedPeriodsQuery.data || []) {
+      const id = p.tierId || p.tierName;
+      if (id && !seen.has(String(id))) {
+        seen.set(String(id), {
+          id: String(id),
+          name: p.tierName || 'Default',
+          minEarnings: 0,
+          maxEarnings: null,
+          sharePercentage: Number(p.driverSharePercent) || 0,
+          color: '#94a3b8',
+        });
+      }
+    }
     for (const row of ledgerRows) {
       const t = row?.tier;
       if (t?.id && !seen.has(t.id)) {
@@ -304,7 +334,7 @@ export function useDriverPayoutPeriodRows(opts: {
       }
     }
     return Array.from(seen.values());
-  }, [ledgerRows]);
+  }, [ledgerRows, sharedPeriodsQuery.data]);
 
   return {
     periodData,

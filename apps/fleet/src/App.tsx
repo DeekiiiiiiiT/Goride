@@ -30,6 +30,7 @@ import { DriverLedgerPage } from './components/drivers/DriverLedgerPage';
 import { FleetFinancialsPage } from './components/fleet-financials/FleetFinancialsPage';
 import { CashRetagPage } from './components/fleet-financials/CashRetagPage';
 import { IndriveWalletCenterPage } from './components/fleet-financials/IndriveWalletCenterPage';
+import { BusinessFinancePage } from './components/business-finance/BusinessFinancePage';
 
 import { useAlertPusher } from './hooks/useAlertPusher';
 import { OfflineProvider } from './components/providers/OfflineProvider';
@@ -325,6 +326,20 @@ function AppContent() {
         {currentPage === 'transactions' && (
           <PermissionGate permission="nav.financial_analytics" onNavigate={setCurrentPage}>
             <TransactionsPage mode="analytics" />
+          </PermissionGate>
+        )}
+        {currentPage === 'business-finance' && (
+          <PermissionGate permission="nav.financial_analytics" onNavigate={setCurrentPage}>
+            <BusinessFinancePage
+              onNavigate={(page) => {
+                setCurrentPage(page);
+                setDriverIdForDetail(null);
+              }}
+              onOpenDriver={(driverId) => {
+                setDriverIdForDetail(driverId);
+                setCurrentPage('drivers');
+              }}
+            />
           </PermissionGate>
         )}
         {currentPage === 'transaction-list' && (

@@ -1,12 +1,12 @@
 /**
- * Fleet Operations → Fleet Financials
+ * Fleet Operations → Fleet Financials → Bank Deposits
  * Confirm Uber bank amounts actually received by the FLEET org (not a driver).
  * Does NOT change Cash Returned / Settlement math.
  */
 import React, { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { format, parseISO, addDays } from 'date-fns';
-import { Loader2, RefreshCw } from 'lucide-react';
+import { CalendarRange, ChevronRight, Landmark, Loader2, RefreshCw, Settings2, X } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 import { api } from '../../services/api';
 import {
@@ -39,8 +39,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from '../ui/dialog';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../ui/collapsible';
 import { cn } from '../ui/utils';
 import { BankStatementImport } from './BankStatementImport';
+import { BankDepositsSummaryCards } from './BankDepositsSummaryCards';
 
 type DeskTab = 'outstanding' | 'completed';
 type StatusFilter = 'all' | FleetBankDisplayStatus;
@@ -387,13 +389,19 @@ export function FleetFinancialsPage() {
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">Fleet Financials</h1>
-          <p className="mt-1 text-sm text-slate-500 max-w-xl">
-            Confirm Uber bank deposits into the fleet account (org week). Drivers do not receive this wire —
-            Cash Wallet stays collection-only; who owes whom stays on Financials → Settlement.
-          </p>
+        <div className="flex items-start gap-3">
+          <div className="rounded-xl bg-indigo-50 dark:bg-indigo-950 p-2.5 mt-0.5">
+            <Landmark className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">Bank Deposits</h1>
+            <p className="mt-1 text-sm text-slate-500 max-w-xl">
+              Confirm Uber bank deposits into the fleet account (org week). Drivers do not receive this wire —
+              Cash Wallet stays collection-only; who owes whom stays on Financials → Settlement.
+            </p>
+          </div>
         </div>
         <Button
           variant="outline"
@@ -409,53 +417,90 @@ export function FleetFinancialsPage() {
         </Button>
       </div>
 
-      <div className="flex flex-wrap gap-3 items-end">
-        <div className="space-y-1">
-          <label className="text-xs text-slate-500">Week from (Monday)</label>
-          <Input type="date" value={weekFrom} onChange={(e) => setWeekFrom(e.target.value)} className="w-44" />
-        </div>
-        <div className="space-y-1">
-          <label className="text-xs text-slate-500">Week to (Monday)</label>
-          <Input type="date" value={weekTo} onChange={(e) => setWeekTo(e.target.value)} className="w-44" />
+      {/* KPI dashboard — respects the week filter below */}
+      <BankDepositsSummaryCards rows={scopedByFilters} />
+
+      {/* Week range toolbar */}
+      <div className="flex flex-wrap items-end justify-between gap-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 py-3">
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-300 pb-2">
+            <CalendarRange className="h-4 w-4 text-slate-400" />
+            Week range
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs text-slate-500">From (Monday)</label>
+            <Input type="date" value={weekFrom} onChange={(e) => setWeekFrom(e.target.value)} className="w-44 h-9" />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs text-slate-500">To (Monday)</label>
+            <Input type="date" value={weekTo} onChange={(e) => setWeekTo(e.target.value)} className="w-44 h-9" />
+          </div>
+          {(weekFrom || weekTo) && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-9 text-slate-500"
+              onClick={() => {
+                setWeekFrom('');
+                setWeekTo('');
+              }}
+            >
+              <X className="h-3.5 w-3.5 mr-1" />
+              Clear
+            </Button>
+          )}
         </div>
       </div>
 
-      <div className="rounded-lg border border-slate-200 dark:border-slate-800 p-4 space-y-3">
-        <div>
-          <h2 className="text-sm font-semibold text-slate-900">Fleet platform IDs</h2>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Organization UUIDs identify the fleet bank account. Drivers are separate — even if the owner also drives.
-            InDrive has no fleet program yet.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-3 items-end">
-          <div className="space-y-1 min-w-[280px] flex-1">
-            <label className="text-xs text-slate-500">Uber Organization UUID</label>
-            <Input
-              value={uberOrgUuidDraft}
-              onChange={(e) => setUberOrgUuidDraft(e.target.value)}
-              placeholder="From payments_organization.csv"
-            />
+      {/* Fleet platform IDs — settings, collapsed by default */}
+      <Collapsible className="group/platform-ids rounded-lg border border-slate-200 dark:border-slate-800">
+        <CollapsibleTrigger asChild>
+          <button className="w-full flex items-center gap-2 px-4 py-3 text-left cursor-pointer">
+            <Settings2 className="h-4 w-4 text-slate-400" />
+            <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">Fleet platform IDs</span>
+            <span className="text-xs text-slate-500 hidden sm:inline">
+              — Organization UUIDs identify the fleet bank account
+            </span>
+            <ChevronRight className="ml-auto h-4 w-4 text-slate-400 transition-transform duration-200 group-data-[state=open]/platform-ids:rotate-90" />
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="px-4 pb-4 space-y-3 border-t border-slate-100 dark:border-slate-800 pt-3">
+            <p className="text-xs text-slate-500">
+              Organization UUIDs identify the fleet bank account. Drivers are separate — even if the owner also drives.
+              InDrive has no fleet program yet.
+            </p>
+            <div className="flex flex-wrap gap-3 items-end">
+              <div className="space-y-1 min-w-[280px] flex-1">
+                <label className="text-xs text-slate-500">Uber Organization UUID</label>
+                <Input
+                  value={uberOrgUuidDraft}
+                  onChange={(e) => setUberOrgUuidDraft(e.target.value)}
+                  placeholder="From payments_organization.csv"
+                />
+              </div>
+              <div className="space-y-1 min-w-[280px] flex-1">
+                <label className="text-xs text-slate-500">Roam Organization UUID</label>
+                <Input
+                  value={roamOrgUuidDraft}
+                  onChange={(e) => setRoamOrgUuidDraft(e.target.value)}
+                  placeholder="Native fleet identity"
+                />
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={savingOrgSettings || !organizationId}
+                onClick={() => void saveOrgPlatformIds()}
+              >
+                {savingOrgSettings ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Save IDs'}
+              </Button>
+            </div>
           </div>
-          <div className="space-y-1 min-w-[280px] flex-1">
-            <label className="text-xs text-slate-500">Roam Organization UUID</label>
-            <Input
-              value={roamOrgUuidDraft}
-              onChange={(e) => setRoamOrgUuidDraft(e.target.value)}
-              placeholder="Native fleet identity"
-            />
-          </div>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={savingOrgSettings || !organizationId}
-            onClick={() => void saveOrgPlatformIds()}
-          >
-            {savingOrgSettings ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Save IDs'}
-          </Button>
-        </div>
-      </div>
+        </CollapsibleContent>
+      </Collapsible>
 
       <BankStatementImport
         expectedRows={rows}

@@ -320,7 +320,7 @@ export function SettlementSummaryView({
           <div>
             <CardTitle>Weekly Settlement Summary</CardTitle>
             <CardDescription className="text-xs text-slate-500">
-              Who owes whom after fuel and tolls. Cash collection is on Cash Wallet; Uber bank received is on Fleet Operations → Fleet Financials.
+              Who owes whom after fuel and tolls. Cash collection is on Cash Wallet; Uber bank received is on Fleet Operations → Fleet Financials → Bank Deposits.
             </CardDescription>
           </div>
           {isReady && settlementRows.length > 0 && (
@@ -542,7 +542,7 @@ export function SettlementSummaryView({
                           </TooltipTrigger>
                           <TooltipContent side="top" className="max-w-[300px] text-xs">
                             Driver’s Uber bank allocation for this week. Shows Pending until the fleet org
-                            week is confirmed in Fleet Financials (wire goes to the fleet account, not the
+                            week is confirmed in Bank Deposits (wire goes to the fleet account, not the
                             driver). Informational only — not part of cash still held.
                           </TooltipContent>
                         </Tooltip>

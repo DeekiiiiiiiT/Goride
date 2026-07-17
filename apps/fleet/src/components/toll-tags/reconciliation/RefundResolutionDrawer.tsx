@@ -52,6 +52,16 @@ interface RefundResolutionDrawerProps {
 }
 
 function formatDate(iso: string): string {
+  // Date-only strings parse as UTC midnight — render as a plain local date or
+  // the row shifts to the previous evening (e.g. Jun 30 shown as "Jun 29, 19:00").
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+    const [y, m, d] = iso.split("-").map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  }
   const d = new Date(iso);
   if (isNaN(d.getTime())) return iso;
   return d.toLocaleString(undefined, {

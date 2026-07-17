@@ -3839,7 +3839,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
              ___OLD_FINANCIAL_SUBTABS_BLOCK_2_END___ */}
           <TabsContent value="wallet" className="space-y-6">
              <p className="text-sm text-slate-500">
-               Cash Wallet tracks <span className="font-medium text-slate-700">cash only</span> — how much cash the fleet is still owed after returns, fuel, and tolls (same as Settlement). Log Cash records handoffs. Uber bank received is on Fleet Operations → Fleet Financials.
+               Cash Wallet tracks <span className="font-medium text-slate-700">cash only</span> — how much cash the fleet is still owed after returns, fuel, and tolls (same as Settlement). Log Cash records handoffs. Uber bank received is on Fleet Operations → Fleet Financials → Bank Deposits.
              </p>
              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                  <Card className="bg-white border-rose-100">

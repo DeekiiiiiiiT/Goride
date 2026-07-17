@@ -1,0 +1,146 @@
+/**
+ * Business Finance DTOs — owner read-only views.
+ * Does not feed settlement math.
+ */
+
+export type BusinessFinanceTab =
+  | 'overview'
+  | 'pnl'
+  | 'cash-bank'
+  | 'expenses'
+  | 'driver-balances';
+
+export type PeriodPreset = 'this_week' | 'last_week' | 'this_month' | 'custom';
+
+export type BusinessFinancePeriod = {
+  preset: PeriodPreset;
+  startYmd: string;
+  endYmd: string;
+};
+
+export type PnLLineId =
+  | 'gross'
+  | 'platform_fees'
+  | 'net_trip'
+  | 'fuel'
+  | 'tolls'
+  | 'maintenance'
+  | 'wallet_loads'
+  | 'driver_payouts'
+  | 'operating_profit';
+
+export type PnLLine = {
+  id: PnLLineId;
+  label: string;
+  amount: number;
+  kind: 'total' | 'subtotal' | 'expense' | 'result';
+};
+
+export type PlatformSplitRow = {
+  platform: string;
+  gross: number;
+  fees: number;
+  net: number;
+};
+
+export type BusinessFinancePnL = {
+  lines: PnLLine[];
+  operatingRatio: number | null;
+  platformSplit: PlatformSplitRow[];
+  coverageNote?: string;
+};
+
+export type BusinessFinanceOverview = {
+  moneyIn: {
+    grossEarnings: number;
+    bankExpected: number;
+    bankReceived: number;
+    cashCollected: number;
+    cashStillHeld: number;
+  };
+  moneyOut: {
+    fuel: number;
+    tolls: number;
+    maintenance: number | null;
+    walletLoads: number;
+    driverPayouts: number;
+  };
+  profit: {
+    operatingProfit: number;
+    operatingRatio: number | null;
+  };
+  risks: {
+    needsStatementWeeks: number;
+    highCashDrivers: number;
+    tollVarianceFlags: number;
+  };
+  incompleteSources: string[];
+};
+
+export type CashBankSnapshot = {
+  platformBank: {
+    expected: number;
+    received: number;
+    variance: number;
+    needsStatementWeeks: number;
+  };
+  driverCash: {
+    totalStillHeld: number;
+    topDebtors: Array<{ driverId: string; name: string; amount: number }>;
+  };
+  walletLoads: {
+    periodLoads: number;
+  };
+  incompleteSources: string[];
+};
+
+export type ExpenseCategoryId = 'fuel' | 'toll' | 'maintenance' | 'other';
+
+export type ExpenseCategorySummary = {
+  id: ExpenseCategoryId;
+  label: string;
+  amount: number | null;
+  tracked: boolean;
+  deepLinkPage?: string;
+  deepLinkLabel?: string;
+};
+
+export type ExpenseRow = {
+  id: string;
+  dateYmd: string;
+  category: string;
+  description: string;
+  amount: number;
+  source: string;
+};
+
+export type ExpensesSnapshot = {
+  categories: ExpenseCategorySummary[];
+  rows: ExpenseRow[];
+  incompleteSources: string[];
+};
+
+export type DriverBalanceRow = {
+  driverId: string;
+  name: string;
+  cashStillHeld: number;
+  companyOwes: number;
+  bankSettled: 'pending' | 'confirmed' | 'unknown';
+  weekLabel: string;
+  periodAnchor: string;
+  status: string;
+};
+
+export type DriverBalancesSnapshot = {
+  rows: DriverBalanceRow[];
+  incompleteSources: string[];
+};
+
+export type BusinessFinanceBundle = {
+  period: BusinessFinancePeriod;
+  overview: BusinessFinanceOverview;
+  pnl: BusinessFinancePnL;
+  cashBank: CashBankSnapshot;
+  expenses: ExpensesSnapshot;
+  driverBalances: DriverBalancesSnapshot;
+};

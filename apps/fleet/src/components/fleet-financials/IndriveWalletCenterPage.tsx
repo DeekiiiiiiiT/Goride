@@ -1,5 +1,5 @@
 /**
- * Fleet Operations → InDrive Wallet Center
+ * Fleet Operations → Fleet Financials → InDrive Wallet Center
  * Multi-driver top-ups, period fees/balances, recent loads. Wallet funding only — not passenger cash.
  */
 import React, { useCallback, useMemo, useState } from 'react';

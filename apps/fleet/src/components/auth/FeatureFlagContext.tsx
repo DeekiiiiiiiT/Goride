@@ -9,6 +9,7 @@ interface EnabledModules {
   fleetEquipment: boolean;
   claimableLoss: boolean;
   performanceAnalytics: boolean;
+  businessFinance: boolean;
 }
 
 const ALL_ENABLED: EnabledModules = {
@@ -18,6 +19,7 @@ const ALL_ENABLED: EnabledModules = {
   fleetEquipment: true,
   claimableLoss: true,
   performanceAnalytics: true,
+  businessFinance: true,
 };
 
 interface FeatureFlagContextValue {
