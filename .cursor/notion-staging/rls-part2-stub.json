@@ -1,0 +1,1 @@
+{"parent": {"page_id": "3a12ac0f-7598-8197-9d18-fec973c6a8ce"}, "pages": [{"properties": {"title": "RLS Audit Report (Part 2)"}, "icon": "🔐", "content": "*Synced from docs/rls-audit.md on 2026-07-18.*\n\nALTER VIEW public.rides_surge_cells SET (security_invoker = true);\nALTER\n\n_(content loading…)_"}]}

@@ -28,7 +28,7 @@ import { stampOrg } from "./org_scope.ts";
 import { isDriverTollChargeSyncEnabled } from "./driver_toll_charge.ts";
 import { syncClaimTollResolution } from "./claim_toll_sync.ts";
 import { type ClaimResolutionReason } from "./claim_resolution_sync.ts";
-import { guardClaimChargeAmount } from "./claim_charge_guard.ts";
+import { resolveDriverChargeAmount } from "./claim_charge_guard.ts";
 import { getTollLedgerEntry, updateTollLedgerEntry, recomputeAndPersistWorkflowStage, loadAllByPrefix } from "./toll_controller.tsx";
 
 /**
@@ -140,7 +140,12 @@ async function enforceClaimChargeGuard(claim: any, opts?: UpsertClaimOptions): P
 
   const tollCost = Math.abs(Number(toll.amount) || 0);
   let platformRefund = 0;
-  const tripId = claim.tripId || toll.tripId || opts?.suggestedTripId;
+  const tripId =
+    claim.tripId ||
+    claim.unlinkedTripId ||
+    toll.tripId ||
+    toll.unlinkedSourceTripId ||
+    opts?.suggestedTripId;
   if (tripId) {
     const trip = (await kv.get(`trip:${tripId}`)) as { tollCharges?: number } | null;
     platformRefund = Math.abs(Number(trip?.tollCharges) || 0);
@@ -158,16 +163,14 @@ async function enforceClaimChargeGuard(claim: any, opts?: UpsertClaimOptions): P
     }
   }
 
-  const guard = guardClaimChargeAmount({
+  const resolved = resolveDriverChargeAmount({
     chargeAmount: claim.amount,
     tollCost,
     platformRefund,
     claimPaidAmount: claim.paidAmount,
   });
-  if (!guard.ok) {
-    throw new Error(guard.message);
-  }
-  claim.amount = guard.amount;
+  // Auto-clamp full-toll charges down to remaining shortfall (never block Charge Driver).
+  claim.amount = resolved.amount;
 }
 
 /**

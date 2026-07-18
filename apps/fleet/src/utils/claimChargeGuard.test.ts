@@ -3,6 +3,7 @@ import {
   computeChargeShortfall,
   guardClaimChargeAmount,
   isFullTollChargeWhenShortfallRemains,
+  resolveDriverChargeAmount,
 } from './claimChargeGuard';
 
 describe('claimChargeGuard', () => {
@@ -41,5 +42,27 @@ describe('claimChargeGuard', () => {
       claimPaidAmount: 275,
     });
     expect(r.ok).toBe(true);
+  });
+
+  it('resolveDriverChargeAmount auto-clamps full toll to shortfall', () => {
+    const r = resolveDriverChargeAmount({
+      chargeAmount: 285,
+      tollCost: 285,
+      platformRefund: 275,
+      claimPaidAmount: 275,
+    });
+    expect(r.amount).toBe(10);
+    expect(r.clamped).toBe(true);
+  });
+
+  it('resolveDriverChargeAmount keeps full charge when no platform credit', () => {
+    const r = resolveDriverChargeAmount({
+      chargeAmount: 285,
+      tollCost: 285,
+      platformRefund: 0,
+      claimPaidAmount: 0,
+    });
+    expect(r.amount).toBe(285);
+    expect(r.clamped).toBe(false);
   });
 });

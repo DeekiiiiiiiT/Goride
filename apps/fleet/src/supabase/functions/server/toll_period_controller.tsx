@@ -296,10 +296,34 @@ function formatWeekPeriodLabel(start: Date, end: Date): string {
   return `${format(start, "MMM d")} – ${format(end, "MMM d, yyyy")}`;
 }
 
+interface PeriodFinancials {
+  tollSpend: number;
+  reimbursedFromTrips: number;
+  matchedDisputeRefundAmount: number;
+  chargedToDrivers: number;
+  resolvedRefundsAmount: number;
+}
+
 interface PeriodAccumulator {
   weekStart: Date;
   weekEnd: Date;
   counts: Record<StepId, StepCounts>;
+  financials: PeriodFinancials;
+}
+
+function zeroFinancials(): PeriodFinancials {
+  return {
+    tollSpend: 0,
+    reimbursedFromTrips: 0,
+    matchedDisputeRefundAmount: 0,
+    chargedToDrivers: 0,
+    resolvedRefundsAmount: 0,
+  };
+}
+
+function netLossFrom(f: PeriodFinancials): number {
+  const reimbursed = f.reimbursedFromTrips + f.matchedDisputeRefundAmount;
+  return Math.max(0, f.tollSpend - reimbursed - f.chargedToDrivers);
 }
 
 // ─── GET /toll-reconciliation/periods ───────────────────────────────────
@@ -339,7 +363,7 @@ app.get(`${BASE}/periods`, requirePermission('toll.view'), async (c) => {
       const { key, weekStart, weekEnd } = weekKeyFor(dateStr, timezone);
       let acc = periods.get(key);
       if (!acc) {
-        acc = { weekStart, weekEnd, counts: zeroCounts() };
+        acc = { weekStart, weekEnd, counts: zeroCounts(), financials: zeroFinancials() };
         periods.set(key, acc);
       }
       return acc;
@@ -403,9 +427,59 @@ app.get(`${BASE}/periods`, requirePermission('toll.view'), async (c) => {
       }
     }
 
+    // ── Per-period financials (same rule as wizard Reimbursed card) ─────────
+    // Reimbursed = trip credits that offset fleet Toll Spend (linked / open
+    // unlinked / expense_logged) + matched dispute refunds.
+    // cash_wash / phantom stay in resolvedRefundsAmount only (Needs Review).
+    for (const tx of scopedTollTx) {
+      if (!tx?.date) continue;
+      const amt = Number(tx.amount) < 0 ? Math.abs(Number(tx.amount)) : 0;
+      if (amt <= 0) continue;
+      getOrCreatePeriod(tx.date).financials.tollSpend += amt;
+    }
+
+    for (const t of scopedTrips) {
+      const tc = Math.abs(Number(t.tollCharges) || 0);
+      if (tc <= 0) continue;
+      const anchor = t.dropoffTime || t.date;
+      if (!anchor) continue;
+      const acc = getOrCreatePeriod(String(anchor));
+      const status = t.tollRefundResolution?.status;
+      if (status && status !== "pending") {
+        acc.financials.resolvedRefundsAmount += tc;
+      }
+      // Driver-pocket resolutions are not fleet reimbursement against Toll Spend.
+      if (status === "cash_wash" || status === "phantom") continue;
+      acc.financials.reimbursedFromTrips += tc;
+    }
+
+    for (const claim of claims) {
+      if (claim.status !== "Resolved" || claim.resolutionReason !== "Charge Driver") continue;
+      const dateStr = resolveClaimDate(claim, tollDateById);
+      if (!dateStr) continue;
+      getOrCreatePeriod(dateStr).financials.chargedToDrivers += Math.abs(Number(claim.amount) || 0);
+    }
+
+    for (const r of disputeRefunds) {
+      if (!isDisputeRefundMatched(r)) continue;
+      const periodKey = disputeRefundPeriodKey(r, tollDateById, claims, timezone);
+      const anchorDate = r.matchedTollId
+        ? tollDateById.get(String(r.matchedTollId))
+        : r.date;
+      if (!periodKey && !anchorDate) continue;
+      const acc = periodKey && periods.get(periodKey)
+        ? periods.get(periodKey)!
+        : getOrCreatePeriod(String(anchorDate));
+      acc.financials.matchedDisputeRefundAmount += Math.abs(Number(r.amount) || 0);
+    }
+
+    const round2 = (n: number) => Math.round(n * 100) / 100;
+
     const periodsOut = Array.from(periods.entries())
       .map(([id, acc]) => {
         const actionableTotal = STEP_IDS.reduce((sum, stepId) => sum + acc.counts[stepId].actionable, 0);
+        const f = acc.financials;
+        const reimbursedByPlatform = f.reimbursedFromTrips + f.matchedDisputeRefundAmount;
         return {
           id,
           startDate: format(acc.weekStart, "yyyy-MM-dd"),
@@ -414,38 +488,39 @@ app.get(`${BASE}/periods`, requirePermission('toll.view'), async (c) => {
           status: actionableTotal > 0 ? ("outstanding" as const) : ("reconciled" as const),
           actionableTotal,
           counts: acc.counts,
+          financials: {
+            tollSpend: round2(f.tollSpend),
+            reimbursedByPlatform: round2(reimbursedByPlatform),
+            matchedDisputeRefundAmount: round2(f.matchedDisputeRefundAmount),
+            chargedToDrivers: round2(f.chargedToDrivers),
+            netTollLoss: round2(netLossFrom(f)),
+            resolvedRefundsAmount: round2(f.resolvedRefundsAmount),
+          },
         };
       })
       .sort((a, b) => (a.startDate < b.startDate ? 1 : a.startDate > b.startDate ? -1 : 0));
 
-    // ── All-time financial snapshot (the pre-period-redesign dashboard cards),
-    // now sourced from the same single loaded/scoped data this endpoint
-    // already builds its per-period counts from, so the two views can never
-    // silently disagree with each other. Unlike the per-period counts above,
-    // these are deliberately NOT period-scoped — they're the fleet-wide
-    // (optionally driver-scoped) totals shown once, above the period list.
-    const round2 = (n: number) => Math.round(n * 100) / 100;
-
-    const tollSpend = scopedTollTx.reduce(
-      (sum: number, tx: any) => sum + (Number(tx.amount) < 0 ? Math.abs(Number(tx.amount)) : 0),
-      0,
+    // Fleet-wide cards = sum of per-period financials (same sources / same rule).
+    const totalsAcc = periodsOut.reduce(
+      (sum, p) => {
+        sum.tollSpend += p.financials.tollSpend;
+        sum.reimbursedByPlatform += p.financials.reimbursedByPlatform;
+        sum.matchedDisputeRefundAmount += p.financials.matchedDisputeRefundAmount;
+        sum.chargedToDrivers += p.financials.chargedToDrivers;
+        sum.resolvedRefundsAmount += p.financials.resolvedRefundsAmount;
+        return sum;
+      },
+      {
+        tollSpend: 0,
+        reimbursedByPlatform: 0,
+        matchedDisputeRefundAmount: 0,
+        chargedToDrivers: 0,
+        resolvedRefundsAmount: 0,
+      },
     );
-    const reimbursedFromTrips = scopedTrips.reduce((sum: number, t: any) => sum + (Number(t.tollCharges) || 0), 0);
-    const matchedDisputeRefundAmount = disputeRefunds
-      .filter((r: any) => isDisputeRefundMatched(r))
-      .reduce((sum: number, r: any) => sum + (Number(r.amount) || 0), 0);
-    const reimbursedByPlatform = reimbursedFromTrips + matchedDisputeRefundAmount;
-    const chargedToDrivers = claims
-      .filter((cl: any) => cl.status === "Resolved" && cl.resolutionReason === "Charge Driver")
-      .reduce((sum: number, cl: any) => sum + Math.abs(Number(cl.amount) || 0), 0);
-    const netTollLoss = Math.max(0, tollSpend - reimbursedByPlatform - chargedToDrivers);
-
-    const resolvedRefundTrips = scopedTrips.filter(
-      (t: any) => t.tollRefundResolution && t.tollRefundResolution.status !== "pending",
-    );
-    const resolvedRefundsAmount = resolvedRefundTrips.reduce(
-      (sum: number, t: any) => sum + (Number(t.tollCharges) || 0),
+    const netTollLoss = Math.max(
       0,
+      totalsAcc.tollSpend - totalsAcc.reimbursedByPlatform - totalsAcc.chargedToDrivers,
     );
 
     return c.json({
@@ -455,15 +530,15 @@ app.get(`${BASE}/periods`, requirePermission('toll.view'), async (c) => {
       workflowStageBackfillComplete: !anyMissingWorkflowStage,
       periods: periodsOut,
       totals: {
-        tollSpend: round2(tollSpend),
-        reimbursedByPlatform: round2(reimbursedByPlatform),
-        matchedDisputeRefundAmount: round2(matchedDisputeRefundAmount),
-        chargedToDrivers: round2(chargedToDrivers),
+        tollSpend: round2(totalsAcc.tollSpend),
+        reimbursedByPlatform: round2(totalsAcc.reimbursedByPlatform),
+        matchedDisputeRefundAmount: round2(totalsAcc.matchedDisputeRefundAmount),
+        chargedToDrivers: round2(totalsAcc.chargedToDrivers),
         netTollLoss: round2(netTollLoss),
         needsReviewCount: unclaimedTolls.length + unclaimedRefundTrips.length,
         tollsNeedingReviewCount: unclaimedTolls.length,
         refundsNeedingReviewCount: unclaimedRefundTrips.length,
-        resolvedRefundsAmount: round2(resolvedRefundsAmount),
+        resolvedRefundsAmount: round2(totalsAcc.resolvedRefundsAmount),
       },
     });
   } catch (e: any) {

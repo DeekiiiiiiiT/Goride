@@ -61,6 +61,41 @@ describe('tollFinancialOverview', () => {
     );
   });
 
+  it('collectTripsForReimbursedCard includes expense_logged, not cash_wash', () => {
+    const collected = collectTripsForReimbursedCard({
+      trips: [],
+      unclaimedRefunds: [],
+      resolvedRefunds: [
+        {
+          id: 'trip-wash',
+          platform: 'Uber',
+          tollCharges: 780,
+          date: '2025-12-30T02:08:51.000Z',
+          dropoffTime: '2025-12-30T03:22:42.000Z',
+          tollRefundResolution: { status: 'cash_wash' },
+        } as Trip,
+        {
+          id: 'trip-expense',
+          platform: 'Uber',
+          tollCharges: 400,
+          date: '2025-12-30T04:00:00.000Z',
+          dropoffTime: '2025-12-30T04:30:00.000Z',
+          tollRefundResolution: { status: 'expense_logged' },
+        } as Trip,
+      ],
+      tolls: [],
+    });
+
+    const totals = computeReimbursedTotals({
+      trips: collected,
+      disputeRefunds: [],
+      period: { startDate: '2025-12-29', endDate: '2026-01-04' },
+      fleetTz: TZ,
+    });
+    expect(totals.total).toBe(400);
+    expect(totals.byPlatform.Uber).toBe(400);
+  });
+
   it('collectTripsForReimbursedCard pulls linkedTrip credits when trips dump is empty', () => {
     const collected = collectTripsForReimbursedCard({
       trips: [],

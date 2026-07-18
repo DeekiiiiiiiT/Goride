@@ -63,3 +63,19 @@ export function guardClaimChargeAmount(input: {
 
   return { ok: true, amount: charge };
 }
+
+/** Charge the requested amount, or auto-clamp to the remaining shortfall. */
+export function resolveDriverChargeAmount(input: {
+  chargeAmount: number;
+  tollCost: number;
+  platformRefund?: number;
+  claimPaidAmount?: number;
+}): { amount: number; clamped: boolean; message?: string } {
+  const guard = guardClaimChargeAmount(input);
+  if (guard.ok) return { amount: guard.amount, clamped: false };
+  return {
+    amount: guard.suggestedAmount,
+    clamped: true,
+    message: guard.message,
+  };
+}

@@ -1465,30 +1465,51 @@ app.post("/make-server-37f42386/system/log-error", async (c) => {
     }
 });
 
-// Phase 8.3: Forensic Audit Export Hardening - Signing
-app.post("/make-server-37f42386/audit/sign-report", async (c) => {
+// Phase 8.3: Forensic Audit Export Hardening - Signing (secrets audit Wave 3)
+app.post(
+  "/make-server-37f42386/audit/sign-report",
+  requireAuth({ strict: true }),
+  requirePermission("data.export"),
+  async (c) => {
     try {
-        const { reportData, reportType } = await c.req.json();
-        
-        // Create a canonical string for signing
-        const canonical = JSON.stringify(reportData, Object.keys(reportData).sort());
-        
-        // In a real env we'd use a private key, here we use service role hash as a HMAC-like signature
-        const encoder = new TextEncoder();
-        const data = encoder.encode(canonical + Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"));
-        const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-        const hashArray = Array.from(new Uint8Array(hashBuffer));
-        const signature = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-        
-        return c.json({
-            signature,
-            signer: "Fleet Integrity Security Module",
-            timestamp: new Date().toISOString()
-        });
+      const { reportData, reportType } = await c.req.json();
+
+      const hmacSecret = Deno.env.get("AUDIT_HMAC_SECRET");
+      if (!hmacSecret || !hmacSecret.trim()) {
+        return c.json(
+          { error: "AUDIT_HMAC_SECRET is required for report signing" },
+          503,
+        );
+      }
+
+      // Canonical JSON for stable signatures
+      const canonical = JSON.stringify(reportData, Object.keys(reportData).sort());
+      const encoder = new TextEncoder();
+      const key = await crypto.subtle.importKey(
+        "raw",
+        encoder.encode(hmacSecret),
+        { name: "HMAC", hash: "SHA-256" },
+        false,
+        ["sign"],
+      );
+      const sigBuf = await crypto.subtle.sign("HMAC", key, encoder.encode(canonical));
+      const signature = Array.from(new Uint8Array(sigBuf))
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("");
+
+      return c.json({
+        signature,
+        reportType: reportType ?? null,
+        signer: "Fleet Integrity Security Module",
+        algorithm: "HMAC-SHA256",
+        timestamp: new Date().toISOString(),
+      });
     } catch (e: any) {
-        return c.json({ error: e.message }, 500);
+      console.error("[audit/sign-report]", e);
+      return c.json({ error: "internal_error", code: "INTERNAL", message: "Something went wrong" }, 500);
     }
-});
+  },
+);
 
 // Health check endpoint
 app.get("/make-server-37f42386/health", (c) => {

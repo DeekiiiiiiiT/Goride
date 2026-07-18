@@ -1,5 +1,5 @@
 import type { DisputeRefund, FinancialTransaction, Trip } from '../types/data';
-import { fleetTzDateKey } from './timezoneDisplay';
+import { fleetCalendarDay, fleetTzDateKey } from './timezoneDisplay';
 import { normalizePlatform } from './normalizePlatform';
 
 export type RidesharePlatform = 'Uber' | 'InDrive' | 'Roam';
@@ -28,7 +28,11 @@ export function isDateInPeriod(
   fleetTz: string,
 ): boolean {
   if (!dateStr) return false;
-  const ymd = fleetTzDateKey(dateStr, fleetTz);
+  // Bare yyyy-MM-dd (ledger/claim) stays as-is via fleetTzDateKey.
+  // Trip Z timestamps use honest UTC→fleet day (no legacy reinterpret).
+  const ymd = /^\d{4}-\d{2}-\d{2}$/.test(String(dateStr).trim())
+    ? fleetTzDateKey(dateStr, fleetTz)
+    : fleetCalendarDay(String(dateStr), fleetTz) || fleetTzDateKey(dateStr, fleetTz);
   if (!ymd) return false;
   return ymd >= from && ymd <= to;
 }
@@ -36,6 +40,20 @@ export function isDateInPeriod(
 export function tripInPeriod(trip: Trip, from: string, to: string, fleetTz: string): boolean {
   const anchor = trip.dropoffTime || trip.date;
   return isDateInPeriod(anchor, from, to, fleetTz);
+}
+
+/**
+ * Fleet Reimbursed offsets Toll Spend (tag/cash the company paid).
+ * cash_wash / phantom = driver paid cash (or fake credit) — never fleet money out,
+ * so they must not inflate Reimbursed or zero out Net Loss.
+ * expense_logged / linked / open unlinked still count.
+ */
+export function countsTowardFleetReimbursed(
+  trip: Pick<Trip, 'tollRefundResolution'> | null | undefined,
+): boolean {
+  const status = trip?.tollRefundResolution?.status;
+  if (status === 'cash_wash' || status === 'phantom') return false;
+  return true;
 }
 
 export function computeTollSpendByPlatform(
@@ -87,18 +105,22 @@ export function resolveTollPlatformBucket(
 }
 
 /**
- * Trips that feed the Reimbursed card when the full trips dump is empty/incomplete.
- * Uses linked trips on period tolls + open unlinked refunds. Cash-wash / expense-logged
- * leftovers stay on the Needs Review "$X resolved" badge — not here.
+ * Trips that feed the Reimbursed card (fleet-offsetting credits only).
+ * Sources: full trips dump, open unlinked refunds, expense_logged resolutions,
+ * and linkedTrip stubs on period tolls.
+ * Excludes cash_wash / phantom — those are driver-pocket, not fleet reimbursement.
  */
 export function collectTripsForReimbursedCard(input: {
   trips: Trip[];
   unclaimedRefunds: Trip[];
+  /** Resolved leftovers — only expense_logged counts toward fleet Reimbursed. */
+  resolvedRefunds?: Trip[];
   tolls: TollWithLinkedTrip[];
 }): Trip[] {
   const byId = new Map<string, Trip>();
   const add = (t: Partial<Trip> & { id: string }) => {
     if (!t?.id) return;
+    if (!countsTowardFleetReimbursed(t as Trip)) return;
     const prev = byId.get(t.id);
     if (!prev) {
       byId.set(t.id, t as Trip);
@@ -113,6 +135,7 @@ export function collectTripsForReimbursedCard(input: {
       tollCharges: Math.max(prevTc, nextTc) || prev.tollCharges || t.tollCharges,
       date: prev.date || t.date,
       dropoffTime: prev.dropoffTime || t.dropoffTime,
+      tollRefundResolution: prev.tollRefundResolution || t.tollRefundResolution,
     } as Trip);
   };
 
@@ -120,6 +143,9 @@ export function collectTripsForReimbursedCard(input: {
     if (t?.id) add(t);
   }
   for (const t of input.unclaimedRefunds) {
+    if (t?.id) add(t);
+  }
+  for (const t of input.resolvedRefunds || []) {
     if (t?.id) add(t);
   }
   for (const tx of input.tolls) {
@@ -159,6 +185,7 @@ export function computeReimbursedTotals(input: ReimbursedTotalsInput): {
 
   for (const trip of trips) {
     if (!trip?.id || seenTripIds.has(trip.id)) continue;
+    if (!countsTowardFleetReimbursed(trip)) continue;
     const refund = Math.abs(Number(trip.tollCharges) || 0);
     if (refund <= 0) continue;
     if (period && !tripInPeriod(trip, period.startDate, period.endDate, fleetTz)) continue;

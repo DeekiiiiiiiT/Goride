@@ -25,7 +25,7 @@ import {
   resolvePendingUnderpaidTrip,
   linkPendingUnderpaidToTrips,
 } from "../../../utils/pendingUnderpaidListable";
-import { guardClaimChargeAmount } from "../../../utils/claimChargeGuard";
+import { resolveDriverChargeAmount } from "../../../utils/claimChargeGuard";
 import { formatDateJM } from "../../../utils/csv-helper";
 
 /**
@@ -421,15 +421,47 @@ export function UnderpaidClaimsStep({
     } catch (e) { toast.error("Failed to re-open claim"); }
   };
 
-  const guardChargeAmountForClaim = (claim: Claim) => {
-    const tx = reconciledTolls.find((t) => t.id === claim.transactionId);
-    const trip = claim.tripId ? tripMap.get(claim.tripId) : tx?.tripId ? tripMap.get(tx.tripId) : undefined;
-    if (!tx) return { ok: true as const, amount: Math.abs(Number(claim.amount) || 0) };
-    return guardClaimChargeAmount({
-      chargeAmount: Number(claim.amount) || 0,
-      tollCost: Math.abs(tx.amount),
-      platformRefund: trip?.tollCharges ?? 0,
-      claimPaidAmount: claim.paidAmount ?? 0,
+  const resolveChargeAmountForClaim = (claim: Claim) => {
+    const tx =
+      (claim.transactionId ? reconciledTollById.get(claim.transactionId) : undefined) ||
+      (claim.transactionId ? displayTollById.get(claim.transactionId) : undefined) ||
+      reconciledTolls.find((t) => t.id === claim.transactionId);
+    if (!tx) return { amount: Math.abs(Number(claim.amount) || 0), clamped: false };
+
+    const tripId =
+      claim.tripId ||
+      claim.unlinkedTripId ||
+      tx.tripId ||
+      tx.unlinkedSourceTripId ||
+      undefined;
+    const trip = tripId
+      ? tripMapWithSuggestionFallback.get(tripId) || tripMap.get(tripId)
+      : undefined;
+    const ctx = buildTollFinancialsContext(tx, trip, claim, trips, disputeRefunds, allocation);
+    const financials = calculateTollFinancials(tx, trip, claim, ctx);
+
+    // Prefer remaining claim amount when partial credits already applied; else net loss.
+    const preferredCharge =
+      Number(claim.paidAmount) > 0
+        ? Math.abs(Number(claim.amount) || financials.netLoss)
+        : financials.netLoss;
+
+    return resolveDriverChargeAmount({
+      chargeAmount: preferredCharge,
+      tollCost: financials.cost,
+      // Allocation-aware — never use raw trip.tollCharges when pool was spent elsewhere.
+      platformRefund: financials.platformRefund,
+      claimPaidAmount: financials.creditsApplied || claim.paidAmount || 0,
+    });
+  };
+
+  const resolveChargeAmountForLoss = (item: LossItem) => {
+    const { financials, claim } = item;
+    return resolveDriverChargeAmount({
+      chargeAmount: financials.netLoss,
+      tollCost: financials.cost,
+      platformRefund: financials.platformRefund,
+      claimPaidAmount: financials.creditsApplied || claim?.paidAmount || 0,
     });
   };
 
@@ -485,23 +517,25 @@ export function UnderpaidClaimsStep({
     }
     const draft = claimDraftFromLoss(item);
     if (!assertNotDisputeCovered(draft)) return;
-    const chargeGuard = guardChargeAmountForClaim(draft);
-    if (!chargeGuard.ok) {
-      toast.error('Cannot charge full toll amount', {
-        description: `${chargeGuard.message} Charge $${chargeGuard.suggestedAmount.toFixed(2)} instead.`,
-      });
+    const resolved = resolveChargeAmountForLoss(item);
+    if (resolved.amount <= 0) {
+      toast.info('Nothing left to charge — credits already cover this toll.');
       return;
     }
     try {
       const claim = await ensureClaimForLoss(item);
       await updateClaim({
         ...claim,
-        amount: chargeGuard.amount,
+        amount: resolved.amount,
         status: 'Resolved',
         resolutionReason: 'Charge Driver',
         updatedAt: new Date().toISOString(),
       });
-      toast.success(`Claim resolved. $${chargeGuard.amount.toFixed(2)} will be deducted from driver pay.`);
+      toast.success(
+        resolved.clamped
+          ? `Charged shortfall $${resolved.amount.toFixed(2)} (credits already applied).`
+          : `Claim resolved. $${resolved.amount.toFixed(2)} will be deducted from driver pay.`,
+      );
       refreshClaims();
     } catch (e) {
       toast.error('Failed to charge driver');
@@ -545,22 +579,24 @@ export function UnderpaidClaimsStep({
       });
       return;
     }
-    const chargeGuard = guardChargeAmountForClaim(claim);
-    if (!chargeGuard.ok) {
-      toast.error('Cannot charge full toll amount', {
-        description: `${chargeGuard.message} Charge $${chargeGuard.suggestedAmount.toFixed(2)} instead.`,
-      });
+    const resolved = resolveChargeAmountForClaim(claim);
+    if (resolved.amount <= 0) {
+      toast.info('Nothing left to charge — credits already cover this toll.');
       return;
     }
     try {
       await updateClaim({
         ...claim,
-        amount: chargeGuard.amount,
+        amount: resolved.amount,
         status: 'Resolved',
         resolutionReason: 'Charge Driver',
         updatedAt: new Date().toISOString(),
       });
-      toast.success(`Claim resolved. $${chargeGuard.amount.toFixed(2)} will be deducted from driver pay.`);
+      toast.success(
+        resolved.clamped
+          ? `Charged shortfall $${resolved.amount.toFixed(2)} (credits already applied).`
+          : `Claim resolved. $${resolved.amount.toFixed(2)} will be deducted from driver pay.`,
+      );
       refreshClaims();
     } catch (e) { toast.error("Failed to charge driver"); }
   };
@@ -581,21 +617,23 @@ export function UnderpaidClaimsStep({
       return;
     }
     if (newReason === 'Charge Driver') {
-      const chargeGuard = guardChargeAmountForClaim(claim);
-      if (!chargeGuard.ok) {
-        toast.error('Cannot charge full toll amount', {
-          description: `${chargeGuard.message} Charge $${chargeGuard.suggestedAmount.toFixed(2)} instead.`,
-        });
+      const resolved = resolveChargeAmountForClaim(claim);
+      if (resolved.amount <= 0) {
+        toast.info('Nothing left to charge — credits already cover this toll.');
         return;
       }
       try {
         await updateClaim({
           ...claim,
-          amount: chargeGuard.amount,
+          amount: resolved.amount,
           resolutionReason: newReason,
           updatedAt: new Date().toISOString(),
         });
-        toast.success(`Claim updated to: ${newReason}`);
+        toast.success(
+          resolved.clamped
+            ? `Updated to Charge Driver — shortfall $${resolved.amount.toFixed(2)}.`
+            : `Claim updated to: ${newReason}`,
+        );
         refreshClaims();
       } catch (e) { toast.error("Failed to update claim status"); }
       return;

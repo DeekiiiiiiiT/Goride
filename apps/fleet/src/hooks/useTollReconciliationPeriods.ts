@@ -10,6 +10,15 @@ export interface ReconciliationPeriod {
   status: 'outstanding' | 'reconciled';
   actionableTotal: number;
   counts: Record<StepId, { actionable: number; informational: number }>;
+  /** Same Reimbursed rule as the wizard cards (includes resolved trip credits). */
+  financials?: {
+    tollSpend: number;
+    reimbursedByPlatform: number;
+    matchedDisputeRefundAmount: number;
+    chargedToDrivers: number;
+    netTollLoss: number;
+    resolvedRefundsAmount: number;
+  };
 }
 
 /** All-time (not period-scoped) financial snapshot — the pre-redesign dashboard cards. */

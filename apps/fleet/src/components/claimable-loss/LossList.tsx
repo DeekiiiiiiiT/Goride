@@ -65,6 +65,11 @@ export function refundSourceLabel(kind: TollRefundSourceKind): string {
   }
 }
 
+function finiteTripTollCharges(trip: Trip | undefined): number {
+  const n = Number(trip?.tollCharges);
+  return Number.isFinite(n) ? Math.abs(n) : 0;
+}
+
 export interface LossItem {
   transaction: FinancialTransaction;
   match: MatchResult;
@@ -242,6 +247,14 @@ export function LossList({
                               <span>${financials.disputeRefund.toFixed(2)}</span>
                             </div>
                           )}
+                          {financials.platformRefund <= 0 &&
+                            finiteTripTollCharges(trip) > 0 &&
+                            creditsReceived <= 0 && (
+                              <div className="text-amber-700 pt-1 max-w-[220px]">
+                                Trip shows ${finiteTripTollCharges(trip).toFixed(2)} platform toll —
+                                already allocated to another underpaid cash receipt.
+                              </div>
+                            )}
                         </div>
                       </TooltipContent>
                     </Tooltip>

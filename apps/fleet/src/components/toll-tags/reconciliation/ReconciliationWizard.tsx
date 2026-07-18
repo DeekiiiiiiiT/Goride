@@ -901,6 +901,7 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
   const reimbursedTrips = collectTripsForReimbursedCard({
     trips: pTrips,
     unclaimedRefunds: pUnclaimed,
+    resolvedRefunds: pResolved,
     tolls: periodTolls,
   });
   const {
