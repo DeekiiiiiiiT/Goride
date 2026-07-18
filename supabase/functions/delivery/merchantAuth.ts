@@ -77,34 +77,7 @@ export async function resolveMerchantAccess(
     };
   }
 
-  if (userEmail) {
-    const normalized = userEmail.trim().toLowerCase();
-    const { data: pendingMember } = await sb
-      .from("merchant_team_members")
-      .select("*, merchants(*)")
-      .ilike("email", normalized)
-      .is("user_id", null)
-      .maybeSingle();
-
-    if (pendingMember) {
-      await sb.from("merchant_team_members")
-        .update({ user_id: userId })
-        .eq("id", (pendingMember as Record<string, unknown>).id);
-      const merchant = (pendingMember as Record<string, unknown>).merchants as Record<string, unknown>;
-      if (merchant && merchant.verification_status === "approved") {
-        return {
-          merchant,
-          membership: {
-            role: ((pendingMember as Record<string, unknown>).role as TeamRole) || "staff",
-            permissions: ((pendingMember as Record<string, unknown>).permissions as TeamPermission[]) || ["orders"],
-            is_owner: false,
-            job_station: readJobStation(pendingMember as Record<string, unknown>),
-          },
-        };
-      }
-    }
-  }
-
+  // No email auto-link — claim only via invite token accept endpoint (Wave 3/7)
   return null;
 }
 

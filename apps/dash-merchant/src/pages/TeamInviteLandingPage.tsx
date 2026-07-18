@@ -33,6 +33,7 @@ export default function TeamInviteLandingPage({
   const [loading, setLoading] = useState(true);
   const [claiming, setClaiming] = useState(false);
   const [wrongAccount, setWrongAccount] = useState(false);
+  const [expired, setExpired] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
   const acceptAttempted = useRef(false);
 
@@ -48,13 +49,28 @@ export default function TeamInviteLandingPage({
     }
     persistTeamInviteToken(token);
     void fetchTeamInvitePreview(token)
-      .then((res) => setPreview(res.invite))
-      .catch((err) => toast.error(err instanceof Error ? err.message : 'Invite not found'))
+      .then((res) => {
+        setPreview(res.invite);
+        setExpired(!!res.invite?.isExpired);
+      })
+      .catch((err) => {
+        const message = err instanceof Error ? err.message : 'Invite not found';
+        if (message.toLowerCase().includes('expired')) {
+          setExpired(true);
+          toast.error('This invite has expired. Ask your store owner to send a new one.');
+        } else {
+          toast.error(message);
+        }
+      })
       .finally(() => setLoading(false));
   }, [token]);
 
   useEffect(() => {
-    if (!session?.user || !token || !preview || acceptAttempted.current) return;
+    if (!session?.user || !token || !preview || expired || acceptAttempted.current) return;
+    if (!session.user.email_confirmed_at) {
+      toast.error('Confirm your email, then reopen this invite link.');
+      return;
+    }
     acceptAttempted.current = true;
     void (async () => {
       setClaiming(true);
@@ -72,12 +88,15 @@ export default function TeamInviteLandingPage({
           setWrongAccount(true);
           return;
         }
+        if (message.toLowerCase().includes('expired')) {
+          setExpired(true);
+        }
         toast.error(message);
       } finally {
         setClaiming(false);
       }
     })();
-  }, [session?.user, token, preview, onAccepted]);
+  }, [session?.user, token, preview, expired, onAccepted]);
 
   const handleSignOut = async () => {
     acceptAttempted.current = false;
@@ -89,6 +108,16 @@ export default function TeamInviteLandingPage({
     return (
       <div className="flex min-h-dvh items-center justify-center bg-background">
         <p className="text-body-lg text-on-surface-variant">Loading invite…</p>
+      </div>
+    );
+  }
+
+  if (!token) {
+    return (
+      <div className="flex min-h-dvh flex-col items-center justify-center bg-background px-margin-mobile py-inset-lg">
+        <p className="text-body-lg text-on-surface">
+          Open the invite link from your email. Joining by email alone is not allowed.
+        </p>
       </div>
     );
   }
@@ -111,7 +140,16 @@ export default function TeamInviteLandingPage({
           <h1 className="text-headline-md font-bold text-primary">Team invite</h1>
         </div>
 
-        {preview ? (
+        {expired ? (
+          <div className="space-y-inset-sm">
+            <p className="text-body-lg text-on-surface">
+              This invite has expired{preview?.merchantName ? ` for ${preview.merchantName}` : ''}.
+            </p>
+            <p className="text-body-sm text-on-surface-variant">
+              Ask your store owner or admin to revoke the old invite and send a new link.
+            </p>
+          </div>
+        ) : preview ? (
           <>
             <p className="text-body-lg">
               You&apos;ve been invited to join <strong>{preview.merchantName}</strong> as{' '}
@@ -128,7 +166,7 @@ export default function TeamInviteLandingPage({
           <p className="text-body-sm text-on-surface-variant">This invite link is invalid or expired.</p>
         )}
 
-        {wrongAccount && preview && (
+        {wrongAccount && preview && !expired && (
           <div className="space-y-inset-sm rounded-lg border border-error/30 bg-error-container/20 p-inset-md">
             <p className="text-body-sm text-on-surface">
               You&apos;re signed in as <strong>{session?.user?.email}</strong>, but this invite was sent to{' '}
@@ -144,10 +182,10 @@ export default function TeamInviteLandingPage({
           </div>
         )}
 
-        {!session && preview && (
+        {!session && preview && !expired && (
           <>
             <p className="text-body-sm text-on-surface-variant">
-              Sign in or create an account with the email you were invited with.
+              Sign in or create an account with the email you were invited with, then confirm your email.
             </p>
             <button
               type="button"
@@ -159,7 +197,7 @@ export default function TeamInviteLandingPage({
           </>
         )}
 
-        {session && claiming && (
+        {session && claiming && !expired && (
           <p className="text-body-sm text-on-surface-variant">Joining team…</p>
         )}
       </div>

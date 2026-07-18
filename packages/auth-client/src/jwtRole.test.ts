@@ -27,9 +27,9 @@ describe('jwtPrimaryRole', () => {
     expect(getJwtRoles(user)).toEqual(['driver_admin', 'driver']);
   });
 
-  it('falls back to user_metadata.role', () => {
+  it('does not fall back to user_metadata.role', () => {
     const user = { user_metadata: { role: 'driver' } };
-    expect(jwtPrimaryRole(user)).toBe('driver');
+    expect(jwtPrimaryRole(user)).toBe('');
   });
 });
 
@@ -68,14 +68,18 @@ describe('canUseDriverSurface', () => {
     expect(canUseDriverSurface({}, true)).toBe(true);
   });
 
-  it('allows legacy driver role', () => {
-    expect(canUseDriverSurface({ user_metadata: { role: 'driver' } }, false)).toBe(true);
+  it('denies legacy user_metadata driver role without profile', () => {
+    expect(canUseDriverSurface({ user_metadata: { role: 'driver' } }, false)).toBe(false);
+  });
+
+  it('allows app_metadata driver role', () => {
+    expect(canUseDriverSurface({ app_metadata: { roles: ['driver'] } }, false)).toBe(true);
   });
 });
 
 describe('canUseHaulerSurface', () => {
-  it('allows hauler surface', () => {
-    expect(canUseHaulerSurface({ user_metadata: { surface: 'hauler' } }, false)).toBe(true);
+  it('denies hauler surface alone without profile', () => {
+    expect(canUseHaulerSurface({ user_metadata: { surface: 'hauler' } }, false)).toBe(false);
   });
 
   it('allows driver profile for dual-role', () => {

@@ -67,10 +67,17 @@ export async function requireProductAdmin(
 
   const roles = getJwtRoles(user);
   const allowedRoles = PRODUCT_ADMIN_ROLES[product];
-  const matched = roles.find((r) => allowedRoles.has(r));
+  const matchedProduct = roles.find((r) => allowedRoles.has(r) && !PLATFORM_ROLES.has(r));
+  const matchedPlatform = roles.find((r) => PLATFORM_ROLES.has(r));
   const dbAccess = await userHasProductAccessResolved(user.id, user, product);
 
-  if (!matched && !dbAccess) {
+  let platformDbOk = false;
+  if (matchedPlatform && !matchedProduct && !dbAccess) {
+    const { dbIsPlatformUser } = await import("./rbacQuery.ts");
+    platformDbOk = await dbIsPlatformUser(user.id);
+  }
+
+  if (!matchedProduct && !dbAccess && !platformDbOk) {
     return c.json(
       {
         error: "Forbidden",
@@ -82,7 +89,8 @@ export async function requireProductAdmin(
     );
   }
 
-  const effectiveRole = matched ?? (dbAccess ? `${product}_admin` : jwtPrimaryRole(user));
+  const effectiveRole = matchedProduct
+    ?? (dbAccess ? `${product}_admin` : (platformDbOk ? matchedPlatform! : jwtPrimaryRole(user)));
 
   return {
     id: user.id,

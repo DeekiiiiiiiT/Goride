@@ -300,7 +300,17 @@ export function registerMerchantTeamRoutes(app: Hono, deps: TeamDeps) {
 
     const row = invite as Record<string, unknown>;
     if (isInviteExpired(row)) {
-      return c.json({ error: "Invite expired" }, 410);
+      const merchant = row.merchants as Record<string, unknown> | null;
+      return c.json({
+        error: "Invite expired",
+        invite: {
+          merchantName: merchant?.name ? String(merchant.name) : "Store",
+          role: String(row.role),
+          inviteeEmailMasked: maskEmail(String(row.email)),
+          expiresAt: row.expires_at ? String(row.expires_at) : undefined,
+          isExpired: true,
+        },
+      }, 410);
     }
 
     const merchant = row.merchants as Record<string, unknown> | null;
@@ -670,6 +680,10 @@ export function registerMerchantTeamRoutes(app: Hono, deps: TeamDeps) {
     const sb = getServiceSb();
     const email = user.email.trim().toLowerCase();
 
+    if (!user.email_confirmed_at) {
+      return c.json({ error: "Confirm your email before accepting this invite" }, 403);
+    }
+
     const { data: invite, error: fetchErr } = await sb
       .from("merchant_team_invites")
       .select("*, merchants(verification_status)")
@@ -743,6 +757,10 @@ export function registerMerchantTeamRoutes(app: Hono, deps: TeamDeps) {
     const inviteId = c.req.param("id");
     const sb = getServiceSb();
     const email = user.email.trim().toLowerCase();
+
+    if (!user.email_confirmed_at) {
+      return c.json({ error: "Confirm your email before accepting this invite" }, 403);
+    }
 
     const { data: invite, error: fetchErr } = await sb
       .from("merchant_team_invites")

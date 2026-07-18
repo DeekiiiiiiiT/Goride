@@ -81,7 +81,6 @@ export function FleetPhoneAuthWizard({
         options: {
           shouldCreateUser: true,
           channel: selected,
-          data: { signup_intent: 'fleet_owner' },
         },
       });
       if (otpError) throw otpError;

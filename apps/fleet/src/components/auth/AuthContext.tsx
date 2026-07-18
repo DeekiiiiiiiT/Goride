@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { User, Session } from '@supabase/supabase-js';
+import { jwtPrimaryRole } from '@roam/auth-client';
 import { supabase } from '../../utils/supabase/client';
 import { resolveRole, Role } from '../../utils/permissions';
 import { FLEET_OAUTH_INTENT_KEY, FLEET_OAUTH_INTENT_VALUE } from '../../utils/fleetAuthSignup';
@@ -33,16 +34,12 @@ const AuthContext = createContext<AuthContextType>({
 });
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
-  // Derive organizationId from user metadata.
-  // Fleet owners (admin): orgId = metadata.organizationId || user.id (self-referencing)
-  // Team members: orgId = metadata.organizationId
-  // Platform roles: null (they see all orgs via Super Admin portal)
+  // Derive organizationId from app_metadata (authz source). Fleet owners default to self-id.
   const deriveOrgId = (u: User): string | null => {
-    const meta = u.user_metadata || {};
-    const explicit = meta.organizationId as string | undefined;
+    const appMeta = u.app_metadata || {};
+    const explicit = appMeta.organizationId as string | undefined;
     if (explicit) return explicit;
-    // Fleet owners own their org — their ID IS the orgId
-    const r = meta.role as string;
+    const r = jwtPrimaryRole(u);
     if (r === 'admin' || r === 'fleet_owner') return u.id;
     return null;
   };
@@ -59,9 +56,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     setSession(session);
     setUser(session?.user ?? null);
     if (session?.user) {
-      const userRole = session.user.user_metadata?.role as UserRole;
-      setRole(userRole || null);
-      setResolvedRole(resolveRole(userRole || null));
+      const userRole = (jwtPrimaryRole(session.user) || null) as UserRole | null;
+      setRole(userRole);
+      setResolvedRole(resolveRole(userRole));
       setOrganizationId(deriveOrgId(session.user));
       setNeedsProvision(needsFleetOwnerProvision(session.user));
     } else {

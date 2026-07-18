@@ -68,7 +68,11 @@ export function CourierConsumerApp() {
     const {
       data: { session },
     } = await supabase.auth.getSession();
-    if (session && (await isProfilePending())) {
+    if (!session) {
+      setPhase('welcome');
+      return;
+    }
+    if (await isProfilePending()) {
       setPhase('account-pending');
       return;
     }
@@ -121,9 +125,14 @@ export function CourierConsumerApp() {
     };
   }, [finishOnboarding, finishLogin]);
 
-  const handleSignOut = useCallback(() => {
+  const handleSignOut = useCallback(async () => {
     resetOnboarding();
     clearSignupDraft();
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      console.warn('courier signOut:', e);
+    }
     setPhase('welcome');
   }, []);
 

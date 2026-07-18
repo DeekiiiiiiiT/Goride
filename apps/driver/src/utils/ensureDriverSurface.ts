@@ -26,9 +26,21 @@ async function shouldClearOAuthProfileMetadata(user: User): Promise<boolean> {
   return !hasAppProfile;
 }
 
-/** Rides driver edge routes require user_metadata.surface (or legacy role) = driver. */
+async function hasDriverProfile(userId: string): Promise<boolean> {
+  const { data } = await supabase
+    .from('driver_profiles')
+    .select('user_id')
+    .eq('user_id', userId)
+    .maybeSingle();
+  return !!data;
+}
+
+/** Only write surface:driver after a real driver_profiles row exists. */
 export async function ensureDriverSurface(user: User): Promise<User> {
   if (shouldSkipOauthSurfaceWrite(user, 'driver')) return user;
+
+  const profileOk = await hasDriverProfile(user.id);
+  if (!profileOk) return user;
 
   const surface = user.user_metadata?.surface;
   const needsSurface = surface !== 'driver';

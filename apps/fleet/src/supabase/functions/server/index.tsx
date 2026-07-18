@@ -12395,22 +12395,36 @@ app.post("/make-server-37f42386/driver/join-fleet", requireAuth(), async (c) => 
   }
 });
 
-// Admin: Update User Password
+// Update User Password — self only, or platform_owner/superadmin for others
 app.post("/make-server-37f42386/update-password", requireAuth(), async (c) => {
   try {
+    const rbacUser = c.get("rbacUser") as {
+      userId?: string;
+      resolvedRole?: string;
+      rawRole?: string;
+    } | null;
     const { userId, password } = await c.req.json();
-    
+
     if (!userId || !password) {
       return c.json({ error: "User ID and new password are required" }, 400);
     }
-    
-    const { data, error } = await supabase.auth.admin.updateUserById(
-      userId,
-      { password: password }
-    );
-    
+    if (typeof password !== "string" || password.length < 8) {
+      return c.json({ error: "Password must be at least 8 characters" }, 400);
+    }
+
+    const callerId = rbacUser?.userId;
+    const isSelf = !!callerId && callerId === userId;
+    const isPlatformOwner =
+      rbacUser?.resolvedRole === "platform_owner" ||
+      rbacUser?.rawRole === "superadmin" ||
+      rbacUser?.rawRole === "platform_owner";
+    if (!isSelf && !isPlatformOwner) {
+      return c.json({ error: "Forbidden: can only change your own password" }, 403);
+    }
+
+    const { error } = await supabase.auth.admin.updateUserById(userId, { password });
     if (error) throw error;
-    
+
     return c.json({ success: true });
   } catch (e: any) {
     console.error("Update Password Error:", e);
@@ -12418,7 +12432,7 @@ app.post("/make-server-37f42386/update-password", requireAuth(), async (c) => {
   }
 });
 
-// Admin: Update User Details (name, role, businessType)
+// Admin: Update User Details (name, role, businessType) — role goes to app_metadata only
 app.post("/make-server-37f42386/update-user", requireAuth(), requirePermission('users.edit_role'), async (c) => {
   try {
     const { userId, name, role, businessType } = await c.req.json();
@@ -12427,29 +12441,50 @@ app.post("/make-server-37f42386/update-user", requireAuth(), requirePermission('
       return c.json({ error: "User ID is required" }, 400);
     }
 
-    const updates: Record<string, any> = {};
-    if (name !== undefined) updates.name = name;
-    if (role !== undefined) updates.role = role;
-    if (businessType !== undefined) updates.businessType = businessType;
+    const { data: existing, error: getErr } = await supabase.auth.admin.getUserById(userId);
+    if (getErr || !existing?.user) {
+      return c.json({ error: "User not found" }, 404);
+    }
 
-    if (Object.keys(updates).length === 0) {
+    const userMetaUpdates: Record<string, unknown> = {
+      ...(existing.user.user_metadata || {}),
+    };
+    if (name !== undefined) userMetaUpdates.name = name;
+    if (businessType !== undefined) userMetaUpdates.businessType = businessType;
+    // Never store authz role in user_metadata
+    delete userMetaUpdates.role;
+    delete userMetaUpdates.organizationId;
+
+    const appMetaUpdates: Record<string, unknown> = {
+      ...(existing.user.app_metadata || {}),
+    };
+    if (role !== undefined) {
+      appMetaUpdates.role = role;
+      const prevRoles = Array.isArray(appMetaUpdates.roles)
+        ? (appMetaUpdates.roles as unknown[]).filter((r): r is string => typeof r === "string")
+        : [];
+      const nextRoles = new Set(prevRoles);
+      nextRoles.add(String(role));
+      appMetaUpdates.roles = Array.from(nextRoles);
+    }
+
+    if (name === undefined && role === undefined && businessType === undefined) {
       return c.json({ error: "No fields to update" }, 400);
     }
 
-    const { data, error } = await supabase.auth.admin.updateUserById(
-      userId,
-      { user_metadata: updates }
-    );
+    const { data, error } = await supabase.auth.admin.updateUserById(userId, {
+      user_metadata: userMetaUpdates,
+      app_metadata: appMetaUpdates,
+    });
 
     if (error) throw error;
 
-    console.log(`User updated: ${userId} — fields: ${JSON.stringify(updates)}`);
-    
-    // Invalidate customer cache if updating an admin user
-    if (updates.role === 'admin' || data.user?.user_metadata?.role === 'admin') {
+    console.log(`User updated: ${userId} — role=${role ?? "(unchanged)"}`);
+
+    if (role === "admin" || data.user?.app_metadata?.role === "admin") {
       await invalidateCustomerCache();
     }
-    
+
     return c.json({ success: true, user: data.user });
   } catch (e: any) {
     console.error("Update User Error:", e);
@@ -13576,6 +13611,113 @@ app.post("/make-server-37f42386/admin/fix-anomaly-flags", async (c) => {
     return c.json({ error: e.message }, 500);
   }
 });
+
+// POST /admin/backfill-app-metadata-roles — copy role/org from user_metadata → app_metadata (once)
+// Does NOT promote privileged user_metadata when app_metadata already has a different role.
+app.post(
+  "/make-server-37f42386/admin/backfill-app-metadata-roles",
+  requireAuth(),
+  requirePermission("data.backfill"),
+  async (c) => {
+    try {
+      const body = await c.req.json().catch(() => ({}));
+      const dryRun = body?.dryRun !== false;
+      const privileged = new Set([
+        "platform_owner",
+        "platform_support",
+        "platform_analyst",
+        "superadmin",
+        "admin",
+        "fleet_owner",
+      ]);
+
+      let page = 1;
+      const perPage = 200;
+      let copied = 0;
+      let skipped = 0;
+      const mismatches: Array<{ id: string; email?: string; userRole: string; appRole: string }> = [];
+
+      for (;;) {
+        const { data, error } = await supabase.auth.admin.listUsers({ page, perPage });
+        if (error) throw error;
+        const users = data?.users || [];
+        if (users.length === 0) break;
+
+        for (const u of users) {
+          const appMeta = (u.app_metadata || {}) as Record<string, unknown>;
+          const userMeta = (u.user_metadata || {}) as Record<string, unknown>;
+          const appRole = typeof appMeta.role === "string" ? appMeta.role.trim() : "";
+          const userRole = typeof userMeta.role === "string" ? userMeta.role.trim() : "";
+          const appOrg =
+            typeof appMeta.organizationId === "string" ? appMeta.organizationId.trim() : "";
+          const userOrg =
+            typeof userMeta.organizationId === "string" ? userMeta.organizationId.trim() : "";
+
+          if (userRole && appRole && userRole !== appRole && privileged.has(userRole)) {
+            mismatches.push({
+              id: u.id,
+              email: u.email,
+              userRole,
+              appRole,
+            });
+          }
+
+          const needRole = !appRole && !!userRole;
+          const needOrg = !appOrg && !!userOrg;
+          if (!needRole && !needOrg) {
+            skipped++;
+            continue;
+          }
+
+          // Never copy privileged user_metadata over empty app when mismatch logged elsewhere —
+          // only copy when app role is empty (legitimate legacy users).
+          if (needRole && privileged.has(userRole) && appRole && appRole !== userRole) {
+            skipped++;
+            continue;
+          }
+
+          copied++;
+          if (dryRun) continue;
+
+          const nextApp: Record<string, unknown> = { ...appMeta };
+          if (needRole) {
+            nextApp.role = userRole;
+            const roles = Array.isArray(nextApp.roles)
+              ? (nextApp.roles as unknown[]).filter((r): r is string => typeof r === "string")
+              : [];
+            if (!roles.includes(userRole)) roles.push(userRole);
+            nextApp.roles = roles;
+          }
+          if (needOrg) nextApp.organizationId = userOrg;
+
+          const { error: updErr } = await supabase.auth.admin.updateUserById(u.id, {
+            app_metadata: nextApp,
+          });
+          if (updErr) {
+            console.warn(`[app-meta-backfill] ${u.id}: ${updErr.message}`);
+          }
+        }
+
+        if (users.length < perPage) break;
+        page++;
+      }
+
+      return c.json({
+        success: true,
+        dryRun,
+        copied,
+        skipped,
+        privilegedMismatches: mismatches,
+        message: dryRun
+          ? "Dry run complete. Set dryRun:false to apply."
+          : "Backfill applied.",
+      });
+    } catch (e: any) {
+      console.error("[app-meta-backfill]", e);
+      return c.json({ error: e.message }, 500);
+    }
+  },
+);
 
 // ---------------------------------------------------------------------------
 // Super Admin — Seed & Check Endpoints

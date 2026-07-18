@@ -93,25 +93,22 @@ function readRolesArray(meta: Record<string, unknown> | undefined): string[] {
 
 function collectAllJwtRoles(
   appMeta: Record<string, unknown>,
-  userMeta: Record<string, unknown>,
+  _userMeta?: Record<string, unknown>,
 ): string[] {
   const roles = new Set<string>();
   if (typeof appMeta.role === 'string' && appMeta.role.trim()) {
     roles.add(appMeta.role.trim());
   }
   for (const r of readRolesArray(appMeta)) roles.add(r);
-  if (typeof userMeta.role === 'string' && userMeta.role.trim()) {
-    roles.add(userMeta.role.trim());
-  }
   return Array.from(roles);
 }
 
-/** Pick the RBAC role from JWT metadata; platform roles beat product admin roles. */
+/** Pick the RBAC role from app_metadata only; platform roles beat product admin roles. */
 export function pickRawRoleForRbac(
   appMeta: Record<string, unknown>,
-  userMeta: Record<string, unknown>,
+  _userMeta?: Record<string, unknown>,
 ): string {
-  const allRoles = collectAllJwtRoles(appMeta, userMeta);
+  const allRoles = collectAllJwtRoles(appMeta);
 
   for (const platformRole of PLATFORM_RAW_ROLES) {
     if (allRoles.includes(platformRole)) return platformRole;
@@ -122,10 +119,23 @@ export function pickRawRoleForRbac(
     return appRole;
   }
 
-  const userRole = typeof userMeta.role === 'string' ? userMeta.role.trim() : '';
-  if (userRole) return userRole;
+  // Prefer first non-product-admin role from roles[]
+  for (const r of readRolesArray(appMeta)) {
+    if (!PRODUCT_ADMIN_ROLES.has(r)) return r;
+  }
 
   return 'fleet_viewer';
+}
+
+function resolveOrganizationId(
+  appMeta: Record<string, unknown>,
+  userId: string,
+  resolved: Role,
+): string | null {
+  const fromApp = appMeta.organizationId;
+  if (typeof fromApp === 'string' && fromApp.trim()) return fromApp.trim();
+  if (resolved === 'fleet_owner') return userId;
+  return null;
 }
 
 export function hasPlatformStaffAccess(user: RbacUser): boolean {
@@ -162,9 +172,7 @@ export function rbacUserFromSupabaseUser(user: SupabaseAuthUser): RbacUser {
     email: user.email || '',
     rawRole,
     resolvedRole: resolved,
-    organizationId: (typeof meta.organizationId === 'string' && meta.organizationId)
-      ? meta.organizationId
-      : (resolved === 'fleet_owner' ? user.id : null),
+    organizationId: resolveOrganizationId(appMeta, user.id, resolved),
   };
 }
 
@@ -341,53 +349,39 @@ export function requireAuth(options?: RequireAuthOptions) {
       const { data, error } = await sb.auth.getUser(token);
 
       if (error || !data?.user) {
-        // Token is likely the anon key
+        const errMsg = (error?.message || '').toLowerCase();
+        // Banned/suspended users must never become anon/admin passthrough
+        if (
+          errMsg.includes('ban') ||
+          errMsg.includes('suspend') ||
+          errMsg.includes('disabled') ||
+          errMsg.includes('forbidden')
+        ) {
+          console.warn('[RBAC] Rejected banned/suspended user');
+          return c.json({
+            error: 'Forbidden: Account suspended',
+            code: 'ACCOUNT_SUSPENDED',
+            message: 'Your account has been suspended. Please contact support.',
+          }, 403);
+        }
 
-        // Check if anon is explicitly allowed
+        // Token is likely the anon key
         if (options?.allowAnon) {
           c.set('rbacUser', null);
           await next();
           return;
         }
 
-        // Check if strict mode is enabled
-        let useStrict = options?.strict;
-        if (useStrict === undefined) {
-          // Check feature flag
-          try {
-            const { isFeatureEnabled, FEATURE_FLAGS } = await import("./feature_flags.ts");
-            useStrict = await isFeatureEnabled(FEATURE_FLAGS.STRICT_AUTH);
-          } catch {
-            // Wave 1C: fail closed if flag store is unavailable
-            useStrict = true;
-          }
-        }
-
-        if (useStrict) {
-          // STRICT MODE: Reject anon key
-          console.warn('[RBAC] STRICT: Rejected anon key - valid JWT required');
-          return c.json({ 
-            error: 'Unauthorized: Valid authentication required',
-            code: 'AUTH_REQUIRED',
-            message: 'This endpoint requires a valid user session. Please log in.'
-          }, 401);
-        }
-
-        // LEGACY MODE: Gracefully degrade for backward compatibility
-        console.log('[RBAC] Auth passthrough: token is not a user JWT (likely anon key). Defaulting to fleet_owner.');
-        const passthroughUser: RbacUser = {
-          userId: '_anon_passthrough',
-          email: '',
-          rawRole: 'admin',
-          resolvedRole: 'fleet_owner',
-          organizationId: null,
-        };
-        c.set('rbacUser', passthroughUser);
-        await next();
-        return;
+        // Always reject non-user JWTs — no fleet_owner passthrough
+        console.warn('[RBAC] Rejected anon/non-user token - valid JWT required');
+        return c.json({
+          error: 'Unauthorized: Valid authentication required',
+          code: 'AUTH_REQUIRED',
+          message: 'This endpoint requires a valid user session. Please log in.',
+        }, 401);
       }
 
-      // Valid JWT — resolve RBAC role
+      // Valid JWT — resolve RBAC role from app_metadata only
       const appMeta = (data.user.app_metadata || {}) as Record<string, unknown>;
       const meta = data.user.user_metadata || {};
       const rawRole = pickRawRoleForRbac(appMeta, meta);
@@ -398,10 +392,7 @@ export function requireAuth(options?: RequireAuthOptions) {
         email: data.user.email || '',
         rawRole,
         resolvedRole: resolved,
-        // Derive organizationId: explicit metadata > self-referencing for fleet_owners
-        organizationId: (typeof meta.organizationId === 'string' && meta.organizationId)
-          ? meta.organizationId
-          : (resolved === 'fleet_owner' ? data.user.id : null),
+        organizationId: resolveOrganizationId(appMeta, data.user.id, resolved),
       };
 
       c.set('rbacUser', rbacUser);
@@ -423,38 +414,12 @@ export function requireAuth(options?: RequireAuthOptions) {
 
       await next();
     } catch (err) {
-      console.error('[RBAC] Auth error:', err);
-
-      // Check if we should fail-open or fail-closed
-      let useStrict = options?.strict;
-      if (useStrict === undefined) {
-        try {
-          const { isFeatureEnabled, FEATURE_FLAGS } = await import("./feature_flags.ts");
-          useStrict = await isFeatureEnabled(FEATURE_FLAGS.STRICT_AUTH);
-        } catch {
-          useStrict = false;
-        }
-      }
-
-      if (useStrict) {
-        // STRICT MODE: Fail closed
-        return c.json({ 
-          error: 'Authentication error',
-          code: 'AUTH_ERROR',
-        }, 500);
-      }
-
-      // LEGACY MODE: Fail-open during transition period
-      console.log('[RBAC] Auth error, using passthrough:', err);
-      const passthroughUser: RbacUser = {
-        userId: '_anon_passthrough',
-        email: '',
-        rawRole: 'admin',
-        resolvedRole: 'fleet_owner',
-        organizationId: null,
-      };
-      c.set('rbacUser', passthroughUser);
-      await next();
+      // Fail closed — never synthesize fleet_owner on auth errors
+      console.error('[RBAC] Auth error (fail closed):', err);
+      return c.json({
+        error: 'Authentication error',
+        code: 'AUTH_ERROR',
+      }, 500);
     }
   };
 }

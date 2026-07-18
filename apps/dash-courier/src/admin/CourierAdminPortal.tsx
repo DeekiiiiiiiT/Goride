@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, Outlet, useLocation, Link } from 'react-router-dom';
-import { supabaseCourierAdmin as supabase, hasProductAdminRole, jwtPrimaryRole } from '@roam/auth-client';
+import { supabaseCourierAdmin as supabase, hasProductAdminRole, jwtPrimaryRole, usePermissions, productPortalAccess } from '@roam/auth-client';
 import { Session } from '@supabase/supabase-js';
 import {
   LayoutDashboard,
@@ -191,6 +191,7 @@ function AdminLayoutShell({ session }: { session: Session }) {
 export function CourierAdminPortal() {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const { hasPermission, loading: permsLoading } = usePermissions({ supabase });
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session: s } }) => {
@@ -213,12 +214,20 @@ export function CourierAdminPortal() {
     );
   }
 
-  if (!session) {
-    return <CourierAdminLoginForm />;
-  }
+  if (!session) return <CourierAdminLoginForm />;
 
   const userRole = jwtPrimaryRole(session.user);
-  const hasAccess = hasProductAdminRole(session.user, 'courier');
+  const hasJwtAccess = hasProductAdminRole(session.user, 'courier');
+  const hasDbAccess = hasPermission(productPortalAccess('courier'));
+  const hasAccess = hasJwtAccess || (!permsLoading && hasDbAccess);
+
+  if (permsLoading && !hasJwtAccess) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-950 text-slate-400">
+        <Loader2 className="w-8 h-8 animate-spin" />
+      </div>
+    );
+  }
 
   if (!hasAccess) {
     return (

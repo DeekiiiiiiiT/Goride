@@ -3,7 +3,7 @@
  * DB-backed with JWT fallback during migration.
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getJwtRoles, jwtPrimaryRole } from "./authEdge.ts";
+import { jwtPrimaryRole } from "./authEdge.ts";
 import { dbIsPlatformUser } from "./rbacQuery.ts";
 import { ROLE_LEVELS } from "./platformPermissions.ts";
 
@@ -37,20 +37,17 @@ export async function requirePlatformAdmin(
   }
 
   const isPlatformDb = await dbIsPlatformUser(user.id);
-  const rawRole = jwtPrimaryRole(user);
-  const roles = getJwtRoles(user);
-  const isPlatformJwt = roles.some((r) => PLATFORM_ADMIN_ROLES.has(r))
-    && (rawRole === "platform_owner" || rawRole === "superadmin" || rawRole === "platform_support" || rawRole === "platform_analyst");
-
-  if (!isPlatformDb && !isPlatformJwt) {
+  // Platform access requires DB row — never JWT alone (app_metadata can be stale; user_metadata is spoofable)
+  if (!isPlatformDb) {
     return c.json({
       error: "Forbidden",
       message: "Platform admin role required",
-      currentRole: rawRole || "(none)",
+      currentRole: jwtPrimaryRole(user) || "(none)",
     }, 403);
   }
 
-  return { id: user.id, email: user.email || "", role: rawRole };
+  const rawRole = jwtPrimaryRole(user);
+  return { id: user.id, email: user.email || "", role: rawRole || "platform_owner" };
 }
 
 export function isPlatformAdminRole(role: string): boolean {

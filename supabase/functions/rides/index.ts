@@ -9,7 +9,7 @@
 import { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import { cors } from "https://deno.land/x/hono@v4.3.11/middleware.ts";
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { deniesPassengerSurface, jsonEdgeForbidden, ridesUserSurfaceRole, allowsPassengerSurface, allowsHaulerOrDriverSurface } from "../_shared/authEdge.ts";
+import { deniesPassengerSurface, jsonEdgeForbidden, ridesUserSurfaceRole, allowsPassengerSurface, allowsHaulerOrDriverSurfaceAsync } from "../_shared/authEdge.ts";
 import { buildFareQuote, gridCellKey } from "./fare/buildQuote.ts";
 import { FareRuleNotFoundError } from "./fare/rules.ts";
 import { rankDriversByDriveTime } from "./fare/distanceMatrix.ts";
@@ -235,6 +235,23 @@ function pubSvc(): SupabaseClient {
     Deno.env.get("SUPABASE_URL") ?? "",
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
   );
+}
+
+async function driverOrHaulerProfileExists(userId: string): Promise<boolean> {
+  const { data } = await pubSvc()
+    .from("driver_profiles")
+    .select("user_id")
+    .eq("user_id", userId)
+    .maybeSingle();
+  return !!data;
+}
+
+async function requireDriverOrHaulerSurface(user: {
+  id: string;
+  user_metadata?: Record<string, unknown>;
+  app_metadata?: Record<string, unknown>;
+}): Promise<boolean> {
+  return allowsHaulerOrDriverSurfaceAsync(user, driverOrHaulerProfileExists);
 }
 
 const DRIVER_LOCATIONS_SELECT_FULL = "user_id, lat, lng, updated_at, body_type_slug, dispatch_mode";
@@ -1432,7 +1449,7 @@ app.get("/v1/app-permission-policy", async (c) => {
   if (surface === "driver") {
     const auth = await requireUser(c.req.header("Authorization"));
     if ("error" in auth) return c.json({ error: auth.error }, auth.status);
-    if (!allowsHaulerOrDriverSurface(auth.user)) {
+    if (!(await requireDriverOrHaulerSurface(auth.user))) {
       return jsonEdgeForbidden(c, "forbidden_role");
     }
   }
@@ -2147,7 +2164,7 @@ app.post("/v1/requests/:id/cancel", async (c) => {
 app.post("/v1/drivers/presence", async (c) => {
   const auth = await requireUser(c.req.header("Authorization"));
   if ("error" in auth) return c.json({ error: auth.error }, auth.status);
-  if (!allowsHaulerOrDriverSurface(auth.user)) return jsonEdgeForbidden(c, "forbidden_role");
+  if (!(await requireDriverOrHaulerSurface(auth.user))) return jsonEdgeForbidden(c, "forbidden_role");
 
   const body = await c.req.json().catch(() => ({}));
   const lat = Number(body.lat);
@@ -2250,7 +2267,7 @@ app.post("/v1/drivers/presence", async (c) => {
 app.get("/v1/drivers/offers", async (c) => {
   const auth = await requireUser(c.req.header("Authorization"));
   if ("error" in auth) return c.json({ error: auth.error }, auth.status);
-  if (!allowsHaulerOrDriverSurface(auth.user)) return jsonEdgeForbidden(c, "forbidden_role");
+  if (!(await requireDriverOrHaulerSurface(auth.user))) return jsonEdgeForbidden(c, "forbidden_role");
 
   const db = svc();
   const nowIso = new Date().toISOString();
@@ -2279,7 +2296,7 @@ app.get("/v1/drivers/offers", async (c) => {
 app.post("/v1/drivers/offers/:offerId/accept", async (c) => {
   const auth = await requireUser(c.req.header("Authorization"));
   if ("error" in auth) return c.json({ error: auth.error }, auth.status);
-  if (!allowsHaulerOrDriverSurface(auth.user)) return jsonEdgeForbidden(c, "forbidden_role");
+  if (!(await requireDriverOrHaulerSurface(auth.user))) return jsonEdgeForbidden(c, "forbidden_role");
 
   const offerId = c.req.param("offerId");
   const db = svc();
@@ -2400,7 +2417,7 @@ app.post("/v1/drivers/offers/:offerId/accept", async (c) => {
 app.post("/v1/drivers/offers/:offerId/decline", async (c) => {
   const auth = await requireUser(c.req.header("Authorization"));
   if ("error" in auth) return c.json({ error: auth.error }, auth.status);
-  if (!allowsHaulerOrDriverSurface(auth.user)) return jsonEdgeForbidden(c, "forbidden_role");
+  if (!(await requireDriverOrHaulerSurface(auth.user))) return jsonEdgeForbidden(c, "forbidden_role");
 
   const offerId = c.req.param("offerId");
   const db = svc();
@@ -2418,7 +2435,7 @@ app.post("/v1/drivers/offers/:offerId/decline", async (c) => {
 app.get("/v1/drivers/me/trips", async (c) => {
   const auth = await requireUser(c.req.header("Authorization"));
   if ("error" in auth) return c.json({ error: auth.error }, auth.status);
-  if (!allowsHaulerOrDriverSurface(auth.user)) return jsonEdgeForbidden(c, "forbidden_role");
+  if (!(await requireDriverOrHaulerSurface(auth.user))) return jsonEdgeForbidden(c, "forbidden_role");
 
   const page = Math.max(1, Number(c.req.query("page") ?? 1));
   const limit = Math.min(100, Math.max(1, Number(c.req.query("limit") ?? 25)));
@@ -2439,7 +2456,7 @@ app.get("/v1/drivers/me/trips", async (c) => {
 app.get("/v1/drivers/me/active-ride", async (c) => {
   const auth = await requireUser(c.req.header("Authorization"));
   if ("error" in auth) return c.json({ error: auth.error }, auth.status);
-  if (!allowsHaulerOrDriverSurface(auth.user)) return jsonEdgeForbidden(c, "forbidden_role");
+  if (!(await requireDriverOrHaulerSurface(auth.user))) return jsonEdgeForbidden(c, "forbidden_role");
 
   const result = await getDriverActiveRideRequest(svc(), pubSvc(), auth.user.id);
   if ("error" in result) {
@@ -2460,7 +2477,7 @@ app.get("/v1/drivers/me/active-ride", async (c) => {
 app.get("/v1/drivers/me/earnings", async (c) => {
   const auth = await requireUser(c.req.header("Authorization"));
   if ("error" in auth) return c.json({ error: auth.error }, auth.status);
-  if (!allowsHaulerOrDriverSurface(auth.user)) return jsonEdgeForbidden(c, "forbidden_role");
+  if (!(await requireDriverOrHaulerSurface(auth.user))) return jsonEdgeForbidden(c, "forbidden_role");
 
   const rawPeriod = (c.req.query("period") ?? "week").toLowerCase();
   const period: DriverEarningsPeriod = rawPeriod === "today" || rawPeriod === "all"
@@ -2482,7 +2499,7 @@ function driverTransitions(): Record<RideStatus, RideStatus[]> {
 app.post("/v1/drivers/ride-location", async (c) => {
   const auth = await requireUser(c.req.header("Authorization"));
   if ("error" in auth) return c.json({ error: auth.error }, auth.status);
-  if (!allowsHaulerOrDriverSurface(auth.user)) return jsonEdgeForbidden(c, "forbidden_role");
+  if (!(await requireDriverOrHaulerSurface(auth.user))) return jsonEdgeForbidden(c, "forbidden_role");
 
   const body = await c.req.json().catch(() => ({}));
   const rideId = typeof body.ride_id === "string" ? body.ride_id : "";
@@ -2667,7 +2684,7 @@ app.get("/v1/requests/:id/toll-crossings", async (c) => {
 app.patch("/v1/requests/:id/driver-transition", async (c) => {
   const auth = await requireUser(c.req.header("Authorization"));
   if ("error" in auth) return c.json({ error: auth.error }, auth.status);
-  if (!allowsHaulerOrDriverSurface(auth.user)) return jsonEdgeForbidden(c, "forbidden_role");
+  if (!(await requireDriverOrHaulerSurface(auth.user))) return jsonEdgeForbidden(c, "forbidden_role");
 
   const id = c.req.param("id");
   const body = await c.req.json().catch(() => ({}));

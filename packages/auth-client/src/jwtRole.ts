@@ -14,8 +14,8 @@ function readRolesArray(meta: Record<string, unknown> | undefined): string[] {
 }
 
 /**
- * Primary role for authorization: explicit app_metadata.role, else first roles[],
- * else legacy user_metadata.role.
+ * Primary role for authorization: app_metadata.role, else first app_metadata.roles[].
+ * Never trust client-writable user_metadata.role.
  */
 export function jwtPrimaryRole(user: JwtUser): string {
   const appMeta = user.app_metadata;
@@ -26,13 +26,10 @@ export function jwtPrimaryRole(user: JwtUser): string {
 
   const fromArray = readRolesArray(appMeta);
   if (fromArray.length > 0) return fromArray[0];
-
-  const um = user.user_metadata?.role;
-  if (typeof um === 'string' && um.trim()) return um.trim();
   return '';
 }
 
-/** All roles on the JWT for permission checks. */
+/** All roles on the JWT for permission checks (app_metadata only). */
 export function getJwtRoles(user: JwtUser): string[] {
   const fromApp = readRolesArray(user.app_metadata);
   if (fromApp.length > 0) return fromApp;
@@ -59,27 +56,21 @@ export function userMetadataSurface(user: JwtUser): string | undefined {
 }
 
 /**
- * Driver app eligibility during migration: profile row, driver role, or surface marker.
+ * Driver app eligibility: verified profile row or app_metadata driver role.
+ * Surface alone is not enough (spoofable).
  */
 export function canUseDriverSurface(user: JwtUser, hasProfile: boolean): boolean {
   if (hasProfile) return true;
-  if (getJwtRoles(user).includes('driver')) return true;
-  if (userMetadataSurface(user) === 'driver') return true;
-  const legacy = user.user_metadata?.role;
-  return legacy === 'driver';
+  return getJwtRoles(user).includes('driver');
 }
 
 /**
- * Hauler app eligibility: hauler surface/role, or existing driver profile (dual-role).
+ * Hauler app eligibility: verified profile or app_metadata hauler/driver role.
  */
 export function canUseHaulerSurface(user: JwtUser, hasProfile: boolean): boolean {
   if (hasProfile) return true;
-  if (getJwtRoles(user).includes('hauler')) return true;
-  if (getJwtRoles(user).includes('driver')) return true;
-  const surface = userMetadataSurface(user);
-  if (surface === 'hauler' || surface === 'driver') return true;
-  const legacy = user.user_metadata?.role;
-  return legacy === 'hauler' || legacy === 'driver';
+  const roles = getJwtRoles(user);
+  return roles.includes('hauler') || roles.includes('driver');
 }
 
 /** True when the user holds a non-rides privileged role (admin/fleet/platform). */

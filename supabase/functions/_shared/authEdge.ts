@@ -15,42 +15,45 @@ function readRolesArray(meta: Record<string, unknown> | undefined): string[] {
 
 export function ridesUserSurfaceRole(user: {
   user_metadata?: Record<string, unknown>;
+  app_metadata?: Record<string, unknown>;
 }): string | undefined {
+  // Prefer app_metadata roles for authz; surface is display-only after Wave 3
+  const roles = getJwtRoles(user);
+  if (roles.includes("driver")) return "driver";
+  if (roles.includes("hauler")) return "hauler";
+  if (roles.includes("passenger")) return "passenger";
   const surface = user.user_metadata?.surface;
   if (typeof surface === "string" && surface.trim()) return surface.trim();
-  const r = user.user_metadata?.role;
-  return typeof r === "string" ? r : undefined;
+  return undefined;
 }
 
-/** Passenger app routes — allow passenger JWT role even when surface metadata says driver. */
+/** Passenger app routes — allow passenger JWT role (app_metadata) or unmarked users. */
 export function allowsPassengerSurface(user: {
   user_metadata?: Record<string, unknown>;
   app_metadata?: Record<string, unknown>;
 }): boolean {
   const roles = getJwtRoles(user);
   if (roles.includes("passenger")) return true;
-  const legacyRole = user.user_metadata?.role;
-  if (typeof legacyRole === "string" && legacyRole.trim() === "passenger") return true;
+  if (roles.includes("driver") || roles.includes("hauler")) return false;
   const role = ridesUserSurfaceRole(user);
   if (!role) return true;
   return role === "passenger";
 }
 
-/** Driver / hauler dispatch routes — allow driver or hauler surface and roles. */
-export function allowsHaulerOrDriverSurface(user: {
-  user_metadata?: Record<string, unknown>;
-  app_metadata?: Record<string, unknown>;
-}): boolean {
+/**
+ * Driver / hauler dispatch routes — app_metadata roles only.
+ * Callers that need profile-backed access should pass hasDriverOrHaulerProfile=true after a DB lookup.
+ */
+export function allowsHaulerOrDriverSurface(
+  user: {
+    user_metadata?: Record<string, unknown>;
+    app_metadata?: Record<string, unknown>;
+  },
+  hasDriverOrHaulerProfile = false,
+): boolean {
+  if (hasDriverOrHaulerProfile) return true;
   const roles = getJwtRoles(user);
-  if (roles.includes("driver") || roles.includes("hauler")) return true;
-  const role = ridesUserSurfaceRole(user);
-  if (role === "driver" || role === "hauler") return true;
-  const legacyRole = user.user_metadata?.role;
-  if (typeof legacyRole === "string") {
-    const r = legacyRole.trim();
-    if (r === "driver" || r === "hauler") return true;
-  }
-  return false;
+  return roles.includes("driver") || roles.includes("hauler");
 }
 
 /** Shared gate for contacts, Roam Tag, book-for-others, and related passenger APIs. */
@@ -61,7 +64,30 @@ export function deniesPassengerSurface(user: {
   return !allowsPassengerSurface(user);
 }
 
-/** All roles on JWT: app_metadata.roles[], else primary, else user_metadata.role */
+/** True when user has a driver_profiles (or hauler) row — for surface gates. */
+export async function hasDriverOrHaulerProfile(
+  userId: string,
+  lookup: (userId: string) => Promise<boolean>,
+): Promise<boolean> {
+  return lookup(userId);
+}
+
+/**
+ * Driver/hauler gate: app_metadata roles OR verified profile via lookup.
+ */
+export async function allowsHaulerOrDriverSurfaceAsync(
+  user: {
+    id: string;
+    user_metadata?: Record<string, unknown>;
+    app_metadata?: Record<string, unknown>;
+  },
+  profileLookup: (userId: string) => Promise<boolean>,
+): Promise<boolean> {
+  if (allowsHaulerOrDriverSurface(user)) return true;
+  return profileLookup(user.id);
+}
+
+/** All roles on JWT from app_metadata only (never user_metadata). */
 export function getJwtRoles(user: {
   user_metadata?: Record<string, unknown>;
   app_metadata?: Record<string, unknown>;
@@ -73,7 +99,7 @@ export function getJwtRoles(user: {
 }
 
 /**
- * Primary role: app_metadata.role, else first roles[], else user_metadata.role.
+ * Primary role: app_metadata.role, else first app_metadata.roles[].
  */
 export function jwtPrimaryRole(user: {
   user_metadata?: Record<string, unknown>;
@@ -85,9 +111,6 @@ export function jwtPrimaryRole(user: {
 
   const fromArray = readRolesArray(appMeta);
   if (fromArray.length > 0) return fromArray[0];
-
-  const um = user.user_metadata?.role;
-  if (typeof um === "string" && um.trim()) return um.trim();
   return "";
 }
 

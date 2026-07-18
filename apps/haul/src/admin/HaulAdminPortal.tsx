@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Routes, Route, Outlet, Link, useLocation } from 'react-router-dom';
-import { supabaseHaulAdmin as supabase, hasProductAdminRole, jwtPrimaryRole } from '@roam/auth-client';
+import { supabaseHaulAdmin as supabase, hasProductAdminRole, jwtPrimaryRole, usePermissions, productPortalAccess } from '@roam/auth-client';
 import type { Session } from '@supabase/supabase-js';
 import { LayoutDashboard, Package, LogOut, Loader2, ShieldAlert, Settings } from 'lucide-react';
 import { Toaster, toast } from 'sonner';
@@ -67,6 +67,7 @@ function Dashboard() {
 export function HaulAdminPortal() {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const { hasPermission, loading: permsLoading } = usePermissions({ supabase });
 
   useEffect(() => {
     void supabase.auth.getSession().then(({ data: { session: s } }) => {
@@ -87,7 +88,19 @@ export function HaulAdminPortal() {
 
   if (!session) return <HaulAdminLoginForm />;
 
-  if (!hasProductAdminRole(session.user, 'haul')) {
+  const hasJwtAccess = hasProductAdminRole(session.user, 'haul');
+  const hasDbAccess = hasPermission(productPortalAccess('haul'));
+  const hasAccess = hasJwtAccess || (!permsLoading && hasDbAccess);
+
+  if (permsLoading && !hasJwtAccess) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-950 text-slate-400">
+        <Loader2 className="w-8 h-8 animate-spin" />
+      </div>
+    );
+  }
+
+  if (!hasAccess) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-slate-950 text-slate-200 p-8">
         <ShieldAlert className="w-10 h-10 text-red-400 mb-4" />

@@ -216,6 +216,9 @@ export async function fetchTeamInvitePreview(token: string): Promise<{ invite: T
     headers: supabaseAnonFunctionHeaders(),
   });
   const body = await res.json().catch(() => ({}));
+  if (res.status === 410 && body.invite) {
+    return { invite: { ...body.invite, isExpired: true } as TeamInvitePreviewData };
+  }
   if (!res.ok) {
     throw new Error(body.error || `Request failed: ${res.status}`);
   }
