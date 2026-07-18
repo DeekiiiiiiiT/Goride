@@ -29,9 +29,15 @@ import {
   loadAllTollLedgerWithTrips,
   getRefundAutomationSettings,
   reconcileTollForDisputeMatch,
+  getDriverAliasMap,
 } from "./toll_controller.tsx";
 import {
+  driverIdsReferToSamePerson,
+  driverNamesReferToSamePerson,
+} from "./driver_identity.ts";
+import {
   DISPUTE_SHORTFALL_TOLERANCE,
+  amountsAlign,
   isFullyReimbursedViaTrip,
   isMatchableDisputeClaim,
 } from "./dispute_refund_eligibility.ts";
@@ -160,14 +166,19 @@ async function loadTollForClaim(transactionId: string | undefined): Promise<any 
   );
 }
 
-/** Matchable toll-refund claims for a driver (open underpaid + Charge Driver). */
-async function loadOpenTollClaimsForDriver(driverId: string): Promise<any[]> {
+/** Matchable toll-refund claims for a driver (open underpaid + Charge Driver).
+ *  Uber CSV IDs and Roam driver UUIDs are treated as the same person via alias map. */
+async function loadOpenTollClaimsForDriver(
+  driverId: string,
+  aliasMap?: Map<string, string>,
+): Promise<any[]> {
   const allClaims = await loadAllByPrefix("claim:");
+  const map = aliasMap ?? (await getDriverAliasMap());
   return allClaims.filter(
     (cl: any) =>
       cl && typeof cl === "object" &&
-      cl.driverId === driverId &&
-      isMatchableDisputeClaim(cl),
+      isMatchableDisputeClaim(cl) &&
+      driverIdsReferToSamePerson(cl.driverId, driverId, map),
   );
 }
 
@@ -181,18 +192,35 @@ async function loadLinkedDisputeTollIds(): Promise<Set<string>> {
   );
 }
 
-/** Evaluate all claim candidates for one refund (claims-first, bare-toll fallback). */
-async function buildDisputeCandidates(refund: any) {
+/** Evaluate claim/toll candidates for one refund (claims-first, bare-toll fallback). */
+async function buildDisputeCandidates(
+  refund: any,
+  opts?: { light?: boolean },
+) {
   const driverId = refund.driverId;
   if (!driverId) return [];
+  const light = opts?.light === true;
 
   const fleetTz = await getFleetTimezone();
+  const aliasMap = await getDriverAliasMap();
   const linkedTollIds = await loadLinkedDisputeTollIds();
-  const { trips } = await loadAllTollLedgerWithTrips();
-  const claims = await loadOpenTollClaimsForDriver(driverId);
+  const claims = await loadOpenTollClaimsForDriver(driverId, aliasMap);
+
+  // Alias expansion can pull every claim for a driver — only fully evaluate the
+  // closest amount matches (live trip enrichment is CPU-heavy on edge).
+  const refundAmt = Math.abs(Number(refund.amount) || 0);
+  const claimsToEval = [...claims]
+    .sort(
+      (a, b) =>
+        Math.abs(Math.abs(Number(a.amount) || 0) - refundAmt) -
+        Math.abs(Math.abs(Number(b.amount) || 0) - refundAmt),
+    )
+    .slice(0, light ? 12 : 8);
+
+  const trips = light ? [] : (await loadAllTollLedgerWithTrips()).trips;
 
   const evaluated: NonNullable<Awaited<ReturnType<typeof evaluateDisputeClaimCandidate>>>[] = [];
-  for (const claim of claims) {
+  for (const claim of claimsToEval) {
     const toll = await loadTollForClaim(claim.transactionId);
     const candidate = await evaluateDisputeClaimCandidate({
       refund,
@@ -201,6 +229,7 @@ async function buildDisputeCandidates(refund: any) {
       trips,
       fleetTz,
       linkedTollIds,
+      light,
     });
     if (candidate) evaluated.push(candidate);
   }
@@ -209,9 +238,24 @@ async function buildDisputeCandidates(refund: any) {
     return evaluated;
   }
 
+  if (light) return evaluated;
+
   const ledger = await loadAllByPrefix("toll_ledger:");
+  const barePool: any[] = [];
   for (const toll of ledger) {
-    if (!toll || typeof toll !== "object" || toll.driverId !== driverId) continue;
+    if (!toll || typeof toll !== "object") continue;
+    if (!driverIdsReferToSamePerson(toll.driverId, driverId, aliasMap)) continue;
+    barePool.push(toll);
+  }
+  const bareToEval = barePool
+    .sort(
+      (a, b) =>
+        Math.abs(Math.abs(Number(a.amount) || 0) - refundAmt) -
+        Math.abs(Math.abs(Number(b.amount) || 0) - refundAmt),
+    )
+    .slice(0, 8);
+
+  for (const toll of bareToEval) {
     const candidate = await evaluateDisputeBareTollCandidate({
       refund,
       toll,
@@ -226,7 +270,7 @@ async function buildDisputeCandidates(refund: any) {
 
 /** Build ranked match suggestions for a dispute refund (claims first, toll fallback). */
 async function computeDisputeSuggestions(refund: any): Promise<any[]> {
-  const evaluated = await buildDisputeCandidates(refund);
+  const evaluated = await buildDisputeCandidates(refund, { light: true });
   return evaluated
     .filter((c) => c.eligibleForSuggestion)
     .sort((a, b) => b.confidence - a.confidence)
@@ -602,9 +646,8 @@ app.get(`${BASE}`, async (c) => {
     }
 
     // ── Auto-link (flagged): only during an active wizard period (dateFrom +
-    //    dateTo both required). Refunds are already period-scoped above; toll
-    //    candidates must fall in the same window. Never auto when live shortfall
-    //    is already $0. Manual cross-period matching is unchanged.
+    //    dateTo both required). Must stay cheap — a full trip-ledger rebuild
+    //    per unmatched refund was HTTP 546'ing the list and wiping the UI.
     let autoMatched = 0;
     try {
       const settings = await getRefundAutomationSettings();
@@ -617,40 +660,26 @@ app.get(`${BASE}`, async (c) => {
       const autoPeriodActive = Boolean(periodFrom && periodTo);
       if (enabled && autoPeriodActive) {
         const fleetTz = await getFleetTimezone();
-        const settlementOrder = await isCorrectSettlementOrderEnabled();
-        // Unlinked-first: do not auto-match disputes while the driver still has
-        // unresolved trip-refund credits that should settle the fare half first.
-        let blockingUnlinkedDrivers: Set<string> | null = null;
-        if (settlementOrder) {
-          blockingUnlinkedDrivers = new Set();
-          const { trips, tollTx } = await loadAllTollLedgerWithTrips();
-          const linkedTripIds = new Set(
-            (tollTx || []).filter((t: any) => t?.tripId).map((t: any) => t.tripId),
-          );
-          for (const trip of trips || []) {
-            if (!trip?.driverId || !(Number(trip.tollCharges) > 0)) continue;
-            if (!isUnresolvedRefund(trip, linkedTripIds)) continue;
-            blockingUnlinkedDrivers.add(String(trip.driverId));
-          }
-        }
-        for (const refund of refunds) {
-          if (refund.status !== "unmatched" || !refund.driverId) continue;
-          if (blockingUnlinkedDrivers?.has(String(refund.driverId))) continue;
-          const candidates = (await buildDisputeCandidates(refund)).filter((c) => {
+        const unmatched = refunds.filter((r: any) => r.status === "unmatched" && r.driverId);
+        // Cap per list request so opening a week cannot burn the whole edge budget.
+        const AUTO_CAP = 5;
+        let attempted = 0;
+        for (const refund of unmatched) {
+          if (attempted >= AUTO_CAP) break;
+          attempted++;
+          const candidates = (await buildDisputeCandidates(refund, { light: true })).filter((c) => {
             const d = fleetTzDay(c.date, fleetTz);
             return Boolean(d && d >= periodFrom && d <= periodTo);
           });
-          const best = pickDisputeMatchCandidate(candidates, { mode: "auto", minConfidence: minConf });
+          // Light path never sets eligibleForAuto — pick by suggestion confidence
+          // and require an exact shortfall amount match before linking.
+          const best = pickDisputeMatchCandidate(candidates, {
+            mode: "suggest",
+            minConfidence: minConf,
+          });
           if (!best?.claimId) continue;
           if (best.shortfall <= DISPUTE_SHORTFALL_TOLERANCE) continue;
-          const tollForAuto = await loadTollForClaim(best.tollId);
-          if (tollForAuto) {
-            const liveRefund = await computeLiveTripRefundForToll(tollForAuto, fleetTz, {
-              suggestedTripId: best.tripId,
-            });
-            const tollAmt = Math.abs(tollForAuto.amount || 0);
-            if (liveRefund != null && isFullyReimbursedViaTrip(tollAmt, liveRefund)) continue;
-          }
+          if (!amountsAlign(Math.abs(Number(refund.amount) || 0), best.shortfall)) continue;
           const res = await matchRefundToClaim(
             refund,
             best.tollId,
@@ -962,10 +991,12 @@ app.get(`${BASE}/match-candidates`, async (c) => {
     const q = (c.req.query("q") || "").trim().toLowerCase();
     const from = (c.req.query("from") || "").slice(0, 10); // yyyy-MM-dd
     const to = (c.req.query("to") || "").slice(0, 10);
+    const filterDriverId = (c.req.query("driverId") || "").trim();
     const LIMIT = 25;
     // Period boundaries arrive as fleet-tz calendar days; normalize each
     // candidate's date into the same frame before comparing (see fleetTzDay).
     const fleetTz = await getFleetTimezone();
+    const aliasMap = await getDriverAliasMap();
     const dayInRange = (dateStr: string | null | undefined) => {
       if (!from && !to) return true;
       const d = fleetTzDay(dateStr, fleetTz);
@@ -973,6 +1004,10 @@ app.get(`${BASE}/match-candidates`, async (c) => {
       if (from && d < from) return false;
       if (to && d > to) return false;
       return true;
+    };
+    const matchesDriverFilter = (candidateDriverId: string | null | undefined) => {
+      if (!filterDriverId) return true;
+      return driverIdsReferToSamePerson(candidateDriverId, filterDriverId, aliasMap);
     };
 
     // Tolls already linked to a matched refund (exclude from candidates).
@@ -1008,8 +1043,9 @@ app.get(`${BASE}/match-candidates`, async (c) => {
         ? (ledgerById.get(String(cl.transactionId)) || null)
         : null;
       const anchorDate = toll?.date || cl.date || cl.createdAt || null;
-      // Drop out-of-period claims before building the response payload.
+      // Drop out-of-period / wrong-driver claims before building the response payload.
       if (!dayInRange(anchorDate)) continue;
+      if (!matchesDriverFilter(cl.driverId || toll?.driverId)) continue;
       const claimAmount = Math.abs(cl.amount || 0);
       const tollAmount = Math.abs(cl.expectedAmount ?? toll?.amount ?? 0);
       claimCandidates.push({
@@ -1044,6 +1080,7 @@ app.get(`${BASE}/match-candidates`, async (c) => {
       if (!toll || typeof toll !== "object" || !toll.id) continue;
       if (toll.type && toll.type !== "usage") continue;
       if (!dayInRange(toll.date)) continue;
+      if (!matchesDriverFilter(toll.driverId)) continue;
       if (claimTollIds.has(toll.id) || linkedTollIds.has(toll.id) || anyClaimTollIds.has(toll.id)) continue;
       // Only tolls that can still take a dispute refund belong here:
       // untriaged, flagged underpaid, or trip-linked ("matched"/"underpaid")
@@ -1076,6 +1113,11 @@ app.get(`${BASE}/match-candidates`, async (c) => {
 
     const matchQ = (cand: any) => {
       if (!q) return true;
+      // Uber CSV names often append platform suffixes (e.g. RATTRAYCAS) while
+      // toll/claim rows use the Roam name — substring match fails; fuzzy does not.
+      if (cand.driverName && driverNamesReferToSamePerson(String(cand.driverName), q)) {
+        return true;
+      }
       const hay = `${cand.driverName} ${cand.tollAmount} ${cand.claimAmount ?? ""} ${cand.date ?? ""}`.toLowerCase();
       return hay.includes(q);
     };

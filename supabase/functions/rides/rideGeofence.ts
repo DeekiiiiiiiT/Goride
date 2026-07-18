@@ -16,6 +16,11 @@ import {
   loadRecentlyCrossedAt,
   type TollCrossingRecord,
 } from "./fare/tollGeofence.ts";
+import {
+  brainEvaluatePoint,
+  brainRecordCrossings,
+  isRidesTollBrainEnabled,
+} from "./fare/tollBrainClient.ts";
 
 export interface LocationFix {
   lat: number;
@@ -246,30 +251,75 @@ export async function evaluateGeofenceTransitions(
     (settings.toll_detect_enroute && status === "driver_en_route_pickup");
   if (settings.toll_detection_enabled && tollDetectStatus) {
     // Cooldown-based de-dup lets genuine round trips through while preventing
-    // dwell double-counting. Falls back to nothing new when within cooldown.
+    // dwell double-counting. Prefer Toll Brain when RIDES_USE_TOLL_BRAIN=1.
     const [crossedTollIds, recentByPlaza] = await Promise.all([
       loadCrossedTollIds(db, rideId),
       loadRecentlyCrossedAt(db, rideId),
     ]);
-    const tollResult = await evaluateTollCrossings(
-      db,
-      fix.lat,
-      fix.lng,
-      settings.toll_geofence_radius_m,
-      crossedTollIds,
-      { recentByPlaza },
-    );
+    const recentObj: Record<string, number> = {};
+    for (const [k, v] of recentByPlaza.entries()) recentObj[k] = v;
+
+    let tollResult: { tollsCrossed: TollCrossingRecord[]; totalTollsMinor: number };
+    if (isRidesTollBrainEnabled()) {
+      const brain = await brainEvaluatePoint({
+        lat: fix.lat,
+        lng: fix.lng,
+        geofenceRadiusM: settings.toll_geofence_radius_m,
+        alreadyCrossedPlazaIds: [...crossedTollIds],
+        recentByPlaza: recentObj,
+      });
+      tollResult = brain ?? await evaluateTollCrossings(
+        db,
+        fix.lat,
+        fix.lng,
+        settings.toll_geofence_radius_m,
+        crossedTollIds,
+        { recentByPlaza },
+      );
+    } else {
+      tollResult = await evaluateTollCrossings(
+        db,
+        fix.lat,
+        fix.lng,
+        settings.toll_geofence_radius_m,
+        crossedTollIds,
+        { recentByPlaza },
+      );
+    }
     if (tollResult.tollsCrossed.length > 0) {
-      const { recorded, total } = await recordTollCrossings(db, rideId, tollResult.tollsCrossed);
-      if (recorded > 0) {
+      let recorded = 0;
+      let total = 0;
+      if (isRidesTollBrainEnabled()) {
+        const brainRec = await brainRecordCrossings({
+          rideRequestId: rideId,
+          crossings: tollResult.tollsCrossed,
+          driverId: driverUserId,
+          vehicleId: ride.vehicle_id ? String(ride.vehicle_id) : null,
+        });
+        if (brainRec) {
+          recorded = brainRec.recorded;
+          total = brainRec.total;
+        }
+      }
+      if (recorded === 0) {
+        const local = await recordTollCrossings(db, rideId, tollResult.tollsCrossed);
+        recorded = local.recorded;
+        total = local.total;
+        if (recorded > 0) {
+          const currentTolls = Number(ride.actual_tolls_minor ?? 0);
+          await deps.patchRideRequest(rideId, {
+            actual_tolls_minor: currentTolls + total,
+            updated_at: new Date().toISOString(),
+          });
+        }
+      } else {
+        // Brain already bumped actual_tolls_minor + optional live ledger
         result.tollsCrossed = tollResult.tollsCrossed;
         result.totalNewTollsMinor = total;
-        
-        const currentTolls = Number(ride.actual_tolls_minor ?? 0);
-        await deps.patchRideRequest(rideId, {
-          actual_tolls_minor: currentTolls + total,
-          updated_at: new Date().toISOString(),
-        });
+      }
+      if (recorded > 0 && !result.tollsCrossed) {
+        result.tollsCrossed = tollResult.tollsCrossed;
+        result.totalNewTollsMinor = total;
       }
     }
   }

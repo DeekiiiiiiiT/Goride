@@ -49,10 +49,12 @@ import { normalizePlatform } from "../../../utils/normalizePlatform";
 import { ReconciliationPeriod } from "../../../hooks/useTollReconciliationPeriods";
 import { useFleetTimezone } from "../../../utils/timezoneDisplay";
 import {
+  collectTripsForReimbursedCard,
   computeReimbursedTotals,
   computeTollSpendByPlatform,
-  normPlatformBucket,
+  resolveTollPlatformBucket,
   type PlatformBucket,
+  type TollWithLinkedTrip,
 } from "../../../utils/tollFinancialOverview";
 
 type PlatformFilter = 'all' | 'Uber' | 'InDrive' | 'Roam';
@@ -180,7 +182,25 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
   const [pendingPersonalTx, setPendingPersonalTx] = React.useState<FinancialTransaction | null>(null);
   const [pendingDriverId, setPendingDriverId] = React.useState<string>('');
 
-  const tripMap = useMemo(() => new Map(trips.map(t => [t.id, t])), [trips]);
+  // Enrich with linkedTrip from toll APIs — fetchAllTrips often misses older weeks.
+  const tripMap = useMemo(() => {
+    const map = new Map<string, TripType>();
+    for (const t of trips) {
+      if (t?.id) map.set(t.id, t);
+    }
+    for (const tx of [...reconciledTolls, ...unreconciledTolls, ...allReconciledTolls] as TollWithLinkedTrip[]) {
+      const lt = tx.linkedTrip;
+      if (!lt?.id || map.has(lt.id)) continue;
+      map.set(lt.id, {
+        id: lt.id,
+        platform: lt.platform || undefined,
+        tollCharges: Number(lt.tollCharges) || 0,
+        date: lt.date || undefined,
+        dropoffTime: lt.dropoffTime || undefined,
+      } as TripType);
+    }
+    return map;
+  }, [trips, reconciledTolls, unreconciledTolls, allReconciledTolls]);
 
   /** Blocking confirm when charge sync is OFF — Expenses/Cash Wallet will not receive the debit. */
   const confirmChargeSyncOrAbort = useCallback(async (): Promise<boolean> => {
@@ -438,14 +458,10 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
 
   // ── Platform scoping (Uber / InDrive / Roam) ─────────────────────────────
   const normPlat = (p?: string | null) => normalizePlatform(p || undefined);
-  const platformOfToll = (tx: FinancialTransaction): PlatformBucket => {
-    const trip = tripMap.get(tx.tripId || '');
-    if (trip?.platform) return normPlatformBucket(trip.platform);
-    if ((tx as any).metadata?.source === 'roam_geofence') return 'Roam';
-    const suggested = suggestions.get(tx.id)?.[0]?.trip?.platform;
-    if (suggested) return normPlatformBucket(suggested);
-    return 'Unlinked';
-  };
+  const platformOfToll = (tx: FinancialTransaction): PlatformBucket =>
+    resolveTollPlatformBucket(tx as TollWithLinkedTrip, tripMap, {
+      suggestedPlatform: suggestions.get(tx.id)?.[0]?.trip?.platform,
+    });
   const tripInPlatform = (t: TripType) => platformFilter === 'all' || normPlat(t.platform) === platformFilter;
   const tollInPlatform = (tx: FinancialTransaction) =>
     platformFilter === 'all' || platformOfToll(tx) === platformFilter;
@@ -877,17 +893,22 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
     .reduce((sum, r) => sum + (r.amount || 0), 0);
   const totalRecovered = recoveredAmount + matchedDisputeRefundAmount;
 
-  const periodTolls = [...pUnreconciled, ...pReconciled];
+  const periodTolls = [...pUnreconciled, ...pReconciled] as TollWithLinkedTrip[];
   const { total: tollSpend, byPlatform: tollSpendByPlatform } = computeTollSpendByPlatform(
     periodTolls,
     platformOfToll,
   );
+  const reimbursedTrips = collectTripsForReimbursedCard({
+    trips: pTrips,
+    unclaimedRefunds: pUnclaimed,
+    tolls: periodTolls,
+  });
   const {
     total: reimbursedByUber,
     byPlatform: reimbursedByPlatform,
     disputeRefundAmount: scopedDisputeFromCalc,
   } = computeReimbursedTotals({
-    trips: pTrips,
+    trips: reimbursedTrips,
     disputeRefunds: disputeRefunds || [],
     period: { startDate: period.startDate, endDate: period.endDate },
     fleetTz,

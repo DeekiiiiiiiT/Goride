@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   computeReimbursedTotals,
   computeTollSpendByPlatform,
+  collectTripsForReimbursedCard,
   isDateInPeriod,
+  resolveTollPlatformBucket,
   tripInPeriod,
 } from './tollFinancialOverview';
 import type { FinancialTransaction, Trip } from '../types/data';
@@ -43,6 +45,58 @@ describe('tollFinancialOverview', () => {
       fleetTz: TZ,
     });
     expect(allTime.total).toBe(5645);
+  });
+
+  it('resolveTollPlatformBucket uses linkedTrip when trip map misses', () => {
+    const tx = {
+      id: 'toll1',
+      amount: -2400,
+      tripId: 'trip-mobay',
+      linkedTrip: { id: 'trip-mobay', platform: 'Uber', tollCharges: 2400, date: '2026-01-05' },
+    } as FinancialTransaction & { linkedTrip: { id: string; platform: string; tollCharges: number; date: string } };
+
+    expect(resolveTollPlatformBucket(tx, new Map())).toBe('Uber');
+    expect(resolveTollPlatformBucket({ ...tx, linkedTrip: null, tripId: null } as typeof tx, new Map())).toBe(
+      'Unlinked',
+    );
+  });
+
+  it('collectTripsForReimbursedCard pulls linkedTrip credits when trips dump is empty', () => {
+    const collected = collectTripsForReimbursedCard({
+      trips: [],
+      unclaimedRefunds: [],
+      tolls: [
+        {
+          id: 'toll1',
+          amount: -2400,
+          tripId: 'trip-mobay',
+          linkedTrip: {
+            id: 'trip-mobay',
+            platform: 'Uber',
+            tollCharges: 2400,
+            date: '2026-01-05T12:45:58.000Z',
+            dropoffTime: '2026-01-05T12:45:58.000Z',
+          },
+        } as FinancialTransaction & {
+          linkedTrip: {
+            id: string;
+            platform: string;
+            tollCharges: number;
+            date: string;
+            dropoffTime: string;
+          };
+        },
+      ],
+    });
+
+    const totals = computeReimbursedTotals({
+      trips: collected,
+      disputeRefunds: [],
+      period: { startDate: '2026-01-05', endDate: '2026-01-11' },
+      fleetTz: TZ,
+    });
+    expect(totals.total).toBe(2400);
+    expect(totals.byPlatform.Uber).toBe(2400);
   });
 
   it('tripInPeriod uses dropoff time in fleet tz', () => {

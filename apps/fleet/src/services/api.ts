@@ -2417,7 +2417,22 @@ export const api = {
     return response.json();
   },
 
-  async getTollAutomationSettings(): Promise<{ success: boolean; data: { refundAutomationEnabled: boolean; refundAutoMinConfidence: number; disputeRefundAutoMinConfidence: number; personalUseDetectionEnabled: boolean; orphanProximityMinutes: number; driverTollChargeSyncEnabled: boolean; unifiedTollSettlementEnabled: boolean; matchOnIngestEnabled: boolean; disputeRefundTripSyncEnabled: boolean; unlinkedRefundUndoEnabled: boolean } }> {
+  async getTollAutomationSettings(): Promise<{
+    success: boolean;
+    data: {
+      refundAutomationEnabled: boolean;
+      refundAutoMinConfidence: number;
+      disputeRefundAutoMinConfidence: number;
+      personalUseDetectionEnabled: boolean;
+      orphanProximityMinutes: number;
+      driverTollChargeSyncEnabled: boolean;
+      unifiedTollSettlementEnabled: boolean;
+      matchOnIngestEnabled: boolean;
+      disputeRefundTripSyncEnabled: boolean;
+      unlinkedRefundUndoEnabled: boolean;
+    };
+    tollBrain?: { consume: boolean; matchDialsSource: string };
+  }> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/automation-settings`, {
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });
@@ -2802,11 +2817,17 @@ export const api = {
     return response.json();
   },
 
-  async getDisputeMatchCandidates(opts?: { query?: string; from?: string; to?: string }): Promise<{ claims: any[]; tolls: any[] }> {
+  async getDisputeMatchCandidates(opts?: {
+    query?: string;
+    from?: string;
+    to?: string;
+    driverId?: string;
+  }): Promise<{ claims: any[]; tolls: any[] }> {
     const qs = new URLSearchParams();
     if (opts?.query) qs.set('q', opts.query);
     if (opts?.from) qs.set('from', opts.from);
     if (opts?.to) qs.set('to', opts.to);
+    if (opts?.driverId) qs.set('driverId', opts.driverId);
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/dispute-refunds/match-candidates?${qs.toString()}`, {
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }
     });

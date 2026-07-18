@@ -21,6 +21,7 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
   const [disputeMinConfidence, setDisputeMinConfidence] = useState(95);
   const [personalUseEnabled, setPersonalUseEnabled] = useState(false);
   const [orphanProximity, setOrphanProximity] = useState(180);
+  const [matchDialsFromBrain, setMatchDialsFromBrain] = useState(false);
   const [driverChargeSync, setDriverChargeSync] = useState(false);
   const [unifiedSettlement, setUnifiedSettlement] = useState(false);
   const [matchOnIngest, setMatchOnIngest] = useState(false);
@@ -73,6 +74,7 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
       .then((res) => {
         if (!active) return;
         applySettings(res.data);
+        setMatchDialsFromBrain(res.tollBrain?.matchDialsSource === "dominion_toll_brain");
       })
       .catch((e) => console.error("[TollAutomation] load failed", e))
       .finally(() => active && setLoading(false));
@@ -308,13 +310,14 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
                 </div>
               </div>
 
-              {/* Personal-use detection */}
+              {/* Personal-use detection — mirrored from Dominion Toll Brain when consume is on */}
               <div className="rounded-lg border border-slate-200 p-4 space-y-3">
                 <div>
                   <h4 className="text-sm font-semibold text-slate-900">Personal-use detection</h4>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Personal tolls are classified automatically and moved into the Personal Use step.
-                    You still confirm each driver charge manually — nothing auto-bills.
+                    {matchDialsFromBrain
+                      ? "Controlled in Dominion → Toll Management → Toll Brain. Shown here read-only."
+                      : "Personal tolls are classified automatically and moved into the Personal Use step. You still confirm each driver charge manually — nothing auto-bills."}
                   </p>
                 </div>
 
@@ -322,7 +325,7 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
                   <span className="text-sm text-slate-700">Detect personal-use (orphan) tolls</span>
                   <Switch
                     checked={personalUseEnabled}
-                    disabled={saving}
+                    disabled={saving || matchDialsFromBrain}
                     onCheckedChange={(v) => save({ personalUseDetectionEnabled: v })}
                   />
                 </label>
@@ -338,7 +341,7 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
                     max={480}
                     step={15}
                     value={orphanProximity}
-                    disabled={saving || !personalUseEnabled}
+                    disabled={saving || !personalUseEnabled || matchDialsFromBrain}
                     onChange={(e) => setOrphanProximity(parseInt(e.target.value, 10))}
                     onMouseUp={() => save({ orphanProximityMinutes: orphanProximity })}
                     onTouchEnd={() => save({ orphanProximityMinutes: orphanProximity })}

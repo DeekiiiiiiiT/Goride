@@ -1,6 +1,11 @@
 import { FinancialTransaction, Trip, Claim, DisputeRefund } from '../types/data';
 import { isWithinInterval, differenceInMinutes } from 'date-fns';
 import { calculateTripTimes, getTripWindows } from './timeUtils';
+import {
+  cashReceiptAmountsAlign,
+  findCashReceiptTripCreditHits,
+  isCashOrPassageReceiptToll,
+} from './cashReceiptTripMatch';
 
 /**
  * Toll Reconciliation Engine - "Idea 1" Implementation
@@ -177,8 +182,26 @@ export function findTollMatches(
     });
   }
 
+  // Cash receipt in post-trip buffer → PERSONAL even with trip credit; upgrade.
+  if (isCashOrPassageReceiptToll(transaction)) {
+    for (let i = 0; i < matches.length; i++) {
+      const m = matches[i];
+      const credit = Math.abs(Number(m.trip.tollCharges) || 0);
+      const tollAbs = Math.abs(transaction.amount);
+      if (m.matchType !== 'PERSONAL_MATCH' || credit <= 0.05) continue;
+      if (!cashReceiptAmountsAlign(tollAbs, credit)) continue;
+      matches[i] = {
+        ...m,
+        matchType: 'AMOUNT_VARIANCE',
+        confidence: 'medium',
+        varianceAmount: credit - tollAbs,
+        reason: `Cash receipt near trip with $${credit.toFixed(2)} platform toll credit — was post-trip personal, upgraded for review`,
+      };
+    }
+  }
+
   // Sort matches by Priority
-  return matches.sort((a, b) => {
+  matches.sort((a, b) => {
     const priority = { 
       'PERFECT_MATCH': 5, 
       'AMOUNT_VARIANCE': 4, 
@@ -190,6 +213,56 @@ export function findTollMatches(
     const scoreA = priority[a.matchType];
     const scoreB = priority[b.matchType];
 
+    if (scoreA !== scoreB) return scoreB - scoreA;
+    return a.timeDifferenceMinutes - b.timeDifferenceMinutes;
+  });
+
+  if (matches.length > 0) return matches;
+
+  // Outside all windows: cash receipt ↔ nearby trip toll credit soft pass
+  if (!isCashOrPassageReceiptToll(transaction) || !txDate) return matches;
+
+  const softHits = findCashReceiptTripCreditHits({
+    tollAmountAbs: Math.abs(transaction.amount),
+    tollDate: txDate,
+    trips: candidateTrips.map((trip) => {
+      const times = calculateTripTimes(trip);
+      return {
+        id: trip.id,
+        tollCharges: trip.tollCharges,
+        requestTime: trip.requestTime,
+        dropoffTime: trip.dropoffTime,
+        date: trip.date,
+        tripStart: times.isValid ? times.requestTime : null,
+        tripEnd: times.isValid ? times.dropoffTime : null,
+      };
+    }),
+  });
+
+  for (const hit of softHits) {
+    const trip = candidateTrips.find((t) => t.id === hit.tripId);
+    if (!trip) continue;
+    matches.push({
+      transaction,
+      trip,
+      confidence: hit.confidenceScore >= 70 ? 'high' : 'medium',
+      reason: hit.reason,
+      timeDifferenceMinutes: hit.timeDifferenceMinutes,
+      matchType: 'AMOUNT_VARIANCE',
+      varianceAmount: hit.amountDelta,
+    });
+  }
+
+  return matches.sort((a, b) => {
+    const priority = {
+      PERFECT_MATCH: 5,
+      AMOUNT_VARIANCE: 4,
+      DEADHEAD_MATCH: 3,
+      PERSONAL_MATCH: 2,
+      POSSIBLE_MATCH: 1,
+    };
+    const scoreA = priority[a.matchType];
+    const scoreB = priority[b.matchType];
     if (scoreA !== scoreB) return scoreB - scoreA;
     return a.timeDifferenceMinutes - b.timeDifferenceMinutes;
   });

@@ -113,15 +113,15 @@ export function DisputeMatchModal({ open, onOpenChange, refund, onMatched }: Dis
       const end = targetWeek?.endDate ?? '';
       setPeriodStart(start);
       setPeriodEnd(end);
-      // No confident week → search all periods, scoped to this driver by name.
-      const seedQuery = !targetWeek && refund.driverName ? refund.driverName : '';
-      setQuery(seedQuery);
+      // Scope by driverId (alias-aware on server). Avoid seeding the mangled
+      // Uber CSV name — it used to hide the Roam-named claim/toll rows.
+      setQuery('');
 
       try {
         const res = await api.getDisputeMatchCandidates({
-          query: seedQuery || undefined,
           from: start || undefined,
           to: end || undefined,
+          driverId: refund.driverId || undefined,
         });
         if (cancelled) return;
         setCandidates({ claims: res.claims || [], tolls: res.tolls || [] });
@@ -149,6 +149,7 @@ export function DisputeMatchModal({ open, onOpenChange, refund, onMatched }: Dis
         query: q.trim() || undefined,
         from: from || undefined,
         to: to || undefined,
+        driverId: refund?.driverId || undefined,
       });
       setCandidates({ claims: res.claims || [], tolls: res.tolls || [] });
     } catch (err: any) {

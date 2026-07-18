@@ -53,6 +53,89 @@ export function computeTollSpendByPlatform(
   return { total, byPlatform };
 }
 
+/** Server enrichment on reconciled/unreconciled toll rows (may be absent on older clients). */
+export type TollLinkedTripStub = {
+  id: string;
+  platform?: string | null;
+  tollCharges?: number | null;
+  date?: string | null;
+  dropoffTime?: string | null;
+};
+
+export type TollWithLinkedTrip = FinancialTransaction & {
+  linkedTrip?: TollLinkedTripStub | null;
+};
+
+/**
+ * Platform for a toll: linked trip first, then suggestion / Roam geofence, else Unlinked.
+ * Prefer this over tripMap-only lookups — fetchAllTrips often misses older weeks.
+ */
+export function resolveTollPlatformBucket(
+  tx: TollWithLinkedTrip,
+  tripById: Map<string, Trip>,
+  opts?: { suggestedPlatform?: string | null },
+): PlatformBucket {
+  const fromMap = tripById.get(tx.tripId || '')?.platform;
+  if (fromMap) return normPlatformBucket(fromMap);
+  const fromLinked = tx.linkedTrip?.platform;
+  if (fromLinked) return normPlatformBucket(fromLinked);
+  if ((tx as { metadata?: { source?: string } }).metadata?.source === 'roam_geofence') {
+    return 'Roam';
+  }
+  if (opts?.suggestedPlatform) return normPlatformBucket(opts.suggestedPlatform);
+  return 'Unlinked';
+}
+
+/**
+ * Trips that feed the Reimbursed card when the full trips dump is empty/incomplete.
+ * Uses linked trips on period tolls + open unlinked refunds. Cash-wash / expense-logged
+ * leftovers stay on the Needs Review "$X resolved" badge — not here.
+ */
+export function collectTripsForReimbursedCard(input: {
+  trips: Trip[];
+  unclaimedRefunds: Trip[];
+  tolls: TollWithLinkedTrip[];
+}): Trip[] {
+  const byId = new Map<string, Trip>();
+  const add = (t: Partial<Trip> & { id: string }) => {
+    if (!t?.id) return;
+    const prev = byId.get(t.id);
+    if (!prev) {
+      byId.set(t.id, t as Trip);
+      return;
+    }
+    const prevTc = Number(prev.tollCharges) || 0;
+    const nextTc = Number(t.tollCharges) || 0;
+    byId.set(t.id, {
+      ...prev,
+      ...t,
+      platform: prev.platform || t.platform,
+      tollCharges: Math.max(prevTc, nextTc) || prev.tollCharges || t.tollCharges,
+      date: prev.date || t.date,
+      dropoffTime: prev.dropoffTime || t.dropoffTime,
+    } as Trip);
+  };
+
+  for (const t of input.trips) {
+    if (t?.id) add(t);
+  }
+  for (const t of input.unclaimedRefunds) {
+    if (t?.id) add(t);
+  }
+  for (const tx of input.tolls) {
+    const lt = tx.linkedTrip;
+    if (!lt?.id) continue;
+    add({
+      id: lt.id,
+      platform: lt.platform || undefined,
+      tollCharges: Number(lt.tollCharges) || 0,
+      date: lt.date || undefined,
+      dropoffTime: lt.dropoffTime || undefined,
+    });
+  }
+  return [...byId.values()];
+}
+
 export interface ReimbursedTotalsInput {
   trips: Trip[];
   disputeRefunds: DisputeRefund[];

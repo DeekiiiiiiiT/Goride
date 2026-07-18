@@ -36,7 +36,9 @@
     "cap:rides:aab": "pnpm --filter @roam/rides-passenger cap:aab",
     "cap:rides:android": "pnpm --filter @roam/rides-passenger cap:open:android",
     "deploy:rides": "npx supabase functions deploy rides --use-api --project-ref csfllzzastacofsvcdsc",
-    "deploy:haul": "npx supabase functions deploy haul --use-api --project-ref csfllzzastacofsvcdsc"
+    "deploy:haul": "npx supabase functions deploy haul --use-api --project-ref csfllzzastacofsvcdsc",
+    "deploy:toll-brain": "npx supabase functions deploy toll-brain --use-api --project-ref csfllzzastacofsvcdsc",
+    "deploy:fuel-brain": "npx supabase functions deploy fuel-brain --use-api --project-ref csfllzzastacofsvcdsc"
   },
   "devDependencies": {
     "typescript": "^5.4.0"

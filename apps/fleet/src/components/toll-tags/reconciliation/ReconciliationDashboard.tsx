@@ -53,7 +53,9 @@ export function ReconciliationDashboard() {
       </div>
       <PeriodLandingPage
         driverId={selectedDriverId || undefined}
+        drivers={drivers.map((d) => ({ id: d.id, name: d.name }))}
         onSelectPeriod={setSelectedPeriod}
+        onPeriodsReset={() => void periodData.refresh()}
         outstanding={periodData.outstanding}
         reconciled={periodData.reconciled}
         totals={periodData.totals}

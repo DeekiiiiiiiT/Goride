@@ -25,6 +25,18 @@ import { emitDriverTollCharge, isUnifiedTollSettlementEnabled } from "./driver_t
 import { mapResolutionReasonToTollResolution } from "./claim_resolution_sync.ts";
 import { classifyTollLedgerEntry } from "./driver_toll_disposition.ts";
 import { demoteSpuriousDeadheadMatch } from "./deadhead_match_guard.ts";
+import {
+  findCashReceiptTripCreditHits,
+  isCashOrPassageReceiptToll,
+  cashReceiptAmountsAlign,
+  CASH_RECEIPT_TRIP_PROXIMITY_MINUTES,
+} from "./cash_receipt_trip_match.ts";
+import {
+  fleetUsesTollBrain,
+  loadTollBrainPolicy,
+  getTollBrainDialsOrDefaults,
+  tollBrainShadowCompare,
+} from "./toll_brain_policy.ts";
 import { computeTollWorkflowStage, type TollWorkflowStage } from "./toll_workflow_stage.ts";
 import { findTripsInDateRange, findTollsInDateRange, findTollsByMatchedTripId } from "./toll_match_index.ts";
 import { appendCanonicalTollReconciledBatch, type TollReconcileAuditEntry } from "./canonical_from_ops.ts";
@@ -648,7 +660,33 @@ function findTollMatchesServer(
     usedOfficialRate?: boolean;
     rateDrift?: boolean;
   },
+  /** Optional brain dials (sync path); when omitted, legacy constants apply. */
+  brainDials?: {
+    cashProximityMinutes?: number;
+    cashAmountDeltaMax?: number;
+    ambiguityMinScore?: number;
+    ambiguityMaxGap?: number;
+    maxSuggestions?: number;
+  },
 ): MatchResult[] {
+  // Dominion Toll Brain dials when consume flag is on (cache warmed by request handlers).
+  if (!brainDials && (fleetUsesTollBrain() || tollBrainShadowCompare())) {
+    const policy = getTollBrainDialsOrDefaults();
+    brainDials = {
+      cashProximityMinutes: policy.cashReceiptProximityMinutes,
+      cashAmountDeltaMax: policy.cashAmountDeltaMax,
+      ambiguityMinScore: policy.ambiguityMinScore,
+      ambiguityMaxGap: policy.ambiguityMaxGap,
+      maxSuggestions: policy.maxSuggestions,
+    };
+  }
+  const cashProximity =
+    brainDials?.cashProximityMinutes ?? CASH_RECEIPT_TRIP_PROXIMITY_MINUTES;
+  const ambiguityMin = brainDials?.ambiguityMinScore ?? 50;
+  const ambiguityGap = brainDials?.ambiguityMaxGap ?? 15;
+  const maxSuggestions = brainDials?.maxSuggestions ?? 5;
+  const cashDeltaMax = brainDials?.cashAmountDeltaMax;
+
   const txDate = getTransactionDateTime(transaction, timezone);
   if (!txDate) return [];
 
@@ -777,21 +815,179 @@ function findTollMatchesServer(
     });
   }
 
+  // Cash receipt inside post-trip (+0–15) buffer still lands as PERSONAL_MATCH
+  // even when the trip has a near-matching platform toll credit — upgrade those.
+  if (isCashOrPassageReceiptToll(transaction)) {
+    for (let i = 0; i < matches.length; i++) {
+      const m = matches[i];
+      const credit = Math.abs(Number(m.tripTollCharges) || 0);
+      if (m.matchType !== "PERSONAL_MATCH" || credit <= 0.05) continue;
+      if (!cashReceiptAmountsAlign(txAmountAbs, credit, cashDeltaMax)) continue;
+      matches[i] = {
+        ...m,
+        matchType: "AMOUNT_VARIANCE",
+        reasonCode: "ON_TRIP",
+        windowHit: "ON_TRIP",
+        varianceAmount: credit - txAmountAbs,
+        confidenceScore: Math.max(m.confidenceScore || 0, 62),
+        confidence: "medium",
+        reason: `Cash receipt near trip with $${credit.toFixed(2)} platform toll credit — was post-trip personal, upgraded for review`,
+      };
+    }
+  }
+
   matches.sort(compareTollMatchResults);
 
-  // Ambiguity detection: if top 2 matches both have score >= 50
-  // and are within 15 points of each other, flag both as ambiguous
+  // Ambiguity detection: if top 2 matches both have score >= ambiguityMin
+  // and are within ambiguityGap points of each other, flag both as ambiguous
   if (matches.length >= 2) {
     const topScore = matches[0].confidenceScore || 0;
     const secondScore = matches[1].confidenceScore || 0;
-    if (topScore >= 50 && secondScore >= 50 && (topScore - secondScore) <= 15) {
+    if (topScore >= ambiguityMin && secondScore >= ambiguityMin && (topScore - secondScore) <= ambiguityGap) {
       matches[0].isAmbiguous = true;
       matches[1].isAmbiguous = true;
     }
   }
 
-  // Cap at top 5 matches to prevent UI overload
-  return matches.slice(0, 5);
+  // Cap at top N matches to prevent UI overload
+  if (matches.length > 0) return matches.slice(0, maxSuggestions);
+
+  // Cash / passage receipts often sit just outside request−45→dropoff+15 and
+  // have no plaza — without this soft pass they become orphan PERSONAL while
+  // a same-day trip (any platform) still carries a near-matching toll credit.
+  if (!isCashOrPassageReceiptToll(transaction)) return [];
+
+  const softHits = findCashReceiptTripCreditHits({
+    tollAmountAbs: txAmountAbs,
+    tollDate: txDate,
+    proximityMinutes: cashProximity,
+    maxAmountDelta: cashDeltaMax,
+    trips: candidateTrips.map((trip: any) => {
+      const times = calculateTripTimes(trip, timezone);
+      return {
+        id: trip.id,
+        tollCharges: trip.tollCharges,
+        requestTime: trip.requestTime,
+        dropoffTime: trip.dropoffTime,
+        date: trip.date,
+        tripStart: times.isValid ? times.requestTime : null,
+        tripEnd: times.isValid ? times.dropoffTime : null,
+      };
+    }),
+  });
+
+  const softMatches: MatchResult[] = softHits.map((hit) => {
+    const trip = candidateTrips.find((t: any) => t.id === hit.tripId) || {};
+    const driverMatch = driverIdsReferToSamePerson(
+      transaction.driverId,
+      trip.driverId,
+      driverAliasMap,
+    );
+    const vehicleMatch =
+      !!transaction.vehicleId &&
+      !!trip.vehicleId &&
+      String(transaction.vehicleId).toLowerCase() === String(trip.vehicleId).toLowerCase();
+    let score = hit.confidenceScore;
+    if (driverMatch) score = Math.min(85, score + 8);
+    if (vehicleMatch) score = Math.min(85, score + 5);
+    return {
+      tripId: hit.tripId,
+      confidence: score >= 70 ? "high" : score >= 55 ? "medium" : "low",
+      reason: hit.reason,
+      timeDifferenceMinutes: hit.timeDifferenceMinutes,
+      matchType: "AMOUNT_VARIANCE" as MatchType,
+      varianceAmount: hit.amountDelta,
+      confidenceScore: score,
+      vehicleMatch,
+      driverMatch,
+      dataQuality: assessDataQuality(trip, timezone),
+      windowHit: "ON_TRIP" as ScoreResult["windowHit"],
+      reasonCode: "ON_TRIP" as MatchResult["reasonCode"],
+      tripDate: trip.date || "",
+      tripAmount: trip.amount || 0,
+      tripTollCharges: hit.tripTollCharges,
+      tripPickup: (trip.pickupLocation || "Unknown").substring(0, 40),
+      tripDropoff: (trip.dropoffLocation || "Unknown").substring(0, 40),
+      tripPlatform: trip.platform || "Unknown",
+      tripDriverId: trip.driverId || "",
+      tripDriverName: trip.driverName || "",
+      officialAmount: costMeta?.officialAmount ?? null,
+      tagAmount: costMeta?.tagAmount ?? tagAmountAbs,
+      usedOfficialRate: costMeta?.usedOfficialRate ?? false,
+      rateDrift: costMeta?.rateDrift ?? false,
+      tripRequestTime: trip.requestTime || trip.date,
+      tripDropoffTime: trip.dropoffTime || trip.date,
+      tripVehicleId: trip.vehicleId,
+      tripDuration: trip.duration,
+      tripDistance: trip.distance,
+      tripServiceType: trip.serviceType,
+    };
+  });
+
+  softMatches.sort(compareTollMatchResults);
+  if (softMatches.length >= 2) {
+    const topScore = softMatches[0].confidenceScore || 0;
+    const secondScore = softMatches[1].confidenceScore || 0;
+    if (topScore >= ambiguityMin && secondScore >= ambiguityMin && topScore - secondScore <= ambiguityGap) {
+      softMatches[0].isAmbiguous = true;
+      softMatches[1].isAmbiguous = true;
+    }
+  }
+  return softMatches.slice(0, maxSuggestions);
+}
+
+/** Async wrapper: warms Dominion policy cache then matches (preferred for HTTP handlers). */
+async function findTollMatchesServerBrainAware(
+  transaction: any,
+  trips: any[],
+  timezone: string,
+  driverAliasMap?: Map<string, string>,
+  expectedCostAbs?: number,
+  costMeta?: {
+    officialAmount?: number | null;
+    tagAmount?: number;
+    usedOfficialRate?: boolean;
+    rateDrift?: boolean;
+  },
+): Promise<MatchResult[]> {
+  if (fleetUsesTollBrain() || tollBrainShadowCompare()) {
+    await loadTollBrainPolicy();
+  }
+  const withBrain = findTollMatchesServer(
+    transaction,
+    trips,
+    timezone,
+    driverAliasMap,
+    expectedCostAbs,
+    costMeta,
+  );
+  if (tollBrainShadowCompare()) {
+    const legacy = findTollMatchesServer(
+      transaction,
+      trips,
+      timezone,
+      driverAliasMap,
+      expectedCostAbs,
+      costMeta,
+      {
+        cashProximityMinutes: CASH_RECEIPT_TRIP_PROXIMITY_MINUTES,
+        cashAmountDeltaMax: 15,
+        ambiguityMinScore: 50,
+        ambiguityMaxGap: 15,
+        maxSuggestions: 5,
+      },
+    );
+    const a = withBrain[0]?.matchType;
+    const b = legacy[0]?.matchType;
+    if (a !== b) {
+      console.warn("[TollBrain] shadow matchType delta", {
+        tollId: transaction?.id,
+        brain: a,
+        legacy: b,
+      });
+    }
+  }
+  return withBrain;
 }
 
 /** Best ON_TRIP match for dispute / underpaid linking (time + refund pool). */
@@ -1393,9 +1589,9 @@ app.get(`${BASE}/summary`, async (c) => {
       return !tx.isReconciled || !tx.tripId;
     });
 
-    // Reconciled
+    // Reconciled (trip-linked or claim/personal closed without a trip)
     const reconciled = tollTx.filter(
-      (tx: any) => tx.isReconciled && tx.tripId,
+      (tx: any) => tx.isReconciled,
     );
 
     // Unclaimed refunds — trips with tollCharges but no linked toll tx
@@ -1593,6 +1789,10 @@ app.post(`${BASE}/rematch-candidates/:id/dismiss`, async (c) => {
 app.get(`${BASE}/unreconciled`, async (c) => {
   const t0 = Date.now();
   try {
+    // Warm Dominion Toll Brain policy cache for match dials.
+    if (fleetUsesTollBrain() || tollBrainShadowCompare()) {
+      await loadTollBrainPolicy();
+    }
     const { driverId, limit, offset, autoMatch, from, to } = parseUnreconciledQueryParams(c);
 
     // Phase 5: Read from toll_ledger:* (single source of truth)
@@ -2084,8 +2284,11 @@ app.get(`${BASE}/reconciled`, async (c) => {
 
     const allTollTx = await loadMergedTollTxArray();
 
+    // Trip-linked matches AND claim/personal resolutions without a trip (cash
+    // shortfalls) — both are real period spend. Requiring tripId hid cash
+    // claim_resolved rows and zeroed wizard Toll Spend cards.
     let reconciled = allTollTx.filter(
-      (tx: any) => isReconcilableTollExpense(tx) && tx.isReconciled && tx.tripId,
+      (tx: any) => isReconcilableTollExpense(tx) && !!tx.isReconciled,
     );
 
     if (driverId) {
@@ -2716,6 +2919,9 @@ async function computeTollMatchPatch(
   timezone: string,
   settings: RefundAutomationSettings,
 ): Promise<Partial<TollLedgerRecord>> {
+  if (fleetUsesTollBrain() || tollBrainShadowCompare()) {
+    await loadTollBrainPolicy();
+  }
   const now = new Date().toISOString();
   const txDate = getTransactionDateTime(tollRecord, timezone);
   if (!txDate) {
@@ -5578,7 +5784,7 @@ interface RefundAutomationSettings {
 
 async function getRefundAutomationSettings(): Promise<RefundAutomationSettings> {
   const rec = (await kv.get(REFUND_SETTINGS_KEY)) as Partial<RefundAutomationSettings> | null;
-  return {
+  const base: RefundAutomationSettings = {
     refundAutomationEnabled: rec?.refundAutomationEnabled === true, // default OFF
     refundAutoMinConfidence:
       typeof rec?.refundAutoMinConfidence === "number"
@@ -5599,6 +5805,13 @@ async function getRefundAutomationSettings(): Promise<RefundAutomationSettings> 
     disputeRefundTripSyncEnabled: rec?.disputeRefundTripSyncEnabled === true, // default OFF
     unlinkedRefundUndoEnabled: rec?.unlinkedRefundUndoEnabled === true, // default OFF
   };
+  // Dominion Toll Brain owns personal-use / orphan dials when consume is on.
+  if (fleetUsesTollBrain()) {
+    const policy = await loadTollBrainPolicy();
+    base.personalUseDetectionEnabled = policy.personalUseDetectionEnabled;
+    base.orphanProximityMinutes = policy.orphanProximityMinutes;
+  }
+  return base;
 }
 
 // ── Geo helper: nearest active toll plaza to a trip's endpoints ──────────
@@ -7238,7 +7451,14 @@ app.get(`${BASE}/resolved-refunds`, async (c) => {
 app.get(`${BASE}/automation-settings`, async (c) => {
   try {
     const settings = await getRefundAutomationSettings();
-    return c.json({ success: true, data: settings });
+    return c.json({
+      success: true,
+      data: settings,
+      tollBrain: {
+        consume: fleetUsesTollBrain(),
+        matchDialsSource: fleetUsesTollBrain() ? "dominion_toll_brain" : "fleet_kv",
+      },
+    });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }
@@ -7248,6 +7468,7 @@ app.put(`${BASE}/automation-settings`, async (c) => {
   try {
     const body = await c.req.json();
     const current = await getRefundAutomationSettings();
+    const brainOwnsMatchDials = fleetUsesTollBrain();
     const next: RefundAutomationSettings = {
       refundAutomationEnabled:
         typeof body?.refundAutomationEnabled === "boolean"
@@ -7261,14 +7482,17 @@ app.put(`${BASE}/automation-settings`, async (c) => {
         typeof body?.disputeRefundAutoMinConfidence === "number"
           ? Math.max(50, Math.min(100, body.disputeRefundAutoMinConfidence))
           : current.disputeRefundAutoMinConfidence,
-      personalUseDetectionEnabled:
-        typeof body?.personalUseDetectionEnabled === "boolean"
-          ? body.personalUseDetectionEnabled
-          : current.personalUseDetectionEnabled,
-      orphanProximityMinutes:
-        typeof body?.orphanProximityMinutes === "number" && body.orphanProximityMinutes > 0
-          ? Math.max(15, Math.min(1440, body.orphanProximityMinutes))
-          : current.orphanProximityMinutes,
+      // Match dials: Dominion Toll Brain is SoT when consume flag is on.
+      personalUseDetectionEnabled: brainOwnsMatchDials
+        ? current.personalUseDetectionEnabled
+        : typeof body?.personalUseDetectionEnabled === "boolean"
+        ? body.personalUseDetectionEnabled
+        : current.personalUseDetectionEnabled,
+      orphanProximityMinutes: brainOwnsMatchDials
+        ? current.orphanProximityMinutes
+        : typeof body?.orphanProximityMinutes === "number" && body.orphanProximityMinutes > 0
+        ? Math.max(15, Math.min(1440, body.orphanProximityMinutes))
+        : current.orphanProximityMinutes,
       driverTollChargeSyncEnabled:
         typeof body?.driverTollChargeSyncEnabled === "boolean"
           ? body.driverTollChargeSyncEnabled
@@ -7291,23 +7515,28 @@ app.put(`${BASE}/automation-settings`, async (c) => {
           : current.unlinkedRefundUndoEnabled,
     };
     await kv.set(REFUND_SETTINGS_KEY, next);
-    return c.json({ success: true, data: next });
+    // Re-apply brain overlay for response so UI always shows Dominion dials.
+    const data = await getRefundAutomationSettings();
+    return c.json({
+      success: true,
+      data,
+      tollBrain: {
+        consume: fleetUsesTollBrain(),
+        matchDialsSource: fleetUsesTollBrain() ? "dominion_toll_brain" : "fleet_kv",
+      },
+    });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }
 });
 
 // ═══════════════════════════════════════════════════════════════════════
-// NATIVE RIDES → FLEET TOLL LEDGER BRIDGE (Phase 4)
+// NATIVE RIDES → FLEET TOLL LEDGER BRIDGE (Phase 4) — REPAIR / BACKFILL
 // ═══════════════════════════════════════════════════════════════════════
-// Geofence-detected toll crossings on native "Roam Driver" rides live in the
-// Postgres table rides.ride_toll_crossings and are invisible to fleet
-// reconciliation. This bridge mirrors each crossing into a toll_ledger:*
-// expense (source = roam_geofence) so it flows through the same matcher.
-//
-// Safety: idempotent (keyed on the crossing id via a toll_bridge:crossing:*
-// dedup marker → re-runs never double-insert), additive (creates new ledger
-// rows only; never mutates rides data), and dry-run capable.
+// Primary path: Toll Brain live materialize on record-crossing
+// (metadata.source = roam_geofence). This bridge remains for repair of
+// crossings that pre-date live materialize. Idempotent via
+// toll_bridge:crossing:* dedup markers.
 
 const TOLL_BRIDGE_DEDUP_PREFIX = "toll_bridge:crossing:";
 

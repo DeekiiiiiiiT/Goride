@@ -1,9 +1,23 @@
-import { Loader2, HelpCircle, CarFront, Route, DollarSign, ShieldCheck, Unlink as UnlinkIcon, Check, type LucideIcon } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import {
+  Loader2,
+  HelpCircle,
+  CarFront,
+  Route,
+  DollarSign,
+  ShieldCheck,
+  Unlink as UnlinkIcon,
+  Check,
+  RotateCcw,
+  type LucideIcon,
+} from 'lucide-react';
 import { Card, CardContent } from '../../ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../ui/tabs';
+import { Button } from '../../ui/button';
 import { ReconciliationPeriod, ReconciliationTotals } from '../../../hooks/useTollReconciliationPeriods';
 import { StepId, STEP_ORDER } from '../../../utils/tollPeriodGating';
 import { TollFinancialOverviewCards } from './TollFinancialOverviewCards';
+import { BulkPeriodResetDialog } from './BulkPeriodResetDialog';
 
 const STEP_ICONS: Record<StepId, LucideIcon> = {
   'needs-review': HelpCircle,
@@ -16,7 +30,9 @@ const STEP_ICONS: Record<StepId, LucideIcon> = {
 
 interface PeriodLandingPageProps {
   driverId?: string;
+  drivers?: Array<{ id: string; name: string }>;
   onSelectPeriod: (period: ReconciliationPeriod) => void;
+  onPeriodsReset?: () => void;
   outstanding: ReconciliationPeriod[];
   reconciled: ReconciliationPeriod[];
   totals: ReconciliationTotals;
@@ -96,13 +112,21 @@ function PeriodList({
 }
 
 export function PeriodLandingPage({
-  driverId: _driverId,
+  driverId,
+  drivers = [],
   onSelectPeriod,
+  onPeriodsReset,
   outstanding,
   reconciled,
   totals,
   loading,
 }: PeriodLandingPageProps) {
+  const [bulkResetOpen, setBulkResetOpen] = useState(false);
+  const allPeriods = useMemo(
+    () => [...outstanding, ...reconciled],
+    [outstanding, reconciled],
+  );
+
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
@@ -117,12 +141,25 @@ export function PeriodLandingPage({
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold tracking-tight text-slate-900">Toll Reconciliation</h2>
-        <p className="text-slate-500">Select a period to reconcile, step by step.</p>
-        <p className="mt-1 text-xs text-slate-400">
-          Totals below are fleet-wide (or the current driver filter). Per-driver detail is on Financials → Expenses.
-        </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight text-slate-900">Toll Reconciliation</h2>
+          <p className="text-slate-500">Select a period to reconcile, step by step.</p>
+          <p className="mt-1 text-xs text-slate-400">
+            Totals below are fleet-wide (or the current driver filter). Per-driver detail is on Financials → Expenses.
+          </p>
+        </div>
+        {!isEmpty && (
+          <Button
+            type="button"
+            variant="outline"
+            className="shrink-0 gap-1.5 border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800"
+            onClick={() => setBulkResetOpen(true)}
+          >
+            <RotateCcw className="h-4 w-4" />
+            Reset periods
+          </Button>
+        )}
       </div>
 
       <TollFinancialOverviewCards
@@ -179,6 +216,15 @@ export function PeriodLandingPage({
           </TabsContent>
         </Tabs>
       )}
+
+      <BulkPeriodResetDialog
+        open={bulkResetOpen}
+        onOpenChange={setBulkResetOpen}
+        periods={allPeriods}
+        drivers={drivers}
+        preselectedDriverId={driverId}
+        onComplete={() => onPeriodsReset?.()}
+      />
     </div>
   );
 }

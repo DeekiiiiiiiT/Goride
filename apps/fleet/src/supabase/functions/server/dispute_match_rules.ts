@@ -90,8 +90,10 @@ export async function evaluateDisputeClaimCandidate(input: {
   trips: any[];
   fleetTz: string;
   linkedTollIds: Set<string>;
+  /** Skip live trip geo-match (suggestions / CPU-safe ranking). */
+  light?: boolean;
 }): Promise<DisputeMatchCandidate | null> {
-  const { refund, claim, toll, trips, fleetTz, linkedTollIds } = input;
+  const { refund, claim, toll, trips, fleetTz, linkedTollIds, light } = input;
   if (!claim?.id || !claim.transactionId) return null;
 
   const refundAmount = Math.abs(refund.amount || 0);
@@ -125,11 +127,22 @@ export async function evaluateDisputeClaimCandidate(input: {
 
   const tollCost = Math.abs(claim.expectedAmount ?? toll.amount ?? 0);
   const chargedClaim = isChargeDriverReversibleClaim(claim);
-  const tripCtx = await resolveTripContextForToll(toll, claim, trips, fleetTz);
-  const liveCtx = await resolveLiveTripContextForToll(toll, fleetTz, {
-    suggestedTripId: tripCtx.tripId,
-  });
-  const liveTripRefund = liveCtx?.tripRefund ?? null;
+
+  let tripCtx: {
+    tripId: string | null;
+    timeDifferenceMinutes: number | null;
+    tripRefund: number | null;
+  } = { tripId: claim.tripId || toll.tripId || null, timeDifferenceMinutes: null, tripRefund: null };
+  let liveTripRefund: number | null = null;
+
+  if (!light) {
+    tripCtx = await resolveTripContextForToll(toll, claim, trips, fleetTz);
+    const liveCtx = await resolveLiveTripContextForToll(toll, fleetTz, {
+      suggestedTripId: tripCtx.tripId,
+    });
+    liveTripRefund = liveCtx?.tripRefund ?? null;
+  }
+
   const tripRefund =
     liveTripRefund ??
     tripCtx.tripRefund ??
@@ -169,9 +182,11 @@ export async function evaluateDisputeClaimCandidate(input: {
   }
 
   let autoReject: string | null = null;
-  if (chargedClaim) {
-    // Late refunds into already-charged claims are always manual (charge reversal).
-    autoReject = "Already charged — match manually to reverse the driver charge";
+  if (light || chargedClaim) {
+    // Light path / already-charged: suggestions only — never auto.
+    autoReject = chargedClaim
+      ? "Already charged — match manually to reverse the driver charge"
+      : "Manual review — full trip check skipped for speed";
   } else {
     autoReject = passesAutoHardGates({
       refundAmount,

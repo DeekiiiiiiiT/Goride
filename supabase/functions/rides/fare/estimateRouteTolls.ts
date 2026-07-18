@@ -5,6 +5,7 @@ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { decodeEncodedPolyline } from "../../_shared/polylineDecode.ts";
 import { routeCrossesPlaza, type TollPlazaGeo } from "../../_shared/tollGeofenceCore.ts";
 import { loadTollPlazas, type LoadedTollPlaza } from "./tollPlazaLoader.ts";
+import { brainEstimateRoute, isRidesTollBrainEnabled } from "./tollBrainClient.ts";
 
 export interface EstimatedTollPlaza {
   toll_plaza_id: string;
@@ -37,6 +38,30 @@ export async function estimateRouteTolls(
   const routePoints = decodeEncodedPolyline(encodedPolyline);
   if (routePoints.length === 0) {
     return { estimatedTollsMinor: 0, plazas: [] };
+  }
+
+  if (isRidesTollBrainEnabled()) {
+    const brain = await brainEstimateRoute({
+      points: routePoints,
+      geofenceRadiusM: fallbackGeofenceRadiusM,
+    });
+    if (brain) {
+      const plazaIdSet = new Set(brain.plazaIds);
+      const plazasLoaded = await loadTollPlazas(db);
+      const matched: EstimatedTollPlaza[] = plazasLoaded
+        .filter((p) => plazaIdSet.has(p.id))
+        .map((p) => ({
+          toll_plaza_id: p.id,
+          toll_plaza_name: p.name,
+          toll_amount_minor: p.defaultRateMinor,
+          currency: p.currency,
+        }));
+      return {
+        estimatedTollsMinor: brain.estimatedTollsMinor ||
+          matched.reduce((s, p) => s + p.toll_amount_minor, 0),
+        plazas: matched,
+      };
+    }
   }
 
   const plazas = await loadTollPlazas(db);

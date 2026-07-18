@@ -50,5 +50,6 @@ export * from './tripShare';
 export * from './roamConnections';
 export * from './matching';
 export * from './fuelBrain';
+export * from './tollBrain';
 export * from './haulage';
 export * from './evidence';

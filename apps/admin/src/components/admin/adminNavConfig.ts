@@ -97,6 +97,7 @@ export const FUEL_MANAGEMENT_CHILDREN: NavChild[] = [
 ];
 
 export const TOLL_MANAGEMENT_CHILDREN: NavChild[] = [
+  { id: 'toll-brain', label: 'Toll Brain', icon: Brain },
   { id: 'toll-stations', label: 'Toll Database', icon: MapPin },
   { id: 'toll-info', label: 'Toll Info', icon: Info },
   { id: 'toll-settings', label: 'Toll Settings', icon: Settings },
@@ -181,6 +182,7 @@ const SHARED_PLATFORM_PAGES = [
   'fuel-brain',
   'fuel-stations',
   'fuel-analytics',
+  'toll-brain',
   'toll-stations',
   'toll-info',
   'toll-settings',
