@@ -60,6 +60,7 @@ function policyToApi(row: Record<string, unknown>) {
     ambiguityMaxGap: Number(row.ambiguity_max_gap ?? 15),
     maxSuggestions: Number(row.max_suggestions ?? 5),
     liveLedgerMaterializeEnabled: row.live_ledger_materialize_enabled !== false,
+    tripTimeMode: row.trip_time_mode === "legacy_reinterpret" ? "legacy_reinterpret" : "trust_utc",
     isDefault: Boolean(row.is_default),
     updatedAt: row.updated_at,
   };
@@ -134,6 +135,7 @@ app.put("/admin/policies", async (c) => {
     ambiguityMaxGap: "ambiguity_max_gap",
     maxSuggestions: "max_suggestions",
     liveLedgerMaterializeEnabled: "live_ledger_materialize_enabled",
+    tripTimeMode: "trip_time_mode",
   };
   for (const [apiKey, col] of Object.entries(map)) {
     if (body[apiKey] !== undefined) patch[col] = body[apiKey];

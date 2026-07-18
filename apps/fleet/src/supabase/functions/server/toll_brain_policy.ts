@@ -18,6 +18,8 @@ export interface TollBrainPolicyRow {
   ambiguityMaxGap: number;
   maxSuggestions: number;
   sameDayPadDays: number;
+  /** trust_utc = real Uber UTC (default). legacy_reinterpret = old CSV Z-digit imports. */
+  tripTimeMode: "trust_utc" | "legacy_reinterpret";
 }
 
 const DEFAULTS: TollBrainPolicyRow = {
@@ -33,6 +35,7 @@ const DEFAULTS: TollBrainPolicyRow = {
   ambiguityMaxGap: 15,
   maxSuggestions: 5,
   sameDayPadDays: 1,
+  tripTimeMode: "trust_utc",
 };
 
 let cache: { policy: TollBrainPolicyRow; at: number } | null = null;
@@ -89,6 +92,8 @@ export async function loadTollBrainPolicy(): Promise<TollBrainPolicyRow> {
       ambiguityMaxGap: Number(data.ambiguity_max_gap ?? 15),
       maxSuggestions: Number(data.max_suggestions ?? 5),
       sameDayPadDays: Number(data.same_day_pad_days ?? 1),
+      tripTimeMode:
+        data.trip_time_mode === "legacy_reinterpret" ? "legacy_reinterpret" : "trust_utc",
     };
     cache = { policy, at: Date.now() };
     return policy;

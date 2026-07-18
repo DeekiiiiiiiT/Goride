@@ -215,14 +215,25 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
   });
 
   // Phase 7.1: React Query for manual drivers
-  const { data: manualDrivers = [] } = useQuery({
+  const { data: manualDrivers = [], isError: driversLoadError, error: driversError } = useQuery({
     queryKey: ['drivers'],
-    queryFn: () => api.getDrivers().catch(() => []),
+    queryFn: () => api.getDrivers(),
+    // Do not swallow auth/CORS failures as an empty fleet — surface the error instead.
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 15 * 60 * 1000, // 15 minutes
     refetchOnWindowFocus: false,
     refetchOnMount: false,
   });
+
+  useEffect(() => {
+    if (driversLoadError) {
+      toast.error(
+        driversError instanceof Error
+          ? `Could not load drivers: ${driversError.message}`
+          : 'Could not load drivers — check login / network (not deleted).',
+      );
+    }
+  }, [driversLoadError, driversError]);
 
   // Phase 7.1: React Query for driver metrics
   const { data: importedMetrics = [] } = useQuery({

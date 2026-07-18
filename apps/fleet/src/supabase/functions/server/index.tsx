@@ -298,7 +298,9 @@ app.use("*", async (c, next) => {
 // ---------------------------------------------------------------------------
 // Wave 5: CORS Allowlist (env-driven)
 // ---------------------------------------------------------------------------
-// Parse CORS_ALLOWED_ORIGINS (comma-separated) or fall back to "*" in dev.
+// Parse CORS_ALLOWED_ORIGINS (comma-separated). Use "*" for temporary allow-all.
+// Always expands each https host to include/exclude www so roamfleet.co and
+// www.roamfleet.co both work.
 function buildCorsOriginFn(): (origin: string) => string | null {
   const rawEnv = Deno.env.get("CORS_ALLOWED_ORIGINS") ?? "";
   const envMode = (Deno.env.get("ENVIRONMENT") ?? Deno.env.get("DENO_ENV") ?? "").toLowerCase();
@@ -309,29 +311,39 @@ function buildCorsOriginFn(): (origin: string) => string | null {
     .map((o) => o.trim().toLowerCase())
     .filter(Boolean);
 
-  // Dev fallback: if no explicit list and dev mode, allow all
-  if (allowed.length === 0 && isDev) {
+  // Explicit "*" (or empty list in local/dev) → allow every browser origin
+  if (allowed.includes("*") || (allowed.length === 0 && isDev)) {
     return () => "*";
   }
 
-  // Also accept origins from known Fleet frontend env vars (VITE_APP_URL, etc.)
+  // Also accept origins from known Fleet frontend env vars
   const viteUrl = Deno.env.get("VITE_APP_URL") ?? "";
   if (viteUrl) allowed.push(viteUrl.toLowerCase());
-  const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-  if (supabaseUrl) allowed.push(supabaseUrl.toLowerCase());
 
-  // Dedupe
-  const allowSet = new Set(allowed);
+  // Expand www / non-www pairs for every https/http origin in the list
+  const expanded: string[] = [];
+  for (const a of allowed) {
+    expanded.push(a);
+    try {
+      const u = new URL(a);
+      if (u.hostname.startsWith("www.")) {
+        const bare = `${u.protocol}//${u.hostname.slice(4)}${u.port ? `:${u.port}` : ""}`;
+        expanded.push(bare);
+      } else if (u.hostname.includes(".")) {
+        const withWww = `${u.protocol}//www.${u.hostname}${u.port ? `:${u.port}` : ""}`;
+        expanded.push(withWww);
+      }
+    } catch {
+      // ignore malformed entries
+    }
+  }
+
+  const allowSet = new Set(expanded);
 
   return (origin: string): string | null => {
     if (!origin) return null;
     const lower = origin.toLowerCase();
     if (allowSet.has(lower)) return origin;
-    // Allow exact match or any subdomain of allowed origins
-    for (const a of allowSet) {
-      if (lower.endsWith(`.${a.replace(/^https?:\/\//, "")}`)) return origin;
-      if (lower === a) return origin;
-    }
     return null;
   };
 }

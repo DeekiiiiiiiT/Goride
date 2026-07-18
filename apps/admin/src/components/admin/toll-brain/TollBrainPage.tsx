@@ -49,6 +49,7 @@ type BrainPolicy = {
   ambiguityMaxGap: number;
   maxSuggestions: number;
   liveLedgerMaterializeEnabled: boolean;
+  tripTimeMode: 'trust_utc' | 'legacy_reinterpret';
   isDefault: boolean;
 };
 
@@ -266,11 +267,36 @@ export function TollBrainPage() {
           </CardTitle>
           <CardDescription>
             Toll expense ↔ trip credit windows. Fleet recon mirrors these dials.
+            Fleet timezone stays in Platform Settings — this dial only controls
+            whether trip clocks are trusted as real UTC.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {policy ? (
             <>
+              <div className="space-y-2 rounded-md border border-slate-200 p-3">
+                <Label htmlFor="trip-time-mode">Trip time mode (match clock)</Label>
+                <select
+                  id="trip-time-mode"
+                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+                  value={policy.tripTimeMode || 'trust_utc'}
+                  onChange={(e) =>
+                    setPolicy({
+                      ...policy,
+                      tripTimeMode: e.target.value as 'trust_utc' | 'legacy_reinterpret',
+                    })
+                  }
+                >
+                  <option value="trust_utc">Trust stored UTC (Uber / InDrive — recommended)</option>
+                  <option value="legacy_reinterpret">
+                    Legacy reinterpret (old CSV imports that baked local time into Z)
+                  </option>
+                </select>
+                <p className="text-xs text-slate-500">
+                  Wrong overnight matches came from auto-reinterpreting correct Uber times. Keep
+                  Trust stored UTC unless you still have pre-fleetTz CSV trip rows.
+                </p>
+              </div>
               <div className="flex items-center gap-2">
                 <Checkbox
                   id="personal-use"

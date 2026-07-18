@@ -36,6 +36,13 @@ export interface TollBrainPolicy {
   ambiguityMaxGap: number;
   /** Max suggestions returned. */
   maxSuggestions: number;
+  /**
+   * How Z-suffixed trip timestamps are read for matching.
+   * trust_utc = real Uber/InDrive UTC (default).
+   * legacy_reinterpret = old CSV imports that baked wall-clock into Z.
+   * Fleet timezone still comes from platform settings — this is not a TZ picker.
+   */
+  tripTimeMode: 'trust_utc' | 'legacy_reinterpret';
   /** Live materialize crossings into toll_ledger. */
   liveLedgerMaterializeEnabled: boolean;
   isDefault: boolean;
@@ -59,6 +66,7 @@ export const DEFAULT_TOLL_BRAIN_POLICY: Omit<TollBrainPolicy, 'id' | 'updatedAt'
   ambiguityMinScore: 50,
   ambiguityMaxGap: 15,
   maxSuggestions: 5,
+  tripTimeMode: 'trust_utc',
   liveLedgerMaterializeEnabled: true,
   isDefault: true,
 };

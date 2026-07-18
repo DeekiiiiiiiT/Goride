@@ -202,16 +202,23 @@ interface TripWindows {
   searchEnd: Date;
 }
 
+function tripTimeModeFromBrain(): "trust_utc" | "legacy_reinterpret" {
+  return getTollBrainDialsOrDefaults().tripTimeMode === "legacy_reinterpret"
+    ? "legacy_reinterpret"
+    : "trust_utc";
+}
+
 function calculateTripTimes(trip: any, timezone: string): TripTimes {
+  const mode = tripTimeModeFromBrain();
   const dropoffStr = trip.dropoffTime || trip.date;
-  const dropoffTime = resolveFleetInstant(String(dropoffStr || ""), timezone);
+  const dropoffTime = resolveFleetInstant(String(dropoffStr || ""), timezone, mode);
 
   const requestStr = trip.requestTime || trip.date;
-  const requestTime = resolveFleetInstant(String(requestStr || ""), timezone);
+  const requestTime = resolveFleetInstant(String(requestStr || ""), timezone, mode);
 
   let pickupTime: Date;
   if (trip.startTime) {
-    pickupTime = resolveFleetInstant(String(trip.startTime), timezone);
+    pickupTime = resolveFleetInstant(String(trip.startTime), timezone, mode);
   } else if (trip.duration) {
     pickupTime = subMinutes(dropoffTime, trip.duration);
   } else {

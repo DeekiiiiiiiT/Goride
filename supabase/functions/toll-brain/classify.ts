@@ -22,6 +22,7 @@ export interface TollBrainPolicy {
   ambiguityMaxGap: number;
   maxSuggestions: number;
   liveLedgerMaterializeEnabled: boolean;
+  tripTimeMode: "trust_utc" | "legacy_reinterpret";
   isDefault: boolean;
 }
 
@@ -44,6 +45,7 @@ export const DEFAULT_POLICY: TollBrainPolicy = {
   ambiguityMaxGap: 15,
   maxSuggestions: 5,
   liveLedgerMaterializeEnabled: true,
+  tripTimeMode: "trust_utc",
   isDefault: true,
 };
 

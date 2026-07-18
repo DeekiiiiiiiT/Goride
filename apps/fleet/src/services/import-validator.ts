@@ -94,12 +94,20 @@ function toFleetCalendarDayBrowser(instant: Date, timezone: string): string {
     return y && m && d ? `${y}-${m}-${d}` : '';
 }
 
-/** Browser mirror of server resolveFleetInstant — auto-fixes legacy stored times. */
-export function resolveFleetInstantBrowser(stored: string, timezone: string): Date {
+/** Mirror of server TripTimeMode — default trusts real Uber UTC. */
+export type TripTimeMode = 'trust_utc' | 'legacy_reinterpret';
+
+/** Browser mirror of server resolveFleetInstant. */
+export function resolveFleetInstantBrowser(
+    stored: string,
+    timezone: string,
+    mode: TripTimeMode = 'trust_utc',
+): Date {
     if (!stored) return new Date(NaN);
     if (!hasTzSuffix(stored)) return new Date(naiveToUtcBrowser(stored, timezone));
     const direct = new Date(stored);
     if (isNaN(direct.getTime())) return direct;
+    if (mode !== 'legacy_reinterpret') return direct;
     const pad = (n: number) => String(n).padStart(2, '0');
     const naive =
         `${direct.getUTCFullYear()}-${pad(direct.getUTCMonth() + 1)}-${pad(direct.getUTCDate())}T` +

@@ -112,18 +112,31 @@ function fleetLocalHour(instant: Date, timezone: string): number {
   return Number(parts.find((p) => p.type === "hour")?.value ?? 0);
 }
 
+/** How Z-suffixed trip timestamps are resolved for matching (Toll Brain dial). */
+export type TripTimeMode = "trust_utc" | "legacy_reinterpret";
+
 /**
  * Resolve a stored timestamp for matching/display without re-importing.
- * - Already-fleetTz imports (v2): parse directly.
- * - Jamaica-browser legacy: direct parseISO is correct.
- * - UTC-browser legacy: UTC digit clock was local wall time — reinterpret.
+ *
+ * - trust_utc (default / brain): parse Z timestamps as real UTC (Uber/InDrive).
+ * - legacy_reinterpret: recover wall-clock digits from old UTC-browser CSV imports.
+ *
+ * IMPORTANT: never auto-reinterpret overnight hours — that shifted correct Uber
+ * windows by +5h (Jamaica) and dumped on-trip tolls into Personal Use.
  */
-export function resolveFleetInstant(stored: string, timezone: string): Date {
+export function resolveFleetInstant(
+  stored: string,
+  timezone: string,
+  mode: TripTimeMode = "trust_utc",
+): Date {
   if (!stored) return new Date(NaN);
   if (!hasTzSuffix(stored)) return naiveToUtc(stored, timezone);
 
   const direct = new Date(stored);
   if (isNaN(direct.getTime())) return direct;
+
+  // Default brain policy: trust stored UTC (Uber trip times are already correct).
+  if (mode !== "legacy_reinterpret") return direct;
 
   const reinterpreted = reinterpretUtcDigitsAsFleetLocal(direct, timezone);
   if (direct.getTime() === reinterpreted.getTime()) return direct;
@@ -132,12 +145,12 @@ export function resolveFleetInstant(stored: string, timezone: string): Date {
   const directYmd = toFleetCalendarDay(direct, timezone);
   const reinterpretYmd = toFleetCalendarDay(reinterpreted, timezone);
 
-  // Cross-midnight UTC-browser import: fleet day from direct ≠ UTC digit day.
+  // Cross-midnight UTC-browser import: fleet day from direct !== UTC digit day.
   if (reinterpretYmd === utcYmd && directYmd !== utcYmd) {
     return reinterpreted;
   }
 
-  // Same day but shifted hours: e.g. 11:39 stored as UTC → displays 6:39 AM fleet.
+  // Same day but shifted hours (legacy only).
   const utcH = direct.getUTCHours();
   const reH = fleetLocalHour(reinterpreted, timezone);
   const diH = fleetLocalHour(direct, timezone);
@@ -150,20 +163,25 @@ export function resolveFleetInstant(stored: string, timezone: string): Date {
   return direct;
 }
 
-/** In-memory repair for legacy trip rows — safe to call on every load. */
-export function repairTripTimesForMatching(trip: any, timezone: string): void {
+/** In-memory repair for legacy trip rows — only when brain mode asks for it. */
+export function repairTripTimesForMatching(
+  trip: any,
+  timezone: string,
+  mode: TripTimeMode = "trust_utc",
+): void {
   if (!trip || trip.timesSource === "fleetTzV2") return;
+  if (mode !== "legacy_reinterpret") return;
 
   const fields = ["requestTime", "dropoffTime", "startTime"] as const;
   for (const key of fields) {
     const raw = trip[key];
     if (!raw || typeof raw !== "string") continue;
-    const fixed = resolveFleetInstant(raw, timezone);
+    const fixed = resolveFleetInstant(raw, timezone, mode);
     if (!isNaN(fixed.getTime())) trip[key] = fixed.toISOString();
   }
 
   if (trip.date && typeof trip.date === "string" && hasTzSuffix(trip.date)) {
-    const fixed = resolveFleetInstant(trip.date, timezone);
+    const fixed = resolveFleetInstant(trip.date, timezone, mode);
     if (!isNaN(fixed.getTime())) trip.date = fixed.toISOString();
   }
 }
