@@ -63,3 +63,31 @@ export function isTollBlockedForDisputeMatch(toll: {
 export function amountsAlign(a: number, b: number, tolerance = DISPUTE_SHORTFALL_TOLERANCE): boolean {
   return Math.abs(Math.abs(a) - Math.abs(b)) <= tolerance;
 }
+
+/** Open underpaid claim statuses (still waiting on Uber / driver). */
+export const OPEN_DISPUTE_CLAIM_STATUSES = ["Open", "Sent_to_Driver", "Submitted_to_Uber"] as const;
+
+/**
+ * Resolved Charge Driver claims stay matchable for late Uber dispute refunds —
+ * matching flips them to Reimbursed and reverses the driver charge.
+ */
+export function isChargeDriverReversibleClaim(claim: {
+  status?: string | null;
+  resolutionReason?: string | null;
+}): boolean {
+  return claim.status === "Resolved" && claim.resolutionReason === "Charge Driver";
+}
+
+/** Claims a dispute refund may link to (open underpaid + already-charged). */
+export function isMatchableDisputeClaim(claim: {
+  type?: string | null;
+  status?: string | null;
+  resolutionReason?: string | null;
+  disputeRefundId?: string | null;
+}): boolean {
+  if (!claim || claim.type !== "Toll_Refund" || claim.disputeRefundId) return false;
+  if ((OPEN_DISPUTE_CLAIM_STATUSES as readonly string[]).includes(String(claim.status || ""))) {
+    return true;
+  }
+  return isChargeDriverReversibleClaim(claim);
+}

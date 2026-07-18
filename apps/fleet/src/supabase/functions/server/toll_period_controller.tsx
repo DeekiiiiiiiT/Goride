@@ -348,21 +348,17 @@ app.get(`${BASE}/periods`, async (c) => {
     }
 
     // Unclaimed tolls → needs-review / personal-use / deadhead / claimless underpaid.
-    // Claimless underpaid_pending blocks Completed only while still unlinked.
-    // Already trip-linked rows keep stage underpaid_pending (AMOUNT_VARIANCE) until a
-    // claim is filed, but shortfall work is gated by the wizard financials — counting
-    // them here left Kenny's week at "4 to review" after Finish (3 linked $0 leftovers
-    // + 1 dispute-covered Open claim).
+    // Linked rows (tripId) never appear in wizard /unreconciled — counting them
+    // here left Jan 5 week Outstanding after Finish (cash $2400 approved+linked
+    // but still workflowStage needs_review / isReconciled false on ledger).
+    // Claimless underpaid_pending with a trip link is also non-blocking (shortfall
+    // work is gated by wizard financials).
     for (const tx of unclaimedTolls) {
       if (!tx?.date) continue;
+      if (tx.tripId) continue;
       if (!tx.workflowStage) anyMissingWorkflowStage = true;
       const bucket = resolvePeriodBucket(tx);
       if (!bucket) continue;
-      if (bucket === "underpaid-claims") {
-        if (tx.isReconciled && tx.tripId) continue;
-        getOrCreatePeriod(tx.date).counts["underpaid-claims"].actionable++;
-        continue;
-      }
       getOrCreatePeriod(tx.date).counts[bucket].actionable++;
     }
 

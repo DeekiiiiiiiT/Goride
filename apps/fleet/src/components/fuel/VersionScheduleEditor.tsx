@@ -68,10 +68,16 @@ export function VersionScheduleEditor({
     () => nextMondayYmd(new Date(), fleetTz || undefined),
     [fleetTz],
   );
-  const weekOptions = useMemo(
-    () => upcomingMondayOptions(16, fleetTz || undefined),
-    [fleetTz],
-  );
+  const weekOptions = useMemo(() => {
+    // Include editing version's start so past schedules remain selectable; else this Monday forward
+    const earliest =
+      editingVersion?.effectiveFrom &&
+      editingVersion.effectiveFrom !== '2000-01-03' &&
+      editingVersion.effectiveFrom < thisMonday
+        ? editingVersion.effectiveFrom
+        : thisMonday;
+    return upcomingMondayOptions(16, fleetTz || undefined, new Date(), earliest);
+  }, [fleetTz, thisMonday, editingVersion?.effectiveFrom]);
   const untilOptions = useMemo(
     () => weekOptions.filter((o) => !effectiveFromMonday || o.value > effectiveFromMonday),
     [weekOptions, effectiveFromMonday],

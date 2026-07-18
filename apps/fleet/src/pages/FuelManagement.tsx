@@ -21,14 +21,18 @@ import {
   SheetDescription,
 } from '../components/ui/sheet';
 import { resolveActiveFuelPolicyForDriverWeek } from '../utils/fuelPolicyVersion';
-import { reportWeekYmdBounds, toEntryYmd, currentFuelWeekRange, isEntryInInclusiveYmdRange } from '../utils/fuelWeekPeriod';
+import {
+  reportWeekYmdBounds,
+  toEntryYmd,
+  currentFuelWeekRange,
+  isEntryInInclusiveYmdRange,
+  resolveFuelActivityEarliestMonday,
+  buildFuelReconciliationWeekOptions,
+} from '../utils/fuelWeekPeriod';
 import { sumPaidByDriverForReport, sumGasCardSpendForReport, entriesBelongingToDriverWeekReport } from '../utils/fuelPaidByDriver';
-import { useFleetTimezone, fleetTzDateKey, ymdToLocalDate } from '../utils/timezoneDisplay';
-import { generateWeekOptionsForDateRange, type PeriodWeekOption } from '../utils/periodWeekOptions';
+import { useFleetTimezone } from '../utils/timezoneDisplay';
+import { type PeriodWeekOption } from '../utils/periodWeekOptions';
 import { format, addDays, parseISO } from 'date-fns';
-
-/** Earliest Monday week for Consumption Reconciliation (fuel data from Dec 2025). */
-const RECON_EARLIEST_WEEK_START = new Date(2025, 11, 1);
 import { DisputeResolutionModal } from '../components/fuel/DisputeResolutionModal';
 import { FuelReimbursementTable } from '../components/fuel/FuelReimbursementTable';
 import { SubmitExpenseModal } from '../components/fuel/SubmitExpenseModal';
@@ -143,12 +147,6 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
     setLogDateRangeOverride(undefined);
   };
 
-  const reconciliationWeekOptions = useMemo(() => {
-    const today = fleetTz ? ymdToLocalDate(fleetTzDateKey(new Date(), fleetTz)) : new Date();
-    return generateWeekOptionsForDateRange(RECON_EARLIEST_WEEK_START, today);
-  }, [fleetTz]);
-
-
   // Fuel Card State
   const [cards, setCards] = useState<FuelCard[]>([]);
   const [isCardModalOpen, setIsCardModalOpen] = useState(false);
@@ -187,6 +185,27 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
   const [scenarios, setScenarios] = useState<FuelScenario[]>([]);
   const [finalizedReports, setFinalizedReports] = useState<FinalizedFuelReport[]>([]);
   const finalizedCount = finalizedReports.length;
+
+  // Week list starts at first real fuel activity (not a hard-coded Dec 2025 launch date)
+  const reconciliationWeekOptions = useMemo(() => {
+    const earliest = resolveFuelActivityEarliestMonday(
+      logs.map((e) => e.date),
+      finalizedReports.map((f) => f.weekStart),
+      fleetTz || undefined,
+    );
+    return buildFuelReconciliationWeekOptions(earliest, fleetTz || undefined);
+  }, [logs, finalizedReports, fleetTz]);
+
+  // If selection falls outside activity-based options (e.g. old Dec weeks), snap to current week
+  useEffect(() => {
+    if (!reconciliationWeekOptions.length || !reconciliationPeriodStart) return;
+    const ok = reconciliationWeekOptions.some((o) => o.startDate === reconciliationPeriodStart);
+    if (ok) return;
+    const range = currentFuelWeekRange(fleetTz || undefined);
+    setActiveFuelWeek({ from: range.from, to: range.to });
+    setLogCustomOverride(false);
+    setLogDateRangeOverride(undefined);
+  }, [reconciliationWeekOptions, reconciliationPeriodStart, fleetTz]);
 
   // Phase 3: Bucket View State
   const [selectedBucketVehicle, setSelectedBucketVehicle] = useState<Vehicle | null>(null);

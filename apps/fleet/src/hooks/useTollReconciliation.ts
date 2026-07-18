@@ -1,9 +1,43 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { api } from '../services/api';
+import { api, fetchFleetTimezone } from '../services/api';
 import { FinancialTransaction, Trip, DisputeRefund } from '../types/data';
 import { findTollMatches, MatchResult } from '../utils/tollReconciliation';
 import { demoteSpuriousDeadheadMatch } from '../utils/deadheadMatchGuard';
+import { fleetCalendarDay, ymdToLocalDate } from '../utils/timezoneDisplay';
 import { toast } from 'sonner@2.0.3';
+
+/** Shift yyyy-MM-dd by N days (local calendar). */
+function shiftYmd(ymd: string, days: number): string {
+  const d = ymdToLocalDate(ymd);
+  d.setDate(d.getDate() + days);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+/**
+ * Pad period fetch window ±1 day so UTC midnight-edge trips (counted in the
+ * period list via fleet TZ) are not dropped by the API's date filter before
+ * the server fleet-day fix is deployed. Caller must re-trim with inPeriodDay.
+ */
+function paddedPeriodDateParams(period: { startDate: string; endDate: string }) {
+  return {
+    from: shiftYmd(period.startDate, -1),
+    to: shiftYmd(period.endDate, 1),
+  };
+}
+
+function inPeriodFleetDay(
+  dateStr: string | undefined,
+  startDate: string,
+  endDate: string,
+  fleetTz: string,
+): boolean {
+  if (!dateStr) return false;
+  const day = fleetCalendarDay(dateStr, fleetTz);
+  return !!day && day >= startDate && day <= endDate;
+}
 
 /**
  * Phase 4: Server-driven toll reconciliation hook.
@@ -204,8 +238,11 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
     const shortfallGen = ++shortfallFetchGen.current;
     const gen = ++fetchGen.current;
     try {
-      const dateParams = period ? { from: period.startDate, to: period.endDate } : {};
+      // ±1 day pad: UTC timestamps just past midnight still belong to prior
+      // fleet calendar day (period list uses fleet TZ; old API filter used UTC).
+      const dateParams = period ? paddedPeriodDateParams(period) : {};
       const filterParams = { ...(driverId ? { driverId } : {}), ...dateParams, autoMatch: opts?.autoMatch };
+      const fleetTz = await fetchFleetTimezone();
 
       // Step 1: Fetch unreconciled in pages (server caps page size; avoids edge timeout)
       const unreconciledRes = await fetchAllUnreconciled(filterParams);
@@ -222,10 +259,15 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
       ]);
       if (gen !== fetchGen.current) return;
 
-      const unreconciled: FinancialTransaction[] = unreconciledRes.data || [];
-      const reconciled: FinancialTransaction[] = reconciledRes.data || [];
+      const trimToPeriod = <T extends { date?: string }>(rows: T[]): T[] => {
+        if (!period) return rows;
+        return rows.filter((r) => inPeriodFleetDay(r.date, period.startDate, period.endDate, fleetTz));
+      };
+
+      const unreconciled: FinancialTransaction[] = trimToPeriod(unreconciledRes.data || []);
+      const reconciled: FinancialTransaction[] = trimToPeriod(reconciledRes.data || []);
       const reconciledAll: FinancialTransaction[] = reconciledAllRes.data || reconciled;
-      const refundsRaw: Trip[] = refundsRes.data || [];
+      const refundsRaw: Trip[] = trimToPeriod(refundsRes.data || []);
       // Belt: server may historically return duplicate trip ids from unordered pages.
       const seenRefundIds = new Set<string>();
       const refunds = refundsRaw.filter((t) => {
@@ -278,7 +320,7 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
           api.getResolvedRefunds(filterParams),
           api.getUnlinkedShortfallSuggestions({
             ...(driverId ? { driverId } : {}),
-            ...(period ? { from: period.startDate, to: period.endDate } : {}),
+            ...dateParams,
           }),
         ]);
         if (gen !== fetchGen.current) return;
@@ -288,7 +330,7 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
           sugMap.set(tripId, s as RefundSuggestion);
         }
         setRefundSuggestions(sugMap);
-        setResolvedRefunds(resolvedRes?.data || []);
+        setResolvedRefunds(trimToPeriod(resolvedRes?.data || []));
 
         if (shortfallGen === shortfallFetchGen.current) {
           const shortMap = new Map<string, UnlinkedShortfallSuggestion[]>();

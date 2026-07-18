@@ -56,6 +56,7 @@ import {
   hasTzSuffix,
   normalizeWallClockTime,
   resolveFleetInstant,
+  fleetCalendarDay,
 } from "./timezone_helper.tsx";
 import {
   buildDriverAliasMap,
@@ -1248,21 +1249,24 @@ function parseUnreconciledQueryParams(c: any) {
 }
 
 /**
- * Optional [from, to] (yyyy-MM-dd) scoping for the period-gated wizard
- * (Phase F4) — best-effort day-boundary filtering (not full fleet-tz
- * correction, unlike the period aggregation endpoint) since this only needs
- * to narrow an already-loaded list to roughly the right week, not compute
- * authoritative period membership.
+ * Optional [from, to] (yyyy-MM-dd) scoping for the period-gated wizard.
+ * Compares fleet-tz calendar days so UTC timestamps near midnight match the
+ * same week as GET /toll-reconciliation/periods (e.g. Jan 5 00:06Z → Jan 4 JM).
  */
-function filterByDateRange<T extends { date?: string }>(items: T[], from?: string, to?: string): T[] {
+async function filterByDateRange<T extends { date?: string }>(
+  items: T[],
+  from?: string,
+  to?: string,
+): Promise<T[]> {
   if (!from && !to) return items;
-  const fromMs = from ? new Date(from).getTime() : -Infinity;
-  const toMs = to ? new Date(`${to}T23:59:59.999`).getTime() : Infinity;
+  const timezone = await getFleetTimezone();
   return items.filter((item) => {
     if (!item.date) return false;
-    const t = new Date(item.date).getTime();
-    if (isNaN(t)) return false;
-    return t >= fromMs && t <= toMs;
+    const day = fleetCalendarDay(String(item.date), timezone);
+    if (!day) return false;
+    if (from && day < from) return false;
+    if (to && day > to) return false;
+    return true;
   });
 }
 
@@ -1614,7 +1618,7 @@ app.get(`${BASE}/unreconciled`, async (c) => {
     });
 
     // Phase F4: optional period scoping for the gated reconciliation wizard.
-    unreconciled = filterByDateRange(unreconciled, from, to);
+    unreconciled = await filterByDateRange(unreconciled, from, to);
 
     // Sort by date descending
     unreconciled.sort(
@@ -1989,7 +1993,7 @@ app.get(`${BASE}/unclaimed-refunds`, async (c) => {
     // Candidates: trips with a toll refund, no linked toll tx, and not already
     // resolved (cash_wash/phantom/expense_logged drop off; pending stays).
     // Phase F4: optional period scoping for the gated reconciliation wizard.
-    const candidates = filterByDateRange(
+    const candidates = await filterByDateRange(
       trips.filter((t: any) => isUnresolvedRefund(t, linkedTripIds)),
       from,
       to,
@@ -2089,7 +2093,7 @@ app.get(`${BASE}/reconciled`, async (c) => {
     }
 
     // Phase F4: optional period scoping for the gated reconciliation wizard.
-    reconciled = filterByDateRange(reconciled, from, to);
+    reconciled = await filterByDateRange(reconciled, from, to);
 
     // Sort by date descending
     reconciled.sort(
@@ -7027,7 +7031,7 @@ app.get(`${BASE}/unlinked-shortfall-suggestions`, async (c) => {
     const tollTx = filterByDriver(loaded.tollTx, driverId);
     let trips = filterByDriver(loaded.trips, driverId);
     // Period-scoped when wizard passes from/to — avoid scoring every historical unlinked trip.
-    trips = filterByDateRange(trips, from, to);
+    trips = await filterByDateRange(trips, from, to);
     const linkedTripIds = new Set(tollTx.filter((tx: any) => tx.tripId).map((tx: any) => tx.tripId));
     const unresolved = trips.filter((t: any) => isUnresolvedRefund(t, linkedTripIds));
 
@@ -7209,7 +7213,7 @@ app.get(`${BASE}/resolved-refunds`, async (c) => {
     const trips = filterByDriver(loaded.trips, driverId);
 
     // Phase F4: optional period scoping for the gated reconciliation wizard.
-    const resolved = filterByDateRange(
+    const resolved = await filterByDateRange(
       trips.filter((t: any) => t.tollRefundResolution && t.tollRefundResolution.status !== "pending"),
       from,
       to,

@@ -44,9 +44,15 @@ export function allocateTripRefundShare(
   siblings: TollPoolRow[],
 ): number {
   const sorted = [...siblings].sort((a, b) => {
-    const ta = new Date(`${a.date}T${a.time || "00:00:00"}`).getTime();
-    const tb = new Date(`${b.date}T${b.time || "00:00:00"}`).getTime();
-    return ta - tb;
+    // Tag imports store "9:35:00 AM" — Date(`${date}T${time}`) is Invalid; fall back to date-only.
+    const parse = (row: TollPoolRow) => {
+      const raw = `${row.date}T${row.time || "00:00:00"}`;
+      const t = new Date(raw).getTime();
+      if (!isNaN(t)) return t;
+      const d = new Date(String(row.date).slice(0, 10)).getTime();
+      return isNaN(d) ? 0 : d;
+    };
+    return parse(a) - parse(b);
   });
   let remaining = pool;
   for (const s of sorted) {
@@ -176,13 +182,32 @@ export async function enrichAndFilterDisputeBareTolls(
   candidates: BareTollCandidate[],
   rawTollById: Map<string, any>,
   fleetTz: string,
+  opts?: {
+    /**
+     * Skip O(candidates × trips) live geo-matching. Use persisted trip links
+     * only — required for period-scoped match-candidates to stay under edge CPU
+     * (HTTP 546). underpaid_pending without a trip link still passes eligibility.
+     */
+    skipInferred?: boolean;
+  },
 ): Promise<BareTollCandidate[]> {
   if (candidates.length === 0) return [];
 
-  const [{ trips, tollTx }, driverAliasMap] = await Promise.all([
-    loadAllTollLedgerWithTrips(),
-    getDriverAliasMap(),
-  ]);
+  const skipInferred = !!opts?.skipInferred;
+  let trips: any[] = [];
+  let tollTx: any[] = [];
+  let driverAliasMap: Map<string, string> | undefined;
+
+  if (!skipInferred) {
+    const loaded = await Promise.all([
+      loadAllTollLedgerWithTrips(),
+      getDriverAliasMap(),
+    ]);
+    trips = loaded[0].trips;
+    tollTx = loaded[0].tollTx;
+    driverAliasMap = loaded[1];
+  }
+
   const resolved: {
     toll: BareTollCandidate;
     tripId: string;
@@ -194,23 +219,30 @@ export async function enrichAndFilterDisputeBareTolls(
     const rawToll = rawTollById.get(t.tollId);
     if (!rawToll) continue;
 
-    const matches = findTollMatchesServer(rawToll, trips, fleetTz, driverAliasMap);
-    const validMatch = pickBestValidTollMatch(matches);
-
     let tripId: string | null = null;
-    if (validMatch) {
-      if (t.tripId && t.tripId !== validMatch.tripId) {
-        t.tripId = null;
+    if (!skipInferred) {
+      const matches = findTollMatchesServer(rawToll, trips, fleetTz, driverAliasMap);
+      const validMatch = pickBestValidTollMatch(matches);
+      if (validMatch) {
+        if (t.tripId && t.tripId !== validMatch.tripId) {
+          t.tripId = null;
+        }
+        tripId = validMatch.tripId;
+        if (!t.tripId) t.suggestedTripId = validMatch.tripId;
       }
-      tripId = validMatch.tripId;
-      if (!t.tripId) t.suggestedTripId = validMatch.tripId;
-    } else {
+    }
+
+    if (!tripId) {
       const persisted = persistedTripLink(rawToll);
       if (persisted) {
         tripId = persisted;
         if (!t.tripId) t.suggestedTripId = persisted;
       } else if (t.tripId) {
-        t.tripId = null;
+        if (skipInferred) {
+          tripId = String(t.tripId);
+        } else {
+          t.tripId = null;
+        }
       }
     }
 
@@ -235,13 +267,10 @@ export async function enrichAndFilterDisputeBareTolls(
       byTrip.set(r.tripId, list);
     }
 
-    // Build every trip's sibling-toll pool from a SINGLE ledger scan, reusing
-    // the ledger we already loaded above. The prior per-trip
-    // siblingsForTripPool() reloaded the whole ledger once per trip —
-    // O(trips × ledger), which timed out the edge fn (HTTP 546) on multi-week
-    // ranges. One pass, grouped by both the stored tripId and any persisted
-    // trip link, is equivalent and bounded.
-    const fullLedger = tollTx || [];
+    // Single ledger pass for sibling pools (avoid per-trip full reloads).
+    const fullLedger = skipInferred
+      ? [...rawTollById.values()]
+      : (tollTx || []);
     const siblingsByTrip = new Map<string, Map<string, TollPoolRow>>();
     const addSibling = (trip: string | null, t: any) => {
       if (!trip) return;
@@ -266,9 +295,6 @@ export async function enrichAndFilterDisputeBareTolls(
       if (t.tripId) addSibling(String(t.tripId), t);
       addSibling(persistedTripLink(t), t);
     }
-    // REGRESSION GUARD: a candidate whose trip link is only live-suggested
-    // (not persisted on the toll row) never enters the ledger-scan pool above,
-    // so allocateTripRefundShare would hand it $0 (old add(focusToll) semantics).
     for (const r of resolved) {
       addSibling(r.tripId, rawTollById.get(r.toll.tollId));
     }

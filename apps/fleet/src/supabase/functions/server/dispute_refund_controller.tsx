@@ -33,6 +33,7 @@ import {
 import {
   DISPUTE_SHORTFALL_TOLERANCE,
   isFullyReimbursedViaTrip,
+  isMatchableDisputeClaim,
 } from "./dispute_refund_eligibility.ts";
 import {
   candidateToSuggestion,
@@ -130,10 +131,9 @@ async function loadAllByPrefix(prefix: string): Promise<any[]> {
 // ═══════════════════════════════════════════════════════════════════════
 // A dispute refund is the money we won back on an underpaid toll. Its amount
 // equals the *shortfall* (the Claimable-Loss claim amount), NOT the full toll.
-// So we match a refund against open Toll_Refund claims by claim.amount, and
-// resolving the claim as "Reimbursed" closes the loop into the Reimbursed tile.
+// Match against open Toll_Refund claims or Resolved "Charge Driver" claims
+// (late refunds reverse the charge). Resolving as "Reimbursed" closes the loop.
 
-const OPEN_CLAIM_STATUSES = ["Open", "Sent_to_Driver", "Submitted_to_Uber"];
 const TOLL_REFUND_LINK_PREFIX = "dispute-refund-toll:";
 
 async function getRefundIdLinkedToToll(tollId: string, excludeRefundId?: string): Promise<string | null> {
@@ -160,16 +160,14 @@ async function loadTollForClaim(transactionId: string | undefined): Promise<any 
   );
 }
 
-/** Open toll-refund (underpaid) claims for a driver, not already tied to a refund. */
+/** Matchable toll-refund claims for a driver (open underpaid + Charge Driver). */
 async function loadOpenTollClaimsForDriver(driverId: string): Promise<any[]> {
   const allClaims = await loadAllByPrefix("claim:");
   return allClaims.filter(
     (cl: any) =>
       cl && typeof cl === "object" &&
       cl.driverId === driverId &&
-      cl.type === "Toll_Refund" &&
-      OPEN_CLAIM_STATUSES.includes(cl.status) &&
-      !cl.disputeRefundId,
+      isMatchableDisputeClaim(cl),
   );
 }
 
@@ -957,8 +955,8 @@ app.get(`${BASE}/suggestions/:id`, async (c) => {
 });
 
 // ─── GET /dispute-refunds/match-candidates ─────────────────────────────
-// Manual search across ALL drivers: open underpaid claims + bare tolls (no
-// claim yet). Used when the smart matcher misses (e.g. driver-name mismatch).
+// Manual search across ALL drivers: open underpaid claims, Charge Driver
+// claims (late refunds), + bare tolls (no claim yet).
 app.get(`${BASE}/match-candidates`, async (c) => {
   try {
     const q = (c.req.query("q") || "").trim().toLowerCase();
@@ -968,6 +966,14 @@ app.get(`${BASE}/match-candidates`, async (c) => {
     // Period boundaries arrive as fleet-tz calendar days; normalize each
     // candidate's date into the same frame before comparing (see fleetTzDay).
     const fleetTz = await getFleetTimezone();
+    const dayInRange = (dateStr: string | null | undefined) => {
+      if (!from && !to) return true;
+      const d = fleetTzDay(dateStr, fleetTz);
+      if (!d) return false;
+      if (from && d < from) return false;
+      if (to && d > to) return false;
+      return true;
+    };
 
     // Tolls already linked to a matched refund (exclude from candidates).
     const allRefunds = await loadAllByPrefix("dispute-refund:");
@@ -977,11 +983,17 @@ app.get(`${BASE}/match-candidates`, async (c) => {
         .map((r: any) => r.matchedTollId),
     );
 
-    // Open underpaid claims (across all drivers).
+    // Single ledger load — also used as claim→toll lookup (no N+1 kv.get).
+    const ledger = await loadAllByPrefix("toll_ledger:");
+    const ledgerById = new Map<string, any>();
+    for (const toll of ledger || []) {
+      if (toll?.id) ledgerById.set(String(toll.id), toll);
+    }
+
+    // Open underpaid + already-charged (Charge Driver) claims across all drivers.
     const allClaims = await loadAllByPrefix("claim:");
     const openClaims = allClaims.filter(
-      (cl: any) => cl && typeof cl === "object" && cl.type === "Toll_Refund" &&
-        OPEN_CLAIM_STATUSES.includes(cl.status) && !cl.disputeRefundId,
+      (cl: any) => cl && typeof cl === "object" && isMatchableDisputeClaim(cl),
     );
     const claimTollIds = new Set(openClaims.map((cl: any) => cl.transactionId).filter(Boolean));
     const anyClaimTollIds = new Set(
@@ -992,7 +1004,12 @@ app.get(`${BASE}/match-candidates`, async (c) => {
 
     const claimCandidates: any[] = [];
     for (const cl of openClaims) {
-      const toll = await loadTollForClaim(cl.transactionId);
+      const toll = cl.transactionId
+        ? (ledgerById.get(String(cl.transactionId)) || null)
+        : null;
+      const anchorDate = toll?.date || cl.date || cl.createdAt || null;
+      // Drop out-of-period claims before building the response payload.
+      if (!dayInRange(anchorDate)) continue;
       const claimAmount = Math.abs(cl.amount || 0);
       const tollAmount = Math.abs(cl.expectedAmount ?? toll?.amount ?? 0);
       claimCandidates.push({
@@ -1021,12 +1038,12 @@ app.get(`${BASE}/match-candidates`, async (c) => {
     }
 
     // Bare tolls (usage, no claim yet, not already linked).
-    const ledger = await loadAllByPrefix("toll_ledger:");
     const tollCandidates: any[] = [];
     const rawTollById = new Map<string, any>();
     for (const toll of ledger) {
       if (!toll || typeof toll !== "object" || !toll.id) continue;
       if (toll.type && toll.type !== "usage") continue;
+      if (!dayInRange(toll.date)) continue;
       if (claimTollIds.has(toll.id) || linkedTollIds.has(toll.id) || anyClaimTollIds.has(toll.id)) continue;
       // Only tolls that can still take a dispute refund belong here:
       // untriaged, flagged underpaid, or trip-linked ("matched"/"underpaid")
@@ -1062,32 +1079,22 @@ app.get(`${BASE}/match-candidates`, async (c) => {
       const hay = `${cand.driverName} ${cand.tollAmount} ${cand.claimAmount ?? ""} ${cand.date ?? ""}`.toLowerCase();
       return hay.includes(q);
     };
-    // Period filter (yyyy-MM-dd inclusive range). Each candidate's date is
-    // resolved to its fleet-tz calendar day so it matches the day the UI shows
-    // and the day the tab groups by (see fleetTzDay).
-    const inRange = (cand: any) => {
-      if (!from && !to) return true;
-      const d = fleetTzDay(cand.date, fleetTz);
-      if (!d) return false;
-      if (from && d < from) return false;
-      if (to && d > to) return false;
-      return true;
-    };
-    const keep = (cand: any) => matchQ(cand) && inRange(cand);
+    const keep = (cand: any) => matchQ(cand);
     const byDate = (a: any, b: any) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime();
 
     const claims = claimCandidates.filter(keep).sort(byDate).slice(0, LIMIT);
 
     // Enrich + eligibility-filter BEFORE slice so fully-reimbursed tolls don't
     // consume the result cap (Dispute Refunds is shortfall-only). Enrichment
-    // (per-toll trip matching) is CPU-heavy, so cap it tightly: enriching more
-    // than we can return just risks the edge CPU limit (HTTP 546) on wide /
-    // all-period searches. Candidates are date-desc, so the newest shortfall
-    // tolls win the cap; scoped weekly searches stay well under it.
+    // (per-toll trip matching) is CPU-heavy — when the wizard passes from/to,
+    // skip live geo-match and use persisted trip links only (avoids HTTP 546).
     const ENRICH_CAP = LIMIT;
     let tolls = tollCandidates.filter(keep).sort(byDate).slice(0, ENRICH_CAP);
+    const scopedPeriod = !!(from || to);
     try {
-      tolls = await enrichAndFilterDisputeBareTolls(tolls, rawTollById, fleetTz);
+      tolls = await enrichAndFilterDisputeBareTolls(tolls, rawTollById, fleetTz, {
+        skipInferred: scopedPeriod,
+      });
     } catch {
       // Best-effort — fall back to workflow-stage filter only.
       tolls = tolls.filter((t) => {

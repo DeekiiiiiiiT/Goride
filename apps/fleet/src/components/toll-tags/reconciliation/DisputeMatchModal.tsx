@@ -75,30 +75,70 @@ export function DisputeMatchModal({ open, onOpenChange, refund, onMatched }: Dis
   const [periodStart, setPeriodStart] = useState<string>('');
   const [periodEnd, setPeriodEnd] = useState<string>('');
 
-  // Load suggestions + default period = the refund's Mon–Sun week.
+  // Load suggestions first, then default the search week to the best match's
+  // original underpaid week (not the refund's arrival week). No suggestion →
+  // all periods so late refunds stay searchable across charged prior weeks.
   useEffect(() => {
     if (!open || !refund) return;
+    let cancelled = false;
     setQuery('');
     setSuggestions([]);
     setCandidates({ claims: [], tolls: [] });
-
-    const refundYmd = fleetTzDateKey(refund.date, fleetTz);
-    const weekOptions = generatePeriodWeekOptions(16, fleetTz);
-    const refundWeek = weekOptions.find(
-      (w) => refundYmd && w.startDate <= refundYmd && w.endDate >= refundYmd,
-    );
-    const start = refundWeek?.startDate ?? '';
-    const end = refundWeek?.endDate ?? '';
-    setPeriodStart(start);
-    setPeriodEnd(end);
-
+    setPeriodStart('');
+    setPeriodEnd('');
     setLoadingSuggestions(true);
-    api.getDisputeRefundSuggestions(refund.id)
-      .then((res) => setSuggestions(res.suggestions || []))
-      .catch(() => setSuggestions([]))
-      .finally(() => setLoadingSuggestions(false));
+    setLoadingCandidates(true);
 
-    loadCandidates('', start, end);
+    const weekOptions = generatePeriodWeekOptions(24, fleetTz);
+
+    (async () => {
+      let nextSuggestions: SuggestionRow[] = [];
+      try {
+        const res = await api.getDisputeRefundSuggestions(refund.id);
+        nextSuggestions = res.suggestions || [];
+      } catch {
+        nextSuggestions = [];
+      }
+      if (cancelled) return;
+      setSuggestions(nextSuggestions);
+      setLoadingSuggestions(false);
+
+      const anchorYmd = nextSuggestions[0]?.date
+        ? fleetTzDateKey(nextSuggestions[0].date, fleetTz)
+        : null;
+      const targetWeek = anchorYmd
+        ? weekOptions.find((w) => w.startDate <= anchorYmd && w.endDate >= anchorYmd)
+        : null;
+      const start = targetWeek?.startDate ?? '';
+      const end = targetWeek?.endDate ?? '';
+      setPeriodStart(start);
+      setPeriodEnd(end);
+      // No confident week → search all periods, scoped to this driver by name.
+      const seedQuery = !targetWeek && refund.driverName ? refund.driverName : '';
+      setQuery(seedQuery);
+
+      try {
+        const res = await api.getDisputeMatchCandidates({
+          query: seedQuery || undefined,
+          from: start || undefined,
+          to: end || undefined,
+        });
+        if (cancelled) return;
+        setCandidates({ claims: res.claims || [], tolls: res.tolls || [] });
+      } catch (err: any) {
+        console.error('[DisputeMatch] candidates failed:', err);
+        if (!cancelled) {
+          toast.error('Failed to load match candidates');
+          setCandidates({ claims: [], tolls: [] });
+        }
+      } finally {
+        if (!cancelled) setLoadingCandidates(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, refund?.id, fleetTz]);
 

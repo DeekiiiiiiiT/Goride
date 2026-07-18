@@ -1,6 +1,6 @@
 import { startOfWeek, endOfWeek, format, parseISO } from 'date-fns';
 import type { Claim, DisputeRefund, FinancialTransaction, Trip } from '../types/data';
-import { fleetTzDateKey, ymdToLocalDate } from './timezoneDisplay';
+import { fleetTzDateKey, normalizeWallClockTime, ymdToLocalDate } from './timezoneDisplay';
 import { VARIANCE_THRESHOLD } from './tollReconciliation';
 
 /**
@@ -34,12 +34,26 @@ export function getTollTransactionDate(tx: FinancialTransaction): Date {
       const d = parseISO(tx.date);
       return !isNaN(d.getTime()) ? d : new Date(tx.date);
     }
+    // Bare yyyy-MM-dd: local calendar midnight (never UTC — shifts prior day in US/JM).
+    if (tx.date && /^\d{4}-\d{2}-\d{2}$/.test(tx.date) && !tx.time) {
+      return ymdToLocalDate(tx.date);
+    }
     const timeStr = tx.time || '12:00:00';
-    const cleanTime = timeStr.length >= 5 ? timeStr : '12:00:00';
+    // Tag imports store "11:47:00 AM" — must convert before Date parse or it is Invalid.
+    const cleanTime = normalizeWallClockTime(timeStr.length >= 5 ? timeStr : '12:00:00');
+    if (tx.date && /^\d{4}-\d{2}-\d{2}$/.test(tx.date)) {
+      const [y, m, d] = tx.date.split('-').map(Number);
+      const [hh, mm, ss] = cleanTime.split(':').map(Number);
+      const local = new Date(y, m - 1, d, hh || 0, mm || 0, ss || 0);
+      if (!isNaN(local.getTime())) return local;
+      return ymdToLocalDate(tx.date);
+    }
     const localDate = new Date(`${tx.date}T${cleanTime}`);
     return !isNaN(localDate.getTime()) ? localDate : new Date(tx.date);
   } catch {
-    return new Date(tx.date);
+    return tx.date && /^\d{4}-\d{2}-\d{2}$/.test(tx.date)
+      ? ymdToLocalDate(tx.date)
+      : new Date(tx.date);
   }
 }
 
@@ -350,6 +364,12 @@ export function tollWeekKey(
   tx: Pick<FinancialTransaction, 'date' | 'time'>,
   timezone?: string,
 ): string {
+  // Date-only ledger days: week from calendar date (matches server fleetTzDay slice).
+  // Avoids AM/PM parse failures + UTC midnight shifting Mon → prior Sunday week.
+  const dateStr = String(tx.date || '');
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    return weekBucketForDate(ymdToLocalDate(dateStr), timezone).key;
+  }
   const d = getTollTransactionDate(tx as FinancialTransaction);
   return weekBucketForDate(d, timezone).key;
 }

@@ -86,11 +86,63 @@ export function fleetTzDateKey(input: string | Date, timezone: string): string {
   }
 }
 
+/**
+ * Honest UTC → fleet calendar day for period membership (trips, refunds).
+ * Unlike fleetTzDateKey, does NOT run resolveFleetInstantBrowser reinterpret
+ * (that helper fixes legacy tag imports; real Uber trip Z timestamps must
+ * stay true UTC so Jan 5 00:06Z → Jan 4 in America/Jamaica).
+ */
+export function fleetCalendarDay(dateStr: string, timezone: string): string {
+  const s = String(dateStr || '');
+  if (!s) return '';
+  if (!hasTzSuffix(s)) return s.slice(0, 10);
+  const instant = new Date(s);
+  if (isNaN(instant.getTime())) return s.slice(0, 10);
+  try {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(instant);
+    const y = parts.find((p) => p.type === 'year')?.value;
+    const m = parts.find((p) => p.type === 'month')?.value;
+    const d = parts.find((p) => p.type === 'day')?.value;
+    return y && m && d ? `${y}-${m}-${d}` : s.slice(0, 10);
+  } catch {
+    return s.slice(0, 10);
+  }
+}
+
 /** yyyy-MM-dd → local calendar Date (avoids parseISO UTC-midnight shifting the day). */
 export function ymdToLocalDate(ymd: string): Date {
   const [y, m, d] = ymd.split('-').map(Number);
   if (!y || !m || !d) return new Date(NaN);
   return new Date(y, m - 1, d);
+}
+
+/**
+ * Normalize tag-import wall-clock times (incl. "11:47:00 AM") to HH:mm:ss.
+ * Mirrors server normalizeWallClockTime in timezone_helper.tsx — needed so
+ * `new Date('yyyy-MM-ddT…')` never gets Invalid Date from AM/PM suffixes.
+ */
+export function normalizeWallClockTime(raw: string): string {
+  const pm = raw.trim().match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(am|pm)$/i);
+  if (pm) {
+    let h = parseInt(pm[1], 10);
+    const m = pm[2];
+    const s = pm[3] || '00';
+    const ampm = pm[4].toLowerCase();
+    if (ampm === 'pm' && h < 12) h += 12;
+    if (ampm === 'am' && h === 12) h = 0;
+    return `${String(h).padStart(2, '0')}:${m}:${s}`;
+  }
+  const parts = raw.trim().split(':');
+  if (parts.length >= 2) {
+    const sec = (parts[2] || '00').replace(/\D/g, '') || '00';
+    return `${parts[0].padStart(2, '0')}:${parts[1].padStart(2, '0')}:${sec.padStart(2, '0')}`;
+  }
+  return '00:00:00';
 }
 
 /** Date-only or naive datetime stored without a TZ suffix (toll ledger `date` field). */

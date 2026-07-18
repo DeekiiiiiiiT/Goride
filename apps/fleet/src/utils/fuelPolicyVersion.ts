@@ -32,23 +32,25 @@ export function nextMondayYmd(d: Date = new Date(), timezone?: string): string {
   return format(addWeeks(parseISO(thisMon), 1), 'yyyy-MM-dd');
 }
 
-/** Earliest Monday offered when setting policy version windows (backfill recon). */
+/** @deprecated Prefer passing activity-based earliestMonday into upcomingMondayOptions. */
 export const POLICY_VERSION_EARLIEST_MONDAY = '2025-12-01';
 
 /**
  * Mondays for the version Starts/Ends dropdowns:
- * from earliestMonday (default Dec 1, 2025) through `futureCount` weeks ahead of this Monday.
+ * from earliestMonday (default: this Monday) through `futureCount` weeks ahead.
+ * Pass earliestMonday from first fuel activity when backdating schedules.
  */
 export function upcomingMondayOptions(
   futureCount = 16,
   timezone?: string,
   from: Date = new Date(),
-  earliestMonday: string = POLICY_VERSION_EARLIEST_MONDAY,
+  earliestMonday?: string,
 ): { value: string; label: string }[] {
   const thisMon = mondayYmdForDate(from, timezone);
-  const earliest = isMondayYmd(earliestMonday)
-    ? earliestMonday
-    : mondayYmdForDate(parseISO(earliestMonday), timezone);
+  const rawEarliest = earliestMonday || thisMon;
+  const earliest = isMondayYmd(rawEarliest)
+    ? rawEarliest
+    : mondayYmdForDate(parseISO(rawEarliest), timezone);
   const startYmd = earliest <= thisMon ? earliest : thisMon;
   const endYmd = format(addWeeks(parseISO(thisMon), Math.max(0, futureCount - 1)), 'yyyy-MM-dd');
 

@@ -144,12 +144,29 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
 
   const { claims, loading: claimsLoading, refresh: refreshClaims, createClaim, updateClaim, deleteClaim } = useClaims();
   const queryClient = useQueryClient();
+  // Expenses Toll Status reads a cached weekly snapshot — rebuild it whenever
+  // reconciliation mutates this period (otherwise Completed weeks stay "Unmatched").
   const invalidateSharedPeriods = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: [DRIVER_FINANCIAL_PERIODS_KEY] });
-    if (driverId) {
-      void api.rebuildDriverFinancialPeriods(driverId, period.startDate).catch(() => undefined);
+    const ids = new Set<string>();
+    if (driverId) ids.add(driverId);
+    for (const tx of [...unreconciledTolls, ...reconciledTolls, ...allReconciledTolls]) {
+      if (!tx?.driverId) continue;
+      if (!isTollInWizardPeriod(tx, period.startDate, fleetTz)) continue;
+      ids.add(String(tx.driverId));
     }
-  }, [queryClient, driverId, period.startDate]);
+    for (const id of ids) {
+      void api.rebuildDriverFinancialPeriods(id, period.startDate).catch(() => undefined);
+    }
+  }, [
+    queryClient,
+    driverId,
+    period.startDate,
+    fleetTz,
+    unreconciledTolls,
+    reconciledTolls,
+    allReconciledTolls,
+  ]);
 
   const handleRefundMatchComplete = useCallback((event: DisputeMatchEvent) => {
     if (event.type === 'match') {
@@ -1020,6 +1037,7 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
       });
       return;
     }
+    invalidateSharedPeriods();
     toast.success(`Period ${period.label} fully reconciled`);
     onExit();
   };

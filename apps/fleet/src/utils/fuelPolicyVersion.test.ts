@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import type { FuelRule, FuelScenario } from '../types/fuel';
 import {
   LEGACY_POLICY_EFFECTIVE_FROM,
-  POLICY_VERSION_EARLIEST_MONDAY,
   applyPolicyTemplateSave,
   assertNoDriverWindowCollision,
   coverageRulesEqual,
@@ -269,11 +268,18 @@ describe('fuelPolicyVersion', () => {
     expect(nextMondayYmd(new Date(2026, 6, 6))).toBe('2026-07-13');
   });
 
-  it('version week dropdown includes Dec 2025 through future Mondays', () => {
+  it('version week dropdown defaults to this Monday through future Mondays', () => {
+    // 2026-07-12 is Sunday → this Monday is 2026-07-06
     const opts = upcomingMondayOptions(4, undefined, new Date(2026, 6, 12));
-    expect(opts[0]?.value).toBe(POLICY_VERSION_EARLIEST_MONDAY);
-    expect(opts.some((o) => o.value === '2026-07-06')).toBe(true);
+    expect(opts[0]?.value).toBe('2026-07-06');
+    expect(opts.some((o) => o.value === '2025-12-01')).toBe(false);
     expect(opts[opts.length - 1]?.value).toBe('2026-07-27');
+  });
+
+  it('version week dropdown can backdate from an activity earliest Monday', () => {
+    const opts = upcomingMondayOptions(4, undefined, new Date(2026, 6, 12), '2026-01-12');
+    expect(opts[0]?.value).toBe('2026-01-12');
+    expect(opts.some((o) => o.value === '2026-07-06')).toBe(true);
   });
 
   it('removes a version', () => {

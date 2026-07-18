@@ -262,6 +262,33 @@ export function formatInFleetTimezone(
   }).format(date);
 }
 
+/**
+ * Calendar day (yyyy-MM-dd) for period/date-range filters.
+ * Bare/naive dates keep their written day; Z/offset timestamps convert in fleet tz
+ * (so 2026-01-05T00:06Z → 2026-01-04 in America/Jamaica — matches period weeks).
+ */
+export function fleetCalendarDay(dateStr: string, timezone: string): string {
+  const s = String(dateStr || "");
+  if (!s) return "";
+  if (!hasTzSuffix(s)) return s.slice(0, 10);
+  const instant = new Date(s);
+  if (isNaN(instant.getTime())) return s.slice(0, 10);
+  try {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: timezone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(instant);
+    const y = parts.find((p) => p.type === "year")?.value;
+    const m = parts.find((p) => p.type === "month")?.value;
+    const d = parts.find((p) => p.type === "day")?.value;
+    return y && m && d ? `${y}-${m}-${d}` : s.slice(0, 10);
+  } catch {
+    return s.slice(0, 10);
+  }
+}
+
 // ─── Internal helpers ────────────────────────────────────────────────
 
 /**

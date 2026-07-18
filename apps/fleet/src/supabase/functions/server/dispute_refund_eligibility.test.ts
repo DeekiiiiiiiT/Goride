@@ -1,7 +1,9 @@
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import {
   isBareTollEligibleForDisputeMatch,
+  isChargeDriverReversibleClaim,
   isFullyReimbursedViaTrip,
+  isMatchableDisputeClaim,
   isTollBlockedForDisputeMatch,
   tollShortfallAmount,
 } from "./dispute_refund_eligibility.ts";
@@ -48,6 +50,45 @@ Deno.test("isBareTollEligibleForDisputeMatch", () => {
       tripRefund: null,
       workflowStage: "underpaid_pending",
     }),
+    true,
+  );
+});
+
+Deno.test("isMatchableDisputeClaim includes Charge Driver for late refunds", () => {
+  assertEquals(
+    isMatchableDisputeClaim({
+      type: "Toll_Refund",
+      status: "Resolved",
+      resolutionReason: "Charge Driver",
+    }),
+    true,
+  );
+  assertEquals(
+    isChargeDriverReversibleClaim({
+      status: "Resolved",
+      resolutionReason: "Charge Driver",
+    }),
+    true,
+  );
+  assertEquals(
+    isMatchableDisputeClaim({
+      type: "Toll_Refund",
+      status: "Resolved",
+      resolutionReason: "Write Off",
+    }),
+    false,
+  );
+  assertEquals(
+    isMatchableDisputeClaim({
+      type: "Toll_Refund",
+      status: "Resolved",
+      resolutionReason: "Charge Driver",
+      disputeRefundId: "dr-1",
+    }),
+    false,
+  );
+  assertEquals(
+    isMatchableDisputeClaim({ type: "Toll_Refund", status: "Open" }),
     true,
   );
 });

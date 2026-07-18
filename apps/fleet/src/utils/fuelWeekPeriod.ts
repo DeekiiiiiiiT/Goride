@@ -4,7 +4,11 @@
  */
 
 import { endOfWeek, format, parseISO, startOfWeek } from 'date-fns';
-import { generatePeriodWeekOptions, type PeriodWeekOption } from './periodWeekOptions';
+import {
+  generatePeriodWeekOptions,
+  generateWeekOptionsForDateRange,
+  type PeriodWeekOption,
+} from './periodWeekOptions';
 import { fleetTzDateKey, ymdToLocalDate } from './timezoneDisplay';
 import { formatWeekPeriodLabel, periodConfirmLabelsMatch } from './tollWeekPeriod';
 
@@ -126,6 +130,50 @@ export function entriesInFuelWeek<T extends { date?: string | null }>(
 export function currentFuelWeekRange(timezone?: string): { from: Date; to: Date } {
   const bucket = fuelWeekBucketForDate(new Date(), timezone);
   return { from: bucket.weekStart, to: bucket.weekEnd };
+}
+
+/**
+ * Earliest recon Monday from real fuel activity (entries + finalized weeks).
+ * Falls back to the current Monday when there is no history yet — never a hard-coded launch date.
+ */
+export function resolveFuelActivityEarliestMonday(
+  entryDates: Array<string | Date | null | undefined>,
+  finalizedWeekStarts: Array<string | null | undefined> = [],
+  timezone?: string,
+  asOf: Date = new Date(),
+): string {
+  let earliestYmd = '';
+  for (const raw of entryDates) {
+    const ymd = toEntryYmd(raw);
+    if (!ymd) continue;
+    if (!earliestYmd || ymd < earliestYmd) earliestYmd = ymd;
+  }
+  for (const raw of finalizedWeekStarts) {
+    const ymd = toEntryYmd(raw);
+    if (!ymd) continue;
+    if (!earliestYmd || ymd < earliestYmd) earliestYmd = ymd;
+  }
+  if (!earliestYmd) {
+    return fuelWeekBucketForDate(asOf, timezone).key;
+  }
+  return fuelWeekBucketForDate(ymdToLocalDate(earliestYmd), timezone).key;
+}
+
+/**
+ * Consumption Reconciliation week list: first activity Monday → today (fleet TZ).
+ * Empty pre-ops weeks are not offered.
+ */
+export function buildFuelReconciliationWeekOptions(
+  earliestMondayYmd: string,
+  timezone?: string,
+  asOf: Date = new Date(),
+): PeriodWeekOption[] {
+  const today = timezone ? ymdToLocalDate(fleetTzDateKey(asOf, timezone)) : asOf;
+  const start = ymdToLocalDate(String(earliestMondayYmd).split('T')[0]);
+  if (isNaN(start.getTime())) {
+    return generateWeekOptionsForDateRange(today, today);
+  }
+  return generateWeekOptionsForDateRange(start, today);
 }
 
 /**

@@ -4,6 +4,7 @@
 import {
   DISPUTE_SHORTFALL_TOLERANCE,
   isBareTollEligibleForDisputeMatch,
+  isChargeDriverReversibleClaim,
   isFullyReimbursedViaTrip,
   isTollBlockedForDisputeMatch,
   tollShortfallAmount,
@@ -123,6 +124,7 @@ export async function evaluateDisputeClaimCandidate(input: {
   if (linkedTollIds.has(tollId)) return null;
 
   const tollCost = Math.abs(claim.expectedAmount ?? toll.amount ?? 0);
+  const chargedClaim = isChargeDriverReversibleClaim(claim);
   const tripCtx = await resolveTripContextForToll(toll, claim, trips, fleetTz);
   const liveCtx = await resolveLiveTripContextForToll(toll, fleetTz, {
     suggestedTripId: tripCtx.tripId,
@@ -132,9 +134,16 @@ export async function evaluateDisputeClaimCandidate(input: {
     liveTripRefund ??
     tripCtx.tripRefund ??
     (claimAmount > 0 && tollCost > 0 ? Math.max(0, tollCost - claimAmount) : null);
-  const shortfall = tollShortfallAmount(tollCost, tripRefund ?? 0);
-  const liveShortfall =
-    liveTripRefund != null ? tollShortfallAmount(tollCost, liveTripRefund) : null;
+  // Already-charged claims: claim.amount is the charged shortfall Uber may still
+  // refund — prefer it over recomputing from trip (personal_use tolls often look "paid").
+  const shortfall = chargedClaim
+    ? claimAmount
+    : tollShortfallAmount(tollCost, tripRefund ?? 0);
+  const liveShortfall = chargedClaim
+    ? claimAmount
+    : liveTripRefund != null
+      ? tollShortfallAmount(tollCost, liveTripRefund)
+      : null;
 
   const anchorDateMs = new Date(toll.date || claim.createdAt || refund.date).getTime();
   const confidence = computeDisputeMatchConfidence({
@@ -149,7 +158,9 @@ export async function evaluateDisputeClaimCandidate(input: {
   let rejectReason: string | null = null;
   let eligibleForSuggestion = true;
 
-  if (isTollBlockedForDisputeMatch(toll)) {
+  // Charge Driver → Reimbursed is an intentional late-refund path; do not treat
+  // personal_use_resolved / resolution=personal as a hard block for those claims.
+  if (!chargedClaim && isTollBlockedForDisputeMatch(toll)) {
     rejectReason = "Toll was already handled (personal/deadhead/reimbursed)";
     eligibleForSuggestion = false;
   } else if (shortfall <= DISPUTE_SHORTFALL_TOLERANCE) {
@@ -157,21 +168,27 @@ export async function evaluateDisputeClaimCandidate(input: {
     eligibleForSuggestion = false;
   }
 
-  let autoReject = passesAutoHardGates({
-    refundAmount,
-    shortfall: liveShortfall ?? shortfall,
-    claimAmount,
-    tripId: tripCtx.tripId,
-    timeDifferenceMinutes: tripCtx.timeDifferenceMinutes,
-  });
-  if (autoReject == null && liveTripRefund == null) {
-    autoReject = "Live trip refund required for auto-match";
-  } else if (
-    autoReject == null &&
-    liveTripRefund != null &&
-    isFullyReimbursedViaTrip(tollCost, liveTripRefund)
-  ) {
-    autoReject = "Toll already fully paid on trip — no shortfall to fix";
+  let autoReject: string | null = null;
+  if (chargedClaim) {
+    // Late refunds into already-charged claims are always manual (charge reversal).
+    autoReject = "Already charged — match manually to reverse the driver charge";
+  } else {
+    autoReject = passesAutoHardGates({
+      refundAmount,
+      shortfall: liveShortfall ?? shortfall,
+      claimAmount,
+      tripId: tripCtx.tripId,
+      timeDifferenceMinutes: tripCtx.timeDifferenceMinutes,
+    });
+    if (autoReject == null && liveTripRefund == null) {
+      autoReject = "Live trip refund required for auto-match";
+    } else if (
+      autoReject == null &&
+      liveTripRefund != null &&
+      isFullyReimbursedViaTrip(tollCost, liveTripRefund)
+    ) {
+      autoReject = "Toll already fully paid on trip — no shortfall to fix";
+    }
   }
 
   return {

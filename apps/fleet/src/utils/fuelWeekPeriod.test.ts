@@ -5,6 +5,8 @@ import {
   toEntryYmd,
   entriesInFuelWeek,
   isSameFuelStatement,
+  resolveFuelActivityEarliestMonday,
+  buildFuelReconciliationWeekOptions,
 } from './fuelWeekPeriod';
 import {
   entriesBelongingToDriverWeekReport,
@@ -71,6 +73,25 @@ describe('fuelWeekPeriod YMD helpers', () => {
         { driverId: 'd2', weekStart: '2026-01-12' },
       ),
     ).toBe(false);
+  });
+
+  it('resolveFuelActivityEarliestMonday uses first fill week, not a hard-coded launch date', () => {
+    expect(
+      resolveFuelActivityEarliestMonday(['2026-01-17', '2026-02-01'], [], undefined, new Date(2026, 6, 17)),
+    ).toBe('2026-01-12');
+  });
+
+  it('resolveFuelActivityEarliestMonday falls back to current Monday when empty', () => {
+    expect(resolveFuelActivityEarliestMonday([], [], undefined, new Date(2026, 6, 17))).toBe(
+      '2026-07-13',
+    );
+  });
+
+  it('buildFuelReconciliationWeekOptions excludes pre-activity Dec weeks', () => {
+    const opts = buildFuelReconciliationWeekOptions('2026-01-12', undefined, new Date(2026, 0, 20));
+    expect(opts.some((o) => o.startDate === '2025-12-01')).toBe(false);
+    expect(opts.some((o) => o.startDate === '2025-12-08')).toBe(false);
+    expect(opts.some((o) => o.startDate === '2026-01-12')).toBe(true);
   });
 });
 
