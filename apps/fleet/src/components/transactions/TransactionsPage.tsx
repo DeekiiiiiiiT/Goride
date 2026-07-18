@@ -1,61 +1,32 @@
-import React, { useEffect, useState } from 'react';
-import { api } from '../../services/api';
-import { Trip } from '../../types/data';
-import { Loader2 } from 'lucide-react';
-import { TransactionsTab } from '../finance/TransactionsTab';
+import React from 'react';
 import { TabbedTransactionList } from '../finance/TabbedTransactionList';
-import { toast } from "sonner@2.0.3";
+import { BusinessFinanceDeskChrome } from '../business-finance/BusinessFinanceDeskChrome';
 
-export function TransactionsPage({ mode = 'analytics' }: { mode?: 'analytics' | 'list' }) {
-  const [trips, setTrips] = useState<Trip[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (mode === 'list') {
-      // TabbedTransactionList handles its own data fetching — no trips needed
-      setLoading(false);
-      return;
-    }
-    const fetchTrips = async () => {
-      try {
-        setLoading(true);
-        const data = await api.getTrips();
-        setTrips(data);
-      } catch (err) {
-        console.error("Failed to fetch trips", err);
-        toast.error("Failed to load data for transactions");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchTrips();
-  }, [mode]);
-
-  // ── List mode: render the tabbed transaction list ──
-  if (mode === 'list') {
-    return <TabbedTransactionList />;
-  }
-
-  // ── Analytics mode: keep existing TransactionsTab ──
-  if (loading) {
+/**
+ * Transaction List desk only.
+ * Legacy Financial Analytics (mode=analytics) removed — redirects live in App.tsx → Business Finance Workbench.
+ */
+export function TransactionsPage({
+  mode = 'list',
+  onBackToBusinessFinance,
+}: {
+  mode?: 'analytics' | 'list';
+  onBackToBusinessFinance?: () => void;
+}) {
+  if (mode === 'analytics') {
     return (
-      <div className="flex items-center justify-center h-[50vh]">
-        <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+      <div className="rounded-md border border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
+        Financial Analytics moved to{' '}
+        <span className="font-semibold text-slate-900 dark:text-slate-100">Business Finance → Workbench</span>.
       </div>
     );
   }
-
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="rounded-md border border-indigo-200 bg-indigo-50 px-3 py-2.5 text-sm text-indigo-950 dark:border-indigo-900 dark:bg-indigo-950/40 dark:text-indigo-100">
-        Prefer <span className="font-semibold">Business Finance</span> in the sidebar for owner P&amp;L, cash, and expenses.
-        This Analytics desk stays available; some older cash KPIs may be incomplete.
-      </div>
-      <div>
-        <h2 className="text-3xl font-bold tracking-tight text-slate-900">Financial Analytics</h2>
-        <p className="text-slate-500">Manage cash flow, expenses, payroll, and generate financial reports.</p>
-      </div>
-      <TransactionsTab trips={trips} mode={mode} />
+    <div className="space-y-4">
+      {onBackToBusinessFinance && (
+        <BusinessFinanceDeskChrome deskLabel="Transaction List" onBack={onBackToBusinessFinance} />
+      )}
+      <TabbedTransactionList />
     </div>
   );
 }

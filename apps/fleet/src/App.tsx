@@ -77,11 +77,42 @@ function AppContent() {
   
   const [currentPage, setCurrentPage] = useState('dashboard');
   const [driverIdForDetail, setDriverIdForDetail] = useState<string | null>(null);
+  const [businessFinanceTab, setBusinessFinanceTab] = useState<'overview' | 'workbench'>('overview');
+  /** Period handoff when leaving BF hub for Bank / Wallet */
+  const [financePeriodHint, setFinancePeriodHint] = useState<{ startYmd: string; endYmd: string } | null>(
+    null,
+  );
+
+  const handleNavigate = (page: string, periodHint?: { startYmd: string; endYmd: string }) => {
+    if (periodHint) {
+      setFinancePeriodHint(periodHint);
+    } else if (page === 'business-finance') {
+      setFinancePeriodHint(null);
+    }
+    if (page === 'transactions') {
+      // Legacy Financial Analytics → Workbench (one set of books)
+      setBusinessFinanceTab('workbench');
+      setCurrentPage('business-finance');
+      return;
+    }
+    if (page === 'business-finance') {
+      setBusinessFinanceTab('overview');
+    }
+    setCurrentPage(page);
+  };
 
   // Old Tier Config / legacy bookmarks → Earnings Policy Configuration
   useEffect(() => {
     if (currentPage === 'tier-config' || currentPage === 'tier-config-legacy') {
       setCurrentPage('earnings-policy');
+    }
+  }, [currentPage]);
+
+  // Legacy page id if somehow set without handleNavigate
+  useEffect(() => {
+    if (currentPage === 'transactions') {
+      setBusinessFinanceTab('workbench');
+      setCurrentPage('business-finance');
     }
   }, [currentPage]);
 
@@ -277,7 +308,7 @@ function AppContent() {
 
   // Fleet Manager View (Default)
   return (
-    <AppLayout currentPage={currentPage} onNavigate={setCurrentPage} onLogout={signOut}>
+    <AppLayout currentPage={currentPage} onNavigate={handleNavigate} onLogout={signOut}>
       <ErrorBoundary
         key={currentPage}
         name={`MainContent:${currentPage}`}
@@ -323,16 +354,13 @@ function AppContent() {
             <ReportsPage />
           </PermissionGate>
         )}
-        {currentPage === 'transactions' && (
-          <PermissionGate permission="nav.financial_analytics" onNavigate={setCurrentPage}>
-            <TransactionsPage mode="analytics" />
-          </PermissionGate>
-        )}
         {currentPage === 'business-finance' && (
           <PermissionGate permission="nav.financial_analytics" onNavigate={setCurrentPage}>
             <BusinessFinancePage
-              onNavigate={(page) => {
-                setCurrentPage(page);
+              key={businessFinanceTab}
+              initialTab={businessFinanceTab}
+              onNavigate={(page, periodHint) => {
+                handleNavigate(page, periodHint);
                 setDriverIdForDetail(null);
               }}
               onOpenDriver={(driverId) => {
@@ -344,7 +372,7 @@ function AppContent() {
         )}
         {currentPage === 'transaction-list' && (
           <PermissionGate permission="nav.transaction_list" onNavigate={setCurrentPage}>
-            <TransactionsPage mode="list" />
+            <TransactionsPage mode="list" onBackToBusinessFinance={() => handleNavigate('business-finance')} />
           </PermissionGate>
         )}
         {currentPage === 'toll-tags' && (
@@ -379,17 +407,27 @@ function AppContent() {
         )}
         {currentPage === 'fleet-financials' && (
           <PermissionGate permission="nav.drivers" onNavigate={setCurrentPage}>
-            <FleetFinancialsPage />
+            <FleetFinancialsPage
+              initialWeekFrom={financePeriodHint?.startYmd}
+              initialWeekTo={financePeriodHint?.endYmd}
+              onBackToBusinessFinance={() => handleNavigate('business-finance')}
+              onPeriodHintConsumed={() => setFinancePeriodHint(null)}
+            />
           </PermissionGate>
         )}
         {currentPage === 'cash-retag' && (
           <PermissionGate permission="nav.drivers" onNavigate={setCurrentPage}>
-            <CashRetagPage />
+            <CashRetagPage onBackToBusinessFinance={() => handleNavigate('business-finance')} />
           </PermissionGate>
         )}
         {currentPage === 'indrive-wallet' && (
           <PermissionGate permission="nav.drivers" onNavigate={setCurrentPage}>
-            <IndriveWalletCenterPage />
+            <IndriveWalletCenterPage
+              initialDateFrom={financePeriodHint?.startYmd}
+              initialDateTo={financePeriodHint?.endYmd}
+              onBackToBusinessFinance={() => handleNavigate('business-finance')}
+              onPeriodHintConsumed={() => setFinancePeriodHint(null)}
+            />
           </PermissionGate>
         )}
         

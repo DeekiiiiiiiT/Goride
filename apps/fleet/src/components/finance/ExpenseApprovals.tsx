@@ -21,6 +21,7 @@ import { Input } from "../ui/input";
 import { Slider } from "../ui/slider";
 import { Switch } from "../ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
+import { Check } from "lucide-react";
 
 interface ExpenseApprovalsProps {
   transactions: FinancialTransaction[];

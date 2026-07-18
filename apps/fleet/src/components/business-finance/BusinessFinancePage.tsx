@@ -15,30 +15,49 @@ import { PnLTab } from './PnLTab';
 import { CashBankTab } from './CashBankTab';
 import { ExpensesTab } from './ExpensesTab';
 import { DriverBalancesTab } from './DriverBalancesTab';
+import { WorkbenchTab } from './workbench/WorkbenchTab';
 import type { BusinessFinanceTab, PeriodPreset } from './types';
 
 type Props = {
-  onNavigate?: (page: string) => void;
+  onNavigate?: (page: string, periodHint?: { startYmd: string; endYmd: string }) => void;
   onOpenDriver?: (driverId: string) => void;
+  /** e.g. open Workbench when redirected from legacy Financial Analytics */
+  initialTab?: BusinessFinanceTab;
 };
 
-export function BusinessFinancePage({ onNavigate, onOpenDriver }: Props) {
-  const [tab, setTab] = useState<BusinessFinanceTab>('overview');
+export function BusinessFinancePage({ onNavigate, onOpenDriver, initialTab = 'overview' }: Props) {
+  const [tab, setTab] = useState<BusinessFinanceTab>(initialTab);
   const [preset, setPreset] = useState<PeriodPreset>('this_week');
+  /** Last complete non-custom preset — used while custom From/To are incomplete */
+  const [anchorPreset, setAnchorPreset] = useState<PeriodPreset>('this_week');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
   const [bannerDismissed, setBannerDismissed] = useState(false);
 
+  const customReady = Boolean(customStart && customEnd);
+  const queryPreset: PeriodPreset =
+    preset === 'custom' && !customReady ? anchorPreset : preset === 'custom' && customReady ? 'custom' : preset;
+
   const { period, data, isLoading, isFetching, isError, error, refetch } = useBusinessFinanceBundle(
-    preset,
-    customStart || undefined,
-    customEnd || undefined,
+    queryPreset,
+    customReady ? customStart : undefined,
+    customReady ? customEnd : undefined,
   );
 
+  const setPresetSafe = (p: PeriodPreset) => {
+    if (p !== 'custom') {
+      setAnchorPreset(p);
+      setCustomStart('');
+      setCustomEnd('');
+    }
+    setPreset(p);
+  };
+
+  // Hard gaps only — soft "not tracked" notes live on cards
   const incomplete = data
     ? [
         ...data.overview.incompleteSources,
-        ...data.expenses.incompleteSources,
+        ...data.expenses.incompleteSources.filter((s) => !/not tracked/i.test(s)),
         ...data.driverBalances.incompleteSources,
         ...(data.pnl.coverageNote ? [data.pnl.coverageNote] : []),
       ]
@@ -46,6 +65,11 @@ export function BusinessFinancePage({ onNavigate, onOpenDriver }: Props) {
 
   const openDriver = (driverId: string) => {
     onOpenDriver?.(driverId);
+  };
+
+  const navigateWithPeriod = (page: string) => {
+    const seedPeriod = ['fleet-financials', 'indrive-wallet', 'cash-retag'].includes(page);
+    onNavigate?.(page, seedPeriod ? { startYmd: period.startYmd, endYmd: period.endYmd } : undefined);
   };
 
   return (
@@ -81,15 +105,19 @@ export function BusinessFinancePage({ onNavigate, onOpenDriver }: Props) {
       <PeriodToolbar
         period={period}
         preset={preset}
-        onPreset={setPreset}
+        onPreset={setPresetSafe}
         customStart={customStart}
         customEnd={customEnd}
-        onCustomStart={setCustomStart}
-        onCustomEnd={setCustomEnd}
+        onCustomStart={(v) => {
+          setCustomStart(v);
+          setPreset('custom');
+        }}
+        onCustomEnd={(v) => {
+          setCustomEnd(v);
+          setPreset('custom');
+        }}
         onClear={() => {
-          setPreset('this_week');
-          setCustomStart('');
-          setCustomEnd('');
+          setPresetSafe('this_week');
         }}
       />
 
@@ -104,6 +132,7 @@ export function BusinessFinancePage({ onNavigate, onOpenDriver }: Props) {
           <TabsTrigger value="cash-bank">Cash &amp; Bank</TabsTrigger>
           <TabsTrigger value="expenses">Expenses</TabsTrigger>
           <TabsTrigger value="driver-balances">Driver Balances</TabsTrigger>
+          <TabsTrigger value="workbench">Workbench</TabsTrigger>
         </TabsList>
 
         {isLoading ? (
@@ -124,7 +153,7 @@ export function BusinessFinancePage({ onNavigate, onOpenDriver }: Props) {
               <OverviewTab
                 overview={data.overview}
                 onNavigateTab={setTab}
-                onNavigatePage={(page) => onNavigate?.(page)}
+                onNavigatePage={navigateWithPeriod}
               />
             </TabsContent>
             <TabsContent value="pnl" className="mt-0">
@@ -133,15 +162,24 @@ export function BusinessFinancePage({ onNavigate, onOpenDriver }: Props) {
             <TabsContent value="cash-bank" className="mt-0">
               <CashBankTab
                 cashBank={data.cashBank}
-                onOpenBankDeposits={() => onNavigate?.('fleet-financials')}
+                onOpenBankDeposits={() => navigateWithPeriod('fleet-financials')}
+                onOpenWallet={() => navigateWithPeriod('indrive-wallet')}
+                onOpenCashRetag={() => navigateWithPeriod('cash-retag')}
                 onOpenDriver={openDriver}
               />
             </TabsContent>
             <TabsContent value="expenses" className="mt-0">
-              <ExpensesTab expenses={data.expenses} onNavigatePage={(page) => onNavigate?.(page)} />
+              <ExpensesTab expenses={data.expenses} onNavigatePage={navigateWithPeriod} />
             </TabsContent>
             <TabsContent value="driver-balances" className="mt-0">
               <DriverBalancesTab snapshot={data.driverBalances} onOpenDriver={openDriver} />
+            </TabsContent>
+            <TabsContent value="workbench" className="mt-0">
+              <WorkbenchTab
+                bundle={data}
+                onNavigatePage={navigateWithPeriod}
+                onOpenDriver={openDriver}
+              />
             </TabsContent>
           </>
         ) : null}

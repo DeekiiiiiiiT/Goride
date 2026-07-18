@@ -14,11 +14,13 @@ type Props = {
 function Row({
   label,
   value,
+  hint,
   onClick,
   valueClassName,
 }: {
   label: string;
   value: string;
+  hint?: string;
   onClick?: () => void;
   valueClassName?: string;
 }) {
@@ -32,8 +34,18 @@ function Row({
         !onClick && 'cursor-default',
       )}
     >
-      <span className="text-slate-600 dark:text-slate-400">{label}</span>
-      <span className={cn('tabular-nums font-medium text-slate-900 dark:text-slate-100 flex items-center gap-1', valueClassName)}>
+      <span className="min-w-0">
+        <span className="text-slate-600 dark:text-slate-400 block">{label}</span>
+        {hint && onClick && (
+          <span className="text-[10px] text-slate-400 block">{hint}</span>
+        )}
+      </span>
+      <span
+        className={cn(
+          'tabular-nums font-medium text-slate-900 dark:text-slate-100 flex items-center gap-1 shrink-0',
+          valueClassName,
+        )}
+      >
         {value}
         {onClick && <ChevronRight className="h-3.5 w-3.5 text-slate-400" />}
       </span>
@@ -43,6 +55,8 @@ function Row({
 
 export function OverviewTab({ overview, onNavigateTab, onNavigatePage }: Props) {
   const { moneyIn, moneyOut, profit, risks } = overview;
+  const profitNegative = profit.operatingProfit < -0.005;
+
   return (
     <div className="grid gap-4 sm:grid-cols-2">
       <Card className="border-slate-200 dark:border-slate-800 rounded-md">
@@ -56,12 +70,19 @@ export function OverviewTab({ overview, onNavigateTab, onNavigatePage }: Props) 
           <p className="text-xs text-slate-500 mb-2">Gross platform earnings</p>
           <Row
             label="Bank received / expected"
+            hint="Cash & Bank"
             value={`${formatMoney(moneyIn.bankReceived)} / ${formatMoney(moneyIn.bankExpected)}`}
             onClick={() => onNavigateTab('cash-bank')}
           />
-          <Row label="Cash collected" value={formatMoney(moneyIn.cashCollected)} onClick={() => onNavigateTab('driver-balances')} />
+          <Row
+            label="Cash collected"
+            hint="Driver Balances"
+            value={formatMoney(moneyIn.cashCollected)}
+            onClick={() => onNavigateTab('driver-balances')}
+          />
           <Row
             label="Cash still held"
+            hint="Driver Balances"
             value={formatMoney(moneyIn.cashStillHeld)}
             valueClassName={moneyIn.cashStillHeld > 0.005 ? 'text-amber-700' : undefined}
             onClick={() => onNavigateTab('driver-balances')}
@@ -74,15 +95,36 @@ export function OverviewTab({ overview, onNavigateTab, onNavigatePage }: Props) 
           <CardTitle className="text-sm font-semibold">Money out</CardTitle>
         </CardHeader>
         <CardContent className="pt-3 space-y-0.5">
-          <Row label="Fuel" value={formatMoney(moneyOut.fuel)} onClick={() => onNavigateTab('expenses')} />
-          <Row label="Tolls" value={formatMoney(moneyOut.tolls)} onClick={() => onNavigateTab('expenses')} />
+          <Row
+            label="Fuel"
+            hint="Expenses"
+            value={formatMoney(moneyOut.fuel)}
+            onClick={() => onNavigateTab('expenses')}
+          />
+          <Row
+            label="Tolls"
+            hint="Expenses"
+            value={formatMoney(moneyOut.tolls)}
+            onClick={() => onNavigateTab('expenses')}
+          />
           <Row
             label="Maintenance"
+            hint="Maintenance Hub"
             value={moneyOut.maintenance == null ? 'Not tracked yet' : formatMoney(moneyOut.maintenance)}
             onClick={() => onNavigatePage?.('maintenance-hub')}
           />
-          <Row label="Wallet loads" value={formatMoney(moneyOut.walletLoads)} onClick={() => onNavigatePage?.('indrive-wallet')} />
-          <Row label="Driver payouts" value={formatMoney(moneyOut.driverPayouts)} onClick={() => onNavigateTab('pnl')} />
+          <Row
+            label="Wallet loads"
+            hint="InDrive Wallet"
+            value={formatMoney(moneyOut.walletLoads)}
+            onClick={() => onNavigatePage?.('indrive-wallet')}
+          />
+          <Row
+            label="Driver payouts"
+            hint="Profit & Loss"
+            value={formatMoney(moneyOut.driverPayouts)}
+            onClick={() => onNavigateTab('pnl')}
+          />
         </CardContent>
       </Card>
 
@@ -91,12 +133,21 @@ export function OverviewTab({ overview, onNavigateTab, onNavigatePage }: Props) 
           <CardTitle className="text-sm font-semibold">Profit health</CardTitle>
         </CardHeader>
         <CardContent className="pt-3">
-          <div className="text-2xl font-bold tabular-nums text-slate-900 dark:text-slate-100">
+          <div
+            className={cn(
+              'text-2xl font-bold tabular-nums',
+              profitNegative ? 'text-rose-700 dark:text-rose-400' : 'text-slate-900 dark:text-slate-100',
+            )}
+          >
             {formatMoney(profit.operatingProfit)}
           </div>
-          <p className="text-xs text-slate-500 mt-1 mb-3">Operating profit</p>
+          <p className="text-xs text-slate-500 mt-1 mb-1">Operating profit</p>
+          <p className="text-[11px] text-slate-400 mb-3">
+            Share of gross eaten by costs (not profit margin).
+          </p>
           <Row
             label="Operating ratio"
+            hint="Profit & Loss"
             value={profit.operatingRatio == null ? '—' : `${profit.operatingRatio}%`}
             onClick={() => onNavigateTab('pnl')}
           />
@@ -110,15 +161,16 @@ export function OverviewTab({ overview, onNavigateTab, onNavigatePage }: Props) 
         <CardContent className="pt-3 space-y-0.5">
           <Row
             label="Needs statement"
+            hint="Bank Deposits"
             value={String(risks.needsStatementWeeks)}
             onClick={() => onNavigatePage?.('fleet-financials')}
           />
           <Row
             label="High cash drivers"
+            hint="Driver Balances"
             value={String(risks.highCashDrivers)}
             onClick={() => onNavigateTab('driver-balances')}
           />
-          <Row label="Toll variances" value={String(risks.tollVarianceFlags)} onClick={() => onNavigatePage?.('toll-tags')} />
         </CardContent>
       </Card>
     </div>

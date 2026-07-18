@@ -31,7 +31,13 @@ export function DriverBalancesTab({
   }, [snapshot.rows, q]);
 
   return (
-    <Card className="border-slate-200 dark:border-slate-800 rounded-md overflow-hidden">
+    <div className="space-y-2">
+      {snapshot.truncated && (
+        <p className="text-xs text-amber-800 dark:text-amber-300 px-0.5">
+          Showing first {snapshot.truncateCap ?? 80} drivers only — narrow the period or open Drivers for the full list.
+        </p>
+      )}
+      <Card className="border-slate-200 dark:border-slate-800 rounded-md overflow-hidden">
       <CardHeader className="border-b border-slate-100 dark:border-slate-800 py-3 flex flex-row items-center justify-between gap-3">
         <CardTitle className="text-sm font-semibold">Driver balances</CardTitle>
         <Input
@@ -110,5 +116,6 @@ export function DriverBalancesTab({
         </Table>
       </CardContent>
     </Card>
+    </div>
   );
 }

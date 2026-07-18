@@ -32,7 +32,6 @@ import {
   BarChart3,
   Bell,
   UploadCloud,
-  History,
   Tag,
   ChevronRight,
   Receipt,
@@ -98,15 +97,22 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate, onLogout }: { curre
   const { isModuleEnabled } = useFeatureFlags();
   const fuelPageIds = ['fuel-management', 'fuel-overview', 'fuel-reconciliation', 'fuel-cards', 'fuel-logs', 'fuel-configuration', 'fuel-reimbursements', 'fuel-integrity-gap'];
   const tollPageIds = ['toll-logs', 'toll-tags', 'tag-inventory', 'toll-analytics'];
-  const fleetFinancialsPageIds = ['fleet-financials', 'cash-retag', 'indrive-wallet'];
+  // Cash desks live under Business Finance (one set of books) — not a rival Fleet Financials group
+  const businessFinancePageIds = ['business-finance', 'fleet-financials', 'cash-retag', 'indrive-wallet', 'transaction-list'];
   const isTollManagementOpen = tollPageIds.includes(currentPage);
   const isFuelManagementOpen = fuelPageIds.includes(currentPage);
-  const isFleetFinancialsOpen = fleetFinancialsPageIds.includes(currentPage);
+  const isBusinessFinanceOpen = businessFinancePageIds.includes(currentPage);
   const canSeeFuelDesk = isModuleEnabled('fuelManagement') && (canView('fuel-overview') || canView('fuel-reimbursements') || canView('fuel-integrity-gap') || canView('fuel-reconciliation') || canView('fuel-cards') || canView('fuel-logs') || canView('fuel-configuration'));
   const canSeeTollDesk = isModuleEnabled('tollManagement') && isSidebarItemVisible('toll-management', businessType) && (canView('toll-logs') || canView('toll-tags') || canView('tag-inventory') || canView('toll-analytics'));
-  const canSeeFleetFinancials = canView('fleet-financials') || canView('cash-retag') || canView('indrive-wallet');
-  const isFleetOpsOpen = [...fleetFinancialsPageIds, ...fuelPageIds, ...tollPageIds].includes(currentPage);
-  const canSeeFleetOps = canSeeFleetFinancials || canSeeFuelDesk || canSeeTollDesk;
+  const canSeeBusinessFinanceHome = isModuleEnabled('businessFinance') && canView('business-finance');
+  const canSeeBusinessFinanceNav =
+    canSeeBusinessFinanceHome ||
+    canView('fleet-financials') ||
+    canView('cash-retag') ||
+    canView('indrive-wallet') ||
+    canView('transaction-list');
+  const isFleetOpsOpen = [...fuelPageIds, ...tollPageIds].includes(currentPage);
+  const canSeeFleetOps = canSeeFuelDesk || canSeeTollDesk;
   const isDriverOpsOpen = ['drivers', 'earnings-policy', 'driver-ledger'].includes(currentPage);
   const isVehicleOpsOpen = ['vehicles', 'maintenance-hub', 'fleet'].includes(currentPage);
 
@@ -148,51 +154,6 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate, onLogout }: { curre
                 </SidebarMenuButton>
               </CollapsibleTrigger>
               <CollapsibleContent>
-                {canSeeFleetFinancials && (
-                <Collapsible defaultOpen={isFleetFinancialsOpen} className="group/fleet-fin-ops mt-1">
-                  <SidebarMenuItem>
-                    <CollapsibleTrigger asChild>
-                      <SidebarMenuButton className="pl-4" tooltip="Fleet Financials">
-                        <Landmark className="h-4 w-4" />
-                        <span>Fleet Financials</span>
-                        <ChevronRight className="ml-auto h-4 w-4 transition-transform duration-200 group-data-[state=open]/fleet-fin-ops:rotate-90" />
-                      </SidebarMenuButton>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent>
-                      <SidebarMenuSub>
-                        {canView('fleet-financials') && (
-                        <SidebarMenuSubItem>
-                          <SidebarMenuSubButton asChild isActive={currentPage === 'fleet-financials'} onClick={() => onNavigate?.('fleet-financials')}>
-                            <button className="w-full text-left cursor-pointer">
-                              <span>Bank Deposits</span>
-                            </button>
-                          </SidebarMenuSubButton>
-                        </SidebarMenuSubItem>
-                        )}
-                        {canView('cash-retag') && (
-                        <SidebarMenuSubItem>
-                          <SidebarMenuSubButton asChild isActive={currentPage === 'cash-retag'} onClick={() => onNavigate?.('cash-retag')}>
-                            <button className="w-full text-left cursor-pointer">
-                              <span>Cash Retag</span>
-                            </button>
-                          </SidebarMenuSubButton>
-                        </SidebarMenuSubItem>
-                        )}
-                        {canView('indrive-wallet') && (
-                        <SidebarMenuSubItem>
-                          <SidebarMenuSubButton asChild isActive={currentPage === 'indrive-wallet'} onClick={() => onNavigate?.('indrive-wallet')}>
-                            <button className="w-full text-left cursor-pointer">
-                              <span>InDrive Wallet</span>
-                            </button>
-                          </SidebarMenuSubButton>
-                        </SidebarMenuSubItem>
-                        )}
-                      </SidebarMenuSub>
-                    </CollapsibleContent>
-                  </SidebarMenuItem>
-                </Collapsible>
-                )}
-
                 {canSeeFuelDesk && (
                 <Collapsible defaultOpen={isFuelManagementOpen} className="group/fuel-ops mt-1">
                   <SidebarMenuItem>
@@ -426,29 +387,67 @@ function AppSidebar({ currentPage = 'dashboard', onNavigate, onLogout }: { curre
             onClick={() => onNavigate?.('reports')}
           />
           )}
-          {isModuleEnabled('businessFinance') && canView('business-finance') && (
-          <NavItem
-            icon={<Landmark className="h-4 w-4" />}
-            label="Business Finance"
-            active={currentPage === 'business-finance'}
-            onClick={() => onNavigate?.('business-finance')}
-          />
-          )}
-          {canView('transactions') && (
-          <NavItem 
-            icon={<History className="h-4 w-4" />} 
-            label="Financial Analytics" 
-            active={currentPage === 'transactions'}
-            onClick={() => onNavigate?.('transactions')}
-          />
-          )}
-          {canView('transaction-list') && (
-          <NavItem 
-            icon={<FileText className="h-4 w-4" />} 
-            label="Transaction List" 
-            active={currentPage === 'transaction-list'}
-            onClick={() => onNavigate?.('transaction-list')}
-          />
+          {canSeeBusinessFinanceNav && (
+          <Collapsible defaultOpen={isBusinessFinanceOpen} className="group/collapsible">
+            <SidebarMenuItem>
+              <CollapsibleTrigger asChild>
+                <SidebarMenuButton tooltip="Business Finance">
+                  <Landmark className="h-4 w-4" />
+                  <span>Business Finance</span>
+                  <ChevronRight className="ml-auto h-4 w-4 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
+                </SidebarMenuButton>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <SidebarMenuSub>
+                  {canSeeBusinessFinanceHome && (
+                  <SidebarMenuSubItem>
+                    <SidebarMenuSubButton asChild isActive={currentPage === 'business-finance'} onClick={() => onNavigate?.('business-finance')}>
+                      <button type="button" className="w-full text-left cursor-pointer">
+                        <span>Home</span>
+                      </button>
+                    </SidebarMenuSubButton>
+                  </SidebarMenuSubItem>
+                  )}
+                  {canView('fleet-financials') && (
+                  <SidebarMenuSubItem>
+                    <SidebarMenuSubButton asChild isActive={currentPage === 'fleet-financials'} onClick={() => onNavigate?.('fleet-financials')}>
+                      <button type="button" className="w-full text-left cursor-pointer">
+                        <span>Bank Deposits</span>
+                      </button>
+                    </SidebarMenuSubButton>
+                  </SidebarMenuSubItem>
+                  )}
+                  {canView('cash-retag') && (
+                  <SidebarMenuSubItem>
+                    <SidebarMenuSubButton asChild isActive={currentPage === 'cash-retag'} onClick={() => onNavigate?.('cash-retag')}>
+                      <button type="button" className="w-full text-left cursor-pointer">
+                        <span>Cash Retag</span>
+                      </button>
+                    </SidebarMenuSubButton>
+                  </SidebarMenuSubItem>
+                  )}
+                  {canView('indrive-wallet') && (
+                  <SidebarMenuSubItem>
+                    <SidebarMenuSubButton asChild isActive={currentPage === 'indrive-wallet'} onClick={() => onNavigate?.('indrive-wallet')}>
+                      <button type="button" className="w-full text-left cursor-pointer">
+                        <span>InDrive Wallet</span>
+                      </button>
+                    </SidebarMenuSubButton>
+                  </SidebarMenuSubItem>
+                  )}
+                  {canView('transaction-list') && (
+                  <SidebarMenuSubItem>
+                    <SidebarMenuSubButton asChild isActive={currentPage === 'transaction-list'} onClick={() => onNavigate?.('transaction-list')}>
+                      <button type="button" className="w-full text-left cursor-pointer">
+                        <span>Transaction List</span>
+                      </button>
+                    </SidebarMenuSubButton>
+                  </SidebarMenuSubItem>
+                  )}
+                </SidebarMenuSub>
+              </CollapsibleContent>
+            </SidebarMenuItem>
+          </Collapsible>
           )}
         </SidebarMenu>
         

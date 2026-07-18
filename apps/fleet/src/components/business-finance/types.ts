@@ -8,7 +8,8 @@ export type BusinessFinanceTab =
   | 'pnl'
   | 'cash-bank'
   | 'expenses'
-  | 'driver-balances';
+  | 'driver-balances'
+  | 'workbench';
 
 export type PeriodPreset = 'this_week' | 'last_week' | 'this_month' | 'custom';
 
@@ -32,8 +33,10 @@ export type PnLLineId =
 export type PnLLine = {
   id: PnLLineId;
   label: string;
-  amount: number;
+  /** null when not tracked yet — never display as $0 */
+  amount: number | null;
   kind: 'total' | 'subtotal' | 'expense' | 'result';
+  tracked?: boolean;
 };
 
 export type PlatformSplitRow = {
@@ -134,6 +137,9 @@ export type DriverBalanceRow = {
 export type DriverBalancesSnapshot = {
   rows: DriverBalanceRow[];
   incompleteSources: string[];
+  /** True when fetch capped at first N drivers */
+  truncated?: boolean;
+  truncateCap?: number;
 };
 
 export type BusinessFinanceBundle = {

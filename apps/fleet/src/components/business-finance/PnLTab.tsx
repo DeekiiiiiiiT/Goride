@@ -17,7 +17,11 @@ export function PnLTab({ pnl }: { pnl: BusinessFinancePnL }) {
   const exportCsv = () => {
     const lines = [
       'Line,Amount',
-      ...pnl.lines.map((l) => `"${l.label}",${l.amount}`),
+      ...pnl.lines.map((l) =>
+        l.tracked === false || l.amount == null
+          ? `"${l.label}",not_tracked`
+          : `"${l.label}",${l.amount}`,
+      ),
       `Operating ratio %,${pnl.operatingRatio ?? ''}`,
     ];
     const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
@@ -43,37 +47,51 @@ export function PnLTab({ pnl }: { pnl: BusinessFinancePnL }) {
         <p className="text-sm text-amber-800 dark:text-amber-300">{pnl.coverageNote}</p>
       )}
       <Card className="border-slate-200 dark:border-slate-800 rounded-md">
-        <CardHeader className="border-b border-slate-100 dark:border-slate-800 py-3 flex flex-row items-center justify-between">
-          <CardTitle className="text-sm font-semibold">Profit &amp; Loss</CardTitle>
+        <CardHeader className="border-b border-slate-100 dark:border-slate-800 py-3 flex flex-row items-center justify-between gap-2">
+          <div>
+            <CardTitle className="text-sm font-semibold">Profit &amp; Loss</CardTitle>
+            {pnl.operatingRatio != null && (
+              <p className="text-[11px] text-slate-500 mt-0.5 font-normal">
+                Share of gross eaten by costs (not profit margin).
+              </p>
+            )}
+          </div>
           {pnl.operatingRatio != null && (
-            <span className="text-xs font-medium text-indigo-700 dark:text-indigo-300">
+            <span className="text-xs font-medium text-indigo-700 dark:text-indigo-300 shrink-0">
               Operating ratio {pnl.operatingRatio}%
             </span>
           )}
         </CardHeader>
         <CardContent className="pt-2 pb-3">
           <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-            {pnl.lines.map((line) => (
-              <li
-                key={line.id}
-                className={cn(
-                  'flex items-center justify-between py-2.5 text-sm',
-                  line.kind === 'result' && 'font-semibold text-base pt-3',
-                  line.kind === 'subtotal' && 'font-medium',
-                )}
-              >
-                <span className="text-slate-700 dark:text-slate-300">{line.label}</span>
-                <span
+            {pnl.lines.map((line) => {
+              const untracked = line.tracked === false || line.amount == null;
+              const amt = line.amount ?? 0;
+              return (
+                <li
+                  key={line.id}
                   className={cn(
-                    'tabular-nums',
-                    line.amount < 0 && 'text-slate-600',
-                    line.kind === 'result' && (line.amount >= 0 ? 'text-emerald-700' : 'text-rose-700'),
+                    'flex items-center justify-between py-2.5 text-sm',
+                    line.kind === 'result' && 'font-semibold text-base pt-3',
+                    line.kind === 'subtotal' && 'font-medium',
                   )}
                 >
-                  {formatMoney(line.amount)}
-                </span>
-              </li>
-            ))}
+                  <span className="text-slate-700 dark:text-slate-300">{line.label}</span>
+                  <span
+                    className={cn(
+                      'tabular-nums',
+                      untracked && 'text-slate-400 italic font-normal',
+                      !untracked && amt < 0 && 'text-slate-600',
+                      line.kind === 'result' &&
+                        !untracked &&
+                        (amt >= 0 ? 'text-emerald-700' : 'text-rose-700'),
+                    )}
+                  >
+                    {untracked ? 'Not tracked yet' : formatMoney(amt)}
+                  </span>
+                </li>
+              );
+            })}
           </ul>
         </CardContent>
       </Card>

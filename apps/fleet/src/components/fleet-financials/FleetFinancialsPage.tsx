@@ -1,9 +1,9 @@
 /**
- * Fleet Operations → Fleet Financials → Bank Deposits
+ * Business Finance → Bank Deposits
  * Confirm Uber bank amounts actually received by the FLEET org (not a driver).
  * Does NOT change Cash Returned / Settlement math.
  */
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { format, parseISO, addDays } from 'date-fns';
 import { CalendarRange, ChevronRight, Landmark, Loader2, RefreshCw, Settings2, X } from 'lucide-react';
@@ -20,6 +20,7 @@ import {
 } from '../../utils/fleetBankReceive';
 import { useFleetTimezone } from '../../utils/timezoneDisplay';
 import { useAuth } from '../auth/AuthContext';
+import { BusinessFinanceDeskChrome } from '../business-finance/BusinessFinanceDeskChrome';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
@@ -220,17 +221,35 @@ function BankReceiveTable({
   );
 }
 
-export function FleetFinancialsPage() {
+export function FleetFinancialsPage({
+  initialWeekFrom,
+  initialWeekTo,
+  onBackToBusinessFinance,
+  onPeriodHintConsumed,
+}: {
+  initialWeekFrom?: string;
+  initialWeekTo?: string;
+  onBackToBusinessFinance?: () => void;
+  onPeriodHintConsumed?: () => void;
+} = {}) {
   const fleetTz = useFleetTimezone();
   const { organizationId } = useAuth();
   const queryClient = useQueryClient();
   const [deskTab, setDeskTab] = useState<DeskTab>('outstanding');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-  const [weekFrom, setWeekFrom] = useState('');
-  const [weekTo, setWeekTo] = useState('');
+  const [weekFrom, setWeekFrom] = useState(initialWeekFrom || '');
+  const [weekTo, setWeekTo] = useState(initialWeekTo || '');
   const [enterRow, setEnterRow] = useState<FleetBankReceiveRow | null>(null);
   const [enterAmount, setEnterAmount] = useState('');
   const [savingKey, setSavingKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!initialWeekFrom && !initialWeekTo) return;
+    if (initialWeekFrom) setWeekFrom(initialWeekFrom);
+    if (initialWeekTo) setWeekTo(initialWeekTo);
+    onPeriodHintConsumed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- apply handoff once on mount / hint change
+  }, [initialWeekFrom, initialWeekTo]);
 
   const bankQuery = useQuery({
     queryKey: ['fleet-bank-expected', weekFrom || null, weekTo || null],
@@ -389,6 +408,9 @@ export function FleetFinancialsPage() {
 
   return (
     <div className="space-y-6">
+      {onBackToBusinessFinance && (
+        <BusinessFinanceDeskChrome deskLabel="Bank Deposits" onBack={onBackToBusinessFinance} />
+      )}
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex items-start gap-3">
@@ -399,7 +421,8 @@ export function FleetFinancialsPage() {
             <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">Bank Deposits</h1>
             <p className="mt-1 text-sm text-slate-500 max-w-xl">
               Confirm Uber bank deposits into the fleet account (org week). Drivers do not receive this wire —
-              Cash Wallet stays collection-only; who owes whom stays on Financials → Settlement.
+              Cash Wallet stays collection-only; who owes whom stays on Business Finance → Driver Balances /
+              Drivers Settlement.
             </p>
           </div>
         </div>

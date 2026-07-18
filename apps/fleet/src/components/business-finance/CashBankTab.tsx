@@ -8,10 +8,14 @@ import type { CashBankSnapshot } from './types';
 export function CashBankTab({
   cashBank,
   onOpenBankDeposits,
+  onOpenWallet,
+  onOpenCashRetag,
   onOpenDriver,
 }: {
   cashBank: CashBankSnapshot;
   onOpenBankDeposits: () => void;
+  onOpenWallet?: () => void;
+  onOpenCashRetag?: () => void;
   onOpenDriver?: (driverId: string) => void;
 }) {
   const { platformBank, driverCash, walletLoads } = cashBank;
@@ -81,6 +85,9 @@ export function CashBankTab({
               ))}
             </ul>
           )}
+          <Button type="button" size="sm" variant="outline" className="w-full mt-2" onClick={onOpenCashRetag}>
+            Open Cash Retag
+          </Button>
         </CardContent>
       </Card>
 
@@ -93,7 +100,12 @@ export function CashBankTab({
             <span className="text-slate-500">Period loads</span>
             <span className="tabular-nums font-medium">{formatMoney(walletLoads.periodLoads)}</span>
           </div>
-          <p className="text-xs text-slate-500">This is funding cost, not revenue.</p>
+          <p className="text-xs text-slate-500">
+            Funding cost, not revenue. Open Wallet Center for load detail.
+          </p>
+          <Button type="button" size="sm" variant="outline" className="w-full mt-2" onClick={onOpenWallet}>
+            Open InDrive Wallet
+          </Button>
         </CardContent>
       </Card>
     </div>

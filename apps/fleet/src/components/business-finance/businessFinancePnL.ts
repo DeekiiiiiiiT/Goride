@@ -66,10 +66,8 @@ export function buildPnLFromCanonicalEvents(
   }
 
   const netTrip = round2(gross - fees);
-  // Maintenance & wallet not on canonical chart yet — show 0 with coverage note when empty ledger
-  const maintenance = 0;
-  const walletLoads = 0;
-  const operatingProfit = round2(netTrip - fuel - tolls - maintenance - walletLoads - driverPayouts);
+  // Maintenance & wallet not on canonical chart yet — exclude from profit, show as untracked
+  const operatingProfit = round2(netTrip - fuel - tolls - driverPayouts);
   const operatingRatio = gross > 0.005 ? round2(((gross - operatingProfit) / gross) * 100) : null;
 
   const lines: PnLLine[] = [
@@ -78,8 +76,8 @@ export function buildPnLFromCanonicalEvents(
     { id: 'net_trip', label: 'Net trip revenue', amount: netTrip, kind: 'subtotal' },
     { id: 'fuel', label: 'Fuel', amount: -round2(fuel), kind: 'expense' },
     { id: 'tolls', label: 'Tolls', amount: -round2(tolls), kind: 'expense' },
-    { id: 'maintenance', label: 'Maintenance', amount: -round2(maintenance), kind: 'expense' },
-    { id: 'wallet_loads', label: 'Wallet loads', amount: -round2(walletLoads), kind: 'expense' },
+    { id: 'maintenance', label: 'Maintenance', amount: null, kind: 'expense', tracked: false },
+    { id: 'wallet_loads', label: 'Wallet loads', amount: null, kind: 'expense', tracked: false },
     { id: 'driver_payouts', label: 'Driver payouts', amount: -round2(driverPayouts), kind: 'expense' },
     { id: 'operating_profit', label: 'Operating profit', amount: operatingProfit, kind: 'result' },
   ];

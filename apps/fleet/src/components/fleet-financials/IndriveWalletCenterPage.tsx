@@ -1,8 +1,8 @@
 /**
- * Fleet Operations → Fleet Financials → InDrive Wallet Center
+ * Business Finance → InDrive Wallet Center
  * Multi-driver top-ups, period fees/balances, recent loads. Wallet funding only — not passenger cash.
  */
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { endOfWeek, format, parseISO, startOfWeek } from 'date-fns';
 import { Loader2, RefreshCw, Trash2, Wallet } from 'lucide-react';
@@ -11,6 +11,7 @@ import { api } from '../../services/api';
 import { buildIndriveWalletLoadTransaction } from '../../utils/indriveWalletLoad';
 import { usePermissions } from '../../hooks/usePermissions';
 import type { IndriveWalletSummary, LedgerEntry } from '../../types/data';
+import { BusinessFinanceDeskChrome } from '../business-finance/BusinessFinanceDeskChrome';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -103,14 +104,32 @@ async function fetchWalletCreditsPage(
   return merged;
 }
 
-export function IndriveWalletCenterPage() {
+export function IndriveWalletCenterPage({
+  initialDateFrom,
+  initialDateTo,
+  onBackToBusinessFinance,
+  onPeriodHintConsumed,
+}: {
+  initialDateFrom?: string;
+  initialDateTo?: string;
+  onBackToBusinessFinance?: () => void;
+  onPeriodHintConsumed?: () => void;
+} = {}) {
   const { can } = usePermissions();
   const canEdit = can('transactions.edit');
   const queryClient = useQueryClient();
 
   const week0 = useMemo(() => defaultWeekRange(), []);
-  const [dateFrom, setDateFrom] = useState(week0.from);
-  const [dateTo, setDateTo] = useState(week0.to);
+  const [dateFrom, setDateFrom] = useState(initialDateFrom || week0.from);
+  const [dateTo, setDateTo] = useState(initialDateTo || week0.to);
+
+  useEffect(() => {
+    if (!initialDateFrom && !initialDateTo) return;
+    if (initialDateFrom) setDateFrom(initialDateFrom);
+    if (initialDateTo) setDateTo(initialDateTo);
+    onPeriodHintConsumed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialDateFrom, initialDateTo]);
 
   const [loadDriverId, setLoadDriverId] = useState('');
   const [loadAmount, setLoadAmount] = useState('');
@@ -347,6 +366,10 @@ export function IndriveWalletCenterPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {onBackToBusinessFinance && (
+        <BusinessFinanceDeskChrome deskLabel="InDrive Wallet" onBack={onBackToBusinessFinance} />
+      )}
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>

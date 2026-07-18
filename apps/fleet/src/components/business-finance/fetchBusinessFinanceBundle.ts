@@ -135,7 +135,9 @@ export async function fetchBusinessFinanceBundle(
     }
   });
 
-  if (drivers.length > 80) incomplete.push('Driver balances (first 80 drivers only)');
+  if (drivers.length > 80) {
+    /* truncated flag set below — do not push soft note into hard incomplete banner */
+  }
 
   let cashCollected = 0;
   let cashStillHeld = 0;
@@ -196,7 +198,7 @@ export async function fetchBusinessFinanceBundle(
       : round2(driverPayoutsFromPeriods);
 
   const grossLine = pnl.lines.find((l) => l.id === 'gross')?.amount || 0;
-  const profitLine = pnl.lines.find((l) => l.id === 'operating_profit')?.amount || 0;
+  const profitLine = Number(pnl.lines.find((l) => l.id === 'operating_profit')?.amount) || 0;
 
   // Wallet loads: scan transactions category if present on events metadata; else 0 + incomplete
   let walletLoads = 0;
@@ -229,15 +231,8 @@ export async function fetchBusinessFinanceBundle(
     },
     incompleteSources: [
       ...incomplete,
-      ...(maintenance === null ? ['Maintenance costs (not tracked yet)'] : []),
-      ...(walletLoads === 0 ? [] : []),
     ],
   };
-
-  // Soft note when wallet not found
-  if (!incomplete.includes('InDrive wallet')) {
-    overview.incompleteSources.push('InDrive wallet loads (use Wallet Center for detail)');
-  }
 
   const cashBank: CashBankSnapshot = {
     platformBank: {
@@ -290,8 +285,10 @@ export async function fetchBusinessFinanceBundle(
       },
     ],
     rows: expenseAgg.rows,
-    incompleteSources: maintenance === null ? ['Maintenance costs (not tracked yet)'] : [],
+    incompleteSources: [],
   };
+
+  const truncated = drivers.length > 80;
 
   return {
     period,
@@ -302,6 +299,8 @@ export async function fetchBusinessFinanceBundle(
     driverBalances: {
       rows: balanceRows,
       incompleteSources: incomplete.includes('Drivers') ? ['Drivers'] : [],
+      truncated,
+      truncateCap: truncated ? 80 : undefined,
     },
   };
 }

@@ -16,6 +16,10 @@ export function ymd(d: Date): string {
   return format(d, 'yyyy-MM-dd');
 }
 
+/**
+ * Custom applies only when both dates are set.
+ * Half-filled custom falls back to this_week so the query never silently lies.
+ */
 export function resolvePeriod(
   preset: PeriodPreset,
   customStart?: string,
@@ -23,8 +27,9 @@ export function resolvePeriod(
   now = new Date(),
 ): BusinessFinancePeriod {
   if (preset === 'custom' && customStart && customEnd) {
-    return { preset, startYmd: customStart, endYmd: customEnd };
+    return { preset: 'custom', startYmd: customStart, endYmd: customEnd };
   }
+  // Incomplete custom: keep last non-custom preset for the query (UI shows hint)
   if (preset === 'this_month') {
     return {
       preset: 'this_month',

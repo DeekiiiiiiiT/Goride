@@ -1,5 +1,5 @@
 /**
- * Fleet Operations → Fleet Financials → Cash Retag
+ * Business Finance → Cash Retag
  * Preview then apply Settlement Week tags on historical Log Cash. Uses saveTransaction path only.
  */
 import React, { useMemo, useState } from 'react';
@@ -17,6 +17,7 @@ import {
   type CashRetagCandidate,
 } from '../../utils/cashRetag';
 import type { FinancialTransaction } from '../../types/data';
+import { BusinessFinanceDeskChrome } from '../business-finance/BusinessFinanceDeskChrome';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Checkbox } from '../ui/checkbox';
@@ -47,7 +48,11 @@ import { cn } from '../ui/utils';
 const MONEY = (n: number) =>
   n.toLocaleString(undefined, { style: 'currency', currency: 'USD' });
 
-export function CashRetagPage() {
+export function CashRetagPage({
+  onBackToBusinessFinance,
+}: {
+  onBackToBusinessFinance?: () => void;
+} = {}) {
   const fleetTz = useFleetTimezone();
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -186,6 +191,9 @@ export function CashRetagPage() {
 
   return (
     <div className="space-y-6">
+      {onBackToBusinessFinance && (
+        <BusinessFinanceDeskChrome deskLabel="Cash Retag" onBack={onBackToBusinessFinance} />
+      )}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">Cash Retag</h1>
