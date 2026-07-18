@@ -1,5 +1,7 @@
-import { projectId, publicAnonKey } from '../utils/supabase/info';
+import { projectId } from '../utils/supabase/info';
 import { supabase } from '../utils/supabase/client';
+import { AuthRequiredError, getHeaders as sharedGetHeaders, requireAuthHeaders } from '../utils/authHeaders';
+export { AuthRequiredError };
 import { Trip, Notification, ImportBatch, CanonicalBatchAuditSnapshot, DriverMetrics, VehicleMetrics, FinancialTransaction, LedgerEntry, LedgerFilterParams, PaginatedLedgerResponse, LedgerDriverOverview, IndriveWalletSummary, DisputeRefund } from '../types/data';
 import type { AppendCanonicalLedgerResult, CanonicalLedgerEventInput } from '../types/ledgerCanonical';
 import { OdometerReading } from '../types/vehicle';
@@ -8,42 +10,17 @@ import { API_ENDPOINTS } from './apiConfig';
 import type { CompatiblePartsResponse } from '../types/partSourcing';
 import { compressImage } from '../utils/compressImage';
 import { isTollCategory } from '../utils/tollCategoryHelper';
-import { getProductLineHeaders } from '../config/productLine';
 import { appendUploadEvidenceMeta, type UploadEvidenceMeta } from '@roam/types/evidence';
 
-/**
- * Helper to get authorization headers (JWT if logged in, else anon key).
- * 
- * IMPORTANT (Phase 1 of Fleet Data Isolation):
- * - Always includes X-Roam-Product-Line header for proper product separation
- * - Uses JWT when available for proper org scoping
- * - Falls back to anon key only when user is not authenticated
- * 
- * @param contentType - Content-Type header value, or null to omit
- * @param options.requireAuth - If true, logs warning when falling back to anon key
- */
+// Auth headers are centralized in utils/authHeaders (single source of truth for
+// session-JWT scoping + product-line headers; throws AuthRequiredError logged out).
+// `getHeaders` accepts a deprecated `{ requireAuth }` option for back-compat with
+// existing call sites; auth is now enforced by default.
 async function getHeaders(
   contentType: string | null = 'application/json',
-  options?: { requireAuth?: boolean }
-) {
-  const { data: { session } } = await supabase.auth.getSession();
-  const token = session?.access_token;
-  
-  // Log warning if auth is required but we're falling back to anon key
-  if (options?.requireAuth && !token) {
-    console.warn('[API] No session token available - falling back to anon key. Data may not be properly scoped.');
-  }
-  
-  const headers: Record<string, string> = {
-    'Authorization': `Bearer ${token || publicAnonKey}`,
-    ...getProductLineHeaders(),  // Always include product line header
-  };
-  
-  if (contentType) {
-    headers['Content-Type'] = contentType;
-  }
-  
-  return headers;
+  _options?: { allowAnon?: boolean; requireAuth?: boolean }
+): Promise<Record<string, string>> {
+  return sharedGetHeaders(contentType, _options);
 }
 
 export interface TripFilterParams {
@@ -169,7 +146,7 @@ export const api = {
 
   async getBatches(): Promise<ImportBatch[]> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/batches`, {
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch batches");
     return response.json();
@@ -178,10 +155,7 @@ export const api = {
   async createBatch(batch: ImportBatch) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/batches`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await requireAuthHeaders(),
       body: JSON.stringify(batch)
     });
     if (!response.ok) throw new Error("Failed to create batch");
@@ -246,7 +220,7 @@ export const api = {
     vehicleMetrics: { affected: number; safeToDelete: number; shared: number; details: any[] };
   }> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/batches/${id}/delete-preview`, {
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await requireAuthHeaders(null)
     });
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
@@ -425,9 +399,7 @@ export const api = {
 
   async getNotifications(): Promise<Notification[]> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/notifications`, {
-      headers: {
-        'Authorization': `Bearer ${publicAnonKey}`
-      }
+      headers: await requireAuthHeaders(null)
     });
 
     if (!response.ok) {
@@ -535,10 +507,7 @@ export const api = {
   async createNotification(notification: Partial<Notification>) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/notifications`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await requireAuthHeaders(),
       body: JSON.stringify(notification)
     });
 
@@ -551,7 +520,7 @@ export const api = {
 
   async getAlertRules() {
     const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/alert-rules`, {
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch alert rules");
     return response.json();
@@ -560,10 +529,7 @@ export const api = {
   async saveAlertRule(rule: any) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/alert-rules`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await requireAuthHeaders(),
       body: JSON.stringify(rule)
     });
     if (!response.ok) throw new Error("Failed to save alert rule");
@@ -573,7 +539,7 @@ export const api = {
   async deleteAlertRule(id: string) {
      const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/alert-rules/${id}`, {
       method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to delete alert rule");
     return response.json();
@@ -581,7 +547,7 @@ export const api = {
 
   async getIntegrations() {
     const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/settings/integrations`, {
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch integrations");
     return response.json();
@@ -590,10 +556,7 @@ export const api = {
   async saveIntegration(integration: any) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/settings/integrations`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await requireAuthHeaders(),
       body: JSON.stringify(integration)
     });
     if (!response.ok) throw new Error("Failed to save integration");
@@ -602,7 +565,7 @@ export const api = {
 
   async getBudgets() {
       const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/budgets`, {
-          headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+          headers: await requireAuthHeaders(null)
       });
       if (!response.ok) throw new Error("Failed to fetch budgets");
       return response.json();
@@ -611,10 +574,7 @@ export const api = {
   async saveBudget(budget: any) {
       const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/budgets`, {
           method: 'POST',
-          headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${publicAnonKey}`
-          },
+          headers: await requireAuthHeaders(),
           body: JSON.stringify(budget)
       });
       if (!response.ok) throw new Error("Failed to save budget");
@@ -623,7 +583,7 @@ export const api = {
 
   async getVehicleTankStatus(vehicleId: string) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/vehicles/${vehicleId}/tank-status`, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch tank status");
     return response.json();
@@ -635,7 +595,7 @@ export const api = {
       ? `${API_ENDPOINTS.fuel}/fuel-audit/summary?vehicleId=${vehicleId}`
       : `${API_ENDPOINTS.fuel}/fuel-audit/fleet-stats`;
     const response = await fetchWithRetry(url, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch audit summary");
     return response.json();
@@ -644,7 +604,7 @@ export const api = {
   async getFlaggedTransactions() {
     // Flagged transactions are just fuel entries with isFlagged: true
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries`, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch flagged transactions");
     const all = await response.json();
@@ -654,7 +614,7 @@ export const api = {
   async resolveFuelAnomaly(transactionId: string, status: 'resolved' | 'disputed' | 'rejected', note: string) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/admin/fuel-audit/resolve`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${publicAnonKey}`, 'Content-Type': 'application/json' },
+        headers: await requireAuthHeaders(),
         body: JSON.stringify({ transactionId, status, note })
     });
     if (!response.ok) throw new Error("Failed to resolve anomaly");
@@ -699,10 +659,7 @@ export const api = {
     async saveFuelEntry(entry: any) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${publicAnonKey}`
-        },
+        headers: await requireAuthHeaders(),
         body: JSON.stringify(entry)
     });
     if (!response.ok) {
@@ -852,9 +809,7 @@ export const api = {
     
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/upload`, {
         method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${publicAnonKey}`
-        },
+        headers: await requireAuthHeaders(null),
         body: formData
     });
     if (!response.ok) {
@@ -870,9 +825,7 @@ export const api = {
     
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/scan-receipt`, {
         method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${publicAnonKey}`
-        },
+        headers: await requireAuthHeaders(null),
         body: formData
     });
     if (!response.ok) {
@@ -892,9 +845,7 @@ export const api = {
     
     const response = await fetchWithRetry(`${API_ENDPOINTS.ai}/parse-document`, {
         method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${publicAnonKey}`
-        },
+        headers: await requireAuthHeaders(null),
         body: formData
     });
     // Handle 503 specifically? Or just let it throw?
@@ -909,10 +860,7 @@ export const api = {
   async generateVehicleImage(vehicleData: { make: string, model: string, year: string, color: string, bodyType: string, licensePlate?: string }) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/generate-vehicle-image`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await requireAuthHeaders(),
       body: JSON.stringify(vehicleData)
     });
     
@@ -925,7 +873,7 @@ export const api = {
 
   async getPreferences() {
     const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/settings/preferences`, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch preferences");
     return response.json();
@@ -934,10 +882,7 @@ export const api = {
   async savePreferences(preferences: any) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/settings/preferences`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${publicAnonKey}`
-        },
+        headers: await requireAuthHeaders(),
         body: JSON.stringify(preferences)
     });
     if (!response.ok) throw new Error("Failed to save preferences");
@@ -947,7 +892,7 @@ export const api = {
   // ── Toll Info ──────────────────────────────────────────────────────────
   async getTollInfo() {
     const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/toll-info`, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch toll info");
     return response.json();
@@ -956,10 +901,7 @@ export const api = {
   async saveTollInfo(schedule: any) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/toll-info`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${publicAnonKey}`
-        },
+        headers: await requireAuthHeaders(),
         body: JSON.stringify(schedule)
     });
     if (!response.ok) throw new Error("Failed to save toll info");
@@ -985,7 +927,7 @@ export const api = {
     if (params.toPlazaName) qs.set('toPlazaName', params.toPlazaName);
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.admin}/toll-info/rate?${qs.toString()}`,
-      { headers: { 'Authorization': `Bearer ${publicAnonKey}` } },
+      { headers: await requireAuthHeaders(null) },
     );
     if (!response.ok) throw new Error("Failed to resolve official toll rate");
     return response.json() as Promise<{ success: boolean; rate: any | null }>;
@@ -993,7 +935,7 @@ export const api = {
 
   async getTollInfoVersions() {
     const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/toll-info/versions`, {
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` },
+      headers: await requireAuthHeaders(null),
     });
     if (!response.ok) throw new Error("Failed to fetch toll info versions");
     return response.json();
@@ -1009,10 +951,7 @@ export const api = {
   }) {
       const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/fleet/sync`, {
           method: 'POST',
-          headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${publicAnonKey}`
-          },
+          headers: await requireAuthHeaders(),
           body: JSON.stringify(state)
       });
       
@@ -1025,7 +964,7 @@ export const api = {
 
   async getDashboardStats() {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/dashboard/stats`, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch dashboard stats");
     return response.json();
@@ -1034,7 +973,7 @@ export const api = {
   /** Fix 2: Aggregated init — stats + trips + driverMetrics + vehicleMetrics in one call */
   async getDashboardInit(): Promise<{ stats: any; trips: any[]; driverMetrics: any[]; vehicleMetrics: any[] }> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/dashboard/init`, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch dashboard init bundle");
     return response.json();
@@ -1044,7 +983,7 @@ export const api = {
   async addStationAlias(id: string, alias: { lat: number, lng: number, label: string }) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/stations/${id}/alias`, {
         method: 'PATCH',
-        headers: { 'Authorization': `Bearer ${publicAnonKey}`, 'Content-Type': 'application/json' },
+        headers: await requireAuthHeaders(),
         body: JSON.stringify(alias)
     });
     if (!response.ok) throw new Error("Failed to add alias");
@@ -1054,7 +993,7 @@ export const api = {
   async syncMasterPin(id: string, payload: { lat: number, lng: number, transactionId: string }) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/stations/${id}/sync-master-pin`, {
         method: 'PATCH',
-        headers: { 'Authorization': `Bearer ${publicAnonKey}`, 'Content-Type': 'application/json' },
+        headers: await requireAuthHeaders(),
         body: JSON.stringify(payload)
     });
     if (!response.ok) throw new Error("Failed to sync master pin");
@@ -1063,7 +1002,7 @@ export const api = {
 
   async getIntegrityMetrics() {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/analytics/integrity-metrics`, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch integrity metrics");
     return response.json();
@@ -1072,7 +1011,7 @@ export const api = {
   async promoteLearntLocationToMaster(payload: { learntId: string, action: 'merge' | 'create', targetStationId?: string, stationData?: any }) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/stations/promote-learnt`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${publicAnonKey}`, 'Content-Type': 'application/json' },
+        headers: await requireAuthHeaders(),
         body: JSON.stringify(payload)
     });
     if (!response.ok) {
@@ -1087,10 +1026,7 @@ export const api = {
   async ensureLearntForGateHeldTransaction(transactionId: string) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/evidence-inbox/ensure-learnt`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${publicAnonKey}`,
-      },
+      headers: await requireAuthHeaders(),
       body: JSON.stringify({ transactionId }),
     });
     if (!response.ok) {
@@ -1106,9 +1042,7 @@ export const api = {
       `${API_ENDPOINTS.fuel}/admin/evidence-inbox/gate-held/${encodeURIComponent(transactionId)}`,
       {
         method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${publicAnonKey}`,
-        },
+        headers: await requireAuthHeaders(null),
       },
     );
     if (!response.ok) {
@@ -1122,10 +1056,7 @@ export const api = {
   async mergeGateHeldTransactionToStation(transactionId: string, targetStationId: string) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/evidence-inbox/merge-to-station`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${publicAnonKey}`,
-      },
+      headers: await requireAuthHeaders(),
       body: JSON.stringify({ transactionId, targetStationId }),
     });
     if (!response.ok) {
@@ -1137,7 +1068,7 @@ export const api = {
 
   async getStations() {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/stations`, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch stations");
     return response.json();
@@ -1151,7 +1082,7 @@ export const api = {
     if (excludeId) params.append('excludeId', excludeId);
     if (category) params.append('category', category);
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/stations/check-duplicate?${params.toString()}`, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to check for station duplicates");
     return response.json();
@@ -1160,7 +1091,7 @@ export const api = {
   async reconcileLedgerOrphans() {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/reconcile-ledger-orphans`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to reconcile orphans");
     return response.json();
@@ -1168,7 +1099,7 @@ export const api = {
 
   async getSpatialReviewQueue(): Promise<{ items: any[]; count: number }> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/spatial-review-queue`, {
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` },
+      headers: await requireAuthHeaders(null),
     });
     if (!response.ok) throw new Error('Failed to fetch spatial review queue');
     return response.json();
@@ -1177,10 +1108,7 @@ export const api = {
   async deleteSpatialReviewRecord(payload: { recordType: 'fuel_entry' | 'transaction'; id: string }) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/spatial-review/delete`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`,
-      },
+      headers: await requireAuthHeaders(),
       body: JSON.stringify(payload),
     });
     if (!response.ok) {
@@ -1193,10 +1121,7 @@ export const api = {
   async bulkAssignStation(entryIds: string[], stationId: string) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/bulk-assign-station`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${publicAnonKey}`
-        },
+        headers: await requireAuthHeaders(),
         body: JSON.stringify({ entryIds, stationId })
     });
     if (!response.ok) {
@@ -1210,10 +1135,7 @@ export const api = {
   async saveStation(station: any) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/stations`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${publicAnonKey}`
-        },
+        headers: await requireAuthHeaders(),
         body: JSON.stringify(station)
     });
     // Handle 409 Conflict (duplicate station detected) — surface the structured response
@@ -1231,7 +1153,7 @@ export const api = {
   async deleteStation(id: string) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/stations/${id}`, {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to delete station");
     return response.json();
@@ -1239,7 +1161,7 @@ export const api = {
 
   async getStationProofOfWork(id: string) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/stations/${id}/proof-of-work`, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch proof of work");
     return response.json();
@@ -1247,7 +1169,7 @@ export const api = {
 
   async getLearntLocations() {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/learnt-locations`, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch learnt locations");
     return response.json();
@@ -1256,10 +1178,7 @@ export const api = {
   async rescanLearntLocations(radius: number = 75) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/learnt-locations/rescan`, {
         method: 'POST',
-        headers: { 
-          'Authorization': `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json'
-        },
+        headers: await requireAuthHeaders(),
         body: JSON.stringify({ radius })
     });
     if (!response.ok) throw new Error("Bulk re-scan failed");
@@ -1269,10 +1188,7 @@ export const api = {
   async promoteLearntLocation(id: string, stationDetails: any) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/learnt-locations/promote`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${publicAnonKey}`
-        },
+        headers: await requireAuthHeaders(),
         body: JSON.stringify({ id, stationDetails })
     });
     if (!response.ok) throw new Error("Failed to promote location");
@@ -1282,10 +1198,7 @@ export const api = {
   async rejectLearntLocation(id: string, reason: string) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/learnt-locations/${id}/reject`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${publicAnonKey}`
-        },
+        headers: await requireAuthHeaders(),
         body: JSON.stringify({ reason })
     });
     if (!response.ok) throw new Error("Failed to reject location");
@@ -1295,9 +1208,7 @@ export const api = {
   async deleteLearntLocation(id: string) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/learnt-locations/${id}`, {
         method: 'DELETE',
-        headers: {
-            'Authorization': `Bearer ${publicAnonKey}`
-        }
+        headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to delete learnt location");
     return response.json();
@@ -1306,10 +1217,7 @@ export const api = {
   async mergeLearntLocation(id: string, targetStationId: string, updateMasterPin: boolean = false) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/learnt-locations/merge`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${publicAnonKey}`
-        },
+        headers: await requireAuthHeaders(),
         body: JSON.stringify({ id, targetStationId, updateMasterPin })
     });
     if (!response.ok) throw new Error("Failed to merge location");
@@ -1319,7 +1227,7 @@ export const api = {
   async runFuelBackfill() {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/backfill-fuel-integrity`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Backfill job failed");
     return response.json();
@@ -1328,7 +1236,7 @@ export const api = {
   async runPaymentSourceBackfill() {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/backfill-payment-sources`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Payment source backfill failed");
     return response.json();
@@ -1337,7 +1245,7 @@ export const api = {
   async runEvidenceBridgeStressTest(vehicleId: string) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/stress-test-evidence-bridge`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${publicAnonKey}`, 'Content-Type': 'application/json' },
+        headers: await requireAuthHeaders(),
         body: JSON.stringify({ vehicleId })
     });
     if (!response.ok) throw new Error("Stress test failed");
@@ -1347,7 +1255,7 @@ export const api = {
   async verifyRecordForensics(recordId: string) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/verify-record-forensics`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${publicAnonKey}`, 'Content-Type': 'application/json' },
+        headers: await requireAuthHeaders(),
         body: JSON.stringify({ recordId })
     });
     if (!response.ok) throw new Error("Forensic verification failed");
@@ -1359,7 +1267,7 @@ export const api = {
     if (!idOrTransactionId) return null;
     try {
       const entriesResponse = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries`, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await requireAuthHeaders(null)
       });
       if (!entriesResponse.ok) return null;
       const entries = await entriesResponse.json();
@@ -1372,7 +1280,7 @@ export const api = {
 
   async getFinancials() {
       const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/financials`, {
-          headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+          headers: await requireAuthHeaders(null)
       });
       if (!response.ok) throw new Error("Failed to fetch financials");
       return response.json();
@@ -1381,10 +1289,7 @@ export const api = {
   async saveFinancials(financials: any) {
       const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/financials`, {
           method: 'POST',
-          headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${publicAnonKey}`
-          },
+          headers: await requireAuthHeaders(),
           body: JSON.stringify(financials)
       });
       if (!response.ok) throw new Error("Failed to save financials");
@@ -1511,7 +1416,7 @@ export const api = {
 
   async getTollTags() {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/toll-tags`, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch toll tags");
     return response.json();
@@ -1520,10 +1425,7 @@ export const api = {
   async saveTollTag(tag: any) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/toll-tags`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${publicAnonKey}`
-        },
+        headers: await requireAuthHeaders(),
         body: JSON.stringify(tag)
     });
     if (!response.ok) {
@@ -1536,7 +1438,7 @@ export const api = {
   async deleteTollTag(id: string) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/toll-tags/${id}`, {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to delete toll tag");
     return response.json();
@@ -1548,7 +1450,7 @@ export const api = {
 
   async getTollPlazas(): Promise<TollPlaza[]> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/toll-plazas`, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch toll plazas");
     return response.json();
@@ -1556,7 +1458,7 @@ export const api = {
 
   async getTollPlaza(id: string): Promise<TollPlaza> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/toll-plazas/${id}`, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch toll plaza");
     return response.json();
@@ -1565,10 +1467,7 @@ export const api = {
   async saveTollPlaza(plaza: Partial<TollPlaza>): Promise<{ success: boolean; data: TollPlaza }> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/toll-plazas`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${publicAnonKey}`
-        },
+        headers: await requireAuthHeaders(),
         body: JSON.stringify(plaza)
     });
     if (!response.ok) throw new Error("Failed to save toll plaza");
@@ -1578,7 +1477,7 @@ export const api = {
   async deleteTollPlaza(id: string): Promise<void> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/toll-plazas/${id}`, {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to delete toll plaza");
   },
@@ -1666,10 +1565,7 @@ export const api = {
   async claimDriver(driverEmail: string) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/team/claim-driver`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await requireAuthHeaders(),
       body: JSON.stringify({ driverEmail })
     });
     if (!response.ok) {
@@ -1682,10 +1578,7 @@ export const api = {
   async parseTollCsvWithAI(csvContent: string) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.ai}/parse-toll-csv`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await requireAuthHeaders(),
       body: JSON.stringify({ csvContent })
     });
     if (!response.ok) throw new Error("Failed to parse toll CSV");
@@ -1698,9 +1591,7 @@ export const api = {
 
     const response = await fetchWithRetry(`${API_ENDPOINTS.ai}/parse-toll-image`, {
         method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${publicAnonKey}`
-        },
+        headers: await requireAuthHeaders(null),
         body: formData
     });
     
@@ -1716,9 +1607,7 @@ export const api = {
 
     const response = await fetchWithRetry(`${API_ENDPOINTS.ai}/scan-odometer`, {
         method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${publicAnonKey}`
-        },
+        headers: await requireAuthHeaders(null),
         body: formData
     });
     
@@ -1733,7 +1622,7 @@ export const api = {
         ? `${API_ENDPOINTS.financial}/claims?driverId=${driverId}` 
         : `${API_ENDPOINTS.financial}/claims`;
     const response = await fetchWithRetry(url, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch claims");
     return response.json();
@@ -1742,10 +1631,7 @@ export const api = {
   async saveClaim(claim: any) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/claims`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${publicAnonKey}`
-        },
+        headers: await requireAuthHeaders(),
         body: JSON.stringify(claim)
     });
     if (!response.ok) {
@@ -1758,7 +1644,7 @@ export const api = {
   async deleteClaim(id: string) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/claims/${id}`, {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to delete claim");
     return response.json();
@@ -1770,7 +1656,7 @@ export const api = {
         url += `?weekStart=${weekStart}`;
     }
     const response = await fetchWithRetry(url, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch check-ins");
     return response.json();
@@ -1803,10 +1689,7 @@ export const api = {
   ) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/expenses/approve`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${publicAnonKey}`
-        },
+        headers: await requireAuthHeaders(),
         body: JSON.stringify({
             id,
             notes,
@@ -1823,10 +1706,7 @@ export const api = {
   async rejectExpense(id: string, reason?: string) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/expenses/reject`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${publicAnonKey}`
-        },
+        headers: await requireAuthHeaders(),
         body: JSON.stringify({ id, reason })
     });
     if (!response.ok) throw new Error("Failed to reject expense");
@@ -1855,7 +1735,7 @@ export const api = {
     const qs = new URLSearchParams({ driverId });
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.financial}/driver-financial-periods?${qs.toString()}`,
-      { headers: { Authorization: `Bearer ${publicAnonKey}` } },
+      { headers: await requireAuthHeaders(null) },
     );
     if (!response.ok) throw new Error("Failed to fetch driver financial periods");
     return response.json();
@@ -1865,7 +1745,7 @@ export const api = {
     const qs = new URLSearchParams({ driverId });
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.financial}/driver-financial-periods/${periodAnchor}?${qs.toString()}`,
-      { headers: { Authorization: `Bearer ${publicAnonKey}` } },
+      { headers: await requireAuthHeaders(null) },
     );
     if (!response.ok) throw new Error("Failed to fetch driver financial period detail");
     return response.json();
@@ -1876,10 +1756,7 @@ export const api = {
       `${API_ENDPOINTS.financial}/driver-financial-periods/rebuild`,
       {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${publicAnonKey}`,
-          "Content-Type": "application/json",
-        },
+        headers: await requireAuthHeaders(),
         body: JSON.stringify({ driverId, periodAnchor }),
       },
     );
@@ -1892,10 +1769,7 @@ export const api = {
       `${API_ENDPOINTS.financial}/driver-financial-periods/backfill`,
       {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${publicAnonKey}`,
-          "Content-Type": "application/json",
-        },
+        headers: await requireAuthHeaders(),
         body: JSON.stringify({ dryRun: opts?.dryRun !== false, driverId: opts?.driverId }),
       },
     );
@@ -1906,7 +1780,7 @@ export const api = {
   async getDriverFinancialPeriodsHealth() {
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.financial}/driver-financial-periods/health`,
-      { headers: { Authorization: `Bearer ${publicAnonKey}` } },
+      { headers: await requireAuthHeaders(null) },
     );
     if (!response.ok) throw new Error("Failed to fetch financial period health");
     return response.json();
@@ -1917,7 +1791,7 @@ export const api = {
     if (driverId) qs.set("driverId", driverId);
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.financial}/driver-financial-periods/verify-parity?${qs.toString()}`,
-      { headers: { Authorization: `Bearer ${publicAnonKey}` } },
+      { headers: await requireAuthHeaders(null) },
     );
     if (!response.ok) throw new Error("Failed to verify financial period parity");
     return response.json();
@@ -1928,10 +1802,7 @@ export const api = {
       `${API_ENDPOINTS.financial}/driver-financial-periods/process-outbox`,
       {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${publicAnonKey}`,
-          "Content-Type": "application/json",
-        },
+        headers: await requireAuthHeaders(),
         body: JSON.stringify({ limit }),
       },
     );
@@ -1959,7 +1830,7 @@ export const api = {
     if (params?.limit !== undefined) qs.set('limit', params.limit.toString());
     if (params?.offset !== undefined) qs.set('offset', params.offset.toString());
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/toll-logs?${qs.toString()}`, {
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch toll logs");
     return response.json();
@@ -1968,7 +1839,7 @@ export const api = {
   // Preview how many tag-ledger records can be linked to their tag (read-only).
   async getTollTagBackfillStatus() {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/toll-ledger/tag-backfill/status`, {
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to load tag history status");
     return response.json();
@@ -1978,10 +1849,7 @@ export const api = {
   async runTollTagBackfill(dryRun: boolean) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/toll-ledger/tag-backfill`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await requireAuthHeaders(),
       body: JSON.stringify({ dryRun })
     });
     if (!response.ok) throw new Error("Failed to sync tag history");
@@ -1997,7 +1865,7 @@ export const api = {
     if (params?.from) qs.set('from', params.from);
     if (params?.to) qs.set('to', params.to);
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/unreconciled?${qs.toString()}`, {
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch unreconciled tolls");
     return response.json();
@@ -2011,7 +1879,7 @@ export const api = {
     if (params?.from) qs.set('from', params.from);
     if (params?.to) qs.set('to', params.to);
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/reconciled?${qs.toString()}`, {
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch reconciled tolls");
     return response.json();
@@ -2025,7 +1893,7 @@ export const api = {
     if (params?.from) qs.set('from', params.from);
     if (params?.to) qs.set('to', params.to);
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/unclaimed-refunds?${qs.toString()}`, {
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch unclaimed refunds");
     return response.json();
@@ -2035,7 +1903,7 @@ export const api = {
     const qs = new URLSearchParams();
     if (params?.driverId) qs.set('driverId', params.driverId);
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/periods?${qs.toString()}`, {
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch reconciliation periods");
     return response.json();
@@ -2049,7 +1917,7 @@ export const api = {
     if (params?.from) qs.set('from', params.from);
     if (params?.to) qs.set('to', params.to);
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/resolved-refunds?${qs.toString()}`, {
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch resolved refunds");
     return response.json();
@@ -2059,7 +1927,7 @@ export const api = {
     const qs = new URLSearchParams();
     if (params?.driverId) qs.set('driverId', params.driverId);
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/refund-suggestions?${qs.toString()}`, {
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch refund suggestions");
     return response.json();
@@ -2094,7 +1962,7 @@ export const api = {
     if (params?.from) qs.set('from', params.from);
     if (params?.to) qs.set('to', params.to);
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/unlinked-shortfall-suggestions?${qs.toString()}`, {
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch unlinked shortfall suggestions");
     return response.json();
@@ -2112,10 +1980,7 @@ export const api = {
   }) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/unlinked-refunds/apply-to-claim`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await requireAuthHeaders(),
       body: JSON.stringify(payload)
     });
     if (!response.ok) {
@@ -2128,10 +1993,7 @@ export const api = {
   async undoApplyUnlinkedRefund(tripId: string) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/unlinked-refunds/undo-apply`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await requireAuthHeaders(),
       body: JSON.stringify({ tripId })
     });
     if (!response.ok) {
@@ -2144,10 +2006,7 @@ export const api = {
   async repairUnlinkedApplySplits(payload?: { tripId?: string; driverId?: string }) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/unlinked-refunds/repair-split`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await requireAuthHeaders(),
       body: JSON.stringify(payload ?? {})
     });
     if (!response.ok) {
@@ -2164,10 +2023,7 @@ export const api = {
   async resolveRefund(payload: { tripId: string; resolution: 'cash_wash' | 'phantom' | 'expense_logged' | 'pending'; notes?: string; driverId?: string }) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/resolve-refund`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await requireAuthHeaders(),
       body: JSON.stringify(payload)
     });
     if (!response.ok) {
@@ -2191,10 +2047,7 @@ export const api = {
   }) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/resolve`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await requireAuthHeaders(),
       body: JSON.stringify(payload)
     });
     if (!response.ok) {
@@ -2221,7 +2074,7 @@ export const api = {
     if (opts?.from) qs.set('from', opts.from);
     if (opts?.to) qs.set('to', opts.to);
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/driver-toll-charges?${qs.toString()}`, {
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch driver toll charges");
     return response.json();
@@ -2230,10 +2083,7 @@ export const api = {
   async bulkResolveRefunds(items: Array<{ tripId: string; resolution: 'cash_wash' | 'phantom' | 'expense_logged' | 'pending'; notes?: string; driverId?: string }>) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/resolve-refund/bulk`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await requireAuthHeaders(),
       body: JSON.stringify({ items })
     });
     if (!response.ok) {
@@ -2264,7 +2114,7 @@ export const api = {
   }> {
     const qs = driverId ? `?driverId=${encodeURIComponent(driverId)}` : '';
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/resolved-cash-claims-audit${qs}`, {
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch resolved cash claims audit");
     return response.json();
@@ -2288,7 +2138,7 @@ export const api = {
   }> {
     const qs = driverId ? `?driverId=${encodeURIComponent(driverId)}` : '';
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/rematch-candidates${qs}`, {
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch rematch candidates");
     return response.json();
@@ -2298,10 +2148,7 @@ export const api = {
   async dismissRematchCandidate(tollId: string): Promise<{ success: boolean }> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/rematch-candidates/${encodeURIComponent(tollId)}/dismiss`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await requireAuthHeaders(),
       body: JSON.stringify({})
     });
     if (!response.ok) throw new Error("Failed to dismiss rematch candidate");
@@ -2317,7 +2164,7 @@ export const api = {
     message: string;
   }> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/match-index/status`, {
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch match-index backfill status");
     return response.json();
@@ -2338,10 +2185,7 @@ export const api = {
   }> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/match-index/backfill`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await requireAuthHeaders(),
       body: JSON.stringify({ dryRun, batchSize })
     });
     if (!response.ok) {
@@ -2365,7 +2209,7 @@ export const api = {
     message: string;
   }> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/claims-toll-sync/status`, {
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch claims toll-sync status");
     return response.json();
@@ -2388,10 +2232,7 @@ export const api = {
   }> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/claims-toll-sync/repair`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await requireAuthHeaders(),
       body: JSON.stringify({ dryRun })
     });
     if (!response.ok) {
@@ -2404,10 +2245,7 @@ export const api = {
   async bridgeRidesTolls(opts?: { dryRun?: boolean; limit?: number }): Promise<{ success: boolean; scanned: number; bridged: number; skipped: number; dryRun: boolean }> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/bridge-rides`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await requireAuthHeaders(),
       body: JSON.stringify({ dryRun: opts?.dryRun ?? false, limit: opts?.limit })
     });
     if (!response.ok) {
@@ -2434,7 +2272,7 @@ export const api = {
     tollBrain?: { consume: boolean; matchDialsSource: string };
   }> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/automation-settings`, {
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch toll automation settings");
     return response.json();
@@ -2443,10 +2281,7 @@ export const api = {
   async updateTollAutomationSettings(payload: { refundAutomationEnabled?: boolean; refundAutoMinConfidence?: number; disputeRefundAutoMinConfidence?: number; personalUseDetectionEnabled?: boolean; orphanProximityMinutes?: number; driverTollChargeSyncEnabled?: boolean; unifiedTollSettlementEnabled?: boolean; matchOnIngestEnabled?: boolean; disputeRefundTripSyncEnabled?: boolean; unlinkedRefundUndoEnabled?: boolean }) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/automation-settings`, {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await requireAuthHeaders(),
       body: JSON.stringify(payload)
     });
     if (!response.ok) {
@@ -2459,10 +2294,7 @@ export const api = {
   async serverReconcileToll(transactionId: string, tripId: string) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/reconcile`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await requireAuthHeaders(),
       body: JSON.stringify({ transactionId, tripId })
     });
     if (!response.ok) {
@@ -2475,10 +2307,7 @@ export const api = {
   async serverUnreconcileToll(transactionId: string) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/unreconcile`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await requireAuthHeaders(),
       body: JSON.stringify({ transactionId })
     });
     if (!response.ok) {
@@ -2491,10 +2320,7 @@ export const api = {
   async bulkReconcileTolls(matches: Array<{ transactionId: string; tripId: string }>) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/bulk-reconcile`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await requireAuthHeaders(),
       body: JSON.stringify({ matches })
     });
     if (!response.ok) {
@@ -2507,10 +2333,7 @@ export const api = {
   async approveToll(transactionId: string, notes?: string) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/approve`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await requireAuthHeaders(),
       body: JSON.stringify({ transactionId, notes })
     });
     if (!response.ok) {
@@ -2524,10 +2347,7 @@ export const api = {
   async rejectToll(transactionId: string, reason?: string) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/reject`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await requireAuthHeaders(),
       body: JSON.stringify({ transactionId, reason })
     });
     if (!response.ok) {
@@ -2541,10 +2361,7 @@ export const api = {
   async editToll(transactionId: string, updates: Record<string, any>) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/edit`, {
       method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await requireAuthHeaders(),
       body: JSON.stringify({ transactionId, updates })
     });
     if (!response.ok) {
@@ -2561,10 +2378,7 @@ export const api = {
       `${API_ENDPOINTS.financial}/toll-reconciliation/reset-for-reconciliation`,
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${publicAnonKey}`,
-        },
+        headers: await requireAuthHeaders(),
         body: JSON.stringify({ transactionId }),
       },
     );
@@ -2598,10 +2412,7 @@ export const api = {
       `${API_ENDPOINTS.financial}/toll-reconciliation/reset-period`,
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${publicAnonKey}`,
-        },
+        headers: await requireAuthHeaders(),
         body: JSON.stringify(payload),
       },
     );
@@ -2648,7 +2459,7 @@ export const api = {
       ? `${API_ENDPOINTS.financial}/toll-reconciliation/export?organizationId=${organizationId}`
       : `${API_ENDPOINTS.financial}/toll-reconciliation/export`;
     const response = await fetchWithRetry(url, {
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await requireAuthHeaders(null)
     });
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
@@ -2682,7 +2493,7 @@ export const api = {
     if (params?.offset !== undefined) qs.set("offset", String(params.offset));
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.financial}/toll-reconciliation/unified-events?${qs.toString()}`,
-      { headers: { Authorization: `Bearer ${publicAnonKey}` } },
+      { headers: await requireAuthHeaders(null) },
     );
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
@@ -2711,7 +2522,7 @@ export const api = {
     if (params?.offset !== undefined) qs.set("offset", String(params.offset));
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.financial}/toll-reconciliation/unified-events/export?${qs.toString()}`,
-      { headers: { Authorization: `Bearer ${publicAnonKey}` } },
+      { headers: await requireAuthHeaders(null) },
     );
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
@@ -2725,10 +2536,7 @@ export const api = {
   async importDisputeRefunds(refunds: DisputeRefund[]): Promise<{ imported: number; skipped: number; total: number; message: string }> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/dispute-refunds/import`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await requireAuthHeaders(),
       body: JSON.stringify({ refunds })
     });
     if (!response.ok) {
@@ -2753,7 +2561,7 @@ export const api = {
     if (params?.dateFrom) qs.set('dateFrom', params.dateFrom);
     if (params?.dateTo) qs.set('dateTo', params.dateTo);
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/dispute-refunds?${qs.toString()}`, {
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await requireAuthHeaders(null)
     });
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
@@ -2765,10 +2573,7 @@ export const api = {
   async matchDisputeRefund(refundId: string, tollTransactionId: string, claimId?: string, opts?: { createClaim?: boolean; suggestedTripId?: string | null }): Promise<{ data: DisputeRefund; warning?: string }> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/dispute-refunds/${refundId}/match`, {
       method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await requireAuthHeaders(),
       body: JSON.stringify({ tollTransactionId, claimId, createClaim: opts?.createClaim, suggestedTripId: opts?.suggestedTripId })
     });
     if (!response.ok) {
@@ -2782,10 +2587,7 @@ export const api = {
   async unmatchDisputeRefund(refundId: string): Promise<{ data: DisputeRefund }> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/dispute-refunds/${refundId}/unmatch`, {
       method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await requireAuthHeaders(),
       body: JSON.stringify({})
     });
     if (!response.ok) {
@@ -2797,7 +2599,7 @@ export const api = {
 
   async getDisputeRefundSuggestions(refundId: string): Promise<{ suggestions: Array<{ tollId: string; tripId: string | null; tollAmount: number; claimAmount?: number; tripRefund?: number; shortfall?: number; uberRefund: number; variance: number; date: string; confidence: number; claimId: string | null; claimStatus: string | null; matchType?: 'claim' | 'toll'; eligibleForAuto?: boolean; rejectReason?: string | null }> }> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/dispute-refunds/suggestions/${refundId}`, {
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await requireAuthHeaders(null)
     });
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
@@ -2808,7 +2610,7 @@ export const api = {
 
   async getDisputeRefundMatchDetail(refundId: string): Promise<import('../components/toll-tags/reconciliation/DisputeRefundDetailDialog').DisputeRefundMatchDetail> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/dispute-refunds/match-detail/${refundId}`, {
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await requireAuthHeaders(null)
     });
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
@@ -2829,7 +2631,7 @@ export const api = {
     if (opts?.to) qs.set('to', opts.to);
     if (opts?.driverId) qs.set('driverId', opts.driverId);
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/dispute-refunds/match-candidates?${qs.toString()}`, {
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await requireAuthHeaders(null)
     });
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
@@ -2845,10 +2647,7 @@ export const api = {
   ): Promise<{ imported: number; skipped: number; total: number; message: string }> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/payment-ledger-lines/import`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`,
-      },
+      headers: await requireAuthHeaders(),
       body: JSON.stringify({ lines }),
     });
     if (!response.ok) {
@@ -2866,10 +2665,7 @@ export const api = {
       `${API_ENDPOINTS.financial}/payment-ledger-lines/driver-quality-snapshots/import`,
       {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${publicAnonKey}`,
-          'Content-Type': 'application/json',
-        },
+        headers: await requireAuthHeaders(),
         body: JSON.stringify({ batchId, snapshots }),
       },
     );
@@ -2897,7 +2693,7 @@ export const api = {
     if (params?.platform) qs.set('platform', params.platform);
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.financial}/payment-ledger-lines?${qs.toString()}`,
-      { headers: { Authorization: `Bearer ${publicAnonKey}` } },
+      { headers: await requireAuthHeaders(null) },
     );
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
@@ -2915,7 +2711,7 @@ export const api = {
     if (options?.offset !== undefined) params.append('offset', options.offset.toString());
 
     const response = await fetchWithRetry(`${API_ENDPOINTS.ai}/performance-report?${params.toString()}`, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch performance report");
     return response.json();
@@ -2932,10 +2728,7 @@ export const api = {
   }) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/reset-by-date`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${publicAnonKey}`
-        },
+        headers: await requireAuthHeaders(),
         body: JSON.stringify(payload)
     });
     
@@ -2950,10 +2743,10 @@ export const api = {
     // Check both potential key formats in the database for backward compatibility
     const [resUnderscore, resHyphen] = await Promise.all([
       fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries?vehicleId=${vehicleId}&limit=1000`, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await requireAuthHeaders(null)
       }),
       fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries?vehicleId=${vehicleId}&prefix=fuel-entry&limit=1000`, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await requireAuthHeaders(null)
       })
     ]);
 
@@ -2967,7 +2760,7 @@ export const api = {
 
   async getCheckInsByVehicle(vehicleId: string): Promise<any[]> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/check-ins`, {
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch check-ins");
     const checkIns = await response.json();
@@ -2977,10 +2770,7 @@ export const api = {
   async runChaosSeeder(count: number, vehicleId?: string) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/chaos-seeder`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${publicAnonKey}`
-        },
+        headers: await requireAuthHeaders(),
         body: JSON.stringify({ count, vehicleId })
     });
     if (!response.ok) throw new Error("Chaos seeder failed");
@@ -2990,9 +2780,7 @@ export const api = {
   async purgeSyntheticData() {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/purge-synthetic`, {
         method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${publicAnonKey}`
-        }
+        headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Purge failed");
     return response.json();
@@ -3001,7 +2789,7 @@ export const api = {
   async backfillFuelIntegrity() {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/backfill-fuel-integrity`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Backfill failed");
     return response.json();
@@ -3010,7 +2798,7 @@ export const api = {
   async backfillWalletCredits(): Promise<{ success: boolean; created: number; skipped: number; total: number }> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel/backfill-wallet-credits`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await requireAuthHeaders(null)
     });
     if (!response.ok) {
       const err = await response.json().catch(() => ({ error: 'Unknown error' }));
@@ -3024,7 +2812,7 @@ export const api = {
   async lockTransaction(id: string) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/transactions/${id}/lock`, {
         method: 'PATCH',
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to lock transaction");
     return response.json();
@@ -3033,7 +2821,7 @@ export const api = {
   async deleteCheckIn(id: string) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/check-ins/${id}`, {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to delete check-in");
     return response.json();
@@ -3051,7 +2839,7 @@ export const api = {
   async deleteFuelEntry(id: string) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries/${id}`, {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to delete fuel entry");
     return response.json();
@@ -3062,7 +2850,7 @@ export const api = {
       ? `${API_ENDPOINTS.fuel}/fuel-entries?organizationId=${organizationId}`
       : `${API_ENDPOINTS.fuel}/fuel-entries`;
     const response = await fetchWithRetry(url, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch fuel entries");
     return response.json();
@@ -3070,7 +2858,7 @@ export const api = {
 
   async getForensicErrorLogs() {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/system/audit-trail`, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch forensic logs");
     return response.json();
@@ -3079,10 +2867,7 @@ export const api = {
   async signAuditReport(reportData: any) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/audit/sign-report`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${publicAnonKey}`
-        },
+        headers: await requireAuthHeaders(),
         body: JSON.stringify({ reportData, reportType: 'forensic-audit' })
     });
     if (!response.ok) throw new Error("Failed to sign audit report");
@@ -3091,7 +2876,7 @@ export const api = {
 
   async getAuditConfig() {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/audit-config`, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch audit config");
     return response.json();
@@ -3100,10 +2885,7 @@ export const api = {
   async saveAuditConfig(config: Record<string, any>) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/audit-config`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${publicAnonKey}`
-        },
+        headers: await requireAuthHeaders(),
         body: JSON.stringify(config)
     });
     if (!response.ok) throw new Error("Failed to save audit config");
@@ -3117,7 +2899,7 @@ export const api = {
     if (periodEnd) params.set('periodEnd', periodEnd);
     const qs = params.toString() ? `?${params.toString()}` : '';
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-audit/deadhead/fleet${qs}`, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch fleet deadhead attribution");
     return response.json();
@@ -3129,7 +2911,7 @@ export const api = {
     if (periodEnd) params.set('periodEnd', periodEnd);
     const qs = params.toString() ? `?${params.toString()}` : '';
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-audit/deadhead/${vehicleId}${qs}`, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch vehicle deadhead attribution");
     return response.json();
@@ -3138,7 +2920,7 @@ export const api = {
   async recalculateAllIntegrity() {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/fuel-audit/recalculate-all`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Recalculate failed");
     return response.json();
@@ -3159,7 +2941,7 @@ export const api = {
     if (opts?.driverIds?.length) qs.set('driverIds', opts.driverIds.join(','));
     const suffix = qs.toString() ? `?${qs.toString()}` : '';
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/finalized-reports${suffix}`, {
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await requireAuthHeaders(null)
     });
     if (!response.ok) {
       const errText = await response.text();
@@ -3171,10 +2953,7 @@ export const api = {
   async saveFinalizedReports(reports: any[]): Promise<{ success: boolean; saved: number }> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/finalized-reports`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await requireAuthHeaders(),
       body: JSON.stringify(reports)
     });
     if (!response.ok) {
@@ -3189,7 +2968,7 @@ export const api = {
     const weekKey = String(weekStart).split('T')[0];
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/finalized-reports/${encodeURIComponent(weekKey)}/${encodeURIComponent(identityId)}`, {
       method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await requireAuthHeaders(null)
     });
     if (!response.ok) {
       const errText = await response.text();
@@ -3210,10 +2989,7 @@ export const api = {
       `${API_ENDPOINTS.fuel}/finalized-reports/reset-period`,
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${publicAnonKey}`,
-        },
+        headers: await requireAuthHeaders(),
         body: JSON.stringify({ weekStart: weekKey }),
       },
     );
@@ -3248,10 +3024,7 @@ export const api = {
       `${API_ENDPOINTS.fuel}/finalized-reports/cleanup-orphaned-settlements`,
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${publicAnonKey}`,
-        },
+        headers: await requireAuthHeaders(),
         body: JSON.stringify({
           dryRun: opts.dryRun,
           ...(opts.confirm ? { confirm: opts.confirm } : {}),
@@ -3293,7 +3066,7 @@ export const api = {
 
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.financial}/ledger?${qp.toString()}`,
-      { headers: { 'Authorization': `Bearer ${publicAnonKey}` } }
+      { headers: await requireAuthHeaders(null) }
     );
     if (!response.ok) {
       const errText = await response.text();
@@ -3309,7 +3082,7 @@ export const api = {
   }> {
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.financial}/ledger/count`,
-      { headers: { 'Authorization': `Bearer ${publicAnonKey}` } }
+      { headers: await requireAuthHeaders(null) }
     );
     if (!response.ok) throw new Error('Failed to fetch ledger count');
     return response.json();
@@ -3377,7 +3150,7 @@ export const api = {
 
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.financial}/ledger/summary?${qp.toString()}`,
-      { headers: { 'Authorization': `Bearer ${publicAnonKey}` } }
+      { headers: await requireAuthHeaders(null) }
     );
     if (!response.ok) {
       const errText = await response.text();
@@ -3427,7 +3200,7 @@ export const api = {
 
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.financial}/ledger/statement-summary?${qp.toString()}`,
-      { headers: { 'Authorization': `Bearer ${publicAnonKey}` } }
+      { headers: await requireAuthHeaders(null) }
     );
     if (!response.ok) {
       const errText = await response.text();
@@ -3450,7 +3223,7 @@ export const api = {
 
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.financial}/ledger/driver-overview?${qp.toString()}`,
-      { headers: { 'Authorization': `Bearer ${publicAnonKey}` } }
+      { headers: await requireAuthHeaders(null) }
     );
     if (!response.ok) {
       const msg = await parseFinancialApiErrorBody(response);
@@ -3466,15 +3239,13 @@ export const api = {
     startDate: string;
     endDate: string;
   }): Promise<any> {
-    const { data: { session } } = await supabase.auth.getSession();
-    const token = session?.access_token || publicAnonKey;
     const qp = new URLSearchParams();
     qp.set('driverId', params.driverId);
     qp.set('startDate', params.startDate);
     qp.set('endDate', params.endDate);
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.financial}/ledger/diagnostic-trip-ledger-gap?${qp.toString()}`,
-      { headers: { Authorization: `Bearer ${token}` } }
+      { headers: await requireAuthHeaders(null) }
     );
     if (!response.ok) {
       const msg = await parseFinancialApiErrorBody(response);
@@ -3494,7 +3265,7 @@ export const api = {
     qp.set('endDate', params.endDate);
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.financial}/ledger/driver-indrive-wallet?${qp.toString()}`,
-      { headers: { 'Authorization': `Bearer ${publicAnonKey}` } }
+      { headers: await requireAuthHeaders(null) }
     );
     if (!response.ok) {
       const msg = await parseFinancialApiErrorBody(response);
@@ -3511,10 +3282,7 @@ export const api = {
       `${API_ENDPOINTS.financial}/ledger`,
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${publicAnonKey}`,
-        },
+        headers: await requireAuthHeaders(),
         body: JSON.stringify(entry),
       }
     );
@@ -3531,10 +3299,7 @@ export const api = {
       `${API_ENDPOINTS.financial}/ledger/batch`,
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${publicAnonKey}`,
-        },
+        headers: await requireAuthHeaders(),
         body: JSON.stringify({ entries }),
       }
     );
@@ -3553,10 +3318,7 @@ export const api = {
       `${API_ENDPOINTS.financial}/ledger/canonical-events/append`,
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${publicAnonKey}`,
-        },
+        headers: await requireAuthHeaders(),
         body: JSON.stringify({ events }),
       },
     );
@@ -3574,10 +3336,7 @@ export const api = {
   }): Promise<{ success: boolean; deleted: number; idemDeleted: number }> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/ledger/delete-by-source`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`,
-      },
+      headers: await requireAuthHeaders(),
       body: JSON.stringify(payload),
     });
     if (!response.ok) {
@@ -3712,7 +3471,7 @@ export const api = {
     if (params.offset != null) qp.set('offset', String(params.offset));
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.financial}/ledger/canonical-events?${qp.toString()}`,
-      { headers: { 'Authorization': `Bearer ${publicAnonKey}` } },
+      { headers: await requireAuthHeaders(null) },
     );
     if (!response.ok) {
       const errText = await response.text();
@@ -3874,10 +3633,7 @@ export const api = {
       `${API_ENDPOINTS.financial}/ledger/${encodeURIComponent(id)}`,
       {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${publicAnonKey}`,
-        },
+        headers: await requireAuthHeaders(),
         body: JSON.stringify(updates),
       }
     );
@@ -3894,7 +3650,7 @@ export const api = {
       `${API_ENDPOINTS.financial}/ledger/${encodeURIComponent(id)}`,
       {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` },
+        headers: await requireAuthHeaders(null),
       }
     );
     if (!response.ok) {
@@ -3918,7 +3674,7 @@ export const api = {
 
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.financial}/ledger/driver-earnings-history?${qp.toString()}`,
-      { headers: { 'Authorization': `Bearer ${publicAnonKey}` } }
+      { headers: await requireAuthHeaders(null) }
     );
     if (!response.ok) {
       const errText = await response.text();
@@ -3934,10 +3690,7 @@ export const api = {
       `${API_ENDPOINTS.financial}/ledger/repair-driver`,
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${publicAnonKey}`,
-        },
+        headers: await requireAuthHeaders(),
         body: JSON.stringify({ driverId, ...(tripIds ? { tripIds } : {}), ...(force ? { force: true } : {}) }),
       }
     );
@@ -3976,10 +3729,7 @@ export const api = {
       const url = `${API_ENDPOINTS.fleet}/ledger/ensure-from-trip-ids`;
       const response = await fetchWithRetry(url, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${publicAnonKey}`,
-        },
+        headers: await requireAuthHeaders(),
         body: JSON.stringify({ tripIds: ids.slice(i, i + SLICE) }),
       });
       if (!response.ok) {
@@ -4001,7 +3751,7 @@ export const api = {
     const response = await fetch(
       `${API_ENDPOINTS.financial}/ledger/cash-diagnostic/${driverId}`,
       {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` },
+        headers: await requireAuthHeaders(null),
       }
     );
     if (!response.ok) {
@@ -4024,10 +3774,7 @@ export const api = {
   }): Promise<{ items: any[]; totalCount: number }> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/bulk-delete-preview`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`,
-      },
+      headers: await requireAuthHeaders(),
       body: JSON.stringify(payload),
     });
     if (!response.ok) {
@@ -4043,10 +3790,7 @@ export const api = {
   }): Promise<{ success: boolean; deletedCount: number; filesDeletedCount: number }> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.admin}/bulk-delete-execute`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`,
-      },
+      headers: await requireAuthHeaders(),
       body: JSON.stringify(payload),
     });
     if (!response.ok) {
@@ -4149,7 +3893,7 @@ export const api = {
       const qs = qp.toString() ? `?${qp.toString()}` : '';
       const response = await fetchWithRetry(
         `${API_ENDPOINTS.financial}/ledger/fleet-summary${qs}`,
-        { headers: { 'Authorization': `Bearer ${publicAnonKey}` } }
+        { headers: await requireAuthHeaders(null) }
       );
       if (!response.ok) {
         const errText = await response.text();
@@ -4197,7 +3941,7 @@ export const api = {
       : `${API_ENDPOINTS.fuel}/unverified-vendors`;
     
     const response = await fetchWithRetry(url, {
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await requireAuthHeaders(null)
     });
     
     if (!response.ok) {
@@ -4218,7 +3962,7 @@ export const api = {
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.fuel}/unverified-vendors/${vendorId}`,
       {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await requireAuthHeaders(null)
       }
     );
     
@@ -4239,10 +3983,7 @@ export const api = {
       `${API_ENDPOINTS.fuel}/unverified-vendors`,
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${publicAnonKey}`
-        },
+        headers: await requireAuthHeaders(),
         body: JSON.stringify(data)
       }
     );
@@ -4271,10 +4012,7 @@ export const api = {
       `${API_ENDPOINTS.fuel}/unverified-vendors/bulk`,
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${publicAnonKey}`
-        },
+        headers: await requireAuthHeaders(),
         body: JSON.stringify({ transactions })
       }
     );
@@ -4306,10 +4044,7 @@ export const api = {
       `${API_ENDPOINTS.fuel}/unverified-vendors/${vendorId}/resolve`,
       {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${publicAnonKey}`
-        },
+        headers: await requireAuthHeaders(),
         body: JSON.stringify({ stationId, resolvedBy })
       }
     );
@@ -4347,10 +4082,7 @@ export const api = {
       `${API_ENDPOINTS.fuel}/unverified-vendors/${vendorId}/create-station`,
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${publicAnonKey}`
-        },
+        headers: await requireAuthHeaders(),
         body: JSON.stringify({ stationData, resolvedBy })
       }
     );
@@ -4382,10 +4114,7 @@ export const api = {
       `${API_ENDPOINTS.fuel}/unverified-vendors/${vendorId}`,
       {
         method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${publicAnonKey}`
-        },
+        headers: await requireAuthHeaders(),
         body: JSON.stringify({ rejectedBy, reason, action })
       }
     );
@@ -4416,10 +4145,7 @@ export const api = {
       `${API_ENDPOINTS.fuel}/unverified-vendors/${vendorId}/transactions/${transactionId}/resolve`,
       {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${publicAnonKey}`
-        },
+        headers: await requireAuthHeaders(),
         body: JSON.stringify({ stationId })
       }
     );
@@ -4453,10 +4179,7 @@ export const api = {
       `${API_ENDPOINTS.fuel}/unverified-vendors/${vendorId}/transactions/${transactionId}/create-station`,
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${publicAnonKey}`
-        },
+        headers: await requireAuthHeaders(),
         body: JSON.stringify(stationData)
       }
     );
@@ -4483,10 +4206,7 @@ export const api = {
       `${API_ENDPOINTS.fuel}/unverified-vendors/${vendorId}/transactions/${transactionId}`,
       {
         method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${publicAnonKey}`
-        },
+        headers: await requireAuthHeaders(),
         body: JSON.stringify({ reason })
       }
     );
@@ -4503,7 +4223,7 @@ export const api = {
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.fuel}/stations/search?q=${encodeURIComponent(query)}`,
       {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await requireAuthHeaders(null)
       }
     );
     
@@ -4532,10 +4252,7 @@ export const api = {
       `${API_ENDPOINTS.fuel}/migrate-legacy-vendors`,
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${publicAnonKey}`
-        },
+        headers: await requireAuthHeaders(),
         body: JSON.stringify({ dryRun: true })
       }
     );
@@ -4570,10 +4287,7 @@ export const api = {
       `${API_ENDPOINTS.fuel}/process-migration-transaction`,
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${publicAnonKey}`
-        },
+        headers: await requireAuthHeaders(),
         body: JSON.stringify({ transactionId, action, data })
       }
     );
@@ -4596,7 +4310,7 @@ export async function fetchFleetTimezone(): Promise<string> {
     const res = await fetch(
       `https://${projectId}.supabase.co/functions/v1/make-server-37f42386/fleet-timezone`,
       {
-        headers: { Authorization: `Bearer ${publicAnonKey}` },
+        headers: await requireAuthHeaders(null),
       },
     );
     if (!res.ok) throw new Error(`HTTP ${res.status}`);

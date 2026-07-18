@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { projectId, publicAnonKey } from '../utils/supabase/info';
+import { projectId } from '../utils/supabase/info';
+import { requireAuthHeaders } from '../utils/authHeaders';
 import { WeeklyCheckIn } from '../types/check-in';
 
 export function useAdminCheckIn() {
@@ -10,10 +11,7 @@ export function useAdminCheckIn() {
         try {
             const response = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-37f42386/check-ins/review`, {
                 method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${publicAnonKey}`,
-                    'Content-Type': 'application/json'
-                },
+                headers: await requireAuthHeaders(),
                 body: JSON.stringify({ checkInId, status, managerNotes: notes })
             });
             

@@ -159,16 +159,34 @@ export function registerPassengerInviteRoutes(app: Hono, deps: InviteDeps) {
     }
 
     const now = new Date().toISOString();
+
+    // Atomically CLAIM the invite BEFORE touching the ride: only the row that is
+    // still unclaimed can win (UPDATE ... WHERE claimed_at IS NULL). Two
+    // concurrent claimants can no longer both pass the earlier read-check and
+    // each write the ride's passenger — the loser matches 0 rows here.
+    const { data: claimedRows, error: claimErr } = await db.from(t.ride_passenger_invites)
+      .update({ claimed_by_user_id: auth.user.id, claimed_at: now })
+      .eq("id", invite.id)
+      .is("claimed_at", null)
+      .select("id");
+    if (claimErr) return c.json({ error: "claim_failed", message: claimErr.message }, 500);
+    if (!claimedRows || claimedRows.length === 0) {
+      // Lost the race: another claimant took this invite first.
+      return c.json({ error: "already_claimed" }, 409);
+    }
+
     const { error: patchErr } = await deps.pubSvc().rpc("rides_patch_ride_request", {
       p_id: rideId,
       p_patch: { passenger_user_id: auth.user.id, updated_at: now },
     });
-    if (patchErr) return c.json({ error: "claim_failed", message: patchErr.message }, 500);
-
-    await db.from(t.ride_passenger_invites).update({
-      claimed_by_user_id: auth.user.id,
-      claimed_at: now,
-    }).eq("id", invite.id);
+    if (patchErr) {
+      // Release the claim so the (now stranded) invite can be retried, then fail.
+      await db.from(t.ride_passenger_invites)
+        .update({ claimed_by_user_id: null, claimed_at: null })
+        .eq("id", invite.id)
+        .eq("claimed_by_user_id", auth.user.id);
+      return c.json({ error: "claim_failed", message: patchErr.message }, 500);
+    }
 
     await deps.audit(rideId, auth.user.id, "passenger_invite_claimed", { token });
 

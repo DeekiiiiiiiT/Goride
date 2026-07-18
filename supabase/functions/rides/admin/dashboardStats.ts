@@ -90,8 +90,12 @@ export function registerDashboardStatsRoutes(
       const locTable = driverResolved.tables.driver_locations;
       const rideTable = driverResolved.tables.ride_requests;
 
+      // FIX: Limit to locations updated in last 24h to avoid unbounded scan
+      const last24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
       const { data: locations } = await driverDb.from(locTable)
-        .select("user_id, available_for_rides, updated_at");
+        .select("user_id, available_for_rides, updated_at")
+        .gte("updated_at", last24h)
+        .limit(2000);
 
       const { data: activeTrips } = await driverDb.from(rideTable)
         .select("assigned_driver_user_id")

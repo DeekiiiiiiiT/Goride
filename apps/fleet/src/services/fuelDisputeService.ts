@@ -1,5 +1,6 @@
 import { FuelDispute } from '../types/fuel';
-import { projectId, publicAnonKey } from '../utils/supabase/info';
+import { projectId } from '../utils/supabase/info';
+import { requireAuthHeaders } from '../utils/authHeaders';
 import { API_ENDPOINTS } from './apiConfig';
 
 async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 3): Promise<Response> {
@@ -7,8 +8,7 @@ async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 
         const res = await fetch(url, {
             ...options,
             headers: {
-                'Authorization': `Bearer ${publicAnonKey}`,
-                'Content-Type': 'application/json',
+                ...(await requireAuthHeaders()),
                 ...options.headers,
             }
         });

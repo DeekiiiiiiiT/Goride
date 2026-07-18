@@ -1,4 +1,5 @@
-import { projectId, publicAnonKey } from '../utils/supabase/info';
+import { projectId } from '../utils/supabase/info';
+import { requireAuthHeaders } from '../utils/authHeaders';
 import { fetchWithRetry } from './api';
 import { API_ENDPOINTS } from './apiConfig';
 import { EquipmentItem } from '../types/equipment';
@@ -14,7 +15,7 @@ export interface EquipmentTemplate {
 export const templateService = {
   async getTemplates(): Promise<EquipmentTemplate[]> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/templates`, {
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch templates");
     return response.json();
@@ -23,10 +24,7 @@ export const templateService = {
   async saveTemplate(template: EquipmentTemplate): Promise<EquipmentTemplate> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/templates`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await requireAuthHeaders(),
       body: JSON.stringify(template)
     });
     if (!response.ok) throw new Error("Failed to save template");

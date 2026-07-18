@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { WeeklyCheckIn } from '../types/check-in';
-import { projectId, publicAnonKey } from '../utils/supabase/info';
+import { projectId } from '../utils/supabase/info';
+import { requireAuthHeaders } from '../utils/authHeaders';
 
 export function useWeeklyCheckIn(driverId: string | undefined) {
     const [needsCheckIn, setNeedsCheckIn] = useState(false);
@@ -27,9 +28,7 @@ export function useWeeklyCheckIn(driverId: string | undefined) {
             
             // Fetch check-ins
             const response = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-37f42386/check-ins?driverId=${driverId}&weekStart=${weekStart}`, {
-                headers: {
-                    'Authorization': `Bearer ${publicAnonKey}`
-                }
+                headers: await requireAuthHeaders(null)
             });
             const data = await response.json();
             
@@ -68,7 +67,7 @@ export function useWeeklyCheckIn(driverId: string | undefined) {
              formData.append('file', photo);
              const uploadRes = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-37f42386/upload`, {
                  method: 'POST',
-                 headers: { 'Authorization': `Bearer ${publicAnonKey}` },
+                 headers: await requireAuthHeaders(null),
                  body: formData
              });
              const uploadData = await uploadRes.json();
@@ -97,10 +96,7 @@ export function useWeeklyCheckIn(driverId: string | undefined) {
 
         await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-37f42386/check-ins`, {
             method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${publicAnonKey}`,
-                'Content-Type': 'application/json'
-            },
+            headers: await requireAuthHeaders(),
             body: JSON.stringify(payload)
         });
         

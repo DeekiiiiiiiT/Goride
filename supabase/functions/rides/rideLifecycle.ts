@@ -44,7 +44,16 @@ export const DRIVER_TRANSITIONS: Record<RideStatus, RideStatus[]> = driverTransi
 
 export interface ApplyTransitionDeps {
   loadRideRequestById: (id: string) => Promise<Record<string, unknown> | null>;
-  patchRideRequest: (id: string, patch: Record<string, unknown>) => Promise<boolean>;
+  /**
+   * Persist a patch. When `expectedFrom` is passed the write MUST be a
+   * compare-and-swap (UPDATE ... WHERE status = expectedFrom); a 0-row result
+   * returns false so the caller can treat it as a status-change conflict.
+   */
+  patchRideRequest: (
+    id: string,
+    patch: Record<string, unknown>,
+    expectedFrom?: string,
+  ) => Promise<boolean>;
   handleTerminalRideLedgerAndSync: (rideId: string) => Promise<void>;
   bumpSurgeDemand: (cellKey: string, delta: number) => Promise<void>;
   audit: (
@@ -184,10 +193,16 @@ export async function applyRideTransition(
     if ("error" in fareResult) {
       return { ok: false, error: fareResult.error, current };
     }
+    // Preserve existing tip/platform_fee from ride row
+    const existingTip = Number(ride.tip_minor ?? 0);
+    const existingPlatformFee = Number(ride.platform_fee_minor ?? 0);
+    const driverNet = fareResult.fareMinor + existingTip - existingPlatformFee;
+
     patch.fare_final_minor = fareResult.fareMinor;
     patch.fare_final_breakdown = fareResult.fareFinalBreakdown;
-    patch.platform_fee_minor = 0;
-    patch.driver_net_minor = fareResult.fareMinor;
+    patch.platform_fee_minor = existingPlatformFee;
+    patch.tip_minor = existingTip;
+    patch.driver_net_minor = Math.max(0, driverNet);
     patch.fare_locked_at = nowIso;
     patch.cash_settlement_status = "pending";
     if (!ride.payment_method) patch.payment_method = "cash";
@@ -206,8 +221,12 @@ export async function applyRideTransition(
     patch.cancel_reason = params.cancelReason ?? null;
   }
 
-  const patched = await deps.patchRideRequest(params.rideId, patch);
-  if (!patched) return { ok: false, error: "patch_failed", current };
+  // CAS on the CURRENT status: the update only lands if the row is still at
+  // `current`. A 0-row result means a concurrent transition already moved the
+  // ride, so we abort WITHOUT running any of the terminal money/ledger side
+  // effects below — this is what prevents double posts on completion/cancel.
+  const patched = await deps.patchRideRequest(params.rideId, patch, current);
+  if (!patched) return { ok: false, error: "status_changed", current };
 
   if (params.next === "completed" || params.next === "cancelled") {
     await deps.handleTerminalRideLedgerAndSync(params.rideId);

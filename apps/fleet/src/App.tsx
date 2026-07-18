@@ -149,6 +149,7 @@ function AppContent() {
   useEffect(() => {
     const PING_INTERVAL_MS = 45_000;
     const healthUrl = `${API_ENDPOINTS.fleet}/health`;
+    // ANON ALLOWLIST: /health is a public, unauthenticated warm-up ping (no data). Anon key is intentional.
     const headers = { Authorization: `Bearer ${publicAnonKey}` };
 
     // Fire one immediately on mount so the instance warms up right away

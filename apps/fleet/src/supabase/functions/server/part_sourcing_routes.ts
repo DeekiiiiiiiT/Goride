@@ -4,7 +4,7 @@
 import type { Context } from "npm:hono";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import * as kv from "./kv_store.tsx";
-import { requireAuth, requirePermission } from "./rbac_middleware.ts";
+import { requireAuth, requirePermission, assertPlatformStaffResponse } from "./rbac_middleware.ts";
 import { filterByOrg } from "./org_scope.ts";
 import { resolveCatalogIdForKvVehicle } from "./vehicle_catalog_resolve.ts";
 
@@ -14,14 +14,8 @@ function isUuid(s: string): boolean {
   return UUID_RE.test(s.trim());
 }
 
-function assertPartSourcingPlatformAccess(c: Context) {
-  const u = c.get("rbacUser") as { resolvedRole?: string; role?: string } | undefined;
-  const r = u?.resolvedRole || u?.role;
-  if (r !== "platform_owner" && r !== "superadmin" && r !== "platform_support") {
-    return c.json({ error: "Only platform owner or support can manage parts sourcing" }, 403);
-  }
-  return null;
-}
+// Wave 5: DRY — use shared assertPlatformStaffResponse from rbac_middleware
+const assertPartSourcingPlatformAccess = assertPlatformStaffResponse;
 
 function normCode(v: unknown): string {
   if (v === undefined || v === null) return "";

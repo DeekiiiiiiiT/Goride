@@ -50,12 +50,14 @@ async function listProfileCandidatesByPhone(
   profileTable: string,
   normalized: string,
 ): Promise<ProfileCandidate[]> {
+  // Query by normalized phone with limit to avoid unbounded scans
   const { data: profiles, error } = await db.from(profileTable)
     .select("user_id, display_name, phone, phone_verified_at")
-    .not("phone", "is", null);
+    .eq("phone", normalized)
+    .limit(10);
 
   if (error) {
-    console.error("[resolve_roam_user] profile_scan_failed", error.message);
+    console.error("[resolve_roam_user] profile_query_failed", error.message);
     return [];
   }
 

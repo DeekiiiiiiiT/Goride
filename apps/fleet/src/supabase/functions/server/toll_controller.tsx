@@ -17,8 +17,10 @@
  */
 
 import { Hono } from "npm:hono";
-import { createClient } from "npm:@supabase/supabase-js@2";
 import * as kv from "./kv_store.tsx";
+import { requireAuth, requirePermission, type RbacUser } from "./rbac_middleware.ts";
+import { getServiceClient } from "./service_client.ts";
+import { checkRateLimit, recordFailedAttempt, getClientIp } from "./rate_limiter.ts";
 import { isTollCategory } from "./toll_category_flags.ts";
 import { classifyOrphanToll } from "./orphanTollClassifier.ts";
 import { emitDriverTollCharge, isUnifiedTollSettlementEnabled } from "./driver_toll_charge.ts";
@@ -105,10 +107,11 @@ import {
 
 const app = new Hono();
 
-const supabase = createClient(
-  Deno.env.get("SUPABASE_URL")!,
-  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-);
+// Auth gate: every route in this controller requires a valid user JWT (Wave 1B).
+app.use("*", requireAuth({ strict: true }));
+
+// Wave 5: Use shared service client
+const supabase = getServiceClient();
 
 const BASE = "/make-server-37f42386/toll-reconciliation";
 
@@ -4599,7 +4602,7 @@ async function writeTollLedgerEntry(params: {
 
 // ─── POST /reconcile ───────────────────────────────────────────────────
 
-app.post(`${BASE}/reconcile`, async (c) => {
+app.post(`${BASE}/reconcile`, requirePermission('toll.manage'), async (c) => {
   try {
     const { transactionId, tripId } = await c.req.json();
     if (!transactionId || !tripId) {
@@ -4689,7 +4692,7 @@ app.post(`${BASE}/reconcile`, async (c) => {
 
 // ─── POST /unreconcile ─────────────────────────────────────────────────
 
-app.post(`${BASE}/unreconcile`, async (c) => {
+app.post(`${BASE}/unreconcile`, requirePermission('toll.manage'), async (c) => {
   try {
     const { transactionId } = await c.req.json();
     if (!transactionId) {
@@ -4961,7 +4964,23 @@ app.post(`${BASE}/reset-for-reconciliation`, async (c) => {
 });
 
 // ─── POST /reset-period ──────────────────────────────────────────────────
-app.post(`${BASE}/reset-period`, async (c) => {
+app.post(`${BASE}/reset-period`, requirePermission('toll.manage'), async (c) => {
+  // FIX: Add rate limiting to prevent abuse of destructive bulk operations
+  const clientIp = getClientIp(c);
+  const rbacUser = c.get("rbacUser") as RbacUser | undefined;
+  const userId = rbacUser?.userId || "unknown";
+  const rateLimitKey = `${clientIp}:${userId}`;
+  
+  const rateCheck = await checkRateLimit(rateLimitKey, "admin");
+  if (!rateCheck.allowed) {
+    console.warn(`[TollReconciliation] Rate limit exceeded for reset-period: ${rateLimitKey}`);
+    return c.json({ 
+      error: "rate_limit_exceeded", 
+      message: `Too many requests. Please wait ${rateCheck.retryAfterSec} seconds.`,
+      retryAfter: rateCheck.retryAfterSec 
+    }, 429);
+  }
+
   try {
     const body = await c.req.json();
     const { executePeriodReconciliationReset } = await import("./period_reset.ts");
@@ -4977,18 +4996,38 @@ app.post(`${BASE}/reset-period`, async (c) => {
     );
     return c.json({ success: true, ...result });
   } catch (e: any) {
+    await recordFailedAttempt(rateLimitKey, "admin");
     const status =
       typeof e.status === "number" && e.status >= 400 && e.status < 600
         ? e.status
         : 500;
-    console.log(`[TollReconciliation] POST /reset-period error: ${e.message}`);
+    console.error(`[TollReconciliation] POST /reset-period error:`, e.message, e.stack);
+    if (status === 500) {
+      return c.json({ error: "internal_error", code: "INTERNAL", message: "Something went wrong" }, 500);
+    }
     return c.json({ error: e.message }, status);
   }
 });
 
 // ─── POST /bulk-reconcile ──────────────────────────────────────────────
 
-app.post(`${BASE}/bulk-reconcile`, async (c) => {
+app.post(`${BASE}/bulk-reconcile`, requirePermission('toll.manage'), async (c) => {
+  // FIX: Add rate limiting to prevent abuse of bulk reconciliation
+  const clientIp = getClientIp(c);
+  const rbacUser = c.get("rbacUser") as RbacUser | undefined;
+  const userId = rbacUser?.userId || "unknown";
+  const rateLimitKey = `${clientIp}:${userId}`;
+  
+  const rateCheck = await checkRateLimit(rateLimitKey, "admin");
+  if (!rateCheck.allowed) {
+    console.warn(`[TollReconciliation] Rate limit exceeded for bulk-reconcile: ${rateLimitKey}`);
+    return c.json({ 
+      error: "rate_limit_exceeded", 
+      message: `Too many requests. Please wait ${rateCheck.retryAfterSec} seconds.`,
+      retryAfter: rateCheck.retryAfterSec 
+    }, 429);
+  }
+
   try {
     const { matches } = await c.req.json();
 
@@ -5007,15 +5046,19 @@ app.post(`${BASE}/bulk-reconcile`, async (c) => {
     for (let i = 0; i < matches.length; i += BATCH_SIZE) {
       const batch = matches.slice(i, i + BATCH_SIZE);
 
-      const txKeys = batch.map((m: any) => `transaction:${m.transactionId}`);
+      // Wave 6: Use toll_ledger as primary store with legacy transaction fallback
+      const tollLedgerKeys = batch.map((m: any) => `toll_ledger:${m.transactionId}`);
+      const legacyTxKeys = batch.map((m: any) => `transaction:${m.transactionId}`);
       const tripKeys = batch.map((m: any) => `trip:${m.tripId}`);
 
-      let txValues: any[];
+      let tollLedgerValues: any[];
+      let legacyTxValues: any[];
       let tripValues: any[];
 
       try {
-        [txValues, tripValues] = await Promise.all([
-          kv.mget(txKeys),
+        [tollLedgerValues, legacyTxValues, tripValues] = await Promise.all([
+          kv.mget(tollLedgerKeys),
+          kv.mget(legacyTxKeys),
           kv.mget(tripKeys),
         ]);
       } catch (e: any) {
@@ -5023,6 +5066,9 @@ app.post(`${BASE}/bulk-reconcile`, async (c) => {
         results.failed += batch.length;
         continue;
       }
+      
+      // Merge: prefer toll_ledger, fall back to legacy transaction
+      const txValues = tollLedgerValues.map((tl, idx) => tl || legacyTxValues[idx]);
 
       const tollLedgerUpdates: { id: string; updates: Partial<TollLedgerRecord>; trip: any }[] = [];
       const canonicalAuditEntries: TollReconcileAuditEntry[] = [];
@@ -5098,8 +5144,12 @@ app.post(`${BASE}/bulk-reconcile`, async (c) => {
 
     return c.json({ success: true, ...results });
   } catch (e: any) {
-    console.log(`[TollReconciliation] POST /bulk-reconcile error: ${e.message}`);
-    return c.json({ error: e.message }, 500);
+    const clientIp = getClientIp(c);
+    const rbacUser = c.get("rbacUser") as RbacUser | undefined;
+    const userId = rbacUser?.userId || "unknown";
+    await recordFailedAttempt(`${clientIp}:${userId}`, "admin");
+    console.error(`[TollReconciliation] POST /bulk-reconcile error:`, e.message, e.stack);
+    return c.json({ error: "internal_error", code: "INTERNAL", message: "Something went wrong" }, 500);
   }
 });
 
@@ -8046,7 +8096,7 @@ async function reconcileTollForDisputeMatch(transactionId: string, tripId: strin
  *
  * POST body: { dryRun?: boolean, tollIds?: string[] }
  */
-app.post(`${BASE}/settlement-allocations/backfill`, async (c) => {
+app.post(`${BASE}/settlement-allocations/backfill`, requirePermission('toll.manage'), async (c) => {
   try {
     const body = await c.req.json().catch(() => ({}));
     const dryRun = body?.dryRun !== false;

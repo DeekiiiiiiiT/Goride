@@ -1,4 +1,5 @@
-import { projectId, publicAnonKey } from '../utils/supabase/info';
+import { projectId } from '../utils/supabase/info';
+import { requireAuthHeaders } from '../utils/authHeaders';
 import { EquipmentItem } from '../types/equipment';
 import { fetchWithRetry } from './api';
 import { API_ENDPOINTS } from './apiConfig';
@@ -6,7 +7,7 @@ import { API_ENDPOINTS } from './apiConfig';
 export const equipmentService = {
   async getEquipment(vehicleId: string): Promise<EquipmentItem[]> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/equipment/${vehicleId}`, {
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch equipment");
     return response.json();
@@ -15,10 +16,7 @@ export const equipmentService = {
   async saveEquipment(item: EquipmentItem): Promise<EquipmentItem> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/equipment`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await requireAuthHeaders(),
       body: JSON.stringify(item)
     });
     if (!response.ok) throw new Error("Failed to save equipment");
@@ -29,14 +27,14 @@ export const equipmentService = {
   async deleteEquipment(vehicleId: string, itemId: string): Promise<void> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/equipment/${vehicleId}/${itemId}`, {
       method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to delete equipment");
   },
 
   async getAllEquipment(): Promise<EquipmentItem[]> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/fleet/equipment/all`, {
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch all equipment");
     return response.json();
@@ -45,10 +43,7 @@ export const equipmentService = {
   async bulkAssignEquipment(items: EquipmentItem[]): Promise<void> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/fleet/equipment/bulk`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await requireAuthHeaders(),
       body: JSON.stringify(items)
     });
     if (!response.ok) throw new Error("Failed to bulk assign equipment");

@@ -4,6 +4,10 @@ import { streamText } from "npm:hono/streaming";
 import { cors } from "npm:hono/cors";
 import { logger } from "npm:hono/logger";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { assertRequiredEnv } from "./env_boot.ts";
+
+// Wave 5: Fail-fast env validation at startup
+assertRequiredEnv();
 import OpenAI from "npm:openai";
 import { GoogleGenerativeAI } from "npm:@google/generative-ai";
 import * as kv from "./kv_store.tsx";
@@ -291,12 +295,55 @@ app.use("*", async (c, next) => {
   await next();
 });
 
+// ---------------------------------------------------------------------------
+// Wave 5: CORS Allowlist (env-driven)
+// ---------------------------------------------------------------------------
+// Parse CORS_ALLOWED_ORIGINS (comma-separated) or fall back to "*" in dev.
+function buildCorsOriginFn(): (origin: string) => string | null {
+  const rawEnv = Deno.env.get("CORS_ALLOWED_ORIGINS") ?? "";
+  const envMode = (Deno.env.get("ENVIRONMENT") ?? Deno.env.get("DENO_ENV") ?? "").toLowerCase();
+  const isDev = envMode === "development" || envMode === "local" || envMode === "";
+
+  const allowed = rawEnv
+    .split(",")
+    .map((o) => o.trim().toLowerCase())
+    .filter(Boolean);
+
+  // Dev fallback: if no explicit list and dev mode, allow all
+  if (allowed.length === 0 && isDev) {
+    return () => "*";
+  }
+
+  // Also accept origins from known Fleet frontend env vars (VITE_APP_URL, etc.)
+  const viteUrl = Deno.env.get("VITE_APP_URL") ?? "";
+  if (viteUrl) allowed.push(viteUrl.toLowerCase());
+  const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+  if (supabaseUrl) allowed.push(supabaseUrl.toLowerCase());
+
+  // Dedupe
+  const allowSet = new Set(allowed);
+
+  return (origin: string): string | null => {
+    if (!origin) return null;
+    const lower = origin.toLowerCase();
+    if (allowSet.has(lower)) return origin;
+    // Allow exact match or any subdomain of allowed origins
+    for (const a of allowSet) {
+      if (lower.endsWith(`.${a.replace(/^https?:\/\//, "")}`)) return origin;
+      if (lower === a) return origin;
+    }
+    return null;
+  };
+}
+
+const corsOriginFn = buildCorsOriginFn();
+
 // CORS must be registered before route handlers so all responses (including 4xx/5xx) expose
 // Access-Control-Allow-Origin — otherwise cross-origin fetch() rejects and the client shows a generic network error.
 app.use(
   "/*",
   cors({
-    origin: "*",
+    origin: corsOriginFn,
     allowHeaders: ["Content-Type", "Authorization", "apikey", "X-Roam-Product-Line", "X-Roam-Settings-Segment"],
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     exposeHeaders: ["Content-Length", "X-Cache"],
@@ -5341,7 +5388,7 @@ app.post("/make-server-37f42386/toll-reconciliation/reset-for-reconciliation", a
   }
 });
 
-app.post("/make-server-37f42386/toll-reconciliation/reset-period", async (c) => {
+app.post("/make-server-37f42386/toll-reconciliation/reset-period", requireAuth({ strict: true }), requirePermission('toll.manage'), async (c) => {
   try {
     const body = await c.req.json().catch(() => ({}));
     const { executePeriodReconciliationReset } = await import("./period_reset.ts");

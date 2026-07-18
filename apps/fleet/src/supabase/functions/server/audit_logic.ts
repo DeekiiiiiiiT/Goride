@@ -13,11 +13,15 @@ export const auditLogic = {
     },
 
     /**
-     * Generates a forensic SHA-256 hash of the record data for tamper-evidence.
-     * Binding spatial evidence and predictive leakage alerts to the record identity.
+     * HMAC-SHA256 of the forensic bundle (Wave 1C).
+     * Requires AUDIT_HMAC_SECRET — bare SHA-256 is forgeable without a server-side key.
      */
     generateRecordHash: async (data: any): Promise<string> => {
-        // Create a forensic bundle to ensure all integrity markers are signed
+        const secret = Deno.env.get("AUDIT_HMAC_SECRET");
+        if (!secret || !secret.trim()) {
+            throw new Error("AUDIT_HMAC_SECRET is required for tamper-evident audit hashing");
+        }
+
         const forensicBundle = {
             id: data.id,
             vehicleId: data.vehicleId,
@@ -26,13 +30,11 @@ export const auditLogic = {
             odometer: data.odometer,
             amount: data.amount,
             stationId: data.matchedStationId,
-            // Spatial Binding
             geofence: {
                 isInside: data.metadata?.geofenceMetadata?.isInside,
                 distance: data.metadata?.geofenceMetadata?.distanceMeters,
                 radius: data.metadata?.geofenceMetadata?.radiusAtTrigger
             },
-            // Predictive Binding
             integrity: {
                 status: data.metadata?.integrityStatus,
                 leakageRisk: data.metadata?.leakageRisk,
@@ -40,14 +42,20 @@ export const auditLogic = {
             }
         };
 
-        const msgUint8 = new TextEncoder().encode(JSON.stringify(forensicBundle));
-        const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
-        const hashArray = Array.from(new Uint8Array(hashBuffer));
-        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        const enc = new TextEncoder();
+        const key = await crypto.subtle.importKey(
+            "raw",
+            enc.encode(secret),
+            { name: "HMAC", hash: "SHA-256" },
+            false,
+            ["sign"],
+        );
+        const sig = await crypto.subtle.sign("HMAC", key, enc.encode(JSON.stringify(forensicBundle)));
+        return Array.from(new Uint8Array(sig)).map((b) => b.toString(16).padStart(2, "0")).join("");
     },
 
     /**
-     * Verifies if a record has been tampered with by comparing its current hash
+     * Verifies if a record has been tampered with by comparing its current HMAC
      * with the stored signature.
      */
     verifyRecordIntegrity: async (record: any, storedSignature: string): Promise<boolean> => {

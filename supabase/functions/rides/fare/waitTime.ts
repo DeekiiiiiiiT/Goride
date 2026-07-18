@@ -145,7 +145,9 @@ export function calculateWaitTimeFee(
     };
   }
   
-  const surge = Math.max(1, params.surgeMultiplier);
+  // Coerce invalid/NaN surgeMultiplier to 1 to avoid propagating NaN
+  const rawSurge = params.surgeMultiplier;
+  const surge = Number.isFinite(rawSurge) && rawSurge >= 1 ? rawSurge : 1;
   const baseFee = billableMinutes * params.ratePerMinMinor;
   const feeMinor = Math.round(baseFee * surge);
   

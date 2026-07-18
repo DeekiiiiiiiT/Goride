@@ -1,4 +1,5 @@
-import { projectId, publicAnonKey } from '../utils/supabase/info';
+import { projectId } from '../utils/supabase/info';
+import { requireAuthHeaders } from '../utils/authHeaders';
 import { FuelCard, FuelEntry, MileageAdjustment, FuelScenario } from '../types/fuel';
 import { FinancialTransaction } from '../types/data';
 import { API_ENDPOINTS } from './apiConfig';
@@ -25,7 +26,7 @@ export const fuelService = {
   // --- Fuel Cards ---
   async getFuelCards(): Promise<FuelCard[]> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-cards`, {
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch fuel cards");
     return response.json();
@@ -34,10 +35,7 @@ export const fuelService = {
   async saveFuelCard(card: FuelCard): Promise<FuelCard> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-cards`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await requireAuthHeaders(),
       body: JSON.stringify(card)
     });
     if (!response.ok) throw new Error("Failed to save fuel card");
@@ -48,7 +46,7 @@ export const fuelService = {
   async deleteFuelCard(id: string): Promise<void> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-cards/${id}`, {
       method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to delete fuel card");
   },
@@ -61,7 +59,7 @@ export const fuelService = {
     if (options?.endDate) query.append("endDate", options.endDate);
 
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries?${query.toString()}`, {
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch fuel entries");
     return response.json();
@@ -75,10 +73,7 @@ export const fuelService = {
 
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await requireAuthHeaders(),
       body: JSON.stringify(entry)
     });
     if (!response.ok) {
@@ -100,7 +95,7 @@ export const fuelService = {
     const enc = encodeURIComponent(id);
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries/${enc}`, {
       method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to delete fuel entry");
   },
@@ -108,7 +103,7 @@ export const fuelService = {
   // --- Mileage Adjustments ---
   async getMileageAdjustments(): Promise<MileageAdjustment[]> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/mileage-adjustments`, {
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch mileage adjustments");
     return response.json();
@@ -117,10 +112,7 @@ export const fuelService = {
   async saveMileageAdjustment(adj: MileageAdjustment): Promise<MileageAdjustment> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/mileage-adjustments`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await requireAuthHeaders(),
       body: JSON.stringify(adj)
     });
     if (!response.ok) throw new Error("Failed to save mileage adjustment");
@@ -131,7 +123,7 @@ export const fuelService = {
   async deleteMileageAdjustment(id: string): Promise<void> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/mileage-adjustments/${id}`, {
       method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to delete mileage adjustment");
   },
@@ -139,7 +131,7 @@ export const fuelService = {
   // --- Fuel Scenarios ---
   async getFuelScenarios(): Promise<FuelScenario[]> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/scenarios`, {
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch fuel scenarios");
     return response.json();
@@ -148,10 +140,7 @@ export const fuelService = {
   async saveFuelScenario(scenario: FuelScenario): Promise<FuelScenario> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/scenarios`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await requireAuthHeaders(),
       body: JSON.stringify(scenario)
     });
     if (!response.ok) {
@@ -169,7 +158,7 @@ export const fuelService = {
   async deleteFuelScenario(id: string): Promise<void> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/scenarios/${id}`, {
       method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await requireAuthHeaders(null)
     });
     if (!response.ok) {
       const errBody = await response.json().catch(() => null);
@@ -181,10 +170,7 @@ export const fuelService = {
   async finalizeReconciliation(reports: any[]): Promise<void> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/reconciliation/finalize`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await requireAuthHeaders(),
       body: JSON.stringify({ reports })
     });
     if (!response.ok) {
@@ -199,7 +185,7 @@ export const fuelService = {
     try {
       // We import api dynamically or use fetch to avoid circular dependency
       const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/../financial-operations/transactions/${transactionId}`, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await requireAuthHeaders(null)
       });
       if (!response.ok) return null;
       return response.json();
@@ -212,7 +198,7 @@ export const fuelService = {
   // --- Gas Stations ---
   async getStations(): Promise<any[]> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/stations`, {
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch stations");
     return response.json();
@@ -226,7 +212,7 @@ export const fuelService = {
     if (excludeId) params.append('excludeId', excludeId);
     if (category) params.append('category', category);
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/stations/check-duplicate?${params.toString()}`, {
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to check for station duplicates");
     return response.json();
@@ -235,10 +221,7 @@ export const fuelService = {
   async saveStation(station: any): Promise<any> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/stations`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await requireAuthHeaders(),
       body: JSON.stringify(station)
     });
     // Handle 409 Conflict (duplicate station detected) — surface the structured response
@@ -261,7 +244,7 @@ export const fuelService = {
   async deleteStation(id: string): Promise<void> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/stations/${id}`, {
       method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to delete station");
   },
@@ -278,10 +261,7 @@ export const fuelService = {
   }> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/stations/demote`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await requireAuthHeaders(),
       body: JSON.stringify({ stationId })
     });
     if (!response.ok) {
@@ -295,10 +275,7 @@ export const fuelService = {
   async migrateStationStatuses(): Promise<{ patchedCount: number; totalStations: number }> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/stations/migrate-status`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      }
+      headers: await requireAuthHeaders()
     });
     if (!response.ok) throw new Error("Failed to run station status migration");
     return response.json();
@@ -306,7 +283,7 @@ export const fuelService = {
 
   async getParentCompanies(): Promise<any[]> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/parent-companies`, {
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch parent companies");
     return response.json();
@@ -315,10 +292,7 @@ export const fuelService = {
   async geocodeAddress(address: string): Promise<{ lat: number; lng: number; formattedAddress?: string; city?: string; parish?: string }> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/geo/geocode`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await requireAuthHeaders(),
       body: JSON.stringify({ address })
     });
     if (!response.ok) {
@@ -331,10 +305,7 @@ export const fuelService = {
   async reverseGeocode(lat: number, lng: number): Promise<{ formattedAddress: string; streetAddress: string; city: string; parish: string; country: string; lat: number; lng: number }> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/geo/reverse-geocode`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await requireAuthHeaders(),
       body: JSON.stringify({ lat, lng })
     });
     if (!response.ok) {
@@ -347,10 +318,7 @@ export const fuelService = {
   async saveParentCompanies(companies: any[]): Promise<void> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/parent-companies`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await requireAuthHeaders(),
       body: JSON.stringify(companies)
     });
     if (!response.ok) throw new Error("Failed to save parent companies");

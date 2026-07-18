@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { projectId, publicAnonKey } from '../utils/supabase/info';
+import { projectId } from '../utils/supabase/info';
+import { requireAuthHeaders } from '../utils/authHeaders';
 import { useAuth } from '../components/auth/AuthContext';
 import { toast } from 'sonner@2.0.3';
 
@@ -10,15 +11,11 @@ export function useEnterpriseSync() {
   const [activeLocks, setActiveLocks] = useState<any[]>([]);
 
   const baseUrl = `https://${projectId}.supabase.co/functions/v1/make-server-37f42386`;
-  const headers = {
-    'Authorization': `Bearer ${publicAnonKey}`,
-    'Content-Type': 'application/json'
-  };
 
   const loadPreferences = useCallback(async () => {
     if (!user) return;
     try {
-      const res = await fetch(`${baseUrl}/sync/preferences?userId=${user.id}`, { headers });
+      const res = await fetch(`${baseUrl}/sync/preferences?userId=${user.id}`, { headers: await requireAuthHeaders() });
       const data = await res.json();
       setPreferences(data);
     } catch (e) {
@@ -32,7 +29,7 @@ export function useEnterpriseSync() {
     try {
       await fetch(`${baseUrl}/sync/preferences`, {
         method: 'POST',
-        headers,
+        headers: await requireAuthHeaders(),
         body: JSON.stringify({ userId: user.id, preferences: newPrefs })
       });
       setPreferences(newPrefs);
@@ -47,7 +44,7 @@ export function useEnterpriseSync() {
     try {
       const res = await fetch(`${baseUrl}/sync/lock`, {
         method: 'POST',
-        headers,
+        headers: await requireAuthHeaders(),
         body: JSON.stringify({
           resourceId,
           resourceType,
@@ -71,7 +68,7 @@ export function useEnterpriseSync() {
     try {
       await fetch(`${baseUrl}/sync/lock`, {
         method: 'DELETE',
-        headers,
+        headers: await requireAuthHeaders(),
         body: JSON.stringify({ resourceId, resourceType, userId: user.id })
       });
     } catch (e) {

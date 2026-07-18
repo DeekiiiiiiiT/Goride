@@ -5,7 +5,7 @@
 import type { Context } from "npm:hono";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import * as kv from "./kv_store.tsx";
-import { requireAuth, requirePermission } from "./rbac_middleware.ts";
+import { requireAuth, requirePermission, assertPlatformStaffResponse } from "./rbac_middleware.ts";
 import { filterByOrg, getOrgId } from "./org_scope.ts";
 import { advanceAfterService, computeInitialScheduleRow } from "./maintenance_schedule_engine.ts";
 import {
@@ -23,14 +23,8 @@ import { resolveCatalogIdForKvVehicle } from "./vehicle_catalog_resolve.ts";
 import { executeMaintenanceBootstrap } from "./maintenance_bootstrap_core.ts";
 import { requireCatalogMatched } from "./vehicle_catalog_gate.ts";
 
-function assertVehicleCatalogPlatformAccess(c: Context) {
-  const rbacUser = c.get("rbacUser") as { resolvedRole?: string; role?: string } | undefined;
-  const role = rbacUser?.resolvedRole || rbacUser?.role;
-  if (role !== "platform_owner" && role !== "superadmin" && role !== "platform_support") {
-    return c.json({ error: "Only platform owner or support can manage maintenance templates" }, 403);
-  }
-  return null;
-}
+// Wave 5: DRY — use shared assertPlatformStaffResponse from rbac_middleware
+const assertVehicleCatalogPlatformAccess = assertPlatformStaffResponse;
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
@@ -770,17 +764,24 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
         }> = [];
         let totalCreated = 0;
 
+        // FIX: Pre-fetch all existing schedule rows in batch to avoid N queries
+        const vehicleIds = vehicles.map((v) => String(v.id ?? "")).filter(Boolean);
+        const { data: allScheduleRows } = await supabase
+          .from("vehicle_maintenance_schedule")
+          .select("vehicle_id, id")
+          .eq("organization_id", orgId)
+          .in("vehicle_id", vehicleIds);
+        
+        const hasScheduleSet = new Set(
+          (allScheduleRows || []).map((r) => r.vehicle_id as string)
+        );
+
         for (const v of vehicles) {
           const vehicleId = String(v.id ?? "");
           if (!vehicleId) continue;
 
-          const { data: existingRows } = await supabase
-            .from("vehicle_maintenance_schedule")
-            .select("id")
-            .eq("organization_id", orgId)
-            .eq("vehicle_id", vehicleId)
-            .limit(1);
-          if (existingRows && existingRows.length > 0) {
+          // Use pre-fetched set instead of per-vehicle query
+          if (hasScheduleSet.has(vehicleId)) {
             results.push({ vehicleId, created: 0, skippedReason: "already_has_schedule" });
             continue;
           }

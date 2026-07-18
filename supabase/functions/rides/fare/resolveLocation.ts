@@ -4,6 +4,8 @@ import {
   buildLocationKey,
   locationKeysForFallback,
   type JamaicaCountySlug,
+  type JamaicaCounty,
+  type JamaicaParish,
 } from "./jamaicaLocations.ts";
 
 export type ResolvedPickupLocation = {
@@ -34,44 +36,68 @@ function pointInBounds(
   return lat >= b.minLat && lat <= b.maxLat && lng >= b.minLng && lng <= b.maxLng;
 }
 
-/** Resolve pickup coordinates to the most specific Jamaica location key we support. */
+function boundsArea(b: { minLat: number; maxLat: number; minLng: number; maxLng: number }): number {
+  return (b.maxLat - b.minLat) * (b.maxLng - b.minLng);
+}
+
+type ParishMatch = {
+  county: JamaicaCounty;
+  parish: JamaicaParish;
+  area: number;
+};
+
+/**
+ * Resolve pickup coordinates to the most specific Jamaica location key we support.
+ * When coords fall in overlapping parish bounds (e.g. Kingston/St Andrew), prefer
+ * the parish with the smaller bounding box as it's more specific.
+ */
 export function resolvePickupLocation(lat: number, lng: number): ResolvedPickupLocation {
+  // Collect all matching parishes (handles overlapping bounds like Kingston/St Andrew)
+  const matches: ParishMatch[] = [];
   for (const county of JAMAICA_COUNTIES) {
     for (const parish of county.parishes) {
-      if (!pointInBounds(lat, lng, parish.bounds)) continue;
-
-      let nearestLocality: string | undefined;
-      let nearestKm = 25;
-
-      for (const loc of parish.localities) {
-        if (loc.lat == null || loc.lng == null) continue;
-        const km = haversineKm(lat, lng, loc.lat, loc.lng);
-        if (km < nearestKm) {
-          nearestKm = km;
-          nearestLocality = loc.slug;
-        }
+      if (pointInBounds(lat, lng, parish.bounds)) {
+        matches.push({ county, parish, area: boundsArea(parish.bounds) });
       }
-
-      const locationKey = buildLocationKey({
-        scope: nearestLocality ? "locality" : "parish",
-        county: county.slug,
-        parish: parish.slug,
-        locality: nearestLocality,
-      });
-
-      return {
-        locationKey,
-        county: county.slug,
-        parish: parish.slug,
-        locality: nearestLocality,
-        fallbackKeys: locationKeysForFallback(locationKey),
-      };
     }
   }
 
+  if (matches.length === 0) {
+    return {
+      locationKey: JAMAICA_COUNTRY_SLUG,
+      fallbackKeys: [JAMAICA_COUNTRY_SLUG],
+    };
+  }
+
+  // Prefer smallest bounding box when multiple parishes match (more specific)
+  matches.sort((a, b) => a.area - b.area);
+  const { county, parish } = matches[0];
+
+  let nearestLocality: string | undefined;
+  let nearestKm = 25;
+
+  for (const loc of parish.localities) {
+    if (loc.lat == null || loc.lng == null) continue;
+    const km = haversineKm(lat, lng, loc.lat, loc.lng);
+    if (km < nearestKm) {
+      nearestKm = km;
+      nearestLocality = loc.slug;
+    }
+  }
+
+  const locationKey = buildLocationKey({
+    scope: nearestLocality ? "locality" : "parish",
+    county: county.slug,
+    parish: parish.slug,
+    locality: nearestLocality,
+  });
+
   return {
-    locationKey: JAMAICA_COUNTRY_SLUG,
-    fallbackKeys: [JAMAICA_COUNTRY_SLUG],
+    locationKey,
+    county: county.slug,
+    parish: parish.slug,
+    locality: nearestLocality,
+    fallbackKeys: locationKeysForFallback(locationKey),
   };
 }
 

@@ -10,8 +10,9 @@
  *   GET  /driver-financial-periods/health
  */
 import { Hono } from "npm:hono";
-import { createClient } from "jsr:@supabase/supabase-js@2.49.8";
 import * as kv from "./kv_store.tsx";
+import { requireAuth, requirePermission, type RbacUser } from "./rbac_middleware.ts";
+import { getServiceClient } from "./service_client.ts";
 import {
   rebuildDriverFinancialPeriod,
   rebuildAllPeriodsForDriver,
@@ -33,16 +34,16 @@ import {
 } from "./toll_controller.tsx";
 
 const app = new Hono();
+
+// Auth gate: every route in this controller requires a valid user JWT (Wave 1B).
+app.use("*", requireAuth({ strict: true }));
+
 const BASE = "/make-server-37f42386/driver-financial-periods";
 
-function sb() {
-  return createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-  );
-}
+// Wave 5: Use shared service client instead of ad-hoc createClient
+const sb = getServiceClient;
 
-app.get(BASE, async (c) => {
+app.get(BASE, requirePermission('transactions.view'), async (c) => {
   try {
     const driverId = c.req.query("driverId");
     if (!driverId) return c.json({ error: "driverId is required" }, 400);
@@ -61,7 +62,7 @@ app.get(BASE, async (c) => {
   }
 });
 
-app.get(`${BASE}/health`, async (c) => {
+app.get(`${BASE}/health`, requirePermission('transactions.view'), async (c) => {
   try {
     const client = sb();
     const [
@@ -112,7 +113,7 @@ app.get(`${BASE}/health`, async (c) => {
  * Shadow-compare regression fixtures for the three known Expenses vs Toll Recon bugs.
  * Query: driverId (optional, defaults to Kenny screenshot driver).
  */
-app.get(`${BASE}/verify-parity`, async (c) => {
+app.get(`${BASE}/verify-parity`, requirePermission('transactions.view'), async (c) => {
   try {
     const driverId =
       c.req.query("driverId") || "73e5b1dc-01b4-45ee-a34a-25a3256b9841";
@@ -206,7 +207,7 @@ app.get(`${BASE}/verify-parity`, async (c) => {
   }
 });
 
-app.get(`${BASE}/:anchor`, async (c) => {
+app.get(`${BASE}/:anchor`, requirePermission('transactions.view'), async (c) => {
   try {
     const driverId = c.req.query("driverId");
     const anchor = c.req.param("anchor");
@@ -221,7 +222,7 @@ app.get(`${BASE}/:anchor`, async (c) => {
   }
 });
 
-app.post(`${BASE}/rebuild`, async (c) => {
+app.post(`${BASE}/rebuild`, requirePermission('transactions.edit'), async (c) => {
   try {
     const body = await c.req.json().catch(() => ({}));
     const driverId = body.driverId;
@@ -238,7 +239,7 @@ app.post(`${BASE}/rebuild`, async (c) => {
   }
 });
 
-app.post(`${BASE}/process-outbox`, async (c) => {
+app.post(`${BASE}/process-outbox`, requirePermission('transactions.edit'), async (c) => {
   try {
     const body = await c.req.json().catch(() => ({}));
     // Keep batches small — each driver still loads toll ledger once.
@@ -253,7 +254,7 @@ app.post(`${BASE}/process-outbox`, async (c) => {
  * Backfill financial_events from toll_ledger usage + driver charges + fuel finalized.
  * Then rebuild all period projections for the driver (or all drivers with tolls).
  */
-app.post(`${BASE}/backfill`, async (c) => {
+app.post(`${BASE}/backfill`, requirePermission('transactions.edit'), async (c) => {
   try {
     const body = await c.req.json().catch(() => ({}));
     const dryRun = body.dryRun !== false;

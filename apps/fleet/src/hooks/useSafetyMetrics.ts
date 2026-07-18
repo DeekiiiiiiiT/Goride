@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { projectId, publicAnonKey } from '../utils/supabase/info';
+import { projectId } from '../utils/supabase/info';
+import { requireAuthHeaders } from '../utils/authHeaders';
 
 export function useSafetyMetrics() {
   const [efficiencyData, setEfficiencyData] = useState<any>(null);
@@ -11,10 +12,7 @@ export function useSafetyMetrics() {
     setLoading(true);
     try {
       const baseUrl = `https://${projectId}.supabase.co/functions/v1/make-server-37f42386`;
-      const headers = {
-        'Authorization': `Bearer ${publicAnonKey}`,
-        'Content-Type': 'application/json'
-      };
+      const headers = await requireAuthHeaders();
 
       const [effRes, fatRes] = await Promise.all([
         fetch(`${baseUrl}/fleet/efficiency-baseline`, { headers }),

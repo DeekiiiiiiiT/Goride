@@ -55,6 +55,13 @@ export interface SyncClaimTollResolutionResult {
    * and pass it back as `priorIsReconciled` on the eventual full revert.
    */
   priorIsReconciled: boolean | undefined;
+  /**
+   * Set when a required charge reversal could NOT be completed safely (the
+   * driver-charge marker was left ACTIVE). The toll resolution was
+   * deliberately NOT advanced; the caller should surface this for manual
+   * compensation rather than treating the claim as fully resolved.
+   */
+  reversalError?: string;
 }
 
 export async function syncClaimTollResolution(
@@ -86,6 +93,20 @@ export async function syncClaimTollResolution(
     );
     if (reverseResult.reversed) {
       resolutionTransactionId = null;
+    } else if (reverseResult.error) {
+      // The charge could not be safely unwound (e.g. projection txn missing);
+      // the marker was intentionally left ACTIVE. Do NOT mark the toll resolved
+      // / reconciled below — leave it flagged for explicit manual compensation.
+      console.error(
+        `[ClaimTollSync] reversal refused for toll ${effectiveTollId} (${reverseResult.error}) — leaving resolution untouched for manual compensation.`,
+      );
+      return {
+        isNoop: false,
+        resolutionTransactionId: undefined,
+        nextLedgerResolution: decision.nextLedgerResolution,
+        priorIsReconciled: undefined,
+        reversalError: reverseResult.error,
+      };
     }
   }
 

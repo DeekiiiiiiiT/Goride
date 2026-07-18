@@ -16,7 +16,6 @@ import {
 } from "lucide-react";
 import { useAuth } from '../auth/AuthContext';
 import { useCurrentDriver } from '../../hooks/useCurrentDriver';
-import { projectId, publicAnonKey } from '../../utils/supabase/info';
 import { Trip, TierConfig, FinancialTransaction, DriverMetrics } from '../../types/data';
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../ui/collapsible";
@@ -103,10 +102,6 @@ export function DriverEarnings() {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const headers = {
-             'Content-Type': 'application/json',
-             'Authorization': `Bearer ${publicAnonKey}`
-        };
 
         // Helper to fetch trips specifically for this driver (User ID + Legacy ID)
         const fetchDriverTrips = async () => {

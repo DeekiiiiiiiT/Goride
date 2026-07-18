@@ -358,8 +358,8 @@ export function requireAuth(options?: RequireAuthOptions) {
             const { isFeatureEnabled, FEATURE_FLAGS } = await import("./feature_flags.ts");
             useStrict = await isFeatureEnabled(FEATURE_FLAGS.STRICT_AUTH);
           } catch {
-            // If feature flags module fails, default to legacy behavior
-            useStrict = false;
+            // Wave 1C: fail closed if flag store is unavailable
+            useStrict = true;
           }
         }
 
@@ -530,4 +530,56 @@ export function requireRole(minimumLevel: number) {
 
     await next();
   };
+}
+
+// ---------------------------------------------------------------------------
+// 10. Middleware: requirePlatformStaff()
+//
+// Wave 5 DRY: Replaces byte-identical checks in part_sourcing_routes,
+// maintenance_routes, pending_vehicle_catalog_routes.
+// Requires platform_owner, platform_support, or superadmin.
+// ---------------------------------------------------------------------------
+
+export function requirePlatformStaff() {
+  return async (c: Context, next: Next) => {
+    const user = c.get('rbacUser') as RbacUser | undefined;
+
+    if (!user) {
+      return c.json({ error: 'Unauthorized: No user context' }, 401);
+    }
+
+    if (!hasPlatformStaffAccess(user)) {
+      console.log(`[RBAC] PLATFORM_STAFF: User ${user.userId} (role=${user.resolvedRole}) denied platform staff access`);
+      return c.json({
+        error: 'Forbidden',
+        message: 'Only platform owner or support can access this resource.',
+        currentRole: user.resolvedRole,
+      }, 403);
+    }
+
+    await next();
+  };
+}
+
+// ---------------------------------------------------------------------------
+// 11. Utility: assertPlatformStaffResponse()
+//
+// Wave 5 DRY: Inline-call version for existing route patterns that use
+// `const denied = assertFn(c); if (denied) return denied;`
+// Returns a Response if access denied, or null if allowed.
+// ---------------------------------------------------------------------------
+
+export function assertPlatformStaffResponse(c: Context): Response | null {
+  const user = c.get('rbacUser') as RbacUser | undefined;
+  if (!user) {
+    return c.json({ error: 'Unauthorized: No user context' }, 401) as unknown as Response;
+  }
+  if (!hasPlatformStaffAccess(user)) {
+    console.log(`[RBAC] PLATFORM_STAFF: User ${user.userId} (role=${user.resolvedRole}) denied platform staff access`);
+    return c.json({
+      error: 'Forbidden',
+      message: 'Only platform owner or support can access this resource.',
+    }, 403) as unknown as Response;
+  }
+  return null;
 }

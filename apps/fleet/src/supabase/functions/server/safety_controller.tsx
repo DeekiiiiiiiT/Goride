@@ -1,8 +1,12 @@
 import { Hono } from "npm:hono";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import * as kv from "./kv_store.tsx";
+import { requireAuth, requirePermission, type RbacUser } from "./rbac_middleware.ts";
 
 const safetyApp = new Hono();
+
+// Auth gate: every route in this controller requires a valid user JWT (Wave 1B).
+safetyApp.use("*", requireAuth({ strict: true }));
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -10,7 +14,7 @@ const supabase = createClient(
 );
 
 // Phase 5: Rolling 30-Day Efficiency Baseline
-safetyApp.get("/make-server-37f42386/fleet/efficiency-baseline", async (c) => {
+safetyApp.get("/make-server-37f42386/fleet/efficiency-baseline", requirePermission('transactions.view'), async (c) => {
   try {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -91,7 +95,7 @@ safetyApp.get("/make-server-37f42386/fleet/efficiency-baseline", async (c) => {
 });
 
 // Phase 5: Advanced Predictive Fatigue Detection
-safetyApp.get("/make-server-37f42386/safety/fatigue-analysis", async (c) => {
+safetyApp.get("/make-server-37f42386/safety/fatigue-analysis", requirePermission('transactions.view'), async (c) => {
   try {
     const driverId = c.req.query("driverId");
     

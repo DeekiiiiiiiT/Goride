@@ -189,3 +189,50 @@ Deno.test("buildWaitTimeInfo exposes grace countdown", () => {
   assertEquals(info.wait_time_grace_expired, false);
   assertEquals(info.wait_time_grace_remaining_seconds > 80, true);
 });
+
+Deno.test("calculateWaitTimeFee - NaN surgeMultiplier coerced to 1", () => {
+  const arrivedAt = new Date("2026-01-15T10:00:00Z");
+  const tripStartAt = new Date("2026-01-15T10:05:00Z"); // 5 minutes later
+
+  const result = calculateWaitTimeFee({
+    graceStartedAt: arrivedAt.toISOString(),
+    tripStartedAt: tripStartAt.toISOString(),
+    graceMinutes: 2,
+    ratePerMinMinor: 50,
+    surgeMultiplier: NaN,
+  });
+
+  // NaN should be coerced to 1, so fee = 3 * 50 = 150
+  assertEquals(result.feeMinor, 150);
+  assertEquals(Number.isNaN(result.feeMinor), false);
+});
+
+Deno.test("calculateWaitTimeFee - negative surgeMultiplier coerced to 1", () => {
+  const arrivedAt = new Date("2026-01-15T10:00:00Z");
+  const tripStartAt = new Date("2026-01-15T10:05:00Z");
+
+  const result = calculateWaitTimeFee({
+    graceStartedAt: arrivedAt.toISOString(),
+    tripStartedAt: tripStartAt.toISOString(),
+    graceMinutes: 2,
+    ratePerMinMinor: 50,
+    surgeMultiplier: -1.5,
+  });
+
+  assertEquals(result.feeMinor, 150);
+});
+
+Deno.test("calculateWaitTimeFee - Infinity surgeMultiplier coerced to 1", () => {
+  const arrivedAt = new Date("2026-01-15T10:00:00Z");
+  const tripStartAt = new Date("2026-01-15T10:05:00Z");
+
+  const result = calculateWaitTimeFee({
+    graceStartedAt: arrivedAt.toISOString(),
+    tripStartedAt: tripStartAt.toISOString(),
+    graceMinutes: 2,
+    ratePerMinMinor: 50,
+    surgeMultiplier: Infinity,
+  });
+
+  assertEquals(result.feeMinor, 150);
+});

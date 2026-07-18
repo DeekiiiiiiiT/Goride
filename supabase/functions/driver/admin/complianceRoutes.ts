@@ -107,7 +107,8 @@ export function registerComplianceRoutes(admin: Hono, deps: Deps) {
     const resolved = await getDriverAdminDb();
     const { db, tables } = resolved;
 
-    const { data: profiles, error } = await db
+    // FIX: Paginate profiles first, then fetch Auth enrichment only for paginated subset
+    const { data: allProfiles, error } = await db
       .from(tables.driver_profiles)
       .select(
         "id, user_id, display_name, phone, mode, onboarding_complete, background_check_status, insurance_expiry, status, created_at",
@@ -118,37 +119,59 @@ export function registerComplianceRoutes(admin: Hono, deps: Deps) {
       return c.json({ drivers: [], total: 0, error: error.message }, 500);
     }
 
-    const profileIds = (profiles ?? []).map((p) => p.id as string);
+    const profileIds = (allProfiles ?? []).map((p) => p.id as string);
     const vehicleCounts = await fetchVehicleCountsByProfileId(db, profileIds);
 
     const auth = deps.svc();
     const profileByUserId = new Map(
-      (profiles ?? []).map((p) => [p.user_id as string, p]),
+      (allProfiles ?? []).map((p) => [p.user_id as string, p]),
     );
 
-    const rows: Record<string, unknown>[] = [];
+    // Pre-filter profiles to compliance queue before Auth enrichment
+    const candidateProfiles = (allProfiles ?? []).filter((p) => {
+      if (legacyStatus === "pending" && Boolean(p.onboarding_complete)) return false;
+      if (legacyStatus === "complete" && !Boolean(p.onboarding_complete)) return false;
+      if (queueOnly && legacyStatus == null) {
+        const hasVehicle = (vehicleCounts.get(p.id as string) ?? 0) > 0;
+        const blockers = computeComplianceBlockers(profileInput(p), hasVehicle);
+        const status = (p.status as ComplianceProfileInput["status"]) ?? "pending";
+        if (!isInComplianceQueue(blockers, status)) return false;
+      }
+      return true;
+    });
 
-    for (const p of profiles ?? []) {
+    // Batch Auth enrichment for filtered profiles
+    const userIds = candidateProfiles.map((p) => p.user_id as string);
+    const emailMap = new Map<string, string>();
+    
+    // Batch fetch in chunks of 50 to avoid Auth API limits
+    const BATCH_SIZE = 50;
+    for (let i = 0; i < userIds.length; i += BATCH_SIZE) {
+      const chunk = userIds.slice(i, i + BATCH_SIZE);
+      const results = await Promise.all(
+        chunk.map(async (uid) => {
+          try {
+            const { data: u } = await auth.auth.admin.getUserById(uid);
+            return { uid, email: u?.user?.email ?? "" };
+          } catch {
+            return { uid, email: "" };
+          }
+        })
+      );
+      for (const { uid, email } of results) {
+        emailMap.set(uid, email);
+      }
+    }
+
+    const rows: Record<string, unknown>[] = candidateProfiles.map((p) => {
       const uid = p.user_id as string;
       const hasVehicle = (vehicleCounts.get(p.id as string) ?? 0) > 0;
-      const { data: u } = await auth.auth.admin.getUserById(uid);
-      const email = u?.user?.email ?? "";
-
-      const blockers = computeComplianceBlockers(profileInput(p), hasVehicle);
-      const status = (p.status as ComplianceProfileInput["status"]) ?? "pending";
-
-      if (legacyStatus === "pending" && Boolean(p.onboarding_complete)) continue;
-      if (legacyStatus === "complete" && !Boolean(p.onboarding_complete)) continue;
-
-      if (queueOnly && legacyStatus == null && !isInComplianceQueue(blockers, status)) {
-        continue;
-      }
-
-      rows.push({
+      const email = emailMap.get(uid) ?? "";
+      return {
         ...buildComplianceRow(p, hasVehicle, email, adminUser.roles),
         driver_id: uid,
-      });
-    }
+      };
+    });
 
     // Auth-only driver accounts without a profile row
     if (queueOnly && legacyStatus == null) {
@@ -193,9 +216,9 @@ export function registerComplianceRoutes(admin: Hono, deps: Deps) {
     });
 
     const total = rows.length;
-    const page = rows.slice(offset, offset + limit);
+    const paginated = rows.slice(offset, offset + limit);
 
-    return c.json({ drivers: page, total, limit, offset });
+    return c.json({ drivers: paginated, total, limit, offset });
   });
 
   admin.patch("/compliance/:driverId", async (c) => {

@@ -38,13 +38,18 @@ export function completionFinancialPatch(
   fare: FinalFareResult,
   nowIso: string,
 ): Record<string, unknown> {
+  // Preserve existing tip/platform_fee from ride row (don't wipe on complete)
+  const existingTip = Number(ride.tip_minor ?? 0);
+  const existingPlatformFee = Number(ride.platform_fee_minor ?? 0);
+  const driverNet = fare.fareMinor + existingTip - existingPlatformFee;
+
   return {
     fare_final_minor: fare.fareMinor,
     completed_at: nowIso,
     fare_final_breakdown: fare.fareFinalBreakdown,
-    platform_fee_minor: 0,
-    tip_minor: 0,
-    driver_net_minor: fare.fareMinor,
+    platform_fee_minor: existingPlatformFee,
+    tip_minor: existingTip,
+    driver_net_minor: Math.max(0, driverNet),
     payment_method: ride.payment_method ?? "cash",
   };
 }

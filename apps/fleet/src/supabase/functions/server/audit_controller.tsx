@@ -1,14 +1,10 @@
 import { Hono } from "npm:hono";
-import { createClient } from "npm:@supabase/supabase-js@2";
 import * as kv from "./kv_store.tsx";
 import { auditLogic } from "./audit_logic.ts";
+import { requireAuth, requirePermission, type RbacUser } from "./rbac_middleware.ts";
+// Wave 5: Removed unused createClient/supabase — this controller only uses KV store
 
 const app = new Hono();
-
-const supabase = createClient(
-  Deno.env.get("SUPABASE_URL")!,
-  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-);
 
 const BASE_PATH = "/make-server-37f42386";
 
@@ -16,9 +12,11 @@ const BASE_PATH = "/make-server-37f42386";
  * Step 4.2: Audit Trail Logging
  * Records changes to sensitive odometer data.
  */
-app.post(`${BASE_PATH}/audit/logs`, async (c) => {
+app.post(`${BASE_PATH}/audit/logs`, requireAuth({ strict: true }), requirePermission('data.export'), async (c) => {
     try {
-        const { entityId, entityType, action, oldValue, newValue, reason, userId } = await c.req.json();
+        // Wave 1B: userId derived from JWT, NOT from body (never trust body userId)
+        const rbacUser = c.get('rbacUser') as RbacUser;
+        const { entityId, entityType, action, oldValue, newValue, reason } = await c.req.json();
         
         const logId = crypto.randomUUID();
         const logEntry = {
@@ -30,7 +28,7 @@ app.post(`${BASE_PATH}/audit/logs`, async (c) => {
             oldValue,
             newValue,
             reason,
-            userId,
+            userId: rbacUser.userId, // Derived from JWT, never trust body
             hash: await auditLogic.generateRecordHash({ entityId, action, oldValue, newValue })
         };
 
@@ -41,7 +39,7 @@ app.post(`${BASE_PATH}/audit/logs`, async (c) => {
     }
 });
 
-app.get(`${BASE_PATH}/audit/logs/:entityId`, async (c) => {
+app.get(`${BASE_PATH}/audit/logs/:entityId`, requireAuth({ strict: true }), requirePermission('data.export'), async (c) => {
     try {
         const entityId = c.req.param("entityId");
         const logs = await kv.getByPrefix("audit_log:");
@@ -57,7 +55,7 @@ app.get(`${BASE_PATH}/audit/logs/:entityId`, async (c) => {
 /**
  * Step 4.3: Cryptographic Record Signing verification
  */
-app.post(`${BASE_PATH}/audit/verify-integrity`, async (c) => {
+app.post(`${BASE_PATH}/audit/verify-integrity`, requireAuth({ strict: true }), requirePermission('data.export'), async (c) => {
     try {
         const { record, signature } = await c.req.json();
         const isValid = await auditLogic.verifyRecordIntegrity(record, signature);

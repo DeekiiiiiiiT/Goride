@@ -133,6 +133,25 @@ import {
 } from "./matchingBrainClient.ts";
 import { latLngToH3 } from "../_shared/h3/geoIndex.ts";
 
+// ---------------------------------------------------------------------------
+// Wave 5: Env boot validation — fail-fast if critical secrets missing
+// ---------------------------------------------------------------------------
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+const ROAM_RIDES_QUOTE_SECRET = Deno.env.get("ROAM_RIDES_QUOTE_SECRET");
+
+{
+  const missing: string[] = [];
+  if (!SUPABASE_URL) missing.push("SUPABASE_URL");
+  if (!SUPABASE_SERVICE_ROLE_KEY) missing.push("SUPABASE_SERVICE_ROLE_KEY");
+  if (!ROAM_RIDES_QUOTE_SECRET) missing.push("ROAM_RIDES_QUOTE_SECRET");
+  if (missing.length > 0) {
+    const msg = `[Rides] FATAL: Missing required env: ${missing.join(", ")}`;
+    console.error(msg);
+    throw new Error(msg);
+  }
+}
+
 /** Match Supabase path prefix: .../functions/v1/rides/<route> → /rides/<route> */
 const app = new Hono().basePath("/rides");
 
@@ -149,10 +168,49 @@ type RideStatus =
   | "completed"
   | "cancelled";
 
+// ---------------------------------------------------------------------------
+// Wave 5: CORS Allowlist (env-driven)
+// ---------------------------------------------------------------------------
+function buildCorsOriginFn(): (origin: string) => string | null {
+  const rawEnv = Deno.env.get("CORS_ALLOWED_ORIGINS") ?? "";
+  const envMode = (Deno.env.get("ENVIRONMENT") ?? Deno.env.get("DENO_ENV") ?? "").toLowerCase();
+  const isDev = envMode === "development" || envMode === "local" || envMode === "";
+
+  const allowed = rawEnv
+    .split(",")
+    .map((o) => o.trim().toLowerCase())
+    .filter(Boolean);
+
+  // Dev fallback: allow all if no explicit list
+  if (allowed.length === 0 && isDev) {
+    return () => "*";
+  }
+
+  // Add known frontend URLs
+  const viteUrl = Deno.env.get("VITE_APP_URL") ?? "";
+  if (viteUrl) allowed.push(viteUrl.toLowerCase());
+  if (SUPABASE_URL) allowed.push(SUPABASE_URL.toLowerCase());
+
+  const allowSet = new Set(allowed);
+
+  return (origin: string): string | null => {
+    if (!origin) return null;
+    const lower = origin.toLowerCase();
+    if (allowSet.has(lower)) return origin;
+    for (const a of allowSet) {
+      if (lower.endsWith(`.${a.replace(/^https?:\/\//, "")}`)) return origin;
+      if (lower === a) return origin;
+    }
+    return null;
+  };
+}
+
+const corsOriginFn = buildCorsOriginFn();
+
 app.use(
   "*",
   cors({
-    origin: "*",
+    origin: corsOriginFn,
     allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allowHeaders: [
       "Content-Type",
@@ -160,7 +218,6 @@ app.use(
       "apikey",
       "x-client-info",
       "x-request-id",
-      "X-Debug-Session-Id",
     ],
   }),
 );
@@ -309,28 +366,12 @@ async function ensureRideVerificationPin(
   if (!patched) {
     logLine({ event: "ensure_pin_patch_failed", ride_id: rideId });
     // Still return PIN to rider so they can share it with the driver.
-    const fallback = { ...ride, verification_pin: pin };
-    // #region agent log
-    debugAgentLog("PIN", "index.ts:ensureRideVerificationPin", "pin patch failed, returning in-memory pin", {
-      rideId,
-      status: ride.status,
-      hasPin: true,
-    }, true);
-    // #endregion
-    return fallback;
+    return { ...ride, verification_pin: pin };
   }
 
   const after = await loadRideRequestById(rideId);
   const savedPin = normalizeVerificationPin(after?.verification_pin) ?? pin;
-  const result = { ...ride, verification_pin: savedPin };
-  // #region agent log
-  debugAgentLog("PIN", "index.ts:ensureRideVerificationPin", "pin ensured", {
-    rideId,
-    status: ride.status,
-    hasPin: Boolean(savedPin),
-  }, !savedPin);
-  // #endregion
-  return result;
+  return { ...ride, verification_pin: savedPin };
 }
 
 async function loadRideRequestByIdempotencyKey(key: string): Promise<Record<string, unknown> | null> {
@@ -429,17 +470,33 @@ function isMissingDbRpc(error: { code?: string; message?: string } | null): bool
   );
 }
 
-async function patchRideRequest(id: string, patch: Record<string, unknown>): Promise<boolean> {
-  const { data: rpcData, error: rpcError } = await pubSvc().rpc("rides_patch_ride_request", {
-    p_id: id,
-    p_patch: patch,
-  });
-  if (!rpcError && rpcData != null) return true;
+/**
+ * Patch a ride request. When `expectedFrom` is supplied the write is a
+ * compare-and-swap: it only lands if the row is STILL at that status, closing
+ * the check-then-act race that let two concurrent transitions both "win". A
+ * CAS miss (0 rows) returns false so callers can surface a 409 conflict.
+ */
+async function patchRideRequest(
+  id: string,
+  patch: Record<string, unknown>,
+  expectedFrom?: string,
+): Promise<boolean> {
+  const rpcArgs: Record<string, unknown> = { p_id: id, p_patch: patch };
+  if (expectedFrom) rpcArgs.p_expected_status = expectedFrom;
 
-  const { data: directRow, error: directError } = await svc().from("ride_requests").update(patch).eq(
-    "id",
-    id,
-  ).select("id").maybeSingle();
+  const { data: rpcData, error: rpcError } = await pubSvc().rpc("rides_patch_ride_request", rpcArgs);
+  if (!rpcError && rpcData != null) return true;
+  // RPC ran cleanly but matched no row while a CAS guard was in force ⇒ the
+  // status already moved. This is a conflict, NOT a reason to fall back to an
+  // unconditional direct UPDATE (which would clobber the concurrent winner).
+  if (!rpcError && rpcData == null && expectedFrom) {
+    logLine({ event: "patch_ride_cas_conflict", ride_id: id, expected_from: expectedFrom });
+    return false;
+  }
+
+  let direct = svc().from("ride_requests").update(patch).eq("id", id);
+  if (expectedFrom) direct = direct.eq("status", expectedFrom);
+  const { data: directRow, error: directError } = await direct.select("id").maybeSingle();
   if (!directError && directRow) {
     if (rpcError) {
       logLine({
@@ -449,6 +506,11 @@ async function patchRideRequest(id: string, patch: Record<string, unknown>): Pro
       });
     }
     return true;
+  }
+  // With a CAS guard, a clean 0-row direct update is a conflict, not a failure.
+  if (!directError && !directRow && expectedFrom) {
+    logLine({ event: "patch_ride_cas_conflict", ride_id: id, expected_from: expectedFrom });
+    return false;
   }
 
   logLine({
@@ -501,7 +563,10 @@ async function cancelRideRequestRow(
  * @deprecated Phase 8 cleanup: Remove legacy path after matching brain stable in production.
  * Legacy matching logic is retained for fallback during rollout.
  * After stable operation, this should only delegate to matching brain.
+ * 
+ * Wave 6 note: Deprecation warning added. Removal deferred pending production metrics.
  */
+let _legacyMatchingWarnedOnce = false;
 async function startMatchingForRide(
   rideId: string,
   ride: Record<string, unknown>,
@@ -529,13 +594,22 @@ async function startMatchingForRide(
         error: result.error,
         request_id: reqId ?? null,
       });
+      // Wave 6: Warn once when legacy fallback is still being used
+      if (!_legacyMatchingWarnedOnce) {
+        console.warn("[rides] DEPRECATION: Legacy matching fallback used. Phase 8 removal deferred pending metrics. ride_id:", rideId);
+        _legacyMatchingWarnedOnce = true;
+      }
       // Fallback to legacy path
       await runMatchingWave(rideId, ride, 1, reqId);
       await reconcileMatching(rideId, reqId);
     }
     return;
   }
-  // Legacy path
+  // Legacy path — warn once per isolate when brain is disabled
+  if (!_legacyMatchingWarnedOnce) {
+    console.warn("[rides] DEPRECATION: Legacy matching path active (brain disabled). Phase 8 removal deferred pending metrics. ride_id:", rideId);
+    _legacyMatchingWarnedOnce = true;
+  }
   await runMatchingWave(rideId, ride, 1, reqId);
   await reconcileMatching(rideId, reqId);
 }
@@ -800,34 +874,6 @@ function logLine(payload: Record<string, unknown>) {
   console.log(JSON.stringify({ svc: "rides", ts: new Date().toISOString(), ...payload }));
 }
 
-// #region agent log
-function debugAgentLog(
-  hypothesisId: string,
-  location: string,
-  message: string,
-  data: Record<string, unknown>,
-  persist = false,
-) {
-  const payload = {
-    sessionId: "adf835",
-    hypothesisId,
-    location,
-    message,
-    data,
-    timestamp: Date.now(),
-  };
-  logLine({ event: "debug_agent", ...payload });
-  if (persist) {
-    void audit(null, undefined, "debug_agent", payload);
-  }
-  fetch("http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "adf835" },
-    body: JSON.stringify(payload),
-  }).catch(() => {});
-}
-// #endregion
-
 function clientIp(c: { req: { header: (n: string) => string | undefined } }): string {
   return c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ||
     c.req.header("cf-connecting-ip") ||
@@ -1015,8 +1061,36 @@ async function cancelMatchingRideSystem(
  * @deprecated Phase 8 cleanup: Remove legacy path after matching brain stable in production.
  * Legacy reconcile logic is retained for fallback during rollout.
  * After stable operation, this should only delegate to matching brain.
+ * 
+ * Wave 6 note: Deprecation warning added. Removal deferred pending production metrics.
  */
-async function reconcileMatching(rideId: string, requestId?: string) {
+/**
+ * Per-ride single-flight guard. Reconcile can be triggered concurrently (cron
+ * batch + an offer accept/decline + a rider poll all firing at once). Two
+ * overlapping runs each read the same "no pending offers" state and each fire a
+ * matching wave, double-inserting driver offers. Coalescing concurrent calls
+ * per rideId onto ONE in-flight promise means the second trigger waits for /
+ * reuses the first instead of racing it. In-memory (per edge instance) — the
+ * common redelivery/burst case is same-instance; cross-instance overlap remains
+ * bounded by the wave-cap and offer expiry.
+ */
+const inFlightReconciles = new Map<string, Promise<void>>();
+let _legacyReconcileWarnedOnce = false;
+
+function reconcileMatching(rideId: string, requestId?: string): Promise<void> {
+  const existing = inFlightReconciles.get(rideId);
+  if (existing) {
+    logLine({ event: "reconcile_matching_coalesced", ride_id: rideId, request_id: requestId ?? null });
+    return existing;
+  }
+  const run = reconcileMatchingInner(rideId, requestId).finally(() => {
+    inFlightReconciles.delete(rideId);
+  });
+  inFlightReconciles.set(rideId, run);
+  return run;
+}
+
+async function reconcileMatchingInner(rideId: string, requestId?: string) {
   if (isMatchingBrainEnabled()) {
     const result = await delegateReconcile({
       product_key: "rides",
@@ -1030,6 +1104,11 @@ async function reconcileMatching(rideId: string, requestId?: string) {
         error: result.error,
         request_id: requestId ?? null,
       });
+      // Wave 6: Warn once when legacy reconcile fallback is still being used
+      if (!_legacyReconcileWarnedOnce) {
+        console.warn("[rides] DEPRECATION: Legacy reconcile fallback used. Phase 8 removal deferred pending metrics. ride_id:", rideId);
+        _legacyReconcileWarnedOnce = true;
+      }
       // Fallback to legacy path below
     } else {
       return;
@@ -1037,13 +1116,6 @@ async function reconcileMatching(rideId: string, requestId?: string) {
   }
 
   await expirePendingOffers(rideId);
-
-  // #region agent log
-  debugAgentLog("E", "index.ts:reconcileMatching", "reconcile started", {
-    rideId,
-    requestId: requestId ?? null,
-  }, true);
-  // #endregion
 
   const dispatchSettings = await loadDispatchSettingsForMatching();
 
@@ -1103,6 +1175,8 @@ async function reconcileMatching(rideId: string, requestId?: string) {
  * @deprecated Phase 8 cleanup: Remove after matching brain stable in production.
  * Legacy wave runner is retained for fallback during rollout.
  * All wave logic should be handled by matching brain after cutover.
+ * 
+ * Wave 6 note: Removal deferred pending production metrics confirmation.
  */
 async function runMatchingWave(
   rideId: string,
@@ -1224,19 +1298,6 @@ async function runMatchingWave(
   const haulageAllowed = new Set(haulageFiltered.map((c) => c.driver_user_id));
   const finalCandidates = candidates.filter((c) => haulageAllowed.has(c.user_id));
 
-  // #region agent log
-  debugAgentLog("A-B", "index.ts:runMatchingWave", "matching wave candidate pool", {
-    rideId,
-    wave,
-    locCount: (locs ?? []).length,
-    excludedCount: excluded.size,
-    eligibleCount: eligibleIds.size,
-    candidateCount: finalCandidates.length,
-    filteredOutBodyType,
-    radiusKm,
-  }, true);
-  // #endregion
-
   const locCount = (locs ?? []).length;
   logLine({
     event: "match_wave_diag",
@@ -1326,17 +1387,6 @@ async function runMatchingWave(
       request_id: requestId ?? null,
     });
   }
-
-  // #region agent log
-  debugAgentLog("D", "index.ts:runMatchingWave:end", "offers inserted", {
-    rideId,
-    wave,
-    pickedCount: picked.length,
-    offersInserted,
-    lastOfferErr: lastOfferErr ?? null,
-    pickedDriverIds: picked.map((c) => c.user_id),
-  }, true);
-  // #endregion
 
   try {
     await audit(rideId, ride.rider_user_id as string | undefined, "matching_wave", {
@@ -2007,16 +2057,6 @@ app.get("/v1/requests/:id", async (c) => {
     }
   }
 
-  // #region agent log
-  if (pinEligible && rideOut?.status === "driver_arrived_pickup" && isPinFeatureEnabled(settings)) {
-    debugAgentLog("PIN", "index.ts:GET/requests", "rider arrived pin response", {
-      rideId: id,
-      riderPin,
-      exposePin: shouldExposeRiderPin(rideOut),
-    }, !riderPin);
-  }
-  // #endregion
-
   const graceAnchor = rideOut ? getWaitTimeGraceAnchor(rideOut) : null;
   if (graceAnchor && shouldExposePickupWaitTime(String(rideOut?.status))) {
     waitTimeInfo = buildWaitTimeInfo(graceAnchor, settings, {
@@ -2232,18 +2272,6 @@ app.get("/v1/drivers/offers", async (c) => {
     ...o,
     ride: ridesById[o.ride_request_id as string] ?? null,
   }));
-
-  const missingRideRows = offers.filter((o) => !ridesById[o.ride_request_id as string]).length;
-
-  // #region agent log
-  debugAgentLog("C", "index.ts:GET/offers", "driver offers response", {
-    driverId: auth.user.id,
-    pendingCount: offers.length,
-    returnedCount: enriched.length,
-    missingRideRows,
-    runId: "rollback-dispatch",
-  }, offers.length > 0 && missingRideRows > 0);
-  // #endregion
 
   return c.json({ offers: enriched });
 });
@@ -2692,6 +2720,13 @@ app.patch("/v1/requests/:id/driver-transition", async (c) => {
         message: "Use Collect payment to confirm cash before completing this trip",
         current: result.current,
       }, 400);
+    }
+    if (result.error === "status_changed") {
+      return c.json({
+        error: "status_changed",
+        message: "This ride already moved to a new status. Refresh and try again.",
+        current: result.current,
+      }, 409);
     }
     return c.json({ error: result.error ?? "transition_failed", current: result.current }, 400);
   }

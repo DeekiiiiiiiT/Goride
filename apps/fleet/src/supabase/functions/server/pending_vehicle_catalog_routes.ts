@@ -2,7 +2,7 @@
 import type { Context } from "npm:hono";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import * as kv from "./kv_store.tsx";
-import { requireAuth, requirePermission } from "./rbac_middleware.ts";
+import { requireAuth, requirePermission, assertPlatformStaffResponse } from "./rbac_middleware.ts";
 import { executeMaintenanceBootstrap } from "./maintenance_bootstrap_core.ts";
 import { canonicalOdometerForVehicle } from "./canonical_vehicle_odometer.ts";
 import { filterByOrg, getOrgId } from "./org_scope.ts";
@@ -61,14 +61,8 @@ function parseOptionalProductionMonth(
 
 const OPEN_STATUSES = ["pending", "needs_info"] as const;
 
-function assertPlatformVehicle(c: Context) {
-  const u = c.get("rbacUser") as { resolvedRole?: string; role?: string } | undefined;
-  const r = u?.resolvedRole || u?.role;
-  if (r !== "platform_owner" && r !== "superadmin" && r !== "platform_support") {
-    return c.json({ error: "Forbidden" }, 403);
-  }
-  return null;
-}
+// Wave 5: DRY — use shared assertPlatformStaffResponse from rbac_middleware
+const assertPlatformVehicle = assertPlatformStaffResponse;
 
 function pickRow(raw: Record<string, unknown>, partial: boolean): Record<string, unknown> {
   const out: Record<string, unknown> = {};

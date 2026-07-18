@@ -239,7 +239,12 @@ export function registerDriverAdminRoutes(app: Hono, _deps: Deps) {
     const offerId = c.req.param("id");
     const resolved = await getDriverAdminDb();
     const { db, tables } = resolved;
-    const adminUser = c.get("adminUser") as { id: string; email: string };
+    const adminUser = c.get("adminUser") as { id: string; email: string; role: string };
+
+    // Exclude driver_ops from cancel (same write-role exclusion as sibling mutations)
+    if (adminUser.role === "driver_ops") {
+      return c.json({ ok: false, error: "driver_ops cannot cancel offers" }, 403);
+    }
 
     const { error } = await db.from(tables.driver_offers)
       .update({ status: "expired" })

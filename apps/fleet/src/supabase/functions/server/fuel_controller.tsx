@@ -1,5 +1,6 @@
 ﻿import { Hono } from "npm:hono";
 import type { Context } from "npm:hono";
+import { requireAuth, requirePermission, type RbacUser } from "./rbac_middleware.ts";
 import { appendCanonicalFuelExpenseIfEligible } from "./canonical_from_ops.ts";
 import { deleteCanonicalLedgerBySource } from "./ledger_canonical.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
@@ -25,6 +26,9 @@ import {
 } from "./fuel_payment_source.ts";
 
 const app = new Hono();
+
+// Auth gate: every route in this controller requires a valid user JWT (Wave 1B).
+app.use("*", requireAuth({ strict: true }));
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -714,7 +718,7 @@ app.delete(`${BASE_PATH}/finalized-reports/:weekStart/:identityId`, async (c) =>
  * Body: { weekStart: "YYYY-MM-DD" } (Monday period id).
  * Reverses ALL fuel credit/deduction legs for the week (Approve + Finalize eras).
  */
-app.post(`${BASE_PATH}/finalized-reports/reset-period`, async (c) => {
+app.post(`${BASE_PATH}/finalized-reports/reset-period`, requirePermission('transactions.edit'), async (c) => {
   try {
     const body = await c.req.json().catch(() => ({}));
     const weekKey = String(body.weekStart || "").split("T")[0];

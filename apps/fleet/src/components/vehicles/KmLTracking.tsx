@@ -55,7 +55,8 @@ import {
   parseISO,
 } from 'date-fns';
 import type { DateRange } from 'react-day-picker';
-import { projectId, publicAnonKey } from '../../utils/supabase/info';
+import { projectId } from '../../utils/supabase/info';
+import { requireAuthHeaders } from '../../utils/authHeaders';
 import {
   Select,
   SelectContent,
@@ -263,7 +264,7 @@ export function KmLTracking({ vehicle }: KmLTrackingProps) {
     try {
       const res = await fetch(
         `${API_BASE}/fuel-entries?vehicleId=${encodeURIComponent(vehicleId)}&limit=5000`,
-        { headers: { Authorization: `Bearer ${publicAnonKey}` } }
+        { headers: await requireAuthHeaders(null) }
       );
       if (!res.ok) throw new Error(`Failed to load fuel entries: ${res.status}`);
       const data = await res.json();

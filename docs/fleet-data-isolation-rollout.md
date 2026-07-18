@@ -135,7 +135,9 @@ curl -X POST "https://your-api-url/make-server-37f42386/admin/feature-flags/stri
 
 ## Step 7.6: Enable strict_auth Globally
 
-Once strict_org_filter is stable:
+**Wave 1C (edge audit remediation):** `strict_auth` now defaults **ON** when the flag is missing or the flag store errors. Money/admin controllers also pass `requireAuth({ strict: true })` so they reject anon keys regardless of the global flag.
+
+If a legacy KV row still has `enabled: false`, flip it on:
 
 ```bash
 curl -X POST "https://your-api-url/make-server-37f42386/admin/feature-flags/strict_auth" \
@@ -144,12 +146,24 @@ curl -X POST "https://your-api-url/make-server-37f42386/admin/feature-flags/stri
   -d '{"enabled": true}'
 ```
 
+Also set `AUDIT_HMAC_SECRET` on the Fleet edge function (required for tamper-evident audit hashes).
+
 ### Expected Behavior
 
 - Requests with anon key will get 401 errors
 - All logged-in users should be unaffected
 - Monitor for increased 401 error rates
 
+### Emergency disable (if Fleet breaks)
+
+```bash
+curl -X POST "https://your-api-url/make-server-37f42386/admin/feature-flags/strict_auth" \
+  -H "Authorization: Bearer YOUR_ADMIN_JWT" \
+  -H "Content-Type: application/json" \
+  -d '{"enabled": false}'
+```
+
+Note: routes that hard-code `requireAuth({ strict: true })` will still reject anon keys until that code is redeployed with `strict: false` or the flag-only path.
 ## Step 7.7: Enable product_line_filter
 
 Once auth and org filtering are stable:

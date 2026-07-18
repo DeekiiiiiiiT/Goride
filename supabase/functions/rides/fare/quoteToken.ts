@@ -1,4 +1,4 @@
-/** Signed quote tokens — lock upfront fare between quote and book. */
+/** Signed quote tokens — lock upfront fare between quote and book. Fail-closed: no unsigned tokens. */
 
 import type { FareBreakdown } from "./compute.ts";
 
@@ -29,7 +29,9 @@ function roundCoord(n: number): number {
 }
 
 function secret(): string | null {
-  return Deno.env.get("ROAM_RIDES_QUOTE_SECRET") ?? null;
+  const s = Deno.env.get("ROAM_RIDES_QUOTE_SECRET");
+  if (!s || !s.trim()) return null;
+  return s;
 }
 
 async function hmac(data: string, key: string): Promise<string> {
@@ -67,6 +69,9 @@ export async function mintQuoteToken(
   ttlMs = QUOTE_TTL_MS,
 ): Promise<string> {
   const sec = secret();
+  if (!sec) {
+    throw new Error("ROAM_RIDES_QUOTE_SECRET is required to mint quote tokens");
+  }
   const full: QuotePayload = {
     ...payload,
     pickup_lat: roundCoord(payload.pickup_lat),
@@ -76,14 +81,22 @@ export async function mintQuoteToken(
     expires_at: new Date(Date.now() + ttlMs).toISOString(),
   };
   const body = encodePayload(full);
-  if (!sec) return `unsigned.${body}`;
   const sig = await hmac(body, sec);
   return `${body}.${sig}`;
 }
 
 export type VerifyResult =
   | { ok: true; payload: QuotePayload }
-  | { ok: false; reason: "missing_secret" | "invalid_token" | "bad_signature" | "expired" | "coord_mismatch" };
+  | {
+    ok: false;
+    reason:
+      | "missing_secret"
+      | "invalid_token"
+      | "bad_signature"
+      | "expired"
+      | "coord_mismatch"
+      | "unsigned_rejected";
+  };
 
 export async function verifyQuoteToken(
   token: string,
@@ -98,27 +111,22 @@ export async function verifyQuoteToken(
   const parts = token.split(".");
   if (parts.length < 2) return { ok: false, reason: "invalid_token" };
 
-  let body: string;
-  let sigPart: string | undefined;
-
-  if (parts[0] === "unsigned" && parts.length === 2) {
-    body = parts[1];
-  } else if (parts.length >= 2) {
-    sigPart = parts[parts.length - 1];
-    body = parts.slice(0, -1).join(".");
-  } else {
-    return { ok: false, reason: "invalid_token" };
+  // Legacy unsigned tokens are never accepted (forgeable without the HMAC secret).
+  if (parts[0] === "unsigned") {
+    return { ok: false, reason: "unsigned_rejected" };
   }
+
+  const sigPart = parts[parts.length - 1];
+  const body = parts.slice(0, -1).join(".");
 
   const payload = decodePayload(body);
   if (!payload) return { ok: false, reason: "invalid_token" };
 
   const sec = secret();
-  if (parts[0] !== "unsigned") {
-    if (!sec) return { ok: false, reason: "missing_secret" };
-    const expected = await hmac(body, sec);
-    if (sigPart !== expected) return { ok: false, reason: "bad_signature" };
-  }
+  if (!sec) return { ok: false, reason: "missing_secret" };
+
+  const expected = await hmac(body, sec);
+  if (sigPart !== expected) return { ok: false, reason: "bad_signature" };
 
   if (new Date(payload.expires_at).getTime() < Date.now()) {
     return { ok: false, reason: "expired" };

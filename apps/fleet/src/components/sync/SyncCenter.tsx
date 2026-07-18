@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { projectId, publicAnonKey } from '../../utils/supabase/info';
+import { projectId } from '../../utils/supabase/info';
+import { requireAuthHeaders } from '../../utils/authHeaders';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../ui/card";
 import { Badge } from "../ui/badge";
 import { RefreshCw, ShieldCheck, Lock, User, Globe, Activity } from 'lucide-react';
@@ -13,7 +14,7 @@ export function SyncCenter() {
         setLoading(true);
         try {
             const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-37f42386/sync/audit-trail`, {
-                headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+                headers: await requireAuthHeaders(null)
             });
             const json = await res.json();
             setData(json);

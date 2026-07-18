@@ -1,4 +1,5 @@
-import { projectId, publicAnonKey } from '../utils/supabase/info';
+import { projectId } from '../utils/supabase/info';
+import { requireAuthHeaders } from '../utils/authHeaders';
 import { FixedExpenseConfig } from '../types/expenses';
 import { API_ENDPOINTS } from './apiConfig';
 
@@ -25,7 +26,7 @@ export const expenseService = {
    */
   async getFixedExpenses(vehicleId: string): Promise<FixedExpenseConfig[]> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/fixed-expenses/${vehicleId}`, {
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await requireAuthHeaders(null)
     });
     
     if (!response.ok) {
@@ -40,10 +41,7 @@ export const expenseService = {
   async saveFixedExpense(expense: FixedExpenseConfig): Promise<FixedExpenseConfig> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/fixed-expenses`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await requireAuthHeaders(),
       body: JSON.stringify(expense)
     });
 
@@ -61,7 +59,7 @@ export const expenseService = {
   async deleteFixedExpense(vehicleId: string, expenseId: string): Promise<void> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/fixed-expenses/${vehicleId}/${expenseId}`, {
       method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await requireAuthHeaders(null)
     });
 
     if (!response.ok) {

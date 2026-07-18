@@ -1,4 +1,5 @@
-import { publicAnonKey } from '../utils/supabase/info';
+
+import { requireAuthHeaders } from '../utils/authHeaders';
 import { API_ENDPOINTS } from './apiConfig';
 import type { EarningsPolicy } from '../types/earningsPolicy';
 import { normalizePolicyVersions } from '../utils/earningsPolicyVersion';
@@ -22,7 +23,7 @@ async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 
 export const earningsPolicyService = {
   async getEarningsPolicies(): Promise<EarningsPolicy[]> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/earnings-policies`, {
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch earnings policies");
     const items = await response.json();
@@ -36,10 +37,7 @@ export const earningsPolicyService = {
     const toSave = normalizePolicyVersions(policy);
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/earnings-policies`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await requireAuthHeaders(),
       body: JSON.stringify(toSave)
     });
     if (!response.ok) {
@@ -54,7 +52,7 @@ export const earningsPolicyService = {
   async deleteEarningsPolicy(id: string): Promise<void> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/earnings-policies/${id}`, {
       method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await requireAuthHeaders(null)
     });
     if (!response.ok) {
       const errBody = await response.json().catch(() => null);

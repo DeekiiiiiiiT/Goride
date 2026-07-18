@@ -1,8 +1,12 @@
 import { Hono } from "npm:hono";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import * as kv from "./kv_store.tsx";
+import { requireAuth, requirePermission, type RbacUser } from "./rbac_middleware.ts";
 
 const syncApp = new Hono();
+
+// Auth gate: every route in this controller requires a valid user JWT (Wave 1B).
+syncApp.use("*", requireAuth({ strict: true }));
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -12,7 +16,11 @@ const supabase = createClient(
 // State Locking Mechanism: Prevent concurrent audits
 syncApp.post("/make-server-37f42386/sync/lock", async (c) => {
     try {
-        const { resourceId, resourceType, userId, userName } = await c.req.json();
+        // Wave 1B: userId derived from JWT, NOT from body (never trust body userId)
+        const rbacUser = c.get('rbacUser') as RbacUser;
+        const userId = rbacUser.userId;
+        const userName = rbacUser.email || 'Unknown';
+        const { resourceId, resourceType } = await c.req.json();
         const lockKey = `lock:${resourceType}:${resourceId}`;
         
         // Check if existing lock
@@ -31,7 +39,7 @@ syncApp.post("/make-server-37f42386/sync/lock", async (c) => {
             }
         }
         
-        // Create/Refresh lock
+        // Create/Refresh lock — ownership forced from JWT
         const lockData = {
             resourceId,
             resourceType,
@@ -49,7 +57,10 @@ syncApp.post("/make-server-37f42386/sync/lock", async (c) => {
 
 syncApp.delete("/make-server-37f42386/sync/lock", async (c) => {
     try {
-        const { resourceId, resourceType, userId } = await c.req.json();
+        // Wave 1B: userId derived from JWT, NOT from body (never trust body userId)
+        const rbacUser = c.get('rbacUser') as RbacUser;
+        const userId = rbacUser.userId;
+        const { resourceId, resourceType } = await c.req.json();
         const lockKey = `lock:${resourceType}:${resourceId}`;
         
         const existingLock = await kv.get(lockKey);
@@ -67,8 +78,9 @@ syncApp.delete("/make-server-37f42386/sync/lock", async (c) => {
 // Enterprise User Preferences Persistence
 syncApp.get("/make-server-37f42386/sync/preferences", async (c) => {
     try {
-        const userId = c.req.query("userId");
-        if (!userId) return c.json({ error: "UserId required" }, 400);
+        // Wave 1B: userId derived from JWT, NOT from query (never trust query userId)
+        const rbacUser = c.get('rbacUser') as RbacUser;
+        const userId = rbacUser.userId;
         
         const prefs = await kv.get(`prefs:${userId}`);
         return c.json(prefs || { theme: 'light', sidebarCollapsed: false, dashboardFilters: {} });
@@ -79,7 +91,10 @@ syncApp.get("/make-server-37f42386/sync/preferences", async (c) => {
 
 syncApp.post("/make-server-37f42386/sync/preferences", async (c) => {
     try {
-        const { userId, preferences } = await c.req.json();
+        // Wave 1B: userId derived from JWT, NOT from body (never trust body userId)
+        const rbacUser = c.get('rbacUser') as RbacUser;
+        const userId = rbacUser.userId;
+        const { preferences } = await c.req.json();
         await kv.set(`prefs:${userId}`, preferences);
         return c.json({ success: true });
     } catch (e: any) {

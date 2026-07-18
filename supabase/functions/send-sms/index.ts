@@ -3,10 +3,29 @@
  * https://supabase.com/docs/guides/auth/auth-hooks/send-sms-hook
  *
  * Verifies Standard Webhooks, routes Digicel vs Flow (prefix-based), POSTs JSON to carrier URLs when configured.
- * Set SMS_HOOK_STUB_LOG_OK=1 for dev only (logs OTP, returns 200 — never in production).
+ * OTP stub logging is hard-gated: requires SMS_HOOK_STUB_LOG_OK=1 AND
+ * ENVIRONMENT in {development,local,test}. Production / unset ENVIRONMENT refuses the stub.
  */
 import { Webhook } from "https://esm.sh/standardwebhooks@1.0.0";
 import { loadPrefixListsFromEnv, pickCarrier } from "./carrierRouter.ts";
+import { recordSent, wasRecentlySent } from "./sendDedup.ts";
+
+/** Idempotency window for suppressing duplicate OTP redeliveries. */
+function dedupWindowMs(): number {
+  const raw = Number(Deno.env.get("SMS_DEDUP_WINDOW_MS") ?? "");
+  return Number.isFinite(raw) && raw > 0 ? raw : 30_000;
+}
+
+/** Stable idempotency key: prefer the Standard Webhooks message id, else hash phone+otp. */
+async function buildDedupKey(headerRecord: Record<string, string>, phone: string, otp: string): Promise<string> {
+  const messageId = headerRecord["webhook-id"];
+  if (messageId) return `wid:${messageId}`;
+  const digest = new Uint8Array(
+    await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${phone}:${otp}`)),
+  );
+  const hex = Array.from(digest.slice(0, 16)).map((b) => b.toString(16).padStart(2, "0")).join("");
+  return `poh:${hex}`;
+}
 
 function normalizeHookSecret(): string {
   const s = Deno.env.get("SEND_SMS_HOOK_SECRET") ?? "";
@@ -113,10 +132,31 @@ Deno.serve(async (req: Request) => {
     return jsonErr(400, "Missing user.phone or sms.otp in payload");
   }
 
-  const stub = Deno.env.get("SMS_HOOK_STUB_LOG_OK") === "1" || Deno.env.get("SMS_HOOK_STUB_LOG_OK") === "true";
-  if (stub) {
-    console.warn("[send-sms] SMS_HOOK_STUB_LOG_OK enabled — OTP visible in logs; do not use in production");
-    console.warn("[send-sms] phone=", phone, "otp=", otp);
+  const stubRequested =
+    Deno.env.get("SMS_HOOK_STUB_LOG_OK") === "1" || Deno.env.get("SMS_HOOK_STUB_LOG_OK") === "true";
+  if (stubRequested) {
+    const env = (Deno.env.get("ENVIRONMENT") ?? Deno.env.get("DENO_ENV") ?? "").toLowerCase().trim();
+    const stubAllowed = env === "development" || env === "local" || env === "test";
+    if (!stubAllowed) {
+      console.error(
+        "[send-sms] SMS_HOOK_STUB_LOG_OK refused — ENVIRONMENT must be development|local|test (got:",
+        env || "unset",
+        ")",
+      );
+      return jsonErr(503, "OTP stub logging is disabled outside development environments");
+    }
+    // Dev-only: intentionally log OTP so hook wiring can be verified without carriers.
+    console.warn("[send-sms] stub mode (dev) phone=", phone, "otp=", otp);
+    return new Response(JSON.stringify({}), { status: 200, headers: { "Content-Type": "application/json" } });
+  }
+
+  // Idempotency: suppress a duplicate OTP for the same webhook message id (or
+  // phone+otp) inside the window. Checked BEFORE sending; the key is only
+  // recorded AFTER a successful send so a retry after a carrier failure still
+  // goes through. A suppressed duplicate returns 200 so the hook is not retried.
+  const dedupKey = await buildDedupKey(headerRecord, phone, otp);
+  if (wasRecentlySent(dedupKey)) {
+    console.warn("[send-sms] duplicate send suppressed (idempotency window)");
     return new Response(JSON.stringify({}), { status: 200, headers: { "Content-Type": "application/json" } });
   }
 
@@ -153,5 +193,6 @@ Deno.serve(async (req: Request) => {
     }
   }
 
+  recordSent(dedupKey, dedupWindowMs());
   return new Response(JSON.stringify({}), { status: 200, headers: { "Content-Type": "application/json" } });
 });

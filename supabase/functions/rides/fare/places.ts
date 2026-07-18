@@ -40,6 +40,7 @@ async function autocompletePlacesNew(
       input,
       includedRegionCodes: ["jm"],
     }),
+    signal: AbortSignal.timeout(8000),
   });
 
   if (!res.ok) {
@@ -79,7 +80,7 @@ async function autocompletePlacesLegacy(
       encodeURIComponent(input)
     }&components=country:jm&key=${encodeURIComponent(apiKey)}`;
 
-  const res = await fetch(url);
+  const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
   const data = (await res.json()) as {
     status?: string;
     error_message?: string;
@@ -134,6 +135,7 @@ async function fetchPlaceDetailsNew(
       "X-Goog-Api-Key": apiKey,
       "X-Goog-FieldMask": "location,formattedAddress,displayName",
     },
+    signal: AbortSignal.timeout(8000),
   });
 
   if (!res.ok) {
@@ -172,7 +174,7 @@ async function fetchPlaceDetailsLegacy(
       encodeURIComponent(placeId)
     }&fields=geometry,formatted_address&key=${encodeURIComponent(apiKey)}`;
 
-  const res = await fetch(url);
+  const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
   const data = (await res.json()) as {
     status?: string;
     error_message?: string;
@@ -232,7 +234,7 @@ export async function reverseGeocodeCoordinates(
       encodeURIComponent(`${lat},${lon}`)
     }&key=${encodeURIComponent(apiKey)}`;
 
-  const res = await fetch(url);
+  const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
   const data = (await res.json()) as {
     status?: string;
     error_message?: string;

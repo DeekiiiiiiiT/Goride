@@ -55,6 +55,7 @@ export function DriverLoginPage() {
 
     try {
       // Enterprise: all login goes through server-side route with rate limiting & role gating
+      // ANON ALLOWLIST: pre-authentication login — there is no session yet, so anon is intentional.
       const res = await fetch(`${API_ENDPOINTS.admin}/driver-login`, {
         method: 'POST',
         headers: {
@@ -115,6 +116,7 @@ export function DriverLoginPage() {
     setSuccessMessage(null);
 
     try {
+      // ANON ALLOWLIST: pre-authentication signup — there is no session yet, so anon is intentional.
       const res = await fetch(`${API_ENDPOINTS.admin}/signup`, {
         method: 'POST',
         headers: {

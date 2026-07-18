@@ -3,7 +3,8 @@ import { FuelEntry, FuelScenario, WeeklyFuelReport, OdometerBucket } from '../ty
 import { FinancialTransaction } from '../types/data';
 import { FuelCalculationService } from './fuelCalculationService';
 import { API_ENDPOINTS } from './apiConfig';
-import { publicAnonKey } from '../utils/supabase/info';
+
+import { requireAuthHeaders } from '../utils/authHeaders';
 import { pickScenarioForDriverMembership, resolveActiveFuelPolicyForDriverWeek } from '../utils/fuelPolicyVersion';
 import { reportWeekYmdBounds, toEntryYmd } from '../utils/fuelWeekPeriod';
 import { isGasCardFuelEntry } from '../utils/fuelPaidByDriver';
@@ -67,7 +68,7 @@ export const settlementService = {
     try {
       const res = await fetchWithRetry(
         `${API_ENDPOINTS.fuel}/fuel-entries?startDate=${weekKey}&endDate=${weekEnd}&limit=2000`,
-        { headers: { Authorization: `Bearer ${publicAnonKey}` } },
+        { headers: await requireAuthHeaders(null) },
       );
       if (res.ok) {
         const entries: FuelEntry[] = await res.json();
@@ -94,10 +95,7 @@ export const settlementService = {
           };
           await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries`, {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${publicAnonKey}`,
-            },
+            headers: await requireAuthHeaders(),
             body: JSON.stringify(updated),
           });
         }
@@ -117,7 +115,7 @@ export const settlementService = {
             api.getVehicles(),
             api.getDrivers().catch(() => []),
             fetchWithRetry(`${API_ENDPOINTS.fuel}/scenarios`, {
-                headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+                headers: await requireAuthHeaders(null)
             })
         ]);
         
@@ -264,10 +262,7 @@ export const settlementService = {
 
             await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${publicAnonKey}`
-                },
+                headers: await requireAuthHeaders(),
                 body: JSON.stringify(updatedEntry)
             });
         }

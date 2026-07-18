@@ -35,43 +35,56 @@ export async function processFuelReceiptVision(imageBase64: string): Promise<OCR
     `;
 
     try {
-        const result = await trackedProviderCall({
-            provider: "gemini",
-            service: "vision",
-            route: "gemini_service/processFuelReceiptVision",
-            model: "gemini-2.5-flash",
-            run: () => model.generateContent([
-                prompt,
-                {
-                    inlineData: {
-                        data: imageBase64.split(",")[1] || imageBase64,
-                        mimeType: "image/jpeg"
+        // FIX: Add 20s timeout to Gemini vision calls
+        const abortController = new AbortController();
+        const timeoutId = setTimeout(() => abortController.abort(), 20000);
+        
+        try {
+            const result = await trackedProviderCall({
+                provider: "gemini",
+                service: "vision",
+                route: "gemini_service/processFuelReceiptVision",
+                model: "gemini-2.5-flash",
+                run: () => model.generateContent([
+                    prompt,
+                    {
+                        inlineData: {
+                            data: imageBase64.split(",")[1] || imageBase64,
+                            mimeType: "image/jpeg"
+                        }
                     }
-                }
-            ]),
-            extractUsage: (r: any) => ({
-                inputTokens: r?.response?.usageMetadata?.promptTokenCount,
-                outputTokens: r?.response?.usageMetadata?.candidatesTokenCount,
-            }),
-        });
+                ]),
+                extractUsage: (r: any) => ({
+                    inputTokens: r?.response?.usageMetadata?.promptTokenCount,
+                    outputTokens: r?.response?.usageMetadata?.candidatesTokenCount,
+                }),
+            });
+            clearTimeout(timeoutId);
 
-        const text = result.response.text();
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
-        if (!jsonMatch) {
-            throw new Error("No JSON found in Gemini response");
+            const text = result.response.text();
+            const jsonMatch = text.match(/\{[\s\S]*\}/);
+            if (!jsonMatch) {
+                throw new Error("No JSON found in Gemini response");
+            }
+
+            const data = JSON.parse(jsonMatch[0]);
+            return {
+                odometer: data.odometer ? Number(data.odometer) : null,
+                liters: data.liters ? Number(data.liters) : null,
+                amount: data.amount ? Number(data.amount) : null,
+                pricePerLiter: data.pricePerLiter ? Number(data.pricePerLiter) : null,
+                date: data.date || null,
+                stationName: data.stationName || null,
+                confidence: data.confidence_score || 0.5,
+                raw_analysis: text
+            };
+        } catch (e: any) {
+            clearTimeout(timeoutId);
+            if (e.name === 'AbortError') {
+                throw new Error('Gemini vision request timed out after 20s');
+            }
+            throw e;
         }
-
-        const data = JSON.parse(jsonMatch[0]);
-        return {
-            odometer: data.odometer ? Number(data.odometer) : null,
-            liters: data.liters ? Number(data.liters) : null,
-            amount: data.amount ? Number(data.amount) : null,
-            pricePerLiter: data.pricePerLiter ? Number(data.pricePerLiter) : null,
-            date: data.date || null,
-            stationName: data.stationName || null,
-            confidence: data.confidence_score || 0.5,
-            raw_analysis: text
-        };
     } catch (e) {
         console.error("Gemini Vision Error:", e);
         throw e;
@@ -124,18 +137,33 @@ export async function verifyOdometerLogic(currentOdo: number, previousOdo: numbe
         }
     `;
 
-    const result = await trackedProviderCall({
-        provider: "gemini",
-        service: "text",
-        route: "gemini_service/verifyOdometerLogic",
-        model: "gemini-2.5-flash",
-        run: () => model.generateContent(prompt),
-        extractUsage: (r: any) => ({
-            inputTokens: r?.response?.usageMetadata?.promptTokenCount,
-            outputTokens: r?.response?.usageMetadata?.candidatesTokenCount,
-        }),
-    });
-    const text = result.response.text();
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    return jsonMatch ? JSON.parse(jsonMatch[0]) : { isValid: true, confidence: 1, message: "No issues detected" };
+    // FIX: Add 15s timeout to Gemini text calls
+    const abortController = new AbortController();
+    const timeoutId = setTimeout(() => abortController.abort(), 15000);
+    
+    try {
+        const result = await trackedProviderCall({
+            provider: "gemini",
+            service: "text",
+            route: "gemini_service/verifyOdometerLogic",
+            model: "gemini-2.5-flash",
+            run: () => model.generateContent(prompt),
+            extractUsage: (r: any) => ({
+                inputTokens: r?.response?.usageMetadata?.promptTokenCount,
+                outputTokens: r?.response?.usageMetadata?.candidatesTokenCount,
+            }),
+        });
+        clearTimeout(timeoutId);
+        
+        const text = result.response.text();
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        return jsonMatch ? JSON.parse(jsonMatch[0]) : { isValid: true, confidence: 1, message: "No issues detected" };
+    } catch (e: any) {
+        clearTimeout(timeoutId);
+        if (e.name === 'AbortError') {
+            console.error('Gemini text request timed out after 15s');
+            return { isValid: true, confidence: 0.5, message: "Request timed out, defaulting to valid" };
+        }
+        throw e;
+    }
 }

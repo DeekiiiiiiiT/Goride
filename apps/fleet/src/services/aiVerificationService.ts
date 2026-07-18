@@ -1,4 +1,5 @@
-import { projectId, publicAnonKey } from '../utils/supabase/info';
+import { projectId } from '../utils/supabase/info';
+import { requireAuthHeaders } from '../utils/authHeaders';
 
 export interface AIReceiptResult {
     odometer: number | null;
@@ -20,10 +21,7 @@ export const aiVerificationService = {
     async processReceipt(imageBase64: string): Promise<AIReceiptResult> {
         const response = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-37f42386/ai/process-fuel-receipt`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${publicAnonKey}`
-            },
+            headers: await requireAuthHeaders(),
             body: JSON.stringify({ imageBase64 })
         });
 
@@ -51,10 +49,7 @@ export const aiVerificationService = {
     }> {
         const response = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-37f42386/ai/verify-odometer`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${publicAnonKey}`
-            },
+            headers: await requireAuthHeaders(),
             body: JSON.stringify({ currentOdo, previousOdo, tripsDistance, previousDate, currentDate })
         });
 

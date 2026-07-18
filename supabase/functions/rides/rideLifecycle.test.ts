@@ -6,11 +6,14 @@ import {
   type RideStatus,
 } from "./rideLifecycle.ts";
 
-function mockDeps(ride: Record<string, unknown>, patchFn?: (id: string, patch: Record<string, unknown>) => Promise<boolean>): ApplyTransitionDeps {
+function mockDeps(ride: Record<string, unknown>, patchFn?: (id: string, patch: Record<string, unknown>, expectedFrom?: string) => Promise<boolean>): ApplyTransitionDeps {
   let current = { ...ride };
   return {
     loadRideRequestById: async () => current,
-    patchRideRequest: patchFn ?? (async (_id, patch) => {
+    patchRideRequest: patchFn ?? (async (_id, patch, expectedFrom) => {
+      // Emulate the DB compare-and-swap: only apply when the row is still at
+      // the expected status (0 rows / false otherwise).
+      if (expectedFrom !== undefined && current.status !== expectedFrom) return false;
       current = { ...current, ...patch };
       return true;
     }),
@@ -149,6 +152,66 @@ Deno.test("applyRideTransition allows card on_trip to completed when flag ON", a
     if (original === undefined) Deno.env.delete("CASH_SETTLEMENT_ENABLED");
     else Deno.env.set("CASH_SETTLEMENT_ENABLED", original);
   }
+});
+
+Deno.test("applyRideTransition passes CAS expectedFrom to the patch writer", async () => {
+  const seen: { expectedFrom?: string }[] = [];
+  const deps = mockDeps(
+    { id: "r1", status: "driver_assigned", pickup_lat: 18, pickup_lng: -77, fare_estimate_minor: 500 },
+    async (_id, _patch, expectedFrom) => {
+      seen.push({ expectedFrom });
+      return true;
+    },
+  );
+  const result = await applyRideTransition(deps, {
+    rideId: "r1",
+    next: "driver_en_route_pickup",
+    actorUserId: "d1",
+    source: "manual",
+  });
+  assertEquals(result.ok, true);
+  // The writer must be told to CAS on the CURRENT status (driver_assigned).
+  assertEquals(seen[0].expectedFrom, "driver_assigned");
+});
+
+Deno.test("applyRideTransition returns status_changed when CAS patch matches 0 rows", async () => {
+  // Simulate a concurrent winner: the conditional patch never lands (false).
+  const deps = mockDeps(
+    { id: "r1", status: "on_trip", payment_method: "card", pickup_lat: 18, pickup_lng: -77, fare_estimate_minor: 1500, assigned_driver_user_id: "d1", rider_user_id: "u1" },
+    async () => false,
+  );
+  const result = await applyRideTransition(deps, {
+    rideId: "r1",
+    next: "completed",
+    actorUserId: "d1",
+    source: "manual",
+  });
+  assertEquals(result.ok, false);
+  assertEquals(result.error, "status_changed");
+});
+
+Deno.test("applyRideTransition does NOT run terminal side effects on CAS conflict", async () => {
+  let terminalCalls = 0;
+  const base = mockDeps(
+    { id: "r1", status: "on_trip", payment_method: "card", pickup_lat: 18, pickup_lng: -77, fare_estimate_minor: 1500, assigned_driver_user_id: "d1", rider_user_id: "u1" },
+    async () => false, // CAS always misses
+  );
+  const deps: ApplyTransitionDeps = {
+    ...base,
+    handleTerminalRideLedgerAndSync: async () => { terminalCalls++; },
+    bumpSurgeDemand: async () => { terminalCalls++; },
+    cleanupLiveState: async () => { terminalCalls++; },
+  };
+  const result = await applyRideTransition(deps, {
+    rideId: "r1",
+    next: "completed",
+    actorUserId: "d1",
+    source: "manual",
+  });
+  assertEquals(result.ok, false);
+  assertEquals(result.error, "status_changed");
+  // No ledger/settlement/cleanup must fire when the transition lost the race.
+  assertEquals(terminalCalls, 0);
 });
 
 Deno.test("applyRideTransition respects expectedFrom guard", async () => {

@@ -31,6 +31,7 @@
 import { Hono } from "npm:hono";
 import { startOfWeek, endOfWeek, format } from "npm:date-fns";
 import { getFleetTimezone } from "./timezone_helper.tsx";
+import { requireAuth, requirePermission, type RbacUser } from "./rbac_middleware.ts";
 import {
   loadAllTollLedgerWithTrips,
   isUnresolvedRefund,
@@ -39,8 +40,12 @@ import {
   loadAllByPrefix,
   isReconcilableTollExpense,
 } from "./toll_controller.tsx";
+import { safeErrorResponse } from "./safe_error.ts";
 
 const app = new Hono();
+
+// Auth gate: every route in this controller requires a valid user JWT (Wave 1B).
+app.use("*", requireAuth({ strict: true }));
 
 const BASE = "/make-server-37f42386/toll-reconciliation";
 
@@ -298,7 +303,7 @@ interface PeriodAccumulator {
 }
 
 // ─── GET /toll-reconciliation/periods ───────────────────────────────────
-app.get(`${BASE}/periods`, async (c) => {
+app.get(`${BASE}/periods`, requirePermission('toll.view'), async (c) => {
   try {
     const driverId = c.req.query("driverId") || undefined;
     const timezone = await getFleetTimezone();
@@ -462,8 +467,7 @@ app.get(`${BASE}/periods`, async (c) => {
       },
     });
   } catch (e: any) {
-    console.log(`[TollPeriodController] GET /periods error: ${e.message}`);
-    return c.json({ error: e.message }, 500);
+    return safeErrorResponse(c, e, "TollPeriodController.periods");
   }
 });
 

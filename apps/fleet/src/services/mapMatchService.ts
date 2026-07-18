@@ -1,4 +1,5 @@
-import { projectId, publicAnonKey } from '../utils/supabase/info';
+import { projectId } from '../utils/supabase/info';
+import { requireAuthHeaders } from '../utils/authHeaders';
 import { RoutePoint } from '../types/tripSession';
 import { API_ENDPOINTS } from './apiConfig';
 
@@ -19,10 +20,7 @@ export const mapMatchService = {
     try {
       const response = await fetch(`${API_ENDPOINTS.ai}/map-match`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${publicAnonKey}`
-        },
+        headers: await requireAuthHeaders(),
         body: JSON.stringify({ points })
       });
 

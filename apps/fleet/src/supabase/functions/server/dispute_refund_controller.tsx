@@ -18,8 +18,9 @@
  */
 
 import { Hono } from "npm:hono";
-import { createClient } from "npm:@supabase/supabase-js@2";
 import * as kv from "./kv_store.tsx";
+import { requireAuth, requirePermission, type RbacUser } from "./rbac_middleware.ts";
+import { getServiceClient } from "./service_client.ts";
 import { isTollCategory } from "./toll_category_flags.ts";
 import { getFleetTimezone, hasTzSuffix } from "./timezone_helper.tsx";
 import { upsertClaim, deleteClaim, findExistingClaimIdForToll } from "./claim_service.ts";
@@ -62,13 +63,15 @@ import {
   projectClaimFromSettlement,
 } from "./toll_settlement.ts";
 import { remainingTollShortfall } from "../../../utils/tollSettlement.ts";
+import { safeErrorResponse } from "./safe_error.ts";
 
 const app = new Hono();
 
-const supabase = createClient(
-  Deno.env.get("SUPABASE_URL")!,
-  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-);
+// Auth gate: every route in this controller requires a valid user JWT (Wave 1B).
+app.use("*", requireAuth({ strict: true }));
+
+// Wave 5: Use shared service client
+const supabase = getServiceClient();
 
 const BASE = "/make-server-37f42386/dispute-refunds";
 
@@ -485,7 +488,7 @@ async function matchRefundToClaim(
 }
 
 // ─── POST /dispute-refunds/import ──────────────────────────────────────
-app.post(`${BASE}/import`, async (c) => {
+app.post(`${BASE}/import`, requirePermission('toll.manage'), async (c) => {
   try {
     const body = await c.req.json();
     const refunds: any[] = body.refunds || [];
@@ -546,8 +549,7 @@ app.post(`${BASE}/import`, async (c) => {
       message: `Imported ${imported} dispute refund(s)${skipped > 0 ? `, ${skipped} skipped (duplicates)` : ""}`,
     });
   } catch (err: any) {
-    console.log(`[DisputeRefund] Import error: ${err.message}`);
-    return c.json({ error: `Failed to import dispute refunds: ${err.message}` }, 500);
+    return safeErrorResponse(c, err, "DisputeRefund.import");
   }
 });
 
@@ -701,13 +703,12 @@ app.get(`${BASE}`, async (c) => {
 
     return c.json({ data: refunds, total: refunds.length, autoMatched });
   } catch (err: any) {
-    console.log(`[DisputeRefund] List error: ${err.message}`);
-    return c.json({ error: `Failed to list dispute refunds: ${err.message}` }, 500);
+    return safeErrorResponse(c, err, "DisputeRefund.list");
   }
 });
 
 // ─── PATCH /dispute-refunds/:id/match ──────────────────────────────────
-app.patch(`${BASE}/:id/match`, async (c) => {
+app.patch(`${BASE}/:id/match`, requirePermission('toll.manage'), async (c) => {
   try {
     const id = c.req.param("id");
     const body = await c.req.json();
@@ -840,8 +841,7 @@ app.patch(`${BASE}/:id/match`, async (c) => {
       ...(result.warning ? { warning: result.warning } : {}),
     });
   } catch (err: any) {
-    console.log(`[DisputeRefund] Match error: ${err.message}`);
-    return c.json({ error: `Failed to match dispute refund: ${err.message}` }, 500);
+    return safeErrorResponse(c, err, "DisputeRefund.match");
   }
 });
 
@@ -946,14 +946,16 @@ export async function unmatchDisputeRefundById(id: string, c: unknown): Promise<
   return updated;
 }
 
-app.patch(`${BASE}/:id/unmatch`, async (c) => {
+app.patch(`${BASE}/:id/unmatch`, requirePermission('toll.manage'), async (c) => {
   try {
     const id = c.req.param("id");
     const updated = await unmatchDisputeRefundById(id, c);
     return c.json({ data: updated });
   } catch (err: any) {
     const status = typeof err.status === "number" ? err.status : 500;
-    console.log(`[DisputeRefund] Unmatch error: ${err.message}`);
+    if (status === 500) {
+      return safeErrorResponse(c, err, "DisputeRefund.unmatch");
+    }
     return c.json({ error: `Failed to unmatch dispute refund: ${err.message}` }, status);
   }
 });
@@ -978,8 +980,7 @@ app.get(`${BASE}/suggestions/:id`, async (c) => {
     const suggestions = await computeDisputeSuggestions(refund);
     return c.json({ suggestions });
   } catch (err: any) {
-    console.log(`[DisputeRefund] Suggestions error: ${err.message}`);
-    return c.json({ error: `Failed to get suggestions: ${err.message}` }, 500);
+    return safeErrorResponse(c, err, "DisputeRefund.suggestions");
   }
 });
 
@@ -1166,8 +1167,7 @@ app.get(`${BASE}/match-candidates`, async (c) => {
 
     return c.json({ claims, tolls });
   } catch (err: any) {
-    console.log(`[DisputeRefund] Match-candidates error: ${err.message}`);
-    return c.json({ error: `Failed to load match candidates: ${err.message}` }, 500);
+    return safeErrorResponse(c, err, "DisputeRefund.matchCandidates");
   }
 });
 
@@ -1281,8 +1281,7 @@ app.get(`${BASE}/match-detail/:id`, async (c) => {
         : null,
     });
   } catch (err: any) {
-    console.log(`[DisputeRefund] Match-detail error: ${err.message}`);
-    return c.json({ error: `Failed to load match detail: ${err.message}` }, 500);
+    return safeErrorResponse(c, err, "DisputeRefund.matchDetail");
   }
 });
 

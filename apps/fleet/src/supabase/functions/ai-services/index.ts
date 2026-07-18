@@ -69,24 +69,34 @@ app.post("/ai-services/parse-document", async (c) => {
     const arrayBuffer = await file.arrayBuffer();
     const base64Data = Buffer.from(arrayBuffer).toString('base64');
 
-    const result = await trackedProviderCall({
-        provider: "gemini",
-        service: "vision",
-        route: "/ai-services/parse-document",
-        model: "gemini-1.5-flash",
-        run: () => model.generateContent([
-            prompt,
-            { inlineData: { data: base64Data, mimeType: file.type } }
-        ]),
-        extractUsage: (r: any) => ({
-            inputTokens: r?.response?.usageMetadata?.promptTokenCount,
-            outputTokens: r?.response?.usageMetadata?.candidatesTokenCount,
-        }),
-    });
+    // FIX: Add 20s timeout to Gemini vision call
+    const abortController = new AbortController();
+    const timeoutId = setTimeout(() => abortController.abort(), 20000);
     
-    const text = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
-    return c.json({ success: true, data: JSON.parse(text) });
-
+    try {
+        const result = await trackedProviderCall({
+            provider: "gemini",
+            service: "vision",
+            route: "/ai-services/parse-document",
+            model: "gemini-1.5-flash",
+            run: () => model.generateContent([
+                prompt,
+                { inlineData: { data: base64Data, mimeType: file.type } }
+            ]),
+            extractUsage: (r: any) => ({
+                inputTokens: r?.response?.usageMetadata?.promptTokenCount,
+                outputTokens: r?.response?.usageMetadata?.candidatesTokenCount,
+            }),
+        });
+        clearTimeout(timeoutId);
+        
+        const text = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
+        return c.json({ success: true, data: JSON.parse(text) });
+    } catch (e: any) {
+        clearTimeout(timeoutId);
+        if (e.name === 'AbortError') throw new Error('Request timed out after 20s');
+        throw e;
+    }
   } catch (e: any) {
     if (e instanceof ProviderBlockedError) return c.json({ error: e.message, code: e.code }, e.httpStatus);
     return c.json({ error: e.message }, 500);
@@ -107,30 +117,45 @@ app.post("/ai-services/generate-vehicle-image", async (c) => {
 
     for (const modelName of modelCandidates) {
         try {
-            const data: any = await trackedProviderCall({
-                provider: "gemini",
-                service: "image",
-                route: "/ai-services/generate-vehicle-image",
-                model: modelName,
-                images: 1,
-                run: async () => {
-                    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:predict?key=${apiKey}`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ instances: [{ prompt }], parameters: { sampleCount: 1, aspectRatio: "4:3" } })
-                    });
-                    if (!response.ok) {
-                        const text = await response.text();
-                        const err = new Error(`Imagen ${modelName}: ${response.status} ${text}`);
-                        (err as any).status = response.status;
-                        throw err;
-                    }
-                    return await response.json();
-                },
-                extractUsage: () => ({ images: 1 }),
-            });
-            imageB64 = data?.predictions?.[0]?.bytesBase64Encoded;
-            if (imageB64) break;
+            // FIX: Add 30s timeout to Imagen calls
+            const abortController = new AbortController();
+            const timeoutId = setTimeout(() => abortController.abort(), 30000);
+            
+            try {
+                const data: any = await trackedProviderCall({
+                    provider: "gemini",
+                    service: "image",
+                    route: "/ai-services/generate-vehicle-image",
+                    model: modelName,
+                    images: 1,
+                    run: async () => {
+                        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:predict?key=${apiKey}`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ instances: [{ prompt }], parameters: { sampleCount: 1, aspectRatio: "4:3" } }),
+                            signal: abortController.signal
+                        });
+                        if (!response.ok) {
+                            const text = await response.text();
+                            const err = new Error(`Imagen ${modelName}: ${response.status} ${text}`);
+                            (err as any).status = response.status;
+                            throw err;
+                        }
+                        return await response.json();
+                    },
+                    extractUsage: () => ({ images: 1 }),
+                });
+                clearTimeout(timeoutId);
+                imageB64 = data?.predictions?.[0]?.bytesBase64Encoded;
+                if (imageB64) break;
+            } catch (e: any) {
+                clearTimeout(timeoutId);
+                if (e.name === 'AbortError') {
+                    lastError = `${modelName} timed out after 30s`;
+                    continue;
+                }
+                throw e;
+            }
         } catch (e: any) {
             if (e instanceof ProviderBlockedError) return c.json({ error: e.message, code: e.code }, e.httpStatus);
             lastError = e?.message || String(e);
@@ -138,21 +163,33 @@ app.post("/ai-services/generate-vehicle-image", async (c) => {
     }
 
     if (!imageB64) {
-         // Fallback OpenAI
+         // Fallback OpenAI with timeout
          const openaiKey = Deno.env.get("OPENAI_API_KEY");
          if (openaiKey) {
             try {
-                const openai = new OpenAI({ apiKey: openaiKey });
-                const dalle: any = await trackedProviderCall({
-                    provider: "openai",
-                    service: "image",
-                    route: "/ai-services/generate-vehicle-image (fallback)",
-                    model: "dall-e-3",
-                    images: 1,
-                    run: () => openai.images.generate({ model: "dall-e-3", prompt, n: 1, size: "1024x1024", response_format: "b64_json" }),
-                    extractUsage: () => ({ images: 1 }),
-                });
-                imageB64 = dalle.data[0].b64_json;
+                const abortController = new AbortController();
+                const timeoutId = setTimeout(() => abortController.abort(), 30000);
+                
+                try {
+                    const openai = new OpenAI({ apiKey: openaiKey });
+                    const dalle: any = await trackedProviderCall({
+                        provider: "openai",
+                        service: "image",
+                        route: "/ai-services/generate-vehicle-image (fallback)",
+                        model: "dall-e-3",
+                        images: 1,
+                        run: () => openai.images.generate({ model: "dall-e-3", prompt, n: 1, size: "1024x1024", response_format: "b64_json" }),
+                        extractUsage: () => ({ images: 1 }),
+                    });
+                    clearTimeout(timeoutId);
+                    imageB64 = dalle.data[0].b64_json;
+                } catch (e: any) {
+                    clearTimeout(timeoutId);
+                    if (e.name === 'AbortError') {
+                        console.error('OpenAI image generation timed out after 30s');
+                    }
+                    throw e;
+                }
             } catch (e: any) {
                 if (e instanceof ProviderBlockedError) return c.json({ error: e.message, code: e.code }, e.httpStatus);
             }

@@ -52,7 +52,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "../ui/alert-dialog";
-import { projectId, publicAnonKey } from '../../utils/supabase/info';
+import { projectId } from '../../utils/supabase/info';
+import { requireAuthHeaders } from '../../utils/authHeaders';
 import { API_ENDPOINTS } from '../../services/apiConfig';
 import { toast } from "sonner@2.0.3";
 import {
@@ -291,9 +292,7 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
     try {
       const response = await fetch(`${API_ENDPOINTS.fleet}/drivers/${driverToDelete}`, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`
-        }
+        headers: await requireAuthHeaders(null)
       });
       
       const data = await response.json();

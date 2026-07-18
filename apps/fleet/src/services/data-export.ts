@@ -1,6 +1,7 @@
 import { api, fetchWithRetry } from './api';
 import { API_ENDPOINTS } from './apiConfig';
-import { publicAnonKey } from '../utils/supabase/info';
+
+import { requireAuthHeaders } from '../utils/authHeaders';
 import { FuelEntry } from '../types/fuel';
 import { ServiceRequest, Trip } from '../types/data';
 import { OdometerReading } from '../types/vehicle';
@@ -53,7 +54,7 @@ interface ExportState {
 async function fetchAllFuelLogs(): Promise<FuelEntry[]> {
     try {
         const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries`, {
-            headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+            headers: await requireAuthHeaders(null)
         });
         if (!response.ok) throw new Error("Failed to fetch fuel entries");
         const data: FuelEntry[] = await response.json();

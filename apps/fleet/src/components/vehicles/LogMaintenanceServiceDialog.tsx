@@ -23,7 +23,7 @@ import { Checkbox } from "../ui/checkbox";
 import { toast } from "sonner@2.0.3";
 import { api } from "../../services/api";
 import { uploadEvidenceFile } from "../../services/uploadEvidence";
-import { publicAnonKey } from "../../utils/supabase/info";
+import { requireAuthHeaders } from '../../utils/authHeaders';
 import { API_ENDPOINTS } from "../../services/apiConfig";
 import type { CatalogMaintenanceTaskOption, MaintenanceLog } from "../../types/maintenance";
 import { MAINTENANCE_SCHEDULE_PRESETS } from "../../constants/maintenanceSchedulePresets";
@@ -163,7 +163,7 @@ export function LogMaintenanceServiceDialog({
 
       const response = await fetch(`${API_ENDPOINTS.ai}/parse-invoice`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${publicAnonKey}` },
+        headers: await requireAuthHeaders(null),
         body: scanFormData,
       });
 

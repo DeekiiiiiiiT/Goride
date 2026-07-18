@@ -75,6 +75,7 @@ export const loadGoogleMapsApi = async (): Promise<void> => {
           }
       }
 
+      // ANON ALLOWLIST: /maps-config is a public bootstrap config fetch (loads the Google Maps script key), so anon is intentional.
       const response = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-37f42386/maps-config`, {
         headers: {
           Authorization: `Bearer ${publicAnonKey}`,

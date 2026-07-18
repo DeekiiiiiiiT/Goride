@@ -29,14 +29,15 @@ export async function listPlatformLedgerLines(
   const limit = Math.min(100, Math.max(1, Number(opts.limit ?? 25)));
   const offset = (page - 1) * limit;
 
-  let q = db.from("ledger_lines").select("*", { count: "exact" });
-  if (opts.driverUserId) q = q.eq("driver_user_id", opts.driverUserId);
-  if (opts.riderUserId) q = q.eq("rider_user_id", opts.riderUserId);
-  if (opts.from) q = q.gte("reporting_at", opts.from);
-  if (opts.to) q = q.lte("reporting_at", opts.to);
-  if (opts.lineKind) q = q.eq("line_kind", opts.lineKind);
+  // Use head:true to get count without fetching all rows
+  let countQ = db.from("ledger_lines").select("id", { count: "exact", head: true });
+  if (opts.driverUserId) countQ = countQ.eq("driver_user_id", opts.driverUserId);
+  if (opts.riderUserId) countQ = countQ.eq("rider_user_id", opts.riderUserId);
+  if (opts.from) countQ = countQ.gte("reporting_at", opts.from);
+  if (opts.to) countQ = countQ.lte("reporting_at", opts.to);
+  if (opts.lineKind) countQ = countQ.eq("line_kind", opts.lineKind);
 
-  const { count, error: countErr } = await q;
+  const { count, error: countErr } = await countQ;
   if (countErr) return { error: countErr.message };
 
   let dataQ = db.from("ledger_lines").select("*");

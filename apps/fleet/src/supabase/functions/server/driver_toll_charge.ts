@@ -36,6 +36,7 @@ import * as kv from "./kv_store.tsx";
 import { appendCanonicalLedgerEvents } from "./ledger_canonical.ts";
 import { stampOrg } from "./org_scope.ts";
 import { postFinancialEvent } from "./financial_ledger.ts";
+import { deterministicProjectionTxId } from "./driver_toll_charge_id.ts";
 
 const SETTINGS_KEY = "toll_reconciliation:settings";
 const PROJECTION_MARKER_PREFIX = "toll_charge_projection:";
@@ -81,6 +82,7 @@ function normalizeMarker(raw: DriverTollChargeMarker | null): NormalizedMarker |
     version: raw.version ?? 1, // legacy markers had no `version` field — treat as v1
   };
 }
+
 
 export interface EmitDriverTollChargeParams {
   /** The toll ledger / transaction id being charged. */
@@ -236,7 +238,9 @@ export async function emitDriverTollCharge(
     return { canonicalWritten, projectionTxId: null, alreadyProjected: false };
   }
 
-  const txId = crypto.randomUUID();
+  // Deterministic id (NOT random): closes the concurrent-double-charge race —
+  // two racing emits for the same toll+version upsert the same row.
+  const txId = await deterministicProjectionTxId(p.tollId, version);
   const projectionTx = stampOrg(
     {
       id: txId,
@@ -285,6 +289,14 @@ export interface ReverseDriverTollChargeResult {
   /** True when an active charge was found and reversed. False = safe no-op. */
   reversed: boolean;
   reversalTxId: string | null;
+  /**
+   * Set when the reversal could NOT be completed safely (e.g. the active
+   * marker points at a projection txn that no longer exists). The marker is
+   * LEFT ACTIVE in this case so the outstanding charge is not silently dropped
+   * — an operator must explicitly compensate. Callers must not treat this as a
+   * successful unwind.
+   */
+  error?: string;
 }
 
 /**
@@ -307,15 +319,16 @@ export async function reverseDriverTollCharge(
 
   const original = (await kv.get(`transaction:${marker.txId}`)) as Record<string, unknown> | null;
   if (!original) {
-    // Data inconsistency: an active marker points at a transaction that no
-    // longer exists. We cannot compute an exact offsetting amount — log loudly
-    // and clear the marker so future re-charges are not blocked, but do not
-    // fabricate a reversal amount.
+    // Data inconsistency: an active marker points at a projection txn that no
+    // longer exists. We CANNOT compute an exact offsetting amount, and we must
+    // NOT silently deactivate the marker — doing so would drop a real
+    // outstanding charge off the books with no reversal. Leave the marker
+    // ACTIVE, log loudly, and surface an error so the resolution is not treated
+    // as reconciled. An operator must explicitly compensate this charge.
     console.error(
-      `[DriverTollCharge] reverse: active marker for toll ${p.tollId} points to missing transaction ${marker.txId} — clearing marker without a financial reversal entry.`,
+      `[DriverTollCharge] reverse: active marker for toll ${p.tollId} points to MISSING transaction ${marker.txId} — leaving marker ACTIVE and refusing to fabricate a reversal. Manual compensation required.`,
     );
-    await kv.set(markerKey, { active: false, txId: marker.txId, version: marker.version } as DriverTollChargeMarker);
-    return { reversed: false, reversalTxId: null };
+    return { reversed: false, reversalTxId: null, error: "original_transaction_missing" };
   }
 
   const originalAmount = Math.abs(Number(original.amount) || 0);

@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { API_ENDPOINTS } from '../../services/apiConfig';
+import { requireAuthHeaders } from '../../utils/authHeaders';
 import { useDropzone } from 'react-dropzone';
 import Papa from 'papaparse';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
@@ -319,13 +320,9 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
     const handleAiMapping = async (fileData: FileData) => {
         try {
             setWarning("AI is analyzing file structure... this may take a moment.");
-            const { projectId, publicAnonKey } = await import('../../utils/supabase/info');
             const res = await fetch(`${API_ENDPOINTS.ai}/ai/map-csv`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${publicAnonKey}`
-                },
+                headers: await requireAuthHeaders(),
                 body: JSON.stringify({
                     headers: fileData.headers,
                     sample: fileData.rows.slice(0, 5),
@@ -552,14 +549,10 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
 
         // 1. Get AI Analysis
         const payload = constructAiPayload(filteredFiles);
-        const { projectId, publicAnonKey } = await import('../../utils/supabase/info');
-        
+
         const res = await fetch(`${API_ENDPOINTS.ai}/analyze-fleet`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${publicAnonKey}`
-            },
+            headers: await requireAuthHeaders(),
             body: JSON.stringify({ payload })
         });
         
@@ -1191,12 +1184,9 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
 
     const performSync = async () => {
         try {
-            const { projectId, publicAnonKey } = await import('../../utils/supabase/info');
             const response = await fetch(`${API_ENDPOINTS.fleet}/uber/sync`, {
                 method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${publicAnonKey}`
-                }
+                headers: await requireAuthHeaders(null)
             });
 
             if (response.status === 401) {
@@ -1243,8 +1233,6 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
 
         // 2. If Auth Required, Start OAuth Flow
         if (result === "AUTH_REQUIRED") {
-            const { projectId, publicAnonKey } = await import('../../utils/supabase/info');
-            
             // ALWAYS use the production URL for consistency (No trailing slash)
             const redirectUri = "https://chorus-tech-15470154.figma.site";
             
@@ -1254,7 +1242,7 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
 
             // Get Auth URL
             const urlRes = await fetch(`${API_ENDPOINTS.fleet}/uber/auth-url?redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}`, {
-                headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+                headers: await requireAuthHeaders(null)
             });
             const urlData = await urlRes.json();
             
@@ -1277,10 +1265,7 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
                         try {
                             const exchangeRes = await fetch(`${API_ENDPOINTS.fleet}/uber/exchange`, {
                                 method: 'POST',
-                                headers: { 
-                                    'Authorization': `Bearer ${publicAnonKey}`,
-                                    'Content-Type': 'application/json'
-                                },
+                                headers: await requireAuthHeaders(),
                                 body: JSON.stringify({ code, redirect_uri: redirectUri })
                             });
                             

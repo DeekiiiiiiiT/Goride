@@ -8,18 +8,21 @@
  *   driver_period_snapshot:{driverId}:{batchId}
  */
 import { Hono } from "npm:hono";
-import { createClient } from "npm:@supabase/supabase-js@2";
 import * as kv from "./kv_store.tsx";
+import { requireAuth, requirePermission, type RbacUser } from "./rbac_middleware.ts";
+import { getServiceClientWithSchema } from "./service_client.ts";
+import { safeErrorResponse } from "./safe_error.ts";
 
 const app = new Hono();
+
+// Auth gate: every route in this controller requires a valid user JWT (Wave 1B).
+app.use("*", requireAuth({ strict: true }));
+
 const BASE = "/make-server-37f42386/payment-ledger-lines";
 
+// Wave 5: Use shared service client factory for rides schema
 function ridesDb() {
-  return createClient(
-    Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-    { db: { schema: "rides" } },
-  );
+  return getServiceClientWithSchema("rides");
 }
 
 function minorToMajor(minor: number): number {
@@ -75,7 +78,7 @@ async function loadRoamLinesByTripId(tripId: string): Promise<Record<string, unk
   return (data ?? []).map((row) => mapPgLineToPaymentLine(row as Record<string, unknown>));
 }
 
-app.post(`${BASE}/import`, async (c) => {
+app.post(`${BASE}/import`, requirePermission('transactions.edit'), async (c) => {
   try {
     const body = await c.req.json();
     const lines: unknown[] = body.lines || [];
@@ -120,12 +123,11 @@ app.post(`${BASE}/import`, async (c) => {
       message: `Imported ${imported} payment ledger line(s), skipped ${skipped}`,
     });
   } catch (e) {
-    console.error("[PaymentLedgerLine] import error:", e);
-    return c.json({ error: String(e) }, 500);
+    return safeErrorResponse(c, e, "PaymentLedgerLine.import");
   }
 });
 
-app.post(`${BASE}/driver-quality-snapshots/import`, async (c) => {
+app.post(`${BASE}/driver-quality-snapshots/import`, requirePermission('transactions.edit'), async (c) => {
   try {
     const body = await c.req.json();
     const snapshots: unknown[] = body.snapshots || [];
@@ -144,12 +146,11 @@ app.post(`${BASE}/driver-quality-snapshots/import`, async (c) => {
     }
     return c.json({ imported, batchId });
   } catch (e) {
-    console.error("[PaymentLedgerLine] driver quality snapshot import error:", e);
-    return c.json({ error: String(e) }, 500);
+    return safeErrorResponse(c, e, "PaymentLedgerLine.driverQualitySnapshotImport");
   }
 });
 
-app.get(`${BASE}/driver-quality-snapshots`, async (c) => {
+app.get(`${BASE}/driver-quality-snapshots`, requirePermission('transactions.view'), async (c) => {
   try {
     const batchId = c.req.query("batchId")?.trim();
     const driverId = c.req.query("driverId")?.trim().toLowerCase();
@@ -162,11 +163,11 @@ app.get(`${BASE}/driver-quality-snapshots`, async (c) => {
     });
     return c.json({ data: filtered, total: filtered.length });
   } catch (e) {
-    return c.json({ error: String(e), data: [], total: 0 }, 500);
+    return safeErrorResponse(c, e, "PaymentLedgerLine.driverQualitySnapshots");
   }
 });
 
-app.get(`${BASE}`, async (c) => {
+app.get(`${BASE}`, requirePermission('transactions.view'), async (c) => {
   try {
     const tripId = c.req.query("tripId")?.trim().toLowerCase();
     const batchId = c.req.query("batchId")?.trim();
@@ -213,8 +214,7 @@ app.get(`${BASE}`, async (c) => {
 
     return c.json({ data: filtered, total: filtered.length, source: "kv" });
   } catch (e) {
-    console.error("[PaymentLedgerLine] list error:", e);
-    return c.json({ error: String(e), data: [], total: 0 }, 500);
+    return safeErrorResponse(c, e, "PaymentLedgerLine.list");
   }
 });
 

@@ -76,8 +76,8 @@ export async function isFeatureEnabled(
     const flag = await kv.get(key) as FeatureFlagValue | null;
 
     if (!flag) {
-      // Flag doesn't exist - default to disabled for safety
-      return false;
+      // Wave 1C: strict_auth defaults ON when unset; other flags default OFF
+      return flagName === FEATURE_FLAGS.STRICT_AUTH;
     }
 
     // Cache the flag value
@@ -91,8 +91,8 @@ export async function isFeatureEnabled(
     return evaluateFlag(flag, orgId);
   } catch (err) {
     console.error(`[FeatureFlags] Error checking flag ${flagName}:`, err);
-    // Fail closed - return false on errors for safety
-    return false;
+    // Wave 1C: auth fails closed (strict ON); other flags fail open (disabled)
+    return flagName === FEATURE_FLAGS.STRICT_AUTH;
   }
 }
 
@@ -342,7 +342,9 @@ export async function initializeDefaultFlags(): Promise<void> {
   }> = [
     {
       name: FEATURE_FLAGS.STRICT_AUTH,
-      enabled: false,
+      // Wave 1C: fail-closed by default. Emergency disable via admin feature-flag API
+      // (see docs/fleet-data-isolation-rollout.md). Money controllers also pass strict: true.
+      enabled: true,
       description: "Reject anonymous key on data endpoints (require valid JWT)",
     },
     {

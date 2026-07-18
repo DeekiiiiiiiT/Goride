@@ -1,4 +1,5 @@
-import { projectId, publicAnonKey } from '../utils/supabase/info';
+import { projectId } from '../utils/supabase/info';
+import { requireAuthHeaders } from '../utils/authHeaders';
 import { InventoryItem } from '../types/fleet';
 import { fetchWithRetry } from './api';
 import { API_ENDPOINTS } from './apiConfig';
@@ -6,7 +7,7 @@ import { API_ENDPOINTS } from './apiConfig';
 export const inventoryService = {
   async getInventory(): Promise<InventoryItem[]> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/inventory`, {
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch inventory");
     return response.json();
@@ -15,10 +16,7 @@ export const inventoryService = {
   async saveStock(item: InventoryItem): Promise<InventoryItem> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/inventory`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await requireAuthHeaders(),
       body: JSON.stringify(item)
     });
     if (!response.ok) throw new Error("Failed to save inventory item");
@@ -29,10 +27,7 @@ export const inventoryService = {
   async bulkUpdateStock(items: InventoryItem[]): Promise<void> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/inventory/bulk`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await requireAuthHeaders(),
       body: JSON.stringify(items)
     });
     if (!response.ok) throw new Error("Failed to bulk update stock");
