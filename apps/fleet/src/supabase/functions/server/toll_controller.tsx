@@ -4688,6 +4688,7 @@ export async function executeTollResetForReconciliation(
       tripId: null,
       isReconciled: false,
       resolution: null,
+      claimId: null,
       matchConfidence: null,
       matchedAt: null,
       matchedBy: null,

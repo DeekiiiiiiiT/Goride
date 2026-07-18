@@ -137,6 +137,8 @@ export interface PeriodResetSummary {
   tollsReset: number;
   refundResolutionsReverted: number;
   workflowStagesRecomputed: number;
+  /** Expenses snapshot rows rebuilt for the reset week. */
+  periodsRebuilt?: number;
 }
 
 export interface PeriodResetResult {
@@ -407,11 +409,43 @@ export async function executePeriodReconciliationReset(
     }
   }
 
+  // Expenses / Settlement Toll Status reads driver_financial_periods — rebuild
+  // the reset week for every driver touched so the UI cannot stay "Reconciled".
+  const driversToRebuild = new Set<string>(
+    (opts.driverIds || []).map(String).filter(Boolean),
+  );
+  for (const tollId of freshInventory.tollIds) {
+    try {
+      const toll: any = await kv.get(`toll_ledger:${tollId}`);
+      if (toll?.driverId) driversToRebuild.add(String(toll.driverId));
+    } catch {
+      /* non-fatal */
+    }
+  }
+  let periodsRebuilt = 0;
+  if (driversToRebuild.size > 0) {
+    try {
+      const { rebuildPeriodsForAnchors } = await import("./driver_financial_periods.ts");
+      for (const driverId of driversToRebuild) {
+        try {
+          periodsRebuilt += await rebuildPeriodsForAnchors(driverId, [opts.startDate]);
+        } catch (e: any) {
+          errors.push(`rebuild expenses ${driverId}: ${e.message}`);
+        }
+      }
+      console.log(
+        `[PeriodReset] Rebuilt ${periodsRebuilt} expense period(s) for ${driversToRebuild.size} driver(s)`,
+      );
+    } catch (e: any) {
+      errors.push(`rebuild expenses: ${e.message}`);
+    }
+  }
+
   await kv.set(`audit:period_reset:${Date.now()}`, {
     startDate: opts.startDate,
     endDate: opts.endDate,
     driverIds: opts.driverIds || [],
-    summary,
+    summary: { ...summary, periodsRebuilt },
     errors,
     completedAt: new Date().toISOString(),
   });
@@ -419,7 +453,7 @@ export async function executePeriodReconciliationReset(
   return {
     dryRun: false,
     inventory: freshInventory,
-    summary,
+    summary: { ...summary, periodsRebuilt },
     errors,
     completedAt: new Date().toISOString(),
   };
