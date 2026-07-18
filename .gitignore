@@ -2,6 +2,14 @@ node_modules
 build
 dist
 
+# Environment files — never commit real secrets
+.env
+.env.local
+.env.*.local
+.env.production
+.env.staging
+!.env.example
+
 # Capacitor / Android (driver)
 apps/driver/android/.gradle/
 apps/driver/android/app/build/

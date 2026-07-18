@@ -13,16 +13,16 @@ When the user runs or completes any Supabase security/reliability audit, update 
 - Tracker DB: [Audit Tracker](https://app.notion.com/p/bf2b52b6b24f46378908de6fe97375b5) (`collection://679fa81f-bccb-426c-a2d4-a02ad6047c3d`)
 
 ## Program (8 areas)
-1. .env & Secrets (~15m)
-2. RLS (~1h)
-3. Auth Settings (~30m)
-4. Storage Buckets (~1h)
-5. Database Schema (~1.5h)
+1. .env & Secrets (~15m) — Done 2026-07-18
+2. RLS (~1h) — Done 2026-07-18
+3. Auth Settings (~30m) — Done 2026-07-18 (Dashboard ops still required for confirmations/password)
+4. Storage Buckets (~1h) — Done 2026-07-18
+5. Database Schema (~1.5h) — Done 2026-07-18
 6. Edge Functions (~2h) — Done 2026-07-18
-7. Performance / Indexes (~1h)
-8. Triggers & Realtime (~45m)
+7. Performance / Indexes (~1h) — Done 2026-07-18
+8. Triggers & Realtime (~45m) — Done 2026-07-18
 
 ## After each audit
 1. Set tracker row Status (`In progress` / `Done` / `Partial`) and Completed date.
 2. Put findings, fixes, secrets/ops follow-ups, and verification steps in that audit’s page body.
-3. Keep repo docs in sync if they exist (`docs/edge-function-audit.md`, etc.), but Notion is the product-owner source of truth.
+3. Keep repo docs in sync if they exist (`docs/*-audit.md`), but Notion is the product-owner source of truth.

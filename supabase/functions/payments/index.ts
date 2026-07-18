@@ -6,6 +6,7 @@
 import { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import { cors } from "https://deno.land/x/hono@v4.3.11/middleware.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { requireProductAdmin } from "../_shared/productAdmin.ts";
 
 const app = new Hono().basePath("/payments");
 
@@ -24,6 +25,37 @@ function getServiceSupabase() {
     Deno.env.get("SUPABASE_URL") ?? "",
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
   );
+}
+
+/** Shared callback secret for WiPay webhooks (never trust unsigned callbacks). */
+function wipayCallbackSecret(): string | null {
+  const s = Deno.env.get("WIPAY_CALLBACK_SECRET");
+  if (!s || !s.trim()) return null;
+  return s.trim();
+}
+
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let out = 0;
+  for (let i = 0; i < a.length; i++) out |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return out === 0;
+}
+
+function verifyWipayCallbackSecret(c: { req: { header: (n: string) => string | undefined; url: string } }): boolean {
+  const expected = wipayCallbackSecret();
+  if (!expected) {
+    console.error("[payments] WIPAY_CALLBACK_SECRET is not set — rejecting webhook");
+    return false;
+  }
+  const fromHeader = c.req.header("X-WiPay-Callback-Secret") ?? "";
+  let fromQuery = "";
+  try {
+    fromQuery = new URL(c.req.url).searchParams.get("secret") ?? "";
+  } catch {
+    fromQuery = "";
+  }
+  const provided = fromHeader || fromQuery;
+  return Boolean(provided) && timingSafeEqual(provided, expected);
 }
 
 // Health check
@@ -122,6 +154,13 @@ async function createWiPayIntent(order: any) {
   }
   
   const returnUrl = Deno.env.get("APP_URL") ?? "https://dash.roamja.com";
+  const callbackSecret = wipayCallbackSecret();
+  if (!callbackSecret) {
+    return { error: "WiPay callback secret not configured — set WIPAY_CALLBACK_SECRET" };
+  }
+  const responseUrl = new URL(`${returnUrl}/payment/callback/wipay`);
+  // WiPay will hit our webhook/callback with this secret so we can verify authenticity.
+  responseUrl.searchParams.set("secret", callbackSecret);
   
   try {
     const response = await fetch("https://sandbox.wipayfinancial.com/v1/gateway_live", {
@@ -140,7 +179,7 @@ async function createWiPayIntent(order: any) {
         method: "credit_card",
         order_id: order.order_number,
         origin: "roam-dash",
-        response_url: `${returnUrl}/payment/callback/wipay`,
+        response_url: responseUrl.toString(),
         return_url: `${returnUrl}/orders/${order.id}`,
         total: order.total.toString(),
       }),
@@ -163,8 +202,12 @@ async function createWiPayIntent(order: any) {
   }
 }
 
-// WiPay webhook callback
+// WiPay webhook callback — requires WIPAY_CALLBACK_SECRET (header or ?secret=)
 app.post("/webhooks/wipay", async (c) => {
+  if (!verifyWipayCallbackSecret(c)) {
+    return c.json({ error: "Unauthorized" }, 401);
+  }
+
   const body = await c.req.json();
   const serviceSupabase = getServiceSupabase();
   
@@ -260,7 +303,9 @@ async function getPayPalAccessToken() {
     : "https://api-m.sandbox.paypal.com";
   
   if (!clientId || !clientSecret) {
-    throw new Error("PayPal not configured");
+    throw new Error(
+      "PayPal not configured — set PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET via supabase secrets set",
+    );
   }
   
   const response = await fetch(`${baseUrl}/v1/oauth2/token`, {
@@ -438,8 +483,8 @@ app.post("/paypal/capture", async (c) => {
 // ============================================================================
 
 app.post("/refunds", async (c) => {
-  const authHeader = c.req.header("Authorization");
-  if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
+  const admin = await requireProductAdmin(c, "dash");
+  if (admin instanceof Response) return admin;
   
   const body = await c.req.json();
   const { transactionId, amount, reason } = body;
@@ -477,7 +522,7 @@ app.post("/refunds", async (c) => {
       currency: transaction.currency,
       reason,
       status: "pending",
-      initiated_by: "system"
+      initiated_by: admin.id,
     })
     .select()
     .single();
@@ -512,8 +557,8 @@ app.post("/refunds", async (c) => {
 // ============================================================================
 
 app.post("/payouts/merchant", async (c) => {
-  const authHeader = c.req.header("Authorization");
-  if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
+  const admin = await requireProductAdmin(c, "dash");
+  if (admin instanceof Response) return admin;
 
   const body = await c.req.json();
   const { merchantId, amount, currency = "JMD", reference } = body;
@@ -566,8 +611,8 @@ app.post("/payouts/merchant", async (c) => {
 // ============================================================================
 
 app.post("/payouts/courier", async (c) => {
-  const authHeader = c.req.header("Authorization");
-  if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
+  const admin = await requireProductAdmin(c, "dash");
+  if (admin instanceof Response) return admin;
 
   const body = await c.req.json();
   const { courierId, amount, currency = "JMD", reference } = body;
