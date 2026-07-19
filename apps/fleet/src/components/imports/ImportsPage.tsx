@@ -116,6 +116,8 @@ import { ImportExportHistory } from './ImportExportHistory';
 import { ImportBatchAuditPanel } from './ImportBatchAuditPanel';
 import { ImportReconciliationSummary } from './ImportReconciliationSummary';
 import { CategoryGroupCard, CategoryGroup } from './CategoryGroupCard';
+import { FleetBusyProvider, useFleetBusy } from '../shared/FleetBusyLock';
+import { runBackgroundJobToast } from '../shared/runBackgroundJobToast';
 
 type Step = 'select_platform' | 'upload' | 'review_files' | 'preview_merged' | 'success';
 
@@ -201,8 +203,17 @@ type ImportsPageProps = {
   onNavigate?: (page: string) => void;
 };
 
-export function ImportsPage({ onNavigate }: ImportsPageProps) {
+export function ImportsPage(props: ImportsPageProps) {
+  return (
+    <FleetBusyProvider>
+      <ImportsPageInner {...props} />
+    </FleetBusyProvider>
+  );
+}
+
+function ImportsPageInner({ onNavigate }: ImportsPageProps) {
   const queryClient = useQueryClient();
+  const { runExclusive, setMessage } = useFleetBusy();
   const fleetTimezone = useFleetTimezone();
   const [activeTab, setActiveTab] = useState<'import' | 'export' | 'delete'>('import');
   const [step, setStep] = useState<Step>('select_platform');
@@ -690,11 +701,14 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
       }
 
       setIsUploading(true);
+      const locked = await runExclusive('Committing import…', async () => {
       try {
+          setMessage('Calibrating trips against physical odometer anchors…');
           // Phase 6: Automatic Anchor Calibration
           // This tags trips with the nearest preceding verified anchor
           setWarning("Calibrating trips against physical odometer anchors...");
           const calibratedTrips = await tripCalibrationService.calibrateTrips(processedData);
+          setMessage('Saving import batch…');
           
           // Generate a Batch ID
           const batchId = crypto.randomUUID();
@@ -980,10 +994,17 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
           });
           
           setStep('success');
+          return true;
       } catch (e: any) {
           setError(e.message || "Failed to save trips");
+          return false;
       } finally {
           setIsUploading(false);
+      }
+      });
+      if (locked === undefined) {
+          setIsUploading(false);
+          toast.message('Another action is still running — try again when it finishes.');
       }
   };
 
@@ -1000,16 +1021,12 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
   };
 
   const handleTollBackup = async () => {
-      try {
-          const toastId = toast.loading("Preparing Toll Backup...");
+      await runBackgroundJobToast(
+        async () => {
           const rows = await fetchFullTollHistory();
-          
           if (rows.length === 0) {
-              toast.dismiss(toastId);
-              toast.info("No toll transactions found to export.");
-              return;
+            throw new Error('No toll transactions found to export.');
           }
-
           const csvContent = generateBackupCSV(rows);
           const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
           const url = URL.createObjectURL(blob);
@@ -1019,13 +1036,19 @@ export function ImportsPage({ onNavigate }: ImportsPageProps) {
           document.body.appendChild(link);
           link.click();
           document.body.removeChild(link);
-          
-          toast.dismiss(toastId);
-          toast.success(`Exported ${rows.length} toll records.`);
-      } catch (err) {
-          console.error(err);
-          toast.error("Toll export failed.");
-      }
+          URL.revokeObjectURL(url);
+          return rows.length;
+        },
+        {
+          loading: 'Preparing Toll Backup…',
+          success: (n) => `Exported ${n} toll records.`,
+          error: (err) => {
+            const msg = (err as Error)?.message || 'Toll export failed.';
+            if (/No toll transactions/i.test(msg)) return msg;
+            return 'Toll export failed.';
+          },
+        },
+      );
   };
 
   // --- Field Management Handlers (Simplified for this view) ---

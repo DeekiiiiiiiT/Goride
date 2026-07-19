@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 import { api } from '../../services/api';
+import { useLockedDialog } from '../shared/useLockedDialog';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Types
@@ -90,6 +91,10 @@ export function BatchDeleteModal({ isOpen, batchId, onClose, onSuccess }: BatchD
   const [confirmText, setConfirmText] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [result, setResult] = useState<DeleteResult | null>(null);
+  const {
+    onOpenChange: lockedOpenChange,
+    contentProps: lockedContentProps,
+  } = useLockedDialog(isOpen, (open) => { if (!open) onClose(); }, deleting);
 
   const CONFIRM_WORD = 'DELETE';
 
@@ -162,8 +167,12 @@ export function BatchDeleteModal({ isOpen, batchId, onClose, onSuccess }: BatchD
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => { if (!open && !deleting) onClose(); }}>
-      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+    <Dialog open={isOpen} onOpenChange={lockedOpenChange}>
+      <DialogContent
+        className="max-w-lg max-h-[85vh] overflow-y-auto"
+        hideCloseButton={deleting}
+        {...lockedContentProps}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-rose-700">
             <Trash2 className="h-5 w-5" />

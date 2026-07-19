@@ -43,6 +43,8 @@ import {
   DialogTitle,
   DialogDescription,
 } from '../ui/dialog';
+import { FleetBusyProvider, useFleetBusy } from '../shared/FleetBusyLock';
+import { useLockedDialog } from '../shared/useLockedDialog';
 
 const MONEY = (n: number) => {
   const body = Math.abs(n).toLocaleString(undefined, {
@@ -80,7 +82,16 @@ function daysBetweenYmd(aYmd: string, bYmd: string): number {
   return Math.abs(a - b) / (24 * 60 * 60 * 1000);
 }
 
-export function BankStatementImport({ expectedRows, organizationId, onConfirmed }: Props) {
+export function BankStatementImport(props: Props) {
+  return (
+    <FleetBusyProvider>
+      <BankStatementImportInner {...props} />
+    </FleetBusyProvider>
+  );
+}
+
+function BankStatementImportInner({ expectedRows, organizationId, onConfirmed }: Props) {
+  const { runExclusive, setMessage } = useFleetBusy();
   const [fileName, setFileName] = useState('');
   const [source, setSource] = useState<ImportSource>(null);
   const [csvRows, setCsvRows] = useState<string[][]>([]);
@@ -96,6 +107,11 @@ export function BankStatementImport({ expectedRows, organizationId, onConfirmed 
   const [statementId, setStatementId] = useState<string | null>(null);
   const [pendingAccept, setPendingAccept] = useState<PendingAccept | null>(null);
   const [pendingManual, setPendingManual] = useState<PendingManualMatch | null>(null);
+  const acceptOpen = !!pendingAccept;
+  const {
+    onOpenChange: lockedAcceptOpenChange,
+    contentProps: lockedAcceptContentProps,
+  } = useLockedDialog(acceptOpen, (open) => { if (!open) setPendingAccept(null); }, busy);
 
   const header = csvRows[0] || [];
   const colCount = header.length || 3;
@@ -324,8 +340,11 @@ export function BankStatementImport({ expectedRows, organizationId, onConfirmed 
     setBusy(true);
     const batch = [...suggestions];
     let ok = 0;
+    const locked = await runExclusive(`Accepting ${batch.length} matches…`, async () => {
     try {
-      for (const s of batch) {
+      for (let i = 0; i < batch.length; i++) {
+        const s = batch[i];
+        setMessage(`Accepting match ${i + 1} of ${batch.length}…`);
         await confirmSuggestion(s);
         ok += 1;
       }
@@ -336,6 +355,7 @@ export function BankStatementImport({ expectedRows, organizationId, onConfirmed 
         `Accepted ${ok} match${ok === 1 ? '' : 'es'} — bank received saved (Cash Returned unchanged)`,
       );
       maybeClearImport(0, unmatched.length);
+      return true;
     } catch (e: any) {
       if (ok > 0) {
         const acceptedIndexes = new Set(batch.slice(0, ok).map((s) => s.line.lineIndex));
@@ -347,9 +367,15 @@ export function BankStatementImport({ expectedRows, organizationId, onConfirmed 
           ? `Accepted ${ok}, then failed: ${e?.message || 'Accept failed'}`
           : e?.message || 'Accept all failed',
       );
+      return false;
     } finally {
       setBusy(false);
       setPendingAccept(null);
+    }
+    });
+    if (locked === undefined) {
+      setBusy(false);
+      toast.message('Another action is still running — try again when it finishes.');
     }
   }
 
@@ -727,12 +753,10 @@ export function BankStatementImport({ expectedRows, organizationId, onConfirmed 
       </Dialog>
 
       <Dialog
-        open={!!pendingAccept}
-        onOpenChange={(open) => {
-          if (!open && !busy) setPendingAccept(null);
-        }}
+        open={acceptOpen}
+        onOpenChange={lockedAcceptOpenChange}
       >
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg" hideCloseButton={busy} {...lockedAcceptContentProps}>
           <DialogHeader>
             <DialogTitle>
               {pendingAccept?.mode === 'all'

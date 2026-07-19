@@ -3,15 +3,27 @@ import { useOffline } from '../providers/OfflineProvider';
 import { Button } from "../ui/button";
 import { ScrollArea } from "../ui/scroll-area";
 import { AlertCircle, CheckCircle2, Trash2, RefreshCw, Wifi, WifiOff } from "lucide-react";
+import { runBackgroundJobToast } from '../shared/runBackgroundJobToast';
 
 export function OfflineSyncManager() {
   const { queue, isOnline, syncStatus, processQueue, removeFromQueue, clearQueue } = useOffline();
 
   const handleRetry = () => {
-      processQueue(true);
+    void runBackgroundJobToast(
+      async () => {
+        await Promise.resolve(processQueue(true));
+        return queue.length;
+      },
+      {
+        loading: `Syncing ${queue.length} offline item${queue.length === 1 ? '' : 's'}…`,
+        success: 'Offline queue sync finished',
+        error: (err) => (err as Error)?.message || 'Offline sync failed',
+      },
+    );
   };
 
   const handleClear = () => {
+      if (syncStatus === 'SYNCING') return;
       if (window.confirm('Are you sure you want to delete all pending offline data? This cannot be undone.')) {
           clearQueue();
       }
@@ -44,7 +56,13 @@ export function OfflineSyncManager() {
                 {suspendedCount > 0 && <span className="text-red-500 ml-1">({suspendedCount} failed)</span>}
             </span>
             {queue.length > 0 && (
-                <Button variant="ghost" size="sm" onClick={handleClear} className="h-6 px-2 text-xs text-red-500 hover:text-red-600 hover:bg-red-50">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleClear}
+                  disabled={syncStatus === 'SYNCING'}
+                  className="h-6 px-2 text-xs text-red-500 hover:text-red-600 hover:bg-red-50"
+                >
                     Clear All
                 </Button>
             )}

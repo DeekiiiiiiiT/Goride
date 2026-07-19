@@ -65,13 +65,27 @@ import { FuelCalculationService } from '../services/fuelCalculationService';
 import type { FinancialTransaction } from '../types/data';
 import type { Trip } from '../types/data';
 import type { Vehicle } from '../types/vehicle';
+import { FuelReconBusyProvider, useFuelReconBusy } from '../components/fuel/reconciliation/fuelReconBusyLock';
 
-export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, onTabChange }: { 
-    defaultTab?: string, 
+export function FuelManagement(props: {
+  defaultTab?: string;
+  onViewDriverLedger?: (driverId: string) => void;
+  onTabChange?: (tab: string) => void;
+}) {
+  return (
+    <FuelReconBusyProvider>
+      <FuelManagementInner {...props} />
+    </FuelReconBusyProvider>
+  );
+}
+
+function FuelManagementInner({ defaultTab = 'dashboard', onViewDriverLedger, onTabChange }: {
+    defaultTab?: string,
     onViewDriverLedger?: (driverId: string) => void,
     onTabChange?: (tab: string) => void
 }) {
   const queryClient = useQueryClient();
+  const { runExclusive, setMessage } = useFuelReconBusy();
   const [activeTab, setActiveTab] = useState(defaultTab);
 
   useEffect(() => {
@@ -876,8 +890,10 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
     .reduce((sum, log) => sum + log.amount, 0);
 
   const handleFinalize = async (reports: WeeklyFuelReport[]) => {
+      const result = await runExclusive('Finalizing week…', async () => {
       try {
           setIsRefreshing(true);
+          setMessage('Finalizing week…');
 
           // Fetch prior snapshots fresh (not from local state, which may be stale
           // if this isn't the first finalize pass in the session) so re-finalize
@@ -1020,11 +1036,17 @@ export function FuelManagement({ defaultTab = 'dashboard', onViewDriverLedger, o
           }
 
           await loadData(true); // Reload everything
+          return true;
       } catch (e: any) {
           console.error(e);
           toast.error(`Finalization failed: ${e.message}`);
+          return false;
       } finally {
           setIsRefreshing(false);
+      }
+      });
+      if (result === undefined) {
+        toast.message('Another action is still running — try again when it finishes.');
       }
   };
 

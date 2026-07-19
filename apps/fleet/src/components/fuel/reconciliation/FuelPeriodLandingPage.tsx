@@ -5,6 +5,7 @@ import { Button } from '../../ui/button';
 import { Loader2 } from 'lucide-react';
 import type { FuelReconciliationPeriod } from '../../../utils/fuelPeriodStatus';
 import { FUEL_STEP_ORDER, type FuelStepId } from '../../../utils/fuelPeriodGating';
+import { FuelReconBusyProvider } from './fuelReconBusyLock';
 
 const STEP_ICONS: Record<FuelStepId, LucideIcon> = {
   'data-quality': AlertTriangle,
@@ -131,6 +132,7 @@ export function FuelPeriodLandingPage({
   const defaultTab = outstanding.length > 0 ? 'outstanding' : 'completed';
 
   return (
+    <FuelReconBusyProvider>
     <div className="space-y-6">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
@@ -200,5 +202,6 @@ export function FuelPeriodLandingPage({
         </Tabs>
       )}
     </div>
+    </FuelReconBusyProvider>
   );
 }

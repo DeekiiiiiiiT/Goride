@@ -8,6 +8,8 @@ import { Loader2, Upload, AlertCircle, CheckCircle2 } from "lucide-react";
 import { TollProvider, TollTagStatus } from "../../types/vehicle";
 import { api } from "../../services/api";
 import { toast } from "sonner";
+import { FleetBusyProvider, useFleetBusy } from "../shared/FleetBusyLock";
+import { useLockedDialog } from "../shared/useLockedDialog";
 
 interface BulkImportTagsModalProps {
   isOpen: boolean;
@@ -23,11 +25,25 @@ interface ParsedTag {
   error?: string;
 }
 
-export function BulkImportTagsModal({ isOpen, onClose, onImportComplete }: BulkImportTagsModalProps) {
+export function BulkImportTagsModal(props: BulkImportTagsModalProps) {
+  return (
+    <FleetBusyProvider>
+      <BulkImportTagsModalInner {...props} />
+    </FleetBusyProvider>
+  );
+}
+
+function BulkImportTagsModalInner({ isOpen, onClose, onImportComplete }: BulkImportTagsModalProps) {
+  const { runExclusive, setMessage } = useFleetBusy();
   const [csvContent, setCsvContent] = useState('');
   const [parsedTags, setParsedTags] = useState<ParsedTag[]>([]);
   const [step, setStep] = useState<'input' | 'preview' | 'importing'>('input');
   const [importStats, setImportStats] = useState({ total: 0, success: 0, failed: 0 });
+  const lockBusy = step === 'importing';
+  const {
+    onOpenChange: lockedOpenChange,
+    contentProps: lockedContentProps,
+  } = useLockedDialog(isOpen, (open) => { if (!open) onClose(); }, lockBusy);
 
   const handleParse = () => {
     if (!csvContent.trim()) {
@@ -76,50 +92,61 @@ export function BulkImportTagsModal({ isOpen, onClose, onImportComplete }: BulkI
   };
 
   const handleImport = async () => {
+    if (step === 'importing') return;
     setStep('importing');
     setImportStats({ total: parsedTags.length, success: 0, failed: 0 });
 
-    let successCount = 0;
-    let failCount = 0;
+    const result = await runExclusive(`Importing ${parsedTags.length} tags…`, async () => {
+      let successCount = 0;
+      let failCount = 0;
 
-    // Process sequentially to avoid overwhelming the server (and since we don't have a batch endpoint)
-    for (const tag of parsedTags) {
-      if (!tag.isValid) {
+      for (let i = 0; i < parsedTags.length; i++) {
+        const tag = parsedTags[i];
+        setMessage(`Importing tag ${i + 1} of ${parsedTags.length}…`);
+        if (!tag.isValid) {
           failCount++;
+          setImportStats((prev) => ({ ...prev, success: successCount, failed: failCount }));
           continue;
-      }
+        }
 
-      try {
-        await api.saveTollTag({
+        try {
+          await api.saveTollTag({
             provider: tag.provider as TollProvider,
             tagNumber: tag.tagNumber,
-            status: (tag.status as TollTagStatus) || 'Active'
-        });
-        successCount++;
-      } catch (error) {
-        console.error(`Failed to import tag ${tag.tagNumber}`, error);
-        failCount++;
+            status: (tag.status as TollTagStatus) || 'Active',
+          });
+          successCount++;
+        } catch (error) {
+          console.error(`Failed to import tag ${tag.tagNumber}`, error);
+          failCount++;
+        }
+
+        setImportStats((prev) => ({ ...prev, success: successCount, failed: failCount }));
       }
-      
-      // Update stats live
-      setImportStats(prev => ({ ...prev, success: successCount, failed: failCount }));
+
+      return { successCount, failCount };
+    });
+
+    if (result === undefined) {
+      setStep('preview');
+      toast.message('Another action is still running — try again when it finishes.');
+      return;
     }
 
-    toast.success(`Import complete. ${successCount} imported, ${failCount} failed.`);
+    toast.success(`Import complete. ${result.successCount} imported, ${result.failCount} failed.`);
     onImportComplete();
-    
-    // Reset after delay or user close
+
     setTimeout(() => {
-        onClose();
-        setStep('input');
-        setCsvContent('');
-        setParsedTags([]);
+      lockedOpenChange(false);
+      setStep('input');
+      setCsvContent('');
+      setParsedTags([]);
     }, 1500);
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[600px] max-h-[80vh] flex flex-col">
+    <Dialog open={isOpen} onOpenChange={lockedOpenChange}>
+      <DialogContent className="sm:max-w-[600px] max-h-[80vh] flex flex-col" hideCloseButton={lockBusy} {...lockedContentProps}>
         <DialogHeader>
           <DialogTitle>Bulk Import Toll Tags</DialogTitle>
           <DialogDescription>

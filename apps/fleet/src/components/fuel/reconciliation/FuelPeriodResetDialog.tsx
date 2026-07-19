@@ -17,6 +17,7 @@ import type { FuelEntry, FinalizedFuelReport } from '../../../types/fuel';
 import { buildFuelPeriodResetInventory } from '../../../utils/fuelPeriodStatus';
 import { periodConfirmLabelsMatch } from '../../../utils/fuelWeekPeriod';
 import type { FuelReconciliationPeriod } from '../../../utils/fuelPeriodStatus';
+import { useLockedDialog } from '../../shared/useLockedDialog';
 import { useFuelReconBusy } from './fuelReconBusyLock';
 
 interface FuelPeriodResetDialogProps {
@@ -36,9 +37,14 @@ export function FuelPeriodResetDialog({
   fuelEntries,
   onComplete,
 }: FuelPeriodResetDialogProps) {
-  const { runExclusive } = useFuelReconBusy();
+  const { runExclusive, busy: fleetBusy } = useFuelReconBusy();
   const [confirmText, setConfirmText] = useState('');
   const [executing, setExecuting] = useState(false);
+  const lockBusy = executing || fleetBusy;
+  const {
+    onOpenChange: lockedOpenChange,
+    contentProps: lockedContentProps,
+  } = useLockedDialog(open, onOpenChange, lockBusy);
 
   const inventory = useMemo(
     () => buildFuelPeriodResetInventory(period.id, finalizedReports, fuelEntries),
@@ -122,7 +128,7 @@ export function FuelPeriodResetDialog({
           { id: toastId },
         );
       }
-      onOpenChange(false);
+      lockedOpenChange(false);
       onComplete();
     } catch (e: any) {
       toast.error(e?.message || 'Reset failed', { id: toastId });
@@ -132,8 +138,8 @@ export function FuelPeriodResetDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+    <Dialog open={open} onOpenChange={lockedOpenChange}>
+      <DialogContent className="max-w-lg" hideCloseButton={lockBusy} {...lockedContentProps}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-rose-700">
             <RotateCcw className="h-5 w-5" />
@@ -196,13 +202,13 @@ export function FuelPeriodResetDialog({
         </div>
 
         <DialogFooter className="gap-2">
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={executing}>
+          <Button type="button" variant="outline" onClick={() => lockedOpenChange(false)} disabled={lockBusy}>
             Cancel
           </Button>
           <Button
             type="button"
             variant="destructive"
-            disabled={executing || !labelOk}
+            disabled={lockBusy || !labelOk}
             onClick={handleExecute}
           >
             {executing ? (

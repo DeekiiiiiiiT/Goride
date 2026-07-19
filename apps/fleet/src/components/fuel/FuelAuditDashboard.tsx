@@ -32,6 +32,7 @@ import { api } from "../../services/api";
 import { fuelService } from "../../services/fuelService";
 import { DeadheadAnalysisPanel } from "./DeadheadAnalysisPanel";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "../ui/tooltip";
+import { FleetBusyProvider, useFleetBusy } from "../shared/FleetBusyLock";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { format } from "date-fns";
 import { toast } from "sonner@2.0.3";
@@ -49,6 +50,15 @@ import {
 } from "../ui/alert-dialog";
 
 export function FuelAuditDashboard() {
+  return (
+    <FleetBusyProvider>
+      <FuelAuditDashboardInner />
+    </FleetBusyProvider>
+  );
+}
+
+function FuelAuditDashboardInner() {
+  const { runExclusive, setMessage } = useFleetBusy();
     const [summary, setSummary] = useState<any>(null);
     const [flaggedTx, setFlaggedTx] = useState<any[]>([]);
     const [allFuelEntries, setAllFuelEntries] = useState<any[]>([]);
@@ -350,21 +360,28 @@ export function FuelAuditDashboard() {
     const handleBulkAction = async (action: 'resolved' | 'disputed') => {
         if (selectedAnomalies.length === 0) return;
         
-        try {
+        const locked = await runExclusive(
+          `${action === 'resolved' ? 'Resolving' : 'Disputing'} ${selectedAnomalies.length} anomalies…`,
+          async () => {
             setLoading(true);
-            // In a real app, we'd call a bulk endpoint. Here we simulate it.
-            await Promise.all(selectedAnomalies.map(id => api.resolveFuelAnomaly(id, action, `Bulk ${action}: ${resolutionNote}`)));
-            
+            setMessage(`Processing ${selectedAnomalies.length} anomalies…`);
+            for (let i = 0; i < selectedAnomalies.length; i++) {
+              const id = selectedAnomalies[i];
+              setMessage(`Processing anomaly ${i + 1} of ${selectedAnomalies.length}…`);
+              await api.resolveFuelAnomaly(id, action, `Bulk ${action}: ${resolutionNote}`);
+            }
             toast.success(`Successfully ${action} ${selectedAnomalies.length} transactions`);
             setSelectedAnomalies([]);
             setResolutionNote("");
             fetchData();
-        } catch (error) {
-            console.error('Bulk action failed:', error);
-            toast.error("Failed to process bulk action");
-        } finally {
-            setLoading(false);
+            return true;
+          },
+        );
+        if (locked === undefined) {
+          toast.message('Another action is still running — try again when it finishes.');
+          return;
         }
+        setLoading(false);
     };
 
     const orphanLedgerEntries = useMemo(() => {

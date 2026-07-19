@@ -346,6 +346,54 @@ export async function rebuildDriverFinancialPeriod(
     }
   }
 
+  // Cash washes + open unlinked trip credits = cash plaza tolls with no tag row.
+  // expense_logged creates a toll_ledger cash row; cash_wash/pending do not —
+  // without this, Expenses stays blank for cash-heavy fleets.
+  const linkedTripIds = new Set(
+    weekTolls.map((tx: any) => tx?.tripId).filter(Boolean).map(String),
+  );
+  for (const trip of context.scopedTrips || []) {
+    if (!trip?.id || linkedTripIds.has(String(trip.id))) continue;
+    const amt = Math.abs(Number(trip.tollCharges) || 0);
+    if (amt <= 0.005) continue;
+    const status = trip?.tollRefundResolution?.status;
+    // Linked to a tag toll elsewhere, or phantom (no real spend).
+    if (status === "phantom") continue;
+    // expense_logged already wrote a cash toll_ledger row — covered by weekTolls.
+    if (status === "expense_logged") continue;
+    const isCashWash = status === "cash_wash";
+    const isOpenUnlinked = !status || status === "pending";
+    if (!isCashWash && !isOpenUnlinked) continue;
+    const anchorDate = String(trip.dropoffTime || trip.date || "").slice(0, 10);
+    if (!anchorDate || anchorDate < periodAnchor || anchorDate > periodEnd) continue;
+    tollSpend += amt;
+    tollCashSpend += amt;
+    if (isCashWash) {
+      tollReconciledCount++;
+    } else {
+      tollUnmatchedCount++;
+      tollWorkflowActionable++;
+    }
+    if (persistLines) {
+      lines.push({
+        lineType: isCashWash ? "toll_handled" : "toll_unmatched",
+        domain: "toll",
+        sourceSystem: isCashWash ? "trip_cash_wash" : "trip_unlinked_refund",
+        sourceId: String(trip.id),
+        description: isCashWash
+          ? `Cash wash · ${trip.platform || "trip"} toll`
+          : `Unlinked ${trip.platform || "trip"} toll credit`,
+        amount: -amt,
+        occurredAt: trip.dropoffTime || trip.date,
+        metadata: {
+          resolution: status || "pending",
+          platform: trip.platform,
+          tollCharges: trip.tollCharges,
+        },
+      });
+    }
+  }
+
   const chargeTx = context.chargeTxAll.filter((t: any) => {
     const d = String(t.date || "").slice(0, 10);
     return d >= periodAnchor && d <= periodEnd;
@@ -541,7 +589,7 @@ export async function rebuildDriverFinancialPeriod(
   const settlementAmount = settled.settlement;
 
   const tollStatus =
-    weekTolls.length === 0
+    weekTolls.length === 0 && tollReconciledCount === 0 && tollUnmatchedCount === 0
       ? "n/a"
       : tollUnmatchedCount > 0
         ? "unmatched"
@@ -934,6 +982,17 @@ export async function rebuildAllPeriodsForDriver(driverId: string): Promise<numb
   for (const tx of ctx.scopedTolls) {
     if (!tx?.date) continue;
     anchors.add(await periodAnchorFor(tx.date, ctx.timezone));
+  }
+  // Cash-wash / open unlinked trip credits (no toll_ledger row) still create Expenses weeks.
+  for (const trip of ctx.scopedTrips || []) {
+    const status = trip?.tollRefundResolution?.status;
+    if (status === "phantom" || status === "expense_logged") continue;
+    const amt = Math.abs(Number(trip.tollCharges) || 0);
+    if (amt <= 0.005) continue;
+    if (status && status !== "cash_wash" && status !== "pending") continue;
+    const d = trip.dropoffTime || trip.date;
+    if (!d) continue;
+    anchors.add(await periodAnchorFor(String(d), ctx.timezone));
   }
   for (const t of ctx.chargeTxAll) {
     if (!t?.date) continue;

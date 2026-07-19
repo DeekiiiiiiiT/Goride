@@ -10,6 +10,8 @@ import { Loader2, AlertCircle, CheckCircle2, ArrowUpRight, ArrowDownLeft, MinusC
 import { api } from "../../services/api";
 import { toast } from "sonner@2.0.3";
 import Papa from 'papaparse';
+import { FleetBusyProvider, useFleetBusy } from '../shared/FleetBusyLock';
+import { useLockedDialog } from '../shared/useLockedDialog';
 
 /** Wall-clock YYYY-MM-DD + HH:MM:SS from a parsed CSV Date (no browser TZ bake). */
 function wallClockStorageFromDate(d: Date): { date: string; time: string } {
@@ -58,7 +60,15 @@ interface ParsedTransaction {
   isDuplicate?: boolean;
 }
 
-export function BulkImportTollTransactionsModal({ 
+export function BulkImportTollTransactionsModal(props: BulkImportTollTransactionsModalProps) {
+  return (
+    <FleetBusyProvider>
+      <BulkImportTollTransactionsModalInner {...props} />
+    </FleetBusyProvider>
+  );
+}
+
+function BulkImportTollTransactionsModalInner({ 
   isOpen, 
   onClose, 
   vehicleId, 
@@ -68,6 +78,7 @@ export function BulkImportTollTransactionsModal({
   onSuccess,
   mode = 'usage'
 }: BulkImportTollTransactionsModalProps) {
+  const { runExclusive, setMessage } = useFleetBusy();
   const [csvContent, setCsvContent] = useState('');
   const [parsedTx, setParsedTx] = useState<ParsedTransaction[]>([]);
   const [step, setStep] = useState<'input' | 'preview' | 'importing'>('input');
@@ -820,6 +831,10 @@ export function BulkImportTollTransactionsModal({
   };
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const {
+    onOpenChange: lockedOpenChange,
+    contentProps: lockedContentProps,
+  } = useLockedDialog(isOpen, (open) => { if (!open) onClose(); }, isSubmitting);
 
   // Handler: when admin changes payment method override, apply to all parsed rows
   const handlePaymentMethodOverride = (method: 'Tag Balance' | 'Cash') => {
@@ -842,10 +857,12 @@ export function BulkImportTollTransactionsModal({
     setStep('importing');
     setImportStats({ total: parsedTx.length, success: 0, failed: 0 });
 
+    const locked = await runExclusive(`Importing ${parsedTx.length} tolls…`, async () => {
     // 2. Process Transactions
     try {
         let successCount = 0;
         let failCount = 0;
+        setMessage(`Importing tolls…`);
         
         // Track balance changes per vehicle: vehicleId -> change amount
         const vehicleBalanceChanges: Record<string, number> = {};
@@ -980,12 +997,24 @@ export function BulkImportTollTransactionsModal({
         toast.error("Import crashed. Check console.");
         setIsSubmitting(false);
         setStep('preview');
+        return false;
+    }
+    return true;
+    });
+    if (locked === undefined) {
+      setIsSubmitting(false);
+      setStep('preview');
+      toast.message('Another action is still running — try again when it finishes.');
     }
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !isSubmitting && onClose()}>
-      <DialogContent className="sm:max-w-[95vw] lg:max-w-[1200px] max-h-[85vh] flex flex-col">
+    <Dialog open={isOpen} onOpenChange={lockedOpenChange}>
+      <DialogContent
+        className="sm:max-w-[95vw] lg:max-w-[1200px] max-h-[85vh] flex flex-col"
+        hideCloseButton={isSubmitting}
+        {...lockedContentProps}
+      >
         <DialogHeader>
           <DialogTitle>
             {mode === 'recovery' 

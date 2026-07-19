@@ -27,8 +27,18 @@ import {
 } from "../ui/alert-dialog";
 import { api } from "../../services/api";
 import { toast } from "sonner@2.0.3";
+import { FleetBusyProvider, useFleetBusy } from "../shared/FleetBusyLock";
 
 export function SystemHardeningPanel() {
+  return (
+    <FleetBusyProvider>
+      <SystemHardeningPanelInner />
+    </FleetBusyProvider>
+  );
+}
+
+function SystemHardeningPanelInner() {
+    const { runExclusive } = useFleetBusy();
     const [seeding, setSeeding] = useState(false);
     const [purging, setPurging] = useState(false);
     const [showPurgeConfirm, setShowPurgeConfirm] = useState(false);
@@ -42,30 +52,40 @@ export function SystemHardeningPanel() {
 
     const handleChaosSeed = async () => {
         setSeeding(true);
-        try {
-            const res = await api.runChaosSeeder(seedCount);
-            toast.success(`Chaos Seeder Successful: ${res.count} entries generated.`);
-            // Trigger a re-audit for the seeded data
-            await api.backfillFuelIntegrity();
-        } catch (err) {
-            toast.error("Chaos Seeder failed to run");
-        } finally {
-            setSeeding(false);
+        const locked = await runExclusive('Running chaos seeder…', async () => {
+            try {
+                const res = await api.runChaosSeeder(seedCount);
+                toast.success(`Chaos Seeder Successful: ${res.count} entries generated.`);
+                await api.backfillFuelIntegrity();
+                return true;
+            } catch (err) {
+                toast.error("Chaos Seeder failed to run");
+                return false;
+            }
+        });
+        setSeeding(false);
+        if (locked === undefined) {
+            toast.message('Another action is still running — try again when it finishes.');
         }
     };
 
     const handlePurge = async () => {
         setPurging(true);
-        try {
-            const res = await api.purgeSyntheticData();
-            toast.success(`System Purge Complete: ${res.count} test entries removed.`);
-            // Re-run backfill to clean up the integrity metrics
-            await api.backfillFuelIntegrity();
-        } catch (err) {
-            toast.error("Failed to purge test data");
-        } finally {
-            setPurging(false);
-            setShowPurgeConfirm(false);
+        const locked = await runExclusive('Purging synthetic data…', async () => {
+            try {
+                const res = await api.purgeSyntheticData();
+                toast.success(`System Purge Complete: ${res.count} test entries removed.`);
+                await api.backfillFuelIntegrity();
+                return true;
+            } catch (err) {
+                toast.error("Failed to purge test data");
+                return false;
+            }
+        });
+        setPurging(false);
+        setShowPurgeConfirm(false);
+        if (locked === undefined) {
+            toast.message('Another action is still running — try again when it finishes.');
         }
     };
 
@@ -152,7 +172,10 @@ export function SystemHardeningPanel() {
                 </Card>
 
                 {/* Purge Confirmation Dialog */}
-                <AlertDialog open={showPurgeConfirm} onOpenChange={setShowPurgeConfirm}>
+                <AlertDialog
+                  open={showPurgeConfirm}
+                  onOpenChange={(open) => { if (!purging) setShowPurgeConfirm(open); }}
+                >
                     <AlertDialogContent>
                         <AlertDialogHeader>
                             <AlertDialogTitle className="flex items-center gap-2">

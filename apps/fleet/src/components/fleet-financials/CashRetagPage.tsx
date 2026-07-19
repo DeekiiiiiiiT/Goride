@@ -44,11 +44,23 @@ import {
   DialogTitle,
 } from '../ui/dialog';
 import { cn } from '../ui/utils';
+import { FleetBusyProvider, useFleetBusy } from '../shared/FleetBusyLock';
+import { useLockedDialog } from '../shared/useLockedDialog';
 
 const MONEY = (n: number) =>
   n.toLocaleString(undefined, { style: 'currency', currency: 'USD' });
 
-export function CashRetagPage({
+export function CashRetagPage(props: {
+  onBackToBusinessFinance?: () => void;
+} = {}) {
+  return (
+    <FleetBusyProvider>
+      <CashRetagPageInner {...props} />
+    </FleetBusyProvider>
+  );
+}
+
+function CashRetagPageInner({
   onBackToBusinessFinance,
 }: {
   onBackToBusinessFinance?: () => void;
@@ -56,6 +68,7 @@ export function CashRetagPage({
   const fleetTz = useFleetTimezone();
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const { runExclusive, setMessage } = useFleetBusy();
   const [driverFilter, setDriverFilter] = useState('all');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -65,6 +78,10 @@ export function CashRetagPage({
   const [weekOverrideById, setWeekOverrideById] = useState<Record<string, string>>({});
   const [previewOpen, setPreviewOpen] = useState(false);
   const [applying, setApplying] = useState(false);
+  const {
+    onOpenChange: lockedPreviewOpenChange,
+    contentProps: lockedPreviewContentProps,
+  } = useLockedDialog(previewOpen, setPreviewOpen, applying);
 
   const driversQuery = useQuery({
     queryKey: ['drivers', 'cash-retag'],
@@ -164,8 +181,11 @@ export function CashRetagPage({
     const by = user?.email || user?.id || 'ops';
     let ok = 0;
     let fail = 0;
+    const locked = await runExclusive(`Tagging ${preview.length} payments…`, async () => {
     try {
-      for (const row of preview) {
+      for (let i = 0; i < preview.length; i++) {
+        const row = preview[i];
+        setMessage(`Tagging payment ${i + 1} of ${preview.length}…`);
         const original = txById.get(row.id);
         if (!original) {
           fail++;
@@ -181,11 +201,17 @@ export function CashRetagPage({
       }
       await queryClient.invalidateQueries({ queryKey: ['cash-retag-transactions'] });
       setSelectedIds(new Set());
-      setPreviewOpen(false);
+      lockedPreviewOpenChange(false);
       if (ok) toast.success(`Tagged ${ok} payment${ok === 1 ? '' : 's'}`);
       if (fail) toast.error(`${fail} failed to save`);
+      return true;
     } finally {
       setApplying(false);
+    }
+    });
+    if (locked === undefined) {
+      setApplying(false);
+      toast.message('Another action is still running — try again when it finishes.');
     }
   }
 
@@ -305,8 +331,8 @@ export function CashRetagPage({
         </div>
       )}
 
-      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent className="max-w-lg">
+      <Dialog open={previewOpen} onOpenChange={lockedPreviewOpenChange}>
+        <DialogContent className="max-w-lg" hideCloseButton={applying} {...lockedPreviewContentProps}>
           <DialogHeader>
             <DialogTitle>Preview retag</DialogTitle>
           </DialogHeader>
@@ -330,7 +356,7 @@ export function CashRetagPage({
             ))}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setPreviewOpen(false)} disabled={applying}>
+            <Button variant="outline" onClick={() => lockedPreviewOpenChange(false)} disabled={applying}>
               Cancel
             </Button>
             <Button onClick={() => void applyPreview()} disabled={applying || preview.length === 0}>

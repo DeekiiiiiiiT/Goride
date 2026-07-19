@@ -9,6 +9,8 @@ import { api } from '../../../services/api';
 import { toast } from 'sonner@2.0.3';
 import { PeriodWeekDropdown } from "../../ui/PeriodWeekDropdown";
 import { ENTIRE_PERIOD_OPTION_ID, generatePeriodWeekOptions, type PeriodWeekOption } from "../../../utils/periodWeekOptions";
+import { FleetBusyProvider, useFleetBusy } from '../../shared/FleetBusyLock';
+import { useLockedDialog } from '../../shared/useLockedDialog';
 
 interface SuggestionRow {
   tollId: string;
@@ -63,14 +65,28 @@ interface DisputeMatchModalProps {
   onMatched: (tollId: string) => void;
 }
 
-export function DisputeMatchModal({ open, onOpenChange, refund, onMatched }: DisputeMatchModalProps) {
+export function DisputeMatchModal(props: DisputeMatchModalProps) {
+  return (
+    <FleetBusyProvider>
+      <DisputeMatchModalInner {...props} />
+    </FleetBusyProvider>
+  );
+}
+
+function DisputeMatchModalInner({ open, onOpenChange, refund, onMatched }: DisputeMatchModalProps) {
   const fleetTz = useFleetTimezone();
+  const { runExclusive } = useFleetBusy();
   const [suggestions, setSuggestions] = useState<SuggestionRow[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [query, setQuery] = useState('');
   const [candidates, setCandidates] = useState<{ claims: Candidate[]; tolls: Candidate[] }>({ claims: [], tolls: [] });
   const [loadingCandidates, setLoadingCandidates] = useState(false);
   const [linkingTollId, setLinkingTollId] = useState<string | null>(null);
+  const lockBusy = !!linkingTollId;
+  const {
+    onOpenChange: lockedOpenChange,
+    contentProps: lockedContentProps,
+  } = useLockedDialog(open, onOpenChange, lockBusy);
   // Period filter (Mon–Sun week). Empty = all periods.
   const [periodStart, setPeriodStart] = useState<string>('');
   const [periodEnd, setPeriodEnd] = useState<string>('');
@@ -172,19 +188,25 @@ export function DisputeMatchModal({ open, onOpenChange, refund, onMatched }: Dis
   const link = async (tollId: string, claimId: string | null, createClaim?: boolean, suggestedTripId?: string | null) => {
     if (!refund) return;
     setLinkingTollId(tollId);
-    try {
-      const res = await api.matchDisputeRefund(refund.id, tollId, claimId || undefined, createClaim ? { createClaim: true, suggestedTripId } : undefined);
-      if (res.warning) {
-        toast.warning(res.warning);
-      } else {
-        toast.success('Refund matched — claim marked Reimbursed');
+    const result = await runExclusive('Matching dispute refund…', async () => {
+      try {
+        const res = await api.matchDisputeRefund(refund.id, tollId, claimId || undefined, createClaim ? { createClaim: true, suggestedTripId } : undefined);
+        if (res.warning) {
+          toast.warning(res.warning);
+        } else {
+          toast.success('Refund matched — claim marked Reimbursed');
+        }
+        onMatched(tollId);
+        lockedOpenChange(false);
+        return true;
+      } catch (err: any) {
+        toast.error(`Match failed: ${err.message}`);
+        return false;
       }
-      onMatched(tollId);
-      onOpenChange(false);
-    } catch (err: any) {
-      toast.error(`Match failed: ${err.message}`);
-    } finally {
-      setLinkingTollId(null);
+    });
+    setLinkingTollId(null);
+    if (result === undefined) {
+      toast.message('Another action is still running — try again when it finishes.');
     }
   };
 
@@ -197,8 +219,8 @@ export function DisputeMatchModal({ open, onOpenChange, refund, onMatched }: Dis
     c >= 80 ? 'bg-emerald-100 text-emerald-700' : c >= 50 ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600';
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+    <Dialog open={open} onOpenChange={lockedOpenChange}>
+      <DialogContent className="max-w-lg" hideCloseButton={lockBusy} {...lockedContentProps}>
         <DialogHeader>
           <DialogTitle>Match dispute refund</DialogTitle>
           <DialogDescription>

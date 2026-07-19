@@ -20,6 +20,7 @@ import { ReconciliationPeriod, ReconciliationTotals } from '../../../hooks/useTo
 import { StepId, STEP_ORDER } from '../../../utils/tollPeriodGating';
 import { TollFinancialOverviewCards } from './TollFinancialOverviewCards';
 import { BulkPeriodResetDialog } from './BulkPeriodResetDialog';
+import { TollReconBusyProvider } from './tollReconBusyLock';
 
 const STEP_ICONS: Record<StepId, LucideIcon> = {
   'needs-review': HelpCircle,
@@ -189,6 +190,7 @@ export function PeriodLandingPage({
   const showActionBanner = totals.needsReviewCount > 0;
 
   return (
+    <TollReconBusyProvider>
     <div className="space-y-8">
       {/* Header — Stitch premium redesign */}
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -336,5 +338,6 @@ export function PeriodLandingPage({
         onComplete={() => onPeriodsReset?.()}
       />
     </div>
+    </TollReconBusyProvider>
   );
 }

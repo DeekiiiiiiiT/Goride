@@ -49,7 +49,7 @@ import type { Trip } from '../../../types/data';
 import type { Vehicle } from '../../../types/vehicle';
 import { getCoverageMatrixRows } from '../../../utils/fuelCoverageSplit';
 import { pickScenarioForDriverMembership, resolveDriverVersionForWeek } from '../../../utils/fuelPolicyVersion';
-import { useFuelReconBusy } from './fuelReconBusyLock';
+import { useFuelReconBusy, FuelReconBusyProvider } from './fuelReconBusyLock';
 
 const STEP_ICONS: Record<FuelStepId, LucideIcon> = {
   'data-quality': AlertTriangle,
@@ -828,5 +828,9 @@ function FuelPeriodWizardInner({
 }
 
 export function FuelPeriodWizard(props: FuelPeriodWizardProps) {
-  return <FuelPeriodWizardInner {...props} />;
+  return (
+    <FuelReconBusyProvider>
+      <FuelPeriodWizardInner {...props} />
+    </FuelReconBusyProvider>
+  );
 }

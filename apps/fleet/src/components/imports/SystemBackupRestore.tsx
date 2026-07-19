@@ -14,6 +14,7 @@ import { toast } from 'sonner@2.0.3';
 import { generateFullBackup, parseBackupZip, BackupManifest, BACKUP_CATEGORIES } from '../../services/data-export';
 import { restoreFullBackup, FullRestoreResult } from '../../services/data-import-executor';
 import JSZip from 'jszip';
+import { FleetBusyProvider, useFleetBusy } from '../shared/FleetBusyLock';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Types
@@ -35,10 +36,16 @@ export function SystemBackupRestore({ onBack }: Props) {
   const [mode, setMode] = useState<Mode>('menu');
 
   return (
+    <FleetBusyProvider>
     <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="sm" onClick={mode === 'menu' ? onBack : () => setMode('menu')} className="h-8 px-2">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={mode === 'menu' ? onBack : () => setMode('menu')}
+          className="h-8 px-2"
+        >
           <ArrowLeft className="h-4 w-4 mr-1" />
           Back
         </Button>
@@ -52,6 +59,7 @@ export function SystemBackupRestore({ onBack }: Props) {
       {mode === 'backup' && <BackupView />}
       {mode === 'restore' && <RestoreView />}
     </div>
+    </FleetBusyProvider>
   );
 }
 
@@ -249,6 +257,7 @@ function BackupView() {
 // ═══════════════════════════════════════════════════════════════════════════
 
 function RestoreView() {
+  const { runExclusive, setMessage } = useFleetBusy();
   const [step, setStep] = useState<RestoreStep>('upload');
   const [fileName, setFileName] = useState('');
   const [manifest, setManifest] = useState<BackupManifest | null>(null);
@@ -306,27 +315,36 @@ function RestoreView() {
     setStep('restoring');
     setProgressPct(0);
 
-    try {
-      const result = await restoreFullBackup(zip, (stage, pct) => {
-        setProgressLabel(stage);
-        setProgressPct(pct);
-      });
+    const locked = await runExclusive('Restoring backup…', async () => {
+      try {
+        const result = await restoreFullBackup(zip, (stage, pct) => {
+          setProgressLabel(stage);
+          setProgressPct(pct);
+          setMessage(stage || 'Restoring backup…');
+        });
 
-      setRestoreResult(result);
-      setStep('done');
+        setRestoreResult(result);
+        setStep('done');
 
-      if (result.totalSuccess > 0) {
-        toast.success(`Restored ${result.totalSuccess.toLocaleString()} records.`);
+        if (result.totalSuccess > 0) {
+          toast.success(`Restored ${result.totalSuccess.toLocaleString()} records.`);
+        }
+        if (result.totalFailed > 0) {
+          toast.warning(`${result.totalFailed} records failed.`);
+        }
+        return true;
+      } catch (err: any) {
+        console.error('Full restore failed:', err);
+        toast.error(`Restore failed: ${err.message}`);
+        setStep('error');
+        return false;
       }
-      if (result.totalFailed > 0) {
-        toast.warning(`${result.totalFailed} records failed.`);
-      }
-    } catch (err: any) {
-      console.error('Full restore failed:', err);
-      toast.error(`Restore failed: ${err.message}`);
-      setStep('error');
+    });
+    if (locked === undefined) {
+      setStep('confirm');
+      toast.message('Another action is still running — try again when it finishes.');
     }
-  }, [zip, restoreMode, confirmText]);
+  }, [zip, restoreMode, confirmText, runExclusive, setMessage]);
 
   // ─── Render ────────────────────────────────────────────────────────────
 

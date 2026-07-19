@@ -25,6 +25,7 @@ import {
 import { api } from '../../services/api';
 import { toast } from 'sonner@2.0.3';
 import { Button } from '../ui/button';
+import { runBackgroundJobToast } from '../shared/runBackgroundJobToast';
 import {
   MapPin, Car, Users, DollarSign, Fuel, Wrench, Gauge,
   ClipboardCheck, CreditCard, Building2, Scale, Package,
@@ -351,46 +352,54 @@ export function ExportCenter() {
     if (isExportingAll) return;
     setIsExportingAll(true);
 
-    const categories = [
-      { label: 'trips', fn: () => handleGenericExport('trips', () => fetchAllTrips(), TRIP_CSV_COLUMNS, 'trips') },
-      { label: 'drivers', fn: () => handleGenericExport('driver profiles', fetchAllDrivers, DRIVER_CSV_COLUMNS, 'drivers') },
-      { label: 'driver metrics', fn: () => handleGenericExport('driver metrics', fetchAllDriverMetrics, DRIVER_METRICS_CSV_COLUMNS, 'driver_metrics') },
-      { label: 'vehicles', fn: () => handleGenericExport('vehicle profiles', fetchAllVehicles, VEHICLE_CSV_COLUMNS, 'vehicles') },
-      { label: 'vehicle metrics', fn: () => handleGenericExport('vehicle metrics', fetchAllVehicleMetrics, VEHICLE_METRICS_CSV_COLUMNS, 'vehicle_metrics') },
-      { label: 'transactions', fn: () => handleGenericExport('transactions', fetchAllTransactions, TRANSACTION_CSV_COLUMNS, 'transactions') },
-      { label: 'fuel', fn: () => handleGenericExport('fuel logs', exportFetchAllFuelLogs, FUEL_CSV_COLUMNS, 'fuel') },
-      { label: 'service', fn: () => handleGenericExport('service logs', exportFetchAllServiceLogs, SERVICE_CSV_COLUMNS, 'service') },
-      { label: 'odometer', fn: () => handleGenericExport('odometer readings', exportFetchAllOdometerReadings, ODOMETER_CSV_COLUMNS, 'odometer') },
-      { label: 'check-ins', fn: () => handleGenericExport('check-ins', exportFetchAllCheckIns, CHECKIN_CSV_COLUMNS, 'checkins') },
-      { label: 'toll tags', fn: () => handleGenericExport('toll tags', fetchAllTollTags, TOLL_TAG_CSV_COLUMNS, 'toll_tags') },
-      { label: 'toll plazas', fn: () => handleGenericExport('toll plazas', fetchAllTollPlazas, TOLL_PLAZA_CSV_COLUMNS, 'toll_plazas') },
-      { label: 'stations', fn: () => handleGenericExport('gas stations', fetchAllStations, STATION_CSV_COLUMNS, 'stations') },
-      { label: 'claims', fn: () => handleGenericExport('claims', fetchAllClaims, CLAIM_CSV_COLUMNS, 'claims') },
-      { label: 'equipment', fn: () => handleGenericExport('equipment', fetchAllEquipment, EQUIPMENT_CSV_COLUMNS, 'equipment') },
-      { label: 'inventory', fn: () => handleGenericExport('inventory', fetchAllInventory, INVENTORY_CSV_COLUMNS, 'inventory') },
-      { label: 'toll transactions', fn: () => handleGenericExport('toll transactions', fetchAllTollTransactions, TOLL_TRANSACTION_CSV_COLUMNS, 'toll_transactions') },
-    ];
+    await runBackgroundJobToast(
+      async () => {
+        const categories = [
+          { label: 'trips', fn: () => handleGenericExport('trips', () => fetchAllTrips(), TRIP_CSV_COLUMNS, 'trips') },
+          { label: 'drivers', fn: () => handleGenericExport('driver profiles', fetchAllDrivers, DRIVER_CSV_COLUMNS, 'drivers') },
+          { label: 'driver metrics', fn: () => handleGenericExport('driver metrics', fetchAllDriverMetrics, DRIVER_METRICS_CSV_COLUMNS, 'driver_metrics') },
+          { label: 'vehicles', fn: () => handleGenericExport('vehicle profiles', fetchAllVehicles, VEHICLE_CSV_COLUMNS, 'vehicles') },
+          { label: 'vehicle metrics', fn: () => handleGenericExport('vehicle metrics', fetchAllVehicleMetrics, VEHICLE_METRICS_CSV_COLUMNS, 'vehicle_metrics') },
+          { label: 'transactions', fn: () => handleGenericExport('transactions', fetchAllTransactions, TRANSACTION_CSV_COLUMNS, 'transactions') },
+          { label: 'fuel', fn: () => handleGenericExport('fuel logs', exportFetchAllFuelLogs, FUEL_CSV_COLUMNS, 'fuel') },
+          { label: 'service', fn: () => handleGenericExport('service logs', exportFetchAllServiceLogs, SERVICE_CSV_COLUMNS, 'service') },
+          { label: 'odometer', fn: () => handleGenericExport('odometer readings', exportFetchAllOdometerReadings, ODOMETER_CSV_COLUMNS, 'odometer') },
+          { label: 'check-ins', fn: () => handleGenericExport('check-ins', exportFetchAllCheckIns, CHECKIN_CSV_COLUMNS, 'checkins') },
+          { label: 'toll tags', fn: () => handleGenericExport('toll tags', fetchAllTollTags, TOLL_TAG_CSV_COLUMNS, 'toll_tags') },
+          { label: 'toll plazas', fn: () => handleGenericExport('toll plazas', fetchAllTollPlazas, TOLL_PLAZA_CSV_COLUMNS, 'toll_plazas') },
+          { label: 'stations', fn: () => handleGenericExport('gas stations', fetchAllStations, STATION_CSV_COLUMNS, 'stations') },
+          { label: 'claims', fn: () => handleGenericExport('claims', fetchAllClaims, CLAIM_CSV_COLUMNS, 'claims') },
+          { label: 'equipment', fn: () => handleGenericExport('equipment', fetchAllEquipment, EQUIPMENT_CSV_COLUMNS, 'equipment') },
+          { label: 'inventory', fn: () => handleGenericExport('inventory', fetchAllInventory, INVENTORY_CSV_COLUMNS, 'inventory') },
+          { label: 'toll transactions', fn: () => handleGenericExport('toll transactions', fetchAllTollTransactions, TOLL_TRANSACTION_CSV_COLUMNS, 'toll_transactions') },
+        ];
 
-    let totalRecords = 0;
-    let successCount = 0;
+        let totalRecords = 0;
+        let successCount = 0;
 
-    for (let i = 0; i < categories.length; i++) {
-      const cat = categories[i];
-      toast.loading(`Exporting ${i + 1}/${categories.length}: ${cat.label}...`, { id: 'export-all-progress' });
-      try {
-        const count = await cat.fn();
-        if (count > 0) successCount++;
-        totalRecords += count;
-      } catch {
-        // Individual errors already toasted inside handleGenericExport
-      }
-    }
+        for (let i = 0; i < categories.length; i++) {
+          const cat = categories[i];
+          toast.loading(`Exporting ${i + 1}/${categories.length}: ${cat.label}...`, { id: 'export-all-progress' });
+          try {
+            const count = await cat.fn();
+            if (count > 0) successCount++;
+            totalRecords += count;
+          } catch {
+            // Individual errors already toasted inside handleGenericExport
+          }
+        }
 
-    toast.dismiss('export-all-progress');
-    toast.success(
-      `Export All complete: ${successCount} files, ${totalRecords.toLocaleString()} total records.`,
-      { duration: 6000 }
+        toast.dismiss('export-all-progress');
+        return { successCount, totalRecords };
+      },
+      {
+        loading: 'Exporting all categories…',
+        success: (r: any) =>
+          `Export All complete: ${r.successCount} files, ${Number(r.totalRecords).toLocaleString()} total records.`,
+        error: 'Export All failed',
+      },
     );
+
     setIsExportingAll(false);
   }, [isExportingAll]);
 

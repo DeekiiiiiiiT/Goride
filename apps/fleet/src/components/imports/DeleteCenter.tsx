@@ -1818,7 +1818,12 @@ export function DeleteCenter() {
           if (!open) setBulkDeleteProgress(null);
         }
       }}>
-        <DialogContent className="max-w-2xl w-[90vw]">
+        <DialogContent
+          className="max-w-2xl w-[90vw]"
+          hideCloseButton={bulkDeleting}
+          onInteractOutside={(e) => { if (bulkDeleting) e.preventDefault(); }}
+          onEscapeKeyDown={(e) => { if (bulkDeleting) e.preventDefault(); }}
+        >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-rose-700">
               <Trash2 className="h-5 w-5" />

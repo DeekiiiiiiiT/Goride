@@ -23,6 +23,7 @@ import { isWithinInterval, parseISO, startOfDay, endOfDay, format } from 'date-f
 import { api } from '../services/api';
 import { toast } from 'sonner@2.0.3';
 import { jsonToCsv, downloadBlob } from '../utils/csv-helper';
+import { FleetBusyProvider, useFleetBusy } from '../components/shared/FleetBusyLock';
 
 // ---------------------------------------------------------------------------
 // Bulk action types
@@ -90,6 +91,15 @@ function fmtJMD(value: number): string {
 // ---------------------------------------------------------------------------
 
 export function TollLogsPage() {
+  return (
+    <FleetBusyProvider>
+      <TollLogsPageInner />
+    </FleetBusyProvider>
+  );
+}
+
+function TollLogsPageInner() {
+  const { runExclusive, setMessage } = useFleetBusy();
   const { logs, loading, refresh, vehicles, drivers, plazas } = useTollLogs();
   const [selectedLog, setSelectedLog] = useState<TollLogEntry | null>(null);
   const [logToEdit, setLogToEdit] = useState<TollLogEntry | null>(null);
@@ -243,7 +253,10 @@ export function TollLogsPage() {
     let failed = 0;
     const failures: string[] = [];
 
-    for (const log of selectedLogs) {
+    const locked = await runExclusive(`Updating ${selectedLogs.length} tolls…`, async () => {
+    for (let i = 0; i < selectedLogs.length; i++) {
+      const log = selectedLogs[i];
+      setMessage(`Updating toll ${i + 1} of ${selectedLogs.length}…`);
       try {
         const updatedTx: any = {
           ...log._raw,
@@ -265,8 +278,14 @@ export function TollLogsPage() {
         console.error(`[TollLogs] Bulk update failed for ${log.id}:`, err);
       }
     }
+    return { succeeded, failed, failures };
+    });
 
     setBulkProcessing(false);
+    if (locked === undefined) {
+      toast.message('Another action is still running — try again when it finishes.');
+      return;
+    }
     setBulkDialogOpen(false);
     setBulkAction(null);
     setSelectedIds(new Set());
@@ -498,8 +517,15 @@ export function TollLogsPage() {
       />
 
       {/* Bulk Action Confirmation Dialog */}
-      <AlertDialog open={bulkDialogOpen} onOpenChange={setBulkDialogOpen}>
-        <AlertDialogContent>
+      <AlertDialog
+        open={bulkDialogOpen}
+        onOpenChange={(open) => {
+          if (!bulkProcessing) setBulkDialogOpen(open);
+        }}
+      >
+        <AlertDialogContent
+          onEscapeKeyDown={(e) => { if (bulkProcessing) e.preventDefault(); }}
+        >
           <AlertDialogHeader>
             <AlertDialogTitle>
               {actionConfig?.dialogTitle}

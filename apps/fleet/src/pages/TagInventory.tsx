@@ -11,8 +11,19 @@ import { BulkImportTagsModal } from "../components/toll-tags/BulkImportTagsModal
 import { api } from "../services/api";
 import { TollTag, TollProvider, TollTagStatus, Vehicle } from "../types/vehicle";
 import { toast } from "sonner";
+import { FleetBusyProvider, useFleetBusy } from "../components/shared/FleetBusyLock";
+import { useLockedDialog } from "../components/shared/useLockedDialog";
 
 export function TagInventory({ onNavigate }: { onNavigate?: (page: string) => void }) {
+  return (
+    <FleetBusyProvider>
+      <TagInventoryInner onNavigate={onNavigate} />
+    </FleetBusyProvider>
+  );
+}
+
+function TagInventoryInner({ onNavigate }: { onNavigate?: (page: string) => void }) {
+  const { runExclusive } = useFleetBusy();
   const [tags, setTags] = useState<TollTag[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -29,6 +40,10 @@ export function TagInventory({ onNavigate }: { onNavigate?: (page: string) => vo
   const [syncPreviewing, setSyncPreviewing] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState<any | null>(null);
+  const {
+    onOpenChange: lockedSyncOpenChange,
+    contentProps: lockedSyncContentProps,
+  } = useLockedDialog(syncOpen, setSyncOpen, syncing);
 
   const openSync = async () => {
     setSyncOpen(true);
@@ -48,17 +63,23 @@ export function TagInventory({ onNavigate }: { onNavigate?: (page: string) => vo
 
   const confirmSync = async () => {
     setSyncing(true);
-    try {
-      const res = await api.runTollTagBackfill(false);
-      const linked = res?.summary?.linked ?? 0;
-      toast.success(linked > 0 ? `Linked ${linked} toll${linked === 1 ? '' : 's'} to their tags.` : "Tag history is already up to date.");
-      setSyncOpen(false);
-      fetchTags();
-    } catch (error) {
-      console.error("Failed to sync tag history:", error);
-      toast.error("Failed to sync tag history. Please try again.");
-    } finally {
-      setSyncing(false);
+    const locked = await runExclusive('Syncing tag history…', async () => {
+      try {
+        const res = await api.runTollTagBackfill(false);
+        const linked = res?.summary?.linked ?? 0;
+        toast.success(linked > 0 ? `Linked ${linked} toll${linked === 1 ? '' : 's'} to their tags.` : "Tag history is already up to date.");
+        lockedSyncOpenChange(false);
+        fetchTags();
+        return true;
+      } catch (error) {
+        console.error("Failed to sync tag history:", error);
+        toast.error("Failed to sync tag history. Please try again.");
+        return false;
+      }
+    });
+    setSyncing(false);
+    if (locked === undefined) {
+      toast.message('Another action is still running — try again when it finishes.');
     }
   };
 
@@ -245,8 +266,8 @@ export function TagInventory({ onNavigate }: { onNavigate?: (page: string) => vo
       )}
 
       {/* Sync Tag History — preview then apply the tag-link backfill */}
-      <Dialog open={syncOpen} onOpenChange={(o) => { if (!syncing) setSyncOpen(o); }}>
-        <DialogContent>
+      <Dialog open={syncOpen} onOpenChange={lockedSyncOpenChange}>
+        <DialogContent hideCloseButton={syncing} {...lockedSyncContentProps}>
           <DialogHeader>
             <DialogTitle>Sync Tag History</DialogTitle>
             <DialogDescription>

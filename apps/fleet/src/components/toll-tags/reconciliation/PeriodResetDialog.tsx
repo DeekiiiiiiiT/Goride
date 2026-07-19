@@ -16,6 +16,7 @@ import { api } from '../../../services/api';
 import { toast } from 'sonner@2.0.3';
 import type { ReconciliationPeriod } from '../../../hooks/useTollReconciliationPeriods';
 import { periodConfirmLabelsMatch } from '../../../utils/tollWeekPeriod';
+import { useLockedDialog } from '../../shared/useLockedDialog';
 import { useTollReconBusy } from './tollReconBusyLock';
 
 interface PeriodResetInventory {
@@ -44,7 +45,7 @@ export function PeriodResetDialog({
   preselectedDriverId,
   onComplete,
 }: PeriodResetDialogProps) {
-  const { runExclusive } = useTollReconBusy();
+  const { runExclusive, busy: fleetBusy } = useTollReconBusy();
   const [allDrivers, setAllDrivers] = useState(!preselectedDriverId);
   const [selectedDriverIds, setSelectedDriverIds] = useState<Set<string>>(
     () => new Set(preselectedDriverId ? [preselectedDriverId] : []),
@@ -53,6 +54,11 @@ export function PeriodResetDialog({
   const [previewLoading, setPreviewLoading] = useState(false);
   const [executing, setExecuting] = useState(false);
   const [confirmText, setConfirmText] = useState('');
+  const lockBusy = executing || fleetBusy;
+  const {
+    onOpenChange: lockedOpenChange,
+    contentProps: lockedContentProps,
+  } = useLockedDialog(open, onOpenChange, lockBusy);
 
   const driverIdsForRequest = useMemo(
     () => (allDrivers ? undefined : [...selectedDriverIds]),
@@ -135,7 +141,7 @@ export function PeriodResetDialog({
       } else {
         toast.success('Period reset complete — back to period list');
       }
-      onOpenChange(false);
+      lockedOpenChange(false);
       onComplete();
     } catch (e: any) {
       toast.dismiss(toastId);
@@ -145,17 +151,9 @@ export function PeriodResetDialog({
     }
   };
 
-  const handleOpenChange = (next: boolean) => {
-    if (!next) {
-      setPreview(null);
-      setConfirmText('');
-    }
-    onOpenChange(next);
-  };
-
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-lg">
+    <Dialog open={open} onOpenChange={lockedOpenChange}>
+      <DialogContent className="max-w-lg" hideCloseButton={lockBusy} {...lockedContentProps}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <RotateCcw className="h-5 w-5 text-red-600" />
@@ -208,7 +206,7 @@ export function PeriodResetDialog({
             type="button"
             variant="outline"
             className="w-full"
-            disabled={previewLoading || executing}
+            disabled={previewLoading || lockBusy}
             onClick={handlePreview}
           >
             {previewLoading ? (
@@ -250,20 +248,20 @@ export function PeriodResetDialog({
                 value={confirmText}
                 onChange={(e) => setConfirmText(e.target.value)}
                 placeholder={period.label}
-                disabled={executing}
+                disabled={lockBusy}
               />
             </div>
           )}
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={executing}>
+          <Button variant="outline" onClick={() => lockedOpenChange(false)} disabled={lockBusy}>
             Cancel
           </Button>
           <Button
             variant="destructive"
             disabled={
-              executing ||
+              lockBusy ||
               !preview ||
               totalItems === 0 ||
               !periodConfirmLabelsMatch(confirmText, period.label)

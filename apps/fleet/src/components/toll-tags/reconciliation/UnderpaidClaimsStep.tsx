@@ -27,6 +27,7 @@ import {
 } from "../../../utils/pendingUnderpaidListable";
 import { resolveDriverChargeAmount } from "../../../utils/claimChargeGuard";
 import { formatDateJM } from "../../../utils/csv-helper";
+import { useTollReconBusy } from "./tollReconBusyLock";
 
 /**
  * "Underpaid & Claims" step — folds the former standalone Claimable Loss
@@ -70,7 +71,10 @@ interface UnderpaidClaimsStepProps {
   loadingClaims: boolean;
   createClaim: (claim: Partial<Claim>) => Promise<any>;
   updateClaim: (claim: Claim) => Promise<any>;
+  /** Unlocked claim write for sequential bulk under one runExclusive. */
+  rawUpdateClaim?: (claim: Claim) => Promise<any>;
   deleteClaim: (id: string) => Promise<any>;
+  rawDeleteClaim?: (id: string) => Promise<any>;
   refreshClaims: () => void;
 }
 
@@ -80,8 +84,11 @@ export function UnderpaidClaimsStep({
   periodLabel: _periodLabel,
   fleetTz,
   drivers, loadingTolls, loadingClaims,
-  createClaim, updateClaim, deleteClaim, refreshClaims,
+  createClaim, updateClaim, rawUpdateClaim, deleteClaim, rawDeleteClaim, refreshClaims,
 }: UnderpaidClaimsStepProps) {
+  const { runExclusive, setMessage } = useTollReconBusy();
+  const writeClaim = rawUpdateClaim || updateClaim;
+  const removeClaim = rawDeleteClaim || deleteClaim;
   const tripMap = useMemo(() => new Map(trips.map(t => [t.id, t])), [trips]);
   const displayTollById = useMemo(() => {
     const map = new Map(reconciledTolls.map((t) => [t.id, t]));
@@ -123,7 +130,11 @@ export function UnderpaidClaimsStep({
     let cancelled = false;
     (async () => {
       try {
-        await Promise.all(dupIds.map((id) => deleteClaim(id)));
+        await runExclusive(`Removing ${dupIds.length} duplicate claims…`, async () => {
+          for (const id of dupIds) {
+            await removeClaim(id);
+          }
+        });
         if (cancelled) return;
         prunedDupesRef.current = key;
         refreshClaims();
@@ -663,7 +674,17 @@ export function UnderpaidClaimsStep({
       return;
     }
     try {
-      await Promise.all(itemsToDelete.map(id => deleteClaim(id)));
+      const result = await runExclusive(`Deleting ${itemsToDelete.length} claims…`, async () => {
+        for (let i = 0; i < itemsToDelete.length; i++) {
+          setMessage(`Deleting claim ${i + 1} of ${itemsToDelete.length}…`);
+          await removeClaim(itemsToDelete[i]);
+        }
+        return true;
+      });
+      if (result === undefined) {
+        toast.message('Another action is still running — try again when it finishes.');
+        return;
+      }
       toast.success(`Successfully deleted ${itemsToDelete.length} claims`);
       refreshClaims();
     } catch (e) {
@@ -720,21 +741,35 @@ export function UnderpaidClaimsStep({
       onConfirm: async () => {
         const toastId = toast.loading(`Updating ${claimsToUpdate.length} claims...`);
         let successCount = 0, failCount = 0;
-        try {
-          await Promise.all(claimsToUpdate.map(async (c) => {
-            try {
-              await updateClaim({ ...c, status: status as any, resolutionReason: reason, updatedAt: new Date().toISOString() });
-              successCount++;
-            } catch (e) { failCount++; }
-          }));
-          toast.dismiss(toastId);
-          if (failCount > 0) toast.warning(`Updated ${successCount} claims. Failed: ${failCount}`);
-          else toast.success(`Successfully updated ${successCount} claims`);
-          refreshClaims();
-        } catch (e) {
-          toast.dismiss(toastId);
-          toast.error("Batch processing failed");
+        const result = await runExclusive(
+          `Updating ${claimsToUpdate.length} claims…`,
+          async () => {
+            for (let i = 0; i < claimsToUpdate.length; i++) {
+              const c = claimsToUpdate[i];
+              setMessage(`Updating claim ${i + 1} of ${claimsToUpdate.length}…`);
+              try {
+                await writeClaim({
+                  ...c,
+                  status: status as any,
+                  resolutionReason: reason,
+                  updatedAt: new Date().toISOString(),
+                });
+                successCount++;
+              } catch {
+                failCount++;
+              }
+            }
+            return { successCount, failCount };
+          },
+        );
+        toast.dismiss(toastId);
+        if (result === undefined) {
+          toast.message('Another action is still running — try again when it finishes.');
+          return;
         }
+        if (failCount > 0) toast.warning(`Updated ${successCount} claims. Failed: ${failCount}`);
+        else toast.success(`Successfully updated ${successCount} claims`);
+        refreshClaims();
       },
     });
   };

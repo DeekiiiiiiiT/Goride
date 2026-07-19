@@ -20,6 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/table";
 import { ScrollArea } from "../../components/ui/scroll-area";
 import { Badge } from "../../components/ui/badge";
+import { useLockedDialog } from "../shared/useLockedDialog";
 
 interface DataResetModalProps {
   isOpen: boolean;
@@ -36,6 +37,11 @@ export function DataResetModal({ isOpen, onClose, onSuccess }: DataResetModalPro
   const [previewItems, setPreviewItems] = useState<any[]>([]);
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
   const [isAllTime, setIsAllTime] = useState(false);
+  const lockBusy = step === 'processing';
+  const {
+    onOpenChange: lockedOpenChange,
+    contentProps: lockedContentProps,
+  } = useLockedDialog(isOpen, (open) => { if (!open) onClose(); }, lockBusy);
 
   React.useEffect(() => {
       if (isOpen) {
@@ -177,8 +183,12 @@ export function DataResetModal({ isOpen, onClose, onSuccess }: DataResetModalPro
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[800px] w-full overflow-hidden max-h-[85vh] flex flex-col">
+    <Dialog open={isOpen} onOpenChange={lockedOpenChange}>
+      <DialogContent
+        className="sm:max-w-[800px] w-full overflow-hidden max-h-[85vh] flex flex-col"
+        hideCloseButton={lockBusy}
+        {...lockedContentProps}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-rose-600">
             <AlertTriangle className="h-5 w-5" />

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Loader2, RotateCcw } from 'lucide-react';
+import { Loader2, RotateCcw } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -12,9 +12,12 @@ import { Button } from '../../ui/button';
 import { Checkbox } from '../../ui/checkbox';
 import { Input } from '../../ui/input';
 import { Label } from '../../ui/label';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../ui/tabs';
 import { api } from '../../../services/api';
 import { toast } from 'sonner@2.0.3';
 import type { ReconciliationPeriod } from '../../../hooks/useTollReconciliationPeriods';
+import { useLockedDialog } from '../../shared/useLockedDialog';
+import { useTollReconBusy } from './tollReconBusyLock';
 
 interface PeriodResetInventory {
   unlinkedApplyTripIds: string[];
@@ -85,7 +88,9 @@ export function BulkPeriodResetDialog({
   preselectedDriverId,
   onComplete,
 }: BulkPeriodResetDialogProps) {
+  const { runExclusive, setMessage, busy: fleetBusy } = useTollReconBusy();
   const [selectedPeriodIds, setSelectedPeriodIds] = useState<Set<string>>(new Set());
+  const [periodTab, setPeriodTab] = useState<'outstanding' | 'completed'>('outstanding');
   const [allDrivers, setAllDrivers] = useState(!preselectedDriverId);
   const [selectedDriverIds, setSelectedDriverIds] = useState<Set<string>>(
     () => new Set(preselectedDriverId ? [preselectedDriverId] : []),
@@ -95,11 +100,17 @@ export function BulkPeriodResetDialog({
   const [executing, setExecuting] = useState(false);
   const [progressLabel, setProgressLabel] = useState('');
   const [confirmText, setConfirmText] = useState('');
+  const lockBusy = executing || fleetBusy;
+  const {
+    onOpenChange: lockedOpenChange,
+    contentProps: lockedContentProps,
+  } = useLockedDialog(open, onOpenChange, lockBusy);
 
   // Fresh selection each time the overlay opens
   useEffect(() => {
     if (!open) return;
     setSelectedPeriodIds(new Set());
+    setPeriodTab('outstanding');
     setPreview(null);
     setConfirmText('');
     setProgressLabel('');
@@ -121,13 +132,17 @@ export function BulkPeriodResetDialog({
     [periods],
   );
 
+  const activePeriodGroup = periodTab === 'outstanding' ? outstanding : completed;
+  const allInTabSelected =
+    activePeriodGroup.length > 0 &&
+    activePeriodGroup.every((p) => selectedPeriodIds.has(p.id));
+
   const driverIdsForRequest = useMemo(
     () => (allDrivers ? undefined : [...selectedDriverIds]),
     [allDrivers, selectedDriverIds],
   );
 
   const expectedConfirm = confirmPhrase(selectedPeriods.length);
-  const allSelected = periods.length > 0 && selectedPeriodIds.size === periods.length;
 
   const togglePeriod = (id: string) => {
     setSelectedPeriodIds((prev) => {
@@ -140,16 +155,25 @@ export function BulkPeriodResetDialog({
     setConfirmText('');
   };
 
-  const toggleSelectAll = () => {
-    if (allSelected) setSelectedPeriodIds(new Set());
-    else setSelectedPeriodIds(new Set(periods.map((p) => p.id)));
+  const toggleSelectAllInTab = () => {
+    setSelectedPeriodIds((prev) => {
+      const next = new Set(prev);
+      if (allInTabSelected) {
+        activePeriodGroup.forEach((p) => next.delete(p.id));
+      } else {
+        activePeriodGroup.forEach((p) => next.add(p.id));
+      }
+      return next;
+    });
     setPreview(null);
     setConfirmText('');
   };
 
+  // Picking any individual driver clears "All drivers"
   const toggleDriver = (id: string) => {
     setAllDrivers(false);
     setSelectedDriverIds((prev) => {
+      if (allDrivers) return new Set([id]);
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -209,39 +233,51 @@ export function BulkPeriodResetDialog({
     setExecuting(true);
     const toastId = toast.loading(`Resetting ${selectedPeriods.length} periods…`);
     const errors: string[] = [];
-    let done = 0;
     try {
-      for (const period of selectedPeriods) {
-        setProgressLabel(`${period.label} (${done + 1}/${selectedPeriods.length})`);
-        try {
-          const res = await api.executePeriodReset(
-            period.startDate,
-            period.endDate,
-            period.label,
-            driverIdsForRequest,
-          );
-          if (res.errors?.length) {
-            errors.push(`${period.label}: ${res.errors.slice(0, 2).join('; ')}`);
+      const result = await runExclusive(
+        `Resetting ${selectedPeriods.length} periods…`,
+        async () => {
+          let done = 0;
+          for (const period of selectedPeriods) {
+            const label = `${period.label} (${done + 1}/${selectedPeriods.length})`;
+            setProgressLabel(label);
+            setMessage(`Resetting ${label}`);
+            try {
+              const res = await api.executePeriodReset(
+                period.startDate,
+                period.endDate,
+                period.label,
+                driverIdsForRequest,
+              );
+              if (res.errors?.length) {
+                errors.push(`${period.label}: ${res.errors.slice(0, 2).join('; ')}`);
+              }
+            } catch (e: any) {
+              errors.push(`${period.label}: ${e?.message || 'failed'}`);
+            }
+            done += 1;
           }
-        } catch (e: any) {
-          errors.push(`${period.label}: ${e?.message || 'failed'}`);
-        }
-        done += 1;
-      }
+          return { errors, done };
+        },
+      );
       toast.dismiss(toastId);
+      if (result === undefined) {
+        toast.message('Another action is still running — try again when it finishes.');
+        return;
+      }
       if (errors.length === selectedPeriods.length) {
         toast.error('All period resets failed', { description: errors.slice(0, 3).join(' · ') });
       } else if (errors.length > 0) {
         toast.warning(`Reset finished with ${errors.length} issue(s)`, {
           description: errors.slice(0, 3).join(' · '),
         });
-        onOpenChange(false);
+        lockedOpenChange(false);
         onComplete();
       } else {
         toast.success(
           `${selectedPeriods.length} period${selectedPeriods.length === 1 ? '' : 's'} reset`,
         );
-        onOpenChange(false);
+        lockedOpenChange(false);
         onComplete();
       }
     } finally {
@@ -250,16 +286,16 @@ export function BulkPeriodResetDialog({
     }
   };
 
-  const handleOpenChange = (next: boolean) => {
-    if (executing) return;
-    onOpenChange(next);
-  };
-
-  const renderPeriodGroup = (label: string, group: ReconciliationPeriod[]) => {
-    if (group.length === 0) return null;
+  const renderPeriodList = (group: ReconciliationPeriod[]) => {
+    if (group.length === 0) {
+      return (
+        <p className="px-2 py-6 text-center text-sm text-slate-500">
+          No {periodTab === 'outstanding' ? 'outstanding' : 'completed'} periods
+        </p>
+      );
+    }
     return (
       <div className="space-y-1.5">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{label}</p>
         {group.map((p) => (
           <label
             key={p.id}
@@ -290,9 +326,12 @@ export function BulkPeriodResetDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+    <Dialog open={open} onOpenChange={lockedOpenChange}>
+      <DialogContent
+        className="max-w-lg max-h-[90vh] overflow-y-auto"
+        hideCloseButton={lockBusy}
+        {...lockedContentProps}
+      >        <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <RotateCcw className="h-5 w-5 text-red-600" />
             Reset periods
@@ -304,39 +343,54 @@ export function BulkPeriodResetDialog({
         </DialogHeader>
 
         <div className="space-y-4 py-2">
-          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 flex gap-2">
-            <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-            <span>
-              Resets run one week at a time. Claims, dispute matches, unlinked applies, and driver
-              charges in those weeks are reversed for the driver scope below.
-            </span>
-          </div>
-
           <div>
             <div className="mb-2 flex items-center justify-between gap-2">
               <Label className="text-sm font-medium">Periods to reset</Label>
               <button
                 type="button"
                 className="text-xs font-medium text-indigo-600 hover:text-indigo-800"
-                onClick={toggleSelectAll}
-                disabled={periods.length === 0 || executing}
+                onClick={toggleSelectAllInTab}
+                disabled={activePeriodGroup.length === 0 || executing}
               >
-                {allSelected ? 'Clear all' : 'Select all'}
+                {allInTabSelected ? 'Clear all' : 'Select all'}
               </button>
             </div>
-            <div className="max-h-56 space-y-3 overflow-y-auto rounded-md border border-slate-200 bg-slate-50/80 p-2">
-              {periods.length === 0 ? (
-                <p className="px-2 py-6 text-center text-sm text-slate-500">No periods available</p>
-              ) : (
-                <>
-                  {renderPeriodGroup('Outstanding', outstanding)}
-                  {renderPeriodGroup('Completed', completed)}
-                </>
-              )}
-            </div>
+            <Tabs
+              value={periodTab}
+              onValueChange={(v) => setPeriodTab(v as 'outstanding' | 'completed')}
+              className="w-full"
+            >
+              <TabsList className="grid h-auto w-full grid-cols-2 rounded-lg bg-indigo-50 p-1">
+                <TabsTrigger
+                  value="outstanding"
+                  className="rounded-md data-[state=active]:bg-white data-[state=active]:shadow-sm"
+                >
+                  Outstanding ({outstanding.length})
+                </TabsTrigger>
+                <TabsTrigger
+                  value="completed"
+                  className="rounded-md data-[state=active]:bg-white data-[state=active]:shadow-sm"
+                >
+                  Completed ({completed.length})
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="outstanding" className="mt-2">
+                <div className="max-h-48 overflow-y-auto rounded-md border border-slate-200 bg-slate-50/80 p-2">
+                  {renderPeriodList(outstanding)}
+                </div>
+              </TabsContent>
+              <TabsContent value="completed" className="mt-2">
+                <div className="max-h-48 overflow-y-auto rounded-md border border-slate-200 bg-slate-50/80 p-2">
+                  {renderPeriodList(completed)}
+                </div>
+              </TabsContent>
+            </Tabs>
             {selectedPeriods.length > 0 && (
               <p className="mt-1.5 text-xs text-slate-500">
                 {selectedPeriods.length} period{selectedPeriods.length === 1 ? '' : 's'} selected
+                {selectedPeriods.some((p) => p.status === 'outstanding') &&
+                  selectedPeriods.some((p) => p.status === 'reconciled') &&
+                  ' (both tabs)'}
               </p>
             )}
           </div>
@@ -359,7 +413,6 @@ export function BulkPeriodResetDialog({
                 <label key={d.id} className="flex items-center gap-2 text-sm cursor-pointer">
                   <Checkbox
                     checked={!allDrivers && selectedDriverIds.has(d.id)}
-                    disabled={allDrivers}
                     onCheckedChange={() => toggleDriver(d.id)}
                   />
                   {d.name}
@@ -438,7 +491,7 @@ export function BulkPeriodResetDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={executing}>
+          <Button variant="outline" onClick={() => lockedOpenChange(false)} disabled={lockBusy}>
             Cancel
           </Button>
           <Button

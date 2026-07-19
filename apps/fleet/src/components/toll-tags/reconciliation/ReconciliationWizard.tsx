@@ -38,6 +38,7 @@ import type { UnlinkedShortfallSuggestion } from "../../../hooks/useTollReconcil
 import { toast } from "sonner@2.0.3";
 import { Trip as TripType } from "../../../types/data";
 import { api } from "../../../services/api";
+import { runBackgroundJobToast } from "../../shared/runBackgroundJobToast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../../ui/dialog";
 import { DriverPicker } from "../../ui/DriverPicker";
 import { TollAutomationSettings } from "./TollAutomationSettings";
@@ -147,7 +148,7 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
   const { claims, loading: claimsLoading, refresh: refreshClaims, createClaim, updateClaim, deleteClaim } = useClaims();
   const queryClient = useQueryClient();
   // Expenses Toll Status reads a cached weekly snapshot — rebuild it whenever
-  // reconciliation mutates this period (otherwise Completed weeks stay "Unmatched").
+  // After mutations, refresh Expenses weeks in the background (leave-safe toast job).
   const invalidateSharedPeriods = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: [DRIVER_FINANCIAL_PERIODS_KEY] });
     const ids = new Set<string>();
@@ -157,9 +158,22 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
       if (!isTollInWizardPeriod(tx, period.startDate, fleetTz)) continue;
       ids.add(String(tx.driverId));
     }
-    for (const id of ids) {
-      void api.rebuildDriverFinancialPeriods(id, period.startDate).catch(() => undefined);
-    }
+    if (ids.size === 0) return;
+    void runBackgroundJobToast(
+      async () => {
+        for (const id of ids) {
+          await api.rebuildDriverFinancialPeriods(id, period.startDate);
+        }
+        // Drain outbox so Expenses catches cash-wash / period projections.
+        await api.processDriverFinancialOutbox(50).catch(() => undefined);
+        return ids.size;
+      },
+      {
+        loading: `Updating Expenses for ${ids.size} driver${ids.size === 1 ? '' : 's'}…`,
+        success: (n) => `Expenses refreshed for ${n} driver${Number(n) === 1 ? '' : 's'}`,
+        error: 'Could not refresh Driver Expenses — try again from Admin if needed',
+      },
+    );
   }, [
     queryClient,
     driverId,
@@ -1374,7 +1388,9 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
               loadingClaims={claimsLoading}
               createClaim={lockedCreateClaim}
               updateClaim={lockedUpdateClaim}
+              rawUpdateClaim={updateClaim}
               deleteClaim={lockedDeleteClaim}
+              rawDeleteClaim={deleteClaim}
               refreshClaims={refreshClaims}
               onUndoUnlinkedApply={lockedUndoApply}
               busyUnlinkedTripId={busyUnlinkedTripId}
