@@ -28,6 +28,10 @@ export interface ResolvedRefundRow extends RefundTripLike {
   preUnlinkedResolutionReason?: string | null;
   targetTollAmount?: number | null;
   targetLocation?: string | null;
+  /** Toll/claim date for cross-period badge. */
+  targetTollDate?: string | null;
+  /** When set, this refund covered a shortfall in a different recon week. */
+  crossPeriodTargetWeekLabel?: string | null;
 }
 
 interface ResolvedRefundsListProps {
@@ -69,6 +73,10 @@ export function ResolvedRefundsList({
   const fleetTz = useFleetTimezone();
   const total = rows.reduce((sum, r) => sum + Math.abs(r.tollCharges ?? 0), 0);
   const weekGroups = useMemo(() => groupByWeek(rows, fleetTz), [rows, fleetTz]);
+  const crossPeriodRows = useMemo(
+    () => rows.filter((r) => !!r.crossPeriodTargetWeekLabel && isApplyRow(r)),
+    [rows],
+  );
   const [expandedWeeks, setExpandedWeeks] = useState<Set<string>>(new Set());
 
   const toggleWeek = (key: string) => {
@@ -104,6 +112,16 @@ export function ResolvedRefundsList({
         </span>
       </CardHeader>
       <CardContent className="space-y-3">
+        {crossPeriodRows.length > 0 && (
+          <div className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm text-violet-950">
+            <span className="font-semibold">{crossPeriodRows.length}</span> applied credit
+            {crossPeriodRows.length === 1 ? '' : 's'} covered underpaid tolls in{' '}
+            <span className="font-semibold">another period</span>
+            {' — '}
+            {[...new Set(crossPeriodRows.map((r) => r.crossPeriodTargetWeekLabel).filter(Boolean))].join(', ')}.
+            Those shortfalls will not appear on this week’s Partially Covered tab.
+          </div>
+        )}
         {weekGroups.map((week) => {
           const isOpen = expandedWeeks.has(week.key);
           const weekTotal = week.items.reduce((sum, r) => sum + Math.abs(r.tollCharges ?? 0), 0);
@@ -172,6 +190,13 @@ export function ResolvedRefundsList({
                                 {applyRow ? "Applied to underpaid" : meta.label}
                               </span>
                               {row.auto && <span className="ml-1 text-[11px] text-slate-400">auto</span>}
+                              {row.crossPeriodTargetWeekLabel && (
+                                <div className="mt-1">
+                                  <span className="inline-flex rounded-full border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold text-violet-800">
+                                    Covered {row.crossPeriodTargetWeekLabel}
+                                  </span>
+                                </div>
+                              )}
                             </TableCell>
                             <TableCell className="text-slate-600">
                               {row.resolvedBy || "—"}
@@ -220,6 +245,8 @@ export function ResolvedRefundsList({
                                   sourceRefundAmount={Math.abs(row.tollCharges ?? 0)}
                                   targetLocation={row.targetLocation}
                                   targetTollAmount={row.targetTollAmount}
+                                  targetTollDate={row.targetTollDate}
+                                  crossPeriodWeekLabel={row.crossPeriodTargetWeekLabel}
                                   appliedAt={row.resolvedAt}
                                   appliedBy={row.resolvedBy}
                                   className="border-0 bg-transparent p-0 shadow-none"

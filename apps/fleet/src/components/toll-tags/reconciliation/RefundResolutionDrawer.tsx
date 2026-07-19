@@ -18,6 +18,8 @@ import type { UnlinkedShortfallSuggestion } from "../../../hooks/useTollReconcil
 import { isRecommendedUnlinkedShortfall, isUnlinkedShortfallPlatformMismatch } from "../../../utils/unlinkedShortfallEligibility";
 import { PlatformMismatchWarning, platformsMismatch } from "./PlatformMismatchWarning";
 import { PlatformSourceBadge } from "./PlatformSourceBadge";
+import { getCrossPeriodCoverage } from "../../../utils/tollWeekPeriod";
+import { useFleetTimezone } from "../../../utils/timezoneDisplay";
 
 export interface RefundResolutionPayload {
   tripId: string;
@@ -92,6 +94,7 @@ function pickPrimaryCandidate(
 function ShortfallCandidateRow({
   candidate: c,
   tripPlatform,
+  tripDate,
   active,
   showRecommended,
   multiMode,
@@ -100,14 +103,17 @@ function ShortfallCandidateRow({
 }: {
   candidate: UnlinkedShortfallSuggestion;
   tripPlatform?: string | null;
+  tripDate?: string | null;
   active: boolean;
   showRecommended: boolean;
   multiMode?: boolean;
   proposedShare?: number;
   onSelect: () => void;
 }) {
+  const fleetTz = useFleetTimezone();
   const recommended = showRecommended && isRecommendedUnlinkedShortfall(c, tripPlatform);
   const share = proposedShare ?? c.proposedShare;
+  const crossPeriod = getCrossPeriodCoverage(tripDate, c.date, fleetTz);
   return (
     <button
       type="button"
@@ -158,6 +164,11 @@ function ShortfallCandidateRow({
           platformsMismatch(c.tripPlatform || tripPlatform, c.tollPlatform)) && (
           <span className="mt-1 inline-flex text-[10px] font-semibold text-amber-700">
             Platform differs from refund
+          </span>
+        )}
+        {crossPeriod && (
+          <span className="mt-1 inline-flex rounded-full border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold text-violet-800">
+            Other period · {crossPeriod.targetWeekLabel}
           </span>
         )}
       </span>
@@ -383,6 +394,7 @@ export function RefundResolutionDrawer({
                       key={key}
                       candidate={c}
                       tripPlatform={trip.platform}
+                    tripDate={trip.date}
                       active={selectedMultiKeys.has(key)}
                       showRecommended={false}
                       multiMode
@@ -436,6 +448,7 @@ export function RefundResolutionDrawer({
                   <ShortfallCandidateRow
                     candidate={primaryCandidate}
                     tripPlatform={trip.platform}
+                    tripDate={trip.date}
                     active={selectedShortfallKey === candidateKey(primaryCandidate)}
                     showRecommended={!multiMode}
                     onSelect={() => {
@@ -467,6 +480,7 @@ export function RefundResolutionDrawer({
                             key={key}
                             candidate={c}
                             tripPlatform={trip.platform}
+                          tripDate={trip.date}
                             active={selectedShortfallKey === key}
                             showRecommended={false}
                             onSelect={() => {
@@ -489,6 +503,7 @@ export function RefundResolutionDrawer({
                           key={key}
                           candidate={c}
                           tripPlatform={trip.platform}
+                          tripDate={trip.date}
                           active={selectedShortfallKey === key}
                           showRecommended={false}
                           onSelect={() => {

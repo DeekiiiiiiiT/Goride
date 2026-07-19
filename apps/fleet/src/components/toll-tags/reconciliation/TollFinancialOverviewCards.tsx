@@ -95,7 +95,7 @@ export function TollFinancialOverviewCards({
                 <HelpCircle className="h-3.5 w-3.5 text-slate-400 transition-colors hover:text-slate-600" />
               </TooltipTrigger>
               <TooltipContent>
-                <p className="max-w-[200px] text-xs">Total tolls the fleet paid (tag charges, cash, and geofence-detected). This is the money that went out.</p>
+                <p className="max-w-[220px] text-xs">Every toll spent this period — tag charges plus platform trip tolls (Uber / InDrive / Roam), including unlinked refunds. Split shows which platform.</p>
               </TooltipContent>
             </Tooltip>
           </div>
@@ -120,8 +120,8 @@ export function TollFinancialOverviewCards({
                 <HelpCircle className="h-3.5 w-3.5 text-emerald-400 transition-colors hover:text-emerald-600" />
               </TooltipTrigger>
               <TooltipContent>
-                <p className="max-w-[220px] text-xs">
-                  Platform money that offsets fleet Toll Spend (linked trips, open unlinked credits, expense logged, dispute matches). Cash washes stay under Needs Review → resolved — they are driver-paid, not fleet spend.
+                <p className="max-w-[240px] text-xs">
+                  Platform money paid back on trips (linked, unlinked, cash wash, expense logged, dispute matches). Cash washes still show here — Uber paid; the plaza was driver cash. Phantom credits do not.
                 </p>
               </TooltipContent>
             </Tooltip>
@@ -176,7 +176,7 @@ export function TollFinancialOverviewCards({
                 <HelpCircle className="h-3.5 w-3.5 text-rose-400 transition-colors hover:text-rose-600" />
               </TooltipTrigger>
               <TooltipContent>
-                <p className="max-w-[200px] text-xs">What the fleet is actually out of pocket: Toll Spend − Reimbursed by Uber − Charged to Drivers.</p>
+                <p className="max-w-[220px] text-xs">Fleet out of pocket from tag/plaza charges not covered by platform reimbursement or driver charges. Cash washes and unlinked trip-only tolls do not create leakage here.</p>
               </TooltipContent>
             </Tooltip>
           </div>

@@ -13,6 +13,9 @@ export interface UnifiedResolutionAuditCardProps {
   targetLocation?: string | null;
   targetTollAmount?: number | null;
   targetClaimStatus?: string | null;
+  targetTollDate?: string | null;
+  /** When set, source refund week ≠ target toll week. */
+  crossPeriodWeekLabel?: string | null;
   appliedAmount?: number | null;
   leftoverShortfall?: number | null;
   appliedAt?: string | null;
@@ -52,6 +55,8 @@ export function UnifiedResolutionAuditCard({
   targetLocation,
   targetTollAmount,
   targetClaimStatus,
+  targetTollDate,
+  crossPeriodWeekLabel,
   appliedAmount,
   leftoverShortfall,
   appliedAt,
@@ -112,7 +117,15 @@ export function UnifiedResolutionAuditCard({
         <div className="text-xs text-slate-600">
           Cost {fmtMoney(targetTollAmount)}
           {targetClaimStatus ? ` · ${targetClaimStatus}` : ""}
+          {targetTollDate ? ` · ${fmtDate(targetTollDate)}` : ""}
         </div>
+        {crossPeriodWeekLabel && (
+          <div className="pt-1">
+            <span className="inline-flex rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[11px] font-semibold text-violet-800">
+              Other period · {crossPeriodWeekLabel}
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-slate-100 pt-3 text-xs text-slate-600">

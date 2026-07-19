@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   computeReimbursedTotals,
   computeTollSpendByPlatform,
+  computeGrossTollSpendByPlatform,
   collectTripsForReimbursedCard,
   isDateInPeriod,
   resolveTollPlatformBucket,
@@ -23,6 +24,55 @@ describe('tollFinancialOverview', () => {
     expect(total).toBe(150);
     expect(byPlatform.Uber).toBe(100);
     expect(byPlatform.Roam).toBe(50);
+  });
+
+  it('computeGrossTollSpendByPlatform includes unlinked trip tolls by platform', () => {
+    const { total, byPlatform, tagTotal } = computeGrossTollSpendByPlatform({
+      tolls: [],
+      resolvePlatform: () => 'Unlinked',
+      unclaimedRefunds: [
+        { id: 'u1', platform: 'Uber', tollCharges: 275 } as Trip,
+        { id: 'u2', platform: 'Uber', tollCharges: 370 } as Trip,
+        { id: 'u3', platform: 'Uber', tollCharges: 370 } as Trip,
+      ],
+    });
+    expect(tagTotal).toBe(0);
+    expect(total).toBe(1015);
+    expect(byPlatform.Uber).toBe(1015);
+  });
+
+  it('computeGrossTollSpendByPlatform does not double-count linked trips', () => {
+    const { total, byPlatform, tagTotal } = computeGrossTollSpendByPlatform({
+      tolls: [
+        {
+          id: 't1',
+          amount: -275,
+          tripId: 'u1',
+          linkedTrip: { id: 'u1', platform: 'Uber', tollCharges: 275 },
+        } as FinancialTransaction & { linkedTrip: { id: string; platform: string; tollCharges: number } },
+      ],
+      resolvePlatform: () => 'Uber',
+      unclaimedRefunds: [{ id: 'u1', platform: 'Uber', tollCharges: 275 } as Trip],
+    });
+    expect(tagTotal).toBe(275);
+    expect(total).toBe(275);
+    expect(byPlatform.Uber).toBe(275);
+  });
+
+  it('computeGrossTollSpendByPlatform skips phantom trip credits', () => {
+    const { total } = computeGrossTollSpendByPlatform({
+      tolls: [],
+      resolvePlatform: () => 'Unlinked',
+      resolvedRefunds: [
+        {
+          id: 'p1',
+          platform: 'Uber',
+          tollCharges: 400,
+          tollRefundResolution: { status: 'phantom' },
+        } as Trip,
+      ],
+    });
+    expect(total).toBe(0);
   });
 
   it('computeReimbursedTotals scopes trips to the period', () => {
@@ -61,39 +111,54 @@ describe('tollFinancialOverview', () => {
     );
   });
 
-  it('collectTripsForReimbursedCard includes expense_logged, not cash_wash', () => {
-    const collected = collectTripsForReimbursedCard({
+  it('collectTripsForReimbursedCard includes cash_wash for platform display, not for fleet mode', () => {
+    const resolvedRefunds = [
+      {
+        id: 'trip-wash',
+        platform: 'Uber',
+        tollCharges: 780,
+        date: '2025-12-30T02:08:51.000Z',
+        dropoffTime: '2025-12-30T03:22:42.000Z',
+        tollRefundResolution: { status: 'cash_wash' },
+      } as Trip,
+      {
+        id: 'trip-expense',
+        platform: 'Uber',
+        tollCharges: 400,
+        date: '2025-12-30T04:00:00.000Z',
+        dropoffTime: '2025-12-30T04:30:00.000Z',
+        tollRefundResolution: { status: 'expense_logged' },
+      } as Trip,
+    ];
+
+    const platformCollected = collectTripsForReimbursedCard({
       trips: [],
       unclaimedRefunds: [],
-      resolvedRefunds: [
-        {
-          id: 'trip-wash',
-          platform: 'Uber',
-          tollCharges: 780,
-          date: '2025-12-30T02:08:51.000Z',
-          dropoffTime: '2025-12-30T03:22:42.000Z',
-          tollRefundResolution: { status: 'cash_wash' },
-        } as Trip,
-        {
-          id: 'trip-expense',
-          platform: 'Uber',
-          tollCharges: 400,
-          date: '2025-12-30T04:00:00.000Z',
-          dropoffTime: '2025-12-30T04:30:00.000Z',
-          tollRefundResolution: { status: 'expense_logged' },
-        } as Trip,
-      ],
+      resolvedRefunds,
       tolls: [],
     });
-
-    const totals = computeReimbursedTotals({
-      trips: collected,
+    const platformTotals = computeReimbursedTotals({
+      trips: platformCollected,
       disputeRefunds: [],
       period: { startDate: '2025-12-29', endDate: '2026-01-04' },
       fleetTz: TZ,
     });
-    expect(totals.total).toBe(400);
-    expect(totals.byPlatform.Uber).toBe(400);
+    expect(platformTotals.total).toBe(1180);
+
+    const fleetCollected = collectTripsForReimbursedCard({
+      trips: [],
+      unclaimedRefunds: [],
+      resolvedRefunds,
+      tolls: [],
+      mode: 'fleet',
+    });
+    const fleetTotals = computeReimbursedTotals({
+      trips: fleetCollected,
+      disputeRefunds: [],
+      period: { startDate: '2025-12-29', endDate: '2026-01-04' },
+      fleetTz: TZ,
+    });
+    expect(fleetTotals.total).toBe(400);
   });
 
   it('collectTripsForReimbursedCard pulls linkedTrip credits when trips dump is empty', () => {

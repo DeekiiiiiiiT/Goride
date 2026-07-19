@@ -429,6 +429,84 @@ export function formatTollPeriodLabel(
   return formatWeekPeriodLabel(start, end);
 }
 
+/** Monday-start week key for any date-ish string (trip, toll, claim). */
+export function dateWeekKey(
+  dateStr: string | undefined | null,
+  fleetTz: string,
+): string | null {
+  if (!dateStr) return null;
+  const raw = String(dateStr).trim();
+  if (!raw) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    return weekBucketForDate(ymdToLocalDate(raw), fleetTz).key;
+  }
+  const ymd = fleetTzDateKey(raw, fleetTz);
+  if (!ymd) return null;
+  return weekBucketForDate(ymdToLocalDate(ymd), fleetTz).key;
+}
+
+/** Human-readable Mon–Sun label for a date-ish string. */
+export function formatDateWeekLabel(
+  dateStr: string | undefined | null,
+  fleetTz?: string,
+): string | null {
+  if (!dateStr) return null;
+  const raw = String(dateStr).trim();
+  if (!raw) return null;
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(raw)
+    ? ymdToLocalDate(raw)
+    : new Date(raw);
+  if (isNaN(d.getTime())) return null;
+  const { start, end } = fleetTz
+    ? (() => {
+        const key = dateWeekKey(raw, fleetTz);
+        if (!key) return getMondaySundayForDate(d);
+        const startD = ymdToLocalDate(key);
+        return { start: startD, end: endOfWeek(startD, { weekStartsOn: 1 }) };
+      })()
+    : getMondaySundayForDate(d);
+  return formatWeekPeriodLabel(start, end);
+}
+
+/**
+ * True when a refund/credit date and the underpaid toll/claim date fall in
+ * different Mon–Sun fleet weeks — Apply to underpaid crossed period boundaries.
+ */
+export function isCrossPeriodCoverage(
+  sourceDate: string | undefined | null,
+  targetDate: string | undefined | null,
+  fleetTz: string,
+): boolean {
+  const a = dateWeekKey(sourceDate, fleetTz);
+  const b = dateWeekKey(targetDate, fleetTz);
+  if (!a || !b) return false;
+  return a !== b;
+}
+
+export type CrossPeriodCoverageInfo = {
+  sourceWeekKey: string;
+  targetWeekKey: string;
+  sourceWeekLabel: string;
+  targetWeekLabel: string;
+};
+
+/** Details for UI badges when apply spans two recon weeks. */
+export function getCrossPeriodCoverage(
+  sourceDate: string | undefined | null,
+  targetDate: string | undefined | null,
+  fleetTz: string,
+): CrossPeriodCoverageInfo | null {
+  if (!isCrossPeriodCoverage(sourceDate, targetDate, fleetTz)) return null;
+  const sourceWeekKey = dateWeekKey(sourceDate, fleetTz)!;
+  const targetWeekKey = dateWeekKey(targetDate, fleetTz)!;
+  return {
+    sourceWeekKey,
+    targetWeekKey,
+    sourceWeekLabel: formatDateWeekLabel(sourceDate, fleetTz) || sourceWeekKey,
+    targetWeekLabel: formatDateWeekLabel(targetDate, fleetTz) || targetWeekKey,
+  };
+}
+
 /**
  * Toll IDs scoped to the active wizard week — date-filtered rows plus same-week
  * reconciled tolls the API date filter may drop. Never includes all-time history.

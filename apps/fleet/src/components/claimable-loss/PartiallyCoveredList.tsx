@@ -14,6 +14,8 @@ import { Claim, Trip } from '../../types/data';
 import { PlatformSourceBadge } from '../toll-tags/reconciliation/PlatformSourceBadge';
 import { dedupeClaimsForDisplay } from '../../utils/claimByToll';
 import { refundSourceLabel } from './LossList';
+import { getCrossPeriodCoverage } from '../../utils/tollWeekPeriod';
+import { useFleetTimezone } from '../../utils/timezoneDisplay';
 
 interface PartiallyCoveredListProps {
   /** Pre-filtered partial shortfall claims from UnderpaidClaimsStep. */
@@ -25,6 +27,8 @@ interface PartiallyCoveredListProps {
   onWriteOff: (claim: Claim) => void;
   onSendToDriver: (claim: Claim) => void;
   onSelectClaim?: (claim: Claim) => void;
+  /** Active wizard week key (Monday) — used to flag credits from other weeks. */
+  periodWeekKey?: string;
 }
 
 export function PartiallyCoveredList({
@@ -36,7 +40,9 @@ export function PartiallyCoveredList({
   onWriteOff,
   onSendToDriver,
   onSelectClaim,
+  periodWeekKey,
 }: PartiallyCoveredListProps) {
+  const fleetTz = useFleetTimezone();
   const tripById = new Map(trips.filter((t) => t?.id).map((t) => [t.id, t]));
   const partialClaims = dedupeClaimsForDisplay(claims).displayClaims;
 
@@ -94,6 +100,12 @@ export function PartiallyCoveredList({
         <TableBody>
           {partialClaims.map((claim) => {
             const trip = claim.tripId ? tripById.get(claim.tripId) : undefined;
+            const creditTrip = claim.unlinkedTripId
+              ? tripById.get(claim.unlinkedTripId)
+              : undefined;
+            const crossFromCredit = creditTrip
+              ? getCrossPeriodCoverage(creditTrip.date, claim.date || periodWeekKey, fleetTz)
+              : null;
             const sourceKind = claim.unlinkedTripId
               ? 'unlinked_refund'
               : claim.disputeRefundId
@@ -106,6 +118,13 @@ export function PartiallyCoveredList({
               <TableRow key={claim.id}>
                 <TableCell className="font-medium text-slate-700">
                   {claim.date ? new Date(claim.date).toLocaleDateString() : '—'}
+                  {crossFromCredit && (
+                    <div className="mt-1">
+                      <span className="inline-flex rounded-full border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold text-violet-800">
+                        Credit from {crossFromCredit.sourceWeekLabel}
+                      </span>
+                    </div>
+                  )}
                 </TableCell>
                 <TableCell>{getDriverName ? getDriverName(claim.driverId) : claim.driverId}</TableCell>
                 <TableCell>

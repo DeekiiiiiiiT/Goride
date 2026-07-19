@@ -43,10 +43,21 @@ export function tripInPeriod(trip: Trip, from: string, to: string, fleetTz: stri
 }
 
 /**
- * Fleet Reimbursed offsets Toll Spend (tag/cash the company paid).
- * cash_wash / phantom = driver paid cash (or fake credit) — never fleet money out,
- * so they must not inflate Reimbursed or zero out Net Loss.
- * expense_logged / linked / open unlinked still count.
+ * Platform money paid back on trips (Uber/InDrive/Roam toll credits).
+ * cash_wash still counts — Uber paid it; driver paid the plaza in cash.
+ * phantom does not (fake credit, no real toll).
+ */
+export function countsTowardPlatformReimbursed(
+  trip: Pick<Trip, 'tollRefundResolution'> | null | undefined,
+): boolean {
+  const status = trip?.tollRefundResolution?.status;
+  if (status === 'phantom') return false;
+  return true;
+}
+
+/**
+ * Credits that offset fleet tag spend for Net Loss math.
+ * cash_wash / phantom must not wipe real tag leakage.
  */
 export function countsTowardFleetReimbursed(
   trip: Pick<Trip, 'tollRefundResolution'> | null | undefined,
@@ -69,6 +80,65 @@ export function computeTollSpendByPlatform(
     byPlatform[resolvePlatform(tx)] += amount;
   }
   return { total, byPlatform };
+}
+
+/**
+ * Trip tolls with no linked tag debit in this period — still real spend
+ * (unlinked Uber/InDrive/Roam credits, cash washes, expense-logged leftovers).
+ * Phantom credits are excluded (not real plaza spend).
+ */
+export function collectTripOnlyTollSpend(input: {
+  tolls: TollWithLinkedTrip[];
+  unclaimedRefunds: Trip[];
+  resolvedRefunds?: Trip[];
+}): { total: number; byPlatform: PlatformAmountBreakdown } {
+  const linkedTripIds = new Set<string>();
+  for (const tx of input.tolls) {
+    if (tx.tripId) linkedTripIds.add(String(tx.tripId));
+    if (tx.linkedTrip?.id) linkedTripIds.add(String(tx.linkedTrip.id));
+  }
+
+  const byPlatform = emptyPlatformBreakdown();
+  const seen = new Set<string>();
+  let total = 0;
+
+  const add = (t: Trip | null | undefined) => {
+    if (!t?.id || seen.has(t.id) || linkedTripIds.has(t.id)) return;
+    if (t.tollRefundResolution?.status === 'phantom') return;
+    const amount = Math.abs(Number(t.tollCharges) || 0);
+    if (amount <= 0) return;
+    seen.add(t.id);
+    total += amount;
+    byPlatform[normPlatformBucket(t.platform)] += amount;
+  };
+
+  for (const t of input.unclaimedRefunds || []) add(t);
+  for (const t of input.resolvedRefunds || []) add(t);
+  return { total, byPlatform };
+}
+
+/** Tag debits + trip-only tolls, merged by platform (no double-count). */
+export function computeGrossTollSpendByPlatform(input: {
+  tolls: TollWithLinkedTrip[];
+  resolvePlatform: (tx: FinancialTransaction) => PlatformBucket;
+  unclaimedRefunds: Trip[];
+  resolvedRefunds?: Trip[];
+}): { total: number; byPlatform: PlatformAmountBreakdown; tagTotal: number } {
+  const tag = computeTollSpendByPlatform(input.tolls, input.resolvePlatform);
+  const tripOnly = collectTripOnlyTollSpend({
+    tolls: input.tolls,
+    unclaimedRefunds: input.unclaimedRefunds,
+    resolvedRefunds: input.resolvedRefunds,
+  });
+  const byPlatform = emptyPlatformBreakdown();
+  for (const k of Object.keys(byPlatform) as PlatformBucket[]) {
+    byPlatform[k] = tag.byPlatform[k] + tripOnly.byPlatform[k];
+  }
+  return {
+    total: tag.total + tripOnly.total,
+    byPlatform,
+    tagTotal: tag.total,
+  };
 }
 
 /** Server enrichment on reconciled/unreconciled toll rows (may be absent on older clients). */
@@ -105,22 +175,24 @@ export function resolveTollPlatformBucket(
 }
 
 /**
- * Trips that feed the Reimbursed card (fleet-offsetting credits only).
- * Sources: full trips dump, open unlinked refunds, expense_logged resolutions,
- * and linkedTrip stubs on period tolls.
- * Excludes cash_wash / phantom — those are driver-pocket, not fleet reimbursement.
+ * Trips that feed the Reimbursed card (platform money on trips).
+ * Includes cash_wash — Uber still paid; excludes phantom.
+ * Pass mode: 'fleet' to exclude cash_wash for Net Loss math only.
  */
 export function collectTripsForReimbursedCard(input: {
   trips: Trip[];
   unclaimedRefunds: Trip[];
-  /** Resolved leftovers — only expense_logged counts toward fleet Reimbursed. */
+  /** Resolved leftovers — cash_wash counts for platform display; expense_logged always. */
   resolvedRefunds?: Trip[];
   tolls: TollWithLinkedTrip[];
+  /** 'platform' (default) = Reimbursed card; 'fleet' = Net Loss offsets only. */
+  mode?: 'platform' | 'fleet';
 }): Trip[] {
+  const include = input.mode === 'fleet' ? countsTowardFleetReimbursed : countsTowardPlatformReimbursed;
   const byId = new Map<string, Trip>();
   const add = (t: Partial<Trip> & { id: string }) => {
     if (!t?.id) return;
-    if (!countsTowardFleetReimbursed(t as Trip)) return;
+    if (!include(t as Trip)) return;
     const prev = byId.get(t.id);
     if (!prev) {
       byId.set(t.id, t as Trip);
@@ -173,6 +245,7 @@ export interface ReimbursedTotalsInput {
 /**
  * Platform toll refunds paid through trip fares (+ matched dispute adjustments).
  * When `period` is set, only trips whose dropoff/date falls in that period count.
+ * cash_wash counts (Uber paid); phantom does not.
  */
 export function computeReimbursedTotals(input: ReimbursedTotalsInput): {
   total: number;
@@ -185,7 +258,7 @@ export function computeReimbursedTotals(input: ReimbursedTotalsInput): {
 
   for (const trip of trips) {
     if (!trip?.id || seenTripIds.has(trip.id)) continue;
-    if (!countsTowardFleetReimbursed(trip)) continue;
+    if (!countsTowardPlatformReimbursed(trip)) continue;
     const refund = Math.abs(Number(trip.tollCharges) || 0);
     if (refund <= 0) continue;
     if (period && !tripInPeriod(trip, period.startDate, period.endDate, fleetTz)) continue;

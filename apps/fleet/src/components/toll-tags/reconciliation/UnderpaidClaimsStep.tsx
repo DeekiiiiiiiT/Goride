@@ -836,13 +836,14 @@ export function UnderpaidClaimsStep({
         <TabsContent value="partial" className="mt-6">
           <PartiallyCoveredList
             claims={partialClaims}
-            trips={trips}
+            trips={[...trips, ...unlinkedRefundTrips]}
             isLoading={loadingClaims}
             getDriverName={getDriverName}
             onChargeDriver={handleChargeDriver}
             onWriteOff={handleWriteOff}
             onSendToDriver={handleSendPartialToDriver}
             onSelectClaim={(claim) => { setSelectedClaimDetail(claim); setIsClaimDetailOpen(true); }}
+            periodWeekKey={periodWeekKey}
           />
         </TabsContent>
 

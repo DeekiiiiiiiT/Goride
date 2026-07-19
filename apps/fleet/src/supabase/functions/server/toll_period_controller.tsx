@@ -298,7 +298,11 @@ function formatWeekPeriodLabel(start: Date, end: Date): string {
 
 interface PeriodFinancials {
   tollSpend: number;
+  /** Tag/plaza debits only — used for Net Loss so cash washes don't inflate leakage. */
+  tagTollSpend: number;
   reimbursedFromTrips: number;
+  /** Excludes cash_wash — used for Net Loss only. */
+  fleetOffsetReimbursed: number;
   matchedDisputeRefundAmount: number;
   chargedToDrivers: number;
   resolvedRefundsAmount: number;
@@ -314,7 +318,9 @@ interface PeriodAccumulator {
 function zeroFinancials(): PeriodFinancials {
   return {
     tollSpend: 0,
+    tagTollSpend: 0,
     reimbursedFromTrips: 0,
+    fleetOffsetReimbursed: 0,
     matchedDisputeRefundAmount: 0,
     chargedToDrivers: 0,
     resolvedRefundsAmount: 0,
@@ -322,8 +328,8 @@ function zeroFinancials(): PeriodFinancials {
 }
 
 function netLossFrom(f: PeriodFinancials): number {
-  const reimbursed = f.reimbursedFromTrips + f.matchedDisputeRefundAmount;
-  return Math.max(0, f.tollSpend - reimbursed - f.chargedToDrivers);
+  const reimbursed = f.fleetOffsetReimbursed + f.matchedDisputeRefundAmount;
+  return Math.max(0, f.tagTollSpend - reimbursed - f.chargedToDrivers);
 }
 
 // ─── GET /toll-reconciliation/periods ───────────────────────────────────
@@ -427,15 +433,17 @@ app.get(`${BASE}/periods`, requirePermission('toll.view'), async (c) => {
       }
     }
 
-    // ── Per-period financials (same rule as wizard Reimbursed card) ─────────
-    // Reimbursed = trip credits that offset fleet Toll Spend (linked / open
-    // unlinked / expense_logged) + matched dispute refunds.
-    // cash_wash / phantom stay in resolvedRefundsAmount only (Needs Review).
+    // ── Per-period financials (same rule as wizard cards) ──────────────────
+    // Gross Toll Spend = tag/plaza debits + trip-only tolls (no linked tag).
+    // Reimbursed (display) includes cash_wash — Uber paid on the trip.
+    // Net Loss uses tag spend − fleet-offset reimbursements (no cash_wash).
     for (const tx of scopedTollTx) {
       if (!tx?.date) continue;
       const amt = Number(tx.amount) < 0 ? Math.abs(Number(tx.amount)) : 0;
       if (amt <= 0) continue;
-      getOrCreatePeriod(tx.date).financials.tollSpend += amt;
+      const acc = getOrCreatePeriod(tx.date);
+      acc.financials.tollSpend += amt;
+      acc.financials.tagTollSpend += amt;
     }
 
     for (const t of scopedTrips) {
@@ -448,9 +456,17 @@ app.get(`${BASE}/periods`, requirePermission('toll.view'), async (c) => {
       if (status && status !== "pending") {
         acc.financials.resolvedRefundsAmount += tc;
       }
-      // Driver-pocket resolutions are not fleet reimbursement against Toll Spend.
-      if (status === "cash_wash" || status === "phantom") continue;
+      // Trip-only spend: real plaza toll with no tag debit linked this period.
+      if (!linkedTripIds.has(String(t.id)) && status !== "phantom") {
+        acc.financials.tollSpend += tc;
+      }
+      // Phantom = fake credit — never reimbursed.
+      if (status === "phantom") continue;
       acc.financials.reimbursedFromTrips += tc;
+      // Cash wash shows on Reimbursed card but does not offset tag Net Loss.
+      if (status !== "cash_wash") {
+        acc.financials.fleetOffsetReimbursed += tc;
+      }
     }
 
     for (const claim of claims) {
@@ -508,6 +524,7 @@ app.get(`${BASE}/periods`, requirePermission('toll.view'), async (c) => {
         sum.matchedDisputeRefundAmount += p.financials.matchedDisputeRefundAmount;
         sum.chargedToDrivers += p.financials.chargedToDrivers;
         sum.resolvedRefundsAmount += p.financials.resolvedRefundsAmount;
+        sum.netTollLoss += p.financials.netTollLoss;
         return sum;
       },
       {
@@ -516,12 +533,10 @@ app.get(`${BASE}/periods`, requirePermission('toll.view'), async (c) => {
         matchedDisputeRefundAmount: 0,
         chargedToDrivers: 0,
         resolvedRefundsAmount: 0,
+        netTollLoss: 0,
       },
     );
-    const netTollLoss = Math.max(
-      0,
-      totalsAcc.tollSpend - totalsAcc.reimbursedByPlatform - totalsAcc.chargedToDrivers,
-    );
+    const netTollLoss = round2(totalsAcc.netTollLoss);
 
     return c.json({
       success: true,

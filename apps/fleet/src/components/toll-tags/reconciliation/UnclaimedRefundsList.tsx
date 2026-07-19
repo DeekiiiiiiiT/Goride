@@ -9,7 +9,7 @@ import { Button } from "../../ui/button";
 import { Checkbox } from "../../ui/checkbox";
 import { formatInFleetTz, useFleetTimezone } from '../../../utils/timezoneDisplay';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../../ui/collapsible";
-import { groupTripsByWeek } from "../../../utils/tollWeekPeriod";
+import { groupTripsByWeek, getCrossPeriodCoverage } from "../../../utils/tollWeekPeriod";
 import { cn } from "../../ui/utils";
 import { RefundBulkActionBar } from "./RefundBulkActionBar";
 import { RefundResolutionDrawer, RefundResolutionPayload } from "./RefundResolutionDrawer";
@@ -74,6 +74,15 @@ export function UnclaimedRefundsList({
   const suggestionFor = (tripId: string) => suggestions?.get(tripId);
   const shortfallsFor = (tripId: string) => shortfallSuggestions?.get(tripId) ?? EMPTY_SHORTFALL;
   const bestShortfallFor = (tripId: string) => shortfallsFor(tripId)[0];
+
+  const crossPeriodCount = useMemo(() => {
+    let n = 0;
+    for (const trip of trips) {
+      const shortfall = (shortfallSuggestions?.get(trip.id) ?? EMPTY_SHORTFALL)[0];
+      if (shortfall && getCrossPeriodCoverage(trip.date, shortfall.date, fleetTz)) n += 1;
+    }
+    return n;
+  }, [trips, shortfallSuggestions, fleetTz]);
 
   const handleApplyShortfall = async (
     trip: Trip,
@@ -216,6 +225,12 @@ export function UnclaimedRefundsList({
               {waitingImportCount} waiting on tag import
             </p>
           )}
+          {interactive && crossPeriodCount > 0 && (
+            <p className="rounded-md border border-violet-200 bg-violet-50 px-2.5 py-1.5 text-violet-900">
+              {crossPeriodCount} refund{crossPeriodCount === 1 ? '' : 's'} best match underpaid tolls in{' '}
+              <span className="font-semibold">another period</span> — look for the violet “Other period” badge before applying.
+            </p>
+          )}
         </div>
       </CardHeader>
 
@@ -263,6 +278,8 @@ export function UnclaimedRefundsList({
                           {week.items.map(trip => {
                             const s = suggestionFor(trip.id);
                             const shortfall = bestShortfallFor(trip.id);
+                            const crossPeriod =
+                              shortfall && getCrossPeriodCoverage(trip.date, shortfall.date, fleetTz);
                             const showApplyShortcut =
                               !!shortfall && isRecommendedUnlinkedShortfall(shortfall, trip.platform);
                             const isFuture = new Date(trip.date) > new Date();
@@ -306,6 +323,11 @@ export function UnclaimedRefundsList({
                                             ? ` → leftover $${shortfall.leftoverShortfall.toFixed(2)}`
                                             : ' → covered'}
                                         </span>
+                                        {crossPeriod && (
+                                          <span className="inline-flex w-fit rounded-full border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold text-violet-800">
+                                            Other period · {crossPeriod.targetWeekLabel}
+                                          </span>
+                                        )}
                                       </div>
                                     ) : shortfall?.requiresMultiTarget ? (
                                       <div className="flex flex-col gap-0.5">
@@ -316,6 +338,11 @@ export function UnclaimedRefundsList({
                                           ${shortfall.tripRefund.toFixed(2)} may cover{' '}
                                           {shortfall.multiTargetTollIds?.length || 2} underpaid tolls — Review to split
                                         </span>
+                                        {crossPeriod && (
+                                          <span className="inline-flex w-fit rounded-full border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold text-violet-800">
+                                            Other period · {crossPeriod.targetWeekLabel}
+                                          </span>
+                                        )}
                                       </div>
                                     ) : s ? (
                                       <div className="flex flex-col gap-0.5">

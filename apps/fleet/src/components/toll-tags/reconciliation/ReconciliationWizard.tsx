@@ -29,7 +29,7 @@ import {
   TollBucket,
 } from "../../../utils/tollBucket";
 import { StepId, StepCounts, STEP_ORDER, computeStepCounts } from "../../../utils/tollPeriodGating";
-import { buildPeriodTollIdSet, isClaimVisibleInPeriod, isTollInWizardPeriod, tollWeekKey, filterTollsToWizardPeriod, assertTollInWizardPeriod } from "../../../utils/tollWeekPeriod";
+import { buildPeriodTollIdSet, isClaimVisibleInPeriod, isTollInWizardPeriod, tollWeekKey, filterTollsToWizardPeriod, assertTollInWizardPeriod, getCrossPeriodCoverage } from "../../../utils/tollWeekPeriod";
 import { mergeReconciledTollsForUnderpaid, buildClaimByTollId } from "../../../utils/claimByToll";
 import { computeUnderpaidPipelineCounts } from "../../../utils/underpaidPipelineCounts";
 import { listFullyCoveredPendingUnderpaid } from "../../../utils/pendingUnderpaidListable";
@@ -51,7 +51,7 @@ import { useFleetTimezone } from "../../../utils/timezoneDisplay";
 import {
   collectTripsForReimbursedCard,
   computeReimbursedTotals,
-  computeTollSpendByPlatform,
+  computeGrossTollSpendByPlatform,
   resolveTollPlatformBucket,
   type PlatformBucket,
   type TollWithLinkedTrip,
@@ -894,15 +894,30 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
   const totalRecovered = recoveredAmount + matchedDisputeRefundAmount;
 
   const periodTolls = [...pUnreconciled, ...pReconciled] as TollWithLinkedTrip[];
-  const { total: tollSpend, byPlatform: tollSpendByPlatform } = computeTollSpendByPlatform(
-    periodTolls,
-    platformOfToll,
-  );
+  // Gross spend = tag/plaza debits + trip-only tolls (unlinked / cash wash) by platform.
+  // Net loss still uses tag-only spend so cash washes don't fake fleet leakage.
+  const {
+    total: tollSpend,
+    byPlatform: tollSpendByPlatform,
+    tagTotal: tagTollSpend,
+  } = computeGrossTollSpendByPlatform({
+    tolls: periodTolls,
+    resolvePlatform: platformOfToll,
+    unclaimedRefunds: pUnclaimed,
+    resolvedRefunds: pResolved,
+  });
   const reimbursedTrips = collectTripsForReimbursedCard({
     trips: pTrips,
     unclaimedRefunds: pUnclaimed,
     resolvedRefunds: pResolved,
     tolls: periodTolls,
+  });
+  const fleetOffsetTrips = collectTripsForReimbursedCard({
+    trips: pTrips,
+    unclaimedRefunds: pUnclaimed,
+    resolvedRefunds: pResolved,
+    tolls: periodTolls,
+    mode: 'fleet',
   });
   const {
     total: reimbursedByUber,
@@ -915,10 +930,17 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
     fleetTz,
     platformFilter: platformFilter === 'all' ? 'all' : platformFilter,
   });
+  const fleetOffsetReimbursed = computeReimbursedTotals({
+    trips: fleetOffsetTrips,
+    disputeRefunds: disputeRefunds || [],
+    period: { startDate: period.startDate, endDate: period.endDate },
+    fleetTz,
+    platformFilter: platformFilter === 'all' ? 'all' : platformFilter,
+  }).total;
   const chargedToDrivers = pPeriodClaims
     .filter(c => c.status === 'Resolved' && c.resolutionReason === 'Charge Driver')
     .reduce((sum, c) => sum + Math.abs(c.amount || 0), 0);
-  const netTollLoss = Math.max(0, tollSpend - reimbursedByUber - chargedToDrivers);
+  const netTollLoss = Math.max(0, tagTollSpend - fleetOffsetReimbursed - chargedToDrivers);
   const needsReviewCount = STEP_ORDER.reduce(
     (sum, id) => sum + (stepCounts[id]?.actionable || 0),
     0,
@@ -1377,8 +1399,11 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
         busyUnlinkedTripId={busyUnlinkedTripId}
         disputeRefunds={disputeRefunds || []}
         pReconciled={pReconciledInPeriod}
+        allReconciledTolls={allReconciledTolls.length ? allReconciledTolls : reconciledTolls}
         trips={trips}
         pClaims={pPeriodClaims}
+        allClaims={claims}
+        fleetTz={fleetTz}
         onUnmatch={lockedUnreconcile}
         selectedDriverId={driverId || ''}
         periodStartDate={period.startDate}
@@ -1449,8 +1474,13 @@ function HistoryPanel(props: {
   onUndoApply?: (tripId: string) => Promise<void> | void;
   busyUnlinkedTripId?: string | null;
   pReconciled: FinancialTransaction[];
+  /** All-time reconciled tolls — needed to label cross-period apply targets. */
+  allReconciledTolls: FinancialTransaction[];
   trips: TripType[];
   pClaims: any[];
+  /** All claims — apply targets may live in another week. */
+  allClaims: any[];
+  fleetTz: string;
   disputeRefunds?: import('../../../types/data').DisputeRefund[];
   onUnmatch: (tx: FinancialTransaction) => Promise<any>;
   selectedDriverId: string;
@@ -1484,14 +1514,18 @@ function HistoryPanel(props: {
             rows={props.pResolved.map((t): ResolvedRefundRow => {
               const res = t.tollRefundResolution;
               const claimId = res?.appliedToClaimId;
+              const claimPool = props.allClaims?.length ? props.allClaims : props.pClaims;
+              const tollPool = props.allReconciledTolls?.length
+                ? props.allReconciledTolls
+                : props.pReconciled;
               const claim = claimId
-                ? props.pClaims.find((c: any) => c?.id === claimId)
-                : props.pClaims.find((c: any) => c?.unlinkedTripId === t.id);
-              const toll = claim?.transactionId
-                ? props.pReconciled.find((tx) => tx.id === claim.transactionId)
-                : res?.appliedToTollId
-                  ? props.pReconciled.find((tx) => tx.id === res.appliedToTollId)
-                  : undefined;
+                ? claimPool.find((c: any) => c?.id === claimId)
+                : claimPool.find((c: any) => c?.unlinkedTripId === t.id);
+              const tollId = claim?.transactionId || res?.appliedToTollId || null;
+              const toll = tollId ? tollPool.find((tx) => tx.id === tollId) : undefined;
+              const targetTollDate =
+                (toll as any)?.date || claim?.date || claim?.tripDate || null;
+              const cross = getCrossPeriodCoverage(t.date, targetTollDate, props.fleetTz);
               return {
                 id: t.id,
                 date: t.date,
@@ -1521,6 +1555,8 @@ function HistoryPanel(props: {
                   (toll as any)?.vendor ||
                   claim?.subject ||
                   null,
+                targetTollDate,
+                crossPeriodTargetWeekLabel: cross?.targetWeekLabel ?? null,
               };
             })}
             onUndo={props.onUndoRefund}
