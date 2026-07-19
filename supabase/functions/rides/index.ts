@@ -45,6 +45,11 @@ import {
   normalizeVerificationPin,
 } from "./fare/pinVerification.ts";
 import {
+  attachRidePin,
+  loadRidePin,
+  upsertRidePin,
+} from "./ridePins.ts";
+import {
   getEligibleDriverUserIds,
   isDriverEligibleForDispatch,
 } from "../_shared/driverModeFilter.ts";
@@ -317,12 +322,14 @@ async function loadRideRequestById(id: string): Promise<Record<string, unknown> 
 
   if (!ride) return null;
 
+  // PIN lives in rides.ride_pins (not on ride_requests — Realtime-safe)
+  ride = await attachRidePin(svc(), ride);
   if (!normalizeVerificationPin(ride.verification_pin)) {
-    const { data: pinRow } = await svc().from("ride_requests").select(
-      "verification_pin, pin_verified_at",
+    const { data: verifiedAt } = await svc().from("ride_requests").select(
+      "pin_verified_at",
     ).eq("id", id).maybeSingle();
-    if (pinRow) {
-      ride = { ...ride, ...pinRow };
+    if (verifiedAt) {
+      ride = { ...ride, ...verifiedAt };
     }
   }
 
@@ -376,19 +383,13 @@ async function ensureRideVerificationPin(
   }
 
   const pin = generatePin();
-  const patched = await patchRideRequest(rideId, {
-    verification_pin: pin,
-    updated_at: new Date().toISOString(),
-  });
-  if (!patched) {
-    logLine({ event: "ensure_pin_patch_failed", ride_id: rideId });
-    // Still return PIN to rider so they can share it with the driver.
+  const ok = await upsertRidePin(svc(), rideId, pin);
+  if (!ok) {
+    logLine({ event: "ensure_pin_upsert_failed", ride_id: rideId });
     return { ...ride, verification_pin: pin };
   }
-
-  const after = await loadRideRequestById(rideId);
-  const savedPin = normalizeVerificationPin(after?.verification_pin) ?? pin;
-  return { ...ride, verification_pin: savedPin };
+  await patchRideRequest(rideId, { updated_at: new Date().toISOString() });
+  return { ...ride, verification_pin: pin };
 }
 
 async function loadRideRequestByIdempotencyKey(key: string): Promise<Record<string, unknown> | null> {
@@ -498,7 +499,12 @@ async function patchRideRequest(
   patch: Record<string, unknown>,
   expectedFrom?: string,
 ): Promise<boolean> {
-  const rpcArgs: Record<string, unknown> = { p_id: id, p_patch: patch };
+  // verification_pin must never be written to ride_requests (Realtime leak)
+  const { verification_pin: pinToStore, ...safePatch } = patch;
+  if (typeof pinToStore === "string" && pinToStore) {
+    await upsertRidePin(svc(), id, pinToStore);
+  }
+  const rpcArgs: Record<string, unknown> = { p_id: id, p_patch: safePatch };
   if (expectedFrom) rpcArgs.p_expected_status = expectedFrom;
 
   const { data: rpcData, error: rpcError } = await pubSvc().rpc("rides_patch_ride_request", rpcArgs);
@@ -511,7 +517,7 @@ async function patchRideRequest(
     return false;
   }
 
-  let direct = svc().from("ride_requests").update(patch).eq("id", id);
+  let direct = svc().from("ride_requests").update(safePatch).eq("id", id);
   if (expectedFrom) direct = direct.eq("status", expectedFrom);
   const { data: directRow, error: directError } = await direct.select("id").maybeSingle();
   if (!directError && directRow) {
@@ -711,6 +717,7 @@ function transitionDeps(): ApplyTransitionDeps {
   return {
     loadRideRequestById,
     patchRideRequest,
+    upsertRidePin: (rideId, pin) => upsertRidePin(svc(), rideId, pin),
     handleTerminalRideLedgerAndSync,
     bumpSurgeDemand,
     audit,
@@ -1752,7 +1759,6 @@ app.post("/v1/requests", async (c) => {
     route_polyline_encoded: typeof body.route_polyline_encoded === "string"
       ? body.route_polyline_encoded
       : null,
-    verification_pin: isPinFeatureEnabled(bookDispatchSettings) ? generatePin() : null,
   };
 
   const paymentMethod = body.payment_method;
@@ -1917,12 +1923,9 @@ app.post("/v1/requests", async (c) => {
   }
 
   const pinEnabled = isPinFeatureEnabled(bookDispatchSettings);
-  if (pinEnabled && !ride.verification_pin) {
+  if (pinEnabled) {
     const pin = generatePin();
-    await patchRideRequest(ride.id as string, {
-      verification_pin: pin,
-      updated_at: new Date().toISOString(),
-    });
+    await upsertRidePin(svc(), ride.id as string, pin);
     ride = { ...ride, verification_pin: pin };
   }
 
@@ -2067,9 +2070,7 @@ app.get("/v1/requests/:id", async (c) => {
   if (rideOut && exposePin) {
     riderPin = normalizeVerificationPin(rideOut.verification_pin);
     if (!riderPin) {
-      const { data: pinRow } = await svc().from("ride_requests").select("verification_pin").eq("id", id)
-        .maybeSingle();
-      riderPin = normalizeVerificationPin(pinRow?.verification_pin);
+      riderPin = await loadRidePin(svc(), id);
       if (riderPin) rideOut = { ...rideOut, verification_pin: riderPin };
     }
   }

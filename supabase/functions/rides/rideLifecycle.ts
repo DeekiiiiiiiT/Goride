@@ -6,6 +6,7 @@ import type { DispatchSettings } from "./fare/dispatchSettings.ts";
 import { gridCellKey } from "./fare/buildQuote.ts";
 import { calculateWaitTimeFee, getWaitTimeGraceAnchor } from "./fare/waitTime.ts";
 import { verifyRidePin, generatePin } from "./fare/pinVerification.ts";
+import { upsertRidePin } from "./ridePins.ts";
 import { isCashSettlementEnabled } from "./cashSettlement/flags.ts";
 import { computeFinalFareFromRide, completionFinancialPatch } from "./cashSettlement/computeFinalFare.ts";
 
@@ -54,6 +55,8 @@ export interface ApplyTransitionDeps {
     patch: Record<string, unknown>,
     expectedFrom?: string,
   ) => Promise<boolean>;
+  /** Persist PIN to rides.ride_pins (never ride_requests). */
+  upsertRidePin?: (rideId: string, pin: string) => Promise<boolean>;
   handleTerminalRideLedgerAndSync: (rideId: string) => Promise<void>;
   bumpSurgeDemand: (cellKey: string, delta: number) => Promise<void>;
   audit: (
@@ -146,19 +149,20 @@ export async function applyRideTransition(
     ...lifecycleTimestampPatch(params.next, nowIso),
   };
 
+  let generatedPin: string | null = null;
   if (
     params.next === "driver_arrived_pickup" &&
     (params.pinSettings?.enabled || params.pinSettings?.requiredForStart) &&
     !ride.verification_pin
   ) {
-    patch.verification_pin = generatePin();
+    generatedPin = generatePin();
   }
 
   if (params.next === "on_trip" && params.pinSettings?.requiredForStart) {
     const pinResult = verifyRidePin(
       params.pinSettings.providedPin ?? "",
       {
-        verification_pin: ((patch.verification_pin as string | undefined) ??
+        verification_pin: (generatedPin ??
           (ride.verification_pin as string | null)) ?? null,
         pin_verified_at: (ride.pin_verified_at as string | null) ?? null,
       },
@@ -227,6 +231,10 @@ export async function applyRideTransition(
   // effects below — this is what prevents double posts on completion/cancel.
   const patched = await deps.patchRideRequest(params.rideId, patch, current);
   if (!patched) return { ok: false, error: "status_changed", current };
+
+  if (generatedPin && deps.upsertRidePin) {
+    await deps.upsertRidePin(params.rideId, generatedPin);
+  }
 
   if (params.next === "completed" || params.next === "cancelled") {
     await deps.handleTerminalRideLedgerAndSync(params.rideId);

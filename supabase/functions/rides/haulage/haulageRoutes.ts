@@ -8,6 +8,7 @@ import { assertRiderCanBook } from "../fare/riderAccount.ts";
 import { FareRuleNotFoundError } from "../fare/rules.ts";
 import { DEFAULT_DISPATCH_SETTINGS, loadDispatchSettings, type DispatchSettings } from "../fare/dispatchSettings.ts";
 import { generatePin } from "../fare/pinVerification.ts";
+import { upsertRidePin } from "../ridePins.ts";
 import { isRiderArrearsBlocked } from "../cashSettlement/arrearsCheck.ts";
 import { gridCellKey } from "../fare/buildQuote.ts";
 import {
@@ -302,7 +303,6 @@ export function registerHaulageRoutes(app: Hono, deps: HaulageRoutesDeps) {
       idempotency_key,
       driver_offer_timeout_seconds: dispatchSettings.default_driver_offer_timeout_seconds,
       matching_wave: 0,
-      verification_pin: isPinFeatureEnabled(dispatchSettings) ? generatePin() : null,
       scheduled_pickup_at: locked.scheduled_pickup_at,
       pickup_window_minutes: clampPickupWindowMinutes(body.pickup_window_minutes),
     };
@@ -316,6 +316,12 @@ export function registerHaulageRoutes(app: Hono, deps: HaulageRoutesDeps) {
         return c.json({ error: "book_failed", message: rideErr?.message ?? fbErr?.message }, 500);
       }
       ride = fallback as Record<string, unknown>;
+    }
+
+    if (isPinFeatureEnabled(dispatchSettings) && ride?.id) {
+      const pin = generatePin();
+      await upsertRidePin(db, String(ride.id), pin);
+      ride = { ...ride, verification_pin: pin };
     }
 
     const rideId = String(ride.id);

@@ -83,7 +83,6 @@ export async function createRideFromTripIntent(
     guest_passenger_name: intent.requester_name,
     guest_passenger_phone: intent.requester_phone,
     roam_mode: intent.roam_mode ?? "open_roam",
-    verification_pin: deps.isPinFeatureEnabled(deps.bookDispatchSettings) ? generatePin() : null,
   };
 
   const db = deps.svc();
@@ -97,6 +96,13 @@ export async function createRideFromTripIntent(
       throw new Error(rpcError?.message ?? error?.message ?? "insert_failed");
     }
     ride = data as Record<string, unknown>;
+  }
+
+  if (deps.isPinFeatureEnabled(deps.bookDispatchSettings) && ride?.id) {
+    const { upsertRidePin } = await import("./ridePins.ts");
+    const pin = generatePin();
+    await upsertRidePin(db, String(ride.id), pin);
+    ride = { ...ride, verification_pin: pin };
   }
 
   if (

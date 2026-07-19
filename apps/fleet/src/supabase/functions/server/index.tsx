@@ -2756,10 +2756,11 @@ app.post("/make-server-37f42386/drivers", requireAuth({ requireOrg: true }), req
          const { data, error } = await supabase.auth.admin.createUser({
             email: driver.email,
             password: password,
-            user_metadata: { 
+            user_metadata: {
                 name: driver.name || '',
+            },
+            app_metadata: {
                 role: 'driver',
-                // Phase 10: Link driver to fleet owner's organization
                 organizationId: orgId || undefined,
             },
             email_confirm: true
@@ -11051,21 +11052,19 @@ app.post("/make-server-37f42386/signup", async (c) => {
       console.log(`[Signup] Failed to check registration mode (failing open): ${regErr.message}`);
     }
 
-    // Step 8.1: Build user_metadata with role-appropriate fields
-    const userMetadata: Record<string, any> = {
-      name,
-      role: normalizedRole,
-    };
+    // Step 8.1: display name in user_metadata; auth fields in app_metadata only
+    const userMetadata: Record<string, any> = { name };
+    const appMetadata: Record<string, any> = { role: normalizedRole };
     if (normalizedRole === 'admin' && businessType) {
-      userMetadata.businessType = businessType;
-      userMetadata.productLine = productLine;
+      appMetadata.businessType = businessType;
+      appMetadata.productLine = productLine;
     }
 
     // Phase 4: If requireApproval is enabled, mark new accounts as pending
     try {
       const platformSettings = await getPlatformSettingsCached(productLine);
       if (platformSettings.requireApproval === true && normalizedRole === 'admin') {
-        userMetadata.accountStatus = 'pending_approval';
+        appMetadata.accountStatus = 'pending_approval';
       }
     } catch (e: any) {
       console.log(`[Signup] Failed to check requireApproval (non-fatal): ${e.message}`);
@@ -11075,6 +11074,7 @@ app.post("/make-server-37f42386/signup", async (c) => {
       email,
       password,
       user_metadata: userMetadata,
+      app_metadata: appMetadata,
       email_confirm: true,
     });
 
@@ -11181,8 +11181,10 @@ app.post("/make-server-37f42386/invite-user", requireAuth(), requirePermission('
     const { data, error } = await supabase.auth.admin.createUser({
       email,
       password,
-      user_metadata: { 
+      user_metadata: {
         name: name || '',
+      },
+      app_metadata: {
         role: assignedRole,
         organizationId: inviterOrgId || undefined,
         invitedBy: inviterUserId || undefined,
@@ -11267,6 +11269,8 @@ app.post("/make-server-37f42386/team/invite", requireAuth(), requirePermission('
       password: tempPassword,
       user_metadata: {
         name,
+      },
+      app_metadata: {
         role,
         organizationId: orgId || undefined,
         invitedBy: inviterUserId || undefined,
@@ -11542,12 +11546,14 @@ app.post("/make-server-37f42386/admin/create-customer", requireAuth(), async (c)
       .join('')
       .slice(0, 12);
 
-    // Create the user
+    // Create the user — auth fields in app_metadata so org trigger can fire safely
     const { data, error } = await supabase.auth.admin.createUser({
       email,
       password: tempPassword,
       user_metadata: {
         name,
+      },
+      app_metadata: {
         role: 'admin',
         businessType,
         productLine: productLine === 'fleet' ? 'fleet' : 'enterprise',
@@ -11562,11 +11568,11 @@ app.post("/make-server-37f42386/admin/create-customer", requireAuth(), async (c)
       throw error;
     }
 
-    // Set organizationId to the new user's own ID (self-referencing for fleet owners)
+    // Set organizationId on app_metadata (trigger may already have set it)
     const userId = data.user.id;
     const { error: updateErr } = await supabase.auth.admin.updateUserById(userId, {
-      user_metadata: {
-        ...data.user.user_metadata,
+      app_metadata: {
+        ...(data.user.app_metadata || {}),
         organizationId: userId,
         productLine: productLine === 'fleet' ? 'fleet' : 'enterprise',
       },
