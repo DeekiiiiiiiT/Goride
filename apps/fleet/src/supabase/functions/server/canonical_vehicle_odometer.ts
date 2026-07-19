@@ -4,7 +4,7 @@
  */
 import type { Context } from "npm:hono";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
-import { filterByOrg, getOrgId } from "./org_scope.ts";
+import { filterByOrg } from "./org_scope.ts";
 import {
   canonicalOdometerFromMaps,
   parseNum,
@@ -43,16 +43,11 @@ async function maxFuelOdometerForVehicle(
   vehicleId: string,
   c: Context,
 ): Promise<number> {
-  let query = supabase
+  const { data, error } = await supabase
     .from(KV_TABLE)
     .select("value")
     .like("key", "fuel_entry:%")
     .eq("value->>vehicleId", vehicleId);
-  const orgId = getOrgId(c);
-  if (orgId) {
-    query = query.eq("value->>organizationId", orgId);
-  }
-  const { data, error } = await query;
   if (error) throw error;
   const vals = (data || [])
     .map((r: { value: unknown }) => r.value as Record<string, unknown>)
@@ -84,14 +79,10 @@ export async function loadOdometerSupplementMaps(
   supabase: SupabaseClient,
   c: Context,
 ): Promise<OdometerSupplementMaps> {
-  const orgId = getOrgId(c);
-  let readingsQ = supabase.from(KV_TABLE).select("key, value").like("key", "odometer_reading:%");
-  let fuelQ = supabase.from(KV_TABLE).select("value").like("key", "fuel_entry:%");
-  if (orgId) {
-    readingsQ = readingsQ.eq("value->>organizationId", orgId);
-    fuelQ = fuelQ.eq("value->>organizationId", orgId);
-  }
-  const [readRes, fuelRes] = await Promise.all([readingsQ, fuelQ]);
+  const [readRes, fuelRes] = await Promise.all([
+    supabase.from(KV_TABLE).select("key, value").like("key", "odometer_reading:%"),
+    supabase.from(KV_TABLE).select("value").like("key", "fuel_entry:%"),
+  ]);
   if (readRes.error) throw readRes.error;
   if (fuelRes.error) throw fuelRes.error;
 

@@ -19,8 +19,8 @@ export function getJwtRoles(user: {
 }): string[] {
   const fromApp = readRolesArray(user.app_metadata as Record<string, unknown> | undefined);
   if (fromApp.length > 0) return fromApp;
-  const appRole = user.app_metadata?.role;
-  if (typeof appRole === "string" && appRole.trim()) return [appRole.trim()];
+  const um = user.user_metadata?.role;
+  if (typeof um === "string" && um.trim()) return [um.trim()];
   return [];
 }
 
@@ -29,14 +29,18 @@ export function userCanAccessFleetPortal(user: {
   app_metadata?: Record<string, unknown>;
 }): boolean {
   const roles = getJwtRoles(user);
-  return roles.includes("admin") || roles.includes("fleet_owner");
+  if (roles.includes("admin") || roles.includes("fleet_owner")) return true;
+  const legacy = user.user_metadata?.role;
+  return legacy === "admin" || legacy === "fleet_owner";
 }
 
 export function userCanAccessDriverPortal(user: {
   user_metadata?: Record<string, unknown>;
   app_metadata?: Record<string, unknown>;
 }): boolean {
-  return getJwtRoles(user).includes("driver");
+  const roles = getJwtRoles(user);
+  if (roles.includes("driver")) return true;
+  return user.user_metadata?.role === "driver";
 }
 
 export function isFleetOwnerProvisioned(user: {
@@ -45,17 +49,13 @@ export function isFleetOwnerProvisioned(user: {
   app_metadata?: Record<string, unknown>;
 }): boolean {
   if (!userCanAccessFleetPortal(user)) return false;
-  const appMeta = user.app_metadata || {};
-  const userMeta = user.user_metadata || {};
-  const productLine = inferProductLineFromUser(userMeta);
-  if (productLine === "enterprise") return false;
-  const orgId =
-    (typeof appMeta.organizationId === "string" && appMeta.organizationId) ||
-    (typeof userMeta.organizationId === "string" && userMeta.organizationId) ||
-    undefined;
+  const meta = user.user_metadata || {};
+  const orgId = meta.organizationId as string | undefined;
+  const line = inferProductLineFromUser(meta);
+  if (line !== "fleet") return false;
   if (orgId) return true;
-  const appRole = typeof appMeta.role === "string" ? appMeta.role : "";
-  return appRole === "admin" || appRole === "fleet_owner";
+  const legacyRole = meta.role;
+  return legacyRole === "admin" || legacyRole === "fleet_owner";
 }
 
 const ASSIGNABLE_ROLES = new Set([
@@ -135,19 +135,12 @@ export async function provisionFleetOwner(
 
   const user = authData.user;
   if (isFleetOwnerProvisioned(user)) {
-    const appMeta = (user.app_metadata || {}) as Record<string, unknown>;
-    const orgId =
-      (typeof appMeta.organizationId === "string" && appMeta.organizationId) ||
-      (user.user_metadata?.organizationId as string) ||
-      user.id;
+    const orgId = (user.user_metadata?.organizationId as string) || user.id;
     return { ok: true, alreadyProvisioned: true, organizationId: orgId };
   }
 
   const meta = (user.user_metadata || {}) as Record<string, unknown>;
-  const appMetaExisting = (user.app_metadata || {}) as Record<string, unknown>;
-  const legacyRole =
-    (typeof appMetaExisting.role === "string" && appMetaExisting.role) ||
-    (typeof meta.role === "string" ? meta.role : "");
+  const legacyRole = typeof meta.role === "string" ? meta.role : "";
   if (legacyRole === "passenger") {
     return { ok: false, error: "Passenger accounts cannot create a fleet on Roam Fleet.", status: 403 };
   }
@@ -175,25 +168,17 @@ export async function provisionFleetOwner(
   const roleAssign = await assignUserRoles(deps.supabase, userId, [...roles], "admin");
   if (!roleAssign.ok) return { ok: false, error: roleAssign.error, status: 500 };
 
-  // Display fields only in user_metadata; role/org live in app_metadata
-  const nextUserMeta: Record<string, unknown> = {
+  const nextMeta: Record<string, unknown> = {
     ...meta,
     name: displayName,
+    role: "admin",
     productLine: "fleet",
     businessType: "rideshare",
+    organizationId: orgId,
   };
-  delete nextUserMeta.role;
-  delete nextUserMeta.organizationId;
 
-  const prevApp = (user.app_metadata || {}) as Record<string, unknown>;
   const { error: metaErr } = await deps.supabase.auth.admin.updateUserById(userId, {
-    user_metadata: nextUserMeta,
-    app_metadata: {
-      ...prevApp,
-      role: "admin",
-      roles: [...roles],
-      organizationId: orgId,
-    },
+    user_metadata: nextMeta,
   });
   if (metaErr) return { ok: false, error: metaErr.message, status: 500 };
 
@@ -279,7 +264,7 @@ export async function enableDriverForFleetOwner(
   }
 
   const roles = new Set(getJwtRoles(user));
-  if (roles.has("driver")) {
+  if (roles.has("driver") && user.user_metadata?.role !== "passenger") {
     const { data: prof } = await deps.supabase
       .from("driver_profiles")
       .select("user_id")
@@ -293,11 +278,7 @@ export async function enableDriverForFleetOwner(
   if (!roleAssign.ok) return { ok: false, error: roleAssign.error, status: 500 };
 
   const meta = (user.user_metadata || {}) as Record<string, unknown>;
-  const appMeta = (user.app_metadata || {}) as Record<string, unknown>;
-  const orgId =
-    (typeof appMeta.organizationId === "string" && appMeta.organizationId) ||
-    (meta.organizationId as string) ||
-    userId;
+  const orgId = (meta.organizationId as string) || userId;
   const displayName =
     (typeof meta.name === "string" && meta.name.trim()) ||
     (user.email?.split("@")[0] ?? "Driver");
@@ -345,21 +326,8 @@ export async function enableDriverForFleetOwner(
   });
 
   const metaPatch = { ...meta };
-  delete metaPatch.role;
-  delete metaPatch.organizationId;
-  const prevApp = (user.app_metadata || {}) as Record<string, unknown>;
-  const roles = new Set(getJwtRoles(user));
-  roles.add("admin");
-  roles.add("driver");
-  await deps.supabase.auth.admin.updateUserById(userId, {
-    user_metadata: metaPatch,
-    app_metadata: {
-      ...prevApp,
-      role: "admin",
-      roles: [...roles],
-      organizationId: orgId,
-    },
-  });
+  if (metaPatch.role !== "admin") metaPatch.role = "admin";
+  await deps.supabase.auth.admin.updateUserById(userId, { user_metadata: metaPatch });
 
   return { ok: true, alreadyEnabled: false };
 }
