@@ -1,4 +1,6 @@
-import type { Vehicle, VehicleCatalogStatus, VehicleStatus } from "../types/vehicle";
+// Local unions — avoid importing apps/fleet/src/types/* into Deno edge (BOOT_ERROR / huge bundle).
+export type VehicleCatalogStatus = "matched" | "pending_catalog" | "needs_info";
+export type VehicleStatus = "Active" | "Maintenance" | "Inactive" | "Decommissioned";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -48,7 +50,7 @@ export function catalogStatusLabel(s: VehicleCatalogStatus | null | undefined): 
   }
 }
 
-export function deriveCatalogStatus(v: Vehicle | CatalogGateVehicleShape | null | undefined): VehicleCatalogStatus {
+export function deriveCatalogStatus(v: CatalogGateVehicleShape | null | undefined): VehicleCatalogStatus {
   if (!v) return "pending_catalog";
   if (v.catalogStatus) return v.catalogStatus;
   const id = typeof v.vehicle_catalog_id === "string" ? v.vehicle_catalog_id.trim() : "";

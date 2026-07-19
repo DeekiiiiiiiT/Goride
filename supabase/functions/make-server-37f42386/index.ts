@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Supabase CLI entry for Edge Function `make-server-37f42386`.
  * The real server calls `Deno.serve` at module load — import `index.tsx` last so side effects run.
  *

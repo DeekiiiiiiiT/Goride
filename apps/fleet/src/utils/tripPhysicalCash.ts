@@ -1,4 +1,10 @@
-import type { Trip } from '../types/data';
+/** Minimal shape — do not import apps/fleet/src/types/data (Deno edge packager / BOOT_ERROR). */
+type TripCashLike = {
+  cashCollected?: number;
+  paymentMethod?: string;
+  platform?: string;
+  amount?: number;
+};
 
 const NON_CASH_PAYMENT_METHODS = new Set([
   'card',
@@ -19,7 +25,7 @@ const NON_CASH_PAYMENT_METHODS = new Set([
  * card trips are cash just because of platform name.
  * Explicit non-cash paymentMethod wins over a stale cashCollected amount.
  */
-export function getTripPhysicalCashCollected(trip: Pick<Trip, 'cashCollected' | 'paymentMethod' | 'platform' | 'amount'>): number {
+export function getTripPhysicalCashCollected(trip: Pick<TripCashLike, 'cashCollected' | 'paymentMethod' | 'platform' | 'amount'>): number {
   const pm = String(trip.paymentMethod ?? '').trim().toLowerCase();
   if (pm && NON_CASH_PAYMENT_METHODS.has(pm)) return 0;
 
@@ -37,7 +43,7 @@ export function getTripPhysicalCashCollected(trip: Pick<Trip, 'cashCollected' | 
 }
 
 export function sumTripPhysicalCashCollected(
-  trips: Pick<Trip, 'cashCollected' | 'paymentMethod' | 'platform' | 'amount'>[],
+  trips: Pick<TripCashLike, 'cashCollected' | 'paymentMethod' | 'platform' | 'amount'>[],
 ): number {
   return trips.reduce((sum, trip) => sum + getTripPhysicalCashCollected(trip), 0);
 }

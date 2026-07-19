@@ -1,4 +1,4 @@
-import { RoutePoint, TripStop } from './tripSession';
+import { RoutePoint, TripStop } from './tripSession.ts';
 
 export interface Trip {
   id: string;

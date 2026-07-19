@@ -1,8 +1,17 @@
-import type { FinancialTransaction } from '../types/data';
+/** Minimal shape — do not import apps/fleet/src/types/data (Deno edge packager / BOOT_ERROR). */
+type CashPaymentLike = {
+  amount?: number;
+  category?: string;
+  type?: string;
+  description?: string;
+  paymentMethod?: string;
+  status?: string;
+  metadata?: { workPeriodStart?: string };
+};
 
 /** Driver → fleet cash handoff (Payments Log, wallet totals, weekly settlement). */
 export function isDriverCashPaymentTransaction(
-  t: Pick<FinancialTransaction, 'amount' | 'category' | 'type' | 'description' | 'paymentMethod'> | null | undefined,
+  t: Pick<CashPaymentLike, 'amount' | 'category' | 'type' | 'description' | 'paymentMethod'> | null | undefined,
 ): boolean {
   if (!t || !Number.isFinite(t.amount) || (t.amount as number) <= 0) return false;
 
@@ -36,7 +45,7 @@ export function isDriverCashPaymentTransaction(
  */
 export function isClearedDriverCashPayment(
   t: Pick<
-    FinancialTransaction,
+    CashPaymentLike,
     'amount' | 'category' | 'type' | 'description' | 'paymentMethod' | 'status'
   > | null | undefined,
 ): boolean {
@@ -53,7 +62,7 @@ export function isClearedDriverCashPayment(
 
 /** Settlement Week Monday key (yyyy-MM-dd) from workPeriodStart metadata. */
 export function cashPaymentWeekKey(
-  t: Pick<FinancialTransaction, 'metadata'> | null | undefined,
+  t: Pick<CashPaymentLike, 'metadata'> | null | undefined,
 ): string | null {
   const raw = t?.metadata?.workPeriodStart;
   if (!raw) return null;
@@ -63,7 +72,7 @@ export function cashPaymentWeekKey(
 
 /** True when cleared payment is tagged exactly to this Settlement Week Monday. */
 export function isCashReturnedForWeek(
-  t: FinancialTransaction | null | undefined,
+  t: CashPaymentLike | null | undefined,
   weekMondayYmd: string,
 ): boolean {
   if (!t || !isClearedDriverCashPayment(t)) return false;

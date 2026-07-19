@@ -5,9 +5,6 @@ import { cors } from "npm:hono/cors";
 import { logger } from "npm:hono/logger";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { assertRequiredEnv } from "./env_boot.ts";
-
-// Wave 5: Fail-fast env validation at startup
-assertRequiredEnv();
 import OpenAI from "npm:openai";
 import { GoogleGenerativeAI } from "npm:@google/generative-ai";
 import * as kv from "./kv_store.tsx";
@@ -161,6 +158,8 @@ import {
   markEvidenceFilesDeleted,
   type EvidenceType,
 } from "./evidence_storage.ts";
+import { ensureBucket } from "./storage_buckets.ts";
+import { detectFileMagicBytes, extForMime, IMAGE_AND_PDF_MIMES } from "./file_magic.ts";
 import { registerPendingVehicleCatalogRoutes } from "./pending_vehicle_catalog_routes.ts";
 import { registerPartSourcingRoutes } from "./part_sourcing_routes.ts";
 import {
@@ -196,6 +195,9 @@ import {
   stripVehicleCatalogOptionalMigrationColumns,
   VEHICLE_CATALOG_SUPABASE_SELECT,
 } from "./vehicle_catalog_schema_fallback.ts";
+
+// Wave 5: Fail-fast env validation at startup (after all imports — never between import lines)
+assertRequiredEnv();
 
 // ---------------------------------------------------------------------------
 // Future-Date Guardrail
@@ -2754,10 +2756,11 @@ app.post("/make-server-37f42386/drivers", requireAuth({ requireOrg: true }), req
          const { data, error } = await supabase.auth.admin.createUser({
             email: driver.email,
             password: password,
-            user_metadata: { 
+            user_metadata: {
                 name: driver.name || '',
+            },
+            app_metadata: {
                 role: 'driver',
-                // Phase 10: Link driver to fleet owner's organization
                 organizationId: orgId || undefined,
             },
             email_confirm: true
@@ -7798,30 +7801,25 @@ app.post("/make-server-37f42386/upload", async (c) => {
       sourceId;
 
     const bucketName = useEphemeral ? EPHEMERAL_EVIDENCE_BUCKET : "make-37f42386-docs";
-    
-    // Ensure bucket exists and has adequate file size limit
-    const { data: buckets } = await supabase.storage.listBuckets();
-    const existingBucket = buckets?.find(b => b.name === bucketName);
-    if (!existingBucket) {
-        await supabase.storage.createBucket(bucketName, {
-            public: false,
-            fileSizeLimit: useEphemeral ? 5242880 : 10485760,
-        });
-    } else if (!useEphemeral) {
-        await supabase.storage.updateBucket(bucketName, {
-            fileSizeLimit: 10485760,
-        });
-    }
+    await ensureBucket(
+      supabase,
+      useEphemeral ? "ephemeral-evidence" : "make-37f42386-docs",
+    );
 
-    const fileExt = file.name.split('.').pop() || 'jpg';
+    const buffer = new Uint8Array(await file.arrayBuffer());
+    const detected = detectFileMagicBytes(buffer);
+    if (!detected || !IMAGE_AND_PDF_MIMES.has(detected)) {
+      return c.json({ error: "File content does not match an allowed type" }, 400);
+    }
+    const fileExt = extForMime(detected);
     const filePath = useEphemeral
       ? buildEphemeralStoragePath(orgId || getOrgId(c) || 'unknown', evidenceType as EvidenceType, fileExt)
       : `driver-docs/${crypto.randomUUID()}.${fileExt}`;
 
     const { error } = await supabase.storage
         .from(bucketName)
-        .upload(filePath, file, {
-            contentType: file.type,
+        .upload(filePath, buffer, {
+            contentType: detected,
             upsert: false
         });
 
@@ -8186,15 +8184,8 @@ app.post("/make-server-37f42386/generate-vehicle-image", async (c) => {
     
     // Convert Base64 to Buffer for Upload
     const buffer = Buffer.from(imageB64, 'base64');
-    
-    // Use the global supabase client
     const bucketName = `make-37f42386-vehicles`;
-    
-    // Ensure bucket exists (idempotent)
-    const { data: buckets } = await supabase.storage.listBuckets();
-    if (!buckets?.some((b: any) => b.name === bucketName)) {
-        await supabase.storage.createBucket(bucketName, { public: false });
-    }
+    await ensureBucket(supabase, "make-37f42386-vehicles");
 
     const fileName = `${licensePlate || crypto.randomUUID()}.png`;
 
@@ -11061,21 +11052,19 @@ app.post("/make-server-37f42386/signup", async (c) => {
       console.log(`[Signup] Failed to check registration mode (failing open): ${regErr.message}`);
     }
 
-    // Step 8.1: Build user_metadata with role-appropriate fields
-    const userMetadata: Record<string, any> = {
-      name,
-      role: normalizedRole,
-    };
+    // Step 8.1: display name in user_metadata; auth fields in app_metadata only
+    const userMetadata: Record<string, any> = { name };
+    const appMetadata: Record<string, any> = { role: normalizedRole };
     if (normalizedRole === 'admin' && businessType) {
-      userMetadata.businessType = businessType;
-      userMetadata.productLine = productLine;
+      appMetadata.businessType = businessType;
+      appMetadata.productLine = productLine;
     }
 
     // Phase 4: If requireApproval is enabled, mark new accounts as pending
     try {
       const platformSettings = await getPlatformSettingsCached(productLine);
       if (platformSettings.requireApproval === true && normalizedRole === 'admin') {
-        userMetadata.accountStatus = 'pending_approval';
+        appMetadata.accountStatus = 'pending_approval';
       }
     } catch (e: any) {
       console.log(`[Signup] Failed to check requireApproval (non-fatal): ${e.message}`);
@@ -11085,6 +11074,7 @@ app.post("/make-server-37f42386/signup", async (c) => {
       email,
       password,
       user_metadata: userMetadata,
+      app_metadata: appMetadata,
       email_confirm: true,
     });
 
@@ -11191,8 +11181,10 @@ app.post("/make-server-37f42386/invite-user", requireAuth(), requirePermission('
     const { data, error } = await supabase.auth.admin.createUser({
       email,
       password,
-      user_metadata: { 
+      user_metadata: {
         name: name || '',
+      },
+      app_metadata: {
         role: assignedRole,
         organizationId: inviterOrgId || undefined,
         invitedBy: inviterUserId || undefined,
@@ -11277,6 +11269,8 @@ app.post("/make-server-37f42386/team/invite", requireAuth(), requirePermission('
       password: tempPassword,
       user_metadata: {
         name,
+      },
+      app_metadata: {
         role,
         organizationId: orgId || undefined,
         invitedBy: inviterUserId || undefined,
@@ -11552,12 +11546,14 @@ app.post("/make-server-37f42386/admin/create-customer", requireAuth(), async (c)
       .join('')
       .slice(0, 12);
 
-    // Create the user
+    // Create the user — auth fields in app_metadata so org trigger can fire safely
     const { data, error } = await supabase.auth.admin.createUser({
       email,
       password: tempPassword,
       user_metadata: {
         name,
+      },
+      app_metadata: {
         role: 'admin',
         businessType,
         productLine: productLine === 'fleet' ? 'fleet' : 'enterprise',
@@ -11572,11 +11568,11 @@ app.post("/make-server-37f42386/admin/create-customer", requireAuth(), async (c)
       throw error;
     }
 
-    // Set organizationId to the new user's own ID (self-referencing for fleet owners)
+    // Set organizationId on app_metadata (trigger may already have set it)
     const userId = data.user.id;
     const { error: updateErr } = await supabase.auth.admin.updateUserById(userId, {
-      user_metadata: {
-        ...data.user.user_metadata,
+      app_metadata: {
+        ...(data.user.app_metadata || {}),
         organizationId: userId,
         productLine: productLine === 'fleet' ? 'fleet' : 'enterprise',
       },
@@ -12395,22 +12391,36 @@ app.post("/make-server-37f42386/driver/join-fleet", requireAuth(), async (c) => 
   }
 });
 
-// Admin: Update User Password
+// Update User Password — self only, or platform_owner/superadmin for others
 app.post("/make-server-37f42386/update-password", requireAuth(), async (c) => {
   try {
+    const rbacUser = c.get("rbacUser") as {
+      userId?: string;
+      resolvedRole?: string;
+      rawRole?: string;
+    } | null;
     const { userId, password } = await c.req.json();
-    
+
     if (!userId || !password) {
       return c.json({ error: "User ID and new password are required" }, 400);
     }
-    
-    const { data, error } = await supabase.auth.admin.updateUserById(
-      userId,
-      { password: password }
-    );
-    
+    if (typeof password !== "string" || password.length < 8) {
+      return c.json({ error: "Password must be at least 8 characters" }, 400);
+    }
+
+    const callerId = rbacUser?.userId;
+    const isSelf = !!callerId && callerId === userId;
+    const isPlatformOwner =
+      rbacUser?.resolvedRole === "platform_owner" ||
+      rbacUser?.rawRole === "superadmin" ||
+      rbacUser?.rawRole === "platform_owner";
+    if (!isSelf && !isPlatformOwner) {
+      return c.json({ error: "Forbidden: can only change your own password" }, 403);
+    }
+
+    const { error } = await supabase.auth.admin.updateUserById(userId, { password });
     if (error) throw error;
-    
+
     return c.json({ success: true });
   } catch (e: any) {
     console.error("Update Password Error:", e);
@@ -12418,7 +12428,7 @@ app.post("/make-server-37f42386/update-password", requireAuth(), async (c) => {
   }
 });
 
-// Admin: Update User Details (name, role, businessType)
+// Admin: Update User Details (name, role, businessType) — role goes to app_metadata only
 app.post("/make-server-37f42386/update-user", requireAuth(), requirePermission('users.edit_role'), async (c) => {
   try {
     const { userId, name, role, businessType } = await c.req.json();
@@ -12427,29 +12437,50 @@ app.post("/make-server-37f42386/update-user", requireAuth(), requirePermission('
       return c.json({ error: "User ID is required" }, 400);
     }
 
-    const updates: Record<string, any> = {};
-    if (name !== undefined) updates.name = name;
-    if (role !== undefined) updates.role = role;
-    if (businessType !== undefined) updates.businessType = businessType;
+    const { data: existing, error: getErr } = await supabase.auth.admin.getUserById(userId);
+    if (getErr || !existing?.user) {
+      return c.json({ error: "User not found" }, 404);
+    }
 
-    if (Object.keys(updates).length === 0) {
+    const userMetaUpdates: Record<string, unknown> = {
+      ...(existing.user.user_metadata || {}),
+    };
+    if (name !== undefined) userMetaUpdates.name = name;
+    if (businessType !== undefined) userMetaUpdates.businessType = businessType;
+    // Never store authz role in user_metadata
+    delete userMetaUpdates.role;
+    delete userMetaUpdates.organizationId;
+
+    const appMetaUpdates: Record<string, unknown> = {
+      ...(existing.user.app_metadata || {}),
+    };
+    if (role !== undefined) {
+      appMetaUpdates.role = role;
+      const prevRoles = Array.isArray(appMetaUpdates.roles)
+        ? (appMetaUpdates.roles as unknown[]).filter((r): r is string => typeof r === "string")
+        : [];
+      const nextRoles = new Set(prevRoles);
+      nextRoles.add(String(role));
+      appMetaUpdates.roles = Array.from(nextRoles);
+    }
+
+    if (name === undefined && role === undefined && businessType === undefined) {
       return c.json({ error: "No fields to update" }, 400);
     }
 
-    const { data, error } = await supabase.auth.admin.updateUserById(
-      userId,
-      { user_metadata: updates }
-    );
+    const { data, error } = await supabase.auth.admin.updateUserById(userId, {
+      user_metadata: userMetaUpdates,
+      app_metadata: appMetaUpdates,
+    });
 
     if (error) throw error;
 
-    console.log(`User updated: ${userId} — fields: ${JSON.stringify(updates)}`);
-    
-    // Invalidate customer cache if updating an admin user
-    if (updates.role === 'admin' || data.user?.user_metadata?.role === 'admin') {
+    console.log(`User updated: ${userId} — role=${role ?? "(unchanged)"}`);
+
+    if (role === "admin" || data.user?.app_metadata?.role === "admin") {
       await invalidateCustomerCache();
     }
-    
+
     return c.json({ success: true, user: data.user });
   } catch (e: any) {
     console.error("Update User Error:", e);
@@ -13576,6 +13607,113 @@ app.post("/make-server-37f42386/admin/fix-anomaly-flags", async (c) => {
     return c.json({ error: e.message }, 500);
   }
 });
+
+// POST /admin/backfill-app-metadata-roles — copy role/org from user_metadata → app_metadata (once)
+// Does NOT promote privileged user_metadata when app_metadata already has a different role.
+app.post(
+  "/make-server-37f42386/admin/backfill-app-metadata-roles",
+  requireAuth(),
+  requirePermission("data.backfill"),
+  async (c) => {
+    try {
+      const body = await c.req.json().catch(() => ({}));
+      const dryRun = body?.dryRun !== false;
+      const privileged = new Set([
+        "platform_owner",
+        "platform_support",
+        "platform_analyst",
+        "superadmin",
+        "admin",
+        "fleet_owner",
+      ]);
+
+      let page = 1;
+      const perPage = 200;
+      let copied = 0;
+      let skipped = 0;
+      const mismatches: Array<{ id: string; email?: string; userRole: string; appRole: string }> = [];
+
+      for (;;) {
+        const { data, error } = await supabase.auth.admin.listUsers({ page, perPage });
+        if (error) throw error;
+        const users = data?.users || [];
+        if (users.length === 0) break;
+
+        for (const u of users) {
+          const appMeta = (u.app_metadata || {}) as Record<string, unknown>;
+          const userMeta = (u.user_metadata || {}) as Record<string, unknown>;
+          const appRole = typeof appMeta.role === "string" ? appMeta.role.trim() : "";
+          const userRole = typeof userMeta.role === "string" ? userMeta.role.trim() : "";
+          const appOrg =
+            typeof appMeta.organizationId === "string" ? appMeta.organizationId.trim() : "";
+          const userOrg =
+            typeof userMeta.organizationId === "string" ? userMeta.organizationId.trim() : "";
+
+          if (userRole && appRole && userRole !== appRole && privileged.has(userRole)) {
+            mismatches.push({
+              id: u.id,
+              email: u.email,
+              userRole,
+              appRole,
+            });
+          }
+
+          const needRole = !appRole && !!userRole;
+          const needOrg = !appOrg && !!userOrg;
+          if (!needRole && !needOrg) {
+            skipped++;
+            continue;
+          }
+
+          // Never copy privileged user_metadata over empty app when mismatch logged elsewhere —
+          // only copy when app role is empty (legitimate legacy users).
+          if (needRole && privileged.has(userRole) && appRole && appRole !== userRole) {
+            skipped++;
+            continue;
+          }
+
+          copied++;
+          if (dryRun) continue;
+
+          const nextApp: Record<string, unknown> = { ...appMeta };
+          if (needRole) {
+            nextApp.role = userRole;
+            const roles = Array.isArray(nextApp.roles)
+              ? (nextApp.roles as unknown[]).filter((r): r is string => typeof r === "string")
+              : [];
+            if (!roles.includes(userRole)) roles.push(userRole);
+            nextApp.roles = roles;
+          }
+          if (needOrg) nextApp.organizationId = userOrg;
+
+          const { error: updErr } = await supabase.auth.admin.updateUserById(u.id, {
+            app_metadata: nextApp,
+          });
+          if (updErr) {
+            console.warn(`[app-meta-backfill] ${u.id}: ${updErr.message}`);
+          }
+        }
+
+        if (users.length < perPage) break;
+        page++;
+      }
+
+      return c.json({
+        success: true,
+        dryRun,
+        copied,
+        skipped,
+        privilegedMismatches: mismatches,
+        message: dryRun
+          ? "Dry run complete. Set dryRun:false to apply."
+          : "Backfill applied.",
+      });
+    } catch (e: any) {
+      console.error("[app-meta-backfill]", e);
+      return c.json({ error: e.message }, 500);
+    }
+  },
+);
 
 // ---------------------------------------------------------------------------
 // Super Admin — Seed & Check Endpoints
