@@ -258,17 +258,20 @@ max_frequency = "5s"
 # Force log out if the user has been inactive longer than the specified duration.
 # inactivity_timeout = "8h"
 
-# Auth Hooks — HTTP Edge Functions (enable secrets in Dashboard for hosted)
-# Local: point Auth at these functions; hosted: Authentication → Hooks.
-[auth.hook.before_user_created]
-enabled = true
-uri = "http://host.docker.internal:54321/functions/v1/before-user-created"
-secrets = "env(BEFORE_USER_CREATED_HOOK_SECRET)"
-
-[auth.hook.custom_access_token]
-enabled = true
-uri = "http://host.docker.internal:54321/functions/v1/custom-access-token"
-secrets = "env(CUSTOM_ACCESS_TOKEN_HOOK_SECRET)"
+# Auth Hooks — owned by Dashboard on hosted (Authentication → Hooks).
+# Do NOT enable env(HOOK_SECRET) here: CI function deploy loads config.toml and
+# fails when those secrets are unset. Uncomment only for local `supabase start`
+# after exporting BEFORE_USER_CREATED_HOOK_SECRET / CUSTOM_ACCESS_TOKEN_HOOK_SECRET
+# as v1,whsec_<base64> values from Dashboard → Reveal.
+# [auth.hook.before_user_created]
+# enabled = true
+# uri = "http://host.docker.internal:54321/functions/v1/before-user-created"
+# secrets = "env(BEFORE_USER_CREATED_HOOK_SECRET)"
+#
+# [auth.hook.custom_access_token]
+# enabled = true
+# uri = "http://host.docker.internal:54321/functions/v1/custom-access-token"
+# secrets = "env(CUSTOM_ACCESS_TOKEN_HOOK_SECRET)"
 
 # Configure one of the supported SMS providers: `twilio`, `twilio_verify`, `messagebird`, `textlocal`, `vonage`.
 [auth.sms.twilio]
