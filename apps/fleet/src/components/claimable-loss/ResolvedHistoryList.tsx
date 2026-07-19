@@ -212,6 +212,7 @@ export function ResolvedHistoryList({
             const locationTrip =
               (claim.tripId ? tripById.get(claim.tripId) : undefined) ||
               (toll?.tripId ? tripById.get(toll.tripId) : undefined) ||
+              (toll?.matchedTripId ? tripById.get(toll.matchedTripId) : undefined) ||
               linkedTrip ||
               messageTrip;
             const location =
@@ -219,6 +220,10 @@ export function ResolvedHistoryList({
               locationTrip?.pickupLocation ||
               locationTrip?.dropoffLocation ||
               (toll as { tollPlaza?: string } | undefined)?.tollPlaza ||
+              toll?.description ||
+              (claim.subject?.startsWith('Toll Refund:')
+                ? claim.subject.replace(/^Toll Refund:\s*/, '')
+                : '') ||
               '';
             const splitApply = isUnlinkedApplySplitState(claim, linkedTrip);
             const staleUnlinkedApply =

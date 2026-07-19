@@ -4,6 +4,7 @@
  */
 
 import { platformsEqual } from './normalizePlatform.ts';
+import { dateWeekKey } from './tollWeekPeriod.ts';
 
 export const UNLINKED_SHORTFALL_TOLERANCE = 0.05;
 /** Minimum score to show a candidate in the Review picker. */
@@ -287,6 +288,20 @@ export function scoreUnlinkedShortfallMatch(input: UnlinkedShortfallCandidateInp
   else if (daysDiff <= 7) dateScore = Math.min(100, dateScore + 5);
 
   return Math.round(amountScore * 0.75 + dateScore * 0.25);
+}
+
+/**
+ * Suggestions only for underpaid tolls in the same Mon–Sun fleet week as the
+ * refund trip. Cross-week amount/date guesses are not "best matches".
+ */
+export function filterSameWeekUnlinkedShortfalls<T extends { date?: string | null }>(
+  tripDate: string | undefined | null,
+  candidates: T[],
+  fleetTz: string,
+): T[] {
+  const tripWeek = dateWeekKey(tripDate, fleetTz);
+  if (!tripWeek) return [];
+  return candidates.filter((c) => dateWeekKey(c.date, fleetTz) === tripWeek);
 }
 
 export function isPendingOnlyRefundResolution(trip: {

@@ -284,6 +284,12 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
             ? 'Driver used trip cash for a personal toll — charged to driver (no reimbursement).'
             : 'This toll was identified as personal usage and charged to your account.'),
           tripId: opts.trip?.id,
+          tripDate: opts.trip?.requestTime || opts.trip?.date,
+          pickup: opts.trip?.pickupLocation || tx.description || undefined,
+          dropoff: opts.trip?.dropoffLocation,
+          platform: opts.trip?.platform,
+          vehicleId: tx.vehicleId,
+          driverName: opts.trip?.driverName || tx.driverName,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
           date: tx.date,
@@ -366,6 +372,9 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
                   resolutionReason: 'Write Off',
                   subject: 'Personal Toll - Fleet Pays',
                   message: 'Fleet covered this personal toll.',
+                  pickup: tx.description || undefined,
+                  vehicleId: tx.vehicleId,
+                  driverName: tx.driverName,
                   createdAt: new Date().toISOString(),
                   updatedAt: new Date().toISOString(),
                   date: tx.date,
@@ -458,6 +467,14 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
       message: match?.reason || undefined,
     });
   }, [chargeDriverForPersonalUse]);
+
+  const handleBulkChargePersonal = useCallback(async (
+    items: Array<{ tx: FinancialTransaction; match?: MatchResult }>,
+  ) => {
+    for (const { tx, match } of items) {
+      await handleChargePersonal(tx, match);
+    }
+  }, [handleChargePersonal]);
 
   const handleEditToll = async (transactionId: string, updates: Record<string, any>) => {
       try {
@@ -1032,6 +1049,12 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
               subject: 'Deadhead Toll - Charged to Driver',
               message: `Enroute-to-pickup toll charged to driver for trip ${match.trip.id}.`,
               tripId: match.trip.id,
+              tripDate: match.trip.requestTime || match.trip.date,
+              pickup: match.trip.pickupLocation,
+              dropoff: match.trip.dropoffLocation,
+              platform: match.trip.platform,
+              vehicleId: tx.vehicleId,
+              driverName: match.trip.driverName || tx.driverName,
               createdAt: new Date().toISOString(),
               updatedAt: new Date().toISOString(),
               date: tx.date,
@@ -1163,6 +1186,7 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
   const lockedFlag = lock('Flagging toll…', handleFlag);
   const lockedManualResolve = lock('Resolving toll…', handleManualResolve);
   const lockedChargePersonal = lock('Charging driver…', handleChargePersonal);
+  const lockedBulkChargePersonal = lock('Charging drivers…', handleBulkChargePersonal);
   const lockedEditToll = lock('Saving toll…', handleEditToll);
   const lockedChargeDeadhead = lock('Charging driver…', handleChargeDriverForDeadhead);
   const lockedSmartReconcile = lock('Matching toll…', handleSmartReconcile);
@@ -1321,11 +1345,12 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
               onFlag={lockedFlag}
               onManualResolve={lockedManualResolve}
               onChargePersonal={lockedChargePersonal}
+              onBulkChargePersonal={lockedBulkChargePersonal}
               onEdit={lockedEditToll}
               advancePrompt={showAdvancePrompt ? renderAdvancePrompt(true) : undefined}
               emptyState={{ icon: CarFront, title: "No personal use tolls this period", description: "No tolls were classified as personal driver use." }}
               listTitle="Personal Use"
-              listDescription="Tolls with no trip explaining them, or after dropoff — confirm each driver charge. Approach tolls appear under Deadhead."
+              listDescription=""
             />
           )}
           {activeStepId === 'deadhead' && (
@@ -1388,6 +1413,7 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
               loadingClaims={claimsLoading}
               createClaim={lockedCreateClaim}
               updateClaim={lockedUpdateClaim}
+              rawCreateClaim={createClaim}
               rawUpdateClaim={updateClaim}
               deleteClaim={lockedDeleteClaim}
               rawDeleteClaim={deleteClaim}

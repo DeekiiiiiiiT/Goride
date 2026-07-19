@@ -1092,6 +1092,8 @@ export interface Claim {
   tripDate?: string;
   pickup?: string;
   dropoff?: string;
+  /** Denormalized trip/toll platform for History when trips aren't loaded. */
+  platform?: string;
 
   // Resolution Tracking
   resolutionReason?: 'Charge Driver' | 'Write Off' | 'Business Expense' | 'Reimbursed' | 'Other';

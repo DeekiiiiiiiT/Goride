@@ -1,16 +1,17 @@
 /**
  * Period-scoped reconciliation reset — inventory + ordered undo for one wizard week.
  */
-import { startOfWeek, endOfWeek, format } from "npm:date-fns";
+import { startOfWeek, format } from "npm:date-fns";
 import * as kv from "./kv_store.tsx";
 import { deleteClaim } from "./claim_service.ts";
 import { unmatchDisputeRefundById } from "./dispute_refund_controller.tsx";
-import { getFleetTimezone } from "./timezone_helper.tsx";
+import { getFleetTimezone, fleetCalendarDay } from "./timezone_helper.tsx";
 import {
   applyRefundResolution,
   executeTollResetForReconciliation,
   getDriverAliasMap,
   getRefundAutomationSettings,
+  isUnresolvedRefund,
   loadAllByPrefix,
   loadAllTollLedgerWithTrips,
   loadDisputeRefundRecords,
@@ -22,28 +23,6 @@ import {
   reverseSettlementsForTolls,
 } from "./toll_settlement.ts";
 
-function fleetTzDay(dateStr: string, tz: string): string {
-  const s = String(dateStr);
-  const hasTzSuffix = /[Zz]|[+-]\d{2}:\d{2}$/.test(s);
-  if (!hasTzSuffix) return s.slice(0, 10);
-  const instant = new Date(s);
-  if (isNaN(instant.getTime())) return s.slice(0, 10);
-  try {
-    const parts = new Intl.DateTimeFormat("en-CA", {
-      timeZone: tz,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).formatToParts(instant);
-    const y = parts.find((p) => p.type === "year")?.value;
-    const m = parts.find((p) => p.type === "month")?.value;
-    const d = parts.find((p) => p.type === "day")?.value;
-    return y && m && d ? `${y}-${m}-${d}` : s.slice(0, 10);
-  } catch {
-    return s.slice(0, 10);
-  }
-}
-
 function ymdToLocalDate(ymd: string): Date {
   const [y, m, d] = ymd.split("-").map(Number);
   if (!y || !m || !d) return new Date(NaN);
@@ -51,7 +30,7 @@ function ymdToLocalDate(ymd: string): Date {
 }
 
 export function weekKeyForDateStr(dateStr: string, timezone: string): string {
-  const day = fleetTzDay(dateStr, timezone);
+  const day = fleetCalendarDay(dateStr, timezone) || String(dateStr).slice(0, 10);
   let base = ymdToLocalDate(day);
   if (isNaN(base.getTime())) base = new Date(dateStr);
   const weekStart = startOfWeek(base, { weekStartsOn: 1 });
@@ -120,6 +99,18 @@ function isUnlinkedApplyTrip(trip: any): boolean {
   );
 }
 
+function inventoryTouchesWork(inv: PeriodResetInventory): boolean {
+  return (
+    inv.unlinkedApplyTripIds.length +
+      inv.disputeRefundIds.length +
+      inv.claimIds.length +
+      inv.tollIds.length +
+      inv.refundResolutionTripIds.length +
+      inv.unresolvedUnlinkedTripIds.length >
+    0
+  );
+}
+
 export interface PeriodResetInventory {
   periodWeekKey: string;
   unlinkedApplyTripIds: string[];
@@ -127,7 +118,11 @@ export interface PeriodResetInventory {
   claimIds: string[];
   tollIds: string[];
   refundResolutionTripIds: string[];
+  /** Pending / open Unlinked Refunds still in the wizard queue for this week. */
+  unresolvedUnlinkedTripIds: string[];
   chargeDriverClaimIds: string[];
+  /** Drivers whose Expenses week must be rebuilt after reset. */
+  touchedDriverIds: string[];
 }
 
 export interface PeriodResetSummary {
@@ -136,6 +131,7 @@ export interface PeriodResetSummary {
   claimsDeleted: number;
   tollsReset: number;
   refundResolutionsReverted: number;
+  unresolvedUnlinkedNormalized: number;
   workflowStagesRecomputed: number;
   /** Expenses snapshot rows rebuilt for the reset week. */
   periodsRebuilt?: number;
@@ -167,6 +163,11 @@ export async function buildPeriodResetInventory(opts: {
   for (const tx of tollTx) {
     if (tx?.id && tx?.date) tollDateById.set(String(tx.id), tx.date);
   }
+
+  // Any trip already linked to a tag toll is not an "unlinked refund".
+  const linkedTripIds = new Set(
+    tollTx.map((tx: any) => tx?.tripId).filter(Boolean).map(String),
+  );
 
   const tollIds = tollTx
     .filter((tx: any) => {
@@ -227,9 +228,46 @@ export async function buildPeriodResetInventory(opts: {
       const res = t?.tollRefundResolution;
       if (!res || res.status === "pending") return false;
       if (!driverMatches(t.driverId, driverIds, driverAliasMap)) return false;
-      return t.date && weekKeyForDateStr(t.date, fleetTz) === periodWeekKey;
+      const anchor = t.dropoffTime || t.date;
+      return anchor && weekKeyForDateStr(String(anchor), fleetTz) === periodWeekKey;
     })
     .map((t: any) => String(t.id));
+
+  // Pending Unlinked Refunds are already "at start" for that step, but Reset
+  // must still count them so preview isn't empty and Expenses can be rebuilt.
+  const refundResolutionSet = new Set(refundResolutionTripIds);
+  const unresolvedUnlinkedTripIds = trips
+    .filter((t: any) => {
+      if (!t?.id) return false;
+      if (unlinkedApplySet.has(String(t.id))) return false;
+      if (refundResolutionSet.has(String(t.id))) return false;
+      if (!isUnresolvedRefund(t, linkedTripIds)) return false;
+      if (!driverMatches(t.driverId, driverIds, driverAliasMap)) return false;
+      const anchor = t.dropoffTime || t.date;
+      return anchor && weekKeyForDateStr(String(anchor), fleetTz) === periodWeekKey;
+    })
+    .map((t: any) => String(t.id));
+
+  const touchedDriverIds = new Set<string>(
+    (driverIds || []).map(String).filter(Boolean),
+  );
+  for (const tx of tollTx) {
+    if (!tx?.id || !tollIdSet.has(String(tx.id))) continue;
+    if (tx.driverId) touchedDriverIds.add(String(tx.driverId));
+  }
+  for (const cl of allClaims) {
+    if (!cl?.id || !claimIdSet.has(String(cl.id))) continue;
+    if (cl.driverId) touchedDriverIds.add(String(cl.driverId));
+  }
+  const tripIdNeedDrivers = new Set([
+    ...unlinkedApplyTripIds,
+    ...refundResolutionTripIds,
+    ...unresolvedUnlinkedTripIds,
+  ]);
+  for (const t of trips) {
+    if (!t?.id || !tripIdNeedDrivers.has(String(t.id))) continue;
+    if (t.driverId) touchedDriverIds.add(String(t.driverId));
+  }
 
   return {
     periodWeekKey,
@@ -238,7 +276,9 @@ export async function buildPeriodResetInventory(opts: {
     claimIds,
     tollIds,
     refundResolutionTripIds,
+    unresolvedUnlinkedTripIds,
     chargeDriverClaimIds,
+    touchedDriverIds: [...touchedDriverIds],
   };
 }
 
@@ -273,6 +313,7 @@ export async function executePeriodReconciliationReset(
     claimsDeleted: 0,
     tollsReset: 0,
     refundResolutionsReverted: 0,
+    unresolvedUnlinkedNormalized: 0,
     workflowStagesRecomputed: 0,
   };
   const errors: string[] = [];
@@ -409,11 +450,19 @@ export async function executePeriodReconciliationReset(
     }
   }
 
-  // Expenses / Settlement Toll Status reads driver_financial_periods — rebuild
-  // the reset week for every driver touched so the UI cannot stay "Reconciled".
-  const driversToRebuild = new Set<string>(
-    (opts.driverIds || []).map(String).filter(Boolean),
-  );
+  // Unresolved Unlinked Refunds are already at wizard-start (pending). Counting
+  // them in inventory unlocks Reset + Expenses rebuild; no per-trip write needed.
+  summary.unresolvedUnlinkedNormalized =
+    freshInventory.unresolvedUnlinkedTripIds.length ||
+    inventory.unresolvedUnlinkedTripIds.length;
+
+  // Expenses / Settlement Toll Status reads driver_financial_periods — always
+  // rebuild touched drivers so the week cannot stay "Reconciled" after reset.
+  const driversToRebuild = new Set<string>([
+    ...inventory.touchedDriverIds,
+    ...freshInventory.touchedDriverIds,
+    ...(opts.driverIds || []).map(String).filter(Boolean),
+  ]);
   for (const tollId of freshInventory.tollIds) {
     try {
       const toll: any = await kv.get(`toll_ledger:${tollId}`);
@@ -434,7 +483,8 @@ export async function executePeriodReconciliationReset(
         }
       }
       console.log(
-        `[PeriodReset] Rebuilt ${periodsRebuilt} expense period(s) for ${driversToRebuild.size} driver(s)`,
+        `[PeriodReset] Rebuilt ${periodsRebuilt} expense period(s) for ${driversToRebuild.size} driver(s) ` +
+          `(work=${inventoryTouchesWork(inventory) || inventoryTouchesWork(freshInventory)})`,
       );
     } catch (e: any) {
       errors.push(`rebuild expenses: ${e.message}`);
@@ -452,7 +502,14 @@ export async function executePeriodReconciliationReset(
 
   return {
     dryRun: false,
-    inventory: freshInventory,
+    inventory: {
+      ...freshInventory,
+      unresolvedUnlinkedTripIds:
+        freshInventory.unresolvedUnlinkedTripIds.length > 0
+          ? freshInventory.unresolvedUnlinkedTripIds
+          : inventory.unresolvedUnlinkedTripIds,
+      touchedDriverIds: [...driversToRebuild],
+    },
     summary: { ...summary, periodsRebuilt },
     errors,
     completedAt: new Date().toISOString(),

@@ -25,6 +25,45 @@ describe('claimHistoryDisplay', () => {
     expect(getClaimPlatformDisplay(claim, null, tripById).platform).toBe('Uber');
   });
 
+  it('uses denormalized claim.platform when trip is missing from map', () => {
+    const claim: Claim = {
+      id: 'c1b',
+      type: 'Toll_Refund',
+      status: 'Resolved',
+      driverId: 'd1',
+      tripId: 'missing-trip',
+      amount: 10,
+      expectedAmount: 285,
+      paidAmount: 275,
+      subject: 'Toll Refund',
+      message: '',
+      createdAt: '',
+      updatedAt: '',
+      resolutionReason: 'Charge Driver',
+      platform: 'Uber',
+    };
+    expect(getClaimPlatformDisplay(claim, null, new Map()).platform).toBe('Uber');
+  });
+
+  it('falls back to toll.tripId when claim.tripId is empty', () => {
+    const claim: Claim = {
+      id: 'c1c',
+      type: 'Toll_Refund',
+      status: 'Resolved',
+      driverId: 'd1',
+      amount: 10,
+      expectedAmount: 285,
+      paidAmount: 275,
+      subject: 'Toll Refund',
+      message: '',
+      createdAt: '',
+      updatedAt: '',
+      resolutionReason: 'Charge Driver',
+    };
+    const toll = { tripId: 't1' } as FinancialTransaction;
+    expect(getClaimPlatformDisplay(claim, toll, tripById).platform).toBe('Uber');
+  });
+
   it('labels Toll_Refund as Underpaid even when workflowStage says personal_use_resolved', () => {
     const claim: Claim = {
       id: 'c2',

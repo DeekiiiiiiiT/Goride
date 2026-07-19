@@ -20,7 +20,8 @@
  * claim-date fallback) are mirrored locally below, each with a comment
  * pointing at its client twin that must be kept in sync:
  *   - apps/fleet/src/utils/tollPeriodGating.ts (classifyPeriodUnderpaidClaim,
- *     countUnclaimedUnderpaidAsPeriodActionable, isClaimActionableNow)
+ *     countUnclaimedUnderpaidAsPeriodActionable, isClaimActionableNow,
+ *     computeStepCounts unlinked + isUnlinkedRefundActionableNow)
  *   - apps/fleet/src/utils/tollWeekPeriod.ts (isDisputeRefundMatched, getClaimWeekDate, weekBucketForDate, formatWeekPeriodLabel)
  *   - apps/fleet/src/utils/tollBucket.ts (bucketForWorkflowStage)
  *
@@ -39,6 +40,7 @@ import {
   filterByDriver,
   loadAllByPrefix,
   isReconcilableTollExpense,
+  buildUnresolvedRefundSuggestionStatuses,
 } from "./toll_controller.tsx";
 import { safeErrorResponse } from "./safe_error.ts";
 
@@ -422,11 +424,16 @@ app.get(`${BASE}/periods`, requirePermission('toll.view'), async (c) => {
     }
 
     // Unclaimed refund trips → unlinked-refunds.
-    // Pending-import stays informational so Finish isn't blocked on statement arrival.
+    // Mirror client isUnlinkedRefundActionableNow: pending-hold alone is
+    // informational; pending + cash_wash/phantom Accept suggestion stays actionable.
+    const unlinkedSuggestionByTripId = await buildUnresolvedRefundSuggestionStatuses(unclaimedRefundTrips);
     for (const t of unclaimedRefundTrips) {
       if (!t?.date) continue;
       const acc = getOrCreatePeriod(t.date);
-      if (t.tollRefundResolution?.status === "pending") {
+      const suggestionStatus = unlinkedSuggestionByTripId.get(String(t.id)) ?? null;
+      const hasAcceptSuggestion = !!(suggestionStatus && suggestionStatus !== "pending");
+      const isPendingOnly = t.tollRefundResolution?.status === "pending";
+      if (isPendingOnly && !hasAcceptSuggestion) {
         acc.counts["unlinked-refunds"].informational++;
       } else {
         acc.counts["unlinked-refunds"].actionable++;

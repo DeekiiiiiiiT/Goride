@@ -25,7 +25,9 @@ interface PeriodResetInventory {
   claimIds: string[];
   tollIds: string[];
   refundResolutionTripIds: string[];
+  unresolvedUnlinkedTripIds?: string[];
   chargeDriverClaimIds: string[];
+  touchedDriverIds?: string[];
 }
 
 interface AggregatedPreview {
@@ -41,6 +43,7 @@ function emptyInventory(): PeriodResetInventory {
     claimIds: [],
     tollIds: [],
     refundResolutionTripIds: [],
+    unresolvedUnlinkedTripIds: [],
     chargeDriverClaimIds: [],
   };
 }
@@ -52,6 +55,10 @@ function mergeInventory(into: PeriodResetInventory, add: PeriodResetInventory): 
     claimIds: [...into.claimIds, ...add.claimIds],
     tollIds: [...into.tollIds, ...add.tollIds],
     refundResolutionTripIds: [...into.refundResolutionTripIds, ...add.refundResolutionTripIds],
+    unresolvedUnlinkedTripIds: [
+      ...(into.unresolvedUnlinkedTripIds || []),
+      ...(add.unresolvedUnlinkedTripIds || []),
+    ],
     chargeDriverClaimIds: [...into.chargeDriverClaimIds, ...add.chargeDriverClaimIds],
   };
 }
@@ -62,7 +69,8 @@ function inventoryItemCount(inv: PeriodResetInventory): number {
     inv.disputeRefundIds.length +
     inv.claimIds.length +
     inv.tollIds.length +
-    inv.refundResolutionTripIds.length
+    inv.refundResolutionTripIds.length +
+    (inv.unresolvedUnlinkedTripIds?.length || 0)
   );
 }
 
@@ -449,6 +457,10 @@ export function BulkPeriodResetDialog({
                 <li>Claims: {preview.totals.claimIds.length}</li>
                 <li>Tolls to reset: {preview.totals.tollIds.length}</li>
                 <li>Refund resolutions: {preview.totals.refundResolutionTripIds.length}</li>
+                <li>
+                  Unlinked refunds (back to start):{' '}
+                  {preview.totals.unresolvedUnlinkedTripIds?.length || 0}
+                </li>
                 {preview.totals.chargeDriverClaimIds.length > 0 && (
                   <li className="text-orange-700">
                     Charge-driver reversals: {preview.totals.chargeDriverClaimIds.length}

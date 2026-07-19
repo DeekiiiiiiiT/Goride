@@ -6,6 +6,7 @@ import {
   ChevronDown,
   FileText,
   Gauge,
+  Loader2,
   MoreHorizontal,
   Pencil,
   Search,
@@ -19,6 +20,7 @@ import {
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "../../ui/card";
 import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
+import { Checkbox } from "../../ui/checkbox";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -91,6 +93,8 @@ export interface TollBucketPanelProps {
   onChargeDriver?: (tx: FinancialTransaction, match: MatchResult) => void;
   /** Personal-use step: charge driver for orphan or trip-linked personal tolls. */
   onChargePersonal?: (tx: FinancialTransaction, match?: MatchResult) => void;
+  /** Personal-use step: charge several selected tolls in one go. */
+  onBulkChargePersonal?: (items: Array<{ tx: FinancialTransaction; match?: MatchResult }>) => Promise<void> | void;
   /** Wizard step — controls orphan card surfacing and status labels. */
   stepId?: 'needs-review' | 'personal-use' | 'deadhead';
   /** Period wizard: one card + one list (no duplicate week headers / stacked smart zone). */
@@ -102,13 +106,15 @@ export interface TollBucketPanelProps {
 export function TollBucketPanel({
   tolls, suggestions, onReconcile, allTrips, onApprove, onReject, onDiscardReceipt, onFlag, onManualResolve, onEdit, drivers = [],
   emptyState, listTitle = 'Tolls', listDescription = "Toll provider charges that haven't been linked to a specific trip.",
-  approveLabel = 'Approve', onChargeDriver, onChargePersonal, onAcceptPersonal, stepId, unifiedPeriodView = false, advancePrompt,
+  approveLabel = 'Approve', onChargeDriver, onChargePersonal, onBulkChargePersonal, onAcceptPersonal, stepId, unifiedPeriodView = false, advancePrompt,
 }: TollBucketPanelProps) {
     const [selectedTxForManual, setSelectedTxForManual] = useState<FinancialTransaction | null>(null);
     const [competingPickTx, setCompetingPickTx] = useState<FinancialTransaction | null>(null);
     const [sourceFilter, setSourceFilter] = useState<'all' | 'tag' | 'cash'>('all');
     const [visibleSmartMatches, setVisibleSmartMatches] = useState(10);
     const [visibleWeekCount, setVisibleWeekCount] = useState(12);
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    const [isBulkCharging, setIsBulkCharging] = useState(false);
     const fleetTz = useFleetTimezone();
 
     const [detailTx, setDetailTx] = useState<FinancialTransaction | null>(null);
@@ -123,6 +129,7 @@ export function TollBucketPanel({
     useEffect(() => {
         setVisibleSmartMatches(10);
         setVisibleWeekCount(12);
+        setSelectedIds(new Set());
     }, [tolls]);
 
     const openDetail = (tx: FinancialTransaction, match?: MatchResult, allMatches?: MatchResult[]) => {
@@ -161,6 +168,69 @@ export function TollBucketPanel({
             return true;
         });
     }, [tolls, sourceFilter]);
+
+    const canBulkSelect = stepId === 'personal-use' && !!(onChargePersonal || onBulkChargePersonal);
+
+    /** Personal Use: chargeable rows — skip unsettled ambiguous trip picks. */
+    const selectablePersonalTolls = useMemo(() => {
+        if (!canBulkSelect) return [] as FinancialTransaction[];
+        return filteredTolls.filter((tx) => {
+            const match = suggestions.get(tx.id)?.[0];
+            if (!match) return true;
+            if (isOrphanPersonalMatch(match)) return true;
+            return !needsTripPick(tx, match);
+        });
+    }, [canBulkSelect, filteredTolls, suggestions]);
+
+    const selectablePersonalIdSet = useMemo(
+        () => new Set(selectablePersonalTolls.map((t) => t.id)),
+        [selectablePersonalTolls],
+    );
+
+    const toggleSelect = (id: string, checked: boolean) => {
+        setSelectedIds((prev) => {
+            const next = new Set(prev);
+            if (checked) next.add(id);
+            else next.delete(id);
+            return next;
+        });
+    };
+
+    const toggleSelectAll = (checked: boolean) => {
+        if (checked) {
+            setSelectedIds(new Set(selectablePersonalTolls.map((t) => t.id)));
+        } else {
+            setSelectedIds(new Set());
+        }
+    };
+
+    const handleBulkChargeSelected = async () => {
+        if (selectedIds.size === 0) return;
+        const items = selectablePersonalTolls
+            .filter((tx) => selectedIds.has(tx.id))
+            .map((tx) => ({ tx, match: suggestions.get(tx.id)?.[0] }));
+        if (items.length === 0) return;
+
+        setIsBulkCharging(true);
+        try {
+            if (onBulkChargePersonal) {
+                await onBulkChargePersonal(items);
+            } else if (onChargePersonal) {
+                for (const { tx, match } of items) {
+                    await onChargePersonal(tx, match);
+                }
+            }
+            setSelectedIds(new Set());
+        } finally {
+            setIsBulkCharging(false);
+        }
+    };
+
+    const allSelectableSelected =
+        selectablePersonalTolls.length > 0 &&
+        selectablePersonalTolls.every((t) => selectedIds.has(t.id));
+    const someSelectableSelected =
+        selectablePersonalTolls.some((t) => selectedIds.has(t.id)) && !allSelectableSelected;
 
     const tripsByVehicle = useMemo(() => {
         const map = new Map<string, Trip[]>();
@@ -442,12 +512,16 @@ export function TollBucketPanel({
         const matches = suggestions.get(tx.id) ?? [];
         const match = matches[0];
         if (!match) return null;
+        const isSelectable = canBulkSelect && selectablePersonalIdSet.has(tx.id);
         return (
             <SuggestedMatchCard
                 transaction={tx}
                 match={match}
                 allMatches={matches}
                 orphanMode={orphanMode}
+                selectable={isSelectable}
+                selected={selectedIds.has(tx.id)}
+                onSelectedChange={(checked) => toggleSelect(tx.id, checked)}
                 onConfirm={() => {
                     if (orphanMode && onChargePersonal) {
                         onChargePersonal(tx, match);
@@ -477,9 +551,21 @@ export function TollBucketPanel({
         const inferredDriver = getInferredDriver(vehicleId, tx.date);
         const profileDriver = drivers.length > 0 ? resolveTollDisplayDriverName(tx, drivers) : '';
         const displayDriver = profileDriver || tx.driverName || bestMatch?.trip.driverName || inferredDriver;
+        const isSelectable = canBulkSelect && selectablePersonalIdSet.has(tx.id);
 
         return (
             <TableRow key={tx.id} className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors" onClick={() => openDetail(tx, bestMatch || undefined, txMatches)}>
+                {canBulkSelect && (
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                        {isSelectable ? (
+                            <Checkbox
+                                checked={selectedIds.has(tx.id)}
+                                onCheckedChange={(checked) => toggleSelect(tx.id, checked === true)}
+                                aria-label={`Select toll ${tx.id}`}
+                            />
+                        ) : null}
+                    </TableCell>
+                )}
                 <TableCell>
                     <div className="flex flex-col">
                         {(() => {
@@ -675,7 +761,7 @@ export function TollBucketPanel({
                         <CardHeader className="flex flex-row items-center justify-between pb-4">
                             <div className="space-y-1">
                                 <CardTitle>{listTitle}</CardTitle>
-                                <CardDescription>{listDescription}</CardDescription>
+                                {listDescription ? <CardDescription>{listDescription}</CardDescription> : null}
                             </div>
                             <div className="w-[180px]">
                                 <Select value={sourceFilter} onValueChange={(v: 'all' | 'tag' | 'cash') => setSourceFilter(v)}>
@@ -702,35 +788,71 @@ export function TollBucketPanel({
 
     if (unifiedPeriodView) {
         const visibleSmartTolls = [...ambiguousSmartMatches, ...normalSmartMatches];
+        const showOrphanBanner = stepId === 'personal-use' && orphanSmartMatches.length > 0;
 
         return (
             <>
                 <Card>
-                    <CardHeader className="flex flex-row items-center justify-between pb-4">
-                        <div className="space-y-1">
+                    <CardHeader className="flex flex-row items-start justify-between gap-4 pb-4">
+                        <div className="space-y-2 min-w-0 flex-1">
                             <CardTitle>{listTitle}</CardTitle>
-                            <CardDescription>{listDescription}</CardDescription>
-                        </div>
-                        <div className="w-[180px]">
-                            <Select value={sourceFilter} onValueChange={(v: 'all' | 'tag' | 'cash') => setSourceFilter(v)}>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Filter Source" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">All Sources</SelectItem>
-                                    <SelectItem value="tag">Tag Imports Only</SelectItem>
-                                    <SelectItem value="cash">Cash Claims Only</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        {orphanSmartMatches.length > 0 && (
-                            <div className="space-y-3 w-full min-w-0">
-                                <div className="flex items-center gap-2 rounded-lg border border-purple-200 bg-purple-50/60 px-3 py-2 text-purple-900 text-sm">
+                            {showOrphanBanner ? (
+                                <div className="flex items-center gap-2 rounded-lg border border-purple-200 bg-purple-50/60 px-3 py-2 text-purple-900 text-sm max-w-xl">
                                     <Sparkles className="h-4 w-4 shrink-0" />
                                     <span className="font-semibold">No trips match these tolls.</span>
                                 </div>
+                            ) : listDescription ? (
+                                <CardDescription>{listDescription}</CardDescription>
+                            ) : null}
+                        </div>
+                        <div className="flex flex-col items-end gap-2 shrink-0">
+                            {canBulkSelect && selectedIds.size > 0 && (
+                                <Button
+                                    size="sm"
+                                    onClick={() => void handleBulkChargeSelected()}
+                                    disabled={isBulkCharging}
+                                    className="border-purple-300 text-purple-700 hover:bg-purple-50"
+                                    variant="outline"
+                                >
+                                    {isBulkCharging ? (
+                                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                    ) : (
+                                        <User className="h-4 w-4 mr-2" />
+                                    )}
+                                    Charge Driver ({selectedIds.size})
+                                </Button>
+                            )}
+                            <div className="w-[180px]">
+                                <Select value={sourceFilter} onValueChange={(v: 'all' | 'tag' | 'cash') => setSourceFilter(v)}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Filter Source" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">All Sources</SelectItem>
+                                        <SelectItem value="tag">Tag Imports Only</SelectItem>
+                                        <SelectItem value="cash">Cash Claims Only</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        {canBulkSelect && selectablePersonalTolls.length > 0 && (
+                            <div className="flex items-center gap-2 text-sm text-slate-600">
+                                <Checkbox
+                                    checked={allSelectableSelected || (someSelectableSelected ? 'indeterminate' : false)}
+                                    onCheckedChange={(checked) => toggleSelectAll(checked === true)}
+                                    aria-label="Select all personal tolls"
+                                />
+                                <span>
+                                    {selectedIds.size > 0
+                                        ? `${selectedIds.size} selected`
+                                        : 'Select tolls for bulk Charge Driver'}
+                                </span>
+                            </div>
+                        )}
+                        {orphanSmartMatches.length > 0 && (
+                            <div className="space-y-3 w-full min-w-0">
                                 {orphanSmartMatches.map((tx) => (
                                     <div key={tx.id} className="w-full min-w-0">
                                         {renderSuggestedMatchCard(tx, true)}
@@ -783,6 +905,7 @@ export function TollBucketPanel({
                             <Table>
                                 <TableHeader>
                                     <TableRow>
+                                        {canBulkSelect && <TableHead className="w-[40px]" />}
                                         <TableHead>Date</TableHead>
                                         <TableHead>Vehicle</TableHead>
                                         <TableHead>Driver</TableHead>
@@ -847,7 +970,7 @@ export function TollBucketPanel({
                 <CardHeader className="flex flex-row items-center justify-between pb-4">
                     <div className="space-y-1">
                         <CardTitle>{listTitle}</CardTitle>
-                        <CardDescription>{listDescription}</CardDescription>
+                        {listDescription ? <CardDescription>{listDescription}</CardDescription> : null}
                     </div>
                     <div className="w-[180px]">
                         <Select value={sourceFilter} onValueChange={(v: any) => setSourceFilter(v)}>

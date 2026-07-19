@@ -4,7 +4,7 @@
  */
 import { createClient } from "jsr:@supabase/supabase-js@2.49.8";
 import { startOfWeek, endOfWeek, format } from "npm:date-fns";
-import { getFleetTimezone } from "./timezone_helper.tsx";
+import { getFleetTimezone, fleetCalendarDay } from "./timezone_helper.tsx";
 
 function sb() {
   return createClient(
@@ -79,8 +79,8 @@ export function minorToMajor(minor: number): number {
 export async function periodAnchorFor(dateLike: string | Date, timezone?: string): Promise<string> {
   const tz = timezone || (await getFleetTimezone());
   const raw = typeof dateLike === "string" ? dateLike : dateLike.toISOString();
-  // Use calendar day from ISO or date-only, then Monday-start week in UTC-local parse.
-  const day = raw.includes("T") ? raw.slice(0, 10) : raw.slice(0, 10);
+  // Fleet calendar day (not raw UTC slice) so Expenses weeks match Toll Recon.
+  const day = fleetCalendarDay(raw, tz) || raw.slice(0, 10);
   const [y, m, d] = day.split("-").map(Number);
   const local = new Date(y, (m || 1) - 1, d || 1);
   const weekStart = startOfWeek(local, { weekStartsOn: 1 });

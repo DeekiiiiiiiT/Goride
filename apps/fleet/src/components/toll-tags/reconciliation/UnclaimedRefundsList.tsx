@@ -9,7 +9,7 @@ import { Button } from "../../ui/button";
 import { Checkbox } from "../../ui/checkbox";
 import { formatInFleetTz, useFleetTimezone } from '../../../utils/timezoneDisplay';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../../ui/collapsible";
-import { groupTripsByWeek, getCrossPeriodCoverage } from "../../../utils/tollWeekPeriod";
+import { groupTripsByWeek } from "../../../utils/tollWeekPeriod";
 import { cn } from "../../ui/utils";
 import { RefundBulkActionBar } from "./RefundBulkActionBar";
 import { RefundResolutionDrawer, RefundResolutionPayload } from "./RefundResolutionDrawer";
@@ -20,6 +20,7 @@ import type { UnlinkedShortfallSuggestion } from "../../../hooks/useTollReconcil
 import {
   isRecommendedUnlinkedShortfall,
   isUnlinkedRefundActionableNow,
+  filterSameWeekUnlinkedShortfalls,
 } from "../../../utils/unlinkedShortfallEligibility";
 import { toast } from "sonner@2.0.3";
 
@@ -72,17 +73,14 @@ export function UnclaimedRefundsList({
     });
 
   const suggestionFor = (tripId: string) => suggestions?.get(tripId);
-  const shortfallsFor = (tripId: string) => shortfallSuggestions?.get(tripId) ?? EMPTY_SHORTFALL;
-  const bestShortfallFor = (tripId: string) => shortfallsFor(tripId)[0];
-
-  const crossPeriodCount = useMemo(() => {
-    let n = 0;
-    for (const trip of trips) {
-      const shortfall = (shortfallSuggestions?.get(trip.id) ?? EMPTY_SHORTFALL)[0];
-      if (shortfall && getCrossPeriodCoverage(trip.date, shortfall.date, fleetTz)) n += 1;
-    }
-    return n;
-  }, [trips, shortfallSuggestions, fleetTz]);
+  // Belt: never surface cross-week underpaids as the primary suggestion.
+  const shortfallsFor = (trip: Trip) =>
+    filterSameWeekUnlinkedShortfalls(
+      trip.date,
+      shortfallSuggestions?.get(trip.id) ?? EMPTY_SHORTFALL,
+      fleetTz,
+    );
+  const bestShortfallFor = (trip: Trip) => shortfallsFor(trip)[0];
 
   const handleApplyShortfall = async (
     trip: Trip,
@@ -93,7 +91,7 @@ export function UnclaimedRefundsList({
       targets?: Array<{ claimId?: string | null; tollId?: string | null; share?: number }>;
     },
   ) => {
-    const best = candidate ?? bestShortfallFor(trip.id);
+    const best = candidate ?? bestShortfallFor(trip);
     if (!best || !onApplyToShortfall) return;
     setBusy(true);
     try {
@@ -120,8 +118,8 @@ export function UnclaimedRefundsList({
   }, [drawerTrip, suggestions]);
 
   const drawerShortfalls = useMemo(
-    () => (drawerTrip ? shortfallsFor(drawerTrip.id) : EMPTY_SHORTFALL),
-    [drawerTrip, shortfallSuggestions],
+    () => (drawerTrip ? shortfallsFor(drawerTrip) : EMPTY_SHORTFALL),
+    [drawerTrip, shortfallSuggestions, fleetTz],
   );
 
   const handleDrawerResolve = async (payload: RefundResolutionPayload) => {
@@ -183,7 +181,7 @@ export function UnclaimedRefundsList({
     let needsDecision = 0;
     let waiting = 0;
     for (const trip of trips) {
-      const shortfall = bestShortfallFor(trip.id);
+      const shortfall = bestShortfallFor(trip);
       const s = suggestionFor(trip.id);
       const actionable = isUnlinkedRefundActionableNow(trip, {
         suggestionStatus: s?.status ?? null,
@@ -193,7 +191,7 @@ export function UnclaimedRefundsList({
       else waiting++;
     }
     return { needsDecisionCount: needsDecision, waitingImportCount: waiting };
-  }, [trips, suggestions, shortfallSuggestions]);
+  }, [trips, suggestions, shortfallSuggestions, fleetTz]);
 
   if (trips.length === 0) {
     return (
@@ -216,19 +214,13 @@ export function UnclaimedRefundsList({
             Platform paid a toll on these trips, but no matching toll expense is linked yet.
           </p>
           <p>
-            Apply the credit to an underpaid toll when possible; otherwise clear the row with the suggested reason.
+            Apply the credit to an underpaid toll in this week when possible; otherwise clear the row with the suggested reason.
           </p>
           {interactive && waitingImportCount > 0 && (
             <p className="text-slate-500 pt-0.5">
               {needsDecisionCount} need{needsDecisionCount === 1 ? 's' : ''} a decision
               {' · '}
               {waitingImportCount} waiting on tag import
-            </p>
-          )}
-          {interactive && crossPeriodCount > 0 && (
-            <p className="rounded-md border border-violet-200 bg-violet-50 px-2.5 py-1.5 text-violet-900">
-              {crossPeriodCount} refund{crossPeriodCount === 1 ? '' : 's'} best match underpaid tolls in{' '}
-              <span className="font-semibold">another period</span> — look for the violet “Other period” badge before applying.
             </p>
           )}
         </div>
@@ -277,9 +269,7 @@ export function UnclaimedRefundsList({
                         <tbody className="[&_tr:last-child]:border-0">
                           {week.items.map(trip => {
                             const s = suggestionFor(trip.id);
-                            const shortfall = bestShortfallFor(trip.id);
-                            const crossPeriod =
-                              shortfall && getCrossPeriodCoverage(trip.date, shortfall.date, fleetTz);
+                            const shortfall = bestShortfallFor(trip);
                             const showApplyShortcut =
                               !!shortfall && isRecommendedUnlinkedShortfall(shortfall, trip.platform);
                             const isFuture = new Date(trip.date) > new Date();
@@ -323,11 +313,6 @@ export function UnclaimedRefundsList({
                                             ? ` → leftover $${shortfall.leftoverShortfall.toFixed(2)}`
                                             : ' → covered'}
                                         </span>
-                                        {crossPeriod && (
-                                          <span className="inline-flex w-fit rounded-full border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold text-violet-800">
-                                            Other period · {crossPeriod.targetWeekLabel}
-                                          </span>
-                                        )}
                                       </div>
                                     ) : shortfall?.requiresMultiTarget ? (
                                       <div className="flex flex-col gap-0.5">
@@ -338,11 +323,6 @@ export function UnclaimedRefundsList({
                                           ${shortfall.tripRefund.toFixed(2)} may cover{' '}
                                           {shortfall.multiTargetTollIds?.length || 2} underpaid tolls — Review to split
                                         </span>
-                                        {crossPeriod && (
-                                          <span className="inline-flex w-fit rounded-full border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold text-violet-800">
-                                            Other period · {crossPeriod.targetWeekLabel}
-                                          </span>
-                                        )}
                                       </div>
                                     ) : s ? (
                                       <div className="flex flex-col gap-0.5">

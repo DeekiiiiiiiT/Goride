@@ -14,6 +14,7 @@ import {
   isUnlinkedShortfallPlatformMismatch,
   hasMaterialExcessRefund,
   proposeUnlinkedPoolAllocation,
+  filterSameWeekUnlinkedShortfalls,
 } from './unlinkedShortfallEligibility';
 import { normalizePlatform, platformsEqual } from './normalizePlatform';
 
@@ -64,6 +65,20 @@ describe('unlinked shortfall eligibility', () => {
       claimOrTollDate: '2026-07-01T18:25:00',
     });
     expect(nearby).toBeGreaterThanOrEqual(25);
+  });
+
+  it('filterSameWeekUnlinkedShortfalls drops next-week underpaids', () => {
+    const TZ = 'America/Jamaica';
+    const kept = filterSameWeekUnlinkedShortfalls(
+      '2026-01-28T12:00:00.000Z',
+      [
+        { date: '2026-01-30', tollId: 'same' },
+        { date: '2026-02-02', tollId: 'next' },
+        { date: '2026-02-07', tollId: 'later' },
+      ],
+      TZ,
+    );
+    expect(kept.map((c) => c.tollId)).toEqual(['same']);
   });
 
   it('pending-only resolution is detected for informational gating', () => {

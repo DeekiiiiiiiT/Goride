@@ -375,10 +375,10 @@ export function RefundResolutionDrawer({
             {rankedCandidates.length === 0 ? (
               <div className="rounded-lg border border-dashed border-slate-200 p-3 space-y-1">
                 <p className="text-sm font-medium text-slate-700">
-                  No underpaid toll for this driver right now.
+                  No underpaid toll in this week for this driver.
                 </p>
                 <p className="text-sm text-slate-500">
-                  Clear this credit another way below, or finish underpaid matching first and come back.
+                  Clear this credit with Cash wash or another option below — do not guess a later week.
                 </p>
               </div>
             ) : multiMode && !forceSingleOpen ? (

@@ -71,7 +71,8 @@ interface UnderpaidClaimsStepProps {
   loadingClaims: boolean;
   createClaim: (claim: Partial<Claim>) => Promise<any>;
   updateClaim: (claim: Claim) => Promise<any>;
-  /** Unlocked claim write for sequential bulk under one runExclusive. */
+  /** Unlocked claim create/write for sequential bulk under one runExclusive. */
+  rawCreateClaim?: (claim: Partial<Claim>) => Promise<any>;
   rawUpdateClaim?: (claim: Claim) => Promise<any>;
   deleteClaim: (id: string) => Promise<any>;
   rawDeleteClaim?: (id: string) => Promise<any>;
@@ -84,10 +85,11 @@ export function UnderpaidClaimsStep({
   periodLabel: _periodLabel,
   fleetTz,
   drivers, loadingTolls, loadingClaims,
-  createClaim, updateClaim, rawUpdateClaim, deleteClaim, rawDeleteClaim, refreshClaims,
+  createClaim, updateClaim, rawCreateClaim, rawUpdateClaim, deleteClaim, rawDeleteClaim, refreshClaims,
 }: UnderpaidClaimsStepProps) {
   const { runExclusive, setMessage } = useTollReconBusy();
   const writeClaim = rawUpdateClaim || updateClaim;
+  const makeClaim = rawCreateClaim || createClaim;
   const removeClaim = rawDeleteClaim || deleteClaim;
   const tripMap = useMemo(() => new Map(trips.map(t => [t.id, t])), [trips]);
   const displayTollById = useMemo(() => {
@@ -492,6 +494,7 @@ export function UnderpaidClaimsStep({
       tripDate: trip.requestTime || trip.date,
       pickup: trip.pickupLocation,
       dropoff: trip.dropoffLocation,
+      platform: trip.platform,
       date: transaction.date,
       vehicleId: transaction.vehicleId,
       driverName: trip.driverName,
@@ -500,7 +503,11 @@ export function UnderpaidClaimsStep({
 
   const ensureClaimForLoss = async (item: LossItem): Promise<Claim> => {
     if (item.claim) return item.claim;
-    return createClaim(buildClaimPayloadFromLoss(item));
+    const created = await makeClaim(buildClaimPayloadFromLoss(item));
+    if (!created?.id) {
+      throw new Error('Claim create returned no id');
+    }
+    return created;
   };
 
   const claimDraftFromLoss = (item: LossItem): Claim => ({
@@ -553,6 +560,80 @@ export function UnderpaidClaimsStep({
     }
   };
 
+  const chargeDriverLossQuiet = async (item: LossItem): Promise<'ok' | 'skip' | 'fail'> => {
+    if (!assertTollInWizardPeriod(item.transaction, periodWeekKey, fleetTz).ok) return 'skip';
+    const driverId = item.match.trip.driverId || 'unknown_driver';
+    if (hasBlockingUnlinkedRefund({ claimDriverId: driverId, unlinkedTrips: unlinkedRefundTrips })) return 'skip';
+    const draft = claimDraftFromLoss(item);
+    if (isTollCoveredByDisputeRefund(draft, disputeRefunds)) return 'skip';
+    const resolved = resolveChargeAmountForLoss(item);
+    if (resolved.amount <= 0) return 'skip';
+    try {
+      const claim = await ensureClaimForLoss(item);
+      if (!claim?.id) return 'fail';
+      await writeClaim({
+        ...claim,
+        amount: resolved.amount,
+        status: 'Resolved',
+        resolutionReason: 'Charge Driver',
+        updatedAt: new Date().toISOString(),
+      });
+      return 'ok';
+    } catch {
+      return 'fail';
+    }
+  };
+
+  const handleBulkChargeDriverLoss = (items: LossItem[]) => {
+    if (!items.length) return;
+    const blocked = items.filter((item) =>
+      hasBlockingUnlinkedRefund({
+        claimDriverId: item.match.trip.driverId || 'unknown_driver',
+        unlinkedTrips: unlinkedRefundTrips,
+      }),
+    );
+    if (blocked.length > 0) {
+      toast.error(`${blocked.length} toll(s) blocked — apply Unlinked Refunds for those drivers first`);
+      if (blocked.length === items.length) return;
+    }
+    const actionable = items.filter((item) => !blocked.includes(item));
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Charge Drivers',
+      description: `Charge ${actionable.length} underpaid toll shortfall(s) to the driver(s)?`,
+      actionLabel: 'Charge Driver',
+      isDestructive: false,
+      onConfirm: async () => {
+        const toastId = toast.loading(`Charging ${actionable.length} toll(s)…`);
+        let successCount = 0;
+        let skipCount = 0;
+        let failCount = 0;
+        const result = await runExclusive(
+          `Charging ${actionable.length} drivers…`,
+          async () => {
+            for (let i = 0; i < actionable.length; i++) {
+              setMessage(`Charging toll ${i + 1} of ${actionable.length}…`);
+              const status = await chargeDriverLossQuiet(actionable[i]);
+              if (status === 'ok') successCount++;
+              else if (status === 'skip') skipCount++;
+              else failCount++;
+            }
+            return { successCount, skipCount, failCount };
+          },
+        );
+        toast.dismiss(toastId);
+        if (result === undefined) {
+          toast.message('Another action is still running — try again when it finishes.');
+          return;
+        }
+        if (failCount > 0) toast.warning(`Charged ${successCount}. Skipped ${skipCount}. Failed ${failCount}.`);
+        else if (successCount > 0) toast.success(`Charged ${successCount} toll shortfall(s) to drivers.`);
+        else toast.info('Nothing was charged — items were skipped or already covered.');
+        refreshClaims();
+      },
+    });
+  };
+
   const handleWriteOffLoss = (item: LossItem) => {
     if (!guardTollInPeriod(item.transaction)) return;
     const amount = item.financials.netLoss;
@@ -577,6 +658,58 @@ export function UnderpaidClaimsStep({
         } catch (e) {
           toast.error('Failed to write off claim');
         }
+      },
+    });
+  };
+
+  const handleBulkWriteOffLoss = (items: LossItem[]) => {
+    if (!items.length) return;
+    const total = items.reduce((sum, item) => sum + item.financials.netLoss, 0);
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Write Off',
+      description: `Fleet absorbs $${total.toFixed(2)} across ${items.length} toll(s) — no dispute will be sent to drivers.`,
+      actionLabel: 'Write Off',
+      isDestructive: true,
+      onConfirm: async () => {
+        const toastId = toast.loading(`Writing off ${items.length} toll(s)…`);
+        let successCount = 0;
+        let failCount = 0;
+        const result = await runExclusive(
+          `Writing off ${items.length} tolls…`,
+          async () => {
+            for (let i = 0; i < items.length; i++) {
+              const item = items[i];
+              setMessage(`Writing off toll ${i + 1} of ${items.length}…`);
+              if (!assertTollInWizardPeriod(item.transaction, periodWeekKey, fleetTz).ok) {
+                failCount++;
+                continue;
+              }
+              try {
+                const claim = await ensureClaimForLoss(item);
+                await writeClaim({
+                  ...claim,
+                  amount: item.financials.netLoss,
+                  status: 'Resolved',
+                  resolutionReason: 'Write Off',
+                  updatedAt: new Date().toISOString(),
+                });
+                successCount++;
+              } catch {
+                failCount++;
+              }
+            }
+            return { successCount, failCount };
+          },
+        );
+        toast.dismiss(toastId);
+        if (result === undefined) {
+          toast.message('Another action is still running — try again when it finishes.');
+          return;
+        }
+        if (failCount > 0) toast.warning(`Wrote off ${successCount}. Failed: ${failCount}`);
+        else toast.success(`Wrote off ${successCount} toll(s) as company loss.`);
+        refreshClaims();
       },
     });
   };
@@ -809,26 +942,19 @@ export function UnderpaidClaimsStep({
 
   return (
     <div className="space-y-6">
-      <div>
-        <h3 className="text-lg font-semibold text-slate-900">Underpaid & Claims</h3>
-        <p className="text-sm text-slate-500">
-          Tolls the platform reimbursed for less than they cost — flag them, then track the claim through to resolution.
-        </p>
-      </div>
-
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h4 className="text-sm font-medium text-slate-700">Claim pipeline</h4>
-          <Button onClick={handleExport} variant="outline" size="sm" className="gap-2">
-            <Download className="h-4 w-4" /> Export CSV
-          </Button>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="space-y-3 min-w-0 flex-1">
+          <h3 className="text-lg font-semibold text-slate-900">Underpaid & Claims</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+            <StatCard title="Unclaimed Potential" amount={unclaimedTotal} type="neutral" icon={Banknote} />
+            <StatCard title="Pending Recovery" amount={pendingTotal} type="info" icon={Timer} />
+            <StatCard title="Action Required" amount={atRiskTotal} type="warning" icon={AlertCircle} />
+            <StatCard title="Written Off" amount={writeOffTotal * -1} type="loss" icon={FileX} />
+          </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard title="Unclaimed Potential" amount={unclaimedTotal} type="neutral" icon={Banknote} />
-          <StatCard title="Pending Recovery" amount={pendingTotal} type="info" icon={Timer} />
-          <StatCard title="Action Required" amount={atRiskTotal} type="warning" icon={AlertCircle} />
-          <StatCard title="Written Off" amount={writeOffTotal * -1} type="loss" icon={FileX} />
-        </div>
+        <Button onClick={handleExport} variant="outline" size="sm" className="gap-2 shrink-0 self-start">
+          <Download className="h-4 w-4" /> Export CSV
+        </Button>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
@@ -862,6 +988,8 @@ export function UnderpaidClaimsStep({
             }}
             onChargeDriver={handleChargeDriverLoss}
             onWriteOff={handleWriteOffLoss}
+            onBulkChargeDriver={handleBulkChargeDriverLoss}
+            onBulkWriteOff={handleBulkWriteOffLoss}
             fleetTz={fleetTz}
             onUndoUnlinkedApply={onUndoUnlinkedApply}
             busyUnlinkedTripId={busyUnlinkedTripId}

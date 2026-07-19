@@ -318,9 +318,11 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
         const [sugRes, resolvedRes, shortRes] = await Promise.all([
           api.getRefundSuggestions(driverId ? { driverId } : undefined),
           api.getResolvedRefunds(filterParams),
+          // Exact period bounds (no ±1 pad) — pad was leaking next-week underpaids
+          // into "best match" and the violet Other period banner.
           api.getUnlinkedShortfallSuggestions({
             ...(driverId ? { driverId } : {}),
-            ...dateParams,
+            ...(period ? { from: period.startDate, to: period.endDate } : {}),
           }),
         ]);
         if (gen !== fetchGen.current) return;

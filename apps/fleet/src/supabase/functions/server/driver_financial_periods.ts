@@ -5,7 +5,7 @@
 import { createClient } from "jsr:@supabase/supabase-js@2.49.8";
 import { format, addDays } from "npm:date-fns";
 import * as kv from "./kv_store.tsx";
-import { getFleetTimezone } from "./timezone_helper.tsx";
+import { getFleetTimezone, fleetCalendarDay } from "./timezone_helper.tsx";
 import {
   loadAllTollLedgerWithTrips,
   isReconcilableTollExpense,
@@ -303,7 +303,7 @@ export async function rebuildDriverFinancialPeriod(
   const persistLines = !!context.persistLines;
   const scopedTolls = context.scopedTolls;
   const weekTolls = scopedTolls.filter((tx: any) => {
-    const d = String(tx.date || "").slice(0, 10);
+    const d = fleetCalendarDay(String(tx.date || ""), timezone);
     return d >= periodAnchor && d <= periodEnd;
   });
 
@@ -364,7 +364,8 @@ export async function rebuildDriverFinancialPeriod(
     const isCashWash = status === "cash_wash";
     const isOpenUnlinked = !status || status === "pending";
     if (!isCashWash && !isOpenUnlinked) continue;
-    const anchorDate = String(trip.dropoffTime || trip.date || "").slice(0, 10);
+    // Fleet calendar day — same week bucketing as Toll Recon / period reset.
+    const anchorDate = fleetCalendarDay(String(trip.dropoffTime || trip.date || ""), timezone);
     if (!anchorDate || anchorDate < periodAnchor || anchorDate > periodEnd) continue;
     tollSpend += amt;
     tollCashSpend += amt;
@@ -395,7 +396,7 @@ export async function rebuildDriverFinancialPeriod(
   }
 
   const chargeTx = context.chargeTxAll.filter((t: any) => {
-    const d = String(t.date || "").slice(0, 10);
+    const d = fleetCalendarDay(String(t.date || ""), timezone);
     return d >= periodAnchor && d <= periodEnd;
   });
   let tollChargedToDriver = 0;
@@ -418,13 +419,13 @@ export async function rebuildDriverFinancialPeriod(
   let disputeRefundMatched = 0;
   let disputeRefundUnmatched = 0;
   for (const r of context.disputes) {
-    const d = String(r.date || r.matchedAt || "").slice(0, 10);
+    const d = fleetCalendarDay(String(r.date || r.matchedAt || ""), timezone);
     let weekDate = d;
     if (r.matchedTollId) {
       const toll =
         weekTolls.find((t: any) => String(t.id) === String(r.matchedTollId)) ||
         scopedTolls.find((t: any) => String(t.id) === String(r.matchedTollId));
-      if (toll?.date) weekDate = String(toll.date).slice(0, 10);
+      if (toll?.date) weekDate = fleetCalendarDay(String(toll.date), timezone);
     }
     if (!(weekDate >= periodAnchor && weekDate <= periodEnd)) continue;
     const amt = Math.abs(Number(r.amount) || 0);
@@ -447,26 +448,27 @@ export async function rebuildDriverFinancialPeriod(
     }
   }
 
-  // Open claims keep the week actionable even when every toll row is "handled"
-  // (claim_filed is terminal per-toll, but the claim itself may still be Open).
+  // Open + Rejected claims keep the week actionable (matches Toll Recon wizard).
+  // claim_filed is terminal per-toll, but the claim itself may still need work.
   let tollOpenClaimCount = 0;
   for (const cl of context.claims) {
-    if (String(cl?.status || "") !== "Open") continue;
+    const claimStatus = String(cl?.status || "");
+    if (claimStatus !== "Open" && claimStatus !== "Rejected") continue;
     const tollId = String(cl.transactionId || "");
     const toll = tollId ? scopedTolls.find((t: any) => String(t.id) === tollId) : null;
     const d = toll?.date
-      ? String(toll.date).slice(0, 10)
-      : String(cl.date || cl.createdAt || "").slice(0, 10);
+      ? fleetCalendarDay(String(toll.date), timezone)
+      : fleetCalendarDay(String(cl.date || cl.createdAt || ""), timezone);
     if (d >= periodAnchor && d <= periodEnd) {
       tollOpenClaimCount++;
       tollWorkflowActionable++;
       if (persistLines) {
         lines.push({
-          lineType: "claim_open",
+          lineType: claimStatus === "Rejected" ? "claim_rejected" : "claim_open",
           domain: "toll",
           sourceSystem: "claim",
           sourceId: String(cl.id),
-          description: `Open claim${toll ? ` on toll ${tollId}` : ""}`,
+          description: `${claimStatus} claim${toll ? ` on toll ${tollId}` : ""}`,
           amount: -(Math.abs(Number(cl.amount) || 0)),
           occurredAt: d,
         });

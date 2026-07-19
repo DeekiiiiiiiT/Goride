@@ -7,11 +7,15 @@ export function getClaimPlatformDisplay(
   toll: FinancialTransaction | null | undefined,
   tripById: ReadonlyMap<string, Trip>,
 ): { tollPlatform?: string; refundPlatform?: string; platform?: string } {
-  const matchedTrip = claim.tripId ? tripById.get(claim.tripId) : undefined;
+  const matchedTrip =
+    (claim.tripId ? tripById.get(claim.tripId) : undefined) ||
+    (toll?.tripId ? tripById.get(toll.tripId) : undefined) ||
+    (toll?.matchedTripId ? tripById.get(toll.matchedTripId) : undefined);
   const unlinkedTrip = claim.unlinkedTripId ? tripById.get(claim.unlinkedTripId) : undefined;
 
   const tollPlatform =
     matchedTrip?.platform ||
+    claim.platform ||
     ((toll?.metadata as { source?: string } | undefined)?.source === 'roam_geofence'
       ? 'Roam'
       : undefined);
@@ -29,7 +33,12 @@ export function getClaimPlatformDisplay(
     };
   }
 
-  const single = tollPlatform || refundPlatform || matchedTrip?.platform || unlinkedTrip?.platform;
+  const single =
+    tollPlatform ||
+    refundPlatform ||
+    matchedTrip?.platform ||
+    unlinkedTrip?.platform ||
+    claim.platform;
   return single ? { platform: normalizePlatform(single) } : {};
 }
 

@@ -25,7 +25,9 @@ interface PeriodResetInventory {
   claimIds: string[];
   tollIds: string[];
   refundResolutionTripIds: string[];
+  unresolvedUnlinkedTripIds?: string[];
   chargeDriverClaimIds: string[];
+  touchedDriverIds?: string[];
 }
 
 interface PeriodResetDialogProps {
@@ -70,12 +72,15 @@ export function PeriodResetDialog({
       preview.disputeRefundIds.length +
       preview.claimIds.length +
       preview.tollIds.length +
-      preview.refundResolutionTripIds.length
+      preview.refundResolutionTripIds.length +
+      (preview.unresolvedUnlinkedTripIds?.length || 0)
     : 0;
 
   const toggleDriver = (id: string) => {
     setAllDrivers(false);
     setSelectedDriverIds((prev) => {
+      // Leaving "All drivers" — start with only the clicked driver selected
+      if (allDrivers) return new Set([id]);
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -98,11 +103,15 @@ export function PeriodResetDialog({
         driverIdsForRequest,
       );
       setPreview(res.inventory);
-      if (
-        res.inventory.unlinkedApplyTripIds.length === 0 &&
-        res.inventory.claimIds.length === 0 &&
-        res.inventory.tollIds.length === 0
-      ) {
+      const inv = res.inventory as PeriodResetInventory;
+      const items =
+        (inv.unlinkedApplyTripIds?.length || 0) +
+        (inv.disputeRefundIds?.length || 0) +
+        (inv.claimIds?.length || 0) +
+        (inv.tollIds?.length || 0) +
+        (inv.refundResolutionTripIds?.length || 0) +
+        (inv.unresolvedUnlinkedTripIds?.length || 0);
+      if (items === 0) {
         toast.info('Nothing to reset for this scope');
       }
     } catch (e: any) {
@@ -160,9 +169,10 @@ export function PeriodResetDialog({
             Reset this period
           </DialogTitle>
           <DialogDescription>
-            Undo all reconciliation work for <strong>{period.label}</strong> and send tolls back to
-            Needs Review. Toll charges and trips are not deleted. Tolls will be re-classified using
-            current Automation settings (including personal-use detection).
+            Undo all reconciliation work for <strong>{period.label}</strong> and send the week back
+            to the start of the wizard. Clears Expenses “Reconciled” for the selected drivers. Toll
+            charges and trips are not deleted. Tolls will be re-classified using current Automation
+            settings (including personal-use detection).
           </DialogDescription>
         </DialogHeader>
 
@@ -170,8 +180,8 @@ export function PeriodResetDialog({
           <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 flex gap-2">
             <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
             <span>
-              This reverses claims, dispute matches, unlinked applies, and driver charges for the
-              selected scope. Other weeks are not affected.
+              This reverses claims, dispute matches, unlinked applies, and driver charges, and
+              refreshes Expenses status for the selected scope. Other weeks are not affected.
             </span>
           </div>
 
@@ -193,7 +203,6 @@ export function PeriodResetDialog({
                 <label key={d.id} className="flex items-center gap-2 text-sm cursor-pointer">
                   <Checkbox
                     checked={!allDrivers && selectedDriverIds.has(d.id)}
-                    disabled={allDrivers}
                     onCheckedChange={() => toggleDriver(d.id)}
                   />
                   {d.name}
@@ -228,6 +237,10 @@ export function PeriodResetDialog({
                 <li>Claims: {preview.claimIds.length}</li>
                 <li>Tolls to reset: {preview.tollIds.length}</li>
                 <li>Refund resolutions: {preview.refundResolutionTripIds.length}</li>
+                <li>
+                  Unlinked refunds (back to start):{' '}
+                  {preview.unresolvedUnlinkedTripIds?.length || 0}
+                </li>
                 {preview.chargeDriverClaimIds.length > 0 && (
                   <li className="text-orange-700">
                     Charge-driver reversals: {preview.chargeDriverClaimIds.length}

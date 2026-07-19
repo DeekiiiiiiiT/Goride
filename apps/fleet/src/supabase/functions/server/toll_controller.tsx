@@ -53,6 +53,7 @@ import { applyEvidenceResolution } from "./evidence_routes.ts";
   isEligibleUnlinkedShortfallToll,
   hasMaterialExcessRefund,
   proposeUnlinkedPoolAllocation,
+  filterSameWeekUnlinkedShortfalls,
   UNLINKED_PICKER_MIN_CONFIDENCE,
   UNLINKED_SHORTFALL_TOLERANCE,
 } from "./unlinked_shortfall_eligibility.ts";
@@ -6114,6 +6115,37 @@ async function applyRefundResolution(params: {
   return { tripId, resolution, linkedTollLedgerId };
 }
 
+/**
+ * Suggestion status per unresolved unlinked-refund trip — used by GET /periods
+ * so pending + cash_wash/phantom Accept stays actionable (mirrors client
+ * isUnlinkedRefundActionableNow + refund suggestions).
+ */
+async function buildUnresolvedRefundSuggestionStatuses(
+  unresolvedTrips: any[],
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  if (!unresolvedTrips.length) return out;
+  const plazas = await loadActivePlazaPoints();
+  const { amountMatchesAnyOfficialRate } = await import("./toll_rate_schedule.ts");
+  for (const t of unresolvedTrips) {
+    if (!t?.id) continue;
+    const nearest = nearestPlazaMetersForTrip(t, plazas);
+    const matchesOfficialRate = await amountMatchesAnyOfficialRate(
+      Number(t.tollCharges) || 0,
+      t.date,
+    );
+    const cls = classifyRefundServer({
+      tollCharges: Number(t.tollCharges) || 0,
+      platform: t.platform,
+      paymentMethod: t.paymentMethod,
+      nearestPlazaMeters: nearest,
+      matchesOfficialRate,
+    });
+    out.set(String(t.id), cls.status);
+  }
+  return out;
+}
+
 // ─── GET /refund-suggestions ─────────────────────────────────────────────
 app.get(`${BASE}/refund-suggestions`, async (c) => {
   try {
@@ -7298,6 +7330,7 @@ async function undoApplyUnlinkedRefundToClaim(
 app.get(`${BASE}/unlinked-shortfall-suggestions`, async (c) => {
   try {
     const { driverId, from, to } = parseQueryParams(c);
+    const fleetTz = await getFleetTimezone();
     const loaded = await loadAllTollLedgerWithTrips();
     const tollTx = filterByDriver(loaded.tollTx, driverId);
     let trips = filterByDriver(loaded.trips, driverId);
@@ -7309,17 +7342,12 @@ app.get(`${BASE}/unlinked-shortfall-suggestions`, async (c) => {
     const ctx = await loadUnlinkedShortfallContext(tollTx);
     const suggestions: Record<string, any[]> = {};
     for (const t of unresolved) {
-      let ranked = computeUnlinkedShortfallSuggestions(t, ctx);
-      // Wizard is period-scoped: never one-click suggest underpaid tolls outside this week.
-      if (from || to) {
-        ranked = ranked.filter((r: any) => {
-          const d = String(r?.date || "").slice(0, 10);
-          if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return false;
-          if (from && d < from) return false;
-          if (to && d > to) return false;
-          return true;
-        });
-      }
+      // Same Mon–Sun week as the refund only — never promote next-week guesses.
+      const ranked = filterSameWeekUnlinkedShortfalls(
+        t.date,
+        computeUnlinkedShortfallSuggestions(t, ctx),
+        fleetTz,
+      );
       if (ranked.length > 0) suggestions[t.id] = ranked;
     }
     return c.json({ success: true, suggestions });
@@ -8236,6 +8264,7 @@ export {
   isUnresolvedRefund,
   loadAllTollLedgerWithTrips,
   getRefundAutomationSettings,
+  buildUnresolvedRefundSuggestionStatuses,
 };
 export type { RefundAutomationSettings };
 

@@ -2,6 +2,7 @@ import React from 'react';
 import { Card, CardContent } from "../../ui/card";
 import { Button } from "../../ui/button";
 import { Badge } from "../../ui/badge";
+import { Checkbox } from "../../ui/checkbox";
 import { ArrowRight, Check, X, Clock, DollarSign, MapPin, Camera, AlertTriangle, Car, User, Gauge, Search, Trash2 } from "lucide-react";
 import { FinancialTransaction, Trip } from "../../../types/data";
 import { normalizePlatform } from '../../../utils/normalizePlatform';
@@ -31,11 +32,15 @@ interface SuggestedMatchCardProps {
   onSelectTrip?: (trip: Trip) => void;
   /** Prominent manual match when trip link is unsettled. */
   onFindMatch?: () => void;
+  /** Multi-select for bulk Charge Driver on Personal Use. */
+  selectable?: boolean;
+  selected?: boolean;
+  onSelectedChange?: (selected: boolean) => void;
 }
 
 export function SuggestedMatchCard({
   transaction, match, allMatches, orphanMode = false, onConfirm, onApprove, onReject, onDiscard, onFlag, onChargeDriver,
-  onClickDetail, onFindMatch, onAcceptPersonal,
+  onClickDetail, onFindMatch, onAcceptPersonal, selectable = false, selected = false, onSelectedChange,
 }: SuggestedMatchCardProps) {
   const { trip, confidence, reason, timeDifferenceMinutes, matchType, varianceAmount, confidenceScore, vehicleMatch, driverMatch, dataQuality, windowHit, isAmbiguous, reasonCode, rateDrift, officialAmount, tagAmount, usedOfficialRate } = match as any;
   const isClaim = transaction.paymentMethod === 'Cash' || !!transaction.receiptUrl;
@@ -231,9 +236,22 @@ export function SuggestedMatchCard({
   };
 
   return (
-    <Card className={`border-l-4 bg-slate-50/50 w-full min-w-0 ${getBorderColor()} ${onClickDetail ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}>
+    <Card className={`border-l-4 bg-slate-50/50 w-full min-w-0 ${getBorderColor()} ${selected ? 'ring-2 ring-purple-300' : ''} ${onClickDetail ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}>
       <CardContent className="p-4">
         <div className="flex flex-col xl:flex-row gap-4 items-stretch w-full min-w-0">
+            {selectable && (
+              <div
+                className="flex items-start pt-1 shrink-0"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <Checkbox
+                  checked={selected}
+                  onCheckedChange={(checked) => onSelectedChange?.(checked === true)}
+                  aria-label={`Select toll ${transaction.id}`}
+                  className="size-5"
+                />
+              </div>
+            )}
             
             {/* Left: Transaction (The Problem) */}
             <div className="flex-1 min-w-0 basis-0" onClick={onClickDetail}>

@@ -9,6 +9,7 @@ import {
 } from '../ui/table';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
+import { Checkbox } from '../ui/checkbox';
 import {
   Tooltip,
   TooltipContent,
@@ -18,6 +19,7 @@ import {
 import {
   AlertCircle,
   Archive,
+  ChevronDown,
   Clock,
   Info,
   MoreHorizontal,
@@ -29,6 +31,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu';
@@ -83,6 +86,8 @@ interface LossListProps {
   onSelectLoss: (item: LossItem) => void;
   onChargeDriver?: (item: LossItem) => void;
   onWriteOff?: (item: LossItem) => void;
+  onBulkChargeDriver?: (items: LossItem[]) => void;
+  onBulkWriteOff?: (items: LossItem[]) => void;
   onUndoUnlinkedApply?: (tripId: string) => Promise<void> | void;
   busyUnlinkedTripId?: string | null;
   fleetTz?: string;
@@ -94,10 +99,40 @@ export function LossList({
   onSelectLoss,
   onChargeDriver,
   onWriteOff,
+  onBulkChargeDriver,
+  onBulkWriteOff,
   onUndoUnlinkedApply,
   busyUnlinkedTripId,
   fleetTz,
 }: LossListProps) {
+  const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set());
+
+  React.useEffect(() => {
+    setSelectedIds(new Set());
+  }, [losses]);
+
+  const toggleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedIds(new Set(losses.map((l) => l.transaction.id)));
+    } else {
+      setSelectedIds(new Set());
+    }
+  };
+
+  const toggleSelect = (id: string, checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  const selectedItems = losses.filter((l) => selectedIds.has(l.transaction.id));
+  const allSelected = losses.length > 0 && selectedIds.size === losses.length;
+  const someSelected = selectedIds.size > 0 && selectedIds.size < losses.length;
+  const canBulk = !!(onBulkChargeDriver || onBulkWriteOff);
+
   if (isLoading) {
     return <div className="p-8 text-center text-slate-500">Analyzing claims...</div>;
   }
@@ -116,7 +151,7 @@ export function LossList({
 
   return (
     <div className="border rounded-md bg-white shadow-sm">
-      <div className="p-4 border-b bg-slate-50/50 flex justify-between items-center">
+      <div className="p-4 border-b bg-slate-50/50 flex justify-between items-center gap-4 flex-wrap">
         <div>
           <h3 className="font-semibold text-slate-900">
             Underpaid Trips{' '}
@@ -124,7 +159,48 @@ export function LossList({
           </h3>
           <p className="text-sm text-slate-500">Tolls incurred during a trip that were not fully refunded.</p>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 flex-wrap justify-end">
+          {selectedIds.size > 0 && canBulk && (
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-slate-500 font-medium">{selectedIds.size} selected</span>
+              {onBulkChargeDriver && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-purple-300 text-purple-700 hover:bg-purple-50 gap-2"
+                  onClick={() => {
+                    onBulkChargeDriver(selectedItems);
+                    setSelectedIds(new Set());
+                  }}
+                >
+                  <UserMinus className="h-3.5 w-3.5" />
+                  Charge Driver ({selectedIds.size})
+                </Button>
+              )}
+              {onBulkWriteOff && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button size="sm" variant="outline" className="gap-2">
+                      More <ChevronDown className="h-3 w-3" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuLabel>Bulk actions</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() => {
+                        onBulkWriteOff(selectedItems);
+                        setSelectedIds(new Set());
+                      }}
+                    >
+                      <Archive className="mr-2 h-4 w-4" />
+                      Write Off ({selectedIds.size})
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            </div>
+          )}
           <div className="text-sm font-medium text-slate-600">
             Total Potential Claim:{' '}
             <span className="text-orange-600 font-bold ml-1">
@@ -136,6 +212,15 @@ export function LossList({
       <Table>
         <TableHeader>
           <TableRow>
+            {canBulk && (
+              <TableHead className="w-[40px]">
+                <Checkbox
+                  checked={allSelected || (someSelected ? 'indeterminate' : false)}
+                  onCheckedChange={(checked) => toggleSelectAll(checked === true)}
+                  aria-label="Select all underpaid trips"
+                />
+              </TableHead>
+            )}
             <TableHead>Date</TableHead>
             <TableHead>Toll Description</TableHead>
             <TableHead>Platform</TableHead>
@@ -155,6 +240,7 @@ export function LossList({
             const creditsReceived = financials.totalRecovered;
             const { daysRemaining, status } = calculateDaysRemaining(transaction.date);
             const unlinkedTripId = claim?.unlinkedTripId || transaction.unlinkedSourceTripId;
+            const isSelected = selectedIds.has(transaction.id);
 
             const expiry =
               status === 'expired'
@@ -166,7 +252,16 @@ export function LossList({
                     : { color: 'text-emerald-600 font-medium', icon: <Clock className="h-3 w-3" />, text: `${daysRemaining} days left` };
 
             return (
-              <TableRow key={transaction.id}>
+              <TableRow key={transaction.id} data-state={isSelected ? 'selected' : undefined}>
+                {canBulk && (
+                  <TableCell>
+                    <Checkbox
+                      checked={isSelected}
+                      onCheckedChange={(checked) => toggleSelect(transaction.id, checked === true)}
+                      aria-label={`Select toll ${transaction.id}`}
+                    />
+                  </TableCell>
+                )}
                 <TableCell className="font-medium text-slate-700">
                   {new Date(transaction.date).toLocaleDateString()}
                   <div className="text-xs text-slate-400">{transaction.time}</div>
