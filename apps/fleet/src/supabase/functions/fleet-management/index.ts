@@ -40,28 +40,25 @@ app.post("/fleet-management/trips/search", async (c) => {
       .select("value")
       .like("key", "trip:%");
 
-    // Apply Filters
+    // Match idx_kv_trip_driver_date: (value->>'driverId'), (value->>'date')
     if (driverId) {
-      // Use -> operator (JSONB) to leverage GIN index
-      query = query.eq("value->driverId", driverId);
+      query = query.eq("value->>driverId", String(driverId));
     }
-    
+
     if (status) {
-        query = query.eq("value->status", status);
+      query = query.eq("value->>status", status);
     }
 
+    // date is YYYY-MM-DD (or ISO prefix); coerce timestamps to date for index match
+    const toDateKey = (v: string) => String(v).slice(0, 10);
     if (startDate) {
-      query = query.gte("value->createdAt", startDate);
+      query = query.gte("value->>date", toDateKey(startDate));
     }
-    
     if (endDate) {
-      query = query.lte("value->createdAt", endDate);
+      query = query.lte("value->>date", toDateKey(endDate));
     }
 
-    // Sorting - defaulting to newest first
-    // Note: We need to cast to appropriate type if we want strict date sorting, 
-    // but ISO strings sort correctly alphabetically.
-    query = query.order("value->createdAt", { ascending: false });
+    query = query.order("value->>date", { ascending: false });
 
     // Pagination
     const limitVal = typeof limit === 'number' ? limit : 20;
@@ -371,27 +368,24 @@ app.get("/fleet-management/dashboard/stats", async (c) => {
   try {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const todayISO = today.toISOString();
-    
-    // 1. Fetch Today's Trips
-    // We use the same JSONB query strategy to fetch only relevant rows
+    const todayDate = today.toISOString().slice(0, 10);
+
+    // Match trip date expression index (value->>'date')
     const { data: tripData, error: tripError } = await supabase
         .from("kv_store_37f42386")
         .select("value")
         .like("key", "trip:%")
-        .gte("value->requestTime", todayISO); // Assuming requestTime is the primary date field
+        .gte("value->>date", todayDate);
 
     if (tripError) throw tripError;
 
     const trips = tripData?.map((r: any) => r.value) || [];
 
-    // 2. Fetch Active Drivers (approximate by drivers who have logged in or have trips today)
-    // For now, we'll just count drivers with status 'active' in the store
     const { data: driverData, error: driverError } = await supabase
         .from("kv_store_37f42386")
         .select("value")
         .like("key", "driver:%")
-        .eq("value->status", "active");
+        .eq("value->>status", "active");
 
     if (driverError) throw driverError;
     const activeDrivers = driverData?.length || 0;

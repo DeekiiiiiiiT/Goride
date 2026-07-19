@@ -58,17 +58,44 @@ export async function loadRideRowById(
   rideId: string,
   columns = "*",
 ): Promise<Record<string, unknown> | null> {
-  const { data: native, error: nativeErr } = await nativeDb.from(NATIVE_TABLE)
-    .select(columns)
-    .eq("id", rideId)
-    .maybeSingle();
-  if (!nativeErr && native) return native as Record<string, unknown>;
+  const map = await loadRideRowsByIds(nativeDb, publicDb, [rideId], columns);
+  return map.get(rideId) ?? null;
+}
 
-  const { data: pub } = await publicDb.from(PUBLIC_TABLE)
-    .select(columns)
-    .eq("id", rideId)
-    .maybeSingle();
-  return (pub as Record<string, unknown> | null) ?? null;
+/** Batched ride load — avoids N+1 single-row fetches. */
+export async function loadRideRowsByIds(
+  nativeDb: SupabaseClient,
+  publicDb: SupabaseClient,
+  rideIds: string[],
+  columns = "*",
+): Promise<Map<string, Record<string, unknown>>> {
+  const out = new Map<string, Record<string, unknown>>();
+  const unique = [...new Set(rideIds.map(String).filter(Boolean))];
+  if (unique.length === 0) return out;
+
+  const CHUNK = 100;
+  for (let i = 0; i < unique.length; i += CHUNK) {
+    const chunk = unique.slice(i, i + CHUNK);
+    const { data: native, error: nativeErr } = await nativeDb
+      .from(NATIVE_TABLE)
+      .select(columns)
+      .in("id", chunk);
+    if (!nativeErr && native) {
+      for (const row of native as Record<string, unknown>[]) {
+        out.set(String(row.id), row);
+      }
+    }
+    const missing = chunk.filter((id) => !out.has(id));
+    if (missing.length === 0) continue;
+    const { data: pub } = await publicDb
+      .from(PUBLIC_TABLE)
+      .select(columns)
+      .in("id", missing);
+    for (const row of (pub ?? []) as Record<string, unknown>[]) {
+      out.set(String(row.id), row);
+    }
+  }
+  return out;
 }
 
 async function hubReturnRide(

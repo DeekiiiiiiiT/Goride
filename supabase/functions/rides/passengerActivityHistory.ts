@@ -7,7 +7,7 @@ import {
   isDelegatedBooking,
   TERMINAL_RIDE_STATUSES,
 } from "./rideAccess.ts";
-import { loadRideRowById } from "./rideHubQueries.ts";
+import { loadRideRowsByIds } from "./rideHubQueries.ts";
 import { sanitizeActivityRideForBooker } from "./shadowBookerPrivacy.ts";
 import { enrichRideRoamModeFromBooking } from "./roamModeResolve.ts";
 
@@ -246,6 +246,7 @@ async function queryTerminalRidesForUserOnTable(
   table: string,
   userId: string,
   columns: string,
+  windowStartIso: string,
 ): Promise<{ rows: Record<string, unknown>[]; error: string | null }> {
   const statuses = [...TERMINAL_RIDE_STATUSES];
 
@@ -254,6 +255,7 @@ async function queryTerminalRidesForUserOnTable(
       .select(columns)
       .in("status", statuses)
       .eq(roleCol, userId)
+      .gte("updated_at", windowStartIso)
       .order("updated_at", { ascending: false })
       .limit(FETCH_CAP);
     return { data: (data ?? []) as Record<string, unknown>[], error };
@@ -280,8 +282,12 @@ async function queryUserTerminalRidesSince(
   nativeDb: SupabaseClient,
   publicDb: SupabaseClient,
   userId: string,
+  windowDays: number,
 ): Promise<Record<string, unknown>[]> {
   const byId = new Map<string, Record<string, unknown>>();
+  const windowStartIso = new Date(
+    Date.now() - windowDays * 24 * 60 * 60 * 1000,
+  ).toISOString();
 
   const ingest = (rows: Record<string, unknown>[]) => {
     for (const row of rows) {
@@ -291,8 +297,8 @@ async function queryUserTerminalRidesSince(
 
   for (const columns of [HISTORY_RIDE_COLUMNS, HISTORY_RIDE_COLUMNS_FALLBACK]) {
     const [native, pub] = await Promise.all([
-      queryTerminalRidesForUserOnTable(nativeDb, NATIVE_TABLE, userId, columns),
-      queryTerminalRidesForUserOnTable(publicDb, PUBLIC_TABLE, userId, columns),
+      queryTerminalRidesForUserOnTable(nativeDb, NATIVE_TABLE, userId, columns, windowStartIso),
+      queryTerminalRidesForUserOnTable(publicDb, PUBLIC_TABLE, userId, columns, windowStartIso),
     ]);
 
     if (!native.error) ingest(native.rows);
@@ -337,18 +343,37 @@ async function loadTerminalRidesFromIntents(
       .limit(FETCH_CAP),
   ]);
 
-  const candidates: HistoryCandidate[] = [];
+  const intentRows: Array<{ row: Record<string, unknown>; role: ActivityTripParticipantRole }> = [];
+  const rideIds: string[] = [];
   const seenRideIds = new Set<string>();
 
-  const processIntent = async (
-    row: Record<string, unknown>,
-    role: ActivityTripParticipantRole,
-  ) => {
-    const rideId = row.ride_request_id ? String(row.ride_request_id) : null;
-    if (!rideId || seenRideIds.has(rideId)) return;
-    const ride = await loadRideRowById(rideDb, publicDb, rideId, HISTORY_RIDE_COLUMNS);
-    if (!ride || !isTerminalRideStatus(ride.status)) return;
+  for (const row of asRequester ?? []) {
+    const rideId = (row as Record<string, unknown>).ride_request_id
+      ? String((row as Record<string, unknown>).ride_request_id)
+      : null;
+    if (!rideId || seenRideIds.has(rideId)) continue;
     seenRideIds.add(rideId);
+    rideIds.push(rideId);
+    intentRows.push({ row: row as Record<string, unknown>, role: "passenger" });
+  }
+  for (const row of asPayer ?? []) {
+    const rideId = (row as Record<string, unknown>).ride_request_id
+      ? String((row as Record<string, unknown>).ride_request_id)
+      : null;
+    if (!rideId || seenRideIds.has(rideId)) continue;
+    seenRideIds.add(rideId);
+    rideIds.push(rideId);
+    intentRows.push({ row: row as Record<string, unknown>, role: "booker" });
+  }
+
+  const rideMap = await loadRideRowsByIds(rideDb, publicDb, rideIds, HISTORY_RIDE_COLUMNS);
+  const candidates: HistoryCandidate[] = [];
+
+  for (const { row, role } of intentRows) {
+    const rideId = row.ride_request_id ? String(row.ride_request_id) : null;
+    if (!rideId) continue;
+    const ride = rideMap.get(rideId);
+    if (!ride || !isTerminalRideStatus(ride.status)) continue;
     const enriched = await enrichRideRoamModeFromBooking(ride, getContactsDb, rideDb);
     const resolvedRole = getRideParticipantRole(enriched, userId);
     candidates.push({
@@ -357,13 +382,6 @@ async function loadTerminalRidesFromIntents(
         ? resolvedRole
         : role,
     });
-  };
-
-  for (const row of asRequester ?? []) {
-    await processIntent(row as Record<string, unknown>, "passenger");
-  }
-  for (const row of asPayer ?? []) {
-    await processIntent(row as Record<string, unknown>, "booker");
   }
 
   return candidates;
@@ -401,7 +419,7 @@ export async function buildActivityTripHistory(
   const pub = deps.pubSvc();
 
   const [terminalRides, intentCandidates] = await Promise.all([
-    queryUserTerminalRidesSince(db, pub, userId),
+    queryUserTerminalRidesSince(db, pub, userId, windowDays),
     loadTerminalRidesFromIntents(deps.getContactsDb, db, pub, userId),
   ]);
 

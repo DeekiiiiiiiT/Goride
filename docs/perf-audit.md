@@ -249,3 +249,42 @@ Every single-driver lookup by user id, vehicle-count batch lookups, and the pend
 ---
 
 *Compiled from eight independent passes, each extracting real query call-sites from the edge functions and checking them against the actual index definitions in the migrations — not a static schema review, a query-by-query match. Fix pattern 1 first (the three "index exists, doesn't match anymore" cases) since those are the cheapest possible wins: the index work is already done, only the query needs to change.*
+
+---
+
+## Remediation status (2026-07-18)
+
+Applied live on `csfllzzastacofsvcdsc`. Migrations: `supabase/migrations/20260718230000`–`20260718230300`.
+
+### Wave 0 — Wire existing indexes / RPCs
+
+| Fix | Change |
+|---|---|
+| Fleet trip search | `value->>driverId` + `value->>date` (matches `idx_kv_trip_driver_date`) |
+| Fleet dashboard stats | trips by `value->>date`; drivers by `value->>status` |
+| Fare pickup ETA | calls `rides_drivers_in_h3_cells` first (legacy nationwide fallback only if H3 fails) |
+| Fare rules city | rebuilt `idx_rides_fare_rules_city_vehicle_active` |
+
+### Wave 1 — Hot indexes
+
+Active-ride `(rider|passenger)_user_id, created_at DESC` partials; history `updated_at` composites; status+time admin composites; rider phone; driver_locations available+updated; payment_intents.provider_intent_id; maintenance org+date; outbox pending+created_at. Evidence indexes skipped if table absent on prod.
+
+Note: Schema audit Wave 4 already had `(rider_user_id, status)` partial — these add the `created_at` ORDER BY cover the hub query needs.
+
+### Wave 2 — Catalog search
+
+`pg_trgm` + GIN on `make` / `model` / `trim_series` (+ chassis/engine when columns exist).
+
+### Wave 3 — App query fixes
+
+- Compliance: Auth-enrich **only** the page slice after sort/paginate
+- Activity history: batched `.in("id", …)` ride load; day window pushed into SQL via `updated_at >= windowStart`
+- Fuel odometer maps: filter `organizationId` in the KV query when org is known
+
+### Wave 4 — Driver directory stats
+
+`rides.driver_directory_stats` is now a **materialized view** (public wrapper view preserved). Hourly `pg_cron` job `refresh_driver_directory_stats_hourly`. Admin UI may lag up to ~1 hour.
+
+### Deferred (later)
+
+Contacts 4N fan-out, permission-join caching, redundant `user_id` duplicate indexes, admin ledger full-scan with no driver/rider filter.

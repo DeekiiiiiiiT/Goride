@@ -8,6 +8,11 @@ import {
 } from "./dispatchSettings.ts";
 import { haversineKm } from "./routing.ts";
 import { getEligibleDriverUserIds } from "../../_shared/driverModeFilter.ts";
+import {
+  DEFAULT_H3_RESOLUTION,
+  h3Disk,
+  kRingForRadiusKm,
+} from "../../_shared/h3/geoIndex.ts";
 
 /** Fallback when settings are not loaded. */
 export const DRIVER_LOCATION_MAX_AGE_MS =
@@ -27,6 +32,59 @@ export type ResolvedPickupEta = {
   pickupEtaSource: PickupEtaSource;
 };
 
+async function loadNearbyDriverLocations(
+  db: SupabaseClient,
+  pickupLat: number,
+  pickupLng: number,
+  quoteRadiusKm: number,
+  freshSince: string,
+): Promise<Record<string, unknown>[]> {
+  const locSelects = [
+    "user_id, lat, lng, updated_at, body_type_slug",
+    "user_id, lat, lng, updated_at",
+  ];
+  const pub = createClient(
+    Deno.env.get("SUPABASE_URL") ?? "",
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+  );
+
+  // Prefer H3-bounded RPC (idx_driver_locations_h3_available) over nationwide scan
+  const k = kRingForRadiusKm(quoteRadiusKm, DEFAULT_H3_RESOLUTION);
+  const cells = h3Disk(pickupLat, pickupLng, k, DEFAULT_H3_RESOLUTION);
+  if (cells.length > 0) {
+    const { data: rpcData, error: rpcError } = await pub.rpc("rides_drivers_in_h3_cells", {
+      p_h3_cells: cells,
+      p_fresh_since: freshSince,
+    });
+    if (!rpcError && Array.isArray(rpcData)) {
+      return rpcData as Record<string, unknown>[];
+    }
+  }
+
+  // Legacy fallback if H3 cells empty or RPC unavailable
+  for (const locSelect of locSelects) {
+    const { data: nativeLocs, error: nativeErr } = await db
+      .from("driver_locations")
+      .select(locSelect)
+      .gte("updated_at", freshSince)
+      .eq("available_for_rides", true);
+    if (!nativeErr && nativeLocs?.length) {
+      return nativeLocs as Record<string, unknown>[];
+    }
+    const { data: pubLocs, error: pubErr } = await pub
+      .from("rides_driver_locations")
+      .select(locSelect)
+      .gte("updated_at", freshSince)
+      .eq("available_for_rides", true);
+    if (!pubErr && pubLocs?.length) {
+      return pubLocs as Record<string, unknown>[];
+    }
+    if (!nativeErr && nativeLocs) return nativeLocs as Record<string, unknown>[];
+    if (!pubErr && pubLocs) return pubLocs as Record<string, unknown>[];
+  }
+  return [];
+}
+
 export async function resolvePickupEta(
   db: SupabaseClient,
   pickupLat: number,
@@ -40,37 +98,14 @@ export async function resolvePickupEta(
   const maxAgeMs = driverLocationMaxAgeMs(settings);
   const quoteRadiusKm = settings.quote_driver_radius_km;
   const freshSince = new Date(Date.now() - maxAgeMs).toISOString();
-  const locSelects = [
-    "user_id, lat, lng, updated_at, body_type_slug",
-    "user_id, lat, lng, updated_at",
-  ];
-  let locs: Record<string, unknown>[] = [];
-  const pub = createClient(
-    Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+
+  const locs = await loadNearbyDriverLocations(
+    db,
+    pickupLat,
+    pickupLng,
+    quoteRadiusKm,
+    freshSince,
   );
-  for (const locSelect of locSelects) {
-    const { data: nativeLocs, error: nativeErr } = await db
-      .from("driver_locations")
-      .select(locSelect)
-      .gte("updated_at", freshSince)
-      .eq("available_for_rides", true);
-    if (!nativeErr && nativeLocs?.length) {
-      locs = nativeLocs as Record<string, unknown>[];
-      break;
-    }
-    const { data: pubLocs, error: pubErr } = await pub
-      .from("rides_driver_locations")
-      .select(locSelect)
-      .gte("updated_at", freshSince)
-      .eq("available_for_rides", true);
-    if (!pubErr && pubLocs?.length) {
-      locs = pubLocs as Record<string, unknown>[];
-      break;
-    }
-    if (!nativeErr && nativeLocs) locs = nativeLocs as Record<string, unknown>[];
-    else if (!pubErr && pubLocs) locs = pubLocs as Record<string, unknown>[];
-  }
 
   type DriverRow = { user_id: string; lat: number; lng: number; haversineKm: number };
   const nearby: DriverRow[] = [];

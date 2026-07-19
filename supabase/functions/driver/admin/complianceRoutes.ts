@@ -107,7 +107,7 @@ export function registerComplianceRoutes(admin: Hono, deps: Deps) {
     const resolved = await getDriverAdminDb();
     const { db, tables } = resolved;
 
-    // FIX: Paginate profiles first, then fetch Auth enrichment only for paginated subset
+    // Paginate profiles first, then Auth-enrich only the page slice
     const { data: allProfiles, error } = await db
       .from(tables.driver_profiles)
       .select(
@@ -127,7 +127,6 @@ export function registerComplianceRoutes(admin: Hono, deps: Deps) {
       (allProfiles ?? []).map((p) => [p.user_id as string, p]),
     );
 
-    // Pre-filter profiles to compliance queue before Auth enrichment
     const candidateProfiles = (allProfiles ?? []).filter((p) => {
       if (legacyStatus === "pending" && Boolean(p.onboarding_complete)) return false;
       if (legacyStatus === "complete" && !Boolean(p.onboarding_complete)) return false;
@@ -140,40 +139,18 @@ export function registerComplianceRoutes(admin: Hono, deps: Deps) {
       return true;
     });
 
-    // Batch Auth enrichment for filtered profiles
-    const userIds = candidateProfiles.map((p) => p.user_id as string);
-    const emailMap = new Map<string, string>();
-    
-    // Batch fetch in chunks of 50 to avoid Auth API limits
-    const BATCH_SIZE = 50;
-    for (let i = 0; i < userIds.length; i += BATCH_SIZE) {
-      const chunk = userIds.slice(i, i + BATCH_SIZE);
-      const results = await Promise.all(
-        chunk.map(async (uid) => {
-          try {
-            const { data: u } = await auth.auth.admin.getUserById(uid);
-            return { uid, email: u?.user?.email ?? "" };
-          } catch {
-            return { uid, email: "" };
-          }
-        })
-      );
-      for (const { uid, email } of results) {
-        emailMap.set(uid, email);
-      }
-    }
+    // Lightweight rows (no Auth) for sort + page slice
+    type LightRow = {
+      profile: (typeof candidateProfiles)[number] | null;
+      authOnly?: Record<string, unknown>;
+      created_at: string | null;
+    };
+    const lightRows: LightRow[] = candidateProfiles.map((p) => ({
+      profile: p,
+      created_at: (p.created_at as string) ?? null,
+    }));
 
-    const rows: Record<string, unknown>[] = candidateProfiles.map((p) => {
-      const uid = p.user_id as string;
-      const hasVehicle = (vehicleCounts.get(p.id as string) ?? 0) > 0;
-      const email = emailMap.get(uid) ?? "";
-      return {
-        ...buildComplianceRow(p, hasVehicle, email, adminUser.roles),
-        driver_id: uid,
-      };
-    });
-
-    // Auth-only driver accounts without a profile row
+    // Auth-only driver accounts without a profile — only when building full queue
     if (queueOnly && legacyStatus == null) {
       let page = 1;
       const perPage = 200;
@@ -187,20 +164,24 @@ export function registerComplianceRoutes(admin: Hono, deps: Deps) {
           if (!isDriverUser(u)) continue;
           if (profileByUserId.has(u.id)) continue;
           const blockers: DriverComplianceBlocker[] = ["no_profile"];
-          rows.push({
-            driver_id: u.id,
-            driver_name: null,
-            driver_email: u.email ?? "",
-            account_status: "pending",
-            mode: "independent",
-            onboarding_complete: false,
-            background_check_status: null,
-            insurance_expiry: null,
-            has_vehicle: false,
-            blockers,
-            can_strict_approve: false,
-            can_force_approve: false,
+          lightRows.push({
+            profile: null,
             created_at: u.created_at ?? null,
+            authOnly: {
+              driver_id: u.id,
+              driver_name: null,
+              driver_email: u.email ?? "",
+              account_status: "pending",
+              mode: "independent",
+              onboarding_complete: false,
+              background_check_status: null,
+              insurance_expiry: null,
+              has_vehicle: false,
+              blockers,
+              can_strict_approve: false,
+              can_force_approve: false,
+              created_at: u.created_at ?? null,
+            },
           });
         }
         if (list.users.length < perPage) break;
@@ -209,14 +190,49 @@ export function registerComplianceRoutes(admin: Hono, deps: Deps) {
       }
     }
 
-    rows.sort((a, b) => {
-      const ta = a.created_at ? new Date(a.created_at as string).getTime() : 0;
-      const tb = b.created_at ? new Date(b.created_at as string).getTime() : 0;
+    lightRows.sort((a, b) => {
+      const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
       return tb - ta;
     });
 
-    const total = rows.length;
-    const paginated = rows.slice(offset, offset + limit);
+    const total = lightRows.length;
+    const pageSlice = lightRows.slice(offset, offset + limit);
+
+    // Auth enrich only the paginated subset (profiles that need email)
+    const emailMap = new Map<string, string>();
+    const pageUserIds = pageSlice
+      .filter((r) => r.profile)
+      .map((r) => r.profile!.user_id as string);
+    const BATCH_SIZE = 50;
+    for (let i = 0; i < pageUserIds.length; i += BATCH_SIZE) {
+      const chunk = pageUserIds.slice(i, i + BATCH_SIZE);
+      const results = await Promise.all(
+        chunk.map(async (uid) => {
+          try {
+            const { data: u } = await auth.auth.admin.getUserById(uid);
+            return { uid, email: u?.user?.email ?? "" };
+          } catch {
+            return { uid, email: "" };
+          }
+        }),
+      );
+      for (const { uid, email } of results) {
+        emailMap.set(uid, email);
+      }
+    }
+
+    const paginated = pageSlice.map((light) => {
+      if (light.authOnly) return light.authOnly;
+      const p = light.profile!;
+      const uid = p.user_id as string;
+      const hasVehicle = (vehicleCounts.get(p.id as string) ?? 0) > 0;
+      const email = emailMap.get(uid) ?? "";
+      return {
+        ...buildComplianceRow(p, hasVehicle, email, adminUser.roles),
+        driver_id: uid,
+      };
+    });
 
     return c.json({ drivers: paginated, total, limit, offset });
   });
