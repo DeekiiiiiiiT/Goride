@@ -1,9 +1,11 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { offlineStorage } from '../../services/offlineStorage';
+import { offlineBlobStore } from '../../services/offlineBlobStore';
 import { OfflineAction } from '../../types/offline';
 import { useAuth } from '../../contexts/AuthContext';
 import { api } from '../../services/api';
+import { uploadEvidenceFile } from '../../services/uploadEvidence';
 import { createManualTrip } from '../../utils/tripFactory';
 import { mapMatchService } from '../../services/mapMatchService';
 import { toast } from 'sonner';
@@ -11,7 +13,7 @@ import { toast } from 'sonner';
 interface OfflineContextType {
   isOnline: boolean;
   queue: OfflineAction[];
-  addToQueue: (action: Omit<OfflineAction, 'id' | 'timestamp' | 'retryCount'>) => void;
+  addToQueue: (action: Omit<OfflineAction, 'id' | 'timestamp' | 'retryCount'>) => OfflineAction;
   refreshQueue: () => void;
   processQueue: (forceRetry?: boolean) => Promise<void>;
   removeFromQueue: (id: string) => void;
@@ -23,6 +25,60 @@ interface OfflineContextType {
 const OfflineContext = createContext<OfflineContextType | undefined>(undefined);
 
 const MAX_RETRIES = 3;
+
+async function syncFuelExpense(action: Extract<OfflineAction, { type: 'SUBMIT_FUEL_EXPENSE' }>) {
+  const { payload } = action;
+  const tx = { ...payload.transaction };
+  const txId = String(tx.id || crypto.randomUUID());
+  tx.id = txId;
+
+  let receiptUrl = tx.receiptUrl || '';
+  let odometerProofUrl = tx.metadata?.odometerProofUrl || '';
+
+  if (payload.receiptBlobKey) {
+    const blob = await offlineBlobStore.get(payload.receiptBlobKey);
+    if (!blob) throw new Error('Offline receipt photo missing');
+    const file = new File(
+      [blob],
+      payload.receiptFileName || 'receipt.jpg',
+      { type: payload.receiptMimeType || blob.type || 'image/jpeg' },
+    );
+    const uploadRes = await uploadEvidenceFile(file, {
+      evidenceType: 'fuel_receipt',
+      sourceType: 'transaction',
+      sourceId: txId,
+      retentionClass: 'ephemeral',
+      parentStatus: 'Pending',
+    });
+    receiptUrl = uploadRes.url;
+  }
+
+  if (payload.odometerBlobKey) {
+    const blob = await offlineBlobStore.get(payload.odometerBlobKey);
+    if (!blob) throw new Error('Offline odometer photo missing');
+    const file = new File(
+      [blob],
+      payload.odometerFileName || 'odometer.jpg',
+      { type: payload.odometerMimeType || blob.type || 'image/jpeg' },
+    );
+    const uploadRes = await uploadEvidenceFile(file, {
+      evidenceType: 'odometer_proof',
+      sourceType: 'transaction',
+      sourceId: txId,
+      retentionClass: 'ephemeral',
+      parentStatus: 'Pending',
+    });
+    odometerProofUrl = uploadRes.url;
+  }
+
+  if (receiptUrl) tx.receiptUrl = receiptUrl;
+  if (odometerProofUrl) {
+    tx.metadata = { ...(tx.metadata || {}), odometerProofUrl };
+  }
+
+  await api.saveTransaction(tx);
+  await offlineBlobStore.removeMany([payload.odometerBlobKey, payload.receiptBlobKey]);
+}
 
 export function OfflineProvider({ children }: { children: React.ReactNode }) {
   const isOnline = useNetworkStatus();
@@ -38,9 +94,10 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     refreshQueue();
   }, []);
 
-  const addToQueue = (action: Omit<OfflineAction, 'id' | 'timestamp' | 'retryCount'>) => {
-    offlineStorage.addToQueue(action);
+  const addToQueue = (action: Omit<OfflineAction, 'id' | 'timestamp' | 'retryCount'>): OfflineAction => {
+    const created = offlineStorage.addToQueue(action);
     refreshQueue();
+    return created;
   };
 
   const removeFromQueue = (id: string) => {
@@ -69,7 +126,8 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
       
       const processedIds: string[] = [];
       let errorCount = 0;
-      let successCount = 0;
+      let tripSuccess = 0;
+      let fuelSuccess = 0;
 
       // Filter actionable items first
       const itemsToProcess = currentQueue.filter(item => 
@@ -119,7 +177,11 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
                   
                   await api.saveTrips([trip]);
                   processedIds.push(action.id);
-                  successCount++;
+                  tripSuccess++;
+              } else if (action.type === 'SUBMIT_FUEL_EXPENSE') {
+                  await syncFuelExpense(action);
+                  processedIds.push(action.id);
+                  fuelSuccess++;
               }
           } catch (e: any) {
               console.error("Sync failed for action", action.id, e);
@@ -134,7 +196,10 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
 
       if (processedIds.length > 0) {
           processedIds.forEach(id => offlineStorage.removeFromQueue(id));
-          toast.success(`Synced ${processedIds.length} offline trips`);
+          const parts: string[] = [];
+          if (tripSuccess > 0) parts.push(`${tripSuccess} trip${tripSuccess === 1 ? '' : 's'}`);
+          if (fuelSuccess > 0) parts.push(`${fuelSuccess} fuel log${fuelSuccess === 1 ? '' : 's'}`);
+          toast.success(`Synced ${parts.join(' and ') || `${processedIds.length} items`}`);
           refreshQueue();
       }
       

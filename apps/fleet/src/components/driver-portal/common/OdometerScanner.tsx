@@ -1,5 +1,5 @@
 // cache-bust: force recompile — 2026-03-17 Phase1
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
 import { Label } from '../../ui/label';
@@ -37,6 +37,8 @@ export function OdometerScanner({ onScanComplete, onCancel, lastOdometer = 0, cl
     const [isVerifying, setIsVerifying] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const photoOnlyInputRef = useRef<HTMLInputElement>(null);
+    const scanAbortRef = useRef<AbortController | null>(null);
+    const scanGenerationRef = useRef(0);
 
     // Track whether a photo has been captured in PHOTO_ONLY mode
     const [photoOnlyReady, setPhotoOnlyReady] = useState(false);
@@ -44,6 +46,19 @@ export function OdometerScanner({ onScanComplete, onCancel, lastOdometer = 0, cl
     const odometerValue = parseFloat(odometer) || 0;
     const isDecreasing = lastOdometer > 0 && odometerValue > 0 && odometerValue < lastOdometer;
     const isHighJump = lastOdometer > 0 && odometerValue > (lastOdometer + 1500); // Flag > 1500km since last entry
+
+    useEffect(() => {
+        return () => {
+            scanAbortRef.current?.abort();
+            scanGenerationRef.current += 1;
+        };
+    }, []);
+
+    const abortInFlightScan = () => {
+        scanAbortRef.current?.abort();
+        scanAbortRef.current = null;
+        scanGenerationRef.current += 1;
+    };
 
     const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
@@ -61,9 +76,14 @@ export function OdometerScanner({ onScanComplete, onCancel, lastOdometer = 0, cl
     };
 
     const analyzePhoto = async (file: File) => {
+        abortInFlightScan();
+        const generation = scanGenerationRef.current;
+        const controller = new AbortController();
+        scanAbortRef.current = controller;
         setErrorMsg(null);
         try {
-            const res = await api.scanOdometerWithAI(file);
+            const res = await api.scanOdometerWithAI(file, controller.signal);
+            if (generation !== scanGenerationRef.current) return;
             if (res.data && res.data.reading !== null) {
                 setScanResult(res.data);
                 setOdometer(res.data.reading.toString());
@@ -71,9 +91,26 @@ export function OdometerScanner({ onScanComplete, onCancel, lastOdometer = 0, cl
             } else {
                 handleScanFailure("Could not detect a clear odometer reading.");
             }
-        } catch (err) {
-            handleScanFailure("AI Analysis failed. Please try again.");
+        } catch (err: any) {
+            if (generation !== scanGenerationRef.current) return;
+            if (err?.name === 'AbortError' || controller.signal.aborted) {
+                return;
+            }
+            const msg = typeof err?.message === 'string' && err.message.includes('too long')
+                ? err.message
+                : "AI Analysis failed. Please try again.";
+            handleScanFailure(msg);
+        } finally {
+            if (scanAbortRef.current === controller) {
+                scanAbortRef.current = null;
+            }
         }
+    };
+
+    const handleCancelAnalyzing = () => {
+        abortInFlightScan();
+        setErrorMsg(null);
+        setStep('CAPTURE');
     };
 
     const handleScanFailure = (msg: string) => {
@@ -87,7 +124,8 @@ export function OdometerScanner({ onScanComplete, onCancel, lastOdometer = 0, cl
             setStep('PHOTO_ONLY');
         } else {
             // First failure, allow retry
-            setErrorMsg(msg + " Please ensure the odometer is clearly visible.");
+            const needsSuffix = !msg.includes('too long') && !msg.includes('Please');
+            setErrorMsg(needsSuffix ? msg + " Please ensure the odometer is clearly visible." : msg);
             setRetryCount(prev => prev + 1);
             setStep('CAPTURE');
         }
@@ -260,6 +298,9 @@ export function OdometerScanner({ onScanComplete, onCancel, lastOdometer = 0, cl
                                     Extracting odometer reading...
                                 </p>
                             </div>
+                            <Button variant="ghost" className="w-full max-w-xs" onClick={handleCancelAnalyzing}>
+                                Cancel
+                            </Button>
                         </div>
                     )}
 
@@ -402,7 +443,7 @@ export function OdometerScanner({ onScanComplete, onCancel, lastOdometer = 0, cl
                                 <div className="text-xs text-amber-900 leading-relaxed">
                                     <p className="font-bold mb-1 uppercase tracking-wider">Admin Review Required</p>
                                     <p className="opacity-90">
-                                        AI couldn't read the odometer. Please take a clear, well-lit photo of your dashboard — an admin will review it and enter the reading for you.
+                                        We&apos;ll send the photo for your fleet to fill in the odometer. Your fuel log will still go through.
                                     </p>
                                 </div>
                             </div>
@@ -456,7 +497,7 @@ export function OdometerScanner({ onScanComplete, onCancel, lastOdometer = 0, cl
                                         <CheckCircle className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
                                         <div className="text-xs text-blue-900 leading-relaxed">
                                             <p className="font-semibold mb-0.5">Photo captured successfully</p>
-                                            <p className="opacity-80">An admin will review this photo and enter the odometer reading on your behalf. You can proceed to log the fuel amount and price.</p>
+                                            <p className="opacity-80">We&apos;ll send the photo for your fleet to fill in the odometer. Your fuel log will still go through — continue to enter the fuel details.</p>
                                         </div>
                                     </div>
 

@@ -1,9 +1,9 @@
-import { TripSession } from './tripSession';
+import type { TripSession } from './tripSession';
 
-export type OfflineActionType = 'SUBMIT_TRIP';
+export type OfflineActionType = 'SUBMIT_TRIP' | 'SUBMIT_FUEL_EXPENSE';
 
 export interface SubmitTripPayload {
-  tripData: Partial<TripSession>; 
+  tripData: Partial<TripSession>;
   formData: {
     category: string;
     purpose: string;
@@ -11,15 +11,36 @@ export interface SubmitTripPayload {
     projectId?: string;
     [key: string]: any;
   };
-  rawRoute: any[]; // Raw GPS points
-  calculatedDistance: number; // Distance in meters
+  rawRoute: any[];
+  calculatedDistance: number;
 }
 
-export interface OfflineAction {
-  id: string;
-  type: OfflineActionType;
-  payload: SubmitTripPayload;
-  timestamp: number;
-  retryCount: number;
-  lastError?: string;
+/** Transaction fields + IndexedDB blob keys for photos (not base64 in localStorage). */
+export interface SubmitFuelExpensePayload {
+  transaction: Record<string, any>;
+  odometerBlobKey?: string;
+  receiptBlobKey?: string;
+  odometerFileName?: string;
+  receiptFileName?: string;
+  odometerMimeType?: string;
+  receiptMimeType?: string;
+  label?: string;
 }
+
+export type OfflineAction =
+  | {
+      id: string;
+      type: 'SUBMIT_TRIP';
+      payload: SubmitTripPayload;
+      timestamp: number;
+      retryCount: number;
+      lastError?: string;
+    }
+  | {
+      id: string;
+      type: 'SUBMIT_FUEL_EXPENSE';
+      payload: SubmitFuelExpensePayload;
+      timestamp: number;
+      retryCount: number;
+      lastError?: string;
+    };

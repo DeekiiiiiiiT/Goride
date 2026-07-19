@@ -1,5 +1,5 @@
 // cache-bust: force recompile — 2026-02-10
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Button } from '@roam/ui';
 import { Input } from '@roam/ui';
@@ -43,10 +43,14 @@ export function WeeklyCheckInModal({
     const [scanResult, setScanResult] = useState<{ reading: number | null, confidence: string } | null>(null);
     const [manualReason, setManualReason] = useState<string>('');
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
+    const scanAbortRef = useRef<AbortController | null>(null);
+    const scanGenerationRef = useRef(0);
 
     // Reset state when opening
     useEffect(() => {
         if (isOpen) {
+            scanAbortRef.current?.abort();
+            scanGenerationRef.current += 1;
             setStep('CAPTURE');
             setOdometer('');
             setPhoto(null);
@@ -57,6 +61,19 @@ export function WeeklyCheckInModal({
             setErrorMsg(null);
         }
     }, [isOpen]);
+
+    useEffect(() => {
+        return () => {
+            scanAbortRef.current?.abort();
+            scanGenerationRef.current += 1;
+        };
+    }, []);
+
+    const abortInFlightScan = () => {
+        scanAbortRef.current?.abort();
+        scanAbortRef.current = null;
+        scanGenerationRef.current += 1;
+    };
 
     const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
@@ -74,9 +91,14 @@ export function WeeklyCheckInModal({
     };
 
     const analyzePhoto = async (file: File) => {
+        abortInFlightScan();
+        const generation = scanGenerationRef.current;
+        const controller = new AbortController();
+        scanAbortRef.current = controller;
         setErrorMsg(null);
         try {
-            const res = await api.scanOdometerWithAI(file);
+            const res = await api.scanOdometerWithAI(file, controller.signal);
+            if (generation !== scanGenerationRef.current) return;
             if (res.data && res.data.reading !== null) {
                 setScanResult(res.data);
                 setOdometer(res.data.reading.toString());
@@ -84,9 +106,26 @@ export function WeeklyCheckInModal({
             } else {
                 handleScanFailure("Could not detect a clear odometer reading.");
             }
-        } catch (err) {
-            handleScanFailure("AI Analysis failed. Please try again.");
+        } catch (err: any) {
+            if (generation !== scanGenerationRef.current) return;
+            if (err?.name === 'AbortError' || controller.signal.aborted) {
+                return;
+            }
+            const msg = typeof err?.message === 'string' && err.message.includes('too long')
+                ? err.message
+                : "AI Analysis failed. Please try again.";
+            handleScanFailure(msg);
+        } finally {
+            if (scanAbortRef.current === controller) {
+                scanAbortRef.current = null;
+            }
         }
+    };
+
+    const handleCancelAnalyzing = () => {
+        abortInFlightScan();
+        setErrorMsg(null);
+        setStep('CAPTURE');
     };
 
     const handleScanFailure = (msg: string) => {
@@ -97,7 +136,8 @@ export function WeeklyCheckInModal({
             setStep('MANUAL_ENTRY');
         } else {
             // First failure, allow retry
-            setErrorMsg(msg + " Please ensure the odometer is clearly visible.");
+            const needsSuffix = !msg.includes('too long') && !msg.includes('Please');
+            setErrorMsg(needsSuffix ? msg + " Please ensure the odometer is clearly visible." : msg);
             setRetryCount(prev => prev + 1);
             setStep('CAPTURE');
         }
@@ -223,6 +263,9 @@ export function WeeklyCheckInModal({
                                     Extracting odometer reading...
                                 </p>
                             </div>
+                            <Button variant="ghost" className="w-full max-w-xs" onClick={handleCancelAnalyzing}>
+                                Cancel
+                            </Button>
                         </div>
                     )}
 

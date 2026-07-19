@@ -8,7 +8,7 @@ import { OdometerReading } from '../types/vehicle';
 import { TollPlaza } from '../types/toll';
 import { API_ENDPOINTS } from './apiConfig';
 import type { CompatiblePartsResponse } from '../types/partSourcing';
-import { compressImage } from '../utils/compressImage';
+import { compressImage, OCR_COMPRESS_OPTS } from '../utils/compressImage';
 import { isTollCategory } from '../utils/tollCategoryHelper';
 import { appendUploadEvidenceMeta, type UploadEvidenceMeta } from '@roam/types/evidence';
 
@@ -61,7 +61,8 @@ export async function fetchWithRetry(url: string, options: RequestInit = {}, ret
         throw new Error(`Server error: ${response.status}`);
     }
     return response;
-  } catch (err) {
+  } catch (err: any) {
+    if (err?.name === 'AbortError') throw err;
     if (retries > 0) {
       // Wait before retrying
       await new Promise(resolve => setTimeout(resolve, backoff));
@@ -800,39 +801,65 @@ export const api = {
   },
 
   async uploadFile(file: File, evidenceMeta?: UploadEvidenceMeta) {
-    // Compress images client-side before upload to stay within Supabase Storage 5MB limit
-    const processedFile = await compressImage(file);
+    // Force-downscale camera photos — raw uploads hang / get auth-blocked mid-flight
+    const processedFile = await compressImage(file, OCR_COMPRESS_OPTS);
 
     const formData = new FormData();
     formData.append('file', processedFile);
     appendUploadEvidenceMeta(formData, evidenceMeta);
-    
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/upload`, {
-        method: 'POST',
-        headers: await requireAuthHeaders(null),
-        body: formData
-    });
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      throw new Error(err.error || "Failed to upload file");
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60000);
+    try {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/upload`, {
+          method: 'POST',
+          headers: await requireAuthHeaders(null),
+          body: formData,
+          signal: controller.signal,
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to upload file");
+      }
+      return response.json();
+    } catch (err: any) {
+      if (err?.name === 'AbortError') {
+        throw new Error('Upload timed out. Please try again with a clearer, closer photo.');
+      }
+      throw err;
+    } finally {
+      clearTimeout(timeoutId);
     }
-    return response.json();
   },
 
   async scanReceipt(file: File) {
+    // Always downscale for OCR — raw phone photos never reach the server and spin forever
+    const processedFile = await compressImage(file, OCR_COMPRESS_OPTS);
     const formData = new FormData();
-    formData.append('file', file);
-    
-    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/scan-receipt`, {
-        method: 'POST',
-        headers: await requireAuthHeaders(null),
-        body: formData
-    });
-    if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        throw new Error(err.error || "Failed to scan receipt");
+    formData.append('file', processedFile);
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 45000);
+    try {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/scan-receipt`, {
+          method: 'POST',
+          headers: await requireAuthHeaders(null),
+          body: formData,
+          signal: controller.signal,
+      });
+      if (!response.ok) {
+          const err = await response.json().catch(() => ({}));
+          throw new Error(err.error || "Failed to scan receipt");
+      }
+      return response.json();
+    } catch (err: any) {
+      if (err?.name === 'AbortError') {
+        throw new Error('Receipt scan timed out. Please try again or enter details manually.');
+      }
+      throw err;
+    } finally {
+      clearTimeout(timeoutId);
     }
-    return response.json();
   },
 
   async parseDocument(file: File, type: 'license' | 'address' | 'vehicle_registration', backFile?: File) {
@@ -1601,20 +1628,68 @@ export const api = {
     return response.json();
   },
 
-  async scanOdometerWithAI(file: File) {
+  async scanOdometerWithAI(file: File, externalSignal?: AbortSignal) {
+    // Always downscale — raw phone photos hang Edge/OCR and spin forever on hot devices
+    const processedFile = await compressImage(file, OCR_COMPRESS_OPTS);
     const formData = new FormData();
-    formData.append('file', file);
+    formData.append('file', processedFile);
 
-    const response = await fetchWithRetry(`${API_ENDPOINTS.ai}/scan-odometer`, {
-        method: 'POST',
-        headers: await requireAuthHeaders(null),
-        body: formData
-    });
-    
-    if (!response.ok) {
-        throw new Error("Failed to scan odometer");
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 45000);
+    const onExternalAbort = () => controller.abort();
+    if (externalSignal) {
+      if (externalSignal.aborted) {
+        clearTimeout(timeoutId);
+        throw new DOMException('Aborted', 'AbortError');
+      }
+      externalSignal.addEventListener('abort', onExternalAbort, { once: true });
     }
-    return response.json();
+
+    try {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.ai}/scan-odometer`, {
+          method: 'POST',
+          headers: await requireAuthHeaders(null),
+          body: formData,
+          signal: controller.signal,
+      });
+
+      if (!response.ok) {
+          throw new Error("Failed to scan odometer");
+      }
+      return response.json();
+    } catch (err: any) {
+      if (err?.name === 'AbortError') {
+        if (externalSignal?.aborted) throw err;
+        throw new Error('That took too long. Try a closer photo, or enter the reading manually.');
+      }
+      throw err;
+    } finally {
+      clearTimeout(timeoutId);
+      externalSignal?.removeEventListener('abort', onExternalAbort);
+    }
+  },
+
+  async verifyOdometerWithAI(
+    currentOdo: number,
+    previousOdo: number,
+    tripsDistance: number = 0,
+    previousDate?: string,
+    currentDate?: string,
+  ) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.ai}/ai/verify-odometer`, {
+      method: 'POST',
+      headers: await requireAuthHeaders(),
+      body: JSON.stringify({ currentOdo, previousOdo, tripsDistance, previousDate, currentDate }),
+    });
+    if (!response.ok) {
+      throw new Error('Failed to verify odometer');
+    }
+    return response.json() as Promise<{
+      isValid: boolean;
+      confidence: number;
+      correction?: number | null;
+      message?: string;
+    }>;
   },
 
   async getClaims(driverId?: string) {

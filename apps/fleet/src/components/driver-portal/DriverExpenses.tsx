@@ -61,6 +61,7 @@ type ViewState =
   | 'list'
   | 'category_select'
   | 'odometer_scan'
+  | 'fuel_gps_locking'
   | 'fuel_gps_retry'
   | 'method_select'
   | 'entry_details'
@@ -69,6 +70,10 @@ type ViewState =
 
 /** Manual "Retry GPS" taps allowed after the automatic post–odometer-scan attempt fails. */
 const MAX_MANUAL_FUEL_GPS_RETRIES = 2;
+/** Skip GPS enabled after this delay to avoid accidental skips. */
+const FUEL_GPS_SKIP_ENABLE_MS = 3000;
+/** Overall fuel/expense submit deadline (uploads + save). */
+const SUBMIT_DEADLINE_MS = 90_000;
 
 import { useGeolocation } from '../../hooks/useGeolocation';
 
@@ -93,7 +98,7 @@ interface FuelEntryState {
 export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerProps) {
   const { user } = useAuth();
   const { driverRecord } = useCurrentDriver();
-  const { getLocation, loading: locationLoading, lat, lng, accuracy } = useGeolocation();
+  const { getLocation } = useGeolocation();
   const [transactions, setTransactions] = useState<FinancialTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -130,6 +135,8 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
   /** True after GPS capture was exhausted; shows copy on fuel details that admin will verify location. */
   const [fuelProceedingWithoutGps, setFuelProceedingWithoutGps] = useState(false);
   const [isRetryingFuelGps, setIsRetryingFuelGps] = useState(false);
+  const [fuelGpsSkipEnabled, setFuelGpsSkipEnabled] = useState(false);
+  const fuelGpsLockGenRef = useRef(0);
 
   useEffect(() => {
     if (user) {
@@ -160,6 +167,8 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
     setFuelGpsManualRetriesLeft(MAX_MANUAL_FUEL_GPS_RETRIES);
     setFuelProceedingWithoutGps(false);
     setIsRetryingFuelGps(false);
+    setFuelGpsSkipEnabled(false);
+    fuelGpsLockGenRef.current += 1;
   };
 
   const fetchTransactions = async () => {
@@ -254,6 +263,7 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
   };
 
   const tollFileInputRef = useRef<HTMLInputElement>(null);
+  const tollScanGenRef = useRef(0);
 
   const handleTollPhotoCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -263,10 +273,12 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
       reader.onload = (ev) => setReceiptPreview(ev.target?.result as string);
       reader.readAsDataURL(file);
 
+      const scanGen = ++tollScanGenRef.current;
       setIsScanning(true);
 
       try {
         const { data } = await api.scanReceipt(file);
+        if (scanGen !== tollScanGenRef.current) return;
 
         if (data) {
           if (data.amount) setAmount(data.amount.toString());
@@ -310,13 +322,16 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
           toast.error("Could not read receipt. Please try again.");
         }
       } catch (error) {
+        if (scanGen !== tollScanGenRef.current) return;
         console.error("Toll scan error:", error);
         toast.error("Could not scan receipt. Please try again.");
         // Stay on toll_scan so driver can retry
         setReceiptFile(null);
         setReceiptPreview(null);
       } finally {
-        setIsScanning(false);
+        if (scanGen === tollScanGenRef.current) {
+          setIsScanning(false);
+        }
         // Reset the file input so the same file can be re-selected
         if (tollFileInputRef.current) {
           tollFileInputRef.current.value = '';
@@ -451,6 +466,14 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
     console.log('[DriverExpenses] All validation passed! Submitting to API...');
     setSubmitError(null);
     setIsSubmitting(true);
+    let submitTimedOut = false;
+    const submitDeadline = setTimeout(() => {
+      submitTimedOut = true;
+      setIsSubmitting(false);
+      const msg = 'Save timed out. Check your connection and try again.';
+      setSubmitError(msg);
+      toast.error(msg);
+    }, SUBMIT_DEADLINE_MS);
     try {
       const txId = crypto.randomUUID();
       let receiptUrl = '';
@@ -462,6 +485,7 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
           retentionClass: 'ephemeral',
           parentStatus: 'Pending',
         });
+        if (submitTimedOut) return;
         receiptUrl = uploadRes.url;
       }
 
@@ -474,10 +498,12 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
           retentionClass: 'ephemeral',
           parentStatus: 'Pending',
         });
+        if (submitTimedOut) return;
         odometerProofUrl = uploadRes.url;
       }
 
       const vehicles = await api.getVehicles().catch(() => []);
+      if (submitTimedOut) return;
       const resolvedVehicleId = resolveVehicleIdForDriver(driverRecord, vehicles, user?.id);
       // Defense in depth: look up the real plate/name directly from the vehicles
       // list already fetched above, rather than relying solely on driverRecord's
@@ -518,11 +544,28 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
 
       const newTx = constructTransactionPayload(baseTx, receiptUrl, odometerProofUrl);
       const savedTx = await api.saveTransaction(newTx);
-      
-      if (savedTx.status === 'Approved') {
-          toast.success("Expense Auto-Approved & Odometer Verified! 🚀");
+      if (submitTimedOut) return;
+
+      const needsReview =
+        category === 'Fuel' &&
+        (savedTx.status === 'Pending' ||
+          savedTx?.metadata?.needsLogReview ||
+          savedTx?.metadata?.stationGateHold ||
+          fuelEntry.odometerMethod === 'photo_review' ||
+          fuelProceedingWithoutGps);
+
+      if (category === 'Fuel') {
+        if (savedTx.status === 'Approved') {
+          toast.success('Fuel log saved');
+        } else if (needsReview) {
+          toast.success('Fuel log sent — waiting for fleet review');
+        } else {
+          toast.success('Fuel log sent — waiting for fleet review');
+        }
+      } else if (savedTx.status === 'Approved') {
+        toast.success('Expense Auto-Approved & Odometer Verified! 🚀');
       } else {
-          toast.success("Expense submitted for approval");
+        toast.success('Expense submitted for approval');
       }
 
       setViewState('list');
@@ -530,12 +573,14 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
       fetchTransactions();
 
     } catch (err) {
+      if (submitTimedOut) return;
       console.error('[DriverExpenses] Submit error:', err);
       const msg = `Failed to submit expense: ${err instanceof Error ? err.message : String(err)}`;
       setSubmitError(msg);
       toast.error("Failed to submit expense");
     } finally {
-      setIsSubmitting(false);
+      clearTimeout(submitDeadline);
+      if (!submitTimedOut) setIsSubmitting(false);
     }
   };
 
@@ -585,10 +630,32 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
     }
   };
 
-  const handleOdometerScanComplete = async (result: any) => {
+  const handleOdometerScanComplete = (result: any) => {
+    setFuelEntry((prev) => ({
+      ...prev,
+      odometerReading: result.reading,
+      odometerProof: result.photo,
+      odometerMethod: result.method,
+      manualReason: result.manualReason,
+      locationMetadata: undefined,
+    }));
+    setFuelGpsSkipEnabled(false);
+    setFuelProceedingWithoutGps(false);
+    setFuelGpsManualRetriesLeft(MAX_MANUAL_FUEL_GPS_RETRIES);
+    setViewState('fuel_gps_locking');
+    void runFuelGpsLock();
+  };
+
+  const runFuelGpsLock = async () => {
+    const gen = ++fuelGpsLockGenRef.current;
+    const skipTimer = setTimeout(() => {
+      if (gen === fuelGpsLockGenRef.current) setFuelGpsSkipEnabled(true);
+    }, FUEL_GPS_SKIP_ENABLE_MS);
+
     let locationData: FuelEntryState['locationMetadata'] = undefined;
     try {
       const loc = await getLocation();
+      if (gen !== fuelGpsLockGenRef.current) return;
       if (loc.lat != null && loc.lng != null) {
         locationData = {
           lat: loc.lat,
@@ -596,34 +663,39 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
           accuracy: loc.accuracy ?? 0,
           timestamp: new Date().toISOString(),
         };
-        toast.success("Location locked for verification 📍");
       }
     } catch (e) {
       console.error("GPS Acquisition failed", e);
+    } finally {
+      clearTimeout(skipTimer);
     }
 
-    setFuelEntry((prev) => ({
-      ...prev,
-      odometerReading: result.reading,
-      odometerProof: result.photo,
-      odometerMethod: result.method,
-      manualReason: result.manualReason,
-      locationMetadata: locationData,
-    }));
+    if (gen !== fuelGpsLockGenRef.current) return;
 
     if (locationData) {
+      setFuelEntry((prev) => ({ ...prev, locationMetadata: locationData }));
       setFuelProceedingWithoutGps(false);
       setFuelGpsManualRetriesLeft(MAX_MANUAL_FUEL_GPS_RETRIES);
+      toast.success("Location locked for verification 📍");
       setViewState('method_select');
-    } else {
-      setFuelGpsManualRetriesLeft(MAX_MANUAL_FUEL_GPS_RETRIES);
-      setFuelProceedingWithoutGps(false);
-      toast.message(
-        "We couldn't lock your location. Turn on Location, move to an open area if needed, then tap Retry.",
-        { duration: 5000 },
-      );
-      setViewState('fuel_gps_retry');
+      return;
     }
+
+    setFuelGpsManualRetriesLeft(MAX_MANUAL_FUEL_GPS_RETRIES);
+    setFuelProceedingWithoutGps(false);
+    toast.message(
+      "We couldn't lock your location. Turn on Location, move to an open area if needed, then tap Retry.",
+      { duration: 5000 },
+    );
+    setViewState('fuel_gps_retry');
+  };
+
+  const handleSkipFuelGpsLock = () => {
+    if (!fuelGpsSkipEnabled) return;
+    fuelGpsLockGenRef.current += 1;
+    setFuelGpsManualRetriesLeft(MAX_MANUAL_FUEL_GPS_RETRIES);
+    setFuelProceedingWithoutGps(false);
+    setViewState('fuel_gps_retry');
   };
 
   const applyManualFuelGpsRetryFailed = (nextLeft: number) => {
@@ -690,6 +762,10 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
         }
         break;
       case 'odometer_scan': setViewState('category_select'); break;
+      case 'fuel_gps_locking':
+        fuelGpsLockGenRef.current += 1;
+        setViewState('odometer_scan');
+        break;
       case 'fuel_gps_retry': setViewState('odometer_scan'); break;
       case 'method_select': setViewState('odometer_scan'); break;
       case 'toll_scan': setViewState('category_select'); break;
@@ -817,6 +893,7 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
               <h2 className="text-xl font-bold">
                 {viewState === 'category_select' && "Log New Expense"}
                 {viewState === 'odometer_scan' && "Scan Odometer"}
+                {viewState === 'fuel_gps_locking' && "Lock location"}
                 {viewState === 'fuel_gps_retry' && "Lock location"}
                 {viewState === 'method_select' && "Payment Method"}
                 {viewState === 'entry_details' && (category === 'Fuel' ? "Fuel Details" : "Expense Details")}
@@ -834,7 +911,7 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
               {category === 'Fuel' ? (
                 <>Step {
                   viewState === 'category_select' ? '1' :
-                  viewState === 'odometer_scan' || viewState === 'fuel_gps_retry' ? '2' :
+                  viewState === 'odometer_scan' || viewState === 'fuel_gps_locking' || viewState === 'fuel_gps_retry' ? '2' :
                   viewState === 'method_select' ? '3' : '4'
                 } of 4</>
               ) : category === 'Tolls' ? (
@@ -882,17 +959,39 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
 
           {viewState === 'odometer_scan' && (
             <div className="p-0 min-h-[400px] relative">
-              {locationLoading && (
-                <div className="absolute top-4 right-4 z-50 bg-white/90 backdrop-blur px-3 py-1.5 rounded-full shadow-sm border border-indigo-100 flex items-center gap-2 animate-pulse">
-                  <div className="w-2 h-2 bg-indigo-500 rounded-full"></div>
-                  <span className="text-[10px] font-bold text-indigo-700 uppercase tracking-tight">Acquiring GPS...</span>
-                </div>
-              )}
               <OdometerScanner 
                 lastOdometer={tankStatus?.lastOdometer}
                 onScanComplete={handleOdometerScanComplete}
                 onCancel={goBack}
               />
+            </div>
+          )}
+
+          {viewState === 'fuel_gps_locking' && (
+            <div className="p-6 space-y-6">
+              <div className="flex flex-col items-center text-center space-y-3">
+                <div className="h-14 w-14 rounded-full bg-indigo-50 flex items-center justify-center">
+                  <Loader2 className="h-7 w-7 text-indigo-600 animate-spin" />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-slate-900">Locking your station location…</h3>
+                  <p className="text-sm text-slate-500 mt-1 max-w-sm mx-auto">
+                    This helps your fleet verify the fuel stop.
+                  </p>
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                disabled={!fuelGpsSkipEnabled}
+                onClick={handleSkipFuelGpsLock}
+              >
+                Skip for now
+              </Button>
+              {!fuelGpsSkipEnabled && (
+                <p className="text-xs text-center text-slate-400">Skip available in a moment…</p>
+              )}
             </div>
           )}
 
@@ -1075,6 +1174,20 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
                   </div>
                   <p className="text-lg font-bold text-slate-900">Analyzing Receipt...</p>
                   <p className="text-sm text-slate-500 mt-1">Extracting toll details automatically</p>
+                  <button
+                    type="button"
+                    className="mt-6 text-sm font-medium text-slate-600 underline underline-offset-2"
+                    onClick={() => {
+                      tollScanGenRef.current += 1;
+                      setIsScanning(false);
+                      setReceiptFile(null);
+                      setReceiptPreview(null);
+                      if (tollFileInputRef.current) tollFileInputRef.current.value = '';
+                      toast.info("Scan cancelled. Tap to try again.");
+                    }}
+                  >
+                    Cancel
+                  </button>
                 </div>
               )}
 

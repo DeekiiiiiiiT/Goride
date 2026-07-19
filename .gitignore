@@ -26,3 +26,5 @@ apps/rides-passenger/android/local.properties
 apps/rides-passenger/android/.idea/
 apps/rides-passenger/android/capacitor-cordova-android-plugins/build/
 **/.DS_Store
+.vercel
+.env*

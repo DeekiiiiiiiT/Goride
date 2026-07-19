@@ -6390,7 +6390,8 @@ app.post("/make-server-37f42386/scan-receipt", async (c) => {
     const body = await c.req.parseBody();
     const file = body['file'];
     
-    if (!file || !(file instanceof File)) {
+    // Deno multipart may yield Blob (not File) — accept both
+    if (!file || (!(file instanceof File) && !(file instanceof Blob))) {
         return c.json({ error: "File upload required" }, 400);
     }
 
@@ -6399,9 +6400,11 @@ app.post("/make-server-37f42386/scan-receipt", async (c) => {
 
     const openai = new OpenAI({ apiKey });
 
-    const arrayBuffer = await file.arrayBuffer();
+    const blob = file as Blob;
+    const arrayBuffer = await blob.arrayBuffer();
     const base64Data = Buffer.from(arrayBuffer).toString('base64');
-    const dataUrl = `data:${file.type};base64,${base64Data}`;
+    const mimeType = (file as File).type || blob.type || "image/jpeg";
+    const dataUrl = `data:${mimeType};base64,${base64Data}`;
 
     const prompt = `
       You are an OCR assistant for a driver expense portal. 
@@ -6444,7 +6447,7 @@ app.post("/make-server-37f42386/scan-receipt", async (c) => {
                 }
             ],
             response_format: { type: "json_object" }
-        }),
+        }, { signal: AbortSignal.timeout(40000) }),
         extractUsage: (r: any) => ({
             inputTokens: r?.usage?.prompt_tokens,
             outputTokens: r?.usage?.completion_tokens,
@@ -6462,6 +6465,9 @@ app.post("/make-server-37f42386/scan-receipt", async (c) => {
   } catch (e: any) {
     console.error("Scan Receipt Error:", e);
     if (e instanceof ProviderBlockedError) return c.json({ error: e.message, code: e.code }, e.httpStatus);
+    if (e?.name === "TimeoutError" || e?.name === "AbortError") {
+      return c.json({ error: "Receipt scan timed out. Please try again." }, 504);
+    }
     return c.json({ error: e.message }, 500);
   }
 });
@@ -7773,16 +7779,19 @@ app.post("/make-server-37f42386/upload", async (c) => {
     const body = await c.req.parseBody();
     const file = body['file'];
     
-    if (!file || !(file instanceof File)) {
+    // Deno multipart may yield Blob (not File) — accept both
+    if (!file || (!(file instanceof File) && !(file instanceof Blob))) {
       return c.json({ error: "No file uploaded" }, 400);
     }
 
+    const blob = file as Blob;
+
     // Server-side size check with clear error message
     const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
-    if (file.size > MAX_FILE_SIZE) {
-      console.log(`Upload rejected: file "${file.name}" is ${(file.size / 1024 / 1024).toFixed(2)}MB, exceeds ${MAX_FILE_SIZE / 1024 / 1024}MB limit`);
+    if (blob.size > MAX_FILE_SIZE) {
+      console.log(`Upload rejected: file is ${(blob.size / 1024 / 1024).toFixed(2)}MB, exceeds ${MAX_FILE_SIZE / 1024 / 1024}MB limit`);
       return c.json({ 
-        error: `File too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Maximum allowed size is 5MB. Please compress or resize the image before uploading.` 
+        error: `File too large (${(blob.size / 1024 / 1024).toFixed(1)}MB). Maximum allowed size is 5MB. Please compress or resize the image before uploading.` 
       }, 413);
     }
 
@@ -7806,7 +7815,7 @@ app.post("/make-server-37f42386/upload", async (c) => {
       useEphemeral ? "ephemeral-evidence" : "make-37f42386-docs",
     );
 
-    const buffer = new Uint8Array(await file.arrayBuffer());
+    const buffer = new Uint8Array(await blob.arrayBuffer());
     const detected = detectFileMagicBytes(buffer);
     if (!detected || !IMAGE_AND_PDF_MIMES.has(detected)) {
       return c.json({ error: "File content does not match an allowed type" }, 400);

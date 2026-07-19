@@ -1,4 +1,5 @@
 import type { OfflineAction } from '../types/offline';
+import { offlineBlobStore } from './offlineBlobStore';
 
 const STORAGE_KEY = 'roam_offline_queue';
 
@@ -14,14 +15,14 @@ export const offlineStorage = {
     }
   },
 
-  addToQueue: (action: Omit<OfflineAction, 'id' | 'timestamp' | 'retryCount'>) => {
+  addToQueue: (action: Omit<OfflineAction, 'id' | 'timestamp' | 'retryCount'>): OfflineAction => {
     const queue = offlineStorage.getQueue();
-    const newAction: OfflineAction = {
+    const newAction = {
       ...action,
       id: crypto.randomUUID(),
       timestamp: Date.now(),
       retryCount: 0,
-    };
+    } as OfflineAction;
     queue.push(newAction);
     offlineStorage.saveQueue(queue);
     return newAction;
@@ -31,15 +32,23 @@ export const offlineStorage = {
     const queue = offlineStorage.getQueue();
     const index = queue.findIndex(item => item.id === id);
     if (index !== -1) {
-      queue[index] = { ...queue[index], ...updates };
+      queue[index] = { ...queue[index], ...updates } as OfflineAction;
       offlineStorage.saveQueue(queue);
     }
   },
 
   removeFromQueue: (id: string) => {
     const queue = offlineStorage.getQueue();
+    const item = queue.find(a => a.id === id);
     const newQueue = queue.filter(item => item.id !== id);
     offlineStorage.saveQueue(newQueue);
+    // Clean IndexedDB blobs for fuel expenses
+    if (item?.type === 'SUBMIT_FUEL_EXPENSE') {
+      void offlineBlobStore.removeMany([
+        item.payload.odometerBlobKey,
+        item.payload.receiptBlobKey,
+      ]);
+    }
   },
 
   saveQueue: (queue: OfflineAction[]) => {
@@ -49,6 +58,15 @@ export const offlineStorage = {
 
   clearQueue: () => {
     if (typeof window === 'undefined') return;
+    const queue = offlineStorage.getQueue();
+    for (const item of queue) {
+      if (item.type === 'SUBMIT_FUEL_EXPENSE') {
+        void offlineBlobStore.removeMany([
+          item.payload.odometerBlobKey,
+          item.payload.receiptBlobKey,
+        ]);
+      }
+    }
     localStorage.removeItem(STORAGE_KEY);
   },
 };

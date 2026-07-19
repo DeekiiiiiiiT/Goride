@@ -345,7 +345,11 @@ export function requireAuth(options?: RequireAuthOptions) {
       path.includes("/signup") ||
       path.includes("/platform-status") ||
       path.includes("/platform-feature-flags") ||
-      path.includes("/health")
+      path.includes("/health") ||
+      // OCR helpers — auth enforced by the route handler / client session JWT
+      path.includes("/scan-receipt") ||
+      path.includes("/scan-odometer") ||
+      path.includes("/upload")
     ) {
       await next();
       return;

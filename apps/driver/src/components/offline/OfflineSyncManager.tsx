@@ -141,6 +141,9 @@ function getDisplayTitle(item: OfflineAction) {
     const data = item.payload.formData as { startLocation?: string; endLocation?: string };
     return `${data.startLocation || 'Unknown'} ➝ ${data.endLocation || 'Unknown'}`;
   }
+  if (item.type === 'SUBMIT_FUEL_EXPENSE') {
+    return item.payload.label || 'Fuel log';
+  }
   return 'Unknown Action';
 }
 
