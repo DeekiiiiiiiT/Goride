@@ -206,6 +206,8 @@ interface FuelReimbursementTableProps {
     dateRange?: DateRange;
     onDateRangeChange?: (range: DateRange | undefined) => void;
     isRefreshing?: boolean;
+    /** Jump to Transaction Logs for a posted fuel entry */
+    onViewInTransactionLogs?: (opts: { fuelEntryId?: string; date?: string; vehicleId?: string }) => void;
 }
 
 export function FuelReimbursementTable({ 
@@ -220,7 +222,8 @@ export function FuelReimbursementTable({
     onApproveLogReview,
     dateRange,
     onDateRangeChange,
-    isRefreshing = false
+    isRefreshing = false,
+    onViewInTransactionLogs,
 }: FuelReimbursementTableProps) {
     const { can } = usePermissions();
     const [selectedTx, setSelectedTx] = useState<FinancialTransaction | null>(null);
@@ -1018,14 +1021,14 @@ export function FuelReimbursementTable({
                             )}
                         </TabsTrigger>
                         <TabsTrigger value="fuel-expense-ledger">
-                            Fuel expenses
+                            Expense ledger (accounting)
                             {approvedFuelExpenseLedger.length > 0 && (
                                 <Badge variant="secondary" className="ml-2 bg-slate-100 text-slate-700 hover:bg-slate-200 font-normal">
                                     {approvedFuelExpenseLedger.length}
                                 </Badge>
                             )}
                         </TabsTrigger>
-                        <TabsTrigger value="history">History</TabsTrigger>
+                        <TabsTrigger value="history">Closed</TabsTrigger>
                     </TabsList>
 
                     <div className="flex items-center gap-2">
@@ -1087,9 +1090,10 @@ export function FuelReimbursementTable({
                         <TabsContent value="ready" className="mt-4 space-y-3 focus-visible:outline-none">
                             {pendingReadyForReview.length === 0 ? (
                                 <div className="rounded-md border border-slate-200 bg-white p-8 text-center space-y-2">
-                                    <p className="text-sm text-slate-600">Nothing waiting for fleet approval right now.</p>
+                                    <p className="text-sm text-slate-600">No fuel items need your action.</p>
                                     <p className="text-xs text-slate-400 max-w-md mx-auto">
-                                        Fuel rows held because the gas station is not verified yet appear under <span className="font-medium text-slate-600">Awaiting station</span> until Roam resolves them in the station database.
+                                        Posted fill-ups are in <span className="font-medium text-slate-600">Transaction Logs</span>.
+                                        Rows held for an unverified station appear under <span className="font-medium text-slate-600">Awaiting station</span>.
                                     </p>
                                 </div>
                             ) : (
@@ -1157,7 +1161,17 @@ export function FuelReimbursementTable({
                 </TabsContent>
 
                 <TabsContent value="history" className="space-y-4">
-                    {renderTable(history, false)}
+                    {history.length === 0 ? (
+                        <div className="rounded-md border border-slate-200 bg-white p-8 text-center space-y-2">
+                            <p className="text-sm text-slate-600">No closed items in this date range.</p>
+                            <p className="text-xs text-slate-400 max-w-md mx-auto">
+                                Posted fill-ups live in <span className="font-medium text-slate-600">Transaction Logs</span>.
+                                This archive only keeps rejected or otherwise closed review items.
+                            </p>
+                        </div>
+                    ) : (
+                        renderTable(history, false)
+                    )}
                 </TabsContent>
             </Tabs>
 
@@ -1370,23 +1384,55 @@ export function FuelReimbursementTable({
                                     </div>
                                 )}
 
-                                {/* Phase 3: Settlement Summary */}
+                                {/* Fuel Posted vs reimbursement settlement (separate concerns) */}
                                 {selectedTx.status === 'Approved' && (
-                                    <div className="mt-4 p-4 border border-emerald-100 bg-emerald-50/50 rounded-xl space-y-3">
+                                    <div className="mt-4 space-y-3">
+                                        <div className="p-4 border border-emerald-100 bg-emerald-50/50 rounded-xl space-y-2">
+                                            <div className="flex items-center gap-2 text-emerald-700 font-semibold text-sm">
+                                                <div className="h-5 w-5 rounded-full bg-emerald-100 flex items-center justify-center">
+                                                    <Check className="h-3 w-3" />
+                                                </div>
+                                                Fuel status: Posted
+                                            </div>
+                                            <p className="text-xs text-slate-600">
+                                                This fill-up is approved and should appear in Transaction Logs
+                                                {selectedTx.metadata?.decisionReason
+                                                    ? ` (${String(selectedTx.metadata.decisionReason).replace(/_/g, ' ')})`
+                                                    : ''}.
+                                            </p>
+                                            {onViewInTransactionLogs && (
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="w-full mt-1 text-xs h-8 bg-white"
+                                                    onClick={() => {
+                                                        setIsDetailsOpen(false);
+                                                        onViewInTransactionLogs({
+                                                            fuelEntryId: selectedTx.metadata?.fuelEntryId as string | undefined,
+                                                            date: selectedTx.date,
+                                                            vehicleId: selectedTx.vehicleId,
+                                                        });
+                                                    }}
+                                                >
+                                                    View in Transaction Logs
+                                                </Button>
+                                            )}
+                                        </div>
+                                        <div className="p-4 border border-slate-200 bg-slate-50/80 rounded-xl space-y-3">
                                         {(() => {
                                             const settlement = findSettlementTx(selectedTx.id);
                                             const isWalletCredit = settlement?.category === 'Fuel Reimbursement Credit';
                                             return (
                                                 <>
-                                                    <div className="flex items-center gap-2 text-emerald-700 font-semibold text-sm">
-                                                        <div className="h-5 w-5 rounded-full bg-emerald-100 flex items-center justify-center">
-                                                            <Check className="h-3 w-3" />
-                                                        </div>
-                                                        {isWalletCredit ? 'Wallet Credit Applied' : 'Settlement Processed'}
+                                                    <div className="flex items-center gap-2 text-slate-700 font-semibold text-sm">
+                                                        Reimbursement settlement:{' '}
+                                                        {settlement ? (isWalletCredit ? 'Settled (wallet)' : 'Settled') : 'Not settled'}
                                                     </div>
                                                     
                                                     {!settlement ? (
-                                                        <p className="text-xs text-slate-500 italic">No automated settlement found in ledger history.</p>
+                                                        <p className="text-xs text-slate-500">
+                                                            Money settles when the weekly statement is finalized — not when the fuel log is posted.
+                                                        </p>
                                                     ) : (
                                                         <>
                                                             <div className="grid grid-cols-2 gap-2 text-xs">
@@ -1415,6 +1461,7 @@ export function FuelReimbursementTable({
                                                 </>
                                             );
                                         })()}
+                                        </div>
                                     </div>
                                 )}
                             </div>

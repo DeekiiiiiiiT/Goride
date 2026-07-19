@@ -380,7 +380,8 @@ const OdometerHistoryInternal: React.FC<OdometerHistoryProps> = ({
               <div className="space-y-1">
                 <CardTitle className="text-base font-semibold">Raw History</CardTitle>
                 <CardDescription>
-                  Displaying {filteredHistory.length} of {history.length} records
+                  Displaying {filteredHistory.length} of {history.length} records.
+                  Fuel anchors come from posted fuel logs.
                 </CardDescription>
               </div>
             </CardHeader>

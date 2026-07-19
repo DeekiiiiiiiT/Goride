@@ -115,6 +115,7 @@ import {
 } from "./driver_vehicle_assignment.ts";
 import { syncLinkedExpenseTransaction } from "./fuel_transaction_sync.ts";
 import { resolveFuelPaymentSource } from "./fuel_payment_source.ts";
+import { ensureFuelEntryForApprovedTx } from "./fuel_posted_guarantee.ts";
 import auditApp from "./audit_controller.tsx";
 import safetyApp from "./safety_controller.tsx";
 import syncApp from "./sync_controller.tsx";
@@ -3382,6 +3383,7 @@ app.post("/make-server-37f42386/transactions", requireAuth(), async (c) => {
                 stationGateHold: true,
                 holdReason: 'Unverified station — awaiting admin review from Learnt Locations',
                 holdTimestamp: new Date().toISOString(),
+                decisionReason: 'HOLD_STATION',
                 // Ensure needsLogReview is set for non-AI odometer methods (belt-and-suspenders)
                 needsLogReview: (!isAiVerified) ? true : (transaction.metadata?.needsLogReview || undefined),
             };
@@ -3415,6 +3417,7 @@ app.post("/make-server-37f42386/transactions", requireAuth(), async (c) => {
                 transaction.metadata = {
                     ...transaction.metadata,
                     needsLogReview: true,
+                    decisionReason: 'REVIEW_ODO',
                     logReviewReason: transaction.metadata?.logReviewReason
                         || (transaction.metadata?.odometerMethod === 'photo_review'
                             ? 'AI scan failed — odometer photo pending admin review'
@@ -3431,92 +3434,40 @@ app.post("/make-server-37f42386/transactions", requireAuth(), async (c) => {
             return c.json({ success: true, data: transaction });
         }
 
-        transaction.status = 'Approved';
-        transaction.isReconciled = true;
-        transaction.metadata = {
-            ...transaction.metadata,
-            approvedAt: new Date().toISOString(),
-            approvalReason: 'Auto-approved via AI Odometer Scan',
-            notes: (transaction.metadata?.notes || '') + ' [AI Verified]'
-        };
-
-        // Create Fuel Entry Anchor
-        // Fix: Extract volume from metadata.fuelVolume if top-level quantity is missing
-        const quantity = Number(transaction.quantity) || Number(transaction.metadata?.fuelVolume) || 0;
-        const amount = Math.abs(Number(transaction.amount) || 0);
-        const pricePerLiter = transaction.metadata?.pricePerLiter || (quantity > 0 ? Number((amount / quantity).toFixed(3)) : 0);
-        
-        // Ensure quantity is saved to transaction for consistent display
-        if (!transaction.quantity && quantity > 0) {
-            transaction.quantity = quantity;
-        }
-
-        // Resolve vendor name: smart-matched station > transaction vendor > description > fallback
-        const resolvedVendor = smartMatchedStation?.name || transaction.vendor || transaction.description || 'Reimbursement';
-        // Ambiguous/missing → RideShare_Cash (business trip cash), never silent Personal
-        const paySrc = resolveFuelPaymentSource(
-          transaction.metadata?.paymentSource || transaction.paymentSource || transaction.paymentMethod
-        );
-
-        const fuelEntry: any = {
-            id: crypto.randomUUID(),
-            date: (transaction.date && transaction.time) 
-                ? `${transaction.date}T${transaction.time}` 
-                : (transaction.date || new Date().toISOString().split('T')[0]),
-            type: 'Reimbursement',
-            amount: amount,
-            liters: quantity,
-            pricePerLiter: pricePerLiter,
-            odometer: Number(transaction.odometer) || 0,
-            vendor: resolvedVendor,
-            location: resolvedVendor,
-            stationAddress: transaction.metadata?.stationAddress || transaction.metadata?.stationLocation || '',
-            vehicleId: transaction.vehicleId,
-            driverId: transaction.driverId,
-            cardId: undefined,
-            transactionId: transaction.id,
-            receiptUrl: transaction.receiptUrl || transaction.metadata?.receiptUrl,
-            odometerProofUrl: transaction.odometerProofUrl || transaction.metadata?.odometerProofUrl,
-            isVerified: true, // Key Requirement: Anchor
+        // Posted guarantee: never Approve without a linked fuel_entry
+        const autoResult = await ensureFuelEntryForApprovedTx(transaction, {
             source: 'Fuel Log',
-            matchedStationId: transaction.metadata?.matchedStationId,
-            paymentSource: paySrc.enum,
-            metadata: {
-                receiptUrl: transaction.receiptUrl || transaction.metadata?.receiptUrl,
-                odometerProofUrl: transaction.odometerProofUrl || transaction.metadata?.odometerProofUrl,
-                originalTransactionId: transaction.id,
-                locationMetadata: transaction.metadata?.locationMetadata,
-                parentCompany: transaction.metadata?.parentCompany,
-                // Bug fixes: locationStatus + matchedStationId INSIDE metadata (where FuelLogTable reads them)
-                locationStatus: transaction.metadata?.locationStatus || 'unknown',
-                matchedStationId: transaction.metadata?.matchedStationId,
-                verificationMethod: transaction.metadata?.verificationMethod,
-                matchDistance: transaction.metadata?.matchDistance,
-                matchConfidence: transaction.metadata?.matchConfidence,
-                paymentSource: paySrc.meta
-            }
-        };
+            stationName: smartMatchedStation?.name,
+            matchedStation: smartMatchedStation,
+            decisionReason: 'AUTO_AI_STATION',
+            stamp: (rec) => stampOrg(rec, c),
+            afterPersist: async (fe) => {
+                await appendCanonicalFuelExpenseIfEligible(fe, c);
+            },
+        });
 
-        // Calculate Audit Confidence Score (matching fuel_controller.tsx gold-standard pattern)
-        if (smartMatchedStation && fuelEntry.matchedStationId) {
-            const confidence = fuelLogic.calculateConfidenceScore(fuelEntry, smartMatchedStation);
-            fuelEntry.metadata = {
-                ...fuelEntry.metadata,
-                auditConfidenceScore: confidence.score,
-                auditConfidenceBreakdown: confidence.breakdown,
-                isHighlyTrusted: confidence.isHighlyTrusted
+        if (autoResult.blockedNoVehicle) {
+            transaction.status = 'Pending';
+            transaction.isReconciled = false;
+            transaction.metadata = {
+                ...transaction.metadata,
+                decisionReason: 'BLOCKED_NO_VEHICLE',
+                needsLogReview: true,
+                logReviewReason: 'Cannot post fuel log — vehicle not assigned. Assign a vehicle then approve.',
             };
-            console.log(`[FuelEntry] Audit confidence for ${fuelEntry.id}: ${confidence.score}/100`);
-        }
-
-        if (fuelEntry.vehicleId) {
-             await kv.set(`fuel_entry:${fuelEntry.id}`, stampOrg(fuelEntry, c));
-             await appendCanonicalFuelExpenseIfEligible(fuelEntry, c);
-             await syncLinkedExpenseTransaction(fuelEntry);
+            console.warn(
+                `[FuelEntry] BLOCKED_NO_VEHICLE for transaction ${transaction.id} — staying Pending`,
+            );
         } else {
-             console.warn(
-               `[FuelEntry] Skipped fuel_entry for transaction ${transaction.id}: no vehicleId after fleet assignment resolution`,
-             );
+            transaction.status = 'Approved';
+            transaction.isReconciled = true;
+            transaction.metadata = {
+                ...transaction.metadata,
+                approvedAt: new Date().toISOString(),
+                approvalReason: 'Auto-approved via AI Odometer Scan',
+                notes: (transaction.metadata?.notes || '') + ' [AI Verified]',
+                decisionReason: 'AUTO_AI_STATION',
+            };
         }
     }
 
@@ -6603,141 +6554,72 @@ app.post("/make-server-37f42386/expenses/approve", requireAuth(), requirePermiss
     );
     Object.assign(tx, withVehicle);
 
-    tx.status = 'Approved';
-    tx.isReconciled = true; // Approval implies reconciliation usually
-    tx.metadata = { 
-        ...tx.metadata, 
-        approvedAt: new Date().toISOString(), 
-        notes: notes || tx.metadata?.notes,
-        // Clear the Log Review flag now that admin has reviewed
-        needsLogReview: undefined,
-        logReviewCompleted: tx.metadata?.needsLogReview ? true : undefined,
-        logReviewCompletedAt: tx.metadata?.needsLogReview ? new Date().toISOString() : undefined,
-        adminOdometerReading: (odometerReading !== undefined && odometerReading !== null) ? Number(odometerReading) : undefined,
-        stationGateHold: false,
-        holdReason: undefined,
-        holdTimestamp: undefined,
-    };
-
-    // Auto-create Fuel Entry for approved Fuel Reimbursements
-    if ((tx.category === 'Fuel' || tx.category === 'Fuel Reimbursement') && tx.status === 'Approved') {
-        const amount = Math.abs(Number(tx.amount) || Number(tx.metadata?.totalCost) || 0);
-        let quantity =
-            Number(tx.quantity) ||
-            Number(tx.metadata?.fuelVolume) ||
-            0;
-        if (!quantity || quantity <= 0) {
-            const ppl = Number(tx.metadata?.pricePerLiter);
-            if (amount > 0 && ppl > 0) {
-                quantity = Number((amount / ppl).toFixed(2));
-            }
-        }
-        const pricePerLiter =
-            Number(tx.metadata?.pricePerLiter) ||
-            (quantity > 0 ? Number((amount / quantity).toFixed(3)) : 0);
-
-        if (quantity > 0) {
-            tx.quantity = quantity;
-            tx.metadata = { ...tx.metadata, fuelVolume: quantity };
+    // Fuel Posted guarantee: create fuel_entry before committing Approved (or 422 if blocked)
+    if (tx.category === 'Fuel' || tx.category === 'Fuel Reimbursement') {
+        // Pre-set fields that ensureFuelEntry reads for quantity/vendor
+        if (odometerReading !== undefined && odometerReading !== null) {
+            const odoVal = Number(odometerReading);
+            if (!isNaN(odoVal) && odoVal > 0) tx.odometer = odoVal;
         }
 
-        const resolvedVendor =
-            adminResolvedStation?.name ||
-            tx.vendor ||
-            tx.merchant ||
-            tx.description ||
-            "Reimbursement";
-        // Ambiguous/missing → RideShare_Cash; money posts at Finalize only (no approve credit)
-        const approvePaySrc = resolveFuelPaymentSource(
-          tx.metadata?.paymentSource || tx.paymentSource || tx.paymentMethod
-        );
+        const approveResult = await ensureFuelEntryForApprovedTx(tx, {
+            source: 'Manual Approval',
+            stationName: adminResolvedStation?.name,
+            matchedStation: adminResolvedStation,
+            decisionReason: 'ADMIN_APPROVED',
+            stamp: (rec) => stampOrg(rec, c),
+        });
 
-        const fuelEntry = {
-            id: crypto.randomUUID(),
-            date: (tx.date && tx.time) ? `${tx.date}T${tx.time}` : (tx.date || new Date().toISOString().split('T')[0]),
-            type: 'Reimbursement', // Using internal type even if UI doesn't show it
-            amount: amount,
-            liters: quantity,
-            pricePerLiter: pricePerLiter,
-            odometer: Number(tx.odometer) || 0,
-            location: resolvedVendor,
-            vendor: resolvedVendor,
-            stationAddress: tx.metadata?.stationLocation || tx.location || '',
-            vehicleId: tx.vehicleId, // Must be present to link to vehicle stats
-            driverId: tx.driverId,
-            cardId: undefined, // Not a card transaction
-            transactionId: tx.id, // Link back to original transaction
-            matchedStationId: tx.matchedStationId || tx.metadata?.matchedStationId,
-            receiptUrl: tx.receiptUrl || tx.metadata?.receiptUrl,
-            odometerProofUrl: tx.odometerProofUrl || tx.metadata?.odometerProofUrl,
-            isVerified: true, // Matches auto-approve path (line 1974)
-            source: 'Manual Approval', // Distinguishes from auto-approve 'Fuel Log'
-            paymentSource: approvePaySrc.enum,
-            metadata: {
-                ...tx.metadata,
-                portal_type: tx.metadata?.portal_type || 'Manual_Entry',
-                isManual: tx.metadata?.isManual ?? (tx.paymentMethod === 'Cash' || tx.metadata?.portal_type === 'Manual_Entry'),
-                sourceId: tx.id,
-                source: tx.metadata?.source || 'Manual Approval',
-                receiptUrl: tx.receiptUrl || tx.metadata?.receiptUrl,
-                odometerProofUrl: tx.odometerProofUrl || tx.metadata?.odometerProofUrl,
-                locationStatus: tx.metadata?.locationStatus || ((tx.matchedStationId || tx.metadata?.matchedStationId) ? 'verified' : 'unknown'),
-                matchedStationId: tx.matchedStationId || tx.metadata?.matchedStationId,
-                verificationMethod: tx.metadata?.verificationMethod || ((tx.matchedStationId || tx.metadata?.matchedStationId) ? 'manual_station_picker' : undefined),
-                paymentSource: approvePaySrc.meta,
-            }
-        };
-
-        // Calculate Audit Confidence Score (matching auto-approve gold-standard pattern)
-        const resolvedStationId = fuelEntry.matchedStationId;
-        let matchedStation = null;
-        if (resolvedStationId) {
-            matchedStation = await kv.get(`station:${resolvedStationId}`);
-        }
-
-        if (matchedStation && fuelEntry.matchedStationId) {
-            const confidence = fuelLogic.calculateConfidenceScore(fuelEntry, matchedStation);
-            fuelEntry.metadata = {
-                ...fuelEntry.metadata,
-                auditConfidenceScore: confidence.score,
-                auditConfidenceBreakdown: confidence.breakdown,
-                isHighlyTrusted: confidence.isHighlyTrusted
-            };
-            console.log(`[ApproveHandler] Audit confidence for ${fuelEntry.id}: ${confidence.score}/100`);
-        } else {
-            // No matched station — still calculate base confidence (behavioral + physical only)
-            const confidence = fuelLogic.calculateConfidenceScore(fuelEntry, null);
-            fuelEntry.metadata = {
-                ...fuelEntry.metadata,
-                auditConfidenceScore: confidence.score,
-                auditConfidenceBreakdown: confidence.breakdown,
-                isHighlyTrusted: confidence.isHighlyTrusted
-            };
-            console.log(`[ApproveHandler] Audit confidence (no station) for ${fuelEntry.id}: ${confidence.score}/100`);
-        }
-
-        // Only save if we have a vehicleId (Critical for fleet stats)
-        if (fuelEntry.vehicleId) {
-             await kv.set(`fuel_entry:${fuelEntry.id}`, stampOrg(fuelEntry, c));
-             await syncLinkedExpenseTransaction(fuelEntry);
-             
-             // Check if we need to link this to a transaction
-             if (tx.id) {
-                // Ensure the transaction also has the URLs updated if they were missing
-                tx.receiptUrl = tx.receiptUrl || tx.metadata?.receiptUrl;
-                tx.metadata = {
-                    ...tx.metadata,
-                    receiptUrl: tx.receiptUrl,
-                    odometerProofUrl: tx.odometerProofUrl || tx.metadata?.odometerProofUrl,
-                    fuelEntryId: fuelEntry.id,
-                };
-             }
-        } else {
-            console.warn(
-              `[ApproveHandler] Skipped fuel_entry for transaction ${id}: no vehicleId after fleet assignment resolution`,
+        if (approveResult.blockedNoVehicle) {
+            return c.json(
+                {
+                    error:
+                        'Cannot approve: vehicle is not assigned. Assign a vehicle to this driver, then approve again.',
+                    code: 'BLOCKED_NO_VEHICLE',
+                },
+                422,
             );
         }
+
+        tx.status = 'Approved';
+        tx.isReconciled = true;
+        tx.metadata = {
+            ...tx.metadata,
+            approvedAt: new Date().toISOString(),
+            notes: notes || tx.metadata?.notes,
+            needsLogReview: undefined,
+            logReviewCompleted: tx.metadata?.needsLogReview ? true : undefined,
+            logReviewCompletedAt: tx.metadata?.needsLogReview ? new Date().toISOString() : undefined,
+            adminOdometerReading:
+                odometerReading !== undefined && odometerReading !== null
+                    ? Number(odometerReading)
+                    : undefined,
+            stationGateHold: false,
+            holdReason: undefined,
+            holdTimestamp: undefined,
+            decisionReason: 'ADMIN_APPROVED',
+        };
+    } else {
+        tx.status = 'Approved';
+        tx.isReconciled = true;
+        tx.metadata = {
+            ...tx.metadata,
+            approvedAt: new Date().toISOString(),
+            notes: notes || tx.metadata?.notes,
+            needsLogReview: undefined,
+            logReviewCompleted: tx.metadata?.needsLogReview ? true : undefined,
+            logReviewCompletedAt: tx.metadata?.needsLogReview ? new Date().toISOString() : undefined,
+            adminOdometerReading:
+                odometerReading !== undefined && odometerReading !== null
+                    ? Number(odometerReading)
+                    : undefined,
+            stationGateHold: false,
+            holdReason: undefined,
+            holdTimestamp: undefined,
+        };
     }
+
+    // (fuel_entry create moved into ensureFuelEntryForApprovedTx above)
 
     // Fuel wallet money posts only at Finalize (commitWeeklyStatement) — not on approve.
     if ((tx.category === 'Fuel' || tx.category === 'Fuel Reimbursement') && tx.status === 'Approved') {

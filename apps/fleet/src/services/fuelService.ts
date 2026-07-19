@@ -65,6 +65,21 @@ export const fuelService = {
     return response.json();
   },
 
+  /** Heal Approved fuel expenses missing fuel_entry (Posted guarantee). */
+  async ensurePostedEntries(limit = 40): Promise<{ healed: number; blocked: number }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel/ensure-posted-entries`, {
+      method: 'POST',
+      headers: await requireAuthHeaders(),
+      body: JSON.stringify({ limit }),
+    });
+    if (!response.ok) {
+      console.warn('[FuelService] ensurePostedEntries failed', response.status);
+      return { healed: 0, blocked: 0 };
+    }
+    const result = await response.json().catch(() => ({}));
+    return { healed: Number(result.healed) || 0, blocked: Number(result.blocked) || 0 };
+  },
+
   async saveFuelEntry(entry: FuelEntry): Promise<FuelEntry> {
     // Phase 2: Staged Reconciliation - Default to Pending for new or legacy logs
     if (!entry.reconciliationStatus) {

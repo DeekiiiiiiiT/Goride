@@ -24,6 +24,11 @@ import {
   normalizeFuelPaymentSourceEnum,
   fuelPaymentSourceToMeta,
 } from "./fuel_payment_source.ts";
+import {
+  ensureFuelEntryForApprovedTx,
+  healApprovedFuelEntriesMissingLog,
+} from "./fuel_posted_guarantee.ts";
+import { stampOrg, getOrgId } from "./org_scope.ts";
 
 const app = new Hono();
 
@@ -36,6 +41,25 @@ const supabase = createClient(
 );
 
 const BASE_PATH = "/make-server-37f42386";
+
+/** Heal Approved fuel expenses missing fuel_entry (Posted guarantee). Called on Fuel Management refresh. */
+app.post(`${BASE_PATH}/fuel/ensure-posted-entries`, requirePermission("fuel.view"), async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const limit = Math.min(Number(body?.limit) || 40, 100);
+    const orgId = getOrgId(c);
+    const result = await healApprovedFuelEntriesMissingLog(limit, (rec) =>
+      stampOrg(rec, c),
+    );
+    console.log(
+      `[EnsurePosted] org=${orgId || "none"} healed=${result.healed} blocked=${result.blocked}`,
+    );
+    return c.json({ success: true, ...result });
+  } catch (e: any) {
+    console.error("[EnsurePosted] failed", e);
+    return c.json({ error: e?.message || "Ensure failed" }, 500);
+  }
+});
 
 // --- CONSTANTS ---
 const SOFT_ANCHOR_THRESHOLD = 0.98; // Adjusted to Roadmap: 98% capacity triggers a reset
@@ -1109,7 +1133,7 @@ async function releaseHeldTransaction(learnt: any, resolvedStationId: string, st
         return 0;
     }
 
-    // Release the hold and approve
+    // Release the hold and prepare for Posted
     const resolved = await resolveDriverVehicleAssignment(tx.driverId, {
         organizationId: tx.organizationId,
         hintVehicleId: tx.vehicleId,
@@ -1118,8 +1142,6 @@ async function releaseHeldTransaction(learnt: any, resolvedStationId: string, st
         tx.vehicleId = resolved.vehicleId;
     }
 
-    tx.status = 'Approved';
-    tx.isReconciled = true;
     tx.metadata = {
         ...tx.metadata,
         stationGateHold: false,
@@ -1128,61 +1150,43 @@ async function releaseHeldTransaction(learnt: any, resolvedStationId: string, st
         approvedAt: new Date().toISOString(),
         approvalReason: 'Auto-approved after station verified via Learnt Locations',
         notes: (tx.metadata?.notes || '') + ' [Station Gate Released]',
+        decisionReason: 'STATION_GATE_RELEASED',
     };
+    tx.vendor = stationName;
+    tx.matchedStationId = resolvedStationId;
 
-    // Create the fuel entry that was deferred
-    const quantity = Number(tx.quantity) || Number(tx.metadata?.fuelVolume) || 0;
-    const amount = Math.abs(Number(tx.amount) || 0);
-    const pricePerLiter = tx.metadata?.pricePerLiter || (quantity > 0 ? Number((amount / quantity).toFixed(3)) : 0);
-
-    // Resolve paymentSource from the original transaction
-    const paySrc = resolveFuelPaymentSource(tx.metadata?.paymentSource || tx.paymentMethod);
-    const paymentSourceEnum = paySrc.enum;
-    const metadataPaymentSource = paySrc.meta;
-
-    const fuelEntry: any = {
-        id: crypto.randomUUID(),
-        date: (tx.date && tx.time)
-            ? `${tx.date}T${tx.time}`
-            : (tx.date || new Date().toISOString().split('T')[0]),
-        type: 'Reimbursement',
-        amount: amount,
-        liters: quantity,
-        pricePerLiter: pricePerLiter,
-        odometer: Number(tx.odometer) || 0,
-        vendor: stationName,
-        location: stationName,
-        stationAddress: tx.metadata?.stationLocation || '',
-        vehicleId: tx.vehicleId,
-        driverId: tx.driverId,
-        transactionId: tx.id,
-        receiptUrl: tx.receiptUrl || tx.metadata?.receiptUrl,
-        odometerProofUrl: tx.odometerProofUrl || tx.metadata?.odometerProofUrl,
-        isVerified: true,
+    const result = await ensureFuelEntryForApprovedTx(tx, {
         source: 'Fuel Log',
-        matchedStationId: resolvedStationId,
-        paymentSource: paymentSourceEnum,
-        entryMode: 'Floating',
-        metadata: {
-            locationStatus: 'verified',
-            verificationMethod: 'station_gate_release',
-            matchedStationId: resolvedStationId,
-            stationName: stationName,
-            originalTransactionId: tx.id,
-            paymentSource: metadataPaymentSource,
-        },
-    };
-    fuelEntry.signature = await signRecord(fuelEntry);
+        stationName,
+        matchedStation: { id: resolvedStationId, name: stationName },
+        decisionReason: 'STATION_GATE_RELEASED',
+    });
 
-    await kv.set(`fuel_entry:${fuelEntry.id}`, fuelEntry);
+    if (result.blockedNoVehicle) {
+        tx.status = 'Pending';
+        tx.isReconciled = false;
+        tx.metadata = {
+            ...tx.metadata,
+            decisionReason: 'BLOCKED_NO_VEHICLE',
+            needsLogReview: true,
+            logReviewReason: 'Station verified but vehicle not assigned — cannot post fuel log.',
+            stationGateHold: false,
+        };
+        await kv.set(`transaction:${tx.id}`, tx);
+        console.warn(`[StationGate-Release] BLOCKED_NO_VEHICLE for ${txId}`);
+        return 0;
+    }
+
+    tx.status = 'Approved';
+    tx.isReconciled = true;
+
     const resolvedAt = new Date();
     const deleteAfter = await applyEvidenceResolution(supabase, "transaction", tx.id, resolvedAt);
     if (deleteAfter) {
         tx.metadata = { ...tx.metadata, evidenceDeleteAfter: deleteAfter };
     }
     await kv.set(`transaction:${tx.id}`, tx);
-    await syncLinkedExpenseTransaction(fuelEntry);
-    console.log(`[StationGate-Release] Transaction ${txId} released â†’ fuel_entry ${fuelEntry.id} created, station ${stationName} (${resolvedStationId}).`);
+    console.log(`[StationGate-Release] Transaction ${txId} released → fuel_entry ${result.fuelEntry?.id}, station ${stationName} (${resolvedStationId}).`);
     return 1;
 }
 

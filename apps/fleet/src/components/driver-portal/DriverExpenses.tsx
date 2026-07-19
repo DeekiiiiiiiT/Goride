@@ -546,18 +546,19 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
       const savedTx = await api.saveTransaction(newTx);
       if (submitTimedOut) return;
 
-      const needsReview =
-        category === 'Fuel' &&
-        (savedTx.status === 'Pending' ||
+      if (category === 'Fuel') {
+        const reason = String(savedTx?.metadata?.decisionReason || '');
+        if (savedTx.status === 'Approved' || reason === 'AUTO_AI_STATION' || reason === 'ADMIN_APPROVED' || reason === 'STATION_GATE_RELEASED') {
+          toast.success('Fuel log saved');
+        } else if (reason === 'REVIEW_ODO' || reason === 'HOLD_STATION' || reason === 'BLOCKED_NO_VEHICLE') {
+          toast.success('Fuel log sent — waiting for fleet review');
+        } else if (
+          savedTx.status === 'Pending' ||
           savedTx?.metadata?.needsLogReview ||
           savedTx?.metadata?.stationGateHold ||
           fuelEntry.odometerMethod === 'photo_review' ||
-          fuelProceedingWithoutGps);
-
-      if (category === 'Fuel') {
-        if (savedTx.status === 'Approved') {
-          toast.success('Fuel log saved');
-        } else if (needsReview) {
+          fuelProceedingWithoutGps
+        ) {
           toast.success('Fuel log sent — waiting for fleet review');
         } else {
           toast.success('Fuel log sent — waiting for fleet review');

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
     Table, 
     TableBody, 
@@ -107,6 +107,31 @@ export function FuelLogTable({
     const [activeView, setActiveView] = useState<'transactions' | 'cycles'>('transactions');
     const [isRecalculating, setIsRecalculating] = useState(false);
     const [viewingEntry, setViewingEntry] = useState<FuelEntry | null>(null);
+    const [focusEntryId, setFocusEntryId] = useState<string | null>(null);
+
+    // Soft-highlight row when navigating from Review → Logs
+    useEffect(() => {
+        try {
+            const raw = sessionStorage.getItem('fuel_logs_focus_entry');
+            if (!raw) return;
+            sessionStorage.removeItem('fuel_logs_focus_entry');
+            if (raw.startsWith('{')) {
+                const parsed = JSON.parse(raw) as { date?: string; vehicleId?: string };
+                const match = entries.find((e) => {
+                    const dateOk = !parsed.date || String(e.date || '').startsWith(String(parsed.date).slice(0, 10));
+                    const vehOk = !parsed.vehicleId || e.vehicleId === parsed.vehicleId;
+                    return dateOk && vehOk;
+                });
+                if (match?.id) setFocusEntryId(match.id);
+            } else {
+                setFocusEntryId(raw);
+            }
+            const t = window.setTimeout(() => setFocusEntryId(null), 8000);
+            return () => window.clearTimeout(t);
+        } catch {
+            /* ignore */
+        }
+    }, [entries]);
 
     // Phase 2: Cycle Mapping
     const allCycles = useFuelCycles(entries, vehicles);
@@ -595,14 +620,15 @@ export function FuelLogTable({
                                 <TableHead>Vehicle</TableHead>
                                 <TableHead>Driver</TableHead>
                                 <TableHead>Vol (L)</TableHead>
-                                <TableHead>Prev Odo</TableHead>
+                                <TableHead>Odo</TableHead>
+                                <TableHead>Δ Prev</TableHead>
                                 <TableHead>Cost ($)</TableHead>
                                 <TableHead className="text-center">Audit</TableHead>
                                 <TableHead className="text-right">Actions</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {filteredEntries.length === 0 ? <TableRow><TableCell colSpan={10} className="h-24 text-center">No transactions found</TableCell></TableRow> : 
+                            {filteredEntries.length === 0 ? <TableRow><TableCell colSpan={11} className="h-24 text-center">No transactions found</TableCell></TableRow> : 
                             filteredEntries.map(entry => {
                                 const locationStatus = entry.metadata?.locationStatus || entry.locationStatus;
                                 const confidenceScore = entry.metadata?.auditConfidenceScore;
@@ -610,7 +636,13 @@ export function FuelLogTable({
                                 const isLocked = entry.isLocked || entry.status === 'Finalized';
 
                                 return (
-                                <TableRow key={entry.id} className={cn(isLocked && "bg-slate-50/50")}>
+                                <TableRow
+                                    key={entry.id}
+                                    className={cn(
+                                        isLocked && "bg-slate-50/50",
+                                        focusEntryId === entry.id && "bg-emerald-50 ring-2 ring-inset ring-emerald-300",
+                                    )}
+                                >
                                     <TableCell>
                                         <div className="flex flex-col gap-0.5">
                                             <span>{formatDate(entry.date)}</span>
@@ -634,7 +666,7 @@ export function FuelLogTable({
                                         <div className="flex flex-col gap-0.5">
                                             <div className="flex items-center gap-1.5">
                                                 <span className="text-xs font-semibold text-slate-700 truncate max-w-[140px]">
-                                                    {entry.vendor || entry.metadata?.stationName || "Unknown Vendor"}
+                                                    {entry.location || entry.vendor || entry.metadata?.stationName || "Unknown Station"}
                                                 </span>
                                                 {locationStatus === 'verified' && (
                                                     <Tooltip>
@@ -754,6 +786,13 @@ export function FuelLogTable({
                                         })()}
                                     </TableCell>
                                     <TableCell>
+                                        <span className="text-xs font-semibold font-mono text-slate-800">
+                                            {(entry.odometer as number) > 0
+                                                ? Number(entry.odometer).toLocaleString()
+                                                : '—'}
+                                        </span>
+                                    </TableCell>
+                                    <TableCell>
                                         {(() => {
                                             const prev = prevOdometerMap.get(entry.id);
                                             if (!prev || prev.prevOdo == null) return <span className="text-xs text-slate-300">—</span>;
@@ -763,7 +802,7 @@ export function FuelLogTable({
                                             const isZeroDelta = !isRegression && delta === 0;
                                             return (
                                                 <div className="flex flex-col">
-                                                    <span className="text-xs font-medium">{prev.prevOdo.toLocaleString()}</span>
+                                                    <span className="text-[10px] text-slate-400">{prev.prevOdo.toLocaleString()}</span>
                                                     <span className={`text-[10px] font-medium ${
                                                       isRegression ? 'text-red-600' : isZeroDelta ? 'text-amber-600' : 'text-green-600'
                                                     }`}>
@@ -812,6 +851,11 @@ export function FuelLogTable({
                                                                 {confidenceScore ?? 'PENDING'}%
                                                             </Badge>
                                                         </div>
+                                                        {entry.metadata?.decisionReason && (
+                                                            <p className="text-[10px] text-slate-500">
+                                                                Decision: {String(entry.metadata.decisionReason).replace(/_/g, ' ')}
+                                                            </p>
+                                                        )}
                                                         
                                                         <div className="space-y-1.5">
                                                             <AuditBreakdownItem label="GPS Handshake" value={entry.metadata?.auditConfidenceBreakdown?.gps} max={30} />

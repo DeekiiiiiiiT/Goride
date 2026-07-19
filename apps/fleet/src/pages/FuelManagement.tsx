@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useCallback, useMemo } from 'react';
+﻿import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { FuelLayout } from '../components/fuel/FuelLayout';
 import { Card, CardContent } from '../components/ui/card';
@@ -87,10 +87,20 @@ function FuelManagementInner({ defaultTab = 'dashboard', onViewDriverLedger, onT
   const queryClient = useQueryClient();
   const { runExclusive, setMessage } = useFuelReconBusy();
   const [activeTab, setActiveTab] = useState(defaultTab);
+  const lastFuelDataLoadAtRef = useRef(0);
 
   useEffect(() => {
     setActiveTab(defaultTab);
   }, [defaultTab]);
+
+  // Silent refresh when switching to Logs / Review if data is stale (>30s)
+  useEffect(() => {
+    if (activeTab !== 'logs' && activeTab !== 'reimbursements') return;
+    const age = Date.now() - lastFuelDataLoadAtRef.current;
+    if (lastFuelDataLoadAtRef.current > 0 && age > 30_000) {
+      void loadData(true);
+    }
+  }, [activeTab]);
 
   const fleetTz = useFleetTimezone();
 
@@ -250,6 +260,9 @@ function FuelManagementInner({ defaultTab = 'dashboard', onViewDriverLedger, onT
   const loadData = useCallback(async (silent = false) => {
       if (!silent) setIsRefreshing(true);
       try {
+          // Heal Approved fuel txs missing fuel_entry before loading Logs (Posted guarantee)
+          await fuelService.ensurePostedEntries(40).catch(() => ({ healed: 0, blocked: 0 }));
+
           // Fetch all data in a single parallel batch for fastest load time.
           // None of these calls depend on each other's results.
           const [vData, dData, scenariosData, cardsData, logsData, adjsData, disputesData, txData, finalizedData] = await Promise.all([
@@ -274,6 +287,7 @@ function FuelManagementInner({ defaultTab = 'dashboard', onViewDriverLedger, onT
           setDisputes(disputesData);
           setTransactions(txData);
           setFinalizedReports(Array.isArray(finalizedData) ? finalizedData : []);
+          lastFuelDataLoadAtRef.current = Date.now();
 
           if (!silent) toast.success("Data refreshed");
       } catch (e) {
@@ -517,7 +531,7 @@ function FuelManagementInner({ defaultTab = 'dashboard', onViewDriverLedger, onT
           // Refresh logs to pick up the new fuel_entry created by server
           const freshLogs = await fuelService.getFuelEntries();
           setLogs(freshLogs);
-          toast.success("Fuel log reviewed and approved");
+          toast.success("Posted to Transaction Logs");
       } catch (e) {
           console.error(e);
           toast.error("Failed to approve log review");
@@ -534,8 +548,6 @@ function FuelManagementInner({ defaultTab = 'dashboard', onViewDriverLedger, onT
           const updated = await api.approveExpense(id, notes, undefined, stationOpts);
           setTransactions(prev => prev.map(t => t.id === id ? updated : t));
           
-          // Phase 3: Automated Financial Settlement
-          // If it was a fuel reimbursement, trigger the credit settlement
           if (updated.category === 'Fuel' || updated.category === 'Fuel Reimbursement') {
               await fuelService.getFuelScenarios();
               try {
@@ -544,12 +556,9 @@ function FuelManagementInner({ defaultTab = 'dashboard', onViewDriverLedger, onT
               } catch {
                   /* non-fatal */
               }
-              /* 
-                 Phase 6: Legacy Auto-Settlement Disabled.
-              */
-              toast.success("Reimbursement Approved (Pending Reconciliation)");
+              toast.success("Posted to Transaction Logs");
           } else {
-              toast.success("Reimbursement Approved");
+              toast.success("Expense approved");
           }
       } catch (e) {
           console.error(e);
@@ -1065,13 +1074,13 @@ function FuelManagementInner({ defaultTab = 'dashboard', onViewDriverLedger, onT
       pageDescription = "Compare actual gas card charges against estimated operating costs.";
   } else if (activeTab === 'reimbursements') {
       pageTitle = "Review Queue";
-      pageDescription = "Review and approve driver fuel submissions.";
+      pageDescription = "Open work only — posted fill-ups are in Transaction Logs.";
   } else if (activeTab === 'cards') {
       pageTitle = "Card Inventory";
       pageDescription = "Manage gas cards and their assignments.";
   } else if (activeTab === 'logs') {
       pageTitle = "Transaction Logs";
-      pageDescription = "History of all fuel purchases and manual entries.";
+      pageDescription = "Posted fuel fill-ups. Odometer column shows current km; Δ Prev shows change from last fill.";
   } else if (activeTab === 'configuration') {
       pageTitle = "Fleet Policy Configuration";
       pageDescription = "Manage company and driver expense splits for fuel.";
@@ -1170,6 +1179,21 @@ function FuelManagementInner({ defaultTab = 'dashboard', onViewDriverLedger, onT
               dateRange={reimbursementDateRange}
               onDateRangeChange={setReimbursementDateRange}
               isRefreshing={isRefreshing}
+              onViewInTransactionLogs={({ fuelEntryId, date, vehicleId }) => {
+                  setActiveTab('logs');
+                  onTabChange?.('logs');
+                  if (fuelEntryId) {
+                      // Soft highlight via session — Logs table can pick up later; refresh ensures row exists
+                      sessionStorage.setItem('fuel_logs_focus_entry', fuelEntryId);
+                  } else if (date || vehicleId) {
+                      sessionStorage.setItem(
+                          'fuel_logs_focus_entry',
+                          JSON.stringify({ date, vehicleId }),
+                      );
+                  }
+                  void loadData(true);
+                  toast.info('Opening Transaction Logs…');
+              }}
           />
       )}
 
