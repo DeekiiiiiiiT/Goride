@@ -161,6 +161,8 @@ import {
   markEvidenceFilesDeleted,
   type EvidenceType,
 } from "./evidence_storage.ts";
+import { ensureBucket } from "./storage_buckets.ts";
+import { detectFileMagicBytes, extForMime, IMAGE_AND_PDF_MIMES } from "./file_magic.ts";
 import { registerPendingVehicleCatalogRoutes } from "./pending_vehicle_catalog_routes.ts";
 import { registerPartSourcingRoutes } from "./part_sourcing_routes.ts";
 import {
@@ -7798,30 +7800,25 @@ app.post("/make-server-37f42386/upload", async (c) => {
       sourceId;
 
     const bucketName = useEphemeral ? EPHEMERAL_EVIDENCE_BUCKET : "make-37f42386-docs";
-    
-    // Ensure bucket exists and has adequate file size limit
-    const { data: buckets } = await supabase.storage.listBuckets();
-    const existingBucket = buckets?.find(b => b.name === bucketName);
-    if (!existingBucket) {
-        await supabase.storage.createBucket(bucketName, {
-            public: false,
-            fileSizeLimit: useEphemeral ? 5242880 : 10485760,
-        });
-    } else if (!useEphemeral) {
-        await supabase.storage.updateBucket(bucketName, {
-            fileSizeLimit: 10485760,
-        });
-    }
+    await ensureBucket(
+      supabase,
+      useEphemeral ? "ephemeral-evidence" : "make-37f42386-docs",
+    );
 
-    const fileExt = file.name.split('.').pop() || 'jpg';
+    const buffer = new Uint8Array(await file.arrayBuffer());
+    const detected = detectFileMagicBytes(buffer);
+    if (!detected || !IMAGE_AND_PDF_MIMES.has(detected)) {
+      return c.json({ error: "File content does not match an allowed type" }, 400);
+    }
+    const fileExt = extForMime(detected);
     const filePath = useEphemeral
       ? buildEphemeralStoragePath(orgId || getOrgId(c) || 'unknown', evidenceType as EvidenceType, fileExt)
       : `driver-docs/${crypto.randomUUID()}.${fileExt}`;
 
     const { error } = await supabase.storage
         .from(bucketName)
-        .upload(filePath, file, {
-            contentType: file.type,
+        .upload(filePath, buffer, {
+            contentType: detected,
             upsert: false
         });
 
@@ -8186,15 +8183,8 @@ app.post("/make-server-37f42386/generate-vehicle-image", async (c) => {
     
     // Convert Base64 to Buffer for Upload
     const buffer = Buffer.from(imageB64, 'base64');
-    
-    // Use the global supabase client
     const bucketName = `make-37f42386-vehicles`;
-    
-    // Ensure bucket exists (idempotent)
-    const { data: buckets } = await supabase.storage.listBuckets();
-    if (!buckets?.some((b: any) => b.name === bucketName)) {
-        await supabase.storage.createBucket(bucketName, { public: false });
-    }
+    await ensureBucket(supabase, "make-37f42386-vehicles");
 
     const fileName = `${licensePlate || crypto.randomUUID()}.png`;
 

@@ -1,8 +1,8 @@
 import { useRef, useState } from 'react';
-import { supabase } from '../lib/partner-supabase';
 import { toast } from 'sonner';
 import { MaterialIcon } from '../signup/components/MaterialIcon';
 import ImageCropModal from './ImageCropModal';
+import { uploadMerchantAsset } from '../lib/partner-api';
 
 interface ImageUploadProps {
   value?: string;
@@ -52,7 +52,7 @@ const VARIANT_CONFIG = {
 export default function ImageUpload({
   value,
   onChange,
-  bucket = 'merchant-assets',
+  bucket: _bucket = 'merchant-assets',
   folder = 'images',
   aspectRatio = 'square',
   label,
@@ -74,27 +74,7 @@ export default function ImageUpload({
     setErrorMessage(null);
 
     try {
-      const fileExt = originalName.split('.').pop() || 'jpg';
-      const fileName = `${folder}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-
-      const { error: uploadError } = await supabase.storage.from(bucket).upload(fileName, file, {
-        cacheControl: '3600',
-        upsert: false,
-      });
-
-      if (uploadError) {
-        if (uploadError.message?.toLowerCase().includes('bucket not found')) {
-          throw new Error(
-            `Storage bucket "${bucket}" doesn't exist. Please contact support to set up image uploads.`
-          );
-        }
-        throw uploadError;
-      }
-
-      const {
-        data: { publicUrl },
-      } = supabase.storage.from(bucket).getPublicUrl(fileName);
-
+      const { publicUrl } = await uploadMerchantAsset(file, folder, originalName);
       onChange(publicUrl);
       toast.success('Image uploaded');
     } catch (error: unknown) {

@@ -8,6 +8,7 @@ import { Buffer } from "node:buffer";
 import * as kv from "./kv_store.tsx";
 import { generatePerformanceReport } from "./performance-metrics.tsx";
 import { trackedProviderCall, ProviderBlockedError } from "./api_usage_logger.ts";
+import { ensureBucket } from "./storage_buckets.ts";
 
 const app = new Hono();
 
@@ -199,8 +200,7 @@ app.post("/ai-services/generate-vehicle-image", async (c) => {
 
     const buffer = Buffer.from(imageB64, 'base64');
     const bucketName = `make-37f42386-vehicles`;
-    const { data: buckets } = await supabase.storage.listBuckets();
-    if (!buckets?.some((b: any) => b.name === bucketName)) await supabase.storage.createBucket(bucketName, { public: false });
+    await ensureBucket(supabase, "make-37f42386-vehicles");
     
     const fileName = `${licensePlate || crypto.randomUUID()}.png`;
     const { error: uploadError } = await supabase.storage.from(bucketName).upload(fileName, buffer, { contentType: 'image/png', upsert: true });

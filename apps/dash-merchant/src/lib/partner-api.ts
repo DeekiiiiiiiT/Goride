@@ -118,6 +118,37 @@ export async function uploadMerchantDocument(
   return res.json();
 }
 
+/** Storefront images (logo/cover/menu) via Edge Function — not direct Storage writes. */
+export async function uploadMerchantAsset(
+  file: File | Blob,
+  folder = 'images',
+  originalName = 'image.jpg',
+): Promise<{ publicUrl: string; path: string }> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session) throw new Error('Not authenticated');
+
+  const form = new FormData();
+  const asFile =
+    file instanceof File ? file : new File([file], originalName, { type: (file as Blob).type || 'image/jpeg' });
+  form.append('file', asFile);
+  form.append('folder', folder);
+
+  const res = await fetch(`${API_ENDPOINTS.delivery}/merchant-assets/upload`, {
+    method: 'POST',
+    headers: supabaseAnonFunctionHeaders({
+      Authorization: `Bearer ${session.access_token}`,
+    }),
+    body: form,
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || 'Upload failed');
+  }
+  return res.json();
+}
+
 export async function saveBankAccount(input: MerchantBankAccountInput): Promise<{ bankAccount: MerchantBankAccountMasked }> {
   return deliveryFetch('/merchant/bank-account', {
     method: 'POST',

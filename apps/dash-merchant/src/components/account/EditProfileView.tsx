@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { supabase } from '../../lib/partner-supabase';
+import { uploadMerchantAsset } from '../../lib/partner-api';
 import { MaterialIcon } from '../../signup/components/MaterialIcon';
 import {
   MerchantSettingsFormData,
@@ -76,16 +76,7 @@ export default function EditProfileView({
   };
 
   const uploadImage = async (file: File, folder: string) => {
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${folder}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-    const { error } = await supabase.storage.from('merchant-assets').upload(fileName, file, {
-      cacheControl: '3600',
-      upsert: false,
-    });
-    if (error) throw error;
-    const {
-      data: { publicUrl },
-    } = supabase.storage.from('merchant-assets').getPublicUrl(fileName);
+    const { publicUrl } = await uploadMerchantAsset(file, folder, file.name);
     return publicUrl;
   };
 

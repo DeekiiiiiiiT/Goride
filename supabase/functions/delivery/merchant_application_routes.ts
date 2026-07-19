@@ -516,15 +516,30 @@ export function registerMerchantApplicationRoutes(app: Hono) {
       return c.json({ error: "File must be 10MB or smaller" }, 400);
     }
 
-    const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
+    const buffer = new Uint8Array(await file.arrayBuffer());
+    const { detectFileMagicBytes, extForMime, IMAGE_AND_PDF_MIMES } = await import(
+      "../_shared/fileMagic.ts"
+    );
+    const detected = detectFileMagicBytes(buffer);
+    if (!detected || !IMAGE_AND_PDF_MIMES.has(detected)) {
+      return c.json({ error: "File content does not match an allowed type" }, 400);
+    }
+
+    const { scanForMalware } = await import("../_shared/malwareScan.ts");
+    const scan = await scanForMalware(buffer);
+    if (!scan.clean) {
+      return c.json({ error: scan.reason || "This file failed a security scan and was not uploaded." }, 422);
+    }
+
+    // Deliberate: upsert by docType — latest file wins (path is merchant/docType-timestamp)
+    const ext = extForMime(detected);
     const storagePath = `${merchant.id}/${docType}-${Date.now()}.${ext}`;
     const storage = getStorageSupabase();
-    const buffer = await file.arrayBuffer();
 
     const { error: uploadError } = await storage.storage
       .from("merchant-documents")
       .upload(storagePath, buffer, {
-        contentType: file.type || "application/octet-stream",
+        contentType: detected,
         upsert: true,
       });
     if (uploadError) {

@@ -5,6 +5,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import * as kv from "./kv_store.tsx";
 import type { Context, Next } from "npm:hono";
 import { checkRateLimit, recordFailedAttempt, getClientIp } from "../server/rate_limiter.ts";
+import { ensureBucket } from "../server/storage_buckets.ts";
 
 // ---------------------------------------------------------------------------
 // Wave 5: Env boot validation
@@ -371,8 +372,7 @@ app.post("/admin-operations/upload", requirePlatformAdmin, async (c) => {
     const file = body['file'];
     if (!file || !(file instanceof File)) return c.json({ error: "No file" }, 400);
     const bucketName = "make-37f42386-docs";
-    const { data: buckets } = await supabase.storage.listBuckets();
-    if (!buckets?.find(b => b.name === bucketName)) await supabase.storage.createBucket(bucketName, { public: false, fileSizeLimit: 5242880 });
+    await ensureBucket(supabase, "make-37f42386-docs");
     const fileExt = file.name.split('.').pop();
     const fileName = `${crypto.randomUUID()}.${fileExt}`;
     const filePath = `driver-docs/${fileName}`;

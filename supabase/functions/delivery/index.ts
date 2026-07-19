@@ -1975,6 +1975,7 @@ app.post("/merchant/notifications/:id/read", async (c) => {
 });
 
 import { registerMerchantApplicationRoutes } from "./merchant_application_routes.ts";
+import { registerMerchantAssetsRoutes } from "./merchantAssetsUpload.ts";
 import { registerPartnerBusinessTypeRoutes } from "./admin/onboardingConfigRoutes.ts";
 import { registerCourierAdminRoutes } from "./admin/courierRoutes.ts";
 import { registerMerchantAdminRoutes } from "./admin/merchantRoutes.ts";
@@ -1982,6 +1983,7 @@ import { registerOrderAdminRoutes } from "./admin/orderRoutes.ts";
 import { registerCustomerAdminRoutes } from "./admin/customerRoutes.ts";
 import { registerFinanceAdminRoutes } from "./admin/financeRoutes.ts";
 registerMerchantApplicationRoutes(app);
+registerMerchantAssetsRoutes(app);
 registerMerchantTeamRoutes(app, { getSupabase, getServiceSupabase });
 registerMerchantStationRoutes(app, { getSupabase, getServiceSupabase });
 registerMerchantVenueOpsRoutes(app, { getSupabase, getServiceSupabase });
