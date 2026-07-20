@@ -176,7 +176,7 @@ describe('buildPnLFromCanonicalEvents — toll netting', () => {
   it('flags pending (unresolved) trip-level tolls as provisional', () => {
     const events = [tollCharge({ sourceType: 'trip', sourceId: 'trip-5', netAmount: 30, grossAmount: 30 })];
     const pnl = buildPnLFromCanonicalEvents(events, period);
-    expect(pnl.coverageNote).toMatch(/not yet resolved in Toll Reconciliation/);
+    expect(pnl.coverageNote).toMatch(/no cash-wash\/phantom\/personal determination synced/);
   });
 });
 

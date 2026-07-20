@@ -169,7 +169,7 @@ export function buildPnLFromCanonicalEvents(
   }
   if (tollNet.provisional > 0.005) {
     noteParts.push(
-      `${formatMoneyPlain(tollNet.provisional)} of Tolls is from trip-level tolls not yet resolved in Toll Reconciliation — this number may change once reviewed.`,
+      `${formatMoneyPlain(tollNet.provisional)} of Tolls is from trip-level tolls with no cash-wash/phantom/personal determination synced to this P&L yet — if these were already resolved in Toll Reconciliation, run the P&L offset backfill to sync them here; this number may otherwise change once reviewed.`,
     );
   }
   if (tollNet.clipped) {
