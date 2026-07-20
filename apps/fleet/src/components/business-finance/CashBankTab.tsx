@@ -100,6 +100,14 @@ export function CashBankTab({
             <span className="text-slate-500">Period loads</span>
             <span className="tabular-nums font-medium">{formatMoney(walletLoads.periodLoads)}</span>
           </div>
+          {walletLoads.shortDriverCount > 0 && (
+            <div className="flex justify-between">
+              <span className="text-slate-500">Drivers short</span>
+              <span className="tabular-nums font-medium text-amber-700">
+                {walletLoads.shortDriverCount}
+              </span>
+            </div>
+          )}
           <p className="text-xs text-slate-500">
             Funding cost, not revenue. Open Wallet Center for load detail.
           </p>

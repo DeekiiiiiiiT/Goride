@@ -23,6 +23,7 @@ const VALID_CANONICAL_EVENT_TYPES = new Set([
   "refund_expense",
   "platform_fee",
   "fuel_expense",
+  "fuel_charge_offset",
   "toll_charge",
   "toll_refund",
   "adjustment",

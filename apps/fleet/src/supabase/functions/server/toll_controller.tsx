@@ -27,7 +27,6 @@ import { emitDriverTollCharge, isUnifiedTollSettlementEnabled } from "./driver_t
 import {
   emitTollChargeOffset,
   reinstateTollCharge,
-  isTollPnlOffsetEnabled,
   type TollPnlOffsetReason,
 } from "./toll_pnl_offset.ts";
 import { mapResolutionReasonToTollResolution } from "./claim_resolution_sync.ts";
@@ -4537,9 +4536,7 @@ app.get(`${BASE}/toll-pnl-offset-backfill/status`, async (c) => {
 // Mirrors the match-index backfill convention: dryRun defaults true, batched,
 // capped error samples, manifest of every id touched for a concrete undo path
 // (reinstateTollCharge per id, same key each source already uses). Idempotent
-// — safe to re-run; already-offset sources are skipped automatically. Applying
-// requires tollPnlOffsetEnabled to already be ON (go-forward behavior should
-// be verified before correcting history) — dry-run is allowed regardless.
+// — safe to re-run; already-offset sources are skipped automatically.
 app.post(`${BASE}/toll-pnl-offset-backfill/backfill`, async (c) => {
   try {
     const body = await c.req.json().catch(() => ({}));
@@ -4562,13 +4559,6 @@ app.post(`${BASE}/toll-pnl-offset-backfill/backfill`, async (c) => {
             ? `Dry run: would offset ${batch.length} of ${candidates.length} historical toll(s) totaling ${totalAmount} (batchSize=${batchSize}). Re-run with dryRun=false to apply.`
             : "Nothing to backfill.",
       });
-    }
-
-    if (!(await isTollPnlOffsetEnabled())) {
-      return c.json(
-        { error: "tollPnlOffsetEnabled must be turned ON (and verified for a cycle) before backfilling history. See Toll Automation Settings." },
-        400,
-      );
     }
 
     const touched: Array<{ sourceType: string; id: string; reason: string; amount: number }> = [];
@@ -5855,7 +5845,7 @@ app.post(`${BASE}/resolve`, async (c) => {
       );
       // Personal = recovered via driver payout deduction, not a fleet loss —
       // neutralize the toll's own toll_charge event in the Business Finance P&L.
-      if (amount > 0 && (await isTollPnlOffsetEnabled())) {
+      if (amount > 0) {
         try {
           await emitTollChargeOffset(
             {
@@ -6215,9 +6205,7 @@ interface RefundAutomationSettings {
   disputeRefundTripSyncEnabled: boolean;
   // Real Undo for Apply-to-Underpaid — additive, default OFF.
   unlinkedRefundUndoEnabled: boolean;
-  // Emit compensating toll_charge_offset events so cash_wash/phantom/
-  // expense_logged/personal resolutions stop counting as a Business Finance
-  // P&L loss — additive, default OFF.
+  // Always true — P&L offsets are automatic. Kept for older clients.
   tollPnlOffsetEnabled: boolean;
 }
 
@@ -6243,7 +6231,7 @@ async function getRefundAutomationSettings(): Promise<RefundAutomationSettings> 
     matchOnIngestEnabled: rec?.matchOnIngestEnabled === true, // default OFF
     disputeRefundTripSyncEnabled: rec?.disputeRefundTripSyncEnabled === true, // default OFF
     unlinkedRefundUndoEnabled: rec?.unlinkedRefundUndoEnabled === true, // default OFF
-    tollPnlOffsetEnabled: rec?.tollPnlOffsetEnabled === true, // default OFF
+    tollPnlOffsetEnabled: true, // always on
   };
   // Dominion Toll Brain owns personal-use / orphan dials when consume is on.
   if (fleetUsesTollBrain()) {
@@ -6476,8 +6464,8 @@ async function applyRefundResolution(params: {
   // P&L offset: neutralize the original toll_charge for resolutions Toll
   // Reconciliation determined are NOT a real, unrecovered business loss, and
   // reinstate it if a resolution reverts back to a non-offsetting status.
-  // Additive/reversible; gated OFF by default (mirrors driver_toll_charge.ts).
-  if (amount > 0 && (await isTollPnlOffsetEnabled())) {
+  // Always on — reversible via reinstate on status change.
+  if (amount > 0) {
     const OFFSET_REASON_BY_RESOLUTION: Partial<Record<RefundResolutionStatus, TollPnlOffsetReason>> = {
       cash_wash: "cash_wash",
       phantom: "phantom",
@@ -8043,10 +8031,7 @@ app.put(`${BASE}/automation-settings`, async (c) => {
         typeof body?.unlinkedRefundUndoEnabled === "boolean"
           ? body.unlinkedRefundUndoEnabled
           : current.unlinkedRefundUndoEnabled,
-      tollPnlOffsetEnabled:
-        typeof body?.tollPnlOffsetEnabled === "boolean"
-          ? body.tollPnlOffsetEnabled
-          : current.tollPnlOffsetEnabled,
+      tollPnlOffsetEnabled: true, // always on — ignore client patch
     };
     await kv.set(REFUND_SETTINGS_KEY, next);
     // Re-apply brain overlay for response so UI always shows Dominion dials.

@@ -11,6 +11,7 @@ import {
 import type { DriverFinancialPeriodClient } from '../../hooks/useDriverFinancialPeriods';
 import { buildPnLFromCanonicalEvents, sumExpenseRowsFromEvents } from './businessFinancePnL';
 import { inPeriod } from './periodRange';
+import { computeIndriveWalletLoadsFromLedgerEntries } from '../../utils/indriveWalletMetrics';
 import type {
   BusinessFinanceBundle,
   BusinessFinancePeriod,
@@ -189,8 +190,9 @@ export async function fetchBusinessFinanceBundle(
   const pnl = buildPnLFromCanonicalEvents(ledgerEvents, period);
   const expenseAgg = sumExpenseRowsFromEvents(ledgerEvents, period);
 
-  // Prefer period fuel when ledger thin. Tolls: never treat net $0 as "ledger empty".
-  const fuel = expenseAgg.fuel > 0.005 ? expenseAgg.fuel : round2(fuelFromPeriods);
+  // Prefer ledger when fuel/toll events exist — never treat net $0 as "ledger empty".
+  const fuel =
+    expenseAgg.fuelEventCount > 0 ? expenseAgg.fuel : round2(fuelFromPeriods);
   const tolls =
     expenseAgg.tollEventCount > 0 ? expenseAgg.tolls : round2(tollFromPeriods);
   const driverPayouts =
@@ -201,8 +203,12 @@ export async function fetchBusinessFinanceBundle(
   const grossLine = pnl.lines.find((l) => l.id === 'gross')?.amount || 0;
   const profitLine = Number(pnl.lines.find((l) => l.id === 'operating_profit')?.amount) || 0;
 
-  // Wallet loads: scan transactions category if present on events metadata; else 0 + incomplete
-  let walletLoads = 0;
+  // Wallet loads: sum canonical wallet_credit already in ledgerEvents (funding transfer, not P&L).
+  const { periodLoads: walletLoads } = computeIndriveWalletLoadsFromLedgerEntries(
+    ledgerEvents,
+    period.startYmd,
+    period.endYmd,
+  );
   // Maintenance honestly untracked
   const maintenance: number | null = null;
 
@@ -211,6 +217,26 @@ export async function fetchBusinessFinanceBundle(
     const periodsRes = await api.getTollReconciliationPeriods();
     const missing = Number((periodsRes as any)?.totals?.missingCanonicalChargeCount) || 0;
     tollVarianceFlags = missing > 0 ? missing : 0;
+  } catch {
+    /* optional health signal — do not fail the bundle */
+  }
+
+  let fuelVarianceFlags = 0;
+  try {
+    const fuelHealth = await api.getFuelReconciliationPeriodsHealth();
+    const missing = Number((fuelHealth as any)?.totals?.missingCanonicalExpenseCount) || 0;
+    fuelVarianceFlags = missing > 0 ? missing : 0;
+  } catch {
+    /* optional */
+  }
+
+  let walletShortDriverCount = 0;
+  try {
+    const walletFleet = await api.getIndriveWalletFleet({
+      startDate: period.startYmd,
+      endDate: period.endYmd,
+    });
+    walletShortDriverCount = Number(walletFleet?.totals?.shortDriverCount) || 0;
   } catch {
     /* optional health signal — do not fail the bundle */
   }
@@ -227,7 +253,7 @@ export async function fetchBusinessFinanceBundle(
       fuel,
       tolls,
       maintenance,
-      walletLoads,
+      walletLoads: round2(walletLoads),
       driverPayouts,
     },
     profit: {
@@ -238,11 +264,19 @@ export async function fetchBusinessFinanceBundle(
       needsStatementWeeks,
       highCashDrivers: debtors.filter((d) => d.amount > 10000).length,
       tollVarianceFlags,
+      fuelVarianceFlags,
+      walletShortDriverCount,
     },
     incompleteSources: [
       ...incomplete,
       ...(tollVarianceFlags > 0
         ? [`${tollVarianceFlags} tag toll(s) missing from Business Finance ledger — run canonical tolls backfill`]
+        : []),
+      ...(fuelVarianceFlags > 0
+        ? [`${fuelVarianceFlags} fuel fill(s) missing from Business Finance ledger — check fuel expense sync`]
+        : []),
+      ...(walletShortDriverCount > 0
+        ? [`${walletShortDriverCount} driver(s) short on InDrive wallet`]
         : []),
     ],
   };
@@ -258,7 +292,10 @@ export async function fetchBusinessFinanceBundle(
       totalStillHeld: round2(cashStillHeld),
       topDebtors: debtors.slice(0, 5),
     },
-    walletLoads: { periodLoads: walletLoads },
+    walletLoads: {
+      periodLoads: round2(walletLoads),
+      shortDriverCount: walletShortDriverCount,
+    },
     incompleteSources: overview.incompleteSources.filter((s) =>
       /bank|wallet|driver|cash/i.test(s),
     ),
@@ -273,6 +310,10 @@ export async function fetchBusinessFinanceBundle(
         tracked: true,
         deepLinkPage: 'fuel-overview',
         deepLinkLabel: 'Open Fuel',
+        note:
+          pnl.fuelRecoveredWashed && pnl.fuelRecoveredWashed > 0.005
+            ? `${formatMoney(fuel)} fleet loss · ${formatMoney(pnl.fuelRecoveredWashed)} already charged to drivers`
+            : undefined,
       },
       {
         id: 'toll',

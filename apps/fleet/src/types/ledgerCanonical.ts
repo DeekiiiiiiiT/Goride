@@ -16,6 +16,8 @@ export const CANONICAL_LEDGER_EVENT_TYPES = [
   'refund_expense',
   'platform_fee',
   'fuel_expense',
+  /** Compensating entry that nets driver-share of a prior `fuel_expense` (or reinstates one). */
+  'fuel_charge_offset',
   'toll_charge',
   'toll_refund',
   /** Compensating entry that nets a prior `toll_charge` (or reinstates one) without rewriting history. */

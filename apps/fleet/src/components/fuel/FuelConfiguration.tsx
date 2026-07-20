@@ -5,6 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { Info } from 'lucide-react';
 import { ScenarioList } from './ScenarioList';
 import { PolicySchedulePanel } from './PolicySchedulePanel';
+import { FuelPnlSettingsPanel } from './FuelPnlSettingsPanel';
 import type { FuelScenario } from '../../types/fuel';
 
 export function FuelConfiguration({
@@ -40,6 +41,8 @@ export function FuelConfiguration({
                         Changes apply to Consumption Reconciliation immediately.
                     </AlertDescription>
                 </Alert>
+
+                <FuelPnlSettingsPanel />
 
                 <Tabs
                     value={tab}

@@ -780,7 +780,7 @@ export interface LedgerDriverOverview {
 
 /**
  * GET `/ledger/driver-indrive-wallet` (Phase 2 + Phase 7). All amounts same currency as fleet (e.g. JMD).
- * Fee source: **`ledger_event:*`** only (legacy **`ledger:%`** paths removed).
+ * Loads: canonical **`wallet_credit`**. Fees: **`ledger_event:*`** only.
  *
  * **`periodFees`:** Within `[startDate, endDate]`, sum **absolute** fee impact for InDrive:
  * 1. Primary: sum `|netAmount|` on rows with `eventType === 'platform_fee'`, `platform === 'InDrive'`.

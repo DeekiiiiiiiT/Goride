@@ -13,7 +13,7 @@ import {
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../ui/collapsible';
 import { cn } from '../ui/utils';
 import { formatMoney } from './money';
-import type { BusinessFinancePnL, PnLTollBreakdown } from './types';
+import type { BusinessFinancePnL, PnLFuelBreakdown, PnLTollBreakdown } from './types';
 
 function TollBreakdownPanel({ breakdown }: { breakdown: PnLTollBreakdown }) {
   const rows: Array<{ label: string; hint: string; amount: number; emphasize?: boolean }> = [
@@ -72,9 +72,68 @@ function TollBreakdownPanel({ breakdown }: { breakdown: PnLTollBreakdown }) {
   );
 }
 
+function FuelBreakdownPanel({ breakdown }: { breakdown: PnLFuelBreakdown }) {
+  const rows: Array<{ label: string; hint: string; amount: number; emphasize?: boolean }> = [
+    {
+      label: 'Fuel spend',
+      hint: 'All fills this period (gross)',
+      amount: breakdown.grossSpend,
+    },
+    {
+      label: 'Already covered',
+      hint: 'Driver share after Finalize — not a fleet loss',
+      amount: breakdown.alreadyCovered,
+    },
+    {
+      label: 'Reimbursed to drivers',
+      hint: 'Wallet fuel credits (memo only)',
+      amount: breakdown.reimbursedToDrivers,
+    },
+    {
+      label: 'Fleet loss',
+      hint: 'Hits this P&L Fuel line',
+      amount: breakdown.fleetLoss,
+      emphasize: true,
+    },
+  ];
+
+  return (
+    <div className="mt-2 mb-1 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+      {rows.map((row) => (
+        <div
+          key={row.label}
+          className={cn(
+            'rounded-md border px-3 py-2.5',
+            row.emphasize
+              ? 'border-rose-200 bg-rose-50/80 dark:border-rose-900 dark:bg-rose-950/40'
+              : 'border-slate-100 bg-slate-50/80 dark:border-slate-800 dark:bg-slate-900/50',
+          )}
+        >
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+            {row.label}
+          </p>
+          <p
+            className={cn(
+              'mt-1 text-lg font-semibold tabular-nums',
+              row.emphasize
+                ? 'text-rose-700 dark:text-rose-400'
+                : 'text-slate-900 dark:text-slate-100',
+            )}
+          >
+            {formatMoney(row.amount)}
+          </p>
+          <p className="mt-0.5 text-[11px] text-slate-500 leading-snug">{row.hint}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function PnLTab({ pnl }: { pnl: BusinessFinancePnL }) {
   const [tollsOpen, setTollsOpen] = useState(false);
-  const breakdown = pnl.tollBreakdown;
+  const [fuelOpen, setFuelOpen] = useState(false);
+  const tollBreakdown = pnl.tollBreakdown;
+  const fuelBreakdown = pnl.fuelBreakdown;
 
   const exportCsv = () => {
     const lines = [
@@ -85,12 +144,20 @@ export function PnLTab({ pnl }: { pnl: BusinessFinancePnL }) {
           : `"${l.label}",${l.amount}`,
       ),
     ];
-    if (breakdown) {
+    if (fuelBreakdown) {
       lines.push(
-        `"Toll charges (gross)",${breakdown.grossCharges}`,
-        `"Already covered (not fleet loss)",${breakdown.alreadyCovered}`,
-        `"Charged to drivers",${breakdown.chargedToDrivers}`,
-        `"Fleet toll loss",${breakdown.fleetLoss}`,
+        `"Fuel spend (gross)",${fuelBreakdown.grossSpend}`,
+        `"Already covered (driver share)",${fuelBreakdown.alreadyCovered}`,
+        `"Reimbursed to drivers",${fuelBreakdown.reimbursedToDrivers}`,
+        `"Fleet fuel loss",${fuelBreakdown.fleetLoss}`,
+      );
+    }
+    if (tollBreakdown) {
+      lines.push(
+        `"Toll charges (gross)",${tollBreakdown.grossCharges}`,
+        `"Already covered (not fleet loss)",${tollBreakdown.alreadyCovered}`,
+        `"Charged to drivers",${tollBreakdown.chargedToDrivers}`,
+        `"Fleet toll loss",${tollBreakdown.fleetLoss}`,
       );
     }
     lines.push(`Operating ratio %,${pnl.operatingRatio ?? ''}`);
@@ -137,7 +204,36 @@ export function PnLTab({ pnl }: { pnl: BusinessFinancePnL }) {
             {pnl.lines.map((line) => {
               if (line.kind === 'memo') return null;
 
-              if (line.id === 'tolls' && breakdown) {
+              if (line.id === 'fuel' && fuelBreakdown) {
+                const amt = line.amount ?? 0;
+                return (
+                  <li key={line.id} className="py-2.5 text-sm">
+                    <Collapsible open={fuelOpen} onOpenChange={setFuelOpen}>
+                      <CollapsibleTrigger className="group flex w-full items-center justify-between gap-2 text-left min-h-[44px]">
+                        <span className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300">
+                          <ChevronDown
+                            className={cn(
+                              'h-4 w-4 shrink-0 text-slate-400 transition-transform duration-200',
+                              fuelOpen && 'rotate-180',
+                            )}
+                            aria-hidden
+                          />
+                          {line.label}
+                          <span className="text-[11px] font-normal text-slate-400">
+                            {fuelOpen ? 'Hide breakdown' : 'Show breakdown'}
+                          </span>
+                        </span>
+                        <span className="tabular-nums text-slate-600">{formatMoney(amt)}</span>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <FuelBreakdownPanel breakdown={fuelBreakdown} />
+                      </CollapsibleContent>
+                    </Collapsible>
+                  </li>
+                );
+              }
+
+              if (line.id === 'tolls' && tollBreakdown) {
                 const amt = line.amount ?? 0;
                 return (
                   <li key={line.id} className="py-2.5 text-sm">
@@ -159,7 +255,7 @@ export function PnLTab({ pnl }: { pnl: BusinessFinancePnL }) {
                         <span className="tabular-nums text-slate-600">{formatMoney(amt)}</span>
                       </CollapsibleTrigger>
                       <CollapsibleContent>
-                        <TollBreakdownPanel breakdown={breakdown} />
+                        <TollBreakdownPanel breakdown={tollBreakdown} />
                       </CollapsibleContent>
                     </Collapsible>
                   </li>

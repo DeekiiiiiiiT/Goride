@@ -11,13 +11,12 @@ import {
   tollEventDate,
   tollRecoveredWashedMemo,
 } from '../../utils/tollFleetLossNetting';
+import {
+  computeFuelFleetLossNetting,
+  fuelRecoveredWashedMemo,
+} from '../../utils/fuelFleetLossNetting';
 
 type LedgerLike = Record<string, unknown>;
-
-function num(v: unknown): number {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : 0;
-}
 
 function eventDate(e: LedgerLike): string {
   return tollEventDate(e);
@@ -42,7 +41,6 @@ export function buildPnLFromCanonicalEvents(
   const scoped = (events || []).filter((e) => inPeriod(eventDate(e), period));
   let gross = 0;
   let fees = 0;
-  let fuel = 0;
   let driverPayouts = 0;
   const byPlatform = new Map<string, { gross: number; fees: number }>();
 
@@ -59,12 +57,36 @@ export function buildPnLFromCanonicalEvents(
     } else if (t === 'platform_fee') {
       fees += amt;
       row.fees += amt;
-    } else if (t === 'fuel_expense') {
-      fuel += amt;
     } else if (t === 'payout_cash' || t === 'driver_payout') {
       driverPayouts += amt;
     }
   }
+
+  const fuelNet = computeFuelFleetLossNetting(scoped);
+  const fuel = fuelNet.net;
+  const fuelRecoveredMemo = fuelRecoveredWashedMemo(fuelNet);
+
+  // Wallet reimbursements — shown in Fuel accordion, not netted into fleet loss.
+  let reimbursedToDrivers = 0;
+  for (const e of scoped) {
+    if (String(e.eventType || '') === 'fuel_reimbursement') {
+      reimbursedToDrivers += eventAmount(e);
+    }
+  }
+  reimbursedToDrivers = round2(Math.max(0, reimbursedToDrivers));
+
+  const fuelBreakdown =
+    fuelNet.gross > 0.005 ||
+    (fuelRecoveredMemo != null && fuelRecoveredMemo > 0.005) ||
+    reimbursedToDrivers > 0.005 ||
+    fuel > 0.005
+      ? {
+          grossSpend: fuelNet.gross,
+          alreadyCovered: fuelRecoveredMemo ?? 0,
+          reimbursedToDrivers,
+          fleetLoss: fuel,
+        }
+      : undefined;
 
   const tollNet = computeTollFleetLossNetting(scoped);
   const tolls = tollNet.net;
@@ -97,7 +119,7 @@ export function buildPnLFromCanonicalEvents(
   const operatingProfit = round2(netTrip - fuel - tolls - driverPayouts);
   const operatingRatio = gross > 0.005 ? round2(((gross - operatingProfit) / gross) * 100) : null;
 
-  // Memo line retired — Tolls accordion on PnLTab carries the owner breakdown.
+  // Memo line retired — Tolls/Fuel accordions on PnLTab carry the owner breakdown.
   const lines: PnLLine[] = [
     { id: 'gross', label: 'Gross platform earnings', amount: round2(gross), kind: 'total' },
     { id: 'platform_fees', label: 'Platform fees', amount: -round2(fees), kind: 'expense' },
@@ -131,6 +153,9 @@ export function buildPnLFromCanonicalEvents(
   if (tollNet.clipped) {
     noteParts.push('Toll recoveries exceeded gross toll charges this period — Tolls floored at $0; check Toll Reconciliation for a data mismatch.');
   }
+  if (fuelNet.clipped) {
+    noteParts.push('Fuel recoveries exceeded gross fuel spend this period — Fuel floored at $0; check Consumption Reconciliation for a data mismatch.');
+  }
 
   return {
     lines,
@@ -139,6 +164,8 @@ export function buildPnLFromCanonicalEvents(
     coverageNote: noteParts.length ? noteParts.join(' ') : undefined,
     tollsRecoveredWashed: recoveredMemo,
     tollBreakdown,
+    fuelRecoveredWashed: fuelRecoveredMemo,
+    fuelBreakdown,
   };
 }
 
@@ -149,19 +176,27 @@ function formatMoneyPlain(n: number): string {
 export function sumExpenseRowsFromEvents(
   events: LedgerLike[] | undefined | null,
   period: BusinessFinancePeriod,
-): { fuel: number; tolls: number; other: number; tollEventCount: number; rows: Array<{
-  id: string;
-  dateYmd: string;
-  category: string;
-  description: string;
-  amount: number;
-  source: string;
-}> } {
+): {
+  fuel: number;
+  tolls: number;
+  other: number;
+  tollEventCount: number;
+  fuelEventCount: number;
+  rows: Array<{
+    id: string;
+    dateYmd: string;
+    category: string;
+    description: string;
+    amount: number;
+    source: string;
+  }>;
+} {
   const scoped = (events || []).filter((e) => inPeriod(eventDate(e), period));
   let fuel = 0;
   let tolls = 0;
   let other = 0;
   let tollEventCount = 0;
+  let fuelEventCount = 0;
   const rows: Array<{
     id: string;
     dateYmd: string;
@@ -171,7 +206,15 @@ export function sumExpenseRowsFromEvents(
     source: string;
   }> = [];
 
-  const RECOGNIZED = ['fuel_expense', 'toll_charge', 'toll_refund', 'toll_charge_offset', 'refund_expense', 'adjustment'];
+  const RECOGNIZED = [
+    'fuel_expense',
+    'fuel_charge_offset',
+    'toll_charge',
+    'toll_refund',
+    'toll_charge_offset',
+    'refund_expense',
+    'adjustment',
+  ];
   for (const e of scoped) {
     const t = String(e.eventType || '');
     if (!RECOGNIZED.includes(t)) continue;
@@ -181,7 +224,18 @@ export function sumExpenseRowsFromEvents(
     let signedAmount = amt;
     if (t === 'fuel_expense') {
       fuel += amt;
+      fuelEventCount++;
       category = 'Fuel';
+    } else if (t === 'fuel_charge_offset') {
+      category = 'Fuel';
+      fuelEventCount++;
+      if (String(e.direction || '') === 'inflow') {
+        fuel -= amt;
+        signedAmount = -amt;
+      } else {
+        fuel += amt;
+        signedAmount = amt;
+      }
     } else if (t === 'toll_charge') {
       tolls += amt;
       tollEventCount++;
@@ -219,10 +273,11 @@ export function sumExpenseRowsFromEvents(
 
   rows.sort((a, b) => b.dateYmd.localeCompare(a.dateYmd));
   return {
-    fuel: round2(fuel),
+    fuel: round2(Math.max(0, fuel)),
     tolls: round2(Math.max(0, tolls)),
     other: round2(other),
     tollEventCount,
+    fuelEventCount,
     rows: rows.slice(0, 100),
   };
 }

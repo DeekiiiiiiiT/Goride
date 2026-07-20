@@ -19,6 +19,25 @@ function toYmd(d: string | undefined | null): string {
   return toEntryYmd(d);
 }
 
+/** Bounded parallelism for settlement posts (avoids N serial edge round-trips). */
+async function mapPool<T>(
+  items: T[],
+  concurrency: number,
+  fn: (item: T) => Promise<void>,
+): Promise<void> {
+  if (items.length === 0) return;
+  const limit = Math.max(1, Math.min(concurrency, items.length));
+  let next = 0;
+  const workers = Array.from({ length: limit }, async () => {
+    while (true) {
+      const i = next++;
+      if (i >= items.length) return;
+      await fn(items[i]);
+    }
+  });
+  await Promise.all(workers);
+}
+
 /**
  * Service to handle automated financial settlements for fuel and other expenses.
  * Wallet credits / fuel deductions are written ONLY at Finalize (commitWeeklyStatement).
@@ -108,19 +127,36 @@ export const settlementService = {
   },
 
   // --- Phase 4: Commit Weekly Statement ---
-  async commitWeeklyStatement(report: WeeklyFuelReport, entries: FuelEntry[]): Promise<void> {
+  async loadSettlementDeps(): Promise<{
+    vehicles: Awaited<ReturnType<typeof api.getVehicles>>;
+    drivers: any[];
+    scenarios: FuelScenario[];
+  }> {
+    const [vehicles, drivers, scenariosResponse] = await Promise.all([
+      api.getVehicles(),
+      api.getDrivers().catch(() => []),
+      fetchWithRetry(`${API_ENDPOINTS.fuel}/scenarios`, {
+        headers: await requireAuthHeaders(null),
+      }),
+    ]);
+    if (!scenariosResponse.ok) throw new Error('Failed to fetch scenarios');
+    const scenarios: FuelScenario[] = await scenariosResponse.json();
+    return { vehicles, drivers: drivers || [], scenarios };
+  },
+
+  async commitWeeklyStatement(
+    report: WeeklyFuelReport,
+    entries: FuelEntry[],
+    preloaded?: {
+      vehicles: Awaited<ReturnType<typeof api.getVehicles>>;
+      drivers: any[];
+      scenarios: FuelScenario[];
+    },
+  ): Promise<void> {
     try {
-        // 1. Fetch dependencies
-        const [vehicles, drivers, scenariosResponse] = await Promise.all([
-            api.getVehicles(),
-            api.getDrivers().catch(() => []),
-            fetchWithRetry(`${API_ENDPOINTS.fuel}/scenarios`, {
-                headers: await requireAuthHeaders(null)
-            })
-        ]);
-        
-        if (!scenariosResponse.ok) throw new Error("Failed to fetch scenarios");
-        const scenarios: FuelScenario[] = await scenariosResponse.json();
+        // 1. Fetch dependencies (or reuse bulk-hoisted set)
+        const deps = preloaded ?? (await settlementService.loadSettlementDeps());
+        const { vehicles, drivers, scenarios } = deps;
         const vehicle = vehicles.find(v => v.id === report.vehicleId);
         
         if (!vehicle) throw new Error(`Vehicle ${report.vehicleId} not found`);
@@ -148,17 +184,19 @@ export const settlementService = {
 
         const driverRatio = FuelCalculationService.getBlendedDriverShareRatio(report);
 
-        // 3. Process each entry
-        for (const entry of entries) {
-            // Skip already reconciled or awaiting review — only genuinely pending
-            // entries should be swept into settlement.
-            if (
-                entry.reconciliationStatus === 'Verified' ||
-                entry.reconciliationStatus === 'Archived' ||
-                entry.reconciliationStatus === 'Flagged' ||
-                entry.reconciliationStatus === 'Observing'
-            ) continue;
+        // Only genuinely pending entries — Verified/Archived/Flagged/Observing skipped.
+        const toSettle = entries.filter((entry) => {
+          const status = entry.reconciliationStatus;
+          return !(
+            status === 'Verified' ||
+            status === 'Archived' ||
+            status === 'Flagged' ||
+            status === 'Observing'
+          );
+        });
 
+        // Parallel posts (was 1 entry at a time → 50–70 serial API calls for a busy week).
+        await mapPool(toSettle, 5, async (entry) => {
             // Normalize blank payment source before money write
             const paymentSource = normalizeFuelPaymentSourceEnum(
               entry.paymentSource || (entry.metadata as any)?.paymentSource
@@ -206,7 +244,7 @@ export const settlementService = {
                 console.warn(
                   `[SettlementService] Skipping unsettled paymentSource '${paymentSource}' for entry ${entry.id}`
                 );
-                continue;
+                return;
             }
 
             const processTx = async (tx: Partial<FinancialTransaction>) => {
@@ -265,7 +303,7 @@ export const settlementService = {
                 headers: await requireAuthHeaders(),
                 body: JSON.stringify(updatedEntry)
             });
-        }
+        });
     } catch (error) {
         console.error("Failed to commit weekly statement:", error);
         throw error;

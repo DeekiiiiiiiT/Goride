@@ -174,26 +174,55 @@ export function IndriveWalletCenterPage({
   }, [driverList]);
 
   const summariesQuery = useQuery({
-    queryKey: ['indrive-wallet-center', 'summaries', dateFrom, dateTo, driverIds.join(',')],
+    queryKey: ['indrive-wallet-center', 'summaries', dateFrom, dateTo],
     enabled: rangeReady && driverIds.length > 0,
-    queryFn: async (): Promise<DriverWalletRow[]> => {
-      const settled = await Promise.allSettled(
-        driverIds.map((id) =>
-          api.getDriverIndriveWallet({ driverId: id, startDate: dateFrom, endDate: dateTo }),
-        ),
-      );
-      return driverIds.map((id, i) => {
-        const r = settled[i];
-        if (r.status === 'fulfilled') {
-          return { driverId: id, name: driverNameById[id] || id, summary: r.value };
-        }
-        return {
+    queryFn: async (): Promise<{
+      rows: DriverWalletRow[];
+      totals: { periodLoads: number; periodFees: number; shortDriverCount: number };
+    }> => {
+      // Single fleet call — replaces N+1 getDriverIndriveWallet.
+      const fleet = await api.getIndriveWalletFleet({
+        startDate: dateFrom,
+        endDate: dateTo,
+      });
+      const byId = new Map(fleet.drivers.map((d) => [d.driverId, d]));
+      const seen = new Set<string>();
+      const rows: DriverWalletRow[] = [];
+      for (const id of driverIds) {
+        seen.add(id);
+        const s = byId.get(id);
+        rows.push({
           driverId: id,
           name: driverNameById[id] || id,
-          summary: null,
-          error: r.reason instanceof Error ? r.reason.message : 'Failed to load',
-        };
-      });
+          summary: s
+            ? {
+                periodLoads: s.periodLoads,
+                periodFees: s.periodFees,
+                lifetimeLoads: s.lifetimeLoads,
+                estimatedBalance: s.estimatedBalance,
+              }
+            : {
+                periodLoads: 0,
+                periodFees: 0,
+                lifetimeLoads: 0,
+                estimatedBalance: 0,
+              },
+        });
+      }
+      for (const s of fleet.drivers) {
+        if (seen.has(s.driverId)) continue;
+        rows.push({
+          driverId: s.driverId,
+          name: driverNameById[s.driverId] || s.driverId,
+          summary: {
+            periodLoads: s.periodLoads,
+            periodFees: s.periodFees,
+            lifetimeLoads: s.lifetimeLoads,
+            estimatedBalance: s.estimatedBalance,
+          },
+        });
+      }
+      return { rows, totals: fleet.totals };
     },
   });
 
@@ -227,7 +256,7 @@ export function IndriveWalletCenterPage({
   });
 
   const sortedRows = useMemo(() => {
-    const rows = summariesQuery.data || [];
+    const rows = summariesQuery.data?.rows || [];
     return [...rows].sort((a, b) => {
       const balA = a.summary?.estimatedBalance ?? 0;
       const balB = b.summary?.estimatedBalance ?? 0;
@@ -240,10 +269,18 @@ export function IndriveWalletCenterPage({
   }, [summariesQuery.data]);
 
   const fleetTotals = useMemo(() => {
+    const server = summariesQuery.data?.totals;
+    if (server) {
+      return {
+        topUps: Math.round(server.periodLoads * 100) / 100,
+        fees: Math.round(server.periodFees * 100) / 100,
+        shortCount: server.shortDriverCount,
+      };
+    }
     let topUps = 0;
     let fees = 0;
     let shortCount = 0;
-    for (const r of summariesQuery.data || []) {
+    for (const r of summariesQuery.data?.rows || []) {
       if (!r.summary) continue;
       topUps += r.summary.periodLoads || 0;
       fees += r.summary.periodFees || 0;

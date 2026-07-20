@@ -16,9 +16,8 @@
  * dispute match resolves a trip as expense_logged, then an unmatch reverts it
  * to pending, then a later match resolves it again) without collision.
  *
- * Gated by `tollPnlOffsetEnabled` (default OFF) at call sites in
- * toll_controller.tsx — this module itself is unconditional so it stays
- * simple and testable; the flag check belongs to the callers.
+ * Always enabled — Finalize / Resolve always sync Business Finance P&L.
+ * Call sites keep `isTollPnlOffsetEnabled()` for readability.
  */
 
 import * as kv from "./kv_store.tsx";
@@ -252,8 +251,7 @@ export async function reinstateTollCharge(
   return { reinstated: true, idempotencyKey };
 }
 
-/** Read the current offset flag from the shared toll_reconciliation:settings KV record. */
+/** Toll P&L offsets are always on. */
 export async function isTollPnlOffsetEnabled(): Promise<boolean> {
-  const rec = (await kv.get("toll_reconciliation:settings")) as { tollPnlOffsetEnabled?: boolean } | null;
-  return rec?.tollPnlOffsetEnabled === true;
+  return true;
 }

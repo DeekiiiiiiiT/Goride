@@ -242,3 +242,82 @@ describe('sumExpenseRowsFromEvents — Toll rows tie out to the P&L summary', ()
     expect(agg.tolls).toBe(0);
   });
 });
+
+function fuelExpense(overrides: Record<string, unknown> = {}) {
+  return {
+    id: overrides.id || 'fe1',
+    eventType: 'fuel_expense',
+    date: '2026-07-02',
+    driverId: 'd1',
+    sourceType: 'transaction',
+    sourceId: 'entry-1',
+    netAmount: 1000,
+    grossAmount: 1000,
+    direction: 'outflow',
+    platform: 'Roam',
+    ...overrides,
+  };
+}
+
+function fuelOffset(overrides: Record<string, unknown> = {}) {
+  return {
+    id: overrides.id || 'fe-offset',
+    eventType: 'fuel_charge_offset',
+    date: '2026-07-02',
+    driverId: 'd1',
+    sourceType: 'transaction',
+    sourceId: 'entry-1',
+    netAmount: 300,
+    grossAmount: 300,
+    direction: 'inflow',
+    platform: 'Roam',
+    ...overrides,
+  };
+}
+
+describe('buildPnLFromCanonicalEvents — fuel netting', () => {
+  it('counts plain fuel_expense in full before Finalize offsets', () => {
+    const pnl = buildPnLFromCanonicalEvents([fuelExpense()], period);
+    expect(pnl.lines.find((l) => l.id === 'fuel')!.amount).toBe(-1000);
+    expect(pnl.fuelRecoveredWashed).toBeUndefined();
+  });
+
+  it('nets driver-share offset off the Fuel line', () => {
+    const events = [fuelExpense(), fuelOffset()];
+    const pnl = buildPnLFromCanonicalEvents(events, period);
+    expect(pnl.lines.find((l) => l.id === 'fuel')!.amount).toBe(-700);
+    expect(pnl.fuelRecoveredWashed).toBe(300);
+    expect(pnl.fuelBreakdown).toEqual({
+      grossSpend: 1000,
+      alreadyCovered: 300,
+      reimbursedToDrivers: 0,
+      fleetLoss: 700,
+    });
+  });
+
+  it('fully offset fuel nets to $0 but keeps event count for fallback', () => {
+    const events = [fuelExpense(), fuelOffset({ netAmount: 1000, grossAmount: 1000 })];
+    const pnl = buildPnLFromCanonicalEvents(events, period);
+    expect(pnl.lines.find((l) => l.id === 'fuel')!.amount).toBe(-0);
+    const agg = sumExpenseRowsFromEvents(events, period);
+    expect(agg.fuelEventCount).toBeGreaterThan(0);
+    expect(agg.fuel).toBe(0);
+  });
+
+  it('shows fuel_reimbursement in breakdown but does not net it into fleet loss', () => {
+    const events = [
+      fuelExpense(),
+      {
+        id: 'reimb',
+        eventType: 'fuel_reimbursement',
+        date: '2026-07-02',
+        netAmount: 200,
+        direction: 'inflow',
+        platform: 'Roam',
+      },
+    ];
+    const pnl = buildPnLFromCanonicalEvents(events, period);
+    expect(pnl.lines.find((l) => l.id === 'fuel')!.amount).toBe(-1000);
+    expect(pnl.fuelBreakdown?.reimbursedToDrivers).toBe(200);
+  });
+});

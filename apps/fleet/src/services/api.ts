@@ -2285,7 +2285,7 @@ export const api = {
     return response.json();
   },
 
-  /** Emits compensating toll_charge_offset events for historical resolved tolls. dryRun defaults true. Requires tollPnlOffsetEnabled ON to apply. */
+  /** Emits compensating toll_charge_offset events for historical resolved tolls. dryRun defaults true. */
   async runTollPnlOffsetBackfill(dryRun: boolean = true, batchSize: number = 200): Promise<{
     success: boolean;
     dryRun: boolean;
@@ -3117,6 +3117,79 @@ export const api = {
     return response.json();
   },
 
+  async getFuelReconciliationSettings(): Promise<{ success: boolean; fuelPnlOffsetEnabled: boolean }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-reconciliation/settings`, {
+      headers: await requireAuthHeaders(null),
+    });
+    if (!response.ok) throw new Error('Failed to fetch fuel reconciliation settings');
+    return response.json();
+  },
+
+  async updateFuelReconciliationSettings(payload: {
+    fuelPnlOffsetEnabled?: boolean;
+  }): Promise<{ success: boolean; fuelPnlOffsetEnabled: boolean }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-reconciliation/settings`, {
+      method: 'PATCH',
+      headers: await requireAuthHeaders(),
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error((err as any).error || 'Failed to update fuel reconciliation settings');
+    }
+    return response.json();
+  },
+
+  async getFuelReconciliationPeriodsHealth(): Promise<{
+    success: boolean;
+    totals: {
+      missingCanonicalExpenseCount: number;
+      unresolvedLeakageVehicleWeeks: number;
+      actionableFinalizeCount: number;
+    };
+  }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-reconciliation/periods-health`, {
+      headers: await requireAuthHeaders(null),
+    });
+    if (!response.ok) throw new Error('Failed to fetch fuel period health');
+    return response.json();
+  },
+
+  async getFuelPnlOffsetBackfillStatus(): Promise<{
+    success: boolean;
+    eligibleCount: number;
+    totalAmount: number;
+    sample: unknown[];
+    message: string;
+  }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-pnl-offset-backfill/status`, {
+      headers: await requireAuthHeaders(null),
+    });
+    if (!response.ok) throw new Error('Failed to fetch fuel P&L offset backfill status');
+    return response.json();
+  },
+
+  async runFuelPnlOffsetBackfill(opts?: { dryRun?: boolean }): Promise<{
+    success: boolean;
+    dryRun: boolean;
+    eligibleCount: number;
+    totalAmount: number;
+    appliedCount: number;
+    applied: string[];
+    errors: string[];
+  }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-pnl-offset-backfill/backfill`, {
+      method: 'POST',
+      headers: await requireAuthHeaders(),
+      body: JSON.stringify({ dryRun: opts?.dryRun !== false }),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error((err as any).error || 'Failed to run fuel P&L offset backfill');
+    }
+    return response.json();
+  },
+
   /** Delete by driverId (preferred) or legacy vehicleId — same path param. */
   async deleteFinalizedReport(weekStart: string, identityId: string): Promise<void> {
     const weekKey = String(weekStart).split('T')[0];
@@ -3428,6 +3501,50 @@ export const api = {
     const json = await response.json();
     if (!json?.data) throw new Error('InDrive wallet summary: empty response');
     return json.data as IndriveWalletSummary;
+  },
+
+  /** Fleet-wide InDrive wallet summaries — one call replaces Wallet Center N+1. Canonical loads + fees. */
+  async getIndriveWalletFleet(params: {
+    startDate: string;
+    endDate: string;
+  }): Promise<{
+    success: boolean;
+    totals: {
+      periodLoads: number;
+      periodFees: number;
+      shortDriverCount: number;
+    };
+    drivers: Array<{
+      driverId: string;
+      periodLoads: number;
+      periodFees: number;
+      lifetimeLoads: number;
+      lifetimeInDriveFees: number;
+      estimatedBalance: number;
+    }>;
+  }> {
+    const qp = new URLSearchParams();
+    qp.set('startDate', params.startDate);
+    qp.set('endDate', params.endDate);
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/ledger/indrive-wallet/fleet?${qp.toString()}`,
+      { headers: await requireAuthHeaders(null) }
+    );
+    if (!response.ok) {
+      const msg = await parseFinancialApiErrorBody(response);
+      throw new Error(`InDrive wallet fleet summary failed: ${msg}`);
+    }
+    const json = await response.json();
+    if (!json?.success) throw new Error('InDrive wallet fleet summary: empty response');
+    return {
+      success: true,
+      totals: {
+        periodLoads: Number(json.totals?.periodLoads) || 0,
+        periodFees: Number(json.totals?.periodFees) || 0,
+        shortDriverCount: Number(json.totals?.shortDriverCount) || 0,
+      },
+      drivers: Array.isArray(json.drivers) ? json.drivers : [],
+    };
   },
 
   async createLedgerEntry(entry: Partial<LedgerEntry>): Promise<{ success: boolean; data?: LedgerEntry; skipped?: boolean; message?: string }> {

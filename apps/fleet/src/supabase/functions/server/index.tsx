@@ -93,7 +93,11 @@ import {
   canonicalEventInSelectedWindow,
 } from "./ledger_money_aggregate.ts";
 import { CANONICAL_LEDGER_KEY_LIKE } from "../../../utils/ledgerKvSource.ts";
-import { computeIndriveWalletFeesFromLedgerEntries } from "../../../utils/indriveWalletMetrics.ts";
+import {
+  computeIndriveWalletFeesFromLedgerEntries,
+  computeIndriveWalletLoadsFromLedgerEntries,
+  buildIndriveWalletFleetFromLedger,
+} from "../../../utils/indriveWalletMetrics.ts";
 import { parseCatalogMonthFromUnknown } from "../../../utils/catalogMonthParse.ts";
 import fuelApp from "./fuel_controller.tsx";
 import { validateFuelScenarioPayload } from "./fuel_scenario_validation.ts";
@@ -4981,11 +4985,11 @@ app.get("/make-server-37f42386/ledger/diagnostic-trip-ledger-gap", requireAuth()
   }
 });
 
-// ─── GET /ledger/driver-indrive-wallet — Period loads, fees, lifetime loads (Phase 2) ──
+// ─── GET /ledger/driver-indrive-wallet — Period loads, fees, lifetime loads ──
 // Query: driverId, startDate, endDate (YYYY-MM-DD). Same multi-ID driver resolution as driver-overview.
-// Fee side from `ledger_event:*` only. Loads always from transaction:* (InDrive Wallet Credit).
-// Phase 7 estimatedBalance = lifetimeLoads − lifetimeInDriveFees (fleet estimate only).
-// Phase 8: read access aligned with financial transaction visibility (transactions.view).
+// Loads + fees both from canonical `ledger_event:*` (wallet_credit / InDrive platform_fee|fare gap).
+// estimatedBalance = lifetimeLoads − lifetimeInDriveFees (fleet estimate only).
+// Read access: transactions.view. transaction:* "InDrive Wallet Credit" is write-path only.
 app.get(
   "/make-server-37f42386/ledger/driver-indrive-wallet",
   requireAuth(),
@@ -4996,7 +5000,6 @@ app.get(
     const driverId = c.req.query("driverId");
     const startDate = c.req.query("startDate");
     const endDate = c.req.query("endDate");
-    const LOAD_CATEGORY = "InDrive Wallet Credit";
 
     if (!driverId || !startDate || !endDate) {
       return c.json({ error: "Missing required params: driverId, startDate, endDate" }, 400);
@@ -5044,65 +5047,30 @@ app.get(
       return q;
     };
 
-    const fetchLedgerEntryValues = async () => {
-      const rows = await paginatedFetch(() => ledgerBaseQuery());
-      return filterByOrg(
-        rows.map((r: any) => r.value).filter(Boolean),
-        c,
-      );
-    };
-
-    const txBaseQuery = () => {
-      let q = supabase
-        .from("kv_store_37f42386")
-        .select("value")
-        .like("key", "transaction:%")
-        .eq("value->>category", LOAD_CATEGORY);
-      if (orgId) q = q.eq("value->>organizationId", orgId);
-      if (driverIdOrFilter) q = q.or(driverIdOrFilter);
-      else q = q.eq("value->>driverId", driverId);
-      return q;
-    };
-
-    const loadTxRows = await paginatedFetch(() => txBaseQuery());
-
-    const txDate = (raw: string | undefined) => (raw ? raw.split("T")[0] : "");
-
-    let periodLoads = 0;
-    let lifetimeLoads = 0;
-    for (const row of loadTxRows) {
-      const t = row.value;
-      if (!t) continue;
-      const amt = Number(t.amount) || 0;
-      if (amt <= 0) continue;
-      const d = txDate(t.date);
-      lifetimeLoads += amt;
-      if (d >= startDate && d <= endDate) periodLoads += amt;
-    }
-
-    periodLoads = Number(periodLoads.toFixed(2));
-    lifetimeLoads = Number(lifetimeLoads.toFixed(2));
-
-    const buildWalletData = (periodFees: number, lifetimeInDriveFees: number) => {
-      const estimatedBalance = Number((lifetimeLoads - lifetimeInDriveFees).toFixed(2));
-      return {
-        periodLoads,
-        periodFees,
-        lifetimeLoads,
-        estimatedBalance,
-      };
-    };
-
-    const ledgerVals = await fetchLedgerEntryValues();
+    const ledgerVals = filterByOrg(
+      (await paginatedFetch(() => ledgerBaseQuery())).map((r: any) => r.value).filter(Boolean),
+      c,
+    );
+    const { periodLoads, lifetimeLoads } = computeIndriveWalletLoadsFromLedgerEntries(
+      ledgerVals,
+      startDate,
+      endDate,
+    );
     const { periodFees, lifetimeInDriveFees } = computeIndriveWalletFeesFromLedgerEntries(
       ledgerVals,
       startDate,
       endDate,
     );
-    const data = buildWalletData(periodFees, lifetimeInDriveFees);
+    const estimatedBalance = Number((lifetimeLoads - lifetimeInDriveFees).toFixed(2));
+    const data = {
+      periodLoads,
+      periodFees,
+      lifetimeLoads,
+      estimatedBalance,
+    };
 
     console.log(
-      `[IndriveWallet] source=canonical driverId=${driverId} range=${startDate}..${endDate} periodLoads=${data.periodLoads} periodFees=${data.periodFees} lifetimeLoads=${data.lifetimeLoads} estimatedBalance=${data.estimatedBalance} ledgerVals=${ledgerVals.length} loadTxRows=${loadTxRows.length} ${Date.now() - t0}ms`,
+      `[IndriveWallet] source=canonical driverId=${driverId} range=${startDate}..${endDate} periodLoads=${data.periodLoads} periodFees=${data.periodFees} lifetimeLoads=${data.lifetimeLoads} estimatedBalance=${data.estimatedBalance} ledgerVals=${ledgerVals.length} ${Date.now() - t0}ms`,
     );
 
     return c.json({
@@ -5113,6 +5081,87 @@ app.get(
   } catch (e: any) {
     console.error("[IndriveWallet] Error:", e);
     return c.json({ error: `InDrive wallet summary failed: ${e.message}` }, 500);
+  }
+});
+
+// ─── GET /ledger/indrive-wallet/fleet — Fleet-wide wallet summaries (replaces Wallet Center N+1) ──
+// Query: startDate, endDate (YYYY-MM-DD). Canonical wallet_credit + InDrive fees in one org scan.
+app.get(
+  "/make-server-37f42386/ledger/indrive-wallet/fleet",
+  requireAuth(),
+  requirePermission("transactions.view"),
+  async (c) => {
+  const t0 = Date.now();
+  try {
+    const startDate = c.req.query("startDate");
+    const endDate = c.req.query("endDate");
+    if (!startDate || !endDate) {
+      return c.json({ error: "Missing required params: startDate, endDate" }, 400);
+    }
+
+    const orgId = getOrgId(c);
+    const PAGE = 1000;
+    const MAX_ROWS = 100000;
+    const paginatedFetch = async (buildQuery: () => any): Promise<any[]> => {
+      let all: any[] = [];
+      let offset = 0;
+      while (offset < MAX_ROWS) {
+        const { data, error } = await buildQuery().range(offset, offset + PAGE - 1);
+        if (error) throw error;
+        const page = data || [];
+        all = all.concat(page);
+        if (page.length < PAGE) break;
+        offset += PAGE;
+      }
+      return all;
+    };
+
+    const driverRows = await paginatedFetch(() => {
+      let q = supabase.from("kv_store_37f42386").select("value").like("key", "driver:%");
+      if (orgId) q = q.eq("value->>organizationId", orgId);
+      return q;
+    });
+    const driversRaw = (driverRows || []).map((r: any) => r.value).filter(Boolean);
+    const drivers = await filterByOrgSafe(driversRaw, c, { endpoint: "/ledger/indrive-wallet/fleet" });
+
+    const ledgerRows = await paginatedFetch(() => {
+      let q = supabase.from("kv_store_37f42386").select("value").like("key", CANONICAL_LEDGER_KEY_LIKE);
+      if (orgId) q = q.eq("value->>organizationId", orgId);
+      return q;
+    });
+    const ledgerVals = filterByOrg(
+      (ledgerRows || []).map((r: any) => r.value).filter(Boolean),
+      c,
+    );
+
+    const driverIdRecords = (drivers || [])
+      .map((d: any) => ({
+        id: String(d?.id || d?.roamId || "").trim(),
+        uberDriverId: d?.uberDriverId ?? null,
+        inDriveDriverId: d?.inDriveDriverId ?? null,
+      }))
+      .filter((d: { id: string }) => !!d.id);
+
+    const { drivers: driverSummaries, totals } = buildIndriveWalletFleetFromLedger(
+      driverIdRecords,
+      ledgerVals,
+      startDate,
+      endDate,
+    );
+
+    console.log(
+      `[IndriveWalletFleet] source=canonical range=${startDate}..${endDate} drivers=${driverSummaries.length} short=${totals.shortDriverCount} periodLoads=${totals.periodLoads} ledgerVals=${ledgerVals.length} ${Date.now() - t0}ms`,
+    );
+
+    return c.json({
+      success: true,
+      meta: { source: "canonical", durationMs: Date.now() - t0 },
+      totals,
+      drivers: driverSummaries,
+    });
+  } catch (e: any) {
+    console.error("[IndriveWalletFleet] Error:", e);
+    return c.json({ error: `InDrive wallet fleet summary failed: ${e.message}` }, 500);
   }
 });
 

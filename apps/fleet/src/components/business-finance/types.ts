@@ -58,6 +58,18 @@ export type PnLTollBreakdown = {
   fleetLoss: number;
 };
 
+/** Owner-facing Fuel accordion — Consumption Recon → Business Finance. */
+export type PnLFuelBreakdown = {
+  /** All fill spend in the period (gross fuel_expense). */
+  grossSpend: number;
+  /** Driver-share offsets already removed from fleet loss. */
+  alreadyCovered: number;
+  /** Wallet fuel reimbursements to drivers (memo only; not netted into fleet loss). */
+  reimbursedToDrivers: number;
+  /** What hits the Fuel P&L line (unrecovered fleet loss). */
+  fleetLoss: number;
+};
+
 export type BusinessFinancePnL = {
   lines: PnLLine[];
   operatingRatio: number | null;
@@ -67,6 +79,10 @@ export type BusinessFinancePnL = {
   tollsRecoveredWashed?: number;
   /** Collapsible Tolls detail for owners; omit when no toll activity in period. */
   tollBreakdown?: PnLTollBreakdown;
+  /** Fuel already charged to drivers — excluded from Fuel expense line. */
+  fuelRecoveredWashed?: number;
+  /** Collapsible Fuel detail; omit when no fuel activity in period. */
+  fuelBreakdown?: PnLFuelBreakdown;
 };
 
 export type BusinessFinanceOverview = {
@@ -92,6 +108,9 @@ export type BusinessFinanceOverview = {
     needsStatementWeeks: number;
     highCashDrivers: number;
     tollVarianceFlags: number;
+    fuelVarianceFlags: number;
+    /** Drivers with estimated InDrive wallet balance below short threshold. */
+    walletShortDriverCount: number;
   };
   incompleteSources: string[];
 };
@@ -109,6 +128,7 @@ export type CashBankSnapshot = {
   };
   walletLoads: {
     periodLoads: number;
+    shortDriverCount: number;
   };
   incompleteSources: string[];
 };

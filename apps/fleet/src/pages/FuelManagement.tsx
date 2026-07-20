@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { FuelLayout } from '../components/fuel/FuelLayout';
 import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
-import { Fuel, Plus, CreditCard, Banknote, Upload, RefreshCw, History, Loader2, Link2, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { Fuel, Plus, CreditCard, Banknote, Upload, RefreshCw, History, Loader2, Link2, ShieldCheck, AlertTriangle, Flag } from 'lucide-react';
 import { FuelCardList } from '../components/fuel/FuelCardList';
 import { FuelCardModal } from '../components/fuel/FuelCardModal';
 import { FuelLogModal } from '../components/fuel/FuelLogModal';
@@ -20,20 +20,16 @@ import {
   SheetTitle,
   SheetDescription,
 } from '../components/ui/sheet';
-import { resolveActiveFuelPolicyForDriverWeek } from '../utils/fuelPolicyVersion';
-import { toSlimFuelCycles } from '../utils/slimFuelCycles';
 import {
-  reportWeekYmdBounds,
   toEntryYmd,
   currentFuelWeekRange,
   isEntryInInclusiveYmdRange,
   resolveFuelActivityEarliestMonday,
   buildFuelReconciliationWeekOptions,
 } from '../utils/fuelWeekPeriod';
-import { sumPaidByDriverForReport, sumGasCardSpendForReport, entriesBelongingToDriverWeekReport } from '../utils/fuelPaidByDriver';
 import { useFleetTimezone } from '../utils/timezoneDisplay';
 import { type PeriodWeekOption } from '../utils/periodWeekOptions';
-import { format, addDays, parseISO } from 'date-fns';
+import { format } from 'date-fns';
 import { DisputeResolutionModal } from '../components/fuel/DisputeResolutionModal';
 import { FuelReimbursementTable } from '../components/fuel/FuelReimbursementTable';
 import { SubmitExpenseModal } from '../components/fuel/SubmitExpenseModal';
@@ -41,10 +37,12 @@ import { IntegrityGapDashboard } from '../components/fuel/IntegrityGapDashboard'
 import { useFuelAnchors } from '../hooks/useFuelAnchors';
 import { fuelService } from '../services/fuelService';
 import { settlementService } from '../services/settlementService';
+import { finalizeFuelWeekReports } from '../services/fuelFinalizeService';
 import { FuelDisputeService } from '../services/fuelDisputeService';
 import { api } from '../services/api';
-import { tierService } from '../services/tierService';
 import { FinalizedReportsTab } from '../components/fuel/FinalizedReportsTab';
+import { FuelBulkFinalizeDialog } from '../components/fuel/reconciliation/FuelBulkFinalizeDialog';
+import { deriveFuelReconciliationPeriods } from '../utils/fuelPeriodStatus';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Badge } from '../components/ui/badge';
 import {
@@ -62,7 +60,6 @@ import { Label } from '../components/ui/label';
 import { toast } from 'sonner@2.0.3';
 import { DateRange } from 'react-day-picker';
 import type { FuelCard, FuelEntry, FuelScenario, MileageAdjustment, FuelDispute, WeeklyFuelReport, FinalizedFuelReport } from '../types/fuel';
-import { FuelCalculationService } from '../services/fuelCalculationService';
 import type { FinancialTransaction } from '../types/data';
 import type { Trip } from '../types/data';
 import type { Vehicle } from '../types/vehicle';
@@ -208,6 +205,7 @@ function FuelManagementInner({ defaultTab = 'dashboard', onViewDriverLedger, onT
   const [drivers, setDrivers] = useState<any[]>([]);
   const [trips, setTrips] = useState<Trip[]>([]);
   const [scenarios, setScenarios] = useState<FuelScenario[]>([]);
+  const [bulkFinalizeOpen, setBulkFinalizeOpen] = useState(false);
   const [finalizedReports, setFinalizedReports] = useState<FinalizedFuelReport[]>([]);
   const finalizedCount = finalizedReports.length;
 
@@ -220,6 +218,24 @@ function FuelManagementInner({ defaultTab = 'dashboard', onViewDriverLedger, onT
     );
     return buildFuelReconciliationWeekOptions(earliest, fleetTz || undefined);
   }, [logs, finalizedReports, fleetTz]);
+
+  const fuelReconPeriods = useMemo(
+    () =>
+      deriveFuelReconciliationPeriods({
+        weekOptions: reconciliationWeekOptions,
+        vehicles,
+        fuelEntries: logs,
+        disputes,
+        finalizedReports,
+        scenarios,
+      }),
+    [reconciliationWeekOptions, vehicles, logs, disputes, finalizedReports, scenarios],
+  );
+
+  const outstandingFuelPeriods = useMemo(
+    () => fuelReconPeriods.filter((p) => p.status === 'outstanding' && !p.locked),
+    [fuelReconPeriods],
+  );
 
   // If selection falls outside activity-based options (e.g. old Dec weeks), snap to current week
   useEffect(() => {
@@ -905,149 +921,36 @@ function FuelManagementInner({ defaultTab = 'dashboard', onViewDriverLedger, onT
           setIsRefreshing(true);
           setMessage('Finalizing week…');
 
-          // Fetch prior snapshots fresh (not from local state, which may be stale
-          // if this isn't the first finalize pass in the session) so re-finalize
-          // deltas below are computed against the latest posted totals.
-          const priorReports: FinalizedFuelReport[] = await api.getFinalizedReports().catch(() => []);
-          const findPrior = (driverId: string, weekStartYmd: string) =>
-              priorReports.find((r: any) => r.driverId === driverId && reportWeekYmdBounds(r).start === weekStartYmd);
+          const weekResult = await finalizeFuelWeekReports(
+            reports,
+            {
+              vehicles,
+              drivers,
+              fuelCards: cards,
+              fuelEntries: logs,
+              scenarios,
+              trips,
+            },
+            {
+              onProgress: (msg) => setMessage(msg),
+            },
+          );
 
-          // Phase 5: Connect to Settlement Engine
-          let successCount = 0;
-          const snapshots: FinalizedFuelReport[] = [];
-
-          for (const report of reports) {
-              // Same belonging helper as recon rows / Paid by Driver (resolveFuelFillDriver)
-              const { start: rStart } = reportWeekYmdBounds(report);
-              const attrCtx = { vehicles, fuelCards: cards, trips };
-              const prior = findPrior(report.driverId, rStart);
-
-              // Re-finalize: reverse prior Enterprise sync, then repost ALL week fills atomically
-              if (prior) {
-                  await settlementService.reverseEnterpriseFuelSyncForReport(report);
-              }
-
-              // After reverse, local `logs` may still show Verified — treat previously-finalized
-              // + Pending as postable on re-finalize; first finalize uses Pending only.
-              const weekEntries = entriesBelongingToDriverWeekReport(logs, report, attrCtx);
-              const relevantEntries = prior
-                ? weekEntries.filter(
-                    (entry) =>
-                      entry.reconciliationStatus === 'Pending' ||
-                      entry.reconciliationStatus === 'Verified' ||
-                      entry.metadata?.finalizedByReport,
-                  ).map((e) => ({
-                    ...e,
-                    // Force Pending so commitWeeklyStatement will post
-                    reconciliationStatus: 'Pending' as const,
-                  }))
-                : weekEntries.filter((entry) => entry.reconciliationStatus === 'Pending');
-
-              // No-op guard: do not rewrite finalized snapshots when nothing new to post
-              if (relevantEntries.length === 0) {
-                  if (prior) continue;
-                  // First-time lock with zero pending still saves a snapshot so the week can Complete
-              }
-
-              // Same blended ratio settlementService uses to split these entries —
-              // computed here too so the snapshot's cumulative posted totals stay
-              // in lockstep with what actually gets posted to the ledger.
-              const ratio = FuelCalculationService.getBlendedDriverShareRatio(report);
-              const newlyPostedDriverShare = relevantEntries.reduce((sum, e) => sum + e.amount * ratio, 0);
-              const newlyPostedCompanyShare = relevantEntries.reduce((sum, e) => sum + (e.amount - e.amount * ratio), 0);
-
-              if (relevantEntries.length > 0) {
-                  await settlementService.commitWeeklyStatement(report, relevantEntries);
-                  successCount++;
-              }
-
-              // Re-finalize: absolute posted totals (full-week repost), not cumulative add
-              const postedDriverShare = newlyPostedDriverShare;
-              const postedCompanyShare = newlyPostedCompanyShare;
-
-              const vehicle = vehicles.find((v: any) => v.id === report.vehicleId);
-              const driver = drivers.find((d: any) => d.id === report.driverId || d.driverId === report.driverId);
-              const driverSpend = sumPaidByDriverForReport(logs, report, vehicles, attrCtx);
-              const gasCardSpend = sumGasCardSpendForReport(logs, report, vehicles, attrCtx);
-
-              // Step 9 audit trail — freeze driver policy coverage used for this week
-              const policy = resolveActiveFuelPolicyForDriverWeek(
-                scenarios,
-                report.driverId || driver?.id,
-                rStart,
-              );
-              const activeScenario = policy?.scenario;
-              const appliedFuelRule = activeScenario?.rules.find(r => r.category === 'Fuel');
-              const appliedVersion = policy?.version;
-
-              snapshots.push({
-                ...report,
-                status: 'Finalized',
-                finalizedAt: new Date().toISOString(),
-                finalizedByUser: 'admin',
-                driverSpend,
-                gasCardSpend,
-                netPay: driverSpend - report.driverShare,
-                vehiclePlate: vehicle?.licensePlate || 'Unknown',
-                vehicleModel: vehicle?.model || '',
-                driverName: driver?.name || 'Unknown',
-                postedDriverShare,
-                postedCompanyShare,
-                // Freeze slim cycles (no embedded transactions[]) for KV size
-                fuelCycles: toSlimFuelCycles(report.fuelCycles),
-                metadata: {
-                  ...report.metadata,
-                  appliedScenario: activeScenario
-                    ? {
-                        id: activeScenario.id,
-                        name: activeScenario.name,
-                        fuelRule: appliedFuelRule,
-                        effectiveFrom: appliedVersion?.effectiveFrom,
-                        versionId: appliedVersion?.id,
-                      }
-                    : undefined,
-                },
-              });
-          }
-
-          // Persist snapshots to server (non-blocking â€” settlement is already committed)
-          if (snapshots.length === 0) {
-            toast.info("No pending items found to finalize.");
+          if (weekResult.snapshotCount === 0) {
+            toast.info(weekResult.message || 'No pending items found to finalize.');
             return;
           }
 
-          try {
-            await api.saveFinalizedReports(snapshots);
-            // Driver Financials tabs share React Query cache for finalized snapshots.
-            await queryClient.invalidateQueries({ queryKey: ['finalizedReports'] });
-            await queryClient.invalidateQueries({ queryKey: ['driverFinancialPeriods'] });
-          } catch (snapErr: any) {
-            console.error('[FinalizedReports] Snapshot save failed:', snapErr);
-            toast.warning('Statements finalized but snapshot save failed â€” finalized tab may be incomplete.');
-          }
+          await queryClient.invalidateQueries({ queryKey: ['finalizedReports'] });
+          await queryClient.invalidateQueries({ queryKey: ['driverFinancialPeriods'] });
 
-          // Personal Allowance: non-fatal next-week bonus write when top band hit
-          try {
-            for (const snap of snapshots) {
-              const pa = snap.metadata?.personalAllowance;
-              const bonusKm = Number(pa?.configSnapshot?.nextWeekBonusKm) || 0;
-              if (!pa?.hitTopBand || bonusKm <= 0 || !snap.driverId) continue;
-              const nextWeek = addDays(parseISO(reportWeekYmdBounds(snap).start), 7);
-              const nextYmd = format(nextWeek, 'yyyy-MM-dd');
-              await tierService.setPersonalAllowanceBonusKm(snap.driverId, nextYmd, bonusKm);
-            }
-          } catch (bonusErr) {
-            console.warn('[PersonalAllowance] bonus write failed', bonusErr);
-            toast.warning('Fuel finalized, but next-week Personal Allowance bonus could not be saved.');
-          }
-
-          if (successCount > 0) {
-              toast.success(`Successfully finalized ${successCount} statements and posted to ledger.`);
+          if (weekResult.successCount > 0) {
+              toast.success(`Successfully finalized ${weekResult.successCount} statements and posted to ledger.`);
           } else {
-              toast.success(`Week locked â€” ${snapshots.length} snapshot(s) saved.`);
+              toast.success(`Week locked — ${weekResult.snapshotCount} snapshot(s) saved.`);
           }
 
-          await loadData(true); // Reload everything
+          await loadData(true);
           return true;
       } catch (e: any) {
           console.error(e);
@@ -1221,7 +1124,23 @@ function FuelManagementInner({ defaultTab = 'dashboard', onViewDriverLedger, onT
                 )}
               </TabsTrigger>
             </TabsList>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="min-h-10 gap-1.5"
+                disabled={outstandingFuelPeriods.length === 0}
+                onClick={() => setBulkFinalizeOpen(true)}
+              >
+                <Flag className="h-4 w-4" />
+                Finalize weeks
+                {outstandingFuelPeriods.length > 0 && (
+                  <Badge variant="secondary" className="ml-0.5 h-5 min-w-5 px-1.5 text-xs">
+                    {outstandingFuelPeriods.length}
+                  </Badge>
+                )}
+              </Button>
               <PeriodWeekDropdown
                 selectedStart={reconciliationPeriodStart}
                 selectedEnd={reconciliationPeriodEnd}
@@ -1338,6 +1257,23 @@ function FuelManagementInner({ defaultTab = 'dashboard', onViewDriverLedger, onT
       />
       )}
 
+
+      <FuelBulkFinalizeDialog
+        open={bulkFinalizeOpen}
+        onOpenChange={setBulkFinalizeOpen}
+        periods={outstandingFuelPeriods}
+        vehicles={vehicles}
+        drivers={drivers}
+        fuelEntries={logs}
+        adjustments={adjustments}
+        scenarios={scenarios}
+        fuelCards={cards}
+        onComplete={async () => {
+          await queryClient.invalidateQueries({ queryKey: ['finalizedReports'] });
+          await queryClient.invalidateQueries({ queryKey: ['driverFinancialPeriods'] });
+          await loadData(true);
+        }}
+      />
 
       {isAdjustmentModalOpen && (
       <MileageAdjustmentModal 

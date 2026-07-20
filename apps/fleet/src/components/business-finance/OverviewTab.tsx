@@ -178,6 +178,20 @@ export function OverviewTab({ overview, onNavigateTab, onNavigatePage }: Props) 
             valueClassName={risks.tollVarianceFlags > 0 ? 'text-amber-700' : undefined}
             onClick={() => onNavigatePage?.('toll-tags')}
           />
+          <Row
+            label="Fuel fills missing from P&L"
+            hint="Consumption Reconciliation"
+            value={String(risks.fuelVarianceFlags)}
+            valueClassName={risks.fuelVarianceFlags > 0 ? 'text-amber-700' : undefined}
+            onClick={() => onNavigatePage?.('fuel-overview')}
+          />
+          <Row
+            label="Drivers short on InDrive wallet"
+            hint="InDrive Wallet"
+            value={String(risks.walletShortDriverCount)}
+            valueClassName={risks.walletShortDriverCount > 0 ? 'text-amber-700' : undefined}
+            onClick={() => onNavigatePage?.('indrive-wallet')}
+          />
         </CardContent>
       </Card>
     </div>

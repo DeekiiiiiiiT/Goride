@@ -9,6 +9,7 @@
  * in transitively from `index.tsx` (remote bundle then fails with "Module not found").
  */
 import "../../../apps/fleet/src/supabase/functions/server/toll_controller.tsx";
+import "../../../apps/fleet/src/supabase/functions/server/fuel_pnl_offset.ts";
 import "../../../apps/fleet/src/supabase/functions/server/maintenance_schedule_engine.ts";
 import "../../../apps/fleet/src/supabase/functions/server/normalize_platform.ts";
 import "../../../apps/fleet/src/supabase/functions/server/period_share_cash.ts";

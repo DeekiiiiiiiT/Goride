@@ -2,7 +2,15 @@
 import type { Context } from "npm:hono";
 import { requireAuth, requirePermission, type RbacUser } from "./rbac_middleware.ts";
 import { appendCanonicalFuelExpenseIfEligible } from "./canonical_from_ops.ts";
-import { deleteCanonicalLedgerBySource } from "./ledger_canonical.ts";
+import { deleteCanonicalLedgerBySource, canonicalEventExistsByIdemKey } from "./ledger_canonical.ts";
+import {
+  getFuelReconciliationSettings,
+  updateFuelReconciliationSettings,
+  syncFuelPnlOffsetsForFinalizedReport,
+  reinstateFuelPnlOffsetsForEntries,
+  emitFuelChargeOffset,
+  blendedDriverShareRatio,
+} from "./fuel_pnl_offset.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import * as kv from "./kv_store.tsx";
 import * as cache from "./cache.ts";
@@ -282,6 +290,38 @@ app.post(`${BASE_PATH}/finalized-reports`, async (c) => {
       } catch (finErr: any) {
         console.error(`[FinalizedReports] financial ledger post failed: ${finErr?.message || finErr}`);
       }
+
+      // Canonical P&L offsets — driver-share portion of each fill (always on).
+      try {
+        // Prefer stubs from client snapshot — never scan all fuel_entry:* on Finalize.
+        const stubs = Array.isArray(report?.metadata?.settledEntries)
+          ? (report.metadata.settledEntries as Array<Record<string, unknown>>)
+          : [];
+        const weekEntries: Array<Record<string, unknown>> = stubs
+          .filter((s) => s && s.id)
+          .map((s) => ({
+            id: String(s.id),
+            amount: Number(s.amount) || 0,
+            date: String(s.date || weekKey).split("T")[0],
+            driverId: s.driverId ? String(s.driverId) : String(report.driverId),
+            vehicleId: s.vehicleId ? String(s.vehicleId) : report.vehicleId ? String(report.vehicleId) : undefined,
+          }));
+
+        // Legacy snapshots without stubs: skip (no full scan) — re-finalize to sync.
+        if (weekEntries.length === 0) {
+          console.warn(
+            `[FinalizedReports] fuel P&L offset skipped for ${report.driverId}/${weekKey} — no settledEntries stubs (re-finalize to sync)`,
+          );
+        } else {
+          const stats = await syncFuelPnlOffsetsForFinalizedReport(report, weekEntries, c);
+          console.log(
+            `[FinalizedReports] fuel P&L offsets driver=${report.driverId} week=${weekKey} emitted=${stats.emitted} reinstated=${stats.reinstated} skipped=${stats.skipped}`,
+          );
+        }
+      } catch (pnlErr: any) {
+        console.error(`[FinalizedReports] fuel P&L offset failed: ${pnlErr?.message || pnlErr}`);
+      }
+
       saved++;
     }
 
@@ -667,6 +707,17 @@ app.delete(`${BASE_PATH}/finalized-reports/:weekStart/:identityId`, async (c) =>
       console.warn("[FinalizedReports] Ledger cleanup failed (non-fatal):", ledgerErr?.message);
     }
 
+    // Reinstate fuel P&L offsets for fills in this report week (Business Finance).
+    try {
+      const fillsForReinstate = allFuelEntries.filter((e: any) => e?.id && weekFillIds.has(e.id));
+      const reinstated = await reinstateFuelPnlOffsetsForEntries(fillsForReinstate, c);
+      if (reinstated > 0) {
+        console.log(`[FinalizedReports] reinstated ${reinstated} fuel P&L offset(s) for ${identityId} week ${weekKey}`);
+      }
+    } catch (pnlErr: any) {
+      console.warn("[FinalizedReports] fuel P&L reinstate failed (non-fatal):", pnlErr?.message);
+    }
+
     let entriesReset = 0;
     for (const entry of allFuelEntries) {
       if (!entry?.id) continue;
@@ -891,6 +942,17 @@ app.post(`${BASE_PATH}/finalized-reports/reset-period`, requirePermission('trans
       console.warn("[FuelResetPeriod] Ledger cleanup failed (non-fatal):", ledgerErr?.message);
     }
 
+    // Reinstate fuel P&L offsets so Business Finance Fuel returns to gross for this week.
+    try {
+      const fillsForReinstate = allFuelEntries.filter((e: any) => e?.id && weekFillIds.has(e.id));
+      const reinstated = await reinstateFuelPnlOffsetsForEntries(fillsForReinstate, c);
+      if (reinstated > 0) {
+        console.log(`[FuelResetPeriod] reinstated ${reinstated} fuel P&L offset(s) for week ${weekKey}`);
+      }
+    } catch (pnlErr: any) {
+      console.warn("[FuelResetPeriod] fuel P&L reinstate failed (non-fatal):", pnlErr?.message);
+    }
+
     let entriesReset = 0;
     for (const entry of entriesToReset) {
       const meta = { ...(entry.metadata || {}) };
@@ -955,6 +1017,232 @@ app.post(`${BASE_PATH}/finalized-reports/reset-period`, requirePermission('trans
     });
   } catch (e: any) {
     console.log(`[FuelResetPeriod] error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ─── Fuel Reconciliation settings (P&L offset flag) ───────────────────────
+app.get(`${BASE_PATH}/fuel-reconciliation/settings`, async (c) => {
+  try {
+    const settings = await getFuelReconciliationSettings();
+    return c.json({ success: true, ...settings });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.patch(`${BASE_PATH}/fuel-reconciliation/settings`, async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const settings = await updateFuelReconciliationSettings({
+      fuelPnlOffsetEnabled:
+        typeof body?.fuelPnlOffsetEnabled === "boolean" ? body.fuelPnlOffsetEnabled : undefined,
+    });
+    return c.json({ success: true, ...settings });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+/** Period health for Business Finance risk signals. */
+app.get(`${BASE_PATH}/fuel-reconciliation/periods-health`, async (c) => {
+  try {
+    const snapshots = (await kv.getByPrefix("finalized_report:")) || [];
+    const allEntries = (await kv.getByPrefix("fuel_entry:")) || [];
+
+    let missingCanonicalExpenseCount = 0;
+    let unresolvedLeakageVehicleWeeks = 0;
+    let actionableFinalizeCount = 0;
+
+    // Sample recent fills (last ~90 days) for missing fuel_expense
+    const cutoff = new Date();
+    cutoff.setUTCDate(cutoff.getUTCDate() - 90);
+    const cutoffYmd = cutoff.toISOString().slice(0, 10);
+
+    for (const entry of allEntries) {
+      if (!entry?.id) continue;
+      const d = String(entry.date || "").split("T")[0];
+      if (!d || d < cutoffYmd) continue;
+      const amt = Math.abs(Number(entry.amount) || 0);
+      if (amt <= 0.005) continue;
+      const has = await canonicalEventExistsByIdemKey(`fuel_entry:${entry.id}|fuel_expense`);
+      if (!has) missingCanonicalExpenseCount++;
+    }
+
+    // Unresolved leakage: finalized reports with misc > 0 still flagged, or
+    // weeks with spend but no finalize — approximate via snapshot misc + pending fills
+    for (const s of snapshots) {
+      const misc = Math.abs(Number(s?.miscellaneousCost) || 0);
+      if (misc > 0.005) unresolvedLeakageVehicleWeeks++;
+    }
+
+    // Pending fills (not finalized) with amount — owner still needs to Finalize
+    for (const entry of allEntries) {
+      if (!entry?.id) continue;
+      const status = entry.reconciliationStatus;
+      if (status && status !== "Pending") continue;
+      const amt = Math.abs(Number(entry.amount) || 0);
+      if (amt <= 0.005) continue;
+      const d = String(entry.date || "").split("T")[0];
+      if (!d || d < cutoffYmd) continue;
+      actionableFinalizeCount++;
+    }
+
+    return c.json({
+      success: true,
+      totals: {
+        missingCanonicalExpenseCount,
+        unresolvedLeakageVehicleWeeks,
+        actionableFinalizeCount,
+      },
+    });
+  } catch (e: any) {
+    console.log(`[FuelPeriodsHealth] error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+interface FuelPnlOffsetBackfillCandidate {
+  fuelEntryId: string;
+  amount: number;
+  driverId?: string;
+  vehicleId?: string;
+  date: string;
+  reportId: string;
+  weekStart: string;
+}
+
+async function findFuelPnlOffsetBackfillCandidates(): Promise<FuelPnlOffsetBackfillCandidate[]> {
+  const snapshots = (await kv.getByPrefix("finalized_report:")) || [];
+  const allEntries = (await kv.getByPrefix("fuel_entry:")) || [];
+  const candidates: FuelPnlOffsetBackfillCandidate[] = [];
+
+  for (const report of snapshots) {
+    const driverShare = Math.abs(Number(report?.driverShare) || 0);
+    if (driverShare <= 0.005) continue;
+    const weekKey = String(report?.weekStart || "").split("T")[0];
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(weekKey)) continue;
+    const weekEnd =
+      String(report?.weekEnd || "").split("T")[0] ||
+      (() => {
+        const d = new Date(`${weekKey}T12:00:00.000Z`);
+        d.setUTCDate(d.getUTCDate() + 6);
+        return d.toISOString().slice(0, 10);
+      })();
+    const ratio = blendedDriverShareRatio(
+      driverShare,
+      Math.abs(Number(report?.totalGasCardCost) || Number(report?.gasCardSpend) || 0),
+    );
+    if (ratio <= 0) continue;
+
+    const vehicleIds = new Set<string>();
+    if (report.vehicleId) vehicleIds.add(String(report.vehicleId));
+    if (Array.isArray(report.vehicleIds)) {
+      for (const vid of report.vehicleIds) if (vid) vehicleIds.add(String(vid));
+    }
+    const reportId = String(report.id || `${report.driverId}_${weekKey}`);
+
+    for (const entry of allEntries) {
+      if (!entry?.id) continue;
+      const entryDate = String(entry.date || "").split("T")[0];
+      if (!entryDate || entryDate < weekKey || entryDate > weekEnd) continue;
+      const matchReport =
+        entry.metadata?.finalizedByReport && String(entry.metadata.finalizedByReport) === reportId;
+      const matchDriver = entry.driverId && String(entry.driverId) === String(report.driverId);
+      const matchVehicle = entry.vehicleId && vehicleIds.has(String(entry.vehicleId));
+      if (!matchReport && !matchDriver && !matchVehicle) continue;
+
+      const marker = await kv.get(`fuel_pnl_offset_marker:fuel_entry:${entry.id}`);
+      if (marker && (marker as any).active) continue;
+
+      const hasOriginal = await canonicalEventExistsByIdemKey(`fuel_entry:${entry.id}|fuel_expense`);
+      if (!hasOriginal) continue;
+
+      const entryAmt = Math.abs(Number(entry.amount) || 0);
+      const amount = Math.round(entryAmt * ratio * 100) / 100;
+      if (amount <= 0.005) continue;
+
+      candidates.push({
+        fuelEntryId: String(entry.id),
+        amount,
+        driverId: entry.driverId ? String(entry.driverId) : report.driverId ? String(report.driverId) : undefined,
+        vehicleId: entry.vehicleId ? String(entry.vehicleId) : undefined,
+        date: entryDate,
+        reportId,
+        weekStart: weekKey,
+      });
+    }
+  }
+
+  return candidates;
+}
+
+app.get(`${BASE_PATH}/fuel-pnl-offset-backfill/status`, async (c) => {
+  try {
+    const candidates = await findFuelPnlOffsetBackfillCandidates();
+    const totalAmount = Math.round(candidates.reduce((s, e) => s + e.amount, 0) * 100) / 100;
+    return c.json({
+      success: true,
+      eligibleCount: candidates.length,
+      totalAmount,
+      sample: candidates.slice(0, 20),
+      message:
+        candidates.length > 0
+          ? `${candidates.length} historical fill(s) totaling ${totalAmount} would be offset (driver share). POST /fuel-pnl-offset-backfill/backfill (dryRun defaults true) to apply.`
+          : "Nothing to backfill — every finalized driver-share already has an offset.",
+    });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.post(`${BASE_PATH}/fuel-pnl-offset-backfill/backfill`, async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const dryRun = body?.dryRun !== false; // default true
+
+    const candidates = await findFuelPnlOffsetBackfillCandidates();
+    const applied: string[] = [];
+    const errors: string[] = [];
+
+    if (!dryRun) {
+      for (const cand of candidates) {
+        try {
+          const res = await emitFuelChargeOffset(
+            {
+              fuelEntryId: cand.fuelEntryId,
+              driverId: cand.driverId,
+              vehicleId: cand.vehicleId,
+              date: cand.date,
+              amount: cand.amount,
+              reason: "driver_share",
+            },
+            c,
+          );
+          if (res.written) applied.push(cand.fuelEntryId);
+        } catch (err: any) {
+          errors.push(`${cand.fuelEntryId}: ${err?.message || err}`);
+          if (errors.length >= 20) break;
+        }
+      }
+      await kv.set(`fuel_pnl_offset_backfill_manifest:${new Date().toISOString()}`, {
+        applied,
+        count: applied.length,
+        at: new Date().toISOString(),
+      });
+    }
+
+    const totalAmount = Math.round(candidates.reduce((s, e) => s + e.amount, 0) * 100) / 100;
+    return c.json({
+      success: true,
+      dryRun,
+      eligibleCount: candidates.length,
+      totalAmount,
+      appliedCount: dryRun ? 0 : applied.length,
+      applied: dryRun ? candidates.slice(0, 20).map((c) => c.fuelEntryId) : applied.slice(0, 50),
+      errors,
+    });
+  } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }
 });
