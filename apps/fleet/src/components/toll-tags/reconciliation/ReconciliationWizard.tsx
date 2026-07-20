@@ -1,6 +1,5 @@
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../ui/tabs";
 import { TooltipProvider } from "../../ui/tooltip";
 import { DRIVER_FINANCIAL_PERIODS_KEY } from '../../../hooks/useDriverFinancialPeriods';
 import { TollBucketPanel } from "./TollBucketPanel";
@@ -8,18 +7,15 @@ import { TollFinancialOverviewCards } from "./TollFinancialOverviewCards";
 import { UnderpaidClaimsStep } from "./UnderpaidClaimsStep";
 import { DisputeRefundsList, DisputeMatchEvent } from "./DisputeRefundsList";
 import { UnclaimedRefundsList } from "./UnclaimedRefundsList";
-import { ReconciledTollsList } from "./ReconciledTollsList";
-import { ResolvedRefundsList, ResolvedRefundRow } from "./ResolvedRefundsList";
 import { GatedReconciliationStepper, computeGatedStepStates, pickInitialStep, GatedStepState } from "./GatedReconciliationStepper";
 import { useTollReconciliation } from "../../../hooks/useTollReconciliation";
 import { useClaims } from "../../../hooks/useClaims";
 import {
   Loader2, RefreshCw, Wand2, DollarSign, HelpCircle,
-  CarFront, Route, ShieldCheck, Unlink as UnlinkIcon, History as HistoryIcon, ArrowLeft, RotateCcw, type LucideIcon,
+  CarFront, Route, ShieldCheck, Unlink as UnlinkIcon, ArrowLeft, RotateCcw, type LucideIcon,
 } from "lucide-react";
 import { Button } from "../../ui/button";
 import { runScenarioTest } from "../../../utils/testScenario";
-import { UnifiedTollActivityTable } from "./UnifiedTollActivityTable";
 import { FinancialTransaction, Claim } from "../../../types/data";
 import { MatchResult, calculateTollFinancials, buildTollFinancialsContext, buildTripRefundAllocation, spentUnlinkedCreditsByTripId } from "../../../utils/tollReconciliation";
 import {
@@ -29,7 +25,7 @@ import {
   TollBucket,
 } from "../../../utils/tollBucket";
 import { StepId, StepCounts, STEP_ORDER, computeStepCounts } from "../../../utils/tollPeriodGating";
-import { buildPeriodTollIdSet, isClaimVisibleInPeriod, isTollInWizardPeriod, tollWeekKey, filterTollsToWizardPeriod, assertTollInWizardPeriod, getCrossPeriodCoverage } from "../../../utils/tollWeekPeriod";
+import { buildPeriodTollIdSet, isClaimVisibleInPeriod, isTollInWizardPeriod, tollWeekKey, filterTollsToWizardPeriod, assertTollInWizardPeriod } from "../../../utils/tollWeekPeriod";
 import { mergeReconciledTollsForUnderpaid, buildClaimByTollId } from "../../../utils/claimByToll";
 import { computeUnderpaidPipelineCounts } from "../../../utils/underpaidPipelineCounts";
 import { listFullyCoveredPendingUnderpaid } from "../../../utils/pendingUnderpaidListable";
@@ -1290,7 +1286,7 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
           <Wand2 className="h-4 w-4 shrink-0" />
           <span>
             <strong>{autoReconciledCount}</strong> toll{autoReconciledCount === 1 ? ' was' : 's were'} auto-matched to trips this session.{' '}
-            <span className="text-indigo-500">View in History below.</span>
+            <span className="text-indigo-500">View under Underpaid & Claims → History.</span>
           </span>
         </div>
       )}
@@ -1420,6 +1416,16 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
               refreshClaims={refreshClaims}
               onUndoUnlinkedApply={lockedUndoApply}
               busyUnlinkedTripId={busyUnlinkedTripId}
+              historyAudit={{
+                resolvedRefundTrips: pResolved,
+                onUndoRefund: lockedUndoRefund,
+                matchedTolls: pReconciledInPeriod,
+                allReconciledTolls: allReconciledTolls.length ? allReconciledTolls : reconciledTolls,
+                onUnmatch: lockedUnreconcile,
+                selectedDriverId: driverId || '',
+                periodStartDate: period.startDate,
+                periodEndDate: period.endDate,
+              }}
             />
           )}
         </div>
@@ -1430,27 +1436,6 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
           </div>
         )}
       </div>
-
-      {/* Read-only audit views — Resolved / Matched History / All activity,
-          scoped to this period like every other step (not a step itself:
-          nothing here needs a decision). */}
-      <HistoryPanel
-        pResolved={pResolved}
-        onUndoRefund={lockedUndoRefund}
-        onUndoApply={lockedUndoApply}
-        busyUnlinkedTripId={busyUnlinkedTripId}
-        disputeRefunds={disputeRefunds || []}
-        pReconciled={pReconciledInPeriod}
-        allReconciledTolls={allReconciledTolls.length ? allReconciledTolls : reconciledTolls}
-        trips={trips}
-        pClaims={pPeriodClaims}
-        allClaims={claims}
-        fleetTz={fleetTz}
-        onUnmatch={lockedUnreconcile}
-        selectedDriverId={driverId || ''}
-        periodStartDate={period.startDate}
-        periodEndDate={period.endDate}
-      />
 
       <Dialog open={!!pendingPersonalTx} onOpenChange={(o) => { if (!o) setPendingPersonalTx(null); }}>
         <DialogContent>
@@ -1509,128 +1494,3 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
   );
 }
 
-// ── Persistent read-only history (Resolved / Matched History / All activity) ──
-function HistoryPanel(props: {
-  pResolved: TripType[];
-  onUndoRefund: (tripId: string) => Promise<void> | void;
-  onUndoApply?: (tripId: string) => Promise<void> | void;
-  busyUnlinkedTripId?: string | null;
-  pReconciled: FinancialTransaction[];
-  /** All-time reconciled tolls — needed to label cross-period apply targets. */
-  allReconciledTolls: FinancialTransaction[];
-  trips: TripType[];
-  pClaims: any[];
-  /** All claims — apply targets may live in another week. */
-  allClaims: any[];
-  fleetTz: string;
-  disputeRefunds?: import('../../../types/data').DisputeRefund[];
-  onUnmatch: (tx: FinancialTransaction) => Promise<any>;
-  selectedDriverId: string;
-  periodStartDate: string;
-  periodEndDate: string;
-}) {
-  return (
-    <div className="border-t border-slate-200 pt-6">
-      <div className="flex items-center gap-2 mb-4">
-        <HistoryIcon className="h-4 w-4 text-slate-400" />
-        <h3 className="text-sm font-semibold text-slate-700">History</h3>
-        <span className="text-xs text-slate-400">Read-only audit trail for this period — nothing here needs a decision.</span>
-      </div>
-      <Tabs defaultValue="history" className="w-full">
-        <TabsList className="grid w-full grid-cols-3 sm:max-w-md">
-          <TabsTrigger value="resolved">
-            Resolved
-            {props.pResolved.length > 0 && (
-              <span className="ml-2 bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full text-xs font-bold">{props.pResolved.length}</span>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="history">
-            Matched History
-            <span className="ml-2 bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full text-xs font-bold">{props.pReconciled.length}</span>
-          </TabsTrigger>
-          <TabsTrigger value="activity">All activity</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="resolved" className="mt-4">
-          <ResolvedRefundsList
-            rows={props.pResolved.map((t): ResolvedRefundRow => {
-              const res = t.tollRefundResolution;
-              const claimId = res?.appliedToClaimId;
-              const claimPool = props.allClaims?.length ? props.allClaims : props.pClaims;
-              const tollPool = props.allReconciledTolls?.length
-                ? props.allReconciledTolls
-                : props.pReconciled;
-              const claim = claimId
-                ? claimPool.find((c: any) => c?.id === claimId)
-                : claimPool.find((c: any) => c?.unlinkedTripId === t.id);
-              const tollId = claim?.transactionId || res?.appliedToTollId || null;
-              const toll = tollId ? tollPool.find((tx) => tx.id === tollId) : undefined;
-              const targetTollDate =
-                (toll as any)?.date || claim?.date || claim?.tripDate || null;
-              const cross = getCrossPeriodCoverage(t.date, targetTollDate, props.fleetTz);
-              return {
-                id: t.id,
-                date: t.date,
-                platform: t.platform,
-                driverId: t.driverId,
-                driverName: t.driverName,
-                tollCharges: t.tollCharges,
-                pickupLocation: t.pickupLocation,
-                dropoffLocation: t.dropoffLocation,
-                resolution: (res?.status as ResolvedRefundRow['resolution']) || 'cash_wash',
-                resolvedBy: res?.resolvedBy,
-                resolvedAt: res?.resolvedAt,
-                auto: res?.auto,
-                appliedToClaimId: res?.appliedToClaimId,
-                appliedToTollId: res?.appliedToTollId,
-                resolutionSource: res?.source,
-                resolutionNotes: res?.notes,
-                preUnlinkedStatus: claim?.preUnlinkedStatus,
-                preUnlinkedResolutionReason: claim?.preUnlinkedResolutionReason,
-                targetTollAmount: toll
-                  ? Math.abs(Number(toll.amount) || 0)
-                  : claim
-                    ? Math.abs(Number(claim.expectedAmount ?? claim.amount) || 0)
-                    : null,
-                targetLocation:
-                  (toll as any)?.description ||
-                  (toll as any)?.vendor ||
-                  claim?.subject ||
-                  null,
-                targetTollDate,
-                crossPeriodTargetWeekLabel: cross?.targetWeekLabel ?? null,
-              };
-            })}
-            onUndo={props.onUndoRefund}
-            onUndoApply={props.onUndoApply}
-            busyTripId={props.busyUnlinkedTripId}
-          />
-        </TabsContent>
-
-        <TabsContent value="history" className="mt-4">
-          <ReconciledTollsList
-            tolls={props.pReconciled}
-            trips={props.trips}
-            claims={props.pClaims}
-            disputeRefunds={props.disputeRefunds || []}
-            onUnmatch={props.onUnmatch}
-          />
-        </TabsContent>
-
-        <TabsContent value="activity" className="mt-4">
-          <div className="mb-2">
-            <p className="text-sm text-slate-600">
-              One timeline across toll ledger, legacy imports, unlinked trip refunds, and Uber support adjustments.
-              Amounts follow each source&apos;s sign convention (toll charges are usually negative; credits positive).
-            </p>
-          </div>
-          <UnifiedTollActivityTable
-            driverId={props.selectedDriverId || undefined}
-            initialFrom={props.periodStartDate}
-            initialTo={props.periodEndDate}
-          />
-        </TabsContent>
-      </Tabs>
-    </div>
-  );
-}

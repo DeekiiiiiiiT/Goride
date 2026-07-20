@@ -1,14 +1,9 @@
-import React, { useMemo, useState } from "react";
-import { CalendarRange, ChevronDown } from "lucide-react";
+import React, { useMemo } from "react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "../../ui/card";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "../../ui/table";
-import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../../ui/collapsible";
 import { cn } from "../../ui/utils";
 import { RefundResolutionType, REFUND_RESOLUTION_META, RefundTripLike } from "./refundResolutionShell";
-import { groupByWeek } from "../../../utils/tollWeekPeriod";
-import { useFleetTimezone } from "../../../utils/timezoneDisplay";
 import { isUnlinkedApplyResolution } from "../../../utils/unlinkedShortfallEligibility";
 import { UndoApplyToUnderpaidDialog } from "./UndoApplyToUnderpaidDialog";
 import { UnifiedResolutionAuditCard } from "./UnifiedResolutionAuditCard";
@@ -62,7 +57,7 @@ function isApplyRow(row: ResolvedRefundRow): boolean {
 
 /**
  * Resolved Refunds history. Every resolution is reversible via Undo.
- * Apply-to-Underpaid rows use the dedicated undo dialog when onUndoApply is provided.
+ * Flat list — period is already known from the wizard context.
  */
 export function ResolvedRefundsList({
   rows,
@@ -70,23 +65,11 @@ export function ResolvedRefundsList({
   onUndoApply,
   busyTripId,
 }: ResolvedRefundsListProps) {
-  const fleetTz = useFleetTimezone();
   const total = rows.reduce((sum, r) => sum + Math.abs(r.tollCharges ?? 0), 0);
-  const weekGroups = useMemo(() => groupByWeek(rows, fleetTz), [rows, fleetTz]);
   const crossPeriodRows = useMemo(
     () => rows.filter((r) => !!r.crossPeriodTargetWeekLabel && isApplyRow(r)),
     [rows],
   );
-  const [expandedWeeks, setExpandedWeeks] = useState<Set<string>>(new Set());
-
-  const toggleWeek = (key: string) => {
-    setExpandedWeeks((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  };
 
   if (rows.length === 0) {
     return (
@@ -122,147 +105,115 @@ export function ResolvedRefundsList({
             Those shortfalls will not appear on this week’s Partially Covered tab.
           </div>
         )}
-        {weekGroups.map((week) => {
-          const isOpen = expandedWeeks.has(week.key);
-          const weekTotal = week.items.reduce((sum, r) => sum + Math.abs(r.tollCharges ?? 0), 0);
-          return (
-            <Collapsible
-              key={week.key}
-              open={isOpen}
-              onOpenChange={() => toggleWeek(week.key)}
-              className="rounded-xl border border-slate-200 overflow-hidden"
-            >
-              <CollapsibleTrigger className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left bg-slate-50/80 hover:bg-slate-100/80 transition-colors">
-                <div className="flex items-center gap-2 min-w-0 flex-wrap">
-                  <CalendarRange className="h-4 w-4 text-slate-500 shrink-0" />
-                  <span className="font-semibold text-slate-800">{week.label}</span>
-                  <span className="text-[10px] uppercase tracking-wide text-slate-500">Mon–Sun</span>
-                  <Badge variant="secondary" className="text-[11px]">
-                    {week.items.length} refund{week.items.length !== 1 ? "s" : ""}
-                  </Badge>
-                  <span className="text-xs font-medium text-emerald-700">${weekTotal.toFixed(2)}</span>
-                </div>
-                <ChevronDown
-                  className={cn(
-                    "h-4 w-4 text-slate-500 shrink-0 transition-transform duration-200",
-                    isOpen ? "rotate-0" : "-rotate-90",
-                  )}
-                />
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Resolution</TableHead>
-                      <TableHead>Resolved by</TableHead>
-                      <TableHead>Amount</TableHead>
-                      <TableHead className="text-right">Action</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {week.items.map((row) => {
-                      const meta = REFUND_RESOLUTION_META[row.resolution];
-                      const applyRow = isApplyRow(row);
-                      const willCharge =
-                        row.preUnlinkedResolutionReason === "Charge Driver" ||
-                        row.preUnlinkedStatus === "Resolved";
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Date</TableHead>
+              <TableHead>Resolution</TableHead>
+              <TableHead>Resolved by</TableHead>
+              <TableHead>Amount</TableHead>
+              <TableHead className="text-right">Action</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((row) => {
+              const meta = REFUND_RESOLUTION_META[row.resolution];
+              const applyRow = isApplyRow(row);
+              const willCharge =
+                row.preUnlinkedResolutionReason === "Charge Driver" ||
+                row.preUnlinkedStatus === "Resolved";
 
-                      return (
-                        <React.Fragment key={row.id}>
-                          <TableRow>
-                            <TableCell>
-                              <div className="font-medium">{timeAgo(row.date)}</div>
-                              <div className="flex items-center gap-1.5 mt-0.5">
-                                <PlatformSourceBadge platform={row.platform} size="sm" />
-                                <span className="text-xs text-slate-500">{row.driverName || "—"}</span>
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <span
-                                className={cn(
-                                  "inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium",
-                                  applyRow
-                                    ? "border-orange-200 bg-orange-50 text-orange-800"
-                                    : meta.chipClass,
-                                )}
-                              >
-                                {applyRow ? "Applied to underpaid" : meta.label}
-                              </span>
-                              {row.auto && <span className="ml-1 text-[11px] text-slate-400">auto</span>}
-                              {row.crossPeriodTargetWeekLabel && (
-                                <div className="mt-1">
-                                  <span className="inline-flex rounded-full border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold text-violet-800">
-                                    Covered {row.crossPeriodTargetWeekLabel}
-                                  </span>
-                                </div>
-                              )}
-                            </TableCell>
-                            <TableCell className="text-slate-600">
-                              {row.resolvedBy || "—"}
-                              {row.resolvedAt && (
-                                <span className="text-slate-400"> · {timeAgo(row.resolvedAt)}</span>
-                              )}
-                            </TableCell>
-                            <TableCell className="font-medium">
-                              ${Math.abs(row.tollCharges ?? 0).toFixed(2)}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              {applyRow && onUndoApply ? (
-                                <UndoApplyToUnderpaidDialog
-                                  summary={{
-                                    tripId: row.id,
-                                    tripRefund: Math.abs(row.tollCharges ?? 0),
-                                    tripPlatform: row.platform,
-                                    tollAmount: row.targetTollAmount,
-                                    tollLocation: row.targetLocation,
-                                    priorClaimStatus: row.preUnlinkedStatus,
-                                    priorResolutionReason: row.preUnlinkedResolutionReason,
-                                    willReinstateDriverCharge: !!willCharge,
-                                  }}
-                                  onConfirm={() => onUndoApply(row.id)}
-                                  disabled={busyTripId === row.id}
-                                />
-                              ) : (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => onUndo(row.id)}
-                                  disabled={busyTripId === row.id}
-                                >
-                                  Undo
-                                </Button>
-                              )}
-                            </TableCell>
-                          </TableRow>
-                          {applyRow && (
-                            <TableRow className="hover:bg-transparent">
-                              <TableCell colSpan={5} className="bg-slate-50/60 py-3">
-                                <UnifiedResolutionAuditCard
-                                  sourcePlatform={row.platform}
-                                  sourceDate={row.date}
-                                  sourceDriverName={row.driverName}
-                                  sourceRefundAmount={Math.abs(row.tollCharges ?? 0)}
-                                  targetLocation={row.targetLocation}
-                                  targetTollAmount={row.targetTollAmount}
-                                  targetTollDate={row.targetTollDate}
-                                  crossPeriodWeekLabel={row.crossPeriodTargetWeekLabel}
-                                  appliedAt={row.resolvedAt}
-                                  appliedBy={row.resolvedBy}
-                                  className="border-0 bg-transparent p-0 shadow-none"
-                                />
-                              </TableCell>
-                            </TableRow>
-                          )}
-                        </React.Fragment>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </CollapsibleContent>
-            </Collapsible>
-          );
-        })}
+              return (
+                <React.Fragment key={row.id}>
+                  <TableRow>
+                    <TableCell>
+                      <div className="font-medium">{timeAgo(row.date)}</div>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <PlatformSourceBadge platform={row.platform} size="sm" />
+                        <span className="text-xs text-slate-500">{row.driverName || "—"}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <span
+                        className={cn(
+                          "inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium",
+                          applyRow
+                            ? "border-orange-200 bg-orange-50 text-orange-800"
+                            : meta.chipClass,
+                        )}
+                      >
+                        {applyRow ? "Applied to underpaid" : meta.label}
+                      </span>
+                      {row.auto && <span className="ml-1 text-[11px] text-slate-400">auto</span>}
+                      {row.crossPeriodTargetWeekLabel && (
+                        <div className="mt-1">
+                          <span className="inline-flex rounded-full border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold text-violet-800">
+                            Covered {row.crossPeriodTargetWeekLabel}
+                          </span>
+                        </div>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-slate-600">
+                      {row.resolvedBy || "—"}
+                      {row.resolvedAt && (
+                        <span className="text-slate-400"> · {timeAgo(row.resolvedAt)}</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="font-medium">
+                      ${Math.abs(row.tollCharges ?? 0).toFixed(2)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {applyRow && onUndoApply ? (
+                        <UndoApplyToUnderpaidDialog
+                          summary={{
+                            tripId: row.id,
+                            tripRefund: Math.abs(row.tollCharges ?? 0),
+                            tripPlatform: row.platform,
+                            tollAmount: row.targetTollAmount,
+                            tollLocation: row.targetLocation,
+                            priorClaimStatus: row.preUnlinkedStatus,
+                            priorResolutionReason: row.preUnlinkedResolutionReason,
+                            willReinstateDriverCharge: !!willCharge,
+                          }}
+                          onConfirm={() => onUndoApply(row.id)}
+                          disabled={busyTripId === row.id}
+                        />
+                      ) : (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => onUndo(row.id)}
+                          disabled={busyTripId === row.id}
+                        >
+                          Undo
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                  {applyRow && (
+                    <TableRow className="hover:bg-transparent">
+                      <TableCell colSpan={5} className="bg-slate-50/60 py-3">
+                        <UnifiedResolutionAuditCard
+                          sourcePlatform={row.platform}
+                          sourceDate={row.date}
+                          sourceDriverName={row.driverName}
+                          sourceRefundAmount={Math.abs(row.tollCharges ?? 0)}
+                          targetLocation={row.targetLocation}
+                          targetTollAmount={row.targetTollAmount}
+                          targetTollDate={row.targetTollDate}
+                          crossPeriodWeekLabel={row.crossPeriodTargetWeekLabel}
+                          appliedAt={row.resolvedAt}
+                          appliedBy={row.resolvedBy}
+                          className="border-0 bg-transparent p-0 shadow-none"
+                        />
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </React.Fragment>
+              );
+            })}
+          </TableBody>
+        </Table>
       </CardContent>
     </Card>
   );

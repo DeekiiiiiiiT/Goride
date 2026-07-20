@@ -3,6 +3,9 @@ import type { Claim, DisputeRefund, FinancialTransaction, Trip } from '../types/
 import { fleetTzDateKey, normalizeWallClockTime, ymdToLocalDate } from './timezoneDisplay';
 import { VARIANCE_THRESHOLD } from './tollReconciliation';
 
+/** Re-export Edge-safe Monday week key (shared with unlinked shortfall scoring). */
+export { dateWeekKey } from './fleetMondayWeekKey';
+
 /**
  * Monday-start week key + bounds for a row's date.
  *
@@ -429,21 +432,8 @@ export function formatTollPeriodLabel(
   return formatWeekPeriodLabel(start, end);
 }
 
-/** Monday-start week key for any date-ish string (trip, toll, claim). */
-export function dateWeekKey(
-  dateStr: string | undefined | null,
-  fleetTz: string,
-): string | null {
-  if (!dateStr) return null;
-  const raw = String(dateStr).trim();
-  if (!raw) return null;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
-    return weekBucketForDate(ymdToLocalDate(raw), fleetTz).key;
-  }
-  const ymd = fleetTzDateKey(raw, fleetTz);
-  if (!ymd) return null;
-  return weekBucketForDate(ymdToLocalDate(ymd), fleetTz).key;
-}
+/** Monday-start week key for any date-ish string (trip, toll, claim).
+ *  Implementation lives in fleetMondayWeekKey.ts (Deno Edge-safe). */
 
 /** Human-readable Mon–Sun label for a date-ish string. */
 export function formatDateWeekLabel(

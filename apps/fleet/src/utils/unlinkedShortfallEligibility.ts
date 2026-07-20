@@ -4,7 +4,7 @@
  */
 
 import { platformsEqual } from './normalizePlatform.ts';
-import { dateWeekKey } from './tollWeekPeriod.ts';
+import { dateWeekKey } from './fleetMondayWeekKey.ts';
 
 export const UNLINKED_SHORTFALL_TOLERANCE = 0.05;
 /** Minimum score to show a candidate in the Review picker. */

@@ -270,9 +270,6 @@ function DisputeMatchModalInner({ open, onOpenChange, refund, onMatched }: Dispu
                           {Math.abs(s.variance) < 0.01 ? 'Covers shortfall' : `$${Math.abs(s.variance).toFixed(2)} off`}
                         </span>
                       </div>
-                      {s.eligibleForAuto === false && s.rejectReason && (
-                        <div className="text-[10px] text-amber-700 mt-0.5">Manual review: {s.rejectReason}</div>
-                      )}
                       <div className="text-[10px] text-slate-500 mt-0.5">
                         {fmtDate(s.date)}
                       </div>

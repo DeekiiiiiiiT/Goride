@@ -6644,6 +6644,13 @@ async function applyUnlinkedRefundToClaim(
         amount: initialShortfall > 0 ? initialShortfall : tollAmount,
         expectedAmount: tollAmount,
         paidAmount: platformRefund,
+        // Denormalize for History when trip map / dispute lookup is thin.
+        platform: matchedTrip?.platform || trip.platform || undefined,
+        pickup:
+          matchedTrip?.pickupLocation ||
+          (toll?.metadata as { plaza?: string } | undefined)?.plaza ||
+          trip.pickupLocation ||
+          undefined,
         subject: `Unlinked refund applied from trip ${tripId}`,
         message: `Platform trip refund $${tripRefund.toFixed(2)} applied toward underpaid toll.`,
         date: toll.date || trip.date,
@@ -6797,6 +6804,20 @@ async function applyUnlinkedRefundToClaim(
   const tollCostForAlloc = Math.abs(
     Number(claim.expectedAmount ?? claim.amount) || remaining || 0,
   );
+  // Keep History display fields populated even if later dispute matching clears links.
+  const displayPlatform = claim.platform || tripPlatform || tollPlatform || undefined;
+  const displayPickup =
+    claim.pickup ||
+    (claim.tripId ? tripById.get(claim.tripId)?.pickupLocation : undefined) ||
+    (tollForPlatform?.metadata as { plaza?: string } | undefined)?.plaza ||
+    trip.pickupLocation ||
+    undefined;
+  const claimDisplayPatch = {
+    platform: displayPlatform,
+    pickup: displayPickup,
+    unlinkedTripId: tripId,
+    unlinkedSourcePlatform: tripPlatform,
+  };
 
   // Canonical allocation (idempotent). Soft-caps to remaining shortfall.
   if (resolvedTollId && applied > UNLINKED_SHORTFALL_TOLERANCE) {
@@ -6835,8 +6856,7 @@ async function applyUnlinkedRefundToClaim(
         paidAmount: projected.paidAmount,
         amount: projected.amount,
         expectedAmount: projected.expectedAmount,
-        unlinkedTripId: tripId,
-        unlinkedSourcePlatform: tripPlatform,
+        ...claimDisplayPatch,
         preUnlinkedStatus: priorStatus,
         preUnlinkedResolutionReason: priorReason,
         preUnlinkedPaidAmount: priorPaid,
@@ -6853,8 +6873,7 @@ async function applyUnlinkedRefundToClaim(
         resolutionReason: "Reimbursed",
         paidAmount: nextPaid,
         amount: wasChargeDriver ? claim.amount : Math.max(0, Math.abs(Number(claim.amount) || 0) - applied),
-        unlinkedTripId: tripId,
-        unlinkedSourcePlatform: tripPlatform,
+        ...claimDisplayPatch,
         preUnlinkedStatus: priorStatus,
         preUnlinkedResolutionReason: priorReason,
         preUnlinkedPaidAmount: priorPaid,
@@ -6871,8 +6890,7 @@ async function applyUnlinkedRefundToClaim(
         resolutionReason: claim.status === "Resolved" ? null : claim.resolutionReason,
         paidAmount: nextPaid,
         amount: leftover,
-        unlinkedTripId: tripId,
-        unlinkedSourcePlatform: tripPlatform,
+        ...claimDisplayPatch,
         preUnlinkedStatus: priorStatus,
         preUnlinkedResolutionReason: priorReason,
         preUnlinkedPaidAmount: priorPaid,

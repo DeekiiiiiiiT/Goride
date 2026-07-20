@@ -9,7 +9,7 @@ import {
 } from "../ui/table";
 import { Badge } from "../ui/badge";
 import { CheckCircle2, History, Trash2, MoreHorizontal, FileText, UserMinus } from "lucide-react";
-import { Claim, FinancialTransaction } from "../../types/data";
+import { Claim, DisputeRefund, FinancialTransaction } from "../../types/data";
 import { toast } from "sonner@2.0.3";
 import { Checkbox } from "../ui/checkbox";
 import { Button } from "../ui/button";
@@ -27,8 +27,10 @@ import { UndoApplyToUnderpaidDialog } from "../toll-tags/reconciliation/UndoAppl
 import type { Trip } from "../../types/data";
 import { PlatformSourceBadge } from "../toll-tags/reconciliation/PlatformSourceBadge";
 import {
+  disputePlatformByClaimId,
   getClaimCategoryChipClass,
   getClaimCategoryLabel,
+  getClaimLocationDisplay,
   getClaimPlatformDisplay,
 } from "../../utils/claimHistoryDisplay";
 
@@ -86,6 +88,8 @@ interface ResolvedHistoryListProps {
   trips?: Trip[];
   /** Toll ledger rows keyed by id — platform + category context. */
   tollById?: ReadonlyMap<string, FinancialTransaction>;
+  /** Dispute refunds — platform fallback when claim.platform / trip link is missing. */
+  disputeRefunds?: DisputeRefund[];
   /** Undo apply from claim row — passes the linked unlinked trip id. */
   onUndoUnlinkedApply?: (tripId: string) => Promise<void> | void;
   busyUnlinkedTripId?: string | null;
@@ -100,10 +104,15 @@ export function ResolvedHistoryList({
   onSelectClaim,
   trips = [],
   tollById,
+  disputeRefunds = [],
   onUndoUnlinkedApply,
   busyUnlinkedTripId,
 }: ResolvedHistoryListProps) {
   const tripById = useMemo(() => new Map(trips.map((t) => [t.id, t])), [trips]);
+  const disputeById = useMemo(
+    () => new Map((disputeRefunds || []).filter((r) => r?.id).map((r) => [r.id, r])),
+    [disputeRefunds],
+  );
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   if (isLoading) {
@@ -203,28 +212,12 @@ export function ResolvedHistoryList({
           {claims.map((claim) => {
             const styles = getResolutionStyle(claim.resolutionReason);
             const toll = claim.transactionId ? tollById?.get(claim.transactionId) : undefined;
-            const platformDisplay = getClaimPlatformDisplay(claim, toll, tripById);
+            const platformDisplay = getClaimPlatformDisplay(claim, toll, tripById, {
+              disputePlatform: disputePlatformByClaimId(claim, disputeById),
+            });
             const category = getClaimCategoryLabel(claim, toll);
             const linkedTrip = claim.unlinkedTripId ? tripById.get(claim.unlinkedTripId) : undefined;
-            const messageTripId = claim.message?.match(/trip\s+([0-9a-f-]{36})/i)?.[1];
-            const messageTrip = messageTripId ? tripById.get(messageTripId) : undefined;
-            // Prefer underpaid/matched trip; fall back to unlinked-credit trip (common after Apply).
-            const locationTrip =
-              (claim.tripId ? tripById.get(claim.tripId) : undefined) ||
-              (toll?.tripId ? tripById.get(toll.tripId) : undefined) ||
-              (toll?.matchedTripId ? tripById.get(toll.matchedTripId) : undefined) ||
-              linkedTrip ||
-              messageTrip;
-            const location =
-              claim.pickup ||
-              locationTrip?.pickupLocation ||
-              locationTrip?.dropoffLocation ||
-              (toll as { tollPlaza?: string } | undefined)?.tollPlaza ||
-              toll?.description ||
-              (claim.subject?.startsWith('Toll Refund:')
-                ? claim.subject.replace(/^Toll Refund:\s*/, '')
-                : '') ||
-              '';
+            const location = getClaimLocationDisplay(claim, toll, tripById);
             const splitApply = isUnlinkedApplySplitState(claim, linkedTrip);
             const staleUnlinkedApply =
               !!claim.unlinkedTripId &&

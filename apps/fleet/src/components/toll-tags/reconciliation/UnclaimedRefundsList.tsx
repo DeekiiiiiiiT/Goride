@@ -231,7 +231,6 @@ export function UnclaimedRefundsList({
           selectedCount={selected.size}
           suggestedCount={suggestedCount}
           onApplySuggested={() => applyBulk()}
-          onMarkCashWash={() => applyBulk('cash_wash')}
           onClear={() => setSelected(new Set())}
           busy={busy}
         />

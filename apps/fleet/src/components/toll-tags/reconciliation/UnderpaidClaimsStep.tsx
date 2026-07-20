@@ -1,8 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../ui/tabs";
-import { Button } from "../../ui/button";
 import { toast } from "sonner@2.0.3";
-import { Download, FileX, AlertCircle, Timer, Banknote } from "lucide-react";
+import { FileX, AlertCircle, Timer, Banknote } from "lucide-react";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -15,6 +14,7 @@ import { ResolvedHistoryList } from "../../claimable-loss/ResolvedHistoryList";
 import { DisputeModal } from "../../claimable-loss/DisputeModal";
 import { ClaimDetailOverlay } from "../../claimable-loss/ClaimDetailOverlay";
 import { StatCard } from "../../claimable-loss/StatCard";
+import { PeriodHistoryPanel } from "./PeriodHistoryPanel";
 import { FinancialTransaction, Trip, Claim, DisputeRefund } from "../../../types/data";
 import { MatchResult, calculateTollFinancials, buildTollFinancialsContext, buildTripRefundAllocation, spentUnlinkedCreditsByTripId } from "../../../utils/tollReconciliation";
 import { hasBlockingUnlinkedRefund } from "../../../utils/unlinkedShortfallEligibility";
@@ -26,7 +26,6 @@ import {
   linkPendingUnderpaidToTrips,
 } from "../../../utils/pendingUnderpaidListable";
 import { resolveDriverChargeAmount } from "../../../utils/claimChargeGuard";
-import { formatDateJM } from "../../../utils/csv-helper";
 import { useTollReconBusy } from "./tollReconBusyLock";
 
 /**
@@ -77,6 +76,17 @@ interface UnderpaidClaimsStepProps {
   deleteClaim: (id: string) => Promise<any>;
   rawDeleteClaim?: (id: string) => Promise<any>;
   refreshClaims: () => void;
+  /** Period audit history (resolved refunds / matched / activity). */
+  historyAudit?: {
+    resolvedRefundTrips: Trip[];
+    onUndoRefund: (tripId: string) => Promise<void> | void;
+    matchedTolls: FinancialTransaction[];
+    allReconciledTolls: FinancialTransaction[];
+    onUnmatch: (tx: FinancialTransaction) => Promise<any>;
+    selectedDriverId: string;
+    periodStartDate: string;
+    periodEndDate: string;
+  };
 }
 
 export function UnderpaidClaimsStep({
@@ -86,6 +96,7 @@ export function UnderpaidClaimsStep({
   fleetTz,
   drivers, loadingTolls, loadingClaims,
   createClaim, updateClaim, rawCreateClaim, rawUpdateClaim, deleteClaim, rawDeleteClaim, refreshClaims,
+  historyAudit,
 }: UnderpaidClaimsStepProps) {
   const { runExclusive, setMessage } = useTollReconBusy();
   const writeClaim = rawUpdateClaim || updateClaim;
@@ -828,32 +839,6 @@ export function UnderpaidClaimsStep({
     }
   };
 
-  const handleExport = () => {
-    if (pendingClaims.length === 0) {
-      toast.error("No pending claims to export");
-      return;
-    }
-    const headers = ['Date', 'Driver', 'Trip ID', 'Amount', 'Pickup', 'Dropoff', 'Status', 'Message'];
-    const csvRows = [headers.join(',')];
-    pendingClaims.forEach(claim => {
-      const row = [
-        formatDateJM(claim.createdAt), `"${getDriverName(claim.driverId)}"`, claim.tripId || '',
-        claim.amount.toFixed(2), `"${claim.pickup || ''}"`, `"${claim.dropoff || ''}"`,
-        claim.status, `"${(claim.message || '').replace(/"/g, '""')}"`,
-      ];
-      csvRows.push(row.join(','));
-    });
-    const csvContent = csvRows.join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', `uber_claims_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
   const handleBulkUpdateStatus = (claimsToUpdate: Claim[], status: Claim['status'], reason?: Claim['resolutionReason']) => {
     if (!claimsToUpdate.length) return;
     if (reason === 'Charge Driver') {
@@ -942,19 +927,14 @@ export function UnderpaidClaimsStep({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="space-y-3 min-w-0 flex-1">
-          <h3 className="text-lg font-semibold text-slate-900">Underpaid & Claims</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
-            <StatCard title="Unclaimed Potential" amount={unclaimedTotal} type="neutral" icon={Banknote} />
-            <StatCard title="Pending Recovery" amount={pendingTotal} type="info" icon={Timer} />
-            <StatCard title="Action Required" amount={atRiskTotal} type="warning" icon={AlertCircle} />
-            <StatCard title="Written Off" amount={writeOffTotal * -1} type="loss" icon={FileX} />
-          </div>
+      <div className="space-y-3">
+        <h3 className="text-lg font-semibold text-slate-900">Underpaid & Claims</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+          <StatCard title="Unclaimed Potential" amount={unclaimedTotal} type="neutral" icon={Banknote} />
+          <StatCard title="Pending Recovery" amount={pendingTotal} type="info" icon={Timer} />
+          <StatCard title="Action Required" amount={atRiskTotal} type="warning" icon={AlertCircle} />
+          <StatCard title="Written Off" amount={writeOffTotal * -1} type="loss" icon={FileX} />
         </div>
-        <Button onClick={handleExport} variant="outline" size="sm" className="gap-2 shrink-0 self-start">
-          <Download className="h-4 w-4" /> Export CSV
-        </Button>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
@@ -1056,18 +1036,46 @@ export function UnderpaidClaimsStep({
         </TabsContent>
 
         <TabsContent value="resolved" className="mt-6">
-          <ResolvedHistoryList
-            claims={resolvedClaims}
-            isLoading={loadingClaims}
-            getDriverName={getDriverName}
-            onDelete={handleDeleteClaims}
-            onUpdateStatus={handleUpdateStatus}
-            onSelectClaim={(claim) => { setSelectedClaimDetail(claim); setIsClaimDetailOpen(true); }}
-            trips={trips}
-            tollById={displayTollById}
-            onUndoUnlinkedApply={onUndoUnlinkedApply}
-            busyUnlinkedTripId={busyUnlinkedTripId}
-          />
+          {historyAudit ? (
+            <PeriodHistoryPanel
+              resolvedClaims={resolvedClaims}
+              loadingClaims={loadingClaims}
+              getDriverName={getDriverName}
+              onDeleteClaims={handleDeleteClaims}
+              onUpdateClaimStatus={handleUpdateStatus}
+              onSelectClaim={(claim) => { setSelectedClaimDetail(claim); setIsClaimDetailOpen(true); }}
+              trips={trips}
+              tollById={displayTollById}
+              onUndoUnlinkedApply={onUndoUnlinkedApply}
+              busyUnlinkedTripId={busyUnlinkedTripId}
+              resolvedRefundTrips={historyAudit.resolvedRefundTrips}
+              onUndoRefund={historyAudit.onUndoRefund}
+              matchedTolls={historyAudit.matchedTolls}
+              allReconciledTolls={historyAudit.allReconciledTolls}
+              periodClaims={claims}
+              allClaims={allClaims}
+              fleetTz={fleetTz}
+              disputeRefunds={disputeRefunds}
+              onUnmatch={historyAudit.onUnmatch}
+              selectedDriverId={historyAudit.selectedDriverId}
+              periodStartDate={historyAudit.periodStartDate}
+              periodEndDate={historyAudit.periodEndDate}
+            />
+          ) : (
+            <ResolvedHistoryList
+              claims={resolvedClaims}
+              isLoading={loadingClaims}
+              getDriverName={getDriverName}
+              onDelete={handleDeleteClaims}
+              onUpdateStatus={handleUpdateStatus}
+              onSelectClaim={(claim) => { setSelectedClaimDetail(claim); setIsClaimDetailOpen(true); }}
+              trips={trips}
+              tollById={displayTollById}
+              disputeRefunds={disputeRefunds}
+              onUndoUnlinkedApply={onUndoUnlinkedApply}
+              busyUnlinkedTripId={busyUnlinkedTripId}
+            />
+          )}
         </TabsContent>
       </Tabs>
 

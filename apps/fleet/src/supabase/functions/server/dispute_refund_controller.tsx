@@ -423,6 +423,7 @@ async function matchRefundToClaim(
               expectedAmount: tollCost,
             };
 
+        const tollForDisplay = tollTransactionId ? await loadTollForClaim(tollTransactionId) : null;
         await upsertClaim(
           {
             ...(claim as any),
@@ -432,6 +433,11 @@ async function matchRefundToClaim(
             amount: projected.amount,
             paidAmount: projected.paidAmount,
             expectedAmount: projected.expectedAmount || tollCost,
+            platform: (claim as any).platform || refund.platform || undefined,
+            pickup:
+              (claim as any).pickup ||
+              (tollForDisplay as { metadata?: { plaza?: string } } | null)?.metadata?.plaza ||
+              undefined,
             preDisputeStatus: cs,
             preDisputeResolutionReason: cs === "Resolved" ? (claim as any).resolutionReason : (claim as any).preDisputeResolutionReason,
             preDisputeAmount: (claim as any).amount,
@@ -794,6 +800,11 @@ app.patch(`${BASE}/:id/match`, requirePermission('toll.manage'), async (c) => {
             resolutionReason: existing?.status === "Resolved" ? existing.resolutionReason : null,
             amount: refundAmount,
             expectedAmount: tollAmount,
+            platform: existing?.platform || refund.platform || undefined,
+            pickup:
+              existing?.pickup ||
+              (toll?.metadata as { plaza?: string } | undefined)?.plaza ||
+              undefined,
             subject: existing?.subject || "Toll Underpayment (manual dispute match)",
             date: toll?.date || existing?.date || undefined,
           },
@@ -814,6 +825,8 @@ app.patch(`${BASE}/:id/match`, requirePermission('toll.manage'), async (c) => {
             status: "Submitted_to_Uber",
             amount: refundAmount,
             expectedAmount: tollAmount,
+            platform: refund.platform || undefined,
+            pickup: (toll?.metadata as { plaza?: string } | undefined)?.plaza || undefined,
             subject: "Toll Underpayment (manual dispute match)",
             date: toll?.date || undefined,
             _createdByRefund: id,

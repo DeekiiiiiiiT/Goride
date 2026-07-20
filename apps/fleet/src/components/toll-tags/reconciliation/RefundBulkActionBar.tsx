@@ -7,21 +7,18 @@ interface RefundBulkActionBarProps {
   /** How many of the selected rows have an actionable suggestion. */
   suggestedCount: number;
   onApplySuggested: () => void;
-  onMarkCashWash: () => void;
   onClear: () => void;
   busy?: boolean;
 }
 
 /**
- * Bulk action bar for the Unlinked Refunds table (Phase 1 shell).
- * Renders only when rows are selected. Automation-first: the primary action
- * applies each row's own suggested resolution in one click.
+ * Bulk action bar for Unlinked Refunds — one primary action applies each
+ * row's own suggestion (cash wash, phantom, etc.).
  */
 export function RefundBulkActionBar({
   selectedCount,
   suggestedCount,
   onApplySuggested,
-  onMarkCashWash,
   onClear,
   busy,
 }: RefundBulkActionBarProps) {
@@ -40,15 +37,6 @@ export function RefundBulkActionBar({
         >
           <Sparkles className="mr-1.5 h-4 w-4" />
           Apply suggested ({suggestedCount})
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={onMarkCashWash}
-          disabled={busy}
-          title="Clears an unlinked trip refund — not the same as a cash toll expense on Financials → Expenses."
-        >
-          Mark cash wash
         </Button>
         <Button
           size="sm"

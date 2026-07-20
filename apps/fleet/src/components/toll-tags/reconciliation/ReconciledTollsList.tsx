@@ -4,10 +4,7 @@ import { Button } from "../../ui/button";
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from "../../ui/table";
 import { Checkbox } from "../../ui/checkbox";
 import { FinancialTransaction, Trip, Claim, DisputeRefund } from "../../../types/data";
-import { normalizePlatform } from '../../../utils/normalizePlatform';
-import { History, Undo2, Loader2, Info, ChevronDown, Bot, UserCheck, CreditCard, Banknote, CalendarRange } from "lucide-react";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../../ui/collapsible";
-import { groupTollsByWeek } from "../../../utils/tollWeekPeriod";
+import { History, Undo2, Loader2, Info, Bot, UserCheck, CreditCard, Banknote } from "lucide-react";
 import { Badge } from "../../ui/badge";
 import { calculateTollFinancials, buildTollFinancialsContext, buildTripRefundAllocation } from "../../../utils/tollReconciliation";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../ui/tooltip";
@@ -26,12 +23,10 @@ interface ReconciledTollsListProps {
 export function ReconciledTollsList({ tolls, trips, claims, disputeRefunds = [], onUnmatch }: ReconciledTollsListProps) {
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [isBulkUnmatching, setIsBulkUnmatching] = useState(false);
-    const [visibleWeekCount, setVisibleWeekCount] = useState(12);
     const [detailTx, setDetailTx] = useState<FinancialTransaction | null>(null);
     const fleetTz = useFleetTimezone();
 
-    const weekGroups = useMemo(() => groupTollsByWeek(tolls, fleetTz), [tolls, fleetTz]);
-    const visibleWeekGroups = weekGroups.slice(0, visibleWeekCount);
+    // Flat list — period is already known from the wizard context.
     const tripById = useMemo(() => new Map(trips.filter((t) => t?.id).map((t) => [t.id, t])), [trips]);
     const allocation = useMemo(() => buildTripRefundAllocation(tolls, tripById), [tolls, tripById]);
 
@@ -129,23 +124,7 @@ export function ReconciledTollsList({ tolls, trips, claims, disputeRefunds = [],
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {visibleWeekGroups.map((week) => (
-                            <TableRow key={week.key} className="border-0 hover:bg-transparent">
-                                <TableCell colSpan={10} className="p-0 align-top">
-                                    <Collapsible defaultOpen={false} className="group border-b border-slate-200 last:border-b-0">
-                                        <CollapsibleTrigger className="flex w-full items-center justify-between gap-3 px-2 py-3 text-left bg-slate-50/80 dark:bg-slate-900/40 hover:bg-slate-100/90 dark:hover:bg-slate-800/50 transition-colors">
-                                            <div className="flex items-center gap-2 min-w-0 flex-wrap">
-                                                <CalendarRange className="h-4 w-4 text-slate-500 shrink-0" />
-                                                <span className="font-semibold text-slate-800 dark:text-slate-100">{week.label}</span>
-                                                <span className="text-[10px] uppercase tracking-wide text-slate-500">Mon–Sun</span>
-                                                <Badge variant="secondary" className="text-[11px]">{week.items.length} toll{week.items.length !== 1 ? 's' : ''}</Badge>
-                                            </div>
-                                            <ChevronDown className="h-4 w-4 text-slate-500 shrink-0 transition-transform duration-200 group-data-[state=open]:rotate-0 group-data-[state=closed]:-rotate-90" />
-                                        </CollapsibleTrigger>
-                                        <CollapsibleContent>
-                                            <table className="w-full text-sm caption-bottom">
-                                                <tbody className="[&_tr:last-child]:border-0">
-                                                    {week.items.map(tx => {
+                        {tolls.map(tx => {
                                                         const trip = trips.find(t => t.id === tx.tripId) || (tx as any).linkedTrip || null;
                                                         const claim = claims.find(c => c.transactionId === tx.id);
                                                         const isSelected = selectedIds.has(tx.id);
@@ -388,28 +367,8 @@ export function ReconciledTollsList({ tolls, trips, claims, disputeRefunds = [],
                                                             </TableRow>
                                                         );
                                                     })}
-                                                </tbody>
-                                            </table>
-                                        </CollapsibleContent>
-                                    </Collapsible>
-                                </TableCell>
-                            </TableRow>
-                        ))}
                     </TableBody>
                 </Table>
-                {visibleWeekCount < weekGroups.length && (
-                    <div className="flex items-center justify-center pt-4 border-t mt-2">
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setVisibleWeekCount(prev => prev + 8)}
-                            className="text-slate-600 hover:text-slate-900"
-                        >
-                            <ChevronDown className="h-4 w-4 mr-1" />
-                            Show more weeks ({visibleWeekCount} of {weekGroups.length})
-                        </Button>
-                    </div>
-                )}
             </CardContent>
 
             <MatchedTollDetailOverlay

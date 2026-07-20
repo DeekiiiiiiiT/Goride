@@ -1,5 +1,6 @@
 import { TripStop, RoutePoint } from '../types/tripSession';
-import { projectId, publicAnonKey } from './supabase/info';
+import { projectId } from './supabase/info';
+import { getHeaders } from './authHeaders';
 
 export interface GeoCoordinates {
   latitude: number;
@@ -75,12 +76,11 @@ export const loadGoogleMapsApi = async (): Promise<void> => {
           }
       }
 
-      // ANON ALLOWLIST: /maps-config is a public bootstrap config fetch (loads the Google Maps script key), so anon is intentional.
-      const response = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-37f42386/maps-config`, {
-        headers: {
-          Authorization: `Bearer ${publicAnonKey}`,
-        },
-      });
+      // Prefer session JWT when logged in; anon is allowed for this public bootstrap endpoint.
+      const response = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/make-server-37f42386/maps-config`,
+        { headers: await getHeaders(null, { allowAnon: true }) },
+      );
       
       if (!response.ok) {
         throw new Error(`Server configuration error: ${response.status} ${response.statusText}`);
