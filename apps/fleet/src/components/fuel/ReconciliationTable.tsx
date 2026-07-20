@@ -142,7 +142,19 @@ export function ReconciliationTable({
                     api.getPreferences().catch(() => ({})),
                 ]);
                 if (cancelled) return;
-                setPersonalAllowanceConfig(pa);
+                // Seed prefs when PA never configured so recon gets enabled defaults
+                let paConfig = pa;
+                if (!(prefs as any)?.personalAllowance) {
+                    paConfig = mergePersonalAllowanceDefaults(null);
+                    if (paConfig.enabled) {
+                        try {
+                            await tierService.savePersonalAllowanceSettings(paConfig);
+                        } catch (seedErr) {
+                            console.warn('[PersonalAllowance] seed enable failed', seedErr);
+                        }
+                    }
+                }
+                setPersonalAllowanceConfig(paConfig);
                 setQuotaConfig(quotas);
                 setLegacyTiers(Array.isArray(tiers) && tiers.length ? tiers : createDefaultTiers());
                 setEarningsPolicies(Array.isArray(policies) ? policies : []);
@@ -545,7 +557,7 @@ export function ReconciliationTable({
 
                 <div className="flex items-center gap-2">
                     <div className="text-right mr-4">
-                        <p className="text-xs text-slate-500">Net Leakage</p>
+                        <p className="text-xs text-slate-500">Unassigned spend</p>
                         <p className={`font-bold ${getLeakageColor(totals.misc)}`}>
                             {formatCurrency(totals.misc)}
                         </p>
@@ -692,15 +704,21 @@ export function ReconciliationTable({
                                     <Tooltip>
                                         <TooltipTrigger asChild>
                                             <div className="flex items-center justify-end gap-1 cursor-help">
-                                                Personal
+                                                {paMayBeActive ? 'Personal (after allowance)' : 'Personal'}
                                                 <Info className="h-3 w-3 text-slate-400" />
                                             </div>
                                         </TooltipTrigger>
                                         <TooltipContent side="bottom" className="max-w-xs p-0">
                                             <div className="p-3 space-y-2.5 text-xs">
                                                 <div>
-                                                    <p className="font-bold text-slate-100 text-sm mb-1">Personal</p>
-                                                    <p className="text-slate-300">Fuel consumed for non-work personal driving. This is the true personal residual after all work-related categories have been subtracted.</p>
+                                                    <p className="font-bold text-slate-100 text-sm mb-1">
+                                                        {paMayBeActive ? 'Personal (after allowance)' : 'Personal'}
+                                                    </p>
+                                                    <p className="text-slate-300">
+                                                        {paMayBeActive
+                                                            ? 'Personal fuel $ after Personal Allowance: company absorbs earned free km; only overage hits the scenario Personal split (usually driver).'
+                                                            : 'Fuel consumed for non-work personal driving. This is the true personal residual after all work-related categories have been subtracted.'}
+                                                    </p>
                                                 </div>
                                                 <div className="border-t border-slate-600 pt-2">
                                                     <p className="font-semibold text-amber-400 text-[11px] uppercase tracking-wide mb-1">How it's calculated</p>
@@ -709,7 +727,11 @@ export function ReconciliationTable({
                                                 </div>
                                                 <div className="border-t border-slate-600 pt-2">
                                                     <p className="font-semibold text-amber-400 text-[11px] uppercase tracking-wide mb-1">Company / Driver Split</p>
-                                                    <p className="text-slate-300">Split is determined by the Personal coverage % in the active fuel scenario. Typically 0% company-covered (fully driver responsibility).</p>
+                                                    <p className="text-slate-300">
+                                                        {paMayBeActive
+                                                            ? 'Earned allowance → company. Overage → Personal coverage % on the active fuel scenario (Full = driver pays 100% of overage).'
+                                                            : 'Split is determined by the Personal coverage % in the active fuel scenario. Typically 0% company-covered (fully driver responsibility).'}
+                                                    </p>
                                                 </div>
                                             </div>
                                         </TooltipContent>
@@ -936,7 +958,10 @@ export function ReconciliationTable({
                                             </div>
                                         </TableCell>
                                         <TableCell>
-                                            <div className="flex flex-col items-center justify-center gap-1">
+                                            <TooltipProvider>
+                                            <Tooltip>
+                                            <TooltipTrigger asChild>
+                                            <div className="flex flex-col items-center justify-center gap-1 cursor-help">
                                                 <div className="flex items-center gap-1.5">
                                                     {report.healthStatus === 'Emerald' ? (
                                                         <CheckCircle2 className="h-4 w-4 text-emerald-500" />
@@ -954,6 +979,15 @@ export function ReconciliationTable({
                                                 </div>
                                                 <Progress value={report.healthScore} className="h-1 w-12" />
                                             </div>
+                                            </TooltipTrigger>
+                                            <TooltipContent className="max-w-[240px]">
+                                                <p className="text-xs font-bold">Data Health (tank cycles)</p>
+                                                <p className="text-[10px] text-slate-300">
+                                                    Amber/Red = incomplete tank cycles, soft-cycle efficiency drift, or trip/odo gaps — not every top-up variance.
+                                                </p>
+                                            </TooltipContent>
+                                            </Tooltip>
+                                            </TooltipProvider>
                                         </TableCell>
                                         <TableCell>
                                             <div className="flex flex-col gap-1 items-start">
@@ -1159,9 +1193,21 @@ export function ReconciliationTable({
                                                                         {Math.round(report.metadata.personalAllowance.weeklyQuota).toLocaleString()}
                                                                     </span>
                                                                 </div>
+                                                                <div className="flex justify-between gap-4">
+                                                                    <span>Company absorbed</span>
+                                                                    <span>
+                                                                        {formatCurrency(report.metadata.personalAllowance.earnedCost || 0)}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="flex justify-between gap-4">
+                                                                    <span>Overage $ (split)</span>
+                                                                    <span>
+                                                                        {formatCurrency(report.metadata.personalAllowance.overageCost || 0)}
+                                                                    </span>
+                                                                </div>
                                                             </div>
                                                             <p className="mt-2 text-[10px] text-slate-400">
-                                                                Company covers earned personal fuel; driver pays overage at period $/km.
+                                                                Company covers earned personal fuel; driver pays overage per scenario Personal coverage (Full / 0% company = driver 100%).
                                                             </p>
                                                         </TooltipContent>
                                                     )}

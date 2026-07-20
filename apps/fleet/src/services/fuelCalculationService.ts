@@ -2,7 +2,7 @@
  * Shared utility for fuel-related calculations to ensure consistency across components.
  */
 
-import { FuelEntry, MileageAdjustment, WeeklyFuelReport, FuelScenario, FuelRule, OdometerBucket } from '../types/fuel';
+import { FuelEntry, MileageAdjustment, WeeklyFuelReport, FuelScenario, FuelRule, OdometerBucket, FuelCycle } from '../types/fuel';
 import { Vehicle } from '../types/vehicle';
 import { Trip } from '../types/data';
 import {
@@ -27,6 +27,11 @@ import {
   type PersonalAllowanceSplitResult,
 } from '../utils/personalAllowance';
 import type { PersonalAllowanceTierConfig, QuotaConfig } from '../types/data';
+import { calculateFuelCycles } from '../utils/fuelCycleEngine';
+import { FLEET_CYCLE_HEALTH, FLEET_USE_FUEL_BRAIN } from '../utils/fuelBrainFlags';
+
+/** Soft-cycle efficiency band vs week observed km/L before Amber (cycle-health mode). */
+const SOFT_CYCLE_EFFICIENCY_BAND = 0.30;
 
 export type { FuelCoverageCategory };
 
@@ -384,8 +389,7 @@ export const FuelCalculationService = {
         const companyShare = rideShareSplit.company + companyUsageSplit.company + deadheadSplit.company + personalSplit.company + miscSplit.company + earnedAbsorbCompany;
         const driverShare = rideShareSplit.driver + companyUsageSplit.driver + deadheadSplit.driver + personalSplit.driver + miscSplit.driver;
 
-        // 8. Calculate Health Status (Phase 4)
-        // Buckets already computed above in step 4b
+        // 8. Health Status — cycle spine when FLEET_CYCLE_HEALTH (default ON)
         const efficiencySource: 'odometer' | 'vehicle_settings' | 'default_fallback' =
             entriesWithOdo.length >= 3
               ? 'odometer'
@@ -393,17 +397,51 @@ export const FuelCalculationService = {
         const priceSource: 'fuel_entries' | 'default_fallback' =
             (totalLiters > 0 && totalGasCardCost > 0) ? 'fuel_entries' : 'default_fallback';
 
+        const fuelCycles = calculateFuelCycles(vehicleEntries, [vehicle]);
+        const closedCycles = fuelCycles.filter((c) => c.status === 'Complete' || c.status === 'Anomaly');
+        const tankCap =
+            Number(vehicle.specifications?.tankCapacity) ||
+            Number(vehicle.fuelSettings?.tankCapacity) ||
+            0;
+        const gapAnomalyBuckets = buckets.filter((b) => {
+            const dist = b.endOdometer - b.startOdometer;
+            const hasGap = dist > 0 && b.unaccountedDistance > dist * 0.1;
+            const hasOverflow = tankCap > 0 && b.actualFuelLiters > tankCap * 1.05;
+            return b.status === 'Anomaly' && (hasGap || hasOverflow);
+        });
+        const severeGap = buckets.some((b) => {
+            const dist = b.endOdometer - b.startOdometer;
+            return dist > 0 && b.unaccountedDistance > dist * 0.3;
+        });
+
         let healthStatus: 'Emerald' | 'Amber' | 'Red' = 'Emerald';
         let healthScore = 100;
 
-        if (buckets.length === 0 && vehicleEntries.length > 0) {
+        if (FLEET_CYCLE_HEALTH) {
+            if (closedCycles.length === 0 && vehicleEntries.length > 0) {
+                healthStatus = 'Red';
+                healthScore = 0;
+            } else if (closedCycles.some((c) => c.status === 'Anomaly') || severeGap) {
+                healthStatus = 'Red';
+                healthScore = 40;
+            } else {
+                const softEffOff = closedCycles.some((c) => {
+                    if (c.trustTier !== 'Soft' && c.resetType !== 'Auto_Soft') return false;
+                    if (!(c.efficiency > 0) || !(observedEfficiency > 0)) return false;
+                    return Math.abs(c.efficiency - observedEfficiency) / observedEfficiency > SOFT_CYCLE_EFFICIENCY_BAND;
+                });
+                if (softEffOff || gapAnomalyBuckets.length > 0) {
+                    healthStatus = 'Amber';
+                    healthScore = 70;
+                }
+            }
+        } else if (buckets.length === 0 && vehicleEntries.length > 0) {
             healthStatus = 'Red';
             healthScore = 0;
-        } else if (buckets.some(b => b.status === 'Anomaly')) {
+        } else if (buckets.some((b) => b.status === 'Anomaly')) {
             healthStatus = 'Amber';
             healthScore = 70;
-            // Check for severe anomalies
-            if (buckets.some(b => b.unaccountedDistance > (b.endOdometer - b.startOdometer) * 0.3)) {
+            if (severeGap) {
                 healthStatus = 'Red';
                 healthScore = 40;
             }
@@ -419,6 +457,15 @@ export const FuelCalculationService = {
         if (efficiencySource === 'default_fallback' || priceSource === 'default_fallback') {
             healthStatus = healthStatus === 'Emerald' ? 'Amber' : healthStatus;
             healthScore = Math.min(healthScore, 65);
+        }
+
+        if (FLEET_USE_FUEL_BRAIN && options?.brainClassification) {
+            console.debug('[FuelBrain] week classify', {
+                vehicleId: vehicle.id,
+                cycleCount: closedCycles.length,
+                healthStatus,
+                availableKm: options.brainClassification.availableKm,
+            });
         }
 
         return {
@@ -446,6 +493,7 @@ export const FuelCalculationService = {
             healthStatus,
             healthScore,
             odometerBuckets: buckets,
+            fuelCycles: closedCycles,
             deadheadMeta: deadheadData ? {
                 method: deadheadData.method,
                 confidenceLevel: deadheadData.confidenceLevel,
@@ -480,6 +528,14 @@ export const FuelCalculationService = {
                 personalAllowance: allowanceSplit
                   ? buildPersonalAllowanceMetadata(allowanceSplit, paCtx?.config)
                   : undefined,
+                cycleHealth: FLEET_CYCLE_HEALTH
+                  ? {
+                      mode: 'cycles',
+                      closedCycleCount: closedCycles.length,
+                      anomalyCycles: closedCycles.filter((c) => c.status === 'Anomaly').length,
+                      softCycles: closedCycles.filter((c) => c.trustTier === 'Soft' || c.resetType === 'Auto_Soft').length,
+                    }
+                  : { mode: 'legacy_buckets' },
             }
         };
     },
@@ -1010,7 +1066,7 @@ export const FuelCalculationService = {
                 unaccountedDistance,
                 deductionRecommendation: deductionRecommendation > 0 ? deductionRecommendation : undefined,
                 deductionReason: deductionReason || undefined,
-                status: (isOverflow || unaccountedDistance > (bucketDistance * 0.1) || Math.abs(variancePercent) > 20) ? 'Anomaly' : 'Complete'
+                status: (isOverflow || unaccountedDistance > (bucketDistance * 0.1)) ? 'Anomaly' : 'Complete'
             });
         }
 

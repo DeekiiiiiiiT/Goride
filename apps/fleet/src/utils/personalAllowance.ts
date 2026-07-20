@@ -13,7 +13,9 @@ export const DEFAULT_PERSONAL_ALLOWANCE_BANDS: PersonalAllowanceBand[] = [
 ];
 
 export const DEFAULT_PERSONAL_ALLOWANCE: PersonalAllowanceTierConfig = {
-  enabled: false,
+  /** Enabled by default for new policies (Cycles + PA Economics plan). Existing KV policies keep their stored flag until flipped in UI. */
+  enabled: true,
+  /** null → use weekly quota from QuotaConfig, else 100_000 JMD fallback */
   weeklyQuotaOverrideJmd: null,
   nextWeekBonusKm: 20,
   bands: DEFAULT_PERSONAL_ALLOWANCE_BANDS.map((b) => ({ ...b })),
@@ -37,7 +39,7 @@ export function mergePersonalAllowanceDefaults(
         }))
       : DEFAULT_PERSONAL_ALLOWANCE_BANDS.map((b) => ({ ...b }));
   return {
-    enabled: !!raw.enabled,
+    enabled: raw.enabled === undefined ? DEFAULT_PERSONAL_ALLOWANCE.enabled : !!raw.enabled,
     weeklyQuotaOverrideJmd:
       raw.weeklyQuotaOverrideJmd === null || raw.weeklyQuotaOverrideJmd === undefined
         ? null

@@ -57,7 +57,7 @@ function PeriodCard({
             <span>{period.vehicleCount} vehicle{period.vehicleCount === 1 ? '' : 's'}</span>
             <span>Spend {formatMoney(period.totalSpend)}</span>
             <span className={period.netLeakage > 0 ? 'text-rose-600' : ''}>
-              Net leakage {formatMoney(period.netLeakage)}
+              Net unassigned {formatMoney(period.netLeakage)}
             </span>
           </div>
           <div className="mt-1.5 flex flex-wrap gap-1">

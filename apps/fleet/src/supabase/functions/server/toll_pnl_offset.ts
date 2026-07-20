@@ -22,7 +22,7 @@
  */
 
 import * as kv from "./kv_store.tsx";
-import { appendCanonicalLedgerEvents } from "./ledger_canonical.ts";
+import { appendCanonicalLedgerEvents, canonicalEventExistsByIdemKey } from "./ledger_canonical.ts";
 
 const MARKER_PREFIX = "toll_pnl_offset_marker:";
 
@@ -64,10 +64,17 @@ export interface EmitTollChargeOffsetParams {
 }
 
 export interface EmitTollChargeOffsetResult {
-  /** True when a new offset event was written this call. False = idempotent no-op (already active). */
+  /** True when a new offset event was written this call. False = idempotent no-op (already active) or skipped. */
   written: boolean;
   idempotencyKey: string;
   version: number;
+  /**
+   * True when nothing was written because the original `toll_charge` event
+   * this would offset was never itself written to the ledger — e.g. trip-level
+   * toll_charge events only exist for Uber trips. Offsetting a charge that was
+   * never counted would inflate "recovered" with nothing to net against.
+   */
+  skippedNoOriginalCharge?: boolean;
 }
 
 function buildOffsetEvent(
@@ -114,6 +121,19 @@ export async function emitTollChargeOffset(
   const dateOnly = (p.date || "").split("T")[0] || new Date().toISOString().split("T")[0];
   const markerKey = markerKeyFor(p.sourceType, p.sourceId);
   const marker = (await kv.get(markerKey)) as TollPnlOffsetMarker | null;
+
+  if (!marker?.active) {
+    // Only guard the FIRST emission — if a marker is already active we're
+    // just re-posting the same idempotent event (see below), not creating a
+    // new "recovered" dollar, so the existence check isn't needed there.
+    const hasOriginalCharge = await canonicalEventExistsByIdemKey(originalChargeKeyFor(p.sourceType, p.sourceId));
+    if (!hasOriginalCharge) {
+      console.warn(
+        `[TollPnlOffset] skipping offset for ${p.sourceType}:${p.sourceId} (reason ${p.reason}) — no original toll_charge event exists to offset`,
+      );
+      return { written: false, idempotencyKey: originalChargeKeyFor(p.sourceType, p.sourceId), version: marker?.version ?? 0, skippedNoOriginalCharge: true };
+    }
+  }
 
   if (marker && marker.active) {
     // Already offset — idempotent no-op. Re-write the SAME event key so a

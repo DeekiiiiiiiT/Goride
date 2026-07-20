@@ -48,7 +48,7 @@ import {
 import { computeTollWorkflowStage, type TollWorkflowStage } from "./toll_workflow_stage.ts";
 import { findTripsInDateRange, findTollsInDateRange, findTollsByMatchedTripId } from "./toll_match_index.ts";
 import { appendCanonicalTollReconciledBatch, type TollReconcileAuditEntry } from "./canonical_from_ops.ts";
-import { deleteCanonicalLedgerBySource } from "./ledger_canonical.ts";
+import { deleteCanonicalLedgerBySource, canonicalEventExistsByIdemKey, getCanonicalEventByIdemKey } from "./ledger_canonical.ts";
 import { applyEvidenceResolution } from "./evidence_routes.ts";
   import {
   coversShortfallFully,
@@ -4464,6 +4464,11 @@ async function findTollPnlOffsetBackfillCandidates(): Promise<TollPnlOffsetBackf
     if (!reason || amount <= 0.005) continue;
     const marker = await kv.get(`toll_pnl_offset_marker:trip:${t.id}`);
     if (marker && (marker as any).active) continue;
+    // Trip-level toll_charge events only exist for Uber trips (canonical_from_ops.ts
+    // gates them on isUber) — offsetting a charge that was never written would
+    // inflate "recovered" with nothing on the "gross" side to net against.
+    const hasOriginalCharge = await canonicalEventExistsByIdemKey(`trip:${t.id}|toll_charge`);
+    if (!hasOriginalCharge) continue;
     candidates.push({
       sourceType: "trip",
       id: t.id,
@@ -4481,6 +4486,8 @@ async function findTollPnlOffsetBackfillCandidates(): Promise<TollPnlOffsetBackf
     if (amount <= 0.005) continue;
     const marker = await kv.get(`toll_pnl_offset_marker:toll_ledger:${tx.id}`);
     if (marker && (marker as any).active) continue;
+    const hasOriginalCharge = await canonicalEventExistsByIdemKey(`toll_ledger:${tx.id}|toll_charge`);
+    if (!hasOriginalCharge) continue;
     candidates.push({
       sourceType: "toll_ledger",
       id: tx.id,
@@ -4597,6 +4604,159 @@ app.post(`${BASE}/toll-pnl-offset-backfill/backfill`, async (c) => {
     });
   } catch (e: any) {
     console.log(`[TollPnlOffsetBackfill] backfill error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ─── Toll P&L offset orphan repair ─── undo offsets with no original charge ──
+// Guards against a real bug found in the field: a compensating offset was
+// emitted (by the backfill above, or in principle by go-forward resolution)
+// for a source whose original `toll_charge` canonical event never existed —
+// e.g. trip-level toll_charge only exists for Uber trips, so a cash_wash/
+// phantom/expense_logged resolution on a Cash/Roam/InDrive trip has nothing
+// to offset. Those orphan offsets inflate "recovered" with no matching
+// "gross", which can push a period's netting negative (floored at $0 with a
+// data-mismatch warning). This scans active offset markers, finds ones with
+// no matching original charge, and reinstates (cancels) them — using the
+// SAME reversible mechanism as any other reinstate, so it's still append-only.
+async function loadTollPnlOffsetMarkerRows(): Promise<Array<{ key: string; value: any }>> {
+  const PAGE_SIZE = 1000;
+  const rows: Array<{ key: string; value: any }> = [];
+  let offset = 0;
+  while (true) {
+    const { data, error } = await supabase
+      .from("kv_store_37f42386")
+      .select("key, value")
+      .like("key", "toll_pnl_offset_marker:%")
+      .order("key", { ascending: true })
+      .range(offset, offset + PAGE_SIZE - 1);
+    if (error) throw error;
+    const page = data || [];
+    for (const row of page) {
+      if (row.value) rows.push({ key: String(row.key || ""), value: row.value });
+    }
+    if (page.length < PAGE_SIZE) break;
+    offset += PAGE_SIZE;
+  }
+  return rows;
+}
+
+interface TollPnlOffsetOrphan {
+  sourceType: "trip" | "toll_ledger";
+  sourceId: string;
+  reason: string;
+  amount: number;
+  date: string;
+  driverId?: string;
+  vehicleId?: string;
+}
+
+async function findTollPnlOffsetOrphans(): Promise<TollPnlOffsetOrphan[]> {
+  const rows = await loadTollPnlOffsetMarkerRows();
+  const orphans: TollPnlOffsetOrphan[] = [];
+  for (const { key, value } of rows) {
+    if (!value?.active) continue;
+    const rest = key.slice("toll_pnl_offset_marker:".length);
+    const sep = rest.indexOf(":");
+    if (sep < 0) continue;
+    const sourceType = rest.slice(0, sep);
+    const sourceId = rest.slice(sep + 1);
+    if (sourceType !== "trip" && sourceType !== "toll_ledger") continue;
+    const hasOriginalCharge = await canonicalEventExistsByIdemKey(`${sourceType}:${sourceId}|toll_charge`);
+    if (hasOriginalCharge) continue;
+
+    // Read amount/date/driver back from the offset event itself (append-only,
+    // still there) rather than the source record, which may have changed since.
+    const offsetEvent = value.offsetIdempotencyKey
+      ? await getCanonicalEventByIdemKey(String(value.offsetIdempotencyKey))
+      : null;
+    if (!offsetEvent) {
+      console.error(`[TollPnlOffsetRepair] orphan marker ${key} has no readable offset event — skipping, needs manual review`);
+      continue;
+    }
+    orphans.push({
+      sourceType,
+      sourceId,
+      reason: String(value.reason || "unknown"),
+      amount: Math.abs(Number(offsetEvent.netAmount) || Math.abs(Number(offsetEvent.grossAmount) || 0)),
+      date: String(offsetEvent.date || new Date().toISOString()),
+      driverId: typeof offsetEvent.driverId === "string" ? offsetEvent.driverId : undefined,
+      vehicleId: typeof offsetEvent.vehicleId === "string" ? offsetEvent.vehicleId : undefined,
+    });
+  }
+  return orphans;
+}
+
+app.get(`${BASE}/toll-pnl-offset-backfill/orphans-status`, async (c) => {
+  try {
+    const orphans = await findTollPnlOffsetOrphans();
+    const totalAmount = Math.round(orphans.reduce((s, o) => s + o.amount, 0) * 100) / 100;
+    return c.json({
+      success: true,
+      orphanCount: orphans.length,
+      totalAmount,
+      sample: orphans.slice(0, 20),
+      message:
+        orphans.length > 0
+          ? `${orphans.length} offset(s) totaling ${totalAmount} have no matching original toll_charge event (likely non-Uber trips) — they're inflating "recovered" with nothing to net against. POST /toll-pnl-offset-backfill/repair-orphans (dryRun defaults true) to undo them.`
+          : "No orphan offsets found.",
+    });
+  } catch (e: any) {
+    console.log(`[TollPnlOffsetRepair] status error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.post(`${BASE}/toll-pnl-offset-backfill/repair-orphans`, async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const dryRun = body?.dryRun !== false; // default to dry-run for safety
+
+    const orphans = await findTollPnlOffsetOrphans();
+    const totalAmount = Math.round(orphans.reduce((s, o) => s + o.amount, 0) * 100) / 100;
+
+    if (dryRun) {
+      return c.json({
+        success: true,
+        dryRun: true,
+        orphanCount: orphans.length,
+        totalAmount,
+        message:
+          orphans.length > 0
+            ? `Dry run: would reinstate (undo) ${orphans.length} orphan offset(s) totaling ${totalAmount}. Re-run with dryRun=false to apply.`
+            : "Nothing to repair.",
+      });
+    }
+
+    const touched: Array<{ sourceType: string; sourceId: string; amount: number }> = [];
+    const errors: string[] = [];
+    for (const o of orphans) {
+      try {
+        await reinstateTollCharge(
+          { sourceType: o.sourceType, sourceId: o.sourceId, driverId: o.driverId, vehicleId: o.vehicleId, date: o.date, amount: o.amount },
+          c,
+        );
+        touched.push({ sourceType: o.sourceType, sourceId: o.sourceId, amount: o.amount });
+      } catch (err: any) {
+        errors.push(`${o.sourceType}:${o.sourceId}: ${err.message}`);
+        if (errors.length > 50) break;
+      }
+    }
+
+    const manifestKey = `toll_pnl_offset_repair_run:${new Date().toISOString()}`;
+    await kv.set(manifestKey, { touched, at: new Date().toISOString(), errors });
+    console.log(`[TollPnlOffsetRepair] reinstated=${touched.length} errors=${errors.length} manifest=${manifestKey}`);
+
+    return c.json({
+      success: true,
+      dryRun: false,
+      reinstated: touched.length,
+      errors: errors.slice(0, 50),
+      manifestKey,
+      message: `Reinstated ${touched.length} orphan offset(s). They will no longer count toward "recovered" going forward.`,
+    });
+  } catch (e: any) {
+    console.log(`[TollPnlOffsetRepair] repair error: ${e.message}`);
     return c.json({ error: e.message }, 500);
   }
 });

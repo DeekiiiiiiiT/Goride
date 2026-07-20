@@ -180,6 +180,9 @@ export interface WeeklyFuelReport {
   // These buckets use fuel-entry-only anchors. For unified anchors, BucketReconciliationView
   // fetches its own via odometerService.getUnifiedHistory().
   odometerBuckets?: OdometerBucket[];
+
+  /** Closed tank cycles for the week (cycle-health spine). Live drafts may include full transactions. */
+  fuelCycles?: FuelCycle[];
 }
 
 /**
@@ -190,6 +193,8 @@ export interface FinalizedFuelReport extends WeeklyFuelReport {
   status: 'Finalized';
   finalizedAt: string;
   finalizedByUser?: string;
+  /** Slim cycles only (no embedded transactions) — see toSlimFuelCycles. */
+  fuelCycles?: SlimFuelCycle[];
   /** Total the driver already paid out-of-pocket for fuel in this period (cash/manual entries). */
   driverSpend: number;
   /** Company / fleet gas-card charges for fills in this period. */
@@ -262,6 +267,8 @@ export interface FuelCycle {
   distance: number;
   efficiency: number; // KM/L
   resetType: 'Manual' | 'Auto_Soft' | 'Auto_Anomaly';
+  /** Manual = driver Full Tank (gold); Soft = Auto Soft cap (silver). */
+  trustTier?: 'Manual' | 'Soft';
   startOdometer?: number;
   endOdometer?: number;
   
@@ -270,6 +277,27 @@ export interface FuelCycle {
   isCapped?: boolean;
   excessVolume?: number;
 }
+
+/** Slim cycle frozen on finalized_report (no embedded transactions). */
+export type SlimFuelCycle = {
+  id: string;
+  vehicleId: string;
+  startDate: string;
+  endDate: string;
+  startOdometer?: number;
+  endOdometer?: number;
+  totalLiters: number;
+  totalCost: number;
+  avgPricePerLiter: number;
+  distance: number;
+  efficiency: number;
+  status: FuelCycle['status'];
+  resetType: FuelCycle['resetType'];
+  trustTier?: FuelCycle['trustTier'];
+  isCapped?: boolean;
+  excessVolume?: number;
+  transactionIds: string[];
+};
 
 export type DisputeStatus = 'Open' | 'Resolved' | 'Rejected';
 

@@ -50,6 +50,13 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
     totalAmount: number;
     message: string;
   } | null>(null);
+  const [orphanChecking, setOrphanChecking] = useState(false);
+  const [orphanRepairing, setOrphanRepairing] = useState(false);
+  const [orphanReport, setOrphanReport] = useState<{
+    orphanCount: number;
+    totalAmount: number;
+    message: string;
+  } | null>(null);
 
   const applySettings = (data: {
     refundAutomationEnabled: boolean;
@@ -223,6 +230,33 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
     }
   };
 
+  const checkOrphans = async () => {
+    setOrphanChecking(true);
+    try {
+      const res = await api.getTollPnlOffsetOrphansStatus();
+      setOrphanReport({ orphanCount: res.orphanCount, totalAmount: res.totalAmount, message: res.message });
+      toast.info(res.message);
+    } catch (e: any) {
+      toast.error(e.message || "Status check failed");
+    } finally {
+      setOrphanChecking(false);
+    }
+  };
+
+  const repairOrphans = async () => {
+    setOrphanRepairing(true);
+    try {
+      const res = await api.repairTollPnlOffsetOrphans(false);
+      setOrphanReport({ orphanCount: 0, totalAmount: 0, message: res.message });
+      toast.success(res.message);
+      onChanged?.();
+    } catch (e: any) {
+      toast.error(e.message || "Repair failed");
+    } finally {
+      setOrphanRepairing(false);
+    }
+  };
+
   const runBridge = async (dryRun: boolean) => {
     setBridging(true);
     try {
@@ -248,7 +282,7 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
           Automation
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-[min(920px,95vw)] p-5">
+      <PopoverContent align="end" className="w-[min(920px,95vw)] max-h-[85vh] overflow-y-auto p-5">
         {loading ? (
           <div className="flex items-center justify-center py-10 text-slate-400">
             <Loader2 className="h-5 w-5 animate-spin" />
@@ -606,6 +640,30 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
                     <p className="text-slate-500">{pnlOffsetReport.message}</p>
                   </div>
                 )}
+
+                <div className="border-t border-slate-100 pt-3 space-y-2">
+                  <p className="text-xs text-slate-500">
+                    <span className="font-semibold text-amber-700">Data check:</span> some offsets have
+                    no matching toll charge to net against (e.g. non-Uber trips) — inflates "recovered"
+                    with nothing on the other side. Safe to repair anytime; reversible.
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Button size="sm" variant="outline" disabled={orphanChecking} onClick={checkOrphans}>
+                      {orphanChecking ? <Loader2 className="h-4 w-4 animate-spin" /> : "Check for orphans"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="bg-amber-600 hover:bg-amber-700"
+                      disabled={orphanRepairing}
+                      onClick={repairOrphans}
+                    >
+                      {orphanRepairing ? <Loader2 className="h-4 w-4 animate-spin" /> : "Repair orphans"}
+                    </Button>
+                  </div>
+                  {orphanReport && (
+                    <p className="text-xs text-slate-500 border-t border-slate-100 pt-2">{orphanReport.message}</p>
+                  )}
+                </div>
               </div>
             </div>
           </div>

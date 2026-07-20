@@ -480,17 +480,30 @@ async function run() {
   await step('11. toll P&L offset — cash_wash/phantom/expense_logged/Personal emit compensating events (flag ON)', async () => {
     await callApi('PUT', '/automation-settings', { body: { tollPnlOffsetEnabled: true } });
 
-    // cash_wash: re-apply the same resolution now that the flag is on.
-    await callApi('POST', '/resolve-refund', { body: { tripId: `${ns}_cashwash`, resolution: 'cash_wash' } });
-    const cashwashOffset = await getCanonicalEventByIdemKey(`trip:${ns}_cashwash|toll_charge_offset:v1`);
-    assert.ok(cashwashOffset, 'cash_wash offset event written');
+    // Trip-level toll_charge canonical events only exist for Uber trips
+    // (canonical_from_ops.ts gates them on isUber) — cash_wash/phantom offsets
+    // need an Uber trip to have anything to offset. Uses a fresh trip so this
+    // doesn't collide with the Cash-platform `${ns}_cashwash` fixture below.
+    await kvSet(`trip:${ns}_cashwash_uber`, trip('cashwash_uber', { tollCharges: 3.0 }));
+    await callApi('POST', '/resolve-refund', { body: { tripId: `${ns}_cashwash_uber`, resolution: 'cash_wash' } });
+    const cashwashOffset = await getCanonicalEventByIdemKey(`trip:${ns}_cashwash_uber|toll_charge_offset:v1`);
+    assert.ok(cashwashOffset, 'cash_wash offset event written for an Uber trip (has a real toll_charge to offset)');
     assert.equal(cashwashOffset.direction, 'inflow', 'cash_wash offset is inflow (neutralizes the charge)');
     assert.equal(cashwashOffset.metadata?.reason, 'cash_wash', 'offset reason recorded');
 
     // Idempotent re-post: resolving cash_wash again must not create a v2.
-    await callApi('POST', '/resolve-refund', { body: { tripId: `${ns}_cashwash`, resolution: 'cash_wash' } });
-    const cashwashOffsetV2 = await getCanonicalEventByIdemKey(`trip:${ns}_cashwash|toll_charge_offset:v2`);
+    await callApi('POST', '/resolve-refund', { body: { tripId: `${ns}_cashwash_uber`, resolution: 'cash_wash' } });
+    const cashwashOffsetV2 = await getCanonicalEventByIdemKey(`trip:${ns}_cashwash_uber|toll_charge_offset:v2`);
     assert.equal(cashwashOffsetV2, null, 'repeat cash_wash resolution does not create a second offset version');
+
+    // Regression guard: `${ns}_cashwash` is Cash-platform (seeded in step 2) —
+    // it has NO trip-level toll_charge event to offset. Resolving it as
+    // cash_wash must NOT write an orphan offset (this is the exact bug found
+    // in production: an offset with nothing on the "gross" side to net
+    // against inflates "recovered" and can push a period's Tolls negative).
+    await callApi('POST', '/resolve-refund', { body: { tripId: `${ns}_cashwash`, resolution: 'cash_wash' } });
+    const noOriginalChargeOffset = await getCanonicalEventByIdemKey(`trip:${ns}_cashwash|toll_charge_offset:v1`);
+    assert.equal(noOriginalChargeOffset, null, 'no offset written for a trip with no original toll_charge event (non-Uber)');
 
     // phantom: trip is currently 'pending' (reverted in step 4) — resolve again.
     await callApi('POST', '/resolve-refund', { body: { tripId: `${ns}_phantom`, resolution: 'phantom' } });
@@ -507,7 +520,22 @@ async function run() {
     assert.equal(expense2Offset.metadata?.reason, 'superseded_by_expense_logged', 'expense_logged offset reason recorded');
 
     // Personal (toll_ledger /resolve endpoint) — a separate code path from applyRefundResolution.
+    // This fixture is seeded via a raw kvSet (bypassing saveTollLedgerEntry's
+    // dual-write), so it needs its own canonical toll_charge event written by
+    // hand — otherwise the same no-original-charge guard would (correctly)
+    // skip it too, same as the regression case above.
     await kvSet(`toll_ledger:${ns}_personaltoll`, tollLedger('personaltoll', { amount: -7.5, paymentMethod: 'fleet_account' }));
+    const personalChargeEventId = randomUUID();
+    const personalChargeIdemKey = `toll_ledger:${ns}_personaltoll|toll_charge`;
+    await kvSet(`ledger_event:${personalChargeEventId}`, {
+      id: personalChargeEventId, idempotencyKey: personalChargeIdemKey,
+      date: D, driverId, eventType: 'toll_charge', direction: 'outflow',
+      netAmount: 7.5, grossAmount: 7.5, currency: 'JMD',
+      sourceType: 'transaction', sourceId: `${ns}_personaltoll`, platform: 'Roam',
+      description: 'Toll charge', createdAt: new Date().toISOString(),
+    });
+    await kvSet(`ledger_event_idem:${sha256Hex(personalChargeIdemKey)}`, { id: personalChargeEventId, idempotencyKey: personalChargeIdemKey });
+
     await callApi('POST', '/resolve', { body: { transactionId: `${ns}_personaltoll`, resolution: 'Personal' } });
     const personalOffset = await getCanonicalEventByIdemKey(`toll_ledger:${ns}_personaltoll|toll_charge_offset:v1`);
     assert.ok(personalOffset, 'Personal resolution offsets the toll (recovered via driver payout deduction)');
@@ -515,18 +543,55 @@ async function run() {
   });
 
   await step('12. toll P&L offset — reverting a resolution reinstates the charge', async () => {
-    await callApi('POST', '/resolve-refund', { body: { tripId: `${ns}_cashwash`, resolution: 'pending' } });
-    const reinstate = await getCanonicalEventByIdemKey(`trip:${ns}_cashwash|toll_charge_reinstate:v1`);
+    await callApi('POST', '/resolve-refund', { body: { tripId: `${ns}_cashwash_uber`, resolution: 'pending' } });
+    const reinstate = await getCanonicalEventByIdemKey(`trip:${ns}_cashwash_uber|toll_charge_reinstate:v1`);
     assert.ok(reinstate, 'reinstate event written on revert to pending');
     assert.equal(reinstate.direction, 'outflow', 'reinstate is outflow (brings the charge back)');
 
     // Re-resolving as cash_wash again after a reinstate must bump to v2, not reuse v1.
-    await callApi('POST', '/resolve-refund', { body: { tripId: `${ns}_cashwash`, resolution: 'cash_wash' } });
-    const reoffset = await getCanonicalEventByIdemKey(`trip:${ns}_cashwash|toll_charge_offset:v2`);
+    await callApi('POST', '/resolve-refund', { body: { tripId: `${ns}_cashwash_uber`, resolution: 'cash_wash' } });
+    const reoffset = await getCanonicalEventByIdemKey(`trip:${ns}_cashwash_uber|toll_charge_offset:v2`);
     assert.ok(reoffset, 'cycling offset -> reinstate -> offset again bumps the version');
 
     // Revert flag back off for a clean slate (also restored wholesale in teardown).
     await callApi('PUT', '/automation-settings', { body: { tollPnlOffsetEnabled: false } });
+  });
+
+  await step('13. orphan repair — finds and undoes an offset with no original charge', async () => {
+    // Simulates the exact bad state found in production: an offset + active
+    // marker written (e.g. by a pre-fix backfill run) for a source with no
+    // matching toll_charge event. The guard in step 11 now prevents this from
+    // happening going forward — this seeds it by hand to test the cleanup path.
+    await kvSet(`trip:${ns}_orphan`, trip('orphan', { platform: 'Cash', paymentMethod: 'Cash', tollCharges: 4.25 }));
+    const orphanOffsetIdemKey = `trip:${ns}_orphan|toll_charge_offset:v1`;
+    const orphanEventId = randomUUID();
+    await kvSet(`ledger_event:${orphanEventId}`, {
+      id: orphanEventId, idempotencyKey: orphanOffsetIdemKey,
+      date: D, driverId, eventType: 'toll_charge_offset', direction: 'inflow',
+      netAmount: 4.25, grossAmount: 4.25, currency: 'JMD',
+      sourceType: 'trip', sourceId: `${ns}_orphan`, platform: 'Roam',
+      description: 'Toll not a fleet loss (cash_wash)',
+      metadata: { reason: 'cash_wash', offsetsIdempotencyKey: `trip:${ns}_orphan|toll_charge`, version: 1 },
+      createdAt: new Date().toISOString(),
+    });
+    await kvSet(`ledger_event_idem:${sha256Hex(orphanOffsetIdemKey)}`, { id: orphanEventId, idempotencyKey: orphanOffsetIdemKey });
+    await kvSet(`toll_pnl_offset_marker:trip:${ns}_orphan`, {
+      active: true, version: 1, reason: 'cash_wash', offsetIdempotencyKey: orphanOffsetIdemKey, at: new Date().toISOString(),
+    });
+
+    const status = await callApi('GET', '/toll-pnl-offset-backfill/orphans-status');
+    const found = (status.sample || []).find((o) => o.sourceId === `${ns}_orphan`);
+    assert.ok(found, 'orphans-status detects the seeded orphan');
+
+    const applied = await callApi('POST', '/toll-pnl-offset-backfill/repair-orphans', { body: { dryRun: false } });
+    assert.ok((applied.reinstated ?? 0) >= 1, 'repair-orphans reinstates at least the seeded orphan');
+
+    const marker = await kvGet(`toll_pnl_offset_marker:trip:${ns}_orphan`);
+    assert.equal(marker.active, false, 'orphan marker deactivated after repair');
+
+    const statusAfter = await callApi('GET', '/toll-pnl-offset-backfill/orphans-status');
+    const stillFound = (statusAfter.sample || []).find((o) => o.sourceId === `${ns}_orphan`);
+    assert.ok(!stillFound, 'repaired orphan no longer appears in orphans-status');
   });
 }
 

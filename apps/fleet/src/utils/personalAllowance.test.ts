@@ -23,10 +23,14 @@ const quota: QuotaConfig = {
 };
 
 describe('personalAllowance', () => {
-  it('merge defaults to enabled:false', () => {
+  it('merge defaults to enabled:true', () => {
     const m = mergePersonalAllowanceDefaults(undefined);
-    expect(m.enabled).toBe(false);
+    expect(m.enabled).toBe(true);
     expect(m.bands).toHaveLength(4);
+  });
+
+  it('merge preserves explicit enabled:false', () => {
+    expect(mergePersonalAllowanceDefaults({ enabled: false }).enabled).toBe(false);
   });
 
   it('bonus key shape', () => {

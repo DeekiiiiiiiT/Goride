@@ -74,7 +74,7 @@ const DEFAULT_RULE = (): FuelRule => ({
     rideShareCoverage: 80,
     companyUsageCoverage: 100,
     deadheadCoverage: 50,
-    personalCoverage: 0,
+    personalCoverage: 0, // 0% company = driver pays 100% of Personal overage (after PA)
     miscCoverage: 50,
 });
 

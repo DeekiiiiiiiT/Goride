@@ -21,6 +21,7 @@ import {
   SheetDescription,
 } from '../components/ui/sheet';
 import { resolveActiveFuelPolicyForDriverWeek } from '../utils/fuelPolicyVersion';
+import { toSlimFuelCycles } from '../utils/slimFuelCycles';
 import {
   reportWeekYmdBounds,
   toEntryYmd,
@@ -992,6 +993,8 @@ function FuelManagementInner({ defaultTab = 'dashboard', onViewDriverLedger, onT
                 driverName: driver?.name || 'Unknown',
                 postedDriverShare,
                 postedCompanyShare,
+                // Freeze slim cycles (no embedded transactions[]) for KV size
+                fuelCycles: toSlimFuelCycles(report.fuelCycles),
                 metadata: {
                   ...report.metadata,
                   appliedScenario: activeScenario

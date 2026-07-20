@@ -472,7 +472,23 @@ export function BucketReconciliationView({
                                     </TableCell>
                                     <TableCell className="text-center">
                                         {bucket.status === 'Complete' ? (
-                                            <CheckCircle2 className="h-5 w-5 text-emerald-500 mx-auto" />
+                                            Math.abs(bucket.variancePercent) > 20 ? (
+                                                <TooltipProvider>
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <div className="flex flex-col items-center cursor-help">
+                                                                <CheckCircle2 className="h-5 w-5 text-emerald-500 mx-auto" />
+                                                                <span className="text-[9px] text-slate-400 mt-0.5">Variance info</span>
+                                                            </div>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent className="max-w-[200px]">
+                                                            <p className="text-xs">Fuel variance is informational for top-ups. Flags only for GAP or tank overflow.</p>
+                                                        </TooltipContent>
+                                                    </Tooltip>
+                                                </TooltipProvider>
+                                            ) : (
+                                                <CheckCircle2 className="h-5 w-5 text-emerald-500 mx-auto" />
+                                            )
                                         ) : (
                                             <div className="flex flex-col items-center">
                                                 <AlertTriangle className="h-5 w-5 text-amber-500" />
@@ -494,7 +510,8 @@ export function BucketReconciliationView({
                     <ul className="list-disc list-inside mt-1 space-y-1 opacity-90">
                         <li>Each row represents the travel between two consecutive fuel station visits.</li>
                         <li><strong>GAP</strong> highlights distance traveled that was NOT logged as a Trip or Adjustment.</li>
-                        <li><strong>Variance</strong> compares the fuel added at the end of the bucket against what the vehicle <em>should</em> have used based on its profile.</li>
+                        <li><strong>Variance</strong> compares the fuel added at the end of the bucket against what the vehicle <em>should</em> have used based on its profile (info only for top-ups).</li>
+                        <li><strong>Flagged</strong> means GAP or tank overflow — not normal top-up variance.</li>
                     </ul>
                 </div>
             </div>

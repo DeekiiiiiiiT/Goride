@@ -807,7 +807,7 @@ app.get("/make-server-37f42386/vehicles/:id/tank-status", requireAuth(), async (
         const vehicle = await kv.get(`vehicle:${vehicleId}`);
         if (!vehicle) return c.json({ error: "Vehicle not found" }, 404);
         
-        const tankCapacity = Number(vehicle?.specifications?.tankCapacity) || Number(vehicle?.fuelSettings?.tankCapacity) || 0;
+        const tankCapacity = fuelLogic.resolveTankCapacity(vehicle);
 
         // 2. Get Last Transactions to calculate current cumulative
         const { data: lastTxData } = await supabase
@@ -927,7 +927,7 @@ app.post("/make-server-37f42386/admin/fuel-audit/resolve", async (c) => {
 // Phase 3: Recalculate All History (Logic: 100% Reset / 105% Anomaly)
 app.post("/make-server-37f42386/admin/fuel-audit/recalculate-all", async (c) => {
     try {
-        console.log("[Recalculate] Starting full history recalculation (100% Logic)...");
+        console.log("[Recalculate] Starting full history recalculation (98% soft-anchor spine)...");
 
         // Load configurable frequency threshold
         const auditConfig = await kv.get("config:audit_settings");
@@ -945,9 +945,8 @@ app.post("/make-server-37f42386/admin/fuel-audit/recalculate-all", async (c) => 
         (vehicleData || []).forEach((d: any) => {
             const v = d.value;
             if (v && v.id) {
-                const cap = Number(v.fuelSettings?.tankCapacity) || Number(v.specifications?.tankCapacity) || 0;
                 vehicleMap.set(v.id, {
-                    capacity: cap,
+                    capacity: fuelLogic.resolveTankCapacity(v),
                     fuelEconomy: Number(v.specifications?.fuelEconomy) || Number(v.fuelSettings?.efficiencyCity) || 0,
                     estimatedRangeMin: Number(v.specifications?.estimatedRangeMin) || 0
                 });
@@ -1000,7 +999,9 @@ app.post("/make-server-37f42386/admin/fuel-audit/recalculate-all", async (c) => 
 
             let runningCumulative = 0;
             let carryoverVolume = 0;
-            let currentCycleId = crypto.randomUUID();
+            let currentCycleId = fuelLogic.isStableCycleId(txs[0]?.metadata?.cycleId)
+                ? (txs[0].metadata.cycleId as string)
+                : fuelLogic.mintCycleId();
             // Phase 20: running anchor odometer tracker (replaces broken per-entry metadata lookup)
             let lastAnchorOdo = 0;
             // Phase 21: pre-compute rolling average efficiency for this vehicle's transactions
@@ -1015,24 +1016,23 @@ app.post("/make-server-37f42386/admin/fuel-audit/recalculate-all", async (c) => 
                 const prevCumulative = runningCumulative;
                 runningCumulative += volume;
 
-                const percentOfTank = (runningCumulative / capacity) * 100;
-                
-                // Logic: 
-                // 100% = Soft Anchor (System Reset)
-                // 105% = Anomaly (Overflow)
-                // Phase 18 fix: only metadata.isFullTank / metadata.isAnchor mark a hard anchor
-                // (removed tx.type === 'Reimbursement' — reimbursements are NOT automatic full-tank anchors)
-                const isManualFull = tx.metadata?.isFullTank === true || tx.metadata?.isAnchor === true;
-                const isSoftAnchor = !isManualFull && percentOfTank >= 100;
-                const isAnchor = isManualFull || isSoftAnchor;
-
-                let volumeContributed = volume;
-                let excessVolume = 0;
-
-                if (isAnchor && isSoftAnchor) {
-                    volumeContributed = Math.max(0, capacity - prevCumulative);
-                    excessVolume = volume - volumeContributed;
-                }
+                // Soft/hard + SPLIT via shared classifyAnchor (98%). Reimbursements are never anchors.
+                const anchor = fuelLogic.classifyAnchor({
+                    isFullTank: tx.metadata?.isFullTank === true,
+                    isAnchor: tx.metadata?.isAnchor === true,
+                    isHardAnchor: tx.metadata?.isHardAnchor === true,
+                    isSoftAnchor: tx.metadata?.isSoftAnchor === true,
+                    prevCumulative,
+                    volume,
+                    tankCapacity: capacity,
+                });
+                const isSoftAnchor = anchor.isSoft;
+                const isAnchor = anchor.isAnchor;
+                const volumeContributed = anchor.volumeContributed;
+                const excessVolume = anchor.excessVolume;
+                const percentOfTank = anchor.percentOfTank;
+                // Align running cumulative with classify result before integrity checks
+                runningCumulative = anchor.totalVolumeInCycle;
 
                 // Phase 1 Efficiency Integration (using pre-loaded vehicleMap to avoid N+1 queries)
                 const profileKmPerLiter = vehicleInfo.fuelEconomy;
@@ -1104,6 +1104,7 @@ app.post("/make-server-37f42386/admin/fuel-audit/recalculate-all", async (c) => 
                     efficiencyVariance: Number(efficiencyVariance.toFixed(4)),
                     isSoftAnchor: isSoftAnchor,
                     isAnchor: isAnchor,
+                    isHardAnchor: anchor.isHard || undefined,
                     isHighFrequency,
                     isFragmented,
                     integrityStatus,
@@ -1129,7 +1130,7 @@ app.post("/make-server-37f42386/admin/fuel-audit/recalculate-all", async (c) => 
                 if (isAnchor) {
                     carryoverVolume = excessVolume;
                     runningCumulative = carryoverVolume;
-                    currentCycleId = crypto.randomUUID();
+                    currentCycleId = fuelLogic.resolveNextCycleIdAfterAnchor(txs[i + 1], currentCycleId);
                     // Phase 20: update running anchor odometer for next iteration
                     lastAnchorOdo = tx.odometer || lastAnchorOdo;
                 }
@@ -1192,6 +1193,9 @@ app.post("/make-server-37f42386/admin/fuel-audit/recalculate-all", async (c) => 
             let runningCumulative = 0;
             // Phase 20: running anchor odometer tracker (replaces broken per-entry metadata lookup)
             let lastAnchorOdo = 0;
+            let currentCycleId = fuelLogic.isStableCycleId(entries[0]?.metadata?.cycleId)
+                ? (entries[0].metadata.cycleId as string)
+                : fuelLogic.mintCycleId();
             // Phase 21: pre-compute rolling average efficiency for this vehicle's fuel entries
             const entryRollingAvg = fuelLogic.calculateRollingEfficiencyBatch(entries);
             const efficiencyBaseline = entryRollingAvg?.avgKmPerLiter || 0;
@@ -1201,14 +1205,22 @@ app.post("/make-server-37f42386/admin/fuel-audit/recalculate-all", async (c) => 
                 const entry = entries[i];
                 const volume = Number(entry.liters) || Number(entry.metadata?.fuelVolume) || 0;
                 const prevCumulative = runningCumulative;
-                runningCumulative += volume;
 
-                const percentOfTank = capacity > 0 ? (runningCumulative / capacity) * 100 : 0;
-                // Phase 18 fix: only metadata.isFullTank / metadata.isAnchor mark a hard anchor
-                // (removed entry.type === 'Reimbursement' — reimbursements are NOT automatic full-tank anchors)
-                const isManualFull = entry.metadata?.isFullTank === true || entry.metadata?.isAnchor === true;
-                const isSoftAnchor = !isManualFull && percentOfTank >= 100;
-                const isAnchor = isManualFull || isSoftAnchor;
+                const anchor = fuelLogic.classifyAnchor({
+                    isFullTank: entry.metadata?.isFullTank === true,
+                    isAnchor: entry.metadata?.isAnchor === true,
+                    isHardAnchor: entry.metadata?.isHardAnchor === true,
+                    isSoftAnchor: entry.metadata?.isSoftAnchor === true,
+                    prevCumulative,
+                    volume,
+                    tankCapacity: capacity,
+                });
+                runningCumulative = anchor.totalVolumeInCycle;
+                const percentOfTank = anchor.percentOfTank;
+                const isSoftAnchor = anchor.isSoft;
+                const isAnchor = anchor.isAnchor;
+                const volumeContributed = anchor.volumeContributed;
+                const excessVolume = anchor.excessVolume;
 
                 // Efficiency calculation
                 // Phase 20: use running lastAnchorOdo instead of broken metadata lookup
@@ -1265,16 +1277,26 @@ app.post("/make-server-37f42386/admin/fuel-audit/recalculate-all", async (c) => 
 
                 // Skip if already manually resolved / healed (don't override human decisions)
                 if (entry.auditStatus === 'Resolved' || entry.auditStatus === 'Auto-Resolved' || entry.metadata?.isHealed) {
-                    if (isAnchor) { runningCumulative = 0; }
+                    if (isAnchor) {
+                        runningCumulative = excessVolume;
+                        lastAnchorOdo = entry.odometer || lastAnchorOdo;
+                        currentCycleId = fuelLogic.resolveNextCycleIdAfterAnchor(entries[i + 1], currentCycleId);
+                    }
                     continue;
                 }
 
-                // Check if anything actually changed
+                // Always persist soft/hard + SPLIT fields so cycle engine can trust metadata
                 const oldStatus = entry.metadata?.integrityStatus;
                 const oldReason = entry.metadata?.anomalyReason || entry.anomalyReason;
                 const oldFlagged = entry.isFlagged;
+                const softMetaChanged =
+                    entry.metadata?.isSoftAnchor !== isSoftAnchor ||
+                    entry.metadata?.isAnchor !== isAnchor ||
+                    entry.metadata?.volumeContributed !== Number(volumeContributed.toFixed(2)) ||
+                    entry.metadata?.excessVolume !== (excessVolume > 0 ? Number(excessVolume.toFixed(2)) : undefined) ||
+                    entry.metadata?.cycleId !== currentCycleId;
 
-                if (oldStatus !== newIntegrityStatus || oldReason !== newAnomalyReason || oldFlagged !== newIsFlagged) {
+                if (oldStatus !== newIntegrityStatus || oldReason !== newAnomalyReason || oldFlagged !== newIsFlagged || softMetaChanged) {
                     entry.isFlagged = newIsFlagged;
                     entry.auditStatus = newAuditStatus;
                     entry.anomalyReason = newAnomalyReason;
@@ -1283,6 +1305,8 @@ app.post("/make-server-37f42386/admin/fuel-audit/recalculate-all", async (c) => 
                         integrityStatus: newIntegrityStatus,
                         anomalyReason: newAnomalyReason,
                         auditStatus: newAuditStatus,
+                        volumeContributed: Number(volumeContributed.toFixed(2)),
+                        excessVolume: excessVolume > 0 ? Number(excessVolume.toFixed(2)) : undefined,
                         distanceSinceAnchor,
                         actualKmPerLiter: Number(actualKmPerLiter.toFixed(2)),
                         profileKmPerLiter,
@@ -1296,17 +1320,19 @@ app.post("/make-server-37f42386/admin/fuel-audit/recalculate-all", async (c) => 
                         isFragmented,
                         isSoftAnchor,
                         isAnchor,
+                        isHardAnchor: anchor.isHard || undefined,
+                        cycleId: currentCycleId,
                         recalculatedAt: new Date().toISOString()
                     };
                     entryUpdates.push(entry);
                     entryModifiedCount++;
                 }
 
-                // Reset cycle at anchors
+                // Reset cycle at anchors (carry soft SPLIT excess into next cycle)
                 if (isAnchor) {
-                    runningCumulative = 0;
-                    // Phase 20: update running anchor odometer for next iteration
+                    runningCumulative = excessVolume;
                     lastAnchorOdo = entry.odometer || lastAnchorOdo;
+                    currentCycleId = fuelLogic.resolveNextCycleIdAfterAnchor(entries[i + 1], currentCycleId);
                 }
             }
         }
@@ -3241,7 +3267,7 @@ app.post("/make-server-37f42386/transactions", requireAuth(), async (c) => {
         if (vehicleId) {
             // Fetch vehicle for tank capacity
             const vehicle = await kv.get(`vehicle:${vehicleId}`);
-            const tankCapacity = Number(vehicle?.specifications?.tankCapacity) || Number(vehicle?.fuelSettings?.tankCapacity) || 0;
+            const tankCapacity = fuelLogic.resolveTankCapacity(vehicle);
 
             // Fetch last transactions to calculate cumulative
             const { data: lastTxData } = await supabase
@@ -3292,26 +3318,28 @@ app.post("/make-server-37f42386/transactions", requireAuth(), async (c) => {
                 transaction.metadata.anomalyReason = 'Tank Overflow: Single transaction exceeds tank capacity';
             }
 
-            // Step 2.3: Rule 2 - Soft Anchor Reset (Auto-Close Cycle)
-            // If cumulative volume exceeds 85% of tank capacity, we assume the tank has been filled
-            // (or enough fuel has been added to constitute a cycle). We "close" the cycle here.
-            // This prevents "infinite cumulative volume" and false "0 km" calculations.
-            const isCumulativeFull = tankCapacity > 0 && cumulative > (tankCapacity * 0.85);
-            
-            if (!transaction.metadata?.isFullTank && isCumulativeFull) {
+            // Step 2.3: Soft Anchor Reset (98% spine — classifyAnchor)
+            const prevCum = Math.max(0, cumulative - volume);
+            const anchor = fuelLogic.classifyAnchor({
+                isFullTank: transaction.metadata?.isFullTank === true,
+                isAnchor: transaction.metadata?.isAnchor === true,
+                isHardAnchor: transaction.metadata?.isHardAnchor === true,
+                isSoftAnchor: transaction.metadata?.isSoftAnchor === true,
+                prevCumulative: prevCum,
+                volume,
+                tankCapacity,
+            });
+
+            if (anchor.isSoft) {
                 transaction.metadata.isSoftAnchor = true;
-                transaction.metadata.isAnchor = true; // Unified flag for logic
-                
-                // If it was valid before, keep it valid. It's just an auto-reset.
-                // We do NOT downgrade to 'warning' just because we auto-detected a full tank.
-                if (transaction.metadata.integrityStatus === 'valid') {
-                     transaction.metadata.softAnchorNote = 'Cycle Reset: Cumulative volume reached tank capacity.';
-                } else {
-                     // If it was already a warning (e.g. slight mismatch), keep it but add note
-                     transaction.metadata.softAnchorNote = 'Cycle Reset: Cumulative volume reached tank capacity.';
-                }
-            } else if (transaction.metadata?.isFullTank) {
                 transaction.metadata.isAnchor = true;
+                transaction.metadata.volumeContributed = Number(anchor.volumeContributed.toFixed(2));
+                transaction.metadata.excessVolume = anchor.excessVolume > 0 ? Number(anchor.excessVolume.toFixed(2)) : undefined;
+                transaction.metadata.softAnchorNote = `Cycle Reset: Cumulative volume reached ${Math.round(fuelLogic.SOFT_ANCHOR_THRESHOLD * 100)}% of tank capacity.`;
+            } else if (anchor.isHard) {
+                transaction.metadata.isAnchor = true;
+                transaction.metadata.isHardAnchor = true;
+                transaction.metadata.isSoftAnchor = false;
             }
 
             // --- Phase 3: Fuel Economy & Velocity Algorithms ---

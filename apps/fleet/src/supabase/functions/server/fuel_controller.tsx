@@ -61,9 +61,7 @@ app.post(`${BASE_PATH}/fuel/ensure-posted-entries`, requirePermission("fuel.view
   }
 });
 
-// --- CONSTANTS ---
-const SOFT_ANCHOR_THRESHOLD = 0.98; // Adjusted to Roadmap: 98% capacity triggers a reset
-const OVERFILL_THRESHOLD = 1.02;    // Adjusted to Roadmap: 102% capacity flags a critical anomaly
+// Soft-anchor threshold lives in fuel_logic.SOFT_ANCHOR_THRESHOLD (98%). See docs/fuel-brain-spine.md.
 
 // --- FUEL CARDS ---
 app.get(`${BASE_PATH}/fuel-cards`, async (c) => {
@@ -2325,18 +2323,20 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
             const totalVolumeInCycle = Number((runningCumulative + volumeAtEntry).toFixed(4));
             const distanceSinceAnchor = (entry.odometer && lastAnchorOdo) ? (entry.odometer - lastAnchorOdo) : 0;
             
-            // Step 2.2: Trigger Thresholding (Roadmap: 98%)
-            const isHardAnchor = entry.metadata?.isFullTank || entry.metadata?.isAnchor;
-            const approachingSoftAnchor = tankCapacity > 0 && totalVolumeInCycle >= (tankCapacity * SOFT_ANCHOR_THRESHOLD);
-            const isSoftAnchor = !isHardAnchor && approachingSoftAnchor;
-            
-            // Step 2.3: Virtual Reset Implementation
-            let volumeContributed = volumeAtEntry;
-            let excessVolume = 0;
-            if (isSoftAnchor) {
-                volumeContributed = Math.max(0, tankCapacity - prevCumulative);
-                excessVolume = Number((volumeAtEntry - volumeContributed).toFixed(4));
-            }
+            // Step 2.2–2.3: Soft/hard + SPLIT via shared classifyAnchor (98%)
+            const anchor = fuelLogic.classifyAnchor({
+                isFullTank: entry.metadata?.isFullTank === true,
+                isAnchor: entry.metadata?.isAnchor === true,
+                isHardAnchor: entry.metadata?.isHardAnchor === true,
+                isSoftAnchor: entry.metadata?.isSoftAnchor === true,
+                prevCumulative,
+                volume: volumeAtEntry,
+                tankCapacity,
+            });
+            const isHardAnchor = anchor.isHard;
+            const isSoftAnchor = anchor.isSoft;
+            const volumeContributed = anchor.volumeContributed;
+            const excessVolume = anchor.excessVolume;
 
             // Efficiency Math
             // Phase 23: use rolling average baseline instead of manufacturer spec
@@ -2435,6 +2435,8 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
                 rollingAvgEfficiency: effectiveBaseline
             });
 
+            const openCycleId = fuelLogic.resolveCycleIdForOpenCycle(cycleEntries);
+
             // Update Entry Metadata (Step 1.1 Schema)
             entry.metadata = {
                 ...entry.metadata,
@@ -2452,12 +2454,14 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
                 efficiencyBaseline: rollingAvg ? 'rolling' : 'skipped',
                 efficiencyVariance: Number((efficiencyVariance * 100).toFixed(1)),
                 isSoftAnchor,
+                isAnchor: anchor.isAnchor,
+                isHardAnchor: isHardAnchor || undefined,
                 integrityStatus,
                 anomalyReason,
                 auditStatus,
                 isFragmented,
                 isHighFrequency,
-                cycleId: `cycle_${entry.vehicleId}_${lastAnchorOdo || 'start'}`,
+                cycleId: openCycleId,
                 flaggedAt: (integrityStatus === 'critical' || integrityStatus === 'warning' || leakage?.leakageRisk === 'high') ? new Date().toISOString() : undefined,
                 
                 // Phase 7: Predictive Metadata
@@ -2479,7 +2483,7 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
             entry.auditStatus = auditStatus;
 
             if (isSoftAnchor) {
-                entry.metadata.softAnchorNote = `Soft Anchor: Cumulative volume (${totalVolumeInCycle.toFixed(1)}L) reached 100% of ${tankCapacity}L. Resetting cycle.`;
+                entry.metadata.softAnchorNote = `Soft Anchor: Cumulative volume (${totalVolumeInCycle.toFixed(1)}L) reached ${Math.round(fuelLogic.SOFT_ANCHOR_THRESHOLD * 100)}% of ${tankCapacity}L. Resetting cycle.`;
             }
 
             // Step 3.2: Automated Healing Logic

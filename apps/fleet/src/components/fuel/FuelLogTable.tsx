@@ -973,8 +973,31 @@ export function FuelLogTable({
                                                     <Badge className="bg-blue-50 text-blue-700 border-blue-200 animate-pulse">ACTIVE CYCLE</Badge>
                                                     <span className="text-[9px] text-blue-500 font-bold uppercase">Calculating...</span>
                                                 </div>
-                                             ) : 
-                                             <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200">VERIFIED</Badge>}
+                                             ) : cycle.trustTier === 'Soft' || cycle.resetType === 'Auto_Soft' ? (
+                                                <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                        <Badge className="bg-teal-50 text-teal-800 border-teal-200 gap-1 cursor-help">
+                                                            VERIFIED (SOFT)
+                                                        </Badge>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent className="max-w-[220px]">
+                                                        <p className="text-xs font-bold">Auto Soft cycle close</p>
+                                                        <p className="text-[10px] text-slate-300">System capped the tank near capacity. Not a driver-confirmed Full Tank.</p>
+                                                    </TooltipContent>
+                                                </Tooltip>
+                                             ) : (
+                                                <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                        <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 gap-1 cursor-help">
+                                                            VERIFIED (MANUAL)
+                                                        </Badge>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent className="max-w-[220px]">
+                                                        <p className="text-xs font-bold">Driver/admin Full Tank</p>
+                                                        <p className="text-[10px] text-slate-300">Gold-trust close — preferred for hard charges and critical alerts.</p>
+                                                    </TooltipContent>
+                                                </Tooltip>
+                                             )}
                                         </div>
                                     </AccordionTrigger>
                                     <AccordionContent className="pt-4 pb-2 border-t mt-1">
@@ -986,7 +1009,7 @@ export function FuelLogTable({
                                             <div><p className="text-[10px] font-bold text-slate-400 uppercase">Reset Mode</p>
                                                 <div className="flex items-center gap-1.5 mt-0.5">
                                                     <Badge variant="outline" className="text-[9px] font-bold">{cycle.resetType}</Badge>
-                                                    {cycle.isCapped && <Badge className="text-[8px] bg-amber-100 text-amber-700 border-amber-200">CAPPED @ 100%</Badge>}
+                                                    {cycle.isCapped && <Badge className="text-[8px] bg-amber-100 text-amber-700 border-amber-200">CAPPED @ 98%</Badge>}
                                                 </div>
                                             </div>
                                         </div>

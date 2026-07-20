@@ -75,6 +75,26 @@ async function sha256Hex(text: string): Promise<string> {
   return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+/** Fetch a canonical ledger event by its idempotencyKey, or null if none exists. */
+export async function getCanonicalEventByIdemKey(idempotencyKey: string): Promise<Record<string, unknown> | null> {
+  const pointer = (await kv.get(`ledger_event_idem:${await sha256Hex(idempotencyKey)}`)) as { id?: string } | null;
+  if (!pointer?.id) return null;
+  return (await kv.get(`ledger_event:${pointer.id}`)) as Record<string, unknown> | null;
+}
+
+/**
+ * Does a canonical ledger event with this exact idempotencyKey already exist?
+ * Used by toll_pnl_offset.ts to refuse emitting a compensating event for a
+ * charge that was never actually written to the ledger in the first place
+ * (e.g. trip-level `toll_charge` events only exist for Uber trips — a
+ * cash_wash/phantom resolution on a Cash/Roam/InDrive trip has nothing to
+ * offset, and emitting one anyway inflates "recovered" with no matching
+ * "gross").
+ */
+export async function canonicalEventExistsByIdemKey(idempotencyKey: string): Promise<boolean> {
+  return (await getCanonicalEventByIdemKey(idempotencyKey)) !== null;
+}
+
 function supabaseKv() {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,

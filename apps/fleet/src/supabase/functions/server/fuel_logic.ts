@@ -858,6 +858,118 @@ export async function getEntriesSinceLastAnchor(vehicleId: string, anchorDate: s
 }
 
 /**
+ * Soft cycle close at ≥98% tank. Client mirror: utils/fuelAnchorLogic.ts — keep in sync.
+ * See docs/fuel-brain-spine.md.
+ */
+export const SOFT_ANCHOR_THRESHOLD = 0.98;
+
+/**
+ * Tank capacity: specifications first, then fuelSettings. No silent 40 on server writes.
+ */
+export function resolveTankCapacity(vehicle: any): number {
+  const fromSpec = Number(vehicle?.specifications?.tankCapacity);
+  if (Number.isFinite(fromSpec) && fromSpec > 0) return fromSpec;
+  const fromSettings = Number(vehicle?.fuelSettings?.tankCapacity);
+  if (Number.isFinite(fromSettings) && fromSettings > 0) return fromSettings;
+  return 0;
+}
+
+export type AnchorClassifyInput = {
+  isFullTank?: boolean;
+  isAnchor?: boolean;
+  isHardAnchor?: boolean;
+  isSoftAnchor?: boolean;
+  prevCumulative: number;
+  volume: number;
+  tankCapacity: number;
+};
+
+export type AnchorClassifyResult = {
+  isHard: boolean;
+  isSoft: boolean;
+  isAnchor: boolean;
+  volumeContributed: number;
+  excessVolume: number;
+  percentOfTank: number;
+  totalVolumeInCycle: number;
+};
+
+/**
+ * Classify soft/hard cycle close + SPLIT liters. Reimbursements are never anchors.
+ */
+export function classifyAnchor(input: AnchorClassifyInput): AnchorClassifyResult {
+  const volume = Math.max(0, Number(input.volume) || 0);
+  const prevCumulative = Math.max(0, Number(input.prevCumulative) || 0);
+  const tankCapacity = Math.max(0, Number(input.tankCapacity) || 0);
+  const totalVolumeInCycle = prevCumulative + volume;
+  const percentOfTank = tankCapacity > 0 ? (totalVolumeInCycle / tankCapacity) * 100 : 0;
+
+  const isHard =
+    input.isFullTank === true ||
+    input.isHardAnchor === true ||
+    (input.isAnchor === true && input.isSoftAnchor !== true);
+
+  const isSoft =
+    !isHard && tankCapacity > 0 && totalVolumeInCycle >= tankCapacity * SOFT_ANCHOR_THRESHOLD;
+  const isAnchor = isHard || isSoft;
+
+  let volumeContributed = volume;
+  let excessVolume = 0;
+  if (isSoft && tankCapacity > 0) {
+    volumeContributed = Math.max(0, tankCapacity - prevCumulative);
+    excessVolume = Math.max(0, volume - volumeContributed);
+  }
+
+  return {
+    isHard,
+    isSoft,
+    isAnchor,
+    volumeContributed: Number(volumeContributed.toFixed(4)),
+    excessVolume: Number(excessVolume.toFixed(4)),
+    percentOfTank: Number(percentOfTank.toFixed(2)),
+    totalVolumeInCycle: Number(totalVolumeInCycle.toFixed(4)),
+  };
+}
+
+/** Canonical stable cycle UUID. See docs/fuel-brain-spine.md. */
+export function mintCycleId(): string {
+  return crypto.randomUUID();
+}
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export function isStableCycleId(id: unknown): boolean {
+  return typeof id === 'string' && UUID_RE.test(id);
+}
+
+/**
+ * Live save: reuse open-cycle id from entries since last anchor; else mint.
+ */
+export function resolveCycleIdForOpenCycle(
+  openCycleEntries: Array<{ metadata?: { cycleId?: string } | null } | null | undefined>,
+): string {
+  for (const e of openCycleEntries) {
+    const id = e?.metadata?.cycleId;
+    if (isStableCycleId(id)) return id as string;
+  }
+  return mintCycleId();
+}
+
+/**
+ * Recalculate: pick id for the next cycle after an anchor, preferring the next
+ * fill's existing UUID when present (stable across re-runs).
+ */
+export function resolveNextCycleIdAfterAnchor(
+  nextEntry: { metadata?: { cycleId?: string } | null } | null | undefined,
+  closedCycleId: string,
+): string {
+  const nextId = nextEntry?.metadata?.cycleId;
+  if (isStableCycleId(nextId) && nextId !== closedCycleId) return nextId as string;
+  return mintCycleId();
+}
+
+/**
  * Step 1.2: Vehicle Profile Configuration Helper
  * Ensures we get the standard immutable constants from a vehicle object.
  * NOTE: baselineEfficiencyL100km is in L/100km (lower = better).
@@ -865,7 +977,7 @@ export async function getEntriesSinceLastAnchor(vehicleId: string, anchorDate: s
  */
 export function getVehicleBaselines(vehicle: any) {
   return {
-    tankCapacity: Number(vehicle?.specifications?.tankCapacity) || Number(vehicle?.fuelSettings?.tankCapacity) || 0,
+    tankCapacity: resolveTankCapacity(vehicle),
     baselineEfficiencyL100km: Number(vehicle?.specifications?.fuelEconomy) || Number(vehicle?.fuelSettings?.efficiencyCity) || 0,
     rangeMin: Number(vehicle?.specifications?.estimatedRangeMin) || 0
   };

@@ -2310,6 +2310,44 @@ export const api = {
     return response.json();
   },
 
+  /** Read-only report: active toll P&L offsets with no matching original toll_charge event (e.g. non-Uber trips) — inflate "recovered" with nothing to net against. */
+  async getTollPnlOffsetOrphansStatus(): Promise<{
+    success: boolean;
+    orphanCount: number;
+    totalAmount: number;
+    sample: Array<{ sourceType: string; sourceId: string; reason: string; amount: number }>;
+    message: string;
+  }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/toll-pnl-offset-backfill/orphans-status`, {
+      headers: await requireAuthHeaders(null)
+    });
+    if (!response.ok) throw new Error("Failed to fetch toll P&L offset orphan status");
+    return response.json();
+  },
+
+  /** Reinstates (undoes) orphan toll P&L offsets. dryRun defaults true. */
+  async repairTollPnlOffsetOrphans(dryRun: boolean = true): Promise<{
+    success: boolean;
+    dryRun: boolean;
+    orphanCount?: number;
+    totalAmount?: number;
+    reinstated?: number;
+    errors?: string[];
+    manifestKey?: string;
+    message: string;
+  }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/toll-pnl-offset-backfill/repair-orphans`, {
+      method: 'POST',
+      headers: await requireAuthHeaders(),
+      body: JSON.stringify({ dryRun })
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to repair toll P&L offset orphans");
+    }
+    return response.json();
+  },
+
   /** Read-only dry-run report: which resolved claims need their toll_ledger label/date repaired. */
   async getClaimsTollSyncStatus(): Promise<{
     success: boolean;

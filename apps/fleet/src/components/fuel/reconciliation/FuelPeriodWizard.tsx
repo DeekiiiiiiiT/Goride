@@ -429,7 +429,7 @@ function FuelPeriodWizardInner({
             }
           : {
               title: 'Review flagged vehicles',
-              body: 'Amber/Red means stop-to-stop data looks incomplete. Pending logs post when you Finalize — they do not block you here.',
+              body: 'Amber/Red means tank-cycle or gap issues — not every top-up variance. Pending logs post when you Finalize.',
               actionLabel: 'Continue',
               onAction: handleContinue,
             };
@@ -456,15 +456,15 @@ function FuelPeriodWizardInner({
         return strip.leakage > 0.009 && !leakageReviewed
           ? {
               title: 'Review unaccounted fuel',
-              body: `Net Leakage ${formatMoney(strip.leakage)} — charge stop-to-stop gaps if needed, or accept and continue.`,
+              body: `Unassigned spend ${formatMoney(strip.leakage)} — charge stop-to-stop gaps if needed, or accept and continue.`,
               actionLabel: 'Mark reviewed & continue',
               onAction: handleMarkLeakageReviewed,
             }
           : {
               title: 'Leakage reviewed',
               body: strip.leakage > 0.009
-                ? `Net Leakage ${formatMoney(strip.leakage)} marked reviewed for this week.`
-                : 'No misc leakage this week.',
+                ? `Unassigned spend ${formatMoney(strip.leakage)} marked reviewed for this week.`
+                : 'No unassigned spend this week.',
               actionLabel: 'Continue',
               onAction: handleContinue,
             };
@@ -561,7 +561,7 @@ function FuelPeriodWizardInner({
           { label: 'Total Spend', value: strip.totalSpend },
           { label: 'Company share', value: strip.company },
           { label: 'Driver deduction', value: strip.driver },
-          { label: 'Net Leakage', value: strip.leakage, warn: strip.leakage > 0 },
+          { label: 'Unassigned spend', value: strip.leakage, warn: strip.leakage > 0 },
         ].map((c) => (
           <div
             key={c.label}
