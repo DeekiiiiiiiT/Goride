@@ -19,7 +19,7 @@ import type {
   ExpensesSnapshot,
   BusinessFinanceOverview,
 } from './types';
-import { round2 } from './money';
+import { round2, formatMoney } from './money';
 
 async function fetchAllCanonical(
   startDate: string,
@@ -268,6 +268,10 @@ export async function fetchBusinessFinanceBundle(
         tracked: true,
         deepLinkPage: 'toll-tags',
         deepLinkLabel: 'Open Toll Reconciliation',
+        note:
+          pnl.tollsRecoveredWashed && pnl.tollsRecoveredWashed > 0.005
+            ? `${formatMoney(tolls)} business-absorbed · ${formatMoney(pnl.tollsRecoveredWashed)} recovered/washed`
+            : undefined,
       },
       {
         id: 'maintenance',

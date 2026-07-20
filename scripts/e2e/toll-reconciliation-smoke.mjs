@@ -10,7 +10,10 @@
  * undo/revert → rides→ledger bridge (dry-run, apply, idempotent re-run) →
  * automation flag off→on→off revert → dispute-refund→claim/trip cascade
  * (flag off baseline, flag on match, already-resolved "Charge Driver"
- * reimbursement reversal, unmatch round trip) → teardown.
+ * reimbursement reversal, unmatch round trip) → toll P&L offset (cash_wash/
+ * phantom/expense_logged/Personal emit compensating events, reinstate on
+ * revert-to-pending) → dispute match/unmatch driver-charge symmetry with the
+ * trip-sync flag OFF → teardown.
  *
  * Required env:
  *   SUPABASE_URL                e.g. https://csfllzzastacofsvcdsc.supabase.co
@@ -24,7 +27,7 @@
 
 import { createRequire } from 'node:module';
 import { strict as assert } from 'node:assert';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -102,6 +105,18 @@ async function kvGet(key) {
   const { data, error } = await sb.from(KV).select('value').eq('key', key).maybeSingle();
   if (error) throw new Error(`kvGet ${key}: ${error.message}`);
   return data?.value ?? null;
+}
+
+// Mirrors ledger_canonical.ts's sha256Hex — used to look up a canonical
+// ledger_event by its idempotencyKey without needing the authenticated
+// GET /ledger/canonical-events endpoint.
+function sha256Hex(text) {
+  return createHash('sha256').update(text, 'utf8').digest('hex');
+}
+async function getCanonicalEventByIdemKey(idemKey) {
+  const pointer = await kvGet(`ledger_event_idem:${sha256Hex(idemKey)}`);
+  if (!pointer?.id) return null;
+  return kvGet(`ledger_event:${pointer.id}`);
 }
 
 // ── Seed builders ────────────────────────────────────────────────────────────
@@ -461,6 +476,58 @@ async function run() {
     // Revert flags back off for a clean slate (also restored wholesale in teardown).
     await callApi('PUT', '/automation-settings', { body: { disputeRefundTripSyncEnabled: false, driverTollChargeSyncEnabled: false } });
   });
+
+  await step('11. toll P&L offset — cash_wash/phantom/expense_logged/Personal emit compensating events (flag ON)', async () => {
+    await callApi('PUT', '/automation-settings', { body: { tollPnlOffsetEnabled: true } });
+
+    // cash_wash: re-apply the same resolution now that the flag is on.
+    await callApi('POST', '/resolve-refund', { body: { tripId: `${ns}_cashwash`, resolution: 'cash_wash' } });
+    const cashwashOffset = await getCanonicalEventByIdemKey(`trip:${ns}_cashwash|toll_charge_offset:v1`);
+    assert.ok(cashwashOffset, 'cash_wash offset event written');
+    assert.equal(cashwashOffset.direction, 'inflow', 'cash_wash offset is inflow (neutralizes the charge)');
+    assert.equal(cashwashOffset.metadata?.reason, 'cash_wash', 'offset reason recorded');
+
+    // Idempotent re-post: resolving cash_wash again must not create a v2.
+    await callApi('POST', '/resolve-refund', { body: { tripId: `${ns}_cashwash`, resolution: 'cash_wash' } });
+    const cashwashOffsetV2 = await getCanonicalEventByIdemKey(`trip:${ns}_cashwash|toll_charge_offset:v2`);
+    assert.equal(cashwashOffsetV2, null, 'repeat cash_wash resolution does not create a second offset version');
+
+    // phantom: trip is currently 'pending' (reverted in step 4) — resolve again.
+    await callApi('POST', '/resolve-refund', { body: { tripId: `${ns}_phantom`, resolution: 'phantom' } });
+    const phantomOffset = await getCanonicalEventByIdemKey(`trip:${ns}_phantom|toll_charge_offset:v1`);
+    assert.ok(phantomOffset, 'phantom offset event written');
+    assert.equal(phantomOffset.metadata?.reason, 'phantom', 'phantom offset reason recorded');
+
+    // expense_logged: fresh trip so we don't duplicate the step-3 ledger row.
+    await kvSet(`trip:${ns}_expense2`, trip('expense2', { tollCharges: 5.0 }));
+    const exp2 = await callApi('POST', '/resolve-refund', { body: { tripId: `${ns}_expense2`, resolution: 'expense_logged', driverId } });
+    if (exp2?.data?.linkedTollLedgerId) createdLedgerIds.add(exp2.data.linkedTollLedgerId);
+    const expense2Offset = await getCanonicalEventByIdemKey(`trip:${ns}_expense2|toll_charge_offset:v1`);
+    assert.ok(expense2Offset, 'expense_logged offsets the original trip-level toll_charge (no double count)');
+    assert.equal(expense2Offset.metadata?.reason, 'superseded_by_expense_logged', 'expense_logged offset reason recorded');
+
+    // Personal (toll_ledger /resolve endpoint) — a separate code path from applyRefundResolution.
+    await kvSet(`toll_ledger:${ns}_personaltoll`, tollLedger('personaltoll', { amount: -7.5, paymentMethod: 'fleet_account' }));
+    await callApi('POST', '/resolve', { body: { transactionId: `${ns}_personaltoll`, resolution: 'Personal' } });
+    const personalOffset = await getCanonicalEventByIdemKey(`toll_ledger:${ns}_personaltoll|toll_charge_offset:v1`);
+    assert.ok(personalOffset, 'Personal resolution offsets the toll (recovered via driver payout deduction)');
+    assert.equal(personalOffset.metadata?.reason, 'personal', 'personal offset reason recorded');
+  });
+
+  await step('12. toll P&L offset — reverting a resolution reinstates the charge', async () => {
+    await callApi('POST', '/resolve-refund', { body: { tripId: `${ns}_cashwash`, resolution: 'pending' } });
+    const reinstate = await getCanonicalEventByIdemKey(`trip:${ns}_cashwash|toll_charge_reinstate:v1`);
+    assert.ok(reinstate, 'reinstate event written on revert to pending');
+    assert.equal(reinstate.direction, 'outflow', 'reinstate is outflow (brings the charge back)');
+
+    // Re-resolving as cash_wash again after a reinstate must bump to v2, not reuse v1.
+    await callApi('POST', '/resolve-refund', { body: { tripId: `${ns}_cashwash`, resolution: 'cash_wash' } });
+    const reoffset = await getCanonicalEventByIdemKey(`trip:${ns}_cashwash|toll_charge_offset:v2`);
+    assert.ok(reoffset, 'cycling offset -> reinstate -> offset again bumps the version');
+
+    // Revert flag back off for a clean slate (also restored wholesale in teardown).
+    await callApi('PUT', '/automation-settings', { body: { tollPnlOffsetEnabled: false } });
+  });
 }
 
 // ── Teardown ─────────────────────────────────────────────────────────────────
@@ -476,6 +543,7 @@ async function teardown() {
   await del('kv dispute-refunds', () => sb.from(KV).delete().like('key', `dispute-refund:${ns}_%`));
   await del('kv charge projections', () => sb.from(KV).delete().like('key', `toll_charge_projection:${ns}_%`));
   await del('kv legacy transactions', () => sb.from(KV).delete().like('key', `transaction:${ns}_%`));
+  await del('kv toll P&L offset markers', () => sb.from(KV).delete().like('key', `toll_pnl_offset_marker:%${ns}_%`));
   if (bridgeMarkerKey) await del('bridge marker', () => sb.from(KV).delete().eq('key', bridgeMarkerKey));
   for (const id of createdLedgerIds) await del(`ledger ${id}`, () => sb.from(KV).delete().eq('key', `toll_ledger:${id}`));
   if (rideId) await del('ride_request (cascades crossing)', () => sbRides.from('ride_requests').delete().eq('id', rideId));

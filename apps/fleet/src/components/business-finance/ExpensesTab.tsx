@@ -9,6 +9,7 @@ import {
   TableHeader,
   TableRow,
 } from '../ui/table';
+import { cn } from '../ui/utils';
 import { formatMoney } from './money';
 import type { ExpensesSnapshot } from './types';
 
@@ -31,6 +32,7 @@ export function ExpensesTab({
               <div className="text-xl font-bold tabular-nums">
                 {c.tracked && c.amount != null ? formatMoney(c.amount) : 'Not tracked yet'}
               </div>
+              {c.note && <div className="text-xs text-slate-500 dark:text-slate-400">{c.note}</div>}
               {c.deepLinkPage && c.deepLinkLabel && (
                 <Button
                   type="button"
@@ -75,7 +77,14 @@ export function ExpensesTab({
                     <TableCell className="whitespace-nowrap text-sm">{r.dateYmd}</TableCell>
                     <TableCell>{r.category}</TableCell>
                     <TableCell className="max-w-[240px] truncate">{r.description}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatMoney(r.amount)}</TableCell>
+                    <TableCell
+                      className={cn(
+                        'text-right tabular-nums',
+                        r.amount < 0 && 'text-emerald-700 dark:text-emerald-400',
+                      )}
+                    >
+                      {formatMoney(r.amount)}
+                    </TableCell>
                     <TableCell className="text-slate-500 text-sm">{r.source}</TableCell>
                   </TableRow>
                 ))

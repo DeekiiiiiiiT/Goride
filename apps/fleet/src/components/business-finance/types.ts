@@ -31,11 +31,11 @@ export type PnLLineId =
   | 'operating_profit';
 
 export type PnLLine = {
-  id: PnLLineId;
+  id: PnLLineId | 'tolls_memo';
   label: string;
   /** null when not tracked yet — never display as $0 */
   amount: number | null;
-  kind: 'total' | 'subtotal' | 'expense' | 'result';
+  kind: 'total' | 'subtotal' | 'expense' | 'result' | 'memo';
   tracked?: boolean;
 };
 
@@ -51,6 +51,8 @@ export type BusinessFinancePnL = {
   operatingRatio: number | null;
   platformSplit: PlatformSplitRow[];
   coverageNote?: string;
+  /** Tolls that were recovered (refund) or washed out (cash_wash/phantom/personal) — NOT a fleet loss, excluded from the Tolls expense line but shown for transparency. */
+  tollsRecoveredWashed?: number;
 };
 
 export type BusinessFinanceOverview = {
@@ -106,6 +108,8 @@ export type ExpenseCategorySummary = {
   tracked: boolean;
   deepLinkPage?: string;
   deepLinkLabel?: string;
+  /** Short caption under the amount, e.g. "$X business-absorbed · $Y recovered/washed" */
+  note?: string;
 };
 
 export type ExpenseRow = {

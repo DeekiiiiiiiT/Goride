@@ -42,6 +42,7 @@ const VALID_CANONICAL_EVENT_TYPES = new Set([
   "toll_usage",
   "toll_charged_to_driver",
   "toll_charge_reversed",
+  "toll_charge_offset",
   "fuel_deduction",
   "fuel_fleet_share",
   "fuel_driver_spend",

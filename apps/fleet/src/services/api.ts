@@ -2270,6 +2270,46 @@ export const api = {
     return response.json();
   },
 
+  /** Read-only dry-run report: historical resolved tolls (cash_wash/phantom/expense_logged/personal) missing a Business Finance P&L offset. */
+  async getTollPnlOffsetBackfillStatus(): Promise<{
+    success: boolean;
+    eligibleCount: number;
+    totalAmount: number;
+    sample: Array<{ sourceType: string; id: string; reason: string; amount: number }>;
+    message: string;
+  }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/toll-pnl-offset-backfill/status`, {
+      headers: await requireAuthHeaders(null)
+    });
+    if (!response.ok) throw new Error("Failed to fetch toll P&L offset backfill status");
+    return response.json();
+  },
+
+  /** Emits compensating toll_charge_offset events for historical resolved tolls. dryRun defaults true. Requires tollPnlOffsetEnabled ON to apply. */
+  async runTollPnlOffsetBackfill(dryRun: boolean = true, batchSize: number = 200): Promise<{
+    success: boolean;
+    dryRun: boolean;
+    totalEligible?: number;
+    wouldProcess?: number;
+    totalAmount?: number;
+    processed?: number;
+    remaining?: number;
+    errors?: string[];
+    manifestKey?: string;
+    message: string;
+  }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/toll-pnl-offset-backfill/backfill`, {
+      method: 'POST',
+      headers: await requireAuthHeaders(),
+      body: JSON.stringify({ dryRun, batchSize })
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to run toll P&L offset backfill");
+    }
+    return response.json();
+  },
+
   /** Read-only dry-run report: which resolved claims need their toll_ledger label/date repaired. */
   async getClaimsTollSyncStatus(): Promise<{
     success: boolean;
@@ -2343,6 +2383,7 @@ export const api = {
       matchOnIngestEnabled: boolean;
       disputeRefundTripSyncEnabled: boolean;
       unlinkedRefundUndoEnabled: boolean;
+      tollPnlOffsetEnabled: boolean;
     };
     tollBrain?: { consume: boolean; matchDialsSource: string };
   }> {
@@ -2353,7 +2394,7 @@ export const api = {
     return response.json();
   },
 
-  async updateTollAutomationSettings(payload: { refundAutomationEnabled?: boolean; refundAutoMinConfidence?: number; disputeRefundAutoMinConfidence?: number; personalUseDetectionEnabled?: boolean; orphanProximityMinutes?: number; driverTollChargeSyncEnabled?: boolean; unifiedTollSettlementEnabled?: boolean; matchOnIngestEnabled?: boolean; disputeRefundTripSyncEnabled?: boolean; unlinkedRefundUndoEnabled?: boolean }) {
+  async updateTollAutomationSettings(payload: { refundAutomationEnabled?: boolean; refundAutoMinConfidence?: number; disputeRefundAutoMinConfidence?: number; personalUseDetectionEnabled?: boolean; orphanProximityMinutes?: number; driverTollChargeSyncEnabled?: boolean; unifiedTollSettlementEnabled?: boolean; matchOnIngestEnabled?: boolean; disputeRefundTripSyncEnabled?: boolean; unlinkedRefundUndoEnabled?: boolean; tollPnlOffsetEnabled?: boolean }) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/automation-settings`, {
       method: 'PUT',
       headers: await requireAuthHeaders(),

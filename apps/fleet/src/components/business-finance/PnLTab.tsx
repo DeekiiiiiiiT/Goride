@@ -65,6 +65,18 @@ export function PnLTab({ pnl }: { pnl: BusinessFinancePnL }) {
         <CardContent className="pt-2 pb-3">
           <ul className="divide-y divide-slate-100 dark:divide-slate-800">
             {pnl.lines.map((line) => {
+              if (line.kind === 'memo') {
+                const amt = line.amount ?? 0;
+                return (
+                  <li
+                    key={line.id}
+                    className="flex items-center justify-between py-1.5 pl-4 text-xs text-slate-500 dark:text-slate-400"
+                  >
+                    <span className="italic">{line.label}</span>
+                    <span className="tabular-nums italic">{formatMoney(amt)}</span>
+                  </li>
+                );
+              }
               const untracked = line.tracked === false || line.amount == null;
               const amt = line.amount ?? 0;
               return (

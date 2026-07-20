@@ -27,6 +27,7 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
   const [matchOnIngest, setMatchOnIngest] = useState(false);
   const [disputeRefundTripSync, setDisputeRefundTripSync] = useState(false);
   const [unlinkedRefundUndo, setUnlinkedRefundUndo] = useState(false);
+  const [tollPnlOffset, setTollPnlOffset] = useState(false);
   const [bridging, setBridging] = useState(false);
   const [claimsSyncChecking, setClaimsSyncChecking] = useState(false);
   const [claimsSyncApplying, setClaimsSyncApplying] = useState(false);
@@ -42,6 +43,13 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
     missingMatchStatus: number;
     message: string;
   } | null>(null);
+  const [pnlOffsetChecking, setPnlOffsetChecking] = useState(false);
+  const [pnlOffsetApplying, setPnlOffsetApplying] = useState(false);
+  const [pnlOffsetReport, setPnlOffsetReport] = useState<{
+    eligibleCount: number;
+    totalAmount: number;
+    message: string;
+  } | null>(null);
 
   const applySettings = (data: {
     refundAutomationEnabled: boolean;
@@ -54,6 +62,7 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
     matchOnIngestEnabled?: boolean;
     disputeRefundTripSyncEnabled?: boolean;
     unlinkedRefundUndoEnabled?: boolean;
+    tollPnlOffsetEnabled?: boolean;
   }) => {
     setEnabled(data.refundAutomationEnabled);
     setMinConfidence(data.refundAutoMinConfidence);
@@ -65,6 +74,7 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
     setMatchOnIngest(data.matchOnIngestEnabled === true);
     setDisputeRefundTripSync(data.disputeRefundTripSyncEnabled === true);
     setUnlinkedRefundUndo(data.unlinkedRefundUndoEnabled === true);
+    setTollPnlOffset(data.tollPnlOffsetEnabled === true);
   };
 
   useEffect(() => {
@@ -94,6 +104,7 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
     matchOnIngestEnabled?: boolean;
     disputeRefundTripSyncEnabled?: boolean;
     unlinkedRefundUndoEnabled?: boolean;
+    tollPnlOffsetEnabled?: boolean;
   }) => {
     setSaving(true);
     try {
@@ -174,6 +185,41 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
       toast.error(e.message || "Backfill failed");
     } finally {
       setMatchIndexApplying(false);
+    }
+  };
+
+  const checkPnlOffsetBackfill = async () => {
+    setPnlOffsetChecking(true);
+    try {
+      const res = await api.getTollPnlOffsetBackfillStatus();
+      setPnlOffsetReport({
+        eligibleCount: res.eligibleCount,
+        totalAmount: res.totalAmount,
+        message: res.message,
+      });
+      toast.info(res.message);
+    } catch (e: any) {
+      toast.error(e.message || "Status check failed");
+    } finally {
+      setPnlOffsetChecking(false);
+    }
+  };
+
+  const applyPnlOffsetBackfill = async () => {
+    setPnlOffsetApplying(true);
+    try {
+      const res = await api.runTollPnlOffsetBackfill(false, 200);
+      setPnlOffsetReport({
+        eligibleCount: res.remaining ?? 0,
+        totalAmount: 0,
+        message: res.message,
+      });
+      toast.success(res.message);
+      onChanged?.();
+    } catch (e: any) {
+      toast.error(e.message || "Backfill failed");
+    } finally {
+      setPnlOffsetApplying(false);
     }
   };
 
@@ -306,6 +352,22 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
                   <p className="text-xs text-slate-500 mt-1">
                     Allow reversing an Unlinked Refund that was applied to an underpaid claim —
                     restores the trip, claim, and driver financials.
+                  </p>
+                </div>
+
+                <div className="border-t border-slate-100 pt-3">
+                  <label className="flex items-center justify-between">
+                    <span className="text-sm text-slate-700">Sync toll resolutions to Business Finance P&amp;L</span>
+                    <Switch
+                      checked={tollPnlOffset}
+                      disabled={saving}
+                      onCheckedChange={(v) => save({ tollPnlOffsetEnabled: v })}
+                    />
+                  </label>
+                  <p className="text-xs text-slate-500 mt-1">
+                    When a toll is resolved as cash-wash, phantom, expense-logged, or charged to a
+                    driver, stop counting it as a loss in the Business Finance Tolls line — it's
+                    already recovered elsewhere. Reversible; only affects the owner P&amp;L view.
                   </p>
                 </div>
               </div>
@@ -508,6 +570,40 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
                     <p>Total tolls: <span className="font-semibold">{matchIndexReport.totalTolls}</span></p>
                     <p>Still missing matchStatus: <span className="font-semibold">{matchIndexReport.missingMatchStatus}</span></p>
                     <p className="text-slate-500">{matchIndexReport.message}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Toll P&L offset backfill */}
+              <div className="rounded-lg border border-slate-200 p-4 space-y-3">
+                <div className="flex items-center gap-1.5">
+                  <Wrench className="h-4 w-4 text-slate-500" />
+                  <h4 className="text-sm font-semibold text-slate-900">Toll P&amp;L offset backfill</h4>
+                </div>
+                <p className="text-xs text-slate-500">
+                  One-time correction for tolls resolved as cash-wash, phantom, expense-logged, or
+                  charged to a driver BEFORE the sync above was turned on — they're still counted
+                  as a loss in Business Finance until offset. Requires the sync toggle ON to apply.
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="outline" disabled={pnlOffsetChecking} onClick={checkPnlOffsetBackfill}>
+                    {pnlOffsetChecking ? <Loader2 className="h-4 w-4 animate-spin" /> : "Check status"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="bg-indigo-600 hover:bg-indigo-700"
+                    disabled={pnlOffsetApplying || !tollPnlOffset}
+                    onClick={applyPnlOffsetBackfill}
+                  >
+                    {pnlOffsetApplying ? <Loader2 className="h-4 w-4 animate-spin" /> : "Apply backfill (200)"}
+                  </Button>
+                </div>
+                {!tollPnlOffset && (
+                  <p className="text-xs text-amber-700">Turn on the sync toggle above first — dry-run check still works.</p>
+                )}
+                {pnlOffsetReport && (
+                  <div className="text-xs text-slate-600 space-y-1 border-t border-slate-100 pt-2">
+                    <p className="text-slate-500">{pnlOffsetReport.message}</p>
                   </div>
                 )}
               </div>

@@ -24,6 +24,12 @@ import { checkRateLimit, recordFailedAttempt, getClientIp } from "./rate_limiter
 import { isTollCategory } from "./toll_category_flags.ts";
 import { classifyOrphanToll } from "./orphanTollClassifier.ts";
 import { emitDriverTollCharge, isUnifiedTollSettlementEnabled } from "./driver_toll_charge.ts";
+import {
+  emitTollChargeOffset,
+  reinstateTollCharge,
+  isTollPnlOffsetEnabled,
+  type TollPnlOffsetReason,
+} from "./toll_pnl_offset.ts";
 import { mapResolutionReasonToTollResolution } from "./claim_resolution_sync.ts";
 import { classifyTollLedgerEntry } from "./driver_toll_disposition.ts";
 import { demoteSpuriousDeadheadMatch } from "./deadhead_match_guard.ts";
@@ -4424,6 +4430,177 @@ app.post(`${BASE}/match-index/backfill`, async (c) => {
   }
 });
 
+// ─── GET /toll-pnl-offset-backfill/status ─── read-only backfill preview ──
+// Historical tolls resolved as cash_wash/phantom/expense_logged (trip-level)
+// or personal (toll_ledger-level) BEFORE tollPnlOffsetEnabled existed never
+// got a compensating toll_charge_offset event — the Business Finance P&L
+// Tolls line still overstates them. Reports how many + total $, without
+// touching anything. See toll_pnl_offset.ts.
+const TOLL_PNL_OFFSET_REASON_BY_TRIP_STATUS: Record<string, TollPnlOffsetReason> = {
+  cash_wash: "cash_wash",
+  phantom: "phantom",
+  expense_logged: "superseded_by_expense_logged",
+};
+
+interface TollPnlOffsetBackfillCandidate {
+  sourceType: "trip" | "toll_ledger";
+  id: string;
+  reason: TollPnlOffsetReason;
+  amount: number;
+  driverId?: string;
+  vehicleId?: string;
+  date: string;
+}
+
+async function findTollPnlOffsetBackfillCandidates(): Promise<TollPnlOffsetBackfillCandidate[]> {
+  const trips = (await loadAllByPrefix("trip:")) as any[];
+  const tollLedgerRecords = (await loadAllByPrefix(TOLL_LEDGER_PREFIX)) as TollLedgerRecord[];
+  const candidates: TollPnlOffsetBackfillCandidate[] = [];
+
+  for (const t of trips) {
+    const status = t?.tollRefundResolution?.status;
+    const reason = status ? TOLL_PNL_OFFSET_REASON_BY_TRIP_STATUS[status] : undefined;
+    const amount = Math.abs(Number(t?.tollCharges) || 0);
+    if (!reason || amount <= 0.005) continue;
+    const marker = await kv.get(`toll_pnl_offset_marker:trip:${t.id}`);
+    if (marker && (marker as any).active) continue;
+    candidates.push({
+      sourceType: "trip",
+      id: t.id,
+      reason,
+      amount,
+      driverId: t.driverId,
+      vehicleId: t.vehicleId,
+      date: String(t.date || new Date().toISOString()),
+    });
+  }
+
+  for (const tx of tollLedgerRecords) {
+    if (tx?.resolution !== "personal") continue;
+    const amount = Math.abs(Number(tx?.amount) || 0);
+    if (amount <= 0.005) continue;
+    const marker = await kv.get(`toll_pnl_offset_marker:toll_ledger:${tx.id}`);
+    if (marker && (marker as any).active) continue;
+    candidates.push({
+      sourceType: "toll_ledger",
+      id: tx.id,
+      reason: "personal",
+      amount,
+      driverId: tx.driverId || undefined,
+      vehicleId: tx.vehicleId || undefined,
+      date: String(tx.date || new Date().toISOString()),
+    });
+  }
+
+  return candidates;
+}
+
+app.get(`${BASE}/toll-pnl-offset-backfill/status`, async (c) => {
+  try {
+    const candidates = await findTollPnlOffsetBackfillCandidates();
+    const totalAmount = Math.round(candidates.reduce((s, e) => s + e.amount, 0) * 100) / 100;
+    return c.json({
+      success: true,
+      eligibleCount: candidates.length,
+      totalAmount,
+      sample: candidates.slice(0, 20),
+      message:
+        candidates.length > 0
+          ? `${candidates.length} historical toll(s) totaling ${totalAmount} would be offset (no longer counted as a Tolls loss). POST /toll-pnl-offset-backfill/backfill (dryRun defaults true) to apply.`
+          : "Nothing to backfill — every resolved toll already has an offset.",
+    });
+  } catch (e: any) {
+    console.log(`[TollPnlOffsetBackfill] status error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ─── POST /toll-pnl-offset-backfill/backfill ─── apply (dry-run by default) ──
+// Mirrors the match-index backfill convention: dryRun defaults true, batched,
+// capped error samples, manifest of every id touched for a concrete undo path
+// (reinstateTollCharge per id, same key each source already uses). Idempotent
+// — safe to re-run; already-offset sources are skipped automatically. Applying
+// requires tollPnlOffsetEnabled to already be ON (go-forward behavior should
+// be verified before correcting history) — dry-run is allowed regardless.
+app.post(`${BASE}/toll-pnl-offset-backfill/backfill`, async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const dryRun = body?.dryRun !== false; // default to dry-run for safety
+    const batchSize = Math.max(1, Math.min(500, Number(body?.batchSize) || 200));
+
+    const candidates = await findTollPnlOffsetBackfillCandidates();
+    const batch = candidates.slice(0, batchSize);
+    const totalAmount = Math.round(candidates.reduce((s, e) => s + e.amount, 0) * 100) / 100;
+
+    if (dryRun) {
+      return c.json({
+        success: true,
+        dryRun: true,
+        totalEligible: candidates.length,
+        wouldProcess: batch.length,
+        totalAmount,
+        message:
+          candidates.length > 0
+            ? `Dry run: would offset ${batch.length} of ${candidates.length} historical toll(s) totaling ${totalAmount} (batchSize=${batchSize}). Re-run with dryRun=false to apply.`
+            : "Nothing to backfill.",
+      });
+    }
+
+    if (!(await isTollPnlOffsetEnabled())) {
+      return c.json(
+        { error: "tollPnlOffsetEnabled must be turned ON (and verified for a cycle) before backfilling history. See Toll Automation Settings." },
+        400,
+      );
+    }
+
+    const touched: Array<{ sourceType: string; id: string; reason: string; amount: number }> = [];
+    const errors: string[] = [];
+    for (const cand of batch) {
+      try {
+        await emitTollChargeOffset(
+          {
+            sourceType: cand.sourceType,
+            sourceId: cand.id,
+            driverId: cand.driverId,
+            vehicleId: cand.vehicleId,
+            date: cand.date,
+            amount: cand.amount,
+            reason: cand.reason,
+          },
+          c,
+        );
+        touched.push({ sourceType: cand.sourceType, id: cand.id, reason: cand.reason, amount: cand.amount });
+      } catch (err: any) {
+        errors.push(`${cand.sourceType}:${cand.id}: ${err.message}`);
+        if (errors.length > 50) break;
+      }
+    }
+
+    const manifestKey = `toll_pnl_offset_backfill_run:${new Date().toISOString()}`;
+    await kv.set(manifestKey, { touched, at: new Date().toISOString(), errors });
+
+    const remaining = candidates.length - touched.length;
+    console.log(
+      `[TollPnlOffsetBackfill] processed=${touched.length} remaining=${remaining} errors=${errors.length} manifest=${manifestKey}`,
+    );
+    return c.json({
+      success: true,
+      dryRun: false,
+      processed: touched.length,
+      remaining,
+      errors: errors.slice(0, 50),
+      manifestKey,
+      message:
+        remaining > 0
+          ? `Processed ${touched.length}. Re-run to continue with the remaining ${remaining}.`
+          : `Processed ${touched.length}. Every eligible historical toll now has an offset. To undo, call reinstateTollCharge for each id in manifest ${manifestKey}.`,
+    });
+  } catch (e: any) {
+    console.log(`[TollPnlOffsetBackfill] backfill error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
 // ─── GET /workflow-stage/status (RWF-1) ─── read-only backfill preview ────
 // Historical tolls (and tolls created before this field existed) have no
 // workflowStage. This reports how many, without touching anything.
@@ -4597,10 +4774,19 @@ async function writeTollLedgerEntry(params: {
   const mockContext = { get: () => undefined } as any;
   
   try {
-    await appendCanonicalLedgerEvents([canonicalEvent], mockContext);
-    console.log(
-      `[TollLedger] Written ${params.eventType} canonical event for tx ${params.sourceId}`,
-    );
+    const result = await appendCanonicalLedgerEvents([canonicalEvent], mockContext);
+    if (!result?.success || (result.failed || 0) > 0) {
+      // Do NOT log "Written" — the event was rejected (e.g. invalid eventType/
+      // sourceType) and never actually landed in the canonical ledger.
+      console.error(
+        `[TollLedger] Canonical event ${params.eventType} for tx ${params.sourceId} was rejected:`,
+        result?.details,
+      );
+    } else {
+      console.log(
+        `[TollLedger] Written ${params.eventType} canonical event for tx ${params.sourceId}`,
+      );
+    }
   } catch (err) {
     console.error(`[TollLedger] Failed to write canonical event:`, err);
   }
@@ -5496,6 +5682,26 @@ app.post(`${BASE}/resolve`, async (c) => {
         },
         c,
       );
+      // Personal = recovered via driver payout deduction, not a fleet loss —
+      // neutralize the toll's own toll_charge event in the Business Finance P&L.
+      if (amount > 0 && (await isTollPnlOffsetEnabled())) {
+        try {
+          await emitTollChargeOffset(
+            {
+              sourceType: "toll_ledger",
+              sourceId: transactionId,
+              driverId: tx.driverId,
+              vehicleId: tx.vehicleId,
+              date: tx.date,
+              amount,
+              reason: "personal",
+            },
+            c,
+          );
+        } catch (err) {
+          console.error(`[TollReconciliation] toll P&L offset failed for tx ${transactionId}:`, err);
+        }
+      }
     } else {
       // WriteOff / Business = fleet absorbs the cost. No driver charge.
       await writeTollLedgerEntry({
@@ -5838,6 +6044,10 @@ interface RefundAutomationSettings {
   disputeRefundTripSyncEnabled: boolean;
   // Real Undo for Apply-to-Underpaid — additive, default OFF.
   unlinkedRefundUndoEnabled: boolean;
+  // Emit compensating toll_charge_offset events so cash_wash/phantom/
+  // expense_logged/personal resolutions stop counting as a Business Finance
+  // P&L loss — additive, default OFF.
+  tollPnlOffsetEnabled: boolean;
 }
 
 async function getRefundAutomationSettings(): Promise<RefundAutomationSettings> {
@@ -5862,6 +6072,7 @@ async function getRefundAutomationSettings(): Promise<RefundAutomationSettings> 
     matchOnIngestEnabled: rec?.matchOnIngestEnabled === true, // default OFF
     disputeRefundTripSyncEnabled: rec?.disputeRefundTripSyncEnabled === true, // default OFF
     unlinkedRefundUndoEnabled: rec?.unlinkedRefundUndoEnabled === true, // default OFF
+    tollPnlOffsetEnabled: rec?.tollPnlOffsetEnabled === true, // default OFF
   };
   // Dominion Toll Brain owns personal-use / orphan dials when consume is on.
   if (fleetUsesTollBrain()) {
@@ -6025,6 +6236,7 @@ async function applyRefundResolution(params: {
   const driverId = params.driverId || trip.driverId || undefined;
   const now = new Date().toISOString();
   let linkedTollLedgerId: string | undefined;
+  const prevResolutionStatus: RefundResolutionStatus | undefined = trip.tollRefundResolution?.status;
 
   // "expense_logged" creates a real cash toll expense and links it to the trip.
   if (resolution === "expense_logged") {
@@ -6089,6 +6301,50 @@ async function applyRefundResolution(params: {
     appliedTargets: params.appliedTargets ?? undefined,
   };
   await kv.set(`trip:${tripId}`, trip);
+
+  // P&L offset: neutralize the original toll_charge for resolutions Toll
+  // Reconciliation determined are NOT a real, unrecovered business loss, and
+  // reinstate it if a resolution reverts back to a non-offsetting status.
+  // Additive/reversible; gated OFF by default (mirrors driver_toll_charge.ts).
+  if (amount > 0 && (await isTollPnlOffsetEnabled())) {
+    const OFFSET_REASON_BY_RESOLUTION: Partial<Record<RefundResolutionStatus, TollPnlOffsetReason>> = {
+      cash_wash: "cash_wash",
+      phantom: "phantom",
+      expense_logged: "superseded_by_expense_logged",
+    };
+    const newReason = OFFSET_REASON_BY_RESOLUTION[resolution];
+    const prevReason = prevResolutionStatus ? OFFSET_REASON_BY_RESOLUTION[prevResolutionStatus] : undefined;
+    try {
+      if (newReason) {
+        await emitTollChargeOffset(
+          {
+            sourceType: "trip",
+            sourceId: tripId,
+            driverId,
+            vehicleId: trip.vehicleId,
+            date: String(trip.date || now),
+            amount,
+            reason: newReason,
+          },
+          { get: () => undefined },
+        );
+      } else if (prevReason) {
+        await reinstateTollCharge(
+          {
+            sourceType: "trip",
+            sourceId: tripId,
+            driverId,
+            vehicleId: trip.vehicleId,
+            date: String(trip.date || now),
+            amount,
+          },
+          { get: () => undefined },
+        );
+      }
+    } catch (err) {
+      console.error(`[TollReconciliation] toll P&L offset failed for trip ${tripId}:`, err);
+    }
+  }
 
   // Audit trail (canonical, net-zero — no double counting of financials).
   await writeTollLedgerEntry({
@@ -7616,6 +7872,10 @@ app.put(`${BASE}/automation-settings`, async (c) => {
         typeof body?.unlinkedRefundUndoEnabled === "boolean"
           ? body.unlinkedRefundUndoEnabled
           : current.unlinkedRefundUndoEnabled,
+      tollPnlOffsetEnabled:
+        typeof body?.tollPnlOffsetEnabled === "boolean"
+          ? body.tollPnlOffsetEnabled
+          : current.tollPnlOffsetEnabled,
     };
     await kv.set(REFUND_SETTINGS_KEY, next);
     // Re-apply brain overlay for response so UI always shows Dominion dials.

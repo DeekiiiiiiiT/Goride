@@ -17,6 +17,9 @@ export const CANONICAL_LEDGER_EVENT_TYPES = [
   'platform_fee',
   'fuel_expense',
   'toll_charge',
+  'toll_refund',
+  /** Compensating entry that nets a prior `toll_charge` (or reinstates one) without rewriting history. */
+  'toll_charge_offset',
   'adjustment',
   // Statement / payout SSOT (Phase 4+)
   'statement_line',

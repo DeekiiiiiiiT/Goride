@@ -882,7 +882,11 @@ export async function unmatchDisputeRefundById(id: string, c: unknown): Promise<
     if (claim && typeof claim === "object" && claim.disputeRefundId === id) {
       claimTripIdForTripReversal = claim.tripId || null;
       if (claim._createdByRefund === id) {
-        await deleteClaim(claimId, c, { syncMode: settings.disputeRefundTripSyncEnabled ? "force" : "skip" });
+        // Symmetric with matchRefundToClaim's unconditional syncMode:"force" —
+        // a match always runs the driver-wallet claim sync, so unmatch must
+        // always undo it too, regardless of disputeRefundTripSyncEnabled
+        // (that flag gates the TRIP cascade below, not this reversal).
+        await deleteClaim(claimId, c, { syncMode: "force" });
         console.log(`[DisputeRefund] Deleted refund-created claim ${claimId} on unmatch`);
       } else if (settings.disputeRefundTripSyncEnabled && claim.preDisputeResolutionReason !== undefined) {
         const revertReason = claim.preDisputeResolutionReason || undefined;
@@ -910,6 +914,7 @@ export async function unmatchDisputeRefundById(id: string, c: unknown): Promise<
         );
         console.log(`[DisputeRefund] Reverted claim ${claimId} to ${claim.preDisputeStatus || "Sent_to_Driver"} on unmatch`);
       } else {
+        // Same symmetry fix as the delete branch above — always force.
         await upsertClaim(
           {
             ...claim,
@@ -919,7 +924,7 @@ export async function unmatchDisputeRefundById(id: string, c: unknown): Promise<
             preDisputeStatus: null,
           },
           c,
-          { syncMode: "skip" },
+          { syncMode: "force" },
         );
         console.log(`[DisputeRefund] Reverted claim ${claimId} to ${claim.preDisputeStatus || "Sent_to_Driver"} on unmatch`);
       }
