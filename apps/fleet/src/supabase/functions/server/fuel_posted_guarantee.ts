@@ -158,6 +158,29 @@ export type PersistFuelEntryOptions = {
   afterPersist?: (fuelEntry: any) => Promise<void>;
 };
 
+const AUTH_SOURCES = new Set([
+  "driver-portal",
+  "admin-manual",
+  "admin-edit",
+  "bulk-import",
+  "fuel-card",
+]);
+
+/** Who authored the fill-up — not cash/payment style (isManual). */
+function resolveAuthorshipFromApprovedTx(tx: any): string {
+  const m = tx?.metadata || {};
+  const explicit = tx?.entrySource || m.entrySource;
+  if (typeof explicit === "string" && AUTH_SOURCES.has(explicit)) return explicit;
+
+  const src = m.source;
+  if (src === "Bulk Manual" || src === "Bulk Log") return "bulk-import";
+  if (src === "Manual") return "admin-manual";
+  if (tx?.type === "Fuel_Manual_Entry" && src === "Fuel Log") return "admin-manual";
+
+  // Driver expense approved / station hold released → Portal authorship
+  return "driver-portal";
+}
+
 /**
  * Create or reuse fuel_entry for an Approved fuel transaction.
  * Mutates tx in place (vehicleId, metadata.fuelEntryId, decisionReason).
@@ -267,6 +290,9 @@ export async function ensureFuelEntryForApprovedTx(
   const driverName = await resolveDriverName(tx.driverId, tx.driverName);
   if (driverName) tx.driverName = driverName;
 
+  // Authorship (who created the line) — not cash/payment style. isManual stays cash-style only.
+  const entrySource = resolveAuthorshipFromApprovedTx(tx);
+
   const fuelEntry: any = {
     id: crypto.randomUUID(),
     date:
@@ -292,13 +318,16 @@ export async function ensureFuelEntryForApprovedTx(
     odometerProofUrl: tx.odometerProofUrl || tx.metadata?.odometerProofUrl,
     isVerified: true,
     source: opts.source,
+    entrySource,
     paymentSource: paySrc.enum,
     metadata: {
       ...(tx.metadata || {}),
       portal_type: tx.metadata?.portal_type || "Manual_Entry",
+      // Cash-style flag only — UI must not treat this as Admin Entry authorship
       isManual:
         tx.metadata?.isManual ??
         (tx.paymentMethod === "Cash" || tx.metadata?.portal_type === "Manual_Entry"),
+      entrySource,
       sourceId: tx.id,
       originalTransactionId: tx.id,
       source: opts.source,

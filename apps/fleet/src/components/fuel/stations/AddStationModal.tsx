@@ -6,7 +6,6 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
-  DialogFooter,
 } from '../../ui/dialog';
 import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
@@ -18,12 +17,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../../ui/select';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../../ui/tooltip';
 import { StationProfile, StationOverride, LocationStatus } from '../../../types/station';
-import { generateStationId, normalizeStationName, inferBrandFromName } from '../../../utils/stationUtils';
+import { normalizeStationName, inferBrandFromName } from '../../../utils/stationUtils';
 import { encodePlusCode, decodePlusCode, isValidPlusCode, isFullPlusCode, getPlusCodePrecision, recoverShortCode, extractLocality, extractCodePortion, getDefaultGeofenceRadius } from '../../../utils/plusCode';
 import { fuelService } from '../../../services/fuelService';
-import { Plus, X, Loader2, Building2, MapPin, Search, CheckCircle2, Hash, ArrowDownUp, Info, Grid3X3, Navigation, Globe, Pencil, Copy, Check } from 'lucide-react';
+import { Plus, Loader2, MapPin, Search, CheckCircle2, Info, Grid3X3, Navigation, Pencil, Check } from 'lucide-react';
 import { Slider } from '../../ui/slider';
 import { toast } from 'sonner@2.0.3';
 import { AlertTriangle, Merge, ShieldAlert, ShieldCheck as ShieldCheckIcon, Trash2 } from 'lucide-react';
@@ -129,6 +127,8 @@ export function AddStationModal({
     lng: '' as string | number,
   });
 
+  const [wizardStep, setWizardStep] = useState<'nearby' | 'station' | 'pin' | 'confirm'>('station');
+
   // Reset form on open
   useEffect(() => {
     if (isOpen) {
@@ -138,16 +138,16 @@ export function AddStationModal({
       setDismissedCsvId(null);
       // Seed soft CSV reference from nearby enrichment if unverified; hard dupe only if verified
       const nearby = initialNearbyStation || null;
+      let seedCsv: DuplicateStationInfo | null = null;
+      let seedDupe: DuplicateStationInfo | null = null;
       if (nearby?.status === 'verified') {
-        setDuplicateStation(nearby);
-        setCsvReference(null);
+        seedDupe = nearby;
       } else if (nearby) {
-        setDuplicateStation(null);
-        setCsvReference(nearby);
-      } else {
-        setDuplicateStation(null);
-        setCsvReference(null);
+        seedCsv = nearby;
       }
+      setDuplicateStation(seedDupe);
+      setCsvReference(seedCsv);
+      setWizardStep(seedDupe || seedCsv ? 'nearby' : 'station');
       if (editStation) {
         // Pre-fill form with existing station data for edit mode
         setFormData({
@@ -232,10 +232,14 @@ export function AddStationModal({
       if (dupeCheck?.isDuplicate && dupeCheck.existingStation) {
         setDuplicateStation(mapDupePayload(dupeCheck.existingStation));
         setForceCreate(false);
+        setWizardStep('nearby');
         console.log(`[Duplicate Check] GOD match: ${dupeCheck.existingStation.name}`);
       }
       if (dupeCheck?.csvReference && dupeCheck.csvReference.id !== dismissedCsvId) {
         setCsvReference(mapDupePayload(dupeCheck.csvReference));
+        if (!(dupeCheck?.isDuplicate && dupeCheck.existingStation)) {
+          setWizardStep('nearby');
+        }
         console.log(`[Duplicate Check] CSV reference: ${dupeCheck.csvReference.name}`);
       }
     } catch (err) {
@@ -444,8 +448,10 @@ export function AddStationModal({
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    // Only Confirm may save — blocks Enter / accidental submit from earlier steps
+    if (wizardStep !== 'confirm') return;
     if (!formData.name) {
       toast.error("Station name is required.");
       return;
@@ -479,6 +485,7 @@ export function AddStationModal({
           setDuplicateStation(mapDupePayload(dupeCheck.existingStation));
           setForceCreate(false);
           setLoading(false);
+          setWizardStep('nearby');
           toast.warning(`Verified GOD duplicate: "${dupeCheck.existingStation.name}". Resolve below before saving.`);
           return;
         }
@@ -534,6 +541,7 @@ export function AddStationModal({
         } else {
           setDuplicateStation(mapDupePayload(error.existingStation));
           setForceCreate(false);
+          setWizardStep('nearby');
           toast.warning(`Backend GOD duplicate: "${error.existingStation.name}". Resolve below.`);
         }
       } else {
@@ -545,604 +553,528 @@ export function AddStationModal({
     }
   };
 
+  const needsNearbyStep = !!(duplicateStation || csvReference);
+  const wizardSteps = (isVerifyGodFlow
+    ? [
+        ...(needsNearbyStep || wizardStep === 'nearby' ? [{ id: 'nearby' as const, label: 'Nearby' }] : []),
+        { id: 'station' as const, label: 'Station' },
+        { id: 'pin' as const, label: 'Pin' },
+        { id: 'confirm' as const, label: 'Confirm' },
+      ]
+    : [
+        { id: 'station' as const, label: 'Station' },
+        { id: 'pin' as const, label: 'Pin' },
+        { id: 'confirm' as const, label: 'Confirm' },
+      ]
+  );
+  const stepIndex = Math.max(0, wizardSteps.findIndex((s) => s.id === wizardStep));
+  const goNext = () => {
+    const next = wizardSteps[stepIndex + 1];
+    if (!next) return;
+    // Defer so the Continue click cannot land on the Confirm "Save" button that replaces it
+    window.setTimeout(() => setWizardStep(next.id), 0);
+  };
+  const goBack = () => {
+    const prev = wizardSteps[stepIndex - 1];
+    if (prev) setWizardStep(prev.id);
+  };
+  const canAdvanceFromStation = !!formData.name.trim();
+  const canAdvanceFromPin = (() => {
+    const lat = typeof formData.lat === 'number' ? formData.lat : parseFloat(String(formData.lat));
+    const lng = typeof formData.lng === 'number' ? formData.lng : parseFloat(String(formData.lng));
+    return !isNaN(lat) && !isNaN(lng) && (!!plusCodeInput.trim() || !!formData.address.trim());
+  })();
+
+  const resolveCsvAndContinue = async (deleteRef: boolean) => {
+    if (!csvReference) {
+      setWizardStep('station');
+      return;
+    }
+    if (deleteRef) {
+      setDeletingCsv(true);
+      try {
+        if (onDeleteCsvReference) {
+          await onDeleteCsvReference(csvReference.id);
+        } else {
+          await fuelService.deleteStation(csvReference.id);
+        }
+        setDismissedCsvId(csvReference.id);
+        setCsvReference(null);
+        toast.success('Unverified match deleted.');
+        setWizardStep('station');
+      } catch (err) {
+        console.error('[Delete CSV reference]', err);
+        toast.error('Could not delete unverified match.');
+      } finally {
+        setDeletingCsv(false);
+      }
+      return;
+    }
+    setDismissedCsvId(csvReference.id);
+    setCsvReference(null);
+    setWizardStep('station');
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-lg w-[calc(100%-2rem)] flex max-h-[90vh] flex-col gap-0 overflow-hidden p-0">
-        {/* Scroll body: avoids overflow when inputs grow (e.g. browser autofill) */}
-        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-5 pt-5 pb-5">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            {isVerifyGodFlow ? (
-              <>
-                <ShieldCheckIcon className="h-5 w-5 text-emerald-600" />
-                Verify Location — GOD List
-              </>
-            ) : isEditMode ? (
-              <>
-                <Pencil className="h-5 w-5 text-amber-600" />
-                Edit Station
-              </>
-            ) : (
-              <>
-                <Plus className="h-5 w-5 text-blue-600" />
-                Add to Unverified MGMT (CSV shelf)
-              </>
-            )}
-          </DialogTitle>
-          <DialogDescription>
-            {isVerifyGodFlow ? (
-              <>
-                Build your company GOD list from <span className="font-semibold">your</span> pin only.
-                CSV Unverified nearby is reference only — nothing is copied or merged from it.
-              </>
-            ) : isEditMode ? (
-              <>
-                Edit <span className="font-semibold">{editStation?.name}</span>. Enter a Plus Code, then Verify GPS.
-              </>
-            ) : (
-              <>
-                Add a draft to the CSV reference shelf (not GOD). Prefer Verify Location from the Resolution Queue for the company list.
-              </>
-            )}
-          </DialogDescription>
-        </DialogHeader>
+      <DialogContent className="sm:max-w-[520px] w-[calc(100%-1.5rem)] flex max-h-[88vh] flex-col gap-0 overflow-hidden p-0 border-slate-200 shadow-xl">
+        <div className="shrink-0 border-b border-slate-100 bg-white px-5 pt-5 pb-4">
+          <DialogHeader className="space-y-1 text-left">
+            <DialogTitle className="flex items-center gap-2 text-base font-semibold tracking-tight text-slate-900">
+              {isVerifyGodFlow ? (
+                <>
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-50 text-emerald-700">
+                    <ShieldCheckIcon className="h-4 w-4" />
+                  </span>
+                  Verify to GOD list
+                </>
+              ) : isEditMode ? (
+                <>
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-50 text-amber-700">
+                    <Pencil className="h-4 w-4" />
+                  </span>
+                  Edit station
+                </>
+              ) : (
+                <>
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-700">
+                    <Plus className="h-4 w-4" />
+                  </span>
+                  Add CSV reference
+                </>
+              )}
+            </DialogTitle>
+            <DialogDescription className="text-xs text-slate-500 leading-relaxed">
+              {isVerifyGodFlow
+                ? 'Your pin only. CSV nearby is a hint — never copied into GOD.'
+                : isEditMode
+                  ? `Editing ${editStation?.name || 'station'}.`
+                  : 'Draft shelf only — use Verify from the Resolution Queue for GOD.'}
+            </DialogDescription>
+          </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4 py-3">
-          {/* Decision cards above the fold */}
-          {duplicateStation && (
-            <div className="animate-in slide-in-from-top-2 duration-300">
-              <div className="bg-gradient-to-r from-red-50 to-orange-50 p-3 rounded-lg border-2 border-red-200 shadow-sm">
-                <div className="flex items-start gap-2">
-                  <ShieldAlert className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
-                  <div className="flex-1 min-w-0 space-y-2">
-                    <h4 className="text-sm font-bold text-red-700">Match on Verified GOD list</h4>
-                    <p className="text-xs text-red-600 leading-relaxed">
-                      Within <span className="font-bold">{duplicateStation.distance}m</span> of{' '}
-                      <span className="font-semibold">{duplicateStation.name}</span>
-                      {duplicateStation.address ? ` (${duplicateStation.address})` : ''}
-                      {' '}— geofence {duplicateStation.geofenceRadius || 150}m.
-                    </p>
-                    <div className="grid grid-cols-2 gap-2 text-[10px] bg-white/60 rounded p-2 border border-red-100">
-                      <div>
-                        <span className="text-red-400 uppercase font-bold tracking-wide">Status</span>
-                        <p className="text-emerald-700 font-semibold">Verified (GOD)</p>
+          <ol className="mt-4 flex items-center gap-1.5" aria-label="Progress">
+            {wizardSteps.map((s, i) => {
+              const active = s.id === wizardStep;
+              const done = i < stepIndex;
+              return (
+                <li key={s.id} className="flex flex-1 items-center gap-1.5 min-w-0">
+                  <div className="flex min-w-0 flex-1 flex-col items-center gap-1">
+                    <div
+                      className={cn(
+                        'flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-semibold transition-colors',
+                        active && 'bg-emerald-600 text-white shadow-sm',
+                        done && !active && 'bg-emerald-100 text-emerald-800',
+                        !active && !done && 'bg-slate-100 text-slate-400',
+                      )}
+                    >
+                      {done && !active ? <Check className="h-3.5 w-3.5" /> : i + 1}
+                    </div>
+                    <span
+                      className={cn(
+                        'truncate text-[10px] font-medium',
+                        active ? 'text-emerald-800' : done ? 'text-slate-600' : 'text-slate-400',
+                      )}
+                    >
+                      {s.label}
+                    </span>
+                  </div>
+                  {i < wizardSteps.length - 1 && (
+                    <div className={cn('mb-4 h-px flex-1', done || active ? 'bg-emerald-200' : 'bg-slate-200')} />
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+        </div>
+
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (wizardStep === 'confirm') {
+              void handleSubmit(e);
+              return;
+            }
+            if (wizardStep === 'station' && canAdvanceFromStation) goNext();
+            else if (wizardStep === 'pin' && canAdvanceFromPin) goNext();
+          }}
+          className="flex min-h-0 flex-1 flex-col"
+        >
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4">
+            {wizardStep === 'nearby' && (
+              <div className="space-y-4 animate-in fade-in-0 slide-in-from-right-2 duration-200">
+                {duplicateStation ? (
+                  <div className="rounded-xl border border-red-200 bg-red-50/80 p-4 space-y-3">
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-100 text-red-700">
+                        <ShieldAlert className="h-4 w-4" />
                       </div>
-                      <div>
-                        <span className="text-red-400 uppercase font-bold tracking-wide">Distance</span>
-                        <p className="text-red-700 font-medium">{duplicateStation.distance}m</p>
+                      <div className="min-w-0 space-y-1">
+                        <h3 className="text-sm font-semibold text-red-900">Already on GOD list</h3>
+                        <p className="text-xs text-red-800/90 leading-relaxed">
+                          <span className="font-medium">{duplicateStation.name}</span>
+                          {' '}is {duplicateStation.distance}m away (Verified).
+                        </p>
                       </div>
                     </div>
                     <div className="flex flex-col gap-2">
                       {onMergeIntoExisting && (
                         <Button
                           type="button"
-                          size="sm"
-                          className="h-auto py-2 px-3 text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-2 justify-start w-full"
+                          className="h-11 justify-start gap-3 bg-emerald-600 hover:bg-emerald-700 text-white"
+                          disabled={loading}
                           onClick={async () => {
                             setLoading(true);
                             try {
                               await onMergeIntoExisting(duplicateStation.id);
-                              toast.success(`Merged into GOD station "${duplicateStation.name}".`);
+                              toast.success(`Merged into "${duplicateStation.name}".`);
                               onClose();
                             } catch (err) {
                               console.error('[Merge Into Existing] Failed:', err);
-                              toast.error('Failed to merge into existing GOD station.');
+                              toast.error('Failed to merge into GOD station.');
                             } finally {
                               setLoading(false);
                             }
                           }}
-                          disabled={loading}
                         >
                           <Merge className="h-4 w-4 shrink-0" />
-                          <div className="text-left">
-                            <span className="font-semibold block">Merge into verified station</span>
-                            <span className="text-emerald-200 text-[10px] font-normal block mt-0.5">Attach this stop to the GOD list pin</span>
-                          </div>
+                          <span className="text-left">
+                            <span className="block text-sm font-semibold">Merge into this GOD station</span>
+                            <span className="block text-[11px] font-normal text-emerald-100">Attach this stop — recommended</span>
+                          </span>
                         </Button>
                       )}
                       <Button
                         type="button"
-                        size="sm"
                         variant="outline"
-                        className="h-auto py-2 px-3 text-xs border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 gap-2 justify-start w-full"
+                        className="h-11 justify-start gap-3 border-slate-200"
                         onClick={() => {
                           setForceCreate(true);
                           setDuplicateStation(null);
-                          toast.info('Override accepted — create as a separate GOD station. Click save to confirm.');
+                          setWizardStep('station');
+                          toast.info('Creating a separate GOD station.');
                         }}
                       >
-                        <ShieldCheckIcon className="h-4 w-4 shrink-0 text-amber-600" />
-                        <div className="text-left">
-                          <span className="font-semibold block">Not a duplicate — create separate</span>
-                          <span className="text-amber-600 text-[10px] font-normal block mt-0.5">Confirmed different locations that happen to be nearby</span>
-                        </div>
+                        <ShieldCheckIcon className="h-4 w-4 shrink-0 text-slate-600" />
+                        <span className="text-left">
+                          <span className="block text-sm font-semibold text-slate-800">Different place — continue</span>
+                          <span className="block text-[11px] font-normal text-slate-500">Create a new GOD pin nearby</span>
+                        </span>
                       </Button>
                     </div>
                   </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {csvReference && !duplicateStation && (
-            <div className="animate-in slide-in-from-top-2 duration-300">
-              <div className="bg-amber-50 p-3 rounded-lg border-2 border-amber-200 shadow-sm">
-                <div className="flex items-start gap-2">
-                  <Info className="h-5 w-5 text-amber-700 shrink-0 mt-0.5" />
-                  <div className="flex-1 min-w-0 space-y-2">
-                    <h4 className="text-sm font-bold text-amber-900">CSV reference nearby (not GOD)</h4>
-                    <p className="text-xs text-amber-800 leading-relaxed">
-                      <span className="font-semibold">{csvReference.name}</span> is on your Unverified MGMT shelf
-                      ({csvReference.distance}m). Nothing from CSV will be copied into your GOD list.
-                    </p>
-                    <div className="grid grid-cols-2 gap-2 text-[10px] bg-white/70 rounded p-2 border border-amber-100">
-                      <div>
-                        <span className="text-amber-500 uppercase font-bold tracking-wide">Status</span>
-                        <p className="text-amber-800 font-semibold">Unverified (CSV shelf)</p>
-                      </div>
-                      <div>
-                        <span className="text-amber-500 uppercase font-bold tracking-wide">Distance</span>
-                        <p className="text-amber-800 font-medium">{csvReference.distance}m</p>
-                      </div>
+                ) : csvReference ? (
+                  <div className="space-y-5 animate-in fade-in-0 duration-200">
+                    <div className="text-center space-y-1.5 px-2">
+                      <p className="text-sm font-semibold text-slate-900">Found in Unverified</p>
+                      <p className="text-sm text-slate-700 font-medium truncate">{csvReference.name}</p>
+                      <p className="text-xs text-slate-500">{csvReference.distance}m away · not on your GOD list</p>
                     </div>
-                    <div className="flex flex-col gap-2">
-                      {onDeleteCsvReference && (
-                        <Button
-                          type="button"
-                          size="sm"
-                          className="h-auto py-2 px-3 text-xs bg-amber-700 hover:bg-amber-800 text-white gap-2 justify-start w-full"
-                          disabled={deletingCsv || loading}
-                          onClick={async () => {
-                            setDeletingCsv(true);
-                            try {
-                              await onDeleteCsvReference(csvReference.id);
-                              setDismissedCsvId(csvReference.id);
-                              setCsvReference(null);
-                              toast.success('CSV reference deleted. Continue verifying your GOD station.');
-                            } catch (err) {
-                              console.error('[Delete CSV reference]', err);
-                              toast.error('Could not delete CSV reference.');
-                            } finally {
-                              setDeletingCsv(false);
-                            }
-                          }}
-                        >
-                          {deletingCsv ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4 shrink-0" />}
-                          <div className="text-left">
-                            <span className="font-semibold block">Delete CSV reference &amp; continue</span>
-                            <span className="text-amber-100 text-[10px] font-normal block mt-0.5">Matches your usual workflow</span>
-                          </div>
-                        </Button>
-                      )}
+                    <div className="grid grid-cols-2 gap-3">
                       <Button
                         type="button"
-                        size="sm"
                         variant="outline"
-                        className="h-auto py-2 px-3 text-xs border-amber-300 bg-white text-amber-900 hover:bg-amber-50 gap-2 justify-start w-full"
-                        onClick={() => {
-                          setDismissedCsvId(csvReference.id);
-                          setCsvReference(null);
-                          toast.info('CSV kept as shelf reference. Saving uses only your form — nothing copied.');
-                        }}
+                        className="h-20 flex-col gap-1.5 border-red-200 bg-red-50 text-red-800 hover:bg-red-100 hover:text-red-900"
+                        disabled={deletingCsv || loading}
+                        onClick={() => void resolveCsvAndContinue(true)}
                       >
-                        <CheckCircle2 className="h-4 w-4 shrink-0 text-amber-700" />
-                        <div className="text-left">
-                          <span className="font-semibold block">Keep CSV, continue with my station</span>
-                          <span className="text-amber-600 text-[10px] font-normal block mt-0.5">No merge — your pin becomes GOD truth</span>
-                        </div>
+                        {deletingCsv ? (
+                          <Loader2 className="h-5 w-5 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-5 w-5" />
+                        )}
+                        <span className="text-sm font-semibold">Delete</span>
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-20 flex-col gap-1.5 border-slate-200 bg-white text-slate-800 hover:bg-slate-50"
+                        disabled={deletingCsv || loading}
+                        onClick={() => void resolveCsvAndContinue(false)}
+                      >
+                        <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                        <span className="text-sm font-semibold">Keep</span>
                       </Button>
                     </div>
                   </div>
+                ) : (
+                  <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-4 text-sm text-emerald-900">
+                    No nearby conflicts. Continue to name your station.
+                    <div className="mt-3">
+                      <Button type="button" className="bg-emerald-600 hover:bg-emerald-700" onClick={() => setWizardStep('station')}>
+                        Continue
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {wizardStep === 'station' && (
+              <div className="space-y-4 animate-in fade-in-0 slide-in-from-right-2 duration-200">
+                {forceCreate && (
+                  <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
+                    Creating a separate GOD station near an existing Verified pin.
+                  </p>
+                )}
+                <div className="space-y-2">
+                  <Label htmlFor="name" className="text-xs font-medium text-slate-700">Station name *</Label>
+                  <Input
+                    id="name"
+                    placeholder="e.g. Total Spanish Town Road"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    className="h-11"
+                    autoFocus
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="brand" className="text-xs font-medium text-slate-700">Brand</Label>
+                    <Select value={formData.brand} onValueChange={(value) => setFormData({ ...formData, brand: value })}>
+                      <SelectTrigger id="brand" className="h-11">
+                        <SelectValue placeholder={fetchingCompanies ? 'Loading…' : 'Select brand'} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Independent">Independent</SelectItem>
+                        {parentCompanies.map((company) => (
+                          <SelectItem key={company.id} value={company.name}>{company.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="category" className="text-xs font-medium text-slate-700">Category</Label>
+                    <Select
+                      value={formData.category}
+                      onValueChange={(value: 'fuel' | 'non_fuel') => setFormData({ ...formData, category: value })}
+                    >
+                      <SelectTrigger id="category" className="h-11">
+                        <SelectValue placeholder="Category" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="fuel">Fuel Station</SelectItem>
+                        <SelectItem value="non_fuel">Non-Fuel</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {forceCreate && !duplicateStation && (
-            <div className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
-              Creating near a Verified GOD station (override). Click save to confirm.
-            </div>
-          )}
-
-          <div className="grid grid-cols-2 gap-4">
-            {/* Station Name */}
-            <div className="col-span-2 space-y-2">
-              <Label htmlFor="name">Gas Station Name*</Label>
-              <Input
-                id="name"
-                placeholder="e.g. Total Liguanea"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                required
-              />
-            </div>
-
-            {/* Brand / Category */}
-            <div className="space-y-2">
-              <Label htmlFor="brand">Brand / Parent Company</Label>
-              <Select
-                value={formData.brand}
-                onValueChange={(value) => setFormData({ ...formData, brand: value })}
-              >
-                <SelectTrigger id="brand">
-                  <SelectValue placeholder={fetchingCompanies ? "Loading..." : "Select brand"} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Independent">Independent</SelectItem>
-                  {parentCompanies.map((company) => (
-                    <SelectItem key={company.id} value={company.name}>
-                      {company.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="category">Category</Label>
-              <Select
-                value={formData.category}
-                onValueChange={(value: 'fuel' | 'non_fuel') =>
-                  setFormData({ ...formData, category: value })
-                }
-              >
-                <SelectTrigger id="category">
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="fuel">Fuel Station</SelectItem>
-                  <SelectItem value="non_fuel">Non-Fuel Location</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* ===== PLUS CODE SECTION — PRIMARY LOCATION INPUT ===== */}
-            <div className="col-span-2 space-y-2">
-              <div className="bg-gradient-to-r from-violet-50 to-indigo-50 p-3 rounded-lg border-2 border-violet-200">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-1.5">
-                    <Grid3X3 className="h-3.5 w-3.5 text-violet-600" />
-                    <Label htmlFor="plusCode" className="text-[10px] uppercase text-violet-700 font-bold tracking-wide">
-                      Plus Code (Open Location Code)*
+            {wizardStep === 'pin' && (
+              <div className="space-y-4 animate-in fade-in-0 slide-in-from-right-2 duration-200">
+                <div className="rounded-xl border border-slate-200 bg-white p-3.5 space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <Label htmlFor="plusCode" className="text-xs font-medium text-slate-700 flex items-center gap-1.5">
+                      <Grid3X3 className="h-3.5 w-3.5 text-slate-500" />
+                      Plus Code *
                     </Label>
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Info className="h-3 w-3 text-violet-400 cursor-help" />
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="max-w-[280px] text-xs">
-                          <p className="font-semibold mb-1">Plus Code = Primary Location</p>
-                          <p>Enter the full Plus Code from Google Maps (e.g. 7795X453+XH4). This is more precise than a street address.</p>
-                          <p className="mt-1 font-medium">How to find it:</p>
-                          <ol className="list-decimal pl-3 mt-0.5 space-y-0.5 text-muted-foreground">
-                            <li>Open Google Maps</li>
-                            <li>Tap/click the location</li>
-                            <li>The Plus Code appears near the coordinates</li>
-                          </ol>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {plusCodeSynced && isVerified && (
-                      <div className="flex items-center gap-1 text-[9px] text-emerald-600 font-medium">
-                        <CheckCircle2 className="h-3 w-3" />
-                        Verified
-                      </div>
-                    )}
-                    <Button 
-                      type="button" 
-                      variant="ghost" 
-                      size="sm" 
-                      className="h-6 text-[10px] text-violet-700 hover:text-violet-800 hover:bg-violet-100 px-2 font-semibold"
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="h-8 bg-emerald-600 hover:bg-emerald-700 text-white"
                       onClick={handleVerifyFromPlusCode}
                       disabled={geocoding || !plusCodeInput.trim()}
                     >
-                      {geocoding ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Navigation className="h-3 w-3 mr-1" />}
+                      {geocoding ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <Navigation className="h-3.5 w-3.5 mr-1.5" />}
                       Verify GPS
                     </Button>
                   </div>
-                </div>
-                <div className="relative">
                   <Input
                     id="plusCode"
                     placeholder="e.g. 7795X453+XH4"
                     value={plusCodeInput}
                     onChange={(e) => handlePlusCodeChange(e.target.value.toUpperCase())}
-                    className={`h-10 text-sm font-mono tracking-wider pl-3 pr-20 ${
-                      isVerified && plusCodeValid === true 
-                        ? 'border-emerald-300 bg-emerald-50/30 focus-visible:ring-emerald-300' 
-                        : plusCodeValid === true 
-                          ? 'border-violet-200 bg-white focus-visible:ring-violet-300' 
-                          : plusCodeValid === false 
-                            ? 'border-red-200 bg-red-50/30 focus-visible:ring-red-300' 
-                            : 'bg-white'
-                    }`}
+                    className={cn(
+                      'h-11 font-mono tracking-wide',
+                      isVerified && plusCodeValid === true && 'border-emerald-300 bg-emerald-50/40',
+                      plusCodeValid === false && 'border-red-300 bg-red-50/30',
+                    )}
                   />
-                  <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                    {plusCodeValid === true && plusCodeInput && (
-                      <span className="text-[8px] font-bold uppercase text-violet-500 bg-violet-50 px-1.5 py-0.5 rounded">
-                        {getPlusCodePrecision(plusCodeInput)}
-                      </span>
-                    )}
-                    {plusCodeValid === false && (
-                      <span className="text-[8px] font-bold uppercase text-red-500 bg-red-50 px-1.5 py-0.5 rounded">
-                        Invalid
-                      </span>
-                    )}
-                    {isVerified && plusCodeValid === true && (
-                      <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                    )}
+                  <p className="text-[11px] text-slate-500">Paste from Google Maps, then Verify GPS to fill address &amp; coords.</p>
+                  {checkingDuplicate && (
+                    <div className="flex items-center gap-2 text-xs text-slate-500">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Checking GOD list…
+                    </div>
+                  )}
+                  {isVerified && (
+                    <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-700">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      GPS verified
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="address" className="text-xs font-medium text-slate-700">Street address</Label>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-[11px] text-slate-600"
+                      onClick={handleVerifyFromAddress}
+                      disabled={addressGeocoding || !formData.address}
+                    >
+                      {addressGeocoding ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Search className="h-3 w-3 mr-1" />}
+                      Lookup
+                    </Button>
+                  </div>
+                  <Input
+                    id="address"
+                    placeholder="Auto-filled from Plus Code"
+                    value={formData.address}
+                    onChange={(e) => {
+                      setFormData({ ...formData, address: e.target.value });
+                      if (isVerified && !plusCodeInput.trim()) setIsVerified(false);
+                    }}
+                    className="h-10"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="city" className="text-xs font-medium text-slate-700">City</Label>
+                    <Input id="city" placeholder="Kingston" value={formData.city} onChange={(e) => setFormData({ ...formData, city: e.target.value })} className="h-10" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="parish" className="text-xs font-medium text-slate-700">Parish</Label>
+                    <Input id="parish" placeholder="St. Andrew" value={formData.parish} onChange={(e) => setFormData({ ...formData, parish: e.target.value })} className="h-10" />
                   </div>
                 </div>
-                <p className="text-[8px] text-violet-400 italic mt-1.5">
-                  Enter the full Plus Code from Google Maps, then click "Verify GPS" to auto-populate address &amp; coordinates.
-                </p>
-              </div>
-            </div>
 
-            {/* ===== STREET ADDRESS — SECONDARY (Auto-populated or manual) ===== */}
-            <div className="col-span-2 space-y-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="address" className="flex items-center gap-1.5">
-                  Street Address
-                  {!plusCodeInput.trim() && <span className="text-[9px] text-amber-600 font-normal">(or enter address as fallback)</span>}
-                </Label>
-                <Button 
-                  type="button" 
-                  variant="ghost" 
-                  size="sm" 
-                  className="h-6 text-[10px] text-blue-600 hover:text-blue-700 hover:bg-blue-50 px-2"
-                  onClick={handleVerifyFromAddress}
-                  disabled={addressGeocoding || !formData.address}
-                >
-                  {addressGeocoding ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Search className="h-3 w-3 mr-1" />}
-                  Lookup Address
-                </Button>
-              </div>
-              <div className="relative">
-                <Input
-                  id="address"
-                  placeholder="Auto-populated from Plus Code, or enter manually"
-                  value={formData.address}
-                  onChange={(e) => {
-                    setFormData({ ...formData, address: e.target.value });
-                    if (isVerified && !plusCodeInput.trim()) setIsVerified(false);
-                  }}
-                  className={isVerified && formData.address ? "pr-10 border-emerald-200 bg-emerald-50/30" : ""}
-                />
-                {isVerified && formData.address && (
-                  <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-500" />
-                )}
-              </div>
-            </div>
-
-            {/* City / Parish */}
-            <div className="space-y-2">
-              <Label htmlFor="city">City</Label>
-              <Input
-                id="city"
-                placeholder="e.g. Kingston"
-                value={formData.city}
-                onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="parish">Parish</Label>
-              <Input
-                id="parish"
-                placeholder="e.g. St. Andrew"
-                value={formData.parish}
-                onChange={(e) => setFormData({ ...formData, parish: e.target.value })}
-              />
-            </div>
-
-            {/* GPS Coordinates Section — Auto-populated from Plus Code */}
-            <div className="col-span-2 grid grid-cols-2 gap-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
-               <div className="col-span-2 flex items-center justify-between mb-0.5">
-                 <span className="text-[10px] uppercase text-slate-500 font-bold tracking-wide">GPS Coordinates</span>
-                 {(formData.lat !== '' && formData.lng !== '') && (
-                   <Button
-                     type="button"
-                     variant="ghost"
-                     size="sm"
-                     className={`h-6 text-[10px] px-2 gap-1 transition-colors ${
-                       showCopyField
-                         ? 'text-emerald-600 bg-emerald-50 hover:bg-emerald-50 hover:text-emerald-600'
-                         : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200'
-                     }`}
-                     onClick={() => {
-                       setShowCopyField(true);
-                       setTimeout(() => {
-                         copyInputRef.current?.focus();
-                         copyInputRef.current?.select();
-                       }, 100);
-                     }}
-                   >
-                     {showCopyField ? (
-                       <>
-                         <Check className="h-3 w-3" />
-                         Copied!
-                       </>
-                     ) : (
-                       <>
-                         <Copy className="h-3 w-3" />
-                         Copy
-                       </>
-                     )}
-                   </Button>
-                 )}
-               </div>
-               <div className="space-y-1.5">
-                  <Label htmlFor="lat" className="text-[10px] uppercase text-slate-500 font-bold">Latitude</Label>
-                  <Input
-                    id="lat"
-                    type="number"
-                    step="any"
-                    placeholder="Auto from Plus Code"
-                    value={formData.lat}
-                    onChange={(e) => setFormData({ ...formData, lat: parseFloat(e.target.value) || '' })}
-                    className={`h-8 text-xs font-mono ${isVerified ? 'border-emerald-200 bg-emerald-50/30' : ''}`}
-                  />
-               </div>
-               <div className="space-y-1.5">
-                  <Label htmlFor="lng" className="text-[10px] uppercase text-slate-500 font-bold">Longitude</Label>
-                  <Input
-                    id="lng"
-                    type="number"
-                    step="any"
-                    placeholder="Auto from Plus Code"
-                    value={formData.lng}
-                    onChange={(e) => setFormData({ ...formData, lng: parseFloat(e.target.value) || '' })}
-                    className={`h-8 text-xs font-mono ${isVerified ? 'border-emerald-200 bg-emerald-50/30' : ''}`}
-                  />
-               </div>
-               <p className="col-span-2 text-[9px] text-slate-400 italic">
-                  Coordinates are auto-populated when you verify a Plus Code. You can also enter them manually.
-               </p>
-               {showCopyField && (
-                 <div className="col-span-2 mt-2">
-                   <Input
-                     ref={copyInputRef}
-                     type="text"
-                     value={`Latitude: ${formData.lat}, Longitude: ${formData.lng}`}
-                     readOnly
-                     className="h-8 text-xs font-mono border-emerald-200 bg-emerald-50/30"
-                   />
-                 </div>
-               )}
-            </div>
-
-            {/* ===== GEOFENCE RADIUS SLIDER ===== */}
-            <div className="col-span-2 space-y-2">
-              <div className="bg-gradient-to-r from-amber-50 to-orange-50 p-3 rounded-lg border border-amber-200">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-1.5">
-                    <MapPin className="h-3.5 w-3.5 text-amber-600" />
-                    <Label className="text-[10px] uppercase text-amber-700 font-bold tracking-wide">
-                      Geofence Radius
-                    </Label>
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Info className="h-3 w-3 text-amber-400 cursor-help" />
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="max-w-[280px] text-xs">
-                          <p className="font-semibold mb-1">Spatial Match Boundary</p>
-                          <p>The geofence radius defines the circular boundary around the Plus Code anchor point. 
-                             Fuel transactions must occur within this radius to be considered spatially valid.</p>
-                          <p className="mt-1 text-muted-foreground">Default is calculated from Plus Code precision. 
-                             Tighter Plus Codes allow smaller radii.</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
+                <div className="rounded-xl border border-slate-100 bg-slate-50 p-3 grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label htmlFor="lat" className="text-[10px] uppercase tracking-wide text-slate-500">Latitude</Label>
+                    <Input id="lat" type="number" step="any" value={formData.lat} onChange={(e) => setFormData({ ...formData, lat: parseFloat(e.target.value) || '' })} className="h-9 font-mono text-xs" />
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-amber-800 tabular-nums">
+                  <div className="space-y-1">
+                    <Label htmlFor="lng" className="text-[10px] uppercase tracking-wide text-slate-500">Longitude</Label>
+                    <Input id="lng" type="number" step="any" value={formData.lng} onChange={(e) => setFormData({ ...formData, lng: parseFloat(e.target.value) || '' })} className="h-9 font-mono text-xs" />
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-slate-200 p-3.5 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-medium text-slate-700 flex items-center gap-1.5">
+                      <MapPin className="h-3.5 w-3.5 text-slate-500" />
+                      Geofence
+                    </Label>
+                    <span className="text-sm font-semibold tabular-nums text-slate-800">
                       {geofenceRadius ?? getDefaultGeofenceRadius(plusCodeInput || undefined)}m
                     </span>
-                    {geofenceRadius !== null && geofenceRadius !== getDefaultGeofenceRadius(plusCodeInput || undefined) && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-5 text-[9px] text-amber-600 hover:text-amber-700 hover:bg-amber-100 px-1.5"
-                        onClick={() => setGeofenceRadius(null)}
-                      >
-                        Reset
-                      </Button>
-                    )}
+                  </div>
+                  <Slider
+                    value={[geofenceRadius ?? getDefaultGeofenceRadius(plusCodeInput || undefined)]}
+                    onValueChange={([val]) => setGeofenceRadius(val)}
+                    min={20}
+                    max={500}
+                    step={5}
+                    className="[&_[data-slot=slider-range]]:bg-emerald-600 [&_[data-slot=slider-thumb]]:border-emerald-600"
+                  />
+                  <div className="flex justify-between text-[10px] text-slate-400">
+                    <span>20m</span>
+                    <span>Default {getDefaultGeofenceRadius(plusCodeInput || undefined)}m</span>
+                    <span>500m</span>
                   </div>
                 </div>
-                <Slider
-                  value={[geofenceRadius ?? getDefaultGeofenceRadius(plusCodeInput || undefined)]}
-                  onValueChange={([val]) => setGeofenceRadius(val)}
-                  min={20}
-                  max={500}
-                  step={5}
-                  className="[&_[data-slot=slider-track]]:h-2 [&_[data-slot=slider-range]]:bg-amber-500 [&_[data-slot=slider-thumb]]:border-amber-500 [&_[data-slot=slider-thumb]]:size-4"
-                />
-                <div className="flex justify-between mt-1.5">
-                  <span className="text-[8px] text-amber-400">20m (tight)</span>
-                  <span className="text-[8px] text-amber-400">
-                    Default: {getDefaultGeofenceRadius(plusCodeInput || undefined)}m
-                    {plusCodeInput && plusCodeValid ? ` (${getPlusCodePrecision(plusCodeInput)} precision)` : ' (no Plus Code)'}
-                  </span>
-                  <span className="text-[8px] text-amber-400">500m (wide)</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Duplicate check in progress indicator */}
-            {checkingDuplicate && (
-              <div className="col-span-2 flex items-center justify-center gap-2 py-1.5">
-                <Loader2 className="h-3.5 w-3.5 animate-spin text-violet-500" />
-                <span className="text-xs text-violet-600 font-medium">Checking GOD list &amp; CSV shelf…</span>
               </div>
             )}
 
-            {/* Telephone / Country */}
-            <div className="space-y-2">
-              <Label htmlFor="phone">Telephone</Label>
-              <Input
-                id="phone"
-                placeholder="e.g. 876-123-4567"
-                value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="country">Country</Label>
-              <Input
-                id="country"
-                value={formData.country}
-                onChange={(e) => setFormData({ ...formData, country: e.target.value })}
-              />
-            </div>
+            {wizardStep === 'confirm' && (
+              <div className="space-y-4 animate-in fade-in-0 slide-in-from-right-2 duration-200">
+                <div className="rounded-xl border border-emerald-100 bg-emerald-50/40 p-4 space-y-3">
+                  <h3 className="text-sm font-semibold text-slate-900">Ready to save</h3>
+                  <dl className="grid grid-cols-[88px_1fr] gap-x-3 gap-y-2 text-xs">
+                    <dt className="text-slate-500">Name</dt>
+                    <dd className="font-medium text-slate-900 truncate">{formData.name || '—'}</dd>
+                    <dt className="text-slate-500">Brand</dt>
+                    <dd className="text-slate-800">{formData.brand || 'Independent'}</dd>
+                    <dt className="text-slate-500">Plus Code</dt>
+                    <dd className="font-mono text-slate-800 truncate">{plusCodeInput || '—'}</dd>
+                    <dt className="text-slate-500">Address</dt>
+                    <dd className="text-slate-800 truncate">{formData.address || '—'}</dd>
+                    <dt className="text-slate-500">GPS</dt>
+                    <dd className="font-mono text-slate-800">
+                      {formData.lat !== '' && formData.lng !== '' ? `${formData.lat}, ${formData.lng}` : '—'}
+                    </dd>
+                    <dt className="text-slate-500">Geofence</dt>
+                    <dd className="text-slate-800">{geofenceRadius ?? getDefaultGeofenceRadius(plusCodeInput || undefined)}m</dd>
+                  </dl>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="phone" className="text-xs font-medium text-slate-700">Phone (optional)</Label>
+                    <Input id="phone" placeholder="876-…" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} className="h-10" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="country" className="text-xs font-medium text-slate-700">Country</Label>
+                    <Input id="country" value={formData.country} onChange={(e) => setFormData({ ...formData, country: e.target.value })} className="h-10" />
+                  </div>
+                </div>
+                {isVerifyGodFlow && (
+                  <p className="text-[11px] text-slate-500 leading-relaxed">
+                    Saves as <span className="font-medium text-emerald-800">Verified GOD</span> from this form only.
+                  </p>
+                )}
+              </div>
+            )}
           </div>
 
-          <DialogFooter className="pt-4">
-            <Button type="button" variant="ghost" onClick={onClose} disabled={loading}>
-              Cancel
-            </Button>
+          <div className="shrink-0 flex items-center justify-between gap-2 border-t border-slate-100 bg-white px-5 py-3.5">
             <Button
-              type="submit"
-              disabled={loading || !!duplicateStation}
-              className={
-                forceCreate
-                  ? 'bg-amber-600 hover:bg-amber-700'
-                  : duplicateStation
-                    ? 'bg-red-400 cursor-not-allowed opacity-60'
-                    : isVerifyGodFlow
-                      ? 'bg-emerald-600 hover:bg-emerald-700'
-                      : 'bg-blue-600 hover:bg-blue-700'
-              }
+              type="button"
+              variant="ghost"
+              className="text-slate-600"
+              disabled={loading}
+              onClick={() => {
+                if (stepIndex <= 0) {
+                  onClose();
+                  return;
+                }
+                goBack();
+              }}
             >
-              {loading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Saving...
-                </>
-              ) : forceCreate ? (
-                <>
-                  <AlertTriangle className="mr-1.5 h-4 w-4" />
-                  Create separate GOD station
-                </>
-              ) : duplicateStation ? (
-                'Resolve GOD duplicate first'
-              ) : isVerifyGodFlow ? (
-                'Save to GOD list'
-              ) : isEditMode ? (
-                'Update Station'
-              ) : (
-                'Add to CSV shelf'
-              )}
+              {stepIndex <= 0 ? 'Cancel' : 'Back'}
             </Button>
-          </DialogFooter>
+
+            {wizardStep === 'nearby' ? null : wizardStep === 'confirm' ? (
+              <Button
+                type="button"
+                disabled={loading || !!duplicateStation}
+                className={cn(
+                  'min-w-[140px]',
+                  forceCreate ? 'bg-amber-600 hover:bg-amber-700' : isVerifyGodFlow ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-900 hover:bg-slate-800',
+                )}
+                onClick={() => void handleSubmit()}
+              >
+                {loading ? (
+                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Saving…</>
+                ) : forceCreate ? (
+                  <><AlertTriangle className="mr-1.5 h-4 w-4" />Save separate</>
+                ) : isVerifyGodFlow ? (
+                  'Save to GOD list'
+                ) : isEditMode ? (
+                  'Update station'
+                ) : (
+                  'Add to CSV shelf'
+                )}
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                className="min-w-[120px] bg-emerald-600 hover:bg-emerald-700"
+                disabled={wizardStep === 'station' ? !canAdvanceFromStation : !canAdvanceFromPin}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={goNext}
+              >
+                Continue
+              </Button>
+            )}
+          </div>
         </form>
-        </div>
       </DialogContent>
     </Dialog>
   );

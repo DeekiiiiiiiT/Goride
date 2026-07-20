@@ -343,6 +343,11 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
             cardId: formData.type === 'company_card' ? formData.cardId : undefined,
             paymentSource: PAYMENT_SOURCE_MAP[formData.type] || 'Personal',
             matchedStationId: formData.matchedStationId || undefined,
+            entrySource: initialData
+                ? (initialData.entrySource === 'admin-manual' || initialData.metadata?.entrySource === 'admin-manual'
+                    ? 'admin-manual'
+                    : 'admin-edit')
+                : 'admin-manual',
             // When editing, bypass server-side integrity guardrails that block
             // admin corrections (signature check, immutability lockdown, data lock)
             bypassSignatureCheck: !!initialData,
@@ -353,6 +358,11 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
                 source: 'Fuel Log',
                 portal_type: 'Manual_Entry',
                 isManual: true,
+                entrySource: initialData
+                    ? (initialData.entrySource === 'admin-manual' || initialData.metadata?.entrySource === 'admin-manual'
+                        ? 'admin-manual'
+                        : 'admin-edit')
+                    : 'admin-manual',
                 paymentSource: formData.type,
                 matchedStationId: formData.matchedStationId || undefined,
             }
@@ -393,11 +403,13 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
             cardId: undefined,
             paymentSource: PAYMENT_SOURCE_MAP[bulkCommon.type] || 'Personal',
             matchedStationId: row.matchedStationId || undefined,
+            entrySource: 'bulk-import',
             metadata: {
                 pricePerLiter: row.pricePerLiter,
                 source: 'Bulk Log',
                 portal_type: 'Manual_Entry',
                 isManual: true,
+                entrySource: 'bulk-import',
                 paymentSource: bulkCommon.type,
                 matchedStationId: row.matchedStationId || undefined,
             }

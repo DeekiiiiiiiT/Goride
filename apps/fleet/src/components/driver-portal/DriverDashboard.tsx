@@ -401,11 +401,13 @@ export function DriverDashboard() {
               entryMode: entryMode,
               paymentSource: paymentSource,
               source: 'Driver Portal',
+              entrySource: method === 'card' ? 'fuel-card' : 'driver-portal',
               reconciliationStatus: 'Pending',
               geofenceMetadata: (data as any).geofenceMetadata,
               deviationReason: (data as any).deviationReason,
               metadata: {
                 paymentSource: paySrc.meta,
+                entrySource: method === 'card' ? 'fuel-card' : 'driver-portal',
               },
           } as any;
 

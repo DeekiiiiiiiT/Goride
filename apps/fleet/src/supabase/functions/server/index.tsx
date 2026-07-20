@@ -14176,11 +14176,39 @@ app.get("/make-server-37f42386/rate-limit-stats", requireAuth(), async (c) => {
 app.get("/make-server-37f42386/admin-check", async (c) => {
   try {
     const existing = await kv.get("platform:superadmin_created");
-    const exists = !!(existing && (existing as any).created === true);
-    return c.json({ exists });
+    if (existing && (existing as any).created === true) {
+      return c.json({ exists: true });
+    }
+
+    // Heal: KV lock may be missing after env reset / migration, but Auth still has a platform admin.
+    // Prefer login over forcing a second "Initial Setup" when a superadmin already exists.
+    try {
+      const { data } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+      const platformAdmin = data?.users?.find((u: any) => {
+        const role = u.user_metadata?.role;
+        return role === 'superadmin' || role === 'platform_owner';
+      });
+      if (platformAdmin) {
+        await kv.set("platform:superadmin_created", {
+          created: true,
+          userId: platformAdmin.id,
+          email: platformAdmin.email,
+          createdAt: platformAdmin.created_at || new Date().toISOString(),
+          healedAt: new Date().toISOString(),
+          healedFrom: 'admin-check',
+        });
+        console.log(`[admin-check] Healed KV lock from Auth user ${platformAdmin.email} (${platformAdmin.id})`);
+        return c.json({ exists: true, healed: true });
+      }
+    } catch (healErr: any) {
+      console.log(`[admin-check] Auth heal failed: ${healErr.message}`);
+    }
+
+    return c.json({ exists: false });
   } catch (e: any) {
     console.log(`Admin check error: ${e.message}`);
-    return c.json({ exists: false });
+    // Prefer login UI on hard failure so operators are not blocked behind setup
+    return c.json({ exists: true, degraded: true });
   }
 });
 

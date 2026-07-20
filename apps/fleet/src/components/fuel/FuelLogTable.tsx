@@ -63,6 +63,7 @@ import { FUEL_CSV_COLUMNS } from '../../types/csv-schemas';
 import { Download } from 'lucide-react';
 import { usePermissions } from '../../hooks/usePermissions';
 import { isEntryInInclusiveYmdRange, toEntryYmd } from '../../utils/fuelWeekPeriod';
+import { resolveFuelEntrySource } from '../../utils/fuelEntrySource';
 
 interface FuelLogTableProps {
     entries: FuelEntry[];
@@ -184,29 +185,8 @@ export function FuelLogTable({
         return isManualType || hasManualPortalType || hasManualSource;
     };
 
-    // Resolve entry source: explicit field → metadata fallback → heuristic for legacy
-    const resolveEntrySource = (entry: FuelEntry): 'driver-portal' | 'admin-manual' | 'admin-edit' | 'bulk-import' | 'fuel-card' => {
-        // 1. Explicit tag (new system) — always trust first
-        if (entry.entrySource) return entry.entrySource;
-        if (entry.metadata?.entrySource) return entry.metadata.entrySource;
-        // 2. Legacy bulk import marker
-        if (entry.metadata?.source === 'Bulk Manual') return 'bulk-import';
-        // 3. Driver Portal origin detection (multiple signals):
-        //    - DriverDashboard stamps top-level source: 'Driver Portal'
-        //    - DriverDashboard creates with type 'Manual_Entry' (NOT 'Fuel_Manual_Entry')
-        //    - Portal entries may have geofenceMetadata from GPS
-        const topSource = (entry as any).source;
-        const isFromPortal = topSource === 'Driver Portal' || entry.type === 'Manual_Entry' || entry.geofenceMetadata != null;
-        if (isFromPortal) {
-            // If admin later touched it (FuelLogModal stamps isManual, handleSaveLog stamps isEdited)
-            const wasAdminEdited = entry.metadata?.isManual || entry.metadata?.isEdited || entry.metadata?.previousPaymentSource;
-            return wasAdminEdited ? 'admin-edit' : 'driver-portal';
-        }
-        // 4. No portal markers — admin created from scratch (SubmitExpenseModal sets type 'Fuel_Manual_Entry')
-        if (entry.metadata?.isManual || entry.metadata?.portal_type === 'Manual_Entry') return 'admin-manual';
-        if (entry.type === 'Card_Transaction') return 'fuel-card';
-        return 'driver-portal';
-    };
+    // Authorship label — delegates to shared resolver (isManual ≠ admin)
+    const resolveEntrySource = (entry: FuelEntry) => resolveFuelEntrySource(entry);
 
     const entrySourceLabel = (src: string): { label: string; color: string } => {
         switch (src) {

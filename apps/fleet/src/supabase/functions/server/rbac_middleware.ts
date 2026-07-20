@@ -342,6 +342,9 @@ export function requireAuth(options?: RequireAuthOptions) {
     if (
       path.includes("/fleet-login") ||
       path.includes("/driver-login") ||
+      path.includes("/admin-login") ||
+      path.includes("/admin-check") ||
+      path.includes("/admin-seed") ||
       path.includes("/signup") ||
       path.includes("/platform-status") ||
       path.includes("/platform-feature-flags") ||

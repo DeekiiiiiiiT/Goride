@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Shield, Loader2, AlertCircle, KeyRound, UserPlus } from 'lucide-react';
 import { supabase } from '../../utils/supabase/client';
 import { API_ENDPOINTS } from '../../services/apiConfig';
-import { publicAnonKey } from '@roam/api-client';
+import { supabaseAnonFunctionHeaders } from '@roam/api-client';
 import { requestPasswordReset, rememberRecoverySignInHref } from '@roam/auth-client';
 import { LockoutCountdown } from '../auth/LockoutCountdown';
 
@@ -21,7 +21,7 @@ export function AdminLoginPage() {
   const [checking, setChecking] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [adminExists, setAdminExists] = useState(false);
+  const [adminExists, setAdminExists] = useState(true);
   const [lockoutSeconds, setLockoutSeconds] = useState<number | null>(null);
   const [forgotMode, setForgotMode] = useState(false);
 
@@ -33,7 +33,7 @@ export function AdminLoginPage() {
         for (let attempt = 0; attempt < 3; attempt++) {
           try {
             res = await fetch(`${API_ENDPOINTS.admin}/admin-check`, {
-              headers: { Authorization: `Bearer ${publicAnonKey}` },
+              headers: supabaseAnonFunctionHeaders(),
             });
             break; // success
           } catch (fetchErr) {
@@ -44,8 +44,15 @@ export function AdminLoginPage() {
             throw fetchErr; // exhausted retries
           }
         }
-        const data = await res!.json();
-        setAdminExists(data.exists === true);
+        const data = await res!.json().catch(() => ({}));
+        // Only show Initial Setup when the API explicitly says no admin exists.
+        // Auth errors / odd payloads must fall back to Login (your account already exists).
+        if (!res!.ok) {
+          console.warn('[AdminLogin] admin-check not ok — defaulting to login', res!.status, data);
+          setAdminExists(true);
+        } else {
+          setAdminExists(data.exists === true);
+        }
       } catch (e) {
         console.error('Admin check failed:', e);
         // Default to login mode on error
@@ -65,10 +72,7 @@ export function AdminLoginPage() {
     try {
       const res = await fetch(`${API_ENDPOINTS.admin}/admin-seed`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${publicAnonKey}`,
-        },
+        headers: supabaseAnonFunctionHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ email, password, name }),
       });
 
@@ -80,10 +84,7 @@ export function AdminLoginPage() {
       // Auto sign-in via server-side endpoint (handles password recovery)
       const loginRes = await fetch(`${API_ENDPOINTS.admin}/admin-login`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${publicAnonKey}`,
-        },
+        headers: supabaseAnonFunctionHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ email, password }),
       });
       const loginData = await loginRes.json();
@@ -134,10 +135,7 @@ export function AdminLoginPage() {
     try {
       const res = await fetch(`${API_ENDPOINTS.admin}/admin-login`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${publicAnonKey}`,
-        },
+        headers: supabaseAnonFunctionHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ email, password }),
       });
       const data = await res.json();
