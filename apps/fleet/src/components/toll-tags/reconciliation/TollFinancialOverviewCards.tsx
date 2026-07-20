@@ -22,9 +22,10 @@ export interface TollFinancialOverviewCardsProps {
 }
 
 /**
- * The financial snapshot — one balancing story: Spend − Reimbursed −
- * Charged = Net Loss. Shared by PeriodLandingPage and ReconciliationWizard.
- * Visual language matched to Stitch "Toll Reconciliation - Premium Redesign".
+ * The financial snapshot. Spend / Reimbursed / Charged are operational cards.
+ * Net Toll Loss is the same fleet-loss number as Business Finance P&L Tolls
+ * (canonical ledger netting) — not Spend − Reimbursed − Charged.
+ * Shared by PeriodLandingPage and ReconciliationWizard.
  */
 function PlatformSplit({ breakdown, className }: { breakdown?: PlatformAmountBreakdown; className?: string }) {
   if (!breakdown) return null;
@@ -176,12 +177,16 @@ export function TollFinancialOverviewCards({
                 <HelpCircle className="h-3.5 w-3.5 text-rose-400 transition-colors hover:text-rose-600" />
               </TooltipTrigger>
               <TooltipContent>
-                <p className="max-w-[220px] text-xs">Fleet out of pocket from tag/plaza charges not covered by platform reimbursement or driver charges. Cash washes and unlinked trip-only tolls do not create leakage here.</p>
+                <p className="max-w-[240px] text-xs">
+                  Fleet toll loss — same number as Business Finance → Profit &amp; Loss → Tolls
+                  (canonical charges minus cash-washes, personal, and real refunds). Spend /
+                  Reimbursed / Charged above are operational breakdown only.
+                </p>
               </TooltipContent>
             </Tooltip>
           </div>
           <h4 className="mt-1 text-2xl font-bold tracking-tight text-rose-600 tabular-nums">${netTollLoss.toFixed(2)}</h4>
-          <p className="mt-2 text-[11px] font-medium text-slate-500">Unrecovered toll leakage</p>
+          <p className="mt-2 text-[11px] font-medium text-slate-500">Same as Business Finance P&amp;L</p>
         </GlassStatCard>
 
         {showNeedsReviewCard && (

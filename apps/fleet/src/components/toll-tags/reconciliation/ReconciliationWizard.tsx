@@ -53,6 +53,7 @@ import {
   type PlatformBucket,
   type TollWithLinkedTrip,
 } from "../../../utils/tollFinancialOverview";
+import { computeTollFleetLossNetting } from "../../../utils/tollFleetLossNetting";
 
 type PlatformFilter = 'all' | 'Uber' | 'InDrive' | 'Roam';
 const PLATFORM_OPTIONS: PlatformFilter[] = ['all', 'Uber', 'InDrive', 'Roam'];
@@ -111,6 +112,38 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
   const [platformFilter, setPlatformFilter] = useState<PlatformFilter>('all');
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const fleetTz = useFleetTimezone();
+  // Net Toll Loss = Business Finance P&L Tolls (canonical), not Spend−Reimbursed−Charged.
+  const [fleetLossNet, setFleetLossNet] = useState<number | null>(period.financials?.netTollLoss ?? null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const all: Record<string, unknown>[] = [];
+        let offset = 0;
+        for (let i = 0; i < 40; i++) {
+          const page = await api.getCanonicalLedgerEvents({
+            startDate: period.startDate,
+            endDate: period.endDate,
+            eventTypes: 'toll_charge,toll_refund,toll_charge_offset',
+            driverId: driverId || undefined,
+            limit: 500,
+            offset,
+          });
+          const chunk = page.data || [];
+          all.push(...chunk);
+          if (!page.hasMore || chunk.length === 0) break;
+          offset += 500;
+        }
+        if (!cancelled) setFleetLossNet(computeTollFleetLossNetting(all).net);
+      } catch {
+        if (!cancelled) setFleetLossNet(period.financials?.netTollLoss ?? null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [period.startDate, period.endDate, period.financials?.netTollLoss, driverId]);
 
   const {
     loading: tollsLoading,
@@ -939,13 +972,6 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
     resolvedRefunds: pResolved,
     tolls: periodTolls,
   });
-  const fleetOffsetTrips = collectTripsForReimbursedCard({
-    trips: pTrips,
-    unclaimedRefunds: pUnclaimed,
-    resolvedRefunds: pResolved,
-    tolls: periodTolls,
-    mode: 'fleet',
-  });
   const {
     total: reimbursedByUber,
     byPlatform: reimbursedByPlatform,
@@ -957,17 +983,13 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
     fleetTz,
     platformFilter: platformFilter === 'all' ? 'all' : platformFilter,
   });
-  const fleetOffsetReimbursed = computeReimbursedTotals({
-    trips: fleetOffsetTrips,
-    disputeRefunds: disputeRefunds || [],
-    period: { startDate: period.startDate, endDate: period.endDate },
-    fleetTz,
-    platformFilter: platformFilter === 'all' ? 'all' : platformFilter,
-  }).total;
   const chargedToDrivers = pPeriodClaims
     .filter(c => c.status === 'Resolved' && c.resolutionReason === 'Charge Driver')
     .reduce((sum, c) => sum + Math.abs(c.amount || 0), 0);
-  const netTollLoss = Math.max(0, tagTollSpend - fleetOffsetReimbursed - chargedToDrivers);
+  // Prefer live canonical netting; fall back to period API (same formula) while loading.
+  const netTollLoss = fleetLossNet != null
+    ? fleetLossNet
+    : (period.financials?.netTollLoss ?? 0);
   const needsReviewCount = STEP_ORDER.reduce(
     (sum, id) => sum + (stepCounts[id]?.actionable || 0),
     0,
@@ -1265,7 +1287,7 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
         </div>
       </div>
 
-      {/* Financial Overview Cards — one balancing story: Spend − Reimbursed − Charged = Net Loss */}
+      {/* Financial Overview Cards — Net Loss matches Business Finance P&L Tolls */}
       <TollFinancialOverviewCards
         tollSpend={tollSpend}
         tollSpendByPlatform={tollSpendByPlatform}

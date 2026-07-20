@@ -16,7 +16,7 @@
  *   POST /toll-reconciliation/reset-for-reconciliation – pending + clear trip/match (re-queue for Unmatched)
  */
 
-import { Hono } from "npm:hono";
+import { Hono, type Context } from "npm:hono";
 import * as kv from "./kv_store.tsx";
 import { requireAuth, requirePermission, type RbacUser } from "./rbac_middleware.ts";
 import { getServiceClient } from "./service_client.ts";
@@ -47,10 +47,10 @@ import {
 } from "./toll_brain_policy.ts";
 import { computeTollWorkflowStage, type TollWorkflowStage } from "./toll_workflow_stage.ts";
 import { findTripsInDateRange, findTollsInDateRange, findTollsByMatchedTripId } from "./toll_match_index.ts";
-import { appendCanonicalTollReconciledBatch, type TollReconcileAuditEntry } from "./canonical_from_ops.ts";
+import { appendCanonicalTollIfEligible, appendCanonicalTollReconciledBatch, type TollReconcileAuditEntry } from "./canonical_from_ops.ts";
 import { deleteCanonicalLedgerBySource, canonicalEventExistsByIdemKey, getCanonicalEventByIdemKey } from "./ledger_canonical.ts";
 import { applyEvidenceResolution } from "./evidence_routes.ts";
-  import {
+import {
   coversShortfallFully,
   leftoverAfterApply,
   remainingClaimShortfall,
@@ -2682,8 +2682,10 @@ const TOLL_LEDGER_PREFIX = "toll_ledger:";
 
 /**
  * Save a toll ledger entry to KV store.
+ * Always mirrors usage/refund into the Business Finance canonical ledger
+ * (idempotent). Callers must not skip this — that was the silent P&L miss.
  */
-async function saveTollLedgerEntry(entry: TollLedgerRecord): Promise<void> {
+async function saveTollLedgerEntry(entry: TollLedgerRecord, c?: Context): Promise<void> {
   // Validate required fields
   if (!entry.id) throw new Error("TollLedgerRecord.id is required");
   if (!entry.date) throw new Error("TollLedgerRecord.date is required");
@@ -2716,6 +2718,15 @@ async function saveTollLedgerEntry(entry: TollLedgerRecord): Promise<void> {
 
   await kv.set(`${TOLL_LEDGER_PREFIX}${entry.id}`, entry);
   console.log(`[TollLedgerStorage] Saved toll_ledger:${entry.id}`);
+
+  // Business Finance P&L — usage/refund only (top_up deliberately excluded).
+  // Failures must not block the operational write; variance flags catch lag.
+  try {
+    const stubCtx = { get: () => undefined } as unknown as Context;
+    await appendCanonicalTollIfEligible(entry, c ?? stubCtx);
+  } catch (e) {
+    console.error("[TollLedgerStorage] canonical toll append failed:", e);
+  }
 
   try {
     const { fleetDualWriteToll } = await import("./unified_ledger_dual_write.ts");

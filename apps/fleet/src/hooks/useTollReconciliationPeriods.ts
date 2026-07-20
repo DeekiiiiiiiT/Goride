@@ -32,6 +32,8 @@ export interface ReconciliationTotals {
   tollsNeedingReviewCount: number;
   refundsNeedingReviewCount: number;
   resolvedRefundsAmount: number;
+  /** Tag usages with no matching Business Finance toll_charge (repair via canonical-backfill types=tolls). */
+  missingCanonicalChargeCount?: number;
 }
 
 const EMPTY_TOTALS: ReconciliationTotals = {

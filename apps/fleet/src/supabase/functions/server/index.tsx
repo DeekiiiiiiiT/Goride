@@ -74,7 +74,6 @@ import { upsertClaim, deleteClaim, executeClaimDateBackfill } from "./claim_serv
 import { addToTollDisposition, emptyTollDisposition, roundTollDisposition } from "./driver_toll_disposition.ts";
 import {
   appendCanonicalFuelExpenseIfEligible,
-  appendCanonicalTollIfEligible,
   appendCanonicalTripFaresIfEligible,
   appendCanonicalTripFaresIfEligibleWithStats,
   buildCanonicalTripFareEventsFromTrip,
@@ -433,9 +432,9 @@ async function writeTollToLedger(transaction: any, c: Context): Promise<void> {
   }
 
   const tollRecord = transactionToTollLedgerServer(transaction);
-  await saveTollLedgerEntry(tollRecord);
+  await saveTollLedgerEntry(tollRecord, c);
   console.log(`[TollLedger] Saved toll_ledger:${tollRecord.id}`);
-  await appendCanonicalTollIfEligible(tollRecord, c);
+  // Canonical append is inside saveTollLedgerEntry (idempotent).
   // MOI-3: compute+persist a match-on-ingest suggestion (no-ops unless the
   // matchOnIngestEnabled flag is on; never throws — failures here must never
   // break toll creation itself).

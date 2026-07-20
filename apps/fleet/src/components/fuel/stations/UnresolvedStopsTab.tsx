@@ -148,11 +148,21 @@ export function UnresolvedStopsTab({ onPromoted, onVerifyLocation }: UnresolvedS
     try {
       setRescanning(true);
       let count = 0;
+      let skippedCsv = 0;
       for (const match of pendingMatches) {
+        // Never bulk-merge into CSV Unverified shelf
+        if (match.matchedStationStatus && match.matchedStationStatus !== 'verified') {
+          skippedCsv++;
+          continue;
+        }
         await api.mergeLearntLocation(match.learntId, match.matchedStationId);
         count++;
       }
-      toast.success(`Handshake Complete: Merged ${count} matched locations.`);
+      toast.success(
+        skippedCsv > 0
+          ? `Merged ${count} into GOD list. Skipped ${skippedCsv} CSV reference match(es).`
+          : `Handshake Complete: Merged ${count} matched locations into GOD list.`,
+      );
       setIsReviewModalOpen(false);
       setPendingMatches([]);
       await loadData();
@@ -177,6 +187,7 @@ export function UnresolvedStopsTab({ onPromoted, onVerifyLocation }: UnresolvedS
 
   const renderActionsMenu = (row: UnresolvedStopRow) => {
     const nearby = actions.nearestWithin150(row);
+    const nearbyStatus = nearby?.status || 'unverified';
     const hasGps = rowHasGps(row);
     const key = rowActionKey(row);
 
@@ -218,9 +229,9 @@ export function UnresolvedStopsTab({ onPromoted, onVerifyLocation }: UnresolvedS
             >
               <Navigation className="h-4 w-4 mt-0.5 shrink-0" />
               <div>
-                <div className="text-sm font-medium">Verify Location</div>
+                <div className="text-sm font-medium">Verify Location (GOD list)</div>
                 <div className="text-[10px] font-normal text-slate-500 leading-snug mt-0.5">
-                  Create a verified station from these coordinates.
+                  Primary path — create Verified station from your pin. CSV is never copied.
                 </div>
               </div>
             </DropdownMenuItem>
@@ -239,9 +250,9 @@ export function UnresolvedStopsTab({ onPromoted, onVerifyLocation }: UnresolvedS
           >
             <Link2 className="h-4 w-4 mt-0.5 shrink-0" />
             <div>
-              <div className="text-sm font-medium">Link to Station</div>
+              <div className="text-sm font-medium">Link to GOD Station</div>
               <div className="text-[10px] font-normal text-slate-500 leading-snug mt-0.5">
-                Merge into an existing station and release blocked payment when applicable.
+                Merge into an existing Verified station only.
               </div>
             </div>
           </DropdownMenuItem>
@@ -257,23 +268,38 @@ export function UnresolvedStopsTab({ onPromoted, onVerifyLocation }: UnresolvedS
           >
             <Merge className="h-4 w-4 mt-0.5 shrink-0" />
             <div>
-              <div className="text-sm font-medium">Merge into Station</div>
+              <div className="text-sm font-medium">Merge into GOD Station</div>
               <div className="text-[10px] font-normal text-slate-500 leading-snug mt-0.5">
-                Searchable station list merge.
+                Search Verified stations only — CSV shelf is not offered.
               </div>
             </div>
           </DropdownMenuItem>
 
-          {nearby && (
+          {nearby && nearbyStatus === 'verified' && (
             <DropdownMenuItem
               className="gap-2.5 text-emerald-700 focus:text-emerald-800 focus:bg-emerald-50 font-medium items-start py-2"
               onClick={() => void actions.handleMergeToStation(row, nearby.id)}
             >
               <Zap className="h-4 w-4 mt-0.5 shrink-0" />
               <div>
-                <div className="text-sm font-medium">Quick Merge ({nearby.distance}m)</div>
+                <div className="text-sm font-medium">Quick Merge GOD ({nearby.distance}m)</div>
                 <div className="text-[10px] font-normal text-slate-500 leading-snug mt-0.5">
                   One-click merge into {nearby.name}.
+                </div>
+              </div>
+            </DropdownMenuItem>
+          )}
+
+          {nearby && nearbyStatus !== 'verified' && (
+            <DropdownMenuItem
+              className="gap-2.5 text-amber-800 focus:text-amber-900 focus:bg-amber-50 font-medium items-start py-2"
+              onClick={() => void actions.handleDeleteCsvReference(nearby.id)}
+            >
+              <Trash2 className="h-4 w-4 mt-0.5 shrink-0" />
+              <div>
+                <div className="text-sm font-medium">Delete CSV reference ({nearby.distance}m)</div>
+                <div className="text-[10px] font-normal text-slate-500 leading-snug mt-0.5">
+                  Remove {nearby.name} from Unverified shelf, then Verify Location.
                 </div>
               </div>
             </DropdownMenuItem>
@@ -334,8 +360,9 @@ export function UnresolvedStopsTab({ onPromoted, onVerifyLocation }: UnresolvedS
             <h4 className="font-semibold text-indigo-950">Unresolved stops</h4>
             <p className="text-sm text-indigo-900/90 leading-relaxed">
               Combined queue for <span className="font-medium">unknown fuel stop locations</span> and{' '}
-              <span className="font-medium">blocked reimbursements</span>. Linked rows are the same fuel event — resolve
-              once to clear both. Use filters to see payment-only or location-only edge cases.
+              <span className="font-medium">blocked reimbursements</span>. Primary fix:{' '}
+              <span className="font-medium">Verify Location</span> into your GOD list. Nearby CSV Unverified rows are
+              reference only — delete them or ignore; never merge CSV into GOD. Merge/Link only targets Verified stations.
             </p>
           </div>
         </div>
@@ -416,7 +443,8 @@ export function UnresolvedStopsTab({ onPromoted, onVerifyLocation }: UnresolvedS
               displayRows.map((row) => {
                 const coords = rowCoords(row);
                 const linkMeta = LINKAGE_LABELS[row.linkage];
-                const nearby = row.learnt?.nearbyStation;
+                const nearby = actions.nearestWithin150(row);
+                const nearbyIsGod = nearby?.status === 'verified';
                 return (
                   <TableRow key={row.rowKey} className="hover:bg-slate-50/60">
                     <TableCell>
@@ -437,11 +465,29 @@ export function UnresolvedStopsTab({ onPromoted, onVerifyLocation }: UnresolvedS
                     <TableCell>
                       <div className="flex flex-col gap-0.5">
                         <span className="font-medium text-sm">{rowDisplayName(row)}</span>
-                        {nearby && (
+                        {nearby && nearbyIsGod && (
                           <Badge variant="outline" className="text-[9px] w-fit bg-emerald-50 text-emerald-700 border-emerald-200">
                             <MapPin className="h-2.5 w-2.5 mr-0.5" />
-                            Near: {nearby.name} ({nearby.distance}m)
+                            Near GOD: {nearby.name} ({nearby.distance}m)
                           </Badge>
+                        )}
+                        {nearby && !nearbyIsGod && (
+                          <div className="flex flex-wrap items-center gap-1">
+                            <Badge variant="outline" className="text-[9px] w-fit bg-amber-50 text-amber-800 border-amber-200">
+                              <MapPin className="h-2.5 w-2.5 mr-0.5" />
+                              CSV ref: {nearby.name} ({nearby.distance}m)
+                            </Badge>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 px-1.5 text-[10px] text-amber-800 hover:bg-amber-50"
+                              onClick={() => void actions.handleDeleteCsvReference(nearby.id)}
+                              disabled={actions.actionId === nearby.id}
+                            >
+                              Delete ref
+                            </Button>
+                          </div>
                         )}
                         {row.learnt?.id && (
                           <span className="text-[10px] text-slate-400 font-mono">
@@ -521,7 +567,8 @@ export function UnresolvedStopsTab({ onPromoted, onVerifyLocation }: UnresolvedS
               Evidence Bridge Review
             </DialogTitle>
             <DialogDescription>
-              Found {pendingMatches.length} potential matches. Review before bulk merge.
+              Found {pendingMatches.length} potential matches. Only <span className="font-medium">Verified GOD</span> targets
+              will merge — CSV Unverified matches are skipped.
             </DialogDescription>
           </DialogHeader>
           <div className="bg-slate-50 rounded-lg border overflow-hidden mt-4 max-h-64 overflow-y-auto">
@@ -530,6 +577,7 @@ export function UnresolvedStopsTab({ onPromoted, onVerifyLocation }: UnresolvedS
                 <TableRow>
                   <TableHead>Learnt</TableHead>
                   <TableHead>Match</TableHead>
+                  <TableHead className="text-center">List</TableHead>
                   <TableHead className="text-center">Distance</TableHead>
                 </TableRow>
               </TableHeader>
@@ -538,6 +586,13 @@ export function UnresolvedStopsTab({ onPromoted, onVerifyLocation }: UnresolvedS
                   <TableRow key={idx}>
                     <TableCell className="text-sm font-medium">{match.learntName}</TableCell>
                     <TableCell className="text-sm text-blue-700">{match.matchedStationName}</TableCell>
+                    <TableCell className="text-center text-xs">
+                      {match.matchedStationStatus === 'verified' ? (
+                        <Badge variant="outline" className="text-[9px] bg-emerald-50 text-emerald-700 border-emerald-200">GOD</Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-[9px] bg-amber-50 text-amber-800 border-amber-200">CSV (skip)</Badge>
+                      )}
+                    </TableCell>
                     <TableCell className="text-center text-xs">{match.distance}m</TableCell>
                   </TableRow>
                 ))}
@@ -550,7 +605,7 @@ export function UnresolvedStopsTab({ onPromoted, onVerifyLocation }: UnresolvedS
             </Button>
             <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => void handleBulkApprove()} disabled={rescanning}>
               {rescanning ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Check className="h-4 w-4 mr-2" />}
-              Approve and Bulk Merge
+              Approve GOD merges only
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -571,8 +626,11 @@ export function UnresolvedStopsTab({ onPromoted, onVerifyLocation }: UnresolvedS
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Merge className="h-4 w-4" />
-              Merge into Station
+              Merge into Verified GOD Station
             </DialogTitle>
+            <DialogDescription className="text-xs">
+              CSV Unverified stations are not listed. Merge only attaches this stop to your company GOD list.
+            </DialogDescription>
           </DialogHeader>
           <div className="relative">
             <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />

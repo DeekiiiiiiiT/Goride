@@ -33,6 +33,8 @@ import { Hono } from "npm:hono";
 import { startOfWeek, endOfWeek, format } from "npm:date-fns";
 import { getFleetTimezone } from "./timezone_helper.tsx";
 import { requireAuth, requirePermission, type RbacUser } from "./rbac_middleware.ts";
+import { getServiceClient } from "./service_client.ts";
+import { computeTollFleetLossForPeriod } from "../../../utils/tollFleetLossNetting.ts";
 import {
   loadAllTollLedgerWithTrips,
   isUnresolvedRefund,
@@ -329,9 +331,31 @@ function zeroFinancials(): PeriodFinancials {
   };
 }
 
-function netLossFrom(f: PeriodFinancials): number {
-  const reimbursed = f.fleetOffsetReimbursed + f.matchedDisputeRefundAmount;
-  return Math.max(0, f.tagTollSpend - reimbursed - f.chargedToDrivers);
+/** Load canonical events that drive Business Finance P&L Tolls / Net Toll Loss. */
+async function loadTollFleetLossLedgerEvents(): Promise<Record<string, unknown>[]> {
+  const supabase = getServiceClient();
+  const PAGE = 1000;
+  const out: Record<string, unknown>[] = [];
+  let offset = 0;
+  const typeOr = ["toll_charge", "toll_refund", "toll_charge_offset"]
+    .map((t) => `value->>eventType.eq.${t}`)
+    .join(",");
+  while (true) {
+    const { data, error } = await supabase
+      .from("kv_store_37f42386")
+      .select("value")
+      .like("key", "ledger_event:%")
+      .or(typeOr)
+      .range(offset, offset + PAGE - 1);
+    if (error) throw error;
+    const page = data || [];
+    for (const row of page) {
+      if (row?.value && typeof row.value === "object") out.push(row.value as Record<string, unknown>);
+    }
+    if (page.length < PAGE) break;
+    offset += PAGE;
+  }
+  return out;
 }
 
 // ─── GET /toll-reconciliation/periods ───────────────────────────────────
@@ -340,7 +364,19 @@ app.get(`${BASE}/periods`, requirePermission('toll.view'), async (c) => {
     const driverId = c.req.query("driverId") || undefined;
     const timezone = await getFleetTimezone();
 
-    const { tollTx, trips } = await loadAllTollLedgerWithTrips();
+    const [{ tollTx, trips }, fleetLossEvents] = await Promise.all([
+      loadAllTollLedgerWithTrips(),
+      loadTollFleetLossLedgerEvents(),
+    ]);
+    const scopedFleetLossEvents = driverId
+      ? fleetLossEvents.filter((e) => String(e.driverId || "") === String(driverId))
+      : fleetLossEvents;
+    const canonicalChargeSourceIds = new Set(
+      scopedFleetLossEvents
+        .filter((e) => String(e.eventType || "") === "toll_charge" && String(e.sourceType || "") === "transaction")
+        .map((e) => String(e.sourceId || ""))
+        .filter(Boolean),
+    );
     // Tag credits (top-ups/refunds/adjustments) must not spawn periods or counts.
     const scopedTollTx = filterByDriver(tollTx, driverId).filter(isReconcilableTollExpense);
     const scopedTrips = filterByDriver(trips, driverId);
@@ -516,7 +552,12 @@ app.get(`${BASE}/periods`, requirePermission('toll.view'), async (c) => {
             reimbursedByPlatform: round2(reimbursedByPlatform),
             matchedDisputeRefundAmount: round2(f.matchedDisputeRefundAmount),
             chargedToDrivers: round2(f.chargedToDrivers),
-            netTollLoss: round2(netLossFrom(f)),
+            // Same formula as Business Finance P&L Tolls (canonical ledger netting).
+            netTollLoss: computeTollFleetLossForPeriod(
+              scopedFleetLossEvents,
+              format(acc.weekStart, "yyyy-MM-dd"),
+              format(acc.weekEnd, "yyyy-MM-dd"),
+            ).net,
             resolvedRefundsAmount: round2(f.resolvedRefundsAmount),
           },
         };
@@ -545,6 +586,16 @@ app.get(`${BASE}/periods`, requirePermission('toll.view'), async (c) => {
     );
     const netTollLoss = round2(totalsAcc.netTollLoss);
 
+    // Tag usages with a driver that never got a Business Finance toll_charge.
+    let missingCanonicalChargeCount = 0;
+    for (const tx of scopedTollTx) {
+      if (String(tx?.type || "").toLowerCase() !== "usage") continue;
+      if (!tx?.driverId || !String(tx.driverId).trim()) continue;
+      const id = String(tx.id || "");
+      if (!id) continue;
+      if (!canonicalChargeSourceIds.has(id)) missingCanonicalChargeCount++;
+    }
+
     return c.json({
       success: true,
       timezone,
@@ -561,6 +612,7 @@ app.get(`${BASE}/periods`, requirePermission('toll.view'), async (c) => {
         tollsNeedingReviewCount: unclaimedTolls.length,
         refundsNeedingReviewCount: unclaimedRefundTrips.length,
         resolvedRefundsAmount: round2(totalsAcc.resolvedRefundsAmount),
+        missingCanonicalChargeCount,
       },
     });
   } catch (e: any) {

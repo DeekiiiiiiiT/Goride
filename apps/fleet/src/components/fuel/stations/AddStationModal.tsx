@@ -26,7 +26,7 @@ import { fuelService } from '../../../services/fuelService';
 import { Plus, X, Loader2, Building2, MapPin, Search, CheckCircle2, Hash, ArrowDownUp, Info, Grid3X3, Navigation, Globe, Pencil, Copy, Check } from 'lucide-react';
 import { Slider } from '../../ui/slider';
 import { toast } from 'sonner@2.0.3';
-import { AlertTriangle, Merge, ShieldAlert, ShieldCheck as ShieldCheckIcon } from 'lucide-react';
+import { AlertTriangle, Merge, ShieldAlert, ShieldCheck as ShieldCheckIcon, Trash2 } from 'lucide-react';
 import { cn } from "../../ui/utils";
 
 export interface DuplicateStationInfo {
@@ -47,12 +47,41 @@ interface AddStationModalProps {
   onAdd: (station: StationOverride) => Promise<void>;
   editStation?: StationProfile | null;
   onUpdate?: (id: string, station: StationOverride) => Promise<void>;
+  /** Merge only into Verified GOD stations — never Unverified CSV. */
   onMergeIntoExisting?: (existingStationId: string) => Promise<void>;
+  /** Delete a nearby CSV Unverified reference so GOD create can proceed. */
+  onDeleteCsvReference?: (stationId: string) => Promise<void>;
+  /** When true, save creates/updates a Verified GOD station (Verify Location flow). */
+  verifyAsGodList?: boolean;
   /** Phase 7: Pre-populated nearby station from backend enrichment */
   initialNearbyStation?: DuplicateStationInfo | null;
 }
 
-export function AddStationModal({ isOpen, onClose, onAdd, editStation, onUpdate, onMergeIntoExisting, initialNearbyStation }: AddStationModalProps) {
+function mapDupePayload(raw: any): DuplicateStationInfo {
+  return {
+    id: raw.id,
+    name: raw.name,
+    plusCode: raw.plusCode || '',
+    address: raw.address || '',
+    brand: raw.brand || '',
+    status: raw.status || 'unknown',
+    distance: raw.distance ?? 0,
+    matchType: raw.matchType || 'geofence',
+    geofenceRadius: raw.geofenceRadius,
+  };
+}
+
+export function AddStationModal({
+  isOpen,
+  onClose,
+  onAdd,
+  editStation,
+  onUpdate,
+  onMergeIntoExisting,
+  onDeleteCsvReference,
+  verifyAsGodList = false,
+  initialNearbyStation,
+}: AddStationModalProps) {
   // Phase 5: Use React Query for parent companies caching
   const { data: parentCompaniesData = [] } = useQuery({
     queryKey: ['parentCompanies'],
@@ -76,12 +105,16 @@ export function AddStationModal({ isOpen, onClose, onAdd, editStation, onUpdate,
   const [showCopyField, setShowCopyField] = useState(false);
   const copyInputRef = React.useRef<HTMLInputElement>(null);
 
-  // --- Duplicate detection state (Phase 4) ---
-  const [duplicateStation, setDuplicateStation] = useState<DuplicateStationInfo | null>(initialNearbyStation || null);
+  // --- Duplicate detection: hard = Verified GOD; soft = CSV Unverified reference ---
+  const [duplicateStation, setDuplicateStation] = useState<DuplicateStationInfo | null>(null);
+  const [csvReference, setCsvReference] = useState<DuplicateStationInfo | null>(null);
   const [checkingDuplicate, setCheckingDuplicate] = useState(false);
   const [forceCreate, setForceCreate] = useState(false);
+  const [dismissedCsvId, setDismissedCsvId] = useState<string | null>(null);
+  const [deletingCsv, setDeletingCsv] = useState(false);
   
   const isEditMode = !!editStation;
+  const isVerifyGodFlow = !!verifyAsGodList;
 
   const [formData, setFormData] = useState({
     name: '',
@@ -100,9 +133,21 @@ export function AddStationModal({ isOpen, onClose, onAdd, editStation, onUpdate,
   useEffect(() => {
     if (isOpen) {
       setShowCopyField(false);
-      setDuplicateStation(initialNearbyStation || null);
       setCheckingDuplicate(false);
       setForceCreate(false);
+      setDismissedCsvId(null);
+      // Seed soft CSV reference from nearby enrichment if unverified; hard dupe only if verified
+      const nearby = initialNearbyStation || null;
+      if (nearby?.status === 'verified') {
+        setDuplicateStation(nearby);
+        setCsvReference(null);
+      } else if (nearby) {
+        setDuplicateStation(null);
+        setCsvReference(nearby);
+      } else {
+        setDuplicateStation(null);
+        setCsvReference(null);
+      }
       if (editStation) {
         // Pre-fill form with existing station data for edit mode
         setFormData({
@@ -159,7 +204,9 @@ export function AddStationModal({ isOpen, onClose, onAdd, editStation, onUpdate,
     setIsVerified(false);
     setPlusCodeSynced(false);
     setDuplicateStation(null);
+    setCsvReference(null);
     setForceCreate(false);
+    setDismissedCsvId(null);
     
     const trimmed = value.trim();
     if (!trimmed) {
@@ -178,33 +225,25 @@ export function AddStationModal({ isOpen, onClose, onAdd, editStation, onUpdate,
   const runDuplicateCheck = useCallback(async (plusCode: string, lat: number, lng: number) => {
     setCheckingDuplicate(true);
     setDuplicateStation(null);
+    setCsvReference(null);
     try {
       const excludeId = isEditMode ? editStation?.id : undefined;
       const dupeCheck = await fuelService.checkStationDuplicate(plusCode, lat, lng, excludeId, formData.category);
       if (dupeCheck?.isDuplicate && dupeCheck.existingStation) {
-        setDuplicateStation({
-          id: dupeCheck.existingStation.id,
-          name: dupeCheck.existingStation.name,
-          plusCode: dupeCheck.existingStation.plusCode || '',
-          address: dupeCheck.existingStation.address || '',
-          brand: dupeCheck.existingStation.brand || '',
-          status: dupeCheck.existingStation.status || 'unknown',
-          distance: dupeCheck.existingStation.distance ?? 0,
-          matchType: dupeCheck.existingStation.matchType || 'geofence',
-          geofenceRadius: dupeCheck.existingStation.geofenceRadius,
-        });
+        setDuplicateStation(mapDupePayload(dupeCheck.existingStation));
         setForceCreate(false);
-        console.log(`[Duplicate Check] Match found: ${dupeCheck.existingStation.name} (${dupeCheck.existingStation.matchType}, ${dupeCheck.existingStation.distance}m)`);
-      } else {
-        setDuplicateStation(null);
+        console.log(`[Duplicate Check] GOD match: ${dupeCheck.existingStation.name}`);
+      }
+      if (dupeCheck?.csvReference && dupeCheck.csvReference.id !== dismissedCsvId) {
+        setCsvReference(mapDupePayload(dupeCheck.csvReference));
+        console.log(`[Duplicate Check] CSV reference: ${dupeCheck.csvReference.name}`);
       }
     } catch (err) {
       console.warn('[Duplicate Check] Non-blocking failure:', err);
-      // Don't block the user — verification still succeeded
     } finally {
       setCheckingDuplicate(false);
     }
-  }, [isEditMode, editStation?.id, formData.category]);
+  }, [isEditMode, editStation?.id, formData.category, dismissedCsvId]);
 
   /**
    * PRIMARY FLOW: Verify GPS from Plus Code
@@ -426,35 +465,25 @@ export function AddStationModal({ isOpen, onClose, onAdd, editStation, onUpdate,
       return;
     }
 
-    // --- Final duplicate guard (Phase 5) ---
-    // If the user didn't go through Verify GPS (skipped straight to submit), run a synchronous check now
+    // --- Final hard-duplicate guard (Verified GOD only) ---
     if (!duplicateStation && !forceCreate) {
       const finalPlusCode = plusCodeInput.trim() || encodePlusCode(lat, lng, 11);
       try {
         setLoading(true);
         const excludeId = isEditMode ? editStation?.id : undefined;
         const dupeCheck = await fuelService.checkStationDuplicate(finalPlusCode, lat, lng, excludeId, formData.category);
+        if (dupeCheck?.csvReference && dupeCheck.csvReference.id !== dismissedCsvId) {
+          setCsvReference(mapDupePayload(dupeCheck.csvReference));
+        }
         if (dupeCheck?.isDuplicate && dupeCheck.existingStation) {
-          // Duplicate found at submit time — show warning and abort save
-          setDuplicateStation({
-            id: dupeCheck.existingStation.id,
-            name: dupeCheck.existingStation.name,
-            plusCode: dupeCheck.existingStation.plusCode || '',
-            address: dupeCheck.existingStation.address || '',
-            brand: dupeCheck.existingStation.brand || '',
-            status: dupeCheck.existingStation.status || 'unknown',
-            distance: dupeCheck.existingStation.distance ?? 0,
-            matchType: dupeCheck.existingStation.matchType || 'geofence',
-            geofenceRadius: dupeCheck.existingStation.geofenceRadius,
-          });
+          setDuplicateStation(mapDupePayload(dupeCheck.existingStation));
           setForceCreate(false);
           setLoading(false);
-          toast.warning(`Duplicate detected: "${dupeCheck.existingStation.name}". Resolve below before saving.`);
-          return; // Abort — user must choose Merge or Create Anyway
+          toast.warning(`Verified GOD duplicate: "${dupeCheck.existingStation.name}". Resolve below before saving.`);
+          return;
         }
       } catch (err) {
         console.warn('[Submit Duplicate Guard] Non-blocking failure:', err);
-        // Proceed with save — don't block on network errors
       }
     }
 
@@ -462,7 +491,6 @@ export function AddStationModal({ isOpen, onClose, onAdd, editStation, onUpdate,
     try {
       const normalizedName = normalizeStationName(formData.name);
       
-      // Auto-generate Plus Code if not provided but coords exist
       const finalPlusCode = plusCodeInput.trim() || encodePlusCode(lat, lng, 11);
       
       const newStation: StationOverride = {
@@ -478,40 +506,36 @@ export function AddStationModal({ isOpen, onClose, onAdd, editStation, onUpdate,
           phone: formData.phone,
         },
         category: formData.category,
-        status: (isEditMode && editStation?.status) ? editStation.status : ('unverified' as LocationStatus),
+        status: (isVerifyGodFlow
+          ? 'verified'
+          : (isEditMode && editStation?.status) ? editStation.status : ('unverified' as LocationStatus)) as LocationStatus,
         dataSource: (isEditMode && editStation?.dataSource) ? editStation.dataSource : 'manual',
         location: { lat, lng },
       };
 
-      // If user explicitly chose "Create Anyway", pass the override flag so the backend skips its own dupe check
       if (forceCreate) {
         (newStation as any)._overrideDuplicate = true;
       }
 
       if (isEditMode && editStation && onUpdate) {
         await onUpdate(editStation.id, newStation);
-        toast.success("Station updated successfully.");
+        toast.success(isVerifyGodFlow ? 'Verified station saved to GOD list.' : 'Station updated successfully.');
       } else {
         await onAdd(newStation);
-        toast.success("Station added successfully.");
+        toast.success('Station added successfully.');
       }
       onClose();
     } catch (error: any) {
-      // Handle 409 duplicate errors from the backend (belt-and-suspenders with the backend guard)
       if (error.duplicate && error.existingStation) {
-        setDuplicateStation({
-          id: error.existingStation.id,
-          name: error.existingStation.name,
-          plusCode: error.existingStation.plusCode || '',
-          address: error.existingStation.address || '',
-          brand: error.existingStation.brand || '',
-          status: error.existingStation.status || 'unknown',
-          distance: error.existingStation.distance ?? 0,
-          matchType: error.existingStation.matchType || 'geofence',
-          geofenceRadius: error.existingStation.geofenceRadius,
-        });
-        setForceCreate(false);
-        toast.warning(`Backend duplicate guard: "${error.existingStation.name}". Resolve below.`);
+        const status = error.existingStation.status || 'unknown';
+        if (status === 'unverified') {
+          setCsvReference(mapDupePayload(error.existingStation));
+          toast.info(`CSV reference nearby: "${error.existingStation.name}". Delete it or continue — nothing is copied to GOD.`);
+        } else {
+          setDuplicateStation(mapDupePayload(error.existingStation));
+          setForceCreate(false);
+          toast.warning(`Backend GOD duplicate: "${error.existingStation.name}". Resolve below.`);
+        }
       } else {
         console.error("Failed to add station:", error);
         toast.error("Failed to add station. Please try again.");
@@ -523,39 +547,203 @@ export function AddStationModal({ isOpen, onClose, onAdd, editStation, onUpdate,
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[540px] flex max-h-[90vh] flex-col gap-0 overflow-hidden p-0">
+      <DialogContent className="sm:max-w-lg w-[calc(100%-2rem)] flex max-h-[90vh] flex-col gap-0 overflow-hidden p-0">
         {/* Scroll body: avoids overflow when inputs grow (e.g. browser autofill) */}
-        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-6 pt-6 pb-6">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-5 pt-5 pb-5">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            {isEditMode ? (
+            {isVerifyGodFlow ? (
+              <>
+                <ShieldCheckIcon className="h-5 w-5 text-emerald-600" />
+                Verify Location — GOD List
+              </>
+            ) : isEditMode ? (
               <>
                 <Pencil className="h-5 w-5 text-amber-600" />
-                Edit Station — Verify Location
+                Edit Station
               </>
             ) : (
               <>
                 <Plus className="h-5 w-5 text-blue-600" />
-                Add New Station (Unverified)
+                Add to Unverified MGMT (CSV shelf)
               </>
             )}
           </DialogTitle>
           <DialogDescription>
-            {isEditMode ? (
+            {isVerifyGodFlow ? (
               <>
-                Edit <span className="font-semibold">{editStation?.name}</span> and verify its location. 
-                Enter or update the <span className="font-semibold text-violet-600">Plus Code</span>, then click "Verify GPS" to re-populate address &amp; coordinates.
+                Build your company GOD list from <span className="font-semibold">your</span> pin only.
+                CSV Unverified nearby is reference only — nothing is copied or merged from it.
+              </>
+            ) : isEditMode ? (
+              <>
+                Edit <span className="font-semibold">{editStation?.name}</span>. Enter a Plus Code, then Verify GPS.
               </>
             ) : (
               <>
-                Manually register a gas station in the unverified management queue. 
-                Enter a <span className="font-semibold text-violet-600">Plus Code</span> for highest accuracy, then click "Verify GPS" to auto-populate all location fields.
+                Add a draft to the CSV reference shelf (not GOD). Prefer Verify Location from the Resolution Queue for the company list.
               </>
             )}
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4 py-4">
+        <form onSubmit={handleSubmit} className="space-y-4 py-3">
+          {/* Decision cards above the fold */}
+          {duplicateStation && (
+            <div className="animate-in slide-in-from-top-2 duration-300">
+              <div className="bg-gradient-to-r from-red-50 to-orange-50 p-3 rounded-lg border-2 border-red-200 shadow-sm">
+                <div className="flex items-start gap-2">
+                  <ShieldAlert className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0 space-y-2">
+                    <h4 className="text-sm font-bold text-red-700">Match on Verified GOD list</h4>
+                    <p className="text-xs text-red-600 leading-relaxed">
+                      Within <span className="font-bold">{duplicateStation.distance}m</span> of{' '}
+                      <span className="font-semibold">{duplicateStation.name}</span>
+                      {duplicateStation.address ? ` (${duplicateStation.address})` : ''}
+                      {' '}— geofence {duplicateStation.geofenceRadius || 150}m.
+                    </p>
+                    <div className="grid grid-cols-2 gap-2 text-[10px] bg-white/60 rounded p-2 border border-red-100">
+                      <div>
+                        <span className="text-red-400 uppercase font-bold tracking-wide">Status</span>
+                        <p className="text-emerald-700 font-semibold">Verified (GOD)</p>
+                      </div>
+                      <div>
+                        <span className="text-red-400 uppercase font-bold tracking-wide">Distance</span>
+                        <p className="text-red-700 font-medium">{duplicateStation.distance}m</p>
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      {onMergeIntoExisting && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="h-auto py-2 px-3 text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-2 justify-start w-full"
+                          onClick={async () => {
+                            setLoading(true);
+                            try {
+                              await onMergeIntoExisting(duplicateStation.id);
+                              toast.success(`Merged into GOD station "${duplicateStation.name}".`);
+                              onClose();
+                            } catch (err) {
+                              console.error('[Merge Into Existing] Failed:', err);
+                              toast.error('Failed to merge into existing GOD station.');
+                            } finally {
+                              setLoading(false);
+                            }
+                          }}
+                          disabled={loading}
+                        >
+                          <Merge className="h-4 w-4 shrink-0" />
+                          <div className="text-left">
+                            <span className="font-semibold block">Merge into verified station</span>
+                            <span className="text-emerald-200 text-[10px] font-normal block mt-0.5">Attach this stop to the GOD list pin</span>
+                          </div>
+                        </Button>
+                      )}
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-auto py-2 px-3 text-xs border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 gap-2 justify-start w-full"
+                        onClick={() => {
+                          setForceCreate(true);
+                          setDuplicateStation(null);
+                          toast.info('Override accepted — create as a separate GOD station. Click save to confirm.');
+                        }}
+                      >
+                        <ShieldCheckIcon className="h-4 w-4 shrink-0 text-amber-600" />
+                        <div className="text-left">
+                          <span className="font-semibold block">Not a duplicate — create separate</span>
+                          <span className="text-amber-600 text-[10px] font-normal block mt-0.5">Confirmed different locations that happen to be nearby</span>
+                        </div>
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {csvReference && !duplicateStation && (
+            <div className="animate-in slide-in-from-top-2 duration-300">
+              <div className="bg-amber-50 p-3 rounded-lg border-2 border-amber-200 shadow-sm">
+                <div className="flex items-start gap-2">
+                  <Info className="h-5 w-5 text-amber-700 shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0 space-y-2">
+                    <h4 className="text-sm font-bold text-amber-900">CSV reference nearby (not GOD)</h4>
+                    <p className="text-xs text-amber-800 leading-relaxed">
+                      <span className="font-semibold">{csvReference.name}</span> is on your Unverified MGMT shelf
+                      ({csvReference.distance}m). Nothing from CSV will be copied into your GOD list.
+                    </p>
+                    <div className="grid grid-cols-2 gap-2 text-[10px] bg-white/70 rounded p-2 border border-amber-100">
+                      <div>
+                        <span className="text-amber-500 uppercase font-bold tracking-wide">Status</span>
+                        <p className="text-amber-800 font-semibold">Unverified (CSV shelf)</p>
+                      </div>
+                      <div>
+                        <span className="text-amber-500 uppercase font-bold tracking-wide">Distance</span>
+                        <p className="text-amber-800 font-medium">{csvReference.distance}m</p>
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      {onDeleteCsvReference && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="h-auto py-2 px-3 text-xs bg-amber-700 hover:bg-amber-800 text-white gap-2 justify-start w-full"
+                          disabled={deletingCsv || loading}
+                          onClick={async () => {
+                            setDeletingCsv(true);
+                            try {
+                              await onDeleteCsvReference(csvReference.id);
+                              setDismissedCsvId(csvReference.id);
+                              setCsvReference(null);
+                              toast.success('CSV reference deleted. Continue verifying your GOD station.');
+                            } catch (err) {
+                              console.error('[Delete CSV reference]', err);
+                              toast.error('Could not delete CSV reference.');
+                            } finally {
+                              setDeletingCsv(false);
+                            }
+                          }}
+                        >
+                          {deletingCsv ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4 shrink-0" />}
+                          <div className="text-left">
+                            <span className="font-semibold block">Delete CSV reference &amp; continue</span>
+                            <span className="text-amber-100 text-[10px] font-normal block mt-0.5">Matches your usual workflow</span>
+                          </div>
+                        </Button>
+                      )}
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-auto py-2 px-3 text-xs border-amber-300 bg-white text-amber-900 hover:bg-amber-50 gap-2 justify-start w-full"
+                        onClick={() => {
+                          setDismissedCsvId(csvReference.id);
+                          setCsvReference(null);
+                          toast.info('CSV kept as shelf reference. Saving uses only your form — nothing copied.');
+                        }}
+                      >
+                        <CheckCircle2 className="h-4 w-4 shrink-0 text-amber-700" />
+                        <div className="text-left">
+                          <span className="font-semibold block">Keep CSV, continue with my station</span>
+                          <span className="text-amber-600 text-[10px] font-normal block mt-0.5">No merge — your pin becomes GOD truth</span>
+                        </div>
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {forceCreate && !duplicateStation && (
+            <div className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
+              Creating near a Verified GOD station (override). Click save to confirm.
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-4">
             {/* Station Name */}
             <div className="col-span-2 space-y-2">
@@ -886,134 +1074,11 @@ export function AddStationModal({ isOpen, onClose, onAdd, editStation, onUpdate,
               </div>
             </div>
 
-            {/* ===== DUPLICATE STATION WARNING (Phase 4) ===== */}
-            {duplicateStation && (
-              <div className="col-span-2 animate-in slide-in-from-top-2 duration-300">
-                <div className="bg-gradient-to-r from-red-50 to-orange-50 p-4 rounded-lg border-2 border-red-200 shadow-sm">
-                  <div className="flex items-start gap-3">
-                    <div className="shrink-0 mt-0.5">
-                      <div className="h-8 w-8 rounded-full bg-red-100 flex items-center justify-center">
-                        <ShieldAlert className="h-4.5 w-4.5 text-red-600" />
-                      </div>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h4 className="text-sm font-bold text-red-700 mb-1">Duplicate Station Detected</h4>
-                      <p className="text-xs text-red-600 leading-relaxed">
-                        {duplicateStation.matchType === 'pluscode' ? (
-                          <>
-                            A station with Plus Code <span className="font-mono font-bold">{duplicateStation.plusCode}</span> already exists:{' '}
-                            <span className="font-semibold">{duplicateStation.name}</span>
-                            {duplicateStation.address && <span className="text-red-500"> ({duplicateStation.address})</span>}
-                          </>
-                        ) : (
-                          <>
-                            The coordinates fall within <span className="font-bold">{duplicateStation.distance}m</span> of existing station{' '}
-                            <span className="font-semibold">{duplicateStation.name}</span>
-                            {duplicateStation.address && <span className="text-red-500"> ({duplicateStation.address})</span>}
-                            <span className="text-red-500"> — geofence: {duplicateStation.geofenceRadius || 150}m</span>
-                          </>
-                        )}
-                      </p>
-
-                      {/* Existing station details */}
-                      <div className="mt-2 bg-white/60 rounded-md p-2 border border-red-100">
-                        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[10px]">
-                          <div>
-                            <span className="text-red-400 uppercase font-bold tracking-wide">Station</span>
-                            <p className="text-red-700 font-medium truncate">{duplicateStation.name}</p>
-                          </div>
-                          <div>
-                            <span className="text-red-400 uppercase font-bold tracking-wide">Brand</span>
-                            <p className="text-red-700 font-medium">{duplicateStation.brand || 'Unknown'}</p>
-                          </div>
-                          <div>
-                            <span className="text-red-400 uppercase font-bold tracking-wide">Status</span>
-                            <p className={cn(
-                              "font-medium capitalize text-[11px] inline-flex items-center gap-1 mt-0.5",
-                              duplicateStation.status === 'verified' ? 'text-emerald-700' :
-                              duplicateStation.status === 'unverified' ? 'text-amber-700' :
-                              'text-red-700'
-                            )}>
-                              <span className={cn(
-                                "inline-block h-1.5 w-1.5 rounded-full",
-                                duplicateStation.status === 'verified' ? 'bg-emerald-500' :
-                                duplicateStation.status === 'unverified' ? 'bg-amber-500' :
-                                'bg-red-500'
-                              )} />
-                              {duplicateStation.status}
-                              {duplicateStation.status === 'verified' && (
-                                <span className="text-[9px] text-emerald-500 font-normal">(merge recommended)</span>
-                              )}
-                            </p>
-                          </div>
-                          <div>
-                            <span className="text-red-400 uppercase font-bold tracking-wide">Distance</span>
-                            <p className="text-red-700 font-medium">{duplicateStation.distance}m ({duplicateStation.matchType})</p>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Action buttons */}
-                      <div className="mt-3 space-y-2">
-                        <p className="text-[10px] font-semibold text-red-500 uppercase tracking-wide">Choose an action:</p>
-                        <div className="flex flex-col gap-2">
-                          {onMergeIntoExisting && (
-                            <Button
-                              type="button"
-                              size="sm"
-                              className="h-auto py-2 px-3 text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-2 justify-start w-full"
-                              onClick={async () => {
-                                setLoading(true);
-                                try {
-                                  await onMergeIntoExisting(duplicateStation.id);
-                                  toast.success(`Merged into "${duplicateStation.name}" successfully.`);
-                                  onClose();
-                                } catch (err) {
-                                  console.error('[Merge Into Existing] Failed:', err);
-                                  toast.error('Failed to merge into existing station.');
-                                } finally {
-                                  setLoading(false);
-                                }
-                              }}
-                              disabled={loading}
-                            >
-                              <Merge className="h-4 w-4 shrink-0" />
-                              <div className="text-left">
-                                <span className="font-semibold block">Merge Into {duplicateStation.name.length > 25 ? duplicateStation.name.slice(0, 25) + '...' : duplicateStation.name}</span>
-                                <span className="text-emerald-200 text-[10px] font-normal block mt-0.5">Combine this data into the existing station record</span>
-                              </div>
-                            </Button>
-                          )}
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            className="h-auto py-2 px-3 text-xs border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 hover:text-amber-900 hover:border-amber-400 gap-2 justify-start w-full"
-                            onClick={() => {
-                              setForceCreate(true);
-                              setDuplicateStation(null);
-                              toast.info('Override accepted — this is a separate station. Click the save button to confirm.');
-                            }}
-                          >
-                            <ShieldCheckIcon className="h-4 w-4 shrink-0 text-amber-600" />
-                            <div className="text-left">
-                              <span className="font-semibold block">Not a Duplicate — Create as Separate Station</span>
-                              <span className="text-amber-600 text-[10px] font-normal block mt-0.5">I've confirmed these are different locations that happen to be nearby</span>
-                            </div>
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
             {/* Duplicate check in progress indicator */}
             {checkingDuplicate && (
               <div className="col-span-2 flex items-center justify-center gap-2 py-1.5">
                 <Loader2 className="h-3.5 w-3.5 animate-spin text-violet-500" />
-                <span className="text-xs text-violet-600 font-medium">Checking for duplicate stations...</span>
+                <span className="text-xs text-violet-600 font-medium">Checking GOD list &amp; CSV shelf…</span>
               </div>
             )}
 
@@ -1050,7 +1115,9 @@ export function AddStationModal({ isOpen, onClose, onAdd, editStation, onUpdate,
                   ? 'bg-amber-600 hover:bg-amber-700'
                   : duplicateStation
                     ? 'bg-red-400 cursor-not-allowed opacity-60'
-                    : 'bg-blue-600 hover:bg-blue-700'
+                    : isVerifyGodFlow
+                      ? 'bg-emerald-600 hover:bg-emerald-700'
+                      : 'bg-blue-600 hover:bg-blue-700'
               }
             >
               {loading ? (
@@ -1061,14 +1128,16 @@ export function AddStationModal({ isOpen, onClose, onAdd, editStation, onUpdate,
               ) : forceCreate ? (
                 <>
                   <AlertTriangle className="mr-1.5 h-4 w-4" />
-                  {isEditMode ? 'Update Anyway (Override)' : 'Create Anyway (Override)'}
+                  Create separate GOD station
                 </>
               ) : duplicateStation ? (
-                'Resolve Duplicate First'
+                'Resolve GOD duplicate first'
+              ) : isVerifyGodFlow ? (
+                'Save to GOD list'
               ) : isEditMode ? (
                 'Update Station'
               ) : (
-                'Add Station'
+                'Add to CSV shelf'
               )}
             </Button>
           </DialogFooter>

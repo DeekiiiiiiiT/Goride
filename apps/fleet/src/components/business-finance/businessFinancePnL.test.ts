@@ -57,6 +57,13 @@ describe('buildPnLFromCanonicalEvents — toll netting', () => {
     const tolls = pnl.lines.find((l) => l.id === 'tolls')!;
     expect(tolls.amount).toBe(-0);
     expect(pnl.tollsRecoveredWashed).toBe(100);
+    expect(pnl.lines.find((l) => l.id === 'tolls_memo')).toBeUndefined();
+    expect(pnl.tollBreakdown).toEqual({
+      grossCharges: 100,
+      alreadyCovered: 100,
+      chargedToDrivers: 0,
+      fleetLoss: 0,
+    });
   });
 
   it('nets a phantom offset to $0', () => {
@@ -171,6 +178,34 @@ describe('buildPnLFromCanonicalEvents — toll netting', () => {
     const pnl = buildPnLFromCanonicalEvents(events, period);
     const tolls = pnl.lines.find((l) => l.id === 'tolls')!;
     expect(tolls.amount).toBe(-40);
+    expect(pnl.tollBreakdown?.chargedToDrivers).toBe(0);
+    expect(pnl.tollBreakdown?.fleetLoss).toBe(40);
+  });
+
+  it('shows Charge Driver amounts on the Tolls accordion breakdown only', () => {
+    const events = [
+      tollCharge({ netAmount: 100, grossAmount: 100 }),
+      {
+        id: 'driver-charge',
+        eventType: 'toll_charged_to_driver',
+        date: '2026-07-02',
+        driverId: 'd1',
+        sourceType: 'toll_resolution',
+        sourceId: 'toll-1',
+        netAmount: 60,
+        grossAmount: 60,
+        direction: 'outflow',
+        platform: 'Roam',
+      },
+    ];
+    const pnl = buildPnLFromCanonicalEvents(events, period);
+    expect(pnl.lines.find((l) => l.id === 'tolls')!.amount).toBe(-100);
+    expect(pnl.tollBreakdown).toEqual({
+      grossCharges: 100,
+      alreadyCovered: 0,
+      chargedToDrivers: 60,
+      fleetLoss: 100,
+    });
   });
 
   it('flags pending (unresolved) trip-level tolls as provisional', () => {

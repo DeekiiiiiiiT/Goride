@@ -297,9 +297,11 @@ export function buildCanonicalTollEventFromTollLedger(entry: TollLedgerLike): Re
     };
   }
 
-  if (t === "refund" || t === "top_up") {
+  // Real operator refunds reduce fleet Tolls. Top-ups are tag funding (prepaid
+  // cash), not a toll recovery — never emit toll_refund for top_up.
+  if (t === "refund") {
     return {
-      idempotencyKey: `toll_ledger:${id}|toll_${t}`,
+      idempotencyKey: `toll_ledger:${id}|toll_refund`,
       date,
       driverId,
       eventType: "toll_refund",
@@ -311,7 +313,7 @@ export function buildCanonicalTollEventFromTollLedger(entry: TollLedgerLike): Re
       sourceId: id,
       vehicleId: typeof entry.vehicleId === "string" && entry.vehicleId ? entry.vehicleId : undefined,
       platform: "Roam",
-      description: entry.description?.trim() || (t === "top_up" ? "Toll top-up" : "Toll refund"),
+      description: entry.description?.trim() || "Toll refund",
       metadata: { tollLedgerId: id, tollType: t },
     };
   }

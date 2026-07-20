@@ -250,7 +250,7 @@ export function LearntLocationsTab({ onPromoted, onVerifyLocation }: LearntLocat
     }
   };
 
-  const filteredStations = [...verifiedStations, ...unverifiedStations].filter(s => 
+  const filteredStations = verifiedStations.filter(s => 
     s.name?.toLowerCase().includes(mergeSearch.toLowerCase()) ||
     s.brand?.toLowerCase().includes(mergeSearch.toLowerCase())
   );
@@ -291,7 +291,7 @@ export function LearntLocationsTab({ onPromoted, onVerifyLocation }: LearntLocat
       filtered.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
     }
     return filtered;
-  }, [linkingLocation, verifiedStations, unverifiedStations, linkSearch, linkSortBy]);
+  }, [linkingLocation, verifiedStations, linkSearch, linkSortBy]);
 
   /** Format distance for display */
   const formatDistance = (m: number): string => {
@@ -893,7 +893,7 @@ export function LearntLocationsTab({ onPromoted, onVerifyLocation }: LearntLocat
               Link to Existing Station
             </DialogTitle>
             <DialogDescription>
-              Select a verified or unverified station to link this learnt transaction to. The GPS coordinates will be added as an alias on the target station.
+              Select a Verified GOD station to link this learnt transaction to. CSV Unverified is never offered.
             </DialogDescription>
           </DialogHeader>
 

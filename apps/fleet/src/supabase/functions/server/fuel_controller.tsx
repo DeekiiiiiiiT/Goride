@@ -1597,9 +1597,10 @@ async function findDuplicateStation(
     lat: number,
     lng: number,
     excludeStationId?: string,
-    category?: string
+    category?: string,
+    statusFilter: 'verified' | 'unverified' | 'all' = 'all'
 ): Promise<{ station: any; matchType: 'pluscode' | 'geofence'; distance: number } | null> {
-    // Fetch with keys for robust exclusion â€” value.id may be stale/missing,
+    // Fetch with keys for robust exclusion — value.id may be stale/missing,
     // so we self-heal .id from the KV key to guarantee the exclude check works.
     const { data: rawStations } = await supabase
         .from("kv_store_37f42386")
@@ -1613,18 +1614,25 @@ async function findDuplicateStation(
         }
         return station;
     });
+
+    const passesStatusFilter = (station: any) => {
+        if (statusFilter === 'all') return true;
+        const status = station.status || 'unverified';
+        return status === statusFilter;
+    };
     
     const normalizedInput = normalizePlusCode(plusCode);
     
     if (excludeStationId) {
-        console.log(`[Duplicate Check] Excluding station ID: "${excludeStationId}" from search (${allStations.length} total stations)`);
+        console.log(`[Duplicate Check] Excluding station ID: "${excludeStationId}" from search (${allStations.length} total, filter=${statusFilter})`);
     }
     
     // --- Pass 1: Plus Code match (highest confidence, exact match only) ---
     if (normalizedInput && normalizedInput.includes('+')) {
-        console.log(`[Duplicate Check] Pass 1: checking Plus Code "${normalizedInput}" against ${allStations.length} stations (exact match only)`);
+        console.log(`[Duplicate Check] Pass 1: checking Plus Code "${normalizedInput}" against ${allStations.length} stations (exact match only, filter=${statusFilter})`);
         for (const station of allStations) {
             if (excludeStationId && station.id === excludeStationId) continue;
+            if (!passesStatusFilter(station)) continue;
             if (category && station.category && station.category !== category) continue;
             
             const stationCode = normalizePlusCode(station.plusCode);
@@ -1632,7 +1640,7 @@ async function findDuplicateStation(
                 const dist = (station.location?.lat && station.location?.lng)
                     ? calculateDistance(lat, lng, station.location.lat, station.location.lng)
                     : 0;
-                console.log(`[Duplicate Check] Plus Code EXACT match: "${normalizedInput}" === "${stationCode}" â†’ station "${station.name}", distance: ${Math.round(dist)}m`);
+                console.log(`[Duplicate Check] Plus Code EXACT match: "${normalizedInput}" === "${stationCode}" → station "${station.name}", distance: ${Math.round(dist)}m`);
                 return { station, matchType: 'pluscode', distance: Math.round(dist) };
             }
         }
@@ -1644,12 +1652,11 @@ async function findDuplicateStation(
     
     for (const station of allStations) {
         if (excludeStationId && station.id === excludeStationId) continue;
+        if (!passesStatusFilter(station)) continue;
         if (category && station.category && station.category !== category) continue;
         
-        // Use the station's configured geofence radius, or default
         const stationRadius = station.geofenceRadius || 150;
         
-        // Check primary location
         if (station.location?.lat && station.location?.lng) {
             const dist = calculateDistance(lat, lng, station.location.lat, station.location.lng);
             if (dist <= stationRadius) {
@@ -1659,7 +1666,6 @@ async function findDuplicateStation(
             }
         }
         
-        // Check GPS aliases (merged learnt locations)
         if (station.gpsAliases && Array.isArray(station.gpsAliases)) {
             for (const alias of station.gpsAliases) {
                 if (alias.lat && alias.lng) {
@@ -1675,11 +1681,26 @@ async function findDuplicateStation(
     }
     
     if (closestMatch) {
-        console.log(`[Duplicate Check] Geofence overlap: coordinates (${lat}, ${lng}) within ${closestMatch.distance}m of station "${closestMatch.station.name}" (radius: ${closestMatch.station.geofenceRadius || 150}m)`);
+        console.log(`[Duplicate Check] Geofence overlap: coordinates (${lat}, ${lng}) within ${closestMatch.distance}m of station "${closestMatch.station.name}" (radius: ${closestMatch.station.geofenceRadius || 150}m, status=${closestMatch.station.status})`);
         return { station: closestMatch.station, matchType: 'geofence', distance: closestMatch.distance };
     }
     
     return null;
+}
+
+/** Map dupe result to the API shape used by check-duplicate / 409 responses. */
+function mapDuplicateStationPayload(result: { station: any; matchType: 'pluscode' | 'geofence'; distance: number }) {
+    return {
+        id: result.station.id,
+        name: result.station.name,
+        plusCode: result.station.plusCode || '',
+        address: result.station.address || '',
+        brand: result.station.brand || '',
+        status: result.station.status || 'unknown',
+        distance: result.distance,
+        matchType: result.matchType,
+        geofenceRadius: result.station.geofenceRadius || 150,
+    };
 }
 
 // --- PHASE 6: MASTER LEDGER & INTEGRITY GAP ---
@@ -1763,6 +1784,10 @@ app.post(`${BASE_PATH}/stations/promote-learnt`, async (c) => {
             // Merge into existing station as an alias
             const station = await kv.get(`station:${targetStationId}`);
             if (!station) return c.json({ error: "Target station not found" }, 404);
+            // GOD list only — never merge live stops into CSV Unverified shelf
+            if (station.status !== 'verified') {
+                return c.json({ error: "Cannot merge into Unverified CSV reference. Delete the CSV row and create a Verified station from your location, or merge into an existing Verified GOD station." }, 400);
+            }
 
             const newAlias = {
                 id: crypto.randomUUID(),
@@ -1793,7 +1818,10 @@ app.post(`${BASE_PATH}/stations/promote-learnt`, async (c) => {
             const checkPlusCode = stationData?.plusCode || learnt.plusCode || null;
 
             if (checkPlusCode || (checkLat && checkLng)) {
-                const dupeResult = await findDuplicateStation(checkPlusCode, checkLat, checkLng, undefined, stationData?.category);
+                const overrideDupe = !!(stationData as any)?._overrideDuplicate;
+                const dupeResult = overrideDupe
+                    ? null
+                    : await findDuplicateStation(checkPlusCode, checkLat, checkLng, undefined, stationData?.category, 'verified');
 
                 if (dupeResult) {
                     // Auto-merge into the existing station instead of creating a duplicate
@@ -1831,15 +1859,16 @@ app.post(`${BASE_PATH}/stations/promote-learnt`, async (c) => {
                 }
             }
 
-            // No duplicate â€” proceed with normal station creation
-            const newStationId = stationData.id || crypto.randomUUID();
+            // No duplicate — proceed with normal station creation from operator form (GOD list)
+            const newStationId = crypto.randomUUID();
+            const { _overrideDuplicate, ...cleanStationData } = stationData || {};
             const newStation = {
-                ...stationData,
+                ...cleanStationData,
                 id: newStationId,
                 status: 'verified',
                 verifiedAt: new Date().toISOString(),
                 verificationMethod: 'manual_promotion',
-                location: learnt.location,
+                location: stationData?.location || learnt.location,
                 stats: { totalVisits: 1, lastVisited: new Date().toISOString() }
             };
 
@@ -3640,26 +3669,15 @@ app.get(`${BASE_PATH}/stations/check-duplicate`, async (c) => {
             return c.json({ isDuplicate: false, message: 'No coordinates or Plus Code provided' });
         }
 
-        const result = await findDuplicateStation(plusCode || null, lat, lng, excludeId, category);
+        // Hard duplicate = Verified GOD list only. Unverified CSV is soft reference only.
+        const hard = await findDuplicateStation(plusCode || null, lat, lng, excludeId, category, 'verified');
+        const soft = await findDuplicateStation(plusCode || null, lat, lng, excludeId, category, 'unverified');
 
-        if (result) {
-            return c.json({
-                isDuplicate: true,
-                existingStation: {
-                    id: result.station.id,
-                    name: result.station.name,
-                    plusCode: result.station.plusCode || '',
-                    address: result.station.address || '',
-                    brand: result.station.brand || '',
-                    status: result.station.status || 'unknown',
-                    distance: result.distance,
-                    matchType: result.matchType,
-                    geofenceRadius: result.station.geofenceRadius || 150,
-                },
-            });
-        }
-
-        return c.json({ isDuplicate: false });
+        return c.json({
+            isDuplicate: !!hard,
+            existingStation: hard ? mapDuplicateStationPayload(hard) : null,
+            csvReference: soft ? mapDuplicateStationPayload(soft) : null,
+        });
     } catch (e: any) {
         console.error('[Check Duplicate] Error:', e);
         return c.json({ error: e.message }, 500);
@@ -3786,7 +3804,8 @@ app.post(`${BASE_PATH}/stations`, async (c) => {
                     stationLat,
                     stationLng,
                     excludeId,
-                    station.category
+                    station.category,
+                    'verified'
                 );
 
                 if (dupeResult) {
@@ -3988,13 +4007,11 @@ app.post(`${BASE_PATH}/stations`, async (c) => {
         const stationLatPost = station.location?.lat ?? 0;
         const stationLngPost = station.location?.lng ?? 0;
         if (!wasOverridden && (station.plusCode || (stationLatPost && stationLngPost))) {
-            const postSaveDupe = await findDuplicateStation(
-                station.plusCode || null,
+            const postSaveDupe = await findDuplicateStation(station.plusCode || null,
                 stationLatPost,
                 stationLngPost,
                 station.id, // exclude self
-                station.category
-            );
+                station.category, 'verified');
             if (postSaveDupe) {
                 // Race condition detected â€” roll back the just-saved station
                 await kv.del(`station:${station.id}`);
@@ -4556,48 +4573,15 @@ app.post(`${BASE_PATH}/learnt-locations/promote`, async (c) => {
         const learnt = await kv.get(`learnt_location:${id}`);
         if (!learnt) return c.json({ error: "Learnt location not found" }, 404);
 
-        // Phase 4.2: Before creating a new station, check if an Unverified (MGMT) station
-        // GPS-matches this learnt location. If so, promote that existing station instead.
-        const allStations = await kv.getByPrefix("station:") || [];
-        const unverifiedStations = allStations.filter((s: any) => s.status === 'unverified');
-        
-        const matchedUnverified = findMatchingStation(
-            learnt.location.lat,
-            learnt.location.lng,
-            unverifiedStations,
-            150 // 150m matching radius
-        );
-
+        // CSV Unverified shelf is reference-only — never promote/copy CSV into GOD.
+        // Only auto-merge against Verified GOD stations; otherwise create fresh from operator details.
         let promotedStation;
-
-        if (matchedUnverified) {
-            // Promote the existing unverified station to verified (no duplicate created)
-            matchedUnverified.status = 'verified';
-            matchedUnverified.promotedAt = new Date().toISOString();
-            matchedUnverified.promotionMethod = 'learnt_promote_match';
-            matchedUnverified.stats = {
-                ...(matchedUnverified.stats || {}),
-                totalVisits: ((matchedUnverified.stats?.totalVisits) || 0) + 1,
-                lastUpdated: new Date().toISOString()
-            };
-            // Merge any enriching details from the learnt promote form
-            if (stationDetails.name && stationDetails.name !== 'New Verified Station') {
-                matchedUnverified.name = stationDetails.name;
-            }
-            if (stationDetails.brand && stationDetails.brand !== 'Independent') {
-                matchedUnverified.brand = stationDetails.brand;
-            }
-            await kv.set(`station:${matchedUnverified.id}`, matchedUnverified);
-            promotedStation = matchedUnverified;
-            console.log(`[Promote] Learnt location ${id} matched Unverified station ${matchedUnverified.id} â€” promoted existing station to Verified.`);
-        } else {
-            // Phase 8.1: Before creating a new station, check ALL stations for duplicates
-            // (the findMatchingStation above only checked unverified stations)
-            const locLat = learnt.location?.lat ?? 0;
-            const locLng = learnt.location?.lng ?? 0;
+        {
+            const locLat = stationDetails?.location?.lat ?? learnt.location?.lat ?? 0;
+            const locLng = stationDetails?.location?.lng ?? learnt.location?.lng ?? 0;
             const locPlusCode = stationDetails?.plusCode || learnt.plusCode || null;
 
-            const dupeResult = await findDuplicateStation(locPlusCode, locLat, locLng, undefined, stationDetails?.category);
+            const dupeResult = await findDuplicateStation(locPlusCode, locLat, locLng, undefined, stationDetails?.category, 'verified');
 
             if (dupeResult) {
                 // Auto-merge into the existing station instead of creating a duplicate
@@ -4638,7 +4622,7 @@ app.post(`${BASE_PATH}/learnt-locations/promote`, async (c) => {
                 id: crypto.randomUUID(),
                 status: 'verified',
                 dataSource: 'manual',
-                location: learnt.location,
+                location: stationDetails?.location || learnt.location,
                 promotedAt: new Date().toISOString(),
                 promotionMethod: 'learnt_promote_new',
                 createdAt: new Date().toISOString()
@@ -4662,7 +4646,7 @@ app.post(`${BASE_PATH}/learnt-locations/promote`, async (c) => {
         }
         console.log(`[Promote] Learnt ${id} â†’ station ${promotedStation.id}, linked ${linkedCount} fuel entries, released ${releasedCount} held transactions.`);
 
-        return c.json({ success: true, data: promotedStation, matchedExisting: !!matchedUnverified, linkedEntries: linkedCount, releasedTransactions: releasedCount });
+        return c.json({ success: true, data: promotedStation, matchedExisting: false, linkedEntries: linkedCount, releasedTransactions: releasedCount });
     } catch (e: any) {
         return c.json({ error: e.message }, 500);
     }
@@ -4739,13 +4723,11 @@ app.post(`${BASE_PATH}/learnt-locations/merge`, async (c) => {
 
         console.log(`[Merge] Phase 8.2 audit â€” Merging "${learnt.name || 'Unknown'}" (${learnt.location?.lat?.toFixed(6)}, ${learnt.location?.lng?.toFixed(6)}) into "${station.name}" (status: ${station.status}, plusCode: ${station.plusCode || 'none'})`);
 
-        // Phase 4.2: If target station is unverified, auto-promote it to verified on merge
-        const wasUnverified = station.status === 'unverified';
-        if (wasUnverified) {
-            station.status = 'verified';
-            station.promotedAt = new Date().toISOString();
-            station.promotionMethod = 'learnt_merge_promote';
-            console.log(`[Merge] Unverified station ${targetStationId} auto-promoted to Verified via merge with learnt location ${id}.`);
+        // GOD list only — never merge into / promote CSV Unverified shelf
+        if (station.status !== 'verified') {
+            return c.json({
+                error: "Cannot merge into Unverified CSV reference. Delete the CSV row and verify a new GOD station from your location, or merge into an existing Verified station.",
+            }, 400);
         }
 
         // Update master pin if requested
@@ -4786,7 +4768,7 @@ app.post(`${BASE_PATH}/learnt-locations/merge`, async (c) => {
         }
         console.log(`[Merge] Learnt ${id} â†’ station ${targetStationId}, linked ${linkedCount} fuel entries.`);
 
-        return c.json({ success: true, promoted: wasUnverified, masterPinUpdated: updateMasterPin, linkedEntries: linkedCount });
+        return c.json({ success: true, promoted: false, masterPinUpdated: updateMasterPin, linkedEntries: linkedCount });
     } catch (e: any) {
         return c.json({ error: e.message }, 500);
     }

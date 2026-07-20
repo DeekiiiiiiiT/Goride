@@ -171,6 +171,13 @@ export function OverviewTab({ overview, onNavigateTab, onNavigatePage }: Props) 
             value={String(risks.highCashDrivers)}
             onClick={() => onNavigateTab('driver-balances')}
           />
+          <Row
+            label="Tag tolls missing from P&L"
+            hint="Toll Reconciliation"
+            value={String(risks.tollVarianceFlags)}
+            valueClassName={risks.tollVarianceFlags > 0 ? 'text-amber-700' : undefined}
+            onClick={() => onNavigatePage?.('toll-tags')}
+          />
         </CardContent>
       </Card>
     </div>

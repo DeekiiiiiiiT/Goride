@@ -89,9 +89,23 @@ export function StationDatabaseView({
 
     setEditingStation(pseudoStation);
     setVerifyingLearntId(learntLoc.id);
-    setVerifyingNearbyStation(learntLoc.nearbyStation || null);
+    const nearby = learntLoc.nearbyStation || null;
+    if (nearby?.id) {
+      const fromStore = stationOverrides[nearby.id];
+      setVerifyingNearbyStation({
+        ...nearby,
+        status: fromStore?.status || nearby.status || 'unverified',
+        brand: fromStore?.brand || nearby.brand || '',
+        address: fromStore?.address || nearby.address || '',
+        plusCode: fromStore?.plusCode || nearby.plusCode || '',
+        geofenceRadius: fromStore?.geofenceRadius || nearby.geofenceRadius,
+        matchType: nearby.matchType || 'geofence',
+      });
+    } else {
+      setVerifyingNearbyStation(null);
+    }
     setIsAddStationOpen(true);
-  }, []);
+  }, [stationOverrides]);
 
   const fetchData = useCallback(async () => {
     setIsBackendLoading(true);
@@ -489,9 +503,8 @@ export function StationDatabaseView({
               <TabsTrigger value="parent-company">Parent Company</TabsTrigger>
               <TabsTrigger value="unverified-stations" className="flex items-center gap-1.5">
                 Unverified
-                <Badge variant="outline" className="h-4 px-1 text-[8px] border-slate-300 text-slate-400">MGMT</Badge>
+                <Badge variant="outline" className="h-4 px-1 text-[8px] border-slate-300 text-slate-400">CSV</Badge>
               </TabsTrigger>
-              <TabsTrigger value="accepted-stations">Accepted Gas Stations</TabsTrigger>
               <TabsTrigger value="non-fuel">Non-Fuel Locations</TabsTrigger>
               <TabsTrigger value="resolution-queue" className="flex items-center gap-1.5">
                 <Inbox className="h-3.5 w-3.5 opacity-70" />
@@ -538,8 +551,12 @@ export function StationDatabaseView({
              <ParentCompanyManager />
           </TabsContent>
 
-          {/* --- Unverified Gas Stations Tab --- */}
+          {/* --- Unverified Gas Stations Tab (CSV reference shelf only) --- */}
           <TabsContent value="unverified-stations" className="m-0 p-0 border-0">
+             <div className="mx-3 mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+               <span className="font-semibold">CSV reference shelf only.</span> Nothing here is merged or copied into your Verified GOD list.
+               Usual workflow: delete a nearby CSV row, then Verify Location from the Resolution Queue with your own pin.
+             </div>
              <div className="border-b border-slate-100 bg-white p-3 flex justify-end gap-3 items-center">
                {/* Preferred Toggle */}
                 <div className="flex items-center space-x-2 mr-2">
@@ -598,14 +615,6 @@ export function StationDatabaseView({
                     await handleConfirmDelete(ids);
                   }}
                />
-             </div>
-          </TabsContent>
-
-          {/* --- Accepted Gas Stations Tab --- */}
-          <TabsContent value="accepted-stations" className="m-0 p-0 border-0">
-             <div className="flex flex-col items-center justify-center py-20 text-slate-500">
-               <p className="text-lg font-medium">Accepted Gas Stations</p>
-               <p className="text-sm">Information for this section will be added soon.</p>
              </div>
           </TabsContent>
 
@@ -714,89 +723,93 @@ export function StationDatabaseView({
         }}
         onAdd={handleManualAdd}
         editStation={editingStation}
+        verifyAsGodList={!!verifyingLearntId}
         initialNearbyStation={verifyingNearbyStation}
+        onDeleteCsvReference={async (stationId: string) => {
+          await fuelService.deleteStation(stationId);
+          setStationOverrides((prev) => {
+            const next = { ...prev };
+            delete next[stationId];
+            return next;
+          });
+          await fetchData();
+        }}
         onMergeIntoExisting={async (existingStationId: string) => {
-          // Phase 5: "Merge Into Existing" button in the duplicate warning
+          // Merge only into Verified GOD — backend rejects Unverified CSV
           if (verifyingLearntId) {
-            // Came from Learnt tab → Verify flow: merge the learnt location into the existing station
             const promoteResult = await api.promoteLearntLocationToMaster({
               learntId: verifyingLearntId,
               action: 'merge',
               targetStationId: existingStationId,
             });
             const linked = promoteResult?.linkedEntries || 0;
-            toast.success('Learnt location merged into existing station.', {
+            toast.success('Merged into Verified GOD station.', {
               description: linked > 0
-                ? `${linked} fuel transaction${linked > 1 ? 's' : ''} linked. Anomaly resolved.`
-                : 'The learnt location has been cleared from the Evidence Bridge.',
+                ? `${linked} fuel transaction${linked > 1 ? 's' : ''} linked.`
+                : 'Learnt staging cleared.',
               icon: <ShieldCheck className="h-4 w-4 text-emerald-500" />,
             });
             setVerifyingLearntId(null);
             await fetchData();
           } else {
-            // Regular add-station flow: no learnt location to merge — just inform the user
-            toast.info('Station already exists at this location. No new station was created.');
+            toast.info('Station already exists on the GOD list. No new station was created.');
           }
         }}
         onUpdate={async (id, stationData) => {
-          // Merge the updated fields while preserving existing metadata
+          // Verify Location from Resolution Queue: create fresh GOD from form only — never seed from CSV
+          if (verifyingLearntId) {
+            try {
+              const promoteResult = await api.promoteLearntLocationToMaster({
+                learntId: verifyingLearntId,
+                action: 'create',
+                stationData: {
+                  ...stationData,
+                  status: 'verified',
+                  dataSource: 'manual',
+                },
+              });
+
+              if (promoteResult?.autoMerged) {
+                const linked = promoteResult?.linkedEntries || 0;
+                const mergedName = promoteResult?.data?.name || 'existing GOD station';
+                toast.success(`Matched existing GOD station "${mergedName}".`, {
+                  description: `${promoteResult.message || ''}${linked > 0 ? ` ${linked} transaction${linked > 1 ? 's' : ''} linked.` : ''}`,
+                  icon: <ShieldCheck className="h-4 w-4 text-emerald-500" />,
+                });
+              } else {
+                const linked = promoteResult?.linkedEntries || 0;
+                toast.success('Saved to Verified GOD list from your location.', {
+                  description: linked > 0
+                    ? `${linked} fuel transaction${linked > 1 ? 's' : ''} linked.`
+                    : 'Payment holds for this stop will clear when matching picks up your pin.',
+                  icon: <ShieldCheck className="h-4 w-4 text-emerald-500" />,
+                });
+              }
+              setVerifyingLearntId(null);
+              await fetchData();
+            } catch (promoteErr: any) {
+              console.error('[Verify Learnt] Failed to promote:', promoteErr);
+              toast.error(promoteErr?.message || 'Failed to save Verified GOD station.');
+              throw promoteErr;
+            }
+            return;
+          }
+
+          // Regular edit of an existing station record
           const current = stationOverrides[id] || {};
           const updated: StationOverride = {
             ...current,
             ...stationData,
             id,
-            // Preserve the existing status (unverified) and dataSource
             status: current.status || stationData.status,
             dataSource: current.dataSource || stationData.dataSource,
-            // Preserve geofenceRadius: use modal value if set, otherwise keep existing
             geofenceRadius: stationData.geofenceRadius ?? current.geofenceRadius,
           };
           
           try {
             await fuelService.saveStation(updated);
             setStationOverrides(prev => ({ ...prev, [id]: updated }));
-            // Close the detail sheet to reflect changes when it re-opens
             setSelectedStation(null);
-
-            // If this was triggered from the Learnt tab's "Verify" button,
-            // also promote/remove the learnt location from the staging area
-            if (verifyingLearntId) {
-              try {
-                const promoteResult = await api.promoteLearntLocationToMaster({
-                  learntId: verifyingLearntId,
-                  action: 'create',
-                  stationData: updated,
-                });
-
-                if (promoteResult?.autoMerged) {
-                  // Backend detected a duplicate and auto-merged instead of creating
-                  const linked = promoteResult?.linkedEntries || 0;
-                  const mergedName = promoteResult?.data?.name || 'existing station';
-                  toast.success(`Duplicate detected! Auto-merged into "${mergedName}".`, {
-                    description: `${promoteResult.message}${linked > 0 ? ` ${linked} transaction${linked > 1 ? 's' : ''} linked.` : ''}`,
-                    icon: <ShieldCheck className="h-4 w-4 text-amber-500" />,
-                  });
-                } else {
-                  const linked = promoteResult?.linkedEntries || 0;
-                  toast.success('Learnt location verified and promoted to station database.', {
-                    description: linked > 0 
-                      ? `${linked} fuel transaction${linked > 1 ? 's' : ''} linked to this station. Anomaly resolved.`
-                      : 'The anomaly has been resolved and removed from the Evidence Bridge.',
-                    icon: <ShieldCheck className="h-4 w-4 text-emerald-500" />,
-                  });
-                }
-              } catch (promoteErr: any) {
-                // Phase 7-8 fix: Show detailed error message
-                console.error('[Verify Learnt] Failed to promote learnt location:', promoteErr);
-                const errorMsg = promoteErr.message || String(promoteErr);
-                toast.warning('Station saved, but failed to clear the learnt location from Evidence Bridge.', {
-                  description: errorMsg
-                });
-              }
-              setVerifyingLearntId(null);
-              // Refresh both station data and trigger learnt tab refresh
-              await fetchData();
-            }
           } catch (e) {
             console.error("Failed to update station via modal", e);
             throw e;

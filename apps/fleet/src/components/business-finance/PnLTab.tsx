@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { ChevronDown } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import {
@@ -9,11 +10,72 @@ import {
   TableHeader,
   TableRow,
 } from '../ui/table';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../ui/collapsible';
 import { cn } from '../ui/utils';
 import { formatMoney } from './money';
-import type { BusinessFinancePnL } from './types';
+import type { BusinessFinancePnL, PnLTollBreakdown } from './types';
+
+function TollBreakdownPanel({ breakdown }: { breakdown: PnLTollBreakdown }) {
+  const rows: Array<{ label: string; hint: string; amount: number; emphasize?: boolean }> = [
+    {
+      label: 'Toll charges',
+      hint: 'Tag & trip tolls this period',
+      amount: breakdown.grossCharges,
+    },
+    {
+      label: 'Already covered',
+      hint: 'Cash-wash, personal, refunds — not a fleet loss',
+      amount: breakdown.alreadyCovered,
+    },
+    {
+      label: 'Charged to drivers',
+      hint: 'Recovered via Charge Driver (wallet)',
+      amount: breakdown.chargedToDrivers,
+    },
+    {
+      label: 'Fleet loss',
+      hint: 'Hits this P&L Tolls line',
+      amount: breakdown.fleetLoss,
+      emphasize: true,
+    },
+  ];
+
+  return (
+    <div className="mt-2 mb-1 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+      {rows.map((row) => (
+        <div
+          key={row.label}
+          className={cn(
+            'rounded-md border px-3 py-2.5',
+            row.emphasize
+              ? 'border-rose-200 bg-rose-50/80 dark:border-rose-900 dark:bg-rose-950/40'
+              : 'border-slate-100 bg-slate-50/80 dark:border-slate-800 dark:bg-slate-900/50',
+          )}
+        >
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+            {row.label}
+          </p>
+          <p
+            className={cn(
+              'mt-1 text-lg font-semibold tabular-nums',
+              row.emphasize
+                ? 'text-rose-700 dark:text-rose-400'
+                : 'text-slate-900 dark:text-slate-100',
+            )}
+          >
+            {formatMoney(row.amount)}
+          </p>
+          <p className="mt-0.5 text-[11px] text-slate-500 leading-snug">{row.hint}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export function PnLTab({ pnl }: { pnl: BusinessFinancePnL }) {
+  const [tollsOpen, setTollsOpen] = useState(false);
+  const breakdown = pnl.tollBreakdown;
+
   const exportCsv = () => {
     const lines = [
       'Line,Amount',
@@ -22,8 +84,16 @@ export function PnLTab({ pnl }: { pnl: BusinessFinancePnL }) {
           ? `"${l.label}",not_tracked`
           : `"${l.label}",${l.amount}`,
       ),
-      `Operating ratio %,${pnl.operatingRatio ?? ''}`,
     ];
+    if (breakdown) {
+      lines.push(
+        `"Toll charges (gross)",${breakdown.grossCharges}`,
+        `"Already covered (not fleet loss)",${breakdown.alreadyCovered}`,
+        `"Charged to drivers",${breakdown.chargedToDrivers}`,
+        `"Fleet toll loss",${breakdown.fleetLoss}`,
+      );
+    }
+    lines.push(`Operating ratio %,${pnl.operatingRatio ?? ''}`);
     const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -65,18 +135,37 @@ export function PnLTab({ pnl }: { pnl: BusinessFinancePnL }) {
         <CardContent className="pt-2 pb-3">
           <ul className="divide-y divide-slate-100 dark:divide-slate-800">
             {pnl.lines.map((line) => {
-              if (line.kind === 'memo') {
+              if (line.kind === 'memo') return null;
+
+              if (line.id === 'tolls' && breakdown) {
                 const amt = line.amount ?? 0;
                 return (
-                  <li
-                    key={line.id}
-                    className="flex items-center justify-between py-1.5 pl-4 text-xs text-slate-500 dark:text-slate-400"
-                  >
-                    <span className="italic">{line.label}</span>
-                    <span className="tabular-nums italic">{formatMoney(amt)}</span>
+                  <li key={line.id} className="py-2.5 text-sm">
+                    <Collapsible open={tollsOpen} onOpenChange={setTollsOpen}>
+                      <CollapsibleTrigger className="group flex w-full items-center justify-between gap-2 text-left min-h-[44px]">
+                        <span className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300">
+                          <ChevronDown
+                            className={cn(
+                              'h-4 w-4 shrink-0 text-slate-400 transition-transform duration-200',
+                              tollsOpen && 'rotate-180',
+                            )}
+                            aria-hidden
+                          />
+                          {line.label}
+                          <span className="text-[11px] font-normal text-slate-400">
+                            {tollsOpen ? 'Hide breakdown' : 'Show breakdown'}
+                          </span>
+                        </span>
+                        <span className="tabular-nums text-slate-600">{formatMoney(amt)}</span>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <TollBreakdownPanel breakdown={breakdown} />
+                      </CollapsibleContent>
+                    </Collapsible>
                   </li>
                 );
               }
+
               const untracked = line.tracked === false || line.amount == null;
               const amt = line.amount ?? 0;
               return (

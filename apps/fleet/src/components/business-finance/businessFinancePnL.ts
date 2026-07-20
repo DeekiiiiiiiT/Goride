@@ -5,6 +5,12 @@
 import type { BusinessFinancePeriod, BusinessFinancePnL, PnLLine, PlatformSplitRow } from './types';
 import { inPeriod } from './periodRange';
 import { round2 } from './money';
+import {
+  computeTollFleetLossNetting,
+  tollEventAmount,
+  tollEventDate,
+  tollRecoveredWashedMemo,
+} from '../../utils/tollFleetLossNetting';
 
 type LedgerLike = Record<string, unknown>;
 
@@ -14,13 +20,11 @@ function num(v: unknown): number {
 }
 
 function eventDate(e: LedgerLike): string {
-  return String(e.date || e.postingAt || e.createdAt || '').slice(0, 10);
+  return tollEventDate(e);
 }
 
 function eventAmount(e: LedgerLike): number {
-  const net = num(e.netAmount);
-  if (net !== 0) return Math.abs(net);
-  return Math.abs(num(e.grossAmount));
+  return tollEventAmount(e);
 }
 
 function platformOf(e: LedgerLike): string {
@@ -29,68 +33,6 @@ function platformOf(e: LedgerLike): string {
   if (p.includes('indrive') || p.includes('in_drive')) return 'InDrive';
   if (p.includes('roam')) return 'Roam';
   return p === 'unknown' ? 'Other' : p;
-}
-
-/**
- * Net toll figures from raw canonical events. A `toll_charge` only represents
- * a real, unrecovered business loss once you subtract:
- *  - `toll_refund` — the toll operator literally refunded it
- *  - `toll_charge_offset` (inflow) — Toll Reconciliation determined it's a
- *    cash_wash / phantom / expense_logged-superseded / personal-recovered
- *    charge, so it's not a fleet loss (see toll_pnl_offset.ts)
- * and add back:
- *  - `toll_charge_offset` (outflow) — a prior offset was reinstated (e.g. a
- *    resolution reverted to pending)
- * `toll_charged_to_driver` / `toll_charge_reversed` are driver-wallet billing
- * events, not a fleet cost decision — deliberately NOT netted here.
- */
-function computeTollNetting(scoped: LedgerLike[]): {
-  gross: number;
-  recovered: number;
-  reinstated: number;
-  net: number;
-  clipped: boolean;
-  provisional: number;
-} {
-  let gross = 0;
-  let recovered = 0;
-  let reinstated = 0;
-  const offsetSourceIds = new Set<string>();
-  const tripCharges: Array<{ sourceId: string; amt: number }> = [];
-
-  for (const e of scoped) {
-    const t = String(e.eventType || '');
-    const amt = eventAmount(e);
-    if (t === 'toll_charge') {
-      gross += amt;
-      if (String(e.sourceType || '') === 'trip') {
-        tripCharges.push({ sourceId: String(e.sourceId || ''), amt });
-      }
-    } else if (t === 'toll_refund') {
-      recovered += amt;
-    } else if (t === 'toll_charge_offset') {
-      const dir = String(e.direction || '');
-      if (dir === 'inflow') {
-        recovered += amt;
-        offsetSourceIds.add(String(e.sourceId || ''));
-      } else if (dir === 'outflow') {
-        reinstated += amt;
-      }
-    }
-  }
-
-  const rawNet = gross - recovered + reinstated;
-  const net = round2(Math.max(0, rawNet));
-  const clipped = rawNet < -0.005;
-
-  // Trip-level tolls (unlinked-refund flow) with no active offset in scope are
-  // either still `pending` review, or the offset-emission flag is off — either
-  // way, honestly disclosed as not-yet-resolution-confirmed.
-  const provisional = round2(
-    tripCharges.reduce((s, tc) => (offsetSourceIds.has(tc.sourceId) ? s : s + tc.amt), 0),
-  );
-
-  return { gross: round2(gross), recovered: round2(recovered), reinstated: round2(reinstated), net, clipped, provisional };
 }
 
 export function buildPnLFromCanonicalEvents(
@@ -124,30 +66,44 @@ export function buildPnLFromCanonicalEvents(
     }
   }
 
-  const tollNet = computeTollNetting(scoped);
+  const tollNet = computeTollFleetLossNetting(scoped);
   const tolls = tollNet.net;
+  const recoveredMemo = tollRecoveredWashedMemo(tollNet);
+
+  // Charge Driver wallet postings — shown in Tolls accordion, not netted into fleet loss.
+  let chargedToDrivers = 0;
+  for (const e of scoped) {
+    const t = String(e.eventType || '');
+    if (t === 'toll_charged_to_driver') chargedToDrivers += eventAmount(e);
+    else if (t === 'toll_charge_reversed') chargedToDrivers -= eventAmount(e);
+  }
+  chargedToDrivers = round2(Math.max(0, chargedToDrivers));
+
+  const tollBreakdown =
+    tollNet.gross > 0.005 ||
+    (recoveredMemo != null && recoveredMemo > 0.005) ||
+    chargedToDrivers > 0.005 ||
+    tolls > 0.005
+      ? {
+          grossCharges: tollNet.gross,
+          alreadyCovered: recoveredMemo ?? 0,
+          chargedToDrivers,
+          fleetLoss: tolls,
+        }
+      : undefined;
 
   const netTrip = round2(gross - fees);
   // Maintenance & wallet not on canonical chart yet — exclude from profit, show as untracked
   const operatingProfit = round2(netTrip - fuel - tolls - driverPayouts);
   const operatingRatio = gross > 0.005 ? round2(((gross - operatingProfit) / gross) * 100) : null;
 
+  // Memo line retired — Tolls accordion on PnLTab carries the owner breakdown.
   const lines: PnLLine[] = [
     { id: 'gross', label: 'Gross platform earnings', amount: round2(gross), kind: 'total' },
     { id: 'platform_fees', label: 'Platform fees', amount: -round2(fees), kind: 'expense' },
     { id: 'net_trip', label: 'Net trip revenue', amount: netTrip, kind: 'subtotal' },
     { id: 'fuel', label: 'Fuel', amount: -round2(fuel), kind: 'expense' },
     { id: 'tolls', label: 'Tolls', amount: -round2(tolls), kind: 'expense' },
-    ...(tollNet.recovered > 0.005
-      ? [
-          {
-            id: 'tolls_memo' as const,
-            label: 'of which recovered / cash-washed (not a fleet loss)',
-            amount: round2(tollNet.recovered - tollNet.reinstated),
-            kind: 'memo' as const,
-          },
-        ]
-      : []),
     { id: 'maintenance', label: 'Maintenance', amount: null, kind: 'expense', tracked: false },
     { id: 'wallet_loads', label: 'Wallet loads', amount: null, kind: 'expense', tracked: false },
     { id: 'driver_payouts', label: 'Driver payouts', amount: -round2(driverPayouts), kind: 'expense' },
@@ -181,7 +137,8 @@ export function buildPnLFromCanonicalEvents(
     operatingRatio,
     platformSplit,
     coverageNote: noteParts.length ? noteParts.join(' ') : undefined,
-    tollsRecoveredWashed: tollNet.recovered > 0.005 ? round2(tollNet.recovered - tollNet.reinstated) : undefined,
+    tollsRecoveredWashed: recoveredMemo,
+    tollBreakdown,
   };
 }
 
@@ -192,7 +149,7 @@ function formatMoneyPlain(n: number): string {
 export function sumExpenseRowsFromEvents(
   events: LedgerLike[] | undefined | null,
   period: BusinessFinancePeriod,
-): { fuel: number; tolls: number; other: number; rows: Array<{
+): { fuel: number; tolls: number; other: number; tollEventCount: number; rows: Array<{
   id: string;
   dateYmd: string;
   category: string;
@@ -204,6 +161,7 @@ export function sumExpenseRowsFromEvents(
   let fuel = 0;
   let tolls = 0;
   let other = 0;
+  let tollEventCount = 0;
   const rows: Array<{
     id: string;
     dateYmd: string;
@@ -226,16 +184,19 @@ export function sumExpenseRowsFromEvents(
       category = 'Fuel';
     } else if (t === 'toll_charge') {
       tolls += amt;
+      tollEventCount++;
       category = 'Toll';
     } else if (t === 'toll_refund') {
       // Real refund from the toll operator — a credit against Tolls.
       tolls -= amt;
+      tollEventCount++;
       category = 'Toll';
       signedAmount = -amt;
     } else if (t === 'toll_charge_offset') {
       // Not a fleet loss (cash_wash/phantom/expense_logged/personal) — credit;
       // or a reinstatement of a prior offset — debit. See toll_pnl_offset.ts.
       category = 'Toll';
+      tollEventCount++;
       if (String(e.direction || '') === 'inflow') {
         tolls -= amt;
         signedAmount = -amt;
@@ -257,5 +218,11 @@ export function sumExpenseRowsFromEvents(
   }
 
   rows.sort((a, b) => b.dateYmd.localeCompare(a.dateYmd));
-  return { fuel: round2(fuel), tolls: round2(Math.max(0, tolls)), other: round2(other), rows: rows.slice(0, 100) };
+  return {
+    fuel: round2(fuel),
+    tolls: round2(Math.max(0, tolls)),
+    other: round2(other),
+    tollEventCount,
+    rows: rows.slice(0, 100),
+  };
 }

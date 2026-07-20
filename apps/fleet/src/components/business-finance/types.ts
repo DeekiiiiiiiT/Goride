@@ -46,6 +46,18 @@ export type PlatformSplitRow = {
   net: number;
 };
 
+/** Owner-facing Tolls accordion — same story as Toll Recon cards, P&L math. */
+export type PnLTollBreakdown = {
+  /** All tag/trip toll charges in the period (gross). */
+  grossCharges: number;
+  /** Cash-wash / personal / phantom / real refunds — already removed from fleet loss. */
+  alreadyCovered: number;
+  /** Posted Charge Driver amounts (wallet path; not double-counted in fleet loss). */
+  chargedToDrivers: number;
+  /** What hits the Tolls P&L line (unrecovered fleet loss). */
+  fleetLoss: number;
+};
+
 export type BusinessFinancePnL = {
   lines: PnLLine[];
   operatingRatio: number | null;
@@ -53,6 +65,8 @@ export type BusinessFinancePnL = {
   coverageNote?: string;
   /** Tolls that were recovered (refund) or washed out (cash_wash/phantom/personal) — NOT a fleet loss, excluded from the Tolls expense line but shown for transparency. */
   tollsRecoveredWashed?: number;
+  /** Collapsible Tolls detail for owners; omit when no toll activity in period. */
+  tollBreakdown?: PnLTollBreakdown;
 };
 
 export type BusinessFinanceOverview = {

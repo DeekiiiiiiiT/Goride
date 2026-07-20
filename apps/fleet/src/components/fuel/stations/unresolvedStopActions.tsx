@@ -113,25 +113,31 @@ export function useUnresolvedStopActions({
     [verifiedStations, unverifiedStations],
   );
 
-  const filteredStations = allStations.filter(
+  // Merge/Link pickers: GOD list only — never offer CSV Unverified as merge target
+  const filteredStations = verifiedStations.filter(
     (s) =>
       s.name?.toLowerCase().includes(mergeSearch.toLowerCase()) ||
       s.brand?.toLowerCase().includes(mergeSearch.toLowerCase()),
   );
 
   const nearestWithin150 = useCallback(
-    (row: UnresolvedStopRow): { id: string; name: string; distance: number } | null => {
+    (row: UnresolvedStopRow): { id: string; name: string; distance: number; status?: string } | null => {
       const coords = rowCoords(row);
       if (!coords) return null;
       if (row.learnt?.nearbyStation && row.learnt.nearbyStation.distance <= 150) {
-        return row.learnt.nearbyStation;
+        const nearbyId = row.learnt.nearbyStation.id;
+        const fromList = allStations.find((s) => s.id === nearbyId);
+        return {
+          ...row.learnt.nearbyStation,
+          status: fromList?.status || 'unverified',
+        };
       }
-      let best: { id: string; name: string; distance: number } | null = null;
+      let best: { id: string; name: string; distance: number; status?: string } | null = null;
       for (const s of allStations) {
         if (!s.location?.lat || !s.location?.lng) continue;
         const d = Math.round(calculateDistance(coords.lat, coords.lng, s.location.lat, s.location.lng));
         if (d <= 150 && (!best || d < best.distance)) {
-          best = { id: s.id, name: s.name || s.id, distance: d };
+          best = { id: s.id, name: s.name || s.id, distance: d, status: s.status };
         }
       }
       return best;
@@ -143,7 +149,8 @@ export function useUnresolvedStopActions({
     if (!linkingRow) return [];
     const coords = rowCoords(linkingRow);
     if (!coords) return [];
-    const enriched = allStations.map((station) => {
+    // GOD list only for link/merge
+    const enriched = verifiedStations.map((station) => {
       const sLat = station.location?.lat ?? 0;
       const sLng = station.location?.lng ?? 0;
       const distM = sLat && sLng ? Math.round(calculateDistance(coords.lat, coords.lng, sLat, sLng)) : Infinity;
@@ -165,7 +172,21 @@ export function useUnresolvedStopActions({
       filtered.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
     }
     return filtered;
-  }, [linkingRow, allStations, linkSearch, linkSortBy]);
+  }, [linkingRow, verifiedStations, linkSearch, linkSortBy]);
+
+  const handleDeleteCsvReference = async (stationId: string) => {
+    try {
+      setActionId(stationId);
+      await api.deleteStation(stationId);
+      toast.success('CSV reference deleted. Verify Location to add your GOD pin.');
+      await onRefresh();
+      onPromoted?.();
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to delete CSV reference');
+    } finally {
+      setActionId(null);
+    }
+  };
 
   const resolveLearntId = async (row: UnresolvedStopRow): Promise<string> => {
     if (row.learnt?.id) return row.learnt.id;
@@ -374,6 +395,7 @@ export function useUnresolvedStopActions({
     distanceColor,
     handlePromote,
     handleMergeToStation,
+    handleDeleteCsvReference,
     handleReject,
     handleDelete,
     handleLinkConfirm,
