@@ -406,6 +406,11 @@ export function buildCanonicalWalletCreditEvent(
   const amt = Math.abs(coerceAmount(transaction.amount));
   if (amt <= 1e-9) return null;
 
+  const orgFromTx =
+    typeof transaction.organizationId === "string" && transaction.organizationId.trim()
+      ? transaction.organizationId.trim()
+      : "";
+
   return {
     idempotencyKey: `transaction:${id}|wallet_credit`,
     date,
@@ -423,6 +428,8 @@ export function buildCanonicalWalletCreditEvent(
         ? transaction.description.trim()
         : "InDrive Wallet Credit",
     metadata: { transactionId: id },
+    // Prefer tx org so stampOrg no-ops (anon) still leave a tenant tag for fleet reads.
+    ...(orgFromTx ? { organizationId: orgFromTx } : {}),
   };
 }
 

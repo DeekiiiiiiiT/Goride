@@ -5040,8 +5040,9 @@ app.get(
     };
 
     const ledgerBaseQuery = () => {
+      // Driver-scoped fetch; filterByOrg keeps null-org legacy wallet_credit rows.
+      // Do not chain .or(org) + .or(drivers) — PostgREST overwrites the or= param.
       let q = supabase.from("kv_store_37f42386").select("value").like("key", CANONICAL_LEDGER_KEY_LIKE);
-      if (orgId) q = q.eq("value->>organizationId", orgId);
       if (driverIdOrFilter) q = q.or(driverIdOrFilter);
       else q = q.eq("value->>driverId", driverId);
       return q;
@@ -5126,7 +5127,10 @@ app.get(
 
     const ledgerRows = await paginatedFetch(() => {
       let q = supabase.from("kv_store_37f42386").select("value").like("key", CANONICAL_LEDGER_KEY_LIKE);
-      if (orgId) q = q.eq("value->>organizationId", orgId);
+      // Include null-org legacy wallet_credit / fee rows; filterByOrg keeps them for this org.
+      if (orgId) {
+        q = q.or(`value->>organizationId.eq.${orgId},value->>organizationId.is.null`);
+      }
       return q;
     });
     const ledgerVals = filterByOrg(
@@ -13231,13 +13235,21 @@ app.get("/make-server-37f42386/notifications/list", requireAuth(), async (c) => 
     try {
         const userId = c.req.query("userId");
         const vehicleId = c.req.query("vehicleId");
-        
+        // Cap history so clients cannot re-download unbounded alert spam (egress guard).
+        const rawLimit = parseInt(c.req.query("limit") || "50", 10);
+        const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), 100) : 50;
+        const unreadOnlyParam = (c.req.query("unreadOnly") ?? "true").toLowerCase();
+        const unreadOnly = unreadOnlyParam !== "false" && unreadOnlyParam !== "0";
+
         // Use kv.getByPrefix for reliable retrieval (avoids unsupported JSON path ordering)
         let alerts: any[] = filterByOrg(await kv.getByPrefix("alert:"), c);
 
         // Filter in-memory if optional query params are provided
         if (userId) alerts = alerts.filter((a: any) => a.driverId === userId);
         if (vehicleId) alerts = alerts.filter((a: any) => a.vehicleId === vehicleId);
+        if (unreadOnly) {
+          alerts = alerts.filter((a: any) => !(a?.isRead === true || a?.read === true));
+        }
 
         // Sort newest-first by timestamp
         alerts.sort((a: any, b: any) => {
@@ -13246,7 +13258,7 @@ app.get("/make-server-37f42386/notifications/list", requireAuth(), async (c) => 
             return tb - ta;
         });
 
-        return c.json(alerts);
+        return c.json(alerts.slice(0, limit));
     } catch (e: any) {
         console.log("Error listing persistent alerts:", e.message);
         return c.json({ error: e.message }, 500);

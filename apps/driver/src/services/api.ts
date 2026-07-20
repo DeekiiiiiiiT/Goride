@@ -443,12 +443,18 @@ export const api = {
     return response.json();
   },
 
-  // Persistent Alerts (Phase 1)
-  async getPersistentAlerts(userId?: string, vehicleId?: string): Promise<Notification[]> {
+  // Persistent Alerts (Phase 1) — always capped; server also enforces limit/unreadOnly defaults.
+  async getPersistentAlerts(
+    userId?: string,
+    vehicleId?: string,
+    opts?: { limit?: number; unreadOnly?: boolean },
+  ): Promise<Notification[]> {
     const url = new URL(`${API_ENDPOINTS.admin}/notifications/list`);
     if (userId) url.searchParams.append('userId', userId);
     if (vehicleId) url.searchParams.append('vehicleId', vehicleId);
-    
+    url.searchParams.set('limit', String(opts?.limit ?? 50));
+    url.searchParams.set('unreadOnly', opts?.unreadOnly === false ? 'false' : 'true');
+
     // Single attempt (no retries) — this is a background poll that retries every 30s anyway
     const response = await fetch(url.toString(), {
       headers: { 'Authorization': `Bearer ${publicAnonKey}` }

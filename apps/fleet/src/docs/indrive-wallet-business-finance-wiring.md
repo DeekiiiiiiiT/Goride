@@ -4,6 +4,12 @@
 loads. Business Finance sums period loads from in-memory ledger events; Wallet
 Center and Overview short-driver risk use one fleet endpoint (no N+1).
 
+**Org-tag fix (2026-07-20):** Older `wallet_credit` rows lacked `organizationId`,
+so the fleet Period total (strict org filter) showed $0 while Recent top-ups
+(driver-scoped list) still showed them. Missing org tags were backfilled from
+the driver’s org; fleet reads now include null-org legacy rows (same pattern as
+statement summary); new credits copy org from the transaction when present.
+
 ## How it works
 
 **1. Canonical ledger write on every top-up.** `IndriveWalletCenterPage.tsx`'s
