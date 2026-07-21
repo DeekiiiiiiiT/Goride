@@ -8,6 +8,7 @@ export type BusinessFinanceTab =
   | 'pnl'
   | 'cash-bank'
   | 'expenses'
+  | 'budgets'
   | 'driver-balances'
   | 'workbench';
 
@@ -26,6 +27,9 @@ export type PnLLineId =
   | 'fuel'
   | 'tolls'
   | 'maintenance'
+  | 'fixed_overhead'
+  | 'other_income'
+  | 'operating_expenses'
   | 'driver_payouts'
   | 'operating_profit';
 
@@ -95,7 +99,9 @@ export type BusinessFinanceOverview = {
   moneyOut: {
     fuel: number;
     tolls: number;
-    maintenance: number | null;
+    maintenance: number;
+    fixedOverhead: number;
+    operatingExpenses: number;
     driverPayouts: number;
   };
   /** Bank → platform wallet transfers (not an expense). */
@@ -132,10 +138,26 @@ export type CashBankSnapshot = {
     periodLoads: number;
     shortDriverCount: number;
   };
+  businessPayments: {
+    periodOutflows: number;
+    bankOrCardOutflows: number;
+    cashOutflows: number;
+    otherInflows: number;
+  };
   incompleteSources: string[];
 };
 
-export type ExpenseCategoryId = 'fuel' | 'toll' | 'maintenance' | 'other';
+export type ExpenseCategoryId =
+  | 'fuel'
+  | 'toll'
+  | 'maintenance'
+  | 'insurance'
+  | 'lease'
+  | 'security'
+  | 'software'
+  | 'permits'
+  | 'equipment'
+  | 'other';
 
 export type ExpenseCategorySummary = {
   id: ExpenseCategoryId;

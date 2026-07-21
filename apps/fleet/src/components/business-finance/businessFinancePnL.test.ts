@@ -391,3 +391,70 @@ describe('buildPnLFromCanonicalEvents — platform fee recognition', () => {
     expect(pnl.lines.find((l) => l.id === 'platform_fees')!.amount).toBe(-0);
   });
 });
+
+describe('buildPnLFromCanonicalEvents — business overhead', () => {
+  const overhead = [
+    {
+      id: 'fixed-1',
+      eventType: 'fixed_expense',
+      date: '2026-07-02',
+      netAmount: 500,
+      direction: 'outflow',
+      category: 'Insurance',
+      sourceType: 'financial_event',
+      sourceId: 'cfg-1',
+    },
+    {
+      id: 'maintenance-1',
+      eventType: 'maintenance',
+      date: '2026-07-03',
+      netAmount: 200,
+      direction: 'outflow',
+      category: 'Maintenance',
+      sourceType: 'transaction',
+      sourceId: 'tx-1',
+    },
+    {
+      id: 'office-1',
+      eventType: 'operating_expense',
+      date: '2026-07-04',
+      netAmount: 100,
+      direction: 'outflow',
+      category: 'Office Expenses',
+      sourceType: 'transaction',
+      sourceId: 'tx-2',
+    },
+    {
+      id: 'income-1',
+      eventType: 'other_income',
+      date: '2026-07-05',
+      netAmount: 50,
+      direction: 'inflow',
+      category: 'Other Income',
+      sourceType: 'transaction',
+      sourceId: 'tx-3',
+    },
+  ];
+
+  it('includes fixed, maintenance and generic expenses in operating profit', () => {
+    const pnl = buildPnLFromCanonicalEvents(overhead, period);
+    expect(pnl.lines.find((l) => l.id === 'fixed_overhead')?.amount).toBe(-500);
+    expect(pnl.lines.find((l) => l.id === 'maintenance')?.amount).toBe(-200);
+    expect(pnl.lines.find((l) => l.id === 'operating_expenses')?.amount).toBe(-100);
+    expect(pnl.lines.find((l) => l.id === 'other_income')?.amount).toBe(50);
+    expect(pnl.lines.find((l) => l.id === 'operating_profit')?.amount).toBe(-750);
+  });
+
+  it('exposes overhead rows and category control totals', () => {
+    const agg = sumExpenseRowsFromEvents(overhead, period);
+    expect(agg.fixed).toBe(500);
+    expect(agg.maintenance).toBe(200);
+    expect(agg.operating).toBe(100);
+    expect(agg.byCategory).toMatchObject({
+      Insurance: 500,
+      Maintenance: 200,
+      'Office Expenses': 100,
+    });
+    expect(agg.rows).toHaveLength(3);
+  });
+});

@@ -14,9 +14,8 @@ import {
   Cell
 } from 'recharts';
 import { SafeResponsiveContainer as ResponsiveContainer } from '../ui/SafeResponsiveContainer';
-import { Trip, Budget } from '../../types/data';
-import { api } from '../../services/api';
-import { DollarSign, TrendingUp, Wallet, CreditCard, PiggyBank, Receipt, Loader2, Database } from "lucide-react";
+import { Trip } from '../../types/data';
+import { DollarSign, TrendingUp, Wallet, PiggyBank, Receipt, Database } from "lucide-react";
 
 interface FinancialsViewProps {
   trips: Trip[];
@@ -30,43 +29,15 @@ interface FinancialsViewProps {
     platformBreakdown: Array<{ platform: string; earnings: number; tripCount: number }>;
     revenueByType: { fare: number; tip: number; promotion: number; other: number };
   } | null;
+  /** Navigate to another page id (e.g. Business Finance) for CTA links. */
+  onNavigate?: (page: string) => void;
 }
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'];
 
-export function FinancialsView({ trips, fleetSummary = null }: FinancialsViewProps) {
-  const [budgets, setBudgets] = React.useState<Budget[]>([]);
-  const [loading, setLoading] = React.useState(true);
-
-  React.useEffect(() => {
-      const loadBudgets = async () => {
-          try {
-              const data = await api.getBudgets();
-              if (data && data.length > 0) {
-                  setBudgets(data);
-              } else {
-                  // Initialize default budgets if none exist
-                  const defaults = [
-                      { month: '2025-12', category: 'Fuel', limit: 500 },
-                      { month: '2025-12', category: 'Maintenance', limit: 300 },
-                      { month: '2025-12', category: 'Insurance', limit: 80 },
-                      { month: '2025-12', category: 'Fleet Cleaning', limit: 120 }
-                  ];
-                  // Save them
-                  for (const d of defaults) {
-                      await api.saveBudget(d);
-                  }
-                  // Fetch again (simplified)
-                  setBudgets(await api.getBudgets());
-              }
-          } catch (e) {
-              console.error("Failed to load budgets", e);
-          } finally {
-              setLoading(false);
-          }
-      };
-      loadBudgets();
-  }, []);
+export function FinancialsView({ trips, fleetSummary = null, onNavigate }: FinancialsViewProps) {
+  // Budgets moved to Business Finance → Budgets (single source of truth with
+  // ledger-sourced actuals). This view is ledger-sourced revenue analytics only.
 
   // Financial Metrics Calculation
   const metrics = useMemo(() => {
@@ -142,45 +113,6 @@ export function FinancialsView({ trips, fleetSummary = null }: FinancialsViewPro
     };
   }, [trips, fleetSummary]);
 
-  // Budget Analysis Calculation
-  const budgetAnalysis = useMemo(() => {
-      const actuals: Record<string, number> = {};
-      
-      trips.forEach(t => {
-          // Check for expenses (negative amount)
-          if (t.amount < 0) {
-              const note = (t.notes || t.transactionType || '').toLowerCase();
-              const amt = Math.abs(t.amount);
-              
-              if (note.includes('fuel') || note.includes('gas')) {
-                  actuals['Fuel'] = (actuals['Fuel'] || 0) + amt;
-              } else if (note.includes('maint') || note.includes('repair') || note.includes('service')) {
-                  actuals['Maintenance'] = (actuals['Maintenance'] || 0) + amt;
-              } else if (note.includes('insur')) {
-                  actuals['Insurance'] = (actuals['Insurance'] || 0) + amt;
-              } else if (note.includes('clean') || note.includes('wash')) {
-                  actuals['Fleet Cleaning'] = (actuals['Fleet Cleaning'] || 0) + amt;
-              }
-          }
-      });
-
-      let totalVariance = 0;
-
-      const rows = budgets.map(b => {
-          const actual = actuals[b.category] || 0;
-          const variance = b.limit - actual;
-          totalVariance += variance;
-          
-          return {
-              ...b,
-              actual,
-              variance
-          };
-      });
-
-      return { rows, totalVariance };
-  }, [trips, budgets]);
-
   // Daily Revenue & Trip Count Data for Composed Chart
   const chartData = useMemo(() => {
     // Phase 6: Ledger is sole source — no trip fallback
@@ -242,42 +174,27 @@ export function FinancialsView({ trips, fleetSummary = null }: FinancialsViewPro
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Monthly Budget vs Actual (Phase 7.2) */}
+        {/* Budgets moved to Business Finance (ledger-sourced actuals). */}
         <Card className="lg:col-span-1">
             <CardHeader>
-                <CardTitle className="text-lg">Monthly Budget vs Actual</CardTitle>
-                <CardDescription>Target vs Realized expenses.</CardDescription>
+                <CardTitle className="text-lg">Budget vs Actual</CardTitle>
+                <CardDescription>Now managed in Business Finance.</CardDescription>
             </CardHeader>
             <CardContent>
-                <div className="space-y-4">
-                    {loading ? (
-                        <div className="flex justify-center py-8">
-                            <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
-                        </div>
-                    ) : budgetAnalysis.rows.length > 0 ? (
-                        <>
-                            {budgetAnalysis.rows.map(row => (
-                                <BudgetRow 
-                                    key={row.id} 
-                                    label={row.category} 
-                                    budget={row.limit} 
-                                    actual={row.actual} 
-                                />
-                            ))}
-                            
-                            <div className="pt-4 border-t mt-4">
-                                <div className="flex justify-between items-center font-bold">
-                                    <span>Total Variance</span>
-                                    <span className={budgetAnalysis.totalVariance >= 0 ? "text-emerald-600" : "text-rose-600"}>
-                                        {budgetAnalysis.totalVariance >= 0 ? '+' : '-'}${Math.abs(budgetAnalysis.totalVariance).toFixed(2)}
-                                    </span>
-                                </div>
-                            </div>
-                        </>
-                    ) : (
-                        <div className="text-center text-slate-500 py-8">No budget data available</div>
-                    )}
-                </div>
+                <p className="text-sm text-slate-500 mb-4">
+                    Monthly budgets and variance against real ledger actuals now live in
+                    Business Finance, so targets are checked against the same numbers as
+                    your Profit &amp; Loss.
+                </p>
+                {onNavigate && (
+                    <button
+                        type="button"
+                        onClick={() => onNavigate('business-finance')}
+                        className="inline-flex items-center rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+                    >
+                        Open Business Finance
+                    </button>
+                )}
             </CardContent>
         </Card>
 
@@ -414,30 +331,4 @@ function MetricCard({ title, value, icon, subtext, sourceTag }: { title: string,
       </CardContent>
     </Card>
   );
-}
-
-function BudgetRow({ label, budget, actual }: { label: string, budget: number, actual: number }) {
-    const variance = budget - actual;
-    const isOver = variance < 0;
-    
-    return (
-        <div className="space-y-1">
-            <div className="flex justify-between text-sm">
-                <span className="font-medium text-slate-700">{label}</span>
-                <span className={isOver ? "text-rose-600 font-bold" : "text-emerald-600 font-bold"}>
-                    {isOver ? '-' : '+'}${Math.abs(variance).toFixed(2)}
-                </span>
-            </div>
-            <div className="flex justify-between text-xs text-slate-500">
-                <span>Budget: ${budget}</span>
-                <span>Actual: ${actual}</span>
-            </div>
-            <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
-                <div 
-                    className={`h-full ${isOver ? 'bg-rose-500' : 'bg-emerald-500'}`} 
-                    style={{ width: `${Math.min((actual/budget)*100, 100)}%` }}
-                ></div>
-            </div>
-        </div>
-    )
 }

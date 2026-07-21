@@ -389,7 +389,7 @@ export function Dashboard() {
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="executive">Executive</TabsTrigger>
-          <TabsTrigger value="financials">Financials</TabsTrigger>
+          <TabsTrigger value="financials">Revenue</TabsTrigger>
           <TabsTrigger value="drivers">Drivers</TabsTrigger>
           <TabsTrigger value="vehicles">Vehicles</TabsTrigger>
           <TabsTrigger value="alerts">Alerts</TabsTrigger>
@@ -431,7 +431,7 @@ export function Dashboard() {
         </TabsContent>
 
         <TabsContent value="financials" className="space-y-6">
-          <FinancialsView trips={trips} fleetSummary={fleetSummary} />
+          <FinancialsView trips={trips} fleetSummary={fleetSummary} onNavigate={handleNavigate} />
         </TabsContent>
 
         <TabsContent value="drivers" className="space-y-6">

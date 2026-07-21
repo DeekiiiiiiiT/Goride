@@ -2,9 +2,10 @@ import { startOfWeek, endOfWeek, format, parseISO } from 'date-fns';
 import type { Claim, DisputeRefund, FinancialTransaction, Trip } from '../types/data';
 import { fleetTzDateKey, normalizeWallClockTime, ymdToLocalDate } from './timezoneDisplay';
 import { VARIANCE_THRESHOLD } from './tollReconciliation';
+import { dateWeekKey } from './fleetMondayWeekKey';
 
-/** Re-export Edge-safe Monday week key (shared with unlinked shortfall scoring). */
-export { dateWeekKey } from './fleetMondayWeekKey';
+/** Edge-safe Monday week key (shared with unlinked shortfall scoring). */
+export { dateWeekKey };
 
 /**
  * Monday-start week key + bounds for a row's date.

@@ -20,6 +20,7 @@ import {
 } from '../../utils/fleetBankReceive';
 import { useFleetTimezone } from '../../utils/timezoneDisplay';
 import { useAuth } from '../auth/AuthContext';
+import { usePermissions } from '../../hooks/usePermissions';
 import { BusinessFinanceDeskChrome } from '../business-finance/BusinessFinanceDeskChrome';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -121,8 +122,8 @@ function BankReceiveTable({
   mode: DeskTab;
   emptyLabel: string;
   savingKey: string | null;
-  onConfirm: (row: FleetBankReceiveRow) => void;
-  onEnterAmount: (row: FleetBankReceiveRow) => void;
+  onConfirm?: (row: FleetBankReceiveRow) => void;
+  onEnterAmount?: (row: FleetBankReceiveRow) => void;
   onUnconfirm?: (row: FleetBankReceiveRow) => void;
 }) {
   return (
@@ -181,7 +182,7 @@ function BankReceiveTable({
                     <StatusCell row={row} />
                   </TableCell>
                   <TableCell className="text-right space-x-2 whitespace-nowrap">
-                    {mode === 'outstanding' && (
+                    {mode === 'outstanding' && onConfirm && (
                       <Button
                         size="sm"
                         variant="outline"
@@ -191,14 +192,19 @@ function BankReceiveTable({
                         {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Confirm'}
                       </Button>
                     )}
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      disabled={busy}
-                      onClick={() => onEnterAmount(row)}
-                    >
-                      {mode === 'completed' ? 'Edit amount' : 'Enter amount'}
-                    </Button>
+                    {onEnterAmount && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={busy}
+                        onClick={() => onEnterAmount(row)}
+                      >
+                        {mode === 'completed' ? 'Edit amount' : 'Enter amount'}
+                      </Button>
+                    )}
+                    {!onConfirm && !onEnterAmount && !onUnconfirm && (
+                      <span className="text-xs text-slate-400">View only</span>
+                    )}
                     {mode === 'completed' && onUnconfirm && (
                       <Button
                         size="sm"
@@ -234,6 +240,8 @@ export function FleetFinancialsPage({
 } = {}) {
   const fleetTz = useFleetTimezone();
   const { organizationId } = useAuth();
+  const { can } = usePermissions();
+  const canEdit = can('transactions.edit');
   const queryClient = useQueryClient();
   const [deskTab, setDeskTab] = useState<DeskTab>('outstanding');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
@@ -590,11 +598,11 @@ export function FleetFinancialsPage({
               mode="outstanding"
               emptyLabel="Nothing outstanding for this filter."
               savingKey={savingKey}
-              onConfirm={(row) => void saveConfirm(row, row.expected, 'manual')}
-              onEnterAmount={(row) => {
+              onConfirm={canEdit ? (row) => void saveConfirm(row, row.expected, 'manual') : undefined}
+              onEnterAmount={canEdit ? (row) => {
                 setEnterRow(row);
                 setEnterAmount(String(row.amountReceived ?? row.expected ?? ''));
-              }}
+              } : undefined}
             />
           </TabsContent>
 
@@ -604,12 +612,12 @@ export function FleetFinancialsPage({
               mode="completed"
               emptyLabel="No confirmed weeks for this filter."
               savingKey={savingKey}
-              onConfirm={(row) => void saveConfirm(row, row.expected, 'manual')}
-              onEnterAmount={(row) => {
+              onConfirm={canEdit ? (row) => void saveConfirm(row, row.expected, 'manual') : undefined}
+              onEnterAmount={canEdit ? (row) => {
                 setEnterRow(row);
                 setEnterAmount(String(row.amountReceived ?? row.expected ?? ''));
-              }}
-              onUnconfirm={(row) => void unconfirm(row)}
+              } : undefined}
+              onUnconfirm={canEdit ? (row) => void unconfirm(row) : undefined}
             />
           </TabsContent>
         </Tabs>

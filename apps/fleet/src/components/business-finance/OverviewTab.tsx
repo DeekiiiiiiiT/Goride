@@ -110,8 +110,20 @@ export function OverviewTab({ overview, onNavigateTab, onNavigatePage }: Props) 
           <Row
             label="Maintenance"
             hint="Maintenance Hub"
-            value={moneyOut.maintenance == null ? 'Not tracked yet' : formatMoney(moneyOut.maintenance)}
+            value={formatMoney(moneyOut.maintenance)}
             onClick={() => onNavigatePage?.('maintenance-hub')}
+          />
+          <Row
+            label="Fixed overhead"
+            hint="Expenses"
+            value={formatMoney(moneyOut.fixedOverhead)}
+            onClick={() => onNavigateTab('expenses')}
+          />
+          <Row
+            label="Other operating expenses"
+            hint="Expenses"
+            value={formatMoney(moneyOut.operatingExpenses)}
+            onClick={() => onNavigateTab('expenses')}
           />
           <Row
             label="Driver payouts"

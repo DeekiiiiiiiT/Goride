@@ -32,6 +32,15 @@ export const CANONICAL_LEDGER_EVENT_TYPES = [
   'dispute_refund',
   /** One row per Uber payments_transaction.csv line (transaction-grain SSOT). */
   'payment_line',
+  // Business-overhead SSOT (Business Finance coverage program).
+  /** One dated occurrence of a recurring vehicle FixedExpenseConfig. */
+  'fixed_expense',
+  /** Generic manually-logged operating expense bridged from transaction:*. */
+  'operating_expense',
+  /** Generic manually-logged other income bridged from transaction:*. */
+  'other_income',
+  /** Completed, paid maintenance parts/labor spend. */
+  'maintenance',
 ] as const;
 
 export type CanonicalLedgerEventType = (typeof CANONICAL_LEDGER_EVENT_TYPES)[number];
@@ -41,7 +50,11 @@ export type CanonicalLedgerSourceType =
   | 'statement'
   | 'import_batch'
   | 'transaction'
-  | 'adjustment';
+  | 'adjustment'
+  /** Owner-entered overhead not tied to a trip/statement (fixed expenses, manual costs). */
+  | 'financial_event'
+  /** Rebuilt from a historical backfill job. */
+  | 'backfill';
 
 /**
  * Full persisted canonical event (server adds organizationId via stampOrg when missing).

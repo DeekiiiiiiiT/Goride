@@ -34,18 +34,28 @@ InDrive wallet top-ups. Everything below is graded against that one rule.
   `payout_cash`/`driver_payout`, driver-financial-period cash figures feed
   Cash & Bank and Driver Balances.
 
+> **Status update (2026-07-21):** A remediation program is now underway. See
+> [business-finance-recognition-policy.md](business-finance-recognition-policy.md)
+> for the accounting contract governing the fixes below.
+>
+> **Implementation update (2026-07-21):** Fixed Expenses, generic posted
+> transactions, posted Maintenance spend, and Budgets vs Actual are now wired.
+> Historical rows can be synced from Business Finance → Expenses. See
+> [business-overhead-finance-wiring.md](business-overhead-finance-wiring.md).
+
 ## Partially wired
 
-- **InDrive Wallet loads** — canonical `wallet_credit` events exist and are
-  already fetched into `fetchBusinessFinanceBundle.ts`'s in-memory event list,
-  but the aggregation is a hardcoded `walletLoads = 0` — the CashBankTab card
-  always reads $0.00 regardless of real activity. No fleet-wide "drivers
-  short on wallet balance" risk signal exists either. (Full detail in the
-  dedicated doc.)
+- **InDrive Wallet loads** — ~~hardcoded `walletLoads = 0`~~ **Now wired
+  (2026-07-20).** `fetchBusinessFinanceBundle.ts` sums canonical `wallet_credit`
+  via `computeIndriveWalletLoadsFromLedgerEntries`, and a fleet-wide
+  "drivers short on wallet balance" risk signal (`walletShortDriverCount`) is
+  populated from `GET /ledger/indrive-wallet/fleet`. Loads are shown as a
+  transfer (Cash & Bank / Overview Transfers), not a P&L expense. See the
+  dedicated wiring doc.
 
-## Not wired at all — real money, zero visibility in Business Finance
+## Original gaps — remediation status
 
-### 1. Fixed Expenses (Insurance, Lease/Financing, Security/GPS, Software, Permits, Equipment) — biggest gap found
+### 1. Fixed Expenses — wired 2026-07-21
 
 Real, persisted, per-vehicle recurring costs: `apps/fleet/src/types/expenses.ts`
 defines `FixedExpenseConfig` (amount, frequency, category, start/end date),
@@ -57,39 +67,29 @@ record vehicle insurance premiums, lease/financing payments, GPS tracker
 subscriptions, software subscriptions, permits & licenses, and equipment
 rental here today.
 
-None of it ever becomes a canonical ledger event. `fetchBusinessFinanceBundle.ts`
-never calls `expenseService`/`getFixedExpenses` and there is no
-`fixed_expense_*` write path into `ledger_event:*`. Every dollar of insurance,
-lease, and subscription cost an owner has entered is invisible in the P&L,
-Expenses tab, and Overview risk signals. The Expenses tab's "Maintenance"
-category is explicitly `tracked: false, amount: null` — but Insurance,
-Lease, Security, Software, Permits, and Equipment aren't even represented as
-untracked placeholders; they don't appear in Business Finance's category list
-(`ExpenseCategoryId` = `'fuel' | 'toll' | 'maintenance' | 'other'`) at all.
+Fixed Expense rules now expand into idempotent `fixed_expense` occurrences on
+scheduled due dates. P&L, Expenses, Overview, and Budgets read those canonical
+events. A schedule does not move Cash & Bank; only a posted payment does.
 
-### 2. Maintenance spend (parts/labor, not the Fixed Expense "Maintenance Contract" category)
+### 2. Maintenance spend — posted actuals wired 2026-07-21
 
 `FleetMaintenanceHub.tsx` tracks supplier quotes and unit pricing per
 maintenance task (`Suppliers / price` column, `unit_price`/`currency` per
-order) — real procurement cost data. It never posts to `transaction:*`,
-`financial_ledger.ts`, or the canonical ledger. Business Finance already
-handles this honestly (Maintenance P&L line and Expenses category are both
-explicitly `null`/`tracked: false` rather than silently showing $0), but the
-underlying cost data that *should* eventually fill that line already exists
-in the Maintenance module and nothing pipes it out.
+order) — procurement estimates, not proof of spend. Realized Maintenance spend
+is logged from Business Finance → Expenses and posts `maintenance`; quotes are
+deliberately excluded so they cannot overstate cost.
 
-### 3. Budgets
+### 3. Budgets — moved to Business Finance 2026-07-21
 
-Real backend (`GET/POST /budgets`, `index.tsx:9643-9662`), seeded with
-Fuel/Maintenance/Insurance/Fleet Cleaning limits, but only ever read by the
-legacy Dashboard "Financials" tab (see below). Business Finance has no
-budget-vs-actual view anywhere, even for the categories (Fuel, Tolls) it
-already tracks accurately.
+The existing backend (`GET/POST /budgets`) is now used by Business Finance →
+Budgets. Actuals come from the canonical ledger. The Dashboard no longer
+calculates budget actuals from trip-note guesses.
 
-### 4. Manually-logged transactions outside the allow-list
+### 4. Manually-logged transactions — generic bridge wired 2026-07-21
 
-The general transaction save path (`index.tsx`, `POST /transactions`) only
-canonicalizes one category: `"InDrive Wallet Credit"`. But
+The general transaction save path (`index.tsx`, `POST /transactions`) now
+canonicalizes posted business expenses/income in addition to
+`"InDrive Wallet Credit"`. The
 `TransactionCategory` (`types/data.ts:586`) defines a much longer list that's
 presumably selectable wherever transactions get added: `Registration`,
 `Bank Charges`, `Office Expenses`, `Software/Subscription`, `Marketing`,
@@ -97,65 +97,44 @@ presumably selectable wherever transactions get added: `Registration`,
 `Bonuses`, `Other Income`, plus ad-hoc one-off `Insurance`/`Maintenance`
 entries logged as a transaction rather than through Fixed Expenses. If an
 admin logs "Vehicle registration renewal — $340" or "Office rent — $1,200" as
-a transaction today, it's saved to `transaction:{id}` and then simply never
-looked at again by anything financial. There is no generic
-"any expense/income transaction → canonical ledger" bridge — only the
-purpose-built ones (toll, fuel, wallet credit) exist.
+a transaction today, it maps to `operating_expense`, `maintenance`, or
+`other_income`. Pending/Rejected/Void rows do not enter the books. Fuel, Toll,
+Wallet, and trip-derived categories keep their specialized writers.
 
-### 5. Canonical event types that are declared but never emitted
+### 5. Canonical event types — partially remediated
 
 `LedgerEventType` (`types/data.ts:604`) includes `maintenance`, `insurance`,
 `cash_collection`, `surge_bonus`, `wallet_debit`, `cancelled_trip_loss`,
 `refund_expense`, and `other` as valid values. A repo-wide search for every
-`eventType: "..."` write site turns up **zero** emitters for any of these —
-they exist only in the type contract. `businessFinancePnL.ts`'s
+`maintenance` now has a real writer. Several future-product types still have
+no emitter and remain type-contract placeholders. `businessFinancePnL.ts`'s
 `sumExpenseRowsFromEvents` even lists `refund_expense` in its `RECOGNIZED`
 set, netting an event type that no code path has ever produced — dead logic
 waiting for a writer that doesn't exist. Worth knowing before anyone assumes
 "the type is declared" means "the data flows."
 
-## A conflicting source of truth, currently live
+## Dashboard source-of-truth conflict — resolved 2026-07-21
 
-`Dashboard.tsx` renders a `"financials"` tab (`FinancialsView.tsx`, also
-reachable standalone via `FinancialsPage.tsx`) that blends three things: (a)
-a real ledger-sourced `fleetSummary` on the main Dashboard call site, (b)
-**entirely fabricated data** — `generateMockTransactions()` in
-`financialService.ts` invents random Fuel/Maintenance/Insurance/Bank Fee
-amounts, random driver "Incentive"/"Fine" transactions, and a hardcoded
-`$25,571.82` opening balance, all clearly placeholder — and (c) the real
-Budgets feature from #3 above. `FinancialsPage.tsx` calls `FinancialsView`
-with *no* `fleetSummary` at all, meaning that route is 100% mock data end to
-end. Both are currently reachable in the app. An owner who opens the
-Dashboard's Financials tab and the new Business Finance section side by side
-will see two different, disagreeing numbers for the same business — and one
-of them is partly synthetic. This should be resolved (retire, gate behind a
-flag, or clearly relabel as "legacy/demo") before it's mistaken for a second
-opinion on real numbers.
+`Dashboard.tsx` now labels the former Financials tab **Revenue** and limits it
+to ledger-sourced revenue analytics. Budgets moved to Business Finance. The
+orphan `FinancialsPage.tsx` and mock transaction generator were deleted, so
+Business Finance is the sole P&L / cash / expense story.
 
 ## Lower-priority / not yet real features (no action needed today)
 
-- **Driver bonuses/incentives/penalties/fines** — appear only in
-  `generateMockTransactions()`'s fake data; no real write path exists
-  anywhere in the server. Not a wiring gap because there's no real feature to
-  wire yet — flag only if/when it's built.
+- **Driver bonuses/incentives/penalties/fines** — no complete real write path
+  exists today. Not a wiring gap until that product is built.
 - **Vehicle depreciation / capex schedule** — no depreciation tracking found;
-  vehicle financing is folded into the Fixed Expense "Lease" category (see
-  #1), which is itself unwired. One fix (wiring Fixed Expenses) covers this
-  too.
+  lease payments can be tracked as Fixed Expenses, but financing principal is
+  not depreciation. A proper asset/depreciation schedule remains a separate,
+  lower-priority accounting feature.
 
-## Priority order (accountant's view)
+## Remediation result (accountant's view)
 
-1. **Fixed Expenses → canonical ledger** (#1) — largest, most concrete dollar
-   amount currently invisible; real recurring costs an owner already trusts
-   are being tracked "somewhere."
-2. **Resolve the Dashboard Financials / mock-data conflict** — not a missing
-   feature, but an active correctness risk: two disagreeing dashboards, one
-   partly fake, both currently visible.
-3. **InDrive Wallet loads aggregation** (already scoped, cheapest fix — data's
-   already in memory).
-4. **Generic transaction → canonical bridge** (#4) — turns every future
-   manually-logged expense/income category into something Business Finance
-   can see, instead of adding one allow-listed category at a time.
-5. **Maintenance and Budgets** (#2, #3) — real underlying data, lower
-   urgency than #1 since Business Finance already labels Maintenance as
-   honestly untracked rather than silently wrong.
+1. **Done:** Fixed Expenses → canonical ledger.
+2. **Done:** Dashboard conflict resolved (Revenue analytics only; Budgets moved).
+3. **Done:** InDrive Wallet load aggregation and short-driver risk.
+4. **Done:** Generic posted transaction → canonical bridge.
+5. **Done:** Posted Maintenance actuals and Budgets vs ledger actual.
+6. **Remaining future scope:** depreciation/capex schedules and any not-yet-real
+   bonus/fine products.

@@ -18,9 +18,9 @@ export function CashBankTab({
   onOpenCashRetag?: () => void;
   onOpenDriver?: (driverId: string) => void;
 }) {
-  const { platformBank, driverCash, walletLoads } = cashBank;
+  const { platformBank, driverCash, walletLoads, businessPayments } = cashBank;
   return (
-    <div className="grid gap-4 lg:grid-cols-3">
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
       <Card className="border-slate-200 dark:border-slate-800 rounded-md">
         <CardHeader className="border-b border-slate-100 dark:border-slate-800 py-3">
           <CardTitle className="text-sm font-semibold">Platform bank</CardTitle>
@@ -114,6 +114,35 @@ export function CashBankTab({
           <Button type="button" size="sm" variant="outline" className="w-full mt-2" onClick={onOpenWallet}>
             Open InDrive Wallet
           </Button>
+        </CardContent>
+      </Card>
+
+      <Card className="border-slate-200 dark:border-slate-800 rounded-md">
+        <CardHeader className="border-b border-slate-100 dark:border-slate-800 py-3">
+          <CardTitle className="text-sm font-semibold">Business payments</CardTitle>
+        </CardHeader>
+        <CardContent className="pt-3 space-y-2 text-sm">
+          <div className="flex justify-between">
+            <span className="text-slate-500">Paid out this period</span>
+            <span className="tabular-nums font-medium">{formatMoney(businessPayments.periodOutflows)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-slate-500">Bank / card / other</span>
+            <span className="tabular-nums">{formatMoney(businessPayments.bankOrCardOutflows)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-slate-500">Cash</span>
+            <span className="tabular-nums">{formatMoney(businessPayments.cashOutflows)}</span>
+          </div>
+          <div className="flex justify-between border-t border-slate-100 pt-2 dark:border-slate-800">
+            <span className="text-slate-500">Other income received</span>
+            <span className="tabular-nums text-emerald-700 dark:text-emerald-400">
+              {formatMoney(businessPayments.otherInflows)}
+            </span>
+          </div>
+          <p className="text-xs text-slate-500">
+            Real posted payments only. Fixed-expense schedules do not move cash.
+          </p>
         </CardContent>
       </Card>
     </div>

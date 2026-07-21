@@ -46,6 +46,7 @@ import {
 import { cn } from '../ui/utils';
 import { FleetBusyProvider, useFleetBusy } from '../shared/FleetBusyLock';
 import { useLockedDialog } from '../shared/useLockedDialog';
+import { usePermissions } from '../../hooks/usePermissions';
 
 const MONEY = (n: number) =>
   n.toLocaleString(undefined, { style: 'currency', currency: 'USD' });
@@ -67,6 +68,8 @@ function CashRetagPageInner({
 } = {}) {
   const fleetTz = useFleetTimezone();
   const { user } = useAuth();
+  const { can } = usePermissions();
+  const canEdit = can('transactions.edit');
   const queryClient = useQueryClient();
   const { runExclusive, setMessage } = useFleetBusy();
   const [driverFilter, setDriverFilter] = useState('all');
@@ -173,6 +176,10 @@ function CashRetagPageInner({
   }
 
   async function applyPreview() {
+    if (!canEdit) {
+      toast.error('Your role has view-only finance access.');
+      return;
+    }
     if (preview.length === 0) {
       toast.error('Nothing to apply — check selection or enable replace for tagged rows');
       return;
@@ -276,9 +283,15 @@ function CashRetagPageInner({
         </label>
       </div>
 
+      {!canEdit && (
+        <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+          View-only access: Fleet Owners and Managers can apply cash retags.
+        </div>
+      )}
+
       <div className="flex gap-2">
         <Button
-          disabled={selected.length === 0}
+          disabled={!canEdit || selected.length === 0}
           onClick={() => setPreviewOpen(true)}
         >
           Preview {selected.length > 0 ? `(${selected.length})` : ''}

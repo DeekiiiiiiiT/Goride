@@ -202,7 +202,7 @@ export function AppSidebar({
   ].filter(Boolean) as NavLeaf[];
 
   const financeItems: NavLeaf[] = [
-    canSeeBusinessFinanceHome && { id: 'business-finance', label: 'Home' },
+    canSeeBusinessFinanceHome && { id: 'business-finance', label: 'Overview' },
     canView('fleet-financials') && {
       id: 'fleet-financials',
       label: 'Bank Deposits',

@@ -77,6 +77,19 @@ export function buildPnLFromCanonicalEvents(
   const tolls = tollNet.net;
   const recoveredMemo = tollRecoveredWashedMemo(tollNet);
 
+  let fixedOverhead = 0;
+  let maintenance = 0;
+  let operatingExpenses = 0;
+  let otherIncome = 0;
+  for (const e of scoped) {
+    const type = String(e.eventType || '');
+    const amount = eventAmount(e);
+    if (type === 'fixed_expense') fixedOverhead += amount;
+    else if (type === 'maintenance') maintenance += amount;
+    else if (type === 'operating_expense') operatingExpenses += amount;
+    else if (type === 'other_income') otherIncome += amount;
+  }
+
   // Charge Driver wallet postings — shown in Tolls accordion, not netted into fleet loss.
   let chargedToDrivers = 0;
   for (const e of scoped) {
@@ -100,8 +113,17 @@ export function buildPnLFromCanonicalEvents(
       : undefined;
 
   const netTrip = round2(gross - fees);
-  // Maintenance not tracked yet. Wallet loads are transfers (Cash & Bank), not P&L expenses.
-  const operatingProfit = round2(netTrip - fuel - tolls - driverPayouts);
+  // Wallet loads are transfers (Cash & Bank), not P&L expenses.
+  const operatingProfit = round2(
+    netTrip +
+      otherIncome -
+      fuel -
+      tolls -
+      maintenance -
+      fixedOverhead -
+      operatingExpenses -
+      driverPayouts,
+  );
   const operatingRatio = gross > 0.005 ? round2(((gross - operatingProfit) / gross) * 100) : null;
 
   // Memo line retired — Tolls/Fuel accordions on PnLTab carry the owner breakdown.
@@ -111,7 +133,10 @@ export function buildPnLFromCanonicalEvents(
     { id: 'net_trip', label: 'Net trip revenue', amount: netTrip, kind: 'subtotal' },
     { id: 'fuel', label: 'Fuel', amount: -round2(fuel), kind: 'expense' },
     { id: 'tolls', label: 'Tolls', amount: -round2(tolls), kind: 'expense' },
-    { id: 'maintenance', label: 'Maintenance', amount: null, kind: 'expense', tracked: false },
+    { id: 'maintenance', label: 'Maintenance', amount: -round2(maintenance), kind: 'expense' },
+    { id: 'fixed_overhead', label: 'Fixed overhead', amount: -round2(fixedOverhead), kind: 'expense' },
+    { id: 'operating_expenses', label: 'Other operating expenses', amount: -round2(operatingExpenses), kind: 'expense' },
+    { id: 'other_income', label: 'Other income', amount: round2(otherIncome), kind: 'subtotal' },
     { id: 'driver_payouts', label: 'Driver payouts', amount: -round2(driverPayouts), kind: 'expense' },
     { id: 'operating_profit', label: 'Operating profit', amount: operatingProfit, kind: 'result' },
   ];
@@ -163,6 +188,10 @@ export function sumExpenseRowsFromEvents(
 ): {
   fuel: number;
   tolls: number;
+  maintenance: number;
+  fixed: number;
+  operating: number;
+  byCategory: Record<string, number>;
   other: number;
   tollEventCount: number;
   fuelEventCount: number;
@@ -178,6 +207,10 @@ export function sumExpenseRowsFromEvents(
   const scoped = (events || []).filter((e) => inPeriod(eventDate(e), period));
   let fuel = 0;
   let tolls = 0;
+  let maintenance = 0;
+  let fixed = 0;
+  let operating = 0;
+  const byCategory: Record<string, number> = {};
   let other = 0;
   let tollEventCount = 0;
   let fuelEventCount = 0;
@@ -198,6 +231,9 @@ export function sumExpenseRowsFromEvents(
     'toll_charge_offset',
     'refund_expense',
     'adjustment',
+    'fixed_expense',
+    'maintenance',
+    'operating_expense',
   ];
   for (const e of scoped) {
     const t = String(e.eventType || '');
@@ -242,6 +278,18 @@ export function sumExpenseRowsFromEvents(
         tolls += amt;
         signedAmount = amt;
       }
+    } else if (t === 'fixed_expense') {
+      fixed += amt;
+      category = String(e.category || 'Fixed overhead');
+      byCategory[category] = (byCategory[category] || 0) + amt;
+    } else if (t === 'maintenance') {
+      maintenance += amt;
+      category = 'Maintenance';
+      byCategory.Maintenance = (byCategory.Maintenance || 0) + amt;
+    } else if (t === 'operating_expense') {
+      operating += amt;
+      category = String(e.category || 'Other');
+      byCategory[category] = (byCategory[category] || 0) + amt;
     } else {
       other += amt;
     }
@@ -259,6 +307,12 @@ export function sumExpenseRowsFromEvents(
   return {
     fuel: round2(Math.max(0, fuel)),
     tolls: round2(Math.max(0, tolls)),
+    maintenance: round2(Math.max(0, maintenance)),
+    fixed: round2(Math.max(0, fixed)),
+    operating: round2(Math.max(0, operating)),
+    byCategory: Object.fromEntries(
+      Object.entries(byCategory).map(([key, value]) => [key, round2(value)]),
+    ),
     other: round2(other),
     tollEventCount,
     fuelEventCount,

@@ -7,7 +7,15 @@ import { Label } from "../../ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/select";
 import { Textarea } from "../../ui/textarea";
 import { Checkbox } from "../../ui/checkbox";
-import { FixedExpenseConfig, ExpenseCategory, ExpenseFrequency } from '../../../types/expenses';
+import {
+    EXPENSE_CATEGORIES,
+    EXPENSE_FREQUENCIES,
+    FixedExpenseConfig,
+    ExpenseCategory,
+    ExpenseFrequency,
+    normalizeExpenseCategory,
+    normalizeExpenseFrequency,
+} from '../../../types/expenses';
 import { expenseService } from '../../../services/expenseService';
 import { toast } from "sonner@2.0.3";
 import { Loader2 } from "lucide-react";
@@ -45,8 +53,8 @@ export const AddFixedExpenseDialog: React.FC<AddFixedExpenseDialogProps> = ({
         defaultValues: {
             name: expenseToEdit?.name || '',
             amount: expenseToEdit?.amount.toString() || '',
-            frequency: expenseToEdit?.frequency || 'Monthly',
-            category: expenseToEdit?.category || 'Insurance',
+            frequency: expenseToEdit ? normalizeExpenseFrequency(expenseToEdit.frequency) : 'monthly',
+            category: expenseToEdit ? normalizeExpenseCategory(expenseToEdit.category) : 'Insurance',
             startDate: expenseToEdit?.startDate || new Date().toISOString().split('T')[0],
             endDate: expenseToEdit?.endDate || '',
             vendor: expenseToEdit?.vendor || '',
@@ -61,8 +69,8 @@ export const AddFixedExpenseDialog: React.FC<AddFixedExpenseDialogProps> = ({
             reset({
                 name: expenseToEdit?.name || '',
                 amount: expenseToEdit?.amount.toString() || '',
-                frequency: expenseToEdit?.frequency || 'Monthly',
-                category: expenseToEdit?.category || 'Insurance',
+                frequency: expenseToEdit ? normalizeExpenseFrequency(expenseToEdit.frequency) : 'monthly',
+                category: expenseToEdit ? normalizeExpenseCategory(expenseToEdit.category) : 'Insurance',
                 startDate: expenseToEdit?.startDate || new Date().toISOString().split('T')[0],
                 endDate: expenseToEdit?.endDate || '',
                 vendor: expenseToEdit?.vendor || '',
@@ -151,13 +159,11 @@ export const AddFixedExpenseDialog: React.FC<AddFixedExpenseDialogProps> = ({
                                     <SelectValue placeholder="Select category" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="Insurance">Insurance</SelectItem>
-                                    <SelectItem value="Tracking">Tracking / Security</SelectItem>
-                                    <SelectItem value="License">License / Registration</SelectItem>
-                                    <SelectItem value="Lease">Lease / Financing</SelectItem>
-                                    <SelectItem value="Parking">Parking</SelectItem>
-                                    <SelectItem value="Software">Software / Apps</SelectItem>
-                                    <SelectItem value="Other">Other</SelectItem>
+                                    {EXPENSE_CATEGORIES.map((category) => (
+                                        <SelectItem key={category.value} value={category.value}>
+                                            {category.label}
+                                        </SelectItem>
+                                    ))}
                                 </SelectContent>
                             </Select>
                         </div>
@@ -172,11 +178,11 @@ export const AddFixedExpenseDialog: React.FC<AddFixedExpenseDialogProps> = ({
                                     <SelectValue placeholder="Select frequency" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="Weekly">Weekly</SelectItem>
-                                    <SelectItem value="Monthly">Monthly</SelectItem>
-                                    <SelectItem value="Quarterly">Quarterly</SelectItem>
-                                    <SelectItem value="Yearly">Yearly</SelectItem>
-                                    <SelectItem value="One-time">One-time</SelectItem>
+                                    {EXPENSE_FREQUENCIES.map((frequency) => (
+                                        <SelectItem key={frequency.value} value={frequency.value}>
+                                            {frequency.label}
+                                        </SelectItem>
+                                    ))}
                                 </SelectContent>
                             </Select>
                         </div>

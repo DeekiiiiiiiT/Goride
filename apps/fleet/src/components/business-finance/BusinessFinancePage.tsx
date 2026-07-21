@@ -14,6 +14,7 @@ import { OverviewTab } from './OverviewTab';
 import { PnLTab } from './PnLTab';
 import { CashBankTab } from './CashBankTab';
 import { ExpensesTab } from './ExpensesTab';
+import { BudgetsTab } from './BudgetsTab';
 import { DriverBalancesTab } from './DriverBalancesTab';
 import { WorkbenchTab } from './workbench/WorkbenchTab';
 import type { BusinessFinanceTab, PeriodPreset } from './types';
@@ -131,6 +132,7 @@ export function BusinessFinancePage({ onNavigate, onOpenDriver, initialTab = 'ov
           <TabsTrigger value="pnl">Profit &amp; Loss</TabsTrigger>
           <TabsTrigger value="cash-bank">Cash &amp; Bank</TabsTrigger>
           <TabsTrigger value="expenses">Expenses</TabsTrigger>
+          <TabsTrigger value="budgets">Budgets</TabsTrigger>
           <TabsTrigger value="driver-balances">Driver Balances</TabsTrigger>
           <TabsTrigger value="workbench">Workbench</TabsTrigger>
         </TabsList>
@@ -169,7 +171,14 @@ export function BusinessFinancePage({ onNavigate, onOpenDriver, initialTab = 'ov
               />
             </TabsContent>
             <TabsContent value="expenses" className="mt-0">
-              <ExpensesTab expenses={data.expenses} onNavigatePage={navigateWithPeriod} />
+              <ExpensesTab
+                expenses={data.expenses}
+                onNavigatePage={navigateWithPeriod}
+                onChanged={() => void refetch()}
+              />
+            </TabsContent>
+            <TabsContent value="budgets" className="mt-0">
+              <BudgetsTab expenses={data.expenses} period={period} />
             </TabsContent>
             <TabsContent value="driver-balances" className="mt-0">
               <DriverBalancesTab snapshot={data.driverBalances} onOpenDriver={openDriver} />

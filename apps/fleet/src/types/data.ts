@@ -621,12 +621,21 @@ export type LedgerEventType =
   | 'wallet_credit'
   | 'wallet_debit'
   | 'cancelled_trip_loss'
+  | 'fixed_expense'
+  | 'operating_expense'
+  | 'other_income'
   | 'adjustment'
   | 'other';
 
 export type LedgerDirection = 'inflow' | 'outflow';
 
-export type LedgerSourceType = 'trip' | 'transaction' | 'manual' | 'system';
+export type LedgerSourceType =
+  | 'trip'
+  | 'transaction'
+  | 'manual'
+  | 'system'
+  | 'financial_event'
+  | 'backfill';
 
 export interface LedgerEntry {
   id: string;

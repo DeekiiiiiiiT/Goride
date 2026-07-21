@@ -89,7 +89,9 @@ describe('deriveTollTxIsReconciled', () => {
 });
 
 describe('top-level resolution + classifyTollLedgerEntry', () => {
-  it('classifies personal cash toll as personal (not cashWash) when resolution is top-level', () => {
+  // Cash plaza spend always washes; personal liability is the Charge Driver
+  // wallet debit — counting cash as personal would double-count.
+  it('keeps cash plaza spend as cashWash even when resolution is personal', () => {
     expect(
       classifyTollLedgerEntry({
         paymentMethod: 'Cash',
@@ -98,6 +100,6 @@ describe('top-level resolution + classifyTollLedgerEntry', () => {
         tripId: null,
         amount: -285,
       }),
-    ).toBe('personal');
+    ).toBe('cashWash');
   });
 });

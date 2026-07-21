@@ -4,6 +4,9 @@
  */
 import type { Context } from "npm:hono";
 import { appendCanonicalLedgerEvents } from "./ledger_canonical.ts";
+import type { FixedExpenseConfig } from "../../../types/expenses.ts";
+import { buildFixedExpenseOccurrences } from "../../../utils/fixedExpenseOccurrences.ts";
+import { classifyPostedBusinessTransaction } from "../../../utils/businessTransactionAccounting.ts";
 
 function isCompletedTripStatus(status: unknown): boolean {
   const s = String(status ?? "").trim().toLowerCase();
@@ -444,6 +447,122 @@ export async function appendCanonicalWalletCreditIfEligible(
   } catch (e) {
     console.error("[CanonicalOps] wallet_credit append failed:", e);
   }
+}
+
+// ─── Business overhead: fixed expenses + generic transactions ──────────────
+
+/** Build dated fixed-expense occurrences for one config and recognition window. */
+export function buildCanonicalFixedExpenseEvents(
+  config: FixedExpenseConfig,
+  windowStartYmd: string,
+  windowEndYmd: string,
+): Record<string, unknown>[] {
+  return buildFixedExpenseOccurrences(config, windowStartYmd, windowEndYmd).map((occ) => ({
+    idempotencyKey: occ.idempotencyKey,
+    date: occ.occurrenceYmd,
+    driverId: "fleet",
+    eventType: "fixed_expense",
+    direction: "outflow",
+    netAmount: occ.amount,
+    grossAmount: occ.amount,
+    currency: occ.currency,
+    sourceType: "financial_event",
+    sourceId: occ.configId,
+    vehicleId: occ.vehicleId,
+    category: occ.category,
+    description: occ.vendor ? `${occ.name} — ${occ.vendor}` : occ.name,
+    metadata: {
+      fixedExpenseConfigId: occ.configId,
+      occurrenceYmd: occ.occurrenceYmd,
+      versionTag: occ.versionTag,
+      recognitionBasis: "scheduled_due_date",
+    },
+  }));
+}
+
+export async function appendCanonicalFixedExpenseIfEligible(
+  config: FixedExpenseConfig,
+  windowStartYmd: string,
+  windowEndYmd: string,
+  c: Context,
+): Promise<{ inserted: number; skipped: number; failed: number }> {
+  const events = buildCanonicalFixedExpenseEvents(config, windowStartYmd, windowEndYmd);
+  if (!events.length) return { inserted: 0, skipped: 0, failed: 0 };
+  const totals = { inserted: 0, skipped: 0, failed: 0 };
+  for (let i = 0; i < events.length; i += 200) {
+    const result = await appendCanonicalLedgerEvents(events.slice(i, i + 200), c);
+    totals.inserted += result.inserted;
+    totals.skipped += result.skipped;
+    totals.failed += result.failed;
+  }
+  return totals;
+}
+
+/**
+ * Generic transaction bridge. Specialized Fuel, Toll, wallet and trip-derived
+ * categories are intentionally excluded so their existing writers cannot be
+ * double-counted.
+ */
+export function buildCanonicalGenericTransactionEvent(
+  transaction: Record<string, unknown>,
+): Record<string, unknown> | null {
+  const id = String(transaction.id ?? "").trim();
+  const category = String(transaction.category ?? "").trim();
+  if (!id || !category) return null;
+
+  const classification = classifyPostedBusinessTransaction(category, transaction.status);
+  if (!classification) return null;
+  const { eventType, direction } = classification;
+
+  const amount = Math.abs(coerceAmount(transaction.amount));
+  if (amount <= 1e-9) return null;
+  const rawDate = String(transaction.date ?? transaction.timestamp ?? transaction.createdAt ?? "").trim();
+  const date = rawDate.slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+  const driverId = String(transaction.driverId ?? "").trim() || "fleet";
+
+  return {
+    idempotencyKey: `transaction:${id}|${eventType}`,
+    date,
+    driverId,
+    eventType,
+    direction,
+    netAmount: amount,
+    grossAmount: amount,
+    currency: String(transaction.currency || "JMD").toUpperCase(),
+    sourceType: "transaction",
+    sourceId: id,
+    vehicleId:
+      typeof transaction.vehicleId === "string" && transaction.vehicleId.trim()
+        ? transaction.vehicleId.trim()
+        : undefined,
+    category,
+    description:
+      typeof transaction.description === "string" && transaction.description.trim()
+        ? transaction.description.trim()
+        : category,
+    paymentMethod: transaction.paymentMethod,
+    metadata: {
+      transactionId: id,
+      recognitionBasis: "transaction_date",
+      ...(transaction.metadata && typeof transaction.metadata === "object"
+        ? { sourceMetadata: transaction.metadata }
+        : {}),
+    },
+    ...(typeof transaction.organizationId === "string" && transaction.organizationId.trim()
+      ? { organizationId: transaction.organizationId.trim() }
+      : {}),
+  };
+}
+
+export async function appendCanonicalGenericTransactionIfEligible(
+  transaction: Record<string, unknown>,
+  c: Context,
+): Promise<boolean> {
+  const event = buildCanonicalGenericTransactionEvent(transaction);
+  if (!event) return false;
+  const result = await appendCanonicalLedgerEvents([event], c);
+  return result.inserted > 0 || result.skipped > 0;
 }
 
 // ─── Fuel Reimbursement Credit ──────────────────────────────────────────────

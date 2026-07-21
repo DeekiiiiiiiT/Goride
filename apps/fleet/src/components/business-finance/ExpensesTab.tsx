@@ -1,4 +1,6 @@
 import React from 'react';
+import { Plus, RefreshCw } from 'lucide-react';
+import { toast } from 'sonner@2.0.3';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import {
@@ -12,16 +14,71 @@ import {
 import { cn } from '../ui/utils';
 import { formatMoney } from './money';
 import type { ExpensesSnapshot } from './types';
+import { usePermissions } from '../../hooks/usePermissions';
+import { api } from '../../services/api';
+import { LogBusinessExpenseDialog } from './LogBusinessExpenseDialog';
 
 export function ExpensesTab({
   expenses,
   onNavigatePage,
+  onChanged,
 }: {
   expenses: ExpensesSnapshot;
   onNavigatePage?: (page: string) => void;
+  onChanged?: () => void;
 }) {
+  const { can } = usePermissions();
+  const [logOpen, setLogOpen] = React.useState(false);
+  const [syncing, setSyncing] = React.useState(false);
+
+  const syncHistoricalExpenses = async () => {
+    setSyncing(true);
+    try {
+      const result = await api.syncBusinessFinanceExpenses(false);
+      const fixed = result.stats.fixed_expenses;
+      const generic = result.stats.generic_transactions;
+      toast.success(
+        `Expense sync complete: ${(fixed?.appended || 0) + (generic?.appended || 0)} posted, ${(fixed?.skipped || 0) + (generic?.skipped || 0)} already current`,
+      );
+      onChanged?.();
+    } catch (error) {
+      console.error('[ExpensesTab] historical sync failed', error);
+      toast.error(error instanceof Error ? error.message : 'Expense sync failed');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">Business expenses</h2>
+          <p className="text-xs text-slate-500">
+            Ledger-posted actuals. Recurring schedules are managed on each vehicle.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {can('data.backfill') && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={syncing}
+              onClick={() => void syncHistoricalExpenses()}
+            >
+              <RefreshCw className={`mr-2 h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
+              Sync historical
+            </Button>
+          )}
+          {can('transactions.edit') && (
+            <Button type="button" size="sm" onClick={() => setLogOpen(true)}>
+              <Plus className="mr-2 h-4 w-4" />
+              Log expense
+            </Button>
+          )}
+        </div>
+      </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {expenses.categories.map((c) => (
           <Card key={c.id} className="border-slate-200 dark:border-slate-800 rounded-md">
@@ -93,6 +150,11 @@ export function ExpensesTab({
           </Table>
         </CardContent>
       </Card>
+      <LogBusinessExpenseDialog
+        open={logOpen}
+        onOpenChange={setLogOpen}
+        onSaved={() => onChanged?.()}
+      />
     </div>
   );
 }

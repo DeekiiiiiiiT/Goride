@@ -51,6 +51,15 @@ const VALID_CANONICAL_EVENT_TYPES = new Set([
   "fuel_finalized",
   "cash_collected",
   "cash_returned",
+  // Business-overhead SSOT (Business Finance coverage program).
+  /** One dated occurrence of a recurring vehicle FixedExpenseConfig (Phase 2). */
+  "fixed_expense",
+  /** Generic manually-logged operating expense bridged from transaction:* (Phase 3). */
+  "operating_expense",
+  /** Generic manually-logged other income bridged from transaction:* (Phase 3). */
+  "other_income",
+  /** Completed, paid maintenance parts/labor spend (Phase 4). */
+  "maintenance",
 ]);
 
 const VALID_DIRECTIONS = new Set(["inflow", "outflow", "neutral"]);
@@ -175,6 +184,62 @@ export async function deleteCanonicalLedgerBySource(
   const idemDeleted = await deleteIdemKeysForKeys(idemKeys);
   console.log(
     `[CanonicalLedger] deleteCanonicalLedgerBySource type=${sourceType} ids=${ids.length} deleted=${keys.length} idem=${idemDeleted}`,
+  );
+  return { deleted: keys.length, idemDeleted };
+}
+
+/**
+ * Remove canonical rows for source ids on/after a date. Used when deleting a
+ * recurring rule: incurred history stays in the books, future scheduled
+ * occurrences are removed.
+ */
+export async function deleteCanonicalLedgerBySourceFromDate(
+  sourceType: string,
+  sourceIds: string[],
+  fromYmd: string,
+): Promise<{ deleted: number; idemDeleted: number }> {
+  const ids = [...new Set(sourceIds.map((s) => String(s).trim()).filter(Boolean))];
+  if (
+    !ids.length ||
+    !VALID_SOURCE_TYPES.has(sourceType) ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(fromYmd)
+  ) {
+    return { deleted: 0, idemDeleted: 0 };
+  }
+
+  const sb = supabaseKv();
+  const allRows: { key: string; value: Record<string, unknown> }[] = [];
+  for (let i = 0; i < ids.length; i += SOURCE_ID_IN_CHUNK) {
+    const chunk = ids.slice(i, i + SOURCE_ID_IN_CHUNK);
+    let offset = 0;
+    while (offset < 500_000) {
+      const { data, error } = await sb
+        .from("kv_store_37f42386")
+        .select("key, value")
+        .like("key", "ledger_event:%")
+        .eq("value->>sourceType", sourceType)
+        .in("value->>sourceId", chunk)
+        .gte("value->>date", fromYmd)
+        .range(offset, offset + LEDGER_DELETE_PAGE - 1);
+      if (error) throw error;
+      const page = (data || []) as { key: string; value: Record<string, unknown> }[];
+      allRows.push(...page);
+      if (page.length < LEDGER_DELETE_PAGE) break;
+      offset += LEDGER_DELETE_PAGE;
+    }
+  }
+  if (!allRows.length) return { deleted: 0, idemDeleted: 0 };
+
+  const idemKeys = allRows
+    .map((row) => String(row.value?.idempotencyKey ?? "").trim())
+    .filter(Boolean);
+  const keys = allRows.map((row) => row.key);
+  for (let i = 0; i < keys.length; i += 100) {
+    await kv.mdel(keys.slice(i, i + 100));
+  }
+  const idemDeleted = await deleteIdemKeysForKeys(idemKeys);
+  console.log(
+    `[CanonicalLedger] deleteCanonicalLedgerBySourceFromDate type=${sourceType} ids=${ids.length} from=${fromYmd} deleted=${keys.length} idem=${idemDeleted}`,
   );
   return { deleted: keys.length, idemDeleted };
 }

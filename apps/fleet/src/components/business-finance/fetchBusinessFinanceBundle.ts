@@ -195,9 +195,10 @@ export async function fetchBusinessFinanceBundle(
     expenseAgg.fuelEventCount > 0 ? expenseAgg.fuel : round2(fuelFromPeriods);
   const tolls =
     expenseAgg.tollEventCount > 0 ? expenseAgg.tolls : round2(tollFromPeriods);
+  const driverPayoutLine = pnl.lines.find((line) => line.id === 'driver_payouts')?.amount ?? 0;
   const driverPayouts =
-    Math.abs(pnl.lines.find((l) => l.id === 'driver_payouts')?.amount || 0) > 0.005
-      ? Math.abs(pnl.lines.find((l) => l.id === 'driver_payouts')!.amount)
+    Math.abs(driverPayoutLine) > 0.005
+      ? Math.abs(driverPayoutLine)
       : round2(driverPayoutsFromPeriods);
 
   const grossLine = pnl.lines.find((l) => l.id === 'gross')?.amount || 0;
@@ -209,8 +210,28 @@ export async function fetchBusinessFinanceBundle(
     period.startYmd,
     period.endYmd,
   );
-  // Maintenance honestly untracked
-  const maintenance: number | null = null;
+  const maintenance = expenseAgg.maintenance;
+  const fixedOverhead = expenseAgg.fixed;
+  const operatingExpenses = expenseAgg.operating;
+  let businessPaymentOutflows = 0;
+  let businessBankOrCardOutflows = 0;
+  let businessCashOutflows = 0;
+  let businessOtherInflows = 0;
+  for (const event of ledgerEvents) {
+    const type = String(event.eventType || '');
+    const date = String(event.date || event.postingAt || event.createdAt || '').slice(0, 10);
+    if (!inPeriod(date, period) || String(event.sourceType || '') !== 'transaction') continue;
+    const amount = Math.abs(Number(event.netAmount) || Number(event.grossAmount) || 0);
+    if (type === 'other_income') {
+      businessOtherInflows += amount;
+      continue;
+    }
+    if (type !== 'operating_expense' && type !== 'maintenance') continue;
+    businessPaymentOutflows += amount;
+    const method = String(event.paymentMethod || '').toLowerCase();
+    if (method === 'cash') businessCashOutflows += amount;
+    else businessBankOrCardOutflows += amount;
+  }
 
   let tollVarianceFlags = 0;
   try {
@@ -253,6 +274,8 @@ export async function fetchBusinessFinanceBundle(
       fuel,
       tolls,
       maintenance,
+      fixedOverhead,
+      operatingExpenses,
       driverPayouts,
     },
     transfers: {
@@ -298,6 +321,12 @@ export async function fetchBusinessFinanceBundle(
       periodLoads: round2(walletLoads),
       shortDriverCount: walletShortDriverCount,
     },
+    businessPayments: {
+      periodOutflows: round2(businessPaymentOutflows),
+      bankOrCardOutflows: round2(businessBankOrCardOutflows),
+      cashOutflows: round2(businessCashOutflows),
+      otherInflows: round2(businessOtherInflows),
+    },
     incompleteSources: overview.incompleteSources.filter((s) =>
       /bank|wallet|driver|cash/i.test(s),
     ),
@@ -332,15 +361,66 @@ export async function fetchBusinessFinanceBundle(
       {
         id: 'maintenance',
         label: 'Maintenance',
-        amount: null,
-        tracked: false,
+        amount: maintenance,
+        tracked: true,
         deepLinkPage: 'maintenance-hub',
         deepLinkLabel: 'Open Maintenance Hub',
+        note: 'Completed, posted maintenance spend only; supplier quotes are excluded.',
+      },
+      {
+        id: 'insurance',
+        label: 'Insurance',
+        amount: expenseAgg.byCategory.Insurance || 0,
+        tracked: true,
+        note: 'Scheduled recurring costs plus posted one-off insurance expenses.',
+      },
+      {
+        id: 'lease',
+        label: 'Lease / Financing',
+        amount: expenseAgg.byCategory.Lease || 0,
+        tracked: true,
+      },
+      {
+        id: 'security',
+        label: 'Security / GPS',
+        amount: expenseAgg.byCategory.Security || expenseAgg.byCategory.Tracking || 0,
+        tracked: true,
+      },
+      {
+        id: 'software',
+        label: 'Software',
+        amount:
+          (expenseAgg.byCategory.Software || 0) +
+          (expenseAgg.byCategory['Software/Subscription'] || 0),
+        tracked: true,
+      },
+      {
+        id: 'permits',
+        label: 'Permits / Registration',
+        amount:
+          (expenseAgg.byCategory.Permits || 0) +
+          (expenseAgg.byCategory.Registration || 0),
+        tracked: true,
+      },
+      {
+        id: 'equipment',
+        label: 'Equipment',
+        amount: expenseAgg.byCategory.Equipment || 0,
+        tracked: true,
       },
       {
         id: 'other',
         label: 'Other',
-        amount: expenseAgg.other,
+        amount: round2(
+          expenseAgg.other +
+            Math.max(
+              0,
+              operatingExpenses -
+                (expenseAgg.byCategory.Insurance || 0) -
+                (expenseAgg.byCategory['Software/Subscription'] || 0) -
+                (expenseAgg.byCategory.Registration || 0),
+            ),
+        ),
         tracked: true,
       },
     ],

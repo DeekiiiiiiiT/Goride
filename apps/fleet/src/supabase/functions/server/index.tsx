@@ -68,6 +68,7 @@ import {
   appendCanonicalLedgerEvents,
   deleteAllCanonicalLedgerBySourceType,
   deleteCanonicalLedgerBySource,
+  deleteCanonicalLedgerBySourceFromDate,
 } from "./ledger_canonical.ts";
 import { isUnifiedTollSettlementEnabled } from "./driver_toll_charge.ts";
 import { upsertClaim, deleteClaim, executeClaimDateBackfill } from "./claim_service.ts";
@@ -85,6 +86,10 @@ import {
   buildCanonicalFuelReimbursementEvent,
   buildCanonicalTollReimbursementEvent,
   buildCanonicalTollEventFromTollLedger,
+  appendCanonicalFixedExpenseIfEligible,
+  buildCanonicalFixedExpenseEvents,
+  appendCanonicalGenericTransactionIfEligible,
+  buildCanonicalGenericTransactionEvent,
   type TollLedgerLike,
 } from "./canonical_from_ops.ts";
 import {
@@ -3069,6 +3074,7 @@ app.post("/make-server-37f42386/transactions", requireAuth(), async (c) => {
     if (!transaction.id) {
         transaction.id = crypto.randomUUID();
     }
+    const previousTransaction = await kv.get(`transaction:${transaction.id}`);
     if (!transaction.timestamp) {
         transaction.timestamp = new Date().toISOString();
     }
@@ -3139,6 +3145,22 @@ app.post("/make-server-37f42386/transactions", requireAuth(), async (c) => {
             transaction.isReconciled = true;
         }
         if (!transaction.paymentMethod) transaction.paymentMethod = "Digital Wallet";
+    }
+
+    const genericTransactionPreview = buildCanonicalGenericTransactionEvent(transaction);
+    const isCashRetag = Boolean(transaction?.metadata?.cashRetag);
+    if (genericTransactionPreview || isCashRetag) {
+      const rbacUser = c.get("rbacUser") as RbacUser | undefined;
+      if (!rbacUser || !hasPermission(rbacUser.resolvedRole, "transactions.edit")) {
+        return c.json(
+          {
+            error: "Forbidden",
+            message: 'Posting business expenses/income or applying cash retags requires the "transactions.edit" permission.',
+            required: "transactions.edit",
+          },
+          403,
+        );
+      }
     }
 
     const txOrgId = getOrgId(c) || transaction.organizationId;
@@ -3512,9 +3534,25 @@ app.post("/make-server-37f42386/transactions", requireAuth(), async (c) => {
     
     await kv.set(`transaction:${transaction.id}`, stampOrg(transaction, c));
 
-    // ── Canonical ledger for InDrive Wallet Credit ──
-    if (transaction.category === "InDrive Wallet Credit") {
+    // ── Canonical ledger for wallet + generic business transactions ──
+    // Rebuild only these categories on edit; specialized Fuel/Toll writers keep
+    // their existing source rows untouched.
+    const previousGeneric = previousTransaction && typeof previousTransaction === "object"
+      ? buildCanonicalGenericTransactionEvent(previousTransaction as Record<string, unknown>)
+      : null;
+    const nextGeneric = genericTransactionPreview;
+    const previousWasWallet =
+      previousTransaction && typeof previousTransaction === "object"
+        ? (previousTransaction as Record<string, unknown>).category === "InDrive Wallet Credit"
+        : false;
+    const nextIsWallet = transaction.category === "InDrive Wallet Credit";
+    if (previousGeneric || nextGeneric || previousWasWallet || nextIsWallet) {
+      await deleteCanonicalLedgerBySource("transaction", [String(transaction.id)]);
+    }
+    if (nextIsWallet) {
         await appendCanonicalWalletCreditIfEligible(transaction, c);
+    } else if (nextGeneric) {
+        await appendCanonicalGenericTransactionIfEligible(transaction, c);
     }
 
     return c.json({ success: true, data: transaction });
@@ -6983,7 +7021,7 @@ app.post("/make-server-37f42386/fuel/backfill-rideshare-payment-source", require
 // ─── POST /ledger/canonical-backfill — Backfill canonical ledger events from existing data ─────
 // Populates ledger_event:* for: trips, fuel_entries, toll_ledger, wallet credits (InDrive, fuel reimbursement, toll reimbursement)
 // Idempotent: uses idempotencyKey to skip duplicates.
-// Supports: ?dryRun=true (count only), ?types=trips,fuel,tolls,indrive,fuel_reimburse,toll_reimburse (filter by type)
+// Supports body: dryRun + comma-separated types including fixed_expenses,generic_transactions.
 app.post("/make-server-37f42386/ledger/canonical-backfill", requireAuth(), requirePermission('data.backfill'), async (c) => {
   const startMs = Date.now();
   try {
@@ -6991,7 +7029,8 @@ app.post("/make-server-37f42386/ledger/canonical-backfill", requireAuth(), requi
     const dryRun = body?.dryRun === true;
     const typesParam = typeof body?.types === 'string' ? body.types : '';
     const allowedTypes = new Set(typesParam ? typesParam.split(',').map((t: string) => t.trim().toLowerCase()) : [
-      'trips', 'fuel', 'tolls', 'indrive', 'fuel_reimburse', 'toll_reimburse'
+      'trips', 'fuel', 'tolls', 'indrive', 'fuel_reimburse', 'toll_reimburse',
+      'fixed_expenses', 'generic_transactions'
     ]);
 
     console.log(`[CanonicalBackfill] Starting dryRun=${dryRun} types=${[...allowedTypes].join(',')}`);
@@ -7003,6 +7042,8 @@ app.post("/make-server-37f42386/ledger/canonical-backfill", requireAuth(), requi
       indrive: { scanned: 0, eligible: 0, appended: 0, skipped: 0, errors: 0 },
       fuel_reimburse: { scanned: 0, eligible: 0, appended: 0, skipped: 0, errors: 0 },
       toll_reimburse: { scanned: 0, eligible: 0, appended: 0, skipped: 0, errors: 0 },
+      fixed_expenses: { scanned: 0, eligible: 0, appended: 0, skipped: 0, errors: 0 },
+      generic_transactions: { scanned: 0, eligible: 0, appended: 0, skipped: 0, errors: 0 },
     };
 
     // 1. Trips → fare_earning (non-Uber only; Uber comes from CSV imports)
@@ -7111,8 +7152,13 @@ app.post("/make-server-37f42386/ledger/canonical-backfill", requireAuth(), requi
     }
 
     // 4-6. Transaction-based wallet credits
-    const allTransactions = (allowedTypes.has('indrive') || allowedTypes.has('fuel_reimburse') || allowedTypes.has('toll_reimburse'))
-      ? await kv.getByPrefix('transaction:')
+    const allTransactions = (
+      allowedTypes.has('indrive') ||
+      allowedTypes.has('fuel_reimburse') ||
+      allowedTypes.has('toll_reimburse') ||
+      allowedTypes.has('generic_transactions')
+    )
+      ? filterByOrg(await kv.getByPrefix('transaction:'), c)
       : [];
 
     // 4. InDrive Wallet Credit → wallet_credit
@@ -7218,6 +7264,72 @@ app.post("/make-server-37f42386/ledger/canonical-backfill", requireAuth(), requi
         stats.toll_reimburse.appended = batch.length;
       }
       console.log(`[CanonicalBackfill] Toll Reimburse: scanned=${stats.toll_reimburse.scanned} eligible=${stats.toll_reimburse.eligible} appended=${stats.toll_reimburse.appended}`);
+    }
+
+    // 7. Fixed expense rules → dated fixed_expense occurrences.
+    if (allowedTypes.has('fixed_expenses')) {
+      console.log('[CanonicalBackfill] Processing fixed expense rules...');
+      const configs = filterByOrg(await kv.getByPrefix('fixed_expense:'), c);
+      stats.fixed_expenses.scanned = configs.length;
+      const horizon = new Date();
+      horizon.setUTCFullYear(horizon.getUTCFullYear() + 5);
+      const horizonYmd = horizon.toISOString().slice(0, 10);
+      const batch: Record<string, unknown>[] = [];
+      for (const config of configs) {
+        if (!config?.id || !config?.startDate) continue;
+        const events = buildCanonicalFixedExpenseEvents(
+          config as any,
+          String(config.startDate),
+          horizonYmd,
+        );
+        if (events.length) {
+          stats.fixed_expenses.eligible++;
+          batch.push(...events);
+        }
+      }
+      if (dryRun) {
+        stats.fixed_expenses.appended = batch.length;
+      } else {
+        for (let i = 0; i < batch.length; i += 200) {
+          try {
+            const result = await appendCanonicalLedgerEvents(batch.slice(i, i + 200), c);
+            stats.fixed_expenses.appended += result.inserted;
+            stats.fixed_expenses.skipped += result.skipped;
+            stats.fixed_expenses.errors += result.failed;
+          } catch (e: any) {
+            stats.fixed_expenses.errors++;
+            console.error('[CanonicalBackfill] fixed expenses append error:', e?.message);
+          }
+        }
+      }
+    }
+
+    // 8. Posted generic transactions → operating expense / maintenance / other income.
+    if (allowedTypes.has('generic_transactions')) {
+      console.log('[CanonicalBackfill] Processing generic transactions...');
+      stats.generic_transactions.scanned = allTransactions.length;
+      const batch: Record<string, unknown>[] = [];
+      for (const tx of allTransactions) {
+        const event = buildCanonicalGenericTransactionEvent(tx as Record<string, unknown>);
+        if (!event) continue;
+        stats.generic_transactions.eligible++;
+        batch.push(event);
+      }
+      if (dryRun) {
+        stats.generic_transactions.appended = batch.length;
+      } else {
+        for (let i = 0; i < batch.length; i += 200) {
+          try {
+            const result = await appendCanonicalLedgerEvents(batch.slice(i, i + 200), c);
+            stats.generic_transactions.appended += result.inserted;
+            stats.generic_transactions.skipped += result.skipped;
+            stats.generic_transactions.errors += result.failed;
+          } catch (e: any) {
+            stats.generic_transactions.errors++;
+            console.error('[CanonicalBackfill] generic transactions append error:', e?.message);
+          }
+        }
+      }
     }
 
     const durationMs = Date.now() - startMs;
@@ -7514,7 +7626,7 @@ app.get("/make-server-37f42386/fleet-bank-confirms", requireAuth(), async (c) =>
   }
 });
 
-app.put("/make-server-37f42386/fleet-bank-confirms", requireAuth(), async (c) => {
+app.put("/make-server-37f42386/fleet-bank-confirms", requireAuth(), requirePermission("transactions.edit"), async (c) => {
   try {
     const body = await c.req.json();
     const weekStartYmd = String(body?.weekStartYmd || "").trim();
@@ -7600,7 +7712,7 @@ app.put("/make-server-37f42386/fleet-bank-confirms", requireAuth(), async (c) =>
 });
 
 /** Unconfirm — removes org (and optional legacy driver) receive record. */
-app.delete("/make-server-37f42386/fleet-bank-confirms", requireAuth(), async (c) => {
+app.delete("/make-server-37f42386/fleet-bank-confirms", requireAuth(), requirePermission("transactions.edit"), async (c) => {
   try {
     const weekStartYmd = String(c.req.query("weekStartYmd") || "").trim();
     if (!/^\d{4}-\d{2}-\d{2}$/.test(weekStartYmd)) {
@@ -9877,26 +9989,72 @@ app.post("/make-server-37f42386/fixed-expenses", requireAuth(), requirePermissio
     if (!expense.id) {
         expense.id = crypto.randomUUID();
     }
+    const amount = Number(expense.amount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+        return c.json({ error: "Amount must be a positive number" }, 400);
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(expense.startDate || ""))) {
+        return c.json({ error: "Start date must be YYYY-MM-DD" }, 400);
+    }
+    if (
+      expense.endDate &&
+      (!/^\d{4}-\d{2}-\d{2}$/.test(String(expense.endDate)) ||
+        String(expense.endDate) < String(expense.startDate))
+    ) {
+        return c.json({ error: "End date must be YYYY-MM-DD and not precede start date" }, 400);
+    }
+    const frequency = String(expense.frequency || "").trim().toLowerCase();
+    if (!["daily", "weekly", "monthly", "quarterly", "annually", "yearly", "one_time", "one-time"].includes(frequency)) {
+        return c.json({ error: "Unsupported expense frequency" }, 400);
+    }
+    if (!String(expense.name || "").trim() || !String(expense.category || "").trim()) {
+        return c.json({ error: "Name and category are required" }, 400);
+    }
     if (!expense.createdAt) {
         expense.createdAt = new Date().toISOString();
     }
+    expense.amount = amount;
+    if (expense.isActive == null) expense.isActive = true;
     expense.updatedAt = new Date().toISOString();
 
     const key = `fixed_expense:${expense.vehicleId}:${expense.id}`;
     await kv.set(key, stampOrg(expense, c));
-    return c.json({ success: true, data: expense });
+
+    // A rule edit replaces its generated ledger schedule. We post through a
+    // rolling five-year horizon; rerunning the idempotent backfill extends it.
+    await deleteCanonicalLedgerBySource("financial_event", [String(expense.id)]);
+    const horizon = new Date();
+    horizon.setUTCFullYear(horizon.getUTCFullYear() + 5);
+    const horizonYmd = horizon.toISOString().slice(0, 10);
+    const ledger = await appendCanonicalFixedExpenseIfEligible(
+      expense,
+      String(expense.startDate),
+      horizonYmd,
+      c,
+    );
+    return c.json({ success: true, data: expense, ledger });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }
 });
 
 app.delete("/make-server-37f42386/fixed-expenses/:vehicleId/:id", requireAuth(), requirePermission('vehicles.edit'), async (c) => {
-  const vehicleId = c.req.param("vehicleId");
-  const id = c.req.param("id");
+  const vehicleId = String(c.req.param("vehicleId") || "").trim();
+  const id = String(c.req.param("id") || "").trim();
+  if (!vehicleId || !id) return c.json({ error: "Vehicle ID and expense ID are required" }, 400);
   try {
     const key = `fixed_expense:${vehicleId}:${id}`;
     await kv.del(key);
-    return c.json({ success: true });
+    // Keep incurred history; remove today/future scheduled occurrences.
+    const tomorrow = new Date();
+    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+    const futureFromYmd = tomorrow.toISOString().slice(0, 10);
+    const ledger = await deleteCanonicalLedgerBySourceFromDate(
+      "financial_event",
+      [id],
+      futureFromYmd,
+    );
+    return c.json({ success: true, ledger });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }

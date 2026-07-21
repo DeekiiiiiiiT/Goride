@@ -3770,6 +3770,30 @@ export const api = {
     return response.json();
   },
 
+  /** Idempotently sync historical fixed expenses + generic transactions into Business Finance. */
+  async syncBusinessFinanceExpenses(dryRun = false): Promise<{
+    success: boolean;
+    dryRun: boolean;
+    stats: Record<string, { scanned: number; eligible: number; appended: number; skipped: number; errors: number }>;
+  }> {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/ledger/canonical-backfill`,
+      {
+        method: 'POST',
+        headers: await requireAuthHeaders(),
+        body: JSON.stringify({
+          dryRun,
+          types: 'fixed_expenses,generic_transactions',
+        }),
+      },
+    );
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Business Finance expense sync failed: ${error}`);
+    }
+    return response.json();
+  },
+
   /** Ops-only Uber bank receive confirms — never touches Cash Returned / Settlement math. */
   async getFleetBankConfirms(): Promise<{ data: Array<{
     organizationId?: string;

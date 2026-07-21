@@ -407,7 +407,7 @@ function AppContent() {
           </PermissionGate>
         )}
         {currentPage === 'fleet-financials' && (
-          <PermissionGate permission="nav.drivers" onNavigate={setCurrentPage}>
+          <PermissionGate permission="nav.financial_analytics" onNavigate={setCurrentPage}>
             <FleetFinancialsPage
               initialWeekFrom={financePeriodHint?.startYmd}
               initialWeekTo={financePeriodHint?.endYmd}
@@ -417,12 +417,12 @@ function AppContent() {
           </PermissionGate>
         )}
         {currentPage === 'cash-retag' && (
-          <PermissionGate permission="nav.drivers" onNavigate={setCurrentPage}>
+          <PermissionGate permission="nav.financial_analytics" onNavigate={setCurrentPage}>
             <CashRetagPage onBackToBusinessFinance={() => handleNavigate('business-finance')} />
           </PermissionGate>
         )}
         {currentPage === 'indrive-wallet' && (
-          <PermissionGate permission="nav.drivers" onNavigate={setCurrentPage}>
+          <PermissionGate permission="nav.financial_analytics" onNavigate={setCurrentPage}>
             <IndriveWalletCenterPage
               initialDateFrom={financePeriodHint?.startYmd}
               initialDateTo={financePeriodHint?.endYmd}
