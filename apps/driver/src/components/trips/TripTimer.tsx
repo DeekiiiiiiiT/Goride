@@ -499,13 +499,13 @@ export function TripTimer({ onComplete }: TripTimerProps) {
                       {formatElapsedTime(waitSeconds)}
                   </div>
               ) : (
-                  <div className="text-2xl font-mono font-bold text-slate-900 leading-none mb-1">
+                  <div className="text-2xl font-mono font-bold text-slate-900 dark:text-white leading-none mb-1">
                     {formatElapsedTime(elapsedSeconds)}
                   </div>
               )}
               
               {tripStatus === 'WAITING' && (
-                  <div className="text-xs text-slate-500 font-medium">
+                  <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">
                       Total Trip: {formatElapsedTime(elapsedSeconds)}
                   </div>
               )}

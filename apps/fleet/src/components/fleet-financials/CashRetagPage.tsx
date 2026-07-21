@@ -47,6 +47,7 @@ import { cn } from '../ui/utils';
 import { FleetBusyProvider, useFleetBusy } from '../shared/FleetBusyLock';
 import { useLockedDialog } from '../shared/useLockedDialog';
 import { usePermissions } from '../../hooks/usePermissions';
+import { DRIVER_FINANCIAL_PERIODS_KEY } from '../../hooks/useDriverFinancialPeriods';
 
 const MONEY = (n: number) =>
   n.toLocaleString(undefined, { style: 'currency', currency: 'USD' });
@@ -207,6 +208,8 @@ function CashRetagPageInner({
         }
       }
       await queryClient.invalidateQueries({ queryKey: ['cash-retag-transactions'] });
+      // Retags move Cash Returned between Settlement Weeks — refresh the period projection.
+      await queryClient.invalidateQueries({ queryKey: [DRIVER_FINANCIAL_PERIODS_KEY] });
       setSelectedIds(new Set());
       lockedPreviewOpenChange(false);
       if (ok) toast.success(`Tagged ${ok} payment${ok === 1 ? '' : 's'}`);

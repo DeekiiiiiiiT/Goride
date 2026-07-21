@@ -134,6 +134,7 @@ import { LogCashPaymentModal } from './LogCashPaymentModal';
 import { WeeklySettlementView } from './WeeklySettlementView';
 import { useDriverPayoutPeriodRows } from '../../hooks/useDriverPayoutPeriodRows';
 import { useDriverFinancialBundle } from '../../hooks/useDriverFinancialBundle';
+import { useInvalidateDriverFinancialPeriods } from '../../hooks/useDriverFinancialPeriods';
 import { buildWalletCallOutstandingByMonday } from '../../utils/walletCallOutstanding';
 import { DriverEarningsHistory } from './DriverEarningsHistory';
 import { DriverExpensesHistory } from './DriverExpensesHistory';
@@ -944,6 +945,9 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       setExpandedRows(newSet);
   };
 
+  // Cash Wallet "Cash still owed" reads the server period projection — refetch after cash writes.
+  const invalidateFinancialPeriods = useInvalidateDriverFinancialPeriods();
+
   const handleSavePayment = async (payment: { 
     id?: string;
     amount: number; 
@@ -1025,6 +1029,8 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
           console.log('[DriverDetail] New payment saved:', savedTx?.id, savedTx?.category, savedTx?.type, savedTx?.amount);
           setTransactions(prev => [savedTx, ...prev].filter(Boolean));
       }
+      // Server rebuilt the tagged Settlement Week — pull fresh cash_returned / cash_still_held.
+      void invalidateFinancialPeriods(driverId);
   };
 
   const handleEditTransaction = (tx: FinancialTransaction) => {
@@ -1045,6 +1051,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
 
           // Persist
           await api.saveTransaction(updatedTx);
+          void invalidateFinancialPeriods(driverId);
           toast.success("Transaction verified");
       } catch (e) {
           console.error("Failed to verify transaction", e);
@@ -1065,6 +1072,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
 
       try {
           await api.deleteTransaction(transactionToDelete);
+          void invalidateFinancialPeriods(driverId);
           toast.success("Transaction deleted");
       } catch (e) {
           setTransactions(originalTransactions);

@@ -3132,6 +3132,54 @@ app.get("/make-server-37f42386/admin/station-gate-evidence", requireAuth(), asyn
     }
 });
 
+/** Settlement Week anchors a cash-payment-like tx feeds (workPeriodStart tag = Cash Returned SSOT). */
+function cashTxWeekAnchors(tx: unknown): { driverId: string; anchors: string[] } | null {
+  if (!tx || typeof tx !== "object") return null;
+  const rec = tx as Record<string, any>;
+  const driverId = String(rec.driverId || "").trim();
+  if (!driverId) return null;
+  const cat = String(rec.category || "");
+  const type = String(rec.type || "");
+  const isCashPaymentLike =
+    cat === "Cash Collection" ||
+    type === "Payment_Received" ||
+    cat === "Float Issue" ||
+    cat === "Adjustment";
+  if (!isCashPaymentLike) return null;
+  const anchors: string[] = [];
+  const wps = String(rec?.metadata?.workPeriodStart || "").slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(wps)) anchors.push(wps);
+  return { driverId, anchors };
+}
+
+/**
+ * Rebuild driver_financial_periods for weeks touched by a cash payment write.
+ * Without this, projected cash_returned / cash_still_held never move after Log Cash.
+ * Covers create, edit (old + new week on retag), and status changes. Non-fatal.
+ */
+async function rebuildFinancialPeriodsForCashTx(next: unknown, previous: unknown): Promise<void> {
+  try {
+    const targets = new Map<string, Set<string>>();
+    for (const t of [next, previous]) {
+      const info = cashTxWeekAnchors(t);
+      if (!info || info.anchors.length === 0) continue;
+      const set = targets.get(info.driverId) || new Set<string>();
+      for (const a of info.anchors) set.add(a);
+      targets.set(info.driverId, set);
+    }
+    if (targets.size === 0) return;
+    const { rebuildPeriodsForAnchors } = await import("./driver_financial_periods.ts");
+    for (const [driverId, anchors] of targets) {
+      await rebuildPeriodsForAnchors(driverId, [...anchors]);
+      console.log(
+        `[transactions] Rebuilt financial periods for driver ${driverId}: ${[...anchors].join(", ")}`,
+      );
+    }
+  } catch (e: any) {
+    console.warn("[transactions] financial period rebuild failed (non-fatal):", e?.message || e);
+  }
+}
+
 app.post("/make-server-37f42386/transactions", requireAuth(), async (c) => {
   try {
     const transaction = await c.req.json();
@@ -3619,6 +3667,12 @@ app.post("/make-server-37f42386/transactions", requireAuth(), async (c) => {
         await appendCanonicalGenericTransactionIfEligible(transaction, c);
     }
 
+    // ── Settlement projection sync (Cash Wallet "Cash still owed" SSOT) ──
+    // driver_financial_periods.cash_returned only changes on rebuild; without this,
+    // Log Cash / edits / verifies never move the projected week. Rebuild the tagged
+    // Settlement Week anchors (new + previous when retagged). Non-fatal on error.
+    await rebuildFinancialPeriodsForCashTx(transaction, previousTransaction);
+
     return c.json({ success: true, data: transaction });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
@@ -3698,6 +3752,8 @@ app.delete("/make-server-37f42386/transactions/:id", requireAuth(), requireDelet
     } catch (ledgerErr: any) {
       console.warn(`[DELETE /transactions/:id] Ledger cleanup failed (non-fatal) tx=${id}:`, ledgerErr?.message);
     }
+    // Deleted cash payments must leave the projected Cash Returned for their Settlement Week.
+    await rebuildFinancialPeriodsForCashTx(tx, null);
     return c.json({ success: true });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
