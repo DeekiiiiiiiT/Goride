@@ -6,6 +6,7 @@
  */
 
 import { useState, useCallback } from 'react';
+import { projectId } from '../../../utils/supabase/info';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../ui/card';
 import { Button } from '../../ui/button';
 import { Badge } from '../../ui/badge';
@@ -33,7 +34,7 @@ export function SyncStatusCard({ policyId, canEdit, session }: SyncStatusCardPro
     setError(null);
 
     try {
-      const baseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+      const baseUrl = `https://${projectId}.supabase.co`;
       const res = await fetch(
         `${baseUrl}/functions/v1/matching/admin/policies/${policyId}/sync-status`,
         {
@@ -64,7 +65,7 @@ export function SyncStatusCard({ policyId, canEdit, session }: SyncStatusCardPro
     setError(null);
 
     try {
-      const baseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+      const baseUrl = `https://${projectId}.supabase.co`;
       const res = await fetch(`${baseUrl}/functions/v1/matching/admin/sync-to-legacy`, {
         method: 'POST',
         headers: {

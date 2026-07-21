@@ -1,5 +1,9 @@
+/**
+ * BF Expenses tab — at-a-glance category cards + ledger detail for the selected period.
+ * Management (rules, bills, approvals, payments) lives in the dedicated Expense Hub desk.
+ */
 import React from 'react';
-import { Plus, RefreshCw } from 'lucide-react';
+import { ArrowRight, Plus, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
@@ -26,6 +30,9 @@ export function ExpensesTab({
   expenses: ExpensesSnapshot;
   onNavigatePage?: (page: string) => void;
   onChanged?: () => void;
+  /** Kept for BusinessFinancePage compatibility; period context comes from the page toolbar. */
+  period?: { startYmd: string; endYmd: string };
+  initialVehicleId?: string;
 }) {
   const { can } = usePermissions();
   const [logOpen, setLogOpen] = React.useState(false);
@@ -53,12 +60,24 @@ export function ExpensesTab({
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">Business expenses</h2>
+          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+            Business expenses
+          </h2>
           <p className="text-xs text-slate-500">
-            Ledger-posted actuals. Recurring schedules are managed on each vehicle.
+            Ledger-posted actuals for the selected period. Manage bills and recurring rules in the
+            Expense Hub.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => onNavigatePage?.('expense-hub')}
+          >
+            Open Expense Hub
+            <ArrowRight className="ml-2 h-4 w-4" />
+          </Button>
           {can('data.backfill') && (
             <Button
               type="button"
@@ -79,6 +98,7 @@ export function ExpensesTab({
           )}
         </div>
       </div>
+
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {expenses.categories.map((c) => (
           <Card key={c.id} className="border-slate-200 dark:border-slate-800 rounded-md">
@@ -132,7 +152,7 @@ export function ExpensesTab({
                 expenses.rows.map((r) => (
                   <TableRow key={r.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                     <TableCell className="whitespace-nowrap text-sm">{r.dateYmd}</TableCell>
-                    <TableCell>{r.category}</TableCell>
+                    <TableCell className="capitalize">{r.category}</TableCell>
                     <TableCell className="max-w-[240px] truncate">{r.description}</TableCell>
                     <TableCell
                       className={cn(

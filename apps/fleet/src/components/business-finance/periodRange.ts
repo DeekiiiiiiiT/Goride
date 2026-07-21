@@ -6,7 +6,11 @@ import {
   endOfWeek,
   startOfMonth,
   endOfMonth,
+  startOfDay,
   subWeeks,
+  subMonths,
+  subDays,
+  differenceInCalendarDays,
   format,
   parseISO,
 } from 'date-fns';
@@ -29,6 +33,10 @@ export function resolvePeriod(
   if (preset === 'custom' && customStart && customEnd) {
     return { preset: 'custom', startYmd: customStart, endYmd: customEnd };
   }
+  if (preset === 'today') {
+    const day = ymd(startOfDay(now));
+    return { preset: 'today', startYmd: day, endYmd: day };
+  }
   // Incomplete custom: keep last non-custom preset for the query (UI shows hint)
   if (preset === 'this_month') {
     return {
@@ -50,6 +58,43 @@ export function resolvePeriod(
     preset: 'this_week',
     startYmd: ymd(startOfWeek(now, weekOpts)),
     endYmd: ymd(endOfWeek(now, weekOpts)),
+  };
+}
+
+/** Matching prior window for % change badges (same length immediately before current). */
+export function previousPeriod(period: BusinessFinancePeriod): BusinessFinancePeriod {
+  const start = parseISO(period.startYmd);
+  const end = parseISO(period.endYmd);
+  const days = Math.max(0, differenceInCalendarDays(end, start));
+
+  if (period.preset === 'today') {
+    const y = ymd(subDays(start, 1));
+    return { preset: 'custom', startYmd: y, endYmd: y };
+  }
+  if (period.preset === 'this_month') {
+    const prev = subMonths(start, 1);
+    return {
+      preset: 'custom',
+      startYmd: ymd(startOfMonth(prev)),
+      endYmd: ymd(endOfMonth(prev)),
+    };
+  }
+  if (period.preset === 'this_week' || period.preset === 'last_week') {
+    const weekOpts = { weekStartsOn: 1 as const };
+    const prior = subWeeks(start, 1);
+    return {
+      preset: 'custom',
+      startYmd: ymd(startOfWeek(prior, weekOpts)),
+      endYmd: ymd(endOfWeek(prior, weekOpts)),
+    };
+  }
+  // Custom: same-length window ending the day before start
+  const prevEnd = subDays(start, 1);
+  const prevStart = subDays(prevEnd, days);
+  return {
+    preset: 'custom',
+    startYmd: ymd(prevStart),
+    endYmd: ymd(prevEnd),
   };
 }
 

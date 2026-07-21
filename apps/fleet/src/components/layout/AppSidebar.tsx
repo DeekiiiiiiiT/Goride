@@ -99,7 +99,10 @@ export function AppSidebar({
   const canSeeFleetOps = canSeeFuelDesk || canSeeTollDesk;
   const canSeeDriverOps = canView('drivers') || canView('earnings-policy');
   const canSeeVehicleOps =
-    canView('vehicles') || canView('maintenance-hub') || canView('fleet');
+    canView('vehicles') ||
+    canView('vehicle-analytics') ||
+    canView('maintenance-hub') ||
+    canView('fleet');
   const canSeeSystem = canView('user-management') || canView('settings');
 
   // Accordion only for Fleet Ops (has mid-level Fuel/Toll desks)
@@ -194,6 +197,10 @@ export function AppSidebar({
 
   const vehicleItems: NavLeaf[] = [
     canView('vehicles') && { id: 'vehicles', label: v('vehiclesPageTitle') },
+    canView('vehicle-analytics') && {
+      id: 'vehicle-analytics',
+      label: 'Vehicle Analytics',
+    },
     canView('maintenance-hub') && {
       id: 'maintenance-hub',
       label: 'Maintenance',
@@ -203,6 +210,7 @@ export function AppSidebar({
 
   const financeItems: NavLeaf[] = [
     canSeeBusinessFinanceHome && { id: 'business-finance', label: 'Overview' },
+    canSeeBusinessFinanceHome && { id: 'expense-hub', label: 'Expense Hub' },
     canView('fleet-financials') && {
       id: 'fleet-financials',
       label: 'Bank Deposits',

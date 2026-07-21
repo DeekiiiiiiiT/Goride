@@ -172,6 +172,7 @@ import { ensureBucket } from "./storage_buckets.ts";
 import { detectFileMagicBytes, extForMime, IMAGE_AND_PDF_MIMES } from "./file_magic.ts";
 import { registerPendingVehicleCatalogRoutes } from "./pending_vehicle_catalog_routes.ts";
 import { registerPartSourcingRoutes } from "./part_sourcing_routes.ts";
+import { registerExpenseHubRoutes } from "./expense_hub_routes.ts";
 import {
   provisionFleetOwner,
   enableDriverForFleetOwner,
@@ -424,6 +425,7 @@ registerEvidenceRoutes(app, supabase, kv, requireAuth, requirePermission);
 registerFleetAdminStorageRoutes(app, supabase, kv);
 registerPendingVehicleCatalogRoutes(app, supabase);
 registerPartSourcingRoutes(app, supabase);
+registerExpenseHubRoutes(app);
 
 // ─── Toll Ledger Primary Write Helper (Phase 6) ──────────────────────────
 // Tolls are now written ONLY to toll_ledger:* (single source of truth).

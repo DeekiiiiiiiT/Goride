@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../../ui/card";
 import { Button } from "../../ui/button";
-import { Plus, Loader2, Pencil, Trash2, Calendar, Repeat, Table as TableIcon, List, ChevronLeft, ChevronRight, LayoutList, Layers, HelpCircle } from "lucide-react";
+import { Plus, Loader2, Pencil, Trash2, Calendar, Repeat, Table as TableIcon, List, ChevronLeft, ChevronRight, LayoutList, Layers, HelpCircle, ExternalLink } from "lucide-react";
 import { expenseService } from '../../../services/expenseService';
+import { useExpenseHubFlag } from '../../../hooks/useExpenseHub';
 import { FixedExpenseConfig } from '../../../types/expenses';
 import { toast } from "sonner@2.0.3";
 import { AddFixedExpenseDialog } from './AddFixedExpenseDialog';
@@ -33,9 +34,14 @@ import {
   
 interface FixedExpensesManagerProps {
     vehicleId: string;
+    /** When the Expense Hub flag is on, rules are managed centrally — this opens BF Expenses filtered to this vehicle. */
+    onNavigateToExpenseHub?: (vehicleId: string) => void;
 }
 
-export const FixedExpensesManager: React.FC<FixedExpensesManagerProps> = React.memo(({ vehicleId }) => {
+export const FixedExpensesManager: React.FC<FixedExpensesManagerProps> = React.memo(({ vehicleId, onNavigateToExpenseHub }) => {
+    // Hub cutover: read-only here once the flag is on (writes move to BF Expense Hub)
+    const hubFlag = useExpenseHubFlag();
+    const hubManaged = hubFlag.data?.enabled === true;
     const [expenses, setExpenses] = useState<FixedExpenseConfig[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isAddExpenseOpen, setIsAddExpenseOpen] = useState(false);
@@ -146,12 +152,32 @@ export const FixedExpensesManager: React.FC<FixedExpensesManagerProps> = React.m
                             Rules
                         </Button>
                     </div>
-                    <Button size="sm" onClick={() => setIsAddExpenseOpen(true)}>
-                        <Plus className="h-4 w-4 mr-2" />
-                        Add Rule
-                    </Button>
+                    {hubManaged ? (
+                        onNavigateToExpenseHub && (
+                            <Button
+                                size="sm"
+                                className="min-h-11 bg-indigo-600 hover:bg-indigo-700"
+                                onClick={() => onNavigateToExpenseHub(vehicleId)}
+                            >
+                                <ExternalLink className="h-4 w-4 mr-2" />
+                                Manage in Expense Hub
+                            </Button>
+                        )
+                    ) : (
+                        <Button size="sm" onClick={() => setIsAddExpenseOpen(true)}>
+                            <Plus className="h-4 w-4 mr-2" />
+                            Add Rule
+                        </Button>
+                    )}
                 </div>
             </div>
+
+            {hubManaged && (
+                <div className="rounded-md border border-indigo-200 bg-indigo-50 px-3 py-2.5 text-sm text-indigo-900 dark:border-indigo-900 dark:bg-indigo-950/40 dark:text-indigo-100">
+                    Recurring expenses for this vehicle are now managed centrally in the Business
+                    Finance Expense Hub. This view is read-only.
+                </div>
+            )}
 
             {isLoading ? (
                 <div className="flex justify-center items-center py-12">
@@ -167,9 +193,22 @@ export const FixedExpensesManager: React.FC<FixedExpensesManagerProps> = React.m
                         <p className="text-sm text-muted-foreground max-w-sm mb-4">
                             Set up recurring costs to automatically project your vehicle's monthly overhead.
                         </p>
-                        <Button variant="outline" onClick={() => setIsAddExpenseOpen(true)}>
-                            Add First Expense
-                        </Button>
+                        {hubManaged ? (
+                            onNavigateToExpenseHub && (
+                                <Button
+                                    variant="outline"
+                                    className="min-h-11"
+                                    onClick={() => onNavigateToExpenseHub(vehicleId)}
+                                >
+                                    <ExternalLink className="h-4 w-4 mr-2" />
+                                    Manage in Expense Hub
+                                </Button>
+                            )
+                        ) : (
+                            <Button variant="outline" onClick={() => setIsAddExpenseOpen(true)}>
+                                Add First Expense
+                            </Button>
+                        )}
                     </CardContent>
                 </Card>
             ) : (
@@ -220,14 +259,16 @@ export const FixedExpensesManager: React.FC<FixedExpensesManagerProps> = React.m
                                                    </p>
                                                    <p className="text-xs text-muted-foreground">per {expense.frequency.toLowerCase().replace('ly', '')}</p>
                                                </div>
-                                               <div className="flex items-center gap-1">
-                                                   <Button variant="ghost" size="icon" onClick={() => handleEdit(expense)}>
-                                                       <Pencil className="h-4 w-4 text-muted-foreground" />
-                                                   </Button>
-                                                   <Button variant="ghost" size="icon" onClick={() => handleDelete(expense.id!)}>
-                                                       <Trash2 className="h-4 w-4 text-rose-500" />
-                                                   </Button>
-                                               </div>
+                                               {!hubManaged && (
+                                                   <div className="flex items-center gap-1">
+                                                       <Button variant="ghost" size="icon" onClick={() => handleEdit(expense)}>
+                                                           <Pencil className="h-4 w-4 text-muted-foreground" />
+                                                       </Button>
+                                                       <Button variant="ghost" size="icon" onClick={() => handleDelete(expense.id!)}>
+                                                           <Trash2 className="h-4 w-4 text-rose-500" />
+                                                       </Button>
+                                                   </div>
+                                               )}
                                            </div>
                                        </div>
                                    </CardContent>

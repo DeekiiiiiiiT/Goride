@@ -24,9 +24,16 @@ type Props = {
   onOpenDriver?: (driverId: string) => void;
   /** e.g. open Workbench when redirected from legacy Financial Analytics */
   initialTab?: BusinessFinanceTab;
+  /** Deep link from a vehicle page — Expenses tab opens the Hub register filtered to this vehicle. */
+  expensesInitialVehicleId?: string;
 };
 
-export function BusinessFinancePage({ onNavigate, onOpenDriver, initialTab = 'overview' }: Props) {
+export function BusinessFinancePage({
+  onNavigate,
+  onOpenDriver,
+  initialTab = 'overview',
+  expensesInitialVehicleId,
+}: Props) {
   const [tab, setTab] = useState<BusinessFinanceTab>(initialTab);
   const [preset, setPreset] = useState<PeriodPreset>('this_week');
   /** Last complete non-custom preset — used while custom From/To are incomplete */
@@ -175,6 +182,8 @@ export function BusinessFinancePage({ onNavigate, onOpenDriver, initialTab = 'ov
                 expenses={data.expenses}
                 onNavigatePage={navigateWithPeriod}
                 onChanged={() => void refetch()}
+                period={{ startYmd: period.startYmd, endYmd: period.endYmd }}
+                initialVehicleId={expensesInitialVehicleId}
               />
             </TabsContent>
             <TabsContent value="budgets" className="mt-0">

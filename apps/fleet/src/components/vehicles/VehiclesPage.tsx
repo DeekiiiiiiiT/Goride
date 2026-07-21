@@ -73,7 +73,12 @@ import { useMyPendingCatalogRequests } from '../../hooks/useMyPendingCatalogRequ
 import { PendingCatalogRequestsDrawer } from './PendingCatalogRequestsDrawer';
 import { ListChecks } from 'lucide-react';
 
-export function VehiclesPage() {
+export function VehiclesPage({
+  onNavigateToExpenseHub,
+}: {
+  /** Expense Hub deep link — parent switches to Business Finance → Expenses for this vehicle. */
+  onNavigateToExpenseHub?: (vehicleId: string) => void;
+} = {}) {
   const { v } = useVocab();
   const { can } = usePermissions();
   const queryClient = useQueryClient();
@@ -434,13 +439,13 @@ export function VehiclesPage() {
   return (
     <>
       {selectedVehicle ? (
-        <VehicleDetail 
-            vehicle={selectedVehicle} 
-            trips={trips} 
-            vehicleMetrics={vehicleMetrics} // Added prop
-            onBack={() => setSelectedVehicleId(null)} 
+        <VehicleDetail
+            vehicle={selectedVehicle}
+            trips={trips}
+            onBack={() => setSelectedVehicleId(null)}
             onAssignDriver={() => handleOpenAssignModal(selectedVehicle.id)}
             onUpdate={handleVehicleUpdate}
+            onNavigateToExpenseHub={onNavigateToExpenseHub}
         />
       ) : (
         <div className="space-y-6 animate-in fade-in duration-500">

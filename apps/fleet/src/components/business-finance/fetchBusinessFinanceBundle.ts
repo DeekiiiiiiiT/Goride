@@ -10,6 +10,7 @@ import {
 } from '../../utils/fleetBankReceive';
 import type { DriverFinancialPeriodClient } from '../../hooks/useDriverFinancialPeriods';
 import { buildPnLFromCanonicalEvents, sumExpenseRowsFromEvents } from './businessFinancePnL';
+import { buildExpensesSnapshot, fetchAllCanonicalEvents } from './expensesSnapshot';
 import { inPeriod } from './periodRange';
 import { computeIndriveWalletLoadsFromLedgerEntries } from '../../utils/indriveWalletMetrics';
 import type {
@@ -22,29 +23,7 @@ import type {
 } from './types';
 import { round2, formatMoney } from './money';
 
-async function fetchAllCanonical(
-  startDate: string,
-  endDate: string,
-  eventTypes?: string,
-): Promise<Record<string, unknown>[]> {
-  const all: Record<string, unknown>[] = [];
-  let offset = 0;
-  const limit = 500;
-  for (let i = 0; i < 40; i++) {
-    const page = await api.getCanonicalLedgerEvents({
-      startDate,
-      endDate,
-      eventTypes,
-      limit,
-      offset,
-    });
-    const chunk = page.data || [];
-    all.push(...chunk);
-    if (!page.hasMore || chunk.length === 0) break;
-    offset += limit;
-  }
-  return all;
-}
+const fetchAllCanonical = fetchAllCanonicalEvents;
 
 async function mapPool<T, R>(
   items: T[],
@@ -332,101 +311,10 @@ export async function fetchBusinessFinanceBundle(
     ),
   };
 
-  const expenses: ExpensesSnapshot = {
-    categories: [
-      {
-        id: 'fuel',
-        label: 'Fuel',
-        amount: fuel,
-        tracked: true,
-        deepLinkPage: 'fuel-overview',
-        deepLinkLabel: 'Open Fuel',
-        note:
-          pnl.fuelRecoveredWashed && pnl.fuelRecoveredWashed > 0.005
-            ? `${formatMoney(fuel)} fleet loss · ${formatMoney(pnl.fuelRecoveredWashed)} already charged to drivers`
-            : undefined,
-      },
-      {
-        id: 'toll',
-        label: 'Tolls',
-        amount: tolls,
-        tracked: true,
-        deepLinkPage: 'toll-tags',
-        deepLinkLabel: 'Open Toll Reconciliation',
-        note:
-          pnl.tollsRecoveredWashed && pnl.tollsRecoveredWashed > 0.005
-            ? `${formatMoney(tolls)} fleet loss · ${formatMoney(pnl.tollsRecoveredWashed)} already removed (recovered/washed)`
-            : undefined,
-      },
-      {
-        id: 'maintenance',
-        label: 'Maintenance',
-        amount: maintenance,
-        tracked: true,
-        deepLinkPage: 'maintenance-hub',
-        deepLinkLabel: 'Open Maintenance Hub',
-        note: 'Completed, posted maintenance spend only; supplier quotes are excluded.',
-      },
-      {
-        id: 'insurance',
-        label: 'Insurance',
-        amount: expenseAgg.byCategory.Insurance || 0,
-        tracked: true,
-        note: 'Scheduled recurring costs plus posted one-off insurance expenses.',
-      },
-      {
-        id: 'lease',
-        label: 'Lease / Financing',
-        amount: expenseAgg.byCategory.Lease || 0,
-        tracked: true,
-      },
-      {
-        id: 'security',
-        label: 'Security / GPS',
-        amount: expenseAgg.byCategory.Security || expenseAgg.byCategory.Tracking || 0,
-        tracked: true,
-      },
-      {
-        id: 'software',
-        label: 'Software',
-        amount:
-          (expenseAgg.byCategory.Software || 0) +
-          (expenseAgg.byCategory['Software/Subscription'] || 0),
-        tracked: true,
-      },
-      {
-        id: 'permits',
-        label: 'Permits / Registration',
-        amount:
-          (expenseAgg.byCategory.Permits || 0) +
-          (expenseAgg.byCategory.Registration || 0),
-        tracked: true,
-      },
-      {
-        id: 'equipment',
-        label: 'Equipment',
-        amount: expenseAgg.byCategory.Equipment || 0,
-        tracked: true,
-      },
-      {
-        id: 'other',
-        label: 'Other',
-        amount: round2(
-          expenseAgg.other +
-            Math.max(
-              0,
-              operatingExpenses -
-                (expenseAgg.byCategory.Insurance || 0) -
-                (expenseAgg.byCategory['Software/Subscription'] || 0) -
-                (expenseAgg.byCategory.Registration || 0),
-            ),
-        ),
-        tracked: true,
-      },
-    ],
-    rows: expenseAgg.rows,
-    incompleteSources: [],
-  };
+  const expenses: ExpensesSnapshot = buildExpensesSnapshot(ledgerEvents, period, {
+    fuel: fuelFromPeriods,
+    tolls: tollFromPeriods,
+  });
 
   const truncated = drivers.length > 80;
 

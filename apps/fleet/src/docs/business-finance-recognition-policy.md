@@ -3,8 +3,9 @@
 Governs the Business Finance coverage program: how overhead, manual costs,
 maintenance, and budgets reach the owner books. Companion to
 [business-finance-coverage-audit.md](business-finance-coverage-audit.md),
-[fuel-business-finance-wiring.md](fuel-business-finance-wiring.md), and
-[indrive-wallet-business-finance-wiring.md](indrive-wallet-business-finance-wiring.md).
+[fuel-business-finance-wiring.md](fuel-business-finance-wiring.md),
+[indrive-wallet-business-finance-wiring.md](indrive-wallet-business-finance-wiring.md),
+and [expense-hub-architecture.md](expense-hub-architecture.md) (centralized Expense Hub).
 
 ## The one rule
 

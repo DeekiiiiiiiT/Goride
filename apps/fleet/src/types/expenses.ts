@@ -63,7 +63,13 @@ export interface FixedExpenseConfig {
     currency?: string;
     frequency: ExpenseFrequency;
     startDate: string; // ISO Date string (YYYY-MM-DD)
+    /** Local effective time (HH:mm), primarily used for insurance coverage. */
+    startTime?: string;
     endDate?: string;  // Optional ISO Date string
+    /** Local expiration time (HH:mm), primarily used for insurance coverage. */
+    endTime?: string;
+    /** IANA timezone for start/end time interpretation. */
+    timeZone?: string;
     /** Provider / counterparty (e.g. ICWI, KingAlarm). */
     vendor?: string;
     /** Free-text notes shown in the entry UI. */
@@ -75,6 +81,13 @@ export interface FixedExpenseConfig {
     isActive?: boolean;
     createdAt?: string;
     updatedAt?: string;
+    /** Expense Hub rule group (additive; legacy rows omit). */
+    ruleGroupId?: string;
+    /** Expense Hub assignment id (usually same as id). */
+    assignmentId?: string;
+    /** Read-only provenance after Hub cutover. */
+    managedByExpenseHub?: boolean;
+    organizationId?: string;
 }
 
 // Helper for UI dropdowns (canonical values).

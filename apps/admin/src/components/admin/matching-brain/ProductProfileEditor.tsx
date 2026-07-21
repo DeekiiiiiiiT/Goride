@@ -6,6 +6,7 @@
  */
 
 import { useState, useCallback } from 'react';
+import { projectId } from '../../../utils/supabase/info';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../ui/card';
 import { Button } from '../../ui/button';
 import { Badge } from '../../ui/badge';
@@ -94,7 +95,7 @@ export function ProductProfileEditor({
     setError(null);
 
     try {
-      const baseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+      const baseUrl = `https://${projectId}.supabase.co`;
       const res = await fetch(`${baseUrl}/functions/v1/matching/admin/product-profiles/${profileId}`, {
         method: 'PATCH',
         headers: {
@@ -125,7 +126,7 @@ export function ProductProfileEditor({
     if (!session || !canEdit) return;
 
     try {
-      const baseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+      const baseUrl = `https://${projectId}.supabase.co`;
       await fetch(`${baseUrl}/functions/v1/matching/admin/product-profiles/${profile.id}`, {
         method: 'PATCH',
         headers: {

@@ -46,6 +46,8 @@ export const FEATURE_FLAGS = {
   PRODUCT_LINE_FILTER: "product_line_filter",
   /** Unlinked trip credits first, then dispute top-ups; allocation-backed balances. */
   CORRECT_TOLL_SETTLEMENT_ORDER: "correct_toll_settlement_order",
+  /** Expense Hub writes + vehicle page read-only projection. */
+  EXPENSE_HUB_V1: "expense_hub_v1",
 } as const;
 
 export type FeatureFlagName = typeof FEATURE_FLAGS[keyof typeof FEATURE_FLAGS];
@@ -362,6 +364,12 @@ export async function initializeDefaultFlags(): Promise<void> {
       enabled: true,
       description:
         "Apply unlinked trip refunds before dispute refunds; settle via allocation ledger",
+    },
+    {
+      name: FEATURE_FLAGS.EXPENSE_HUB_V1,
+      enabled: true,
+      description:
+        "Expense Hub writes and vehicle Fixed Expenses read-only projection (roll out per org)",
     },
   ];
 

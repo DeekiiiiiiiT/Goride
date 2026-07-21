@@ -4,6 +4,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
+import { projectId } from '../../../utils/supabase/info';
 import { useAuth } from '../../auth/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../ui/card';
 import { Badge } from '../../ui/badge';
@@ -61,7 +62,8 @@ export function TollBrainPage() {
   const [health, setHealth] = useState<BrainHealth | null>(null);
   const [policy, setPolicy] = useState<BrainPolicy | null>(null);
 
-  const baseUrl = (import.meta.env.VITE_SUPABASE_URL || '').replace(/\/$/, '');
+  // Shared projectId falls back to the default project when VITE_* env is unset (local dev)
+  const baseUrl = `https://${projectId}.supabase.co`;
 
   const headers = useCallback(() => {
     return {
@@ -71,9 +73,8 @@ export function TollBrainPage() {
   }, [session]);
 
   const fetchAll = useCallback(async () => {
-    if (!session || !baseUrl) {
+    if (!session) {
       setLoading(false);
-      setError(!baseUrl ? 'VITE_SUPABASE_URL not configured' : null);
       return;
     }
     setLoading(true);

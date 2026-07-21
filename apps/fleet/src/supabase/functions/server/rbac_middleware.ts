@@ -51,7 +51,9 @@ export type Permission =
   | 'reports.generate' | 'reports.export' | 'reports.view'
   | 'settings.edit'
   | 'users.invite' | 'users.edit_role' | 'users.remove'
-  | 'data.import' | 'data.export' | 'data.backfill';
+  | 'data.import' | 'data.export' | 'data.backfill'
+  | 'expenses.view' | 'expenses.export' | 'expenses.create' | 'expenses.manage_rules'
+  | 'expenses.approve' | 'expenses.pay' | 'expenses.manage_vendors';
 
 export interface RbacUser {
   userId: string;
@@ -238,6 +240,8 @@ const ALL_CUSTOMER_PERMISSIONS: Permission[] = [
   'settings.edit',
   'users.invite', 'users.edit_role', 'users.remove',
   'data.import', 'data.export', 'data.backfill',
+  'expenses.view', 'expenses.export', 'expenses.create', 'expenses.manage_rules',
+  'expenses.approve', 'expenses.pay', 'expenses.manage_vendors',
 ];
 
 const FLEET_MANAGER_PERMISSIONS: Permission[] = ALL_CUSTOMER_PERMISSIONS.filter(
@@ -262,6 +266,7 @@ const FLEET_ACCOUNTANT_PERMISSIONS: Permission[] = [
   'transactions.view', 'transactions.export',
   'reports.view', 'reports.export',
   'data.export',
+  'expenses.view', 'expenses.export',
 ];
 
 const FLEET_VIEWER_PERMISSIONS: Permission[] = [

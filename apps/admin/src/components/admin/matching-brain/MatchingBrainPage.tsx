@@ -6,6 +6,7 @@
  */
 
 import { useState, useEffect, useCallback } from "react";
+import { projectId } from "../../../utils/supabase/info";
 import { useAuth } from "../../auth/AuthContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../ui/tabs";
@@ -64,7 +65,7 @@ export function MatchingBrainPage() {
     setError(null);
 
     try {
-      const baseUrl = import.meta.env.VITE_SUPABASE_URL || "";
+      const baseUrl = `https://${projectId}.supabase.co`;
       const headers = {
         Authorization: `Bearer ${session.access_token}`,
         "Content-Type": "application/json",
@@ -115,7 +116,7 @@ export function MatchingBrainPage() {
     setError(null);
     setSuccess(null);
 
-    const baseUrl = import.meta.env.VITE_SUPABASE_URL || "";
+    const baseUrl = `https://${projectId}.supabase.co`;
     const res = await fetch(`${baseUrl}/functions/v1/matching/admin/policies/${selectedPolicy.id}`, {
       method: "PATCH",
       headers: {

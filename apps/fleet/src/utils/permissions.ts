@@ -122,6 +122,7 @@ export type Permission =
   | 'nav.imports'
   | 'nav.drivers'
   | 'nav.vehicles'
+  | 'nav.vehicle_analytics'
   | 'nav.maintenance'
   | 'nav.fleet'
   | 'nav.fuel_overview'
@@ -188,7 +189,15 @@ export type Permission =
   // Data
   | 'data.import'
   | 'data.export'
-  | 'data.backfill';
+  | 'data.backfill'
+  // Expense Hub (Business Finance)
+  | 'expenses.view'
+  | 'expenses.export'
+  | 'expenses.create'
+  | 'expenses.manage_rules'
+  | 'expenses.approve'
+  | 'expenses.pay'
+  | 'expenses.manage_vendors';
 
 // ---------------------------------------------------------------------------
 // 4. Role → Permissions map
@@ -201,6 +210,7 @@ const ALL_CUSTOMER_PERMISSIONS: Permission[] = [
   'nav.imports',
   'nav.drivers',
   'nav.vehicles',
+  'nav.vehicle_analytics',
   'nav.maintenance',
   'nav.fleet',
   'nav.fuel_overview',
@@ -238,6 +248,9 @@ const ALL_CUSTOMER_PERMISSIONS: Permission[] = [
   'settings.edit',
   'users.invite', 'users.edit_role', 'users.remove',
   'data.import', 'data.export', 'data.backfill',
+  // Expense Hub — owners/managers get full workflow
+  'expenses.view', 'expenses.export', 'expenses.create', 'expenses.manage_rules',
+  'expenses.approve', 'expenses.pay', 'expenses.manage_vendors',
 ];
 
 const FLEET_MANAGER_PERMISSIONS: Permission[] = ALL_CUSTOMER_PERMISSIONS.filter(
@@ -262,7 +275,7 @@ const FLEET_ACCOUNTANT_PERMISSIONS: Permission[] = [
   'nav.financial_analytics',
   'nav.transaction_list',
   'nav.reports',
-  // Actions — view & export only
+  // Actions — view & export only (Expense Hub stays view/export until owner expands)
   'drivers.view',
   'vehicles.view',
   'fuel.view',
@@ -273,6 +286,8 @@ const FLEET_ACCOUNTANT_PERMISSIONS: Permission[] = [
   'reports.view',
   'reports.export',
   'data.export',
+  'expenses.view',
+  'expenses.export',
 ];
 
 const FLEET_VIEWER_PERMISSIONS: Permission[] = [
@@ -400,6 +415,7 @@ export const PAGE_PERMISSION_MAP: Record<string, Permission> = {
 
   // Vehicles / Fleet
   'vehicles':           'nav.vehicles',
+  'vehicle-analytics':  'nav.vehicle_analytics',
   'maintenance-hub':    'nav.maintenance',
   'fleet':              'nav.fleet',
 

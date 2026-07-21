@@ -5,16 +5,12 @@ import {
   Clock, 
   MapPin, 
   TrendingUp, 
-  Fuel,
   Wrench,
   AlertTriangle,
   CheckCircle2,
-  PiggyBank,
-  CreditCard,
   Plus,
   Loader2,
   Scan,
-  Pencil,
   Activity,
   Tag,
   Unlink,
@@ -24,8 +20,6 @@ import {
   Download,
   Trash2,
   MoreVertical,
-  DollarSign,
-  Receipt,
   Wind,
   Zap,
   Settings,
@@ -50,10 +44,6 @@ import {
   YAxis, 
   CartesianGrid, 
   Tooltip as RechartsTooltip, 
-  PieChart,
-  Pie,
-  Cell,
-  Legend
 } from 'recharts';
 import { SafeResponsiveContainer as ResponsiveContainer } from '../ui/SafeResponsiveContainer';
 import {
@@ -100,7 +90,7 @@ import { Trip } from '../../types/data';
 import { api } from '../../services/api';
 import { odometerService } from '../../services/odometerService';
 import { ImageWithFallback } from '../figma/ImageWithFallback';
-import { format, subDays, isSameDay, getDay, getHours, differenceInDays, addDays, startOfDay, endOfDay, isWithinInterval } from 'date-fns';
+import { format, subDays, isSameDay, getHours, differenceInDays, addDays, startOfDay, endOfDay, isWithinInterval, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from 'date-fns';
 import { DateRange } from "react-day-picker";
 import { DatePickerWithRange } from "../ui/date-range-picker";
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
@@ -125,10 +115,8 @@ import { PendingCatalogRequestsDrawer } from './PendingCatalogRequestsDrawer';
 import { TollClassPicker } from './TollClassPicker';
 
 import { OdometerHistory } from './odometer/OdometerHistory';
-import { OdometerDisplay } from './odometer/OdometerDisplay';
 import { MasterLogTimeline } from './odometer/MasterLogTimeline';
 import { ImportOdometerModal } from './odometer/ImportOdometerModal';
-import { calculateLiveMileage } from '../../utils/mileageProjection';
 import { FixedExpensesManager } from './expenses/FixedExpensesManager';
 import { EquipmentManager } from './EquipmentManager';
 import { ExteriorManager } from './ExteriorManager';
@@ -143,13 +131,14 @@ import { catalogOptionsFromScheduleRows } from '../../utils/maintenanceCatalogOp
 interface VehicleDetailProps {
   vehicle: Vehicle;
   trips: Trip[];
-  vehicleMetrics?: import('../../types/data').VehicleMetrics[]; // Added
   onBack: () => void;
   onAssignDriver?: () => void;
   onUpdate?: (vehicle: Vehicle) => void;
+  /** Expense Hub deep link — opens BF Expenses register filtered to this vehicle. */
+  onNavigateToExpenseHub?: (vehicleId: string) => void;
 }
 
-export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssignDriver, onUpdate }: VehicleDetailProps) {
+export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate, onNavigateToExpenseHub }: VehicleDetailProps) {
 
   const { session } = useAuth();
   const token = session?.access_token;
@@ -458,7 +447,6 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
     nextOdo: 0,
     remainingKm: 0,
   });
-  const [projectedMileage, setProjectedMileage] = useState<{value: number, isProjected: boolean} | null>(null);
   const [odometerHistory, setOdometerHistory] = useState<any[]>([]);
   /** Start true when a vehicle is shown so maintenance bootstrap waits for unified odometer fetch. */
   const [isOdometerLoading, setIsOdometerLoading] = useState(() => Boolean(vehicle.id || vehicle.licensePlate));
@@ -552,6 +540,38 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
       from: subDays(new Date(), 29),
       to: new Date(),
   });
+  // Period preset driving the header date range; switches to 'custom' on manual calendar edits
+  type DetailPeriodPreset = 'today' | 'this_week' | 'last_week' | 'this_month' | '30d' | 'custom';
+  const [periodPreset, setPeriodPreset] = useState<DetailPeriodPreset>('30d');
+  const applyPeriodPreset = (preset: DetailPeriodPreset) => {
+      setPeriodPreset(preset);
+      const now = new Date();
+      switch (preset) {
+          case 'today':
+              setDateRange({ from: startOfDay(now), to: now });
+              break;
+          case 'this_week':
+              setDateRange({ from: startOfWeek(now, { weekStartsOn: 1 }), to: now });
+              break;
+          case 'last_week': {
+              const lastWeek = subDays(startOfWeek(now, { weekStartsOn: 1 }), 7);
+              setDateRange({ from: lastWeek, to: endOfWeek(lastWeek, { weekStartsOn: 1 }) });
+              break;
+          }
+          case 'this_month':
+              setDateRange({ from: startOfMonth(now), to: now });
+              break;
+          case '30d':
+              setDateRange({ from: subDays(now, 29), to: now });
+              break;
+          default:
+              break;
+      }
+  };
+  const handleManualDateChange = (range: DateRange | undefined) => {
+      setPeriodPreset('custom');
+      setDateRange(range);
+  };
 
   const [uploadForm, setUploadForm] = useState({
     type: 'Registration',
@@ -583,20 +603,13 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
     controlNumber: '',
   });
 
-  // Fetch Maintenance Logs & Projected Mileage
+  // Fetch Maintenance Logs
   useEffect(() => {
       if (vehicle.id || vehicle.licensePlate) {
           const vId = vehicle.id || vehicle.licensePlate;
           api.getMaintenanceLogs(vId).then(setMaintenanceLogs).catch(console.error);
-          
-          calculateLiveMileage(vId, vehicle.metrics.odometer, trips).then(res => {
-             setProjectedMileage({
-                 value: res.estimatedOdo,
-                 isProjected: res.isProjected
-             });
-          });
       }
-  }, [vehicle.id, vehicle.licensePlate, vehicle.metrics.odometer, trips]);
+  }, [vehicle.id, vehicle.licensePlate]);
 
   useEffect(() => {
     const vId = vehicle.id || vehicle.licensePlate;
@@ -643,7 +656,7 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
     odometerHistory,
   ]);
 
-  // Analytics Logic
+  // Analytics Logic — Performance + Km Tracking only (no estimated costs/idle)
   const analytics = useMemo(() => {
     const vehicleTrips = trips.filter(t => t.vehicleId === vehicle.id || t.vehicleId === vehicle.licensePlate);
     
@@ -673,12 +686,6 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
         };
     });
 
-    const dayOfWeekStats = [0,0,0,0,0,0,0].map((_, i) => ({ 
-        name: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][i], 
-        earnings: 0, 
-        trips: 0 
-    }));
-
     const activityByHour = Array.from({ length: 24 }, (_, i) => ({
         hour: i,
         name: `${i}:00`,
@@ -689,6 +696,7 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
     let totalDurationMinutes = 0;
     let totalDistance = 0;
     let sumVisibleEarnings = 0;
+    let periodTripCount = 0;
 
     vehicleTrips.forEach(t => {
         const tDate = new Date(t.date);
@@ -703,6 +711,8 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
              const cutoff = subDays(new Date(), 30);
              if (tDate < cutoff) return;
         }
+
+        periodTripCount += 1;
 
         const dayStat = trendData.find(d => isSameDay(d.fullDate, tDate));
         if (dayStat) {
@@ -720,10 +730,6 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
             else kmStat.other += dist;
         }
 
-        const dayIndex = getDay(tDate);
-        dayOfWeekStats[dayIndex].earnings += t.amount;
-        dayOfWeekStats[dayIndex].trips += 1;
-
         const hourIndex = getHours(tDate);
         activityByHour[hourIndex].trips += 1;
         activityByHour[hourIndex].earnings += t.amount;
@@ -733,114 +739,24 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
         sumVisibleEarnings += t.amount;
     });
 
-    let activeHours = totalDurationMinutes / 60;
-    let idleHours = activeHours * 0.4;
-    
-    // Determine Earnings Base for Rate Calculations
-    // We must ensure the numerator (Earnings) and denominator (Hours/Trips/Km) represent the same dataset.
-    let earningsForHourlyRate = sumVisibleEarnings;
-
-    if (vehicle.metrics.onlineHours !== undefined && vehicle.metrics.onTripHours !== undefined) {
-        // If we use lifetime hours from metrics, we must use lifetime earnings
-    }
-    
-    const totalEarnings = sumVisibleEarnings; // Use visible earnings for the period, not lifetime
-    const totalTrips = vehicleTrips.filter(t => {
-         const tDate = new Date(t.date);
-         if (dateRange?.from && dateRange?.to) {
-             return isWithinInterval(tDate, { start: startOfDay(dateRange.from), end: endOfDay(dateRange.to) });
-         }
-         return true;
-    }).length; // Re-calculate count
-    
-    const fuelCost = totalDistance * 0.15;
-    const maintenanceCost = totalDistance * 0.05;
-    
-    // Estimate Insurance and Depreciation based on time period
-    const daysCount = daysDiff;
-    const insuranceCost = (150 * 6) / 365 * daysCount; 
-    const depreciationCost = (200 * 6) / 365 * daysCount;
-    
-    const totalExpenses = fuelCost + maintenanceCost + insuranceCost + depreciationCost;
-    const netProfit = totalEarnings - totalExpenses;
-    const profitMargin = totalEarnings > 0 ? (netProfit / totalEarnings) * 100 : 0;
-    
-    const vehiclePurchasePrice = 25000;
-    const roiPercentage = (netProfit / vehiclePurchasePrice) * 100;
-    
-    // Use real logs if available
-    const history: any[] = maintenanceLogs;
-    const totalMaintCost = history.reduce((sum, item) => sum + (item.cost || 0), 0);
-
-    // Use consistent datasets for rates (Visible Trips vs Visible Earnings)
-    const earningsPerTrip = totalTrips > 0 ? sumVisibleEarnings / totalTrips : 0;
+    const activeHours = totalDurationMinutes / 60;
+    const earningsPerTrip = periodTripCount > 0 ? sumVisibleEarnings / periodTripCount : 0;
     const earningsPerKm = totalDistance > 0 ? sumVisibleEarnings / totalDistance : 0;
-    const earningsPerHour = activeHours > 0 ? earningsForHourlyRate / activeHours : 0;
-
-    // Phase 2: Extract Distance Metrics from vehicleMetrics prop
-    let distanceMetrics = null;
-    if (vehicleMetrics && vehicleMetrics.length > 0) {
-        // Filter metrics for this vehicle (already filtered by parent likely, but safe to check)
-        const myMetrics = vehicleMetrics.filter(m => 
-            (m.vehicleId === vehicle.id) || 
-            (m.plateNumber && vehicle.licensePlate && m.plateNumber.includes(vehicle.licensePlate))
-        );
-
-        if (myMetrics.length > 0) {
-             // Find relevant one for date range
-             const relevant = myMetrics.filter(m => {
-                 if (!dateRange?.from) return true;
-                 const mStart = new Date(m.periodStart);
-                 const mEnd = new Date(m.periodEnd);
-                 return mStart <= (dateRange.to || new Date()) && mEnd >= dateRange.from;
-             }).sort((a, b) => new Date(b.periodEnd).getTime() - new Date(a.periodEnd).getTime())[0]; // Take latest
-
-             if (relevant && relevant.openDistance !== undefined) {
-                 distanceMetrics = {
-                     open: relevant.openDistance || 0,
-                     enroute: relevant.enrouteDistance || 0,
-                     onTrip: relevant.onTripDistance || 0,
-                     unavailable: relevant.unavailableDistance || 0,
-                     total: (relevant.openDistance || 0) + (relevant.enrouteDistance || 0) + (relevant.onTripDistance || 0) + (relevant.unavailableDistance || 0)
-                 };
-             }
-        }
-    }
+    const earningsPerHour = activeHours > 0 ? sumVisibleEarnings / activeHours : 0;
 
     return {
-        trendData: trendData,
+        trendData,
         kmTrackingData,
-        dayOfWeekData: dayOfWeekStats,
         activityByHour,
         metrics: {
             earningsPerTrip,
             earningsPerKm,
             earningsPerHour,
             totalDistance,
-            activeHours,
-            idleHours
+            periodTripCount,
         },
-        distanceMetrics, // New
-        financials: {
-            totalRevenue: totalEarnings,
-            totalExpenses,
-            netProfit,
-            profitMargin,
-            roiPercentage,
-            breakdown: [
-                { name: 'Fuel', value: fuelCost, color: '#f59e0b', fill: '#f59e0b' },
-                { name: 'Maintenance', value: maintenanceCost, color: '#ef4444', fill: '#ef4444' },
-                { name: 'Insurance', value: insuranceCost, color: '#6366f1', fill: '#6366f1' },
-                { name: 'Depreciation', value: depreciationCost, color: '#94a3b8', fill: '#94a3b8' }
-            ]
-        },
-        maintenance: {
-            history,
-            totalCost: totalMaintCost,
-            nextDue: vehicle.nextServiceDate
-        }
     };
-  }, [vehicle, trips, maintenanceLogs, dateRange]);
+  }, [vehicle, trips, dateRange]);
 
   // Documents Logic
   const documents = useMemo(() => {
@@ -1060,12 +976,32 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
     <div className="space-y-6 animate-in slide-in-from-right duration-300">
       
       {/* --- Top Navigation --- */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-wrap justify-between items-center gap-3">
         <Button variant="ghost" onClick={onBack} className="pl-0 hover:bg-transparent hover:text-indigo-600">
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Fleet
         </Button>
-        <DatePickerWithRange date={dateRange} setDate={setDateRange} />
+        <div className="flex flex-wrap items-center gap-2">
+          {([
+            { id: 'today', label: 'Today' },
+            { id: 'this_week', label: 'This week' },
+            { id: 'last_week', label: 'Last week' },
+            { id: 'this_month', label: 'This month' },
+            { id: '30d', label: '30 days' },
+          ] as Array<{ id: DetailPeriodPreset; label: string }>).map((p) => (
+            <Button
+              key={p.id}
+              type="button"
+              size="sm"
+              variant={periodPreset === p.id ? 'default' : 'outline'}
+              className={periodPreset === p.id ? 'min-h-11 px-3 bg-indigo-600 hover:bg-indigo-600' : 'min-h-11 px-3'}
+              onClick={() => applyPeriodPreset(p.id)}
+            >
+              {p.label}
+            </Button>
+          ))}
+          <DatePickerWithRange date={dateRange} setDate={handleManualDateChange} />
+        </div>
       </div>
 
       {parked && (
@@ -1158,8 +1094,8 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
       )}
 
       {/* --- Header Section --- */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <Card className="lg:col-span-2 overflow-hidden border-indigo-100 shadow-sm">
+      <div className="grid grid-cols-1 gap-6">
+          <Card className="overflow-hidden border-indigo-100 shadow-sm">
              <div className="flex flex-col md:flex-row h-full">
                  <div className="md:w-1/3 relative bg-slate-100 min-h-[200px]">
                      {vehicle.image?.startsWith('figma:') ? (
@@ -1291,185 +1227,16 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
              </div>
           </Card>
 
-          <Card className="border-slate-200 shadow-sm">
-              <CardHeader className="pb-2 flex flex-row items-center justify-between">
-                  <CardTitle className="text-lg">Today's Pulse</CardTitle>
-                  <Button 
-                    variant="ghost" 
-                    size="icon"
-                    className="h-6 w-6"
-                    onClick={() => setIsUpdateOdometerOpen(true)}
-                    title="Update Odometer"
-                  >
-                     <Pencil className="h-3 w-3 text-slate-400 hover:text-indigo-600" />
-                  </Button>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                  <div className="flex justify-between items-center py-2 border-b border-slate-100">
-                      <span className="text-slate-500 text-sm">Odometer</span>
-                      <div className="flex flex-col items-end">
-                          <OdometerDisplay value={projectedMileage?.value || vehicle.metrics.odometer} size="sm" />
-                          {projectedMileage?.isProjected && (
-                              <p className="text-[10px] text-indigo-500 font-medium flex items-center justify-end gap-1 mt-1">
-                                  <TrendingUp className="h-3 w-3" /> Projected
-                              </p>
-                          )}
-                      </div>
-                  </div>
-                  <div className="flex justify-between items-center py-2 border-b border-slate-100">
-                      <span className="text-slate-500 text-sm">Earnings</span>
-                      <span className="font-bold text-slate-900">${vehicle.metrics.todayEarnings.toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between items-center py-2 border-b border-slate-100">
-                      <span className="text-slate-500 text-sm">Utilization</span>
-                      <div className="flex items-center gap-2">
-                          <div className="h-2 w-16 bg-slate-100 rounded-full overflow-hidden">
-                              <div className="h-full bg-emerald-500" style={{ width: `${vehicle.metrics.utilizationRate}%` }}></div>
-                          </div>
-                          <span className="font-bold text-slate-900">{vehicle.metrics.utilizationRate.toFixed(1)}%</span>
-                      </div>
-                  </div>
-                  <div className="flex justify-between items-center py-2 border-b border-slate-100">
-                      <span className="text-slate-500 text-sm">Health Score</span>
-                      <span className={`font-bold ${vehicle.metrics.healthScore > 80 ? 'text-emerald-600' : 'text-amber-600'}`}>
-                          {vehicle.metrics.healthScore}/100
-                      </span>
-                  </div>
-                  
-                  {vehicle.serviceStatus !== 'OK' && (
-                      <div className="bg-amber-50 text-amber-800 text-xs p-3 rounded-md flex items-start gap-2 mt-2">
-                          <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-                          <div>
-                              <p className="font-bold">Service Due: {vehicle.nextServiceType}</p>
-                              <p>Due in {vehicle.daysToService} days</p>
-                          </div>
-                      </div>
-                  )}
-              </CardContent>
-          </Card>
       </div>
 
       <Tabs defaultValue="performance" className="w-full">
           <TabsList>
               <TabsTrigger value="performance">Performance</TabsTrigger>
-              <TabsTrigger value="overview">Overview</TabsTrigger>
-              <TabsTrigger value="utilization">Utilization</TabsTrigger>
-              <TabsTrigger value="financials">Financials</TabsTrigger>
               <TabsTrigger value="expenses">Vehicle Expenses</TabsTrigger>
               <TabsTrigger value="odometer">Odometer</TabsTrigger>
               <TabsTrigger value="km-tracking">Km Tracking</TabsTrigger>
               <TabsTrigger value="profile">Profile</TabsTrigger>
           </TabsList>
-
-          <TabsContent value="overview" className="space-y-6 mt-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <Card>
-                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                          <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
-                          <DollarSign className="h-4 w-4 text-muted-foreground" />
-                      </CardHeader>
-                      <CardContent>
-                          <div className="text-2xl font-bold">${analytics.financials.totalRevenue.toFixed(2)}</div>
-                          <p className="text-xs text-muted-foreground">
-                              For selected period
-                          </p>
-                      </CardContent>
-                  </Card>
-                  <Card>
-                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                          <CardTitle className="text-sm font-medium">Net Profit</CardTitle>
-                          <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                      </CardHeader>
-                      <CardContent>
-                          <div className="text-2xl font-bold text-emerald-600">${analytics.financials.netProfit.toFixed(2)}</div>
-                          <p className="text-xs text-muted-foreground">
-                              {analytics.financials.profitMargin.toFixed(1)}% Margin
-                          </p>
-                      </CardContent>
-                  </Card>
-                  <Card>
-                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                          <CardTitle className="text-sm font-medium">Earnings / Km</CardTitle>
-                          <Activity className="h-4 w-4 text-muted-foreground" />
-                      </CardHeader>
-                      <CardContent>
-                          <div className="text-2xl font-bold">${analytics.metrics.earningsPerKm.toFixed(2)}</div>
-                          <p className="text-xs text-muted-foreground">
-                              Target: $1.20
-                          </p>
-                      </CardContent>
-                  </Card>
-                  
-                  {/* New Distance Metrics Tile */}
-                  <Card>
-                    <CardHeader className="pb-2">
-                       <CardTitle className="text-sm font-medium text-slate-500">Distance Metrics</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                       {analytics.distanceMetrics ? (
-                          <>
-                             <div className="h-[100px] w-full relative">
-                                <ResponsiveContainer width="100%" height="100%">
-                                   <PieChart>
-                                      <Pie
-                                         data={[
-                                            { name: 'Open Dist', value: analytics.distanceMetrics.open, fill: '#1e3a8a' },
-                                            { name: 'Enroute Dist', value: analytics.distanceMetrics.enroute, fill: '#fbbf24' },
-                                            { name: 'On Trip Dist', value: analytics.distanceMetrics.onTrip, fill: '#10b981' },
-                                            { name: 'Unavailable Dist', value: analytics.distanceMetrics.unavailable, fill: '#94a3b8' }
-                                         ]}
-                                         cx="50%"
-                                         cy="50%"
-                                         innerRadius={30}
-                                         outerRadius={45}
-                                         paddingAngle={0}
-                                         dataKey="value"
-                                         startAngle={90}
-                                         endAngle={-270}
-                                         stroke="none"
-                                      >
-                                         
-                                         
-                                         
-                                         
-                                      </Pie>
-                                      <RechartsTooltip formatter={(value: number) => [value.toFixed(1) + ' km', 'Distance']} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} itemStyle={{ color: '#64748b' }} />
-                                   </PieChart>
-                                </ResponsiveContainer>
-                                <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none">
-                                   <div className="text-lg font-bold text-slate-900">{analytics.distanceMetrics.total.toFixed(0)}</div>
-                                   <div className="text-[8px] text-slate-500 font-medium uppercase tracking-wide">Total KM</div>
-                                </div>
-                             </div>
-                             <div className="mt-2 grid grid-cols-4 gap-1 text-center">
-                                <div className="flex flex-col items-center">
-                                   <span className="text-xs font-bold text-slate-900">{analytics.distanceMetrics.open.toFixed(0)}</span>
-                                   <span className="text-[9px] text-slate-500">Open</span>
-                                </div>
-                                <div className="flex flex-col items-center">
-                                   <span className="text-xs font-bold text-slate-900">{analytics.distanceMetrics.enroute.toFixed(0)}</span>
-                                   <span className="text-[9px] text-slate-500">Enroute</span>
-                                </div>
-                                <div className="flex flex-col items-center">
-                                   <span className="text-xs font-bold text-slate-900">{analytics.distanceMetrics.onTrip.toFixed(0)}</span>
-                                   <span className="text-[9px] text-slate-500">On Trip</span>
-                                </div>
-                                <div className="flex flex-col items-center">
-                                   <span className="text-xs font-bold text-slate-900">{analytics.distanceMetrics.unavailable.toFixed(0)}</span>
-                                   <span className="text-[9px] text-slate-500">Unavail</span>
-                                </div>
-                             </div>
-                          </>
-                       ) : (
-                          <div className="h-[140px] flex flex-col items-center justify-center text-slate-400">
-                             <MapPin className="h-8 w-8 mb-2 opacity-20" />
-                             <p className="text-xs text-center">Upload "Vehicle Time & Distance" Report</p>
-                          </div>
-                       )}
-                    </CardContent>
-                  </Card>
-              </div>
-          </TabsContent>
 
           <TabsContent value="performance" className="space-y-6 mt-6">
               <ErrorBoundary name="PerformanceCharts">
@@ -1481,8 +1248,8 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
                               <Clock className="h-4 w-4 text-emerald-500" />
                           </div>
                           <h3 className="text-2xl font-bold text-slate-900">${analytics.metrics.earningsPerHour.toFixed(2)}</h3>
-                          <p className="text-xs text-emerald-600 flex items-center mt-1">
-                              <TrendingUp className="h-3 w-3 mr-1" /> Top 10% of fleet
+                          <p className="text-xs text-slate-400 mt-1">
+                              From trip duration in selected period
                           </p>
                       </CardContent>
                   </Card>
@@ -1494,18 +1261,20 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
                           </div>
                           <h3 className="text-2xl font-bold text-slate-900">${analytics.metrics.earningsPerTrip.toFixed(2)}</h3>
                           <p className="text-xs text-slate-400 mt-1">
-                              Based on {trips.length} trips
+                              Based on {analytics.metrics.periodTripCount} trips
                           </p>
                       </CardContent>
                   </Card>
                   <Card>
                       <CardContent className="p-6">
                           <div className="flex justify-between items-start mb-2">
-                              <p className="text-sm font-medium text-slate-500">Fuel Efficiency</p>
-                              <Fuel className="h-4 w-4 text-amber-500" />
+                              <p className="text-sm font-medium text-slate-500">Earnings per Km</p>
+                              <Activity className="h-4 w-4 text-amber-500" />
                           </div>
-                          <h3 className="text-2xl font-bold text-slate-900">12.5 km/L</h3>
-                          <p className="text-xs text-slate-400 mt-1">Est. based on model</p>
+                          <h3 className="text-2xl font-bold text-slate-900">${analytics.metrics.earningsPerKm.toFixed(2)}</h3>
+                          <p className="text-xs text-slate-400 mt-1">
+                              {Math.round(analytics.metrics.totalDistance).toLocaleString()} km in period
+                          </p>
                       </CardContent>
                   </Card>
               </div>
@@ -1513,8 +1282,8 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   <Card>
                       <CardHeader>
-                          <CardTitle>Earnings Trend (30 Days)</CardTitle>
-                          <CardDescription>Daily revenue performance</CardDescription>
+                          <CardTitle>Earnings Trend</CardTitle>
+                          <CardDescription>Daily revenue for the selected period</CardDescription>
                       </CardHeader>
                       <CardContent className="h-[300px]">
                           <ResponsiveContainer width="100%" height="100%" minHeight={200}>
@@ -1522,7 +1291,7 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
                                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
                                   <XAxis dataKey="date" fontSize={12} tickLine={false} axisLine={false} />
                                   <YAxis fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `$${value}`} />
-                                  <RechartsTooltip formatter={(value: number) => [`$${value}`, 'Earnings']} />
+                                  <RechartsTooltip formatter={(value) => [`$${Number(value)}`, 'Earnings']} />
                                   <Bar dataKey="earnings" fill="#6366f1" radius={[4, 4, 0, 0]} />
                               </BarChart>
                           </ResponsiveContainer>
@@ -1549,146 +1318,11 @@ export function VehicleDetail({ vehicle, trips, vehicleMetrics, onBack, onAssign
               </ErrorBoundary>
           </TabsContent>
 
-          <TabsContent value="utilization" className="mt-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <Card>
-                      <CardHeader>
-                          <CardTitle>Utilization Breakdown</CardTitle>
-                          <CardDescription>Time distribution (Monthly)</CardDescription>
-                      </CardHeader>
-                      <CardContent className="h-[300px] flex items-center justify-center">
-                         <ResponsiveContainer width="100%" height="100%" minHeight={200}>
-                            <PieChart>
-                                <Pie 
-                                    data={[
-                                        { name: 'Active Driving', value: analytics.metrics.activeHours, color: '#10b981' }, 
-                                        { name: 'Idle / Waiting', value: analytics.metrics.idleHours, color: '#fbbf24' }, 
-                                        { name: 'Offline', value: Math.max(0, (24 * 30) - (analytics.metrics.activeHours + analytics.metrics.idleHours)), color: '#e2e8f0' }
-                                    ]} 
-                                    innerRadius={60} 
-                                    outerRadius={80} 
-                                    dataKey="value"
-                                >
-                                    {[
-                                        { name: 'Active Driving', value: analytics.metrics.activeHours, color: '#10b981' }, 
-                                        { name: 'Idle / Waiting', value: analytics.metrics.idleHours, color: '#fbbf24' }, 
-                                        { name: 'Offline', value: Math.max(0, (24 * 30) - (analytics.metrics.activeHours + analytics.metrics.idleHours)), color: '#e2e8f0' }
-                                    ].map((entry) => <Cell key={entry.name} fill={entry.color} />)}{false && ((
-                                        null
-                                    ))}
-                                </Pie>
-                                <RechartsTooltip />
-                                <Legend verticalAlign="bottom" />
-                            </PieChart>
-                         </ResponsiveContainer>
-                      </CardContent>
-                  </Card>
-              </div>
-          </TabsContent>
-
-          <TabsContent value="financials" className="space-y-6 mt-6">
-               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <Card>
-                      <CardContent className="p-6">
-                          <div className="flex justify-between items-start mb-2">
-                              <p className="text-sm font-medium text-slate-500">Total Revenue</p>
-                              <DollarSign className="h-4 w-4 text-emerald-500" />
-                          </div>
-                          <h3 className="text-2xl font-bold text-slate-900">
-                              ${analytics.financials.totalRevenue.toLocaleString(undefined, {maximumFractionDigits: 2})}
-                          </h3>
-                          <p className="text-xs text-slate-500 mt-1">Lifetime</p>
-                      </CardContent>
-                  </Card>
-
-                  <Card>
-                      <CardContent className="p-6">
-                          <div className="flex justify-between items-start mb-2">
-                              <p className="text-sm font-medium text-slate-500">Total Expenses</p>
-                              <Receipt className="h-4 w-4 text-rose-500" />
-                          </div>
-                          <h3 className="text-2xl font-bold text-slate-900">
-                              ${analytics.financials.totalExpenses.toLocaleString(undefined, {maximumFractionDigits: 0})}
-                          </h3>
-                          <p className="text-xs text-slate-500 mt-1">Est. Fuel, Maint, Ins.</p>
-                      </CardContent>
-                  </Card>
-
-                  <Card>
-                      <CardContent className="p-6">
-                          <div className="flex justify-between items-start mb-2">
-                              <p className="text-sm font-medium text-slate-500">Net Profit</p>
-                              <PiggyBank className="h-4 w-4 text-indigo-500" />
-                          </div>
-                          <h3 className={`text-2xl font-bold ${analytics.financials.netProfit >= 0 ? 'text-indigo-600' : 'text-rose-600'}`}>
-                              ${analytics.financials.netProfit.toLocaleString(undefined, {maximumFractionDigits: 0})}
-                          </h3>
-                          <p className="text-xs text-slate-500 mt-1">{analytics.financials.profitMargin.toFixed(1)}% Margin</p>
-                      </CardContent>
-                  </Card>
-
-                  <Card>
-                      <CardContent className="p-6">
-                          <div className="flex justify-between items-start mb-2">
-                              <p className="text-sm font-medium text-slate-500">Toll Balance</p>
-                              <CreditCard className="h-4 w-4 text-amber-600" />
-                          </div>
-                          <h3 className="text-2xl font-bold text-slate-900">${(vehicle.tollBalance || 0).toLocaleString()}</h3>
-                          <div className="flex items-center justify-between mt-1">
-                             <p className="text-xs text-slate-500">Tag: {vehicle.tollTagId || 'N/A'}</p>
-                          </div>
-                      </CardContent>
-                  </Card>
-               </div>
-               
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <Card>
-                      <CardHeader>
-                          <CardTitle>Expense Breakdown</CardTitle>
-                          <CardDescription>Where is the money going?</CardDescription>
-                      </CardHeader>
-                      <CardContent className="h-[300px]">
-                          <ResponsiveContainer width="100%" height="100%" minHeight={200}>
-                              <PieChart>
-                                  <Pie data={analytics.financials.breakdown} innerRadius={60} outerRadius={80} dataKey="value">
-                                      
-                                  </Pie>
-                                  <RechartsTooltip formatter={(value: number) => `$${value.toLocaleString()}`} />
-                                  <Legend verticalAlign="bottom" height={36}/>
-                              </PieChart>
-                          </ResponsiveContainer>
-                      </CardContent>
-                  </Card>
-
-                  <Card>
-                      <CardHeader>
-                          <CardTitle>Profitability Analysis</CardTitle>
-                          <CardDescription>Revenue vs Expenses vs Profit</CardDescription>
-                      </CardHeader>
-                      <CardContent className="h-[300px]">
-                          <ResponsiveContainer width="100%" height="100%" minHeight={200}>
-                              <BarChart data={[{
-                                  name: 'Metrics',
-                                  Revenue: analytics.financials.totalRevenue,
-                                  Expenses: analytics.financials.totalExpenses,
-                                  Profit: analytics.financials.netProfit
-                              }]}>
-                                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                  <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} />
-                                  <YAxis fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `$${value}`} />
-                                  <RechartsTooltip formatter={(value: number) => `$${value.toLocaleString()}`} />
-                                  <Bar dataKey="Revenue" fill="#10b981" radius={[4, 4, 0, 0]} />
-                                  <Bar dataKey="Expenses" fill="#ef4444" radius={[4, 4, 0, 0]} />
-                                  <Bar dataKey="Profit" fill="#6366f1" radius={[4, 4, 0, 0]} />
-                              </BarChart>
-                          </ResponsiveContainer>
-                      </CardContent>
-                  </Card>
-               </div>
-          </TabsContent>
-
           <TabsContent value="expenses" className="space-y-6 mt-6">
-              <FixedExpensesManager vehicleId={vehicle.id || vehicle.licensePlate} />
+              <FixedExpensesManager
+                vehicleId={vehicle.id || vehicle.licensePlate}
+                onNavigateToExpenseHub={onNavigateToExpenseHub}
+              />
           </TabsContent>
 
           <TabsContent value="odometer" className="space-y-6 mt-6">

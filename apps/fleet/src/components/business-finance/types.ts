@@ -12,7 +12,7 @@ export type BusinessFinanceTab =
   | 'driver-balances'
   | 'workbench';
 
-export type PeriodPreset = 'this_week' | 'last_week' | 'this_month' | 'custom';
+export type PeriodPreset = 'today' | 'this_week' | 'last_week' | 'this_month' | 'custom';
 
 export type BusinessFinancePeriod = {
   preset: PeriodPreset;

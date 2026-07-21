@@ -26,11 +26,13 @@ import { EarningsPolicyConfiguration } from './components/earnings-policy';
 import { FuelManagement } from './pages/FuelManagement';
 import { TollLogsPage } from './pages/TollLogs';
 import { TollAnalytics } from './components/toll/TollAnalytics';
+import { VehicleAnalytics } from './components/vehicles/VehicleAnalytics';
 import { DriverLedgerPage } from './components/drivers/DriverLedgerPage';
 import { FleetFinancialsPage } from './components/fleet-financials/FleetFinancialsPage';
 import { CashRetagPage } from './components/fleet-financials/CashRetagPage';
 import { IndriveWalletCenterPage } from './components/fleet-financials/IndriveWalletCenterPage';
 import { BusinessFinancePage } from './components/business-finance/BusinessFinancePage';
+import { ExpenseHubPage } from './components/business-finance/expense-hub/ExpenseHubPage';
 
 import { useAlertPusher } from './hooks/useAlertPusher';
 import { OfflineProvider } from './components/providers/OfflineProvider';
@@ -77,11 +79,13 @@ function AppContent() {
   
   const [currentPage, setCurrentPage] = useState('dashboard');
   const [driverIdForDetail, setDriverIdForDetail] = useState<string | null>(null);
-  const [businessFinanceTab, setBusinessFinanceTab] = useState<'overview' | 'workbench'>('overview');
+  const [businessFinanceTab, setBusinessFinanceTab] = useState<'overview' | 'workbench' | 'expenses'>('overview');
   /** Period handoff when leaving BF hub for Bank / Wallet */
   const [financePeriodHint, setFinancePeriodHint] = useState<{ startYmd: string; endYmd: string } | null>(
     null,
   );
+  /** Vehicle deep link into BF Expenses (Expense Hub register filter) */
+  const [expenseHubVehicleId, setExpenseHubVehicleId] = useState<string | null>(null);
 
   const handleNavigate = (page: string, periodHint?: { startYmd: string; endYmd: string }) => {
     if (periodHint) {
@@ -97,8 +101,20 @@ function AppContent() {
     }
     if (page === 'business-finance') {
       setBusinessFinanceTab('overview');
+      setExpenseHubVehicleId(null);
+    }
+    if (page === 'expense-hub') {
+      setExpenseHubVehicleId(null);
+      setFinancePeriodHint(null);
     }
     setCurrentPage(page);
+  };
+
+  /** Vehicle page → Business Finance Expenses, filtered to one vehicle */
+  const openExpenseHubForVehicle = (vehicleId: string) => {
+    setExpenseHubVehicleId(vehicleId);
+    setFinancePeriodHint(null);
+    setCurrentPage('expense-hub');
   };
 
   // Old Tier Config / legacy bookmarks → Earnings Policy Configuration
@@ -332,7 +348,12 @@ function AppContent() {
         )}
         {currentPage === 'vehicles' && (
           <PermissionGate permission="nav.vehicles" onNavigate={setCurrentPage}>
-            <VehiclesPage />
+            <VehiclesPage onNavigateToExpenseHub={openExpenseHubForVehicle} />
+          </PermissionGate>
+        )}
+        {currentPage === 'vehicle-analytics' && (
+          <PermissionGate permission="nav.vehicle_analytics" onNavigate={setCurrentPage}>
+            <VehicleAnalytics onNavigate={setCurrentPage} />
           </PermissionGate>
         )}
         {currentPage === 'maintenance-hub' && (
@@ -358,8 +379,9 @@ function AppContent() {
         {currentPage === 'business-finance' && (
           <PermissionGate permission="nav.financial_analytics" onNavigate={setCurrentPage}>
             <BusinessFinancePage
-              key={businessFinanceTab}
+              key={`${businessFinanceTab}:${expenseHubVehicleId || ''}`}
               initialTab={businessFinanceTab}
+              expensesInitialVehicleId={expenseHubVehicleId ?? undefined}
               onNavigate={(page, periodHint) => {
                 handleNavigate(page, periodHint);
                 setDriverIdForDetail(null);
@@ -367,6 +389,19 @@ function AppContent() {
               onOpenDriver={(driverId) => {
                 setDriverIdForDetail(driverId);
                 setCurrentPage('drivers');
+              }}
+            />
+          </PermissionGate>
+        )}
+        {currentPage === 'expense-hub' && (
+          <PermissionGate permission="nav.financial_analytics" onNavigate={setCurrentPage}>
+            <ExpenseHubPage
+              key={expenseHubVehicleId || 'expense-hub'}
+              initialVehicleId={expenseHubVehicleId ?? undefined}
+              initialSubview={expenseHubVehicleId ? 'register' : 'overview'}
+              onNavigate={(page, periodHint) => {
+                handleNavigate(page, periodHint);
+                setDriverIdForDetail(null);
               }}
             />
           </PermissionGate>
