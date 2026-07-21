@@ -23,21 +23,22 @@ import { AnnouncementBanner } from './AnnouncementBanner';
 import { OfflineStatusIndicator } from '../offline/OfflineStatusIndicator';
 import { NotificationCenter } from '../notifications/NotificationCenter';
 
-import { DriverDashboard } from '../legacy/DriverDashboard';
-import { DriverEarnings } from '../legacy/DriverEarnings';
-import { DriverTrips } from '../legacy/DriverTrips';
+import { DriverMintHome } from '../home/DriverMintHome';
+import { FleetServiceRequestPage } from '../fleet/FleetServiceRequestPage';
+import { DriverEarnings } from '../fleet/DriverEarnings';
+import { DriverTrips } from '../fleet/DriverTrips';
 import { IndependentEarningsPage } from '../independent/IndependentEarningsPage';
 import { IndependentProfilePage } from '../independent/IndependentProfilePage';
 import { IndependentProfileDocumentsPage } from '../independent/IndependentProfileDocumentsPage';
 import { IndependentTripsPage } from '../independent/IndependentTripsPage';
-import { DriverProfile } from '../legacy/DriverProfile';
-import { DriverExpenses } from '../legacy/DriverExpenses';
-import { DriverEquipment } from '../legacy/DriverEquipment';
-import { DriverClaims } from '../legacy/DriverClaims';
-import { WeeklyCheckInModal } from '../legacy/WeeklyCheckInModal';
-import { DriverFuelStats } from '../legacy/DriverFuelStats';
-import { FleetFuelLogPage } from '../legacy/FleetFuelLogPage';
-import { DriverPerformancePage } from '../legacy/DriverPerformancePage';
+import { DriverProfile } from '../fleet/DriverProfile';
+import { DriverExpenses } from '../fleet/DriverExpenses';
+import { DriverEquipment } from '../fleet/DriverEquipment';
+import { DriverClaims } from '../fleet/DriverClaims';
+import { WeeklyCheckInModal } from '../fleet/WeeklyCheckInModal';
+import { DriverFuelStats } from '../fleet/DriverFuelStats';
+import { FleetFuelLogPage } from '../fleet/FleetFuelLogPage';
+import { DriverPerformancePage } from '../fleet/DriverPerformancePage';
 import { useCurrentDriver } from '../../hooks/useCurrentDriver';
 import { useWeeklyCheckIn } from '../../hooks/useWeeklyCheckIn';
 
@@ -70,7 +71,8 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
 
   const checkInModalOpen = isFleetDriver && (needsCheckIn || checkInOpen);
   const checkInForced = isFleetDriver && needsCheckIn;
-  const mintHomeLayout = isIndependentDriver && currentPage === 'dashboard';
+  // Home is the shared mint booking UI for every driver mode.
+  const mintHomeLayout = currentPage === 'dashboard';
   const mintEarningsLayout = isIndependentDriver && currentPage === 'earnings';
   const mintTripsLayout = isIndependentDriver && currentPage === 'trips';
   const mintProfileLayout = isIndependentDriver && currentPage === 'profile';
@@ -144,7 +146,7 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
   const renderPage = () => {
     switch (currentPage) {
       case 'dashboard':
-        return <DriverDashboard onNavigate={setCurrentPage} />;
+        return <DriverMintHome />;
       case 'passenger-rides':
         return <RideDispatchPage onOpenWallets={() => setCurrentPage('rides-wallets')} />;
       case 'rides-wallets':
@@ -184,6 +186,10 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
         return isFleetDriver ? <DriverClaims /> : null;
       case 'fuel':
         return isFleetDriver ? <FleetFuelLogPage onBack={() => setCurrentPage('dashboard')} /> : null;
+      case 'service':
+        return isFleetDriver ? (
+          <FleetServiceRequestPage onBack={() => setCurrentPage('dashboard')} />
+        ) : null;
       case 'performance':
         return isFleetDriver ? <DriverPerformancePage onBack={() => setCurrentPage('dashboard')} /> : null;
       case 'fuel-stats':
@@ -292,7 +298,15 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
             ) : mintDriverLayout ? (
               <>
                 {mintHomeLayout ? (
-                  <ThemeToggleButton className="inline-flex h-10 w-10 items-center justify-center rounded-lg p-2 text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white" />
+                  <>
+                    {isFleetDriver && (
+                      <>
+                        <OfflineStatusIndicator />
+                        <NotificationCenter />
+                      </>
+                    )}
+                    <ThemeToggleButton className="inline-flex h-10 w-10 items-center justify-center rounded-lg p-2 text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white" />
+                  </>
                 ) : null}
                 {mintEarningsLayout && (
                   <button
@@ -537,7 +551,9 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
     </div>
   );
 
-  return isIndependentDriver ? (
+  // All drivers (fleet + independent) get the dispatch context and trip overlays.
+  // Fleet eligibility to actually go online is enforced server-side (driverModeFilter).
+  return (
     <DispatchConfigProvider config={RIDESHARE_DISPATCH_CONFIG}>
       <RideDispatchProvider>
         {shell}
@@ -549,7 +565,5 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
         <DriverArrivedPickupOverlay />
       </RideDispatchProvider>
     </DispatchConfigProvider>
-  ) : (
-    shell
   );
 }

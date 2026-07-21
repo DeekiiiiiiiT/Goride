@@ -126,6 +126,64 @@ app.get("/health", (c) => {
 });
 
 // -----------------------------------------------------------------------------
+// Admin: Dispatch pilot allowlist (staged fleet rollout)
+// -----------------------------------------------------------------------------
+
+app.get("/admin/dispatch-pilots", async (c) => {
+  const auth = await requirePlatformAdmin(c);
+  if (auth instanceof Response) return auth;
+
+  const db = svc();
+  const { data, error } = await db
+    .from("driver_profiles")
+    .select("user_id, display_name, mode, status, fleet_id, dispatch_pilot")
+    .eq("mode", "fleet")
+    .order("display_name", { ascending: true, nullsFirst: false });
+
+  if (error) {
+    logLine({ event: "admin_dispatch_pilots_list_failed", error: error.message });
+    return c.json({ error: "list_failed", message: error.message }, 500);
+  }
+
+  return c.json({ drivers: data ?? [] });
+});
+
+app.patch("/admin/dispatch-pilots/:userId", async (c) => {
+  const auth = await requirePlatformAdmin(c);
+  if (auth instanceof Response) return auth;
+  if (!ADMIN_WRITE_ROLES.has(auth.role)) {
+    return c.json({ error: "forbidden", message: "Write access requires platform_owner, superadmin, or rides_admin" }, 403);
+  }
+
+  const userId = c.req.param("userId");
+  const body = await c.req.json().catch(() => ({}));
+  if (typeof body.dispatch_pilot !== "boolean") {
+    return c.json({ error: "invalid_dispatch_pilot" }, 400);
+  }
+
+  const db = svc();
+  const { data, error } = await db
+    .from("driver_profiles")
+    .update({ dispatch_pilot: body.dispatch_pilot, updated_at: new Date().toISOString() })
+    .eq("user_id", userId)
+    .select("user_id, display_name, mode, status, fleet_id, dispatch_pilot")
+    .maybeSingle();
+
+  if (error) {
+    logLine({ event: "admin_dispatch_pilot_update_failed", error: error.message, user_id: userId });
+    return c.json({ error: "update_failed", message: error.message }, 500);
+  }
+  if (!data) return c.json({ error: "not_found" }, 404);
+
+  await audit(db, "dispatch_pilot_updated", null, null, auth.id, {
+    target_user_id: userId,
+    dispatch_pilot: body.dispatch_pilot,
+  });
+
+  return c.json({ driver: data });
+});
+
+// -----------------------------------------------------------------------------
 // Admin: Policies
 // -----------------------------------------------------------------------------
 

@@ -21,12 +21,13 @@ export async function getEligibleDriverUserIds(
   const db = publicDb();
   let query = db
     .from("driver_profiles")
-    .select("user_id, mode, status")
+    .select("user_id, mode, status, dispatch_pilot")
     .in("user_id", unique)
     .eq("status", "active");
 
   if (dispatchSettings.independent_only_matching) {
-    query = query.eq("mode", "independent");
+    // Staged rollout: pilot-flagged fleet drivers stay in the pool.
+    query = query.or("mode.eq.independent,dispatch_pilot.eq.true");
   }
 
   const { data, error } = await query;
@@ -45,7 +46,7 @@ export async function isDriverEligibleForDispatch(
   const db = publicDb();
   const { data, error } = await db
     .from("driver_profiles")
-    .select("user_id, mode, status")
+    .select("user_id, mode, status, dispatch_pilot")
     .eq("user_id", userId)
     .maybeSingle();
 
@@ -55,9 +56,22 @@ export async function isDriverEligibleForDispatch(
   }
   if (!data) return { eligible: false, reason: "no_driver_profile" };
   if (data.status !== "active") return { eligible: false, reason: "driver_not_active" };
-  if (dispatchSettings.independent_only_matching && data.mode !== "independent") {
+
+  const isPilot = data.dispatch_pilot === true;
+  if (dispatchSettings.independent_only_matching && data.mode !== "independent" && !isPilot) {
     return { eligible: false, reason: "fleet_not_eligible_for_dispatch" };
   }
+
+  // Fleet drivers must have an assigned fleet vehicle before going online so
+  // rides carry correct vehicle attribution into fleet books/analytics.
+  if (data.mode === "fleet") {
+    const { getFleetDriverContext } = await import("./fleetDriverContext.ts");
+    const ctx = await getFleetDriverContext(userId);
+    if (!ctx.assignedVehicleId) {
+      return { eligible: false, reason: "fleet_vehicle_not_assigned" };
+    }
+  }
+
   return { eligible: true };
 }
 

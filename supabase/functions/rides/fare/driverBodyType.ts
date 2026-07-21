@@ -50,8 +50,21 @@ export async function resolveDriverBodyTypeSlug(
   }
 
   const label = (primary as { body_type?: string | null } | null)?.body_type?.trim();
-  if (!label) return null;
-  return slugFromCommandoBodyType(label) || null;
+  if (label) return slugFromCommandoBodyType(label) || null;
+
+  // Fleet drivers: no personal driver_vehicles row — resolve from the assigned fleet vehicle.
+  try {
+    const { getFleetDriverContext, fleetVehicleBodyTypeLabel } = await import(
+      "../../_shared/fleetDriverContext.ts"
+    );
+    const ctx = await getFleetDriverContext(userId);
+    const fleetLabel = fleetVehicleBodyTypeLabel(ctx);
+    if (fleetLabel) return slugFromCommandoBodyType(fleetLabel) || null;
+  } catch (e) {
+    console.warn("[driverBodyType] fleet vehicle body type resolve failed:", e);
+  }
+
+  return null;
 }
 
 export async function isActiveBodyTypeSlug(

@@ -1,9 +1,12 @@
 import React from 'react';
 import { useRideDispatchContext } from '../../contexts/RideDispatchContext';
+import { useDriver } from '../../contexts/DriverContext';
 import { DriverHomeDashboard } from './DriverHomeDashboard';
+import { FleetStartTripLauncher } from './FleetStartTripLauncher';
 
 export function DriverMintHome() {
   const { activeRide } = useRideDispatchContext();
+  const { isFleetDriver } = useDriver();
   const enRouteToPickup =
     activeRide?.status === 'driver_assigned' || activeRide?.status === 'driver_en_route_pickup';
   const onTrip = activeRide?.status === 'on_trip';
@@ -13,7 +16,10 @@ export function DriverMintHome() {
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col">
-      <DriverHomeDashboard tripFlowActive={tripFlowActive} />
+      <DriverHomeDashboard
+        tripFlowActive={tripFlowActive}
+        startTripSlot={isFleetDriver && !tripFlowActive ? <FleetStartTripLauncher /> : null}
+      />
     </div>
   );
 }

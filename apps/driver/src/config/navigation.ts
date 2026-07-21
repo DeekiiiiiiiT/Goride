@@ -4,6 +4,7 @@ import {
   Car,
   User,
   Wrench,
+  Hammer,
   Fuel,
   Receipt,
   CheckCircle,
@@ -36,6 +37,7 @@ const commonNavItems: NavItem[] = [
 const fleetOnlyNavItems: NavItem[] = [
   { id: 'expenses', label: 'Expenses', icon: Camera },  // Toll scanning, fuel, etc.
   { id: 'equipment', label: 'Equipment', icon: Wrench },
+  { id: 'service', label: 'Service request', icon: Hammer },
   { id: 'fuel', label: 'Log fuel', icon: Fuel },
   { id: 'performance', label: 'Performance', icon: History },
   { id: 'fuel-stats', label: 'Fuel Stats', icon: BarChart3 },

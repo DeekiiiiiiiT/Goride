@@ -58,6 +58,7 @@ function isFatalPresenceError(message: string): boolean {
     m.includes('forbidden') ||
     m.includes('driver_not_active') ||
     m.includes('fleet_not_eligible') ||
+    m.includes('fleet_vehicle_not_assigned') ||
     m.includes('no_driver_profile') ||
     m.includes('not_eligible_for_dispatch')
   );
@@ -423,7 +424,9 @@ export function useRideDispatch() {
         }
         setPresenceError(display);
         const fatal = isFatalPresenceError(message);
-        if (message.includes('fleet_not_eligible')) {
+        if (message.includes('fleet_vehicle_not_assigned')) {
+          toast.error('No vehicle assigned yet. Ask your fleet manager to assign you a vehicle before going online.');
+        } else if (message.includes('fleet_not_eligible')) {
           toast.error('Fleet drivers cannot go online for Roam dispatch during beta.');
         } else if (message.includes('driver_not_active')) {
           toast.error('Your driver account is not active yet. Contact support.');

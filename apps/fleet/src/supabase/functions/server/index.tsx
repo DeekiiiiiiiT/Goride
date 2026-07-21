@@ -412,6 +412,68 @@ async function upsertDriverProfileFromServer(opts: {
   if (error) console.warn("[driver_profiles] upsert failed:", error.message);
 }
 
+/**
+ * Fully detach a driver from an organization across all three stores
+ * (auth metadata, fleet KV, driver_profiles) and release any assigned vehicle.
+ * Fixes the "zombie membership" bug where only auth metadata was cleared.
+ */
+async function detachDriverFromOrg(driverId: string): Promise<void> {
+  // 1) Auth metadata
+  const { data: authData } = await supabase.auth.admin.getUserById(driverId);
+  const meta = authData?.user?.user_metadata || {};
+  if (meta.organizationId) {
+    await supabase.auth.admin.updateUserById(driverId, {
+      user_metadata: { ...meta, organizationId: null },
+    });
+  }
+
+  // 2) Fleet KV: clear org + mirrored vehicle assignment on the driver record
+  const driverKv = await kv.get(`driver:${driverId}`);
+  if (driverKv && typeof driverKv === "object") {
+    await kv.set(`driver:${driverId}`, {
+      ...driverKv,
+      organizationId: null,
+      assignedVehicleId: null,
+      assignedVehiclePlate: null,
+      assignedVehicleName: null,
+      vehicle: null,
+    });
+  }
+
+  // 3) Release vehicles that still point at this driver (assignment SSOT)
+  try {
+    const { data: vehicleRows } = await supabase
+      .from("kv_store_37f42386")
+      .select("key, value")
+      .like("key", "vehicle:%")
+      .eq("value->>currentDriverId", driverId);
+    if (vehicleRows?.length) {
+      const { applyDriverAssignmentChangeOnVehicle } = await import("./driver_vehicle_assignment.ts");
+      for (const row of vehicleRows) {
+        const vehicle = row.value as Record<string, unknown>;
+        const updated = applyDriverAssignmentChangeOnVehicle(vehicle, {
+          ...vehicle,
+          currentDriverId: null,
+          currentDriverName: null,
+        });
+        await kv.set(String(row.key), updated);
+      }
+    }
+  } catch (e) {
+    console.warn(`[DetachDriver] vehicle release failed for ${driverId}:`, e);
+  }
+
+  // 4) driver_profiles: back to independent, fleet link cleared. Direct update
+  //    (not upsert) so display_name/onboarding state are preserved.
+  const { error: profErr } = await supabase
+    .from("driver_profiles")
+    .update({ mode: "independent", fleet_id: null, fleet_joined_at: null, updated_at: new Date().toISOString() })
+    .eq("user_id", driverId);
+  if (profErr) console.warn("[DetachDriver] driver_profiles update failed:", profErr.message);
+
+  invalidateDriverCache();
+}
+
 function getProvisionDeps() {
   return {
     supabase,
@@ -11839,10 +11901,8 @@ app.post("/make-server-37f42386/admin/drivers/:id/unlink", requireAuth(), async 
       return c.json({ error: "Driver is already unlinked" }, 400);
     }
 
-    const { error: updateErr } = await supabase.auth.admin.updateUserById(driverId, {
-      user_metadata: { ...user.user_metadata, organizationId: null }
-    });
-    if (updateErr) throw updateErr;
+    // Clear auth + KV + driver_profiles + vehicle assignment (not just auth metadata)
+    await detachDriverFromOrg(driverId);
 
     console.log(`[Admin Drivers] Unlinked driver ${user.email} from org ${user.user_metadata.organizationId}`);
     await logAdminAction({ actorId: rbacUser?.id, actorName: rbacUser?.name || 'Admin', action: 'unlink_driver', targetId: driverId, targetEmail: user.email || '', details: `From org: ${user.user_metadata.organizationId}` });
@@ -12482,6 +12542,43 @@ app.post("/make-server-37f42386/team/claim-driver", requireAuth(), requirePermis
   }
 });
 
+// POST /team/drivers/:id/remove — Fleet owner removes a driver from their own fleet.
+// Clears auth metadata, KV org, driver_profiles fleet link, and releases the vehicle.
+app.post("/make-server-37f42386/team/drivers/:id/remove", requireAuth(), requirePermission('drivers.delete'), async (c) => {
+  try {
+    const orgId = getOrgId(c);
+    if (!orgId) return c.json({ error: "No organization context" }, 400);
+
+    const driverId = c.req.param('id');
+    const { data: { user }, error: getUserErr } = await supabase.auth.admin.getUserById(driverId);
+    if (getUserErr || !user) return c.json({ error: "Driver not found" }, 404);
+
+    // Scope check across both membership stores — owner can only remove their own drivers
+    const metaOrg = typeof user.user_metadata?.organizationId === 'string' ? user.user_metadata.organizationId : '';
+    const { data: prof } = await supabase.from("driver_profiles").select("fleet_id").eq("user_id", driverId).maybeSingle();
+    const profOrg = prof?.fleet_id ? String(prof.fleet_id) : '';
+    if (metaOrg !== orgId && profOrg !== orgId) {
+      return c.json({ error: "This driver is not part of your fleet" }, 403);
+    }
+
+    await detachDriverFromOrg(driverId);
+
+    const rbacUser = c.get('rbacUser') as any;
+    await logAdminAction({
+      actorId: rbacUser?.id,
+      actorName: rbacUser?.name || 'Fleet Owner',
+      action: 'remove_driver_from_fleet',
+      targetId: driverId,
+      targetEmail: user.email || '',
+      details: `Removed from org: ${orgId}`,
+    });
+    return c.json({ success: true, message: "Driver removed from your fleet" });
+  } catch (e: any) {
+    console.error("[Team Drivers Remove] Error:", e);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
 // Driver app: self-serve link to a fleet by organization UUID (minimal hybrid onboarding).
 app.post("/make-server-37f42386/driver/join-fleet", requireAuth(), async (c) => {
   try {
@@ -12505,10 +12602,24 @@ app.post("/make-server-37f42386/driver/join-fleet", requireAuth(), async (c) => 
     if (authErr || !authData?.user) return c.json({ error: "User not found" }, 404);
 
     const meta = (authData.user.user_metadata || {}) as Record<string, unknown>;
-    const { data: existingProf } = await supabase.from("driver_profiles").select("onboarding_complete").eq(
+    const { data: existingProf } = await supabase.from("driver_profiles").select("onboarding_complete, fleet_id").eq(
       "user_id",
       uid,
     ).maybeSingle();
+
+    // Guard: never silently overwrite an existing fleet membership.
+    const currentOrg =
+      (typeof meta.organizationId === "string" && meta.organizationId.trim()) ||
+      (existingProf?.fleet_id ? String(existingProf.fleet_id) : "");
+    if (currentOrg && currentOrg !== fleetId) {
+      return c.json(
+        { error: "You are already linked to a fleet. Ask your current fleet owner to remove you first." },
+        409,
+      );
+    }
+    if (currentOrg === fleetId) {
+      return c.json({ success: true, alreadyMember: true });
+    }
 
     await supabase.auth.admin.updateUserById(uid, {
       user_metadata: { ...meta, organizationId: fleetId },

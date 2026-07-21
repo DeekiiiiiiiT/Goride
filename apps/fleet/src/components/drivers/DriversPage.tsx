@@ -203,6 +203,8 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
 
   const [driverToDelete, setDriverToDelete] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [driverToRemove, setDriverToRemove] = useState<string | null>(null);
+  const [isRemoving, setIsRemoving] = useState(false);
 
   // Phase 7.1: React Query for trips data
   const { data: trips = [], isLoading: tripsLoading } = useQuery({
@@ -321,6 +323,29 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
       toast.error(error.message || "Failed to delete driver");
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  // Detach membership (auth + KV + driver_profiles + vehicle) without deleting the account
+  const handleRemoveFromFleet = async () => {
+    if (!driverToRemove) return;
+    setIsRemoving(true);
+    try {
+      const response = await fetch(`${API_ENDPOINTS.fleet}/team/drivers/${driverToRemove}/remove`, {
+        method: 'POST',
+        headers: await requireAuthHeaders(null),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Failed to remove driver');
+
+      queryClient.invalidateQueries({ queryKey: ['drivers'] });
+      toast.success('Driver removed from your fleet');
+      setDriverToRemove(null);
+    } catch (error: any) {
+      console.error('Remove error:', error);
+      toast.error(error.message || 'Failed to remove driver');
+    } finally {
+      setIsRemoving(false);
     }
   };
 
@@ -935,6 +960,16 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
                                                 <DropdownMenuItem>View History</DropdownMenuItem>
                                                 <DropdownMenuSeparator />
                                                 {can('drivers.delete') && (
+                                                <>
+                                                <DropdownMenuItem
+                                                    className="cursor-pointer"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setDriverToRemove(driver.id);
+                                                    }}
+                                                >
+                                                    Remove from Fleet
+                                                </DropdownMenuItem>
                                                 <DropdownMenuItem 
                                                     className="text-rose-600 focus:text-rose-600 focus:bg-rose-50 dark:focus:bg-rose-900/20 cursor-pointer"
                                                     onClick={(e) => {
@@ -944,6 +979,7 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
                                                 >
                                                     Delete Driver
                                                 </DropdownMenuItem>
+                                                </>
                                                 )}
                                             </DropdownMenuContent>
                                         </DropdownMenu>
@@ -1079,6 +1115,31 @@ export function DriversPage({ initialDriverId }: { initialDriverId?: string | nu
               disabled={isDeleting}
             >
               {isDeleting ? "Deleting..." : "Delete Driver"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Remove From Fleet Confirmation Dialog */}
+      <AlertDialog open={!!driverToRemove} onOpenChange={(open) => !open && setDriverToRemove(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove driver from your fleet?</AlertDialogTitle>
+            <AlertDialogDescription>
+              The driver keeps their account and trip history, but is unlinked from your organization,
+              unassigned from their vehicle, and switched back to independent mode.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isRemoving}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                handleRemoveFromFleet();
+              }}
+              disabled={isRemoving}
+            >
+              {isRemoving ? "Removing..." : "Remove from Fleet"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -142,6 +142,28 @@ export async function syncRideToFleetKv(ride: Record<string, unknown>): Promise<
     return;
   }
 
+  // Fleet attribution: only fleet drivers' rides belong in fleet books.
+  // Independent drivers settle via their personal ride wallets — syncing them
+  // creates unscoped trip:* rows in fleet KV (no org, no vehicle).
+  try {
+    const { getFleetDriverContext } = await import("./fleetDriverContext.ts");
+    const ctx = await getFleetDriverContext(String(trip.driverId));
+    if (ctx.mode !== "fleet") {
+      return;
+    }
+    if (ctx.organizationId) trip.organizationId = ctx.organizationId;
+    if (ctx.assignedVehicleId) {
+      trip.vehicleId = ctx.assignedVehicleId;
+      if (ctx.assignedVehiclePlate) trip.vehiclePlate = ctx.assignedVehiclePlate;
+    } else {
+      console.warn(
+        `[rideToFleetTrip] Fleet driver ${trip.driverId} has no assigned vehicle — trip ${rideId} synced without vehicle attribution`,
+      );
+    }
+  } catch (e) {
+    console.warn("[rideToFleetTrip] fleet context resolve failed — syncing without attribution:", e);
+  }
+
   const url = `${base}/functions/v1/make-server-37f42386/trips`;
   const res = await fetch(url, {
     method: "POST",

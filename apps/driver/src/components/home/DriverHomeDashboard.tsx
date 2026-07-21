@@ -37,9 +37,11 @@ function StatCard({ label, value, valueClassName, loading }: StatCardProps) {
 
 type Props = {
   tripFlowActive: boolean;
+  /** Fleet-only: small manual "Start Trip" control rendered under the stats row. */
+  startTripSlot?: React.ReactNode;
 };
 
-export function DriverHomeDashboard({ tripFlowActive }: Props) {
+export function DriverHomeDashboard({ tripFlowActive, startTripSlot }: Props) {
   const [period, setPeriod] = useState<HomePeriod>('today');
   const { data, loading, error, refresh } = useIndependentEarnings(period);
   const { driverRecord } = useCurrentDriver();
@@ -83,6 +85,7 @@ export function DriverHomeDashboard({ tripFlowActive }: Props) {
           loading={false}
         />
         </div>
+        {startTripSlot ? <div className="mt-3 flex justify-end">{startTripSlot}</div> : null}
       </div>
 
       {error ? (
