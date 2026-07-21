@@ -12,6 +12,7 @@ import {
   MoreHorizontal,
   Trash2,
   X,
+  HardDrive,
 } from 'lucide-react';
 import {
   approveFleetCustomer,
@@ -22,6 +23,7 @@ import {
   suspendFleetCustomer,
   type FleetAdminCustomer,
 } from './fleetAdminService';
+import { StorageCenterPage } from './storage/StorageCenterPage';
 import { Button } from '../components/ui/button';
 import { toast } from 'sonner';
 import { useAdminConfirm } from './contexts/AdminConfirmContext';
@@ -132,7 +134,7 @@ export function FleetProductAdminPortal() {
   const [loading, setLoading] = useState(true);
   const [customers, setCustomers] = useState<FleetAdminCustomer[]>([]);
   const [customersLoading, setCustomersLoading] = useState(false);
-  const [page, setPage] = useState<'dashboard' | 'customers'>('dashboard');
+  const [page, setPage] = useState<'dashboard' | 'customers' | 'storage'>('dashboard');
   
   // Action state
   const [actionMenuId, setActionMenuId] = useState<string | null>(null);
@@ -291,6 +293,13 @@ export function FleetProductAdminPortal() {
         >
           <Users className="h-4 w-4" /> Fleet customers
         </button>
+        <button
+          type="button"
+          onClick={() => setPage('storage')}
+          className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm ${page === 'storage' ? 'bg-slate-800' : 'hover:bg-slate-900'}`}
+        >
+          <HardDrive className="h-4 w-4" /> Storage
+        </button>
         <div className="mt-auto pt-4 border-t border-slate-800 space-y-1">
           <a
             href={DRIVER_ADMIN_URL}
@@ -340,6 +349,10 @@ export function FleetProductAdminPortal() {
               </div>
             </div>
           </div>
+        )}
+
+        {page === 'storage' && (
+          <StorageCenterPage accessToken={token} canPurge={canDelete} />
         )}
 
         {page === 'customers' && (

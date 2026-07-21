@@ -624,6 +624,37 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [transactions]);
 
+  // Group Payments Log rows by Settlement Week (period), newest period first, untagged last.
+  const groupedPaymentTransactions = useMemo(() => {
+    const groups = new Map<string, { key: string; label: string; sortKey: number; total: number; rows: typeof paymentTransactions }>();
+    for (const tx of paymentTransactions) {
+      const s = tx.metadata?.workPeriodStart;
+      const e = tx.metadata?.workPeriodEnd;
+      const sd = s ? parseTripDate(String(s).split('T')[0]) : null;
+      const ed = e ? parseTripDate(String(e).split('T')[0]) : null;
+      const key = sd ? `${s}|${e || ''}` : '__untagged__';
+      const label = sd
+        ? (ed ? `${format(sd, 'MMM d')} – ${format(ed, 'MMM d, yyyy')}` : format(sd, 'MMM d, yyyy'))
+        : 'Untagged';
+      const sortKey = sd ? sd.getTime() : -Infinity;
+      let g = groups.get(key);
+      if (!g) { g = { key, label, sortKey, total: 0, rows: [] }; groups.set(key, g); }
+      g.total += tx.amount;
+      g.rows.push(tx);
+    }
+    return Array.from(groups.values()).sort((a, b) => b.sortKey - a.sortKey);
+  }, [paymentTransactions]);
+
+  // Periods collapsed by default; track which ones the user expanded.
+  const [expandedPaymentGroups, setExpandedPaymentGroups] = useState<Set<string>>(new Set());
+  const togglePaymentGroup = (key: string) => {
+    setExpandedPaymentGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
+
   const fuelTransactions = useMemo(() => (dateFilteredTransactions || []).filter(t => {
       if (!t) return false;
       const cat = (t.category || '').toLowerCase();
@@ -3985,7 +4016,30 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                             </TableHeader>
                                             <TableBody>
                                                 {paymentTransactions.length > 0 ? (
-                                                    paymentTransactions.map((tx) => (
+                                                    groupedPaymentTransactions.flatMap((group) => ([
+                                                        <TableRow
+                                                            key={`grp-${group.key}`}
+                                                            className="bg-slate-50 hover:bg-slate-100 cursor-pointer select-none"
+                                                            onClick={() => togglePaymentGroup(group.key)}
+                                                        >
+                                                            <TableCell colSpan={2} className="py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                                                <span className="flex items-center gap-1.5">
+                                                                    {expandedPaymentGroups.has(group.key)
+                                                                        ? <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+                                                                        : <ChevronRight className="h-3.5 w-3.5 text-slate-400" />}
+                                                                    {group.label}
+                                                                </span>
+                                                            </TableCell>
+                                                            <TableCell colSpan={2} className="py-2 text-xs text-slate-400">
+                                                                {group.rows.length} payment{group.rows.length !== 1 ? 's' : ''}
+                                                            </TableCell>
+                                                            <TableCell className="py-2 text-right text-xs text-slate-500">Subtotal</TableCell>
+                                                            <TableCell className="py-2 text-right font-bold font-mono text-emerald-700">
+                                                                +${group.total.toFixed(2)}
+                                                            </TableCell>
+                                                            <TableCell className="py-2"></TableCell>
+                                                        </TableRow>,
+                                                        ...(expandedPaymentGroups.has(group.key) ? group.rows : []).map((tx) => (
                                                         <TableRow key={tx.id}>
                                                             <TableCell className="font-medium text-slate-600">{(() => { const d = parseTripDate(tx.date); return d ? format(d, 'MMM d, yyyy') : '-'; })()}</TableCell>
                                                             <TableCell className="text-sm text-slate-600">
@@ -4096,7 +4150,8 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                                 </div>
                                                             </TableCell>
                                                         </TableRow>
-                                                    ))
+                                                    )),
+                                                    ]))
                                                 ) : (
                                                     <TableRow>
                                                         <TableCell colSpan={7} className="h-24 text-center text-slate-500">

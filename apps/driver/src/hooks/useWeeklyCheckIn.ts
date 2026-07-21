@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { WeeklyCheckIn } from '../types/check-in';
 import { projectId, publicAnonKey } from '../utils/supabase/info';
 import { supabase } from '../utils/supabase/client';
+import { compressImage, OCR_COMPRESS_OPTS } from '../utils/compressImage';
 
 export function useWeeklyCheckIn(driverId: string | undefined) {
     const [needsCheckIn, setNeedsCheckIn] = useState(false);
@@ -72,7 +73,8 @@ export function useWeeklyCheckIn(driverId: string | undefined) {
         let photoUrl = '';
         if (photo) {
              const formData = new FormData();
-             formData.append('file', photo);
+             const compressed = await compressImage(photo, OCR_COMPRESS_OPTS);
+             formData.append('file', compressed);
              const uploadRes = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-37f42386/upload`, {
                  method: 'POST',
                  headers: { 'Authorization': `Bearer ${authToken}` },

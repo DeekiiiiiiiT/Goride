@@ -1,65 +1,48 @@
 # Wiring InDrive Wallet into Business Finance
 
 **Status: wired (2026-07-20).** Canonical `wallet_credit` is the source of truth for
-loads. Business Finance sums period loads from in-memory ledger events; Wallet
-Center and Overview short-driver risk use one fleet endpoint (no N+1).
+loads. Loads are **transfers** (bank/cash → platform wallet), not P&L expenses.
+Platform fees use shared recognition (`platformFeeRecognition.ts`) so P&L and
+Wallet Center cannot drift.
 
-**Org-tag fix (2026-07-20):** Older `wallet_credit` rows lacked `organizationId`,
-so the fleet Period total (strict org filter) showed $0 while Recent top-ups
-(driver-scoped list) still showed them. Missing org tags were backfilled from
-the driver’s org; fleet reads now include null-org legacy rows (same pattern as
-statement summary); new credits copy org from the transaction when present.
+**Org-tag fix (2026-07-20):** Older `wallet_credit` / InDrive `fare_earning` rows
+lacking `organizationId` were backfilled. Fleet reads include null-org legacy
+rows; new credits copy org from the transaction when present.
+
+## Accounting model
+
+| Event | Classification | Where shown | Operating profit? |
+|-------|----------------|-------------|-------------------|
+| Wallet top-up (`wallet_credit`) | Transfer | Cash & Bank, Overview Transfers, Wallet Center | No |
+| Platform commission | Expense | P&L Platform fees + platform split | Yes |
+| Trip earnings | Revenue (pre-commission gross when known) | P&L Gross | Via net trip |
 
 ## How it works
 
-**1. Canonical ledger write on every top-up.** `IndriveWalletCenterPage.tsx`'s
-"Quick load" form calls `api.saveTransaction` with a transaction built by
-[indriveWalletLoad.ts](../utils/indriveWalletLoad.ts)
-(`category: 'InDrive Wallet Credit'`). On save, the server appends a
-`wallet_credit` canonical ledger event via
-`appendCanonicalWalletCreditIfEligible`
-([canonical_from_ops.ts](../supabase/functions/server/canonical_from_ops.ts)).
-Deletes remove the matching canonical event via
-`deleteCanonicalLedgerBySource("transaction", [id])`.
+**1. Canonical ledger write on every top-up.** Quick load → `transaction` +
+`wallet_credit` via `appendCanonicalWalletCreditIfEligible`.
 
-**2. Loads + fees both from canonical.** Shared helpers in
-[indriveWalletMetrics.ts](../utils/indriveWalletMetrics.ts):
-- Loads: `wallet_credit` only (`computeIndriveWalletLoadsFromLedgerEntries`)
-- Fees: InDrive `platform_fee`, else fare gross−net gap
-  (`computeIndriveWalletFeesFromLedgerEntries`)
-- Fleet rollup: `buildIndriveWalletFleetFromLedger` (alias-aware driver ids)
+**2. Loads from canonical.** `computeIndriveWalletLoadsFromLedgerEntries` sums
+`wallet_credit`. Raw `transaction:*` is write-path only.
 
-Raw `transaction:*` with category `InDrive Wallet Credit` remains the
-**write-path** record; reads must not scan it for loads.
+**3. Fees — shared recognition.** [`platformFeeRecognition.ts`](../utils/platformFeeRecognition.ts):
+- Explicit: `|netAmount|` on `platform_fee`
+- Fallback: `gross − net` on `fare_earning` when no explicit fees for that platform
+- Fare gross for P&L: `grossAmount` when it exceeds net (avoids double-counting)
 
-**3. Per-driver endpoint.** `GET /ledger/driver-indrive-wallet` — loads and
-fees from canonical. Used by single-driver hooks (`useIndriveWallet`).
+InDrive Wallet metrics wrap the same helper filtered to InDrive.
+Business Finance P&L uses it for all platforms.
 
-**4. Fleet endpoint (replaces Wallet Center N+1).**
-`GET /ledger/indrive-wallet/fleet?startDate=&endDate=` returns
-`{ totals: { periodLoads, periodFees, shortDriverCount }, drivers: [...] }`.
-`IndriveWalletCenterPage` calls this once via `api.getIndriveWalletFleet`.
+**4. Fleet endpoint.** `GET /ledger/indrive-wallet/fleet` — one scan for Wallet
+Center (replaces N+1).
 
-## Business Finance
+**5. Business Finance surfaces**
+- Cash & Bank: **Bank → InDrive wallet** (period transfers + short drivers)
+- Overview: **Transfers** card (not under Money out)
+- P&L: **no** wallet loads line; Maintenance remains the only “Not tracked yet”
+- Risks: `walletShortDriverCount`
 
-**1. Period loads.** `fetchBusinessFinanceBundle.ts` sums `wallet_credit` from
-already-fetched `ledgerEvents` (no extra network call for the $ total).
-
-**2. Short-driver risk.** Same bundle calls `getIndriveWalletFleet` (try/catch,
-non-fatal) → `risks.walletShortDriverCount` + `incompleteSources` line + Cash
-Bank `walletLoads.shortDriverCount`. Overview shows an amber risk row with deep
-link to InDrive Wallet.
-
-**3. P&L — intentional non-tracking.** `wallet_loads` stays
-`amount: null, tracked: false`. Wallet loads are a funding transfer; InDrive’s
-cut is already in Platform fees / `platformSplit`. Do not add `wallet_credit` to
-Expenses `RECOGNIZED`.
-
-## Deploy note
-
-Edge function source is
-`apps/fleet/src/supabase/functions/server/index.tsx` (imported by
-`supabase/functions/make-server-37f42386`). Redeploy after server route changes:
+## Deploy
 
 ```bash
 npx supabase functions deploy make-server-37f42386 --use-api

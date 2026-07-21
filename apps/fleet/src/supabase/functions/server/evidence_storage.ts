@@ -81,6 +81,9 @@ export interface RegisterEvidenceInput {
   publicUrl?: string | null;
   parentStatus?: string | null;
   retentionClass?: "ephemeral" | "permanent";
+  /** Bytes on disk — stored in metadata.size for Storage Center tiles */
+  fileSizeBytes?: number | null;
+  contentType?: string | null;
 }
 
 export async function registerEvidenceFile(
@@ -93,6 +96,12 @@ export async function registerEvidenceFile(
   const deleteAfter = pending
     ? null
     : computeDeleteAfter(new Date(resolvedAt!));
+
+  const metadata: Record<string, unknown> = {};
+  if (input.fileSizeBytes != null && input.fileSizeBytes > 0) {
+    metadata.size = input.fileSizeBytes;
+  }
+  if (input.contentType) metadata.contentType = input.contentType;
 
   const { data, error } = await supabase
     .from("evidence_files")
@@ -108,6 +117,7 @@ export async function registerEvidenceFile(
       status,
       resolved_at: resolvedAt,
       delete_after: deleteAfter,
+      metadata: Object.keys(metadata).length ? metadata : {},
     })
     .select("id")
     .single();
@@ -216,26 +226,154 @@ export interface EvidenceCleanupResult {
   wouldPurge?: number;
 }
 
+export function recordOrganizationId(
+  record: Record<string, unknown> | null | undefined,
+): string | null {
+  if (!record) return null;
+  const raw =
+    record.organizationId ??
+    (record.metadata as { organizationId?: unknown } | undefined)?.organizationId;
+  if (typeof raw === "string" && raw.trim()) return raw.trim();
+  return null;
+}
+
+/** Legacy docs paths referenced from KV (optionally scoped to one org). */
+export async function collectReferencedLegacyPaths(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  kv: { getByPrefix: (p: string) => Promise<any[]> },
+  orgId?: string | null,
+): Promise<Set<string>> {
+  const referenced = new Set<string>();
+  const txs = await kv.getByPrefix("transaction:");
+  const fuel = await kv.getByPrefix("fuel_entry:");
+  const maint = await kv.getByPrefix("maintenance_log:");
+  for (const rec of [...(txs || []), ...(fuel || []), ...(maint || [])]) {
+    if (orgId) {
+      const recOrg = recordOrganizationId(rec);
+      if (recOrg !== orgId) continue;
+    }
+    for (const url of extractEvidenceUrlsFromRecord(rec)) {
+      const parsed = parseStoragePathFromUrl(url);
+      if (parsed?.bucket === LEGACY_DOCS_BUCKET) {
+        referenced.add(parsed.path);
+      }
+    }
+  }
+  return referenced;
+}
+
+export type LinkedLegacyRef = {
+  path: string;
+  sourceType: EvidenceSourceType;
+  sourceId: string;
+  orgId: string | null;
+};
+
+/** Linked legacy paths with source metadata (for org drill-in / scoped purge). */
+export async function collectLinkedLegacyRefs(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  kv: { getByPrefix: (p: string) => Promise<any[]> },
+  orgId?: string | null,
+): Promise<LinkedLegacyRef[]> {
+  const byPath = new Map<string, LinkedLegacyRef>();
+  const batches: { prefix: string; sourceType: EvidenceSourceType }[] = [
+    { prefix: "transaction:", sourceType: "transaction" },
+    { prefix: "fuel_entry:", sourceType: "fuel_entry" },
+    { prefix: "maintenance_log:", sourceType: "maintenance_log" },
+  ];
+  for (const { prefix, sourceType } of batches) {
+    const rows = await kv.getByPrefix(prefix);
+    for (const rec of rows || []) {
+      const recOrg = recordOrganizationId(rec);
+      if (orgId && recOrg !== orgId) continue;
+      const sourceId = String(rec?.id ?? "").trim();
+      if (!sourceId) continue;
+      for (const url of extractEvidenceUrlsFromRecord(rec)) {
+        const parsed = parseStoragePathFromUrl(url);
+        if (parsed?.bucket !== LEGACY_DOCS_BUCKET) continue;
+        if (!byPath.has(parsed.path)) {
+          byPath.set(parsed.path, {
+            path: parsed.path,
+            sourceType,
+            sourceId,
+            orgId: recOrg,
+          });
+        }
+      }
+    }
+  }
+  return [...byPath.values()];
+}
+
+export type LinkedVehicleRef = {
+  path: string;
+  vehicleId: string;
+  licensePlate: string | null;
+  orgId: string | null;
+};
+
+export async function collectLinkedVehicleRefs(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  kv: { getByPrefix: (p: string) => Promise<any[]> },
+  orgId?: string | null,
+): Promise<LinkedVehicleRef[]> {
+  const byPath = new Map<string, LinkedVehicleRef>();
+  const vehicles = await kv.getByPrefix("vehicle:");
+  for (const rec of vehicles || []) {
+    const recOrg = recordOrganizationId(rec);
+    if (orgId && recOrg !== orgId) continue;
+    const imageUrl =
+      (typeof rec?.image === "string" && rec.image) ||
+      (typeof rec?.imageUrl === "string" && rec.imageUrl) ||
+      "";
+    if (!imageUrl) continue;
+    const parsed = parseStoragePathFromUrl(imageUrl);
+    if (!parsed || parsed.bucket !== "make-37f42386-vehicles") continue;
+    const vehicleId = String(rec?.id ?? "").trim();
+    if (!vehicleId) continue;
+    if (!byPath.has(parsed.path)) {
+      byPath.set(parsed.path, {
+        path: parsed.path,
+        vehicleId,
+        licensePlate:
+          typeof rec?.licensePlate === "string" ? rec.licensePlate : null,
+        orgId: recOrg,
+      });
+    }
+  }
+  return [...byPath.values()];
+}
+
 export async function runEvidenceCleanup(
   supabase: SupabaseClient,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   kv: { getByPrefix: (p: string) => Promise<any[]>; get: (k: string) => Promise<any>; set: (k: string, v: any) => Promise<void> },
-  options: { dryRun?: boolean } = {},
+  options: { dryRun?: boolean; orgId?: string | null } = {},
 ): Promise<EvidenceCleanupResult> {
   if (!isEvidenceTtlEnabled()) {
     return { purged: 0, kvPatched: 0, errors: [], dryRun: options.dryRun };
   }
 
   const now = new Date().toISOString();
-  const { data: dueRows, error } = await supabase
+  let query = supabase
     .from("evidence_files")
-    .select("id, bucket_id, storage_path, public_url")
+    .select("id, bucket_id, storage_path, public_url, org_id")
     .eq("status", "scheduled")
     .lte("delete_after", now)
     .is("deleted_at", null)
     .limit(200);
+  if (options.orgId) {
+    query = query.eq("org_id", options.orgId);
+  }
+  const { data: dueRows, error } = await query;
 
-  if (error) throw error;
+  if (error) {
+    const detail =
+      typeof error === "object" && error !== null && "message" in error
+        ? String((error as { message: unknown }).message)
+        : JSON.stringify(error);
+    throw new Error(`evidence_files query failed: ${detail}`);
+  }
   const rows = dueRows || [];
 
   if (options.dryRun) {

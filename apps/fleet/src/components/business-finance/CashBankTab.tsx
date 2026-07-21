@@ -93,11 +93,11 @@ export function CashBankTab({
 
       <Card className="border-slate-200 dark:border-slate-800 rounded-md">
         <CardHeader className="border-b border-slate-100 dark:border-slate-800 py-3">
-          <CardTitle className="text-sm font-semibold">InDrive wallet loads</CardTitle>
+          <CardTitle className="text-sm font-semibold">Bank → InDrive wallet</CardTitle>
         </CardHeader>
         <CardContent className="pt-3 space-y-2 text-sm">
           <div className="flex justify-between">
-            <span className="text-slate-500">Period loads</span>
+            <span className="text-slate-500">Period transfers</span>
             <span className="tabular-nums font-medium">{formatMoney(walletLoads.periodLoads)}</span>
           </div>
           {walletLoads.shortDriverCount > 0 && (
@@ -109,7 +109,7 @@ export function CashBankTab({
             </div>
           )}
           <p className="text-xs text-slate-500">
-            Funding cost, not revenue. Open Wallet Center for load detail.
+            Transfer from bank/cash to platform wallet — not an expense.
           </p>
           <Button type="button" size="sm" variant="outline" className="w-full mt-2" onClick={onOpenWallet}>
             Open InDrive Wallet

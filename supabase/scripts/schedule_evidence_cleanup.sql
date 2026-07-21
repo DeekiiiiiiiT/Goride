@@ -1,12 +1,21 @@
--- Manual evidence cleanup trigger (run when pg_cron cannot call edge functions directly).
--- Requires FLEET_CRON_SECRET and deployed evidence-cleanup function OR make-server internal route.
+-- Evidence cleanup daily schedule (pg_cron + pg_net).
+-- Applied on GoRide as job `fleet-evidence-cleanup-daily` at 0 3 * * * UTC.
+-- Secret lives in private.fleet_ops_secrets (name = fleet_cron_secret).
+-- Edge function also accepts RIDES_CRON_SECRET / FLEET_CRON_SECRET via X-Fleet-Cron-Secret.
 --
--- Example (replace URL and secret):
--- curl -X POST "$SUPABASE_URL/functions/v1/evidence-cleanup?dryRun=true" \
---   -H "X-Fleet-Cron-Secret: $FLEET_CRON_SECRET"
+-- Manual dry-run:
+--   curl -X POST "$SUPABASE_URL/functions/v1/evidence-cleanup?dryRun=true" \
+--     -H "X-Fleet-Cron-Secret: $FLEET_CRON_SECRET" \
+--     -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY"
 --
 -- Or via fleet server:
--- curl -X POST "$SUPABASE_URL/functions/v1/make-server-37f42386/internal/evidence-cleanup?dryRun=true" \
---   -H "X-Fleet-Cron-Secret: $FLEET_CRON_SECRET"
+--   curl -X POST "$SUPABASE_URL/functions/v1/make-server-37f42386/internal/evidence-cleanup?dryRun=true" \
+--     -H "X-Fleet-Cron-Secret: $FLEET_CRON_SECRET"
+--
+-- Re-schedule (ops):
+--   SELECT private.invoke_evidence_cleanup();  -- immediate
+--   SELECT cron.schedule('fleet-evidence-cleanup-daily', '0 3 * * *', $$SELECT private.invoke_evidence_cleanup();$$);
 
-SELECT 'Schedule evidence-cleanup via Supabase Dashboard → Edge Functions → Cron (0 3 * * *)' AS notice;
+SELECT jobid, jobname, schedule, command
+FROM cron.job
+WHERE jobname = 'fleet-evidence-cleanup-daily';

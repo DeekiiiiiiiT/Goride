@@ -870,7 +870,17 @@ export const api = {
 
     const formData = new FormData();
     formData.append('file', processedFile);
-    appendUploadEvidenceMeta(formData, evidenceMeta);
+    let meta = evidenceMeta;
+    if (meta && !meta.orgId) {
+      const { data: { session } } = await supabase.auth.getSession();
+      const user = session?.user;
+      const app = (user?.app_metadata || {}) as Record<string, unknown>;
+      const fromApp = typeof app.organizationId === 'string' ? app.organizationId.trim() : '';
+      const fleetId = typeof app.fleetId === 'string' ? app.fleetId.trim() : '';
+      const orgId = fromApp || fleetId || undefined;
+      if (orgId) meta = { ...meta, orgId };
+    }
+    appendUploadEvidenceMeta(formData, meta);
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 60000);

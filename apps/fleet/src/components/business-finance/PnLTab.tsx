@@ -2,18 +2,10 @@ import React, { useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '../ui/table';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../ui/collapsible';
 import { cn } from '../ui/utils';
 import { formatMoney } from './money';
-import type { BusinessFinancePnL, PnLFuelBreakdown, PnLTollBreakdown } from './types';
+import type { BusinessFinancePnL, PnLFuelBreakdown, PnLTollBreakdown, PlatformSplitRow } from './types';
 
 function TollBreakdownPanel({ breakdown }: { breakdown: PnLTollBreakdown }) {
   const rows: Array<{ label: string; hint: string; amount: number; emphasize?: boolean }> = [
@@ -129,11 +121,80 @@ function FuelBreakdownPanel({ breakdown }: { breakdown: PnLFuelBreakdown }) {
   );
 }
 
+/** Platform fees by marketplace. */
+function PlatformFeesBreakdownPanel({ rows }: { rows: PlatformSplitRow[] }) {
+  const feeRows = [...rows]
+    .filter((r) => r.fees > 0.005)
+    .sort((a, b) => b.fees - a.fees);
+  if (feeRows.length === 0) {
+    return (
+      <p className="mt-2 mb-1 text-xs text-slate-500">No platform fees recognized this period.</p>
+    );
+  }
+  return (
+    <div className="mt-2 mb-1 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+      {feeRows.map((r) => (
+        <div
+          key={r.platform}
+          className="rounded-md border border-slate-100 bg-slate-50/80 px-3 py-2.5 dark:border-slate-800 dark:bg-slate-900/50"
+        >
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+            {r.platform}
+          </p>
+          <p className="mt-1 text-lg font-semibold tabular-nums text-slate-900 dark:text-slate-100">
+            {formatMoney(r.fees)}
+          </p>
+          <p className="mt-0.5 text-[11px] text-slate-500 leading-snug">
+            Commission on {formatMoney(r.gross)} gross
+          </p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Gross earnings by marketplace (replaces the old Platform split table). */
+function PlatformGrossBreakdownPanel({ rows }: { rows: PlatformSplitRow[] }) {
+  const grossRows = [...rows]
+    .filter((r) => r.gross > 0.005)
+    .sort((a, b) => b.gross - a.gross);
+  if (grossRows.length === 0) {
+    return (
+      <p className="mt-2 mb-1 text-xs text-slate-500">No platform earnings this period.</p>
+    );
+  }
+  return (
+    <div className="mt-2 mb-1 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+      {grossRows.map((r) => (
+        <div
+          key={r.platform}
+          className="rounded-md border border-slate-100 bg-slate-50/80 px-3 py-2.5 dark:border-slate-800 dark:bg-slate-900/50"
+        >
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+            {r.platform}
+          </p>
+          <p className="mt-1 text-lg font-semibold tabular-nums text-slate-900 dark:text-slate-100">
+            {formatMoney(r.gross)}
+          </p>
+          <p className="mt-0.5 text-[11px] text-slate-500 leading-snug">
+            Net after fees {formatMoney(r.net)}
+          </p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function PnLTab({ pnl }: { pnl: BusinessFinancePnL }) {
   const [tollsOpen, setTollsOpen] = useState(false);
   const [fuelOpen, setFuelOpen] = useState(false);
+  const [feesOpen, setFeesOpen] = useState(false);
+  const [grossOpen, setGrossOpen] = useState(false);
   const tollBreakdown = pnl.tollBreakdown;
   const fuelBreakdown = pnl.fuelBreakdown;
+  const splitRows = pnl.platformSplit;
+  const hasFeeBreakdown = splitRows.some((r) => r.fees > 0.005);
+  const hasGrossBreakdown = splitRows.some((r) => r.gross > 0.005);
 
   const exportCsv = () => {
     const lines = [
@@ -159,6 +220,12 @@ export function PnLTab({ pnl }: { pnl: BusinessFinancePnL }) {
         `"Charged to drivers",${tollBreakdown.chargedToDrivers}`,
         `"Fleet toll loss",${tollBreakdown.fleetLoss}`,
       );
+    }
+    for (const r of splitRows.filter((x) => x.gross > 0.005)) {
+      lines.push(`"Gross (${r.platform})",${r.gross}`);
+    }
+    for (const r of splitRows.filter((x) => x.fees > 0.005)) {
+      lines.push(`"Platform fees (${r.platform})",${-r.fees}`);
     }
     lines.push(`Operating ratio %,${pnl.operatingRatio ?? ''}`);
     const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
@@ -203,6 +270,64 @@ export function PnLTab({ pnl }: { pnl: BusinessFinancePnL }) {
           <ul className="divide-y divide-slate-100 dark:divide-slate-800">
             {pnl.lines.map((line) => {
               if (line.kind === 'memo') return null;
+
+              if (line.id === 'gross' && hasGrossBreakdown) {
+                const amt = line.amount ?? 0;
+                return (
+                  <li key={line.id} className="py-2.5 text-sm">
+                    <Collapsible open={grossOpen} onOpenChange={setGrossOpen}>
+                      <CollapsibleTrigger className="group flex w-full items-center justify-between gap-2 text-left min-h-[44px]">
+                        <span className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300">
+                          <ChevronDown
+                            className={cn(
+                              'h-4 w-4 shrink-0 text-slate-400 transition-transform duration-200',
+                              grossOpen && 'rotate-180',
+                            )}
+                            aria-hidden
+                          />
+                          {line.label}
+                          <span className="text-[11px] font-normal text-slate-400">
+                            {grossOpen ? 'Hide breakdown' : 'Show breakdown'}
+                          </span>
+                        </span>
+                        <span className="tabular-nums text-slate-600">{formatMoney(amt)}</span>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <PlatformGrossBreakdownPanel rows={splitRows} />
+                      </CollapsibleContent>
+                    </Collapsible>
+                  </li>
+                );
+              }
+
+              if (line.id === 'platform_fees' && hasFeeBreakdown) {
+                const amt = line.amount ?? 0;
+                return (
+                  <li key={line.id} className="py-2.5 text-sm">
+                    <Collapsible open={feesOpen} onOpenChange={setFeesOpen}>
+                      <CollapsibleTrigger className="group flex w-full items-center justify-between gap-2 text-left min-h-[44px]">
+                        <span className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300">
+                          <ChevronDown
+                            className={cn(
+                              'h-4 w-4 shrink-0 text-slate-400 transition-transform duration-200',
+                              feesOpen && 'rotate-180',
+                            )}
+                            aria-hidden
+                          />
+                          {line.label}
+                          <span className="text-[11px] font-normal text-slate-400">
+                            {feesOpen ? 'Hide breakdown' : 'Show breakdown'}
+                          </span>
+                        </span>
+                        <span className="tabular-nums text-slate-600">{formatMoney(amt)}</span>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <PlatformFeesBreakdownPanel rows={splitRows} />
+                      </CollapsibleContent>
+                    </Collapsible>
+                  </li>
+                );
+              }
 
               if (line.id === 'fuel' && fuelBreakdown) {
                 const amt = line.amount ?? 0;
@@ -292,36 +417,6 @@ export function PnLTab({ pnl }: { pnl: BusinessFinancePnL }) {
           </ul>
         </CardContent>
       </Card>
-
-      {pnl.platformSplit.length > 0 && (
-        <Card className="border-slate-200 dark:border-slate-800 rounded-md overflow-hidden">
-          <CardHeader className="border-b border-slate-100 dark:border-slate-800 py-3">
-            <CardTitle className="text-sm font-semibold">Platform split</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Platform</TableHead>
-                  <TableHead className="text-right">Gross</TableHead>
-                  <TableHead className="text-right">Fees</TableHead>
-                  <TableHead className="text-right">Net</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {pnl.platformSplit.map((r) => (
-                  <TableRow key={r.platform}>
-                    <TableCell>{r.platform}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatMoney(r.gross)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatMoney(r.fees)}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatMoney(r.net)}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 }

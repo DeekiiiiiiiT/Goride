@@ -321,3 +321,73 @@ describe('buildPnLFromCanonicalEvents — fuel netting', () => {
     expect(pnl.fuelBreakdown?.reimbursedToDrivers).toBe(200);
   });
 });
+
+describe('buildPnLFromCanonicalEvents — platform fee recognition', () => {
+  const period = { preset: 'custom' as const, startYmd: '2026-02-01', endYmd: '2026-02-28' };
+
+  it('InDrive fare gap → fees and pre-commission gross; net trip = net fare', () => {
+    const pnl = buildPnLFromCanonicalEvents(
+      [
+        {
+          eventType: 'fare_earning',
+          platform: 'InDrive',
+          date: '2026-02-10',
+          grossAmount: 100,
+          netAmount: 80,
+        },
+      ],
+      period,
+    );
+    expect(pnl.lines.find((l) => l.id === 'gross')!.amount).toBe(100);
+    expect(pnl.lines.find((l) => l.id === 'platform_fees')!.amount).toBe(-20);
+    expect(pnl.lines.find((l) => l.id === 'net_trip')!.amount).toBe(80);
+    expect(pnl.platformSplit.find((r) => r.platform === 'InDrive')).toEqual({
+      platform: 'InDrive',
+      gross: 100,
+      fees: 20,
+      net: 80,
+    });
+    expect(pnl.lines.find((l) => l.id === 'wallet_loads')).toBeUndefined();
+  });
+
+  it('explicit platform_fee wins over fare gap (no double count)', () => {
+    const pnl = buildPnLFromCanonicalEvents(
+      [
+        {
+          eventType: 'fare_earning',
+          platform: 'InDrive',
+          date: '2026-02-10',
+          grossAmount: 100,
+          netAmount: 80,
+        },
+        {
+          eventType: 'platform_fee',
+          platform: 'InDrive',
+          date: '2026-02-10',
+          netAmount: -15,
+        },
+      ],
+      period,
+    );
+    expect(pnl.lines.find((l) => l.id === 'platform_fees')!.amount).toBe(-15);
+    expect(pnl.lines.find((l) => l.id === 'gross')!.amount).toBe(100);
+    expect(pnl.lines.find((l) => l.id === 'net_trip')!.amount).toBe(85);
+  });
+
+  it('Uber gross=net → fees 0', () => {
+    const pnl = buildPnLFromCanonicalEvents(
+      [
+        {
+          eventType: 'fare_earning',
+          platform: 'Uber',
+          date: '2026-02-10',
+          grossAmount: 50,
+          netAmount: 50,
+        },
+      ],
+      period,
+    );
+    expect(pnl.lines.find((l) => l.id === 'gross')!.amount).toBe(50);
+    expect(pnl.lines.find((l) => l.id === 'platform_fees')!.amount).toBe(-0);
+  });
+});

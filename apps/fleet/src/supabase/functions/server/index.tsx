@@ -152,6 +152,7 @@ import {
   applyEvidenceResolution,
   cleanupEphemeralPathsOnDelete,
 } from "./evidence_routes.ts";
+import { registerFleetAdminStorageRoutes } from "./fleet_admin_storage_routes.ts";
 import {
   buildEphemeralStoragePath,
   EPHEMERAL_EVIDENCE_BUCKET,
@@ -415,6 +416,7 @@ function getProvisionDeps() {
 
 registerMaintenanceRoutes(app, supabase);
 registerEvidenceRoutes(app, supabase, kv, requireAuth, requirePermission);
+registerFleetAdminStorageRoutes(app, supabase, kv);
 registerPendingVehicleCatalogRoutes(app, supabase);
 registerPartSourcingRoutes(app, supabase);
 
@@ -7761,7 +7763,7 @@ app.post("/make-server-37f42386/upload", async (c) => {
     const evidenceType = body['evidenceType'] ? String(body['evidenceType']) : '';
     const sourceType = body['sourceType'] ? String(body['sourceType']) : '';
     const sourceId = body['sourceId'] ? String(body['sourceId']) : '';
-    const orgId = body['orgId'] ? String(body['orgId']) : '';
+    const formOrgId = body['orgId'] ? String(body['orgId']).trim() : '';
     const parentStatus = body['parentStatus'] ? String(body['parentStatus']) : 'Pending';
 
     const useEphemeral =
@@ -7770,6 +7772,35 @@ app.post("/make-server-37f42386/upload", async (c) => {
       evidenceType &&
       sourceType &&
       sourceId;
+
+    // /upload bypasses requireAuth middleware — resolve org from form or JWT for ephemeral
+    let resolvedOrgId = formOrgId || getOrgId(c) || '';
+    if (useEphemeral && !resolvedOrgId) {
+      const token = c.req.header('Authorization')?.replace(/^Bearer\s+/i, '');
+      if (token) {
+        const { data: authData } = await supabase.auth.getUser(token);
+        const user = authData?.user;
+        if (user) {
+          const appMeta = (user.app_metadata || {}) as Record<string, unknown>;
+          const fromApp = appMeta.organizationId;
+          if (typeof fromApp === 'string' && fromApp.trim()) {
+            resolvedOrgId = fromApp.trim();
+          } else {
+            const role = typeof appMeta.role === 'string' ? appMeta.role : '';
+            const roles = Array.isArray(appMeta.roles) ? appMeta.roles.map(String) : [];
+            if (role === 'fleet_owner' || roles.includes('fleet_owner') || role === 'admin') {
+              resolvedOrgId = user.id;
+            }
+          }
+        }
+      }
+    }
+    if (useEphemeral && (!resolvedOrgId || resolvedOrgId === 'unknown')) {
+      return c.json({
+        error: 'orgId required for ephemeral evidence uploads',
+        message: 'Pass orgId or sign in with an organization-scoped session.',
+      }, 400);
+    }
 
     const bucketName = useEphemeral ? EPHEMERAL_EVIDENCE_BUCKET : "make-37f42386-docs";
     await ensureBucket(
@@ -7784,7 +7815,7 @@ app.post("/make-server-37f42386/upload", async (c) => {
     }
     const fileExt = extForMime(detected);
     const filePath = useEphemeral
-      ? buildEphemeralStoragePath(orgId || getOrgId(c) || 'unknown', evidenceType as EvidenceType, fileExt)
+      ? buildEphemeralStoragePath(resolvedOrgId, evidenceType as EvidenceType, fileExt)
       : `driver-docs/${crypto.randomUUID()}.${fileExt}`;
 
     const { error } = await supabase.storage
@@ -7809,10 +7840,12 @@ app.post("/make-server-37f42386/upload", async (c) => {
         evidenceType: evidenceType as EvidenceType,
         sourceType: sourceType as "transaction" | "fuel_entry" | "maintenance_log",
         sourceId,
-        orgId: orgId || getOrgId(c) || null,
+        orgId: resolvedOrgId,
         publicUrl: signedUrl,
         parentStatus,
         retentionClass: 'ephemeral',
+        fileSizeBytes: buffer.byteLength,
+        contentType: detected,
       });
     }
 

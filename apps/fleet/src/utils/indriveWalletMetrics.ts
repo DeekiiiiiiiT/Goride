@@ -2,7 +2,10 @@
  * InDrive wallet fee + load rules — shared by per-driver / fleet endpoints and Business Finance.
  * Period: [startDate, endDate] inclusive (YYYY-MM-DD). Lifetime: all rows (no date filter).
  * Loads: canonical `wallet_credit` only (not raw transaction:*).
+ * Fees: shared platformFeeRecognition (InDrive only).
  */
+
+import { computePlatformFeesPeriodAndLifetime } from './platformFeeRecognition.ts';
 
 /** Match Wallet Center: estimatedBalance below this = "short". */
 export const INDRIVE_WALLET_SHORT_THRESHOLD = -0.005;
@@ -28,38 +31,15 @@ export function computeIndriveWalletFeesFromLedgerEntries(
   startDate: string,
   endDate: string,
 ): { periodFees: number; lifetimeInDriveFees: number } {
-  let platformFeeInDrive = 0;
-  let fareGapInDrive = 0;
-  let lifetimePlatformFeeInDrive = 0;
-  let lifetimeFareGapInDrive = 0;
-
-  for (const e of entries) {
-    const plat = (e.platform === 'GoRide' ? 'Roam' : e.platform) || 'Other';
-    const net = Number(e.netAmount) || 0;
-    const gross = Number(e.grossAmount) || 0;
-    const et = e.eventType;
-    const d = ledgerRowDate(e.date);
-    const inPeriod = d >= startDate && d <= endDate;
-
-    if (et === 'platform_fee' && plat === 'InDrive') {
-      const absNet = Math.abs(net);
-      lifetimePlatformFeeInDrive += absNet;
-      if (inPeriod) platformFeeInDrive += absNet;
-    }
-    if (et === 'fare_earning' && plat === 'InDrive') {
-      const gap = gross - net;
-      lifetimeFareGapInDrive += gap;
-      if (inPeriod) fareGapInDrive += gap;
-    }
-  }
-
-  const periodFees = platformFeeInDrive > 0 ? platformFeeInDrive : fareGapInDrive;
-  const lifetimeInDriveFees =
-    lifetimePlatformFeeInDrive > 0 ? lifetimePlatformFeeInDrive : lifetimeFareGapInDrive;
-
+  const { periodFees, lifetimeFees } = computePlatformFeesPeriodAndLifetime(
+    entries,
+    'InDrive',
+    startDate,
+    endDate,
+  );
   return {
-    periodFees: Number(periodFees.toFixed(2)),
-    lifetimeInDriveFees: Number(lifetimeInDriveFees.toFixed(2)),
+    periodFees,
+    lifetimeInDriveFees: lifetimeFees,
   };
 }
 
@@ -132,7 +112,7 @@ export function buildIndriveWalletDriverAliasMap(
 
 /**
  * One pass over canonical ledger → per-driver wallet summaries + fleet totals.
- * Loads from wallet_credit; fees via the same InDrive fee rule as the per-driver endpoint.
+ * Loads from wallet_credit; fees via shared InDrive fee recognition.
  */
 export function buildIndriveWalletFleetFromLedger(
   drivers: ReadonlyArray<DriverIdRecord>,

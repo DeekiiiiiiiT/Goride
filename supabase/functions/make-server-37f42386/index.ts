@@ -14,4 +14,5 @@ import "../../../apps/fleet/src/supabase/functions/server/maintenance_schedule_e
 import "../../../apps/fleet/src/supabase/functions/server/normalize_platform.ts";
 import "../../../apps/fleet/src/supabase/functions/server/period_share_cash.ts";
 import "../../../apps/fleet/src/supabase/functions/server/driver_period_settlement.ts";
+import "../../../apps/fleet/src/supabase/functions/server/fleet_admin_storage_routes.ts";
 import "../../../apps/fleet/src/supabase/functions/server/index.tsx";

@@ -15,6 +15,7 @@ import {
   computeFuelFleetLossNetting,
   fuelRecoveredWashedMemo,
 } from '../../utils/fuelFleetLossNetting';
+import { recognizePlatformGrossAndFees } from '../../utils/platformFeeRecognition';
 
 type LedgerLike = Record<string, unknown>;
 
@@ -26,39 +27,23 @@ function eventAmount(e: LedgerLike): number {
   return tollEventAmount(e);
 }
 
-function platformOf(e: LedgerLike): string {
-  const p = String(e.platform || 'unknown').toLowerCase();
-  if (p.includes('uber')) return 'Uber';
-  if (p.includes('indrive') || p.includes('in_drive')) return 'InDrive';
-  if (p.includes('roam')) return 'Roam';
-  return p === 'unknown' ? 'Other' : p;
-}
-
 export function buildPnLFromCanonicalEvents(
   events: LedgerLike[] | undefined | null,
   period: BusinessFinancePeriod,
 ): BusinessFinancePnL {
   const scoped = (events || []).filter((e) => inPeriod(eventDate(e), period));
-  let gross = 0;
-  let fees = 0;
-  let driverPayouts = 0;
-  const byPlatform = new Map<string, { gross: number; fees: number }>();
 
+  // Gross + fees via shared recognition (platform_fee or fare gap; pre-commission gross).
+  const recognized = recognizePlatformGrossAndFees(scoped);
+  const gross = recognized.totalGross;
+  const fees = recognized.totalFees;
+  const byPlatform = recognized.byPlatform;
+
+  let driverPayouts = 0;
   for (const e of scoped) {
     const t = String(e.eventType || '');
-    const amt = eventAmount(e);
-    const plat = platformOf(e);
-    if (!byPlatform.has(plat)) byPlatform.set(plat, { gross: 0, fees: 0 });
-    const row = byPlatform.get(plat)!;
-
-    if (t === 'fare_earning' || t === 'tip' || t === 'promotion') {
-      gross += amt;
-      row.gross += amt;
-    } else if (t === 'platform_fee') {
-      fees += amt;
-      row.fees += amt;
-    } else if (t === 'payout_cash' || t === 'driver_payout') {
-      driverPayouts += amt;
+    if (t === 'payout_cash' || t === 'driver_payout') {
+      driverPayouts += eventAmount(e);
     }
   }
 
@@ -115,7 +100,7 @@ export function buildPnLFromCanonicalEvents(
       : undefined;
 
   const netTrip = round2(gross - fees);
-  // Maintenance & wallet not on canonical chart yet — exclude from profit, show as untracked
+  // Maintenance not tracked yet. Wallet loads are transfers (Cash & Bank), not P&L expenses.
   const operatingProfit = round2(netTrip - fuel - tolls - driverPayouts);
   const operatingRatio = gross > 0.005 ? round2(((gross - operatingProfit) / gross) * 100) : null;
 
@@ -127,7 +112,6 @@ export function buildPnLFromCanonicalEvents(
     { id: 'fuel', label: 'Fuel', amount: -round2(fuel), kind: 'expense' },
     { id: 'tolls', label: 'Tolls', amount: -round2(tolls), kind: 'expense' },
     { id: 'maintenance', label: 'Maintenance', amount: null, kind: 'expense', tracked: false },
-    { id: 'wallet_loads', label: 'Wallet loads', amount: null, kind: 'expense', tracked: false },
     { id: 'driver_payouts', label: 'Driver payouts', amount: -round2(driverPayouts), kind: 'expense' },
     { id: 'operating_profit', label: 'Operating profit', amount: operatingProfit, kind: 'result' },
   ];

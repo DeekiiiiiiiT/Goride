@@ -54,7 +54,7 @@ function Row({
 }
 
 export function OverviewTab({ overview, onNavigateTab, onNavigatePage }: Props) {
-  const { moneyIn, moneyOut, profit, risks } = overview;
+  const { moneyIn, moneyOut, transfers, profit, risks } = overview;
   const profitNegative = profit.operatingProfit < -0.005;
 
   return (
@@ -114,16 +114,33 @@ export function OverviewTab({ overview, onNavigateTab, onNavigatePage }: Props) 
             onClick={() => onNavigatePage?.('maintenance-hub')}
           />
           <Row
-            label="Wallet loads"
-            hint="InDrive Wallet"
-            value={formatMoney(moneyOut.walletLoads)}
-            onClick={() => onNavigatePage?.('indrive-wallet')}
-          />
-          <Row
             label="Driver payouts"
             hint="Profit & Loss"
             value={formatMoney(moneyOut.driverPayouts)}
             onClick={() => onNavigateTab('pnl')}
+          />
+        </CardContent>
+      </Card>
+
+      <Card className="border-slate-200 dark:border-slate-800 rounded-md">
+        <CardHeader className="border-b border-slate-100 dark:border-slate-800 py-3">
+          <CardTitle className="text-sm font-semibold">Transfers</CardTitle>
+        </CardHeader>
+        <CardContent className="pt-3 space-y-0.5">
+          <p className="text-[11px] text-slate-400 mb-2">
+            Bank/cash moved to platform wallets — not an expense.
+          </p>
+          <Row
+            label="Bank → InDrive wallet"
+            hint="Cash & Bank"
+            value={formatMoney(transfers.bankToIndriveWallet)}
+            onClick={() => onNavigateTab('cash-bank')}
+          />
+          <Row
+            label="Open InDrive Wallet"
+            hint="Wallet Center"
+            value="View"
+            onClick={() => onNavigatePage?.('indrive-wallet')}
           />
         </CardContent>
       </Card>
@@ -154,7 +171,7 @@ export function OverviewTab({ overview, onNavigateTab, onNavigatePage }: Props) 
         </CardContent>
       </Card>
 
-      <Card className="border-slate-200 dark:border-slate-800 rounded-md">
+      <Card className="border-slate-200 dark:border-slate-800 rounded-md sm:col-span-2">
         <CardHeader className="border-b border-slate-100 dark:border-slate-800 py-3">
           <CardTitle className="text-sm font-semibold">Risk flags</CardTitle>
         </CardHeader>

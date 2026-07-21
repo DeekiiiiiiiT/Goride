@@ -26,7 +26,6 @@ export type PnLLineId =
   | 'fuel'
   | 'tolls'
   | 'maintenance'
-  | 'wallet_loads'
   | 'driver_payouts'
   | 'operating_profit';
 
@@ -97,8 +96,11 @@ export type BusinessFinanceOverview = {
     fuel: number;
     tolls: number;
     maintenance: number | null;
-    walletLoads: number;
     driverPayouts: number;
+  };
+  /** Bank → platform wallet transfers (not an expense). */
+  transfers: {
+    bankToIndriveWallet: number;
   };
   profit: {
     operatingProfit: number;

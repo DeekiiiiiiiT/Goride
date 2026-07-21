@@ -253,8 +253,10 @@ export async function fetchBusinessFinanceBundle(
       fuel,
       tolls,
       maintenance,
-      walletLoads: round2(walletLoads),
       driverPayouts,
+    },
+    transfers: {
+      bankToIndriveWallet: round2(walletLoads),
     },
     profit: {
       operatingProfit: round2(profitLine),
