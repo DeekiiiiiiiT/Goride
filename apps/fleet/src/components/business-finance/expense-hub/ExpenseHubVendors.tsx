@@ -1,10 +1,9 @@
 /**
- * Expense Hub — Categories & Vendors subview (Stitch: Categories & Vendors mobile+desktop).
- * Vendors: list + create (only writes the hub API supports). Categories: read-only
- * reference of the fixed expense taxonomy. No edit/archive/merge — server has no routes.
+ * Expense Hub — Categories & Vendors subview.
+ * Vendors + custom categories (built-in taxonomy remains; org can add more).
  */
 import React from 'react';
-import { ListPlus, Loader2, Plus, Search, Store, Trash2, UserRoundPlus } from 'lucide-react';
+import { ListPlus, Loader2, MoreVertical, Pencil, Plus, Search, Store, Trash2, UserRoundPlus } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 import { Badge } from '../../ui/badge';
 import { Button } from '../../ui/button';
@@ -17,6 +16,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '../../ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '../../ui/dropdown-menu';
 import { Input } from '../../ui/input';
 import { Label } from '../../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../ui/select';
@@ -31,18 +36,21 @@ import {
   TableRow,
 } from '../../ui/table';
 import { cn } from '../../ui/utils';
-import { EXPENSE_CATEGORIES } from '../../../types/expenses';
 import { usePermissions } from '../../../hooks/usePermissions';
 import {
+  useCreateExpenseCategory,
   useCreateExpenseVendor,
   useCreateExpenseVendorsBulk,
+  useExpenseHubCategories,
   useExpenseHubVendors,
+  useUpdateExpenseCategory,
 } from '../../../hooks/useExpenseHub';
-import type { ExpenseVendor } from '../../../types/expenseHub';
+import type { ExpenseHubCategory, ExpenseVendor } from '../../../types/expenseHub';
 import { HubEmpty, HubError, HubLoading } from './HubStates';
 import { categoryIcon } from './hubFormat';
 
 type AddMode = 'one' | 'bulk';
+type HubTab = 'vendors' | 'categories';
 
 type BulkRow = { id: string; name: string };
 
@@ -56,22 +64,41 @@ function initialBulkRows(): BulkRow[] {
   return [newBulkRow(), newBulkRow()];
 }
 
+function suggestCategoryCode(label: string): string {
+  const parts = label.trim().split(/[^a-zA-Z0-9]+/).filter(Boolean);
+  return parts.map((p) => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join('') || '';
+}
+
 export function ExpenseHubVendors({ writesEnabled = true }: { writesEnabled?: boolean }) {
   const { can } = usePermissions();
   const vendorsQuery = useExpenseHubVendors();
+  const categoriesQuery = useExpenseHubCategories();
   const createVendor = useCreateExpenseVendor();
   const createVendorsBulk = useCreateExpenseVendorsBulk();
+  const createCategory = useCreateExpenseCategory();
+  const updateCategory = useUpdateExpenseCategory();
 
+  const [hubTab, setHubTab] = React.useState<HubTab>('vendors');
   const [filter, setFilter] = React.useState('');
   const [dialogOpen, setDialogOpen] = React.useState(false);
+  const [categoryDialogOpen, setCategoryDialogOpen] = React.useState(false);
+  const [editingCategory, setEditingCategory] = React.useState<ExpenseHubCategory | null>(null);
   const [addMode, setAddMode] = React.useState<AddMode>('one');
   const [name, setName] = React.useState('');
   const [categoryDefault, setCategoryDefault] = React.useState('none');
   const [notes, setNotes] = React.useState('');
   const [bulkRows, setBulkRows] = React.useState<BulkRow[]>(initialBulkRows);
+  const [categoryLabel, setCategoryLabel] = React.useState('');
+  const [categoryCode, setCategoryCode] = React.useState('');
+  const [categoryNotes, setCategoryNotes] = React.useState('');
+  const [codeTouched, setCodeTouched] = React.useState(false);
 
   const canManage = can('expenses.manage_vendors') && writesEnabled;
-  const anyCreatePending = createVendor.isPending || createVendorsBulk.isPending;
+  const categoryBusy = createCategory.isPending || updateCategory.isPending;
+  const anyCreatePending =
+    createVendor.isPending || createVendorsBulk.isPending || categoryBusy;
+
+  const allCategories = categoriesQuery.data?.items || [];
 
   const resetForm = () => {
     setAddMode('one');
@@ -81,15 +108,43 @@ export function ExpenseHubVendors({ writesEnabled = true }: { writesEnabled?: bo
     setBulkRows(initialBulkRows());
   };
 
+  const resetCategoryForm = () => {
+    setEditingCategory(null);
+    setCategoryLabel('');
+    setCategoryCode('');
+    setCategoryNotes('');
+    setCodeTouched(false);
+  };
+
   const openDialog = () => {
     resetForm();
     setDialogOpen(true);
+  };
+
+  const openCategoryDialog = () => {
+    resetCategoryForm();
+    setCategoryDialogOpen(true);
+  };
+
+  const openEditCategory = (category: ExpenseHubCategory) => {
+    setEditingCategory(category);
+    setCategoryLabel(category.label);
+    setCategoryCode(category.value);
+    setCategoryNotes(category.notes || '');
+    setCodeTouched(true);
+    setCategoryDialogOpen(true);
   };
 
   const closeDialog = (open: boolean) => {
     if (anyCreatePending) return;
     setDialogOpen(open);
     if (!open) resetForm();
+  };
+
+  const closeCategoryDialog = (open: boolean) => {
+    if (categoryBusy) return;
+    setCategoryDialogOpen(open);
+    if (!open) resetCategoryForm();
   };
 
   const filledBulkNames = bulkRows.map((r) => r.name.trim()).filter(Boolean);
@@ -157,6 +212,40 @@ export function ExpenseHubVendors({ writesEnabled = true }: { writesEnabled?: bo
     }
   };
 
+  const submitCategory = async () => {
+    if (!categoryLabel.trim()) {
+      toast.error('Category name is required');
+      return;
+    }
+    try {
+      if (editingCategory) {
+        await updateCategory.mutateAsync({
+          id: editingCategory.id,
+          label: categoryLabel.trim(),
+          notes: categoryNotes.trim() || '',
+        });
+        toast.success('Category updated');
+      } else {
+        await createCategory.mutateAsync({
+          label: categoryLabel.trim(),
+          value: categoryCode.trim() || undefined,
+          notes: categoryNotes.trim() || undefined,
+        });
+        toast.success('Category added');
+      }
+      closeCategoryDialog(false);
+      setHubTab('categories');
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : editingCategory
+            ? 'Failed to update category'
+            : 'Failed to add category',
+      );
+    }
+  };
+
   const q = filter.trim().toLowerCase();
   const allVendors = vendorsQuery.data?.items || [];
   const vendors = q
@@ -168,16 +257,43 @@ export function ExpenseHubVendors({ writesEnabled = true }: { writesEnabled?: bo
       )
     : allVendors;
   const categories = q
-    ? EXPENSE_CATEGORIES.filter(
+    ? allCategories.filter(
         (c) => c.label.toLowerCase().includes(q) || c.value.toLowerCase().includes(q),
       )
-    : EXPENSE_CATEGORIES;
+    : allCategories;
 
   const addVendorButton = canManage ? (
     <Button type="button" className="min-h-11" onClick={openDialog}>
       <Plus className="mr-2 h-4 w-4" aria-hidden />
       Add vendor
     </Button>
+  ) : undefined;
+
+  const addCategoryButton = canManage ? (
+    <Button type="button" className="min-h-11" onClick={openCategoryDialog}>
+      <Plus className="mr-2 h-4 w-4" aria-hidden />
+      Add category
+    </Button>
+  ) : undefined;
+
+  const headerActions = canManage ? (
+    <div className="flex flex-wrap items-center gap-2">
+      {hubTab === 'categories' ? (
+        <>
+          <Button type="button" variant="outline" className="min-h-11" onClick={openDialog}>
+            Add vendor
+          </Button>
+          {addCategoryButton}
+        </>
+      ) : (
+        <>
+          <Button type="button" variant="outline" className="min-h-11" onClick={openCategoryDialog}>
+            Add category
+          </Button>
+          {addVendorButton}
+        </>
+      )}
+    </div>
   ) : undefined;
 
   const primaryDisabled =
@@ -195,7 +311,7 @@ export function ExpenseHubVendors({ writesEnabled = true }: { writesEnabled?: bo
             Classification structure and counterparties used across expenses and rules.
           </p>
         </div>
-        {addVendorButton}
+        {headerActions}
       </div>
 
       <div className="relative">
@@ -209,13 +325,13 @@ export function ExpenseHubVendors({ writesEnabled = true }: { writesEnabled?: bo
         />
       </div>
 
-      <Tabs defaultValue="vendors">
+      <Tabs value={hubTab} onValueChange={(v) => setHubTab(v as HubTab)}>
         <TabsList className="h-auto w-full bg-slate-100 dark:bg-slate-800 sm:w-auto">
           <TabsTrigger value="vendors" className="min-h-11 flex-1 px-4 sm:flex-none">
             Vendors ({allVendors.length})
           </TabsTrigger>
           <TabsTrigger value="categories" className="min-h-11 flex-1 px-4 sm:flex-none">
-            Categories ({EXPENSE_CATEGORIES.length})
+            Categories ({allCategories.length})
           </TabsTrigger>
         </TabsList>
 
@@ -300,10 +416,17 @@ export function ExpenseHubVendors({ writesEnabled = true }: { writesEnabled?: bo
         </TabsContent>
 
         <TabsContent value="categories" className="space-y-3 pt-1">
-          {categories.length === 0 ? (
+          {categoriesQuery.isLoading ? (
+            <HubLoading label="Loading categories…" />
+          ) : categories.length === 0 ? (
             <HubEmpty
-              title="No categories match this filter"
-              description="Try a different name or clear the filter."
+              title={q ? 'No categories match this filter' : 'No categories yet'}
+              description={
+                q
+                  ? 'Try a different name or clear the filter.'
+                  : 'Add categories to classify expenses and vendor defaults.'
+              }
+              action={q ? undefined : addCategoryButton}
             />
           ) : (
             <>
@@ -312,12 +435,12 @@ export function ExpenseHubVendors({ writesEnabled = true }: { writesEnabled?: bo
                 {categories.map((c) => {
                   const Icon = categoryIcon(c.value);
                   return (
-                    <Card key={c.value} className="rounded-xl border-slate-200 dark:border-slate-800">
+                    <Card key={c.id || c.value} className="rounded-xl border-slate-200 dark:border-slate-800">
                       <CardContent className="flex items-center gap-3 p-4">
                         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800">
                           <Icon className="h-5 w-5 text-indigo-600 dark:text-indigo-400" aria-hidden />
                         </div>
-                        <div className="min-w-0">
+                        <div className="min-w-0 flex-1">
                           <p className="truncate font-medium text-slate-900 dark:text-slate-100">
                             {c.label}
                           </p>
@@ -325,6 +448,12 @@ export function ExpenseHubVendors({ writesEnabled = true }: { writesEnabled?: bo
                             {c.value}
                           </p>
                         </div>
+                        {canManage && !c.isSystem && (
+                          <CategoryActions
+                            category={c}
+                            onEdit={() => openEditCategory(c)}
+                          />
+                        )}
                       </CardContent>
                     </Card>
                   );
@@ -340,17 +469,29 @@ export function ExpenseHubVendors({ writesEnabled = true }: { writesEnabled?: bo
                         <TableHead>Name</TableHead>
                         <TableHead>Code</TableHead>
                         <TableHead>Status</TableHead>
+                        {canManage && <TableHead className="text-right">Actions</TableHead>}
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {categories.map((c) => {
                         const Icon = categoryIcon(c.value);
                         return (
-                          <TableRow key={c.value} className="h-11 hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                          <TableRow
+                            key={c.id || c.value}
+                            className="h-11 hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                          >
                             <TableCell className="font-medium">
                               <span className="flex items-center gap-2">
-                                <Icon className="h-4 w-4 text-indigo-600 dark:text-indigo-400" aria-hidden />
+                                <Icon
+                                  className="h-4 w-4 text-indigo-600 dark:text-indigo-400"
+                                  aria-hidden
+                                />
                                 {c.label}
+                                {!c.isSystem && (
+                                  <Badge variant="secondary" className="font-normal">
+                                    Custom
+                                  </Badge>
+                                )}
                               </span>
                             </TableCell>
                             <TableCell className="text-sm uppercase tracking-wider text-slate-500">
@@ -364,6 +505,20 @@ export function ExpenseHubVendors({ writesEnabled = true }: { writesEnabled?: bo
                                 Active
                               </Badge>
                             </TableCell>
+                            {canManage && (
+                              <TableCell className="text-right">
+                                {c.isSystem ? (
+                                  <span className="text-xs text-slate-400">Standard</span>
+                                ) : (
+                                  <div className="flex justify-end">
+                                    <CategoryActions
+                                      category={c}
+                                      onEdit={() => openEditCategory(c)}
+                                    />
+                                  </div>
+                                )}
+                              </TableCell>
+                            )}
                           </TableRow>
                         );
                       })}
@@ -372,8 +527,8 @@ export function ExpenseHubVendors({ writesEnabled = true }: { writesEnabled?: bo
                 </CardContent>
               </Card>
               <p className="text-xs text-slate-500">
-                Categories are fixed for consistent reporting. Vendors can set a default category
-                to speed up expense entry.
+                Standard categories stay for consistent reporting. Custom ones can be edited; their
+                code stays fixed so past expenses keep matching.
               </p>
             </>
           )}
@@ -453,7 +608,7 @@ export function ExpenseHubVendors({ writesEnabled = true }: { writesEnabled?: bo
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">None</SelectItem>
-                      {EXPENSE_CATEGORIES.map((c) => (
+                      {allCategories.map((c) => (
                         <SelectItem key={c.value} value={c.value}>
                           {c.label}
                         </SelectItem>
@@ -543,7 +698,7 @@ export function ExpenseHubVendors({ writesEnabled = true }: { writesEnabled?: bo
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">None</SelectItem>
-                      {EXPENSE_CATEGORIES.map((c) => (
+                      {allCategories.map((c) => (
                         <SelectItem key={c.value} value={c.value}>
                           {c.label}
                         </SelectItem>
@@ -581,7 +736,116 @@ export function ExpenseHubVendors({ writesEnabled = true }: { writesEnabled?: bo
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={categoryDialogOpen} onOpenChange={closeCategoryDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editingCategory ? 'Edit category' : 'Add category'}</DialogTitle>
+            <DialogDescription>
+              {editingCategory
+                ? 'Update the display name or notes. The code stays the same for reporting.'
+                : 'Custom categories appear in expense and rule forms alongside the standard list.'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="hub-category-label">Name *</Label>
+              <Input
+                id="hub-category-label"
+                value={categoryLabel}
+                onChange={(e) => {
+                  const label = e.target.value;
+                  setCategoryLabel(label);
+                  if (!editingCategory && !codeTouched) setCategoryCode(suggestCategoryCode(label));
+                }}
+                placeholder="e.g. Road tax"
+                className="h-11"
+                autoFocus
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="hub-category-code">Code</Label>
+              <Input
+                id="hub-category-code"
+                value={categoryCode}
+                onChange={(e) => {
+                  if (editingCategory) return;
+                  setCodeTouched(true);
+                  setCategoryCode(e.target.value.replace(/[^A-Za-z0-9_]/g, ''));
+                }}
+                placeholder="RoadTax"
+                className="h-11 font-mono"
+                disabled={Boolean(editingCategory)}
+              />
+              <p className="text-xs text-slate-500">
+                {editingCategory
+                  ? 'Code cannot change after the category is created.'
+                  : 'Used in reports. Letters, numbers, and underscore only.'}
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="hub-category-notes">Notes (optional)</Label>
+              <Textarea
+                id="hub-category-notes"
+                value={categoryNotes}
+                onChange={(e) => setCategoryNotes(e.target.value)}
+                rows={2}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-11"
+              disabled={categoryBusy}
+              onClick={() => closeCategoryDialog(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              className="min-h-11"
+              disabled={categoryBusy || !categoryLabel.trim()}
+              onClick={() => void submitCategory()}
+            >
+              {categoryBusy && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />}
+              {editingCategory ? 'Save changes' : 'Add category'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
+  );
+}
+
+function CategoryActions({
+  category,
+  onEdit,
+}: {
+  category: ExpenseHubCategory;
+  onEdit: () => void;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-11 w-11"
+          aria-label={`Actions for ${category.label}`}
+        >
+          <MoreVertical className="h-4 w-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="min-w-[10rem]">
+        <DropdownMenuItem className="min-h-11 cursor-pointer gap-2" onSelect={onEdit}>
+          <Pencil className="h-4 w-4" aria-hidden />
+          Edit
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 

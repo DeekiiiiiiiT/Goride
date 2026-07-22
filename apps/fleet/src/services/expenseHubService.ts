@@ -7,10 +7,12 @@ import { API_ENDPOINTS } from './apiConfig';
 import type {
   ExpenseBulkPreview,
   ExpenseDocument,
+  ExpenseHubCategory,
   ExpenseHubSummary,
   ExpensePayment,
   ExpenseRuleAssignment,
   ExpenseRuleGroup,
+  ExpenseSpendBreakdown,
   ExpenseVendor,
 } from '../types/expenseHub';
 
@@ -39,6 +41,12 @@ export const expenseHubService = {
   getSummary(startYmd: string, endYmd: string) {
     return hubFetch<ExpenseHubSummary>(
       `/summary?startYmd=${encodeURIComponent(startYmd)}&endYmd=${encodeURIComponent(endYmd)}`,
+    );
+  },
+
+  getSpendBreakdown(startYmd: string, endYmd: string) {
+    return hubFetch<ExpenseSpendBreakdown>(
+      `/spend-breakdown?startYmd=${encodeURIComponent(startYmd)}&endYmd=${encodeURIComponent(endYmd)}`,
     );
   },
 
@@ -143,8 +151,30 @@ export const expenseHubService = {
     );
   },
 
+  updateRule(id: string, body: Record<string, unknown>) {
+    return this.bulkRuleAction(id, { action: 'update', ...body });
+  },
+
   listVendors() {
     return hubFetch<{ items: ExpenseVendor[] }>('/vendors');
+  },
+
+  listCategories() {
+    return hubFetch<{ items: ExpenseHubCategory[] }>('/categories');
+  },
+
+  createCategory(body: { label: string; value?: string; notes?: string }) {
+    return hubFetch<{ success: boolean; data: ExpenseHubCategory }>('/categories', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  },
+
+  updateCategory(id: string, body: { label?: string; notes?: string; isActive?: boolean }) {
+    return hubFetch<{ success: boolean; data: ExpenseHubCategory }>(`/categories/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    });
   },
 
   createVendor(body: { name: string; categoryDefault?: string; notes?: string }) {

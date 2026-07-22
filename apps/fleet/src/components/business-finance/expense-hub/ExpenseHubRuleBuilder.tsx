@@ -24,9 +24,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Switch } from '../../ui/switch';
 import { Textarea } from '../../ui/textarea';
 import { formatMoney } from '../money';
-import { EXPENSE_CATEGORIES, EXPENSE_FREQUENCIES } from '../../../types/expenses';
+import { EXPENSE_FREQUENCIES } from '../../../types/expenses';
 import type { ExpenseBulkPreview, ExpensePermitType } from '../../../types/expenseHub';
-import { useCreateExpenseRule, useExpenseHubVendors } from '../../../hooks/useExpenseHub';
+import { useCreateExpenseRule, useExpenseHubCategories, useExpenseHubVendors } from '../../../hooks/useExpenseHub';
 import { expenseHubService } from '../../../services/expenseHubService';
 import { useFleetTimezone } from '../../../utils/timezoneDisplay';
 import type { FitnessTierId } from '../../../utils/jamaicaFitnessMatrix';
@@ -56,6 +56,7 @@ export function ExpenseHubRuleBuilder({
 }) {
   const createRule = useCreateExpenseRule();
   const vendorsQuery = useExpenseHubVendors();
+  const categoriesQuery = useExpenseHubCategories();
   const fleetTimeZone = useFleetTimezone();
   const [step, setStep] = React.useState<1 | 2>(1);
   const [name, setName] = React.useState('');
@@ -348,7 +349,7 @@ export function ExpenseHubRuleBuilder({
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {EXPENSE_CATEGORIES.map((item) => (
+                        {(categoriesQuery.data?.items || []).map((item) => (
                           <SelectItem key={item.value} value={item.value}>
                             {item.label}
                           </SelectItem>

@@ -20,6 +20,7 @@ describe('Expense Hub accessibility & UI contract', () => {
       'ExpenseHubShell.tsx',
       'ExpenseHubPage.tsx',
       'ExpenseHubOverview.tsx',
+      'ExpenseHubSpendOverTime.tsx',
       'ExpenseHubRegister.tsx',
       'ExpenseHubNewExpenseWizard.tsx',
       'ExpenseHubRules.tsx',

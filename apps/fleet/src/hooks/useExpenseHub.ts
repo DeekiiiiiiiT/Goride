@@ -8,12 +8,15 @@ export const expenseHubKeys = {
   all: ['expense-hub'] as const,
   flag: () => [...expenseHubKeys.all, 'flag'] as const,
   summary: (start: string, end: string) => [...expenseHubKeys.all, 'summary', start, end] as const,
+  spendBreakdown: (start: string, end: string) =>
+    [...expenseHubKeys.all, 'spend-breakdown', start, end] as const,
   documents: (filters: Record<string, unknown>) =>
     [...expenseHubKeys.all, 'documents', filters] as const,
   document: (id: string) => [...expenseHubKeys.all, 'document', id] as const,
   rules: () => [...expenseHubKeys.all, 'rules'] as const,
   rule: (id: string) => [...expenseHubKeys.all, 'rule', id] as const,
   vendors: () => [...expenseHubKeys.all, 'vendors'] as const,
+  categories: () => [...expenseHubKeys.all, 'categories'] as const,
 };
 
 export function useExpenseHubFlag() {
@@ -29,6 +32,15 @@ export function useExpenseHubSummary(startYmd: string, endYmd: string) {
     queryKey: expenseHubKeys.summary(startYmd, endYmd),
     queryFn: () => expenseHubService.getSummary(startYmd, endYmd),
     enabled: Boolean(startYmd && endYmd),
+  });
+}
+
+export function useExpenseHubSpendBreakdown(startYmd: string, endYmd: string) {
+  return useQuery({
+    queryKey: expenseHubKeys.spendBreakdown(startYmd, endYmd),
+    queryFn: () => expenseHubService.getSpendBreakdown(startYmd, endYmd),
+    enabled: Boolean(startYmd && endYmd),
+    staleTime: 60_000,
   });
 }
 
@@ -58,6 +70,14 @@ export function useExpenseHubRules() {
   });
 }
 
+export function useExpenseHubRule(id: string | null) {
+  return useQuery({
+    queryKey: expenseHubKeys.rule(id || ''),
+    queryFn: () => expenseHubService.getRule(id!),
+    enabled: Boolean(id),
+  });
+}
+
 export function useExpenseHubVendors() {
   return useQuery({
     queryKey: expenseHubKeys.vendors(),
@@ -65,9 +85,59 @@ export function useExpenseHubVendors() {
   });
 }
 
+export function useExpenseHubCategories() {
+  return useQuery({
+    queryKey: expenseHubKeys.categories(),
+    queryFn: async () => {
+      try {
+        return await expenseHubService.listCategories();
+      } catch {
+        // Pre-deploy / offline: fall back to built-in taxonomy only.
+        const { EXPENSE_CATEGORIES } = await import('../types/expenses');
+        return {
+          items: EXPENSE_CATEGORIES.map((c) => ({
+            id: `system:${c.value}`,
+            value: c.value,
+            label: c.label,
+            isSystem: true,
+            isActive: true,
+            createdAt: '',
+            updatedAt: '',
+          })),
+        };
+      }
+    },
+  });
+}
+
 function useInvalidateHub() {
   const qc = useQueryClient();
   return () => qc.invalidateQueries({ queryKey: expenseHubKeys.all });
+}
+
+export function useCreateExpenseCategory() {
+  const invalidate = useInvalidateHub();
+  return useMutation({
+    mutationFn: (body: { label: string; value?: string; notes?: string }) =>
+      expenseHubService.createCategory(body),
+    onSuccess: () => invalidate(),
+  });
+}
+
+export function useUpdateExpenseCategory() {
+  const invalidate = useInvalidateHub();
+  return useMutation({
+    mutationFn: ({
+      id,
+      ...body
+    }: {
+      id: string;
+      label?: string;
+      notes?: string;
+      isActive?: boolean;
+    }) => expenseHubService.updateCategory(id, body),
+    onSuccess: () => invalidate(),
+  });
 }
 
 export function useCreateExpenseDocument() {
@@ -126,6 +196,15 @@ export function useBulkExpenseRuleAction() {
   return useMutation({
     mutationFn: ({ id, ...body }: { id: string } & Record<string, unknown>) =>
       expenseHubService.bulkRuleAction(id, body),
+    onSuccess: () => invalidate(),
+  });
+}
+
+export function useUpdateExpenseRule() {
+  const invalidate = useInvalidateHub();
+  return useMutation({
+    mutationFn: ({ id, ...body }: { id: string } & Record<string, unknown>) =>
+      expenseHubService.updateRule(id, body),
     onSuccess: () => invalidate(),
   });
 }

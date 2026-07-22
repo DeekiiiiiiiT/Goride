@@ -1,9 +1,8 @@
 /**
  * Expense Hub — Overview subview.
  * Stitch "Expense Hub — Overview" (Mobile b70d3395 / Desktop d43f2232) translated onto
- * real data: hub summary KPIs, Fuel/Toll specialist-desk cards, category actuals with
- * share bars, and the dense ledger table. No Stitch demo numbers; unsupported widgets
- * (spend trend chart, approvals queue panel, rule alerts) are omitted.
+ * real data: hub summary KPIs, spend-over-time (as paid / spread), Fuel/Toll specialist-desk
+ * cards, category actuals with share bars, and the dense ledger table.
  */
 import React from 'react';
 import {
@@ -40,8 +39,14 @@ import type { ExpenseCategorySummary, ExpensesSnapshot } from '../types';
 import { usePermissions } from '../../../hooks/usePermissions';
 import { api } from '../../../services/api';
 import { LogBusinessExpenseDialog } from '../LogBusinessExpenseDialog';
-import { useExpenseHubSummary } from '../../../hooks/useExpenseHub';
+import {
+  useExpenseHubSpendBreakdown,
+  useExpenseHubSummary,
+} from '../../../hooks/useExpenseHub';
+import type { ExpenseSpendLens } from '../../../types/expenseHub';
+import { runRateAverages } from '../../../utils/expenseCoverageRunRate';
 import { formatYmd } from './formatYmd';
+import { ExpenseHubSpendOverTime } from './ExpenseHubSpendOverTime';
 
 const CATEGORY_ICONS: Record<string, LucideIcon> = {
   fuel: Fuel,
@@ -56,8 +61,38 @@ const CATEGORY_ICONS: Record<string, LucideIcon> = {
   other: Receipt,
 };
 
+/** Map spend-breakdown category labels → Overview category ids. */
+const CATEGORY_LABEL_TO_ID: Record<string, string> = {
+  Fuel: 'fuel',
+  Toll: 'toll',
+  Tolls: 'toll',
+  Maintenance: 'maintenance',
+  Insurance: 'insurance',
+  Lease: 'lease',
+  Security: 'security',
+  Tracking: 'security',
+  Software: 'software',
+  'Software/Subscription': 'software',
+  Permits: 'permits',
+  Registration: 'permits',
+  Equipment: 'equipment',
+  Other: 'other',
+  Parking: 'other',
+};
+
 function categoryIcon(id: string): LucideIcon {
   return CATEGORY_ICONS[id] || Receipt;
+}
+
+function amountsByCategoryId(
+  byCategory: Array<{ category: string; amount: number }> | undefined,
+): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const row of byCategory || []) {
+    const id = CATEGORY_LABEL_TO_ID[row.category] || 'other';
+    out[id] = (out[id] || 0) + row.amount;
+  }
+  return out;
 }
 
 /** Stitch KPI section: 3 stacked full-width cards + 2-up small grid on mobile, one row on desktop. */
@@ -150,9 +185,11 @@ function HubKpiStrip({ startYmd, endYmd }: { startYmd: string; endYmd: string })
 function OperationalCard({
   category,
   onNavigatePage,
+  runRateLine,
 }: {
   category: ExpenseCategorySummary;
   onNavigatePage?: (page: string) => void;
+  runRateLine?: string | null;
 }) {
   const Icon = categoryIcon(category.id);
   return (
@@ -169,6 +206,11 @@ function OperationalCard({
               </p>
               {category.note && (
                 <p className="text-xs text-slate-500 dark:text-slate-400">{category.note}</p>
+              )}
+              {runRateLine && (
+                <p className="text-xs tabular-nums text-slate-500 dark:text-slate-400">
+                  {runRateLine}
+                </p>
               )}
             </div>
           </div>
@@ -195,9 +237,11 @@ function OperationalCard({
 function CategoryRow({
   category,
   sharePercent,
+  runRateLine,
 }: {
   category: ExpenseCategorySummary;
   sharePercent: number | null;
+  runRateLine?: string | null;
 }) {
   const Icon = categoryIcon(category.id);
   const tracked = category.tracked && category.amount != null;
@@ -209,6 +253,11 @@ function CategoryRow({
           <p className="truncate text-sm text-slate-900 dark:text-slate-100">{category.label}</p>
           {category.note && (
             <p className="truncate text-xs text-slate-500 dark:text-slate-400">{category.note}</p>
+          )}
+          {runRateLine && (
+            <p className="truncate text-xs tabular-nums text-slate-500 dark:text-slate-400">
+              {runRateLine}
+            </p>
           )}
         </div>
       </div>
@@ -239,6 +288,16 @@ function CategoryRow({
   );
 }
 
+function formatRunRateLine(
+  amount: number | null | undefined,
+  startYmd: string,
+  endYmd: string,
+): string | null {
+  if (amount == null || !(amount > 0.005)) return null;
+  const avg = runRateAverages(amount, startYmd, endYmd);
+  return `≈ ${formatMoney(avg.perDay)} / day · ${formatMoney(avg.perWeek)} / week · ${formatMoney(avg.perMonth)} / month`;
+}
+
 export function ExpenseHubOverview({
   expenses,
   onNavigatePage,
@@ -255,6 +314,13 @@ export function ExpenseHubOverview({
   const { can } = usePermissions();
   const [logOpen, setLogOpen] = React.useState(false);
   const [syncing, setSyncing] = React.useState(false);
+  // Default Spread so months with no cash still show operating cost.
+  const [lens, setLens] = React.useState<ExpenseSpendLens>('spread');
+
+  const spendQuery = useExpenseHubSpendBreakdown(
+    period?.startYmd || '',
+    period?.endYmd || '',
+  );
 
   const syncHistoricalExpenses = async () => {
     setSyncing(true);
@@ -274,12 +340,33 @@ export function ExpenseHubOverview({
     }
   };
 
+  const lensAmounts = React.useMemo(() => {
+    if (!spendQuery.data) return null;
+    const src = lens === 'spread' ? spendQuery.data.spread : spendQuery.data.asPaid;
+    return amountsByCategoryId(src.byCategory);
+  }, [spendQuery.data, lens]);
+
+  const displayCategories = React.useMemo(() => {
+    if (!lensAmounts) return expenses.categories;
+    return expenses.categories.map((c) => {
+      const nextAmount = lensAmounts[c.id] ?? 0;
+      let note = c.note;
+      if (c.id === 'insurance') {
+        note =
+          lens === 'spread'
+            ? 'Coverage cost for this period (annual premiums spread across coverage dates).'
+            : 'Scheduled recurring costs plus posted one-off insurance expenses.';
+      }
+      return { ...c, amount: nextAmount, note };
+    });
+  }, [expenses.categories, lensAmounts, lens]);
+
   // Stitch splits "Operational Expenses" (specialist desks) from plain category actuals.
-  const operationalCategories = expenses.categories.filter(
+  const operationalCategories = displayCategories.filter(
     (c) => c.deepLinkPage && c.deepLinkLabel,
   );
-  const plainCategories = expenses.categories.filter((c) => !(c.deepLinkPage && c.deepLinkLabel));
-  const trackedTotal = expenses.categories.reduce(
+  const plainCategories = displayCategories.filter((c) => !(c.deepLinkPage && c.deepLinkLabel));
+  const trackedTotal = displayCategories.reduce(
     (sum, c) => sum + (c.tracked && c.amount != null && c.amount > 0 ? c.amount : 0),
     0,
   );
@@ -287,6 +374,9 @@ export function ExpenseHubOverview({
     trackedTotal > 0 && c.tracked && c.amount != null && c.amount > 0
       ? Math.min(100, Math.round((c.amount / trackedTotal) * 100))
       : null;
+
+  const runRateFor = (c: ExpenseCategorySummary) =>
+    period ? formatRunRateLine(c.amount, period.startYmd, period.endYmd) : null;
 
   return (
     <div className="space-y-6">
@@ -327,6 +417,15 @@ export function ExpenseHubOverview({
         <HubKpiStrip startYmd={period.startYmd} endYmd={period.endYmd} />
       )}
 
+      {hubEnabled && period && (
+        <ExpenseHubSpendOverTime
+          startYmd={period.startYmd}
+          endYmd={period.endYmd}
+          lens={lens}
+          onLensChange={setLens}
+        />
+      )}
+
       {operationalCategories.length > 0 && (
         <section className="space-y-3">
           <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
@@ -334,7 +433,12 @@ export function ExpenseHubOverview({
           </h3>
           <div className="grid gap-3 sm:grid-cols-2">
             {operationalCategories.map((c) => (
-              <OperationalCard key={c.id} category={c} onNavigatePage={onNavigatePage} />
+              <OperationalCard
+                key={c.id}
+                category={c}
+                onNavigatePage={onNavigatePage}
+                runRateLine={runRateFor(c)}
+              />
             ))}
           </div>
         </section>
@@ -347,7 +451,12 @@ export function ExpenseHubOverview({
           </h3>
           <div className="space-y-2">
             {plainCategories.map((c) => (
-              <CategoryRow key={c.id} category={c} sharePercent={shareOf(c)} />
+              <CategoryRow
+                key={c.id}
+                category={c}
+                sharePercent={shareOf(c)}
+                runRateLine={runRateFor(c)}
+              />
             ))}
           </div>
         </section>
@@ -356,6 +465,11 @@ export function ExpenseHubOverview({
       <Card className="rounded-lg border-slate-200 dark:border-slate-800 overflow-hidden">
         <CardHeader className="border-b border-slate-100 dark:border-slate-800 py-3">
           <CardTitle className="text-sm font-semibold">Expense detail</CardTitle>
+          {lens === 'spread' && (
+            <p className="text-xs font-normal text-slate-500">
+              Table shows payments and due-dated posts; chart above uses the selected cost view.
+            </p>
+          )}
         </CardHeader>
         <CardContent className="p-0 overflow-x-auto">
           <Table>

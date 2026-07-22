@@ -16,6 +16,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { AuthRecoveryGate } from '@roam/auth-client';
 import { DriverAdminPortal } from './admin/DriverAdminPortal';
 import { DriverSplashScreen } from './components/layout/DriverSplashScreen';
+import { Toaster } from 'sonner';
 
 const SPLASH_MIN_MS = 2000;
 
@@ -111,6 +112,7 @@ export default function App() {
                 <OfflineProvider>
                   <AppErrorBoundary>
                     <AppContent />
+                    <Toaster position="top-center" />
                   </AppErrorBoundary>
                 </OfflineProvider>
               </AuthProvider>

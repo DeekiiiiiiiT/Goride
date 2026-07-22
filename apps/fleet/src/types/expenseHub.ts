@@ -35,6 +35,20 @@ export type ExpenseVendor = {
   updatedAt: string;
 };
 
+/** Org-defined category additive to the built-in EXPENSE_CATEGORIES taxonomy. */
+export type ExpenseHubCategory = {
+  id: string;
+  organizationId?: string;
+  /** Stable code used on documents/rules (e.g. RoadTax). */
+  value: string;
+  label: string;
+  notes?: string;
+  isSystem?: boolean;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type ExpensePermitType = 'fitness' | 'registration' | 'other';
 
 export type ExpenseRuleVehicleOverride = {
@@ -177,6 +191,37 @@ export type ExpenseHubSummary = {
   operationalFuel: number;
   operationalTolls: number;
 };
+
+/** Overview spend chart — as-paid vs coverage-spread (view layer only). */
+export type ExpenseSpendCategoryAmount = {
+  category: string;
+  amount: number;
+};
+
+export type ExpenseSpendDailyPoint = {
+  dateYmd: string;
+  amount: number;
+};
+
+export type ExpenseSpendLensBreakdown = {
+  periodTotal: number;
+  byCategory: ExpenseSpendCategoryAmount[];
+  seriesDaily: ExpenseSpendDailyPoint[];
+};
+
+export type ExpenseSpendBreakdown = {
+  periodStartYmd: string;
+  periodEndYmd: string;
+  asPaid: ExpenseSpendLensBreakdown;
+  spread: ExpenseSpendLensBreakdown;
+  meta: {
+    hasCashInPeriod: boolean;
+    hasCoverageInPeriod: boolean;
+  };
+};
+
+export type ExpenseSpendLens = 'as_paid' | 'spread';
+export type ExpenseSpendGrain = 'day' | 'week' | 'month';
 
 export type ExpenseBulkPreview = {
   includedVehicleIds: string[];

@@ -22,6 +22,7 @@ import {
   hubCategoryToCanonicalEventType,
   allocateEvenly,
 } from "../../../utils/expenseHubJournal.ts";
+import { createClient } from "npm:@supabase/supabase-js@2";
 import type { FixedExpenseConfig } from "../../../types/expenses.ts";
 import type {
   ExpenseDocument,
@@ -32,6 +33,12 @@ import type {
   ExpenseAuditEvent,
   ExpenseBulkPreview,
 } from "../../../types/expenseHub.ts";
+import { buildFixedExpenseOccurrences } from "../../../utils/fixedExpenseOccurrences.ts";
+import {
+  buildExpenseSpendBreakdown,
+  type CoverageRuleInput,
+  type PointSpendEvent,
+} from "../../../utils/expenseCoverageRunRate.ts";
 
 const PREFIX = "/make-server-37f42386/expense-hub";
 
@@ -225,6 +232,168 @@ export function registerExpenseHubRoutes(app: {
       operationalTolls: 0,
     });
   });
+
+  /**
+   * Overview spend chart — as-paid (due/incurred in range) vs spread (coverage overlap).
+   * View-layer only; does not change ledger recognition.
+   */
+  app.get(
+    `${PREFIX}/spend-breakdown`,
+    requireAuth(),
+    requirePermission("expenses.view"),
+    async (c: Context) => {
+      const start = String(c.req.query("startYmd") || "").slice(0, 10);
+      const end = String(c.req.query("endYmd") || "").slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end) || end < start) {
+        return c.json({ error: "startYmd and endYmd (YYYY-MM-DD) are required" }, 400);
+      }
+
+      const groups = filterByOrg(
+        await kv.getByPrefix("expense_rule_group:"),
+        c,
+      ) as ExpenseRuleGroup[];
+      const assignments = filterByOrg(
+        await kv.getByPrefix("expense_rule_assignment:"),
+        c,
+      ) as ExpenseRuleAssignment[];
+
+      const coverageRules: CoverageRuleInput[] = [];
+      for (const group of groups) {
+        if (group.status !== "active") continue;
+        const active = assignments.filter((a) => a.ruleGroupId === group.id && a.isActive);
+        for (const a of active) {
+          coverageRules.push({
+            id: a.id,
+            category: String(group.category),
+            amount: Number(a.amountOverride ?? group.amount) || 0,
+            frequency: String(group.frequency || "monthly"),
+            startDate: a.startDateOverride || group.startDate,
+            endDate: a.endDateOverride || group.endDate,
+            isActive: true,
+          });
+        }
+      }
+
+      // Also include legacy vehicle fixed expenses not managed by Hub (same coverage math).
+      const configs = filterByOrg(await kv.getByPrefix("fixed_expense:"), c) as FixedExpenseConfig[];
+      const hubAssignmentIds = new Set(
+        assignments.map((a) => a.fixedExpenseConfigId).filter(Boolean),
+      );
+      for (const cfg of configs) {
+        if (cfg.isActive === false) continue;
+        if (cfg.id && hubAssignmentIds.has(cfg.id)) continue; // already from Hub assignment
+        if (cfg.managedByExpenseHub && cfg.assignmentId) continue;
+        coverageRules.push({
+          id: String(cfg.id || `${cfg.vehicleId}:${cfg.name}`),
+          category: String(cfg.category),
+          amount: Number(cfg.amount) || 0,
+          frequency: String(cfg.frequency || "monthly"),
+          startDate: cfg.startDate,
+          endDate: cfg.endDate,
+          isActive: cfg.isActive !== false,
+        });
+      }
+
+      const pointEvents: PointSpendEvent[] = [];
+
+      // As-paid fixed occurrences on due dates inside the window
+      for (const cfg of configs) {
+        if (cfg.isActive === false) continue;
+        const occ = buildFixedExpenseOccurrences(cfg, start, end);
+        for (const o of occ) {
+          pointEvents.push({
+            dateYmd: o.occurrenceYmd,
+            category: o.category,
+            amount: o.amount,
+            kind: "fixed_expense",
+          });
+        }
+      }
+
+      // Operational + one-off ledger (fuel / toll / maintenance / operating_expense).
+      // Prefer ledger SSOT over re-reading Hub docs (avoids double-count after post).
+      try {
+        const supabase = createClient(
+          Deno.env.get("SUPABASE_URL")!,
+          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+        );
+        const eventTypes = [
+          "fuel_expense",
+          "fuel_charge_offset",
+          "toll_charge",
+          "toll_refund",
+          "toll_charge_offset",
+          "maintenance",
+          "operating_expense",
+        ];
+        const typeOr = eventTypes.map((t) => `value->>eventType.eq.${t}`).join(",");
+        let offset = 0;
+        const pageSize = 500;
+        for (let page = 0; page < 40; page++) {
+          const { data, error } = await supabase
+            .from("kv_store_37f42386")
+            .select("key, value")
+            .like("key", "ledger_event:%")
+            .or(typeOr)
+            .gte("value->>date", start)
+            .lte("value->>date", end)
+            .order("value->>date", { ascending: true })
+            .range(offset, offset + pageSize - 1);
+          if (error) throw error;
+          const rows = filterByOrg(
+            (data || []).map((d: { key: string; value: Record<string, unknown> }) => ({
+              key: d.key,
+              ...(d.value || {}),
+            })),
+            c,
+          ) as Array<Record<string, unknown>>;
+          for (const e of rows) {
+            const t = String(e.eventType || "");
+            const dateYmd = String(e.date || "").slice(0, 10);
+            const amt = Number(e.netAmount ?? e.grossAmount ?? e.amount ?? 0);
+            if (!dateYmd || !Number.isFinite(amt) || amt === 0) continue;
+            let kind: PointSpendEvent["kind"] = "other";
+            let category = "Other";
+            let signed = amt;
+            if (t === "fuel_expense") {
+              kind = "fuel";
+              category = "Fuel";
+            } else if (t === "fuel_charge_offset") {
+              kind = "fuel";
+              category = "Fuel";
+              if (String(e.direction || "") === "inflow") signed = -amt;
+            } else if (t === "toll_charge") {
+              kind = "toll";
+              category = "Toll";
+            } else if (t === "toll_refund") {
+              kind = "toll";
+              category = "Toll";
+              signed = -amt;
+            } else if (t === "toll_charge_offset") {
+              kind = "toll";
+              category = "Toll";
+              if (String(e.direction || "") === "inflow") signed = -amt;
+            } else if (t === "maintenance") {
+              kind = "maintenance";
+              category = "Maintenance";
+            } else if (t === "operating_expense") {
+              kind = "operating";
+              category = String(e.category || "Other");
+            }
+            pointEvents.push({ dateYmd, category, amount: signed, kind });
+          }
+          if (!data || data.length < pageSize) break;
+          offset += pageSize;
+        }
+      } catch (err) {
+        console.error("[expense-hub/spend-breakdown] ledger query failed", err);
+        // Coverage + fixed occurrences still return; operational series may be incomplete.
+      }
+
+      const breakdown = buildExpenseSpendBreakdown(start, end, coverageRules, pointEvents);
+      return c.json(breakdown);
+    },
+  );
 
   app.get(`${PREFIX}/documents`, requireAuth(), requirePermission("expenses.view"), async (c: Context) => {
     const status = c.req.query("status");
@@ -766,10 +935,20 @@ export function registerExpenseHubRoutes(app: {
         next.status = "ended";
         next.endDate = body.endDate || ymd();
       } else if (action === "update") {
+        if (body.name != null) next.name = String(body.name).trim() || next.name;
         if (body.category) next.category = body.category;
-        if (body.vendorName !== undefined) next.vendorName = body.vendorName;
-        if (body.amount != null) next.amount = Number(body.amount);
-        if (body.endDate) next.endDate = body.endDate;
+        if (body.vendorId !== undefined) next.vendorId = body.vendorId || undefined;
+        if (body.vendorName !== undefined) next.vendorName = body.vendorName || undefined;
+        if (body.amount != null && Number.isFinite(Number(body.amount))) {
+          next.amount = Number(body.amount);
+        }
+        if (body.frequency) next.frequency = body.frequency;
+        if (body.description !== undefined) next.description = body.description || undefined;
+        if (body.autoRenew !== undefined) next.autoRenew = Boolean(body.autoRenew);
+        if (body.startDate) next.startDate = body.startDate;
+        if (body.startTime) next.startTime = body.startTime;
+        if (body.endDate !== undefined) next.endDate = body.endDate || undefined;
+        if (body.endTime) next.endTime = body.endTime;
       } else {
         return c.json({ error: "Unknown bulk action" }, 400);
       }
@@ -810,6 +989,156 @@ export function registerExpenseHubRoutes(app: {
         after: next as unknown as Record<string, unknown>,
       });
       return c.json({ success: true, group: next, affected: assignments.length });
+    },
+  );
+
+  // ── Categories ─────────────────────────────────────────────────────────
+  app.get(`${PREFIX}/categories`, requireAuth(), requirePermission("expenses.view"), async (c: Context) => {
+    const custom = filterByOrg(await kv.getByPrefix("expense_category:"), c) as Array<{
+      id: string;
+      value: string;
+      label: string;
+      notes?: string;
+      isActive?: boolean;
+      createdAt: string;
+      updatedAt: string;
+      organizationId?: string;
+    }>;
+    const builtIn = [
+      { value: "Insurance", label: "Insurance" },
+      { value: "Security", label: "Security (Tracker/GPS)" },
+      { value: "Lease", label: "Vehicle Lease/Financing" },
+      { value: "Maintenance", label: "Maintenance Contract" },
+      { value: "Software", label: "Software Subscription" },
+      { value: "Permits", label: "Permits & Licenses" },
+      { value: "Equipment", label: "Equipment Rental" },
+      { value: "Parking", label: "Parking" },
+      { value: "Other", label: "Other" },
+    ].map((c) => ({
+      id: `system:${c.value}`,
+      value: c.value,
+      label: c.label,
+      isSystem: true,
+      isActive: true,
+      createdAt: "",
+      updatedAt: "",
+    }));
+    const customActive = custom
+      .filter((c) => c.isActive !== false)
+      .map((c) => ({ ...c, isSystem: false }));
+    const seen = new Set(builtIn.map((c) => c.value.toLowerCase()));
+    const merged = [
+      ...builtIn,
+      ...customActive.filter((c) => !seen.has(String(c.value || "").toLowerCase())),
+    ];
+    return c.json({ items: merged });
+  });
+
+  app.post(
+    `${PREFIX}/categories`,
+    requireAuth(),
+    requirePermission("expenses.manage_vendors"),
+    async (c: Context) => {
+      const blocked = await requireHubWrites(c);
+      if (blocked) return blocked;
+      const body = await c.req.json();
+      const label = String(body.label || body.name || "").trim();
+      if (!label) return c.json({ error: "Category name is required" }, 400);
+
+      const slugParts = label.split(/[^a-zA-Z0-9]+/).filter(Boolean);
+      const autoValue = slugParts
+        .map((p: string) => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase())
+        .join("");
+      const value = String(body.value || autoValue || "Custom").trim();
+      if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(value)) {
+        return c.json({ error: "Category code must start with a letter (letters/numbers/_ only)" }, 400);
+      }
+
+      const builtIn = new Set([
+        "insurance",
+        "security",
+        "lease",
+        "maintenance",
+        "software",
+        "permits",
+        "equipment",
+        "parking",
+        "other",
+      ]);
+      if (builtIn.has(value.toLowerCase())) {
+        return c.json({ error: "That category already exists in the standard list" }, 409);
+      }
+
+      const existing = filterByOrg(await kv.getByPrefix("expense_category:"), c) as Array<{
+        value: string;
+        isActive?: boolean;
+      }>;
+      if (
+        existing.some(
+          (c) => c.isActive !== false && String(c.value || "").toLowerCase() === value.toLowerCase(),
+        )
+      ) {
+        return c.json({ error: "A category with that code already exists" }, 409);
+      }
+
+      const category = {
+        id: body.id || crypto.randomUUID(),
+        value,
+        label,
+        notes: body.notes ? String(body.notes).trim() : undefined,
+        isSystem: false,
+        isActive: true,
+        createdAt: nowIso(),
+        updatedAt: nowIso(),
+      };
+      await kv.set(`expense_category:${category.id}`, stampOrg(category, c));
+      return c.json({ success: true, data: category });
+    },
+  );
+
+  app.put(
+    `${PREFIX}/categories/:id`,
+    requireAuth(),
+    requirePermission("expenses.manage_vendors"),
+    async (c: Context) => {
+      const blocked = await requireHubWrites(c);
+      if (blocked) return blocked;
+      const id = c.req.param("id");
+      if (!id || id.startsWith("system:")) {
+        return c.json({ error: "Standard categories cannot be edited" }, 400);
+      }
+      const raw = await kv.get(`expense_category:${id}`);
+      if (!raw) return c.json({ error: "Category not found" }, 404);
+      const existing = filterByOrg([raw], c)[0] as {
+        id: string;
+        value: string;
+        label: string;
+        notes?: string;
+        isSystem?: boolean;
+        isActive?: boolean;
+        createdAt: string;
+        updatedAt: string;
+        organizationId?: string;
+      } | undefined;
+      if (!existing) return c.json({ error: "Category not found" }, 404);
+
+      const body = await c.req.json();
+      const label = body.label != null ? String(body.label).trim() : existing.label;
+      if (!label) return c.json({ error: "Category name is required" }, 400);
+
+      // Code is immutable after create — keeps historical expenses/rules stable.
+      const next = {
+        ...existing,
+        label,
+        notes: body.notes !== undefined
+          ? (String(body.notes).trim() || undefined)
+          : existing.notes,
+        isActive: body.isActive !== undefined ? Boolean(body.isActive) : existing.isActive !== false,
+        isSystem: false,
+        updatedAt: nowIso(),
+      };
+      await kv.set(`expense_category:${id}`, stampOrg(next, c));
+      return c.json({ success: true, data: next });
     },
   );
 

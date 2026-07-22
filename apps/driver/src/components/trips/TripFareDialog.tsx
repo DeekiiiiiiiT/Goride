@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { DollarSign, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@roam/ui';
 import { Input } from '@roam/ui';
 import { Label } from '@roam/ui';
@@ -54,9 +55,15 @@ export function TripFareDialog({
   }, [open, initialData]);
 
   const handleSave = async () => {
-    if (!initialData) return;
+    if (!initialData) {
+      toast.error('Enter a fare amount');
+      return;
+    }
     const fare = parseFloat(amount);
-    if (!fare || fare <= 0) return;
+    if (!fare || fare <= 0) {
+      toast.error('Enter a fare amount');
+      return;
+    }
 
     const payload: ManualTripInput = {
       date: initialData.date,

@@ -25,9 +25,12 @@ import { Label } from '../../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../ui/select';
 import { Textarea } from '../../ui/textarea';
 import { formatMoney, round2 } from '../money';
-import { EXPENSE_CATEGORIES } from '../../../types/expenses';
 import { usePermissions } from '../../../hooks/usePermissions';
-import { useCreateExpenseDocument, useExpenseHubVendors } from '../../../hooks/useExpenseHub';
+import {
+  useCreateExpenseDocument,
+  useExpenseHubCategories,
+  useExpenseHubVendors,
+} from '../../../hooks/useExpenseHub';
 import { VehicleMultiSelect } from './VehicleMultiSelect';
 import { useVehicleOptions } from './useVehicleOptions';
 
@@ -58,6 +61,7 @@ export function ExpenseHubNewExpenseWizard({
   const { can } = usePermissions();
   const createDoc = useCreateExpenseDocument();
   const vendorsQuery = useExpenseHubVendors();
+  const categoriesQuery = useExpenseHubCategories();
   const vehicleOptions = useVehicleOptions();
   const [step, setStep] = React.useState<1 | 2>(1);
   const [description, setDescription] = React.useState('');
@@ -226,7 +230,7 @@ export function ExpenseHubNewExpenseWizard({
                     <Select value={category} onValueChange={setCategory}>
                       <SelectTrigger id="hub-exp-category" className="min-h-11"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        {EXPENSE_CATEGORIES.map((item) => (
+                        {(categoriesQuery.data?.items || []).map((item) => (
                           <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>
                         ))}
                       </SelectContent>

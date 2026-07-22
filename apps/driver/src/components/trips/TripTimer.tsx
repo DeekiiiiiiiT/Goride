@@ -30,6 +30,8 @@ interface TripTimerProps {
 }
 
 const STORAGE_KEY = 'current_trip_session';
+/** Survives Complete until Save succeeds — prevents losing the trip if fare sheet is closed. */
+export const PENDING_FARE_STORAGE_KEY = 'pending_fare_trip';
 
 /** Downsample GPS route so Complete / save does not block the main thread. */
 function sampleRoute(points: RoutePoint[], maxPoints = 80): RoutePoint[] {
@@ -432,6 +434,32 @@ export function TripTimer({ onComplete }: TripTimerProps) {
         resolutionTimestamp: undefined,
         geocodeError,
       };
+
+      // Persist fare draft before wiping live session so Cancel/crash can still recover.
+      try {
+        localStorage.setItem(
+          PENDING_FARE_STORAGE_KEY,
+          JSON.stringify({
+            date: tripData.startDate,
+            time: tripData.startTime,
+            endTime: tripData.endTime,
+            duration: tripData.duration,
+            pickupLocation: tripData.startLocation,
+            endLocation: tripData.endLocation,
+            pickupCoords: tripData.pickupCoords,
+            dropoffCoords: tripData.dropoffCoords,
+            route: tripData.route,
+            stops: tripData.stops,
+            totalWaitTime: tripData.totalWaitTime,
+            distance: tripData.distance,
+            isOffline: tripData.isOffline,
+            resolutionMethod: tripData.resolutionMethod,
+            geocodeError: tripData.geocodeError,
+          }),
+        );
+      } catch (persistErr) {
+        console.warn('Failed to persist pending fare trip', persistErr);
+      }
 
       localStorage.removeItem(STORAGE_KEY);
       stopTracking();

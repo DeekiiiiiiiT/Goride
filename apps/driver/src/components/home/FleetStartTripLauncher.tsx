@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Play, X } from 'lucide-react';
 import { toast } from 'sonner';
-import { TripTimer } from '../trips/TripTimer';
+import { TripTimer, PENDING_FARE_STORAGE_KEY } from '../trips/TripTimer';
 import { TripFareDialog, type TripFareInitialData } from '../trips/TripFareDialog';
 import { PendingCatalogRequestsDrawer } from '../vehicles/PendingCatalogRequestsDrawer';
 import { useAuth } from '../../contexts/AuthContext';
@@ -33,12 +33,32 @@ function hasActiveTimerSession(): boolean {
   }
 }
 
+function readPendingFareTrip(): TripFareInitialData | null {
+  try {
+    const raw = localStorage.getItem(PENDING_FARE_STORAGE_KEY);
+    if (!raw) return null;
+    const pending = JSON.parse(raw) as TripFareInitialData;
+    if (!pending?.date || !pending?.time) return null;
+    return pending;
+  } catch {
+    return null;
+  }
+}
+
+function clearPendingFareTrip() {
+  try {
+    localStorage.removeItem(PENDING_FARE_STORAGE_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
 /**
  * Fleet "Start Trip" on the mint home.
  * Small pill button → full-screen sheet hosting the live TripTimer only
  * (no after-the-fact manual entry — drivers must record trips live).
  * Completion flows into TripFareDialog → createManualTrip → api.saveTrips.
- * Auto-reopens when a persisted timer session exists.
+ * Auto-reopens when a persisted timer session or pending fare draft exists.
  */
 export function FleetStartTripLauncher() {
   const { user } = useAuth();
@@ -50,12 +70,16 @@ export function FleetStartTripLauncher() {
   const [tripInitialData, setTripInitialData] = useState<TripFareInitialData | undefined>(undefined);
   const [activeSession, setActiveSession] = useState(false);
 
-  // Recovery: if a live timer session survived an app restart, reopen the sheet
-  // so TripTimer can restore it (it only restores while mounted).
+  // Recovery: reopen live timer sheet and/or unsaved fare draft after restart.
   useEffect(() => {
     if (hasActiveTimerSession()) {
       setActiveSession(true);
       setSheetOpen(true);
+    }
+    const pending = readPendingFareTrip();
+    if (pending) {
+      setTripInitialData(pending);
+      setFareDialogOpen(true);
     }
   }, []);
 
@@ -110,8 +134,24 @@ export function FleetStartTripLauncher() {
     setFareDialogOpen(true);
   };
 
+  /** Cancel/backdrop: confirm before discarding an unsaved completed trip. */
+  const handleFareClose = () => {
+    const stillPending = !!localStorage.getItem(PENDING_FARE_STORAGE_KEY);
+    if (stillPending) {
+      const discard = window.confirm("Discard this trip? It won't be saved.");
+      if (!discard) return;
+      clearPendingFareTrip();
+    }
+    setTripInitialData(undefined);
+    setFareDialogOpen(false);
+    setActiveSession(false);
+  };
+
   const handleManualTripSubmit = async (data: ManualTripInput) => {
-    if (!user?.id) return;
+    if (!user?.id) {
+      toast.error('Please sign in again to save this trip');
+      throw new Error('Not signed in');
+    }
     try {
       const identity = resolveTripIdentity(user, driverRecord);
       const trip = createManualTrip(
@@ -120,9 +160,11 @@ export function FleetStartTripLauncher() {
         identity.driverName,
       );
       await api.saveTrips([trip]);
+      clearPendingFareTrip();
       toast.success('Trip Logged Successfully', {
         description: `$${data.amount} on ${data.date}`,
       });
+      setTripInitialData(undefined);
       setFareDialogOpen(false);
       setActiveSession(false);
       setSheetOpen(false);
@@ -192,7 +234,7 @@ export function FleetStartTripLauncher() {
 
       <TripFareDialog
         open={fareDialogOpen}
-        onClose={() => setFareDialogOpen(false)}
+        onClose={handleFareClose}
         initialData={tripInitialData}
         defaultVehicleId={defaultVehicleId}
         onSubmit={handleManualTripSubmit}
