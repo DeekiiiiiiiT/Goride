@@ -1,8 +1,21 @@
 # Expense Hub — Accounting & Architecture Contract
 
 Companion to [business-finance-recognition-policy.md](business-finance-recognition-policy.md).
-Owns fleet-wide recurring rules, one-off bills, approvals, payments, and vendor/category
-master data inside Business Finance. Fuel and Toll remain specialist desks.
+Owns fleet-wide recurring rules, one-off bills, approvals, and payments inside Business Finance.
+**Jamaica vendor master + expense category taxonomy** are Roam platform catalogs in Super Admin
+(Accounting), consumed read-only by all fleet apps. Fuel and Toll remain specialist desks.
+
+## Surface map
+
+| Surface | Owns |
+|---------|------|
+| Super Admin → Accounting → Vendor Database | Verified Jamaica company catalog (`platform_vendor:*`) |
+| Super Admin → Pending vendor requests | Fleet requests → approve / merge / reject |
+| Super Admin → Expense categories | Shared operating-expense taxonomy |
+| RoamFleet → Accounting | Per-org recurring cost rules (schedules → FixedExpenseConfig) |
+| RoamFleet → Expense Hub | Overview · Register · Approvals (day-to-day AP) |
+
+Fleet users **request** missing vendors (pending); they do not create permanent private vendors.
 
 ## Non-negotiables
 
@@ -12,6 +25,7 @@ master data inside Business Finance. Fuel and Toll remain specialist desks.
 3. Historical canonical rows are never rewritten during migration.
 4. Recurring schedule due dates recognize P&L; cash moves only on real payments.
 5. Vehicle pages are projections of Hub data after cutover — not a second write path.
+6. Verified vendors are platform-global (no org stamp), same class as gas stations.
 
 ## Document lifecycle
 
@@ -64,6 +78,12 @@ Idempotency keys:
 
 `expense_hub_v1` gates Hub writes and vehicle-page read-only mode. Disabled = legacy
 vehicle Fixed Expenses edit path unchanged.
+
+## Vendor catalog migration
+
+`POST /admin/platform-vendors/migrate-legacy` (Super Admin): lifts org `expense_vendor:*` /
+`expense_category:*` into `platform_vendor:*` / `platform_expense_category:*` with name-based
+dedupe and document/rule `vendorId` remap.
 
 ## Future depreciation boundary
 

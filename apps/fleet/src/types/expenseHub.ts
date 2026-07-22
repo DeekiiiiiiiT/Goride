@@ -24,20 +24,35 @@ export type ExpenseAllocation = {
   sharePercent?: number;
 };
 
+/** Platform vendor lifecycle — Roam owns verified; fleets may only request pending. */
+export type PlatformVendorStatus = 'verified' | 'pending' | 'rejected';
+
+/**
+ * Jamaica vendor master (platform-global). Prefer `platform_vendor:{id}` keys.
+ * Legacy org-scoped `expense_vendor:{id}` rows are migrated into the platform catalog.
+ */
 export type ExpenseVendor = {
   id: string;
+  /** @deprecated Org stamp only on legacy rows / pending requests for audit. */
   organizationId?: string;
   name: string;
   categoryDefault?: ExpenseCategory;
   notes?: string;
   isActive: boolean;
+  /** verified = GOD list; pending = fleet request; rejected = blocked for new use. */
+  status?: PlatformVendorStatus;
+  requestedByOrgId?: string;
+  requestedByUserId?: string;
+  /** Set when Super Admin merges a pending/legacy row into an existing verified vendor. */
+  mergedIntoVendorId?: string;
   createdAt: string;
   updatedAt: string;
 };
 
-/** Org-defined category additive to the built-in EXPENSE_CATEGORIES taxonomy. */
+/** Shared operating-expense taxonomy (platform-global + built-in seeds). */
 export type ExpenseHubCategory = {
   id: string;
+  /** @deprecated Org stamp only on legacy custom rows pending migration. */
   organizationId?: string;
   /** Stable code used on documents/rules (e.g. RoadTax). */
   value: string;

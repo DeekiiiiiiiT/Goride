@@ -111,6 +111,12 @@ export const VEHICLE_DATABASE_CHILDREN: NavChild[] = [
   { id: 'parts-sourcing', label: 'Parts sourcing', icon: ShoppingCart },
 ];
 
+export const ACCOUNTING_CHILDREN: NavChild[] = [
+  { id: 'vendor-database', label: 'Vendor Database', icon: Store },
+  { id: 'pending-vendor-requests', label: 'Pending vendor requests', icon: Inbox },
+  { id: 'expense-categories', label: 'Expense categories', icon: Layers },
+];
+
 export const ROAM_FLEET_CHILDREN: NavChild[] = [
   { id: 'fleet-overview', label: 'Overview', icon: BarChart3 },
   { id: 'fleet-customers', label: 'Customer Accounts', icon: Users },
@@ -191,6 +197,9 @@ const SHARED_PLATFORM_PAGES = [
   'pending-motor-vehicles',
   'maintenance-templates',
   'parts-sourcing',
+  'vendor-database',
+  'pending-vendor-requests',
+  'expense-categories',
   ...GLOBAL_SETTINGS_PAGES,
   ...FLEET_SETTINGS_PAGES,
   ...ENTERPRISE_SETTINGS_PAGES,

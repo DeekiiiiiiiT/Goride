@@ -211,7 +211,7 @@ export function ExpenseHubRegister({
             Expense Register
           </h2>
           <p className="text-xs text-slate-500">
-            Manage and track all operational expenditures across the fleet.
+            Manage and track bills and one-off spend across the fleet.
           </p>
         </div>
         {newExpenseButton}
@@ -298,7 +298,7 @@ export function ExpenseHubRegister({
           description={
             status !== 'all' || vehicleId !== 'all' || q
               ? 'Try adjusting your filters or search query to find what you are looking for.'
-              : 'Create your first hub expense to start the approval and payment trail.'
+              : 'Log your first bill or one-off expense to start the approval and payment trail.'
           }
           action={newExpenseButton}
         />

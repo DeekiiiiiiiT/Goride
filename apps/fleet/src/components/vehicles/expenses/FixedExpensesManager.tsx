@@ -160,7 +160,7 @@ export const FixedExpensesManager: React.FC<FixedExpensesManagerProps> = React.m
                                 onClick={() => onNavigateToExpenseHub(vehicleId)}
                             >
                                 <ExternalLink className="h-4 w-4 mr-2" />
-                                Manage in Expense Hub
+                                Manage in Accounting
                             </Button>
                         )
                     ) : (
@@ -174,8 +174,8 @@ export const FixedExpensesManager: React.FC<FixedExpensesManagerProps> = React.m
 
             {hubManaged && (
                 <div className="rounded-md border border-indigo-200 bg-indigo-50 px-3 py-2.5 text-sm text-indigo-900 dark:border-indigo-900 dark:bg-indigo-950/40 dark:text-indigo-100">
-                    Recurring expenses for this vehicle are now managed centrally in the Business
-                    Finance Expense Hub. This view is read-only.
+                    Recurring expenses for this vehicle are managed under Business Finance → Accounting.
+                    This view is read-only.
                 </div>
             )}
 
@@ -201,7 +201,7 @@ export const FixedExpensesManager: React.FC<FixedExpensesManagerProps> = React.m
                                     onClick={() => onNavigateToExpenseHub(vehicleId)}
                                 >
                                     <ExternalLink className="h-4 w-4 mr-2" />
-                                    Manage in Expense Hub
+                                    Manage in Accounting
                                 </Button>
                             )
                         ) : (

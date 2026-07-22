@@ -178,10 +178,18 @@ export const expenseHubService = {
   },
 
   createVendor(body: { name: string; categoryDefault?: string; notes?: string }) {
-    return hubFetch<{ success: boolean; data: ExpenseVendor }>('/vendors', {
+    return hubFetch<{ success: boolean; data: ExpenseVendor; alreadyExists?: boolean }>('/vendors', {
       method: 'POST',
       body: JSON.stringify(body),
     });
+  },
+
+  /** Request a Jamaica vendor for Roam Super Admin approval (pending until verified). */
+  requestVendor(body: { name: string; categoryDefault?: string; notes?: string }) {
+    return hubFetch<{ success: boolean; data: ExpenseVendor; alreadyExists?: boolean }>(
+      '/vendors/request',
+      { method: 'POST', body: JSON.stringify(body) },
+    );
   },
 
   /**

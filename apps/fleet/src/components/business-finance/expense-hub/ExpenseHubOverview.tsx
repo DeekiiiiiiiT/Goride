@@ -11,6 +11,7 @@ import {
   FileCheck,
   FileText,
   Fuel,
+  Info,
   Laptop,
   Package,
   Plus,
@@ -33,6 +34,7 @@ import {
   TableHeader,
   TableRow,
 } from '../../ui/table';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../../ui/tooltip';
 import { cn } from '../../ui/utils';
 import { formatMoney } from '../money';
 import type { ExpenseCategorySummary, ExpensesSnapshot } from '../types';
@@ -47,6 +49,38 @@ import type { ExpenseSpendLens } from '../../../types/expenseHub';
 import { runRateAverages } from '../../../utils/expenseCoverageRunRate';
 import { formatYmd } from './formatYmd';
 import { ExpenseHubSpendOverTime } from './ExpenseHubSpendOverTime';
+
+const KPI_HINTS = {
+  posted:
+    'Total of Hub ledger expenses that are posted or paid, with an incurred date in this date range. Fuel and toll operational spend only counts here after it is logged as a Hub expense.',
+  paid:
+    'Total of Hub payment records with a payment date in this date range — not the same as fuel/toll activity below.',
+  pending:
+    'Expenses waiting in the Approvals queue. Not limited to this date range.',
+  overdue:
+    'Approved or posted expenses past their due date that still have an unpaid balance.',
+  rules:
+    'Recurring expense rules that are currently turned on. Managed on Rules and on each vehicle.',
+} as const;
+
+function KpiHint({ label, hint }: { label: string; hint: string }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          className="inline-flex shrink-0 rounded-full p-0.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400/40 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+          aria-label={`About ${label}`}
+        >
+          <Info className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="top" sideOffset={6} className="max-w-xs text-left leading-snug">
+        {hint}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
 
 const CATEGORY_ICONS: Record<string, LucideIcon> = {
   fuel: Fuel,
@@ -134,19 +168,28 @@ function HubKpiStrip({ startYmd, endYmd }: { startYmd: string; endYmd: string })
   return (
     <section className="grid grid-cols-2 gap-3 lg:grid-cols-5">
       <div className={cn(cardClass, 'col-span-2 lg:col-span-1')}>
-        <p className={labelClass}>Posted this period</p>
+        <div className="flex items-center gap-1">
+          <p className={labelClass}>Posted this period</p>
+          <KpiHint label="Posted this period" hint={KPI_HINTS.posted} />
+        </div>
         <p className="text-2xl font-bold tabular-nums text-indigo-700 dark:text-indigo-400">
           {formatMoney(data.postedExpenseTotal)}
         </p>
       </div>
       <div className={cn(cardClass, 'col-span-2 lg:col-span-1')}>
-        <p className={labelClass}>Paid this period</p>
+        <div className="flex items-center gap-1">
+          <p className={labelClass}>Paid this period</p>
+          <KpiHint label="Paid this period" hint={KPI_HINTS.paid} />
+        </div>
         <p className="text-2xl font-bold tabular-nums text-slate-900 dark:text-slate-100">
           {formatMoney(data.paidThisPeriod)}
         </p>
       </div>
       <div className={cn(cardClass, 'col-span-2 lg:col-span-1')}>
-        <p className={labelClass}>Pending approvals</p>
+        <div className="flex items-center gap-1">
+          <p className={labelClass}>Pending approvals</p>
+          <KpiHint label="Pending approvals" hint={KPI_HINTS.pending} />
+        </div>
         <div className="flex items-center gap-2">
           <p className="text-2xl font-bold tabular-nums text-slate-900 dark:text-slate-100">
             {data.pendingApprovalCount}
@@ -159,7 +202,10 @@ function HubKpiStrip({ startYmd, endYmd }: { startYmd: string; endYmd: string })
         </div>
       </div>
       <div className={cardClass}>
-        <p className={labelClass}>Overdue unpaid</p>
+        <div className="flex items-center gap-1">
+          <p className={labelClass}>Overdue unpaid</p>
+          <KpiHint label="Overdue unpaid" hint={KPI_HINTS.overdue} />
+        </div>
         <p
           className={cn(
             'text-xl font-bold tabular-nums',
@@ -172,7 +218,10 @@ function HubKpiStrip({ startYmd, endYmd }: { startYmd: string; endYmd: string })
         </p>
       </div>
       <div className={cardClass}>
-        <p className={labelClass}>Active rules</p>
+        <div className="flex items-center gap-1">
+          <p className={labelClass}>Active rules</p>
+          <KpiHint label="Active rules" hint={KPI_HINTS.rules} />
+        </div>
         <p className="text-xl font-bold tabular-nums text-slate-900 dark:text-slate-100">
           {data.activeRuleCount}
         </p>

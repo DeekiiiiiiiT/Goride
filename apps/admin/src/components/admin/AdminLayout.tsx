@@ -27,6 +27,7 @@ import {
   FUEL_MANAGEMENT_CHILDREN,
   TOLL_MANAGEMENT_CHILDREN,
   VEHICLE_DATABASE_CHILDREN,
+  ACCOUNTING_CHILDREN,
   GLOBAL_SETTINGS_CHILDREN,
   SETTINGS_CHILDREN,
   API_CENTER_CHILDREN,
@@ -64,6 +65,7 @@ function allNavChildren(): NavChild[] {
     ...FUEL_MANAGEMENT_CHILDREN,
     ...TOLL_MANAGEMENT_CHILDREN,
     ...VEHICLE_DATABASE_CHILDREN,
+    ...ACCOUNTING_CHILDREN,
     ...GLOBAL_SETTINGS_CHILDREN,
     ...SETTINGS_CHILDREN,
     ...API_CENTER_CHILDREN,
@@ -128,6 +130,7 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
   const visibleFuel = filterChildren(FUEL_MANAGEMENT_CHILDREN);
   const visibleToll = filterChildren(TOLL_MANAGEMENT_CHILDREN);
   const visibleVehicleDb = filterChildren(VEHICLE_DATABASE_CHILDREN);
+  const visibleAccounting = filterChildren(ACCOUNTING_CHILDREN);
   const visibleGlobalSettings = filterChildren(GLOBAL_SETTINGS_CHILDREN);
   const visibleLegacySettings = filterChildren(SETTINGS_CHILDREN);
   const visibleApiCenter = filterChildren(API_CENTER_CHILDREN);
@@ -143,6 +146,7 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
   const fuelIds = useMemo(() => visibleFuel.map((c) => c.id), [visibleFuel]);
   const tollIds = useMemo(() => visibleToll.map((c) => c.id), [visibleToll]);
   const vehicleIds = useMemo(() => visibleVehicleDb.map((c) => c.id), [visibleVehicleDb]);
+  const accountingIds = useMemo(() => visibleAccounting.map((c) => c.id), [visibleAccounting]);
   const globalSettingsIds = useMemo(() => visibleGlobalSettings.map((c) => c.id), [visibleGlobalSettings]);
   const legacySettingsIds = useMemo(() => visibleLegacySettings.map((c) => c.id), [visibleLegacySettings]);
   const apiIds = useMemo(() => visibleApiCenter.map((c) => c.id), [visibleApiCenter]);
@@ -157,6 +161,7 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
   const [fuelOpen, setFuelOpen] = useSectionOpen(currentPage, fuelIds);
   const [tollOpen, setTollOpen] = useSectionOpen(currentPage, tollIds);
   const [vehicleDbOpen, setVehicleDbOpen] = useSectionOpen(currentPage, vehicleIds);
+  const [accountingOpen, setAccountingOpen] = useSectionOpen(currentPage, accountingIds);
   const businessSegmentIds = useMemo(
     () => [...enterpriseIds, ...fleetIds, ...driverIds, ...ridesIds, ...haulIds, ...dashIds],
     [enterpriseIds, fleetIds, driverIds, ridesIds, haulIds, dashIds],
@@ -270,6 +275,15 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
       open: vehicleDbOpen,
       setOpen: setVehicleDbOpen,
       isActive: vehicleIds.includes(currentPage),
+    },
+    {
+      key: 'accounting',
+      label: 'Accounting',
+      icon: Receipt,
+      children: visibleAccounting,
+      open: accountingOpen,
+      setOpen: setAccountingOpen,
+      isActive: accountingIds.includes(currentPage),
     },
   ];
 

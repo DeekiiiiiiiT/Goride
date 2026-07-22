@@ -1,6 +1,6 @@
 /**
- * Expense Hub shell — always shows Overview / Register / Rules / Approvals / Vendors.
- * Flag OFF blocks server writes (and vehicle edit lock); UI stays browsable.
+ * Expense Hub shell — ops only: Overview / Register / Approvals.
+ * Rules → Accounting sidebar; Vendors → Super Admin catalog.
  */
 import React from 'react';
 import {
@@ -8,8 +8,6 @@ import {
   FileText,
   Info,
   LayoutDashboard,
-  Repeat2,
-  Store,
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '../../ui/utils';
@@ -19,12 +17,10 @@ import type { ExpensesSnapshot } from '../types';
 import { HubDenied, HubLoading } from './HubStates';
 import { ExpenseHubOverview } from './ExpenseHubOverview';
 import { ExpenseHubRegister } from './ExpenseHubRegister';
-import { ExpenseHubRules } from './ExpenseHubRules';
 import { ExpenseHubApprovals } from './ExpenseHubApprovals';
-import { ExpenseHubVendors } from './ExpenseHubVendors';
 import { ExpenseHubDetail } from './ExpenseHubDetail';
 
-export type ExpenseHubSubview = 'overview' | 'register' | 'rules' | 'approvals' | 'settings';
+export type ExpenseHubSubview = 'overview' | 'register' | 'approvals';
 
 export function ExpenseHubShell({
   expenses,
@@ -38,7 +34,6 @@ export function ExpenseHubShell({
   onNavigatePage?: (page: string) => void;
   onChanged?: () => void;
   period?: { startYmd: string; endYmd: string };
-  /** Deep link (e.g. from a vehicle page) — preselects the Register vehicle filter. */
   initialVehicleId?: string;
   initialSubview?: ExpenseHubSubview;
 }) {
@@ -62,18 +57,11 @@ export function ExpenseHubShell({
   }> = [
     { id: 'overview', label: 'Overview', icon: LayoutDashboard, visible: true },
     { id: 'register', label: 'Register', icon: FileText, visible: true },
-    { id: 'rules', label: 'Rules', icon: Repeat2, visible: true },
     {
       id: 'approvals',
       label: 'Approvals',
       icon: ClipboardCheck,
       visible: can('expenses.approve') || can('expenses.view'),
-    },
-    {
-      id: 'settings',
-      label: 'Vendors',
-      icon: Store,
-      visible: can('expenses.manage_vendors') || can('expenses.view'),
     },
   ];
   const visibleSubviews = subviews.filter((s) => s.visible);
@@ -85,8 +73,8 @@ export function ExpenseHubShell({
         <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
           <Info className="mt-0.5 h-4 w-4 shrink-0" />
           <span>
-            Hub browsing is on; saving rules/bills/payments needs the expense_hub_v1 flag. Until
-            then use “Log expense” for one-offs and keep editing recurring costs on each vehicle.
+            Hub browsing is on; saving bills/payments needs the expense_hub_v1 flag. Recurring rules
+            live under Accounting; Jamaica vendors are managed by Roam.
           </span>
         </div>
       )}
@@ -126,7 +114,6 @@ export function ExpenseHubShell({
           writesEnabled={hubEnabled}
         />
       )}
-      {active === 'rules' && <ExpenseHubRules onChanged={onChanged} writesEnabled={hubEnabled} />}
       {active === 'approvals' && (
         <ExpenseHubApprovals
           onOpenDetail={setDetailId}
@@ -134,7 +121,6 @@ export function ExpenseHubShell({
           writesEnabled={hubEnabled}
         />
       )}
-      {active === 'settings' && <ExpenseHubVendors writesEnabled={hubEnabled} />}
 
       <ExpenseHubDetail
         documentId={detailId}
@@ -145,7 +131,7 @@ export function ExpenseHubShell({
 
       <nav
         aria-label="Expense Hub sections"
-        className="sticky bottom-2 z-20 grid grid-cols-5 rounded-lg border border-slate-200 bg-white/95 p-1 shadow-lg backdrop-blur dark:border-slate-800 dark:bg-slate-950/95 sm:hidden"
+        className="sticky bottom-2 z-20 grid grid-cols-3 rounded-lg border border-slate-200 bg-white/95 p-1 shadow-lg backdrop-blur dark:border-slate-800 dark:bg-slate-950/95 sm:hidden"
       >
         {visibleSubviews.map((item) => {
           const Icon = item.icon;

@@ -33,6 +33,7 @@ import { CashRetagPage } from './components/fleet-financials/CashRetagPage';
 import { IndriveWalletCenterPage } from './components/fleet-financials/IndriveWalletCenterPage';
 import { BusinessFinancePage } from './components/business-finance/BusinessFinancePage';
 import { ExpenseHubPage } from './components/business-finance/expense-hub/ExpenseHubPage';
+import { ExpenseAccountingPage } from './components/business-finance/expense-hub/ExpenseAccountingPage';
 
 import { useAlertPusher } from './hooks/useAlertPusher';
 import { OfflineProvider } from './components/providers/OfflineProvider';
@@ -110,11 +111,11 @@ function AppContent() {
     setCurrentPage(page);
   };
 
-  /** Vehicle page → Business Finance Expenses, filtered to one vehicle */
+  /** Vehicle page → Accounting (recurring rules) for hub-managed vehicles */
   const openExpenseHubForVehicle = (vehicleId: string) => {
     setExpenseHubVehicleId(vehicleId);
     setFinancePeriodHint(null);
-    setCurrentPage('expense-hub');
+    setCurrentPage('expense-accounting');
   };
 
   // Old Tier Config / legacy bookmarks → Earnings Policy Configuration
@@ -404,6 +405,11 @@ function AppContent() {
                 setDriverIdForDetail(null);
               }}
             />
+          </PermissionGate>
+        )}
+        {currentPage === 'expense-accounting' && (
+          <PermissionGate permission="nav.financial_analytics" onNavigate={setCurrentPage}>
+            <ExpenseAccountingPage />
           </PermissionGate>
         )}
         {currentPage === 'transaction-list' && (

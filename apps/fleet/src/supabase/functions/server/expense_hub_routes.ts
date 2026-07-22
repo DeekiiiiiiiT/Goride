@@ -39,6 +39,11 @@ import {
   type CoverageRuleInput,
   type PointSpendEvent,
 } from "../../../utils/expenseCoverageRunRate.ts";
+import {
+  listFleetVisibleVendors,
+  mergeCategoryCatalog,
+  requestPlatformVendor,
+} from "./platform_vendor_routes.ts";
 
 const PREFIX = "/make-server-37f42386/expense-hub";
 
@@ -992,107 +997,26 @@ export function registerExpenseHubRoutes(app: {
     },
   );
 
-  // ── Categories ─────────────────────────────────────────────────────────
+  // ── Categories (platform catalog + built-ins) ──────────────────────────
   app.get(`${PREFIX}/categories`, requireAuth(), requirePermission("expenses.view"), async (c: Context) => {
-    const custom = filterByOrg(await kv.getByPrefix("expense_category:"), c) as Array<{
-      id: string;
-      value: string;
-      label: string;
-      notes?: string;
-      isActive?: boolean;
-      createdAt: string;
-      updatedAt: string;
-      organizationId?: string;
-    }>;
-    const builtIn = [
-      { value: "Insurance", label: "Insurance" },
-      { value: "Security", label: "Security (Tracker/GPS)" },
-      { value: "Lease", label: "Vehicle Lease/Financing" },
-      { value: "Maintenance", label: "Maintenance Contract" },
-      { value: "Software", label: "Software Subscription" },
-      { value: "Permits", label: "Permits & Licenses" },
-      { value: "Equipment", label: "Equipment Rental" },
-      { value: "Parking", label: "Parking" },
-      { value: "Other", label: "Other" },
-    ].map((c) => ({
-      id: `system:${c.value}`,
-      value: c.value,
-      label: c.label,
-      isSystem: true,
-      isActive: true,
-      createdAt: "",
-      updatedAt: "",
-    }));
-    const customActive = custom
-      .filter((c) => c.isActive !== false)
-      .map((c) => ({ ...c, isSystem: false }));
-    const seen = new Set(builtIn.map((c) => c.value.toLowerCase()));
-    const merged = [
-      ...builtIn,
-      ...customActive.filter((c) => !seen.has(String(c.value || "").toLowerCase())),
-    ];
-    return c.json({ items: merged });
+    const items = await mergeCategoryCatalog();
+    return c.json({ items });
   });
 
+  // Fleet can no longer create org-private categories — use Super Admin Accounting.
   app.post(
     `${PREFIX}/categories`,
     requireAuth(),
     requirePermission("expenses.manage_vendors"),
     async (c: Context) => {
-      const blocked = await requireHubWrites(c);
-      if (blocked) return blocked;
-      const body = await c.req.json();
-      const label = String(body.label || body.name || "").trim();
-      if (!label) return c.json({ error: "Category name is required" }, 400);
-
-      const slugParts = label.split(/[^a-zA-Z0-9]+/).filter(Boolean);
-      const autoValue = slugParts
-        .map((p: string) => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase())
-        .join("");
-      const value = String(body.value || autoValue || "Custom").trim();
-      if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(value)) {
-        return c.json({ error: "Category code must start with a letter (letters/numbers/_ only)" }, 400);
-      }
-
-      const builtIn = new Set([
-        "insurance",
-        "security",
-        "lease",
-        "maintenance",
-        "software",
-        "permits",
-        "equipment",
-        "parking",
-        "other",
-      ]);
-      if (builtIn.has(value.toLowerCase())) {
-        return c.json({ error: "That category already exists in the standard list" }, 409);
-      }
-
-      const existing = filterByOrg(await kv.getByPrefix("expense_category:"), c) as Array<{
-        value: string;
-        isActive?: boolean;
-      }>;
-      if (
-        existing.some(
-          (c) => c.isActive !== false && String(c.value || "").toLowerCase() === value.toLowerCase(),
-        )
-      ) {
-        return c.json({ error: "A category with that code already exists" }, 409);
-      }
-
-      const category = {
-        id: body.id || crypto.randomUUID(),
-        value,
-        label,
-        notes: body.notes ? String(body.notes).trim() : undefined,
-        isSystem: false,
-        isActive: true,
-        createdAt: nowIso(),
-        updatedAt: nowIso(),
-      };
-      await kv.set(`expense_category:${category.id}`, stampOrg(category, c));
-      return c.json({ success: true, data: category });
+      return c.json(
+        {
+          error:
+            "Expense categories are managed in Super Admin (Accounting). Contact Roam to add a category.",
+          code: "PLATFORM_CATALOG_ONLY",
+        },
+        403,
+      );
     },
   );
 
@@ -1101,141 +1025,54 @@ export function registerExpenseHubRoutes(app: {
     requireAuth(),
     requirePermission("expenses.manage_vendors"),
     async (c: Context) => {
-      const blocked = await requireHubWrites(c);
-      if (blocked) return blocked;
-      const id = c.req.param("id");
-      if (!id || id.startsWith("system:")) {
-        return c.json({ error: "Standard categories cannot be edited" }, 400);
-      }
-      const raw = await kv.get(`expense_category:${id}`);
-      if (!raw) return c.json({ error: "Category not found" }, 404);
-      const existing = filterByOrg([raw], c)[0] as {
-        id: string;
-        value: string;
-        label: string;
-        notes?: string;
-        isSystem?: boolean;
-        isActive?: boolean;
-        createdAt: string;
-        updatedAt: string;
-        organizationId?: string;
-      } | undefined;
-      if (!existing) return c.json({ error: "Category not found" }, 404);
-
-      const body = await c.req.json();
-      const label = body.label != null ? String(body.label).trim() : existing.label;
-      if (!label) return c.json({ error: "Category name is required" }, 400);
-
-      // Code is immutable after create — keeps historical expenses/rules stable.
-      const next = {
-        ...existing,
-        label,
-        notes: body.notes !== undefined
-          ? (String(body.notes).trim() || undefined)
-          : existing.notes,
-        isActive: body.isActive !== undefined ? Boolean(body.isActive) : existing.isActive !== false,
-        isSystem: false,
-        updatedAt: nowIso(),
-      };
-      await kv.set(`expense_category:${id}`, stampOrg(next, c));
-      return c.json({ success: true, data: next });
+      return c.json(
+        {
+          error:
+            "Expense categories are managed in Super Admin (Accounting). Contact Roam to edit a category.",
+          code: "PLATFORM_CATALOG_ONLY",
+        },
+        403,
+      );
     },
   );
 
-  // ── Vendors ────────────────────────────────────────────────────────────
+  // ── Vendors (platform catalog; create = request pending) ───────────────
   app.get(`${PREFIX}/vendors`, requireAuth(), requirePermission("expenses.view"), async (c: Context) => {
-    const items = filterByOrg(await kv.getByPrefix("expense_vendor:"), c) as ExpenseVendor[];
-    return c.json({ items: items.filter((v) => v.isActive !== false) });
+    const orgId = getOrgId(c);
+    const items = await listFleetVisibleVendors(orgId);
+    items.sort((a, b) => a.name.localeCompare(b.name));
+    return c.json({ items });
   });
 
+  /** Fleet create → pending platform vendor request (wizard-compatible). */
   app.post(
     `${PREFIX}/vendors`,
     requireAuth(),
-    requirePermission("expenses.manage_vendors"),
+    requirePermission("expenses.create"),
     async (c: Context) => {
-      const blocked = await requireHubWrites(c);
-      if (blocked) return blocked;
       const body = await c.req.json();
-      const vendor: ExpenseVendor = {
-        id: body.id || crypto.randomUUID(),
-        name: String(body.name || "").trim(),
-        categoryDefault: body.categoryDefault,
-        notes: body.notes,
-        isActive: true,
-        createdAt: nowIso(),
-        updatedAt: nowIso(),
-      };
-      if (!vendor.name) return c.json({ error: "Name required" }, 400);
-      await kv.set(`expense_vendor:${vendor.id}`, stampOrg(vendor, c));
-      return c.json({ success: true, data: vendor });
+      const result = await requestPlatformVendor(c, body);
+      if ("error" in result) return c.json({ error: result.error }, result.status);
+      return c.json({
+        success: true,
+        data: result.vendor,
+        alreadyExists: result.alreadyExists,
+      });
     },
   );
 
-  /** Bulk create — paste list of names; skips blanks and case-insensitive dupes. */
   app.post(
     `${PREFIX}/vendors/bulk`,
     requireAuth(),
     requirePermission("expenses.manage_vendors"),
     async (c: Context) => {
-      const blocked = await requireHubWrites(c);
-      if (blocked) return blocked;
-      const body = await c.req.json();
-      const categoryDefault =
-        body.categoryDefault === undefined || body.categoryDefault === null || body.categoryDefault === "none"
-          ? undefined
-          : String(body.categoryDefault);
-      const notes =
-        body.notes === undefined || body.notes === null || String(body.notes).trim() === ""
-          ? undefined
-          : String(body.notes).trim();
-
-      const rawNames: string[] = Array.isArray(body.names)
-        ? body.names.map((n: unknown) => String(n || "").trim())
-        : String(body.text || "")
-            .split(/\r?\n/)
-            .map((n: string) => n.trim());
-
-      const names = rawNames.filter(Boolean);
-      if (names.length === 0) return c.json({ error: "At least one vendor name is required" }, 400);
-      if (names.length > 100) return c.json({ error: "Maximum 100 vendors per bulk add" }, 400);
-
-      const existing = filterByOrg(await kv.getByPrefix("expense_vendor:"), c) as ExpenseVendor[];
-      const seen = new Set(
-        existing
-          .filter((v) => v.isActive !== false)
-          .map((v) => v.name.trim().toLowerCase()),
+      return c.json(
+        {
+          error: "Bulk vendor import is Super Admin only (Accounting → Vendor Database).",
+          code: "PLATFORM_CATALOG_ONLY",
+        },
+        403,
       );
-
-      const created: ExpenseVendor[] = [];
-      const skipped: string[] = [];
-      const ts = nowIso();
-
-      for (const name of names) {
-        const key = name.toLowerCase();
-        if (seen.has(key)) {
-          skipped.push(name);
-          continue;
-        }
-        seen.add(key);
-        const vendor: ExpenseVendor = {
-          id: crypto.randomUUID(),
-          name,
-          categoryDefault,
-          notes,
-          isActive: true,
-          createdAt: ts,
-          updatedAt: ts,
-        };
-        await kv.set(`expense_vendor:${vendor.id}`, stampOrg(vendor, c));
-        created.push(vendor);
-      }
-
-      return c.json({
-        success: true,
-        created,
-        skipped,
-        summary: { created: created.length, skipped: skipped.length },
-      });
     },
   );
 

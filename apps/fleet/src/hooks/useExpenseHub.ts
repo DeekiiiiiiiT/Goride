@@ -213,20 +213,21 @@ export function useCreateExpenseVendor() {
   const invalidate = useInvalidateHub();
   return useMutation({
     mutationFn: (body: { name: string; categoryDefault?: string; notes?: string }) =>
-      expenseHubService.createVendor(body),
+      expenseHubService.requestVendor(body),
     onSuccess: () => invalidate(),
   });
+}
+
+export function useRequestExpenseVendor() {
+  return useCreateExpenseVendor();
 }
 
 export function useCreateExpenseVendorsBulk() {
   const invalidate = useInvalidateHub();
   return useMutation({
-    mutationFn: (body: {
-      names?: string[];
-      text?: string;
-      categoryDefault?: string;
-      notes?: string;
-    }) => expenseHubService.createVendorsBulk(body),
+    mutationFn: async () => {
+      throw new Error('Bulk vendor import is Super Admin only (Accounting → Vendor Database).');
+    },
     onSuccess: () => invalidate(),
   });
 }

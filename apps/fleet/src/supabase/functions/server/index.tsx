@@ -173,6 +173,7 @@ import { detectFileMagicBytes, extForMime, IMAGE_AND_PDF_MIMES } from "./file_ma
 import { registerPendingVehicleCatalogRoutes } from "./pending_vehicle_catalog_routes.ts";
 import { registerPartSourcingRoutes } from "./part_sourcing_routes.ts";
 import { registerExpenseHubRoutes } from "./expense_hub_routes.ts";
+import { registerPlatformVendorRoutes } from "./platform_vendor_routes.ts";
 import {
   provisionFleetOwner,
   enableDriverForFleetOwner,
@@ -16715,6 +16716,9 @@ async function verifySuperadmin(c: any): Promise<{ userId: string; email: string
     name: reqUser.user_metadata?.name || reqUser.email || 'Unknown',
   };
 }
+
+// Platform Jamaica vendor + category catalog (Super Admin + fleet request)
+registerPlatformVendorRoutes(app, verifySuperadmin);
 
 // ---------------------------------------------------------------------------
 // Cache Health & Performance Endpoints

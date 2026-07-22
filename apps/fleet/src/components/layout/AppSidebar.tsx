@@ -68,7 +68,7 @@ export function AppSidebar({
   onLogout,
 }: AppSidebarProps) {
   const { v, businessType } = useVocab();
-  const { canView } = usePermissions();
+  const { canView, can } = usePermissions();
   const { isModuleEnabled } = useFeatureFlags();
   const { isMobile, setOpenMobile } = useSidebar();
 
@@ -211,6 +211,11 @@ export function AppSidebar({
   const financeItems: NavLeaf[] = [
     canSeeBusinessFinanceHome && { id: 'business-finance', label: 'Overview' },
     canSeeBusinessFinanceHome && { id: 'expense-hub', label: 'Expense Hub' },
+    canSeeBusinessFinanceHome &&
+      (can('expenses.manage_rules') || can('expenses.view')) && {
+        id: 'expense-accounting',
+        label: 'Accounting',
+      },
     canView('fleet-financials') && {
       id: 'fleet-financials',
       label: 'Bank Deposits',

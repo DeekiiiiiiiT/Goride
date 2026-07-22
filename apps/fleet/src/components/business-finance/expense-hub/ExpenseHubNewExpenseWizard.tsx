@@ -30,6 +30,7 @@ import {
   useCreateExpenseDocument,
   useExpenseHubCategories,
   useExpenseHubVendors,
+  useRequestExpenseVendor,
 } from '../../../hooks/useExpenseHub';
 import { VehicleMultiSelect } from './VehicleMultiSelect';
 import { useVehicleOptions } from './useVehicleOptions';
@@ -60,6 +61,7 @@ export function ExpenseHubNewExpenseWizard({
 }) {
   const { can } = usePermissions();
   const createDoc = useCreateExpenseDocument();
+  const requestVendor = useRequestExpenseVendor();
   const vendorsQuery = useExpenseHubVendors();
   const categoriesQuery = useExpenseHubCategories();
   const vehicleOptions = useVehicleOptions();
@@ -67,6 +69,8 @@ export function ExpenseHubNewExpenseWizard({
   const [description, setDescription] = React.useState('');
   const [category, setCategory] = React.useState('Insurance');
   const [vendorId, setVendorId] = React.useState('none');
+  const [requestVendorOpen, setRequestVendorOpen] = React.useState(false);
+  const [requestVendorName, setRequestVendorName] = React.useState('');
   const [incurredDate, setIncurredDate] = React.useState(() => new Date().toISOString().slice(0, 10));
   const [dueDate, setDueDate] = React.useState('');
   const [grossAmount, setGrossAmount] = React.useState('');
@@ -166,6 +170,7 @@ export function ExpenseHubNewExpenseWizard({
     vehicleOptions.data?.find((vehicle) => vehicle.id === id)?.label || id;
 
   return (
+    <>
     <Dialog open={open} onOpenChange={(next) => !saving && onOpenChange(next)}>
       <DialogContent className="max-h-[96vh] gap-0 overflow-hidden p-0 sm:max-w-4xl">
         <DialogHeader className="border-b bg-slate-50 px-5 py-4 text-left dark:bg-slate-950 sm:px-6">
@@ -219,10 +224,22 @@ export function ExpenseHubNewExpenseWizard({
                       <SelectContent>
                         <SelectItem value="none">No vendor</SelectItem>
                         {(vendorsQuery.data?.items || []).map((vendor) => (
-                          <SelectItem key={vendor.id} value={vendor.id}>{vendor.name}</SelectItem>
+                          <SelectItem key={vendor.id} value={vendor.id}>
+                            {vendor.name}
+                            {vendor.status === 'pending' ? ' (Pending Roam approval)' : ''}
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
+                    {can('expenses.create') && (
+                      <button
+                        type="button"
+                        className="text-xs font-medium text-indigo-600 hover:underline dark:text-indigo-400"
+                        onClick={() => setRequestVendorOpen(true)}
+                      >
+                        Can&apos;t find them? Request a new Jamaica vendor
+                      </button>
+                    )}
                     {vendorsQuery.isError && <p className="text-xs text-rose-600">Vendors could not be loaded.</p>}
                   </div>
                   <div className="space-y-2">
@@ -435,5 +452,55 @@ export function ExpenseHubNewExpenseWizard({
         </div>
       </DialogContent>
     </Dialog>
+
+    <Dialog open={requestVendorOpen} onOpenChange={setRequestVendorOpen}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Request Jamaica vendor</DialogTitle>
+          <DialogDescription>
+            Roam reviews this for the shared catalog. You can still log this expense with a Pending vendor meanwhile.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-2">
+          <Label htmlFor="request-vendor-name">Company name</Label>
+          <Input
+            id="request-vendor-name"
+            value={requestVendorName}
+            onChange={(e) => setRequestVendorName(e.target.value)}
+            placeholder="e.g. Digicel"
+            className="h-11"
+          />
+        </div>
+        <div className="flex justify-end gap-2 pt-2">
+          <Button type="button" variant="outline" onClick={() => setRequestVendorOpen(false)}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            disabled={!requestVendorName.trim() || requestVendor.isPending}
+            onClick={() => {
+              void requestVendor
+                .mutateAsync({ name: requestVendorName.trim() })
+                .then((res) => {
+                  setVendorId(res.data.id);
+                  setRequestVendorOpen(false);
+                  setRequestVendorName('');
+                  toast.success(
+                    res.data.status === 'pending'
+                      ? 'Vendor requested — pending Roam approval'
+                      : 'Vendor already in catalog',
+                  );
+                })
+                .catch((err: unknown) => {
+                  toast.error(err instanceof Error ? err.message : 'Request failed');
+                });
+            }}
+          >
+            {requestVendor.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Submit request'}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }

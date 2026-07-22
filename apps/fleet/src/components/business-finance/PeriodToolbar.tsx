@@ -2,7 +2,9 @@ import React, { useMemo } from 'react';
 import { endOfMonth, format, parseISO, startOfMonth } from 'date-fns';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
+import { PeriodWeekDropdown } from '../ui/PeriodWeekDropdown';
 import { cn } from '../ui/utils';
+import type { PeriodWeekOption } from '../../utils/periodWeekOptions';
 import type { PeriodPreset, BusinessFinancePeriod } from './types';
 import { formatPeriodLabel, ymd } from './periodRange';
 
@@ -79,6 +81,18 @@ export function PeriodToolbar({
     if (!opt) return;
     onCustomStart(opt.startYmd);
     onCustomEnd(opt.endYmd);
+    onPreset('custom');
+  };
+
+  // Prefer explicit custom dates; otherwise highlight the resolved preset week (This/Last week).
+  const weekSelectedStart = customStart || period.startYmd;
+  const weekSelectedEnd = customEnd || period.endYmd;
+
+  const handleWeekPeriod = (p: PeriodWeekOption) => {
+    if (!p.startDate || !p.endDate) return;
+    onCustomStart(p.startDate);
+    onCustomEnd(p.endDate);
+    onPreset('custom');
   };
 
   return (
@@ -121,6 +135,16 @@ export function PeriodToolbar({
               </option>
             ))}
           </select>
+        </div>
+        <div className="space-y-0.5">
+          <label className="text-[11px] text-slate-500">Week periods</label>
+          <PeriodWeekDropdown
+            selectedStart={weekSelectedStart}
+            selectedEnd={weekSelectedEnd}
+            onSelect={handleWeekPeriod}
+            placeholder="Select week period"
+            buttonClassName="h-8 rounded-md"
+          />
         </div>
         <div className="flex flex-wrap items-end gap-2">
           <div className="space-y-0.5">

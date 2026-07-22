@@ -5,20 +5,23 @@ import { resolve } from 'node:path';
 const ROOT = resolve(__dirname, '../..');
 
 describe('Expense Hub accessibility & UI contract', () => {
-  it('shell uses min 44px touch targets on primary nav', () => {
+  it('shell uses min 44px touch targets on primary ops nav', () => {
     const shell = readFileSync(
       resolve(ROOT, 'components/business-finance/expense-hub/ExpenseHubShell.tsx'),
       'utf8',
     );
     expect(shell).toMatch(/min-h-11|min-h-\[44px\]|h-11|h-12/);
     expect(shell).toMatch(/Register/);
-    expect(shell).toMatch(/Rules/);
+    expect(shell).toMatch(/Approvals/);
+    expect(shell).not.toMatch(/id: 'rules'/);
+    expect(shell).not.toMatch(/id: 'settings'/);
   });
 
   it('hub components exist for full workflow', () => {
     const files = [
       'ExpenseHubShell.tsx',
       'ExpenseHubPage.tsx',
+      'ExpenseAccountingPage.tsx',
       'ExpenseHubOverview.tsx',
       'ExpenseHubSpendOverTime.tsx',
       'ExpenseHubRegister.tsx',
@@ -34,12 +37,15 @@ describe('Expense Hub accessibility & UI contract', () => {
     }
   });
 
-  it('exposes Expense Hub as a dedicated Business Finance desk', () => {
+  it('exposes Expense Hub ops + Accounting setup in Business Finance', () => {
     const sidebar = readFileSync(resolve(ROOT, 'components/layout/AppSidebar.tsx'), 'utf8');
     const app = readFileSync(resolve(ROOT, 'App.tsx'), 'utf8');
     expect(sidebar).toContain("{ id: 'expense-hub', label: 'Expense Hub' }");
+    expect(sidebar).toContain("id: 'expense-accounting'");
     expect(app).toContain("currentPage === 'expense-hub'");
+    expect(app).toContain("currentPage === 'expense-accounting'");
     expect(app).toContain('<ExpenseHubPage');
+    expect(app).toContain('<ExpenseAccountingPage');
   });
 
   it('Stitch inventory documents all 18 screens', () => {
