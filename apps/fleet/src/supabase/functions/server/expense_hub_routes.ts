@@ -76,7 +76,10 @@ async function writeAudit(
   return event;
 }
 
-function annualize(amount: number, frequency: string): number {
+function annualize(amount: number, frequency: string, validityYears?: number): number {
+  if (validityYears && validityYears > 0) {
+    return amount / validityYears;
+  }
   const f = frequency.toLowerCase();
   if (f === "daily") return amount * 365;
   if (f === "weekly") return amount * 52;
@@ -616,11 +619,25 @@ export function registerExpenseHubRoutes(app: {
       const preview: ExpenseBulkPreview = {
         includedVehicleIds: vehicleIds,
         excludedVehicleIds: body.excludedVehicleIds || [],
-        projectedAnnualTotal: vehicleIds.reduce((s, vid) => {
-          const o = overrides.find((x: { vehicleId: string; amount: number }) => x.vehicleId === vid);
-          return s + annualize(Number(o?.amount ?? amount), frequency);
+        projectedAnnualTotal: vehicleIds.reduce((s: number, vid: string) => {
+          const o = overrides.find(
+            (x: { vehicleId: string; amount?: number; validityYears?: number }) =>
+              x.vehicleId === vid,
+          );
+          const amt = Number(o?.amount ?? amount);
+          const years = o?.validityYears != null ? Number(o.validityYears) : undefined;
+          return s + annualize(amt, frequency, years);
         }, 0),
-        estimatedOccurrenceCount: vehicleIds.length * (frequency === "monthly" ? 12 : frequency === "weekly" ? 52 : 1),
+        estimatedOccurrenceCount: vehicleIds.reduce((s: number, vid: string) => {
+          const o = overrides.find(
+            (x: { vehicleId: string; validityYears?: number }) => x.vehicleId === vid,
+          );
+          const years = Math.max(1, Number(o?.validityYears) || 1);
+          if (frequency === "monthly") return s + 12;
+          if (frequency === "weekly") return s + 52;
+          // Multi-year fitness: one occurrence per validity cycle in a year horizon ≈ 1/years
+          return s + 1 / years;
+        }, 0),
         overrides,
       };
       return c.json(preview);
@@ -662,6 +679,7 @@ export function registerExpenseHubRoutes(app: {
         id: groupId,
         name: String(body.name || "").trim() || "Recurring expense",
         category: body.category || "Other",
+        permitType: body.permitType,
         vendorId: body.vendorId,
         vendorName: body.vendorName,
         amount,
@@ -684,7 +702,16 @@ export function registerExpenseHubRoutes(app: {
         updatedAt: nowIso(),
       };
       await kv.set(`expense_rule_group:${groupId}`, stampOrg(group, c));
-      const overrides: Array<{ vehicleId: string; amount: number }> = body.overrides || [];
+      type RuleOverride = {
+        vehicleId: string;
+        amount?: number;
+        validityYears?: 1 | 3 | 5;
+        startDateOverride?: string;
+        startTimeOverride?: string;
+        endDateOverride?: string;
+        endTimeOverride?: string;
+      };
+      const overrides: RuleOverride[] = Array.isArray(body.overrides) ? body.overrides : [];
       const assignments: ExpenseRuleAssignment[] = [];
       for (const vehicleId of vehicleIds) {
         const assignmentId = crypto.randomUUID();
@@ -695,6 +722,11 @@ export function registerExpenseHubRoutes(app: {
           vehicleId,
           fixedExpenseConfigId: assignmentId,
           amountOverride: o?.amount,
+          validityYears: o?.validityYears,
+          startDateOverride: o?.startDateOverride,
+          startTimeOverride: o?.startTimeOverride,
+          endDateOverride: o?.endDateOverride,
+          endTimeOverride: o?.endTimeOverride,
           isActive: true,
           createdAt: nowIso(),
           updatedAt: nowIso(),
@@ -807,6 +839,74 @@ export function registerExpenseHubRoutes(app: {
       if (!vendor.name) return c.json({ error: "Name required" }, 400);
       await kv.set(`expense_vendor:${vendor.id}`, stampOrg(vendor, c));
       return c.json({ success: true, data: vendor });
+    },
+  );
+
+  /** Bulk create — paste list of names; skips blanks and case-insensitive dupes. */
+  app.post(
+    `${PREFIX}/vendors/bulk`,
+    requireAuth(),
+    requirePermission("expenses.manage_vendors"),
+    async (c: Context) => {
+      const blocked = await requireHubWrites(c);
+      if (blocked) return blocked;
+      const body = await c.req.json();
+      const categoryDefault =
+        body.categoryDefault === undefined || body.categoryDefault === null || body.categoryDefault === "none"
+          ? undefined
+          : String(body.categoryDefault);
+      const notes =
+        body.notes === undefined || body.notes === null || String(body.notes).trim() === ""
+          ? undefined
+          : String(body.notes).trim();
+
+      const rawNames: string[] = Array.isArray(body.names)
+        ? body.names.map((n: unknown) => String(n || "").trim())
+        : String(body.text || "")
+            .split(/\r?\n/)
+            .map((n: string) => n.trim());
+
+      const names = rawNames.filter(Boolean);
+      if (names.length === 0) return c.json({ error: "At least one vendor name is required" }, 400);
+      if (names.length > 100) return c.json({ error: "Maximum 100 vendors per bulk add" }, 400);
+
+      const existing = filterByOrg(await kv.getByPrefix("expense_vendor:"), c) as ExpenseVendor[];
+      const seen = new Set(
+        existing
+          .filter((v) => v.isActive !== false)
+          .map((v) => v.name.trim().toLowerCase()),
+      );
+
+      const created: ExpenseVendor[] = [];
+      const skipped: string[] = [];
+      const ts = nowIso();
+
+      for (const name of names) {
+        const key = name.toLowerCase();
+        if (seen.has(key)) {
+          skipped.push(name);
+          continue;
+        }
+        seen.add(key);
+        const vendor: ExpenseVendor = {
+          id: crypto.randomUUID(),
+          name,
+          categoryDefault,
+          notes,
+          isActive: true,
+          createdAt: ts,
+          updatedAt: ts,
+        };
+        await kv.set(`expense_vendor:${vendor.id}`, stampOrg(vendor, c));
+        created.push(vendor);
+      }
+
+      return c.json({
+        success: true,
+        created,
+        skipped,
+        summary: { created: created.length, skipped: skipped.length },
+      });
     },
   );
 

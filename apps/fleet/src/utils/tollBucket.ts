@@ -238,6 +238,12 @@ export function resolveWizardBucket(
   }
 
   if (stage === 'personal_use_pending' || tx.matchStatus === 'orphan_personal') {
+    // Stale personal pin: a later trip import can re-match this toll as a clear
+    // underpaid/deadhead — the live money verdict wins over the persisted
+    // personal label (mirrors the knownNonPersonal path above). Ambiguous or
+    // needs-review live results stay pinned to Personal Use.
+    const live = resolveTollBucket(tx, usableBest);
+    if (live === 'underpaid' || live === 'deadhead') return live;
     return 'personal-use';
   }
 

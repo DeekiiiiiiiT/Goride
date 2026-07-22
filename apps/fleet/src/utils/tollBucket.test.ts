@@ -150,6 +150,27 @@ describe('resolveWizardBucket', () => {
     )).toBe('personal-use');
   });
 
+  it('stale personal_use_pending + live AMOUNT_VARIANCE → underpaid (money verdict wins)', () => {
+    expect(resolveWizardBucket(
+      { ...tagTx, workflowStage: 'personal_use_pending' },
+      { matchType: 'AMOUNT_VARIANCE', reasonCode: 'ON_TRIP', trip: { id: 'trip-1' } as any },
+    )).toBe('underpaid');
+  });
+
+  it('stale personal_use_pending + live DEADHEAD_MATCH → deadhead', () => {
+    expect(resolveWizardBucket(
+      { ...tagTx, workflowStage: 'personal_use_pending' },
+      { matchType: 'DEADHEAD_MATCH', reasonCode: 'ENROUTE_APPROACH', trip: { id: 'trip-1' } as any },
+    )).toBe('deadhead');
+  });
+
+  it('stale personal_use_pending + ambiguous live underpaid stays personal-use (no unsettled jump)', () => {
+    expect(resolveWizardBucket(
+      { ...tagTx, workflowStage: 'personal_use_pending' },
+      { matchType: 'AMOUNT_VARIANCE', isAmbiguous: true, trip: { id: 'trip-1' } as any },
+    )).toBe('personal-use');
+  });
+
   it('resolved personal_use_resolved → excluded (null)', () => {
     expect(resolveWizardBucket(
       { ...tagTx, workflowStage: 'personal_use_resolved' },

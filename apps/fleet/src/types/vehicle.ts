@@ -145,6 +145,15 @@ export interface Vehicle {
   bodyType?: string;
   engineNumber?: string;
   ccRating?: string;
+  /**
+   * Jamaica fitness / permit classification (Expense Hub Fitness rules).
+   * Private | Motorcycle | Commercial | PPV | Trailer
+   */
+  usageCategory?: 'Private' | 'Motorcycle' | 'Commercial' | 'PPV' | 'Trailer';
+  /** Jamaica plate class colour: White (private), Green (commercial), Red (PPV). */
+  plateClass?: 'White' | 'Green' | 'Red';
+  /** True when commercial vehicle is on first registration (brand-new fitness tier). */
+  fitnessFirstRegistration?: boolean;
   
   // Registration Certificate
   registrationExpiry?: string;

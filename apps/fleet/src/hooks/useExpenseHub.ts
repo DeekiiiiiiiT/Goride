@@ -138,3 +138,16 @@ export function useCreateExpenseVendor() {
     onSuccess: () => invalidate(),
   });
 }
+
+export function useCreateExpenseVendorsBulk() {
+  const invalidate = useInvalidateHub();
+  return useMutation({
+    mutationFn: (body: {
+      names?: string[];
+      text?: string;
+      categoryDefault?: string;
+      notes?: string;
+    }) => expenseHubService.createVendorsBulk(body),
+    onSuccess: () => invalidate(),
+  });
+}

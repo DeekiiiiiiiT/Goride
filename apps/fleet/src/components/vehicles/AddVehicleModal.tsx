@@ -18,6 +18,7 @@ import { useVehicleCatalogAnchorFacets } from '../../hooks/useVehicleCatalogAnch
 import { extractChassisPrefix } from '../../utils/chassisPrefix';
 import type { VehicleCatalogRecord } from '../../types/vehicleCatalog';
 import { TollClassPicker } from './TollClassPicker';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 
 interface AddVehicleModalProps {
   isOpen: boolean;
@@ -220,6 +221,9 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
     chassis: '',
     /** Super Admin Toll Info class (class1 default for passenger fleet). */
     tollClassId: 'class1',
+    usageCategory: '' as '' | 'Private' | 'Motorcycle' | 'Commercial' | 'PPV' | 'Trailer',
+    plateClass: '' as '' | 'White' | 'Green' | 'Red',
+    fitnessFirstRegistration: false,
   });
 
   /**
@@ -660,6 +664,12 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
               ...catalogHints,
               tollClassId: formData.tollClassId || 'class1',
               tollClassNeedsReview: false,
+              usageCategory: (formData.usageCategory || existingVehicle.usageCategory) as Vehicle['usageCategory'],
+              plateClass: (formData.plateClass || existingVehicle.plateClass) as Vehicle['plateClass'],
+              fitnessFirstRegistration:
+                formData.usageCategory === 'Commercial'
+                  ? formData.fitnessFirstRegistration
+                  : existingVehicle.fitnessFirstRegistration,
           };
           toast.info(`Updated existing vehicle: ${plateToUse}`);
       } else {
@@ -705,6 +715,10 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
             laNumber: formData.laNumber,
             tollClassId: formData.tollClassId || 'class1',
             tollClassNeedsReview: false,
+            usageCategory: (formData.usageCategory || undefined) as Vehicle['usageCategory'],
+            plateClass: (formData.plateClass || undefined) as Vehicle['plateClass'],
+            fitnessFirstRegistration:
+              formData.usageCategory === 'Commercial' ? formData.fitnessFirstRegistration : undefined,
 
             // Hybrid catalog matching: catalog id + hints from the picker.
             ...catalogHints,
@@ -752,7 +766,11 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
         make: '', model: '', year: new Date().getFullYear().toString(),
         color: '', bodyType: '', engineNumber: '', ccRating: '', fitnessIssueDate: '', fitnessExpiryDate: '',
         laNumber: '', licensePlate: '', mvid: '', vin: '', controlNumber: '', registrationIssueDate: '', registrationExpiryDate: '',
-        trim: '', drivetrain: '', transmission: '', fuelType: '', chassis: ''
+        trim: '', drivetrain: '', transmission: '', fuelType: '', chassis: '',
+        tollClassId: 'class1',
+        usageCategory: '',
+        plateClass: '',
+        fitnessFirstRegistration: false,
     });
     setFitnessFile(null);
     setRegistrationFile(null);
@@ -795,6 +813,66 @@ export function AddVehicleModal({ isOpen, onClose, onVehicleAdded, existingVehic
         <Label className="text-xs text-slate-500">Body type</Label>
         <Input value={formData.bodyType} onChange={(e) => setFormData({ ...formData, bodyType: e.target.value })} placeholder="Sedan" />
       </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <Label className="text-xs text-slate-500">Usage category (fitness)</Label>
+          <Select
+            value={formData.usageCategory || 'none'}
+            onValueChange={(v) =>
+              setFormData({
+                ...formData,
+                usageCategory: v === 'none' ? '' : (v as typeof formData.usageCategory),
+              })
+            }
+          >
+            <SelectTrigger className="min-h-9">
+              <SelectValue placeholder="Select…" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">Not set</SelectItem>
+              <SelectItem value="Private">Private / SUV</SelectItem>
+              <SelectItem value="Motorcycle">Motorcycle</SelectItem>
+              <SelectItem value="Commercial">Commercial</SelectItem>
+              <SelectItem value="PPV">Public passenger (PPV)</SelectItem>
+              <SelectItem value="Trailer">Trailer / heavy tractor</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label className="text-xs text-slate-500">Plate class</Label>
+          <Select
+            value={formData.plateClass || 'none'}
+            onValueChange={(v) =>
+              setFormData({
+                ...formData,
+                plateClass: v === 'none' ? '' : (v as typeof formData.plateClass),
+              })
+            }
+          >
+            <SelectTrigger className="min-h-9">
+              <SelectValue placeholder="Select…" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">Not set</SelectItem>
+              <SelectItem value="White">White</SelectItem>
+              <SelectItem value="Green">Green</SelectItem>
+              <SelectItem value="Red">Red</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      {formData.usageCategory === 'Commercial' && (
+        <label className="flex items-center gap-2 text-sm text-slate-700">
+          <input
+            type="checkbox"
+            checked={formData.fitnessFirstRegistration}
+            onChange={(e) =>
+              setFormData({ ...formData, fitnessFirstRegistration: e.target.checked })
+            }
+          />
+          First registration (brand-new commercial fitness)
+        </label>
+      )}
       <div>
         <Label className="text-xs text-slate-500">Motor or engine no.</Label>
         <Input value={formData.engineNumber} onChange={(e) => setFormData({ ...formData, engineNumber: e.target.value })} />

@@ -3,7 +3,6 @@ import { createPortal } from 'react-dom';
 import { Play, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { TripTimer } from '../trips/TripTimer';
-import { ManualTripForm } from '../trips/ManualTripForm';
 import { TripFareDialog, type TripFareInitialData } from '../trips/TripFareDialog';
 import { PendingCatalogRequestsDrawer } from '../vehicles/PendingCatalogRequestsDrawer';
 import { useAuth } from '../../contexts/AuthContext';
@@ -35,17 +34,17 @@ function hasActiveTimerSession(): boolean {
 }
 
 /**
- * Fleet manual "Start Trip" on the mint home.
- * Small pill button → full-screen sheet hosting the live TripTimer; completion
- * flows into TripFareDialog → createManualTrip → api.saveTrips (same path as
- * the legacy dashboard). Auto-reopens when a persisted timer session exists.
+ * Fleet "Start Trip" on the mint home.
+ * Small pill button → full-screen sheet hosting the live TripTimer only
+ * (no after-the-fact manual entry — drivers must record trips live).
+ * Completion flows into TripFareDialog → createManualTrip → api.saveTrips.
+ * Auto-reopens when a persisted timer session exists.
  */
 export function FleetStartTripLauncher() {
   const { user } = useAuth();
   const { driverRecord } = useCurrentDriver();
 
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [manualFormOpen, setManualFormOpen] = useState(false);
   const [fareDialogOpen, setFareDialogOpen] = useState(false);
   const [pendingDrawerOpen, setPendingDrawerOpen] = useState(false);
   const [tripInitialData, setTripInitialData] = useState<TripFareInitialData | undefined>(undefined);
@@ -125,7 +124,6 @@ export function FleetStartTripLauncher() {
         description: `$${data.amount} on ${data.date}`,
       });
       setFareDialogOpen(false);
-      setManualFormOpen(false);
       setActiveSession(false);
       setSheetOpen(false);
     } catch (e: unknown) {
@@ -171,28 +169,19 @@ export function FleetStartTripLauncher() {
           <div className="fixed inset-0 z-[42] flex flex-col bg-[#f7f9fb] dark:bg-slate-950">
             <div className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top,0px))] dark:border-slate-800 dark:bg-slate-900">
               <div>
-                <h2 className="text-base font-bold text-slate-900 dark:text-white">Manual Trip</h2>
+                <h2 className="text-base font-bold text-slate-900 dark:text-white">Start Trip</h2>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
                   Walk-ups, phone bookings, other platforms
                 </p>
               </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setManualFormOpen(true)}
-                  className="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-                >
-                  Enter manually
-                </button>
-                <button
-                  type="button"
-                  onClick={closeSheet}
-                  className="rounded-full p-2 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
-                  aria-label="Close"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={closeSheet}
+                className="rounded-full p-2 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+                aria-label="Close"
+              >
+                <X className="h-5 w-5" />
+              </button>
             </div>
             <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))]">
               <TripTimer onComplete={handleTimerComplete} />
@@ -207,14 +196,6 @@ export function FleetStartTripLauncher() {
         initialData={tripInitialData}
         defaultVehicleId={defaultVehicleId}
         onSubmit={handleManualTripSubmit}
-      />
-
-      <ManualTripForm
-        open={manualFormOpen}
-        onOpenChange={setManualFormOpen}
-        onSubmit={handleManualTripSubmit}
-        isAdmin={false}
-        defaultVehicleId={defaultVehicleId}
       />
 
       <PendingCatalogRequestsDrawer

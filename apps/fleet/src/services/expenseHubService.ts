@@ -154,6 +154,56 @@ export const expenseHubService = {
     });
   },
 
+  /**
+   * Bulk create via existing POST /vendors (one request each).
+   * Skips blanks and case-insensitive duplicates against current list + within the batch.
+   */
+  async createVendorsBulk(body: {
+    names?: string[];
+    text?: string;
+    categoryDefault?: string;
+    notes?: string;
+  }) {
+    const rawNames: string[] = Array.isArray(body.names)
+      ? body.names.map((n) => String(n || '').trim())
+      : String(body.text || '')
+          .split(/\r?\n/)
+          .map((n) => n.trim());
+    const names = rawNames.filter(Boolean);
+    if (names.length === 0) throw new Error('At least one vendor name is required');
+    if (names.length > 100) throw new Error('Maximum 100 vendors per bulk add');
+
+    const existing = await this.listVendors();
+    const seen = new Set(
+      (existing.items || []).map((v) => v.name.trim().toLowerCase()).filter(Boolean),
+    );
+
+    const created: ExpenseVendor[] = [];
+    const skipped: string[] = [];
+
+    for (const name of names) {
+      const key = name.toLowerCase();
+      if (seen.has(key)) {
+        skipped.push(name);
+        continue;
+      }
+      seen.add(key);
+      const result = await this.createVendor({
+        name,
+        categoryDefault: body.categoryDefault,
+        notes: body.notes,
+      });
+      created.push(result.data);
+    }
+
+    return {
+      success: true,
+      created,
+      skipped,
+      summary: { created: created.length, skipped: skipped.length },
+    };
+  },
+
   migrateDryRun() {
     return hubFetch<Record<string, unknown>>('/migrate/dry-run', { method: 'POST', body: '{}' });
   },

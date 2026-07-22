@@ -1222,6 +1222,107 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
                                  }}
                                />
                              </div>
+                             <div className="mt-3 max-w-lg rounded-lg border border-slate-200 bg-slate-50 p-3">
+                               <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                                 Jamaica fitness class
+                               </p>
+                               <p className="mt-1 text-xs text-slate-500">
+                                 Used by Expense Hub Fitness permit rules.
+                               </p>
+                               <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                 <div className="space-y-1.5">
+                                   <Label className="text-xs text-slate-500">Usage category</Label>
+                                   <Select
+                                     value={vehicle.usageCategory || 'none'}
+                                     onValueChange={async (v) => {
+                                       const usageCategory =
+                                         v === 'none'
+                                           ? undefined
+                                           : (v as Vehicle['usageCategory']);
+                                       const updatedVehicle = {
+                                         ...vehicle,
+                                         usageCategory,
+                                         fitnessFirstRegistration:
+                                           usageCategory === 'Commercial'
+                                             ? vehicle.fitnessFirstRegistration
+                                             : undefined,
+                                       };
+                                       try {
+                                         await api.saveVehicle(updatedVehicle);
+                                         onUpdate?.(updatedVehicle);
+                                         toast.success('Usage category updated');
+                                       } catch (e: any) {
+                                         toast.error(e?.message || 'Failed to update');
+                                       }
+                                     }}
+                                   >
+                                     <SelectTrigger className="min-h-10 bg-white">
+                                       <SelectValue placeholder="Not set" />
+                                     </SelectTrigger>
+                                     <SelectContent>
+                                       <SelectItem value="none">Not set</SelectItem>
+                                       <SelectItem value="Private">Private / SUV</SelectItem>
+                                       <SelectItem value="Motorcycle">Motorcycle</SelectItem>
+                                       <SelectItem value="Commercial">Commercial</SelectItem>
+                                       <SelectItem value="PPV">Public passenger (PPV)</SelectItem>
+                                       <SelectItem value="Trailer">Trailer / heavy tractor</SelectItem>
+                                     </SelectContent>
+                                   </Select>
+                                 </div>
+                                 <div className="space-y-1.5">
+                                   <Label className="text-xs text-slate-500">Plate class</Label>
+                                   <Select
+                                     value={vehicle.plateClass || 'none'}
+                                     onValueChange={async (v) => {
+                                       const updatedVehicle = {
+                                         ...vehicle,
+                                         plateClass:
+                                           v === 'none' ? undefined : (v as Vehicle['plateClass']),
+                                       };
+                                       try {
+                                         await api.saveVehicle(updatedVehicle);
+                                         onUpdate?.(updatedVehicle);
+                                         toast.success('Plate class updated');
+                                       } catch (e: any) {
+                                         toast.error(e?.message || 'Failed to update');
+                                       }
+                                     }}
+                                   >
+                                     <SelectTrigger className="min-h-10 bg-white">
+                                       <SelectValue placeholder="Not set" />
+                                     </SelectTrigger>
+                                     <SelectContent>
+                                       <SelectItem value="none">Not set</SelectItem>
+                                       <SelectItem value="White">White</SelectItem>
+                                       <SelectItem value="Green">Green</SelectItem>
+                                       <SelectItem value="Red">Red</SelectItem>
+                                     </SelectContent>
+                                   </Select>
+                                 </div>
+                               </div>
+                               {vehicle.usageCategory === 'Commercial' && (
+                                 <label className="mt-3 flex items-center gap-2 text-sm text-slate-700">
+                                   <input
+                                     type="checkbox"
+                                     checked={!!vehicle.fitnessFirstRegistration}
+                                     onChange={async (e) => {
+                                       const updatedVehicle = {
+                                         ...vehicle,
+                                         fitnessFirstRegistration: e.target.checked,
+                                       };
+                                       try {
+                                         await api.saveVehicle(updatedVehicle);
+                                         onUpdate?.(updatedVehicle);
+                                         toast.success('First registration flag updated');
+                                       } catch (err: any) {
+                                         toast.error(err?.message || 'Failed to update');
+                                       }
+                                     }}
+                                   />
+                                   First registration (brand-new commercial fitness)
+                                 </label>
+                               )}
+                             </div>
                      </div>
                  </div>
              </div>

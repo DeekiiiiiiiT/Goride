@@ -35,11 +35,25 @@ export type ExpenseVendor = {
   updatedAt: string;
 };
 
+export type ExpensePermitType = 'fitness' | 'registration' | 'other';
+
+export type ExpenseRuleVehicleOverride = {
+  vehicleId: string;
+  amount?: number;
+  validityYears?: 1 | 3 | 5;
+  startDateOverride?: string;
+  startTimeOverride?: string;
+  endDateOverride?: string;
+  endTimeOverride?: string;
+};
+
 export type ExpenseRuleGroup = {
   id: string;
   organizationId?: string;
   name: string;
   category: ExpenseCategory;
+  /** When category is Permits — Fitness uses Jamaica matrix bucketing. */
+  permitType?: ExpensePermitType;
   vendorId?: string;
   vendorName?: string;
   /** Template amount; assignments may override. */
@@ -75,6 +89,8 @@ export type ExpenseRuleAssignment = {
   /** Stable link to legacy FixedExpenseConfig id (same as assignment id by default). */
   fixedExpenseConfigId: string;
   amountOverride?: number;
+  /** Jamaica fitness certificate length when permitType is fitness. */
+  validityYears?: 1 | 3 | 5;
   startDateOverride?: string;
   startTimeOverride?: string;
   endDateOverride?: string;
@@ -167,7 +183,7 @@ export type ExpenseBulkPreview = {
   excludedVehicleIds: string[];
   projectedAnnualTotal: number;
   estimatedOccurrenceCount: number;
-  overrides: Array<{ vehicleId: string; amount: number }>;
+  overrides: ExpenseRuleVehicleOverride[];
 };
 
 export type JournalLine = {

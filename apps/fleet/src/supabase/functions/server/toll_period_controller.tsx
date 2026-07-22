@@ -94,6 +94,12 @@ function resolvePeriodBucket(tx: any): "needs-review" | "underpaid-claims" | "de
     (reasonCode.startsWith("ORPHAN_") || !tx.matchedTripId);
 
   if (isOrphanPersonal || stage === "personal_use_pending" || tx.matchStatus === "orphan_personal") {
+    // Stale personal pin: a later rematch can flip the persisted match type to
+    // underpaid/deadhead — money buckets win (mirrors resolveWizardBucket).
+    if (!isOrphanPersonal) {
+      if (tx.matchTypeCode === "AMOUNT_VARIANCE") return "underpaid-claims";
+      if (tx.matchTypeCode === "DEADHEAD_MATCH") return "deadhead";
+    }
     return "personal-use";
   }
 
