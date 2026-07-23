@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
   CheckCircle2,
+  ClipboardCheck,
   Loader2,
   Scan,
 } from "lucide-react";
@@ -27,17 +28,25 @@ import { API_ENDPOINTS } from "../../services/apiConfig";
 import { MAINTENANCE_SCHEDULE_PRESETS } from "../../constants/maintenanceSchedulePresets";
 import { inferPackageIconKey } from "../../constants/maintenanceCategoryIcons";
 import { MaintenanceIcon } from "./MaintenanceIcon";
+import { MaintenanceInspectionPanel } from "./MaintenanceInspectionPanel";
 import type {
   CatalogMaintenanceTaskOption,
   MaintenanceCategoryFieldDef,
+  MaintenanceLineAction,
   MaintenanceLog,
   MaintenanceLogLine,
   MaintenanceServiceCategory,
 } from "../../types/maintenance";
-import { sumMaintenanceLogLines } from "../../types/maintenance";
+import {
+  formatMaintenanceLineLabel,
+  groupCategoriesBySystem,
+  MAINTENANCE_LINE_ACTIONS,
+  sumMaintenanceLogLines,
+} from "../../types/maintenance";
+import type { CompatiblePartsItem } from "../../types/partSourcing";
 
-type DialogStep = "pick" | "categories" | "form" | "review";
-type LogMode = "package" | "quick_job";
+type DialogStep = "pick" | "system" | "component" | "form" | "inspect" | "review";
+type LogMode = "package" | "quick_job" | "inspect";
 
 type PackageChoice = {
   id: string;
@@ -46,7 +55,10 @@ type PackageChoice = {
   iconKey: string;
   templateId?: string;
   categories: MaintenanceServiceCategory[];
+  dueKind?: CatalogMaintenanceTaskOption["dueKind"];
 };
+
+const TIRE_BRAKE_POSITIONS = ["LF", "RF", "LR", "RR"] as const;
 
 export interface LogMaintenanceServiceDialogProps {
   open: boolean;
@@ -82,6 +94,8 @@ function syntheticCategoriesFromNames(names: string[]): MaintenanceServiceCatego
     field_schema: defaultFieldSchema(),
     quick_job_eligible: false,
     sort_order: index,
+    kind: "component" as const,
+    parent_id: null,
     created_at: "",
     updated_at: "",
   }));
@@ -90,7 +104,9 @@ function syntheticCategoriesFromNames(names: string[]): MaintenanceServiceCatego
 function packageFromCatalog(t: CatalogMaintenanceTaskOption): PackageChoice {
   const cats =
     t.categories && t.categories.length > 0
-      ? t.categories
+      ? t.categories.filter(
+          (c) => c.kind !== "system" && !String(c.code || "").startsWith("sys_"),
+        )
       : syntheticCategoriesFromNames(t.checklistLines);
   return {
     id: t.templateId,
@@ -99,6 +115,7 @@ function packageFromCatalog(t: CatalogMaintenanceTaskOption): PackageChoice {
     iconKey: t.iconKey || inferPackageIconKey(t.label),
     templateId: t.templateId,
     categories: cats,
+    dueKind: t.dueKind,
   };
 }
 
@@ -118,7 +135,6 @@ function emptyValuesForCategory(cat: MaintenanceServiceCategory): Record<string,
   for (const field of cat.field_schema?.fields || []) {
     if (field.type === "boolean") values[field.key] = false;
     else if (field.type === "number") {
-      // Prefill qty=1 for tires (and similar qty fields on tire categories)
       if (field.key === "qty" && (cat.code === "tires" || cat.icon_key === "tires")) {
         values[field.key] = 1;
       } else {
@@ -139,24 +155,78 @@ function numFrom(v: unknown): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
+function needsPositions(cat: MaintenanceServiceCategory): boolean {
+  const hay = `${cat.code} ${cat.name} ${cat.icon_key}`.toLowerCase();
+  return /tire|brake|wheel/.test(hay);
+}
+
+type LineExtras = {
+  action: MaintenanceLineAction;
+  laborHours: number | null;
+  laborRate: number | null;
+  brand: string;
+  partNumber: string;
+  positions: string[];
+  warranty: boolean;
+  complimentary: boolean;
+  partId: string | null;
+  system: MaintenanceServiceCategory | null;
+};
+
+function defaultExtras(system: MaintenanceServiceCategory | null = null): LineExtras {
+  return {
+    action: "replace",
+    laborHours: null,
+    laborRate: null,
+    brand: "",
+    partNumber: "",
+    positions: [],
+    warranty: false,
+    complimentary: false,
+    partId: null,
+    system,
+  };
+}
+
 function lineFromCategoryValues(
   cat: MaintenanceServiceCategory,
   values: Record<string, string | number | boolean | null>,
+  extras: LineExtras,
 ): MaintenanceLogLine {
   const isSynthetic = cat.id.startsWith("synthetic-");
   const conditionRaw = values.condition;
+  const hours = extras.laborHours;
+  const rate = extras.laborRate;
+  let labor = numFrom(values.labor);
+  if (hours != null && hours > 0 && rate != null && rate > 0) {
+    labor = hours * rate;
+  }
+  if (extras.complimentary) labor = 0;
+
   return {
     categoryId: isSynthetic ? undefined : cat.id,
     categoryCode: cat.code,
     categoryName: cat.name,
+    systemId: extras.system?.id,
+    systemCode: extras.system?.code,
+    systemName: extras.system?.name,
+    action: extras.action,
     qty: numFrom(values.qty),
     unitPrice: numFrom(values.unit_price),
     material: numFrom(values.material),
-    labor: numFrom(values.labor),
+    labor,
+    laborHours: hours ?? undefined,
+    laborRate: rate ?? undefined,
     condition:
       typeof conditionRaw === "string" && conditionRaw
         ? conditionRaw
         : undefined,
+    positions: extras.positions.length ? [...extras.positions] : undefined,
+    brand: extras.brand.trim() || undefined,
+    partNumber: extras.partNumber.trim() || undefined,
+    warranty: extras.warranty || undefined,
+    complimentary: extras.complimentary || undefined,
+    partId: extras.partId || undefined,
     notes: typeof values.notes === "string" ? values.notes : undefined,
     values: { ...values },
   };
@@ -166,14 +236,30 @@ function lineTotalPreview(line: MaintenanceLogLine): number {
   return sumMaintenanceLogLines([line]);
 }
 
+function lineMatchKey(line: MaintenanceLogLine): string {
+  return `${line.categoryId || ""}|${line.categoryCode}|${line.categoryName}|${line.recommended ? "r" : "n"}`;
+}
+
+function categoryMatchLine(cat: MaintenanceServiceCategory, line: MaintenanceLogLine): boolean {
+  if (line.recommended) return false;
+  return (
+    (Boolean(line.categoryId) && line.categoryId === cat.id) ||
+    (!line.categoryId && line.categoryCode === cat.code && line.categoryName === cat.name)
+  );
+}
+
 function stepTitle(step: DialogStep): string {
   switch (step) {
     case "pick":
       return "Add Service Log";
-    case "categories":
-      return "Select Categories";
+    case "system":
+      return "Select Component";
+    case "component":
+      return "Select Components";
     case "form":
-      return "Category Details";
+      return "Component Details";
+    case "inspect":
+      return "Digital Inspection";
     case "review":
       return "Review & Save";
     default:
@@ -181,16 +267,22 @@ function stepTitle(step: DialogStep): string {
   }
 }
 
-function stepDescription(step: DialogStep, packageLabel?: string): string {
+function stepDescription(step: DialogStep, packageLabel?: string, systemName?: string): string {
   switch (step) {
     case "pick":
-      return "Choose a service package or a quick job.";
-    case "categories":
+      return "Choose a service package, system quick job, or open a digital inspection.";
+    case "system":
+      return systemName
+        ? `Pick a component under ${systemName}.`
+        : "Pick a component under this system.";
+    case "component":
       return packageLabel
-        ? `Tap categories to log for ${packageLabel}.`
-        : "Select the work performed.";
+        ? `Select components to log for ${packageLabel}.`
+        : "Select the components worked on.";
     case "form":
-      return "Enter commercial details for this category.";
+      return "Choose an action and enter commercial details.";
+    case "inspect":
+      return "Mark each item pass, attention, or fail. Failures can add recommended work.";
     case "review":
       return "Confirm totals, odometer, and provider before saving.";
     default:
@@ -212,14 +304,23 @@ export function LogMaintenanceServiceDialog({
   const [scanLoading, setScanLoading] = useState(false);
   const [quickJobsLoading, setQuickJobsLoading] = useState(false);
   const [quickJobs, setQuickJobs] = useState<MaintenanceServiceCategory[]>([]);
+  const [allSystems, setAllSystems] = useState<MaintenanceServiceCategory[]>([]);
+  const [systemComponents, setSystemComponents] = useState<MaintenanceServiceCategory[]>([]);
+  const [systemComponentsLoading, setSystemComponentsLoading] = useState(false);
 
   const [logMode, setLogMode] = useState<LogMode>("package");
   const [selectedPackage, setSelectedPackage] = useState<PackageChoice | null>(null);
+  const [selectedSystem, setSelectedSystem] = useState<MaintenanceServiceCategory | null>(null);
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([]);
   const [activeCategory, setActiveCategory] = useState<MaintenanceServiceCategory | null>(null);
   const [fieldValues, setFieldValues] = useState<Record<string, string | number | boolean | null>>({});
+  const [lineExtras, setLineExtras] = useState<LineExtras>(defaultExtras());
   const [lines, setLines] = useState<MaintenanceLogLine[]>([]);
   const [markPackageComplete, setMarkPackageComplete] = useState(true);
+  const [formQueue, setFormQueue] = useState<MaintenanceServiceCategory[]>([]);
+
+  const [compatibleParts, setCompatibleParts] = useState<CompatiblePartsItem[]>([]);
+  const [partsLoading, setPartsLoading] = useState(false);
 
   const [formMeta, setFormMeta] = useState({
     date: new Date().toISOString().split("T")[0],
@@ -240,16 +341,41 @@ export function LogMaintenanceServiceDialog({
     return MAINTENANCE_SCHEDULE_PRESETS.map(packageFromPreset);
   }, [catalogTemplates]);
 
+  const catalogById = useMemo(() => {
+    const m = new Map<string, MaintenanceServiceCategory>();
+    for (const s of allSystems) m.set(s.id, s);
+    for (const c of systemComponents) m.set(c.id, c);
+    for (const pkg of packageChoices) {
+      for (const c of pkg.categories) m.set(c.id, c);
+    }
+    for (const q of quickJobs) m.set(q.id, q);
+    return m;
+  }, [allSystems, systemComponents, packageChoices, quickJobs]);
+
+  const packageGrouped = useMemo(() => {
+    if (!selectedPackage) return [];
+    const components = selectedPackage.categories;
+    const systemsForGroup =
+      allSystems.length > 0
+        ? allSystems
+        : components
+            .map((c) => (c.parent_id ? catalogById.get(c.parent_id) : null))
+            .filter((s): s is MaintenanceServiceCategory => Boolean(s));
+    const uniqSystems = new Map<string, MaintenanceServiceCategory>();
+    for (const s of systemsForGroup) uniqSystems.set(s.id, s);
+    return groupCategoriesBySystem([...uniqSystems.values(), ...components]);
+  }, [selectedPackage, allSystems, catalogById]);
+
   const totalCost = useMemo(() => sumMaintenanceLogLines(lines), [lines]);
 
   const draftLine = useMemo(() => {
     if (!activeCategory) return null;
-    return lineFromCategoryValues(activeCategory, fieldValues);
-  }, [activeCategory, fieldValues]);
+    return lineFromCategoryValues(activeCategory, fieldValues, lineExtras);
+  }, [activeCategory, fieldValues, lineExtras]);
 
   const draftLineTotal = draftLine ? lineTotalPreview(draftLine) : 0;
 
-  // Reset + load quick jobs when dialog opens
+  // Reset + load systems / quick jobs when dialog opens
   useEffect(() => {
     if (!open) return;
 
@@ -270,8 +396,13 @@ export function LogMaintenanceServiceDialog({
     setPendingInvoiceFile(null);
     setMarkPackageComplete(true);
     setFieldValues({});
+    setLineExtras(defaultExtras());
     setActiveCategory(null);
     setSelectedCategoryIds([]);
+    setSelectedSystem(null);
+    setSystemComponents([]);
+    setFormQueue([]);
+    setCompatibleParts([]);
 
     const existingLines = initialLog?.lines?.length ? [...initialLog.lines] : [];
     setLines(existingLines);
@@ -283,7 +414,7 @@ export function LogMaintenanceServiceDialog({
         : hasTemplate || initialLog?.logMode === "package"
           ? "package"
           : existingLines.length
-            ? (initialLog?.logMode as LogMode) || "quick_job"
+            ? "quick_job"
             : "package";
     setLogMode(mode);
 
@@ -310,16 +441,29 @@ export function LogMaintenanceServiceDialog({
 
     let cancelled = false;
     setQuickJobsLoading(true);
-    api
-      .listQuickJobCategories()
-      .then((res) => {
-        if (!cancelled) setQuickJobs(res.items || []);
+    Promise.all([
+      api.listQuickJobCategories().catch((err) => {
+        console.error(err);
+        return { items: [] as MaintenanceServiceCategory[] };
+      }),
+      api.listMaintenanceSystems().catch((err) => {
+        console.error(err);
+        return { items: [] as MaintenanceServiceCategory[] };
+      }),
+    ])
+      .then(([qj, systems]) => {
+        if (cancelled) return;
+        const qItems = qj.items || [];
+        const sItems = systems.items || [];
+        setQuickJobs(qItems.length ? qItems : sItems.filter((s) => s.quick_job_eligible));
+        setAllSystems(sItems.length ? sItems : qItems.filter((s) => s.kind === "system" || s.code?.startsWith("sys_")));
       })
       .catch((err) => {
         console.error(err);
         if (!cancelled) {
           setQuickJobs([]);
-          toast.error("Could not load quick jobs");
+          setAllSystems([]);
+          toast.error("Could not load systems");
         }
       })
       .finally(() => {
@@ -332,40 +476,128 @@ export function LogMaintenanceServiceDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reset when dialog opens
   }, [open, vehicleId, defaultOdo, catalogTemplates, initialLog]);
 
-  const openCategoryForm = (cat: MaintenanceServiceCategory) => {
-    const existing = lines.find(
-      (l) =>
-        (l.categoryId && l.categoryId === cat.id) ||
-        (!l.categoryId && l.categoryCode === cat.code && l.categoryName === cat.name),
-    );
+  // Load compatible parts when editing a component form
+  useEffect(() => {
+    if (step !== "form" || !activeCategory || !vehicleId) {
+      setCompatibleParts([]);
+      return;
+    }
+    if (activeCategory.id.startsWith("synthetic-")) {
+      setCompatibleParts([]);
+      return;
+    }
+    let cancelled = false;
+    setPartsLoading(true);
+    api
+      .getCompatibleParts(vehicleId, activeCategory.id)
+      .then((res) => {
+        if (!cancelled) setCompatibleParts(res.items || []);
+      })
+      .catch(() => {
+        if (!cancelled) setCompatibleParts([]);
+      })
+      .finally(() => {
+        if (!cancelled) setPartsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [step, activeCategory, vehicleId]);
+
+  const resolveSystemForComponent = (
+    cat: MaintenanceServiceCategory,
+  ): MaintenanceServiceCategory | null => {
+    if (selectedSystem) return selectedSystem;
+    if (cat.parent_id) {
+      const fromAll = allSystems.find((s) => s.id === cat.parent_id);
+      if (fromAll) return fromAll;
+      const fromCat = catalogById.get(cat.parent_id);
+      if (fromCat) return fromCat;
+    }
+    return null;
+  };
+
+  const openCategoryForm = (
+    cat: MaintenanceServiceCategory,
+    systemOverride?: MaintenanceServiceCategory | null,
+  ) => {
+    const existing = lines.find((l) => categoryMatchLine(cat, l));
+    const system = systemOverride ?? resolveSystemForComponent(cat);
     setActiveCategory(cat);
     setFieldValues(
       existing?.values
         ? { ...emptyValuesForCategory(cat), ...existing.values }
         : emptyValuesForCategory(cat),
     );
+    setLineExtras({
+      action: (existing?.action as MaintenanceLineAction) || "replace",
+      laborHours: existing?.laborHours ?? null,
+      laborRate: existing?.laborRate ?? null,
+      brand: existing?.brand || "",
+      partNumber: existing?.partNumber || "",
+      positions: existing?.positions ? [...existing.positions] : [],
+      warranty: Boolean(existing?.warranty),
+      complimentary: Boolean(existing?.complimentary),
+      partId: existing?.partId || null,
+      system,
+    });
     setStep("form");
   };
 
   const handlePickPackage = (pkg: PackageChoice) => {
     setLogMode("package");
     setSelectedPackage(pkg);
+    setSelectedSystem(null);
     setSelectedCategoryIds([]);
     setLines([]);
+    setFormQueue([]);
     setFormMeta((prev) => ({ ...prev, type: pkg.label }));
-    setStep("categories");
+    setStep("component");
   };
 
-  const handlePickQuickJob = (cat: MaintenanceServiceCategory) => {
+  const handlePickSystem = async (system: MaintenanceServiceCategory) => {
     setLogMode("quick_job");
     setSelectedPackage(null);
-    setSelectedCategoryIds([cat.id]);
+    setSelectedSystem(system);
+    setSelectedCategoryIds([]);
     setLines([]);
-    setFormMeta((prev) => ({ ...prev, type: cat.name }));
-    openCategoryForm(cat);
+    setFormQueue([]);
+    setFormMeta((prev) => ({ ...prev, type: system.name }));
+    setStep("system");
+    setSystemComponentsLoading(true);
+    try {
+      const res = await api.listSystemComponents(system.id);
+      let items = res.items || [];
+      if (!items.length) {
+        const all = await api.listMaintenanceCategories("component");
+        items = (all.items || []).filter((c) => c.parent_id === system.id);
+      }
+      setSystemComponents(items);
+    } catch (err) {
+      console.error(err);
+      setSystemComponents([]);
+      toast.error("Could not load components");
+    } finally {
+      setSystemComponentsLoading(false);
+    }
   };
 
-  const handleCategoryTap = (cat: MaintenanceServiceCategory) => {
+  const handleOpenInspection = () => {
+    setLogMode("inspect");
+    setSelectedPackage(null);
+    setSelectedSystem(null);
+    setSelectedCategoryIds([]);
+    setFormQueue([]);
+    setFormMeta((prev) => ({ ...prev, type: "Digital Inspection" }));
+    setStep("inspect");
+  };
+
+  const handlePickQuickComponent = (cat: MaintenanceServiceCategory) => {
+    setSelectedCategoryIds([cat.id]);
+    openCategoryForm(cat, selectedSystem);
+  };
+
+  const handleComponentTap = (cat: MaintenanceServiceCategory) => {
     setSelectedCategoryIds((prev) =>
       prev.includes(cat.id) ? prev : [...prev, cat.id],
     );
@@ -379,56 +611,64 @@ export function LogMaintenanceServiceDialog({
     );
   };
 
+  const advanceAfterForm = (savedCat: MaintenanceServiceCategory) => {
+    if (formQueue.length > 0) {
+      const [next, ...rest] = formQueue;
+      setFormQueue(rest);
+      openCategoryForm(next);
+      return;
+    }
+    if (logMode === "quick_job") {
+      setFormMeta((prev) => ({ ...prev, type: savedCat.name }));
+      setActiveCategory(null);
+      setStep("review");
+      return;
+    }
+    if (logMode === "package") {
+      setActiveCategory(null);
+      setStep("component");
+      return;
+    }
+    setActiveCategory(null);
+    setStep("review");
+  };
+
   const handleSaveCategory = () => {
     if (!activeCategory) return;
-    const line = lineFromCategoryValues(activeCategory, fieldValues);
+    const line = lineFromCategoryValues(activeCategory, fieldValues, lineExtras);
     setLines((prev) => {
-      const without = prev.filter(
-        (l) =>
-          !(
-            (l.categoryId && l.categoryId === activeCategory.id) ||
-            (!l.categoryId &&
-              l.categoryCode === activeCategory.code &&
-              l.categoryName === activeCategory.name)
-          ),
-      );
+      const without = prev.filter((l) => !categoryMatchLine(activeCategory, l));
       return [...without, line];
     });
     setSelectedCategoryIds((prev) =>
       prev.includes(activeCategory.id) ? prev : [...prev, activeCategory.id],
     );
-
-    if (logMode === "quick_job") {
-      setFormMeta((prev) => ({ ...prev, type: activeCategory.name }));
-      setActiveCategory(null);
-      setStep("review");
-      return;
-    }
-
-    setActiveCategory(null);
-    setStep("categories");
+    advanceAfterForm(activeCategory);
   };
 
-  const handleContinueFromCategories = () => {
+  const handleContinueFromComponents = () => {
     if (!selectedPackage || selectedCategoryIds.length < 1) return;
     const cats = selectedPackage.categories;
-    const nextNeedingForm = selectedCategoryIds
+    const needingForm = selectedCategoryIds
       .map((id) => cats.find((c) => c.id === id))
-      .filter(Boolean)
-      .find((cat) => {
-        if (!cat) return false;
-        return !lines.some(
-          (l) =>
-            (l.categoryId && l.categoryId === cat.id) ||
-            (!l.categoryId && l.categoryCode === cat.code && l.categoryName === cat.name),
-        );
-      });
+      .filter((cat): cat is MaintenanceServiceCategory => Boolean(cat))
+      .filter((cat) => !lines.some((l) => categoryMatchLine(cat, l)));
 
-    if (nextNeedingForm) {
-      openCategoryForm(nextNeedingForm);
+    if (needingForm.length > 0) {
+      const [first, ...rest] = needingForm;
+      setFormQueue(rest);
+      openCategoryForm(first);
       return;
     }
     setStep("review");
+  };
+
+  const goToInspectOrReview = () => {
+    if (logMode === "inspect") {
+      setStep("review");
+      return;
+    }
+    setStep("inspect");
   };
 
   const handleServiceScan = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -471,13 +711,52 @@ export function LogMaintenanceServiceDialog({
     }
   };
 
+  const buildSavePayload = (logId: string, invoiceUrl: string) => {
+    const effectiveMode: "package" | "quick_job" =
+      logMode === "package" ? "package" : "quick_job";
+    const advanceSchedule = effectiveMode === "package" && markPackageComplete;
+    const templateId = advanceSchedule
+      ? selectedPackage?.templateId || initialLog?.templateId
+      : undefined;
+
+    const packageLabel = selectedPackage?.label;
+    const typeLabel =
+      effectiveMode === "package"
+        ? packageLabel || formMeta.type || "Regular Maintenance"
+        : lines.find((l) => !l.recommended)?.categoryName ||
+          lines[0]?.categoryName ||
+          formMeta.type;
+
+    return {
+      ...formMeta,
+      vehicleId,
+      id: logId,
+      invoiceUrl,
+      lines,
+      cost: sumMaintenanceLogLines(lines),
+      currency: formMeta.currency || "JMD",
+      odo: Number(formMeta.odo) || 0,
+      status: "Completed" as const,
+      logMode: advanceSchedule ? ("package" as const) : ("quick_job" as const),
+      ...(advanceSchedule && templateId ? { templateId } : {}),
+      type: typeLabel,
+      checklist: lines.filter((l) => !l.declined).map((l) => formatMaintenanceLineLabel(l)),
+      packageComplete: advanceSchedule,
+    };
+  };
+
   const handleSave = async () => {
     if (!formMeta.date) {
       toast.error("Please fill in required fields");
       return;
     }
+    const activeLines = lines.filter((l) => !l.declined);
+    if (!activeLines.length && !lines.length) {
+      toast.error("Add at least one line before saving");
+      return;
+    }
     if (!lines.length) {
-      toast.error("Add at least one category line before saving");
+      toast.error("Add at least one line before saving");
       return;
     }
 
@@ -496,38 +775,71 @@ export function LogMaintenanceServiceDialog({
         invoiceUrl = uploadRes.url;
       }
 
-      // Default package visit advances schedule (logMode=package + templateId).
-      // Unchecking "Mark package complete" saves lines without advancing schedule.
-      const advanceSchedule = logMode === "package" && markPackageComplete;
-      const templateId = advanceSchedule
-        ? selectedPackage?.templateId || initialLog?.templateId
-        : undefined;
+      const payload = buildSavePayload(logId, invoiceUrl);
+      let result: {
+        ledgerPosted?: boolean;
+        ledgerWarning?: string;
+      } = {};
 
-      const packageLabel = selectedPackage?.label;
-      const typeLabel =
-        logMode === "package"
-          ? packageLabel || formMeta.type || "Regular Maintenance"
-          : lines[0]?.categoryName || formMeta.type;
+      if (initialLog?.id) {
+        result = await api.updateMaintenanceLog(vehicleId, logId, payload);
+      } else {
+        // Prefer work-order complete path; fall back to log bridge (creates completed WO).
+        try {
+          const wo = await api.createWorkOrder({
+            vehicleId,
+            status: "in_progress",
+            performedAtDate: formMeta.date,
+            odometer: Number(formMeta.odo) || 0,
+            provider: formMeta.provider || null,
+            currency: formMeta.currency || "JMD",
+            templateId: payload.templateId || null,
+            packageComplete: Boolean(payload.packageComplete),
+            logMode: payload.logMode,
+            notes: formMeta.notes || null,
+            invoiceUrl: invoiceUrl || null,
+            lines,
+          });
+          result = await api.completeWorkOrder(wo.id, {
+            performedAtDate: formMeta.date,
+            odometer: Number(formMeta.odo) || 0,
+            provider: formMeta.provider || null,
+            currency: formMeta.currency || "JMD",
+            templateId: payload.templateId || null,
+            packageComplete: Boolean(payload.packageComplete),
+            logMode: payload.logMode,
+            notes: formMeta.notes || null,
+            invoiceUrl: invoiceUrl || null,
+            lines,
+            totalCost: payload.cost,
+          });
+          try {
+            const findings = lines
+              .filter((l) => l.recommended)
+              .map((l) => ({
+                itemId: null as string | null,
+                systemId: l.systemId || null,
+                componentId: l.categoryId || null,
+                status: (l.declined ? "attention" : "fail") as "attention" | "fail",
+                notes: l.notes || null,
+                declined: Boolean(l.declined),
+              }));
+            if (findings.length) {
+              await api.saveInspectionFindings({
+                vehicleId,
+                workOrderId: wo.id,
+                findings,
+              });
+            }
+          } catch (inspErr) {
+            console.warn("Inspection findings save skipped:", inspErr);
+          }
+        } catch (woErr) {
+          console.warn("Work order path failed, using maintenance log bridge:", woErr);
+          result = await api.saveMaintenanceLog(payload);
+        }
+      }
 
-      const payload = {
-        ...formMeta,
-        vehicleId,
-        id: logId,
-        invoiceUrl,
-        lines,
-        cost: sumMaintenanceLogLines(lines),
-        currency: formMeta.currency || "JMD",
-        odo: Number(formMeta.odo) || 0,
-        status: "Completed" as const,
-        logMode: advanceSchedule ? ("package" as const) : ("quick_job" as const),
-        ...(advanceSchedule && templateId ? { templateId } : {}),
-        type: typeLabel,
-        checklist: lines.map((l) => l.categoryName),
-      };
-
-      const result = initialLog?.id
-        ? await api.updateMaintenanceLog(vehicleId, logId, payload)
-        : await api.saveMaintenanceLog(payload);
       if (result.ledgerWarning) {
         toast.warning(result.ledgerWarning);
       } else {
@@ -552,49 +864,44 @@ export function LogMaintenanceServiceDialog({
       onOpenChange(false);
       return;
     }
-    if (step === "categories") {
+    if (step === "system") {
+      setStep("pick");
+      return;
+    }
+    if (step === "component") {
       setStep("pick");
       return;
     }
     if (step === "form") {
-      if (logMode === "quick_job") {
-        setActiveCategory(null);
-        setStep("pick");
-      } else {
-        setActiveCategory(null);
-        setStep("categories");
-      }
+      setActiveCategory(null);
+      if (logMode === "quick_job") setStep("system");
+      else if (logMode === "package") setStep("component");
+      else setStep("pick");
+      return;
+    }
+    if (step === "inspect") {
+      if (logMode === "inspect") setStep("pick");
+      else if (logMode === "package") setStep("component");
+      else if (logMode === "quick_job") setStep("system");
+      else setStep("pick");
       return;
     }
     if (step === "review") {
-      if (logMode === "quick_job") {
-        const cat =
-          quickJobs.find((c) => c.id === selectedCategoryIds[0]) ||
-          (lines[0]
-            ? ({
-                id: lines[0].categoryId || selectedCategoryIds[0] || "qj",
-                code: lines[0].categoryCode,
-                name: lines[0].categoryName,
-                icon_key: "wrench",
-                field_schema: defaultFieldSchema(),
-                quick_job_eligible: true,
-                sort_order: 0,
-                created_at: "",
-                updated_at: "",
-              } satisfies MaintenanceServiceCategory)
-            : null);
-        if (cat) openCategoryForm(cat);
-        else setStep("pick");
-      } else if (selectedPackage) {
-        setStep("categories");
-      } else {
-        setStep("pick");
-      }
+      setStep("inspect");
     }
   };
 
   const setFieldValue = (key: string, value: string | number | boolean | null) => {
     setFieldValues((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const togglePosition = (pos: string) => {
+    setLineExtras((prev) => ({
+      ...prev,
+      positions: prev.positions.includes(pos)
+        ? prev.positions.filter((p) => p !== pos)
+        : [...prev.positions, pos],
+    }));
   };
 
   const renderField = (field: MaintenanceCategoryFieldDef) => {
@@ -605,7 +912,9 @@ export function LogMaintenanceServiceDialog({
           <Checkbox
             id={id}
             checked={Boolean(fieldValues[field.key])}
-            onCheckedChange={(checked) => setFieldValue(field.key, checked === true)}
+            onCheckedChange={(checked: boolean | "indeterminate") =>
+              setFieldValue(field.key, checked === true)
+            }
           />
           <Label htmlFor={id} className="cursor-pointer font-medium">
             {field.label}
@@ -625,7 +934,7 @@ export function LogMaintenanceServiceDialog({
           </Label>
           <Select
             value={selectVal}
-            onValueChange={(v) => setFieldValue(field.key, v)}
+            onValueChange={(v: string) => setFieldValue(field.key, v)}
           >
             <SelectTrigger id={id} className="bg-slate-50 border-slate-200">
               <SelectValue placeholder="Select…" />
@@ -681,11 +990,7 @@ export function LogMaintenanceServiceDialog({
   };
 
   const categoryHasLine = (cat: MaintenanceServiceCategory) =>
-    lines.some(
-      (l) =>
-        (l.categoryId && l.categoryId === cat.id) ||
-        (!l.categoryId && l.categoryCode === cat.code && l.categoryName === cat.name),
-    );
+    lines.some((l) => categoryMatchLine(cat, l));
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -693,7 +998,7 @@ export function LogMaintenanceServiceDialog({
         <DialogHeader className="px-6 py-4 border-b">
           <DialogTitle>{stepTitle(step)}</DialogTitle>
           <DialogDescription>
-            {stepDescription(step, selectedPackage?.shortLabel)}
+            {stepDescription(step, selectedPackage?.shortLabel, selectedSystem?.name)}
           </DialogDescription>
         </DialogHeader>
 
@@ -723,74 +1028,180 @@ export function LogMaintenanceServiceDialog({
 
               <section className="space-y-3">
                 <h3 className="text-sm font-semibold text-slate-900">Quick jobs</h3>
+                <p className="text-xs text-slate-500">Pick a vehicle system, then a component.</p>
                 {quickJobsLoading ? (
                   <div className="flex items-center gap-2 text-sm text-slate-500 py-6 justify-center">
-                    <Loader2 className="w-4 h-4 animate-spin" /> Loading quick jobs…
+                    <Loader2 className="w-4 h-4 animate-spin" /> Loading systems…
                   </div>
                 ) : quickJobs.length === 0 ? (
-                  <p className="text-sm text-slate-500 py-2">No quick jobs available.</p>
+                  <p className="text-sm text-slate-500 py-2">No systems available.</p>
                 ) : (
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    {quickJobs.map((cat) => (
+                    {quickJobs.map((sys) => (
                       <button
-                        key={cat.id}
+                        key={sys.id}
                         type="button"
-                        onClick={() => handlePickQuickJob(cat)}
+                        onClick={() => handlePickSystem(sys)}
                         className="flex flex-col items-center gap-2 p-4 rounded-xl border border-slate-200 bg-white hover:border-indigo-300 hover:bg-indigo-50/40 transition-colors text-center min-h-[108px]"
                       >
                         <div className="bg-slate-100 p-3 rounded-xl text-indigo-600">
-                          <MaintenanceIcon iconKey={cat.icon_key} className="w-6 h-6" />
+                          <MaintenanceIcon iconKey={sys.icon_key} className="w-6 h-6" />
                         </div>
                         <span className="text-sm font-medium text-slate-900 leading-tight">
-                          {cat.name}
+                          {sys.name}
                         </span>
                       </button>
                     ))}
                   </div>
                 )}
               </section>
+
+              <section>
+                <button
+                  type="button"
+                  onClick={handleOpenInspection}
+                  className="w-full flex items-center gap-3 p-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 hover:bg-indigo-50/40 hover:border-indigo-300 transition-colors text-left min-h-11"
+                >
+                  <div className="bg-white p-3 rounded-xl shadow-sm text-indigo-600">
+                    <ClipboardCheck className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">Open digital inspection</p>
+                    <p className="text-xs text-slate-500">
+                      Walk systems pass / attention / fail and add recommended work.
+                    </p>
+                  </div>
+                </button>
+              </section>
             </div>
           )}
 
-          {step === "categories" && selectedPackage && (
+          {step === "system" && selectedSystem && (
             <div className="space-y-4">
-              <p className="text-sm text-slate-500">
-                Selected: {selectedCategoryIds.length} · Logged: {lines.length}
-              </p>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {selectedPackage.categories.map((cat) => {
-                  const selected = selectedCategoryIds.includes(cat.id);
-                  const logged = categoryHasLine(cat);
-                  return (
+              <div className="flex items-center gap-3">
+                <div className="bg-indigo-50 p-3 rounded-xl text-indigo-600">
+                  <MaintenanceIcon iconKey={selectedSystem.icon_key} className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-slate-900">{selectedSystem.name}</h3>
+                  <p className="text-xs text-slate-500">{selectedSystem.code}</p>
+                </div>
+              </div>
+              {systemComponentsLoading ? (
+                <div className="flex items-center gap-2 text-sm text-slate-500 py-8 justify-center">
+                  <Loader2 className="w-4 h-4 animate-spin" /> Loading components…
+                </div>
+              ) : systemComponents.length === 0 ? (
+                <p className="text-sm text-slate-500 py-4">No components under this system.</p>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {systemComponents.map((cat) => (
                     <button
                       key={cat.id}
                       type="button"
-                      onClick={() => handleCategoryTap(cat)}
-                      className={`relative flex flex-col items-center gap-2 p-4 rounded-xl border transition-colors text-center min-h-[108px] ${
-                        selected || logged
-                          ? "border-indigo-300 bg-indigo-50/50"
-                          : "border-slate-200 bg-white hover:border-indigo-200 hover:bg-slate-50"
-                      }`}
+                      onClick={() => handlePickQuickComponent(cat)}
+                      className="flex flex-col items-center gap-2 p-4 rounded-xl border border-slate-200 bg-white hover:border-indigo-300 hover:bg-indigo-50/40 transition-colors text-center min-h-[108px]"
                     >
-                      {(selected || logged) && (
-                        <span
-                          role="presentation"
-                          onClick={(e) => toggleCategorySelected(cat.id, e)}
-                          className="absolute top-2 right-2 text-indigo-600"
-                        >
-                          <CheckCircle2 className="w-4 h-4" />
-                        </span>
-                      )}
-                      <div className="bg-white p-3 rounded-xl shadow-sm text-indigo-600">
+                      <div className="bg-slate-100 p-3 rounded-xl text-indigo-600">
                         <MaintenanceIcon iconKey={cat.icon_key} className="w-6 h-6" />
                       </div>
                       <span className="text-sm font-medium text-slate-900 leading-tight">
                         {cat.name}
                       </span>
                     </button>
-                  );
-                })}
-              </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {step === "component" && selectedPackage && (
+            <div className="space-y-5">
+              <p className="text-sm text-slate-500">
+                Selected: {selectedCategoryIds.length} · Logged:{" "}
+                {lines.filter((l) => !l.recommended).length}
+              </p>
+              {packageGrouped.length === 0 ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {selectedPackage.categories.map((cat) => {
+                    const selected = selectedCategoryIds.includes(cat.id);
+                    const logged = categoryHasLine(cat);
+                    return (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => handleComponentTap(cat)}
+                        className={`relative flex flex-col items-center gap-2 p-4 rounded-xl border transition-colors text-center min-h-[108px] ${
+                          selected || logged
+                            ? "border-indigo-300 bg-indigo-50/50"
+                            : "border-slate-200 bg-white hover:border-indigo-200 hover:bg-slate-50"
+                        }`}
+                      >
+                        {(selected || logged) && (
+                          <span
+                            role="presentation"
+                            onClick={(e) => toggleCategorySelected(cat.id, e)}
+                            className="absolute top-2 right-2 text-indigo-600"
+                          >
+                            <CheckCircle2 className="w-4 h-4" />
+                          </span>
+                        )}
+                        <div className="bg-white p-3 rounded-xl shadow-sm text-indigo-600">
+                          <MaintenanceIcon iconKey={cat.icon_key} className="w-6 h-6" />
+                        </div>
+                        <span className="text-sm font-medium text-slate-900 leading-tight">
+                          {cat.name}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                packageGrouped.map(({ system, components }) =>
+                  components.length === 0 ? null : (
+                    <section key={system.id} className="space-y-3">
+                      <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+                        <MaintenanceIcon iconKey={system.icon_key} className="w-4 h-4 text-indigo-600" />
+                        {system.name}
+                      </h3>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        {components.map((cat) => {
+                          const selected = selectedCategoryIds.includes(cat.id);
+                          const logged = categoryHasLine(cat);
+                          return (
+                            <button
+                              key={cat.id}
+                              type="button"
+                              onClick={() => handleComponentTap(cat)}
+                              className={`relative flex flex-col items-center gap-2 p-4 rounded-xl border transition-colors text-center min-h-[108px] ${
+                                selected || logged
+                                  ? "border-indigo-300 bg-indigo-50/50"
+                                  : "border-slate-200 bg-white hover:border-indigo-200 hover:bg-slate-50"
+                              }`}
+                            >
+                              {(selected || logged) && (
+                                <span
+                                  role="presentation"
+                                  onClick={(e) => toggleCategorySelected(cat.id, e)}
+                                  className="absolute top-2 right-2 text-indigo-600"
+                                >
+                                  <CheckCircle2 className="w-4 h-4" />
+                                </span>
+                              )}
+                              <div className="bg-white p-3 rounded-xl shadow-sm text-indigo-600">
+                                <MaintenanceIcon iconKey={cat.icon_key} className="w-6 h-6" />
+                              </div>
+                              <span className="text-sm font-medium text-slate-900 leading-tight">
+                                {cat.name}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </section>
+                  ),
+                )
+              )}
             </div>
           )}
 
@@ -802,12 +1213,185 @@ export function LogMaintenanceServiceDialog({
                 </div>
                 <div>
                   <h3 className="font-semibold text-slate-900">{activeCategory.name}</h3>
-                  <p className="text-xs text-slate-500">{activeCategory.code}</p>
+                  <p className="text-xs text-slate-500">
+                    {[lineExtras.system?.name, activeCategory.code].filter(Boolean).join(" · ")}
+                  </p>
                 </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Action</Label>
+                <Select
+                  value={lineExtras.action}
+                  onValueChange={(v: string) =>
+                    setLineExtras((prev) => ({ ...prev, action: v as MaintenanceLineAction }))
+                  }
+                >
+                  <SelectTrigger className="bg-slate-50 border-slate-200">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {MAINTENANCE_LINE_ACTIONS.map((a) => (
+                      <SelectItem key={a.value} value={a.value}>
+                        {a.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {(activeCategory.field_schema?.fields || defaultFieldSchema().fields).map(renderField)}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="labor-hours">Labor hours</Label>
+                  <Input
+                    id="labor-hours"
+                    type="number"
+                    step="0.1"
+                    className="bg-slate-50 border-slate-200"
+                    value={lineExtras.laborHours ?? ""}
+                    onChange={(e) =>
+                      setLineExtras((prev) => ({
+                        ...prev,
+                        laborHours: e.target.value === "" ? null : Number(e.target.value),
+                      }))
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="labor-rate">Labor rate</Label>
+                  <Input
+                    id="labor-rate"
+                    type="number"
+                    className="bg-slate-50 border-slate-200"
+                    value={lineExtras.laborRate ?? ""}
+                    onChange={(e) =>
+                      setLineExtras((prev) => ({
+                        ...prev,
+                        laborRate: e.target.value === "" ? null : Number(e.target.value),
+                      }))
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="brand">Brand</Label>
+                  <Input
+                    id="brand"
+                    className="bg-slate-50 border-slate-200"
+                    value={lineExtras.brand}
+                    onChange={(e) =>
+                      setLineExtras((prev) => ({ ...prev, brand: e.target.value }))
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="part-number">Part number</Label>
+                  <Input
+                    id="part-number"
+                    className="bg-slate-50 border-slate-200"
+                    value={lineExtras.partNumber}
+                    onChange={(e) =>
+                      setLineExtras((prev) => ({ ...prev, partNumber: e.target.value }))
+                    }
+                  />
+                </div>
+              </div>
+
+              {needsPositions(activeCategory) && (
+                <div className="space-y-2">
+                  <Label>Positions</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {TIRE_BRAKE_POSITIONS.map((pos) => {
+                      const on = lineExtras.positions.includes(pos);
+                      return (
+                        <button
+                          key={pos}
+                          type="button"
+                          onClick={() => togglePosition(pos)}
+                          className={`min-h-11 min-w-11 px-3 rounded-lg border text-sm font-semibold ${
+                            on
+                              ? "border-indigo-300 bg-indigo-50 text-indigo-800"
+                              : "border-slate-200 bg-white text-slate-700"
+                          }`}
+                        >
+                          {pos}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex flex-col sm:flex-row gap-4">
+                <div className="flex items-center gap-3">
+                  <Checkbox
+                    id="warranty"
+                    checked={lineExtras.warranty}
+                    onCheckedChange={(checked: boolean | "indeterminate") =>
+                      setLineExtras((prev) => ({ ...prev, warranty: checked === true }))
+                    }
+                  />
+                  <Label htmlFor="warranty" className="cursor-pointer">
+                    Warranty
+                  </Label>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Checkbox
+                    id="complimentary"
+                    checked={lineExtras.complimentary}
+                    onCheckedChange={(checked: boolean | "indeterminate") =>
+                      setLineExtras((prev) => ({ ...prev, complimentary: checked === true }))
+                    }
+                  />
+                  <Label htmlFor="complimentary" className="cursor-pointer">
+                    Complimentary labor
+                  </Label>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Link part (optional)</Label>
+                {partsLoading ? (
+                  <p className="text-xs text-slate-500 flex items-center gap-2">
+                    <Loader2 className="w-3 h-3 animate-spin" /> Loading compatible parts…
+                  </p>
+                ) : compatibleParts.length === 0 ? (
+                  <p className="text-xs text-slate-500">No compatible parts for this vehicle/component.</p>
+                ) : (
+                  <Select
+                    value={lineExtras.partId || "__none__"}
+                    onValueChange={(v: string) => {
+                      if (v === "__none__") {
+                        setLineExtras((prev) => ({ ...prev, partId: null }));
+                        return;
+                      }
+                      const item = compatibleParts.find((p) => p.part.id === v);
+                      setLineExtras((prev) => ({
+                        ...prev,
+                        partId: v,
+                        brand: prev.brand || item?.part.name || prev.brand,
+                        partNumber:
+                          prev.partNumber || item?.part.oem_part_number || prev.partNumber,
+                      }));
+                    }}
+                  >
+                    <SelectTrigger className="bg-slate-50 border-slate-200">
+                      <SelectValue placeholder="Select a part…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">None</SelectItem>
+                      {compatibleParts.map((item) => (
+                        <SelectItem key={item.part.id} value={item.part.id}>
+                          {item.part.name}
+                          {item.part.oem_part_number ? ` · ${item.part.oem_part_number}` : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
 
               <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 flex justify-between items-center">
@@ -817,6 +1401,17 @@ export function LogMaintenanceServiceDialog({
                 </span>
               </div>
             </div>
+          )}
+
+          {step === "inspect" && (
+            <MaintenanceInspectionPanel
+              vehicleId={vehicleId}
+              lines={lines}
+              onLinesChange={setLines}
+              catalogById={catalogById}
+              onContinue={() => setStep("review")}
+              onSkip={() => setStep("review")}
+            />
           )}
 
           {step === "review" && (
@@ -881,7 +1476,7 @@ export function LogMaintenanceServiceDialog({
                   <Label>Currency</Label>
                   <Select
                     value={formMeta.currency || "JMD"}
-                    onValueChange={(v) => setFormMeta({ ...formMeta, currency: v })}
+                    onValueChange={(v: string) => setFormMeta({ ...formMeta, currency: v })}
                   >
                     <SelectTrigger className="bg-slate-50 font-medium">
                       <SelectValue />
@@ -907,50 +1502,60 @@ export function LogMaintenanceServiceDialog({
               <div className="space-y-3">
                 <Label className="font-semibold">Line items</Label>
                 <div className="border rounded-lg divide-y bg-white">
-                  {lines.map((line, idx) => (
-                    <div
-                      key={`${line.categoryCode}-${idx}`}
-                      className="flex items-center justify-between px-4 py-3 gap-3"
-                    >
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-slate-900 truncate">
-                          {line.categoryName}
-                        </p>
-                        <p className="text-xs text-slate-500">
-                          {[
-                            line.qty != null ? `Qty ${line.qty}` : null,
-                            line.condition ? String(line.condition) : null,
-                          ]
-                            .filter(Boolean)
-                            .join(" · ") || line.categoryCode}
-                        </p>
+                  {lines.map((line, idx) => {
+                    const muted = Boolean(line.declined);
+                    return (
+                      <div
+                        key={`${lineMatchKey(line)}-${idx}`}
+                        className={`flex items-center justify-between px-4 py-3 gap-3 ${
+                          muted ? "opacity-50" : ""
+                        }`}
+                      >
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-slate-900 truncate">
+                            {formatMaintenanceLineLabel(line)}
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            {[
+                              line.recommended ? "Recommended" : null,
+                              line.declined ? "Declined" : null,
+                              line.qty != null ? `Qty ${line.qty}` : null,
+                              line.brand || null,
+                              line.positions?.length ? line.positions.join(" ") : null,
+                            ]
+                              .filter(Boolean)
+                              .join(" · ") || line.categoryCode}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-3 shrink-0">
+                          <span className="text-sm font-medium text-slate-900">
+                            {formMeta.currency || "JMD"}{" "}
+                            {muted ? "0" : lineTotalPreview(line).toLocaleString()}
+                          </span>
+                          {!line.recommended && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="text-xs text-slate-500"
+                              onClick={() => {
+                                const pkgCat = selectedPackage?.categories.find(
+                                  (c) =>
+                                    c.id === line.categoryId ||
+                                    (c.code === line.categoryCode && c.name === line.categoryName),
+                                );
+                                const qj = systemComponents.find((c) => c.id === line.categoryId);
+                                const cat = pkgCat || qj || catalogById.get(line.categoryId || "");
+                                if (cat) openCategoryForm(cat);
+                              }}
+                            >
+                              Edit
+                            </Button>
+                          )}
+                        </div>
                       </div>
-                      <div className="flex items-center gap-3 shrink-0">
-                        <span className="text-sm font-medium text-slate-900">
-                          {formMeta.currency || "JMD"}{" "}
-                          {lineTotalPreview(line).toLocaleString()}
-                        </span>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="text-xs text-slate-500"
-                          onClick={() => {
-                            const pkgCat = selectedPackage?.categories.find(
-                              (c) =>
-                                c.id === line.categoryId ||
-                                (c.code === line.categoryCode && c.name === line.categoryName),
-                            );
-                            const qj = quickJobs.find((c) => c.id === line.categoryId);
-                            const cat = pkgCat || qj;
-                            if (cat) openCategoryForm(cat);
-                          }}
-                        >
-                          Edit
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
                 <div className="flex justify-between items-center px-1 pt-1">
                   <span className="text-sm font-semibold text-slate-700">Total</span>
@@ -965,7 +1570,9 @@ export function LogMaintenanceServiceDialog({
                   <Checkbox
                     id="mark-package-complete"
                     checked={markPackageComplete}
-                    onCheckedChange={(checked) => setMarkPackageComplete(checked === true)}
+                    onCheckedChange={(checked: boolean | "indeterminate") =>
+                      setMarkPackageComplete(checked === true)
+                    }
                   />
                   <Label htmlFor="mark-package-complete" className="cursor-pointer">
                     Mark package complete
@@ -990,13 +1597,22 @@ export function LogMaintenanceServiceDialog({
             )}
           </Button>
 
-          {step === "categories" && (selectedCategoryIds.length >= 1 || lines.length >= 1) && (
-            <Button
-              onClick={handleContinueFromCategories}
-              className="bg-slate-900 text-white hover:bg-slate-800"
-            >
-              Continue
-            </Button>
+          {step === "component" && (selectedCategoryIds.length >= 1 || lines.length >= 1) && (
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={goToInspectOrReview}
+              >
+                Inspect
+              </Button>
+              <Button
+                onClick={handleContinueFromComponents}
+                className="bg-slate-900 text-white hover:bg-slate-800"
+              >
+                Continue
+              </Button>
+            </div>
           )}
 
           {step === "form" && (
@@ -1004,7 +1620,7 @@ export function LogMaintenanceServiceDialog({
               onClick={handleSaveCategory}
               className="bg-slate-900 text-white hover:bg-slate-800"
             >
-              Save category
+              Save line
             </Button>
           )}
 

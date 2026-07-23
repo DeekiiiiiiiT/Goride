@@ -14,7 +14,7 @@ import {
 } from '../../ui/select';
 import type { MaintenanceAlert } from '../../../hooks/useVehicleAnalytics';
 import type { MaintenanceLog } from '../../../types/maintenance';
-import { sumMaintenanceLogLines } from '../../../types/maintenance';
+import { formatMaintenanceLineLabel, sumMaintenanceLogLines } from '../../../types/maintenance';
 import type { Vehicle } from '../../../types/vehicle';
 import { formatJMD } from './AnalyticsKpiGrid';
 
@@ -202,7 +202,7 @@ export function AnalyticsMaintenanceSection({
             <div className="divide-y divide-slate-100 dark:divide-slate-800 max-h-[400px] overflow-y-auto">
               {filteredLogs.map((log) => {
                 const displayCost = logDisplayCost(log);
-                const lineNames = log.lines?.map((l) => l.categoryName).filter(Boolean) ?? [];
+                const structuredLines = log.lines?.length ? log.lines : [];
                 return (
                   <button
                     key={log.id}
@@ -229,9 +229,17 @@ export function AnalyticsMaintenanceSection({
                         {log.provider ? ` · ${log.provider}` : ''}
                         {log.odo ? ` · ${log.odo.toLocaleString()} km` : ''}
                       </p>
-                      {lineNames.length > 0 ? (
+                      {structuredLines.length > 0 ? (
                         <p className="text-[11px] text-slate-400 mt-1 truncate">
-                          Lines: {lineNames.join(', ')}
+                          {structuredLines.map((l, i) => (
+                            <span
+                              key={`${l.categoryCode}-${i}`}
+                              className={l.declined ? 'text-slate-300 line-through' : undefined}
+                            >
+                              {i > 0 ? ', ' : ''}
+                              {formatMaintenanceLineLabel(l)}
+                            </span>
+                          ))}
                         </p>
                       ) : log.itemCosts && Object.keys(log.itemCosts).length > 0 ? (
                         <p className="text-[11px] text-slate-400 mt-1 truncate">

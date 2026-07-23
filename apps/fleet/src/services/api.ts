@@ -8,7 +8,14 @@ import { OdometerReading } from '../types/vehicle';
 import { TollPlaza } from '../types/toll';
 import { API_ENDPOINTS } from './apiConfig';
 import type { CompatiblePartsResponse } from '../types/partSourcing';
-import type { MaintenanceServiceCategory } from '../types/maintenance';
+import type {
+  MaintenanceInspectionFinding,
+  MaintenanceInspectionTemplate,
+  MaintenanceLogLine,
+  MaintenanceServiceCategory,
+  MaintenanceWorkOrder,
+  MaintenanceWorkOrderStatus,
+} from '../types/maintenance';
 import { compressImage, OCR_COMPRESS_OPTS } from '../utils/compressImage';
 import { isTollCategory } from '../utils/tollCategoryHelper';
 import { appendUploadEvidenceMeta, type UploadEvidenceMeta } from '@roam/types/evidence';
@@ -1435,8 +1442,9 @@ export const api = {
       }>;
   },
 
-  async listMaintenanceCategories() {
-      const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/maintenance-categories`, {
+  async listMaintenanceCategories(kind?: "system" | "component") {
+      const q = kind ? `?kind=${encodeURIComponent(kind)}` : "";
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/maintenance-categories${q}`, {
           headers: await getHeaders(null),
       });
       if (!response.ok) throw new Error("Failed to fetch maintenance categories");
@@ -1444,6 +1452,23 @@ export const api = {
       return { items: (json.items || []) as MaintenanceServiceCategory[] };
   },
 
+  /** Systems (parent groups) for taxonomy browsing. */
+  async listMaintenanceSystems() {
+      return this.listMaintenanceCategories("system");
+  },
+
+  /** Components under a system (quick-job drill-down). */
+  async listSystemComponents(systemId: string) {
+      const response = await fetchWithRetry(
+        `${API_ENDPOINTS.fuel}/maintenance-categories/systems/${encodeURIComponent(systemId)}/components`,
+        { headers: await getHeaders(null) },
+      );
+      if (!response.ok) throw new Error("Failed to fetch system components");
+      const json = await response.json() as { items?: unknown[] };
+      return { items: (json.items || []) as MaintenanceServiceCategory[] };
+  },
+
+  /** Quick jobs = systems with quick_job_eligible (garage taxonomy). */
   async listQuickJobCategories() {
       const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/maintenance-categories/quick-jobs`, {
           headers: await getHeaders(null),
@@ -1451,6 +1476,173 @@ export const api = {
       if (!response.ok) throw new Error("Failed to fetch quick-job categories");
       const json = await response.json() as { items?: unknown[] };
       return { items: (json.items || []) as MaintenanceServiceCategory[] };
+  },
+
+  async listWorkOrders(vehicleId: string) {
+      const response = await fetchWithRetry(
+        `${API_ENDPOINTS.fuel}/maintenance-work-orders?vehicleId=${encodeURIComponent(vehicleId)}`,
+        { headers: await getHeaders(null) },
+      );
+      if (!response.ok) throw new Error("Failed to fetch work orders");
+      const json = await response.json() as { items?: unknown[] };
+      return { items: (json.items || []) as MaintenanceWorkOrder[] };
+  },
+
+  async getWorkOrder(id: string) {
+      const response = await fetchWithRetry(
+        `${API_ENDPOINTS.fuel}/maintenance-work-orders/${encodeURIComponent(id)}`,
+        { headers: await getHeaders(null) },
+      );
+      if (!response.ok) throw new Error("Failed to fetch work order");
+      const json = await response.json() as { data?: MaintenanceWorkOrder } & MaintenanceWorkOrder;
+      return (json.data || json) as MaintenanceWorkOrder;
+  },
+
+  async createWorkOrder(payload: {
+    vehicleId: string;
+    status?: MaintenanceWorkOrderStatus;
+    performedAtDate?: string | null;
+    odometer?: number | null;
+    provider?: string | null;
+    currency?: string;
+    templateId?: string | null;
+    packageComplete?: boolean;
+    logMode?: "package" | "quick_job";
+    notes?: string | null;
+    invoiceUrl?: string | null;
+    lines?: MaintenanceLogLine[];
+  }) {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/maintenance-work-orders`, {
+          method: "POST",
+          headers: await getHeaders(),
+          body: JSON.stringify(payload),
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error((err as { error?: string }).error || "Failed to create work order");
+      }
+      const json = await response.json() as { data?: MaintenanceWorkOrder } & MaintenanceWorkOrder;
+      return (json.data || json) as MaintenanceWorkOrder;
+  },
+
+  async updateWorkOrder(id: string, patch: Partial<{
+    status: MaintenanceWorkOrderStatus;
+    performedAtDate: string | null;
+    odometer: number | null;
+    provider: string | null;
+    currency: string;
+    templateId: string | null;
+    packageComplete: boolean;
+    logMode: "package" | "quick_job";
+    notes: string | null;
+    invoiceUrl: string | null;
+    lines: MaintenanceLogLine[];
+  }>) {
+      const response = await fetchWithRetry(
+        `${API_ENDPOINTS.fuel}/maintenance-work-orders/${encodeURIComponent(id)}`,
+        {
+          method: "PATCH",
+          headers: await getHeaders(),
+          body: JSON.stringify(patch),
+        },
+      );
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error((err as { error?: string }).error || "Failed to update work order");
+      }
+      const json = await response.json() as { data?: MaintenanceWorkOrder } & MaintenanceWorkOrder;
+      return (json.data || json) as MaintenanceWorkOrder;
+  },
+
+  async completeWorkOrder(id: string, patch?: {
+    performedAtDate?: string | null;
+    odometer?: number | null;
+    provider?: string | null;
+    currency?: string;
+    templateId?: string | null;
+    packageComplete?: boolean;
+    logMode?: "package" | "quick_job";
+    notes?: string | null;
+    invoiceUrl?: string | null;
+    lines?: MaintenanceLogLine[];
+    totalCost?: number | null;
+  }) {
+      const response = await fetchWithRetry(
+        `${API_ENDPOINTS.fuel}/maintenance-work-orders/${encodeURIComponent(id)}/complete`,
+        {
+          method: "POST",
+          headers: await getHeaders(),
+          body: JSON.stringify(patch || {}),
+        },
+      );
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error((err as { error?: string }).error || "Failed to complete work order");
+      }
+      return response.json() as Promise<{
+        success?: boolean;
+        data?: MaintenanceWorkOrder;
+        ledgerPosted?: boolean;
+        ledgerWarning?: string;
+        error?: string;
+      }>;
+  },
+
+  async listInspectionTemplates() {
+      const response = await fetchWithRetry(
+        `${API_ENDPOINTS.fuel}/maintenance-inspection-templates`,
+        { headers: await getHeaders(null) },
+      );
+      if (!response.ok) throw new Error("Failed to fetch inspection templates");
+      const json = await response.json() as { items?: unknown[] };
+      return { items: (json.items || []) as MaintenanceInspectionTemplate[] };
+  },
+
+  async saveInspectionFindings(payload: {
+    vehicleId: string;
+    workOrderId?: string | null;
+    findings: Array<{
+      itemId?: string | null;
+      systemId?: string | null;
+      componentId?: string | null;
+      status: "pass" | "attention" | "fail";
+      notes?: string | null;
+      photoUrl?: string | null;
+      declined?: boolean;
+    }>;
+  }) {
+      const response = await fetchWithRetry(
+        `${API_ENDPOINTS.fuel}/maintenance-inspection-findings`,
+        {
+          method: "POST",
+          headers: await getHeaders(),
+          body: JSON.stringify(payload),
+        },
+      );
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error((err as { error?: string }).error || "Failed to save inspection findings");
+      }
+      return response.json() as Promise<{
+        items?: MaintenanceInspectionFinding[];
+        data?: MaintenanceInspectionFinding[];
+      }>;
+  },
+
+  async declineInspectionFinding(id: string) {
+      const response = await fetchWithRetry(
+        `${API_ENDPOINTS.fuel}/maintenance-inspection-findings/${encodeURIComponent(id)}`,
+        {
+          method: "PATCH",
+          headers: await getHeaders(),
+          body: JSON.stringify({ declined: true }),
+        },
+      );
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error((err as { error?: string }).error || "Failed to decline finding");
+      }
+      return response.json();
   },
 
   async bootstrapMaintenanceSchedule(vehicleId: string, currentOdometer?: number) {

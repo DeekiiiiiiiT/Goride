@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  ChevronDown,
+  ChevronRight,
   Eye,
-  Layers,
   Loader2,
   MoreVertical,
   Pencil,
@@ -30,11 +31,14 @@ import {
 import { formatCatalogProductionSpan, type VehicleCatalogRecord } from "../../../types/vehicleCatalog";
 import type {
   MaintenanceCategoryFieldSchema,
+  MaintenanceCategoryKind,
+  MaintenanceDueKind,
   MaintenanceFrequencyKind,
   MaintenancePackageCategory,
   MaintenanceServiceCategory,
   MaintenanceTaskTemplate,
 } from "../../../types/maintenance";
+import { groupCategoriesBySystem } from "../../../types/maintenance";
 import { MAINTENANCE_SCHEDULE_PRESETS } from "../../../constants/maintenanceSchedulePresets";
 import {
   inferPackageIconKey,
@@ -102,6 +106,8 @@ const COMMERCIAL_FIELD_SCHEMA: MaintenanceCategoryFieldSchema = {
   ],
 };
 
+const EMPTY_FIELD_SCHEMA: MaintenanceCategoryFieldSchema = { fields: [] };
+
 function scheduleKindShort(k: string | undefined): string {
   if (k === "once_milestone") return "One-time";
   if (k === "manual_only") return "Manual";
@@ -112,6 +118,11 @@ function scheduleKindFull(k: string | undefined): string {
   if (k === "once_milestone") return "One-time milestone";
   if (k === "manual_only") return "Manual (no auto next due)";
   return "Recurring (repeat by interval)";
+}
+
+function dueKindLabel(k: MaintenanceDueKind | undefined): string {
+  if (k === "statutory_inspection") return "Statutory inspection";
+  return "Service package";
 }
 
 function formatIntervalMilesDisplay(
@@ -157,6 +168,12 @@ function summarizeFieldSchema(schema: MaintenanceCategoryFieldSchema | undefined
   return fields.map((f) => f.key).join(", ");
 }
 
+function resolveCategoryKind(c: MaintenanceServiceCategory): MaintenanceCategoryKind {
+  if (c.kind === "system" || c.kind === "component") return c.kind;
+  if (!c.parent_id && c.code?.startsWith("sys_")) return "system";
+  return "component";
+}
+
 const TAB_TRIGGER_CLASS =
   "rounded-lg font-medium transition-colors text-slate-700 shadow-none border-0 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm dark:text-slate-300 dark:data-[state=active]:bg-amber-500/20 dark:data-[state=active]:text-amber-50 dark:data-[state=active]:shadow-none dark:data-[state=active]:ring-1 dark:data-[state=active]:ring-amber-400/45";
 
@@ -179,6 +196,7 @@ export function MaintenanceTemplatesManager() {
   const [categories, setCategories] = useState<MaintenanceServiceCategory[]>([]);
   const [loadingCategories, setLoadingCategories] = useState(false);
   const [templateScopeTab, setTemplateScopeTab] = useState<ScopeTab>("global");
+  const [expandedSystems, setExpandedSystems] = useState<Set<string>>(() => new Set());
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<MaintenanceTaskTemplate | null>(null);
@@ -188,10 +206,9 @@ export function MaintenanceTemplatesManager() {
   const [viewingCategories, setViewingCategories] = useState<MaintenancePackageCategory[]>([]);
   const [loadingViewCats, setLoadingViewCats] = useState(false);
 
-  const [membershipOpen, setMembershipOpen] = useState(false);
-  const [membershipTemplate, setMembershipTemplate] = useState<MaintenanceTaskTemplate | null>(null);
-  const [membershipSelected, setMembershipSelected] = useState<string[]>([]);
-  const [savingMembership, setSavingMembership] = useState(false);
+  /** Ordered category ids included in the open package create/edit dialog. */
+  const [packageCategoryIds, setPackageCategoryIds] = useState<string[]>([]);
+  const [loadingPackageCats, setLoadingPackageCats] = useState(false);
 
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<MaintenanceServiceCategory | null>(null);
@@ -203,6 +220,9 @@ export function MaintenanceTemplatesManager() {
     quick_job_eligible: false,
     sort_order: "0",
     schema_preset: "simple" as FieldSchemaPreset,
+    kind: "component" as MaintenanceCategoryKind,
+    parent_id: "",
+    op_code: "",
   });
 
   const [form, setForm] = useState({
@@ -214,10 +234,22 @@ export function MaintenanceTemplatesManager() {
     interval_months: "",
     frequency_kind: "recurring" as MaintenanceFrequencyKind,
     frequency_label: "",
+    due_kind: "service_package" as MaintenanceDueKind,
     priority: "standard" as MaintenanceTaskTemplate["priority"],
     sort_order: "0",
   });
   const [presetId, setPresetId] = useState<string>("__none__");
+
+  const categoryTree = useMemo(() => groupCategoriesBySystem(categories), [categories]);
+
+  const systemOptions = useMemo(
+    () =>
+      categories
+        .filter((c) => resolveCategoryKind(c) === "system")
+        .slice()
+        .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name)),
+    [categories],
+  );
 
   const loadCatalog = useCallback(async () => {
     if (!token) return;
@@ -243,7 +275,17 @@ export function MaintenanceTemplatesManager() {
     setError(null);
     try {
       const items = await listMaintenanceCategories(token);
-      setCategories(items.slice().sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name)));
+      const sorted = items
+        .slice()
+        .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name));
+      setCategories(sorted);
+      setExpandedSystems((prev) => {
+        const next = new Set(prev);
+        for (const c of sorted) {
+          if (resolveCategoryKind(c) === "system") next.add(c.id);
+        }
+        return next;
+      });
     } catch (e: unknown) {
       setError(formatCatchError(e, "Could not load categories."));
     } finally {
@@ -295,9 +337,9 @@ export function MaintenanceTemplatesManager() {
 
   useEffect(() => {
     setDialogOpen(false);
-    setMembershipOpen(false);
     setCategoryDialogOpen(false);
     setViewing(null);
+    setPackageCategoryIds([]);
   }, [templateScopeTab]);
 
   useEffect(() => {
@@ -331,6 +373,25 @@ export function MaintenanceTemplatesManager() {
     return `${row.make} ${row.model} (${formatCatalogProductionSpan(row)})`;
   }, [catalog, selectedCatalogId]);
 
+  const categoryIdsForPreset = (preset: string): string[] => {
+    const codes = PACKAGE_CATEGORY_CODES[preset as "A" | "B" | "C" | "D"];
+    if (!codes?.length) return [];
+    const byCode = new Map(categories.map((c) => [c.code, c]));
+    return codes
+      .map((code) => byCode.get(code))
+      .filter((c): c is MaintenanceServiceCategory => Boolean(c) && resolveCategoryKind(c) !== "system")
+      .map((c) => c.id);
+  };
+
+  const toggleSystemExpanded = (systemId: string) => {
+    setExpandedSystems((prev) => {
+      const next = new Set(prev);
+      if (next.has(systemId)) next.delete(systemId);
+      else next.add(systemId);
+      return next;
+    });
+  };
+
   const applyPreset = (id: string) => {
     setPresetId(id);
     if (id === "__none__") return;
@@ -349,14 +410,18 @@ export function MaintenanceTemplatesManager() {
       interval_months: String(preset.interval_months),
       frequency_kind: "recurring",
       frequency_label: "",
+      due_kind: "service_package",
       priority: "standard",
       sort_order: String(preset.sort_order),
     });
+    setPackageCategoryIds(categoryIdsForPreset(id));
   };
 
   const openCreate = () => {
     setEditing(null);
     setPresetId("__none__");
+    setPackageCategoryIds([]);
+    setLoadingPackageCats(false);
     setForm({
       task_name: "",
       task_code: "",
@@ -366,13 +431,14 @@ export function MaintenanceTemplatesManager() {
       interval_months: "",
       frequency_kind: "recurring",
       frequency_label: "",
+      due_kind: "service_package",
       priority: "standard",
       sort_order: String(templates.length),
     });
     setDialogOpen(true);
   };
 
-  const openEdit = (t: MaintenanceTaskTemplate) => {
+  const openEdit = async (t: MaintenanceTaskTemplate) => {
     setEditing(t);
     setPresetId("__none__");
     setForm({
@@ -389,32 +455,33 @@ export function MaintenanceTemplatesManager() {
       interval_months: t.interval_months != null ? String(t.interval_months) : "",
       frequency_kind: t.frequency_kind ?? "recurring",
       frequency_label: t.frequency_label ?? "",
+      due_kind: t.due_kind ?? "service_package",
       priority: t.priority,
       sort_order: String(t.sort_order),
     });
+    setPackageCategoryIds([]);
     setDialogOpen(true);
-  };
-
-  const openMembership = async (t: MaintenanceTaskTemplate) => {
     if (!token) return;
-    setMembershipTemplate(t);
-    setMembershipOpen(true);
+    setLoadingPackageCats(true);
     setError(null);
     try {
       const items = await listPackageCategories(token, t.id);
-      const ordered = items
-        .slice()
-        .sort((a, b) => a.sort_order - b.sort_order)
-        .map((m) => m.category_id);
-      setMembershipSelected(ordered);
+      setPackageCategoryIds(
+        items
+          .slice()
+          .sort((a, b) => a.sort_order - b.sort_order)
+          .map((m) => m.category_id),
+      );
     } catch (e: unknown) {
-      setMembershipSelected([]);
+      setPackageCategoryIds([]);
       setError(formatCatchError(e, "Could not load package categories."));
+    } finally {
+      setLoadingPackageCats(false);
     }
   };
 
-  const toggleMembership = (categoryId: string, checked: boolean) => {
-    setMembershipSelected((prev) => {
+  const togglePackageCategory = (categoryId: string, checked: boolean) => {
+    setPackageCategoryIds((prev) => {
       if (checked) {
         if (prev.includes(categoryId)) return prev;
         return [...prev, categoryId];
@@ -423,8 +490,8 @@ export function MaintenanceTemplatesManager() {
     });
   };
 
-  const moveMembership = (categoryId: string, dir: -1 | 1) => {
-    setMembershipSelected((prev) => {
+  const movePackageCategory = (categoryId: string, dir: -1 | 1) => {
+    setPackageCategoryIds((prev) => {
       const idx = prev.indexOf(categoryId);
       if (idx < 0) return prev;
       const nextIdx = idx + dir;
@@ -434,34 +501,6 @@ export function MaintenanceTemplatesManager() {
       next.splice(nextIdx, 0, item);
       return next;
     });
-  };
-
-  const handleSaveMembership = async () => {
-    if (!token || !membershipTemplate) return;
-    setSavingMembership(true);
-    setError(null);
-    try {
-      await setPackageCategories(token, membershipTemplate.id, membershipSelected);
-      setMembershipOpen(false);
-      setMembershipTemplate(null);
-    } catch (e: unknown) {
-      setError(formatCatchError(e, "Failed to save package categories."));
-    } finally {
-      setSavingMembership(false);
-    }
-  };
-
-  const autoAssignPresetCategories = async (
-    accessToken: string,
-    templateId: string,
-    preset: string,
-  ) => {
-    const codes = PACKAGE_CATEGORY_CODES[preset as "A" | "B" | "C" | "D"];
-    if (!codes?.length) return;
-    const byCode = new Map(categories.map((c) => [c.code, c]));
-    const ids = codes.map((code) => byCode.get(code)?.id).filter((id): id is string => Boolean(id));
-    if (ids.length === 0) return;
-    await setPackageCategories(accessToken, templateId, ids);
   };
 
   const handleSave = async () => {
@@ -507,14 +546,12 @@ export function MaintenanceTemplatesManager() {
         interval_months: form.interval_months.trim() === "" ? null : Number(form.interval_months),
         frequency_kind: form.frequency_kind,
         frequency_label: form.frequency_label.trim() || null,
+        due_kind: form.due_kind,
         priority: form.priority,
         sort_order: Number(form.sort_order) || 0,
       };
 
       let saved: MaintenanceTaskTemplate;
-      const wasCreate = !editing;
-      const usedPreset = wasCreate && presetId !== "__none__" ? presetId : null;
-
       if (editing) {
         saved = await updateMaintenanceTemplate(token, editing.id, payload);
       } else if (templateScopeTab === "global") {
@@ -523,19 +560,9 @@ export function MaintenanceTemplatesManager() {
         saved = await createMaintenanceTemplate(token, selectedCatalogId, payload);
       }
 
+      await setPackageCategories(token, saved.id, packageCategoryIds);
       setDialogOpen(false);
       await loadTemplates();
-
-      if (wasCreate && saved?.id) {
-        if (usedPreset && (usedPreset === "A" || usedPreset === "B" || usedPreset === "C" || usedPreset === "D")) {
-          try {
-            await autoAssignPresetCategories(token, saved.id, usedPreset);
-          } catch (e: unknown) {
-            setError(formatCatchError(e, "Package saved, but preset categories could not be assigned."));
-          }
-        }
-        await openMembership(saved);
-      }
     } catch (e: unknown) {
       setError(formatCatchError(e, "Save failed"));
     } finally {
@@ -555,20 +582,41 @@ export function MaintenanceTemplatesManager() {
     }
   };
 
-  const openCreateCategory = () => {
+  const openCreateSystem = () => {
     setEditingCategory(null);
     setCategoryForm({
       code: "",
       name: "",
       icon_key: "wrench",
       quick_job_eligible: false,
-      sort_order: String(categories.length * 10),
+      sort_order: String(systemOptions.length * 10),
       schema_preset: "simple",
+      kind: "system",
+      parent_id: "",
+      op_code: "",
+    });
+    setCategoryDialogOpen(true);
+  };
+
+  const openCreateComponent = (parentId?: string) => {
+    const defaultParent = parentId || systemOptions[0]?.id || "";
+    setEditingCategory(null);
+    setCategoryForm({
+      code: "",
+      name: "",
+      icon_key: "wrench",
+      quick_job_eligible: false,
+      sort_order: "0",
+      schema_preset: "simple",
+      kind: "component",
+      parent_id: defaultParent,
+      op_code: "",
     });
     setCategoryDialogOpen(true);
   };
 
   const openEditCategory = (c: MaintenanceServiceCategory) => {
+    const kind = resolveCategoryKind(c);
     setEditingCategory(c);
     setCategoryForm({
       code: c.code,
@@ -577,6 +625,9 @@ export function MaintenanceTemplatesManager() {
       quick_job_eligible: c.quick_job_eligible,
       sort_order: String(c.sort_order),
       schema_preset: detectFieldSchemaPreset(c.field_schema),
+      kind,
+      parent_id: c.parent_id || "",
+      op_code: c.op_code || "",
     });
     setCategoryDialogOpen(true);
   };
@@ -586,21 +637,32 @@ export function MaintenanceTemplatesManager() {
     const code = categoryForm.code.trim();
     const name = categoryForm.name.trim();
     if (!code || !name) {
-      setError("Category code and name are required.");
+      setError("Code and name are required.");
+      return;
+    }
+    if (categoryForm.kind === "component" && !categoryForm.parent_id) {
+      setError("Components must belong to a system.");
       return;
     }
     setSavingCategory(true);
     setError(null);
     try {
-      const field_schema =
-        categoryForm.schema_preset === "commercial" ? COMMERCIAL_FIELD_SCHEMA : SIMPLE_FIELD_SCHEMA;
+      const isSystem = categoryForm.kind === "system";
+      const field_schema = isSystem
+        ? EMPTY_FIELD_SCHEMA
+        : categoryForm.schema_preset === "commercial"
+          ? COMMERCIAL_FIELD_SCHEMA
+          : SIMPLE_FIELD_SCHEMA;
       const payload = {
         code,
         name,
         icon_key: categoryForm.icon_key || "wrench",
-        quick_job_eligible: categoryForm.quick_job_eligible,
+        quick_job_eligible: isSystem ? false : categoryForm.quick_job_eligible,
         sort_order: Number(categoryForm.sort_order) || 0,
         field_schema,
+        kind: categoryForm.kind,
+        parent_id: isSystem ? null : categoryForm.parent_id,
+        op_code: categoryForm.op_code.trim() || null,
       };
       if (editingCategory) {
         await updateMaintenanceCategory(token, editingCategory.id, payload);
@@ -618,7 +680,17 @@ export function MaintenanceTemplatesManager() {
 
   const handleDeleteCategory = async (c: MaintenanceServiceCategory) => {
     if (!token) return;
-    if (!window.confirm(`Delete category "${c.name}"? Packages that use it will lose this membership.`)) {
+    const kind = resolveCategoryKind(c);
+    const label = kind === "system" ? "system" : "component";
+    if (
+      !window.confirm(
+        `Delete ${label} "${c.name}"?${
+          kind === "system"
+            ? " Components under it may become orphaned. Packages that use related components will lose those memberships."
+            : " Packages that use it will lose this membership."
+        }`,
+      )
+    ) {
       return;
     }
     setError(null);
@@ -650,6 +722,8 @@ export function MaintenanceTemplatesManager() {
   }
 
   const showPackages = templateScopeTab === "global" || templateScopeTab === "catalog";
+  const editingKind = categoryForm.kind;
+  const isEditingSystem = editingKind === "system";
 
   return (
     <div className="flex flex-col gap-4 p-4 sm:p-6 text-slate-900">
@@ -798,7 +872,7 @@ export function MaintenanceTemplatesManager() {
                         <button
                           type="button"
                           className="text-left hover:text-amber-700 hover:underline underline-offset-2"
-                          onClick={() => openMembership(t)}
+                          onClick={() => void openEdit(t)}
                         >
                           {t.task_name}
                         </button>
@@ -841,11 +915,7 @@ export function MaintenanceTemplatesManager() {
                               <Eye className="w-4 h-4" />
                               View
                             </DropdownMenuItem>
-                            <DropdownMenuItem className="gap-2" onClick={() => openMembership(t)}>
-                              <Layers className="w-4 h-4" />
-                              Categories
-                            </DropdownMenuItem>
-                            <DropdownMenuItem className="gap-2" onClick={() => openEdit(t)}>
+                            <DropdownMenuItem className="gap-2" onClick={() => void openEdit(t)}>
                               <Pencil className="w-4 h-4" />
                               Edit
                             </DropdownMenuItem>
@@ -871,89 +941,195 @@ export function MaintenanceTemplatesManager() {
 
       {templateScopeTab === "categories" && (
         <div className="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-4 py-3 border-b border-slate-100">
             <p className="text-sm text-slate-600">
-              Service categories used inside packages and quick jobs
+              Garage taxonomy: systems (headers) and components (loggable lines)
             </p>
-            <Button type="button" size="sm" className="gap-1" onClick={openCreateCategory}>
-              <Plus className="w-4 h-4" />
-              Add category
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button type="button" size="sm" variant="outline" className="gap-1" onClick={openCreateSystem}>
+                <Plus className="w-4 h-4" />
+                Add System
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                className="gap-1"
+                onClick={() => openCreateComponent()}
+                disabled={systemOptions.length === 0}
+              >
+                <Plus className="w-4 h-4" />
+                Add Component
+              </Button>
+            </div>
           </div>
           {loadingCategories ? (
             <div className="flex justify-center py-12">
               <Loader2 className="w-6 h-6 text-slate-400 animate-spin" />
             </div>
+          ) : categoryTree.length === 0 ? (
+            <p className="text-center text-slate-500 py-10 text-sm">
+              No systems yet. Add a system, then add components under it.
+            </p>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-[40px]" />
                   <TableHead className="w-[48px]">Icon</TableHead>
                   <TableHead>Name</TableHead>
                   <TableHead>Code</TableHead>
+                  <TableHead>Op code</TableHead>
                   <TableHead>Quick job</TableHead>
                   <TableHead className="w-[80px]">Sort</TableHead>
                   <TableHead className="text-right w-[72px]">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {categories.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center text-slate-500 py-10">
-                      No categories yet. Add oil, tires, brakes, and other service lines.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  categories.map((c) => (
-                    <TableRow key={c.id}>
-                      <TableCell>
-                        <MaintenanceIcon iconKey={c.icon_key} className="h-5 w-5 text-amber-600" />
-                      </TableCell>
-                      <TableCell className="font-medium">{c.name}</TableCell>
-                      <TableCell className="font-mono text-xs text-slate-500">{c.code}</TableCell>
-                      <TableCell>{c.quick_job_eligible ? "Yes" : "No"}</TableCell>
-                      <TableCell className="tabular-nums">{c.sort_order}</TableCell>
-                      <TableCell className="text-right">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8"
-                              aria-label="Open category actions"
-                            >
-                              <MoreVertical className="w-4 h-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-40">
-                            <DropdownMenuItem className="gap-2" onClick={() => openEditCategory(c)}>
-                              <Pencil className="w-4 h-4" />
-                              Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              className="gap-2 text-red-600 focus:text-red-600"
-                              onClick={() => handleDeleteCategory(c)}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                              Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
+                {categoryTree.map(({ system, components }) => {
+                  const isSynthetic = system.id === "__other__";
+                  const open = expandedSystems.has(system.id);
+                  return (
+                    <React.Fragment key={system.id}>
+                      <TableRow className="bg-slate-50/80 hover:bg-slate-50">
+                        <TableCell className="pr-0">
+                          <button
+                            type="button"
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 hover:bg-slate-200/60"
+                            onClick={() => toggleSystemExpanded(system.id)}
+                            aria-label={open ? "Collapse system" : "Expand system"}
+                          >
+                            {open ? (
+                              <ChevronDown className="w-4 h-4" />
+                            ) : (
+                              <ChevronRight className="w-4 h-4" />
+                            )}
+                          </button>
+                        </TableCell>
+                        <TableCell>
+                          <MaintenanceIcon iconKey={system.icon_key} className="h-5 w-5 text-amber-600" />
+                        </TableCell>
+                        <TableCell className="font-semibold text-slate-900">
+                          {system.name}
+                          <span className="ml-2 text-[10px] font-medium uppercase tracking-wide text-slate-400">
+                            System
+                          </span>
+                          <span className="ml-2 text-[11px] font-normal text-slate-400">
+                            ({components.length})
+                          </span>
+                        </TableCell>
+                        <TableCell className="font-mono text-xs text-slate-500">{system.code}</TableCell>
+                        <TableCell className="font-mono text-xs text-slate-400">
+                          {system.op_code?.trim() || "—"}
+                        </TableCell>
+                        <TableCell className="text-slate-400">—</TableCell>
+                        <TableCell className="tabular-nums">{isSynthetic ? "—" : system.sort_order}</TableCell>
+                        <TableCell className="text-right">
+                          {!isSynthetic ? (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  aria-label="Open system actions"
+                                >
+                                  <MoreVertical className="w-4 h-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="w-48">
+                                <DropdownMenuItem
+                                  className="gap-2"
+                                  onClick={() => openCreateComponent(system.id)}
+                                >
+                                  <Plus className="w-4 h-4" />
+                                  Add component
+                                </DropdownMenuItem>
+                                <DropdownMenuItem className="gap-2" onClick={() => openEditCategory(system)}>
+                                  <Pencil className="w-4 h-4" />
+                                  Edit system
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  className="gap-2 text-red-600 focus:text-red-600"
+                                  onClick={() => handleDeleteCategory(system)}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                  Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          ) : null}
+                        </TableCell>
+                      </TableRow>
+                      {open
+                        ? components.map((c) => (
+                            <TableRow key={c.id} className="bg-white">
+                              <TableCell />
+                              <TableCell className="pl-6">
+                                <MaintenanceIcon iconKey={c.icon_key} className="h-5 w-5 text-amber-600" />
+                              </TableCell>
+                              <TableCell className="pl-2 font-medium text-slate-800">
+                                <span className="text-slate-300 mr-1">└</span>
+                                {c.name}
+                              </TableCell>
+                              <TableCell className="font-mono text-xs text-slate-500">{c.code}</TableCell>
+                              <TableCell className="font-mono text-xs text-slate-500">
+                                {c.op_code?.trim() || "—"}
+                              </TableCell>
+                              <TableCell>{c.quick_job_eligible ? "Yes" : "No"}</TableCell>
+                              <TableCell className="tabular-nums">{c.sort_order}</TableCell>
+                              <TableCell className="text-right">
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8"
+                                      aria-label="Open component actions"
+                                    >
+                                      <MoreVertical className="w-4 h-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end" className="w-40">
+                                    <DropdownMenuItem className="gap-2" onClick={() => openEditCategory(c)}>
+                                      <Pencil className="w-4 h-4" />
+                                      Edit
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem
+                                      className="gap-2 text-red-600 focus:text-red-600"
+                                      onClick={() => handleDeleteCategory(c)}
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                      Delete
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        : null}
+                      {open && components.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={8} className="text-center text-slate-400 text-sm py-4">
+                            No components in this system yet.
+                          </TableCell>
+                        </TableRow>
+                      ) : null}
+                    </React.Fragment>
+                  );
+                })}
               </TableBody>
             </Table>
           )}
         </div>
       )}
 
-      {/* Package create/edit */}
+      {/* Package create/edit — intervals + categories in one dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-lg bg-white max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-xl bg-white max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editing ? "Edit package" : "New package"}</DialogTitle>
           </DialogHeader>
@@ -975,8 +1151,7 @@ export function MaintenanceTemplatesManager() {
                   </SelectContent>
                 </Select>
                 <p className="text-[11px] text-slate-500 leading-snug">
-                  Fills name, icon, km/month intervals, and sort. After save, preset categories are assigned
-                  automatically.
+                  Fills name, icon, intervals, sort, and the categories checklist below.
                 </p>
               </div>
             )}
@@ -1041,17 +1216,34 @@ export function MaintenanceTemplatesManager() {
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs">Service label (optional)</Label>
-                <Input
-                  className="h-9 bg-white border-slate-200"
-                  placeholder="e.g. A-service, Inspection I"
-                  value={form.frequency_label}
-                  onChange={(e) => setForm((f) => ({ ...f, frequency_label: e.target.value }))}
-                />
-                <p className="text-[10px] text-slate-400 leading-snug">
-                  Display only; scheduling follows schedule type.
-                </p>
+                <Label className="text-xs">Due kind</Label>
+                <Select
+                  value={form.due_kind}
+                  onValueChange={(v) =>
+                    setForm((f) => ({ ...f, due_kind: v as MaintenanceDueKind }))
+                  }
+                >
+                  <SelectTrigger className="h-9 bg-white border-slate-200">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="service_package">Service package</SelectItem>
+                    <SelectItem value="statutory_inspection">Statutory inspection</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Service label (optional)</Label>
+              <Input
+                className="h-9 bg-white border-slate-200"
+                placeholder="e.g. A-service, Inspection I"
+                value={form.frequency_label}
+                onChange={(e) => setForm((f) => ({ ...f, frequency_label: e.target.value }))}
+              />
+              <p className="text-[10px] text-slate-400 leading-snug">
+                Display only; scheduling follows schedule type.
+              </p>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
@@ -1132,12 +1324,111 @@ export function MaintenanceTemplatesManager() {
                 />
               </div>
             </div>
+
+            <div className="space-y-2 border-t border-slate-100 pt-3 mt-1">
+              <div>
+                <Label className="text-xs font-semibold text-slate-800">Categories in this package</Label>
+                <p className="text-[11px] text-slate-500 leading-snug mt-0.5">
+                  Select components only. Systems are section headers. Order is the log order.
+                </p>
+              </div>
+              {loadingPackageCats ? (
+                <div className="flex items-center gap-2 text-slate-400 py-4 justify-center">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Loading categories…
+                </div>
+              ) : categoryTree.every((g) => g.components.length === 0) ? (
+                <p className="text-sm text-slate-500 py-4 text-center">
+                  No components yet. Add systems and components in the Categories tab first.
+                </p>
+              ) : (
+                <div className="grid gap-3 max-h-[36vh] overflow-y-auto pr-1">
+                  {categoryTree.map(({ system, components }) => {
+                    if (components.length === 0) return null;
+                    return (
+                      <div key={system.id} className="space-y-1.5">
+                        <div className="flex items-center gap-2 px-1 pt-1">
+                          <MaintenanceIcon iconKey={system.icon_key} className="h-3.5 w-3.5 text-slate-400" />
+                          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                            {system.name}
+                          </span>
+                        </div>
+                        {components.map((c) => {
+                          const checked = packageCategoryIds.includes(c.id);
+                          const orderIdx = packageCategoryIds.indexOf(c.id);
+                          return (
+                            <div
+                              key={c.id}
+                              className={`flex items-center gap-3 rounded-md border px-3 py-2 ${
+                                checked
+                                  ? "border-amber-200 bg-amber-50/40"
+                                  : "border-slate-100 bg-slate-50/60"
+                              }`}
+                            >
+                              <Checkbox
+                                id={`pkg-dialog-cat-${c.id}`}
+                                checked={checked}
+                                onCheckedChange={(v) => togglePackageCategory(c.id, v === true)}
+                              />
+                              <MaintenanceIcon iconKey={c.icon_key} className="h-4 w-4 text-amber-600" />
+                              <Label
+                                htmlFor={`pkg-dialog-cat-${c.id}`}
+                                className="flex-1 cursor-pointer font-medium"
+                              >
+                                {c.name}
+                                <span className="ml-2 text-[11px] font-mono text-slate-400 font-normal">
+                                  {c.op_code?.trim() || c.code}
+                                </span>
+                              </Label>
+                              {checked ? (
+                                <div className="flex items-center gap-1">
+                                  <span className="text-[11px] tabular-nums text-slate-400 w-5 text-center">
+                                    {orderIdx + 1}
+                                  </span>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7"
+                                    disabled={orderIdx <= 0}
+                                    onClick={() => movePackageCategory(c.id, -1)}
+                                    aria-label="Move up"
+                                  >
+                                    ↑
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7"
+                                    disabled={orderIdx >= packageCategoryIds.length - 1}
+                                    onClick={() => movePackageCategory(c.id, 1)}
+                                    aria-label="Move down"
+                                  >
+                                    ↓
+                                  </Button>
+                                </div>
+                              ) : null}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
               Cancel
             </Button>
-            <Button type="button" onClick={handleSave} disabled={saving} className="gap-2">
+            <Button
+              type="button"
+              onClick={handleSave}
+              disabled={saving || loadingPackageCats}
+              className="gap-2"
+            >
               {saving && <Loader2 className="w-4 h-4 animate-spin" />}
               Save
             </Button>
@@ -1167,6 +1458,8 @@ export function MaintenanceTemplatesManager() {
                 <span className="capitalize">{viewing.template_scope ?? "catalog"}</span>
                 <span className="text-slate-500">Schedule type</span>
                 <span>{scheduleKindFull(viewing.frequency_kind)}</span>
+                <span className="text-slate-500">Due kind</span>
+                <span>{dueKindLabel(viewing.due_kind)}</span>
                 <span className="text-slate-500">Service label</span>
                 <span>{viewing.frequency_label?.trim() || "—"}</span>
                 <span className="text-slate-500">Every (km)</span>
@@ -1206,8 +1499,10 @@ export function MaintenanceTemplatesManager() {
                             <span className="font-medium text-slate-800">
                               {cat?.name ?? m.category_id}
                             </span>
-                            {cat?.code ? (
-                              <span className="text-[11px] font-mono text-slate-400">{cat.code}</span>
+                            {cat?.op_code || cat?.code ? (
+                              <span className="text-[11px] font-mono text-slate-400">
+                                {cat.op_code?.trim() || cat.code}
+                              </span>
                             ) : null}
                           </li>
                         );
@@ -1224,133 +1519,17 @@ export function MaintenanceTemplatesManager() {
               Close
             </Button>
             {viewing ? (
-              <>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    const row = viewing;
-                    setViewing(null);
-                    void openMembership(row);
-                  }}
-                >
-                  Categories
-                </Button>
-                <Button
-                  type="button"
-                  onClick={() => {
-                    const row = viewing;
-                    setViewing(null);
-                    openEdit(row);
-                  }}
-                >
-                  Edit
-                </Button>
-              </>
+              <Button
+                type="button"
+                onClick={() => {
+                  const row = viewing;
+                  setViewing(null);
+                  void openEdit(row);
+                }}
+              >
+                Edit
+              </Button>
             ) : null}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Package ↔ category membership */}
-      <Dialog
-        open={membershipOpen}
-        onOpenChange={(open) => {
-          setMembershipOpen(open);
-          if (!open) setMembershipTemplate(null);
-        }}
-      >
-        <DialogContent className="sm:max-w-lg bg-white max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              Categories in {membershipTemplate?.task_name ?? "package"}
-            </DialogTitle>
-          </DialogHeader>
-          <p className="text-xs text-slate-500 -mt-1">
-            Check categories to include. Order in the selected list is the log order.
-          </p>
-          <div className="grid gap-2 py-2 max-h-[50vh] overflow-y-auto pr-1">
-            {categories.length === 0 ? (
-              <p className="text-sm text-slate-500 py-6 text-center">
-                No categories available. Create some in the Categories tab first.
-              </p>
-            ) : (
-              categories.map((c) => {
-                const checked = membershipSelected.includes(c.id);
-                const orderIdx = membershipSelected.indexOf(c.id);
-                return (
-                  <div
-                    key={c.id}
-                    className={`flex items-center gap-3 rounded-md border px-3 py-2 ${
-                      checked ? "border-amber-200 bg-amber-50/40" : "border-slate-100 bg-slate-50/60"
-                    }`}
-                  >
-                    <Checkbox
-                      id={`pkg-cat-${c.id}`}
-                      checked={checked}
-                      onCheckedChange={(v) => toggleMembership(c.id, v === true)}
-                    />
-                    <MaintenanceIcon iconKey={c.icon_key} className="h-4 w-4 text-amber-600" />
-                    <Label htmlFor={`pkg-cat-${c.id}`} className="flex-1 cursor-pointer font-medium">
-                      {c.name}
-                      <span className="ml-2 text-[11px] font-mono text-slate-400 font-normal">
-                        {c.code}
-                      </span>
-                    </Label>
-                    {checked ? (
-                      <div className="flex items-center gap-1">
-                        <span className="text-[11px] tabular-nums text-slate-400 w-5 text-center">
-                          {orderIdx + 1}
-                        </span>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7"
-                          disabled={orderIdx <= 0}
-                          onClick={() => moveMembership(c.id, -1)}
-                          aria-label="Move up"
-                        >
-                          ↑
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7"
-                          disabled={orderIdx >= membershipSelected.length - 1}
-                          onClick={() => moveMembership(c.id, 1)}
-                          aria-label="Move down"
-                        >
-                          ↓
-                        </Button>
-                      </div>
-                    ) : null}
-                  </div>
-                );
-              })
-            )}
-          </div>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                setMembershipOpen(false);
-                setMembershipTemplate(null);
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              onClick={handleSaveMembership}
-              disabled={savingMembership || !membershipTemplate}
-              className="gap-2"
-            >
-              {savingMembership && <Loader2 className="w-4 h-4 animate-spin" />}
-              Save
-            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1359,16 +1538,73 @@ export function MaintenanceTemplatesManager() {
       <Dialog open={categoryDialogOpen} onOpenChange={setCategoryDialogOpen}>
         <DialogContent className="sm:max-w-md bg-white max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editingCategory ? "Edit category" : "New category"}</DialogTitle>
+            <DialogTitle>
+              {editingCategory
+                ? isEditingSystem
+                  ? "Edit system"
+                  : "Edit component"
+                : isEditingSystem
+                  ? "New system"
+                  : "New component"}
+            </DialogTitle>
           </DialogHeader>
           <div className="grid gap-3 py-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Kind</Label>
+              <Select
+                value={categoryForm.kind}
+                onValueChange={(v) => {
+                  const kind = v as MaintenanceCategoryKind;
+                  setCategoryForm((f) => ({
+                    ...f,
+                    kind,
+                    parent_id: kind === "system" ? "" : f.parent_id || systemOptions[0]?.id || "",
+                    quick_job_eligible: kind === "system" ? false : f.quick_job_eligible,
+                  }));
+                }}
+                disabled={!!editingCategory}
+              >
+                <SelectTrigger className="h-9 bg-white border-slate-200">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="system">System (parent)</SelectItem>
+                  <SelectItem value="component">Component (loggable)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {!isEditingSystem && (
+              <div className="space-y-1.5">
+                <Label className="text-xs">Parent system *</Label>
+                <Select
+                  value={categoryForm.parent_id || undefined}
+                  onValueChange={(v) => setCategoryForm((f) => ({ ...f, parent_id: v }))}
+                >
+                  <SelectTrigger className="h-9 bg-white border-slate-200">
+                    <SelectValue placeholder="Select system" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {systemOptions.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {systemOptions.length === 0 ? (
+                  <p className="text-[11px] text-amber-700 leading-snug">
+                    Create a system first before adding components.
+                  </p>
+                ) : null}
+              </div>
+            )}
             <div className="space-y-1.5">
               <Label className="text-xs">Code *</Label>
               <Input
                 value={categoryForm.code}
                 onChange={(e) => setCategoryForm((f) => ({ ...f, code: e.target.value }))}
                 className="h-9 font-mono text-sm"
-                placeholder="e.g. oil"
+                placeholder={isEditingSystem ? "e.g. sys_engine" : "e.g. oil"}
                 disabled={!!editingCategory}
               />
             </div>
@@ -1378,7 +1614,16 @@ export function MaintenanceTemplatesManager() {
                 value={categoryForm.name}
                 onChange={(e) => setCategoryForm((f) => ({ ...f, name: e.target.value }))}
                 className="h-9"
-                placeholder="e.g. Oil & Filter"
+                placeholder={isEditingSystem ? "e.g. Engine" : "e.g. Oil & Filter"}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Op code (optional)</Label>
+              <Input
+                value={categoryForm.op_code}
+                onChange={(e) => setCategoryForm((f) => ({ ...f, op_code: e.target.value }))}
+                className="h-9 font-mono text-sm"
+                placeholder="e.g. ENG-OIL"
               />
             </div>
             <div className="space-y-1.5">
@@ -1402,18 +1647,20 @@ export function MaintenanceTemplatesManager() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="cat-quick-job"
-                checked={categoryForm.quick_job_eligible}
-                onCheckedChange={(v) =>
-                  setCategoryForm((f) => ({ ...f, quick_job_eligible: v === true }))
-                }
-              />
-              <Label htmlFor="cat-quick-job" className="text-sm cursor-pointer">
-                Quick job eligible
-              </Label>
-            </div>
+            {!isEditingSystem && (
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="cat-quick-job"
+                  checked={categoryForm.quick_job_eligible}
+                  onCheckedChange={(v) =>
+                    setCategoryForm((f) => ({ ...f, quick_job_eligible: v === true }))
+                  }
+                />
+                <Label htmlFor="cat-quick-job" className="text-sm cursor-pointer">
+                  Quick job eligible
+                </Label>
+              </div>
+            )}
             <div className="space-y-1.5">
               <Label className="text-xs">Sort order</Label>
               <Input
@@ -1423,35 +1670,37 @@ export function MaintenanceTemplatesManager() {
                 type="number"
               />
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Field schema</Label>
-              <Select
-                value={categoryForm.schema_preset}
-                onValueChange={(v) =>
-                  setCategoryForm((f) => ({ ...f, schema_preset: v as FieldSchemaPreset }))
-                }
-              >
-                <SelectTrigger className="h-9 bg-white border-slate-200">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="simple">Simple — material, labor</SelectItem>
-                  <SelectItem value="commercial">Commercial — qty, unit price, condition, labor</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-[11px] text-slate-500 font-mono leading-snug break-all">
-                {summarizeFieldSchema(
-                  categoryForm.schema_preset === "commercial"
-                    ? COMMERCIAL_FIELD_SCHEMA
-                    : SIMPLE_FIELD_SCHEMA,
-                )}
-              </p>
-              {editingCategory ? (
-                <p className="text-[11px] text-slate-400 leading-snug">
-                  Saving replaces the field schema with the selected preset.
+            {!isEditingSystem && (
+              <div className="space-y-1.5">
+                <Label className="text-xs">Field schema</Label>
+                <Select
+                  value={categoryForm.schema_preset}
+                  onValueChange={(v) =>
+                    setCategoryForm((f) => ({ ...f, schema_preset: v as FieldSchemaPreset }))
+                  }
+                >
+                  <SelectTrigger className="h-9 bg-white border-slate-200">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="simple">Simple — material, labor</SelectItem>
+                    <SelectItem value="commercial">Commercial — qty, unit price, condition, labor</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-slate-500 font-mono leading-snug break-all">
+                  {summarizeFieldSchema(
+                    categoryForm.schema_preset === "commercial"
+                      ? COMMERCIAL_FIELD_SCHEMA
+                      : SIMPLE_FIELD_SCHEMA,
+                  )}
                 </p>
-              ) : null}
-            </div>
+                {editingCategory ? (
+                  <p className="text-[11px] text-slate-400 leading-snug">
+                    Saving replaces the field schema with the selected preset.
+                  </p>
+                ) : null}
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setCategoryDialogOpen(false)}>
@@ -1460,7 +1709,10 @@ export function MaintenanceTemplatesManager() {
             <Button
               type="button"
               onClick={handleSaveCategory}
-              disabled={savingCategory}
+              disabled={
+                savingCategory ||
+                (!isEditingSystem && !categoryForm.parent_id && systemOptions.length === 0)
+              }
               className="gap-2"
             >
               {savingCategory && <Loader2 className="w-4 h-4 animate-spin" />}

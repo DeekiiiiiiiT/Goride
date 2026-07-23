@@ -95,12 +95,199 @@ function sumLogLines(lines: unknown): number {
     const qty = Number(line.qty ?? values.qty ?? 0) || 0;
     const unit = Number(line.unitPrice ?? values.unit_price ?? 0) || 0;
     const material = Number(line.material ?? values.material ?? 0) || 0;
-    const labor = Number(line.labor ?? values.labor ?? 0) || 0;
+    let labor = Number(line.labor ?? line.laborAmount ?? values.labor ?? 0) || 0;
+    const hours = Number(line.laborHours ?? values.labor_hours ?? 0) || 0;
+    const rate = Number(line.laborRate ?? values.labor_rate ?? 0) || 0;
+    if (hours > 0 && rate > 0) labor = hours * rate;
+    if (line.complimentary === true) labor = 0;
+    if (line.declined === true) continue;
     if (qty > 0 && unit > 0) total += qty * unit;
     else total += material;
     total += labor;
   }
   return Math.round(total * 100) / 100;
+}
+
+function parseCategoryKind(v: unknown): "system" | "component" | null {
+  if (v === undefined || v === null || v === "") return null;
+  const s = String(v).trim();
+  if (s === "system" || s === "component") return s;
+  return null;
+}
+
+function parseOptionalUuidField(v: unknown): { ok: true; value: string | null } | { ok: false } {
+  if (v === undefined || v === null || v === "") return { ok: true, value: null };
+  const s = String(v).trim();
+  if (!isUuid(s)) return { ok: false };
+  return { ok: true, value: s };
+}
+
+/** Returns error message or null if OK. */
+function assertCategoryKindParent(
+  kind: "system" | "component",
+  parentId: string | null,
+): string | null {
+  if (kind === "component" && !parentId) return "parent_id is required when kind is component";
+  if (kind === "system" && parentId != null) return "parent_id must be null when kind is system";
+  return null;
+}
+
+function parseDueKind(v: unknown): "service_package" | "statutory_inspection" | null {
+  if (v === undefined || v === null || v === "") return null;
+  const s = String(v).trim();
+  if (s === "service_package" || s === "statutory_inspection") return s;
+  return null;
+}
+
+const WO_LINE_ACTIONS = new Set([
+  "inspect", "replace", "rotate", "balance", "flush", "top_up", "repair", "other",
+]);
+
+function computeWoLineTotal(line: Record<string, unknown>): number {
+  if (line.declined === true) return 0;
+  const qty = Number(line.qty ?? 0) || 0;
+  const unit = Number(line.unit_price ?? line.unitPrice ?? 0) || 0;
+  const material = Number(line.material ?? 0) || 0;
+  let labor = Number(line.labor_amount ?? line.laborAmount ?? line.labor ?? 0) || 0;
+  const hours = Number(line.labor_hours ?? line.laborHours ?? 0) || 0;
+  const rate = Number(line.labor_rate ?? line.laborRate ?? 0) || 0;
+  if (hours > 0 && rate > 0) labor = hours * rate;
+  if (line.complimentary === true) labor = 0;
+  let total = 0;
+  if (qty > 0 && unit > 0) total += qty * unit;
+  else total += material;
+  total += labor;
+  return Math.round(total * 100) / 100;
+}
+
+/** camelCase API line → snake_case DB row for maintenance_work_order_lines. */
+function mapApiLineToDb(
+  raw: Record<string, unknown>,
+  sortOrder: number,
+  workOrderId?: string,
+): Record<string, unknown> {
+  const valuesRaw = raw.values ?? raw.values_json;
+  const values = (valuesRaw && typeof valuesRaw === "object" && !Array.isArray(valuesRaw))
+    ? valuesRaw
+    : null;
+  const componentParsed = parseOptionalUuidField(
+    raw.componentId ?? raw.component_id ?? raw.categoryId ?? raw.category_id,
+  );
+  const systemParsed = parseOptionalUuidField(raw.systemId ?? raw.system_id);
+  const partParsed = parseOptionalUuidField(raw.partId ?? raw.part_id);
+  let action = String(raw.action ?? "replace").trim();
+  if (!WO_LINE_ACTIONS.has(action)) action = "other";
+
+  const row: Record<string, unknown> = {
+    sort_order: raw.sortOrder != null ? Number(raw.sortOrder) : (raw.sort_order != null ? Number(raw.sort_order) : sortOrder),
+    system_id: systemParsed.ok ? systemParsed.value : null,
+    component_id: componentParsed.ok ? componentParsed.value : null,
+    system_code: raw.systemCode != null
+      ? String(raw.systemCode)
+      : (raw.system_code != null ? String(raw.system_code) : null),
+    system_name: raw.systemName != null
+      ? String(raw.systemName)
+      : (raw.system_name != null ? String(raw.system_name) : null),
+    component_code: raw.componentCode != null
+      ? String(raw.componentCode)
+      : (raw.categoryCode != null
+        ? String(raw.categoryCode)
+        : (raw.component_code != null ? String(raw.component_code) : null)),
+    component_name: raw.componentName != null
+      ? String(raw.componentName)
+      : (raw.categoryName != null
+        ? String(raw.categoryName)
+        : (raw.component_name != null ? String(raw.component_name) : null)),
+    action,
+    qty: parseOptionalNumberField(raw.qty),
+    unit_price: parseOptionalNumberField(raw.unitPrice ?? raw.unit_price),
+    material: parseOptionalNumberField(raw.material),
+    labor_amount: parseOptionalNumberField(raw.laborAmount ?? raw.labor_amount ?? raw.labor),
+    labor_hours: parseOptionalNumberField(raw.laborHours ?? raw.labor_hours),
+    labor_rate: parseOptionalNumberField(raw.laborRate ?? raw.labor_rate),
+    condition: raw.condition != null ? String(raw.condition) : null,
+    positions: Array.isArray(raw.positions) ? raw.positions.map(String) : null,
+    brand: raw.brand != null ? String(raw.brand) : null,
+    part_number: raw.partNumber != null
+      ? String(raw.partNumber)
+      : (raw.part_number != null ? String(raw.part_number) : null),
+    warranty: raw.warranty === true,
+    complimentary: raw.complimentary === true,
+    part_id: partParsed.ok ? partParsed.value : null,
+    notes: raw.notes != null ? String(raw.notes) : null,
+    recommended: raw.recommended === true,
+    declined: raw.declined === true,
+    values_json: values,
+  };
+  row.line_total = computeWoLineTotal(row);
+  if (workOrderId) row.work_order_id = workOrderId;
+  if (raw.id != null && isUuid(String(raw.id))) row.id = String(raw.id);
+  return row;
+}
+
+/** snake_case DB line → camelCase API. */
+function mapDbLineToApi(row: Record<string, unknown>): Record<string, unknown> {
+  return {
+    id: row.id,
+    sortOrder: row.sort_order,
+    systemId: row.system_id,
+    componentId: row.component_id,
+    systemCode: row.system_code,
+    systemName: row.system_name,
+    categoryId: row.component_id,
+    categoryCode: row.component_code,
+    categoryName: row.component_name,
+    componentCode: row.component_code,
+    componentName: row.component_name,
+    action: row.action,
+    qty: row.qty != null ? Number(row.qty) : undefined,
+    unitPrice: row.unit_price != null ? Number(row.unit_price) : undefined,
+    material: row.material != null ? Number(row.material) : undefined,
+    labor: row.labor_amount != null ? Number(row.labor_amount) : undefined,
+    laborAmount: row.labor_amount != null ? Number(row.labor_amount) : undefined,
+    laborHours: row.labor_hours != null ? Number(row.labor_hours) : undefined,
+    laborRate: row.labor_rate != null ? Number(row.labor_rate) : undefined,
+    condition: row.condition,
+    positions: row.positions,
+    brand: row.brand,
+    partNumber: row.part_number,
+    warranty: row.warranty === true,
+    complimentary: row.complimentary === true,
+    partId: row.part_id,
+    notes: row.notes,
+    recommended: row.recommended === true,
+    declined: row.declined === true,
+    values: row.values_json,
+    lineTotal: row.line_total != null ? Number(row.line_total) : undefined,
+  };
+}
+
+function mapDbWorkOrderToApi(
+  wo: Record<string, unknown>,
+  lines?: Record<string, unknown>[],
+): Record<string, unknown> {
+  return {
+    id: wo.id,
+    organizationId: wo.organization_id,
+    vehicleId: wo.vehicle_id,
+    status: wo.status,
+    openedAt: wo.opened_at,
+    closedAt: wo.closed_at,
+    performedAtDate: wo.performed_at_date,
+    odometer: wo.odometer,
+    provider: wo.provider,
+    currency: wo.currency,
+    templateId: wo.template_id,
+    packageComplete: wo.package_complete === true,
+    logMode: wo.log_mode,
+    notes: wo.notes,
+    invoiceUrl: wo.invoice_url,
+    totalCost: wo.total_cost != null ? Number(wo.total_cost) : null,
+    maintenanceRecordId: wo.maintenance_record_id,
+    lines: lines ? lines.map(mapDbLineToApi) : undefined,
+    createdAt: wo.created_at,
+    updatedAt: wo.updated_at,
+  };
 }
 
 async function loadCategoriesForTemplateIds(
@@ -109,16 +296,40 @@ async function loadCategoriesForTemplateIds(
 ): Promise<Map<string, Array<Record<string, unknown>>>> {
   const map = new Map<string, Array<Record<string, unknown>>>();
   if (!templateIds.length) return map;
+  // Components only for package membership; include parent system when joinable
   const { data, error } = await sb
     .from("maintenance_package_categories")
-    .select("template_id, sort_order, required, category:maintenance_service_categories(*)")
+    .select(
+      "template_id, sort_order, required, category:maintenance_service_categories(*, parent:maintenance_service_categories!parent_id(*))",
+    )
     .in("template_id", templateIds)
     .order("sort_order", { ascending: true });
-  if (error) throw error;
+  if (error) {
+    // Fallback without parent join (older PostgREST / missing FK name)
+    const { data: fallback, error: fbErr } = await sb
+      .from("maintenance_package_categories")
+      .select("template_id, sort_order, required, category:maintenance_service_categories(*)")
+      .in("template_id", templateIds)
+      .order("sort_order", { ascending: true });
+    if (fbErr) throw fbErr;
+    for (const row of fallback || []) {
+      const tid = String((row as { template_id: string }).template_id);
+      const cat = (row as { category?: Record<string, unknown> | null }).category;
+      if (!cat) continue;
+      const kind = cat.kind != null ? String(cat.kind) : "component";
+      if (kind !== "component") continue;
+      const list = map.get(tid) || [];
+      list.push(cat);
+      map.set(tid, list);
+    }
+    return map;
+  }
   for (const row of data || []) {
     const tid = String((row as { template_id: string }).template_id);
     const cat = (row as { category?: Record<string, unknown> | null }).category;
     if (!cat) continue;
+    const kind = cat.kind != null ? String(cat.kind) : "component";
+    if (kind !== "component") continue;
     const list = map.get(tid) || [];
     list.push(cat);
     map.set(tid, list);
@@ -217,6 +428,10 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         if (rangeErr) return c.json({ error: rangeErr }, 400);
         const iconKeyRaw = body.icon_key != null ? String(body.icon_key).trim() : "wrench";
         const icon_key = (iconKeyRaw || "wrench").slice(0, 40);
+        const dueKindParsed = parseDueKind(body.due_kind);
+        if (body.due_kind !== undefined && body.due_kind !== null && body.due_kind !== "" && !dueKindParsed) {
+          return c.json({ error: "due_kind must be service_package or statutory_inspection" }, 400);
+        }
         const row = {
           template_scope: "catalog",
           vehicle_catalog_id: catalogId,
@@ -230,6 +445,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
             : null,
           frequency_kind,
           frequency_label,
+          due_kind: dueKindParsed ?? "service_package",
           priority: String(body.priority ?? "standard"),
           sort_order: body.sort_order != null ? Number(body.sort_order) : 0,
           icon_key,
@@ -286,6 +502,11 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         if (body.icon_key !== undefined) {
           const iconKeyRaw = body.icon_key != null ? String(body.icon_key).trim() : "wrench";
           patch.icon_key = (iconKeyRaw || "wrench").slice(0, 40);
+        }
+        if (body.due_kind !== undefined) {
+          const dk = parseDueKind(body.due_kind);
+          if (!dk) return c.json({ error: "due_kind must be service_package or statutory_inspection" }, 400);
+          patch.due_kind = dk;
         }
 
         const { data: existingRow } = await supabase
@@ -392,6 +613,10 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         if (rangeErrG) return c.json({ error: rangeErrG }, 400);
         const iconKeyRawG = body.icon_key != null ? String(body.icon_key).trim() : "wrench";
         const icon_key = (iconKeyRawG || "wrench").slice(0, 40);
+        const dueKindParsedG = parseDueKind(body.due_kind);
+        if (body.due_kind !== undefined && body.due_kind !== null && body.due_kind !== "" && !dueKindParsedG) {
+          return c.json({ error: "due_kind must be service_package or statutory_inspection" }, 400);
+        }
         const row = {
           template_scope: "global",
           vehicle_catalog_id: null as string | null,
@@ -405,6 +630,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
             : null,
           frequency_kind,
           frequency_label,
+          due_kind: dueKindParsedG ?? "service_package",
           priority: String(body.priority ?? "standard"),
           sort_order: body.sort_order != null ? Number(body.sort_order) : 0,
           icon_key,
@@ -430,10 +656,13 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
       const denied = assertVehicleCatalogPlatformAccess(c);
       if (denied) return denied;
       try {
-        const { data, error } = await supabase
+        const kindFilter = parseCategoryKind(c.req.query("kind"));
+        let q = supabase
           .from("maintenance_service_categories")
           .select("*")
           .order("sort_order", { ascending: true });
+        if (kindFilter) q = q.eq("kind", kindFilter);
+        const { data, error } = await q;
         if (error) throw error;
         return c.json({ items: data || [] });
       } catch (e: unknown) {
@@ -455,6 +684,16 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         const name = String(body.name ?? "").trim();
         if (!code) return c.json({ error: "code is required" }, 400);
         if (!name) return c.json({ error: "name is required" }, 400);
+        const kind = parseCategoryKind(body.kind) ?? "component";
+        const parentParsed = parseOptionalUuidField(body.parent_id);
+        if (!parentParsed.ok) return c.json({ error: "Invalid parent_id" }, 400);
+        let parent_id = parentParsed.value;
+        if (kind === "system") parent_id = null;
+        const kindErr = assertCategoryKindParent(kind, parent_id);
+        if (kindErr) return c.json({ error: kindErr }, 400);
+        const op_code = body.op_code === undefined || body.op_code === null || body.op_code === ""
+          ? null
+          : String(body.op_code).trim().slice(0, 80);
         const iconKeyRaw = body.icon_key != null ? String(body.icon_key).trim() : "wrench";
         const row = {
           code: code.slice(0, 80),
@@ -463,6 +702,9 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           field_schema: parseFieldSchema(body.field_schema),
           quick_job_eligible: body.quick_job_eligible === true,
           sort_order: body.sort_order != null ? Number(body.sort_order) : 0,
+          kind,
+          parent_id,
+          op_code,
           updated_at: new Date().toISOString(),
         };
         const { data, error } = await supabase
@@ -498,6 +740,40 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         if (body.field_schema !== undefined) patch.field_schema = parseFieldSchema(body.field_schema);
         if (body.quick_job_eligible !== undefined) patch.quick_job_eligible = body.quick_job_eligible === true;
         if (body.sort_order !== undefined) patch.sort_order = Number(body.sort_order);
+        if (body.op_code !== undefined) {
+          patch.op_code = body.op_code === null || body.op_code === ""
+            ? null
+            : String(body.op_code).trim().slice(0, 80);
+        }
+
+        const { data: existingCat } = await supabase
+          .from("maintenance_service_categories")
+          .select("kind, parent_id")
+          .eq("id", id)
+          .maybeSingle();
+        if (!existingCat) return c.json({ error: "Not found" }, 404);
+
+        const nextKindRaw = body.kind !== undefined ? parseCategoryKind(body.kind) : null;
+        if (body.kind !== undefined && !nextKindRaw) {
+          return c.json({ error: "kind must be system or component" }, 400);
+        }
+        const nextKind = (nextKindRaw ?? String(existingCat.kind ?? "component")) as "system" | "component";
+        if (body.kind !== undefined) patch.kind = nextKind;
+
+        let nextParent: string | null =
+          existingCat.parent_id != null ? String(existingCat.parent_id) : null;
+        if (body.parent_id !== undefined) {
+          const parentParsed = parseOptionalUuidField(body.parent_id);
+          if (!parentParsed.ok) return c.json({ error: "Invalid parent_id" }, 400);
+          nextParent = parentParsed.value;
+        }
+        if (nextKind === "system") nextParent = null;
+        if (body.kind !== undefined || body.parent_id !== undefined) {
+          const kindErr = assertCategoryKindParent(nextKind, nextParent);
+          if (kindErr) return c.json({ error: kindErr }, 400);
+          patch.parent_id = nextParent;
+        }
+
         const { data, error } = await supabase
           .from("maintenance_service_categories")
           .update(patch)
@@ -600,10 +876,13 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
     requireAuth(),
     async (c) => {
       try {
-        const { data, error } = await supabase
+        const kindFilter = parseCategoryKind(c.req.query("kind"));
+        let q = supabase
           .from("maintenance_service_categories")
           .select("*")
           .order("sort_order", { ascending: true });
+        if (kindFilter) q = q.eq("kind", kindFilter);
+        const { data, error } = await q;
         if (error) throw error;
         return c.json({ items: data || [] });
       } catch (e: unknown) {
@@ -621,7 +900,30 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         const { data, error } = await supabase
           .from("maintenance_service_categories")
           .select("*")
+          .eq("kind", "system")
           .eq("quick_job_eligible", true)
+          .order("sort_order", { ascending: true });
+        if (error) throw error;
+        return c.json({ items: data || [] });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return c.json({ error: msg }, 500);
+      }
+    },
+  );
+
+  route.get(
+    "/make-server-37f42386/maintenance-categories/systems/:systemId/components",
+    requireAuth(),
+    async (c) => {
+      try {
+        const systemId = c.req.param("systemId")?.trim() ?? "";
+        if (!isUuid(systemId)) return c.json({ error: "Invalid system id" }, 400);
+        const { data, error } = await supabase
+          .from("maintenance_service_categories")
+          .select("*")
+          .eq("kind", "component")
+          .eq("parent_id", systemId)
           .order("sort_order", { ascending: true });
         if (error) throw error;
         return c.json({ items: data || [] });
@@ -1039,9 +1341,93 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           provider: rowInsert.provider,
         };
         const ledgerResult = await appendCanonicalMaintenanceIfEligible(ledgerInput, c);
+
+        // Bridge: when lines present, also create a completed work order for the new garage UI
+        let workOrderId: string | undefined;
+        if (Array.isArray(log.lines) && log.lines.length) {
+          const woId = crypto.randomUUID();
+          const lineRows = (log.lines as unknown[])
+            .map((raw, i) => {
+              if (!raw || typeof raw !== "object") return null;
+              return mapApiLineToDb(raw as Record<string, unknown>, i, woId);
+            })
+            .filter((r): r is Record<string, unknown> => r != null);
+          const lineSum = lineRows.reduce((s, r) => s + (Number(r.line_total) || 0), 0);
+          const logModeDb = logMode === "package" ? "package" : "quick_job";
+          const packageComplete = logModeDb === "package" && !!templateId;
+          const { error: woErr } = await supabase.from("maintenance_work_orders").insert({
+            id: woId,
+            organization_id: orgId,
+            vehicle_id: vehicleId,
+            status: "completed",
+            opened_at: new Date().toISOString(),
+            closed_at: new Date().toISOString(),
+            performed_at_date,
+            odometer: performed_at_miles,
+            provider: rowInsert.provider,
+            currency,
+            template_id: templateId || null,
+            package_complete: packageComplete,
+            log_mode: logModeDb,
+            notes: rowInsert.notes,
+            invoice_url: rowInsert.invoice_url,
+            total_cost: cost ?? lineSum,
+            maintenance_record_id: id,
+            payload_json: { source: "maintenance_logs_bridge", logId: id },
+            updated_at: new Date().toISOString(),
+          });
+          if (woErr) {
+            console.warn("[maintenance-logs] WO bridge insert failed:", woErr.message);
+          } else {
+            workOrderId = woId;
+            if (lineRows.length) {
+              const { error: lineErr } = await supabase
+                .from("maintenance_work_order_lines")
+                .insert(lineRows);
+              if (lineErr) {
+                console.warn("[maintenance-logs] WO lines bridge failed:", lineErr.message);
+              } else {
+                const usageRows = lineRows
+                  .filter((r) => r.part_id && isUuid(String(r.part_id)))
+                  .map((r) => ({
+                    organization_id: orgId,
+                    work_order_id: woId,
+                    line_id: r.id != null ? String(r.id) : null,
+                    part_id: String(r.part_id),
+                    qty: r.qty != null ? Number(r.qty) : 1,
+                    unit_cost: r.unit_price != null ? Number(r.unit_price) : null,
+                    currency,
+                    vehicle_id: vehicleId,
+                    used_at: new Date().toISOString(),
+                  }));
+                if (usageRows.length) {
+                  const { error: usageErr } = await supabase
+                    .from("maintenance_parts_usage")
+                    .insert(usageRows);
+                  if (usageErr) {
+                    console.warn("[maintenance-logs] parts usage bridge failed:", usageErr.message);
+                  }
+                }
+              }
+            }
+            // Stash workOrderId on record payload for clients
+            await supabase
+              .from("maintenance_records")
+              .update({
+                payload_json: {
+                  ...(rowInsert.payload_json as Record<string, unknown>),
+                  workOrderId: woId,
+                },
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", id);
+          }
+        }
+
         return c.json({
           success: true,
           data: inserted,
+          workOrderId,
           ledgerPosted: ledgerResult.posted,
           ledgerWarning: ledgerResult.failed
             ? "Service saved but not posted to books — contact support if this persists"
@@ -1346,8 +1732,47 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           .single();
         if (insErr) throw insErr;
 
+        // Phase 6: open a draft work order so fleet completes via garage job card
+        let workOrderId: string | null = null;
+        try {
+          const woId = crypto.randomUUID();
+          const { error: woErr } = await supabase.from("maintenance_work_orders").insert({
+            id: woId,
+            organization_id: orgId,
+            vehicle_id: vehicleId,
+            status: "draft",
+            performed_at_date,
+            odometer: performed_at_miles,
+            provider: "Driver Request",
+            currency: "JMD",
+            log_mode: "quick_job",
+            package_complete: false,
+            notes,
+            maintenance_record_id: id,
+            payload_json: {
+              ...payload_json,
+              workOrderId: woId,
+            },
+            updated_at: new Date().toISOString(),
+          });
+          if (!woErr) {
+            workOrderId = woId;
+            await supabase
+              .from("maintenance_records")
+              .update({
+                payload_json: { ...payload_json, workOrderId: woId },
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", id);
+          } else {
+            console.error("[maintenance-requests] draft WO:", woErr.message);
+          }
+        } catch (woCreateErr: unknown) {
+          console.error("[maintenance-requests] draft WO:", woCreateErr);
+        }
+
         // Never post Requested rows to the ledger
-        return c.json({ success: true, data: inserted });
+        return c.json({ success: true, data: inserted, workOrderId });
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         return c.json({ error: msg }, 500);
@@ -1583,6 +2008,683 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         });
 
         return c.json({ items });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return c.json({ error: msg }, 500);
+      }
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // Tenant — work orders (job cards)
+  // -------------------------------------------------------------------------
+  route.get(
+    "/make-server-37f42386/maintenance-work-orders",
+    requireAuth(),
+    async (c) => {
+      try {
+        const orgId = getOrgId(c);
+        if (!orgId) return c.json({ error: "Organization required" }, 400);
+        const vehicleId = String(c.req.query("vehicleId") || "").trim();
+        if (!vehicleId) return c.json({ error: "vehicleId is required" }, 400);
+        const { data, error } = await supabase
+          .from("maintenance_work_orders")
+          .select("*")
+          .eq("organization_id", orgId)
+          .eq("vehicle_id", vehicleId)
+          .order("opened_at", { ascending: false });
+        if (error) throw error;
+        return c.json({ items: (data || []).map((wo) => mapDbWorkOrderToApi(wo as Record<string, unknown>)) });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return c.json({ error: msg }, 500);
+      }
+    },
+  );
+
+  route.get(
+    "/make-server-37f42386/maintenance-work-orders/:id",
+    requireAuth(),
+    async (c) => {
+      try {
+        const orgId = getOrgId(c);
+        if (!orgId) return c.json({ error: "Organization required" }, 400);
+        const id = c.req.param("id");
+        if (!isUuid(id)) return c.json({ error: "Invalid id" }, 400);
+        const { data: wo, error } = await supabase
+          .from("maintenance_work_orders")
+          .select("*")
+          .eq("id", id)
+          .eq("organization_id", orgId)
+          .maybeSingle();
+        if (error) throw error;
+        if (!wo) return c.json({ error: "Not found" }, 404);
+        const { data: lines, error: lineErr } = await supabase
+          .from("maintenance_work_order_lines")
+          .select("*")
+          .eq("work_order_id", id)
+          .order("sort_order", { ascending: true });
+        if (lineErr) throw lineErr;
+        return c.json({
+          item: mapDbWorkOrderToApi(
+            wo as Record<string, unknown>,
+            (lines || []) as Record<string, unknown>[],
+          ),
+        });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return c.json({ error: msg }, 500);
+      }
+    },
+  );
+
+  route.post(
+    "/make-server-37f42386/maintenance-work-orders",
+    requireAuth(),
+    requirePermission("vehicles.edit"),
+    async (c) => {
+      try {
+        const orgId = getOrgId(c);
+        if (!orgId) return c.json({ error: "Organization required" }, 400);
+        const body = (await c.req.json()) as Record<string, unknown>;
+        const vehicleId = String(body.vehicleId ?? body.vehicle_id ?? "").trim();
+        if (!vehicleId) return c.json({ error: "vehicleId is required" }, 400);
+        const statusRaw = String(body.status ?? "draft").trim();
+        const status = ["draft", "in_progress"].includes(statusRaw) ? statusRaw : "draft";
+        const logModeRaw = String(body.logMode ?? body.log_mode ?? "quick_job").trim();
+        const log_mode = logModeRaw === "package" ? "package" : "quick_job";
+        const templateParsed = parseOptionalUuidField(body.templateId ?? body.template_id);
+        if (!templateParsed.ok) return c.json({ error: "Invalid templateId" }, 400);
+        const currencyRaw = body.currency != null ? String(body.currency).trim().toUpperCase() : "JMD";
+        const currency = currencyRaw || "JMD";
+        const woId = crypto.randomUUID();
+        const rawLines = Array.isArray(body.lines) ? body.lines : [];
+        const lineRows = rawLines
+          .map((raw, i) => {
+            if (!raw || typeof raw !== "object") return null;
+            return mapApiLineToDb(raw as Record<string, unknown>, i, woId);
+          })
+          .filter((r): r is Record<string, unknown> => r != null);
+        const totalCost = lineRows.reduce((s, r) => s + (Number(r.line_total) || 0), 0);
+
+        const header = {
+          id: woId,
+          organization_id: orgId,
+          vehicle_id: vehicleId,
+          status,
+          opened_at: new Date().toISOString(),
+          performed_at_date: body.performedAtDate != null || body.performed_at_date != null
+            ? String(body.performedAtDate ?? body.performed_at_date).slice(0, 10)
+            : null,
+          odometer: body.odometer != null ? Number(body.odometer) : null,
+          provider: body.provider != null ? String(body.provider) : null,
+          currency,
+          template_id: templateParsed.value,
+          package_complete: body.packageComplete === true || body.package_complete === true,
+          log_mode,
+          notes: body.notes != null ? String(body.notes) : null,
+          invoice_url: body.invoiceUrl != null
+            ? String(body.invoiceUrl)
+            : (body.invoice_url != null ? String(body.invoice_url) : null),
+          total_cost: totalCost || null,
+          updated_at: new Date().toISOString(),
+        };
+        const { data: wo, error: woErr } = await supabase
+          .from("maintenance_work_orders")
+          .insert(header)
+          .select()
+          .single();
+        if (woErr) throw woErr;
+        if (lineRows.length) {
+          const { error: lineErr } = await supabase
+            .from("maintenance_work_order_lines")
+            .insert(lineRows);
+          if (lineErr) throw lineErr;
+        }
+        const { data: lines } = await supabase
+          .from("maintenance_work_order_lines")
+          .select("*")
+          .eq("work_order_id", woId)
+          .order("sort_order", { ascending: true });
+        return c.json({
+          item: mapDbWorkOrderToApi(
+            wo as Record<string, unknown>,
+            (lines || []) as Record<string, unknown>[],
+          ),
+        });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return c.json({ error: msg }, 500);
+      }
+    },
+  );
+
+  route.patch(
+    "/make-server-37f42386/maintenance-work-orders/:id",
+    requireAuth(),
+    requirePermission("vehicles.edit"),
+    async (c) => {
+      try {
+        const orgId = getOrgId(c);
+        if (!orgId) return c.json({ error: "Organization required" }, 400);
+        const id = c.req.param("id");
+        if (!isUuid(id)) return c.json({ error: "Invalid id" }, 400);
+        const body = (await c.req.json()) as Record<string, unknown>;
+
+        const { data: existing, error: fetchErr } = await supabase
+          .from("maintenance_work_orders")
+          .select("*")
+          .eq("id", id)
+          .eq("organization_id", orgId)
+          .maybeSingle();
+        if (fetchErr) throw fetchErr;
+        if (!existing) return c.json({ error: "Not found" }, 404);
+        if (String(existing.status) === "completed") {
+          return c.json({ error: "Cannot edit a completed work order" }, 400);
+        }
+
+        const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+        if (body.status !== undefined) {
+          const st = String(body.status).trim();
+          if (!["draft", "in_progress", "cancelled"].includes(st)) {
+            return c.json({ error: "status must be draft, in_progress, or cancelled" }, 400);
+          }
+          patch.status = st;
+        }
+        if (body.performedAtDate !== undefined || body.performed_at_date !== undefined) {
+          const v = body.performedAtDate ?? body.performed_at_date;
+          patch.performed_at_date = v == null || v === "" ? null : String(v).slice(0, 10);
+        }
+        if (body.odometer !== undefined) {
+          patch.odometer = body.odometer == null || body.odometer === "" ? null : Number(body.odometer);
+        }
+        if (body.provider !== undefined) patch.provider = body.provider == null ? null : String(body.provider);
+        if (body.currency !== undefined) {
+          const cur = String(body.currency).trim().toUpperCase();
+          patch.currency = cur || "JMD";
+        }
+        if (body.templateId !== undefined || body.template_id !== undefined) {
+          const tp = parseOptionalUuidField(body.templateId ?? body.template_id);
+          if (!tp.ok) return c.json({ error: "Invalid templateId" }, 400);
+          patch.template_id = tp.value;
+        }
+        if (body.packageComplete !== undefined || body.package_complete !== undefined) {
+          patch.package_complete = body.packageComplete === true || body.package_complete === true;
+        }
+        if (body.logMode !== undefined || body.log_mode !== undefined) {
+          const lm = String(body.logMode ?? body.log_mode).trim();
+          patch.log_mode = lm === "package" ? "package" : "quick_job";
+        }
+        if (body.notes !== undefined) patch.notes = body.notes == null ? null : String(body.notes);
+        if (body.invoiceUrl !== undefined || body.invoice_url !== undefined) {
+          const u = body.invoiceUrl ?? body.invoice_url;
+          patch.invoice_url = u == null || u === "" ? null : String(u);
+        }
+
+        if (Array.isArray(body.lines)) {
+          const { error: delErr } = await supabase
+            .from("maintenance_work_order_lines")
+            .delete()
+            .eq("work_order_id", id);
+          if (delErr) throw delErr;
+          const lineRows = body.lines
+            .map((raw, i) => {
+              if (!raw || typeof raw !== "object") return null;
+              const row = mapApiLineToDb(raw as Record<string, unknown>, i, id);
+              delete row.id; // fresh ids on replace
+              return row;
+            })
+            .filter((r): r is Record<string, unknown> => r != null);
+          if (lineRows.length) {
+            const { error: insErr } = await supabase
+              .from("maintenance_work_order_lines")
+              .insert(lineRows);
+            if (insErr) throw insErr;
+          }
+          patch.total_cost = lineRows.reduce((s, r) => s + (Number(r.line_total) || 0), 0);
+        }
+
+        const { data: wo, error: upErr } = await supabase
+          .from("maintenance_work_orders")
+          .update(patch)
+          .eq("id", id)
+          .eq("organization_id", orgId)
+          .select()
+          .single();
+        if (upErr) throw upErr;
+
+        const { data: lines } = await supabase
+          .from("maintenance_work_order_lines")
+          .select("*")
+          .eq("work_order_id", id)
+          .order("sort_order", { ascending: true });
+        return c.json({
+          item: mapDbWorkOrderToApi(
+            wo as Record<string, unknown>,
+            (lines || []) as Record<string, unknown>[],
+          ),
+        });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return c.json({ error: msg }, 500);
+      }
+    },
+  );
+
+  route.post(
+    "/make-server-37f42386/maintenance-work-orders/:id/complete",
+    requireAuth(),
+    requirePermission("vehicles.edit"),
+    async (c) => {
+      try {
+        const orgId = getOrgId(c);
+        if (!orgId) return c.json({ error: "Organization required" }, 400);
+        const id = c.req.param("id");
+        if (!isUuid(id)) return c.json({ error: "Invalid id" }, 400);
+        const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+
+        const { data: wo, error: fetchErr } = await supabase
+          .from("maintenance_work_orders")
+          .select("*")
+          .eq("id", id)
+          .eq("organization_id", orgId)
+          .maybeSingle();
+        if (fetchErr) throw fetchErr;
+        if (!wo) return c.json({ error: "Not found" }, 404);
+        if (String(wo.status) === "completed") {
+          return c.json({ error: "Work order already completed" }, 400);
+        }
+        if (String(wo.status) === "cancelled") {
+          return c.json({ error: "Cannot complete a cancelled work order" }, 400);
+        }
+
+        const { data: lines, error: lineErr } = await supabase
+          .from("maintenance_work_order_lines")
+          .select("*")
+          .eq("work_order_id", id)
+          .order("sort_order", { ascending: true });
+        if (lineErr) throw lineErr;
+        const lineRows = (lines || []) as Record<string, unknown>[];
+        const totalCost = lineRows.reduce((s, r) => {
+          const lt = r.line_total != null ? Number(r.line_total) : computeWoLineTotal(r);
+          return s + (Number.isFinite(lt) ? lt : 0);
+        }, 0);
+        const roundedTotal = Math.round(totalCost * 100) / 100;
+
+        const performed_at_date = body.performedAtDate != null || body.performed_at_date != null
+          ? String(body.performedAtDate ?? body.performed_at_date).slice(0, 10)
+          : (wo.performed_at_date != null ? String(wo.performed_at_date).slice(0, 10) : todayIso());
+        const performed_at_miles = body.odometer != null
+          ? Number(body.odometer)
+          : (wo.odometer != null ? Number(wo.odometer) : 0);
+        const currency = String(wo.currency ?? "JMD");
+        const vehicleId = String(wo.vehicle_id);
+        const templateId = wo.template_id != null ? String(wo.template_id) : null;
+        const logMode = String(wo.log_mode ?? "quick_job");
+        const packageComplete = wo.package_complete === true;
+        const provider = body.provider != null
+          ? String(body.provider)
+          : (wo.provider != null ? String(wo.provider) : null);
+        const notes = body.notes != null
+          ? String(body.notes)
+          : (wo.notes != null ? String(wo.notes) : null);
+        const invoice_url = body.invoiceUrl != null || body.invoice_url != null
+          ? String(body.invoiceUrl ?? body.invoice_url)
+          : (wo.invoice_url != null ? String(wo.invoice_url) : null);
+
+        const recordId = crypto.randomUUID();
+        const apiLines = lineRows.map(mapDbLineToApi);
+        const service_type = body.type != null
+          ? String(body.type)
+          : (packageComplete ? "Package service" : "Quick job");
+        const payload_json = {
+          id: recordId,
+          vehicleId,
+          date: performed_at_date,
+          odo: performed_at_miles,
+          type: service_type,
+          cost: roundedTotal,
+          currency,
+          provider: provider || "",
+          notes: notes || "",
+          invoiceUrl: invoice_url || "",
+          status: "Completed",
+          templateId: templateId || undefined,
+          logMode,
+          workOrderId: id,
+          lines: apiLines,
+          source: "work_order_complete",
+        };
+
+        const { data: record, error: recErr } = await supabase
+          .from("maintenance_records")
+          .insert({
+            id: recordId,
+            organization_id: orgId,
+            vehicle_id: vehicleId,
+            template_id: templateId,
+            performed_at_miles,
+            performed_at_date,
+            cost: roundedTotal,
+            currency,
+            service_type,
+            provider,
+            notes,
+            invoice_url,
+            status: "Completed",
+            legacy_kv_id: null,
+            payload_json,
+            updated_at: new Date().toISOString(),
+          })
+          .select()
+          .single();
+        if (recErr) throw recErr;
+
+        const { data: completedWo, error: upErr } = await supabase
+          .from("maintenance_work_orders")
+          .update({
+            status: "completed",
+            closed_at: new Date().toISOString(),
+            performed_at_date,
+            odometer: performed_at_miles,
+            provider,
+            notes,
+            invoice_url,
+            total_cost: roundedTotal,
+            maintenance_record_id: recordId,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", id)
+          .eq("organization_id", orgId)
+          .select()
+          .single();
+        if (upErr) throw upErr;
+
+        // Advance schedule when package complete (not quick job)
+        if (packageComplete && templateId && logMode !== "quick_job") {
+          const { data: template } = await supabase
+            .from("maintenance_task_templates")
+            .select("*")
+            .eq("id", templateId)
+            .maybeSingle();
+          if (template) {
+            const adv = advanceAfterService(
+              template as Record<string, unknown>,
+              performed_at_miles,
+              performed_at_date,
+            );
+            await supabase
+              .from("vehicle_maintenance_schedule")
+              .update({
+                last_performed_miles: performed_at_miles,
+                last_performed_date: performed_at_date,
+                next_due_miles: adv.next_due_miles,
+                next_due_miles_max: adv.next_due_miles_max,
+                next_due_date: adv.next_due_date,
+                schedule_status: adv.schedule_status,
+                updated_at: new Date().toISOString(),
+              })
+              .eq("organization_id", orgId)
+              .eq("vehicle_id", vehicleId)
+              .eq("template_id", templateId);
+          }
+        }
+
+        const ledgerInput = {
+          id: recordId,
+          vehicleId,
+          performed_at_date,
+          cost: roundedTotal,
+          status: "Completed",
+          currency,
+          service_type,
+          provider,
+        };
+        const ledgerResult = await appendCanonicalMaintenanceIfEligible(ledgerInput, c);
+
+        const usageRows = lineRows
+          .filter((r) => r.part_id && isUuid(String(r.part_id)) && r.declined !== true)
+          .map((r) => ({
+            organization_id: orgId,
+            work_order_id: id,
+            line_id: r.id != null ? String(r.id) : null,
+            part_id: String(r.part_id),
+            qty: r.qty != null ? Number(r.qty) : 1,
+            unit_cost: r.unit_price != null ? Number(r.unit_price) : null,
+            currency,
+            vehicle_id: vehicleId,
+            used_at: new Date().toISOString(),
+          }));
+        if (usageRows.length) {
+          const { error: usageErr } = await supabase
+            .from("maintenance_parts_usage")
+            .insert(usageRows);
+          if (usageErr) {
+            console.warn("[maintenance-wo] parts usage insert failed:", usageErr.message);
+          }
+        }
+
+        return c.json({
+          item: mapDbWorkOrderToApi(completedWo as Record<string, unknown>, lineRows),
+          record,
+          ledgerPosted: ledgerResult.posted,
+          ledgerWarning: ledgerResult.failed
+            ? "Work order completed but not posted to books — contact support if this persists"
+            : undefined,
+        });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return c.json({ error: msg }, 500);
+      }
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // Tenant — digital vehicle inspection (DVI)
+  // -------------------------------------------------------------------------
+  route.get(
+    "/make-server-37f42386/maintenance-inspection-templates",
+    requireAuth(),
+    async (c) => {
+      try {
+        const { data: templates, error } = await supabase
+          .from("maintenance_inspection_templates")
+          .select("*")
+          .order("sort_order", { ascending: true });
+        if (error) throw error;
+        const ids = (templates || []).map((t: { id: string }) => t.id);
+        const { data: items, error: itemErr } = ids.length
+          ? await supabase
+            .from("maintenance_inspection_items")
+            .select("*")
+            .in("template_id", ids)
+            .order("sort_order", { ascending: true })
+          : { data: [] as Record<string, unknown>[], error: null };
+        if (itemErr) throw itemErr;
+        const byTpl = new Map<string, Record<string, unknown>[]>();
+        for (const it of items || []) {
+          const tid = String((it as { template_id: string }).template_id);
+          const list = byTpl.get(tid) || [];
+          list.push(it as Record<string, unknown>);
+          byTpl.set(tid, list);
+        }
+        return c.json({
+          items: (templates || []).map((t: Record<string, unknown>) => ({
+            ...t,
+            items: byTpl.get(String(t.id)) || [],
+          })),
+        });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return c.json({ error: msg }, 500);
+      }
+    },
+  );
+
+  route.post(
+    "/make-server-37f42386/maintenance-inspection-findings",
+    requireAuth(),
+    requirePermission("vehicles.edit"),
+    async (c) => {
+      try {
+        const orgId = getOrgId(c);
+        if (!orgId) return c.json({ error: "Organization required" }, 400);
+        const body = (await c.req.json()) as Record<string, unknown>;
+        const rawFindings = Array.isArray(body.findings) ? body.findings : [];
+        if (!rawFindings.length) return c.json({ error: "findings[] is required" }, 400);
+
+        const created: Record<string, unknown>[] = [];
+        for (const raw of rawFindings) {
+          if (!raw || typeof raw !== "object") continue;
+          const f = raw as Record<string, unknown>;
+          const vehicleId = String(f.vehicleId ?? f.vehicle_id ?? body.vehicleId ?? "").trim();
+          if (!vehicleId) return c.json({ error: "vehicleId is required on each finding" }, 400);
+          const statusRaw = String(f.status ?? "pass").trim();
+          const status = ["pass", "attention", "fail"].includes(statusRaw) ? statusRaw : "pass";
+          const woParsed = parseOptionalUuidField(f.workOrderId ?? f.work_order_id ?? body.workOrderId);
+          if (!woParsed.ok) return c.json({ error: "Invalid workOrderId" }, 400);
+          const itemParsed = parseOptionalUuidField(f.itemId ?? f.item_id);
+          if (!itemParsed.ok) return c.json({ error: "Invalid itemId" }, 400);
+          const systemParsed = parseOptionalUuidField(f.systemId ?? f.system_id);
+          if (!systemParsed.ok) return c.json({ error: "Invalid systemId" }, 400);
+          const componentParsed = parseOptionalUuidField(f.componentId ?? f.component_id);
+          if (!componentParsed.ok) return c.json({ error: "Invalid componentId" }, 400);
+          const declined = f.declined === true;
+
+          let recommended_line_id: string | null = null;
+          if ((status === "attention" || status === "fail") && !declined && woParsed.value) {
+            const lineRow = mapApiLineToDb({
+              systemId: systemParsed.value,
+              componentId: componentParsed.value,
+              systemCode: f.systemCode ?? f.system_code,
+              systemName: f.systemName ?? f.system_name,
+              categoryCode: f.componentCode ?? f.component_code ?? f.categoryCode,
+              categoryName: f.componentName ?? f.component_name ?? f.categoryName ?? f.label,
+              action: f.action ?? "inspect",
+              recommended: true,
+              declined: false,
+              notes: f.notes != null ? String(f.notes) : null,
+            }, 999, woParsed.value);
+            const { data: insLine, error: lineInsErr } = await supabase
+              .from("maintenance_work_order_lines")
+              .insert(lineRow)
+              .select("id")
+              .single();
+            if (lineInsErr) throw lineInsErr;
+            recommended_line_id = insLine?.id != null ? String(insLine.id) : null;
+          }
+
+          const findingRow = {
+            organization_id: orgId,
+            vehicle_id: vehicleId,
+            work_order_id: woParsed.value,
+            item_id: itemParsed.value,
+            system_id: systemParsed.value,
+            component_id: componentParsed.value,
+            status,
+            notes: f.notes != null ? String(f.notes) : null,
+            photo_url: f.photoUrl != null
+              ? String(f.photoUrl)
+              : (f.photo_url != null ? String(f.photo_url) : null),
+            recommended_line_id,
+            declined,
+            updated_at: new Date().toISOString(),
+          };
+          const { data: inserted, error: insErr } = await supabase
+            .from("maintenance_inspection_findings")
+            .insert(findingRow)
+            .select()
+            .single();
+          if (insErr) throw insErr;
+          created.push({
+            id: inserted.id,
+            organizationId: inserted.organization_id,
+            vehicleId: inserted.vehicle_id,
+            workOrderId: inserted.work_order_id,
+            itemId: inserted.item_id,
+            systemId: inserted.system_id,
+            componentId: inserted.component_id,
+            status: inserted.status,
+            notes: inserted.notes,
+            photoUrl: inserted.photo_url,
+            declined: inserted.declined === true,
+            recommendedLineId: inserted.recommended_line_id,
+          });
+        }
+
+        return c.json({ items: created });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return c.json({ error: msg }, 500);
+      }
+    },
+  );
+
+  route.patch(
+    "/make-server-37f42386/maintenance-inspection-findings/:id",
+    requireAuth(),
+    requirePermission("vehicles.edit"),
+    async (c) => {
+      try {
+        const orgId = getOrgId(c);
+        if (!orgId) return c.json({ error: "Organization required" }, 400);
+        const id = c.req.param("id");
+        if (!isUuid(id)) return c.json({ error: "Invalid id" }, 400);
+        const body = (await c.req.json()) as Record<string, unknown>;
+
+        const { data: existing, error: fetchErr } = await supabase
+          .from("maintenance_inspection_findings")
+          .select("*")
+          .eq("id", id)
+          .eq("organization_id", orgId)
+          .maybeSingle();
+        if (fetchErr) throw fetchErr;
+        if (!existing) return c.json({ error: "Not found" }, 404);
+
+        const declined = body.declined === true || body.decline === true;
+        if (body.declined === undefined && body.decline === undefined) {
+          return c.json({ error: "Set declined: true to decline a finding" }, 400);
+        }
+
+        const patch: Record<string, unknown> = {
+          declined,
+          updated_at: new Date().toISOString(),
+        };
+        if (body.notes !== undefined) patch.notes = body.notes == null ? null : String(body.notes);
+
+        // When declining, mark linked recommended line as declined
+        if (declined && existing.recommended_line_id) {
+          await supabase
+            .from("maintenance_work_order_lines")
+            .update({ declined: true, updated_at: new Date().toISOString() })
+            .eq("id", existing.recommended_line_id);
+        }
+
+        const { data: updated, error: upErr } = await supabase
+          .from("maintenance_inspection_findings")
+          .update(patch)
+          .eq("id", id)
+          .eq("organization_id", orgId)
+          .select()
+          .single();
+        if (upErr) throw upErr;
+
+        return c.json({
+          item: {
+            id: updated.id,
+            organizationId: updated.organization_id,
+            vehicleId: updated.vehicle_id,
+            workOrderId: updated.work_order_id,
+            itemId: updated.item_id,
+            systemId: updated.system_id,
+            componentId: updated.component_id,
+            status: updated.status,
+            notes: updated.notes,
+            photoUrl: updated.photo_url,
+            declined: updated.declined === true,
+            recommendedLineId: updated.recommended_line_id,
+          },
+        });
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         return c.json({ error: msg }, 500);
