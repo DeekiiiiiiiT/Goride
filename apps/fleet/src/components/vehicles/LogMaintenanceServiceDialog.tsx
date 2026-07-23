@@ -156,6 +156,7 @@ function numFrom(v: unknown): number | undefined {
 }
 
 function needsPositions(cat: MaintenanceServiceCategory): boolean {
+  if (cat.position_aware === true) return true;
   const hay = `${cat.code} ${cat.name} ${cat.icon_key}`.toLowerCase();
   return /tire|brake|wheel/.test(hay);
 }

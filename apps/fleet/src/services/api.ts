@@ -12,7 +12,9 @@ import type {
   MaintenanceInspectionFinding,
   MaintenanceInspectionTemplate,
   MaintenanceLogLine,
+  MaintenancePackageChecklistItem,
   MaintenanceServiceCategory,
+  MaintenanceServiceLedgerEntry,
   MaintenanceWorkOrder,
   MaintenanceWorkOrderStatus,
 } from '../types/maintenance';
@@ -1476,6 +1478,69 @@ export const api = {
       if (!response.ok) throw new Error("Failed to fetch quick-job categories");
       const json = await response.json() as { items?: unknown[] };
       return { items: (json.items || []) as MaintenanceServiceCategory[] };
+  },
+
+  /** Ops service history (not finance). */
+  async getMaintenanceServiceLedger(vehicleId?: string, limit = 100) {
+      const qs = new URLSearchParams();
+      if (vehicleId) qs.set("vehicleId", vehicleId);
+      qs.set("limit", String(limit));
+      const response = await fetchWithRetry(
+        `${API_ENDPOINTS.fuel}/maintenance-service-ledger?${qs.toString()}`,
+        { headers: await getHeaders(null) },
+      );
+      if (!response.ok) throw new Error("Failed to fetch service ledger");
+      const json = await response.json() as { items?: MaintenanceServiceLedgerEntry[] };
+      return { items: json.items || [] };
+  },
+
+  async getMaintenanceOutstanding(vehicleId: string) {
+      const response = await fetchWithRetry(
+        `${API_ENDPOINTS.fuel}/maintenance-outstanding/${encodeURIComponent(vehicleId)}`,
+        { headers: await getHeaders(null) },
+      );
+      if (!response.ok) throw new Error("Failed to fetch outstanding maintenance");
+      return await response.json() as {
+        vehicleId: string;
+        odometer: number;
+        items: Array<{
+          categoryId: string;
+          categoryCode: string;
+          categoryName: string;
+          position: string | null;
+          status: "pending" | "overdue";
+          lastPerformedDate: string | null;
+          lastPerformedMiles: number | null;
+          nextDueMiles: number | null;
+          nextDueDate: string | null;
+        }>;
+      };
+  },
+
+  async getMaintenancePackageChecklist(vehicleId: string, templateId: string) {
+      const response = await fetchWithRetry(
+        `${API_ENDPOINTS.fuel}/maintenance-package-checklist/${encodeURIComponent(vehicleId)}/${encodeURIComponent(templateId)}`,
+        { headers: await getHeaders(null) },
+      );
+      if (!response.ok) throw new Error("Failed to fetch package checklist");
+      return await response.json() as {
+        vehicleId: string;
+        templateId: string;
+        odometer: number;
+        items: MaintenancePackageChecklistItem[];
+      };
+  },
+
+  async backfillMaintenanceServiceLedger() {
+      const response = await fetchWithRetry(
+        `${API_ENDPOINTS.fuel}/maintenance-service-ledger/backfill`,
+        { method: "POST", headers: await getHeaders() },
+      );
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error((err as { error?: string }).error || "Backfill failed");
+      }
+      return await response.json() as { success: boolean; records: number; ledgerRows: number };
   },
 
   async listWorkOrders(vehicleId: string) {

@@ -3,6 +3,7 @@
  */
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { computeInitialScheduleRow } from "./maintenance_schedule_engine.ts";
+import { bootstrapVehicleComponentSchedules } from "./maintenance_service_ledger_core.ts";
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
@@ -121,6 +122,24 @@ export async function executeMaintenanceBootstrap(args: {
     });
     if (!error) created++;
   }
+
+  // Component / position schedules from Admin package membership
+  try {
+    await bootstrapVehicleComponentSchedules({
+      sb,
+      organizationId: args.organizationId,
+      vehicleId: args.vehicleId,
+      currentOdo: args.currentOdo,
+      baselineDate: today,
+      templateIds: templates.map((t) => t.id),
+    });
+  } catch (e) {
+    console.warn(
+      "[maintenance-bootstrap] component schedule bootstrap failed:",
+      e instanceof Error ? e.message : String(e),
+    );
+  }
+
   if (bootstrapErrors.length && created === 0) {
     return { ok: false, error: bootstrapErrors.join("; "), catalogId: args.catalogId };
   }

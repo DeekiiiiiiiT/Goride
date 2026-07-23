@@ -7,7 +7,15 @@ import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import * as kv from "./kv_store.tsx";
 import { requireAuth, requirePermission, assertPlatformStaffResponse } from "./rbac_middleware.ts";
 import { filterByOrg, getOrgId } from "./org_scope.ts";
-import { advanceAfterService, computeInitialScheduleRow } from "./maintenance_schedule_engine.ts";
+import {
+  analyzeComponentRowStatus,
+  backfillServiceLedgerForOrg,
+  bootstrapVehicleComponentSchedules,
+  getPackageChecklist,
+  maybeAdvancePackageSchedule,
+  recordCompletedServiceLines,
+  type LedgerLineInput,
+} from "./maintenance_service_ledger_core.ts";
 import {
   canonicalOdometerForVehicle,
   canonicalOdometerFromMaps,
@@ -260,6 +268,43 @@ function mapDbLineToApi(row: Record<string, unknown>): Record<string, unknown> {
     values: row.values_json,
     lineTotal: row.line_total != null ? Number(row.line_total) : undefined,
   };
+}
+
+function apiLinesToLedgerInputs(lines: unknown[]): LedgerLineInput[] {
+  const out: LedgerLineInput[] = [];
+  for (const raw of lines) {
+    if (!raw || typeof raw !== "object") continue;
+    const r = raw as Record<string, unknown>;
+    const catId = r.categoryId ?? r.category_id ?? r.componentId ?? r.component_id;
+    out.push({
+      categoryId: catId != null ? String(catId) : null,
+      categoryCode: r.categoryCode != null
+        ? String(r.categoryCode)
+        : (r.componentCode != null ? String(r.componentCode) : (r.component_code != null ? String(r.component_code) : null)),
+      categoryName: r.categoryName != null
+        ? String(r.categoryName)
+        : (r.componentName != null ? String(r.componentName) : (r.component_name != null ? String(r.component_name) : null)),
+      action: r.action != null ? String(r.action) : null,
+      positions: r.positions,
+      notes: r.notes != null ? String(r.notes) : null,
+      workOrderLineId: r.id != null && isUuid(String(r.id)) ? String(r.id) : null,
+      declined: r.declined === true,
+    });
+  }
+  return out;
+}
+
+function dbLinesToLedgerInputs(lines: Record<string, unknown>[]): LedgerLineInput[] {
+  return lines.map((r) => ({
+    categoryId: r.component_id != null ? String(r.component_id) : null,
+    categoryCode: r.component_code != null ? String(r.component_code) : null,
+    categoryName: r.component_name != null ? String(r.component_name) : null,
+    action: r.action != null ? String(r.action) : null,
+    positions: r.positions,
+    notes: r.notes != null ? String(r.notes) : null,
+    workOrderLineId: r.id != null ? String(r.id) : null,
+    declined: r.declined === true,
+  }));
 }
 
 function mapDbWorkOrderToApi(
@@ -705,6 +750,13 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           kind,
           parent_id,
           op_code,
+          position_aware: kind === "component" && body.position_aware === true,
+          default_interval_miles: body.default_interval_miles != null && body.default_interval_miles !== ""
+            ? Number(body.default_interval_miles)
+            : null,
+          default_interval_months: body.default_interval_months != null && body.default_interval_months !== ""
+            ? Number(body.default_interval_months)
+            : null,
           updated_at: new Date().toISOString(),
         };
         const { data, error } = await supabase
@@ -745,6 +797,21 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
             ? null
             : String(body.op_code).trim().slice(0, 80);
         }
+        if (body.position_aware !== undefined) {
+          patch.position_aware = body.position_aware === true;
+        }
+        if (body.default_interval_miles !== undefined) {
+          patch.default_interval_miles =
+            body.default_interval_miles === null || body.default_interval_miles === ""
+              ? null
+              : Number(body.default_interval_miles);
+        }
+        if (body.default_interval_months !== undefined) {
+          patch.default_interval_months =
+            body.default_interval_months === null || body.default_interval_months === ""
+              ? null
+              : Number(body.default_interval_months);
+        }
 
         const { data: existingCat } = await supabase
           .from("maintenance_service_categories")
@@ -759,6 +826,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         }
         const nextKind = (nextKindRaw ?? String(existingCat.kind ?? "component")) as "system" | "component";
         if (body.kind !== undefined) patch.kind = nextKind;
+        if (nextKind === "system") patch.position_aware = false;
 
         let nextParent: string | null =
           existingCat.parent_id != null ? String(existingCat.parent_id) : null;
@@ -1300,33 +1368,34 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           .single();
         if (insErr) throw insErr;
 
-        // Advance schedule for package completes only (not quick jobs)
-        if (
-          templateId &&
-          String(status).trim().toLowerCase() === "completed" &&
-          logMode !== "quick_job"
-        ) {
-          const { data: template } = await supabase
-            .from("maintenance_task_templates")
-            .select("*")
-            .eq("id", templateId)
-            .maybeSingle();
-          if (template) {
-            const adv = advanceAfterService(template as Record<string, unknown>, performed_at_miles, performed_at_date);
-            await supabase
-              .from("vehicle_maintenance_schedule")
-              .update({
-                last_performed_miles: performed_at_miles,
-                last_performed_date: performed_at_date,
-                next_due_miles: adv.next_due_miles,
-                next_due_miles_max: adv.next_due_miles_max,
-                next_due_date: adv.next_due_date,
-                schedule_status: adv.schedule_status,
-                updated_at: new Date().toISOString(),
-              })
-              .eq("organization_id", orgId)
-              .eq("vehicle_id", vehicleId)
-              .eq("template_id", templateId);
+        // Service ledger + component schedules (ops truth); package clock only when members satisfied
+        if (String(status).trim().toLowerCase() === "completed") {
+          const ledgerLines = Array.isArray(log.lines)
+            ? apiLinesToLedgerInputs(log.lines as unknown[])
+            : [];
+          if (ledgerLines.length) {
+            await recordCompletedServiceLines({
+              sb: supabase,
+              organizationId: orgId,
+              vehicleId,
+              performedAtDate: performed_at_date,
+              performedAtMiles: performed_at_miles,
+              lines: ledgerLines,
+              templateId,
+              maintenanceRecordId: id,
+            });
+          }
+          if (templateId && logMode !== "quick_job") {
+            await maybeAdvancePackageSchedule({
+              sb: supabase,
+              organizationId: orgId,
+              vehicleId,
+              templateId,
+              performedMiles: performed_at_miles,
+              performedDate: performed_at_date,
+              currentOdo: performed_at_miles,
+              force: log.packageComplete === true || log.package_complete === true,
+            });
           }
         }
 
@@ -1551,28 +1620,31 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         if (upErr) throw upErr;
 
         const becameCompleted = prevStatus !== "completed" && nextStatusLc === "completed";
-        if (becameCompleted && templateId && logMode !== "quick_job") {
-          const { data: template } = await supabase
-            .from("maintenance_task_templates")
-            .select("*")
-            .eq("id", templateId)
-            .maybeSingle();
-          if (template) {
-            const adv = advanceAfterService(template as Record<string, unknown>, performed_at_miles, performed_at_date);
-            await supabase
-              .from("vehicle_maintenance_schedule")
-              .update({
-                last_performed_miles: performed_at_miles,
-                last_performed_date: performed_at_date,
-                next_due_miles: adv.next_due_miles,
-                next_due_miles_max: adv.next_due_miles_max,
-                next_due_date: adv.next_due_date,
-                schedule_status: adv.schedule_status,
-                updated_at: new Date().toISOString(),
-              })
-              .eq("organization_id", orgId)
-              .eq("vehicle_id", vehicleId)
-              .eq("template_id", templateId);
+        if (becameCompleted || (nextStatusLc === "completed" && Array.isArray(lines) && lines.length)) {
+          const ledgerLines = Array.isArray(lines) ? apiLinesToLedgerInputs(lines as unknown[]) : [];
+          if (ledgerLines.length && becameCompleted) {
+            await recordCompletedServiceLines({
+              sb: supabase,
+              organizationId: orgId,
+              vehicleId,
+              performedAtDate: performed_at_date,
+              performedAtMiles: performed_at_miles,
+              lines: ledgerLines,
+              templateId,
+              maintenanceRecordId: id,
+            });
+          }
+          if (becameCompleted && templateId && logMode !== "quick_job") {
+            await maybeAdvancePackageSchedule({
+              sb: supabase,
+              organizationId: orgId,
+              vehicleId,
+              templateId,
+              performedMiles: performed_at_miles,
+              performedDate: performed_at_date,
+              currentOdo: performed_at_miles,
+              force: body.packageComplete === true || body.package_complete === true,
+            });
           }
         }
 
@@ -1950,7 +2022,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         }
 
         const today = todayIso();
-        const items = vehicles.map((v: Record<string, unknown>) => {
+        const items = await Promise.all(vehicles.map(async (v: Record<string, unknown>) => {
           const vid = String(v.id ?? "");
           const metricsBase = Number((v.metrics as { odometer?: number })?.odometer ?? 0);
           const odo = canonicalOdometerFromMaps(vid, metricsBase, odoMaps);
@@ -1959,7 +2031,8 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           let maxCalendarDaysOverdue: number | null = null;
           let maxKmOverdue: number | null = null;
 
-          const statuses = sch.map((row) => {
+          const statuses: Array<"ok" | "pending" | "overdue" | "fulfilled"> = [];
+          for (const row of sch) {
             const nextMiles = row.next_due_miles != null ? Number(row.next_due_miles) : null;
             const nextMilesMaxRaw = row.next_due_miles_max != null ? Number(row.next_due_miles_max) : null;
             const nextDate = row.next_due_date != null ? String(row.next_due_date).slice(0, 10) : null;
@@ -1975,10 +2048,42 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
             }
             const tid = String(row.template_id ?? "");
             const taskName = fleetTplById[tid] ?? "Service";
-            if (a.status === "overdue") attention.push({ kind: "overdue", taskName });
-            else if (a.status === "pending") attention.push({ kind: "due_soon", taskName });
-            return a.status;
-          });
+            if (a.status === "overdue" || a.status === "pending") {
+              const kind = a.status === "overdue" ? "overdue" as const : "due_soon" as const;
+              let expanded = false;
+              if (tid) {
+                try {
+                  const checklist = await getPackageChecklist({
+                    sb: supabase,
+                    organizationId: orgId,
+                    vehicleId: vid,
+                    templateId: tid,
+                    currentOdo: odo,
+                    today,
+                  });
+                  const dueItems = checklist.filter(
+                    (i) => i.status === "outstanding" || i.status === "partial",
+                  );
+                  for (const item of dueItems) {
+                    const pos =
+                      item.positionAware && item.outstandingPositions.length
+                        ? ` (${item.outstandingPositions.join(", ")})`
+                        : "";
+                    attention.push({
+                      kind,
+                      taskName: `${item.categoryName}${pos}`,
+                    });
+                    expanded = true;
+                  }
+                  // All members satisfied → do not re-list whole package
+                } catch {
+                  /* fall through to package name */
+                }
+              }
+              if (!expanded) attention.push({ kind, taskName });
+            }
+            statuses.push(a.status);
+          }
           const st = sch.length ? aggregateFleetStatus(statuses.map((s) => ({ status: s }))) : "No schedule";
           const eligibleForNext = sch.filter((r) => String(r.schedule_status ?? "active") !== "fulfilled");
           const minM = eligibleForNext.length
@@ -2005,9 +2110,162 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
             servicesAttention,
             servicesAttentionTruncated,
           };
-        });
+        }));
 
         return c.json({ items });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return c.json({ error: msg }, 500);
+      }
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // Service ledger + outstanding (ops truth, not finance)
+  // -------------------------------------------------------------------------
+  route.get(
+    "/make-server-37f42386/maintenance-service-ledger",
+    requireAuth(),
+    async (c) => {
+      try {
+        const orgId = getOrgId(c);
+        if (!orgId) return c.json({ error: "Organization required" }, 400);
+        const vehicleId = c.req.query("vehicleId")?.trim() || "";
+        const limit = Math.min(Number(c.req.query("limit") || 100) || 100, 500);
+        let q = supabase
+          .from("maintenance_service_ledger")
+          .select("*")
+          .eq("organization_id", orgId)
+          .is("voided_at", null)
+          .order("performed_at_date", { ascending: false })
+          .order("created_at", { ascending: false })
+          .limit(limit);
+        if (vehicleId) q = q.eq("vehicle_id", vehicleId);
+        const { data, error } = await q;
+        if (error) throw error;
+        const items = (data || []).map((r) => ({
+          id: r.id,
+          organizationId: r.organization_id,
+          vehicleId: r.vehicle_id,
+          performedAtDate: r.performed_at_date,
+          performedAtMiles: r.performed_at_miles != null ? Number(r.performed_at_miles) : null,
+          categoryId: r.category_id,
+          categoryCode: r.category_code,
+          categoryName: r.category_name,
+          position: r.position,
+          action: r.action,
+          templateId: r.template_id,
+          maintenanceRecordId: r.maintenance_record_id,
+          workOrderId: r.work_order_id,
+          notes: r.notes,
+          createdAt: r.created_at,
+        }));
+        return c.json({ items });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return c.json({ error: msg }, 500);
+      }
+    },
+  );
+
+  route.get(
+    "/make-server-37f42386/maintenance-outstanding/:vehicleId",
+    requireAuth(),
+    async (c) => {
+      try {
+        const orgId = getOrgId(c);
+        if (!orgId) return c.json({ error: "Organization required" }, 400);
+        const vehicleId = c.req.param("vehicleId");
+        const vehicle = await kv.get(`vehicle:${vehicleId}`);
+        const metricsBase = Number(
+          (vehicle as { metrics?: { odometer?: number } } | null)?.metrics?.odometer ?? 0,
+        );
+        const odo = await canonicalOdometerForVehicle(supabase, vehicleId, metricsBase, c);
+        const today = todayIso();
+
+        const { data: states, error } = await supabase
+          .from("vehicle_component_schedule")
+          .select("*, category:maintenance_service_categories(id, code, name, position_aware, icon_key)")
+          .eq("organization_id", orgId)
+          .eq("vehicle_id", vehicleId);
+        if (error) throw error;
+
+        const items = [];
+        for (const row of states || []) {
+          const st = analyzeComponentRowStatus(odo, today, {
+            next_due_miles: row.next_due_miles as number | null,
+            next_due_miles_max: row.next_due_miles_max as number | null,
+            next_due_date: row.next_due_date as string | null,
+            schedule_status: row.schedule_status as string | null,
+          });
+          if (st !== "pending" && st !== "overdue") continue;
+          const cat = row.category as Record<string, unknown> | null;
+          items.push({
+            categoryId: String(row.category_id),
+            categoryCode: cat?.code != null ? String(cat.code) : "",
+            categoryName: cat?.name != null ? String(cat.name) : "",
+            position: row.position != null ? String(row.position) : null,
+            status: st,
+            lastPerformedDate: row.last_performed_date
+              ? String(row.last_performed_date).slice(0, 10)
+              : null,
+            lastPerformedMiles:
+              row.last_performed_miles != null ? Number(row.last_performed_miles) : null,
+            nextDueMiles: row.next_due_miles != null ? Number(row.next_due_miles) : null,
+            nextDueDate: row.next_due_date != null ? String(row.next_due_date).slice(0, 10) : null,
+          });
+        }
+        return c.json({ vehicleId, odometer: odo, items });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return c.json({ error: msg }, 500);
+      }
+    },
+  );
+
+  route.get(
+    "/make-server-37f42386/maintenance-package-checklist/:vehicleId/:templateId",
+    requireAuth(),
+    async (c) => {
+      try {
+        const orgId = getOrgId(c);
+        if (!orgId) return c.json({ error: "Organization required" }, 400);
+        const vehicleId = c.req.param("vehicleId");
+        const templateId = c.req.param("templateId");
+        const vehicle = await kv.get(`vehicle:${vehicleId}`);
+        const metricsBase = Number(
+          (vehicle as { metrics?: { odometer?: number } } | null)?.metrics?.odometer ?? 0,
+        );
+        const odo = await canonicalOdometerForVehicle(supabase, vehicleId, metricsBase, c);
+        const today = todayIso();
+        const items = await getPackageChecklist({
+          sb: supabase,
+          organizationId: orgId,
+          vehicleId,
+          templateId,
+          currentOdo: odo,
+          today,
+        });
+        return c.json({ vehicleId, templateId, odometer: odo, items });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return c.json({ error: msg }, 500);
+      }
+    },
+  );
+
+  route.post(
+    "/make-server-37f42386/maintenance-service-ledger/backfill",
+    requireAuth(),
+    async (c) => {
+      try {
+        const orgId = getOrgId(c);
+        if (!orgId) return c.json({ error: "Organization required" }, 400);
+        const result = await backfillServiceLedgerForOrg({
+          sb: supabase,
+          organizationId: orgId,
+        });
+        return c.json({ success: true, ...result });
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         return c.json({ error: msg }, 500);
@@ -2400,34 +2658,29 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           .single();
         if (upErr) throw upErr;
 
-        // Advance schedule when package complete (not quick job)
-        if (packageComplete && templateId && logMode !== "quick_job") {
-          const { data: template } = await supabase
-            .from("maintenance_task_templates")
-            .select("*")
-            .eq("id", templateId)
-            .maybeSingle();
-          if (template) {
-            const adv = advanceAfterService(
-              template as Record<string, unknown>,
-              performed_at_miles,
-              performed_at_date,
-            );
-            await supabase
-              .from("vehicle_maintenance_schedule")
-              .update({
-                last_performed_miles: performed_at_miles,
-                last_performed_date: performed_at_date,
-                next_due_miles: adv.next_due_miles,
-                next_due_miles_max: adv.next_due_miles_max,
-                next_due_date: adv.next_due_date,
-                schedule_status: adv.schedule_status,
-                updated_at: new Date().toISOString(),
-              })
-              .eq("organization_id", orgId)
-              .eq("vehicle_id", vehicleId)
-              .eq("template_id", templateId);
-          }
+        // Service ledger + component schedules; package clock when members satisfied
+        await recordCompletedServiceLines({
+          sb: supabase,
+          organizationId: orgId,
+          vehicleId,
+          performedAtDate: performed_at_date,
+          performedAtMiles: performed_at_miles,
+          lines: dbLinesToLedgerInputs(lineRows),
+          templateId,
+          maintenanceRecordId: recordId,
+          workOrderId: id,
+        });
+        if (templateId && logMode !== "quick_job") {
+          await maybeAdvancePackageSchedule({
+            sb: supabase,
+            organizationId: orgId,
+            vehicleId,
+            templateId,
+            performedMiles: performed_at_miles,
+            performedDate: performed_at_date,
+            currentOdo: performed_at_miles,
+            force: packageComplete === true,
+          });
         }
 
         const ledgerInput = {

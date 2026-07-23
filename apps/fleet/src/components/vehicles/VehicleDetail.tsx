@@ -1738,6 +1738,12 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
                         maintenanceStatus={maintenanceStatus}
                         catalogTemplates={catalogMaintenanceOptions}
                         onRefresh={handleRefreshMaintenance}
+                        vehicleMeta={{
+                          licensePlate: vehicle.licensePlate,
+                          make: vehicle.make,
+                          model: vehicle.model,
+                          year: vehicle.year != null ? String(vehicle.year) : undefined,
+                        }}
                       />
                   </TabsContent>
 

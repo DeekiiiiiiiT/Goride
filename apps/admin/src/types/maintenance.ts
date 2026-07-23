@@ -60,11 +60,68 @@ export interface MaintenanceServiceCategory {
   kind: MaintenanceCategoryKind;
   parent_id?: string | null;
   op_code?: string | null;
+  /** When true, Fleet tracks LF/RF/LR/RR separately for outstanding work. */
+  position_aware?: boolean;
+  /** Fallback interval when component is not in a package. */
+  default_interval_miles?: number | null;
+  default_interval_months?: number | null;
   created_at: string;
   updated_at: string;
   /** Populated when listing tree. */
   children?: MaintenanceServiceCategory[];
   parent?: MaintenanceServiceCategory | null;
+}
+
+export type MaintenanceComponentChecklistStatus =
+  | "outstanding"
+  | "satisfied"
+  | "partial"
+  | "ok";
+
+export interface MaintenancePackageChecklistItem {
+  categoryId: string;
+  categoryCode: string;
+  categoryName: string;
+  required: boolean;
+  positionAware: boolean;
+  status: MaintenanceComponentChecklistStatus;
+  outstandingPositions: string[];
+  satisfiedPositions: string[];
+  lastPerformedDate: string | null;
+  lastPerformedMiles: number | null;
+}
+
+export interface MaintenanceServiceLedgerEntry {
+  id: string;
+  organizationId: string;
+  vehicleId: string;
+  performedAtDate: string;
+  performedAtMiles: number | null;
+  categoryId?: string | null;
+  categoryCode?: string | null;
+  categoryName?: string | null;
+  position?: string | null;
+  action?: string | null;
+  templateId?: string | null;
+  maintenanceRecordId?: string | null;
+  workOrderId?: string | null;
+  notes?: string | null;
+  createdAt?: string;
+}
+
+export interface VehicleComponentScheduleRow {
+  id: string;
+  organizationId: string;
+  vehicleId: string;
+  categoryId: string;
+  position?: string | null;
+  lastPerformedMiles?: number | null;
+  lastPerformedDate?: string | null;
+  nextDueMiles?: number | null;
+  nextDueMilesMax?: number | null;
+  nextDueDate?: string | null;
+  scheduleStatus?: "active" | "fulfilled";
+  category?: MaintenanceServiceCategory | null;
 }
 
 /** Package ↔ category membership row (components only). */

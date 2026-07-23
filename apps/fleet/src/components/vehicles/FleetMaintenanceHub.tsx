@@ -27,6 +27,7 @@ import {
   SelectValue,
 } from "../ui/select";
 import { LogMaintenanceServiceDialog } from "./LogMaintenanceServiceDialog";
+import { MaintenanceServiceLedgerPanel } from "./MaintenanceServiceLedgerPanel";
 import { catalogOptionsFromScheduleRows } from "../../utils/maintenanceCatalogOptions";
 import type {
   CatalogMaintenanceTaskOption,
@@ -360,6 +361,8 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
           {error}
         </div>
       )}
+
+      <MaintenanceServiceLedgerPanel vehicles={items} />
 
       <Dialog open={vehiclePickerOpen} onOpenChange={setVehiclePickerOpen}>
         <DialogContent className="sm:max-w-md">

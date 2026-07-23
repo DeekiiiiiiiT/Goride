@@ -8,6 +8,7 @@ import { Label } from "../ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../ui/dialog";
 import type { CatalogMaintenanceTaskOption, MaintenanceLog } from "../../types/maintenance";
+import { MaintenanceServiceLedgerPanel } from "./MaintenanceServiceLedgerPanel";
 
 export type { MaintenanceLog };
 
@@ -23,12 +24,20 @@ interface MaintenanceManagerProps {
   };
   catalogTemplates?: CatalogMaintenanceTaskOption[];
   onRefresh: () => void;
+  /** Optional plate/make for ledger vehicle label */
+  vehicleMeta?: {
+    licensePlate?: string;
+    make?: string;
+    model?: string;
+    year?: string;
+  };
 }
 
 const MaintenanceManagerComponent: React.FC<MaintenanceManagerProps> = ({
-  vehicleId: _vehicleId,
+  vehicleId,
   catalogTemplates: _catalogTemplates,
   onRefresh: _onRefresh,
+  vehicleMeta,
   maintenanceStatus = {
     status: "Unknown",
     nextTypeLabel: "Service",
@@ -38,7 +47,6 @@ const MaintenanceManagerComponent: React.FC<MaintenanceManagerProps> = ({
   },
   logs = [],
 }) => {
-  void _vehicleId;
   void _catalogTemplates;
   void _onRefresh;
   const [selectedLog, setSelectedLog] = useState<MaintenanceLog | null>(null);
@@ -51,6 +59,18 @@ const MaintenanceManagerComponent: React.FC<MaintenanceManagerProps> = ({
 
   return (
     <div className="space-y-6">
+      <MaintenanceServiceLedgerPanel
+        vehicles={[
+          {
+            vehicleId,
+            licensePlate: vehicleMeta?.licensePlate,
+            make: vehicleMeta?.make,
+            model: vehicleMeta?.model,
+            year: vehicleMeta?.year,
+          },
+        ]}
+      />
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Card className="bg-gradient-to-br from-white to-slate-50 border-slate-200">
           <CardHeader className="pb-2">

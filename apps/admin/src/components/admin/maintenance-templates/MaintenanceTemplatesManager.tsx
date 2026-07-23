@@ -162,16 +162,82 @@ function detectFieldSchemaPreset(schema: MaintenanceCategoryFieldSchema | undefi
   return "simple";
 }
 
-function summarizeFieldSchema(schema: MaintenanceCategoryFieldSchema | undefined): string {
-  const fields = schema?.fields ?? [];
-  if (fields.length === 0) return "No fields";
-  return fields.map((f) => f.key).join(", ");
+/** Stable slug for category code from display name. */
+function slugifyCategoryCode(name: string, kind: MaintenanceCategoryKind): string {
+  let slug = name
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_|_$/g, "")
+    .slice(0, 60);
+  if (!slug) slug = kind === "system" ? "system" : "component";
+  if (kind === "system" && !slug.startsWith("sys_")) slug = `sys_${slug}`;
+  return slug;
 }
 
-function resolveCategoryKind(c: MaintenanceServiceCategory): MaintenanceCategoryKind {
+/** Garage op code from parent system + component/system name. */
+function inferCategoryOpCode(
+  name: string,
+  kind: MaintenanceCategoryKind,
+  parent?: MaintenanceServiceCategory | null,
+): string {
+  const words = name
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+  const short = words
+    .map((w) => (w.length <= 4 ? w : w.slice(0, 4)))
+    .slice(0, 2)
+    .join("");
+  if (kind === "system") {
+    return (words[0]?.slice(0, 4) || short || "SYS").slice(0, 8);
+  }
+  const prefix =
+    (parent?.op_code || "").trim().toUpperCase() ||
+    (parent?.code || "").replace(/^sys_/i, "").slice(0, 4).toUpperCase() ||
+    "GEN";
+  const leaf = short || "ITEM";
+  return `${prefix}-${leaf}`.slice(0, 24);
+}
+
+function nextCategorySortOrder(
+  categories: MaintenanceServiceCategory[],
+  kind: MaintenanceCategoryKind,
+  parentId: string,
+): number {
+  const siblings = categories.filter((c) => {
+    if (kind === "system") return resolveCategoryKind(c) === "system";
+    return resolveCategoryKind(c) === "component" && (c.parent_id || "") === parentId;
+  });
+  if (siblings.length === 0) return kind === "system" ? 1000 : 10;
+  const max = Math.max(...siblings.map((c) => Number(c.sort_order) || 0));
+  return max + 10;
+}
+
+function resolveCategoryKind(
+  c: Pick<MaintenanceServiceCategory, "kind" | "code" | "parent_id">,
+): MaintenanceCategoryKind {
   if (c.kind === "system" || c.kind === "component") return c.kind;
-  if (!c.parent_id && c.code?.startsWith("sys_")) return "system";
+  if ((c.code || "").startsWith("sys_") || !c.parent_id) return "system";
   return "component";
+}
+
+/** Avoid duplicate category codes when auto-generating from name. */
+function uniqueCategoryCode(
+  base: string,
+  categories: MaintenanceServiceCategory[],
+  excludeId?: string | null,
+): string {
+  const taken = new Set(
+    categories.filter((c) => c.id !== excludeId).map((c) => (c.code || "").toLowerCase()),
+  );
+  if (!taken.has(base.toLowerCase())) return base;
+  let i = 2;
+  while (taken.has(`${base}_${i}`.toLowerCase())) i += 1;
+  return `${base}_${i}`;
 }
 
 const TAB_TRIGGER_CLASS =
@@ -213,16 +279,21 @@ export function MaintenanceTemplatesManager() {
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<MaintenanceServiceCategory | null>(null);
   const [savingCategory, setSavingCategory] = useState(false);
+  /** Code / op code / sort — auto-filled on create; optional override. */
+  const [categoryAdvancedOpen, setCategoryAdvancedOpen] = useState(false);
   const [categoryForm, setCategoryForm] = useState({
     code: "",
     name: "",
     icon_key: "wrench",
     quick_job_eligible: false,
     sort_order: "0",
-    schema_preset: "simple" as FieldSchemaPreset,
+    schema_preset: "commercial" as FieldSchemaPreset,
     kind: "component" as MaintenanceCategoryKind,
     parent_id: "",
     op_code: "",
+    position_aware: false,
+    default_interval_miles: "",
+    default_interval_months: "",
   });
 
   const [form, setForm] = useState({
@@ -279,10 +350,12 @@ export function MaintenanceTemplatesManager() {
         .slice()
         .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name));
       setCategories(sorted);
+      // Keep systems collapsed by default; only preserve already-expanded ids that still exist
       setExpandedSystems((prev) => {
-        const next = new Set(prev);
-        for (const c of sorted) {
-          if (resolveCategoryKind(c) === "system") next.add(c.id);
+        const valid = new Set(sorted.filter((c) => resolveCategoryKind(c) === "system").map((c) => c.id));
+        const next = new Set<string>();
+        for (const id of prev) {
+          if (valid.has(id)) next.add(id);
         }
         return next;
       });
@@ -584,16 +657,20 @@ export function MaintenanceTemplatesManager() {
 
   const openCreateSystem = () => {
     setEditingCategory(null);
+    setCategoryAdvancedOpen(false);
     setCategoryForm({
       code: "",
       name: "",
       icon_key: "wrench",
       quick_job_eligible: false,
-      sort_order: String(systemOptions.length * 10),
+      sort_order: String(nextCategorySortOrder(categories, "system", "")),
       schema_preset: "simple",
       kind: "system",
       parent_id: "",
       op_code: "",
+      position_aware: false,
+      default_interval_miles: "",
+      default_interval_months: "",
     });
     setCategoryDialogOpen(true);
   };
@@ -601,16 +678,20 @@ export function MaintenanceTemplatesManager() {
   const openCreateComponent = (parentId?: string) => {
     const defaultParent = parentId || systemOptions[0]?.id || "";
     setEditingCategory(null);
+    setCategoryAdvancedOpen(false);
     setCategoryForm({
       code: "",
       name: "",
       icon_key: "wrench",
       quick_job_eligible: false,
-      sort_order: "0",
-      schema_preset: "simple",
+      sort_order: String(nextCategorySortOrder(categories, "component", defaultParent)),
+      schema_preset: "commercial",
       kind: "component",
       parent_id: defaultParent,
       op_code: "",
+      position_aware: false,
+      default_interval_miles: "",
+      default_interval_months: "",
     });
     setCategoryDialogOpen(true);
   };
@@ -618,6 +699,7 @@ export function MaintenanceTemplatesManager() {
   const openEditCategory = (c: MaintenanceServiceCategory) => {
     const kind = resolveCategoryKind(c);
     setEditingCategory(c);
+    setCategoryAdvancedOpen(false);
     setCategoryForm({
       code: c.code,
       name: c.name,
@@ -628,22 +710,42 @@ export function MaintenanceTemplatesManager() {
       kind,
       parent_id: c.parent_id || "",
       op_code: c.op_code || "",
+      position_aware: c.position_aware === true,
+      default_interval_miles:
+        c.default_interval_miles != null ? String(c.default_interval_miles) : "",
+      default_interval_months:
+        c.default_interval_months != null ? String(c.default_interval_months) : "",
     });
     setCategoryDialogOpen(true);
   };
 
   const handleSaveCategory = async () => {
     if (!token) return;
-    const code = categoryForm.code.trim();
     const name = categoryForm.name.trim();
-    if (!code || !name) {
-      setError("Code and name are required.");
+    if (!name) {
+      setError("Name is required.");
       return;
     }
     if (categoryForm.kind === "component" && !categoryForm.parent_id) {
       setError("Components must belong to a system.");
       return;
     }
+    const parent = categories.find((c) => c.id === categoryForm.parent_id) || null;
+    const code =
+      categoryForm.code.trim() ||
+      uniqueCategoryCode(
+        slugifyCategoryCode(name, categoryForm.kind),
+        categories,
+        editingCategory?.id,
+      );
+    const op_code =
+      categoryForm.op_code.trim() ||
+      inferCategoryOpCode(name, categoryForm.kind, parent);
+    const sortRaw = categoryForm.sort_order.trim();
+    const sort_order =
+      sortRaw === ""
+        ? nextCategorySortOrder(categories, categoryForm.kind, categoryForm.parent_id)
+        : Number(sortRaw) || 0;
     setSavingCategory(true);
     setError(null);
     try {
@@ -658,11 +760,22 @@ export function MaintenanceTemplatesManager() {
         name,
         icon_key: categoryForm.icon_key || "wrench",
         quick_job_eligible: isSystem ? false : categoryForm.quick_job_eligible,
-        sort_order: Number(categoryForm.sort_order) || 0,
+        sort_order,
         field_schema,
         kind: categoryForm.kind,
         parent_id: isSystem ? null : categoryForm.parent_id,
-        op_code: categoryForm.op_code.trim() || null,
+        op_code: op_code || null,
+        position_aware: isSystem ? false : categoryForm.position_aware,
+        default_interval_miles: isSystem
+          ? null
+          : categoryForm.default_interval_miles.trim() === ""
+            ? null
+            : Number(categoryForm.default_interval_miles),
+        default_interval_months: isSystem
+          ? null
+          : categoryForm.default_interval_months.trim() === ""
+            ? null
+            : Number(categoryForm.default_interval_months),
       };
       if (editingCategory) {
         await updateMaintenanceCategory(token, editingCategory.id, payload);
@@ -980,6 +1093,7 @@ export function MaintenanceTemplatesManager() {
                   <TableHead>Code</TableHead>
                   <TableHead>Op code</TableHead>
                   <TableHead>Quick job</TableHead>
+                  <TableHead>Corners</TableHead>
                   <TableHead className="w-[80px]">Sort</TableHead>
                   <TableHead className="text-right w-[72px]">Actions</TableHead>
                 </TableRow>
@@ -1021,6 +1135,7 @@ export function MaintenanceTemplatesManager() {
                         <TableCell className="font-mono text-xs text-slate-400">
                           {system.op_code?.trim() || "—"}
                         </TableCell>
+                        <TableCell className="text-slate-400">—</TableCell>
                         <TableCell className="text-slate-400">—</TableCell>
                         <TableCell className="tabular-nums">{isSynthetic ? "—" : system.sort_order}</TableCell>
                         <TableCell className="text-right">
@@ -1078,6 +1193,7 @@ export function MaintenanceTemplatesManager() {
                                 {c.op_code?.trim() || "—"}
                               </TableCell>
                               <TableCell>{c.quick_job_eligible ? "Yes" : "No"}</TableCell>
+                              <TableCell>{c.position_aware ? "LF–RR" : "—"}</TableCell>
                               <TableCell className="tabular-nums">{c.sort_order}</TableCell>
                               <TableCell className="text-right">
                                 <DropdownMenu>
@@ -1555,12 +1671,33 @@ export function MaintenanceTemplatesManager() {
                 value={categoryForm.kind}
                 onValueChange={(v) => {
                   const kind = v as MaintenanceCategoryKind;
-                  setCategoryForm((f) => ({
-                    ...f,
-                    kind,
-                    parent_id: kind === "system" ? "" : f.parent_id || systemOptions[0]?.id || "",
-                    quick_job_eligible: kind === "system" ? false : f.quick_job_eligible,
-                  }));
+                  setCategoryForm((f) => {
+                    const parentId =
+                      kind === "system" ? "" : f.parent_id || systemOptions[0]?.id || "";
+                    const parent = categories.find((c) => c.id === parentId) || null;
+                    if (editingCategory) {
+                      return {
+                        ...f,
+                        kind,
+                        parent_id: parentId,
+                        quick_job_eligible: kind === "system" ? false : f.quick_job_eligible,
+                      };
+                    }
+                    return {
+                      ...f,
+                      kind,
+                      parent_id: parentId,
+                      quick_job_eligible: kind === "system" ? false : f.quick_job_eligible,
+                      schema_preset: kind === "component" ? "commercial" : f.schema_preset,
+                      code: f.name.trim()
+                        ? uniqueCategoryCode(slugifyCategoryCode(f.name, kind), categories)
+                        : "",
+                      op_code: f.name.trim()
+                        ? inferCategoryOpCode(f.name, kind, parent)
+                        : "",
+                      sort_order: String(nextCategorySortOrder(categories, kind, parentId)),
+                    };
+                  });
                 }}
                 disabled={!!editingCategory}
               >
@@ -1578,7 +1715,20 @@ export function MaintenanceTemplatesManager() {
                 <Label className="text-xs">Parent system *</Label>
                 <Select
                   value={categoryForm.parent_id || undefined}
-                  onValueChange={(v) => setCategoryForm((f) => ({ ...f, parent_id: v }))}
+                  onValueChange={(v) => {
+                    setCategoryForm((f) => {
+                      const parent = categories.find((c) => c.id === v) || null;
+                      if (editingCategory) return { ...f, parent_id: v };
+                      return {
+                        ...f,
+                        parent_id: v,
+                        sort_order: String(nextCategorySortOrder(categories, f.kind, v)),
+                        op_code: f.name.trim()
+                          ? inferCategoryOpCode(f.name, f.kind, parent)
+                          : "",
+                      };
+                    });
+                  }}
                 >
                   <SelectTrigger className="h-9 bg-white border-slate-200">
                     <SelectValue placeholder="Select system" />
@@ -1599,31 +1749,28 @@ export function MaintenanceTemplatesManager() {
               </div>
             )}
             <div className="space-y-1.5">
-              <Label className="text-xs">Code *</Label>
-              <Input
-                value={categoryForm.code}
-                onChange={(e) => setCategoryForm((f) => ({ ...f, code: e.target.value }))}
-                className="h-9 font-mono text-sm"
-                placeholder={isEditingSystem ? "e.g. sys_engine" : "e.g. oil"}
-                disabled={!!editingCategory}
-              />
-            </div>
-            <div className="space-y-1.5">
               <Label className="text-xs">Name *</Label>
               <Input
                 value={categoryForm.name}
-                onChange={(e) => setCategoryForm((f) => ({ ...f, name: e.target.value }))}
+                onChange={(e) => {
+                  const name = e.target.value;
+                  setCategoryForm((f) => {
+                    if (editingCategory) return { ...f, name };
+                    const parent = categories.find((c) => c.id === f.parent_id) || null;
+                    return {
+                      ...f,
+                      name,
+                      code: name.trim()
+                        ? uniqueCategoryCode(slugifyCategoryCode(name, f.kind), categories)
+                        : "",
+                      op_code: name.trim()
+                        ? inferCategoryOpCode(name, f.kind, parent)
+                        : "",
+                    };
+                  });
+                }}
                 className="h-9"
                 placeholder={isEditingSystem ? "e.g. Engine" : "e.g. Oil & Filter"}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Op code (optional)</Label>
-              <Input
-                value={categoryForm.op_code}
-                onChange={(e) => setCategoryForm((f) => ({ ...f, op_code: e.target.value }))}
-                className="h-9 font-mono text-sm"
-                placeholder="e.g. ENG-OIL"
               />
             </div>
             <div className="space-y-1.5">
@@ -1657,19 +1804,58 @@ export function MaintenanceTemplatesManager() {
                   }
                 />
                 <Label htmlFor="cat-quick-job" className="text-sm cursor-pointer">
-                  Quick job eligible
+                  Show in Quick Jobs
                 </Label>
               </div>
             )}
-            <div className="space-y-1.5">
-              <Label className="text-xs">Sort order</Label>
-              <Input
-                value={categoryForm.sort_order}
-                onChange={(e) => setCategoryForm((f) => ({ ...f, sort_order: e.target.value }))}
-                className="h-9"
-                type="number"
-              />
-            </div>
+            {!isEditingSystem && (
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="cat-position-aware"
+                  checked={categoryForm.position_aware}
+                  onCheckedChange={(v) =>
+                    setCategoryForm((f) => ({ ...f, position_aware: v === true }))
+                  }
+                />
+                <Label htmlFor="cat-position-aware" className="text-sm cursor-pointer">
+                  Track by corner (LF / RF / LR / RR)
+                </Label>
+              </div>
+            )}
+            {!isEditingSystem && (
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Default interval (km)</Label>
+                  <Input
+                    value={categoryForm.default_interval_miles}
+                    onChange={(e) =>
+                      setCategoryForm((f) => ({
+                        ...f,
+                        default_interval_miles: e.target.value,
+                      }))
+                    }
+                    className="h-9"
+                    type="number"
+                    placeholder="Uses package if empty"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Default interval (months)</Label>
+                  <Input
+                    value={categoryForm.default_interval_months}
+                    onChange={(e) =>
+                      setCategoryForm((f) => ({
+                        ...f,
+                        default_interval_months: e.target.value,
+                      }))
+                    }
+                    className="h-9"
+                    type="number"
+                    placeholder="Optional"
+                  />
+                </div>
+              </div>
+            )}
             {!isEditingSystem && (
               <div className="space-y-1.5">
                 <Label className="text-xs">Field schema</Label>
@@ -1683,24 +1869,81 @@ export function MaintenanceTemplatesManager() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="simple">Simple — material, labor</SelectItem>
-                    <SelectItem value="commercial">Commercial — qty, unit price, condition, labor</SelectItem>
+                    <SelectItem value="simple">Simple — material cost + labor</SelectItem>
+                    <SelectItem value="commercial">
+                      Commercial — qty, unit price, condition, labor
+                    </SelectItem>
                   </SelectContent>
                 </Select>
-                <p className="text-[11px] text-slate-500 font-mono leading-snug break-all">
-                  {summarizeFieldSchema(
-                    categoryForm.schema_preset === "commercial"
-                      ? COMMERCIAL_FIELD_SCHEMA
-                      : SIMPLE_FIELD_SCHEMA,
-                  )}
+                <p className="text-[11px] text-slate-500 leading-snug">
+                  {categoryForm.schema_preset === "commercial"
+                    ? "Drivers/fleet enter quantity, price per unit, condition, and labor — best for parts like filters and tires."
+                    : "Drivers/fleet enter a material cost and labor only — best for simple services."}
                 </p>
                 {editingCategory ? (
                   <p className="text-[11px] text-slate-400 leading-snug">
-                    Saving replaces the field schema with the selected preset.
+                    Saving replaces the form fields with the selected preset.
                   </p>
                 ) : null}
               </div>
             )}
+            <div className="rounded-lg border border-slate-200 overflow-hidden">
+              <button
+                type="button"
+                className="flex w-full items-center justify-between px-3 py-2 text-left text-xs font-medium text-slate-600 hover:bg-slate-50"
+                onClick={() => setCategoryAdvancedOpen((o) => !o)}
+              >
+                <span>Advanced (code, op code, sort)</span>
+                {categoryAdvancedOpen ? (
+                  <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+                ) : (
+                  <ChevronRight className="h-3.5 w-3.5 text-slate-400" />
+                )}
+              </button>
+              {categoryAdvancedOpen ? (
+                <div className="grid gap-3 border-t border-slate-200 bg-slate-50/80 p-3">
+                  <p className="text-[11px] text-slate-500 leading-snug">
+                    Auto-filled from the name
+                    {!isEditingSystem ? " and parent system" : ""}. Change only if you need a
+                    specific garage code.
+                  </p>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Code</Label>
+                    <Input
+                      value={categoryForm.code}
+                      onChange={(e) =>
+                        setCategoryForm((f) => ({ ...f, code: e.target.value }))
+                      }
+                      className="h-9 font-mono text-sm bg-white"
+                      placeholder={isEditingSystem ? "e.g. sys_engine" : "e.g. oil"}
+                      disabled={!!editingCategory}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Op code</Label>
+                    <Input
+                      value={categoryForm.op_code}
+                      onChange={(e) =>
+                        setCategoryForm((f) => ({ ...f, op_code: e.target.value }))
+                      }
+                      className="h-9 font-mono text-sm bg-white"
+                      placeholder="e.g. ENG-OIL"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Sort order</Label>
+                    <Input
+                      value={categoryForm.sort_order}
+                      onChange={(e) =>
+                        setCategoryForm((f) => ({ ...f, sort_order: e.target.value }))
+                      }
+                      className="h-9 bg-white"
+                      type="number"
+                    />
+                  </div>
+                </div>
+              ) : null}
+            </div>
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setCategoryDialogOpen(false)}>
@@ -1711,6 +1954,7 @@ export function MaintenanceTemplatesManager() {
               onClick={handleSaveCategory}
               disabled={
                 savingCategory ||
+                !categoryForm.name.trim() ||
                 (!isEditingSystem && !categoryForm.parent_id && systemOptions.length === 0)
               }
               className="gap-2"
