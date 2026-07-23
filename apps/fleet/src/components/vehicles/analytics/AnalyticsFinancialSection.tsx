@@ -123,7 +123,9 @@ export function AnalyticsFinancialSection({
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">Cost per Vehicle</CardTitle>
-            <CardDescription>Attributed ledger categories only (top 10).</CardDescription>
+            <CardDescription>
+              Books (ledger). After sync, Maintenance matches completed service costs posted to finance (top 10).
+            </CardDescription>
           </CardHeader>
           <CardContent className="min-h-[300px]">
             {stackedData.length === 0 ? (

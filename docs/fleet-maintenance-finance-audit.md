@@ -1,6 +1,11 @@
 # RoamFleet Maintenance & Finance Wiring Audit
 
-**Date:** 2026-07-22
+**Date:** 2026-07-22 (remediation started 2026-07-23)
+**Status note (2026-07-23):** Forward writes — completed `maintenance_records` with
+`cost > 0` now auto-post to canonical `ledger_event` (`maintenance`). No historical
+backfill. Driver requests land as `Requested` maintenance rows (not $0 expenses).
+See remediation plan *Maintenance ↔ Finance Sync & Ops Hardening*.
+
 **Scope:** `apps/fleet` (RoamFleet) maintenance module, `apps/admin` (Roam Dominion) maintenance-templates module, and the maintenance ↔ Business Finance/Expense Hub integration.
 **Method:** Static code audit (read-only, no changes made) across components, services, Supabase edge functions, and SQL migrations, cross-referenced against current fleet-maintenance SaaS products (Fleetio, Samsara, Whip Around, AUTOsist, Simply Fleet, Driveroo).
 **Lens:** Senior software engineer (architecture, correctness, tech debt) + UI/UX (does the flow make sense to a real user) + senior accountant (is the money trail complete and auditable).

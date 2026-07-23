@@ -8,8 +8,10 @@ import { VehicleCard } from './VehicleCard'; // New Component
 import { VehicleDetail } from './VehicleDetail'; // New Component
 import { DriverAssignmentModal } from './DriverAssignmentModal';
 import { FuelLogForm } from '../driver-portal/FuelLogForm';
-import { ServiceRequestForm } from '../driver-portal/ServiceRequestForm';
+import { LogMaintenanceServiceDialog } from './LogMaintenanceServiceDialog';
 import { AddVehicleModal } from './AddVehicleModal';
+import type { CatalogMaintenanceTaskOption, VehicleMaintenanceScheduleRowApi } from '../../types/maintenance';
+import { catalogOptionsFromScheduleRows } from '../../utils/maintenanceCatalogOptions';
 import { Toaster, toast } from 'sonner@2.0.3';
 import { 
   Loader2, 
@@ -94,6 +96,8 @@ export function VehiclesPage({
   // Action States
   const [isFuelModalOpen, setIsFuelModalOpen] = useState(false);
   const [isServiceModalOpen, setIsServiceModalOpen] = useState(false);
+  const [serviceCatalog, setServiceCatalog] = useState<CatalogMaintenanceTaskOption[]>([]);
+  const [serviceOdo, setServiceOdo] = useState<number | undefined>(undefined);
   const [actionVehicleId, setActionVehicleId] = useState<string | null>(null);
   const [vehicleToDelete, setVehicleToDelete] = useState<string | null>(null); // Delete State
 
@@ -369,8 +373,21 @@ export function VehiclesPage({
     }
   };
 
-  const handleLogService = (id: string) => {
+  const handleLogService = async (id: string) => {
     setActionVehicleId(id);
+    try {
+      const sch = await api.getMaintenanceSchedule(id);
+      const rows = Array.isArray(sch.schedule)
+        ? (sch.schedule as VehicleMaintenanceScheduleRowApi[])
+        : [];
+      setServiceCatalog(catalogOptionsFromScheduleRows(rows));
+      const v = vehicles.find((x: Vehicle) => x.id === id);
+      const odo = Number((v as { odometer?: number } | undefined)?.odometer);
+      setServiceOdo(Number.isFinite(odo) ? odo : undefined);
+    } catch {
+      setServiceCatalog([]);
+      setServiceOdo(undefined);
+    }
     setIsServiceModalOpen(true);
   };
 
@@ -383,14 +400,6 @@ export function VehiclesPage({
     toast.success("Alert sent to driver", {
         description: `Notification dispatched for vehicle ${id}`
     });
-  };
-
-  const onServiceSubmit = (data: any) => {
-      console.log("Service Logged", data);
-      toast.success("Service Request Created", {
-        description: "Maintenance team has been notified."
-      });
-      setIsServiceModalOpen(false);
   };
 
   const onFuelSubmit = (data: any) => {
@@ -805,11 +814,19 @@ export function VehiclesPage({
         onSubmit={onFuelSubmit}
       />
 
-      <ServiceRequestForm 
-        open={isServiceModalOpen} 
-        onOpenChange={setIsServiceModalOpen}
-        onSubmit={onServiceSubmit}
-      />
+      {actionVehicleId ? (
+        <LogMaintenanceServiceDialog
+          open={isServiceModalOpen}
+          onOpenChange={setIsServiceModalOpen}
+          vehicleId={actionVehicleId}
+          catalogTemplates={serviceCatalog}
+          defaultOdo={serviceOdo}
+          onSaved={() => {
+            setIsServiceModalOpen(false);
+            queryClient.invalidateQueries({ queryKey: ['vehicles'] });
+          }}
+        />
+      ) : null}
 
       <AddVehicleModal
         isOpen={isAddModalOpen}

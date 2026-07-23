@@ -11,7 +11,8 @@ legacy Financials conflict.
 | Source | Canonical event | P&L | Cash & Bank |
 |---|---|---|---|
 | Fixed Expense rule occurrence | `fixed_expense` | On scheduled due date | No movement until a real payment is posted |
-| Posted maintenance transaction | `maintenance` | Expense | Payment outflow |
+| Posted maintenance service log (`maintenance_records` Completed, cost>0) | `maintenance` | Expense | Payment outflow |
+| Posted maintenance BF one-off transaction | `maintenance` | Expense | Payment outflow |
 | Other posted business expense | `operating_expense` | Expense | Payment outflow |
 | Other posted income | `other_income` | Income | Receipt inflow |
 | Budget | None | Never | Never |
@@ -61,10 +62,11 @@ The operation is organization-scoped and idempotent.
 1. Add monthly vehicle insurance due inside the selected BF period.
 2. Confirm Insurance / Fixed overhead and operating profit change.
 3. Confirm Cash & Bank does **not** move from the schedule.
-4. Log a completed Maintenance expense from BF → Expenses.
-5. Confirm Maintenance P&L and Business payments both change once.
-6. Re-run historical sync; inserted count should be zero and rows should be
+4. Log a completed shop service from Fleet Maintenance → Log service (cost > 0).
+5. Confirm Maintenance P&L changes once from that service log (no second BF entry).
+6. Optional: log a one-off "Other vehicle-related" expense from BF → Expenses with a vehicle.
+7. Re-run historical sync; inserted count should be zero and rows should be
    reported as skipped.
-7. Delete the recurring rule; prior/today history remains and future
+8. Delete the recurring rule; prior/today history remains and future
    occurrences disappear.
 

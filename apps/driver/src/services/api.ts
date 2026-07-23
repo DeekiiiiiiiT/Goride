@@ -1450,6 +1450,21 @@ export const api = {
       return response.json();
   },
 
+  async createMaintenanceRequest(payload: unknown) {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/maintenance-requests`, {
+          method: 'POST',
+          headers: await getHeaders(),
+          body: JSON.stringify(payload),
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error((err as { error?: string; message?: string }).message
+          || (err as { error?: string }).error
+          || "Failed to submit service request");
+      }
+      return response.json();
+  },
+
   async getMaintenanceSchedule(vehicleId: string) {
       const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/maintenance-schedule/${vehicleId}`, {
           headers: await getHeaders(null),

@@ -2729,6 +2729,45 @@ app.post("/make-server-37f42386/vehicles", requireAuth(), requirePermission('veh
       );
     }
 
+    // Auto-bootstrap maintenance schedules when catalog is first matched
+    let maintenanceBootstrap: unknown = undefined;
+    if (orgId && catalogId) {
+      const prevCatalog = previous && typeof (previous as { vehicle_catalog_id?: string }).vehicle_catalog_id === "string"
+        ? String((previous as { vehicle_catalog_id: string }).vehicle_catalog_id).trim()
+        : "";
+      const newlyMatched = !prevCatalog || prevCatalog !== catalogId;
+      if (newlyMatched) {
+        try {
+          const { data: existingSch } = await supabase
+            .from("vehicle_maintenance_schedule")
+            .select("id")
+            .eq("organization_id", orgId)
+            .eq("vehicle_id", String(vehicle.id))
+            .limit(1);
+          if (!existingSch?.length) {
+            const { executeMaintenanceBootstrap } = await import("./maintenance_bootstrap_core.ts");
+            const odo = Number(
+              (vehicle as { odometer?: number; currentOdometer?: number }).odometer
+                ?? (vehicle as { currentOdometer?: number }).currentOdometer
+                ?? 0,
+            );
+            maintenanceBootstrap = await executeMaintenanceBootstrap({
+              supabase,
+              organizationId: orgId,
+              vehicleId: String(vehicle.id),
+              currentOdo: Number.isFinite(odo) ? odo : 0,
+              catalogId,
+            });
+          }
+        } catch (bootErr: unknown) {
+          console.warn(
+            "[vehicles] auto maintenance bootstrap failed (non-fatal):",
+            bootErr instanceof Error ? bootErr.message : bootErr,
+          );
+        }
+      }
+    }
+
     if (orgId) {
       try {
         if (catalogId) {
@@ -2751,6 +2790,7 @@ app.post("/make-server-37f42386/vehicles", requireAuth(), requirePermission('veh
       data: vehicle,
       catalogMatched: !!catalogId,
       catalogStatus: (vehicle as { catalogStatus?: string }).catalogStatus ?? (catalogId ? "matched" : "pending_catalog"),
+      maintenanceBootstrap,
     });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);

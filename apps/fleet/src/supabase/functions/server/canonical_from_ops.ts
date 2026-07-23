@@ -7,6 +7,13 @@ import { appendCanonicalLedgerEvents } from "./ledger_canonical.ts";
 import type { FixedExpenseConfig } from "../../../types/expenses.ts";
 import { buildFixedExpenseOccurrences } from "../../../utils/fixedExpenseOccurrences.ts";
 import { classifyPostedBusinessTransaction } from "../../../utils/businessTransactionAccounting.ts";
+import {
+  buildCanonicalMaintenanceEvent,
+  type MaintenanceLedgerRecordInput,
+} from "../../../utils/canonicalMaintenanceLedger.ts";
+
+export { buildCanonicalMaintenanceEvent, isMaintenanceLedgerEligible } from "../../../utils/canonicalMaintenanceLedger.ts";
+export type { MaintenanceLedgerRecordInput } from "../../../utils/canonicalMaintenanceLedger.ts";
 
 function isCompletedTripStatus(status: unknown): boolean {
   const s = String(status ?? "").trim().toLowerCase();
@@ -347,6 +354,22 @@ export async function appendCanonicalTollIfEligible(
     await appendCanonicalLedgerEvents([ev], c);
   } catch (e) {
     console.error("[CanonicalOps] toll append failed:", e);
+  }
+}
+
+/** Completed maintenance_records with cost > 0 → books. Returns false on append failure. */
+export async function appendCanonicalMaintenanceIfEligible(
+  record: MaintenanceLedgerRecordInput,
+  c: Context,
+): Promise<{ posted: boolean; failed: boolean }> {
+  const ev = buildCanonicalMaintenanceEvent(record);
+  if (!ev) return { posted: false, failed: false };
+  try {
+    await appendCanonicalLedgerEvents([ev], c);
+    return { posted: true, failed: false };
+  } catch (e) {
+    console.error("[CanonicalOps] maintenance append failed:", e);
+    return { posted: false, failed: true };
   }
 }
 

@@ -11,7 +11,7 @@ import {
   Loader2,
   Trophy
 } from "lucide-react";
-import { Trip, FuelLog, ServiceRequest, DriverMetrics, TierConfig, FinancialTransaction, QuotaConfig, DriverGoals } from '../../types/data';
+import { Trip, FuelLog, ServiceRequest, DriverMetrics, TierConfig, QuotaConfig, DriverGoals } from '../../types/data';
 import { RoutePoint, TripStop } from '../../types/tripSession';
 import { toast } from 'sonner@2.0.3';
 import { FuelLogForm } from './FuelLogForm';
@@ -438,34 +438,21 @@ export function DriverDashboard() {
   };
 
   const handleServiceSubmit = async (data: Partial<ServiceRequest>) => {
-      // Create a pending transaction for Service/Maintenance request
       try {
-          const newTx: Partial<FinancialTransaction> = {
-            id: crypto.randomUUID(),
-            driverId: user?.id,
-            driverName: driverRecord?.name || user?.email,
-            date: data.date || new Date().toISOString(),
-            time: undefined,
-            type: 'Expense',
-            category: 'Maintenance',
-            amount: 0, // Placeholder
-            description: `${data.type}: ${data.description}`,
-            status: 'Pending',
-            paymentMethod: 'Cash',
-            notes: `Priority: ${data.priority}`,
+          await api.createMaintenanceRequest({
+            date: data.date || new Date().toISOString().slice(0, 10),
+            type: data.type,
+            priority: data.priority,
+            description: data.description,
             odometer: data.odometer,
-            // Unified Timeline Metadata
-            source: 'Service Request',
-            isVerified: true
-          } as any;
-
-          await api.saveTransaction(newTx);
+            vehicleId: driverRecord?.assignedVehicleId || driverRecord?.vehicleId || driverRecord?.vehicle,
+          });
           toast.success("Service request submitted!", {
-              description: "A fleet manager will review your request shortly."
+              description: "Your fleet manager will see this in Maintenance."
           });
       } catch (e) {
           console.error(e);
-          toast.error("Failed to submit request");
+          toast.error(e instanceof Error ? e.message : "Failed to submit request");
       }
   };
 

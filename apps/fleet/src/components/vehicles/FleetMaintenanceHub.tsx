@@ -30,6 +30,7 @@ import { LogMaintenanceServiceDialog } from "./LogMaintenanceServiceDialog";
 import { catalogOptionsFromScheduleRows } from "../../utils/maintenanceCatalogOptions";
 import type {
   CatalogMaintenanceTaskOption,
+  MaintenanceLog,
   VehicleMaintenanceScheduleRowApi,
 } from "../../types/maintenance";
 import { toast } from "sonner@2.0.3";
@@ -38,6 +39,17 @@ import type { CompatiblePartsResponse } from "../../types/partSourcing";
 export interface FleetMaintenanceHubProps {
   onNavigate?: (page: string) => void;
 }
+
+type DriverRequestRow = {
+  id: string;
+  vehicle_id: string;
+  service_type: string | null;
+  notes: string | null;
+  performed_at_date: string;
+  performed_at_miles: number;
+  status: string;
+  payload_json?: Record<string, unknown> | null;
+};
 
 function formatFleetOverdueLine(
   maxCal: number | null | undefined,
@@ -112,11 +124,28 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
   const [logVehicleId, setLogVehicleId] = useState<string>("");
   const [catalogForLog, setCatalogForLog] = useState<CatalogMaintenanceTaskOption[]>([]);
   const [defaultOdoForLog, setDefaultOdoForLog] = useState<number | undefined>(undefined);
+  const [initialLogForComplete, setInitialLogForComplete] = useState<Partial<MaintenanceLog> | null>(null);
+
+  const [driverRequests, setDriverRequests] = useState<DriverRequestRow[]>([]);
+  const [requestsLoading, setRequestsLoading] = useState(false);
 
   const [partsDialogOpen, setPartsDialogOpen] = useState(false);
   const [partsVehicleId, setPartsVehicleId] = useState<string>("");
   const [partsLoading, setPartsLoading] = useState(false);
   const [partsData, setPartsData] = useState<CompatiblePartsResponse | null>(null);
+
+  const loadRequests = useCallback(async () => {
+    setRequestsLoading(true);
+    try {
+      const res = await api.getMaintenanceRequests("Requested");
+      setDriverRequests((res.data || []) as DriverRequestRow[]);
+    } catch (e) {
+      console.error(e);
+      setDriverRequests([]);
+    } finally {
+      setRequestsLoading(false);
+    }
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -132,12 +161,13 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
           servicesAttentionTruncated: Boolean(row.servicesAttentionTruncated),
         })),
       );
+      await loadRequests();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to load");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [loadRequests]);
 
   const handleBootstrapFleet = useCallback(async () => {
     setFleetBootstrapping(true);
@@ -162,7 +192,7 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
   }, [load]);
 
   const prepareLogForVehicle = useCallback(
-    async (vehicleId: string) => {
+    async (vehicleId: string, initial?: Partial<MaintenanceLog> | null) => {
       if (!vehicleId) return;
       setScheduleLoading(true);
       try {
@@ -172,22 +202,54 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
           : [];
         setCatalogForLog(catalogOptionsFromScheduleRows(rows));
         const odo = items.find((i) => i.vehicleId === vehicleId)?.odometer;
-        setDefaultOdoForLog(Number.isFinite(odo) ? odo : undefined);
+        setDefaultOdoForLog(
+          initial?.odo ?? (Number.isFinite(odo) ? odo : undefined),
+        );
+        setInitialLogForComplete(initial ?? null);
         setLogVehicleId(vehicleId);
         setLogDialogOpen(true);
       } catch (e: unknown) {
         console.error(e);
-        toast.error("Could not load maintenance schedule; using default checklists.");
-        setCatalogForLog([]);
-        const odo = items.find((i) => i.vehicleId === vehicleId)?.odometer;
-        setDefaultOdoForLog(Number.isFinite(odo) ? odo : undefined);
-        setLogVehicleId(vehicleId);
-        setLogDialogOpen(true);
+        toast.error(e instanceof Error ? e.message : "Failed to open log dialog");
       } finally {
         setScheduleLoading(false);
       }
     },
     [items],
+  );
+
+  const handleCompleteRequest = useCallback(
+    async (row: DriverRequestRow) => {
+      await prepareLogForVehicle(row.vehicle_id, {
+        id: row.id,
+        vehicleId: row.vehicle_id,
+        date: row.performed_at_date,
+        type: row.service_type || "Maintenance",
+        notes: row.notes || "",
+        odo: row.performed_at_miles,
+        cost: 0,
+        provider: "",
+        status: "Completed",
+        currency: "JMD",
+      });
+    },
+    [prepareLogForVehicle],
+  );
+
+  const handleDismissRequest = useCallback(
+    async (row: DriverRequestRow) => {
+      try {
+        await api.updateMaintenanceLog(row.vehicle_id, row.id, {
+          status: "Cancelled",
+          cost: null,
+        });
+        toast.success("Request dismissed");
+        await loadRequests();
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Failed to dismiss");
+      }
+    },
+    [loadRequests],
   );
 
   const handleOpenVehiclePicker = useCallback(() => {
@@ -421,14 +483,87 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
           open={logDialogOpen}
           onOpenChange={(o) => {
             setLogDialogOpen(o);
-            if (!o) setLogVehicleId("");
+            if (!o) {
+              setLogVehicleId("");
+              setInitialLogForComplete(null);
+            }
           }}
           vehicleId={logVehicleId}
           catalogTemplates={catalogForLog}
           defaultOdo={defaultOdoForLog}
+          initialLog={initialLogForComplete}
           onSaved={handleLogSaved}
         />
       ) : null}
+
+      {(driverRequests.length > 0 || requestsLoading) && (
+        <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20 shadow-sm overflow-hidden">
+          <div className="px-4 py-3 border-b border-amber-200 dark:border-amber-800 flex items-center justify-between gap-2">
+            <div>
+              <h2 className="font-semibold text-slate-900 dark:text-slate-100">Driver requests</h2>
+              <p className="text-xs text-slate-600 dark:text-slate-400">
+                Open issues from drivers — complete with cost to post to books, or dismiss.
+              </p>
+            </div>
+            {requestsLoading ? <Loader2 className="w-4 h-4 animate-spin text-slate-400" /> : null}
+          </div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Date</TableHead>
+                <TableHead>Vehicle</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead>Notes</TableHead>
+                <TableHead className="w-[200px] text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {driverRequests.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center text-slate-500 py-6 text-sm">
+                    No open driver requests.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                driverRequests.map((row) => {
+                  const veh = items.find((i) => i.vehicleId === row.vehicle_id);
+                  return (
+                    <TableRow key={row.id}>
+                      <TableCell className="whitespace-nowrap">{row.performed_at_date}</TableCell>
+                      <TableCell>{veh ? vehicleLabel(veh) : row.vehicle_id}</TableCell>
+                      <TableCell>{row.service_type || "—"}</TableCell>
+                      <TableCell className="max-w-xs truncate" title={row.notes || undefined}>
+                        {row.notes || "—"}
+                      </TableCell>
+                      <TableCell className="text-right space-x-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="default"
+                          className="h-8"
+                          onClick={() => void handleCompleteRequest(row)}
+                          disabled={scheduleLoading}
+                        >
+                          Complete
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-8"
+                          onClick={() => void handleDismissRequest(row)}
+                        >
+                          Dismiss
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      )}
 
       {loading ? (
         <div className="flex justify-center py-20">

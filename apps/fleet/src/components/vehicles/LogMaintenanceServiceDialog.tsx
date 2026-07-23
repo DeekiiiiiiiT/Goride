@@ -57,6 +57,8 @@ export interface LogMaintenanceServiceDialogProps {
   catalogTemplates: CatalogMaintenanceTaskOption[];
   /** Prefill odometer (e.g. fleet canonical reading). */
   defaultOdo?: number;
+  /** When set, PATCH this record (e.g. complete a driver Requested row). */
+  initialLog?: Partial<MaintenanceLog> | null;
   onSaved?: () => void;
 }
 
@@ -66,6 +68,7 @@ export function LogMaintenanceServiceDialog({
   vehicleId,
   catalogTemplates,
   defaultOdo,
+  initialLog,
   onSaved,
 }: LogMaintenanceServiceDialogProps) {
   const [step, setStep] = useState<1 | 2>(1);
@@ -77,6 +80,7 @@ export function LogMaintenanceServiceDialog({
     type: "Regular Maintenance",
     status: "Completed",
     cost: 0,
+    currency: "JMD",
     odo: 0,
     provider: "",
     notes: "",
@@ -112,27 +116,32 @@ export function LogMaintenanceServiceDialog({
   useEffect(() => {
     if (!open) return;
     setFormData({
-      date: new Date().toISOString().split("T")[0],
-      type: "Regular Maintenance",
+      date: initialLog?.date || new Date().toISOString().split("T")[0],
+      type: initialLog?.type || "Regular Maintenance",
       status: "Completed",
-      cost: 0,
-      odo: defaultOdo != null && Number.isFinite(defaultOdo) ? defaultOdo : 0,
-      provider: "",
-      notes: "",
-      invoiceUrl: "",
-      checklist: [],
-      itemCosts: {},
-      inspectionResults: {
+      cost: initialLog?.cost ?? 0,
+      currency: initialLog?.currency || "JMD",
+      odo:
+        initialLog?.odo ??
+        (defaultOdo != null && Number.isFinite(defaultOdo) ? defaultOdo : 0),
+      provider: initialLog?.provider || "",
+      notes: initialLog?.notes || "",
+      invoiceUrl: initialLog?.invoiceUrl || "",
+      id: initialLog?.id,
+      templateId: initialLog?.templateId,
+      checklist: initialLog?.checklist || [],
+      itemCosts: initialLog?.itemCosts || {},
+      inspectionResults: initialLog?.inspectionResults || {
         issues: [],
         notes: "",
       },
     });
     setStep(1);
     const first = scheduleChoices[0];
-    setSelectedScheduleId(first?.id ?? "");
+    setSelectedScheduleId(initialLog?.templateId || first?.id || "");
     setChecklistItems(first?.items ?? MAINTENANCE_SCHEDULES[0].items);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reset when dialog opens for a vehicle/catalog; scheduleChoices derived from catalogTemplates
-  }, [open, vehicleId, defaultOdo, catalogTemplates]);
+  }, [open, vehicleId, defaultOdo, catalogTemplates, initialLog]);
 
   useEffect(() => {
     if (selectedScheduleId) {
@@ -220,12 +229,24 @@ export function LogMaintenanceServiceDialog({
         id: logId,
         invoiceUrl,
         cost: Number(formData.cost) || 0,
+        currency: formData.currency || "JMD",
         odo: Number(formData.odo) || 0,
+        status: "Completed" as const,
         ...(choice?.templateId ? { templateId: choice.templateId, type: choice.label } : {}),
       };
 
-      await api.saveMaintenanceLog(payload);
-      toast.success("Service log saved");
+      const result = initialLog?.id
+        ? await api.updateMaintenanceLog(vehicleId, logId, payload)
+        : await api.saveMaintenanceLog(payload);
+      if (result.ledgerWarning) {
+        toast.warning(result.ledgerWarning);
+      } else {
+        toast.success(
+          result.ledgerPosted
+            ? "Service saved and posted to Business Finance"
+            : "Service log saved",
+        );
+      }
       onOpenChange(false);
       onSaved?.();
     } catch (error) {
@@ -440,7 +461,7 @@ export function LogMaintenanceServiceDialog({
 
               <div className="grid grid-cols-2 gap-6">
                 <div className="space-y-2">
-                  <Label>Total Cost ($)</Label>
+                  <Label>Total Cost</Label>
                   <Input
                     type="number"
                     value={formData.cost || ""}
@@ -448,6 +469,24 @@ export function LogMaintenanceServiceDialog({
                     className="bg-slate-50 font-medium"
                   />
                 </div>
+                <div className="space-y-2">
+                  <Label>Currency</Label>
+                  <Select
+                    value={formData.currency || "JMD"}
+                    onValueChange={(v) => setFormData({ ...formData, currency: v })}
+                  >
+                    <SelectTrigger className="bg-slate-50 font-medium">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="JMD">JMD</SelectItem>
+                      <SelectItem value="USD">USD</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <Label>Odometer (km)</Label>
                   <Input
@@ -457,16 +496,15 @@ export function LogMaintenanceServiceDialog({
                     className="bg-slate-50 font-medium"
                   />
                 </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Service Provider</Label>
-                <Input
-                  value={formData.provider}
-                  onChange={(e) => setFormData({ ...formData, provider: e.target.value })}
-                  placeholder="e.g. Whole-Heated Car Service LTD"
-                  className="bg-slate-50"
-                />
+                <div className="space-y-2">
+                  <Label>Service Provider</Label>
+                  <Input
+                    value={formData.provider}
+                    onChange={(e) => setFormData({ ...formData, provider: e.target.value })}
+                    placeholder="e.g. Whole-Heated Car Service LTD"
+                    className="bg-slate-50"
+                  />
+                </div>
               </div>
             </div>
           ) : (

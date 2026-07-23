@@ -71,13 +71,17 @@ Fixed Expense rules now expand into idempotent `fixed_expense` occurrences on
 scheduled due dates. P&L, Expenses, Overview, and Budgets read those canonical
 events. A schedule does not move Cash & Bank; only a posted payment does.
 
-### 2. Maintenance spend — posted actuals wired 2026-07-21
+### 2. Maintenance spend — auto-posted from service logs 2026-07-23
 
-`FleetMaintenanceHub.tsx` tracks supplier quotes and unit pricing per
-maintenance task (`Suppliers / price` column, `unit_price`/`currency` per
-order) — procurement estimates, not proof of spend. Realized Maintenance spend
-is logged from Business Finance → Expenses and posts `maintenance`; quotes are
-deliberately excluded so they cannot overstate cost.
+`FleetMaintenanceHub` Compatible Parts still shows supplier quotes
+(`supplier_part_offer`) — procurement estimates, never posted to the books.
+**Realized** maintenance spend is logged via Fleet Maintenance → Log service
+(`maintenance_records` with `status=Completed` and `cost > 0`). The server
+appends a canonical `maintenance` ledger event
+(`sourceType: financial_event`, idempotency `maintenance_record:{id}|maintenance`).
+Quotes remain excluded. Business Finance → Expenses still accepts one-off
+"Other vehicle-related (not a service log)" rows for edge cases; shop work
+should use Log service so history and P&L stay in sync.
 
 ### 3. Budgets — moved to Business Finance 2026-07-21
 

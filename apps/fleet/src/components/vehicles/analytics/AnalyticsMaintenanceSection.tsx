@@ -149,7 +149,7 @@ export function AnalyticsMaintenanceSection({
             <div>
               <CardTitle className="text-lg">Maintenance Log</CardTitle>
               <CardDescription>
-                Completed and scheduled repairs in the selected period · Total {formatJMD(totalCost)}
+                All completed service logs (ops history) · Total {formatJMD(totalCost)}
               </CardDescription>
             </div>
           </div>

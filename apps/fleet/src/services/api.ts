@@ -1365,7 +1365,54 @@ export const api = {
           body: JSON.stringify(log)
       });
       if (!response.ok) throw new Error("Failed to save maintenance log");
+      return response.json() as Promise<{
+        success: boolean;
+        data?: unknown;
+        ledgerPosted?: boolean;
+        ledgerWarning?: string;
+        error?: string;
+      }>;
+  },
+
+  async updateMaintenanceLog(vehicleId: string, id: string, patch: unknown) {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/maintenance-logs/${vehicleId}/${id}`, {
+          method: 'PATCH',
+          headers: await getHeaders(),
+          body: JSON.stringify(patch),
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error((err as { error?: string }).error || "Failed to update maintenance log");
+      }
+      return response.json() as Promise<{
+        success: boolean;
+        data?: unknown;
+        ledgerPosted?: boolean;
+        ledgerWarning?: string;
+        error?: string;
+      }>;
+  },
+
+  async createMaintenanceRequest(payload: unknown) {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/maintenance-requests`, {
+          method: 'POST',
+          headers: await getHeaders(),
+          body: JSON.stringify(payload),
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error((err as { error?: string }).error || "Failed to submit service request");
+      }
       return response.json();
+  },
+
+  async getMaintenanceRequests(status = 'Requested') {
+      const response = await fetchWithRetry(
+        `${API_ENDPOINTS.fuel}/maintenance-requests?status=${encodeURIComponent(status)}`,
+        { headers: await getHeaders(null) },
+      );
+      if (!response.ok) throw new Error("Failed to fetch maintenance requests");
+      return response.json() as Promise<{ data: unknown[] }>;
   },
 
   async getMaintenanceSchedule(vehicleId: string) {

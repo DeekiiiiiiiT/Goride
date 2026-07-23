@@ -70,5 +70,7 @@ export interface MaintenanceLog {
     notes: string;
   };
   invoiceUrl?: string;
-  status?: "Scheduled" | "Completed" | "In Progress";
+  /** ISO currency for cost; defaults JMD on the server. */
+  currency?: string;
+  status?: "Requested" | "Scheduled" | "In Progress" | "Completed" | "Cancelled";
 }

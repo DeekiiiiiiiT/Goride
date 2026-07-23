@@ -2,10 +2,9 @@ import React, { useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { Button } from '@roam/ui';
 import { toast } from 'sonner';
-import { useAuth } from '../../contexts/AuthContext';
 import { useCurrentDriver } from '../../hooks/useCurrentDriver';
 import { ServiceRequestForm } from './ServiceRequestForm';
-import { ServiceRequest, FinancialTransaction } from '../../types/data';
+import { ServiceRequest } from '../../types/data';
 import { api } from '../../services/api';
 
 interface FleetServiceRequestPageProps {
@@ -14,39 +13,27 @@ interface FleetServiceRequestPageProps {
 
 /** Standalone host for the fleet service/maintenance request form (was embedded in the legacy dashboard). */
 export function FleetServiceRequestPage({ onBack }: FleetServiceRequestPageProps) {
-  const { user } = useAuth();
   const { driverRecord } = useCurrentDriver();
   const [open, setOpen] = useState(true);
 
   const handleServiceSubmit = async (data: Partial<ServiceRequest>) => {
     try {
-      const newTx: Partial<FinancialTransaction> = {
-        id: crypto.randomUUID(),
-        driverId: user?.id,
-        driverName: driverRecord?.name || user?.email,
-        date: data.date || new Date().toISOString(),
-        time: undefined,
-        type: 'Expense',
-        category: 'Maintenance',
-        amount: 0, // Placeholder — fleet manager prices it on review
-        description: `${data.type}: ${data.description}`,
-        status: 'Pending',
-        paymentMethod: 'Cash',
-        notes: `Priority: ${data.priority}`,
+      await api.createMaintenanceRequest({
+        date: data.date || new Date().toISOString().slice(0, 10),
+        type: data.type,
+        priority: data.priority,
+        description: data.description,
         odometer: data.odometer,
-        source: 'Service Request',
-        isVerified: true,
-      } as Partial<FinancialTransaction>;
-
-      await api.saveTransaction(newTx);
+        vehicleId: driverRecord?.assignedVehicleId || driverRecord?.vehicleId || driverRecord?.vehicle,
+      });
       toast.success('Service request submitted!', {
-        description: 'A fleet manager will review your request shortly.',
+        description: 'Your fleet manager will see this in Maintenance.',
       });
       setOpen(false);
       onBack();
     } catch (e) {
       console.error(e);
-      toast.error('Failed to submit request');
+      toast.error(e instanceof Error ? e.message : 'Failed to submit request');
     }
   };
 
