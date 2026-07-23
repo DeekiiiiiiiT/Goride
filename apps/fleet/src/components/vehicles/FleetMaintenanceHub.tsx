@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { Loader2, ListChecks, Package, Plus, Wrench, Car, History } from "lucide-react";
+import { Loader2, ListChecks, Package, Plus, Wrench, Car, History, Eye } from "lucide-react";
 import { api } from "../../services/api";
 import { Button } from "../ui/button";
 import {
@@ -65,20 +65,21 @@ function formatFleetOverdueLine(
   return "—";
 }
 
-function formatServicesAttentionLine(
-  rows: Array<{ taskName: string; kind: "overdue" | "due_soon" }> | undefined,
-  truncated?: boolean,
-): { line: string; title: string } {
-  const list = rows ?? [];
-  if (list.length === 0) return { line: "—", title: "" };
-  const parts = list.map(
-    (r) => `${r.taskName} (${r.kind === "overdue" ? "overdue" : "due soon"})`,
-  );
-  const line = parts.join(", ") + (truncated ? "…" : "");
-  const title =
-    parts.join("\n") + (truncated ? "\n(Additional items not listed.)" : "");
-  return { line, title };
-}
+type FleetHubVehicleRow = {
+  vehicleId: string;
+  licensePlate?: string;
+  make?: string;
+  model?: string;
+  year?: string;
+  odometer: number;
+  fleetStatus: string;
+  nextDueOdometer: number | null;
+  scheduleRowCount: number;
+  maxCalendarDaysOverdue: number | null;
+  maxKmOverdue: number | null;
+  servicesAttention: Array<{ taskName: string; kind: "overdue" | "due_soon" }>;
+  servicesAttentionTruncated: boolean;
+};
 
 function vehicleLabel(row: {
   vehicleId: string;
@@ -100,23 +101,8 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
   const [fleetBootstrapping, setFleetBootstrapping] = useState(false);
   const [fleetMessage, setFleetMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [items, setItems] = useState<
-    Array<{
-      vehicleId: string;
-      licensePlate?: string;
-      make?: string;
-      model?: string;
-      year?: string;
-      odometer: number;
-      fleetStatus: string;
-      nextDueOdometer: number | null;
-      scheduleRowCount: number;
-      maxCalendarDaysOverdue: number | null;
-      maxKmOverdue: number | null;
-      servicesAttention: Array<{ taskName: string; kind: "overdue" | "due_soon" }>;
-      servicesAttentionTruncated: boolean;
-    }>
-  >([]);
+  const [items, setItems] = useState<FleetHubVehicleRow[]>([]);
+  const [servicesDueView, setServicesDueView] = useState<FleetHubVehicleRow | null>(null);
 
   const [vehiclePickerOpen, setVehiclePickerOpen] = useState(false);
   const [pickerVehicleId, setPickerVehicleId] = useState<string>("");
@@ -468,7 +454,7 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
                 <TableHead className="text-right">Odometer</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Overdue</TableHead>
-                <TableHead>Services due</TableHead>
+                <TableHead className="text-center w-[100px]">Services due</TableHead>
                 <TableHead className="text-right">Next due (km)</TableHead>
                 <TableHead className="text-right">Schedule rows</TableHead>
                 <TableHead className="w-[100px] text-right">Actions</TableHead>
@@ -483,10 +469,7 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
                 </TableRow>
               ) : (
                 items.map((row) => {
-                  const svc = formatServicesAttentionLine(
-                    row.servicesAttention,
-                    row.servicesAttentionTruncated,
-                  );
+                  const dueCount = row.servicesAttention?.length ?? 0;
                   return (
                     <TableRow key={row.vehicleId}>
                       <TableCell className="font-medium">
@@ -512,13 +495,23 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
                       <TableCell className="text-right tabular-nums text-sm text-slate-700 dark:text-slate-300">
                         {formatFleetOverdueLine(row.maxCalendarDaysOverdue, row.maxKmOverdue)}
                       </TableCell>
-                      <TableCell className="max-w-[min(28rem,55vw)]">
-                        <span
-                          className="line-clamp-2 text-sm text-slate-700 dark:text-slate-300"
-                          title={svc.title || undefined}
-                        >
-                          {svc.line}
-                        </span>
+                      <TableCell className="text-center">
+                        {dueCount === 0 ? (
+                          <span className="text-slate-400">—</span>
+                        ) : (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 gap-1.5 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                            onClick={() => setServicesDueView(row)}
+                            title={`View ${dueCount} service${dueCount === 1 ? "" : "s"} due`}
+                            aria-label={`View ${dueCount} services due`}
+                          >
+                            <Eye className="w-4 h-4" />
+                            <span className="tabular-nums text-xs font-medium">{dueCount}</span>
+                          </Button>
+                        )}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
                         {row.nextDueOdometer != null ? row.nextDueOdometer.toLocaleString() : "—"}
@@ -554,6 +547,64 @@ export function FleetMaintenanceHub({ onNavigate }: FleetMaintenanceHubProps) {
       )}
         </TabsContent>
       </Tabs>
+
+      <Dialog
+        open={!!servicesDueView}
+        onOpenChange={(open) => {
+          if (!open) setServicesDueView(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Services due</DialogTitle>
+            <DialogDescription>
+              {servicesDueView ? vehicleLabel(servicesDueView) : ""}
+              {servicesDueView?.servicesAttentionTruncated
+                ? " — showing top items; open Service ledger for the full list."
+                : null}
+            </DialogDescription>
+          </DialogHeader>
+          <ul className="space-y-2 py-1 max-h-[50vh] overflow-y-auto">
+            {(servicesDueView?.servicesAttention ?? []).map((item, idx) => (
+              <li
+                key={`${item.taskName}-${item.kind}-${idx}`}
+                className="flex items-start justify-between gap-3 rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2.5"
+              >
+                <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                  {item.taskName}
+                </span>
+                <span
+                  className={
+                    item.kind === "overdue"
+                      ? "shrink-0 text-xs font-semibold uppercase tracking-wide text-red-600"
+                      : "shrink-0 text-xs font-semibold uppercase tracking-wide text-amber-600"
+                  }
+                >
+                  {item.kind === "overdue" ? "Overdue" : "Due soon"}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button type="button" variant="outline" onClick={() => setServicesDueView(null)}>
+              Close
+            </Button>
+            {servicesDueView ? (
+              <Button
+                type="button"
+                onClick={() => {
+                  const id = servicesDueView.vehicleId;
+                  setServicesDueView(null);
+                  void prepareLogForVehicle(id);
+                }}
+                disabled={scheduleLoading}
+              >
+                Log service
+              </Button>
+            ) : null}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={vehiclePickerOpen} onOpenChange={setVehiclePickerOpen}>
         <DialogContent className="sm:max-w-md">

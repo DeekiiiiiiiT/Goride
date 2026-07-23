@@ -275,6 +275,10 @@ export function MaintenanceTemplatesManager() {
   /** Ordered category ids included in the open package create/edit dialog. */
   const [packageCategoryIds, setPackageCategoryIds] = useState<string[]>([]);
   const [loadingPackageCats, setLoadingPackageCats] = useState(false);
+  /** Package dialog system sections — collapsed by default. */
+  const [packageExpandedSystems, setPackageExpandedSystems] = useState<Set<string>>(
+    () => new Set(),
+  );
 
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<MaintenanceServiceCategory | null>(null);
@@ -465,6 +469,23 @@ export function MaintenanceTemplatesManager() {
     });
   };
 
+  const togglePackageSystemExpanded = (systemId: string) => {
+    setPackageExpandedSystems((prev) => {
+      const next = new Set(prev);
+      if (next.has(systemId)) next.delete(systemId);
+      else next.add(systemId);
+      return next;
+    });
+  };
+
+  const expandAllPackageSystems = () => {
+    setPackageExpandedSystems(new Set(categoryTree.map((g) => g.system.id)));
+  };
+
+  const collapseAllPackageSystems = () => {
+    setPackageExpandedSystems(new Set());
+  };
+
   const applyPreset = (id: string) => {
     setPresetId(id);
     if (id === "__none__") return;
@@ -494,7 +515,9 @@ export function MaintenanceTemplatesManager() {
     setEditing(null);
     setPresetId("__none__");
     setPackageCategoryIds([]);
+    setPackageExpandedSystems(new Set());
     setLoadingPackageCats(false);
+    void loadCategories();
     setForm({
       task_name: "",
       task_code: "",
@@ -533,6 +556,8 @@ export function MaintenanceTemplatesManager() {
       sort_order: String(t.sort_order),
     });
     setPackageCategoryIds([]);
+    setPackageExpandedSystems(new Set());
+    void loadCategories();
     setDialogOpen(true);
     if (!token) return;
     setLoadingPackageCats(true);
@@ -1442,92 +1467,148 @@ export function MaintenanceTemplatesManager() {
             </div>
 
             <div className="space-y-2 border-t border-slate-100 pt-3 mt-1">
-              <div>
-                <Label className="text-xs font-semibold text-slate-800">Categories in this package</Label>
-                <p className="text-[11px] text-slate-500 leading-snug mt-0.5">
-                  Select components only. Systems are section headers. Order is the log order.
-                </p>
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <Label className="text-xs font-semibold text-slate-800">Categories in this package</Label>
+                  <p className="text-[11px] text-slate-500 leading-snug mt-0.5">
+                    Select components only. Systems are section headers. Order is the log order.
+                  </p>
+                </div>
+                {categoryTree.length > 0 ? (
+                  <div className="flex shrink-0 items-center gap-2 pt-0.5">
+                    <button
+                      type="button"
+                      className="text-[11px] font-medium text-amber-700 hover:text-amber-800"
+                      onClick={expandAllPackageSystems}
+                    >
+                      Expand all
+                    </button>
+                    <span className="text-slate-300">·</span>
+                    <button
+                      type="button"
+                      className="text-[11px] font-medium text-slate-500 hover:text-slate-700"
+                      onClick={collapseAllPackageSystems}
+                    >
+                      Collapse all
+                    </button>
+                  </div>
+                ) : null}
               </div>
-              {loadingPackageCats ? (
+              {loadingPackageCats || loadingCategories ? (
                 <div className="flex items-center gap-2 text-slate-400 py-4 justify-center">
                   <Loader2 className="w-4 h-4 animate-spin" />
                   Loading categories…
                 </div>
-              ) : categoryTree.every((g) => g.components.length === 0) ? (
+              ) : categoryTree.length === 0 ? (
                 <p className="text-sm text-slate-500 py-4 text-center">
-                  No components yet. Add systems and components in the Categories tab first.
+                  No systems yet. Add systems and components in the Categories tab first.
                 </p>
               ) : (
-                <div className="grid gap-3 max-h-[36vh] overflow-y-auto pr-1">
+                <div className="grid gap-1 max-h-[52vh] overflow-y-auto pr-1 border border-slate-100 rounded-md p-1.5 bg-slate-50/40">
                   {categoryTree.map(({ system, components }) => {
-                    if (components.length === 0) return null;
+                    const open = packageExpandedSystems.has(system.id);
+                    const selectedCount = components.filter((c) =>
+                      packageCategoryIds.includes(c.id),
+                    ).length;
                     return (
-                      <div key={system.id} className="space-y-1.5">
-                        <div className="flex items-center gap-2 px-1 pt-1">
-                          <MaintenanceIcon iconKey={system.icon_key} className="h-3.5 w-3.5 text-slate-400" />
-                          <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                      <div key={system.id} className="space-y-1">
+                        <button
+                          type="button"
+                          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-white/80"
+                          onClick={() => togglePackageSystemExpanded(system.id)}
+                          aria-expanded={open}
+                        >
+                          {open ? (
+                            <ChevronDown className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                          ) : (
+                            <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                          )}
+                          <MaintenanceIcon
+                            iconKey={system.icon_key}
+                            className="h-3.5 w-3.5 shrink-0 text-slate-400"
+                          />
+                          <span className="flex-1 text-[11px] font-semibold uppercase tracking-wide text-slate-600">
                             {system.name}
                           </span>
-                        </div>
-                        {components.map((c) => {
-                          const checked = packageCategoryIds.includes(c.id);
-                          const orderIdx = packageCategoryIds.indexOf(c.id);
-                          return (
-                            <div
-                              key={c.id}
-                              className={`flex items-center gap-3 rounded-md border px-3 py-2 ${
-                                checked
-                                  ? "border-amber-200 bg-amber-50/40"
-                                  : "border-slate-100 bg-slate-50/60"
-                              }`}
-                            >
-                              <Checkbox
-                                id={`pkg-dialog-cat-${c.id}`}
-                                checked={checked}
-                                onCheckedChange={(v) => togglePackageCategory(c.id, v === true)}
-                              />
-                              <MaintenanceIcon iconKey={c.icon_key} className="h-4 w-4 text-amber-600" />
-                              <Label
-                                htmlFor={`pkg-dialog-cat-${c.id}`}
-                                className="flex-1 cursor-pointer font-medium"
-                              >
-                                {c.name}
-                                <span className="ml-2 text-[11px] font-mono text-slate-400 font-normal">
-                                  {c.op_code?.trim() || c.code}
-                                </span>
-                              </Label>
-                              {checked ? (
-                                <div className="flex items-center gap-1">
-                                  <span className="text-[11px] tabular-nums text-slate-400 w-5 text-center">
-                                    {orderIdx + 1}
-                                  </span>
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-7 w-7"
-                                    disabled={orderIdx <= 0}
-                                    onClick={() => movePackageCategory(c.id, -1)}
-                                    aria-label="Move up"
+                          <span className="text-[10px] tabular-nums text-slate-400">
+                            {components.length}
+                            {selectedCount > 0 ? ` · ${selectedCount} selected` : ""}
+                          </span>
+                        </button>
+                        {open ? (
+                          components.length === 0 ? (
+                            <p className="pl-8 pr-2 pb-1 text-[11px] text-slate-400">
+                              No components in this system yet.
+                            </p>
+                          ) : (
+                            <div className="grid gap-1.5 pl-1 pb-1">
+                              {components.map((c) => {
+                                const checked = packageCategoryIds.includes(c.id);
+                                const orderIdx = packageCategoryIds.indexOf(c.id);
+                                return (
+                                  <div
+                                    key={c.id}
+                                    className={`flex items-center gap-3 rounded-md border px-3 py-2 ${
+                                      checked
+                                        ? "border-amber-200 bg-amber-50/40"
+                                        : "border-slate-100 bg-white"
+                                    }`}
                                   >
-                                    ↑
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-7 w-7"
-                                    disabled={orderIdx >= packageCategoryIds.length - 1}
-                                    onClick={() => movePackageCategory(c.id, 1)}
-                                    aria-label="Move down"
-                                  >
-                                    ↓
-                                  </Button>
-                                </div>
-                              ) : null}
+                                    <Checkbox
+                                      id={`pkg-dialog-cat-${c.id}`}
+                                      checked={checked}
+                                      onCheckedChange={(v) =>
+                                        togglePackageCategory(c.id, v === true)
+                                      }
+                                    />
+                                    <MaintenanceIcon
+                                      iconKey={c.icon_key}
+                                      className="h-4 w-4 text-amber-600"
+                                    />
+                                    <Label
+                                      htmlFor={`pkg-dialog-cat-${c.id}`}
+                                      className="flex-1 cursor-pointer font-medium"
+                                    >
+                                      {c.name}
+                                      <span className="ml-2 text-[11px] font-mono text-slate-400 font-normal">
+                                        {c.op_code?.trim() || c.code}
+                                      </span>
+                                    </Label>
+                                    {checked ? (
+                                      <div className="flex items-center gap-1">
+                                        <span className="text-[11px] tabular-nums text-slate-400 w-5 text-center">
+                                          {orderIdx + 1}
+                                        </span>
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-7 w-7"
+                                          disabled={orderIdx <= 0}
+                                          onClick={() => movePackageCategory(c.id, -1)}
+                                          aria-label="Move up"
+                                        >
+                                          ↑
+                                        </Button>
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-7 w-7"
+                                          disabled={orderIdx >= packageCategoryIds.length - 1}
+                                          onClick={() => movePackageCategory(c.id, 1)}
+                                          aria-label="Move down"
+                                        >
+                                          ↓
+                                        </Button>
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                );
+                              })}
                             </div>
-                          );
-                        })}
+                          )
+                        ) : null}
                       </div>
                     );
                   })}
