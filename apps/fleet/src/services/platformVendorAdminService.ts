@@ -59,6 +59,12 @@ export const platformVendorAdminService = {
     });
   },
 
+  deleteVendor(id: string) {
+    return adminFetch<{ success: boolean; data: ExpenseVendor }>(`${V}/${id}`, {
+      method: 'DELETE',
+    });
+  },
+
   approveVendor(id: string, body: { mergeIntoVendorId?: string; name?: string; notes?: string } = {}) {
     return adminFetch<{ success: boolean; data: ExpenseVendor }>(`${V}/${id}/approve`, {
       method: 'POST',
@@ -95,6 +101,12 @@ export const platformVendorAdminService = {
     return adminFetch<{ success: boolean; data: ExpenseHubCategory }>(`${C}/${id}`, {
       method: 'PUT',
       body: JSON.stringify(body),
+    });
+  },
+
+  deleteCategory(id: string) {
+    return adminFetch<{ success: boolean; data: ExpenseHubCategory }>(`${C}/${id}`, {
+      method: 'DELETE',
     });
   },
 };

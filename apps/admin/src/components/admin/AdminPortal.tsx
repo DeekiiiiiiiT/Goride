@@ -26,9 +26,9 @@ import { RidesOverviewCard } from './product-overviews/RidesOverviewCard';
 import { DriverOverviewCard } from './product-overviews/DriverOverviewCard';
 import { HaulOverviewCard } from './product-overviews/HaulOverviewCard';
 import { PartsSourcingManager } from './parts-sourcing/PartsSourcingManager';
-import { VendorDatabaseManager } from './accounting/VendorDatabaseManager';
+import { AccountingCatalogManager } from './accounting/AccountingCatalogManager';
 import { PendingVendorRequestsManager } from './accounting/PendingVendorRequestsManager';
-import { ExpenseCategoriesManager } from './accounting/ExpenseCategoriesManager';
+import { ErrorBoundary } from '../ui/ErrorBoundary';
 import { StationDatabaseView } from '../fuel/stations/StationDatabaseView';
 import type { ResolutionQueueSubTab } from '../fuel/stations/ResolutionQueueTab';
 import { GasStationAnalytics } from '../fuel/stations/GasStationAnalytics';
@@ -295,19 +295,18 @@ export function AdminPortal() {
           <PartsSourcingManager />
         </div>
       )}
-      {currentPage === 'vendor-database' && (
+      {(currentPage === 'vendor-database' || currentPage === 'expense-categories') && (
         <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px] dark:bg-card">
-          <VendorDatabaseManager />
+          <ErrorBoundary>
+            <AccountingCatalogManager
+              defaultTab={currentPage === 'expense-categories' ? 'categories' : 'vendors'}
+            />
+          </ErrorBoundary>
         </div>
       )}
       {currentPage === 'pending-vendor-requests' && (
         <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px] dark:bg-card">
           <PendingVendorRequestsManager />
-        </div>
-      )}
-      {currentPage === 'expense-categories' && (
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px] dark:bg-card">
-          <ExpenseCategoriesManager />
         </div>
       )}
       {currentPage === 'roam-dash-overview' && (

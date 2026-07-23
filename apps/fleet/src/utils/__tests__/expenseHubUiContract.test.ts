@@ -13,7 +13,8 @@ describe('Expense Hub accessibility & UI contract', () => {
     expect(shell).toMatch(/min-h-11|min-h-\[44px\]|h-11|h-12/);
     expect(shell).toMatch(/Register/);
     expect(shell).toMatch(/Approvals/);
-    expect(shell).not.toMatch(/id: 'rules'/);
+    expect(shell).toMatch(/Recurring expenses/);
+    expect(shell).toMatch(/id: 'recurring'/);
     expect(shell).not.toMatch(/id: 'settings'/);
   });
 
@@ -21,7 +22,6 @@ describe('Expense Hub accessibility & UI contract', () => {
     const files = [
       'ExpenseHubShell.tsx',
       'ExpenseHubPage.tsx',
-      'ExpenseAccountingPage.tsx',
       'ExpenseHubOverview.tsx',
       'ExpenseHubSpendOverTime.tsx',
       'ExpenseHubRegister.tsx',
@@ -37,15 +37,19 @@ describe('Expense Hub accessibility & UI contract', () => {
     }
   });
 
-  it('exposes Expense Hub ops + Accounting setup in Business Finance', () => {
+  it('exposes Expense Hub (with Recurring expenses) in Business Finance nav', () => {
     const sidebar = readFileSync(resolve(ROOT, 'components/layout/AppSidebar.tsx'), 'utf8');
     const app = readFileSync(resolve(ROOT, 'App.tsx'), 'utf8');
+    const shell = readFileSync(
+      resolve(ROOT, 'components/business-finance/expense-hub/ExpenseHubShell.tsx'),
+      'utf8',
+    );
     expect(sidebar).toContain("{ id: 'expense-hub', label: 'Expense Hub' }");
-    expect(sidebar).toContain("id: 'expense-accounting'");
+    expect(sidebar).not.toContain("id: 'expense-accounting'");
     expect(app).toContain("currentPage === 'expense-hub'");
-    expect(app).toContain("currentPage === 'expense-accounting'");
     expect(app).toContain('<ExpenseHubPage');
-    expect(app).toContain('<ExpenseAccountingPage');
+    expect(shell).toContain("id: 'recurring'");
+    expect(shell).toContain('ExpenseHubRules');
   });
 
   it('Stitch inventory documents all 18 screens', () => {

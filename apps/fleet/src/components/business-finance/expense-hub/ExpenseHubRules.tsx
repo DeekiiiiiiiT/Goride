@@ -373,10 +373,10 @@ export function ExpenseHubRules({
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="text-xl font-bold tracking-tight text-slate-950 dark:text-slate-50">
-            Recurring rules
+            Recurring expenses
           </h2>
           <p className="mt-1 text-sm text-slate-500">
-            Automate fixed expenses across selected vehicles.
+            Schedules that post on due dates across selected vehicles. Use Register for one-off bills.
           </p>
         </div>
         {canManage && (

@@ -261,11 +261,14 @@ export const api = {
   },
 
   async saveTrips(trips: Trip[]) {
+    // Nested controllers mount requireAuth(*) — anon key is rejected (AUTH_REQUIRED).
+    // Drivers must send their session JWT (same pattern as saveTransaction).
+    const authHeaders = await getHeaders();
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/trips`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
+        ...authHeaders,
+        apikey: publicAnonKey,
       },
       body: JSON.stringify(trips),
     });

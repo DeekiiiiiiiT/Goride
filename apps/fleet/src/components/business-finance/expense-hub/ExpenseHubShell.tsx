@@ -1,6 +1,6 @@
 /**
- * Expense Hub shell — ops only: Overview / Register / Approvals.
- * Rules → Accounting sidebar; Vendors → Super Admin catalog.
+ * Expense Hub shell — Overview / Register / Approvals / Recurring expenses.
+ * Jamaica vendors remain Super Admin catalog.
  */
 import React from 'react';
 import {
@@ -8,6 +8,7 @@ import {
   FileText,
   Info,
   LayoutDashboard,
+  Repeat2,
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '../../ui/utils';
@@ -18,9 +19,10 @@ import { HubDenied, HubLoading } from './HubStates';
 import { ExpenseHubOverview } from './ExpenseHubOverview';
 import { ExpenseHubRegister } from './ExpenseHubRegister';
 import { ExpenseHubApprovals } from './ExpenseHubApprovals';
+import { ExpenseHubRules } from './ExpenseHubRules';
 import { ExpenseHubDetail } from './ExpenseHubDetail';
 
-export type ExpenseHubSubview = 'overview' | 'register' | 'approvals';
+export type ExpenseHubSubview = 'overview' | 'register' | 'approvals' | 'recurring';
 
 export function ExpenseHubShell({
   expenses,
@@ -46,6 +48,10 @@ export function ExpenseHubShell({
   );
   const [detailId, setDetailId] = React.useState<string | null>(null);
 
+  React.useEffect(() => {
+    if (initialSubview) setSubview(initialSubview);
+  }, [initialSubview]);
+
   if (!can('expenses.view')) return <HubDenied what="Business Finance expenses" />;
   if (flagQuery.isLoading) return <HubLoading label="Loading Expense Hub…" />;
 
@@ -63,9 +69,21 @@ export function ExpenseHubShell({
       icon: ClipboardCheck,
       visible: can('expenses.approve') || can('expenses.view'),
     },
+    {
+      id: 'recurring',
+      label: 'Recurring expenses',
+      icon: Repeat2,
+      visible: can('expenses.manage_rules') || can('expenses.view'),
+    },
   ];
   const visibleSubviews = subviews.filter((s) => s.visible);
   const active = visibleSubviews.some((s) => s.id === subview) ? subview : 'overview';
+  const mobileCols =
+    visibleSubviews.length >= 4
+      ? 'grid-cols-4'
+      : visibleSubviews.length === 3
+        ? 'grid-cols-3'
+        : 'grid-cols-2';
 
   return (
     <div className="space-y-4">
@@ -73,8 +91,8 @@ export function ExpenseHubShell({
         <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
           <Info className="mt-0.5 h-4 w-4 shrink-0" />
           <span>
-            Hub browsing is on; saving bills/payments needs the expense_hub_v1 flag. Recurring rules
-            live under Accounting; Jamaica vendors are managed by Roam.
+            Hub browsing is on; saving bills, payments, and recurring expenses needs the
+            expense_hub_v1 flag. Jamaica vendors are managed by Roam.
           </span>
         </div>
       )}
@@ -121,6 +139,12 @@ export function ExpenseHubShell({
           writesEnabled={hubEnabled}
         />
       )}
+      {active === 'recurring' && (
+        <ExpenseHubRules
+          onChanged={onChanged}
+          writesEnabled={hubEnabled && can('expenses.manage_rules')}
+        />
+      )}
 
       <ExpenseHubDetail
         documentId={detailId}
@@ -131,7 +155,10 @@ export function ExpenseHubShell({
 
       <nav
         aria-label="Expense Hub sections"
-        className="sticky bottom-2 z-20 grid grid-cols-3 rounded-lg border border-slate-200 bg-white/95 p-1 shadow-lg backdrop-blur dark:border-slate-800 dark:bg-slate-950/95 sm:hidden"
+        className={cn(
+          'sticky bottom-2 z-20 grid rounded-lg border border-slate-200 bg-white/95 p-1 shadow-lg backdrop-blur dark:border-slate-800 dark:bg-slate-950/95 sm:hidden',
+          mobileCols,
+        )}
       >
         {visibleSubviews.map((item) => {
           const Icon = item.icon;
@@ -143,14 +170,16 @@ export function ExpenseHubShell({
               aria-current={selected ? 'page' : undefined}
               onClick={() => setSubview(item.id)}
               className={cn(
-                'flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-md px-1 text-[10px] font-medium',
+                'flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-md px-0.5 text-[10px] font-medium leading-tight',
                 selected
                   ? 'bg-indigo-600 text-white'
                   : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900',
               )}
             >
-              <Icon className="h-4 w-4" aria-hidden />
-              {item.label}
+              <Icon className="h-4 w-4 shrink-0" aria-hidden />
+              <span className="text-center">
+                {item.id === 'recurring' ? 'Recurring' : item.label}
+              </span>
             </button>
           );
         })}

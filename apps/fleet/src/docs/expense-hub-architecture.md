@@ -12,8 +12,7 @@ Owns fleet-wide recurring rules, one-off bills, approvals, and payments inside B
 | Super Admin → Accounting → Vendor Database | Verified Jamaica company catalog (`platform_vendor:*`) |
 | Super Admin → Pending vendor requests | Fleet requests → approve / merge / reject |
 | Super Admin → Expense categories | Shared operating-expense taxonomy |
-| RoamFleet → Accounting | Per-org recurring cost rules (schedules → FixedExpenseConfig) |
-| RoamFleet → Expense Hub | Overview · Register · Approvals (day-to-day AP) |
+| RoamFleet → Expense Hub | Overview · Register · Approvals · Recurring expenses |
 
 Fleet users **request** missing vendors (pending); they do not create permanent private vendors.
 

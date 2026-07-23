@@ -7,7 +7,7 @@ Date: 2026-07-22 (IA restructure)
 - [x] Unit: journal balance, lifecycle, self-approve, category mapping
 - [x] Unit: 53-vehicle allocation without penny drift
 - [x] Contract: Fuel/Toll writers untouched; ADR present
-- [x] UI contract: ops shell (Overview/Register/Approvals); Accounting page; ≥44px nav
+- [x] UI contract: Expense Hub shell (Overview/Register/Approvals/Recurring expenses); ≥44px nav
 - [x] Full Fleet suite: **763/763** passed (pre-restructure baseline)
 - [x] Production build: OK (pre-restructure baseline)
 

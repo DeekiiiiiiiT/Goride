@@ -33,7 +33,7 @@ import { CashRetagPage } from './components/fleet-financials/CashRetagPage';
 import { IndriveWalletCenterPage } from './components/fleet-financials/IndriveWalletCenterPage';
 import { BusinessFinancePage } from './components/business-finance/BusinessFinancePage';
 import { ExpenseHubPage } from './components/business-finance/expense-hub/ExpenseHubPage';
-import { ExpenseAccountingPage } from './components/business-finance/expense-hub/ExpenseAccountingPage';
+import type { ExpenseHubSubview } from './components/business-finance/expense-hub/ExpenseHubShell';
 
 import { useAlertPusher } from './hooks/useAlertPusher';
 import { OfflineProvider } from './components/providers/OfflineProvider';
@@ -85,8 +85,9 @@ function AppContent() {
   const [financePeriodHint, setFinancePeriodHint] = useState<{ startYmd: string; endYmd: string } | null>(
     null,
   );
-  /** Vehicle deep link into BF Expenses (Expense Hub register filter) */
+  /** Vehicle deep link into Expense Hub (register or recurring) */
   const [expenseHubVehicleId, setExpenseHubVehicleId] = useState<string | null>(null);
+  const [expenseHubSubview, setExpenseHubSubview] = useState<ExpenseHubSubview | null>(null);
 
   const handleNavigate = (page: string, periodHint?: { startYmd: string; endYmd: string }) => {
     if (periodHint) {
@@ -103,19 +104,30 @@ function AppContent() {
     if (page === 'business-finance') {
       setBusinessFinanceTab('overview');
       setExpenseHubVehicleId(null);
+      setExpenseHubSubview(null);
     }
     if (page === 'expense-hub') {
       setExpenseHubVehicleId(null);
+      setExpenseHubSubview(null);
       setFinancePeriodHint(null);
+    }
+    // Legacy Accounting nav → Expense Hub Recurring expenses tab
+    if (page === 'expense-accounting') {
+      setExpenseHubVehicleId(null);
+      setExpenseHubSubview('recurring');
+      setFinancePeriodHint(null);
+      setCurrentPage('expense-hub');
+      return;
     }
     setCurrentPage(page);
   };
 
-  /** Vehicle page → Accounting (recurring rules) for hub-managed vehicles */
+  /** Vehicle page → Expense Hub Recurring expenses for hub-managed vehicles */
   const openExpenseHubForVehicle = (vehicleId: string) => {
     setExpenseHubVehicleId(vehicleId);
+    setExpenseHubSubview('recurring');
     setFinancePeriodHint(null);
-    setCurrentPage('expense-accounting');
+    setCurrentPage('expense-hub');
   };
 
   // Old Tier Config / legacy bookmarks → Earnings Policy Configuration
@@ -130,6 +142,14 @@ function AppContent() {
     if (currentPage === 'transactions') {
       setBusinessFinanceTab('workbench');
       setCurrentPage('business-finance');
+    }
+  }, [currentPage]);
+
+  // Legacy Accounting bookmark → Expense Hub Recurring expenses
+  useEffect(() => {
+    if (currentPage === 'expense-accounting') {
+      setExpenseHubSubview('recurring');
+      setCurrentPage('expense-hub');
     }
   }, [currentPage]);
 
@@ -397,19 +417,16 @@ function AppContent() {
         {currentPage === 'expense-hub' && (
           <PermissionGate permission="nav.financial_analytics" onNavigate={setCurrentPage}>
             <ExpenseHubPage
-              key={expenseHubVehicleId || 'expense-hub'}
+              key={`${expenseHubVehicleId || 'expense-hub'}:${expenseHubSubview || 'default'}`}
               initialVehicleId={expenseHubVehicleId ?? undefined}
-              initialSubview={expenseHubVehicleId ? 'register' : 'overview'}
+              initialSubview={
+                expenseHubSubview || (expenseHubVehicleId ? 'register' : 'overview')
+              }
               onNavigate={(page, periodHint) => {
                 handleNavigate(page, periodHint);
                 setDriverIdForDetail(null);
               }}
             />
-          </PermissionGate>
-        )}
-        {currentPage === 'expense-accounting' && (
-          <PermissionGate permission="nav.financial_analytics" onNavigate={setCurrentPage}>
-            <ExpenseAccountingPage />
           </PermissionGate>
         )}
         {currentPage === 'transaction-list' && (

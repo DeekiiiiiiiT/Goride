@@ -112,9 +112,8 @@ export const VEHICLE_DATABASE_CHILDREN: NavChild[] = [
 ];
 
 export const ACCOUNTING_CHILDREN: NavChild[] = [
-  { id: 'vendor-database', label: 'Vendor Database', icon: Store },
+  { id: 'vendor-database', label: 'Vendors & categories', icon: Store },
   { id: 'pending-vendor-requests', label: 'Pending vendor requests', icon: Inbox },
-  { id: 'expense-categories', label: 'Expense categories', icon: Layers },
 ];
 
 export const ROAM_FLEET_CHILDREN: NavChild[] = [
@@ -199,7 +198,6 @@ const SHARED_PLATFORM_PAGES = [
   'parts-sourcing',
   'vendor-database',
   'pending-vendor-requests',
-  'expense-categories',
   ...GLOBAL_SETTINGS_PAGES,
   ...FLEET_SETTINGS_PAGES,
   ...ENTERPRISE_SETTINGS_PAGES,
@@ -244,6 +242,7 @@ export const LEGACY_PAGE_REDIRECTS: Record<string, string> = {
   'settings-security': 'global-settings-security',
   'settings-announcements': 'fleet-settings-announcements',
   'settings-danger': 'global-settings-danger',
+  'expense-categories': 'vendor-database',
 };
 
 export const SECTION_META = {
