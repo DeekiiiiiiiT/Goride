@@ -13,6 +13,10 @@ import {
   Trash2,
   X,
   HardDrive,
+  BookOpen,
+  Wrench,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 import {
   approveFleetCustomer,
@@ -24,12 +28,15 @@ import {
   type FleetAdminCustomer,
 } from './fleetAdminService';
 import { StorageCenterPage } from './storage/StorageCenterPage';
+import { MaintenanceScheduleLedgerPage } from './ledger/MaintenanceScheduleLedgerPage';
 import { Button } from '../components/ui/button';
 import { toast } from 'sonner';
 import { useAdminConfirm } from './contexts/AdminConfirmContext';
 
 const DRIVER_ADMIN_URL = 'https://roamdriver.co/admin';
 const RIDES_ADMIN_URL = 'https://roam-s.co/admin';
+
+type AdminPage = 'dashboard' | 'customers' | 'storage' | 'ledger-maintenance';
 
 function FleetAdminLogin({ onSession }: { onSession: (s: Session) => void }) {
   const [email, setEmail] = useState('');
@@ -134,7 +141,8 @@ export function FleetProductAdminPortal() {
   const [loading, setLoading] = useState(true);
   const [customers, setCustomers] = useState<FleetAdminCustomer[]>([]);
   const [customersLoading, setCustomersLoading] = useState(false);
-  const [page, setPage] = useState<'dashboard' | 'customers' | 'storage'>('dashboard');
+  const [page, setPage] = useState<AdminPage>('dashboard');
+  const [ledgerNavOpen, setLedgerNavOpen] = useState(true);
   
   // Action state
   const [actionMenuId, setActionMenuId] = useState<string | null>(null);
@@ -300,6 +308,42 @@ export function FleetProductAdminPortal() {
         >
           <HardDrive className="h-4 w-4" /> Storage
         </button>
+        <div className="mt-1">
+          <button
+            type="button"
+            onClick={() => {
+              setLedgerNavOpen((o) => !o);
+              if (!ledgerNavOpen) setPage('ledger-maintenance');
+            }}
+            className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm ${
+              page.startsWith('ledger') ? 'bg-slate-800' : 'hover:bg-slate-900'
+            }`}
+          >
+            <BookOpen className="h-4 w-4" />
+            <span className="flex-1 text-left">Ledger</span>
+            {ledgerNavOpen ? (
+              <ChevronDown className="h-3.5 w-3.5 text-slate-500" />
+            ) : (
+              <ChevronRight className="h-3.5 w-3.5 text-slate-500" />
+            )}
+          </button>
+          {ledgerNavOpen ? (
+            <div className="ml-3 mt-0.5 space-y-0.5 border-l border-slate-800 pl-2">
+              <button
+                type="button"
+                onClick={() => setPage('ledger-maintenance')}
+                className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs ${
+                  page === 'ledger-maintenance'
+                    ? 'bg-slate-800/80 text-amber-100'
+                    : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'
+                }`}
+              >
+                <Wrench className="h-3.5 w-3.5 shrink-0" />
+                Maintenance schedule
+              </button>
+            </div>
+          ) : null}
+        </div>
         <div className="mt-auto pt-4 border-t border-slate-800 space-y-1">
           <a
             href={DRIVER_ADMIN_URL}
@@ -353,6 +397,10 @@ export function FleetProductAdminPortal() {
 
         {page === 'storage' && (
           <StorageCenterPage accessToken={token} canPurge={canDelete} />
+        )}
+
+        {page === 'ledger-maintenance' && (
+          <MaintenanceScheduleLedgerPage accessToken={token} />
         )}
 
         {page === 'customers' && (

@@ -158,6 +158,7 @@ import {
   cleanupEphemeralPathsOnDelete,
 } from "./evidence_routes.ts";
 import { registerFleetAdminStorageRoutes } from "./fleet_admin_storage_routes.ts";
+import { registerFleetAdminMaintenanceLedgerRoutes } from "./fleet_admin_maintenance_ledger_routes.ts";
 import {
   buildEphemeralStoragePath,
   EPHEMERAL_EVIDENCE_BUCKET,
@@ -486,6 +487,7 @@ function getProvisionDeps() {
 registerMaintenanceRoutes(app, supabase);
 registerEvidenceRoutes(app, supabase, kv, requireAuth, requirePermission);
 registerFleetAdminStorageRoutes(app, supabase, kv);
+registerFleetAdminMaintenanceLedgerRoutes(app, supabase, kv);
 registerPendingVehicleCatalogRoutes(app, supabase);
 registerPartSourcingRoutes(app, supabase);
 registerExpenseHubRoutes(app);

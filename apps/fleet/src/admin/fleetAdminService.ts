@@ -334,3 +334,96 @@ export async function fetchFleetStorageOrgDetail(
   if (!res.ok) throw new Error(data.error || data.message || `HTTP ${res.status}`);
   return data as FleetStorageOrgDetail;
 }
+
+// ---------------------------------------------------------------------------
+// Maintenance schedule ledger (ops truth — by customer)
+// ---------------------------------------------------------------------------
+
+export type FleetMaintLedgerOverview = {
+  status: "healthy" | "attention";
+  vehicleCount: number;
+  ledgerEntries: number;
+  outstandingCount: number;
+  overdueCount: number;
+  scheduleRows: number;
+  customerCount: number;
+};
+
+export type FleetMaintLedgerOrgRow = {
+  orgId: string;
+  vehicleCount: number;
+  ledgerEntries: number;
+  outstandingCount: number;
+  overdueCount: number;
+  scheduleRows: number;
+};
+
+export type FleetMaintLedgerByOrg = {
+  orgs: FleetMaintLedgerOrgRow[];
+  totals: Omit<FleetMaintLedgerOrgRow, "orgId">;
+};
+
+export type FleetMaintLedgerOrgDetail = {
+  orgId: string;
+  vehicleCount: number;
+  outstanding: Array<{
+    vehicleId: string;
+    categoryId: string;
+    categoryCode: string;
+    categoryName: string;
+    position: string | null;
+    status: "pending" | "overdue";
+    lastPerformedDate: string | null;
+    lastPerformedMiles: number | null;
+    nextDueMiles: number | null;
+    nextDueDate: string | null;
+  }>;
+  history: Array<{
+    id: string;
+    vehicleId: string;
+    performedAtDate: string;
+    performedAtMiles: number | null;
+    categoryCode: string | null;
+    categoryName: string | null;
+    position: string | null;
+    action: string | null;
+    createdAt: string;
+  }>;
+};
+
+export async function fetchFleetMaintLedgerOverview(
+  accessToken: string,
+): Promise<FleetMaintLedgerOverview> {
+  const res = await fetch(`${API_ENDPOINTS.admin}/fleet-admin/maintenance-ledger/overview`, {
+    headers: withProductLineHeaders({ Authorization: `Bearer ${accessToken}` }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || data.message || `HTTP ${res.status}`);
+  return data as FleetMaintLedgerOverview;
+}
+
+export async function fetchFleetMaintLedgerByOrg(
+  accessToken: string,
+): Promise<FleetMaintLedgerByOrg> {
+  const res = await fetch(`${API_ENDPOINTS.admin}/fleet-admin/maintenance-ledger/by-org`, {
+    headers: withProductLineHeaders({ Authorization: `Bearer ${accessToken}` }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || data.message || `HTTP ${res.status}`);
+  return data as FleetMaintLedgerByOrg;
+}
+
+export async function fetchFleetMaintLedgerOrgDetail(
+  accessToken: string,
+  orgId: string,
+): Promise<FleetMaintLedgerOrgDetail> {
+  const res = await fetch(
+    `${API_ENDPOINTS.admin}/fleet-admin/maintenance-ledger/orgs/${encodeURIComponent(orgId)}`,
+    {
+      headers: withProductLineHeaders({ Authorization: `Bearer ${accessToken}` }),
+    },
+  );
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || data.message || `HTTP ${res.status}`);
+  return data as FleetMaintLedgerOrgDetail;
+}
