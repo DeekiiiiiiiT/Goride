@@ -1,6 +1,8 @@
 /**
- * Shared A–D service intervals + checklist lines (fleet UI + Super Admin template quick-fill).
- * Description in templates is stored as newline-separated lines for checklist display downstream.
+ * Shared A–D service packages (fleet fallback + Super Admin quick-fill).
+ * Authoritative package contents live in maintenance_service_categories +
+ * maintenance_package_categories. `items` here is legacy fallback text only
+ * when a vehicle has no bootstrapped schedule / categories yet.
  */
 export interface MaintenanceSchedulePreset {
   id: string;

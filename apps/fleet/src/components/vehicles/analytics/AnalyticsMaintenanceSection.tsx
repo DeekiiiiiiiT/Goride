@@ -14,6 +14,7 @@ import {
 } from '../../ui/select';
 import type { MaintenanceAlert } from '../../../hooks/useVehicleAnalytics';
 import type { MaintenanceLog } from '../../../types/maintenance';
+import { sumMaintenanceLogLines } from '../../../types/maintenance';
 import type { Vehicle } from '../../../types/vehicle';
 import { formatJMD } from './AnalyticsKpiGrid';
 
@@ -25,12 +26,23 @@ type Props = {
   onSelectVehicle?: (id: string) => void;
 };
 
-function itemCostsTotal(log: MaintenanceLog): number {
+/** Prefer structured lines; fall back to legacy itemCosts (avoid double-count with header cost). */
+function partsLinesTotal(log: MaintenanceLog): number {
+  const fromLines = sumMaintenanceLogLines(log.lines);
+  if (fromLines > 0) return fromLines;
   if (!log.itemCosts) return 0;
   return Object.values(log.itemCosts).reduce(
     (s, row) => s + (Number(row.material) || 0) + (Number(row.labor) || 0),
     0,
   );
+}
+
+function logDisplayCost(log: MaintenanceLog): number {
+  const header = Number(log.cost) || 0;
+  if (log.lines?.length) return header > 0 ? header : sumMaintenanceLogLines(log.lines);
+  const parts = partsLinesTotal(log);
+  // Legacy logs sometimes stored parts only in itemCosts while cost was also set — prefer header if present.
+  return header > 0 ? header : parts;
 }
 
 export function AnalyticsMaintenanceSection({
@@ -69,7 +81,7 @@ export function AnalyticsMaintenanceSection({
   }, [logs, inMaintenanceOnly, maintenanceVehicleIds, statusFilter, search, plateById]);
 
   const totalCost = useMemo(
-    () => filteredLogs.reduce((s, l) => s + (Number(l.cost) || 0) + itemCostsTotal(l), 0),
+    () => filteredLogs.reduce((s, l) => s + logDisplayCost(l), 0),
     [filteredLogs],
   );
 
@@ -189,7 +201,8 @@ export function AnalyticsMaintenanceSection({
           ) : (
             <div className="divide-y divide-slate-100 dark:divide-slate-800 max-h-[400px] overflow-y-auto">
               {filteredLogs.map((log) => {
-                const parts = itemCostsTotal(log);
+                const displayCost = logDisplayCost(log);
+                const lineNames = log.lines?.map((l) => l.categoryName).filter(Boolean) ?? [];
                 return (
                   <button
                     key={log.id}
@@ -216,14 +229,18 @@ export function AnalyticsMaintenanceSection({
                         {log.provider ? ` · ${log.provider}` : ''}
                         {log.odo ? ` · ${log.odo.toLocaleString()} km` : ''}
                       </p>
-                      {log.itemCosts && Object.keys(log.itemCosts).length > 0 && (
+                      {lineNames.length > 0 ? (
+                        <p className="text-[11px] text-slate-400 mt-1 truncate">
+                          Lines: {lineNames.join(', ')}
+                        </p>
+                      ) : log.itemCosts && Object.keys(log.itemCosts).length > 0 ? (
                         <p className="text-[11px] text-slate-400 mt-1 truncate">
                           Parts: {Object.keys(log.itemCosts).join(', ')}
                         </p>
-                      )}
+                      ) : null}
                     </div>
                     <div className="text-sm font-semibold tabular-nums shrink-0">
-                      {formatJMD((Number(log.cost) || 0) + parts)}
+                      {formatJMD(displayCost)}
                     </div>
                   </button>
                 );

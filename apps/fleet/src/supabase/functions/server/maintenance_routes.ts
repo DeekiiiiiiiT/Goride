@@ -70,10 +70,88 @@ function assertIntervalMilesRange(miles: number | null, milesMax: number | null)
   return null;
 }
 
-export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; patch: unknown; delete: unknown }, supabase: SupabaseClient) {
+function parseFieldSchema(raw: unknown): Record<string, unknown> {
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+    const o = raw as Record<string, unknown>;
+    if (Array.isArray(o.fields)) return o;
+  }
+  return {
+    fields: [
+      { key: "material", type: "number", label: "Parts / materials", required: false },
+      { key: "labor", type: "number", label: "Labor", required: false },
+    ],
+  };
+}
+
+function sumLogLines(lines: unknown): number {
+  if (!Array.isArray(lines)) return 0;
+  let total = 0;
+  for (const raw of lines) {
+    if (!raw || typeof raw !== "object") continue;
+    const line = raw as Record<string, unknown>;
+    const values = (line.values && typeof line.values === "object")
+      ? (line.values as Record<string, unknown>)
+      : {};
+    const qty = Number(line.qty ?? values.qty ?? 0) || 0;
+    const unit = Number(line.unitPrice ?? values.unit_price ?? 0) || 0;
+    const material = Number(line.material ?? values.material ?? 0) || 0;
+    const labor = Number(line.labor ?? values.labor ?? 0) || 0;
+    if (qty > 0 && unit > 0) total += qty * unit;
+    else total += material;
+    total += labor;
+  }
+  return Math.round(total * 100) / 100;
+}
+
+async function loadCategoriesForTemplateIds(
+  sb: SupabaseClient,
+  templateIds: string[],
+): Promise<Map<string, Array<Record<string, unknown>>>> {
+  const map = new Map<string, Array<Record<string, unknown>>>();
+  if (!templateIds.length) return map;
+  const { data, error } = await sb
+    .from("maintenance_package_categories")
+    .select("template_id, sort_order, required, category:maintenance_service_categories(*)")
+    .in("template_id", templateIds)
+    .order("sort_order", { ascending: true });
+  if (error) throw error;
+  for (const row of data || []) {
+    const tid = String((row as { template_id: string }).template_id);
+    const cat = (row as { category?: Record<string, unknown> | null }).category;
+    if (!cat) continue;
+    const list = map.get(tid) || [];
+    list.push(cat);
+    map.set(tid, list);
+  }
+  return map;
+}
+
+async function syncTemplateDescriptionFromCategories(
+  sb: SupabaseClient,
+  templateId: string,
+): Promise<void> {
+  const { data } = await sb
+    .from("maintenance_package_categories")
+    .select("sort_order, category:maintenance_service_categories(name)")
+    .eq("template_id", templateId)
+    .order("sort_order", { ascending: true });
+  const names = (data || [])
+    .map((r) => {
+      const c = (r as { category?: { name?: string } | null }).category;
+      return c?.name?.trim() || "";
+    })
+    .filter(Boolean);
+  await sb
+    .from("maintenance_task_templates")
+    .update({ description: names.length ? names.join("\n") : null, updated_at: new Date().toISOString() })
+    .eq("id", templateId);
+}
+
+export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; put: unknown; patch: unknown; delete: unknown }, supabase: SupabaseClient) {
   const route = app as {
     get: (path: string, ...handlers: unknown[]) => void;
     post: (path: string, ...handlers: unknown[]) => void;
+    put: (path: string, ...handlers: unknown[]) => void;
     patch: (path: string, ...handlers: unknown[]) => void;
     delete: (path: string, ...handlers: unknown[]) => void;
   };
@@ -137,6 +215,8 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
         }
         const rangeErr = assertIntervalMilesRange(interval_miles, interval_miles_max);
         if (rangeErr) return c.json({ error: rangeErr }, 400);
+        const iconKeyRaw = body.icon_key != null ? String(body.icon_key).trim() : "wrench";
+        const icon_key = (iconKeyRaw || "wrench").slice(0, 40);
         const row = {
           template_scope: "catalog",
           vehicle_catalog_id: catalogId,
@@ -152,6 +232,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
           frequency_label,
           priority: String(body.priority ?? "standard"),
           sort_order: body.sort_order != null ? Number(body.sort_order) : 0,
+          icon_key,
           updated_at: new Date().toISOString(),
         };
         const { data, error } = await supabase.from("maintenance_task_templates").insert(row).select().single();
@@ -201,6 +282,10 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
         if (body.frequency_label !== undefined) {
           const fl = body.frequency_label != null ? String(body.frequency_label).trim() : "";
           patch.frequency_label = fl.length ? fl.slice(0, 120) : null;
+        }
+        if (body.icon_key !== undefined) {
+          const iconKeyRaw = body.icon_key != null ? String(body.icon_key).trim() : "wrench";
+          patch.icon_key = (iconKeyRaw || "wrench").slice(0, 40);
         }
 
         const { data: existingRow } = await supabase
@@ -305,6 +390,8 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
         }
         const rangeErrG = assertIntervalMilesRange(interval_miles, interval_miles_max);
         if (rangeErrG) return c.json({ error: rangeErrG }, 400);
+        const iconKeyRawG = body.icon_key != null ? String(body.icon_key).trim() : "wrench";
+        const icon_key = (iconKeyRawG || "wrench").slice(0, 40);
         const row = {
           template_scope: "global",
           vehicle_catalog_id: null as string | null,
@@ -320,11 +407,224 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
           frequency_label,
           priority: String(body.priority ?? "standard"),
           sort_order: body.sort_order != null ? Number(body.sort_order) : 0,
+          icon_key,
           updated_at: new Date().toISOString(),
         };
         const { data, error } = await supabase.from("maintenance_task_templates").insert(row).select().single();
         if (error) throw error;
         return c.json({ item: data });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return c.json({ error: msg }, 500);
+      }
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // Super Admin — service categories + package membership
+  // -------------------------------------------------------------------------
+  route.get(
+    "/make-server-37f42386/admin/maintenance-categories",
+    requireAuth(),
+    async (c) => {
+      const denied = assertVehicleCatalogPlatformAccess(c);
+      if (denied) return denied;
+      try {
+        const { data, error } = await supabase
+          .from("maintenance_service_categories")
+          .select("*")
+          .order("sort_order", { ascending: true });
+        if (error) throw error;
+        return c.json({ items: data || [] });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return c.json({ error: msg }, 500);
+      }
+    },
+  );
+
+  route.post(
+    "/make-server-37f42386/admin/maintenance-categories",
+    requireAuth(),
+    async (c) => {
+      const denied = assertVehicleCatalogPlatformAccess(c);
+      if (denied) return denied;
+      try {
+        const body = (await c.req.json()) as Record<string, unknown>;
+        const code = String(body.code ?? "").trim();
+        const name = String(body.name ?? "").trim();
+        if (!code) return c.json({ error: "code is required" }, 400);
+        if (!name) return c.json({ error: "name is required" }, 400);
+        const iconKeyRaw = body.icon_key != null ? String(body.icon_key).trim() : "wrench";
+        const row = {
+          code: code.slice(0, 80),
+          name: name.slice(0, 200),
+          icon_key: (iconKeyRaw || "wrench").slice(0, 40),
+          field_schema: parseFieldSchema(body.field_schema),
+          quick_job_eligible: body.quick_job_eligible === true,
+          sort_order: body.sort_order != null ? Number(body.sort_order) : 0,
+          updated_at: new Date().toISOString(),
+        };
+        const { data, error } = await supabase
+          .from("maintenance_service_categories")
+          .insert(row)
+          .select()
+          .single();
+        if (error) throw error;
+        return c.json({ item: data });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return c.json({ error: msg }, 500);
+      }
+    },
+  );
+
+  route.patch(
+    "/make-server-37f42386/admin/maintenance-categories/:id",
+    requireAuth(),
+    async (c) => {
+      const denied = assertVehicleCatalogPlatformAccess(c);
+      if (denied) return denied;
+      const id = c.req.param("id");
+      try {
+        const body = (await c.req.json()) as Record<string, unknown>;
+        const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+        if (body.code !== undefined) patch.code = String(body.code).trim().slice(0, 80);
+        if (body.name !== undefined) patch.name = String(body.name).trim().slice(0, 200);
+        if (body.icon_key !== undefined) {
+          const iconKeyRaw = body.icon_key != null ? String(body.icon_key).trim() : "wrench";
+          patch.icon_key = (iconKeyRaw || "wrench").slice(0, 40);
+        }
+        if (body.field_schema !== undefined) patch.field_schema = parseFieldSchema(body.field_schema);
+        if (body.quick_job_eligible !== undefined) patch.quick_job_eligible = body.quick_job_eligible === true;
+        if (body.sort_order !== undefined) patch.sort_order = Number(body.sort_order);
+        const { data, error } = await supabase
+          .from("maintenance_service_categories")
+          .update(patch)
+          .eq("id", id)
+          .select()
+          .single();
+        if (error) throw error;
+        if (!data) return c.json({ error: "Not found" }, 404);
+        return c.json({ item: data });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return c.json({ error: msg }, 500);
+      }
+    },
+  );
+
+  route.delete(
+    "/make-server-37f42386/admin/maintenance-categories/:id",
+    requireAuth(),
+    async (c) => {
+      const denied = assertVehicleCatalogPlatformAccess(c);
+      if (denied) return denied;
+      const id = c.req.param("id");
+      try {
+        const { error } = await supabase.from("maintenance_service_categories").delete().eq("id", id);
+        if (error) throw error;
+        return c.json({ success: true });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return c.json({ error: msg }, 500);
+      }
+    },
+  );
+
+  route.get(
+    "/make-server-37f42386/admin/maintenance-templates/:id/categories",
+    requireAuth(),
+    async (c) => {
+      const denied = assertVehicleCatalogPlatformAccess(c);
+      if (denied) return denied;
+      const id = c.req.param("id");
+      try {
+        const { data, error } = await supabase
+          .from("maintenance_package_categories")
+          .select("*, category:maintenance_service_categories(*)")
+          .eq("template_id", id)
+          .order("sort_order", { ascending: true });
+        if (error) throw error;
+        return c.json({ items: data || [] });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return c.json({ error: msg }, 500);
+      }
+    },
+  );
+
+  route.put(
+    "/make-server-37f42386/admin/maintenance-templates/:id/categories",
+    requireAuth(),
+    async (c) => {
+      const denied = assertVehicleCatalogPlatformAccess(c);
+      if (denied) return denied;
+      const id = c.req.param("id");
+      try {
+        const body = (await c.req.json()) as Record<string, unknown>;
+        const rawIds = Array.isArray(body.categoryIds) ? body.categoryIds : [];
+        const categoryIds = rawIds.map((x) => String(x).trim()).filter((x) => isUuid(x));
+        const { error: delErr } = await supabase
+          .from("maintenance_package_categories")
+          .delete()
+          .eq("template_id", id);
+        if (delErr) throw delErr;
+        if (categoryIds.length) {
+          const rows = categoryIds.map((category_id, sort_order) => ({
+            template_id: id,
+            category_id,
+            sort_order,
+            required: true,
+          }));
+          const { error: insErr } = await supabase.from("maintenance_package_categories").insert(rows);
+          if (insErr) throw insErr;
+        }
+        await syncTemplateDescriptionFromCategories(supabase, id);
+        const { data, error } = await supabase
+          .from("maintenance_package_categories")
+          .select("*, category:maintenance_service_categories(*)")
+          .eq("template_id", id)
+          .order("sort_order", { ascending: true });
+        if (error) throw error;
+        return c.json({ items: data || [] });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return c.json({ error: msg }, 500);
+      }
+    },
+  );
+
+  route.get(
+    "/make-server-37f42386/maintenance-categories",
+    requireAuth(),
+    async (c) => {
+      try {
+        const { data, error } = await supabase
+          .from("maintenance_service_categories")
+          .select("*")
+          .order("sort_order", { ascending: true });
+        if (error) throw error;
+        return c.json({ items: data || [] });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return c.json({ error: msg }, 500);
+      }
+    },
+  );
+
+  route.get(
+    "/make-server-37f42386/maintenance-categories/quick-jobs",
+    requireAuth(),
+    async (c) => {
+      try {
+        const { data, error } = await supabase
+          .from("maintenance_service_categories")
+          .select("*")
+          .eq("quick_job_eligible", true)
+          .order("sort_order", { ascending: true });
+        if (error) throw error;
+        return c.json({ items: data || [] });
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         return c.json({ error: msg }, 500);
@@ -437,8 +737,15 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
         const { data: tplRows } = templateIds.length
           ? await supabase.from("maintenance_task_templates").select("*").in("id", templateIds)
           : { data: [] as Record<string, unknown>[] };
+        const catsByTpl = await loadCategoriesForTemplateIds(supabase, templateIds);
         const tplById: Record<string, Record<string, unknown>> = {};
-        for (const t of tplRows || []) tplById[String((t as { id: string }).id)] = t as Record<string, unknown>;
+        for (const t of tplRows || []) {
+          const tid = String((t as { id: string }).id);
+          tplById[tid] = {
+            ...(t as Record<string, unknown>),
+            categories: catsByTpl.get(tid) || [],
+          };
+        }
 
         const today = todayIso();
         const enriched = (scheduleRows || []).map((row: Record<string, unknown>) => {
@@ -654,10 +961,16 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
         const performed_at_date = String(log.date ?? todayIso()).slice(0, 10);
         const performed_at_miles = Number(log.odo ?? 0);
         const templateId = log.templateId != null ? String(log.templateId) : null;
+        const logMode = log.logMode != null ? String(log.logMode) : null;
 
         const currencyRaw = log.currency != null ? String(log.currency).trim().toUpperCase() : "JMD";
         const currency = currencyRaw || "JMD";
         const status = log.status != null ? String(log.status) : "Completed";
+
+        // Auto-sum line items when present; otherwise use explicit cost
+        const cost = Array.isArray(log.lines) && log.lines.length
+          ? sumLogLines(log.lines)
+          : (log.cost != null ? Number(log.cost) : null);
 
         const rowInsert = {
           id,
@@ -666,7 +979,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
           template_id: templateId || null,
           performed_at_miles,
           performed_at_date,
-          cost: log.cost != null ? Number(log.cost) : null,
+          cost,
           currency,
           service_type: log.type != null ? String(log.type) : null,
           provider: log.provider != null ? String(log.provider) : null,
@@ -674,7 +987,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
           invoice_url: log.invoiceUrl != null ? String(log.invoiceUrl) : null,
           status,
           legacy_kv_id: null as string | null,
-          payload_json: { ...log, id, vehicleId, currency, status } as Record<string, unknown>,
+          payload_json: { ...log, id, vehicleId, currency, status, cost } as Record<string, unknown>,
           updated_at: new Date().toISOString(),
         };
 
@@ -685,8 +998,12 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
           .single();
         if (insErr) throw insErr;
 
-        // Advance schedule if template linked and this is a completed service
-        if (templateId && String(status).trim().toLowerCase() === "completed") {
+        // Advance schedule for package completes only (not quick jobs)
+        if (
+          templateId &&
+          String(status).trim().toLowerCase() === "completed" &&
+          logMode !== "quick_job"
+        ) {
           const { data: template } = await supabase
             .from("maintenance_task_templates")
             .select("*")
@@ -769,9 +1086,19 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
         const performed_at_miles = body.odo != null
           ? Number(body.odo)
           : Number(existing.performed_at_miles ?? 0);
-        const cost = body.cost !== undefined
-          ? (body.cost != null ? Number(body.cost) : null)
-          : (existing.cost != null ? Number(existing.cost) : null);
+
+        const prevPayload = (existing.payload_json && typeof existing.payload_json === "object")
+          ? existing.payload_json as Record<string, unknown>
+          : {};
+        const lines = body.lines !== undefined
+          ? body.lines
+          : prevPayload.lines;
+        const cost = Array.isArray(lines) && lines.length
+          ? sumLogLines(lines)
+          : (body.cost !== undefined
+            ? (body.cost != null ? Number(body.cost) : null)
+            : (existing.cost != null ? Number(existing.cost) : null));
+
         const currencyRaw = body.currency != null
           ? String(body.currency).trim().toUpperCase()
           : String((existing as { currency?: string }).currency ?? "JMD").trim().toUpperCase();
@@ -791,10 +1118,10 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
         const templateId = body.templateId != null
           ? String(body.templateId)
           : (existing.template_id != null ? String(existing.template_id) : null);
+        const logMode = body.logMode != null
+          ? String(body.logMode)
+          : (prevPayload.logMode != null ? String(prevPayload.logMode) : null);
 
-        const prevPayload = (existing.payload_json && typeof existing.payload_json === "object")
-          ? existing.payload_json as Record<string, unknown>
-          : {};
         const payload_json = {
           ...prevPayload,
           ...body,
@@ -810,6 +1137,8 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
           invoiceUrl: invoice_url,
           templateId: templateId || undefined,
           status: nextStatus,
+          lines,
+          logMode: logMode || undefined,
         };
 
         const { data: updated, error: upErr } = await supabase
@@ -836,7 +1165,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pa
         if (upErr) throw upErr;
 
         const becameCompleted = prevStatus !== "completed" && nextStatusLc === "completed";
-        if (becameCompleted && templateId) {
+        if (becameCompleted && templateId && logMode !== "quick_job") {
           const { data: template } = await supabase
             .from("maintenance_task_templates")
             .select("*")

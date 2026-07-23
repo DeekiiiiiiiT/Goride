@@ -1,10 +1,9 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
+  ArrowLeft,
   CheckCircle2,
   Loader2,
   Scan,
-  ArrowLeft,
-  ArrowRight,
 } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -23,32 +22,31 @@ import { Checkbox } from "../ui/checkbox";
 import { toast } from "sonner@2.0.3";
 import { api } from "../../services/api";
 import { uploadEvidenceFile } from "../../services/uploadEvidence";
-import { requireAuthHeaders } from '../../utils/authHeaders';
+import { requireAuthHeaders } from "../../utils/authHeaders";
 import { API_ENDPOINTS } from "../../services/apiConfig";
-import type { CatalogMaintenanceTaskOption, MaintenanceLog } from "../../types/maintenance";
 import { MAINTENANCE_SCHEDULE_PRESETS } from "../../constants/maintenanceSchedulePresets";
+import { inferPackageIconKey } from "../../constants/maintenanceCategoryIcons";
+import { MaintenanceIcon } from "./MaintenanceIcon";
+import type {
+  CatalogMaintenanceTaskOption,
+  MaintenanceCategoryFieldDef,
+  MaintenanceLog,
+  MaintenanceLogLine,
+  MaintenanceServiceCategory,
+} from "../../types/maintenance";
+import { sumMaintenanceLogLines } from "../../types/maintenance";
 
-const MAINTENANCE_SCHEDULES = MAINTENANCE_SCHEDULE_PRESETS.map((p) => ({
-  id: p.id,
-  label: p.label,
-  interval: p.interval_miles,
-  items: p.items,
-}));
+type DialogStep = "pick" | "categories" | "form" | "review";
+type LogMode = "package" | "quick_job";
 
-const INSPECTION_ITEMS = [
-  "Flush Coolant",
-  "Transmission Service",
-  "Wheel Alignment",
-  "Rotate/Balance Tires",
-  "Replace Tires",
-  "Replace Wipers",
-  "Replace Battery",
-  "Suspension Repair",
-  "Steering System Repair",
-  "Exhaust System Repair",
-  "AC Service",
-  "Brake Service",
-];
+type PackageChoice = {
+  id: string;
+  label: string;
+  shortLabel: string;
+  iconKey: string;
+  templateId?: string;
+  categories: MaintenanceServiceCategory[];
+};
 
 export interface LogMaintenanceServiceDialogProps {
   open: boolean;
@@ -62,6 +60,144 @@ export interface LogMaintenanceServiceDialogProps {
   onSaved?: () => void;
 }
 
+function stripEverySuffix(label: string): string {
+  return label.replace(/\s*\(Every[^)]*\)\s*$/i, "").trim() || label;
+}
+
+function defaultFieldSchema(): MaintenanceServiceCategory["field_schema"] {
+  return {
+    fields: [
+      { key: "material", type: "number", label: "Parts / materials", required: false },
+      { key: "labor", type: "number", label: "Labor", required: false },
+    ],
+  };
+}
+
+function syntheticCategoriesFromNames(names: string[]): MaintenanceServiceCategory[] {
+  return names.map((name, index) => ({
+    id: `synthetic-${index}-${name}`,
+    code: `synthetic_${index}`,
+    name,
+    icon_key: "wrench",
+    field_schema: defaultFieldSchema(),
+    quick_job_eligible: false,
+    sort_order: index,
+    created_at: "",
+    updated_at: "",
+  }));
+}
+
+function packageFromCatalog(t: CatalogMaintenanceTaskOption): PackageChoice {
+  const cats =
+    t.categories && t.categories.length > 0
+      ? t.categories
+      : syntheticCategoriesFromNames(t.checklistLines);
+  return {
+    id: t.templateId,
+    label: t.label,
+    shortLabel: stripEverySuffix(t.label),
+    iconKey: t.iconKey || inferPackageIconKey(t.label),
+    templateId: t.templateId,
+    categories: cats,
+  };
+}
+
+function packageFromPreset(p: (typeof MAINTENANCE_SCHEDULE_PRESETS)[number]): PackageChoice {
+  return {
+    id: `preset-${p.id}`,
+    label: p.label,
+    shortLabel: stripEverySuffix(p.label),
+    iconKey: inferPackageIconKey(p.label, p.id),
+    templateId: undefined,
+    categories: syntheticCategoriesFromNames(p.items),
+  };
+}
+
+function emptyValuesForCategory(cat: MaintenanceServiceCategory): Record<string, string | number | boolean | null> {
+  const values: Record<string, string | number | boolean | null> = {};
+  for (const field of cat.field_schema?.fields || []) {
+    if (field.type === "boolean") values[field.key] = false;
+    else if (field.type === "number") {
+      // Prefill qty=1 for tires (and similar qty fields on tire categories)
+      if (field.key === "qty" && (cat.code === "tires" || cat.icon_key === "tires")) {
+        values[field.key] = 1;
+      } else {
+        values[field.key] = null;
+      }
+    } else if (field.type === "select") {
+      values[field.key] = field.options?.[0] ?? null;
+    } else {
+      values[field.key] = "";
+    }
+  }
+  return values;
+}
+
+function numFrom(v: unknown): number | undefined {
+  if (v == null || v === "") return undefined;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+function lineFromCategoryValues(
+  cat: MaintenanceServiceCategory,
+  values: Record<string, string | number | boolean | null>,
+): MaintenanceLogLine {
+  const isSynthetic = cat.id.startsWith("synthetic-");
+  const conditionRaw = values.condition;
+  return {
+    categoryId: isSynthetic ? undefined : cat.id,
+    categoryCode: cat.code,
+    categoryName: cat.name,
+    qty: numFrom(values.qty),
+    unitPrice: numFrom(values.unit_price),
+    material: numFrom(values.material),
+    labor: numFrom(values.labor),
+    condition:
+      typeof conditionRaw === "string" && conditionRaw
+        ? conditionRaw
+        : undefined,
+    notes: typeof values.notes === "string" ? values.notes : undefined,
+    values: { ...values },
+  };
+}
+
+function lineTotalPreview(line: MaintenanceLogLine): number {
+  return sumMaintenanceLogLines([line]);
+}
+
+function stepTitle(step: DialogStep): string {
+  switch (step) {
+    case "pick":
+      return "Add Service Log";
+    case "categories":
+      return "Select Categories";
+    case "form":
+      return "Category Details";
+    case "review":
+      return "Review & Save";
+    default:
+      return "Add Service Log";
+  }
+}
+
+function stepDescription(step: DialogStep, packageLabel?: string): string {
+  switch (step) {
+    case "pick":
+      return "Choose a service package or a quick job.";
+    case "categories":
+      return packageLabel
+        ? `Tap categories to log for ${packageLabel}.`
+        : "Select the work performed.";
+    case "form":
+      return "Enter commercial details for this category.";
+    case "review":
+      return "Confirm totals, odometer, and provider before saving.";
+    default:
+      return "";
+  }
+}
+
 export function LogMaintenanceServiceDialog({
   open,
   onOpenChange,
@@ -71,94 +207,229 @@ export function LogMaintenanceServiceDialog({
   initialLog,
   onSaved,
 }: LogMaintenanceServiceDialogProps) {
-  const [step, setStep] = useState<1 | 2>(1);
+  const [step, setStep] = useState<DialogStep>("pick");
   const [isLoading, setIsLoading] = useState(false);
   const [scanLoading, setScanLoading] = useState(false);
+  const [quickJobsLoading, setQuickJobsLoading] = useState(false);
+  const [quickJobs, setQuickJobs] = useState<MaintenanceServiceCategory[]>([]);
 
-  const [formData, setFormData] = useState<Partial<MaintenanceLog>>({
+  const [logMode, setLogMode] = useState<LogMode>("package");
+  const [selectedPackage, setSelectedPackage] = useState<PackageChoice | null>(null);
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([]);
+  const [activeCategory, setActiveCategory] = useState<MaintenanceServiceCategory | null>(null);
+  const [fieldValues, setFieldValues] = useState<Record<string, string | number | boolean | null>>({});
+  const [lines, setLines] = useState<MaintenanceLogLine[]>([]);
+  const [markPackageComplete, setMarkPackageComplete] = useState(true);
+
+  const [formMeta, setFormMeta] = useState({
     date: new Date().toISOString().split("T")[0],
     type: "Regular Maintenance",
-    status: "Completed",
-    cost: 0,
     currency: "JMD",
     odo: 0,
     provider: "",
     notes: "",
     invoiceUrl: "",
-    checklist: [],
-    itemCosts: {},
-    inspectionResults: {
-      issues: [],
-      notes: "",
-    },
+    id: undefined as string | undefined,
   });
+  const [pendingInvoiceFile, setPendingInvoiceFile] = useState<File | null>(null);
 
-  const [selectedScheduleId, setSelectedScheduleId] = useState<string>("");
-  const [checklistItems, setChecklistItems] = useState<string[]>([]);
-
-  const scheduleChoices = useMemo(() => {
+  const packageChoices = useMemo((): PackageChoice[] => {
     if (catalogTemplates.length > 0) {
-      return catalogTemplates.map((t) => ({
-        id: t.templateId,
-        label: t.label,
-        items: t.checklistLines,
-        templateId: t.templateId as string | undefined,
-      }));
+      return catalogTemplates.map(packageFromCatalog);
     }
-    return MAINTENANCE_SCHEDULES.map((s) => ({
-      id: s.id,
-      label: s.label,
-      items: s.items,
-      templateId: undefined as string | undefined,
-    }));
+    return MAINTENANCE_SCHEDULE_PRESETS.map(packageFromPreset);
   }, [catalogTemplates]);
 
+  const totalCost = useMemo(() => sumMaintenanceLogLines(lines), [lines]);
+
+  const draftLine = useMemo(() => {
+    if (!activeCategory) return null;
+    return lineFromCategoryValues(activeCategory, fieldValues);
+  }, [activeCategory, fieldValues]);
+
+  const draftLineTotal = draftLine ? lineTotalPreview(draftLine) : 0;
+
+  // Reset + load quick jobs when dialog opens
   useEffect(() => {
     if (!open) return;
-    setFormData({
+
+    const odoPrefill =
+      initialLog?.odo ??
+      (defaultOdo != null && Number.isFinite(defaultOdo) ? defaultOdo : 0);
+
+    setFormMeta({
       date: initialLog?.date || new Date().toISOString().split("T")[0],
       type: initialLog?.type || "Regular Maintenance",
-      status: "Completed",
-      cost: initialLog?.cost ?? 0,
       currency: initialLog?.currency || "JMD",
-      odo:
-        initialLog?.odo ??
-        (defaultOdo != null && Number.isFinite(defaultOdo) ? defaultOdo : 0),
+      odo: odoPrefill,
       provider: initialLog?.provider || "",
       notes: initialLog?.notes || "",
       invoiceUrl: initialLog?.invoiceUrl || "",
       id: initialLog?.id,
-      templateId: initialLog?.templateId,
-      checklist: initialLog?.checklist || [],
-      itemCosts: initialLog?.itemCosts || {},
-      inspectionResults: initialLog?.inspectionResults || {
-        issues: [],
-        notes: "",
-      },
     });
-    setStep(1);
-    const first = scheduleChoices[0];
-    setSelectedScheduleId(initialLog?.templateId || first?.id || "");
-    setChecklistItems(first?.items ?? MAINTENANCE_SCHEDULES[0].items);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset when dialog opens for a vehicle/catalog; scheduleChoices derived from catalogTemplates
-  }, [open, vehicleId, defaultOdo, catalogTemplates, initialLog]);
+    setPendingInvoiceFile(null);
+    setMarkPackageComplete(true);
+    setFieldValues({});
+    setActiveCategory(null);
+    setSelectedCategoryIds([]);
 
-  useEffect(() => {
-    if (selectedScheduleId) {
-      const schedule = scheduleChoices.find((s) => s.id === selectedScheduleId);
-      if (schedule) {
-        const newItems = schedule.items;
-        setChecklistItems(newItems);
-        setFormData((prev) => ({
+    const existingLines = initialLog?.lines?.length ? [...initialLog.lines] : [];
+    setLines(existingLines);
+
+    const hasTemplate = Boolean(initialLog?.templateId);
+    const mode: LogMode =
+      initialLog?.logMode === "quick_job"
+        ? "quick_job"
+        : hasTemplate || initialLog?.logMode === "package"
+          ? "package"
+          : existingLines.length
+            ? (initialLog?.logMode as LogMode) || "quick_job"
+            : "package";
+    setLogMode(mode);
+
+    if (hasTemplate) {
+      const pkg =
+        packageChoices.find((p) => p.templateId === initialLog?.templateId) ||
+        null;
+      setSelectedPackage(pkg);
+    } else {
+      setSelectedPackage(null);
+    }
+
+    if (existingLines.length > 0) {
+      setStep("review");
+      if (existingLines.length === 1 && mode === "quick_job") {
+        setFormMeta((prev) => ({
           ...prev,
-          checklist: [...new Set([...(prev.checklist || []), ...newItems])],
-          ...(schedule.templateId ? { type: schedule.label } : {}),
+          type: existingLines[0].categoryName || prev.type,
         }));
       }
+    } else {
+      setStep("pick");
     }
-  }, [selectedScheduleId, scheduleChoices]);
 
-  const [pendingInvoiceFile, setPendingInvoiceFile] = useState<File | null>(null);
+    let cancelled = false;
+    setQuickJobsLoading(true);
+    api
+      .listQuickJobCategories()
+      .then((res) => {
+        if (!cancelled) setQuickJobs(res.items || []);
+      })
+      .catch((err) => {
+        console.error(err);
+        if (!cancelled) {
+          setQuickJobs([]);
+          toast.error("Could not load quick jobs");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setQuickJobsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset when dialog opens
+  }, [open, vehicleId, defaultOdo, catalogTemplates, initialLog]);
+
+  const openCategoryForm = (cat: MaintenanceServiceCategory) => {
+    const existing = lines.find(
+      (l) =>
+        (l.categoryId && l.categoryId === cat.id) ||
+        (!l.categoryId && l.categoryCode === cat.code && l.categoryName === cat.name),
+    );
+    setActiveCategory(cat);
+    setFieldValues(
+      existing?.values
+        ? { ...emptyValuesForCategory(cat), ...existing.values }
+        : emptyValuesForCategory(cat),
+    );
+    setStep("form");
+  };
+
+  const handlePickPackage = (pkg: PackageChoice) => {
+    setLogMode("package");
+    setSelectedPackage(pkg);
+    setSelectedCategoryIds([]);
+    setLines([]);
+    setFormMeta((prev) => ({ ...prev, type: pkg.label }));
+    setStep("categories");
+  };
+
+  const handlePickQuickJob = (cat: MaintenanceServiceCategory) => {
+    setLogMode("quick_job");
+    setSelectedPackage(null);
+    setSelectedCategoryIds([cat.id]);
+    setLines([]);
+    setFormMeta((prev) => ({ ...prev, type: cat.name }));
+    openCategoryForm(cat);
+  };
+
+  const handleCategoryTap = (cat: MaintenanceServiceCategory) => {
+    setSelectedCategoryIds((prev) =>
+      prev.includes(cat.id) ? prev : [...prev, cat.id],
+    );
+    openCategoryForm(cat);
+  };
+
+  const toggleCategorySelected = (catId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedCategoryIds((prev) =>
+      prev.includes(catId) ? prev.filter((id) => id !== catId) : [...prev, catId],
+    );
+  };
+
+  const handleSaveCategory = () => {
+    if (!activeCategory) return;
+    const line = lineFromCategoryValues(activeCategory, fieldValues);
+    setLines((prev) => {
+      const without = prev.filter(
+        (l) =>
+          !(
+            (l.categoryId && l.categoryId === activeCategory.id) ||
+            (!l.categoryId &&
+              l.categoryCode === activeCategory.code &&
+              l.categoryName === activeCategory.name)
+          ),
+      );
+      return [...without, line];
+    });
+    setSelectedCategoryIds((prev) =>
+      prev.includes(activeCategory.id) ? prev : [...prev, activeCategory.id],
+    );
+
+    if (logMode === "quick_job") {
+      setFormMeta((prev) => ({ ...prev, type: activeCategory.name }));
+      setActiveCategory(null);
+      setStep("review");
+      return;
+    }
+
+    setActiveCategory(null);
+    setStep("categories");
+  };
+
+  const handleContinueFromCategories = () => {
+    if (!selectedPackage || selectedCategoryIds.length < 1) return;
+    const cats = selectedPackage.categories;
+    const nextNeedingForm = selectedCategoryIds
+      .map((id) => cats.find((c) => c.id === id))
+      .filter(Boolean)
+      .find((cat) => {
+        if (!cat) return false;
+        return !lines.some(
+          (l) =>
+            (l.categoryId && l.categoryId === cat.id) ||
+            (!l.categoryId && l.categoryCode === cat.code && l.categoryName === cat.name),
+        );
+      });
+
+    if (nextNeedingForm) {
+      openCategoryForm(nextNeedingForm);
+      return;
+    }
+    setStep("review");
+  };
 
   const handleServiceScan = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -179,11 +450,10 @@ export function LogMaintenanceServiceDialog({
       const result = await response.json();
 
       if (result.success && result.data) {
-        setFormData((prev) => ({
+        setFormMeta((prev) => ({
           ...prev,
           date: result.data.date || prev.date,
-          type: result.data.type || "Regular Maintenance",
-          cost: result.data.cost ? Number(result.data.cost) : prev.cost,
+          type: result.data.type || prev.type,
           odo: result.data.odometer ? Number(result.data.odometer) : prev.odo,
           notes: result.data.notes || prev.notes,
           provider: result.data.vendor || prev.provider,
@@ -202,37 +472,57 @@ export function LogMaintenanceServiceDialog({
   };
 
   const handleSave = async () => {
-    if (!formData.date || !formData.type) {
+    if (!formMeta.date) {
       toast.error("Please fill in required fields");
+      return;
+    }
+    if (!lines.length) {
+      toast.error("Add at least one category line before saving");
       return;
     }
 
     setIsLoading(true);
     try {
-      const logId = formData.id || crypto.randomUUID();
-      let invoiceUrl = formData.invoiceUrl;
+      const logId = formMeta.id || crypto.randomUUID();
+      let invoiceUrl = formMeta.invoiceUrl;
       if (pendingInvoiceFile) {
         const uploadRes = await uploadEvidenceFile(pendingInvoiceFile, {
-          evidenceType: 'maintenance_invoice',
-          sourceType: 'maintenance_log',
+          evidenceType: "maintenance_invoice",
+          sourceType: "maintenance_log",
           sourceId: logId,
-          retentionClass: 'ephemeral',
-          parentStatus: 'Pending',
+          retentionClass: "ephemeral",
+          parentStatus: "Pending",
         });
         invoiceUrl = uploadRes.url;
       }
 
-      const choice = scheduleChoices.find((s) => s.id === selectedScheduleId);
+      // Default package visit advances schedule (logMode=package + templateId).
+      // Unchecking "Mark package complete" saves lines without advancing schedule.
+      const advanceSchedule = logMode === "package" && markPackageComplete;
+      const templateId = advanceSchedule
+        ? selectedPackage?.templateId || initialLog?.templateId
+        : undefined;
+
+      const packageLabel = selectedPackage?.label;
+      const typeLabel =
+        logMode === "package"
+          ? packageLabel || formMeta.type || "Regular Maintenance"
+          : lines[0]?.categoryName || formMeta.type;
+
       const payload = {
-        ...formData,
+        ...formMeta,
         vehicleId,
         id: logId,
         invoiceUrl,
-        cost: Number(formData.cost) || 0,
-        currency: formData.currency || "JMD",
-        odo: Number(formData.odo) || 0,
+        lines,
+        cost: sumMaintenanceLogLines(lines),
+        currency: formMeta.currency || "JMD",
+        odo: Number(formMeta.odo) || 0,
         status: "Completed" as const,
-        ...(choice?.templateId ? { templateId: choice.templateId, type: choice.label } : {}),
+        logMode: advanceSchedule ? ("package" as const) : ("quick_job" as const),
+        ...(advanceSchedule && templateId ? { templateId } : {}),
+        type: typeLabel,
+        checklist: lines.map((l) => l.categoryName),
       };
 
       const result = initialLog?.id
@@ -257,63 +547,281 @@ export function LogMaintenanceServiceDialog({
     }
   };
 
-  const handleChecklistToggle = (item: string) => {
-    setFormData((prev) => {
-      const currentList = prev.checklist || [];
-      if (currentList.includes(item)) {
-        return { ...prev, checklist: currentList.filter((i) => i !== item) };
+  const handleBack = () => {
+    if (step === "pick") {
+      onOpenChange(false);
+      return;
+    }
+    if (step === "categories") {
+      setStep("pick");
+      return;
+    }
+    if (step === "form") {
+      if (logMode === "quick_job") {
+        setActiveCategory(null);
+        setStep("pick");
+      } else {
+        setActiveCategory(null);
+        setStep("categories");
       }
-      return { ...prev, checklist: [...currentList, item] };
-    });
+      return;
+    }
+    if (step === "review") {
+      if (logMode === "quick_job") {
+        const cat =
+          quickJobs.find((c) => c.id === selectedCategoryIds[0]) ||
+          (lines[0]
+            ? ({
+                id: lines[0].categoryId || selectedCategoryIds[0] || "qj",
+                code: lines[0].categoryCode,
+                name: lines[0].categoryName,
+                icon_key: "wrench",
+                field_schema: defaultFieldSchema(),
+                quick_job_eligible: true,
+                sort_order: 0,
+                created_at: "",
+                updated_at: "",
+              } satisfies MaintenanceServiceCategory)
+            : null);
+        if (cat) openCategoryForm(cat);
+        else setStep("pick");
+      } else if (selectedPackage) {
+        setStep("categories");
+      } else {
+        setStep("pick");
+      }
+    }
   };
 
-  const handleCostChange = (item: string, field: "material" | "labor", value: string) => {
-    const numValue = parseFloat(value) || 0;
-    setFormData((prev) => ({
-      ...prev,
-      itemCosts: {
-        ...prev.itemCosts,
-        [item]: {
-          ...(prev.itemCosts?.[item] || { material: 0, labor: 0 }),
-          [field]: numValue,
-        },
-      },
-    }));
+  const setFieldValue = (key: string, value: string | number | boolean | null) => {
+    setFieldValues((prev) => ({ ...prev, [key]: value }));
   };
 
-  const handleInspectionIssueToggle = (issue: string) => {
-    setFormData((prev) => {
-      const currentIssues = prev.inspectionResults?.issues || [];
-      const newIssues = currentIssues.includes(issue)
-        ? currentIssues.filter((i) => i !== issue)
-        : [...currentIssues, issue];
-
-      return {
-        ...prev,
-        inspectionResults: {
-          ...(prev.inspectionResults || { notes: "" }),
-          issues: newIssues,
-        },
-      };
-    });
+  const renderField = (field: MaintenanceCategoryFieldDef) => {
+    const id = `cat-field-${field.key}`;
+    if (field.type === "boolean") {
+      return (
+        <div key={field.key} className="flex items-center gap-3 py-1">
+          <Checkbox
+            id={id}
+            checked={Boolean(fieldValues[field.key])}
+            onCheckedChange={(checked) => setFieldValue(field.key, checked === true)}
+          />
+          <Label htmlFor={id} className="cursor-pointer font-medium">
+            {field.label}
+            {field.required ? " *" : ""}
+          </Label>
+        </div>
+      );
+    }
+    if (field.type === "select") {
+      const raw = fieldValues[field.key];
+      const selectVal = raw == null || raw === "" ? undefined : String(raw);
+      return (
+        <div key={field.key} className="space-y-2">
+          <Label htmlFor={id}>
+            {field.label}
+            {field.required ? " *" : ""}
+          </Label>
+          <Select
+            value={selectVal}
+            onValueChange={(v) => setFieldValue(field.key, v)}
+          >
+            <SelectTrigger id={id} className="bg-slate-50 border-slate-200">
+              <SelectValue placeholder="Select…" />
+            </SelectTrigger>
+            <SelectContent>
+              {(field.options || ["new", "used"]).map((opt) => (
+                <SelectItem key={opt} value={opt}>
+                  {opt}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      );
+    }
+    if (field.type === "number") {
+      const raw = fieldValues[field.key];
+      return (
+        <div key={field.key} className="space-y-2">
+          <Label htmlFor={id}>
+            {field.label}
+            {field.required ? " *" : ""}
+          </Label>
+          <Input
+            id={id}
+            type="number"
+            className="bg-slate-50 border-slate-200"
+            value={raw == null || raw === "" ? "" : String(raw)}
+            onChange={(e) => {
+              const v = e.target.value;
+              setFieldValue(field.key, v === "" ? null : Number(v));
+            }}
+          />
+        </div>
+      );
+    }
+    const raw = fieldValues[field.key];
+    return (
+      <div key={field.key} className="space-y-2">
+        <Label htmlFor={id}>
+          {field.label}
+          {field.required ? " *" : ""}
+        </Label>
+        <Input
+          id={id}
+          type="text"
+          className="bg-slate-50 border-slate-200"
+          value={raw == null ? "" : String(raw)}
+          onChange={(e) => setFieldValue(field.key, e.target.value)}
+        />
+      </div>
+    );
   };
+
+  const categoryHasLine = (cat: MaintenanceServiceCategory) =>
+    lines.some(
+      (l) =>
+        (l.categoryId && l.categoryId === cat.id) ||
+        (!l.categoryId && l.categoryCode === cat.code && l.categoryName === cat.name),
+    );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[900px] max-h-[90vh] flex flex-col p-0 overflow-hidden">
+      <DialogContent className="sm:max-w-[720px] max-h-[90vh] flex flex-col p-0 overflow-hidden">
         <DialogHeader className="px-6 py-4 border-b">
-          <DialogTitle>{step === 1 ? "Add Service Log" : "Inspection Results"}</DialogTitle>
+          <DialogTitle>{stepTitle(step)}</DialogTitle>
           <DialogDescription>
-            {step === 1
-              ? "Record maintenance details for this vehicle."
-              : "Record detailed findings and recommendations."}
+            {stepDescription(step, selectedPackage?.shortLabel)}
           </DialogDescription>
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto px-6 py-6">
-          {step === 1 ? (
+          {step === "pick" && (
+            <div className="space-y-8">
+              <section className="space-y-3">
+                <h3 className="text-sm font-semibold text-slate-900">Service packages</h3>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {packageChoices.map((pkg) => (
+                    <button
+                      key={pkg.id}
+                      type="button"
+                      onClick={() => handlePickPackage(pkg)}
+                      className="flex flex-col items-center gap-2 p-4 rounded-xl border border-slate-200 bg-white hover:border-indigo-300 hover:bg-indigo-50/40 transition-colors text-center min-h-[108px]"
+                    >
+                      <div className="bg-slate-100 p-3 rounded-xl text-indigo-600">
+                        <MaintenanceIcon iconKey={pkg.iconKey} className="w-6 h-6" />
+                      </div>
+                      <span className="text-sm font-medium text-slate-900 leading-tight">
+                        {pkg.shortLabel}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </section>
+
+              <section className="space-y-3">
+                <h3 className="text-sm font-semibold text-slate-900">Quick jobs</h3>
+                {quickJobsLoading ? (
+                  <div className="flex items-center gap-2 text-sm text-slate-500 py-6 justify-center">
+                    <Loader2 className="w-4 h-4 animate-spin" /> Loading quick jobs…
+                  </div>
+                ) : quickJobs.length === 0 ? (
+                  <p className="text-sm text-slate-500 py-2">No quick jobs available.</p>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    {quickJobs.map((cat) => (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => handlePickQuickJob(cat)}
+                        className="flex flex-col items-center gap-2 p-4 rounded-xl border border-slate-200 bg-white hover:border-indigo-300 hover:bg-indigo-50/40 transition-colors text-center min-h-[108px]"
+                      >
+                        <div className="bg-slate-100 p-3 rounded-xl text-indigo-600">
+                          <MaintenanceIcon iconKey={cat.icon_key} className="w-6 h-6" />
+                        </div>
+                        <span className="text-sm font-medium text-slate-900 leading-tight">
+                          {cat.name}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </section>
+            </div>
+          )}
+
+          {step === "categories" && selectedPackage && (
+            <div className="space-y-4">
+              <p className="text-sm text-slate-500">
+                Selected: {selectedCategoryIds.length} · Logged: {lines.length}
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {selectedPackage.categories.map((cat) => {
+                  const selected = selectedCategoryIds.includes(cat.id);
+                  const logged = categoryHasLine(cat);
+                  return (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => handleCategoryTap(cat)}
+                      className={`relative flex flex-col items-center gap-2 p-4 rounded-xl border transition-colors text-center min-h-[108px] ${
+                        selected || logged
+                          ? "border-indigo-300 bg-indigo-50/50"
+                          : "border-slate-200 bg-white hover:border-indigo-200 hover:bg-slate-50"
+                      }`}
+                    >
+                      {(selected || logged) && (
+                        <span
+                          role="presentation"
+                          onClick={(e) => toggleCategorySelected(cat.id, e)}
+                          className="absolute top-2 right-2 text-indigo-600"
+                        >
+                          <CheckCircle2 className="w-4 h-4" />
+                        </span>
+                      )}
+                      <div className="bg-white p-3 rounded-xl shadow-sm text-indigo-600">
+                        <MaintenanceIcon iconKey={cat.icon_key} className="w-6 h-6" />
+                      </div>
+                      <span className="text-sm font-medium text-slate-900 leading-tight">
+                        {cat.name}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {step === "form" && activeCategory && (
             <div className="space-y-6">
-              <div className="border-2 border-dashed border-slate-200 rounded-xl p-8 flex flex-col items-center justify-center bg-slate-50 relative group hover:bg-slate-100 transition-colors">
+              <div className="flex items-center gap-3">
+                <div className="bg-indigo-50 p-3 rounded-xl text-indigo-600">
+                  <MaintenanceIcon iconKey={activeCategory.icon_key} className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-slate-900">{activeCategory.name}</h3>
+                  <p className="text-xs text-slate-500">{activeCategory.code}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {(activeCategory.field_schema?.fields || defaultFieldSchema().fields).map(renderField)}
+              </div>
+
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 flex justify-between items-center">
+                <span className="text-sm text-slate-600">Line total</span>
+                <span className="font-semibold text-slate-900">
+                  {formMeta.currency || "JMD"} {draftLineTotal.toLocaleString()}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {step === "review" && (
+            <div className="space-y-6">
+              <div className="border-2 border-dashed border-slate-200 rounded-xl p-6 flex flex-col items-center justify-center bg-slate-50 relative group hover:bg-slate-100 transition-colors">
                 <Input
                   type="file"
                   accept="image/*,.pdf"
@@ -329,151 +837,51 @@ export function LogMaintenanceServiceDialog({
                   )}
                 </div>
                 <h3 className="font-semibold text-slate-900">Scan Invoice / Receipt</h3>
-                <p className="text-sm text-slate-500">Upload image or PDF to auto-fill</p>
-                {formData.invoiceUrl && (
+                <p className="text-sm text-slate-500">Optional — upload image or PDF to auto-fill</p>
+                {formMeta.invoiceUrl && (
                   <div className="absolute top-4 right-4 bg-emerald-100 text-emerald-700 text-xs px-2 py-1 rounded flex items-center">
                     <CheckCircle2 className="w-3 h-3 mr-1" /> Uploaded
                   </div>
                 )}
               </div>
 
-              <div className="grid grid-cols-2 gap-6">
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Date</Label>
                   <Input
                     type="date"
-                    value={formData.date}
-                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                    value={formMeta.date}
+                    onChange={(e) => setFormMeta({ ...formMeta, date: e.target.value })}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Type</Label>
-                  <Select
-                    value={formData.type}
-                    onValueChange={(val) => setFormData({ ...formData, type: val })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Regular Maintenance">Regular Maintenance</SelectItem>
-                      <SelectItem value="Oil Change">Oil Change</SelectItem>
-                      <SelectItem value="Tire Service">Tire Service</SelectItem>
-                      <SelectItem value="Repair">Repair</SelectItem>
-                      <SelectItem value="Inspection">Inspection</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Service Schedule</Label>
-                <Select value={selectedScheduleId} onValueChange={setSelectedScheduleId}>
-                  <SelectTrigger className="bg-slate-50 border-slate-200">
-                    <SelectValue placeholder="Select maintenance schedule..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {scheduleChoices.map((s) => (
-                      <SelectItem key={s.id} value={s.id}>
-                        {s.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                <div className="border rounded-lg p-4 bg-white flex flex-col h-[300px]">
-                  <div className="flex justify-between items-center mb-3">
-                    <Label className="text-sm font-semibold">Checklist Items</Label>
-                    <span className="text-xs text-slate-400">
-                      {formData.checklist?.length || 0}/{checklistItems.length}
-                    </span>
-                  </div>
-                  <div className="flex-1 overflow-y-auto space-y-3 pr-2">
-                    {checklistItems.map((item, idx) => {
-                      const isChecked = formData.checklist?.includes(item);
-                      return (
-                        <div
-                          key={`${item}-${idx}`}
-                          className={`p-3 rounded-md border transition-all ${
-                            isChecked ? "border-indigo-200 bg-indigo-50/50" : "border-transparent hover:bg-slate-50"
-                          }`}
-                        >
-                          <div className="flex items-start gap-3">
-                            <Checkbox
-                              id={`log-item-${vehicleId}-${idx}`}
-                              checked={isChecked}
-                              onCheckedChange={() => handleChecklistToggle(item)}
-                            />
-                            <div className="flex-1">
-                              <Label
-                                htmlFor={`log-item-${vehicleId}-${idx}`}
-                                className="text-sm font-medium cursor-pointer leading-tight block mb-1"
-                              >
-                                {item}
-                              </Label>
-
-                              {isChecked && (
-                                <div className="flex gap-2 mt-2 animate-in slide-in-from-top-1 fade-in">
-                                  <div className="relative flex-1">
-                                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400">
-                                      Mat ($)
-                                    </span>
-                                    <Input
-                                      className="h-7 text-xs pl-12 bg-white"
-                                      placeholder="0.00"
-                                      value={formData.itemCosts?.[item]?.material || ""}
-                                      onChange={(e) => handleCostChange(item, "material", e.target.value)}
-                                    />
-                                  </div>
-                                  <div className="relative flex-1">
-                                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400">
-                                      Lab ($)
-                                    </span>
-                                    <Input
-                                      className="h-7 text-xs pl-12 bg-white"
-                                      placeholder="0.00"
-                                      value={formData.itemCosts?.[item]?.labor || ""}
-                                      onChange={(e) => handleCostChange(item, "labor", e.target.value)}
-                                    />
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div className="flex flex-col h-[300px]">
-                  <Label className="mb-2 font-semibold">Notes & Observations</Label>
-                  <Textarea
-                    className="flex-1 resize-none bg-slate-50 border-slate-200"
-                    placeholder="Pre-inspection performed. Engine service performed..."
-                    value={formData.notes}
-                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <Label>Total Cost</Label>
+                  <Label>Odometer (km)</Label>
                   <Input
                     type="number"
-                    value={formData.cost || ""}
-                    onChange={(e) => setFormData({ ...formData, cost: parseFloat(e.target.value) })}
                     className="bg-slate-50 font-medium"
+                    value={formMeta.odo || ""}
+                    onChange={(e) =>
+                      setFormMeta({ ...formMeta, odo: parseFloat(e.target.value) || 0 })
+                    }
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Service Provider</Label>
+                  <Input
+                    className="bg-slate-50"
+                    value={formMeta.provider}
+                    onChange={(e) => setFormMeta({ ...formMeta, provider: e.target.value })}
+                    placeholder="e.g. Whole-Heated Car Service LTD"
                   />
                 </div>
                 <div className="space-y-2">
                   <Label>Currency</Label>
                   <Select
-                    value={formData.currency || "JMD"}
-                    onValueChange={(v) => setFormData({ ...formData, currency: v })}
+                    value={formMeta.currency || "JMD"}
+                    onValueChange={(v) => setFormMeta({ ...formMeta, currency: v })}
                   >
                     <SelectTrigger className="bg-slate-50 font-medium">
                       <SelectValue />
@@ -486,92 +894,94 @@ export function LogMaintenanceServiceDialog({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <Label>Odometer (km)</Label>
-                  <Input
-                    type="number"
-                    value={formData.odo || ""}
-                    onChange={(e) => setFormData({ ...formData, odo: parseFloat(e.target.value) })}
-                    className="bg-slate-50 font-medium"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Service Provider</Label>
-                  <Input
-                    value={formData.provider}
-                    onChange={(e) => setFormData({ ...formData, provider: e.target.value })}
-                    placeholder="e.g. Whole-Heated Car Service LTD"
-                    className="bg-slate-50"
-                  />
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-6">
-              <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 flex items-start gap-3">
-                <div className="bg-blue-100 p-2 rounded-full text-blue-600 mt-0.5">
-                  <Scan className="w-4 h-4" />
-                </div>
-                <div>
-                  <h4 className="font-semibold text-blue-900 text-sm">Inspection Report</h4>
-                  <p className="text-xs text-blue-700 mt-1">
-                    Select items that require attention or repair. These will be flagged in the vehicle history.
-                  </p>
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <Label className="font-semibold">Action Items (Needs Attention)</Label>
-                <div className="border rounded-lg p-4 max-h-[300px] overflow-y-auto bg-white">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {INSPECTION_ITEMS.map((item, idx) => (
-                      <div key={item} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={`inspect-${vehicleId}-${idx}`}
-                          checked={formData.inspectionResults?.issues.includes(item)}
-                          onCheckedChange={() => handleInspectionIssueToggle(item)}
-                        />
-                        <label
-                          htmlFor={`inspect-${vehicleId}-${idx}`}
-                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                        >
-                          {item}
-                        </label>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <Label className="font-semibold">Detailed Observations</Label>
+              <div className="space-y-2">
+                <Label>Notes</Label>
                 <Textarea
-                  className="h-32 bg-slate-50 border-slate-200"
-                  placeholder="Enter detailed inspection findings, measurements (e.g., brake pad thickness), or specific recommendations..."
-                  value={formData.inspectionResults?.notes}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      inspectionResults: {
-                        ...(formData.inspectionResults || { issues: [] }),
-                        notes: e.target.value,
-                      },
-                    })
-                  }
+                  className="bg-slate-50 border-slate-200 min-h-[80px]"
+                  placeholder="Inspection notes, recommendations…"
+                  value={formMeta.notes}
+                  onChange={(e) => setFormMeta({ ...formMeta, notes: e.target.value })}
                 />
               </div>
+
+              <div className="space-y-3">
+                <Label className="font-semibold">Line items</Label>
+                <div className="border rounded-lg divide-y bg-white">
+                  {lines.map((line, idx) => (
+                    <div
+                      key={`${line.categoryCode}-${idx}`}
+                      className="flex items-center justify-between px-4 py-3 gap-3"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-slate-900 truncate">
+                          {line.categoryName}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          {[
+                            line.qty != null ? `Qty ${line.qty}` : null,
+                            line.condition ? String(line.condition) : null,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ") || line.categoryCode}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-3 shrink-0">
+                        <span className="text-sm font-medium text-slate-900">
+                          {formMeta.currency || "JMD"}{" "}
+                          {lineTotalPreview(line).toLocaleString()}
+                        </span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="text-xs text-slate-500"
+                          onClick={() => {
+                            const pkgCat = selectedPackage?.categories.find(
+                              (c) =>
+                                c.id === line.categoryId ||
+                                (c.code === line.categoryCode && c.name === line.categoryName),
+                            );
+                            const qj = quickJobs.find((c) => c.id === line.categoryId);
+                            const cat = pkgCat || qj;
+                            if (cat) openCategoryForm(cat);
+                          }}
+                        >
+                          Edit
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex justify-between items-center px-1 pt-1">
+                  <span className="text-sm font-semibold text-slate-700">Total</span>
+                  <span className="text-base font-semibold text-slate-900">
+                    {formMeta.currency || "JMD"} {totalCost.toLocaleString()}
+                  </span>
+                </div>
+              </div>
+
+              {logMode === "package" && (
+                <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+                  <Checkbox
+                    id="mark-package-complete"
+                    checked={markPackageComplete}
+                    onCheckedChange={(checked) => setMarkPackageComplete(checked === true)}
+                  />
+                  <Label htmlFor="mark-package-complete" className="cursor-pointer">
+                    Mark package complete
+                    <span className="block text-xs font-normal text-slate-500 mt-0.5">
+                      Advances the vehicle maintenance schedule for this package.
+                    </span>
+                  </Label>
+                </div>
+              )}
             </div>
           )}
         </div>
 
         <DialogFooter className="px-6 py-4 border-t bg-slate-50/50">
-          <Button
-            variant="ghost"
-            onClick={() => (step === 1 ? onOpenChange(false) : setStep(1))}
-            className="mr-auto"
-          >
-            {step === 1 ? (
+          <Button variant="ghost" onClick={handleBack} className="mr-auto">
+            {step === "pick" ? (
               "Cancel"
             ) : (
               <>
@@ -580,25 +990,33 @@ export function LogMaintenanceServiceDialog({
             )}
           </Button>
 
-          {step === 1 ? (
-            <>
-              <Button variant="outline" onClick={() => onOpenChange(false)}>
-                Cancel
-              </Button>
-              <Button onClick={() => setStep(2)} className="bg-slate-900 text-white hover:bg-slate-800">
-                Next <ArrowRight className="w-4 h-4 ml-2" />
-              </Button>
-            </>
-          ) : (
-            <>
-              <Button variant="outline" onClick={() => onOpenChange(false)}>
-                Cancel
-              </Button>
-              <Button onClick={handleSave} disabled={isLoading} className="bg-slate-900 text-white hover:bg-slate-800">
-                {isLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-                Save Log
-              </Button>
-            </>
+          {step === "categories" && (selectedCategoryIds.length >= 1 || lines.length >= 1) && (
+            <Button
+              onClick={handleContinueFromCategories}
+              className="bg-slate-900 text-white hover:bg-slate-800"
+            >
+              Continue
+            </Button>
+          )}
+
+          {step === "form" && (
+            <Button
+              onClick={handleSaveCategory}
+              className="bg-slate-900 text-white hover:bg-slate-800"
+            >
+              Save category
+            </Button>
+          )}
+
+          {step === "review" && (
+            <Button
+              onClick={handleSave}
+              disabled={isLoading || lines.length < 1}
+              className="bg-slate-900 text-white hover:bg-slate-800"
+            >
+              {isLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+              Save Log
+            </Button>
           )}
         </DialogFooter>
       </DialogContent>

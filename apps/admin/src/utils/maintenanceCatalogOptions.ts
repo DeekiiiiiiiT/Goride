@@ -1,11 +1,12 @@
 import type {
   CatalogMaintenanceTaskOption,
+  MaintenanceServiceCategory,
   VehicleMaintenanceScheduleRowApi,
 } from "../types/maintenance";
 
 /**
- * Derive catalog checklist options from GET maintenance-schedule rows (dedupe by template_id).
- * Same logic as VehicleDetail `catalogMaintenanceOptions` useMemo.
+ * Derive package options from GET maintenance-schedule rows (dedupe by template_id).
+ * Prefers structured categories; falls back to description newlines for unmigrated templates.
  */
 export function catalogOptionsFromScheduleRows(
   rows: VehicleMaintenanceScheduleRowApi[],
@@ -19,14 +20,27 @@ export function catalogOptionsFromScheduleRows(
     seen.add(tid);
     const tpl = row.template;
     const taskName = tpl.task_name || "Service";
+    const categories: MaintenanceServiceCategory[] = Array.isArray(tpl.categories)
+      ? (tpl.categories as MaintenanceServiceCategory[])
+      : [];
+    const fromCats = categories
+      .map((c) => (c?.name || "").trim())
+      .filter(Boolean);
     const desc = tpl.description?.trim();
-    const lines = desc
+    const fromDesc = desc
       ? desc.split(/\n+/).map((s) => s.trim()).filter(Boolean)
       : [];
+    const checklistLines = fromCats.length
+      ? fromCats
+      : fromDesc.length
+        ? fromDesc
+        : [taskName];
     out.push({
       templateId: tid,
       label: taskName,
-      checklistLines: lines.length ? lines : [taskName],
+      checklistLines,
+      iconKey: tpl.icon_key || undefined,
+      categories: categories.length ? categories : undefined,
     });
   }
   return out;

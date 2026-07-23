@@ -8,6 +8,7 @@ import { OdometerReading } from '../types/vehicle';
 import { TollPlaza } from '../types/toll';
 import { API_ENDPOINTS } from './apiConfig';
 import type { CompatiblePartsResponse } from '../types/partSourcing';
+import type { MaintenanceServiceCategory } from '../types/maintenance';
 import { compressImage, OCR_COMPRESS_OPTS } from '../utils/compressImage';
 import { isTollCategory } from '../utils/tollCategoryHelper';
 import { appendUploadEvidenceMeta, type UploadEvidenceMeta } from '@roam/types/evidence';
@@ -1432,6 +1433,24 @@ export const api = {
         };
         schedule: unknown[];
       }>;
+  },
+
+  async listMaintenanceCategories() {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/maintenance-categories`, {
+          headers: await getHeaders(null),
+      });
+      if (!response.ok) throw new Error("Failed to fetch maintenance categories");
+      const json = await response.json() as { items?: unknown[] };
+      return { items: (json.items || []) as MaintenanceServiceCategory[] };
+  },
+
+  async listQuickJobCategories() {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/maintenance-categories/quick-jobs`, {
+          headers: await getHeaders(null),
+      });
+      if (!response.ok) throw new Error("Failed to fetch quick-job categories");
+      const json = await response.json() as { items?: unknown[] };
+      return { items: (json.items || []) as MaintenanceServiceCategory[] };
   },
 
   async bootstrapMaintenanceSchedule(vehicleId: string, currentOdometer?: number) {

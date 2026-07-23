@@ -1,5 +1,9 @@
 import { API_ENDPOINTS } from "./apiConfig";
-import type { MaintenanceTaskTemplate } from "../types/maintenance";
+import type {
+  MaintenancePackageCategory,
+  MaintenanceServiceCategory,
+  MaintenanceTaskTemplate,
+} from "../types/maintenance";
 import { publicAnonKey } from "../utils/supabase/info";
 
 const base = () => `${API_ENDPOINTS.admin}`;
@@ -137,4 +141,79 @@ export async function migrateMaintenanceFromKv(accessToken: string): Promise<{
   });
   if (!res.ok) throw new Error(String(await parseError(res)));
   return res.json();
+}
+
+export async function listMaintenanceCategories(
+  accessToken: string,
+): Promise<MaintenanceServiceCategory[]> {
+  const res = await edgeFetch(`${base()}/admin/maintenance-categories`, {
+    headers: edgeHeaders(accessToken),
+  });
+  if (!res.ok) throw new Error(String(await parseError(res)));
+  const data = await res.json();
+  return (data.items || []) as MaintenanceServiceCategory[];
+}
+
+export async function createMaintenanceCategory(
+  accessToken: string,
+  payload: Partial<MaintenanceServiceCategory> & { code: string; name: string },
+): Promise<MaintenanceServiceCategory> {
+  const res = await edgeFetch(`${base()}/admin/maintenance-categories`, {
+    method: "POST",
+    headers: edgeHeaders(accessToken, "application/json"),
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(String(await parseError(res)));
+  const data = await res.json();
+  return data.item as MaintenanceServiceCategory;
+}
+
+export async function updateMaintenanceCategory(
+  accessToken: string,
+  id: string,
+  payload: Partial<MaintenanceServiceCategory>,
+): Promise<MaintenanceServiceCategory> {
+  const res = await edgeFetch(`${base()}/admin/maintenance-categories/${id}`, {
+    method: "PATCH",
+    headers: edgeHeaders(accessToken, "application/json"),
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(String(await parseError(res)));
+  const data = await res.json();
+  return data.item as MaintenanceServiceCategory;
+}
+
+export async function deleteMaintenanceCategory(accessToken: string, id: string): Promise<void> {
+  const res = await edgeFetch(`${base()}/admin/maintenance-categories/${id}`, {
+    method: "DELETE",
+    headers: edgeHeaders(accessToken),
+  });
+  if (!res.ok) throw new Error(String(await parseError(res)));
+}
+
+export async function listPackageCategories(
+  accessToken: string,
+  templateId: string,
+): Promise<MaintenancePackageCategory[]> {
+  const res = await edgeFetch(`${base()}/admin/maintenance-templates/${templateId}/categories`, {
+    headers: edgeHeaders(accessToken),
+  });
+  if (!res.ok) throw new Error(String(await parseError(res)));
+  const data = await res.json();
+  return (data.items || []) as MaintenancePackageCategory[];
+}
+
+export async function setPackageCategories(
+  accessToken: string,
+  templateId: string,
+  categoryIds: string[],
+): Promise<MaintenancePackageCategory[]> {
+  const res = await edgeFetch(`${base()}/admin/maintenance-templates/${templateId}/categories`, {
+    method: "PUT",
+    headers: edgeHeaders(accessToken, "application/json"),
+    body: JSON.stringify({ categoryIds }),
+  });
+  if (!res.ok) throw new Error(String(await parseError(res)));
+  const data = await res.json();
+  return (data.items || []) as MaintenancePackageCategory[];
 }
