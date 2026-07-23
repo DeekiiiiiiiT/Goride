@@ -23,7 +23,6 @@ import {
 import { Label } from "../ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import type { MaintenanceServiceLedgerEntry } from "../../types/maintenance";
-import { toast } from "sonner@2.0.3";
 
 type FleetVehicleOption = {
   vehicleId: string;
@@ -62,7 +61,6 @@ export function MaintenanceServiceLedgerPanel({
   const [tab, setTab] = useState<"outstanding" | "history">("outstanding");
   const [vehicleId, setVehicleId] = useState<string>("");
   const [loading, setLoading] = useState(false);
-  const [backfilling, setBackfilling] = useState(false);
   const [outstanding, setOutstanding] = useState<OutstandingItem[]>([]);
   const [history, setHistory] = useState<MaintenanceServiceLedgerEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -101,21 +99,6 @@ export function MaintenanceServiceLedgerPanel({
     void load();
   }, [load]);
 
-  const handleBackfill = useCallback(async () => {
-    setBackfilling(true);
-    try {
-      const res = await api.backfillMaintenanceServiceLedger();
-      toast.success(
-        `Backfill done: ${res.ledgerRows} ledger row(s) from ${res.records} completed service(s).`,
-      );
-      await load();
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Backfill failed");
-    } finally {
-      setBackfilling(false);
-    }
-  }, [load]);
-
   return (
     <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40 overflow-hidden">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 py-3 border-b border-slate-200 dark:border-slate-700">
@@ -146,16 +129,6 @@ export function MaintenanceServiceLedgerPanel({
           </div>
           <Button type="button" variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Refresh"}
-          </Button>
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            onClick={() => void handleBackfill()}
-            disabled={backfilling}
-            title="Rebuild ledger from past completed services"
-          >
-            {backfilling ? <Loader2 className="w-4 h-4 animate-spin" /> : "Backfill history"}
           </Button>
         </div>
       </div>
@@ -262,7 +235,7 @@ export function MaintenanceServiceLedgerPanel({
                 ) : history.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={5} className="text-center text-slate-500 py-8">
-                      No service history yet. Log a service or run Backfill history.
+                      No service history yet. Log a service to start the ledger.
                     </TableCell>
                   </TableRow>
                 ) : (

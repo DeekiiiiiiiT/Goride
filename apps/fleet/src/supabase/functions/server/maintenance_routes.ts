@@ -2004,11 +2004,26 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           .select("vehicle_id, next_due_miles, next_due_miles_max, next_due_date, template_id, schedule_status")
           .eq("organization_id", orgId);
 
+        const { data: componentSchedules } = await supabase
+          .from("vehicle_component_schedule")
+          .select(
+            "vehicle_id, position, next_due_miles, next_due_miles_max, next_due_date, schedule_status, category:maintenance_service_categories(id, code, name)",
+          )
+          .eq("organization_id", orgId);
+
         const byVehicle: Record<string, Record<string, unknown>[]> = {};
         for (const s of schedules || []) {
           const vid = s.vehicle_id as string;
           if (!byVehicle[vid]) byVehicle[vid] = [];
           byVehicle[vid].push(s as Record<string, unknown>);
+        }
+
+        const componentsByVehicle: Record<string, Record<string, unknown>[]> = {};
+        for (const s of componentSchedules || []) {
+          const vid = String(s.vehicle_id ?? "");
+          if (!vid) continue;
+          if (!componentsByVehicle[vid]) componentsByVehicle[vid] = [];
+          componentsByVehicle[vid].push(s as Record<string, unknown>);
         }
 
         const templateIds = [...new Set((schedules || []).map((s) => s.template_id).filter(Boolean))] as string[];
@@ -2027,6 +2042,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           const metricsBase = Number((v.metrics as { odometer?: number })?.odometer ?? 0);
           const odo = canonicalOdometerFromMaps(vid, metricsBase, odoMaps);
           const sch = byVehicle[vid] || [];
+          const compRows = componentsByVehicle[vid] || [];
           const attention: FleetServiceAttentionItem[] = [];
           let maxCalendarDaysOverdue: number | null = null;
           let maxKmOverdue: number | null = null;
@@ -2075,23 +2091,64 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
                     });
                     expanded = true;
                   }
-                  // All members satisfied → do not re-list whole package
                 } catch {
-                  /* fall through to package name */
+                  /* fall through */
                 }
               }
               if (!expanded) attention.push({ kind, taskName });
             }
             statuses.push(a.status);
           }
-          const st = sch.length ? aggregateFleetStatus(statuses.map((s) => ({ status: s }))) : "No schedule";
+
+          // Component / corner schedules (service ledger truth) — fill Overdue / Services due
+          // even when package schedule rows are missing.
+          let minComponentNext: number | null = null;
+          for (const row of compRows) {
+            const nextMiles = row.next_due_miles != null ? Number(row.next_due_miles) : null;
+            const nextMilesMaxRaw = row.next_due_miles_max != null ? Number(row.next_due_miles_max) : null;
+            const nextDate = row.next_due_date != null ? String(row.next_due_date).slice(0, 10) : null;
+            const schSt = row.schedule_status != null ? String(row.schedule_status) : "active";
+            const a = analyzeMaintenanceScheduleRow(odo, today, nextMiles, nextMilesMaxRaw, nextDate, schSt);
+            if (a.calendarDaysOverdue != null) {
+              maxCalendarDaysOverdue = maxCalendarDaysOverdue == null
+                ? a.calendarDaysOverdue
+                : Math.max(maxCalendarDaysOverdue, a.calendarDaysOverdue);
+            }
+            if (a.kmOverdue != null) {
+              maxKmOverdue = maxKmOverdue == null ? a.kmOverdue : Math.max(maxKmOverdue, a.kmOverdue);
+            }
+            if (nextMiles != null && Number.isFinite(nextMiles) && schSt !== "fulfilled") {
+              minComponentNext =
+                minComponentNext == null ? nextMiles : Math.min(minComponentNext, nextMiles);
+            }
+            if (a.status === "overdue" || a.status === "pending") {
+              const cat = row.category as { name?: string; code?: string } | null;
+              const baseName = String(cat?.name || cat?.code || "Service").trim() || "Service";
+              const pos = row.position != null ? String(row.position) : "";
+              const taskName = pos ? `${baseName} (${pos})` : baseName;
+              const kind = a.status === "overdue" ? "overdue" as const : "due_soon" as const;
+              // Avoid duplicate labels already added from package checklist
+              if (!attention.some((x) => x.taskName === taskName && x.kind === kind)) {
+                attention.push({ kind, taskName });
+              }
+              statuses.push(a.status);
+            } else if (a.status === "ok" || a.status === "fulfilled") {
+              statuses.push(a.status);
+            }
+          }
+
+          const hasAnySchedule = sch.length > 0 || compRows.length > 0;
+          const st = hasAnySchedule
+            ? aggregateFleetStatus(statuses.map((s) => ({ status: s })))
+            : "No schedule";
           const eligibleForNext = sch.filter((r) => String(r.schedule_status ?? "active") !== "fulfilled");
-          const minM = eligibleForNext.length
+          const minPkg = eligibleForNext.length
             ? eligibleForNext
               .map((r) => r.next_due_miles != null ? Number(r.next_due_miles) : Infinity)
               .reduce((a, b) => Math.min(a, b), Infinity)
             : Infinity;
-          const nextOdo = minM === Infinity ? null : minM;
+          const nextOdoCandidates = [minPkg, minComponentNext ?? Infinity].filter((n) => n !== Infinity);
+          const nextOdo = nextOdoCandidates.length ? Math.min(...nextOdoCandidates) : null;
           const sortedAttention = sortFleetServiceAttention(attention);
           const servicesAttentionTruncated = sortedAttention.length > FLEET_SERVICES_ATTENTION_CAP;
           const servicesAttention = sortedAttention.slice(0, FLEET_SERVICES_ATTENTION_CAP);
@@ -2104,7 +2161,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
             odometer: odo,
             fleetStatus: st,
             nextDueOdometer: nextOdo,
-            scheduleRowCount: sch.length,
+            scheduleRowCount: sch.length + compRows.length,
             maxCalendarDaysOverdue,
             maxKmOverdue,
             servicesAttention,

@@ -1531,18 +1531,6 @@ export const api = {
       };
   },
 
-  async backfillMaintenanceServiceLedger() {
-      const response = await fetchWithRetry(
-        `${API_ENDPOINTS.fuel}/maintenance-service-ledger/backfill`,
-        { method: "POST", headers: await getHeaders() },
-      );
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        throw new Error((err as { error?: string }).error || "Backfill failed");
-      }
-      return await response.json() as { success: boolean; records: number; ledgerRows: number };
-  },
-
   async listWorkOrders(vehicleId: string) {
       const response = await fetchWithRetry(
         `${API_ENDPOINTS.fuel}/maintenance-work-orders?vehicleId=${encodeURIComponent(vehicleId)}`,
