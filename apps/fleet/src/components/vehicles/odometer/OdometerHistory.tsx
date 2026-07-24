@@ -498,7 +498,7 @@ const OdometerHistoryInternal: React.FC<OdometerHistoryProps> = ({
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-[11px] text-slate-500 leading-relaxed">
-                This table shows the raw list of all hard odometer readings (anchors) recorded for this vehicle. For gap analysis and audit discrepancies, please switch to the <strong>Master Log</strong> tab.
+                This table shows the raw list of all hard odometer readings (anchors) recorded for this vehicle. For gap analysis and audit discrepancies, open Consumption Reconciliation → Stop-to-Stop → Explain gap.
               </p>
             </CardContent>
           </Card>

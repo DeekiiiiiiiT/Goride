@@ -70,9 +70,20 @@ interface MasterLogTimelineProps {
   vehicleId: string;
   refreshTrigger?: number;
   viewMode?: 'timeline' | 'anomalies';
+  /** Seed date filters (YYYY-MM-DD) — used when embedded in Consumption Reconciliation. */
+  initialDateRange?: { from: string; to: string };
+  /** Hide right-rail cards so Timeline fits inside a recon sheet. */
+  embedded?: boolean;
 }
 
-const MasterLogTimelineInternal: React.FC<MasterLogTimelineProps & React.HTMLAttributes<HTMLDivElement>> = ({ vehicleId, refreshTrigger = 0, viewMode = 'timeline', ...props }) => {
+const MasterLogTimelineInternal: React.FC<MasterLogTimelineProps & React.HTMLAttributes<HTMLDivElement>> = ({
+  vehicleId,
+  refreshTrigger = 0,
+  viewMode = 'timeline',
+  initialDateRange,
+  embedded = false,
+  ...props
+}) => {
   const [history, setHistory] = useState<OdometerReading[]>([]);
   const [reports, setReports] = useState<Record<string, MileageReport>>({});
   const [loading, setLoading] = useState(true);
@@ -108,7 +119,19 @@ const MasterLogTimelineInternal: React.FC<MasterLogTimelineProps & React.HTMLAtt
   const [searchTerm, setSearchTerm] = useState('');
   const [sourceFilter, setSourceFilter] = useState<string>('all');
   const [confidenceFilter, setConfidenceFilter] = useState<string>('any');
-  const [dateRange, setDateRange] = useState({ from: '', to: '' });
+  const [dateRange, setDateRange] = useState({
+    from: initialDateRange?.from ?? '',
+    to: initialDateRange?.to ?? '',
+  });
+
+  // Re-seed when recon week / bucket window changes
+  useEffect(() => {
+    if (!initialDateRange) return;
+    setDateRange({
+      from: initialDateRange.from ?? '',
+      to: initialDateRange.to ?? '',
+    });
+  }, [initialDateRange?.from, initialDateRange?.to]);
 
   const parseDateForDisplay = (dateStr: string): Date => {
      if (dateStr.includes('T')) {
@@ -480,7 +503,7 @@ const MasterLogTimelineInternal: React.FC<MasterLogTimelineProps & React.HTMLAtt
   }
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto p-2" {...props}>
+    <div className={`space-y-6 mx-auto p-2 ${embedded ? 'max-w-none' : 'max-w-7xl'}`} {...props}>
       {/* Filter Bar */}
       <Card className="bg-white border-slate-200 shadow-sm">
           <CardContent className="p-4">
@@ -533,7 +556,11 @@ const MasterLogTimelineInternal: React.FC<MasterLogTimelineProps & React.HTMLAtt
                             setSearchTerm('');
                             setSourceFilter('all');
                             setConfidenceFilter('any');
-                            setDateRange({ from: '', to: '' });
+                            // Embedded: restore recon seed; standalone: clear filters
+                            setDateRange({
+                              from: initialDateRange?.from ?? '',
+                              to: initialDateRange?.to ?? '',
+                            });
                         }}>
                             Reset
                         </Button>
@@ -543,9 +570,9 @@ const MasterLogTimelineInternal: React.FC<MasterLogTimelineProps & React.HTMLAtt
           </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className={embedded ? 'space-y-6' : 'grid grid-cols-1 lg:grid-cols-3 gap-8'}>
         {/* Timeline View */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className={embedded ? 'space-y-6' : 'lg:col-span-2 space-y-6'}>
             {viewMode === 'anomalies' ? (
                 <div className="space-y-6">
                      <div className="flex items-center justify-between">
@@ -858,7 +885,8 @@ const MasterLogTimelineInternal: React.FC<MasterLogTimelineProps & React.HTMLAtt
             )}
         </div>
 
-        {/* Sidebar */}
+        {/* Sidebar — hidden when embedded in Consumption Reconciliation */}
+        {!embedded && (
         <div className="space-y-6">
             {/* Audit Confidence Card */}
             <Card className="border-indigo-100 bg-white shadow-sm overflow-hidden">
@@ -917,6 +945,7 @@ const MasterLogTimelineInternal: React.FC<MasterLogTimelineProps & React.HTMLAtt
                 </CardContent>
             </Card>
         </div>
+        )}
       </div>
       
       <SourceEvidenceModal 

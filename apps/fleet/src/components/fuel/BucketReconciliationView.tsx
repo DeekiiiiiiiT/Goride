@@ -20,12 +20,20 @@ import {
     History,
     Banknote,
     Loader2,
-    RotateCcw
+    RotateCcw,
+    ScanLine,
 } from "lucide-react";
 import { format } from "date-fns";
 import { DateRange } from "react-day-picker";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 import { Button } from "../ui/button";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+} from "../ui/dialog";
 import { toast } from "sonner@2.0.3";
 
 import { api } from '../../services/api';
@@ -35,6 +43,20 @@ import { FuelEntry, MileageAdjustment, OdometerBucket } from '../../types/fuel';
 import { FuelCalculationService } from '../../services/fuelCalculationService';
 import { settlementService } from '../../services/settlementService';
 import { odometerService } from '../../services/odometerService';
+import { MasterLogTimeline } from '../vehicles/odometer/MasterLogTimeline';
+
+/** Normalize ISO or date-only strings to YYYY-MM-DD for Timeline filters. */
+function toYmd(value: string | Date | undefined | null): string {
+    if (!value) return '';
+    if (typeof value === 'string') {
+        const m = value.match(/^(\d{4}-\d{2}-\d{2})/);
+        if (m) return m[1];
+        const d = new Date(value);
+        if (!Number.isNaN(d.getTime())) return format(d, 'yyyy-MM-dd');
+        return '';
+    }
+    return format(value, 'yyyy-MM-dd');
+}
 
 interface BucketReconciliationViewProps {
     vehicle: Vehicle;
@@ -62,6 +84,36 @@ export function BucketReconciliationView({
     const [isPosting, setIsPosting] = React.useState<string | null>(null);
     const [unifiedAnchors, setUnifiedAnchors] = React.useState<{ id: string; date: string; odometer: number }[] | null>(null);
     const [bucketTrips, setBucketTrips] = React.useState<Trip[] | null>(null);
+    // Explain-gap Timeline drill-down (bucket window or full recon week)
+    const [timelineScope, setTimelineScope] = React.useState<{
+        from: string;
+        to: string;
+        label: string;
+    } | null>(null);
+
+    const weekTimelineRange = React.useMemo(() => {
+        if (!dateRange?.from) return null;
+        return {
+            from: toYmd(dateRange.from),
+            to: toYmd(dateRange.to ?? dateRange.from),
+        };
+    }, [dateRange?.from, dateRange?.to]);
+
+    const openBucketTimeline = (bucket: OdometerBucket) => {
+        setTimelineScope({
+            from: toYmd(bucket.startDate),
+            to: toYmd(bucket.endDate),
+            label: `${bucket.startOdometer.toLocaleString()} → ${bucket.endOdometer.toLocaleString()} km`,
+        });
+    };
+
+    const openWeekTimeline = () => {
+        if (!weekTimelineRange) return;
+        setTimelineScope({
+            ...weekTimelineRange,
+            label: 'Full recon week',
+        });
+    };
 
     React.useEffect(() => {
         const loadAnchors = async () => {
@@ -307,11 +359,23 @@ export function BucketReconciliationView({
 
             <Card>
                 <CardHeader className="pb-2">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-3">
                         <div>
                             <CardTitle className="text-lg">Stop-to-Stop Buckets</CardTitle>
                             <CardDescription>Precise fuel consumption between odometer anchors</CardDescription>
                         </div>
+                        {weekTimelineRange && (
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="shrink-0 gap-1.5"
+                                onClick={openWeekTimeline}
+                            >
+                                <ScanLine className="h-3.5 w-3.5" />
+                                View full week timeline
+                            </Button>
+                        )}
                     </div>
                 </CardHeader>
                 <CardContent className="p-0">
@@ -325,6 +389,7 @@ export function BucketReconciliationView({
                                 <TableHead className="text-right">Attribution (km)</TableHead>
                                 <TableHead className="w-[120px] text-right">Deduction</TableHead>
                                 <TableHead className="w-[100px] text-center">Status</TableHead>
+                                <TableHead className="w-[100px] text-center">Audit</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -496,6 +561,18 @@ export function BucketReconciliationView({
                                             </div>
                                         )}
                                     </TableCell>
+                                    <TableCell className="text-center">
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="ghost"
+                                            className="h-7 px-2 text-[11px] text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 gap-1"
+                                            onClick={() => openBucketTimeline(bucket)}
+                                        >
+                                            <ScanLine className="h-3 w-3" />
+                                            Explain gap
+                                        </Button>
+                                    </TableCell>
                                 </TableRow>
                             ))}
                         </TableBody>
@@ -512,9 +589,35 @@ export function BucketReconciliationView({
                         <li><strong>GAP</strong> highlights distance traveled that was NOT logged as a Trip or Adjustment.</li>
                         <li><strong>Variance</strong> compares the fuel added at the end of the bucket against what the vehicle <em>should</em> have used based on its profile (info only for top-ups).</li>
                         <li><strong>Flagged</strong> means GAP or tank overflow — not normal top-up variance.</li>
+                        <li><strong>Explain gap</strong> opens the Unified Timeline for that stop-to-stop window (anchors, trips, personal km).</li>
                     </ul>
                 </div>
             </div>
+
+            <Dialog open={!!timelineScope} onOpenChange={(open) => !open && setTimelineScope(null)}>
+                <DialogContent className="max-w-[calc(100%-2rem)] sm:max-w-[1100px] w-[95vw] max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <ScanLine className="h-5 w-5 text-indigo-600" />
+                            Gap Timeline — {vehicle.licensePlate || vehicle.id}
+                        </DialogTitle>
+                        <DialogDescription>
+                            {timelineScope?.label}
+                            {timelineScope?.from && timelineScope?.to
+                                ? ` · ${timelineScope.from} → ${timelineScope.to}`
+                                : ''}
+                            . Matching anchors to trips to show how fuel distance was used.
+                        </DialogDescription>
+                    </DialogHeader>
+                    {timelineScope && (
+                        <MasterLogTimeline
+                            vehicleId={vehicle.id}
+                            embedded
+                            initialDateRange={{ from: timelineScope.from, to: timelineScope.to }}
+                        />
+                    )}
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

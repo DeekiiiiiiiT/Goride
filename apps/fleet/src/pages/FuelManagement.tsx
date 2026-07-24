@@ -1383,16 +1383,16 @@ function FuelManagementInner({ defaultTab = 'dashboard', onViewDriverLedger, onT
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Phase 3: Odometer Bucket Sheet */}
+      {/* Phase 3: Odometer Bucket Sheet — widened for Timeline + Trip Manifest drill-down */}
       <Sheet open={isBucketSheetOpen} onOpenChange={setIsBucketSheetOpen}>
-        <SheetContent className="sm:max-w-[900px] overflow-y-auto">
+        <SheetContent className="sm:max-w-[1100px] overflow-y-auto">
           <SheetHeader className="mb-6">
             <SheetTitle className="flex items-center gap-2">
               <History className="h-5 w-5 text-blue-600" />
               Stop-to-Stop Reconciliation
             </SheetTitle>
             <SheetDescription>
-              Detailed odometer-anchored analysis for {selectedBucketVehicle?.licensePlate} ({selectedBucketVehicle?.model})
+              Detailed odometer-anchored analysis for {selectedBucketVehicle?.licensePlate} ({selectedBucketVehicle?.model}). Use Explain gap to open the Unified Timeline for a stop-to-stop window.
             </SheetDescription>
           </SheetHeader>
 

@@ -147,7 +147,7 @@ import tollPeriodApp from "./toll_period_controller.tsx";
 import driverFinancialPeriodApp from "./driver_financial_period_controller.tsx";
 import paymentLedgerLineApp from "./payment_ledger_line_controller.tsx";
 import apiCenterApp from "./api_command_center.tsx";
-import { getFleetTimezone } from "./timezone_helper.tsx";
+import { getFleetTimezone, naiveToUtc, fleetCalendarDay, toFleetCalendarDay } from "./timezone_helper.tsx";
 import * as unverifiedVendor from './unverified_vendor_controller.tsx';
 import { suggestStationMatches } from './vendor_matcher.ts';
 import { checkRateLimit, recordFailedAttempt, clearRateLimit, getClientIp, getRateLimitStats } from './rate_limiter.ts';
@@ -773,9 +773,12 @@ app.use('*', async (c, next) => {
   return next();
 });
 
-// Phase 8.3: Stress Test / Seed Endpoint
-app.post("/make-server-37f42386/test/seed", async (c) => {
+// Phase 8.3: Stress Test / Seed Endpoint — gated so fake trips cannot pollute live earnings
+app.post("/make-server-37f42386/test/seed", requireAuth(), async (c) => {
     try {
+        if (Deno.env.get("ALLOW_TEST_SEED") !== "true") {
+          return c.json({ error: "Seed endpoint disabled. Set ALLOW_TEST_SEED=true to enable." }, 403);
+        }
         const { count, driverId, type } = await c.req.json();
         const numTrips = count || 100;
         const targetDriverId = driverId || "test-driver-1";
@@ -1732,23 +1735,26 @@ async function fetchDashboardDataWithCache(): Promise<any> {
   
   // Layer 3: Database queries (cold path - ~1-3s)
   console.log("[DashboardInit] Cache miss, fetching from database");
-  
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const todayISO = today.toISOString();
-  const endOfToday = new Date();
-  endOfToday.setHours(23, 59, 59, 999);
-  const endOfTodayISO = endOfToday.toISOString();
+
+  // Fleet-local "today" (America/Jamaica) — avoid UTC midnight skew that inflated earnings
+  const fleetTz = await getFleetTimezone();
+  const todayLocal = toFleetCalendarDay(new Date(), fleetTz);
+  const todayEndISO = naiveToUtc(`${todayLocal}T23:59:59.999`, fleetTz).toISOString();
+  // Wide fetch window: date-only strings + overnight UTC trips still resolve via fleetCalendarDay
+  const windowStartISO = naiveToUtc(
+    `${fleetCalendarDay(new Date(Date.now() - 36 * 3600_000).toISOString(), fleetTz) || todayLocal}T00:00:00`,
+    fleetTz,
+  ).toISOString();
 
   // Run all queries in parallel inside the server (each wrapped in withRetry for transient TLS/connection errors)
   const [tripStatsResult, activeDriverResult, tripsResult, driverMetricsResult, vehicleMetricsResult] = await Promise.all([
-    // 1) Dashboard stats — today's trips (aggregated)
+    // 1) Dashboard stats — candidate trips for today (filtered below)
     cache.withRetry(() => supabase
       .from("kv_store_37f42386")
-      .select("value->amount, value->driverId")
+      .select("value->amount, value->driverId, value->status, value->date, value->requestTime")
       .like("key", "trip:%")
-      .or(`value->>date.gte.${todayISO},value->>requestTime.gte.${todayISO}`)
-      .or(`value->>date.lte.${endOfTodayISO},value->>requestTime.lte.${endOfTodayISO}`)
+      .or(`value->>date.gte.${windowStartISO},value->>requestTime.gte.${windowStartISO}`)
+      .or(`value->>date.lte.${todayEndISO},value->>requestTime.lte.${todayEndISO}`)
     ),
 
     // 2) Active driver count
@@ -1794,10 +1800,18 @@ async function fetchDashboardDataWithCache(): Promise<any> {
 
   const todayTrips = tripStatsResult.data || [];
   let revenueToday = 0;
+  let tripsTodayCount = 0;
   const activeDriverIds = new Set<string>();
   todayTrips.forEach((t: any) => {
+    const driverId = String(t.driverId || "");
+    // Drop seed/stress-test junk that was inflating Today's Earnings
+    if (!driverId || driverId.startsWith("test-")) return;
+    if (String(t.status || "") !== "Completed") return;
+    const day = fleetCalendarDay(String(t.date || t.requestTime || ""), fleetTz);
+    if (day !== todayLocal) return;
     revenueToday += (Number(t.amount) || 0);
-    if (t.driverId) activeDriverIds.add(t.driverId);
+    tripsTodayCount += 1;
+    activeDriverIds.add(driverId);
   });
   const activeDriverCount = activeDriverResult.count || 0;
   const finalActiveDrivers = activeDriverCount;
@@ -1806,7 +1820,7 @@ async function fetchDashboardDataWithCache(): Promise<any> {
   const stats = {
     date: new Date().toISOString(),
     activeDrivers: finalActiveDrivers,
-    trips: todayTrips.length,
+    trips: tripsTodayCount,
     revenue: revenueToday,
     efficiency,
   };
@@ -1822,6 +1836,9 @@ async function fetchDashboardDataWithCache(): Promise<any> {
     }
     if (sanitized.platform === 'GoRide') sanitized.platform = 'Roam';
     return sanitized;
+  }).filter((t: any) => {
+    const driverId = String(t.driverId || "");
+    return driverId && !driverId.startsWith("test-");
   });
 
   // ── Build driver metrics ──
@@ -1889,21 +1906,20 @@ app.get("/make-server-37f42386/dashboard/init", requireAuth(), async (c) => {
 // Dashboard Stats Endpoint (Aggregated) - Optimized
 app.get("/make-server-37f42386/dashboard/stats", requireAuth(), async (c) => {
   try {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayISO = today.toISOString();
-
-    // Query today's trips - Optimized
-    const endOfToday = new Date();
-    endOfToday.setHours(23, 59, 59, 999);
-    const endOfTodayISO = endOfToday.toISOString();
+    const fleetTz = await getFleetTimezone();
+    const todayLocal = toFleetCalendarDay(new Date(), fleetTz);
+    const todayEndISO = naiveToUtc(`${todayLocal}T23:59:59.999`, fleetTz).toISOString();
+    const windowStartISO = naiveToUtc(
+      `${fleetCalendarDay(new Date(Date.now() - 36 * 3600_000).toISOString(), fleetTz) || todayLocal}T00:00:00`,
+      fleetTz,
+    ).toISOString();
 
     const { data: tripData, error: tripError } = await supabase
         .from("kv_store_37f42386")
-        .select("value->amount, value->driverId")
+        .select("value->amount, value->driverId, value->status, value->date, value->requestTime")
         .like("key", "trip:%")
-        .or(`value->>date.gte.${todayISO},value->>requestTime.gte.${todayISO}`)
-        .or(`value->>date.lte.${endOfTodayISO},value->>requestTime.lte.${endOfTodayISO}`);
+        .or(`value->>date.gte.${windowStartISO},value->>requestTime.gte.${windowStartISO}`)
+        .or(`value->>date.lte.${todayEndISO},value->>requestTime.lte.${todayEndISO}`);
 
     if (tripError) throw tripError;
 
@@ -1920,27 +1936,28 @@ app.get("/make-server-37f42386/dashboard/stats", requireAuth(), async (c) => {
     const trips = tripData || [];
     
     let revenueToday = 0;
+    let tripsTodayCount = 0;
     const activeDriverIds = new Set();
 
     trips.forEach((t: any) => {
+        const driverId = String(t.driverId || "");
+        if (!driverId || driverId.startsWith("test-")) return;
+        if (String(t.status || "") !== "Completed") return;
+        const day = fleetCalendarDay(String(t.date || t.requestTime || ""), fleetTz);
+        if (day !== todayLocal) return;
         revenueToday += (Number(t.amount) || 0);
-        if (t.driverId) {
-            activeDriverIds.add(t.driverId);
-        }
+        tripsTodayCount += 1;
+        activeDriverIds.add(driverId);
     });
 
     const activeDrivers = activeDriverIds.size > 0 ? activeDriverIds.size : (activeDriverCount || 0);
-    // Fallback: If no trips today, show active drivers from DB. If trips exist, show drivers who drove today? 
-    // Usually "Active Drivers" on dashboard means "Drivers currently working".
-    // We'll use the larger of the two to be safe, or just activeDriverCount if we want "Registered Active"
-    
     const finalActiveDrivers = activeDriverCount || 0;
     const efficiency = finalActiveDrivers > 0 ? Math.round((activeDrivers / finalActiveDrivers) * 100) : 0;
 
     return c.json({
         date: new Date().toISOString(),
         activeDrivers: finalActiveDrivers,
-        trips: trips.length,
+        trips: tripsTodayCount,
         revenue: revenueToday,
         efficiency: efficiency
     });

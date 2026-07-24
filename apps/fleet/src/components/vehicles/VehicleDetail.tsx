@@ -1526,13 +1526,14 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
                 <Card>
                     <CardHeader>
                         <CardTitle>Odometer History</CardTitle>
-                        <CardDescription>Track mileage verification and history</CardDescription>
+                        <CardDescription>
+                            Track mileage verification and history. Gap audit (anchors → trips → personal km) lives in Consumption Reconciliation → Stop-to-Stop → Explain gap.
+                        </CardDescription>
                     </CardHeader>
                     <CardContent>
                         <Tabs defaultValue="history">
                             <TabsList>
                                 <TabsTrigger value="history">History Log</TabsTrigger>
-                                <TabsTrigger value="timeline">Unified Timeline</TabsTrigger>
                                 <TabsTrigger value="anomalies">Anomalies</TabsTrigger>
                             </TabsList>
                             <TabsContent value="history" className="mt-4">
@@ -1540,9 +1541,6 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
                                     vehicleId={vehicle.id || vehicle.licensePlate} 
                                     refreshTrigger={odometerRefreshTrigger}
                                 />
-                            </TabsContent>
-                            <TabsContent value="timeline" className="mt-4">
-                                <MasterLogTimeline vehicleId={vehicle.id || vehicle.licensePlate} />
                             </TabsContent>
                             <TabsContent value="anomalies" className="mt-4">
                                 <MasterLogTimeline vehicleId={vehicle.id || vehicle.licensePlate} viewMode="anomalies" />
