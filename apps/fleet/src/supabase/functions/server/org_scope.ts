@@ -22,14 +22,11 @@
 
 import type { Context } from "npm:hono";
 import type { RbacUser, Role } from "./rbac_middleware.ts";
+import { PLATFORM_RESOLVED_ROLES } from "./rbac_middleware.ts";
 import * as filterStatsCache from "./memory_cache.ts";
 
-// Platform roles that bypass org scoping (they see all orgs)
-const PLATFORM_ROLES: Set<Role> = new Set([
-  'platform_owner',
-  'platform_support',
-  'platform_analyst',
-]);
+// Platform roles that bypass org scoping (they see all orgs) — SoT: rbac_middleware
+const PLATFORM_ROLES: Set<Role> = new Set(PLATFORM_RESOLVED_ROLES);
 
 // Logging configuration
 const LOG_FILTER_STATS = true;  // Enable detailed filter logging

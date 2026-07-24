@@ -1027,7 +1027,7 @@ export const api = {
 
   async getIntegrityMetrics() {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/analytics/integrity-metrics`, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: await getHeaders(null),
     });
     if (!response.ok) throw new Error("Failed to fetch integrity metrics");
     return response.json();
@@ -1301,7 +1301,7 @@ export const api = {
   async runEvidenceBridgeStressTest(vehicleId: string) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/stress-test-evidence-bridge`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${publicAnonKey}`, 'Content-Type': 'application/json' },
+        headers: await getHeaders(),
         body: JSON.stringify({ vehicleId })
     });
     if (!response.ok) throw new Error("Stress test failed");
@@ -1311,10 +1311,21 @@ export const api = {
   async verifyRecordForensics(recordId: string) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/verify-record-forensics`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${publicAnonKey}`, 'Content-Type': 'application/json' },
+        headers: await getHeaders(),
         body: JSON.stringify({ recordId })
     });
     if (!response.ok) throw new Error("Forensic verification failed");
+    return response.json();
+  },
+
+  /** Phase 2: dry-run or live HMAC re-sign of fuel_entry signatures (platform staff). */
+  async backfillHmacSignatures(opts?: { dryRun?: boolean; limit?: number }) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/backfill-hmac-signatures`, {
+        method: 'POST',
+        headers: await getHeaders(),
+        body: JSON.stringify({ dryRun: opts?.dryRun !== false, limit: opts?.limit }),
+    });
+    if (!response.ok) throw new Error("HMAC signature backfill failed");
     return response.json();
   },
 

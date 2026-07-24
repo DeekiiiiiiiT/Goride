@@ -20,6 +20,7 @@ import { Buffer } from "node:buffer";
 import {
   requireAuth,
   requirePermission,
+  requirePlatformStaff,
   hasPermission,
   hasPlatformStaffAccess,
   hasPlatformOwnerAccess,
@@ -935,8 +936,8 @@ app.get("/make-server-37f42386/vehicles/:id/tank-status", requireAuth(), async (
     }
 });
 
-// --- FUEL AUDIT DASHBOARD (Phase 6) ---
-app.get("/make-server-37f42386/admin/fuel-audit/summary", async (c) => {
+// --- FUEL AUDIT DASHBOARD (Phase 6) — platform staff only (Evidence Bridge Phase 0) ---
+app.get("/make-server-37f42386/admin/fuel-audit/summary", requireAuth({ strict: true }), requirePlatformStaff(), async (c) => {
     try {
         const { data: txData } = await supabase
             .from("kv_store_37f42386")
@@ -961,7 +962,7 @@ app.get("/make-server-37f42386/admin/fuel-audit/summary", async (c) => {
     }
 });
 
-app.get("/make-server-37f42386/admin/fuel-audit/flagged", async (c) => {
+app.get("/make-server-37f42386/admin/fuel-audit/flagged", requireAuth({ strict: true }), requirePlatformStaff(), async (c) => {
     try {
         const { data: txData } = await supabase
             .from("kv_store_37f42386")
@@ -984,7 +985,7 @@ app.get("/make-server-37f42386/admin/fuel-audit/flagged", async (c) => {
     }
 });
 
-app.post("/make-server-37f42386/admin/fuel-audit/resolve", async (c) => {
+app.post("/make-server-37f42386/admin/fuel-audit/resolve", requireAuth({ strict: true }), requirePlatformStaff(), async (c) => {
     try {
         const { transactionId, status, note } = await c.req.json();
         const tx = await kv.get(`transaction:${transactionId}`);
@@ -1005,7 +1006,7 @@ app.post("/make-server-37f42386/admin/fuel-audit/resolve", async (c) => {
 });
 
 // Phase 3: Recalculate All History (Logic: 100% Reset / 105% Anomaly)
-app.post("/make-server-37f42386/admin/fuel-audit/recalculate-all", async (c) => {
+app.post("/make-server-37f42386/admin/fuel-audit/recalculate-all", requireAuth({ strict: true }), requirePlatformStaff(), async (c) => {
     try {
         console.log("[Recalculate] Starting full history recalculation (98% soft-anchor spine)...");
 
@@ -1903,7 +1904,7 @@ app.get("/make-server-37f42386/dashboard/init", requireAuth(), async (c) => {
   }
 });
 
-// Dashboard Stats Endpoint (Aggregated) - Optimized
+// Dashboard Stats Endpoint (Aggregated) - Optimized; org-scoped (Evidence Bridge Phase 0)
 app.get("/make-server-37f42386/dashboard/stats", requireAuth(), async (c) => {
   try {
     const fleetTz = await getFleetTimezone();
@@ -1916,24 +1917,30 @@ app.get("/make-server-37f42386/dashboard/stats", requireAuth(), async (c) => {
 
     const { data: tripData, error: tripError } = await supabase
         .from("kv_store_37f42386")
-        .select("value->amount, value->driverId, value->status, value->date, value->requestTime")
+        .select("value->amount, value->driverId, value->status, value->date, value->requestTime, value->organizationId")
         .like("key", "trip:%")
         .or(`value->>date.gte.${windowStartISO},value->>requestTime.gte.${windowStartISO}`)
         .or(`value->>date.lte.${todayEndISO},value->>requestTime.lte.${todayEndISO}`);
 
     if (tripError) throw tripError;
 
-    // Get active drivers count directly
-    const { count: activeDriverCount, error: driverError } = await supabase
+    // Active drivers — fetch values so filterByOrg can scope (head count is cross-tenant)
+    const { data: driverData, error: driverError } = await supabase
         .from("kv_store_37f42386")
-        .select("*", { count: 'exact', head: true })
+        .select("value")
         .like("key", "driver:%")
         .eq("value->>status", "active");
 
     if (driverError) throw driverError;
     
     // Note: When selecting JSON fields directly (value->field), PostgREST returns them as flat keys
-    const trips = tripData || [];
+    const trips = filterByOrg((tripData || []) as Record<string, unknown>[], c, { endpoint: "/dashboard/stats" });
+    const activeDriversScoped = filterByOrg(
+      (driverData || []).map((d: any) => d.value).filter(Boolean) as Record<string, unknown>[],
+      c,
+      { endpoint: "/dashboard/stats/drivers" },
+    );
+    const activeDriverCount = activeDriversScoped.length;
     
     let revenueToday = 0;
     let tripsTodayCount = 0;
@@ -1950,8 +1957,8 @@ app.get("/make-server-37f42386/dashboard/stats", requireAuth(), async (c) => {
         activeDriverIds.add(driverId);
     });
 
-    const activeDrivers = activeDriverIds.size > 0 ? activeDriverIds.size : (activeDriverCount || 0);
-    const finalActiveDrivers = activeDriverCount || 0;
+    const activeDrivers = activeDriverIds.size > 0 ? activeDriverIds.size : activeDriverCount;
+    const finalActiveDrivers = activeDriverCount;
     const efficiency = finalActiveDrivers > 0 ? Math.round((activeDrivers / finalActiveDrivers) * 100) : 0;
 
     return c.json({
@@ -4811,6 +4818,10 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
       const allDriverIdsCanon: string[] = [driverId];
       try {
         const driverRecord = await kv.get(`driver:${driverId}`);
+        // Evidence Bridge Phase 0: IDOR — refuse cross-org driver financial overview
+        if (driverRecord && !belongsToOrg(driverRecord as Record<string, unknown>, c)) {
+          return c.json({ error: "Forbidden" }, 403);
+        }
         if (driverRecord) {
           if (driverRecord.uberDriverId) allDriverIdsCanon.push(driverRecord.uberDriverId);
           if (driverRecord.inDriveDriverId) allDriverIdsCanon.push(driverRecord.inDriveDriverId);
@@ -14693,8 +14704,8 @@ app.get("/make-server-37f42386/admin-check", async (c) => {
   }
 });
 
-// GET /admin-stats — Summary counts for the admin dashboard cards
-app.get("/make-server-37f42386/admin-stats", async (c) => {
+// GET /admin-stats — Summary counts for the admin dashboard cards (platform staff only)
+app.get("/make-server-37f42386/admin-stats", requireAuth({ strict: true }), requirePlatformStaff(), async (c) => {
   try {
     let customerCount = 0;
     let enterpriseCustomerCount = 0;

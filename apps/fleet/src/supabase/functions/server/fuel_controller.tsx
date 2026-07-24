@@ -1,6 +1,6 @@
 ﻿import { Hono } from "npm:hono";
 import type { Context } from "npm:hono";
-import { requireAuth, requirePermission, type RbacUser } from "./rbac_middleware.ts";
+import { requireAuth, requirePermission, requirePlatformStaff, type RbacUser } from "./rbac_middleware.ts";
 import { appendCanonicalFuelExpenseIfEligible } from "./canonical_from_ops.ts";
 import { deleteCanonicalLedgerBySource, canonicalEventExistsByIdemKey } from "./ledger_canonical.ts";
 import {
@@ -1389,13 +1389,7 @@ app.patch(`${BASE_PATH}/transactions/:id/lock`, async (c) => {
 });
 
 // --- CRYPTOGRAPHIC UTILS ---
-async function signRecord(record: any): Promise<string> {
-    const { signature, ...rest } = record; // Exclude existing signature
-    const data = new TextEncoder().encode(JSON.stringify(rest));
-    const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
-}
+// Signing: auditLogic.generateRecordHash (HMAC-SHA256). Legacy bare SHA-256 signRecord removed (Phase 2).
 
 /**
  * STATION GATE RELEASE: When admin promotes a learnt location, release any
@@ -1697,13 +1691,13 @@ async function ensureFuelEntryLinkedToTransaction(tx: any, station: any): Promis
             isHighlyTrusted: confidence.isHighlyTrusted,
         };
 
-        updated.signature = await signRecord(updated);
+        updated.signature = await auditLogic.generateRecordHash(updated);
         await kv.set(`fuel_entry:${existing.id}`, updated);
         await syncLinkedExpenseTransaction(updated);
 
         if (!tx.metadata?.fuelEntryId || tx.metadata.fuelEntryId !== existing.id) {
             tx.metadata = { ...tx.metadata, fuelEntryId: existing.id };
-            tx.signature = await signRecord(tx);
+            tx.signature = await auditLogic.generateRecordHash(tx);
             tx.signedAt = new Date().toISOString();
             await kv.set(`transaction:${tx.id}`, tx);
         }
@@ -1765,11 +1759,11 @@ async function ensureFuelEntryLinkedToTransaction(tx: any, station: any): Promis
         isHighlyTrusted: confidence.isHighlyTrusted,
     };
 
-    fuelEntry.signature = await signRecord(fuelEntry);
+    fuelEntry.signature = await auditLogic.generateRecordHash(fuelEntry);
     await kv.set(`fuel_entry:${fuelEntryId}`, fuelEntry);
 
     tx.metadata = { ...tx.metadata, fuelEntryId: fuelEntryId };
-    tx.signature = await signRecord(tx);
+    tx.signature = await auditLogic.generateRecordHash(tx);
     tx.signedAt = new Date().toISOString();
     await kv.set(`transaction:${tx.id}`, tx);
     await syncLinkedExpenseTransaction(fuelEntry);
@@ -2223,7 +2217,7 @@ async function linkOrphanEntriesToStation(
                 verificationMethod: 'learnt_promote_handshake',
                 matchedStationId: stationId,
             };
-            entry.signature = await signRecord(entry);
+            entry.signature = await auditLogic.generateRecordHash(entry);
             entry.signedAt = new Date().toISOString();
             await kv.set(`fuel_entry:${entry.id}`, entry);
             linkedIds.add(entry.id);
@@ -2257,7 +2251,7 @@ async function linkOrphanEntriesToStation(
                     matchedStationId: stationId,
                     matchDistance: Math.round(dist),
                 };
-                entry.signature = await signRecord(entry);
+                entry.signature = await auditLogic.generateRecordHash(entry);
                 entry.signedAt = new Date().toISOString();
                 await kv.set(`fuel_entry:${entry.id}`, entry);
                 linkedIds.add(entry.id);
@@ -2439,7 +2433,7 @@ async function cleanupResolvedLearntLocations(
                                 verificationMethod: 'auto_cleanup_geofence',
                                 matchedStationId: station.id,
                             };
-                            entry.signature = await signRecord(entry);
+                            entry.signature = await auditLogic.generateRecordHash(entry);
                             entry.signedAt = new Date().toISOString();
                             await kv.set(`fuel_entry:${entry.id}`, entry);
                             console.log(`[Auto-Cleanup] Linked orphan entry ${entry.id} â†’ station ${station.id} (${station.name})`);
@@ -2507,8 +2501,8 @@ async function cleanupResolvedLearntLocations(
     return { cleaned: details.length, details };
 }
 
-// 4. Integrity Gap Metrics (Optimized: parallel Supabase queries instead of getByPrefix)
-app.get(`${BASE_PATH}/analytics/integrity-metrics`, async (c) => {
+// 4. Integrity Gap Metrics — platform staff only; cross-org intentional (Dominion)
+app.get(`${BASE_PATH}/analytics/integrity-metrics`, requirePlatformStaff(), async (c) => {
     try {
         // Run queries in parallel for speed
         const [entriesResult, verifiedResult, stationsResult] = await Promise.all([
@@ -3333,7 +3327,7 @@ app.post(`${BASE_PATH}/admin/reconcile-ledger-orphans`, async (c) => {
                 };
 
                 // Phase 5: Cryptographic Guardrail - Sign historical reconciliation
-                entry.signature = await signRecord(entry);
+                entry.signature = await auditLogic.generateRecordHash(entry);
                 entry.signedAt = new Date().toISOString();
 
                 await kv.set(`fuel_entry:${entry.id}`, entry);
@@ -3680,8 +3674,8 @@ app.post(`${BASE_PATH}/admin/bulk-assign-station`, async (c) => {
             };
             delete entry.metadata.ambiguityReason;
 
-            // 5d. Re-sign with SHA-256 (cryptographic chain-of-custody)
-            entry.signature = await signRecord(entry);
+            // 5d. Re-sign with HMAC (cryptographic chain-of-custody)
+            entry.signature = await auditLogic.generateRecordHash(entry);
             entry.signedAt = new Date().toISOString();
 
             // 5e. Persist to KV
@@ -4565,13 +4559,13 @@ app.post(`${BASE_PATH}/geo/reverse-geocode`, async (c) => {
 // --- PHASE 9: ENTERPRISE GOVERNANCE & STRESS TESTING ---
 
 /**
- * Step 9.3: Evidence Bridge Stress Test
- * Simulates GPS drift and signal loss across a batch of transactions.
+ * Step 9.3: Evidence Bridge Stress Test (simulation only — not a real pipeline).
+ * Platform staff only. Dominion UI removes the pressure-test CTA; endpoint retained for ops.
  */
-app.post(`${BASE_PATH}/admin/stress-test-evidence-bridge`, async (c) => {
+app.post(`${BASE_PATH}/admin/stress-test-evidence-bridge`, requirePlatformStaff(), async (c) => {
     try {
         const { vehicleId, iterations = 10, driftSeverity = 0.5 } = await c.req.json().catch(() => ({}));
-        console.log(`[StressTest] Launching Evidence Bridge Pressure Test (${iterations} cycles)...`);
+        console.log(`[StressTest] Simulation-only Evidence Bridge pressure test (${iterations} cycles)...`);
 
         const vehicle = await kv.get(`vehicle:${vehicleId}`);
         if (!vehicle) throw new Error("Target vehicle required for stress test");
@@ -4608,18 +4602,15 @@ app.post(`${BASE_PATH}/admin/stress-test-evidence-bridge`, async (c) => {
                 metadata: { isStressTest: true, iteration: i }
             };
 
-            // Process through the standard pipeline
-            // Note: In a real system, we'd call the POST /fuel-entries internally
-            // For the mock, we'll just simulate the response or trigger the logic
+            // In-memory simulation only — does not write to ledger or run signing/detection
             results.push(testEntry);
         }
 
-        // We don't save stress test data to the main ledger unless requested, 
-        // but we'll return the forensic results
         return c.json({ 
-            success: true, 
+            success: true,
+            simulationOnly: true,
             iterations, 
-            message: "Evidence Bridge Stress Test Complete. Analysis of spatial drift and spoof detection is available in the Audit Console.",
+            message: "Simulation only: no ledger writes and no real detection pipeline ran. Do not treat this as a validation of Evidence Bridge.",
             results: results.length 
         });
     } catch (e: any) {
@@ -4628,10 +4619,9 @@ app.post(`${BASE_PATH}/admin/stress-test-evidence-bridge`, async (c) => {
 });
 
 /**
- * Step 9.2: Forensic Integrity Verification
- * Deep check of cryptographic binding vs physical data.
+ * Step 9.2: Forensic Integrity Verification — platform staff only (cross-org intentional).
  */
-app.post(`${BASE_PATH}/admin/verify-record-forensics`, async (c) => {
+app.post(`${BASE_PATH}/admin/verify-record-forensics`, requirePlatformStaff(), async (c) => {
     try {
         const { recordId } = await c.req.json();
         const record = await kv.get(`fuel_entry:${recordId}`);
@@ -4662,7 +4652,7 @@ app.post(`${BASE_PATH}/admin/verify-record-forensics`, async (c) => {
         return c.json({
             verified: isValid,
             auditTrail: {
-                cryptographic: isValid ? 'Valid (SHA-256 Match)' : 'Tampered (Signature Mismatch)',
+                cryptographic: isValid ? 'Valid (HMAC Match)' : 'Tampered (Signature Mismatch)',
                 physical: isPhysicallyPlausible ? 'Plausible' : 'Highly Suspicious (Extreme Drift)',
                 behavioral: isEfficiencyPlausible ? 'Consistent' : 'Anomalous (High Variance)'
             },
@@ -4672,6 +4662,94 @@ app.post(`${BASE_PATH}/admin/verify-record-forensics`, async (c) => {
         return c.json({ error: e.message }, 500);
     }
 });
+
+/**
+ * Phase 2: Re-sign fuel entries from legacy bare SHA-256 onto HMAC-SHA256.
+ * dryRun:true (default) counts mismatches; dryRun:false writes new signatures.
+ */
+app.post(`${BASE_PATH}/admin/backfill-hmac-signatures`, requirePlatformStaff(), async (c) => {
+    try {
+        const body = await c.req.json().catch(() => ({}));
+        const dryRun = body.dryRun !== false; // default true — safe
+        const limit = Math.min(Number(body.limit) || 5000, 20000);
+
+        console.log(`[HmacBackfill] Starting ${dryRun ? "DRY RUN" : "LIVE"} (limit=${limit})`);
+
+        const { data, error } = await supabase
+            .from("kv_store_37f42386")
+            .select("key, value")
+            .like("key", "fuel_entry:%")
+            .limit(limit);
+
+        if (error) throw error;
+
+        const rows = data || [];
+        const sampleNeedsResign: string[] = [];
+        let examined = 0;
+        let alreadyHmac = 0;
+        let unsigned = 0;
+        let needsResign = 0;
+        let updated = 0;
+        let errors: string[] = [];
+
+        for (const row of rows) {
+            examined++;
+            const entry = row.value as any;
+            if (!entry || typeof entry !== "object") continue;
+            if (!entry.signature) {
+                unsigned++;
+                continue;
+            }
+            let matches = false;
+            try {
+                matches = await auditLogic.verifyRecordIntegrity(entry, entry.signature);
+            } catch (verifyErr: any) {
+                errors.push(`${entry.id || row.key}: verify failed — ${verifyErr.message}`);
+                continue;
+            }
+            if (matches) {
+                alreadyHmac++;
+                continue;
+            }
+            needsResign++;
+            if (sampleNeedsResign.length < 20) {
+                sampleNeedsResign.push(String(entry.id || row.key));
+            }
+            if (!dryRun) {
+                try {
+                    entry.signature = await auditLogic.generateRecordHash(entry);
+                    entry.signedAt = new Date().toISOString();
+                    entry.metadata = {
+                        ...(entry.metadata || {}),
+                        hmacBackfilledAt: entry.signedAt,
+                    };
+                    await kv.set(row.key, entry);
+                    updated++;
+                } catch (writeErr: any) {
+                    errors.push(`${entry.id || row.key}: write failed — ${writeErr.message}`);
+                }
+            }
+        }
+
+        return c.json({
+            success: true,
+            dryRun,
+            examined,
+            unsigned,
+            alreadyHmac,
+            needsResign,
+            updated: dryRun ? 0 : updated,
+            sampleNeedsResign,
+            errors: errors.slice(0, 25),
+            message: dryRun
+                ? `Dry run: ${needsResign} of ${examined} fuel entries need HMAC re-sign. Set dryRun:false to apply.`
+                : `Live: re-signed ${updated} of ${needsResign} entries needing HMAC.`,
+        });
+    } catch (e: any) {
+        return c.json({ error: e.message }, 500);
+    }
+});
+
 app.post(`${BASE_PATH}/stations/migrate-status`, async (c) => {
     try {
         const stations = await kv.getByPrefix("station:");

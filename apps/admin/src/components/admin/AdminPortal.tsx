@@ -41,6 +41,7 @@ import { MerchantVerificationManager } from './roam-dash/MerchantVerificationMan
 import { GlobalIdentitySearch } from './platform/GlobalIdentitySearch';
 import { MatchingBrainPage } from './matching-brain/MatchingBrainPage';
 import { FuelBrainPage } from './fuel-brain/FuelBrainPage';
+import { EvidenceBridgeAnalytics } from './fuel-evidence-bridge/EvidenceBridgeAnalytics';
 import { TollBrainPage } from './toll-brain/TollBrainPage';
 import { DriverUsersPage } from './product-users/DriverUsersPage';
 import { DriverUserDetailPage } from './product-users/DriverUserDetailPage';
@@ -244,6 +245,11 @@ export function AdminPortal() {
       {currentPage === 'fuel-analytics' && (
         <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px]">
           <GasStationAnalytics logs={fuelLogs} loading={fuelLoading} onRequestRefresh={loadFuelLogs} />
+        </div>
+      )}
+      {currentPage === 'fuel-evidence-bridge' && (
+        <div className="bg-white rounded-xl shadow-sm overflow-hidden min-h-[600px] p-6 dark:bg-card">
+          <EvidenceBridgeAnalytics />
         </div>
       )}
       {currentPage === 'toll-brain' && (

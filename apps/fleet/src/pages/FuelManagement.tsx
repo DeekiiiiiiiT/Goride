@@ -33,7 +33,6 @@ import { format } from 'date-fns';
 import { DisputeResolutionModal } from '../components/fuel/DisputeResolutionModal';
 import { FuelReimbursementTable } from '../components/fuel/FuelReimbursementTable';
 import { SubmitExpenseModal } from '../components/fuel/SubmitExpenseModal';
-import { IntegrityGapDashboard } from '../components/fuel/IntegrityGapDashboard';
 import { useFuelAnchors } from '../hooks/useFuelAnchors';
 import { fuelService } from '../services/fuelService';
 import { settlementService } from '../services/settlementService';
@@ -972,9 +971,6 @@ function FuelManagementInner({ defaultTab = 'dashboard', onViewDriverLedger, onT
   if (activeTab === 'dashboard') {
       pageTitle = "Fleet Integrity Overview";
       pageDescription = "Track consumption, reconcile expenses, and manage gas cards.";
-  } else if (activeTab === 'integrity-gap') {
-      pageTitle = "Evidence Bridge Analytics";
-      pageDescription = "Forensic analysis of spatial accuracy, cryptographic binding, and systemic drift.";
   } else if (activeTab === 'reconciliation') {
       pageTitle = "Consumption Reconciliation";
       pageDescription = "Compare actual gas card charges against estimated operating costs.";
@@ -1101,10 +1097,6 @@ function FuelManagementInner({ defaultTab = 'dashboard', onViewDriverLedger, onT
                   toast.info('Opening Transaction Logs…');
               }}
           />
-      )}
-
-      {activeTab === 'integrity-gap' && (
-          <IntegrityGapDashboard />
       )}
 
       {activeTab === 'reconciliation' && (

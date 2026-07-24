@@ -85,6 +85,18 @@ const PLATFORM_RAW_ROLES = [
   'superadmin', 'platform_owner', 'platform_support', 'platform_analyst',
 ] as const;
 
+/** Canonical resolved platform staff roles — single source of truth for org bypass + staff gates. */
+export const PLATFORM_RESOLVED_ROLES: ReadonlySet<Role> = new Set([
+  'platform_owner',
+  'platform_support',
+  'platform_analyst',
+]);
+
+/** Raw JWT role strings treated as platform staff (includes legacy `superadmin`). */
+export const PLATFORM_STAFF_RAW_ROLES: ReadonlySet<string> = new Set([
+  ...PLATFORM_RAW_ROLES,
+]);
+
 function readRolesArray(meta: Record<string, unknown> | undefined): string[] {
   const raw = meta?.roles;
   if (!Array.isArray(raw)) return [];
@@ -141,13 +153,8 @@ function resolveOrganizationId(
 }
 
 export function hasPlatformStaffAccess(user: RbacUser): boolean {
-  return user.resolvedRole === 'platform_owner'
-    || user.resolvedRole === 'platform_support'
-    || user.resolvedRole === 'platform_analyst'
-    || user.rawRole === 'superadmin'
-    || user.rawRole === 'platform_owner'
-    || user.rawRole === 'platform_support'
-    || user.rawRole === 'platform_analyst';
+  return PLATFORM_RESOLVED_ROLES.has(user.resolvedRole)
+    || PLATFORM_STAFF_RAW_ROLES.has(user.rawRole);
 }
 
 /** Platform owner / superadmin only — full delete and other destructive platform ops. */
@@ -531,7 +538,7 @@ export function requireRole(minimumLevel: number) {
 //
 // Wave 5 DRY: Replaces byte-identical checks in part_sourcing_routes,
 // maintenance_routes, pending_vehicle_catalog_routes.
-// Requires platform_owner, platform_support, or superadmin.
+// Requires platform_owner, platform_support, platform_analyst, or legacy superadmin.
 // ---------------------------------------------------------------------------
 
 export function requirePlatformStaff() {
@@ -546,7 +553,7 @@ export function requirePlatformStaff() {
       console.log(`[RBAC] PLATFORM_STAFF: User ${user.userId} (role=${user.resolvedRole}) denied platform staff access`);
       return c.json({
         error: 'Forbidden',
-        message: 'Only platform owner or support can access this resource.',
+        message: 'Only platform staff (owner, support, or analyst) can access this resource.',
         currentRole: user.resolvedRole,
       }, 403);
     }
@@ -572,7 +579,7 @@ export function assertPlatformStaffResponse(c: Context): Response | null {
     console.log(`[RBAC] PLATFORM_STAFF: User ${user.userId} (role=${user.resolvedRole}) denied platform staff access`);
     return c.json({
       error: 'Forbidden',
-      message: 'Only platform owner or support can access this resource.',
+      message: 'Only platform staff (owner, support, or analyst) can access this resource.',
     }, 403) as unknown as Response;
   }
   return null;

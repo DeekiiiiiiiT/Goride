@@ -490,13 +490,12 @@ function AppContent() {
           </PermissionGate>
         )}
         
-        {['fuel-management', 'fuel-overview', 'fuel-reconciliation', 'fuel-cards', 'fuel-logs', 'fuel-configuration', 'fuel-reimbursements', 'fuel-integrity-gap'].includes(currentPage) && (
+        {['fuel-management', 'fuel-overview', 'fuel-reconciliation', 'fuel-cards', 'fuel-logs', 'fuel-configuration', 'fuel-reimbursements'].includes(currentPage) && (
           <PermissionGate permission={PAGE_PERMISSION_MAP[currentPage] || 'nav.fuel_overview'} onNavigate={setCurrentPage}>
             <FuelManagement 
                 defaultTab={
                     currentPage === 'fuel-reconciliation' ? 'reconciliation' :
                     currentPage === 'fuel-reimbursements' ? 'reimbursements' :
-                    currentPage === 'fuel-integrity-gap' ? 'integrity-gap' :
                     currentPage === 'fuel-cards' ? 'cards' :
                     currentPage === 'fuel-logs' ? 'logs' :
                     currentPage === 'fuel-configuration' ? 'configuration' :

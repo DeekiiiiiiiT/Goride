@@ -48,7 +48,6 @@ const FUEL_PAGE_IDS = [
   'fuel-logs',
   'fuel-configuration',
   'fuel-reimbursements',
-  'fuel-integrity-gap',
 ];
 const TOLL_PAGE_IDS = ['toll-logs', 'toll-tags', 'tag-inventory', 'toll-analytics'];
 
@@ -76,7 +75,6 @@ export function AppSidebar({
     isModuleEnabled('fuelManagement') &&
     (canView('fuel-overview') ||
       canView('fuel-reimbursements') ||
-      canView('fuel-integrity-gap') ||
       canView('fuel-reconciliation') ||
       canView('fuel-cards') ||
       canView('fuel-logs') ||
@@ -148,15 +146,6 @@ export function AppSidebar({
     canView('fuel-reimbursements') && {
       id: 'fuel-reimbursements',
       label: 'Review Queue',
-    },
-    canView('fuel-integrity-gap') && {
-      id: 'fuel-integrity-gap',
-      label: 'Integrity Gap',
-      badge: (
-        <Badge className="h-4 border-none bg-emerald-500 px-1 text-[8px] text-white">
-          PRO
-        </Badge>
-      ),
     },
     canView('fuel-reconciliation') && {
       id: 'fuel-reconciliation',

@@ -1298,26 +1298,6 @@ export const api = {
     return response.json();
   },
 
-  async runEvidenceBridgeStressTest(vehicleId: string) {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/stress-test-evidence-bridge`, {
-        method: 'POST',
-        headers: await requireAuthHeaders(),
-        body: JSON.stringify({ vehicleId })
-    });
-    if (!response.ok) throw new Error("Stress test failed");
-    return response.json();
-  },
-
-  async verifyRecordForensics(recordId: string) {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/verify-record-forensics`, {
-        method: 'POST',
-        headers: await requireAuthHeaders(),
-        body: JSON.stringify({ recordId })
-    });
-    if (!response.ok) throw new Error("Forensic verification failed");
-    return response.json();
-  },
-
   // --- Synchronization Helpers (Phase 1) ---
   async getLinkedFuelEntry(idOrTransactionId: string): Promise<any | null> {
     if (!idOrTransactionId) return null;

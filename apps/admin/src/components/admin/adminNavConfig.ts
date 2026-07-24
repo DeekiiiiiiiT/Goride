@@ -33,6 +33,7 @@ import {
   Store,
   Brain,
   Layers,
+  ShieldCheck,
 } from 'lucide-react';
 
 export type NavChild = {
@@ -94,6 +95,7 @@ export const FUEL_MANAGEMENT_CHILDREN: NavChild[] = [
   { id: 'fuel-brain', label: 'Fuel Brain', icon: Brain },
   { id: 'fuel-stations', label: 'Station Database', icon: Database },
   { id: 'fuel-analytics', label: 'Fuel Analytics', icon: BarChart3 },
+  { id: 'fuel-evidence-bridge', label: 'Evidence Bridge', icon: ShieldCheck },
 ];
 
 export const TOLL_MANAGEMENT_CHILDREN: NavChild[] = [
@@ -187,6 +189,7 @@ const SHARED_PLATFORM_PAGES = [
   'fuel-brain',
   'fuel-stations',
   'fuel-analytics',
+  'fuel-evidence-bridge',
   'toll-brain',
   'toll-stations',
   'toll-info',
@@ -222,6 +225,7 @@ export const PLATFORM_ROLE_PAGES: Record<string, string[]> = {
   platform_support: [...SHARED_PLATFORM_PAGES],
   platform_analyst: [
     'dashboard',
+    'fuel-evidence-bridge',
     'api-center',
     'api-center-overview',
     'api-center-usage',

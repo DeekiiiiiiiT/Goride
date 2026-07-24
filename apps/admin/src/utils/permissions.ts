@@ -536,6 +536,7 @@ export const PAGE_PERMISSIONS: Record<string, DominionPageSensitivity> = {
   'fuel-brain': 'standard',
   'fuel-stations': 'standard',
   'fuel-analytics': 'standard',
+  'fuel-evidence-bridge': 'standard',
   'vendor-database': 'standard',
   'pending-vendor-requests': 'standard',
   'expense-categories': 'standard',

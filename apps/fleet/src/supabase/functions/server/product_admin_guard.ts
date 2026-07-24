@@ -3,14 +3,12 @@
  */
 import { createClient } from "npm:@supabase/supabase-js@2";
 import type { ProductLine } from "./product_line.ts";
+import { PLATFORM_STAFF_RAW_ROLES } from "./rbac_middleware.ts";
 
 export type FleetProductKey = "fleet" | "enterprise" | "dash" | "rides" | "driver" | "haul";
 
-const PLATFORM_ROLES = new Set([
-  "platform_owner",
-  "platform_support",
-  "superadmin",
-]);
+/** Platform staff raw roles — SoT from rbac_middleware (includes analyst + legacy superadmin). */
+const PLATFORM_ROLES = PLATFORM_STAFF_RAW_ROLES;
 
 const PRODUCT_ADMIN_ROLES: Record<FleetProductKey, Set<string>> = {
   fleet: new Set([...PLATFORM_ROLES, "fleet_admin", "fleet_ops"]),
