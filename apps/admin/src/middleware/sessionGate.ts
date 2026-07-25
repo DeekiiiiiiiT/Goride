@@ -1,5 +1,5 @@
 /**
- * Client companion to Vercel Edge Middleware (apps/*/middleware.js).
+ * Client companion to Vercel Edge Middleware (apps/<app>/middleware.js).
  * Edge checks sb-*-auth-token cookies; SPA auth today is mostly localStorage,
  * so AuthProvider remains authoritative — this helper shares path rules.
  */
