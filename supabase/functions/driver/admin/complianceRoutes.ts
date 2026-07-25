@@ -19,6 +19,7 @@ import {
 import {
   requireWrite,
 } from "./permissions.ts";
+import { PRIVATE_LIST_CACHE } from "../../_shared/cacheControl.ts";
 
 interface Deps {
   svc: () => SupabaseClient;
@@ -234,6 +235,7 @@ export function registerComplianceRoutes(admin: Hono, deps: Deps) {
       };
     });
 
+    c.header("Cache-Control", PRIVATE_LIST_CACHE);
     return c.json({ drivers: paginated, total, limit, offset });
   });
 

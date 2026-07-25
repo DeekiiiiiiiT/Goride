@@ -118,26 +118,32 @@ export async function runMatchingWave(
   const timeoutSec = ride.driver_offer_timeout_seconds ?? policy.default_driver_offer_timeout_seconds;
 
   const freshSince = new Date(Date.now() - driverLocationMaxAgeMs(policy)).toISOString();
-  const locations = await loadAvailableDriverLocations(freshSince);
-
   const serviceSlug = (ride.vehicle_option ?? "").trim().toLowerCase();
-  let allowedBodySlugs = new Set<string>();
-  let tiersCount = 0;
 
-  if (serviceSlug && policy.body_type_filtering_enabled) {
-    try {
-      const { db: adminDb, tables } = await getRidesAdminDb();
-      const tiers = await loadServiceBodyTypeTiers(adminDb, tables, serviceSlug);
-      tiersCount = tiers.length;
-      if (tiersCount > 0) {
-        allowedBodySlugs = allowedBodySlugsForWave(tiers, wave, policy.body_type_tier_mode);
+  // Independent: driver locations, body-type tiers, excluded prior offers
+  const [locations, tierResult, excludedIds] = await Promise.all([
+    loadAvailableDriverLocations(freshSince),
+    (async (): Promise<{ allowedBodySlugs: Set<string>; tiersCount: number }> => {
+      if (!serviceSlug || !policy.body_type_filtering_enabled) {
+        return { allowedBodySlugs: new Set(), tiersCount: 0 };
       }
-    } catch {
-      allowedBodySlugs = new Set();
-    }
-  }
+      try {
+        const { db: adminDb, tables } = await getRidesAdminDb();
+        const tiers = await loadServiceBodyTypeTiers(adminDb, tables, serviceSlug);
+        const tiersCount = tiers.length;
+        if (tiersCount === 0) return { allowedBodySlugs: new Set(), tiersCount: 0 };
+        return {
+          allowedBodySlugs: allowedBodySlugsForWave(tiers, wave, policy.body_type_tier_mode),
+          tiersCount,
+        };
+      } catch {
+        return { allowedBodySlugs: new Set(), tiersCount: 0 };
+      }
+    })(),
+    getExcludedDriverIds(rideId),
+  ]);
 
-  const excludedIds = await getExcludedDriverIds(rideId);
+  const { allowedBodySlugs, tiersCount } = tierResult;
   if (ride.assigned_driver_user_id) {
     excludedIds.add(String(ride.assigned_driver_user_id));
   }

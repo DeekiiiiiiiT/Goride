@@ -12,6 +12,7 @@
     "@roam/types": "workspace:*",
     "@roam/toll-ui": "workspace:*",
     "@roam/ui": "workspace:*",
+    "@roam/roam-shared": "workspace:*",
     "@roam/api-client": "workspace:*",
     "@roam/auth-client": "workspace:*",
     "@roam/business-config": "workspace:*",

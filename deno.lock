@@ -546,6 +546,13 @@
           ]
         }
       },
+      "packages/roam-shared": {
+        "packageJson": {
+          "dependencies": [
+            "npm:lucide-react@0.487"
+          ]
+        }
+      },
       "packages/toll-ui": {
         "packageJson": {
           "dependencies": [

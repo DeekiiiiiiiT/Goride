@@ -2,7 +2,7 @@
  * Identity service — RBAC permissions API.
  */
 import { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
-import { cors } from "https://deno.land/x/hono@v4.3.11/middleware.ts";
+import { applyCors } from "../_shared/corsAllowlist.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
   dbUserMaxRoleLevel,
@@ -13,11 +13,10 @@ import { getJwtRoles, jwtPrimaryRole } from "../_shared/authEdge.ts";
 
 const app = new Hono().basePath("/identity");
 
-app.use("*", cors({
-  origin: "*",
+applyCors(app, {
   allowMethods: ["GET", "POST", "OPTIONS"],
   allowHeaders: ["Content-Type", "Authorization", "apikey", "x-client-info"],
-}));
+});
 
 function authClient(authHeader: string) {
   return createClient(

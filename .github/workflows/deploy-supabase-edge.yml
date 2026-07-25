@@ -71,3 +71,14 @@ jobs:
           deploy_with_retry send-sms
           deploy_with_retry rides
           deploy_with_retry driver
+          deploy_with_retry haul
+          deploy_with_retry toll-brain
+          deploy_with_retry fuel-brain
+          deploy_with_retry matching
+          deploy_with_retry identity
+          deploy_with_retry evidence-cleanup
+          deploy_with_retry petrojam-prices
+          deploy_with_retry fleet-ops
+          deploy_with_retry platform-catalog
+          deploy_with_retry before-user-created
+          deploy_with_retry custom-access-token

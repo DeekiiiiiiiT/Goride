@@ -425,9 +425,18 @@ export async function appendCanonicalLedgerEvents(
 
     const base = v.value;
     const idem = String(base.idempotencyKey);
-    const idemKvKey = `ledger_event_idem:${await sha256Hex(idem)}`;
+    const idemHash = await sha256Hex(idem);
+    const idemKvKey = `ledger_event_idem:${idemHash}`;
 
     try {
+      // Deterministic id from idempotency key — concurrent appends converge on one event
+      // instead of racing get→set with two random UUIDs (P1 audit race fix).
+      const id =
+        typeof base.id === "string" && (base.id as string).trim()
+          ? (base.id as string).trim()
+          : idemHash.slice(0, 8) + "-" + idemHash.slice(8, 12) + "-4" + idemHash.slice(13, 16) +
+            "-a" + idemHash.slice(17, 20) + "-" + idemHash.slice(20, 32);
+
       const existing = await kv.get(idemKvKey);
       if (existing && typeof existing === "object" && existing !== null && typeof (existing as any).id === "string") {
         skipped++;
@@ -435,10 +444,23 @@ export async function appendCanonicalLedgerEvents(
         continue;
       }
 
-      const id =
-        typeof base.id === "string" && (base.id as string).trim()
-          ? (base.id as string).trim()
-          : crypto.randomUUID();
+      // Claim idempotency slot first (PK on key). Concurrent loser will conflict on re-read.
+      const claimClient = supabaseKv();
+      const { error: claimErr } = await claimClient.from("kv_store_37f42386").insert({
+        key: idemKvKey,
+        value: { id, idempotencyKey: idem },
+      });
+      if (claimErr) {
+        // Unique violation → another writer won; treat as skip
+        const existingAfter = await kv.get(idemKvKey);
+        if (existingAfter && typeof existingAfter === "object" && (existingAfter as any).id) {
+          skipped++;
+          details.push({ index: i, idempotencyKey: idem, id: (existingAfter as any).id, skipped: true });
+          continue;
+        }
+        throw new Error(claimErr.message);
+      }
+
       const createdAt =
         typeof (rawEvents[i] as { createdAt?: string })?.createdAt === "string"
           ? String((rawEvents[i] as { createdAt?: string }).createdAt)
@@ -454,7 +476,6 @@ export async function appendCanonicalLedgerEvents(
 
       const stamped = stampOrg(record, c);
       await kv.set(`ledger_event:${id}`, stamped);
-      await kv.set(idemKvKey, { id, idempotencyKey: idem });
 
       inserted++;
       details.push({ index: i, idempotencyKey: idem, id });

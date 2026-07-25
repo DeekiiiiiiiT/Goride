@@ -23,6 +23,17 @@
     "deploy:edge": "npx supabase functions deploy make-server-37f42386 --use-api --project-ref csfllzzastacofsvcdsc",
     "deploy:delivery": "npx supabase functions deploy delivery --use-api --project-ref csfllzzastacofsvcdsc",
     "deploy:payments": "npx supabase functions deploy payments --use-api --project-ref csfllzzastacofsvcdsc",
+    "deploy:merchant-push": "npx supabase functions deploy merchant-push --use-api --project-ref csfllzzastacofsvcdsc",
+    "deploy:send-sms": "npx supabase functions deploy send-sms --use-api --project-ref csfllzzastacofsvcdsc",
+    "deploy:driver": "npx supabase functions deploy driver --use-api --project-ref csfllzzastacofsvcdsc",
+    "deploy:matching": "npx supabase functions deploy matching --use-api --project-ref csfllzzastacofsvcdsc",
+    "deploy:identity": "npx supabase functions deploy identity --use-api --project-ref csfllzzastacofsvcdsc",
+    "deploy:evidence-cleanup": "npx supabase functions deploy evidence-cleanup --use-api --project-ref csfllzzastacofsvcdsc",
+    "deploy:petrojam-prices": "npx supabase functions deploy petrojam-prices --use-api --project-ref csfllzzastacofsvcdsc",
+    "deploy:fleet-ops": "npx supabase functions deploy fleet-ops --use-api --project-ref csfllzzastacofsvcdsc",
+    "deploy:platform-catalog": "npx supabase functions deploy platform-catalog --use-api --project-ref csfllzzastacofsvcdsc",
+    "deploy:before-user-created": "npx supabase functions deploy before-user-created --use-api --project-ref csfllzzastacofsvcdsc",
+    "deploy:custom-access-token": "npx supabase functions deploy custom-access-token --use-api --project-ref csfllzzastacofsvcdsc",
     "dev:rides-passenger": "pnpm --filter @roam/rides-passenger dev",
     "build:rides-passenger": "pnpm --filter @roam/rides-passenger build",
     "dev:haul": "pnpm --filter @roam/haul dev",
@@ -38,7 +49,8 @@
     "deploy:rides": "npx supabase functions deploy rides --use-api --project-ref csfllzzastacofsvcdsc",
     "deploy:haul": "npx supabase functions deploy haul --use-api --project-ref csfllzzastacofsvcdsc",
     "deploy:toll-brain": "npx supabase functions deploy toll-brain --use-api --project-ref csfllzzastacofsvcdsc",
-    "deploy:fuel-brain": "npx supabase functions deploy fuel-brain --use-api --project-ref csfllzzastacofsvcdsc"
+    "deploy:fuel-brain": "npx supabase functions deploy fuel-brain --use-api --project-ref csfllzzastacofsvcdsc",
+    "deploy:functions:all": "pnpm deploy:edge && pnpm deploy:delivery && pnpm deploy:merchant-push && pnpm deploy:payments && pnpm deploy:send-sms && pnpm deploy:rides && pnpm deploy:driver && pnpm deploy:haul && pnpm deploy:toll-brain && pnpm deploy:fuel-brain && pnpm deploy:matching && pnpm deploy:identity && pnpm deploy:evidence-cleanup && pnpm deploy:petrojam-prices && pnpm deploy:fleet-ops && pnpm deploy:platform-catalog && pnpm deploy:before-user-created && pnpm deploy:custom-access-token"
   },
   "devDependencies": {
     "typescript": "^5.4.0"

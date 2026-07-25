@@ -9,7 +9,7 @@ import {
   canonicalOdometerFromMaps,
   parseNum,
   type OdometerSupplementMaps,
-} from "../../../utils/canonicalOdometerMath.ts";
+} from "../../../apps/fleet/src/utils/canonicalOdometerMath.ts";
 
 const KV_TABLE = "kv_store_37f42386";
 

@@ -407,6 +407,7 @@ export const PAGE_PERMISSION_MAP: Record<string, Permission> = {
 
   // Driver Operations
   'drivers':            'nav.drivers',
+  'driver-analytics':   'nav.drivers',
   'earnings-policy':    'nav.tier_config',
   // Bookmarks redirect to earnings-policy; map old id so permission checks don't flinch
   'tier-config':        'nav.tier_config',
@@ -419,9 +420,10 @@ export const PAGE_PERMISSION_MAP: Record<string, Permission> = {
   'maintenance-hub':    'nav.maintenance',
   'fleet':              'nav.fleet',
 
-  // Fuel Management
-  'fuel-management':    'nav.fuel_overview',
-  'fuel-overview':      'nav.fuel_overview',
+  // Fuel Management (overview retired → Fuel Analytics)
+  'fuel-management':    'nav.fuel_reports',
+  'fuel-overview':      'nav.fuel_reports',
+  'fuel-analytics':     'nav.fuel_reports',
   'fuel-reimbursements':'nav.fuel_review_queue',
   'fuel-integrity-gap': 'nav.fuel_integrity_gap',
   'fuel-reconciliation':'nav.fuel_reconciliation',

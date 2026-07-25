@@ -406,3 +406,6 @@ verify_jwt = false
 
 [functions.custom-access-token]
 verify_jwt = false
+
+[functions.send-sms]
+verify_jwt = false

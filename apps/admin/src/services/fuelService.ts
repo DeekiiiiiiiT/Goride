@@ -1,9 +1,18 @@
 import { projectId, publicAnonKey } from '../utils/supabase/info';
+import { supabase } from '../utils/supabase/client';
 import { FuelCard, FuelEntry, MileageAdjustment, FuelScenario } from '../types/fuel';
 import { FinancialTransaction } from '../types/data';
 import { API_ENDPOINTS } from './apiConfig';
 import { settlementService } from './settlementService';
 import { throwIfCatalogGateBlocked } from './api';
+
+async function authHeaders(contentType: string | null = 'application/json'): Promise<Record<string, string>> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token || publicAnonKey;
+  const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+  if (contentType) headers['Content-Type'] = contentType;
+  return headers;
+}
 
 async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 3, backoff = 500): Promise<Response> {
   try {
@@ -25,7 +34,7 @@ export const fuelService = {
   // --- Fuel Cards ---
   async getFuelCards(): Promise<FuelCard[]> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-cards`, {
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await authHeaders(null),
     });
     if (!response.ok) throw new Error("Failed to fetch fuel cards");
     return response.json();
@@ -34,10 +43,7 @@ export const fuelService = {
   async saveFuelCard(card: FuelCard): Promise<FuelCard> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-cards`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await authHeaders(),
       body: JSON.stringify(card)
     });
     if (!response.ok) throw new Error("Failed to save fuel card");
@@ -48,7 +54,7 @@ export const fuelService = {
   async deleteFuelCard(id: string): Promise<void> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-cards/${id}`, {
       method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await authHeaders(null),
     });
     if (!response.ok) throw new Error("Failed to delete fuel card");
   },
@@ -61,7 +67,7 @@ export const fuelService = {
     if (options?.endDate) query.append("endDate", options.endDate);
 
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries?${query.toString()}`, {
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await authHeaders(null),
     });
     if (!response.ok) throw new Error("Failed to fetch fuel entries");
     return response.json();

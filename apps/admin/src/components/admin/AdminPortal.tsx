@@ -28,7 +28,7 @@ import { HaulOverviewCard } from './product-overviews/HaulOverviewCard';
 import { PartsSourcingManager } from './parts-sourcing/PartsSourcingManager';
 import { AccountingCatalogManager } from './accounting/AccountingCatalogManager';
 import { PendingVendorRequestsManager } from './accounting/PendingVendorRequestsManager';
-import { ErrorBoundary } from '../ui/ErrorBoundary';
+import { ErrorBoundary } from '@roam/roam-shared';
 import { StationDatabaseView } from '../fuel/stations/StationDatabaseView';
 import type { ResolutionQueueSubTab } from '../fuel/stations/ResolutionQueueTab';
 import { GasStationAnalytics } from '../fuel/stations/GasStationAnalytics';
@@ -41,6 +41,7 @@ import { MerchantVerificationManager } from './roam-dash/MerchantVerificationMan
 import { GlobalIdentitySearch } from './platform/GlobalIdentitySearch';
 import { MatchingBrainPage } from './matching-brain/MatchingBrainPage';
 import { FuelBrainPage } from './fuel-brain/FuelBrainPage';
+import { FuelPricesPage } from './fuel-prices/FuelPricesPage';
 import { EvidenceBridgeAnalytics } from './fuel-evidence-bridge/EvidenceBridgeAnalytics';
 import { TollBrainPage } from './toll-brain/TollBrainPage';
 import { DriverUsersPage } from './product-users/DriverUsersPage';
@@ -229,6 +230,11 @@ export function AdminPortal() {
       {currentPage === 'fuel-brain' && (
         <div className="rounded-xl border border-slate-200 bg-white overflow-hidden min-h-[560px] p-6 dark:border-slate-800 dark:bg-slate-900/40">
           <FuelBrainPage />
+        </div>
+      )}
+      {currentPage === 'fuel-prices' && (
+        <div className="rounded-xl border border-slate-200 bg-white overflow-hidden min-h-[560px] p-6 dark:border-slate-800 dark:bg-slate-900/40">
+          <FuelPricesPage />
         </div>
       )}
       {currentPage === 'activity-log' && <ActivityLog />}

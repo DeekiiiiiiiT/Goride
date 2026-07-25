@@ -8,14 +8,16 @@
  */
 
 import { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
-import { cors } from "https://deno.land/x/hono@v4.3.11/middleware.ts";
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { applyCors } from "../_shared/corsAllowlist.ts";
+import { requireInternalSecret } from "../_shared/requireInternalSecret.ts";
 import { requirePlatformAdmin } from "../_shared/platformAdmin.ts";
 import { classifyTollMatch, mergePolicy, DEFAULT_POLICY } from "./classify.ts";
 import { evaluatePoint, estimateRoute, loadPlazas, invalidatePlazaCache } from "./detect.ts";
+import { STABLE_GET_CACHE } from "../_shared/cacheControl.ts";
 
 const app = new Hono().basePath("/toll-brain");
-app.use("*", cors());
+applyCors(app);
 
 function logLine(payload: Record<string, unknown>) {
   console.log(JSON.stringify({ svc: "toll-brain", ts: new Date().toISOString(), ...payload }));
@@ -32,10 +34,11 @@ function isTollBrainEnabled(): boolean {
   return Deno.env.get("TOLL_BRAIN_ENABLED") === "1";
 }
 
-function requireInternalAuth(c: { req: { header: (n: string) => string | undefined } }): boolean {
-  const secret = Deno.env.get("TOLL_BRAIN_INTERNAL_SECRET");
-  if (!secret) return false;
-  return c.req.header("X-Toll-Brain-Internal-Secret") === secret;
+function requireInternalAuth(c: { req: { raw: Request } }): Response | null {
+  return requireInternalSecret(c.req.raw, {
+    envKeys: ["TOLL_BRAIN_INTERNAL_SECRET"],
+    headerNames: ["X-Toll-Brain-Internal-Secret"],
+  });
 }
 
 const ADMIN_WRITE_ROLES = new Set(["platform_owner", "superadmin", "rides_admin"]);
@@ -77,6 +80,7 @@ async function loadDefaultPolicy(db: SupabaseClient) {
 }
 
 app.get("/health", (c) => {
+  c.header("Cache-Control", STABLE_GET_CACHE);
   return c.json({
     service: "toll-brain",
     status: "ok",
@@ -157,7 +161,10 @@ app.put("/admin/policies", async (c) => {
 });
 
 app.post("/v1/internal/classify-match", async (c) => {
-  if (!requireInternalAuth(c)) return c.json({ error: "unauthorized" }, 401);
+  {
+    const denied = requireInternalAuth(c);
+    if (denied) return denied;
+  }
   if (!isTollBrainEnabled()) return c.json({ error: "brain_disabled" }, 503);
   const body = await c.req.json().catch(() => ({}));
   const db = svc();
@@ -173,7 +180,10 @@ app.post("/v1/internal/classify-match", async (c) => {
 });
 
 app.post("/v1/internal/evaluate-point", async (c) => {
-  if (!requireInternalAuth(c)) return c.json({ error: "unauthorized" }, 401);
+  {
+    const denied = requireInternalAuth(c);
+    if (denied) return denied;
+  }
   if (!isTollBrainEnabled()) return c.json({ error: "brain_disabled" }, 503);
   const body = await c.req.json().catch(() => ({}));
   const db = svc();
@@ -195,7 +205,10 @@ app.post("/v1/internal/evaluate-point", async (c) => {
 });
 
 app.post("/v1/internal/estimate-route", async (c) => {
-  if (!requireInternalAuth(c)) return c.json({ error: "unauthorized" }, 401);
+  {
+    const denied = requireInternalAuth(c);
+    if (denied) return denied;
+  }
   if (!isTollBrainEnabled()) return c.json({ error: "brain_disabled" }, 503);
   const body = await c.req.json().catch(() => ({}));
   const db = svc();
@@ -211,7 +224,10 @@ app.post("/v1/internal/estimate-route", async (c) => {
 });
 
 app.post("/v1/internal/record-crossing", async (c) => {
-  if (!requireInternalAuth(c)) return c.json({ error: "unauthorized" }, 401);
+  {
+    const denied = requireInternalAuth(c);
+    if (denied) return denied;
+  }
   if (!isTollBrainEnabled()) return c.json({ error: "brain_disabled" }, 503);
   const body = await c.req.json().catch(() => ({}));
   const rideId = body.rideRequestId || body.rideId;
@@ -309,7 +325,10 @@ app.post("/v1/internal/record-crossing", async (c) => {
 });
 
 app.get("/v1/internal/ride-toll-state", async (c) => {
-  if (!requireInternalAuth(c)) return c.json({ error: "unauthorized" }, 401);
+  {
+    const denied = requireInternalAuth(c);
+    if (denied) return denied;
+  }
   if (!isTollBrainEnabled()) return c.json({ error: "brain_disabled" }, 503);
   const rideId = c.req.query("rideRequestId") || c.req.query("rideId");
   if (!rideId) return c.json({ error: "rideRequestId_required" }, 400);

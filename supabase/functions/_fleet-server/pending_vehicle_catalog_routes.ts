@@ -18,8 +18,8 @@ import {
   stripVehicleCatalogOptionalMigrationColumns,
   VEHICLE_CATALOG_SUPABASE_SELECT,
 } from "./vehicle_catalog_schema_fallback.ts";
-import { filterCatalogRowsByFleetMonth, type CatalogVariantRow } from "../../../utils/vehicleCatalogResolution.ts";
-import { parseCatalogMonthFromUnknown } from "../../../utils/catalogMonthParse.ts";
+import { filterCatalogRowsByFleetMonth, type CatalogVariantRow } from "../../../apps/fleet/src/utils/vehicleCatalogResolution.ts";
+import { parseCatalogMonthFromUnknown } from "../../../apps/fleet/src/utils/catalogMonthParse.ts";
 
 const KEYS = [
   "make", "model", "production_start_year", "production_end_year", "production_start_month", "production_end_month",

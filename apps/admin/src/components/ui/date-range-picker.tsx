@@ -1,5 +1,5 @@
 import * as React from "react"
-import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subWeeks, subMonths } from "date-fns"
+import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfDay, endOfDay, subWeeks, subMonths, subDays } from "date-fns"
 import { Calendar as CalendarIcon } from "lucide-react"
 import { DateRange } from "react-day-picker"
 
@@ -24,13 +24,19 @@ export function DatePickerWithRange({
   setDate,
 }: DatePickerWithRangeProps) {
 
-  const setPreset = (preset: 'thisWeek' | 'lastWeek' | 'thisMonth' | 'lastMonth') => {
+  const setPreset = (preset: 'today' | 'thisWeek' | 'last30' | 'lastWeek' | 'thisMonth' | 'lastMonth') => {
     const today = new Date();
     let newRange: DateRange | undefined;
     
     switch (preset) {
+        case 'today':
+            newRange = { from: startOfDay(today), to: endOfDay(today) };
+            break;
         case 'thisWeek':
             newRange = { from: startOfWeek(today, { weekStartsOn: 1 }), to: endOfWeek(today, { weekStartsOn: 1 }) };
+            break;
+        case 'last30':
+            newRange = { from: startOfDay(subDays(today, 29)), to: endOfDay(today) };
             break;
         case 'lastWeek':
             const lastWeek = subWeeks(today, 1);
@@ -77,7 +83,9 @@ export function DatePickerWithRange({
         <PopoverContent className="w-auto p-0" align="end">
             <div className="flex">
                 <div className="flex flex-col gap-2 p-3 border-r bg-slate-50/50">
+                    <Button variant="ghost" size="sm" className="justify-start text-left font-normal" onClick={() => setPreset('today')}>Today</Button>
                     <Button variant="ghost" size="sm" className="justify-start text-left font-normal" onClick={() => setPreset('thisWeek')}>This Week</Button>
+                    <Button variant="ghost" size="sm" className="justify-start text-left font-normal" onClick={() => setPreset('last30')}>Last 30 Days</Button>
                     <Button variant="ghost" size="sm" className="justify-start text-left font-normal" onClick={() => setPreset('lastWeek')}>Last Week</Button>
                     <Button variant="ghost" size="sm" className="justify-start text-left font-normal" onClick={() => setPreset('thisMonth')}>This Month</Button>
                     <Button variant="ghost" size="sm" className="justify-start text-left font-normal" onClick={() => setPreset('lastMonth')}>Last Month</Button>

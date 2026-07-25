@@ -3,6 +3,16 @@
  * Port of fleet IntegrityGapDashboard with fabricated metrics removed (Phase 3/4).
  */
 import React, { useState, useEffect, useMemo } from 'react';
+import {
+  format,
+  subDays,
+  startOfDay,
+  endOfDay,
+  startOfWeek,
+  endOfWeek,
+  isSameDay,
+} from 'date-fns';
+import { DateRange } from 'react-day-picker';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../ui/card';
 import { Badge } from '../../ui/badge';
 import { Button } from '../../ui/button';
@@ -24,6 +34,7 @@ import { api } from '../../../services/api';
 import { fuelService } from '../../../services/fuelService';
 import { toast } from 'sonner';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '../../ui/tooltip';
+import { DatePickerWithRange } from '../../ui/date-range-picker';
 import {
   BarChart,
   Bar,
@@ -38,22 +49,74 @@ import {
   Area,
 } from 'recharts';
 import { SafeResponsiveContainer as ResponsiveContainer } from '../../ui/SafeResponsiveContainer';
+import { cn } from '../../ui/utils';
+
+function last30DaysRange(): DateRange {
+  const to = endOfDay(new Date());
+  const from = startOfDay(subDays(to, 29));
+  return { from, to };
+}
+
+function todayRange(): DateRange {
+  const d = new Date();
+  return { from: startOfDay(d), to: endOfDay(d) };
+}
+
+function thisWeekRange(): DateRange {
+  const d = new Date();
+  return {
+    from: startOfDay(startOfWeek(d, { weekStartsOn: 1 })),
+    to: endOfDay(endOfWeek(d, { weekStartsOn: 1 })),
+  };
+}
+
+function rangeKey(range: DateRange | undefined): string {
+  if (range === undefined) return 'all';
+  if (!range.from || !range.to) return 'incomplete';
+  return `${range.from.getTime()}-${range.to.getTime()}`;
+}
 
 export function EvidenceBridgeAnalytics() {
   const [entries, setEntries] = useState<any[]>([]);
-  const [metrics, setMetrics] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<'overview' | 'spatial' | 'forensic' | 'cryptographic'>('overview');
+  // pickerRange updates while clicking; appliedRange only when from+to are both set (avoids mid-select reload)
+  const [pickerRange, setPickerRange] = useState<DateRange | undefined>(last30DaysRange);
+  const [appliedRange, setAppliedRange] = useState<DateRange | undefined>(last30DaysRange);
 
-  const fetchData = async () => {
+  const commitRange = (range: DateRange | undefined) => {
+    setPickerRange(range);
+    setAppliedRange(range);
+  };
+
+  const onPickerChange = (range: DateRange | undefined) => {
+    setPickerRange(range);
+    // Cleared
+    if (!range) {
+      setAppliedRange(undefined);
+      return;
+    }
+    // Wait for end date so the calendar stays open through the second click
+    if (range.from && range.to) {
+      setAppliedRange({
+        from: startOfDay(range.from),
+        to: endOfDay(range.to),
+      });
+    }
+  };
+
+  const fetchData = async (range: DateRange | undefined) => {
     setLoading(true);
     try {
-      const [entriesData, metricsData] = await Promise.all([
-        fuelService.getFuelEntries(),
-        api.getIntegrityMetrics(),
-      ]);
+      const opts: { limit?: number; startDate?: string; endDate?: string } = { limit: 5000 };
+      if (range?.from) {
+        opts.startDate = format(startOfDay(range.from), "yyyy-MM-dd'T'HH:mm:ss");
+      }
+      if (range?.to) {
+        opts.endDate = format(endOfDay(range.to), "yyyy-MM-dd'T'HH:mm:ss.SSS");
+      }
+      const entriesData = await fuelService.getFuelEntries(opts);
       setEntries(entriesData || []);
-      setMetrics(metricsData);
     } catch (err) {
       console.error('Evidence Bridge Analytics Error:', err);
       toast.error('Failed to load integrity analytics');
@@ -77,9 +140,45 @@ export function EvidenceBridgeAnalytics() {
     }
   };
 
+  const appliedKey = rangeKey(appliedRange);
   useEffect(() => {
-    fetchData();
-  }, []);
+    if (appliedKey === 'incomplete') return;
+    void fetchData(appliedRange);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appliedKey]);
+
+  const activePreset = useMemo(() => {
+    if (!appliedRange?.from || !appliedRange?.to) return appliedRange === undefined ? 'all' : null;
+    const t = todayRange();
+    const w = thisWeekRange();
+    const m = last30DaysRange();
+    if (isSameDay(appliedRange.from, t.from!) && isSameDay(appliedRange.to, t.to!)) return 'today';
+    if (isSameDay(appliedRange.from, w.from!) && isSameDay(appliedRange.to, w.to!)) return 'week';
+    if (isSameDay(appliedRange.from, m.from!) && isSameDay(appliedRange.to, m.to!)) return '30';
+    return null;
+  }, [appliedRange]);
+
+  /** Integrity gap for the selected period (from loaded entries, not all-time API). */
+  const periodIntegrityGap = useMemo(() => {
+    let totalSpend = 0;
+    let verifiedSpend = 0;
+    for (const e of entries) {
+      const amt = Number(e.amount) || 0;
+      totalSpend += amt;
+      if (e.metadata?.locationStatus === 'verified' || e.locationStatus === 'verified') {
+        verifiedSpend += amt;
+      }
+    }
+    if (totalSpend <= 0) return 0;
+    return ((totalSpend - verifiedSpend) / totalSpend) * 100;
+  }, [entries]);
+
+  const rangeLabel = useMemo(() => {
+    if (!appliedRange?.from) return 'All loaded records';
+    const from = format(appliedRange.from, 'MMM d, yyyy');
+    const to = appliedRange.to ? format(appliedRange.to, 'MMM d, yyyy') : from;
+    return `${from} → ${to}`;
+  }, [appliedRange]);
 
   const spatialDistribution = useMemo(() => {
     const dist: Record<string, number> = {
@@ -181,7 +280,7 @@ export function EvidenceBridgeAnalytics() {
     return 'Improving';
   }, [driftSeries]);
 
-  if (loading) {
+  if (loading && entries.length === 0) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" />
@@ -189,51 +288,75 @@ export function EvidenceBridgeAnalytics() {
     );
   }
 
+  const presetBtn = (id: string, label: string, onClick: () => void) => (
+    <Button
+      key={id}
+      variant={activePreset === id ? 'default' : 'outline'}
+      size="sm"
+      className={cn('h-8 text-xs', activePreset === id && 'shadow-sm')}
+      onClick={onClick}
+    >
+      {label}
+    </Button>
+  );
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-        <div className="flex items-center gap-4 flex-wrap">
-          <Button
-            variant={view === 'overview' ? 'default' : 'ghost'}
-            size="sm"
-            onClick={() => setView('overview')}
-            className="gap-2"
-          >
-            <Activity className="w-4 h-4" />
-            Overview
-          </Button>
-          <Button
-            variant={view === 'spatial' ? 'default' : 'ghost'}
-            size="sm"
-            onClick={() => setView('spatial')}
-            className="gap-2"
-          >
-            <MapPin className="w-4 h-4" />
-            Spatial Analysis
-          </Button>
-          <Button
-            variant={view === 'cryptographic' ? 'default' : 'ghost'}
-            size="sm"
-            onClick={() => setView('cryptographic')}
-            className="gap-2"
-          >
-            <Fingerprint className="w-4 h-4" />
-            HMAC Hardening
-          </Button>
-          <Button
-            variant={view === 'forensic' ? 'default' : 'ghost'}
-            size="sm"
-            onClick={() => setView('forensic')}
-            className="gap-2"
-          >
-            <History className="w-4 h-4" />
-            Forensic Log
-          </Button>
+      <div className="flex flex-col gap-3 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button
+              variant={view === 'overview' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setView('overview')}
+              className="gap-2"
+            >
+              <Activity className="w-4 h-4" />
+              Overview
+            </Button>
+            <Button
+              variant={view === 'spatial' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setView('spatial')}
+              className="gap-2"
+            >
+              <MapPin className="w-4 h-4" />
+              Spatial Analysis
+            </Button>
+            <Button
+              variant={view === 'cryptographic' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setView('cryptographic')}
+              className="gap-2"
+            >
+              <Fingerprint className="w-4 h-4" />
+              HMAC Hardening
+            </Button>
+            <Button
+              variant={view === 'forensic' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setView('forensic')}
+              className="gap-2"
+            >
+              <History className="w-4 h-4" />
+              Forensic Log
+            </Button>
+          </div>
+          <Badge variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-200 w-fit">
+            {loading ? 'Updating…' : `${entries.length} records`}
+          </Badge>
         </div>
-        <Badge variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-200">
-          Evidence Bridge Analytics
-        </Badge>
+
+        <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
+          {presetBtn('today', 'Today', () => commitRange(todayRange()))}
+          {presetBtn('week', 'This week', () => commitRange(thisWeekRange()))}
+          {presetBtn('30', 'Last 30 days', () => commitRange(last30DaysRange()))}
+          {presetBtn('all', 'All time', () => commitRange(undefined))}
+          <DatePickerWithRange date={pickerRange} setDate={onPickerChange} />
+        </div>
       </div>
+
+      <div className={cn(loading && 'opacity-60 pointer-events-none transition-opacity')}>
 
       {view === 'overview' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -244,7 +367,7 @@ export function EvidenceBridgeAnalytics() {
                 Evidence Bridge Health
               </CardTitle>
               <CardDescription className="text-slate-400">
-                Platform-wide verification coverage (all organizations)
+                Verification coverage for {rangeLabel} (all organizations)
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -254,7 +377,7 @@ export function EvidenceBridgeAnalytics() {
                     Integrity Gap
                   </p>
                   <p className="text-4xl font-black text-emerald-400">
-                    {metrics?.integrityGapPercentage?.toFixed(1) || '0.0'}%
+                    {periodIntegrityGap.toFixed(1)}%
                   </p>
                   <p className="text-xs text-slate-400">Unverified Spend Exposure</p>
                 </div>
@@ -652,6 +775,7 @@ export function EvidenceBridgeAnalytics() {
           </Card>
         </div>
       )}
+      </div>
     </div>
   );
 }

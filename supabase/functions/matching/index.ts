@@ -10,27 +10,32 @@
  * Configured from Super Admin at roamdominion.co.
  * See docs/platform/MATCHING_BRAIN.md for architecture.
  *
+ * Phase 2: rides legacy dual-path is retired unless MATCHING_LEGACY_FALLBACK=1
+ * (emergency). Prefer brain-only; fail closed on brain errors to avoid drift.
+ *
  * Feature flags (default OFF):
  * - MATCHING_BRAIN_ENABLED: Master kill-switch
  * - MATCHING_SERIAL_DISPATCH: Serial 1-to-1 offers
  * - MATCHING_H3_SUPPLY: H3-indexed driver lookup
  * - MATCHING_H3_SURGE: H3 surge cells
+ * - MATCHING_LEGACY_FALLBACK: Emergency rides-local reconcile/wave after brain failure
  */
 
 import { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
-import { cors } from "https://deno.land/x/hono@v4.3.11/middleware.ts";
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { applyCors } from "../_shared/corsAllowlist.ts";
+import { requireInternalSecret } from "../_shared/requireInternalSecret.ts";
 import { requirePlatformAdmin, PLATFORM_ADMIN_ROLES } from "../_shared/platformAdmin.ts";
 import { jwtPrimaryRole } from "../_shared/authEdge.ts";
+import { getFlag } from "../_shared/featureFlags.ts";
 import { loadMatchingPolicy, invalidatePolicyCache, type ResolvedPolicy } from "./policy/loadPolicy.ts";
 import { startMatching, reconcileMatching as doReconcile } from "./dispatch/reconcileMatching.ts";
-import { runMatchingWave } from "./dispatch/runMatchingWave.ts";
 import { patchDriverOfferRow, supersedePendingOffersForRide, loadDriverOfferById } from "./dispatch/offerWrites.ts";
 
 /** Match Supabase path prefix: .../functions/v1/matching/<route> → /matching/<route> */
 const app = new Hono().basePath("/matching");
 
-app.use("*", cors());
+applyCors(app);
 
 // -----------------------------------------------------------------------------
 // Utilities
@@ -55,9 +60,56 @@ function authClient(authHeader: string): SupabaseClient {
   );
 }
 
-function isMatchingBrainEnabled(): boolean {
-  return Deno.env.get("MATCHING_BRAIN_ENABLED") === "1";
+async function isMatchingBrainEnabled(): Promise<boolean> {
+  return getFlag("MATCHING_BRAIN_ENABLED", false);
 }
+
+/** Fields shared by matching_policies and rides.dispatch_settings (dual-write / sync). */
+const POLICY_DUAL_WRITE_FIELDS = [
+  "max_match_waves",
+  "wave_radius_km",
+  "max_offers_per_wave",
+  "default_driver_offer_timeout_seconds",
+  "driver_location_max_age_minutes",
+  "max_matching_duration_minutes",
+  "quote_driver_radius_km",
+  "body_type_filtering_enabled",
+  "body_type_tier_mode",
+  "require_body_type_for_offers",
+  "independent_only_matching",
+  "trip_location_interval_seconds",
+  "pickup_geofence_radius_m",
+  "dropoff_geofence_radius_m",
+  "arrival_dwell_seconds",
+  "max_speed_mps_for_arrival",
+  "auto_en_route_on_accept",
+  "auto_arrive_enabled",
+  "auto_complete_suggest_enabled",
+  "no_show_cancel_minutes",
+  "gps_max_accuracy_m_for_arrival",
+  "no_show_auto_cancel_enabled",
+  "wait_time_grace_minutes",
+  "wait_time_rate_per_min_minor",
+  "wait_time_charge_enabled",
+  "wait_time_max_minutes",
+  "pin_verification_enabled",
+  "pin_verification_required_for_start",
+  "toll_detection_enabled",
+  "toll_geofence_radius_m",
+  "toll_detect_enroute",
+  "route_toll_estimation_enabled",
+] as const;
+
+/** Patchable matching_policies columns (shared + matching-only). */
+const POLICY_PATCH_ALLOWED_FIELDS = [
+  "name",
+  ...POLICY_DUAL_WRITE_FIELDS,
+  "serial_dispatch_enabled",
+  "h3_resolution",
+  "h3_supply_enabled",
+  "h3_surge_enabled",
+  "wave_h3_k_rings",
+] as const;
 
 async function requireUser(authHeader: string | undefined) {
   if (!authHeader?.startsWith("Bearer ")) return { error: "Unauthorized", status: 401 as const };
@@ -66,11 +118,11 @@ async function requireUser(authHeader: string | undefined) {
   return { user };
 }
 
-function requireInternalAuth(c: { req: { header: (n: string) => string | undefined } }): boolean {
-  const secret = Deno.env.get("MATCHING_INTERNAL_SECRET");
-  if (!secret) return false;
-  const token = c.req.header("X-Matching-Internal-Secret");
-  return token === secret;
+function requireInternalAuth(c: { req: { raw: Request } }): Response | null {
+  return requireInternalSecret(c.req.raw, {
+    envKeys: ["MATCHING_INTERNAL_SECRET"],
+    headerNames: ["X-Matching-Internal-Secret"],
+  });
 }
 
 type ProductKey = "rides" | "fleet" | "dash" | "enterprise";
@@ -110,14 +162,15 @@ async function audit(
 // Health
 // -----------------------------------------------------------------------------
 
-app.get("/health", (c) => {
+app.get("/health", async (c) => {
   return c.json({
     service: "matching",
     status: "ok",
-    brain_enabled: isMatchingBrainEnabled(),
+    brain_enabled: await isMatchingBrainEnabled(),
     flags: {
       MATCHING_BRAIN_ENABLED: Deno.env.get("MATCHING_BRAIN_ENABLED") ?? "0",
       RIDES_USE_MATCHING_BRAIN: Deno.env.get("RIDES_USE_MATCHING_BRAIN") ?? "0",
+      MATCHING_LEGACY_FALLBACK: Deno.env.get("MATCHING_LEGACY_FALLBACK") ?? "0",
       MATCHING_SERIAL_DISPATCH: Deno.env.get("MATCHING_SERIAL_DISPATCH") ?? "0",
       MATCHING_H3_SUPPLY: Deno.env.get("MATCHING_H3_SUPPLY") ?? "0",
       MATCHING_H3_SURGE: Deno.env.get("MATCHING_H3_SURGE") ?? "0",
@@ -259,49 +312,8 @@ app.patch("/admin/policies/:id", async (c) => {
   }
 
   // Build patch
-  const allowedFields = [
-    "name",
-    "max_match_waves",
-    "wave_radius_km",
-    "max_offers_per_wave",
-    "default_driver_offer_timeout_seconds",
-    "driver_location_max_age_minutes",
-    "max_matching_duration_minutes",
-    "quote_driver_radius_km",
-    "body_type_filtering_enabled",
-    "body_type_tier_mode",
-    "require_body_type_for_offers",
-    "independent_only_matching",
-    "serial_dispatch_enabled",
-    "h3_resolution",
-    "h3_supply_enabled",
-    "h3_surge_enabled",
-    "wave_h3_k_rings",
-    "trip_location_interval_seconds",
-    "pickup_geofence_radius_m",
-    "dropoff_geofence_radius_m",
-    "arrival_dwell_seconds",
-    "max_speed_mps_for_arrival",
-    "auto_en_route_on_accept",
-    "auto_arrive_enabled",
-    "auto_complete_suggest_enabled",
-    "no_show_cancel_minutes",
-    "gps_max_accuracy_m_for_arrival",
-    "no_show_auto_cancel_enabled",
-    "wait_time_grace_minutes",
-    "wait_time_rate_per_min_minor",
-    "wait_time_charge_enabled",
-    "wait_time_max_minutes",
-    "pin_verification_enabled",
-    "pin_verification_required_for_start",
-    "toll_detection_enabled",
-    "toll_geofence_radius_m",
-    "toll_detect_enroute",
-    "route_toll_estimation_enabled",
-  ];
-
   const patch: Record<string, unknown> = { updated_by: auth.id };
-  for (const field of allowedFields) {
+  for (const field of POLICY_PATCH_ALLOWED_FIELDS) {
     if (body[field] !== undefined) {
       patch[field] = body[field];
     }
@@ -338,25 +350,7 @@ app.patch("/admin/policies/:id", async (c) => {
       };
 
       // Map policy fields to legacy table (only include fields that exist in both)
-      const legacyFields = [
-        "max_match_waves", "wave_radius_km", "max_offers_per_wave",
-        "default_driver_offer_timeout_seconds", "driver_location_max_age_minutes",
-        "max_matching_duration_minutes", "quote_driver_radius_km",
-        "body_type_filtering_enabled", "body_type_tier_mode", "require_body_type_for_offers",
-        "independent_only_matching", "trip_location_interval_seconds",
-        "pickup_geofence_radius_m", "dropoff_geofence_radius_m",
-        "arrival_dwell_seconds", "max_speed_mps_for_arrival",
-        "auto_en_route_on_accept", "auto_arrive_enabled",
-        "auto_complete_suggest_enabled", "no_show_cancel_minutes",
-        "gps_max_accuracy_m_for_arrival", "no_show_auto_cancel_enabled",
-        "wait_time_grace_minutes", "wait_time_rate_per_min_minor",
-        "wait_time_charge_enabled", "wait_time_max_minutes",
-        "pin_verification_enabled", "pin_verification_required_for_start",
-        "toll_detection_enabled", "toll_geofence_radius_m",
-        "toll_detect_enroute", "route_toll_estimation_enabled",
-      ];
-
-      for (const field of legacyFields) {
+      for (const field of POLICY_DUAL_WRITE_FIELDS) {
         if (updated[field] !== undefined) {
           legacyPatch[field] = updated[field];
         }
@@ -527,15 +521,22 @@ app.patch("/admin/product-profiles/:id", async (c) => {
 });
 
 // -----------------------------------------------------------------------------
-// Internal: Dispatch Endpoints (Phase 1 stubs)
+// Internal: Dispatch Endpoints
 // -----------------------------------------------------------------------------
 
+/** Retired dual-path stub — was never implemented; hard-404 so callers fail loudly. */
+app.all("/v1/internal/run-wave", (c) => {
+  logLine({ event: "deprecated_route", path: "/v1/internal/run-wave", method: c.req.method });
+  return c.json({ error: "gone", message: "run-wave retired; use start-matching / reconcile" }, 404);
+});
+
 app.post("/v1/internal/start-matching", async (c) => {
-  if (!requireInternalAuth(c)) {
-    return c.json({ error: "unauthorized" }, 401);
+  {
+    const denied = requireInternalAuth(c);
+    if (denied) return denied;
   }
 
-  if (!isMatchingBrainEnabled()) {
+  if (!(await isMatchingBrainEnabled())) {
     return c.json({ error: "matching_brain_disabled" }, 503);
   }
 
@@ -595,11 +596,12 @@ app.post("/v1/internal/start-matching", async (c) => {
 });
 
 app.post("/v1/internal/reconcile", async (c) => {
-  if (!requireInternalAuth(c)) {
-    return c.json({ error: "unauthorized" }, 401);
+  {
+    const denied = requireInternalAuth(c);
+    if (denied) return denied;
   }
 
-  if (!isMatchingBrainEnabled()) {
+  if (!(await isMatchingBrainEnabled())) {
     return c.json({ error: "matching_brain_disabled" }, 503);
   }
 
@@ -640,33 +642,13 @@ app.post("/v1/internal/reconcile", async (c) => {
   }
 });
 
-app.post("/v1/internal/run-wave", async (c) => {
-  if (!requireInternalAuth(c)) {
-    return c.json({ error: "unauthorized" }, 401);
-  }
-
-  if (!isMatchingBrainEnabled()) {
-    return c.json({ error: "matching_brain_disabled" }, 503);
-  }
-
-  const body = await c.req.json().catch(() => ({}));
-
-  logLine({ event: "run_wave_stub", body });
-
-  // TODO: Implement in Phase 1
-  return c.json({
-    ok: false,
-    error: "not_implemented",
-    message: "Phase 1: Not yet implemented.",
-  }, 501);
-});
-
 app.post("/v1/internal/accept-offer", async (c) => {
-  if (!requireInternalAuth(c)) {
-    return c.json({ error: "unauthorized" }, 401);
+  {
+    const denied = requireInternalAuth(c);
+    if (denied) return denied;
   }
 
-  if (!isMatchingBrainEnabled()) {
+  if (!(await isMatchingBrainEnabled())) {
     return c.json({ error: "matching_brain_disabled" }, 503);
   }
 
@@ -754,11 +736,12 @@ app.post("/v1/internal/accept-offer", async (c) => {
 });
 
 app.post("/v1/internal/decline-offer", async (c) => {
-  if (!requireInternalAuth(c)) {
-    return c.json({ error: "unauthorized" }, 401);
+  {
+    const denied = requireInternalAuth(c);
+    if (denied) return denied;
   }
 
-  if (!isMatchingBrainEnabled()) {
+  if (!(await isMatchingBrainEnabled())) {
     return c.json({ error: "matching_brain_disabled" }, 503);
   }
 
@@ -817,13 +800,13 @@ app.post("/v1/internal/decline-offer", async (c) => {
 // -----------------------------------------------------------------------------
 
 app.post("/v1/internal/reconcile-all", async (c) => {
-  const secret = Deno.env.get("MATCHING_CRON_SECRET");
-  const token = c.req.header("X-Matching-Cron-Secret") ?? "";
-  if (!secret || token !== secret) {
-    return c.json({ error: "unauthorized" }, 401);
-  }
+  const denied = requireInternalSecret(c.req.raw, {
+    envKeys: ["MATCHING_CRON_SECRET"],
+    headerNames: ["X-Matching-Cron-Secret"],
+  });
+  if (denied) return denied;
 
-  if (!isMatchingBrainEnabled()) {
+  if (!(await isMatchingBrainEnabled())) {
     return c.json({ ok: true, message: "matching_brain_disabled", processed: 0 });
   }
 
@@ -914,47 +897,13 @@ app.get("/admin/policies/:id/sync-status", async (c) => {
   }
 
   // Compare fields that exist in both schemas
-  const sharedFields = [
-    "max_match_waves",
-    "max_offers_per_wave",
-    "default_driver_offer_timeout_seconds",
-    "driver_location_max_age_minutes",
-    "max_matching_duration_minutes",
-    "quote_driver_radius_km",
-    "body_type_filtering_enabled",
-    "body_type_tier_mode",
-    "require_body_type_for_offers",
-    "independent_only_matching",
-    "trip_location_interval_seconds",
-    "pickup_geofence_radius_m",
-    "dropoff_geofence_radius_m",
-    "arrival_dwell_seconds",
-    "max_speed_mps_for_arrival",
-    "auto_en_route_on_accept",
-    "auto_arrive_enabled",
-    "auto_complete_suggest_enabled",
-    "no_show_cancel_minutes",
-    "gps_max_accuracy_m_for_arrival",
-    "no_show_auto_cancel_enabled",
-    "wait_time_grace_minutes",
-    "wait_time_rate_per_min_minor",
-    "wait_time_charge_enabled",
-    "wait_time_max_minutes",
-    "pin_verification_enabled",
-    "pin_verification_required_for_start",
-    "toll_detection_enabled",
-    "toll_geofence_radius_m",
-    "toll_detect_enroute",
-    "route_toll_estimation_enabled",
-  ];
-
   const differences: Array<{
     field: string;
     matching_value: unknown;
     legacy_value: unknown;
   }> = [];
 
-  for (const field of sharedFields) {
+  for (const field of POLICY_DUAL_WRITE_FIELDS) {
     const matchingVal = policy[field];
     const legacyVal = legacySettings[field];
 
@@ -972,20 +921,6 @@ app.get("/admin/policies/:id/sync-status", async (c) => {
         field,
         matching_value: matchingVal,
         legacy_value: legacyVal,
-      });
-    }
-  }
-
-  // Also check wave_radius_km separately
-  const matchingRadii = policy.wave_radius_km;
-  const legacyRadii = legacySettings.wave_radius_km;
-  if (JSON.stringify(matchingRadii) !== JSON.stringify(legacyRadii)) {
-    const existing = differences.find((d) => d.field === "wave_radius_km");
-    if (!existing) {
-      differences.push({
-        field: "wave_radius_km",
-        matching_value: matchingRadii,
-        legacy_value: legacyRadii,
       });
     }
   }
@@ -1034,41 +969,12 @@ app.post("/admin/sync-to-legacy", async (c) => {
 
   // Build update for rides.dispatch_settings
   const legacyUpdate: Record<string, unknown> = {
-    max_match_waves: policy.max_match_waves,
-    wave_radius_km: policy.wave_radius_km,
-    max_offers_per_wave: policy.max_offers_per_wave,
-    default_driver_offer_timeout_seconds: policy.default_driver_offer_timeout_seconds,
-    driver_location_max_age_minutes: policy.driver_location_max_age_minutes,
-    max_matching_duration_minutes: policy.max_matching_duration_minutes,
-    quote_driver_radius_km: policy.quote_driver_radius_km,
-    body_type_filtering_enabled: policy.body_type_filtering_enabled,
-    body_type_tier_mode: policy.body_type_tier_mode,
-    require_body_type_for_offers: policy.require_body_type_for_offers,
-    independent_only_matching: policy.independent_only_matching,
-    trip_location_interval_seconds: policy.trip_location_interval_seconds,
-    pickup_geofence_radius_m: policy.pickup_geofence_radius_m,
-    dropoff_geofence_radius_m: policy.dropoff_geofence_radius_m,
-    arrival_dwell_seconds: policy.arrival_dwell_seconds,
-    max_speed_mps_for_arrival: policy.max_speed_mps_for_arrival,
-    auto_en_route_on_accept: policy.auto_en_route_on_accept,
-    auto_arrive_enabled: policy.auto_arrive_enabled,
-    auto_complete_suggest_enabled: policy.auto_complete_suggest_enabled,
-    no_show_cancel_minutes: policy.no_show_cancel_minutes,
-    gps_max_accuracy_m_for_arrival: policy.gps_max_accuracy_m_for_arrival,
-    no_show_auto_cancel_enabled: policy.no_show_auto_cancel_enabled,
-    wait_time_grace_minutes: policy.wait_time_grace_minutes,
-    wait_time_rate_per_min_minor: policy.wait_time_rate_per_min_minor,
-    wait_time_charge_enabled: policy.wait_time_charge_enabled,
-    wait_time_max_minutes: policy.wait_time_max_minutes,
-    pin_verification_enabled: policy.pin_verification_enabled,
-    pin_verification_required_for_start: policy.pin_verification_required_for_start,
-    toll_detection_enabled: policy.toll_detection_enabled,
-    toll_geofence_radius_m: policy.toll_geofence_radius_m,
-    toll_detect_enroute: policy.toll_detect_enroute,
-    route_toll_estimation_enabled: policy.route_toll_estimation_enabled,
     updated_at: new Date().toISOString(),
     updated_by: auth.id,
   };
+  for (const field of POLICY_DUAL_WRITE_FIELDS) {
+    legacyUpdate[field] = policy[field];
+  }
 
   const { error: updateError } = await db
     .from("rides_dispatch_settings")
@@ -1113,7 +1019,7 @@ app.get("/v1/policy", async (c) => {
 
   return c.json({
     policy,
-    brain_enabled: isMatchingBrainEnabled(),
+    brain_enabled: await isMatchingBrainEnabled(),
   });
 });
 

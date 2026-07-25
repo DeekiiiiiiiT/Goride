@@ -24,9 +24,11 @@ import { TagInventory } from './pages/TagInventory';
 import { UserManagementPage } from './components/users/UserManagementPage';
 import { EarningsPolicyConfiguration } from './components/earnings-policy';
 import { FuelManagement } from './pages/FuelManagement';
+import { FuelAnalytics } from './components/fuel/analytics/FuelAnalytics';
 import { TollLogsPage } from './pages/TollLogs';
 import { TollAnalytics } from './components/toll/TollAnalytics';
 import { VehicleAnalytics } from './components/vehicles/VehicleAnalytics';
+import { DriverAnalytics } from './components/drivers/analytics/DriverAnalytics';
 import { DriverLedgerPage } from './components/drivers/DriverLedgerPage';
 import { FleetFinancialsPage } from './components/fleet-financials/FleetFinancialsPage';
 import { CashRetagPage } from './components/fleet-financials/CashRetagPage';
@@ -55,6 +57,8 @@ import { FleetProductAdminPortal } from './admin/FleetProductAdminPortal';
 import { AdminConfirmProvider } from './admin/contexts/AdminConfirmContext';
 import { PRODUCT_LINE, IS_ENTERPRISE_PRODUCT } from './config/productLine';
 import { AuthRecoveryGate } from '@roam/auth-client';
+// Soft path rules shared with apps/fleet/middleware.js (Vercel Edge cookie gate).
+import { requiresSessionGate } from './middleware/sessionGate';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -119,6 +123,11 @@ function AppContent() {
       setCurrentPage('expense-hub');
       return;
     }
+    // Legacy Fuel Overview / Fuel Management hub → Fuel Analytics
+    if (page === 'fuel-overview' || page === 'fuel-management') {
+      setCurrentPage('fuel-analytics');
+      return;
+    }
     setCurrentPage(page);
   };
 
@@ -134,6 +143,13 @@ function AppContent() {
   useEffect(() => {
     if (currentPage === 'tier-config' || currentPage === 'tier-config-legacy') {
       setCurrentPage('earnings-policy');
+    }
+  }, [currentPage]);
+
+  // Retired Fuel Overview → Fuel Analytics
+  useEffect(() => {
+    if (currentPage === 'fuel-overview' || currentPage === 'fuel-management') {
+      setCurrentPage('fuel-analytics');
     }
   }, [currentPage]);
 
@@ -289,7 +305,15 @@ function AppContent() {
   }
 
   // Main Fleet Portal — Authentication Gate
+  // Soft path gate (shared with Edge middleware.js); AuthProvider remains authoritative.
   if (!user || !isFleetPortalUser(user)) {
+    if (
+      typeof window !== 'undefined' &&
+      requiresSessionGate(window.location.pathname) &&
+      window.location.pathname !== '/'
+    ) {
+      window.history.replaceState(null, '', '/');
+    }
     return <LoginPage />;
   }
 
@@ -365,6 +389,17 @@ function AppContent() {
         {currentPage === 'drivers' && (
           <PermissionGate permission="nav.drivers" onNavigate={setCurrentPage}>
             <DriversPage initialDriverId={driverIdForDetail} />
+          </PermissionGate>
+        )}
+        {currentPage === 'driver-analytics' && (
+          <PermissionGate permission="nav.drivers" onNavigate={setCurrentPage}>
+            <DriverAnalytics
+              onNavigate={setCurrentPage}
+              onSelectDriver={(driverId) => {
+                setDriverIdForDetail(driverId);
+                setCurrentPage('drivers');
+              }}
+            />
           </PermissionGate>
         )}
         {currentPage === 'vehicles' && (
@@ -490,7 +525,13 @@ function AppContent() {
           </PermissionGate>
         )}
         
-        {['fuel-management', 'fuel-overview', 'fuel-reconciliation', 'fuel-cards', 'fuel-logs', 'fuel-configuration', 'fuel-reimbursements'].includes(currentPage) && (
+        {currentPage === 'fuel-analytics' && (
+          <PermissionGate permission="nav.fuel_reports" onNavigate={setCurrentPage}>
+            <FuelAnalytics onNavigate={setCurrentPage} />
+          </PermissionGate>
+        )}
+
+        {['fuel-reconciliation', 'fuel-cards', 'fuel-logs', 'fuel-configuration', 'fuel-reimbursements'].includes(currentPage) && (
           <PermissionGate permission={PAGE_PERMISSION_MAP[currentPage] || 'nav.fuel_overview'} onNavigate={setCurrentPage}>
             <FuelManagement 
                 defaultTab={
@@ -499,10 +540,10 @@ function AppContent() {
                     currentPage === 'fuel-cards' ? 'cards' :
                     currentPage === 'fuel-logs' ? 'logs' :
                     currentPage === 'fuel-configuration' ? 'configuration' :
-                    'dashboard'
+                    'logs'
                 }
                 onTabChange={(t) => {
-                    setCurrentPage(t === 'dashboard' ? 'fuel-overview' : `fuel-${t}`);
+                    setCurrentPage(`fuel-${t}`);
                     setDriverIdForDetail(null);
                 }}
                 onViewDriverLedger={(driverId) => {

@@ -7,7 +7,7 @@ import type { Hono } from "npm:hono";
 import * as kv from "./kv_store.tsx";
 import { requireAuth, requirePermission } from "./rbac_middleware.ts";
 import { getOrgId } from "./org_scope.ts";
-import type { ExpenseHubCategory, ExpenseVendor, PlatformVendorStatus } from "../../../types/expenseHub.ts";
+import type { ExpenseHubCategory, ExpenseVendor, PlatformVendorStatus } from "../../../apps/fleet/src/types/expenseHub.ts";
 
 const ADMIN = "/make-server-37f42386/admin/platform-vendors";
 const ADMIN_CAT = "/make-server-37f42386/admin/platform-categories";

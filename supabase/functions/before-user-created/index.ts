@@ -2,6 +2,7 @@
  * Auth Hook: before_user_created
  * Rejects signup when client supplies privileged user_metadata keys.
  * Configure in Dashboard → Authentication → Hooks (verify JWT off for this function).
+ * Fails closed when BEFORE_USER_CREATED_HOOK_SECRET is unset (P0 audit).
  */
 import { Webhook } from "https://esm.sh/standardwebhooks@1.0.0";
 
@@ -17,23 +18,37 @@ const PRIVILEGED_META_KEYS = new Set([
   "admin",
 ]);
 
+function normalizeHookSecret(): string | null {
+  const raw = Deno.env.get("BEFORE_USER_CREATED_HOOK_SECRET") ?? "";
+  const secret = raw.replace(/^v1,whsec_/, "").trim();
+  return secret || null;
+}
+
 Deno.serve(async (req) => {
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: { message: "method_not_allowed" } }), { status: 405 });
   }
 
-  const secret = Deno.env.get("BEFORE_USER_CREATED_HOOK_SECRET") ?? "";
+  const secret = normalizeHookSecret();
+  if (!secret) {
+    console.error("[before-user-created] BEFORE_USER_CREATED_HOOK_SECRET is not set");
+    return new Response(
+      JSON.stringify({
+        error: {
+          http_code: 500,
+          message: "BEFORE_USER_CREATED_HOOK_SECRET is not set on the Edge Function",
+        },
+      }),
+      { status: 500, headers: { "Content-Type": "application/json" } },
+    );
+  }
+
   const payload = await req.text();
   const headers = Object.fromEntries(req.headers);
 
   try {
-    let event: { user?: Record<string, unknown> };
-    if (secret) {
-      const wh = new Webhook(secret.replace(/^v1,whsec_/, ""));
-      event = wh.verify(payload, headers) as typeof event;
-    } else {
-      event = JSON.parse(payload) as typeof event;
-    }
+    const wh = new Webhook(secret);
+    const event = wh.verify(payload, headers) as { user?: Record<string, unknown> };
 
     const user = event.user ?? {};
     const meta = (user.user_metadata ?? {}) as Record<string, unknown>;

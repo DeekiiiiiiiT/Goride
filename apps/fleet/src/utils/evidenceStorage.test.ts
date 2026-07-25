@@ -4,7 +4,7 @@ import {
   EVIDENCE_RETENTION_DAYS,
   isPendingParentStatus,
   parseStoragePathFromUrl,
-} from '../supabase/functions/server/evidence_storage.ts';
+} from '../../../../supabase/functions/_fleet-server/evidence_storage.ts';
 
 describe('evidence_storage', () => {
   it('computeDeleteAfter adds 14 days', () => {

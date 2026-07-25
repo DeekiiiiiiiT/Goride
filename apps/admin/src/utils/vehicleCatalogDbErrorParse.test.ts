@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   mergeCatalogTrimIntoTrimSeriesInPlace,
   parseMissingColumnFromVehicleCatalogDbError,
-} from "../supabase/functions/server/vehicle_catalog_schema_fallback.ts";
+} from "../../../../supabase/functions/_fleet-server/vehicle_catalog_schema_fallback.ts";
 
 describe("parseMissingColumnFromVehicleCatalogDbError", () => {
   it("parses PostgreSQL undefined_column message", () => {

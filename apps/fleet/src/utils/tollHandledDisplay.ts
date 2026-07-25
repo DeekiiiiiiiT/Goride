@@ -1,7 +1,7 @@
 /**
  * Display-side "handled" rule for toll rows returned by GET /toll-logs
  * (tollLedgerToTxShape). Mirrors the server mapper in
- * apps/fleet/src/supabase/functions/server/toll_controller.tsx so Expenses /
+ * supabase/functions/_fleet-server/toll_controller.tsx so Expenses /
  * Settlement Toll Status agree with Toll Reconciliation period landing.
  *
  * A toll is handled when:

@@ -26,7 +26,7 @@ describe('Expense Hub Fuel/Toll preservation', () => {
   });
 
   it('canonical fuel/toll builders remain in canonical_from_ops', () => {
-    const src = readSrc('supabase/functions/server/canonical_from_ops.ts');
+    const src = readSrc('../../../supabase/functions/_fleet-server/canonical_from_ops.ts');
     expect(src).toMatch(/buildCanonicalFuelExpenseEvent/);
     expect(src).toMatch(/appendCanonicalFuelExpenseIfEligible/);
     expect(src).toMatch(/buildCanonicalTollEventFromTollLedger/);

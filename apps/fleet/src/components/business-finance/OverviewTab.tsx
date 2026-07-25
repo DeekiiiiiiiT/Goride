@@ -212,7 +212,7 @@ export function OverviewTab({ overview, onNavigateTab, onNavigatePage }: Props) 
             hint="Consumption Reconciliation"
             value={String(risks.fuelVarianceFlags)}
             valueClassName={risks.fuelVarianceFlags > 0 ? 'text-amber-700' : undefined}
-            onClick={() => onNavigatePage?.('fuel-overview')}
+            onClick={() => onNavigatePage?.('fuel-analytics')}
           />
           <Row
             label="Drivers short on InDrive wallet"

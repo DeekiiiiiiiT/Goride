@@ -34,6 +34,7 @@ import {
   Brain,
   Layers,
   ShieldCheck,
+  DollarSign,
 } from 'lucide-react';
 
 export type NavChild = {
@@ -93,6 +94,7 @@ export const ROAM_ENTERPRISE_CHILDREN: NavChild[] = [
 
 export const FUEL_MANAGEMENT_CHILDREN: NavChild[] = [
   { id: 'fuel-brain', label: 'Fuel Brain', icon: Brain },
+  { id: 'fuel-prices', label: 'Prices', icon: DollarSign },
   { id: 'fuel-stations', label: 'Station Database', icon: Database },
   { id: 'fuel-analytics', label: 'Fuel Analytics', icon: BarChart3 },
   { id: 'fuel-evidence-bridge', label: 'Evidence Bridge', icon: ShieldCheck },
@@ -187,6 +189,7 @@ const SHARED_PLATFORM_PAGES = [
   'roam-dash-overview',
   'dash-merchants',
   'fuel-brain',
+  'fuel-prices',
   'fuel-stations',
   'fuel-analytics',
   'fuel-evidence-bridge',

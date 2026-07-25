@@ -534,6 +534,7 @@ export const PAGE_PERMISSIONS: Record<string, DominionPageSensitivity> = {
   'roam-driver-overview': 'standard',
   'roam-rides-overview': 'standard',
   'fuel-brain': 'standard',
+  'fuel-prices': 'standard',
   'fuel-stations': 'standard',
   'fuel-analytics': 'standard',
   'fuel-evidence-bridge': 'standard',

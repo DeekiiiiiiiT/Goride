@@ -180,23 +180,72 @@ curl -X POST "${BASE_URL}/make-server-37f42386/payment-ledger-lines/import" \
 
 ## Verification Checklist
 
-Run each test and record results:
+Run each test and record results. P0 rows added 2026-07-25 (code fixed; fill Actual after deploy).
 
 | Test | Expected | Actual | Pass |
 |------|----------|--------|------|
-| Toll reset-period (no auth) | 401 | | |
-| Payment ledger import (no auth) | 401 | | |
-| Admin delete-user (no auth) | 401 | | |
-| Dispute refund import (no auth) | 401 | | |
-| Dispute refund match (no auth) | 401 | | |
-| Bulk reconcile (no auth) | 401 | | |
-| Toll reset-period (low-priv) | 403 | | |
-| Toll reset-period (admin) | 200 | | |
-| Admin invite-user (low-priv) | 403 | | |
-| Admin invite-user (admin) | 200 | | |
-| Unsigned quote token | 400/401 | | |
-| Missing quote token | 400 | | |
-| Sanitized error response | Stable JSON | | |
+| Toll reset-period (no auth) | 401 | code-fixed Wave1B; re-run live | pending live |
+| Payment ledger import (no auth) | 401 | code-fixed Wave1B; re-run live | pending live |
+| Admin delete-user (no auth) | 401 | orphan fn deleted Phase1 | N/A |
+| Dispute refund import (no auth) | 401 | code-fixed Wave1B; re-run live | pending live |
+| Dispute refund match (no auth) | 401 | code-fixed Wave1B; re-run live | pending live |
+| Bulk reconcile (no auth) | 401 | code-fixed Wave1B; re-run live | pending live |
+| Toll reset-period (low-priv) | 403 | code-fixed; re-run live | pending live |
+| Toll reset-period (admin) | 200 | code-fixed; re-run live | pending live |
+| Admin invite-user (low-priv) | 403 | orphan fn | N/A |
+| Admin invite-user (admin) | 200 | orphan fn | N/A |
+| Unsigned quote token | 400/401 | code-fixed Wave0 | pending live |
+| Missing quote token | 400 | code-fixed Wave0 | pending live |
+| Sanitized error response | Stable JSON | code-fixed Wave6 | pending live |
+| Delivery GET /orders/:id no auth | 401 | code-fixed P0 2026-07-25 | pending deploy |
+| Delivery GET /orders/:id wrong user | 403 | code-fixed P0 | pending deploy |
+| Payments /intents other user's order | 403 | code-fixed P0 | pending deploy |
+| Payments /paypal/capture other order | 403 | code-fixed P0 | pending deploy |
+| Delivery POST /orders with fake item price | uses DB price | code-fixed P0 | pending deploy |
+| before-user-created missing secret | 500 | code-fixed P0 | pending deploy |
+| merchant-push no secret | 401 | code-fixed P0 | pending deploy |
+
+---
+
+## 5. Phase 0 — Delivery / Payments / Hooks (2026-07-25)
+
+### Delivery order PII leak (expect 401)
+
+```bash
+curl -s -o /dev/null -w "%{http_code}" "${BASE_URL}/delivery/orders/00000000-0000-0000-0000-000000000001"
+# Expected: 401
+```
+
+### Payments intent for someone else's order (expect 403)
+
+```bash
+curl -X POST "${BASE_URL}/payments/intents" \
+  -H "Authorization: Bearer ${USER_JWT}" \
+  -H "apikey: ${ANON_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"orderId":"<other-customer-order-uuid>","provider":"wipay"}'
+# Expected: 403 Forbidden
+```
+
+### PayPal capture ownership (expect 403)
+
+```bash
+curl -X POST "${BASE_URL}/payments/paypal/capture" \
+  -H "Authorization: Bearer ${USER_JWT}" \
+  -H "apikey: ${ANON_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"paypalOrderId":"fake","orderId":"<other-customer-order-uuid>"}'
+# Expected: 401/403 (not 200 marking paid)
+```
+
+### merchant-push without secret (expect 401)
+
+```bash
+curl -X POST "${BASE_URL}/merchant-push" \
+  -H "Content-Type: application/json" \
+  -d '{"merchantId":"any","title":"spam","body":"no"}'
+# Expected: 401
+```
 
 ---
 
@@ -204,5 +253,7 @@ Run each test and record results:
 
 - Wave 1B added `requireAuth({ strict: true })` to all money/admin controllers
 - Wave 6 added `safeErrorResponse()` to sanitize 500s
+- Phase 0 (2026-07-25): delivery auth/pricing, payments ownership, hooks fail-closed, merchant-push secret
 - Test with actual tokens from your environment
 - Run against staging before production
+- Live Pass columns require PO deploy + curl run; code paths verified in repo

@@ -1,9 +1,8 @@
 ﻿import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { FuelLayout } from '../components/fuel/FuelLayout';
-import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
-import { Fuel, Plus, CreditCard, Banknote, Upload, RefreshCw, History, Loader2, Link2, ShieldCheck, AlertTriangle, Flag } from 'lucide-react';
+import { Plus, RefreshCw, History, Loader2, Flag } from 'lucide-react';
 import { FuelCardList } from '../components/fuel/FuelCardList';
 import { FuelCardModal } from '../components/fuel/FuelCardModal';
 import { FuelLogModal } from '../components/fuel/FuelLogModal';
@@ -23,7 +22,6 @@ import {
 import {
   toEntryYmd,
   currentFuelWeekRange,
-  isEntryInInclusiveYmdRange,
   resolveFuelActivityEarliestMonday,
   buildFuelReconciliationWeekOptions,
 } from '../utils/fuelWeekPeriod';
@@ -33,7 +31,6 @@ import { format } from 'date-fns';
 import { DisputeResolutionModal } from '../components/fuel/DisputeResolutionModal';
 import { FuelReimbursementTable } from '../components/fuel/FuelReimbursementTable';
 import { SubmitExpenseModal } from '../components/fuel/SubmitExpenseModal';
-import { useFuelAnchors } from '../hooks/useFuelAnchors';
 import { fuelService } from '../services/fuelService';
 import { settlementService } from '../services/settlementService';
 import { finalizeFuelWeekReports } from '../services/fuelFinalizeService';
@@ -76,7 +73,7 @@ export function FuelManagement(props: {
   );
 }
 
-function FuelManagementInner({ defaultTab = 'dashboard', onViewDriverLedger, onTabChange }: {
+function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabChange }: {
     defaultTab?: string,
     onViewDriverLedger?: (driverId: string) => void,
     onTabChange?: (tab: string) => void
@@ -877,43 +874,6 @@ function FuelManagementInner({ defaultTab = 'dashboard', onViewDriverLedger, onT
       return d ? d.name : 'Unknown Driver';
   }, [drivers]);
 
-  // Phase 7: Shared Anchor Logic
-  const { validAnchorIds, getLinkedTransaction } = useFuelAnchors(logs, transactions);
-
-  const isManualEntry = (entry: FuelEntry) => {
-      if (validAnchorIds.has(entry.id)) return false;
-      const tx = getLinkedTransaction(entry);
-      const isManualType = entry.type === 'Manual_Entry' || entry.type === 'Fuel_Manual_Entry';
-      const hasManualPortalType = entry.metadata?.portal_type === 'Manual_Entry' || tx?.metadata?.portal_type === 'Manual_Entry';
-      const hasManualSource = entry.metadata?.source?.toLowerCase().includes('manual') || 
-                             entry.metadata?.source?.toLowerCase().includes('fuel log') ||
-                             (entry as any).source?.toLowerCase().includes('manual') ||
-                             (entry as any).source?.toLowerCase().includes('fuel log') ||
-                             tx?.metadata?.source?.toLowerCase().includes('manual') ||
-                             tx?.metadata?.source?.toLowerCase().includes('fuel log');
-      return isManualType || hasManualPortalType || hasManualSource;
-  };
-
-  // Phase 4: Decoupled Summary Stats (Step 4.2) — same YMD inclusion as Logs table
-  const statsScopeLogs = logs.filter(log => {
-    if (!logDateRange?.from && !logDateRange?.to) return true;
-    const startYmd = logDateRange.from ? toEntryYmd(logDateRange.from) : '0000-01-01';
-    const endYmd = logDateRange.to
-      ? toEntryYmd(logDateRange.to)
-      : (logDateRange.from ? toEntryYmd(logDateRange.from) : '9999-12-31');
-    return isEntryInInclusiveYmdRange(log.date, startYmd, endYmd);
-  });
-
-  const totalSpend = statsScopeLogs.reduce((sum, log) => sum + log.amount, 0);
-
-  const anchorTotalSpent = statsScopeLogs
-    .filter(log => validAnchorIds.has(log.id))
-    .reduce((sum, log) => sum + log.amount, 0);
-
-  const pendingAuditSpend = statsScopeLogs
-    .filter(log => isManualEntry(log))
-    .reduce((sum, log) => sum + log.amount, 0);
-
   const handleFinalize = async (reports: WeeklyFuelReport[]) => {
       const result = await runExclusive('Finalizing week…', async () => {
       try {
@@ -968,10 +928,7 @@ function FuelManagementInner({ defaultTab = 'dashboard', onViewDriverLedger, onT
   let pageTitle = "Fleet Integrity Management";
   let pageDescription = "Audit fleet integrity, reconcile fuel consumption, and manage gas cards.";
 
-  if (activeTab === 'dashboard') {
-      pageTitle = "Fleet Integrity Overview";
-      pageDescription = "Track consumption, reconcile expenses, and manage gas cards.";
-  } else if (activeTab === 'reconciliation') {
+  if (activeTab === 'reconciliation') {
       pageTitle = "Consumption Reconciliation";
       pageDescription = "Compare actual gas card charges against estimated operating costs.";
   } else if (activeTab === 'reimbursements') {
@@ -1015,55 +972,6 @@ function FuelManagementInner({ defaultTab = 'dashboard', onViewDriverLedger, onT
                 <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
                 {isRefreshing ? 'Refreshing...' : 'Refresh Data'}
             </Button>
-        </div>
-      )}
-
-      {activeTab === 'dashboard' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <Card>
-                <CardContent className="p-6 flex items-center gap-4">
-                    <div className="p-3 bg-blue-100 text-blue-600 rounded-full">
-                        <Fuel className="h-6 w-6" />
-                    </div>
-                    <div>
-                        <p className="text-sm text-slate-500 font-medium">Total Spend</p>
-                        <h3 className="text-2xl font-bold text-slate-900">${totalSpend.toFixed(2)}</h3>
-                    </div>
-                </CardContent>
-            </Card>
-            <Card>
-                <CardContent className="p-6 flex items-center gap-4">
-                    <div className="p-3 bg-emerald-100 text-emerald-600 rounded-full">
-                        <ShieldCheck className="h-6 w-6" />
-                    </div>
-                    <div>
-                        <p className="text-sm text-slate-500 font-medium">Verified Anchors</p>
-                        <h3 className="text-2xl font-bold text-slate-900">${anchorTotalSpent.toFixed(2)}</h3>
-                    </div>
-                </CardContent>
-            </Card>
-             <Card>
-                <CardContent className="p-6 flex items-center gap-4">
-                    <div className="p-3 bg-orange-100 text-orange-600 rounded-full">
-                        <AlertTriangle className="h-6 w-6" />
-                    </div>
-                    <div>
-                        <p className="text-sm text-slate-500 font-medium">Pending Audit</p>
-                        <h3 className="text-2xl font-bold text-slate-900">${pendingAuditSpend.toFixed(2)}</h3>
-                    </div>
-                </CardContent>
-            </Card>
-            <Card>
-                <CardContent className="p-6 flex items-center gap-4">
-                    <div className="p-3 bg-indigo-100 text-indigo-600 rounded-full">
-                        <CreditCard className="h-6 w-6" />
-                    </div>
-                    <div>
-                        <p className="text-sm text-slate-500 font-medium">Active Cards</p>
-                        <h3 className="text-2xl font-bold text-slate-900">{cards.filter(c => c.status === 'Active').length}</h3>
-                    </div>
-                </CardContent>
-            </Card>
         </div>
       )}
 

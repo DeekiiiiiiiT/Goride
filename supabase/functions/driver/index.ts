@@ -7,26 +7,22 @@
  * - Admin operations (monitoring, compliance)
  */
 import { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
-import { cors } from "https://deno.land/x/hono@v4.3.11/middleware.ts";
+import { applyCors } from "../_shared/corsAllowlist.ts";
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { registerDriverAdminRoutes } from "./admin.ts";
 
 const app = new Hono().basePath("/driver");
 
-app.use(
-  "*",
-  cors({
-    origin: "*",
-    allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
-    allowHeaders: [
-      "Content-Type",
-      "Authorization",
-      "apikey",
-      "x-client-info",
-      "x-request-id",
-    ],
-  }),
-);
+applyCors(app, {
+  allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+  allowHeaders: [
+    "Content-Type",
+    "Authorization",
+    "apikey",
+    "x-client-info",
+    "x-request-id",
+  ],
+});
 
 function svc(): SupabaseClient {
   return createClient(

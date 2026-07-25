@@ -1,15 +1,44 @@
 /**
  * Merchant Web Push — sends notifications to subscribed merchant devices.
- * Invoke with service role: { merchantId, title, body, url }
+ * Requires MERCHANT_PUSH_SECRET (or FLEET_CRON_SECRET) via X-Merchant-Push-Secret
+ * or Authorization: Bearer <secret>. Database webhooks must send the same secret.
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import webpush from "npm:web-push@3.6.7";
+import { buildCorsOriginFn } from "../_shared/corsAllowlist.ts";
+import { requireInternalSecret } from "../_shared/requireInternalSecret.ts";
+import { timingSafeEqual } from "../_shared/timingSafeEqual.ts";
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   { db: { schema: "delivery" } },
 );
+
+const corsOriginFn = buildCorsOriginFn();
+
+function corsHeadersFor(req: Request): Record<string, string> {
+  const origin = req.headers.get("Origin") ?? "";
+  const allowed = corsOriginFn(origin);
+  const headers: Record<string, string> = {
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers":
+      "authorization, x-client-info, apikey, content-type, x-merchant-push-secret, x-fleet-cron-secret, x-rides-cron-secret",
+  };
+  if (allowed) headers["Access-Control-Allow-Origin"] = allowed;
+  return headers;
+}
+
+function jsonResponse(
+  req: Request,
+  body: unknown,
+  status = 200,
+): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeadersFor(req), "Content-Type": "application/json" },
+  });
+}
 
 function configureVapid() {
   const publicKey = Deno.env.get("VAPID_PUBLIC_KEY");
@@ -57,8 +86,39 @@ function resolvePushRequest(body: Record<string, unknown>) {
 }
 
 Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeadersFor(req) });
+  }
+
   if (req.method !== "POST") {
-    return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405 });
+    return jsonResponse(req, { error: "Method not allowed" }, 405);
+  }
+
+  // Accept dedicated secret or shared cron secret (for DB webhook / service invoke)
+  const denied = requireInternalSecret(req, {
+    envKeys: ["MERCHANT_PUSH_SECRET", "FLEET_CRON_SECRET", "RIDES_CRON_SECRET"],
+    headerNames: ["X-Merchant-Push-Secret", "X-Fleet-Cron-Secret", "X-Rides-Cron-Secret"],
+  });
+  // Also allow Authorization: Bearer <secret> for supabase.functions.invoke with service role wrappers
+  if (denied) {
+    const auth = req.headers.get("Authorization") ?? "";
+    const bearer = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
+    const expected =
+      Deno.env.get("MERCHANT_PUSH_SECRET")?.trim() ||
+      Deno.env.get("FLEET_CRON_SECRET")?.trim() ||
+      Deno.env.get("RIDES_CRON_SECRET")?.trim() ||
+      "";
+    if (!expected || !bearer || !timingSafeEqual(bearer, expected)) {
+      // Service-role JWT is not a push secret — reject anon/user spam
+      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")?.trim() ?? "";
+      if (!serviceKey || !bearer || !timingSafeEqual(bearer, serviceKey)) {
+        const body = await denied.text();
+        return new Response(body, {
+          status: denied.status,
+          headers: { ...corsHeadersFor(req), "Content-Type": "application/json" },
+        });
+      }
+    }
   }
 
   try {
@@ -67,9 +127,7 @@ Deno.serve(async (req) => {
     const resolved = resolvePushRequest(body as Record<string, unknown>);
 
     if (!resolved) {
-      return new Response(JSON.stringify({ error: "merchantId or record.merchant_id required" }), {
-        status: 400,
-      });
+      return jsonResponse(req, { error: "merchantId or record.merchant_id required" }, 400);
     }
 
     const { merchantId, title, message, url } = resolved;
@@ -80,7 +138,7 @@ Deno.serve(async (req) => {
       .eq("merchant_id", merchantId);
 
     if (error) {
-      return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+      return jsonResponse(req, { error: error.message }, 500);
     }
 
     const payload = JSON.stringify({ title, body: message, url });
@@ -95,6 +153,7 @@ Deno.serve(async (req) => {
             keys: { p256dh: sub.p256dh, auth: sub.auth },
           },
           payload,
+          { timeout: 10000 },
         );
         sent += 1;
         await supabase
@@ -117,11 +176,9 @@ Deno.serve(async (req) => {
         .in("endpoint", stale);
     }
 
-    return new Response(JSON.stringify({ ok: true, sent, stale: stale.length }), {
-      headers: { "Content-Type": "application/json" },
-    });
+    return jsonResponse(req, { ok: true, sent, stale: stale.length });
   } catch (e) {
     console.error("[merchant-push]", e);
-    return new Response(JSON.stringify({ error: String(e) }), { status: 500 });
+    return jsonResponse(req, { error: "Push failed" }, 500);
   }
 });

@@ -61,6 +61,9 @@ function normalizeBodyTypeSlug(slug: string | null | undefined): string | null {
  * - Body type matching (if enabled)
  * - Distance radius
  *
+ * Eligibility is the sole DB round-trip here; callers should Promise.all
+ * locations / tiers / excluded-offer loads before invoking this.
+ *
  * Sorts by distance, then user_id for stable ordering.
  */
 export async function buildCandidatePool(

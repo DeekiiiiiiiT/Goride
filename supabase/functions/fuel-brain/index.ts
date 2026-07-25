@@ -17,6 +17,7 @@ import { cors } from "https://deno.land/x/hono@v4.3.11/middleware.ts";
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { requirePlatformAdmin } from "../_shared/platformAdmin.ts";
 import { classifyFuelWeek } from "./classify.ts";
+import { STABLE_GET_CACHE } from "../_shared/cacheControl.ts";
 
 const app = new Hono().basePath("/fuel-brain");
 
@@ -63,6 +64,7 @@ function policyToApi(row: Record<string, unknown>) {
 }
 
 app.get("/health", (c) => {
+  c.header("Cache-Control", STABLE_GET_CACHE);
   return c.json({
     service: "fuel-brain",
     status: "ok",

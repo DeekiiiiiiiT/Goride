@@ -3,7 +3,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { resolveActiveEarningsBundleForDriverWeek as resolveClient } from './earningsPolicyResolve';
-import { resolveActiveEarningsBundleForDriverWeek as resolveEdge } from '../supabase/functions/server/earnings_policy_runtime';
+import { resolveActiveEarningsBundleForDriverWeek as resolveEdge } from '../../../../supabase/functions/_fleet-server/earnings_policy_runtime';
 import type { EarningsPolicy } from '../types/earningsPolicy';
 import {
   createEmptyQuotas,

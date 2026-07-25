@@ -42,7 +42,8 @@ type FlyoutId = 'fuel' | 'toll' | 'driver-ops' | 'vehicle-ops' | 'business-finan
 
 const FUEL_PAGE_IDS = [
   'fuel-management',
-  'fuel-overview',
+  'fuel-overview', // legacy → redirects to fuel-analytics
+  'fuel-analytics',
   'fuel-reconciliation',
   'fuel-cards',
   'fuel-logs',
@@ -73,7 +74,8 @@ export function AppSidebar({
 
   const canSeeFuelDesk =
     isModuleEnabled('fuelManagement') &&
-    (canView('fuel-overview') ||
+    (canView('fuel-analytics') ||
+      canView('fuel-overview') ||
       canView('fuel-reimbursements') ||
       canView('fuel-reconciliation') ||
       canView('fuel-cards') ||
@@ -95,7 +97,8 @@ export function AppSidebar({
     canView('indrive-wallet') ||
     canView('transaction-list');
   const canSeeFleetOps = canSeeFuelDesk || canSeeTollDesk;
-  const canSeeDriverOps = canView('drivers') || canView('earnings-policy');
+  const canSeeDriverOps =
+    canView('drivers') || canView('driver-analytics') || canView('earnings-policy');
   const canSeeVehicleOps =
     canView('vehicles') ||
     canView('vehicle-analytics') ||
@@ -138,10 +141,15 @@ export function AppSidebar({
   };
 
   const fuelItems: NavLeaf[] = [
-    canView('fuel-overview') && {
-      id: 'fuel-overview',
-      label: 'Overview',
-      activeIds: ['fuel-management'],
+    (canView('fuel-analytics') || canView('fuel-overview')) && {
+      id: 'fuel-analytics',
+      label: 'Fuel Analytics',
+      activeIds: ['fuel-management', 'fuel-overview'],
+      badge: (
+        <Badge className="h-4 border-none bg-indigo-500 px-1 text-[8px] text-white">
+          New
+        </Badge>
+      ),
     },
     canView('fuel-reimbursements') && {
       id: 'fuel-reimbursements',
@@ -176,6 +184,15 @@ export function AppSidebar({
 
   const driverItems: NavLeaf[] = [
     canView('drivers') && { id: 'drivers', label: v('drivers') },
+    (canView('driver-analytics') || canView('drivers')) && {
+      id: 'driver-analytics',
+      label: 'Driver Analytics',
+      badge: (
+        <Badge className="h-4 border-none bg-indigo-500 px-1 text-[8px] text-white">
+          New
+        </Badge>
+      ),
+    },
     isSidebarItemVisible('earnings-policy', businessType) &&
       canView('earnings-policy') && {
         id: 'earnings-policy',

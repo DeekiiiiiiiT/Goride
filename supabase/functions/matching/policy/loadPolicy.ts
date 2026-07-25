@@ -12,6 +12,7 @@
  */
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getFlagFromEnv } from "../../_shared/featureFlags.ts";
 
 // -----------------------------------------------------------------------------
 // Types
@@ -148,7 +149,7 @@ function cacheKey(productKey: ProductKey, surfaceKey: SurfaceKey): string {
 // -----------------------------------------------------------------------------
 
 function isMatchingBrainEnabled(): boolean {
-  return Deno.env.get("MATCHING_BRAIN_ENABLED") === "1";
+  return getFlagFromEnv("MATCHING_BRAIN_ENABLED", false);
 }
 
 function parseNumericArray(raw: unknown): number[] {

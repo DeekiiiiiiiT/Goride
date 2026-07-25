@@ -3,8 +3,9 @@
  * Invoke via Supabase cron or: POST .../internal/evidence-cleanup with X-Fleet-Cron-Secret
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import * as kv from "../../../apps/fleet/src/supabase/functions/server/kv_store.tsx";
-import { runEvidenceCleanup } from "../../../apps/fleet/src/supabase/functions/server/evidence_storage.ts";
+import * as kv from "../_fleet-server/kv_store.tsx";
+import { runEvidenceCleanup } from "../_fleet-server/evidence_storage.ts";
+import { requireInternalSecret } from "../_shared/requireInternalSecret.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -16,11 +17,14 @@ Deno.serve(async (req) => {
     return new Response("ok", { headers: corsHeaders });
   }
 
-  const secret = Deno.env.get("FLEET_CRON_SECRET") || Deno.env.get("RIDES_CRON_SECRET");
-  const headerSecret = req.headers.get("X-Fleet-Cron-Secret") || req.headers.get("X-Rides-Cron-Secret");
-  if (!secret || headerSecret !== secret) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      status: 401,
+  const denied = requireInternalSecret(req, {
+    envKeys: ["FLEET_CRON_SECRET", "RIDES_CRON_SECRET"],
+    headerNames: ["X-Fleet-Cron-Secret", "X-Rides-Cron-Secret"],
+  });
+  if (denied) {
+    const body = await denied.text();
+    return new Response(body, {
+      status: denied.status,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }

@@ -209,9 +209,12 @@ async function hasMoreCandidatesAtWave(
 ): Promise<boolean> {
   const radiusKm = getWaveRadiusKm(policy, wave);
   const freshSince = new Date(Date.now() - driverLocationMaxAgeMs(policy)).toISOString();
-  const locations = await loadAvailableDriverLocations(freshSince);
 
-  const offers = await loadDriverOffersForRide(String(ride.id), false);
+  const [locations, offers] = await Promise.all([
+    loadAvailableDriverLocations(freshSince),
+    loadDriverOffersForRide(String(ride.id), false),
+  ]);
+
   const offeredDriverIds = new Set(offers.map((o) => o.driver_user_id));
   const excludedIds = new Set(
     offers

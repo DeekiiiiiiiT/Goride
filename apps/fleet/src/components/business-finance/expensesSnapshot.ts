@@ -58,7 +58,7 @@ export function buildExpensesSnapshot(
         label: 'Fuel',
         amount: fuel,
         tracked: true,
-        deepLinkPage: 'fuel-overview',
+        deepLinkPage: 'fuel-analytics',
         deepLinkLabel: 'Open Fuel',
         note:
           pnl.fuelRecoveredWashed && pnl.fuelRecoveredWashed > 0.005

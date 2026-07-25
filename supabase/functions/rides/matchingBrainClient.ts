@@ -1,11 +1,9 @@
 /**
  * Matching Brain Client — Delegation Shim
  *
- * When RIDES_USE_MATCHING_BRAIN=1, delegates matching operations to
- * the dedicated matching Edge function instead of running locally.
- *
- * This enables zero-breakage rollout: rides can switch between legacy
- * and brain path with a single flag flip.
+ * When RIDES_USE_MATCHING_BRAIN=1 or MATCHING_BRAIN_ENABLED=1, delegates
+ * matching to the matching Edge function. Fail-closed on brain errors
+ * unless MATCHING_LEGACY_FALLBACK=1 (emergency only).
  */
 
 export interface StartMatchingRequest {
@@ -63,7 +61,13 @@ function getServiceRoleKey(): string {
 }
 
 export function isMatchingBrainEnabled(): boolean {
-  return Deno.env.get("RIDES_USE_MATCHING_BRAIN") === "1";
+  return Deno.env.get("RIDES_USE_MATCHING_BRAIN") === "1" ||
+    Deno.env.get("MATCHING_BRAIN_ENABLED") === "1";
+}
+
+/** Emergency only: re-enable rides-local reconcile/wave when brain fails. */
+export function isMatchingLegacyFallbackEnabled(): boolean {
+  return Deno.env.get("MATCHING_LEGACY_FALLBACK") === "1";
 }
 
 async function callMatchingBrain(

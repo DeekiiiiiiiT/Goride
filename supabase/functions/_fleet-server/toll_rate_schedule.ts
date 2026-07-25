@@ -8,13 +8,13 @@ import {
   resolveOfficialTollRate,
   selectScheduleVersion,
   toIsoDateKey,
-} from "../../../utils/officialTollRate.ts";
+} from "../../../apps/fleet/src/utils/officialTollRate.ts";
 import type {
   TollPaymentMethodRate,
   TollRateScheduleStore,
   TollRateScheduleVersion,
-} from "../../../types/tollRateSchedule.ts";
-import { KV_TOLL_RATE_SCHEDULE } from "../../../types/tollRateSchedule.ts";
+} from "../../../apps/fleet/src/types/tollRateSchedule.ts";
+import { KV_TOLL_RATE_SCHEDULE } from "../../../apps/fleet/src/types/tollRateSchedule.ts";
 
 export {
   migrateToVersionedStore,

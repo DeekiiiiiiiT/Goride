@@ -9,6 +9,7 @@
 import { Webhook } from "https://esm.sh/standardwebhooks@1.0.0";
 import { loadPrefixListsFromEnv, pickCarrier } from "./carrierRouter.ts";
 import { recordSent, wasRecentlySent } from "./sendDedup.ts";
+import { fetchWithTimeout } from "../_shared/fetchWithTimeout.ts";
 
 /** Idempotency window for suppressing duplicate OTP redeliveries. */
 function dedupWindowMs(): number {
@@ -73,10 +74,11 @@ async function postJson(
   headers: Record<string, string>,
   body: Record<string, unknown>
 ): Promise<void> {
-  const res = await fetch(url, {
+  const res = await fetchWithTimeout(url, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...headers },
     body: JSON.stringify(body),
+    timeoutMs: 10000,
   });
   const text = await res.text();
   if (!res.ok) {

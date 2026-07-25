@@ -128,10 +128,12 @@ import {
 } from "./rideNotifications.ts";
 import { registerScheduledRidesRoutes } from "./scheduledRides/scheduledRidesRoutes.ts";
 import { registerHaulageRoutes } from "./haulage/haulageRoutes.ts";
+import { registerInternalCronRoutes } from "./internalCronRoutes.ts";
 import { attachHaulageManifestIfNeeded } from "./haulage/manifestJoin.ts";
 import { filterDriversForHaulageJob } from "./haulage/dispatchConstraints.ts";
 import {
   isMatchingBrainEnabled,
+  isMatchingLegacyFallbackEnabled,
   delegateStartMatching,
   delegateReconcile,
   delegateDeclineOffer,
@@ -583,18 +585,16 @@ async function cancelRideRequestRow(
 }
 
 /**
- * @deprecated Phase 8 cleanup: Remove legacy path after matching brain stable in production.
- * Legacy matching logic is retained for fallback during rollout.
- * After stable operation, this should only delegate to matching brain.
- * 
- * Wave 6 note: Deprecation warning added. Removal deferred pending production metrics.
+ * Prefer matching brain when enabled. Fail-closed on brain errors unless
+ * MATCHING_LEGACY_FALLBACK=1 (emergency). Legacy in-process path only when
+ * brain flags are off or emergency fallback is on.
  */
 let _legacyMatchingWarnedOnce = false;
 async function startMatchingForRide(
   rideId: string,
   ride: Record<string, unknown>,
   reqId?: string,
-): Promise<void> {
+): Promise<{ ok: boolean; error?: string }> {
   if (isMatchingBrainEnabled()) {
     const result = await delegateStartMatching({
       product_key: "rides",
@@ -610,31 +610,48 @@ async function startMatchingForRide(
           : undefined,
       },
     });
-    if (!result.ok) {
+    if (result.ok) return { ok: true };
+
+    logLine({
+      event: "brain_start_matching_failed",
+      ride_id: rideId,
+      error: result.error,
+      request_id: reqId ?? null,
+      legacy_fallback: isMatchingLegacyFallbackEnabled(),
+    });
+
+    if (!isMatchingLegacyFallbackEnabled()) {
       logLine({
-        event: "brain_start_matching_failed_fallback",
+        event: "brain_start_matching_fail_closed",
         ride_id: rideId,
-        error: result.error,
+        error: result.error ?? "brain_unavailable",
         request_id: reqId ?? null,
       });
-      // Wave 6: Warn once when legacy fallback is still being used
-      if (!_legacyMatchingWarnedOnce) {
-        console.warn("[rides] DEPRECATION: Legacy matching fallback used. Phase 8 removal deferred pending metrics. ride_id:", rideId);
-        _legacyMatchingWarnedOnce = true;
-      }
-      // Fallback to legacy path
-      await runMatchingWave(rideId, ride, 1, reqId);
-      await reconcileMatching(rideId, reqId);
+      return { ok: false, error: result.error ?? "brain_unavailable" };
     }
-    return;
+
+    if (!_legacyMatchingWarnedOnce) {
+      console.warn(
+        "[rides] EMERGENCY: MATCHING_LEGACY_FALLBACK=1 — using rides-local matching after brain failure. ride_id:",
+        rideId,
+      );
+      _legacyMatchingWarnedOnce = true;
+    }
+    await runMatchingWave(rideId, ride, 1, reqId);
+    await reconcileMatching(rideId, reqId);
+    return { ok: true };
   }
-  // Legacy path — warn once per isolate when brain is disabled
+
   if (!_legacyMatchingWarnedOnce) {
-    console.warn("[rides] DEPRECATION: Legacy matching path active (brain disabled). Phase 8 removal deferred pending metrics. ride_id:", rideId);
+    console.warn(
+      "[rides] DEPRECATION: Legacy matching path active (brain disabled). Set RIDES_USE_MATCHING_BRAIN=1. ride_id:",
+      rideId,
+    );
     _legacyMatchingWarnedOnce = true;
   }
   await runMatchingWave(rideId, ride, 1, reqId);
   await reconcileMatching(rideId, reqId);
+  return { ok: true };
 }
 
 async function syncBookingRequestForTerminalRide(
@@ -1082,13 +1099,10 @@ async function cancelMatchingRideSystem(
 }
 
 /**
- * @deprecated Phase 8 cleanup: Remove legacy path after matching brain stable in production.
- * Legacy reconcile logic is retained for fallback during rollout.
- * After stable operation, this should only delegate to matching brain.
- * 
- * Wave 6 note: Deprecation warning added. Removal deferred pending production metrics.
- */
-/**
+ * Prefer matching brain when enabled. Fail-closed on brain errors unless
+ * MATCHING_LEGACY_FALLBACK=1. Legacy in-process reconcile retained only for
+ * brain-off or emergency fallback.
+ *
  * Per-ride single-flight guard. Reconcile can be triggered concurrently (cron
  * batch + an offer accept/decline + a rider poll all firing at once). Two
  * overlapping runs each read the same "no pending offers" state and each fire a
@@ -1121,27 +1135,40 @@ async function reconcileMatchingInner(rideId: string, requestId?: string) {
       ride_request_id: rideId,
       request_id: requestId,
     });
-    if (!result.ok) {
+    if (result.ok) return;
+
+    logLine({
+      event: "brain_reconcile_failed",
+      ride_id: rideId,
+      error: result.error,
+      request_id: requestId ?? null,
+      legacy_fallback: isMatchingLegacyFallbackEnabled(),
+    });
+
+    if (!isMatchingLegacyFallbackEnabled()) {
       logLine({
-        event: "brain_reconcile_failed_fallback",
+        event: "brain_reconcile_fail_closed",
         ride_id: rideId,
-        error: result.error,
+        error: result.error ?? "brain_unavailable",
         request_id: requestId ?? null,
       });
-      // Wave 6: Warn once when legacy reconcile fallback is still being used
-      if (!_legacyReconcileWarnedOnce) {
-        console.warn("[rides] DEPRECATION: Legacy reconcile fallback used. Phase 8 removal deferred pending metrics. ride_id:", rideId);
-        _legacyReconcileWarnedOnce = true;
-      }
-      // Fallback to legacy path below
-    } else {
       return;
     }
+
+    if (!_legacyReconcileWarnedOnce) {
+      console.warn(
+        "[rides] EMERGENCY: MATCHING_LEGACY_FALLBACK=1 — using rides-local reconcile after brain failure. ride_id:",
+        rideId,
+      );
+      _legacyReconcileWarnedOnce = true;
+    }
+    // Fall through to legacy path below
   }
 
-  await expirePendingOffers(rideId);
-
-  const dispatchSettings = await loadDispatchSettingsForMatching();
+  const [, dispatchSettings] = await Promise.all([
+    expirePendingOffers(rideId),
+    loadDispatchSettingsForMatching(),
+  ]);
 
   for (let iter = 0; iter < RECONCILE_WAVE_LOOP_CAP; iter++) {
     const ride = await loadRideRequestById(rideId);
@@ -1196,11 +1223,8 @@ async function reconcileMatchingInner(rideId: string, requestId?: string) {
 }
 
 /**
- * @deprecated Phase 8 cleanup: Remove after matching brain stable in production.
- * Legacy wave runner is retained for fallback during rollout.
- * All wave logic should be handled by matching brain after cutover.
- * 
- * Wave 6 note: Removal deferred pending production metrics confirmation.
+ * Legacy wave runner — used only when brain flags are off or
+ * MATCHING_LEGACY_FALLBACK=1 after a brain failure.
  */
 async function runMatchingWave(
   rideId: string,
@@ -1225,31 +1249,39 @@ async function runMatchingWave(
   );
 
   const freshSince = new Date(Date.now() - driverLocationMaxAgeMs(dispatchSettings)).toISOString();
-  const locs = await loadAvailableDriverLocations(freshSince);
-
   const serviceSlug = typeof ride.vehicle_option === "string"
     ? ride.vehicle_option.trim().toLowerCase()
     : "";
-  let allowedBodySlugs = new Set<string>();
-  let tiersCount = 0;
-  if (serviceSlug && dispatchSettings.body_type_filtering_enabled) {
-    try {
-      const { db: adminDb, tables } = await getRidesAdminDb();
-      const tiers = await loadServiceBodyTypeTiers(adminDb, tables, serviceSlug);
-      tiersCount = tiers.length;
-      if (tiersCount > 0) {
-        allowedBodySlugs = allowedBodySlugsForWave(
-          tiers,
-          wave,
-          dispatchSettings.body_type_tier_mode,
-        );
-      }
-    } catch {
-      allowedBodySlugs = new Set();
-    }
-  }
 
-  const declinedRows = (await loadDriverOffersForRide(rideId, false)).filter((row) =>
+  // Independent: driver locations, body-type tiers, prior offers
+  const [locs, tierResult, offerRows] = await Promise.all([
+    loadAvailableDriverLocations(freshSince),
+    (async (): Promise<{ allowedBodySlugs: Set<string>; tiersCount: number }> => {
+      if (!serviceSlug || !dispatchSettings.body_type_filtering_enabled) {
+        return { allowedBodySlugs: new Set(), tiersCount: 0 };
+      }
+      try {
+        const { db: adminDb, tables } = await getRidesAdminDb();
+        const tiers = await loadServiceBodyTypeTiers(adminDb, tables, serviceSlug);
+        const tiersCount = tiers.length;
+        if (tiersCount === 0) return { allowedBodySlugs: new Set(), tiersCount: 0 };
+        return {
+          allowedBodySlugs: allowedBodySlugsForWave(
+            tiers,
+            wave,
+            dispatchSettings.body_type_tier_mode,
+          ),
+          tiersCount,
+        };
+      } catch {
+        return { allowedBodySlugs: new Set(), tiersCount: 0 };
+      }
+    })(),
+    loadDriverOffersForRide(rideId, false),
+  ]);
+
+  const { allowedBodySlugs, tiersCount } = tierResult;
+  const declinedRows = offerRows.filter((row) =>
     ["declined", "expired", "superseded"].includes(String(row.status)),
   );
 
@@ -2774,88 +2806,25 @@ app.patch("/v1/requests/:id/driver-transition", async (c) => {
   });
 });
 
-app.post("/v1/internal/reconcile-matching", async (c) => {
-  const secret = Deno.env.get("RIDES_CRON_SECRET");
-  const token = c.req.header("X-Rides-Cron-Secret") ?? "";
-  if (!secret || token !== secret) {
-    return c.json({ error: "unauthorized" }, 401);
-  }
-
-  let hygiene: Record<string, unknown> | null = null;
-  const { data: hygieneData, error: hygieneErr } = await pubSvc().rpc("rides_run_matching_hygiene");
-  if (!hygieneErr && hygieneData) {
-    hygiene = hygieneData as Record<string, unknown>;
-  } else if (hygieneErr) {
-    logLine({ event: "matching_hygiene_rpc_skipped", error: hygieneErr.message });
-  }
-
-  const rideIds = await loadMatchingRideIds();
-  let processed = 0;
-  for (const rideId of rideIds) {
-    await reconcileMatching(rideId);
-    processed += 1;
-  }
-
-  logLine({ event: "reconcile_matching_batch", processed, hygiene });
-  return c.json({ ok: true, processed, hygiene });
-});
-
-app.post("/v1/internal/reconcile-active-rides", async (c) => {
-  const secret = Deno.env.get("RIDES_CRON_SECRET");
-  const token = c.req.header("X-Rides-Cron-Secret") ?? "";
-  if (!secret || token !== secret) {
-    return c.json({ error: "unauthorized" }, 401);
-  }
-
-  const settings = await loadDispatchSettingsForRides();
-  const rideIds = await loadActiveRideIds();
-  let noShowCancelled = 0;
-  let staleAlerts = 0;
-  const nowMs = Date.now();
-
-  for (const rideId of rideIds) {
-    const ride = await loadRideRequestById(rideId);
-    if (!ride) continue;
-
-    const lastLocMs = ride.last_driver_location_at
-      ? Date.parse(String(ride.last_driver_location_at))
-      : NaN;
-    if (
-      Number.isFinite(lastLocMs) &&
-      nowMs - lastLocMs > 2 * 60 * 60 * 1000 &&
-      ["driver_en_route_pickup", "driver_arrived_pickup", "on_trip"].includes(String(ride.status))
-    ) {
-      staleAlerts += 1;
-      await audit(rideId, null, "ride_stale_location_alert", {
-        last_driver_location_at: ride.last_driver_location_at,
-        status: ride.status,
-      });
-    }
-
-    if (
-      settings.no_show_auto_cancel_enabled &&
-      ride.status === "driver_arrived_pickup" &&
-      ride.arrived_pickup_at
-    ) {
-      const arrivedMs = Date.parse(String(ride.arrived_pickup_at));
-      const waitMin = (nowMs - arrivedMs) / 60_000;
-      if (waitMin >= settings.no_show_cancel_minutes) {
-        const tr = await applyRideTransition(transitionDeps(), {
-          rideId,
-          next: "cancelled",
-          actorUserId: null,
-          source: "system",
-          expectedFrom: "driver_arrived_pickup",
-          cancelReason: "rider_no_show",
-          cancelledBy: "system",
-        });
-        if (tr.ok && !tr.skipped) noShowCancelled += 1;
-      }
-    }
-  }
-
-  logLine({ event: "reconcile_active_rides", rides: rideIds.length, noShowCancelled, staleAlerts });
-  return c.json({ ok: true, rides: rideIds.length, no_show_cancelled: noShowCancelled, stale_alerts: staleAlerts });
+registerInternalCronRoutes(app, {
+  pubSvc,
+  logLine,
+  loadMatchingRideIds,
+  reconcileMatching,
+  loadDispatchSettingsForRides,
+  loadActiveRideIds,
+  loadRideRequestById,
+  audit,
+  cancelNoShowRide: async (rideId) =>
+    applyRideTransition(transitionDeps(), {
+      rideId,
+      next: "cancelled",
+      actorUserId: null,
+      source: "system",
+      expectedFrom: "driver_arrived_pickup",
+      cancelReason: "rider_no_show",
+      cancelledBy: "system",
+    }),
 });
 
 async function loadRiderDisplayNameForChat(userId: string): Promise<string | null> {

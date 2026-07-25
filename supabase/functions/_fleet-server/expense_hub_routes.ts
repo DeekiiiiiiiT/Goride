@@ -21,9 +21,9 @@ import {
   canTransition,
   hubCategoryToCanonicalEventType,
   allocateEvenly,
-} from "../../../utils/expenseHubJournal.ts";
+} from "../../../apps/fleet/src/utils/expenseHubJournal.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import type { FixedExpenseConfig } from "../../../types/expenses.ts";
+import type { FixedExpenseConfig } from "../../../apps/fleet/src/types/expenses.ts";
 import type {
   ExpenseDocument,
   ExpensePayment,
@@ -32,13 +32,13 @@ import type {
   ExpenseVendor,
   ExpenseAuditEvent,
   ExpenseBulkPreview,
-} from "../../../types/expenseHub.ts";
-import { buildFixedExpenseOccurrences } from "../../../utils/fixedExpenseOccurrences.ts";
+} from "../../../apps/fleet/src/types/expenseHub.ts";
+import { buildFixedExpenseOccurrences } from "../../../apps/fleet/src/utils/fixedExpenseOccurrences.ts";
 import {
   buildExpenseSpendBreakdown,
   type CoverageRuleInput,
   type PointSpendEvent,
-} from "../../../utils/expenseCoverageRunRate.ts";
+} from "../../../apps/fleet/src/utils/expenseCoverageRunRate.ts";
 import {
   listFleetVisibleVendors,
   mergeCategoryCatalog,

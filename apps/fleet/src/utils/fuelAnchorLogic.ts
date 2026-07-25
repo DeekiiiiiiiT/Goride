@@ -1,6 +1,6 @@
 /**
  * Shared soft/hard anchor + SPLIT math.
- * Mirrored in supabase/functions/server/fuel_logic.ts — keep in sync.
+ * Mirrored in supabase/functions/_fleet-server/fuel_logic.ts — keep in sync.
  * See docs/fuel-brain-spine.md.
  */
 

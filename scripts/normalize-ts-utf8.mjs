@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 const roots = [
-  "src/supabase/functions/server/vehicle_catalog_gate.ts",
+  "supabase/functions/_fleet-server/vehicle_catalog_gate.ts",
   "src/utils/vehicleCatalogGate.ts",
   "src/utils/catalogGateErrors.ts",
   "src/utils/chassisPrefix.ts",

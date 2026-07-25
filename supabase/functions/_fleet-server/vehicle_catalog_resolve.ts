@@ -7,7 +7,7 @@ import {
   filterCatalogRowsByFleetMonth,
   type CatalogMatchHints,
   type CatalogVariantRow,
-} from "../../../utils/vehicleCatalogResolution.ts";
+} from "../../../apps/fleet/src/utils/vehicleCatalogResolution.ts";
 import { isVehicleCatalogSchemaMismatchError } from "./vehicle_catalog_schema_fallback.ts";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;

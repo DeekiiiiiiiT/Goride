@@ -4,16 +4,16 @@
  */
 import type { Context } from "npm:hono";
 import { appendCanonicalLedgerEvents } from "./ledger_canonical.ts";
-import type { FixedExpenseConfig } from "../../../types/expenses.ts";
-import { buildFixedExpenseOccurrences } from "../../../utils/fixedExpenseOccurrences.ts";
-import { classifyPostedBusinessTransaction } from "../../../utils/businessTransactionAccounting.ts";
+import type { FixedExpenseConfig } from "../../../apps/fleet/src/types/expenses.ts";
+import { buildFixedExpenseOccurrences } from "../../../apps/fleet/src/utils/fixedExpenseOccurrences.ts";
+import { classifyPostedBusinessTransaction } from "../../../apps/fleet/src/utils/businessTransactionAccounting.ts";
 import {
   buildCanonicalMaintenanceEvent,
   type MaintenanceLedgerRecordInput,
-} from "../../../utils/canonicalMaintenanceLedger.ts";
+} from "../../../apps/fleet/src/utils/canonicalMaintenanceLedger.ts";
 
-export { buildCanonicalMaintenanceEvent, isMaintenanceLedgerEligible } from "../../../utils/canonicalMaintenanceLedger.ts";
-export type { MaintenanceLedgerRecordInput } from "../../../utils/canonicalMaintenanceLedger.ts";
+export { buildCanonicalMaintenanceEvent, isMaintenanceLedgerEligible } from "../../../apps/fleet/src/utils/canonicalMaintenanceLedger.ts";
+export type { MaintenanceLedgerRecordInput } from "../../../apps/fleet/src/utils/canonicalMaintenanceLedger.ts";
 
 function isCompletedTripStatus(status: unknown): boolean {
   const s = String(status ?? "").trim().toLowerCase();

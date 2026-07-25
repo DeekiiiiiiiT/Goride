@@ -1,6 +1,6 @@
 /**
  * Pure toll-disposition classifier (client mirror of the server module
- * apps/fleet/src/supabase/functions/server/driver_toll_disposition.ts).
+ * supabase/functions/_fleet-server/driver_toll_disposition.ts).
  *
  * Single policy for how a toll affects a driver's settlement:
  *   - cash toll (driver paid company cash)               → cashWash (credit vs owed)

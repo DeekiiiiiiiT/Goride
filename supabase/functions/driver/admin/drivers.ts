@@ -38,6 +38,7 @@ import {
   requireDelete,
   requireWrite,
 } from "./permissions.ts";
+import { PRIVATE_LIST_CACHE } from "../../_shared/cacheControl.ts";
 
 type DriverAdminDb = Awaited<ReturnType<typeof getDriverAdminDb>>;
 
@@ -382,6 +383,7 @@ export function registerDriverUserAdminRoutes(admin: Hono) {
         onboarding: c.req.query("onboarding") ?? undefined,
         sort: c.req.query("sort") ?? undefined,
       });
+      c.header("Cache-Control", PRIVATE_LIST_CACHE);
       return c.json({ drivers, total, page, limit });
     } catch (e) {
       return c.json({
@@ -919,6 +921,8 @@ export function registerDriverUserAdminRoutes(admin: Hono) {
 
     const resolved = await driverDbOrResponse(c);
     if (resolved instanceof Response) return resolved;
+
+    c.header("Cache-Control", PRIVATE_LIST_CACHE);
 
     const page = Math.max(1, Number(c.req.query("page") ?? 1));
     const limit = Math.min(100, Math.max(1, Number(c.req.query("limit") ?? 25)));

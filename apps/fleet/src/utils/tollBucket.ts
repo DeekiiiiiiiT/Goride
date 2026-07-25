@@ -58,7 +58,7 @@ export function bucketForBestMatch(
 
 /**
  * Client mirror of the server's TollWorkflowStage (RWF-1,
- * apps/fleet/src/supabase/functions/server/toll_workflow_stage.ts). Kept as a
+ * supabase/functions/_fleet-server/toll_workflow_stage.ts). Kept as a
  * plain string union here (not imported — that file is a Deno server module)
  * so `bucketForWorkflowStage` below can be unit-tested the same way
  * `bucketForBestMatch` already is.

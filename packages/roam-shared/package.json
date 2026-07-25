@@ -1,0 +1,19 @@
+{
+  "name": "@roam/roam-shared",
+  "version": "0.1.0",
+  "private": true,
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./ErrorBoundary": "./src/ErrorBoundary.tsx"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0"
+  },
+  "dependencies": {
+    "@roam/api-client": "workspace:*",
+    "lucide-react": "^0.487.0"
+  }
+}

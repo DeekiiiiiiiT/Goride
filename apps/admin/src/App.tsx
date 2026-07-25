@@ -6,6 +6,8 @@ import { AdminLoginPage } from './components/admin/AdminLoginPage';
 import { AdminPortal } from './components/admin/AdminPortal';
 import { isPassengerOnlyMetadataRole } from '@roam/auth-client';
 import { WrongAdminSurfaceGate } from './components/auth/WrongAdminSurfaceGate';
+// Soft path rules shared with apps/admin/middleware.js (Vercel Edge cookie gate).
+import { requiresSessionGate } from './middleware/sessionGate';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -20,6 +22,9 @@ const queryClient = new QueryClient({
 
 function AppContent() {
   const { user, isPlatformUser, loading, signOut } = useAuth();
+  // Path-based gate (Vite SPA): AuthProvider is authoritative; Edge middleware is soft cookie UX.
+  const pathNeedsSession =
+    typeof window !== 'undefined' && requiresSessionGate(window.location.pathname);
 
   if (loading) {
     return (
@@ -40,6 +45,9 @@ function AppContent() {
   }
 
   if (!user || !isPlatformUser) {
+    if (pathNeedsSession && typeof window !== 'undefined' && window.location.pathname !== '/') {
+      window.history.replaceState(null, '', '/');
+    }
     return <AdminLoginPage />;
   }
 

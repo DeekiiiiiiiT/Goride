@@ -6,7 +6,7 @@ import { classifyOrphanToll, OrphanCandidateTrip } from "./orphanTollClassifier.
  * match apps/fleet/src/utils/orphanTollClassifier.test.ts (the client Vitest
  * suite) case-for-case, so any drift between the two hand-ported copies fails here.
  *
- * Run: deno test apps/fleet/src/supabase/functions/server/orphanTollClassifier.test.ts
+ * Run: deno test supabase/functions/_fleet-server/orphanTollClassifier.test.ts
  */
 
 const PROXIMITY = 180;

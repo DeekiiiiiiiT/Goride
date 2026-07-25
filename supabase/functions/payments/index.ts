@@ -4,13 +4,23 @@
  */
 
 import { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
-import { cors } from "https://deno.land/x/hono@v4.3.11/middleware.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { applyCors } from "../_shared/corsAllowlist.ts";
+import { timingSafeEqual } from "../_shared/timingSafeEqual.ts";
 import { requireProductAdmin } from "../_shared/productAdmin.ts";
+import { assertRateLimit } from "../_shared/rateLimit.ts";
+import { getFlag } from "../_shared/featureFlags.ts";
+import { fetchWithTimeout } from "../_shared/fetchWithTimeout.ts";
+import { validateBody, z } from "../_shared/validateBody.ts";
+
+const PaymentIntentBody = z.object({
+  orderId: z.string().uuid(),
+  provider: z.enum(["wipay", "paypal"]).optional(),
+});
 
 const app = new Hono().basePath("/payments");
 
-app.use("*", cors());
+applyCors(app);
 
 function getSupabase(authHeader?: string) {
   return createClient(
@@ -34,13 +44,6 @@ function wipayCallbackSecret(): string | null {
   return s.trim();
 }
 
-function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let out = 0;
-  for (let i = 0; i < a.length; i++) out |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return out === 0;
-}
-
 function verifyWipayCallbackSecret(c: { req: { header: (n: string) => string | undefined; url: string } }): boolean {
   const expected = wipayCallbackSecret();
   if (!expected) {
@@ -58,6 +61,53 @@ function verifyWipayCallbackSecret(c: { req: { header: (n: string) => string | u
   return Boolean(provided) && timingSafeEqual(provided, expected);
 }
 
+/** Resolve delivery customer row for an authenticated user. */
+async function getCustomerForUser(userId: string) {
+  const serviceSupabase = getServiceSupabase();
+  const { data: customer } = await serviceSupabase
+    .schema("delivery")
+    .from("customers")
+    .select("id")
+    .eq("user_id", userId)
+    .maybeSingle();
+  return customer;
+}
+
+/** Ensure the authenticated user owns the order (by customer_id). */
+async function assertCustomerOwnsOrder(
+  userId: string,
+  orderId: string,
+): Promise<
+  | { ok: true; order: Record<string, unknown>; customerId: string }
+  | { ok: false; status: number; error: string }
+> {
+  const customer = await getCustomerForUser(userId);
+  if (!customer) return { ok: false, status: 403, error: "Forbidden" };
+
+  const serviceSupabase = getServiceSupabase();
+  const { data: order, error } = await serviceSupabase
+    .schema("delivery")
+    .from("orders")
+    .select("*, merchant:merchant_id(*)")
+    .eq("id", orderId)
+    .single();
+
+  if (error || !order) return { ok: false, status: 404, error: "Order not found" };
+  if (String(order.customer_id) !== String(customer.id)) {
+    return { ok: false, status: 403, error: "Forbidden" };
+  }
+  return { ok: true, order: order as Record<string, unknown>, customerId: String(customer.id) };
+}
+
+/** WiPay gateway host — sandbox vs live by WIPAY_ENV. */
+function wipayGatewayUrl(): string {
+  const env = (Deno.env.get("WIPAY_ENV") ?? "sandbox").toLowerCase();
+  if (env === "live" || env === "production") {
+    return "https://www.wipayfinancial.com/v1/gateway_live";
+  }
+  return "https://sandbox.wipayfinancial.com/v1/gateway_live";
+}
+
 // Health check
 app.get("/health", (c) => c.json({ service: "payments", status: "ok", providers: ["wipay", "paypal"] }));
 
@@ -73,21 +123,26 @@ app.post("/intents", async (c) => {
   const supabase = getSupabase(authHeader);
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+  if (!(await getFlag("PAYMENTS_INTENTS_ENABLED", true))) {
+    return c.json({ error: "payments_disabled" }, 503);
+  }
+
+  const limited = await assertRateLimit(c, `payments:intents:${user.id}`, {
+    max: 20,
+    windowMs: 60_000,
+  });
+  if (limited) return limited;
   
-  const body = await c.req.json();
+  const body = await validateBody(c, PaymentIntentBody);
+  if (body instanceof Response) return body;
   const { orderId, provider = "wipay" } = body;
+
+  const owned = await assertCustomerOwnsOrder(user.id, orderId);
+  if (!owned.ok) return c.json({ error: owned.error }, owned.status);
+  const order = owned.order;
   
   const serviceSupabase = getServiceSupabase();
-  const { data: order, error: orderError } = await serviceSupabase
-    .schema("delivery")
-    .from("orders")
-    .select("*, merchant:merchant_id(*)")
-    .eq("id", orderId)
-    .single();
-  
-  if (orderError || !order) {
-    return c.json({ error: "Order not found" }, 404);
-  }
   
   let clientSecret = null;
   let providerIntentId = null;
@@ -118,7 +173,7 @@ app.post("/intents", async (c) => {
     .from("payment_intents")
     .insert({
       order_id: orderId,
-      customer_id: order.customer_id,
+      customer_id: owned.customerId,
       amount: order.total,
       currency: "JMD",
       provider,
@@ -163,7 +218,7 @@ async function createWiPayIntent(order: any) {
   responseUrl.searchParams.set("secret", callbackSecret);
   
   try {
-    const response = await fetch("https://sandbox.wipayfinancial.com/v1/gateway_live", {
+    const response = await fetchWithTimeout(wipayGatewayUrl(), {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
@@ -183,6 +238,7 @@ async function createWiPayIntent(order: any) {
         return_url: `${returnUrl}/orders/${order.id}`,
         total: order.total.toString(),
       }),
+      timeoutMs: 15000,
     });
     
     const result = await response.json();
@@ -308,13 +364,14 @@ async function getPayPalAccessToken() {
     );
   }
   
-  const response = await fetch(`${baseUrl}/v1/oauth2/token`, {
+  const response = await fetchWithTimeout(`${baseUrl}/v1/oauth2/token`, {
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
       "Authorization": `Basic ${btoa(`${clientId}:${clientSecret}`)}`
     },
-    body: "grant_type=client_credentials"
+    body: "grant_type=client_credentials",
+    timeoutMs: 15000,
   });
   
   const data = await response.json();
@@ -329,7 +386,7 @@ async function createPayPalOrder(order: any) {
       : "https://api-m.sandbox.paypal.com";
     const returnUrl = Deno.env.get("APP_URL") ?? "https://dash.roamja.com";
     
-    const response = await fetch(`${baseUrl}/v2/checkout/orders`, {
+    const response = await fetchWithTimeout(`${baseUrl}/v2/checkout/orders`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -353,7 +410,8 @@ async function createPayPalOrder(order: any) {
           return_url: `${returnUrl}/payment/callback/paypal?orderId=${order.id}`,
           cancel_url: `${returnUrl}/orders/${order.id}?cancelled=true`
         }
-      })
+      }),
+      timeoutMs: 15000,
     });
     
     const result = await response.json();
@@ -378,9 +436,19 @@ async function createPayPalOrder(order: any) {
 app.post("/paypal/capture", async (c) => {
   const authHeader = c.req.header("Authorization");
   if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
+
+  const supabase = getSupabase(authHeader);
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return c.json({ error: "Unauthorized" }, 401);
   
   const body = await c.req.json();
   const { paypalOrderId, orderId } = body;
+  if (!paypalOrderId || !orderId) {
+    return c.json({ error: "paypalOrderId and orderId required" }, 400);
+  }
+
+  const owned = await assertCustomerOwnsOrder(user.id, String(orderId));
+  if (!owned.ok) return c.json({ error: owned.error }, owned.status);
   
   const serviceSupabase = getServiceSupabase();
   
@@ -390,12 +458,13 @@ app.post("/paypal/capture", async (c) => {
       ? "https://api-m.paypal.com"
       : "https://api-m.sandbox.paypal.com";
     
-    const response = await fetch(`${baseUrl}/v2/checkout/orders/${paypalOrderId}/capture`, {
+    const response = await fetchWithTimeout(`${baseUrl}/v2/checkout/orders/${paypalOrderId}/capture`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${accessToken}`
-      }
+      },
+      timeoutMs: 15000,
     });
     
     const result = await response.json();
@@ -407,68 +476,69 @@ app.post("/paypal/capture", async (c) => {
         .select("*")
         .eq("provider_intent_id", paypalOrderId)
         .single();
-      
-      if (intent) {
-        await serviceSupabase
-          .schema("payments")
-          .from("payment_intents")
-          .update({ status: "completed", completed_at: new Date().toISOString() })
-          .eq("id", intent.id);
-        
-        // Get merchant_id from order
-        const { data: order } = await serviceSupabase
-          .schema("delivery")
-          .from("orders")
-          .select("merchant_id")
-          .eq("id", orderId)
-          .single();
 
-        const capture = result.purchase_units[0].payments.captures[0];
-        
-        const { data: txn } = await serviceSupabase
-          .schema("payments")
-          .from("transactions")
-          .insert({
-            intent_id: intent.id,
-            order_id: orderId,
-            customer_id: intent.customer_id,
-            amount: intent.amount,
-            net_amount: intent.amount,
-            currency: "JMD",
-            status: "completed",
-            provider: "paypal",
-            provider_transaction_id: capture.id,
-            provider_data: result,
-            payment_method: "paypal",
-          })
-          .select("id")
-          .single();
-
-        // Dual-write to unified ledger with merchantId
-        if (txn?.id) {
-          try {
-            const { dualWriteDashPayment } = await import("../_shared/unifiedLedger/dualWriteDash.ts");
-            await dualWriteDashPayment({
-              transactionId: String(txn.id),
-              orderId: String(orderId),
-              merchantId: order?.merchant_id ? String(order.merchant_id) : null,
-              amount: Number(intent.amount),
-              currency: "JMD",
-              kind: "order_capture",
-            });
-          } catch (e) {
-            console.error("[payments/paypal] unified dual-write failed:", e);
-          }
-        }
-        
-        await serviceSupabase
-          .schema("delivery")
-          .from("orders")
-          .update({ status: "confirmed", payment_status: "paid" })
-          .eq("id", orderId);
+      if (!intent) {
+        return c.json({ error: "Payment intent not found" }, 404);
+      }
+      // Intent must belong to this customer and match the claimed order
+      if (String(intent.customer_id) !== owned.customerId) {
+        return c.json({ error: "Forbidden" }, 403);
+      }
+      if (String(intent.order_id) !== String(orderId)) {
+        return c.json({ error: "Order mismatch" }, 403);
       }
       
-      return c.json({ success: true, captureId: result.purchase_units[0].payments.captures[0].id });
+      await serviceSupabase
+        .schema("payments")
+        .from("payment_intents")
+        .update({ status: "completed", completed_at: new Date().toISOString() })
+        .eq("id", intent.id);
+      
+      const order = owned.order;
+      const capture = result.purchase_units[0].payments.captures[0];
+      
+      const { data: txn } = await serviceSupabase
+        .schema("payments")
+        .from("transactions")
+        .insert({
+          intent_id: intent.id,
+          order_id: intent.order_id,
+          customer_id: intent.customer_id,
+          amount: intent.amount,
+          net_amount: intent.amount,
+          currency: "JMD",
+          status: "completed",
+          provider: "paypal",
+          provider_transaction_id: capture.id,
+          provider_data: result,
+          payment_method: "paypal",
+        })
+        .select("id")
+        .single();
+
+      if (txn?.id) {
+        try {
+          const { dualWriteDashPayment } = await import("../_shared/unifiedLedger/dualWriteDash.ts");
+          await dualWriteDashPayment({
+            transactionId: String(txn.id),
+            orderId: String(intent.order_id),
+            merchantId: order?.merchant_id ? String(order.merchant_id) : null,
+            amount: Number(intent.amount),
+            currency: "JMD",
+            kind: "order_capture",
+          });
+        } catch (e) {
+          console.error("[payments/paypal] unified dual-write failed:", e);
+        }
+      }
+      
+      await serviceSupabase
+        .schema("delivery")
+        .from("orders")
+        .update({ status: "confirmed", payment_status: "paid" })
+        .eq("id", intent.order_id);
+      
+      return c.json({ success: true, captureId: capture.id });
     } else {
       return c.json({ error: "Payment not completed", status: result.status }, 400);
     }
@@ -485,6 +555,12 @@ app.post("/paypal/capture", async (c) => {
 app.post("/refunds", async (c) => {
   const admin = await requireProductAdmin(c, "dash");
   if (admin instanceof Response) return admin;
+
+  const limited = await assertRateLimit(c, `payments:refunds:${admin.id}`, {
+    max: 20,
+    windowMs: 60_000,
+  });
+  if (limited) return limited;
   
   const body = await c.req.json();
   const { transactionId, amount, reason } = body;

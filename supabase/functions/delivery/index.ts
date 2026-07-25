@@ -9,8 +9,8 @@
  */
 
 import { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
-import { cors } from "https://deno.land/x/hono@v4.3.11/middleware.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { applyCors } from "../_shared/corsAllowlist.ts";
 import { jwtPrimaryRole } from "../_shared/authEdge.ts";
 import { requireProductAdmin } from "../_shared/productAdmin.ts";
 import { resolveMerchantAccess, requireResolvedMerchantWithPermission, requireMerchantPermission, type TeamPermission } from "./merchantAuth.ts";
@@ -30,14 +30,20 @@ import {
   roamStatusTransitions,
 } from "./merchantRestaurantRoutes.ts";
 import { registerMerchantInventoryRoutes } from "./merchantInventoryRoutes.ts";
+import { registerCustomerOrderRoutes } from "./customerOrderRoutes.ts";
+import {
+  aggregateAnalyticsByDay,
+  ANALYTICS_CACHE_CONTROL,
+  parseOrderItems,
+  resolveAnalyticsDateRange,
+  type OrderRow,
+} from "./analyticsSummary.ts";
 
 const app = new Hono().basePath("/delivery");
 
-// CORS for all routes
 // Fleet admin + dash apps send `apikey` (Supabase anon key) alongside Authorization.
 // If it is not listed here, browsers block the request with a CORS error after preflight.
-app.use("*", cors({
-  origin: "*",
+applyCors(app, {
   allowMethods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
   allowHeaders: [
     "Content-Type",
@@ -49,21 +55,14 @@ app.use("*", cors({
     "X-Staff-Shift-Token",
     "X-Station-Device-Token",
   ],
-}));
+});
 
-// Helper to get Supabase client (defaults to delivery schema for table queries)
-function getSupabase(authHeader: string | null) {
+/** JWT-scoped client only — never falls back to service role (P0 audit fix). */
+function getSupabase(authHeader: string) {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-  const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  
-  if (authHeader) {
-    return createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
-      db: { schema: "delivery" },
-    });
-  }
-  return createClient(supabaseUrl, supabaseServiceKey, {
+  return createClient(supabaseUrl, supabaseAnonKey, {
+    global: { headers: { Authorization: authHeader } },
     db: { schema: "delivery" },
   });
 }
@@ -105,7 +104,7 @@ app.get("/health", (c) => c.json({ service: "delivery", status: "ok", timestamp:
 
 // List active merchants (public)
 app.get("/merchants", async (c) => {
-  const supabase = getSupabase(null);
+  const supabase = getServiceSupabase();
   const { cuisine, lat, lng, radius, vertical } = c.req.query();
   
   let query = supabase
@@ -130,7 +129,7 @@ app.get("/merchants", async (c) => {
 
 // Get merchant details with menu
 app.get("/merchants/:id", async (c) => {
-  const supabase = getSupabase(null);
+  const supabase = getServiceSupabase();
   const { id } = c.req.param();
   
   const { data: merchant, error: merchantError } = await supabase
@@ -306,7 +305,7 @@ async function requireOwnedMerchant(
 
 // Get merchant operating hours
 app.get("/merchants/:id/hours", async (c) => {
-  const supabase = getSupabase(null);
+  const supabase = getServiceSupabase();
   const { id } = c.req.param();
   
   const { data: hours, error } = await supabase
@@ -619,111 +618,8 @@ app.put("/merchant/menu/reorder", async (c) => {
 });
 
 // ============================================================================
-// Orders
+// Orders (customer place/detail/history → customerOrderRoutes.ts)
 // ============================================================================
-
-// Place new order
-app.post("/orders", async (c) => {
-  const authHeader = c.req.header("Authorization");
-  if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
-  
-  const supabase = getSupabase(authHeader);
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return c.json({ error: "Unauthorized" }, 401);
-  
-  const body = await c.req.json();
-  
-  // Get or create customer
-  let { data: customer } = await supabase
-    .from("customers")
-    .select("id")
-    .eq("user_id", user.id)
-    .single();
-  
-  if (!customer) {
-    const { data: newCustomer, error: customerError } = await supabase
-      .from("customers")
-      .insert({
-        user_id: user.id,
-        name: body.customerName || user.email?.split("@")[0] || "Customer",
-        phone: body.phone,
-        email: user.email,
-      })
-      .select("id")
-      .single();
-    
-    if (customerError) return c.json({ error: customerError.message }, 500);
-    customer = newCustomer;
-  }
-  
-  // Calculate totals
-  const subtotal = body.items.reduce((sum: number, item: any) => sum + (item.price * item.quantity), 0);
-  const platformFee = subtotal * 0.05; // 5% platform fee
-  const deliveryFee = body.deliveryFee || 0;
-  const tax = subtotal * 0.165; // 16.5% GCT for Jamaica
-  const total = subtotal + platformFee + deliveryFee + tax + (body.tip || 0) - (body.discount || 0);
-  
-  const { data: order, error: orderError } = await supabase
-    .from("orders")
-    .insert({
-      customer_id: customer.id,
-      merchant_id: body.merchantId,
-      items: body.items,
-      subtotal,
-      delivery_fee: deliveryFee,
-      platform_fee: platformFee,
-      tax,
-      tip: body.tip || 0,
-      discount: body.discount || 0,
-      total,
-      delivery_address: body.deliveryAddress,
-      delivery_lat: body.deliveryLat,
-      delivery_lng: body.deliveryLng,
-      delivery_instructions: body.deliveryInstructions,
-      payment_method: body.paymentMethod || "cash",
-    })
-    .select()
-    .single();
-  
-  if (orderError) return c.json({ error: orderError.message }, 500);
-  
-  // Create initial order event
-  await supabase.from("order_events").insert({
-    order_id: order.id,
-    status: "placed",
-    actor_type: "customer",
-    actor_id: user.id,
-  });
-  
-  return c.json({ order }, 201);
-});
-
-// Get order details
-app.get("/orders/:id", async (c) => {
-  const authHeader = c.req.header("Authorization");
-  const supabase = getSupabase(authHeader);
-  const { id } = c.req.param();
-  
-  const { data: order, error } = await supabase
-    .from("orders")
-    .select(`
-      *,
-      merchant:merchants(id, name, logo_url, phone, address),
-      customer:customers(id, name, phone)
-    `)
-    .eq("id", id)
-    .single();
-  
-  if (error) return c.json({ error: error.message }, 404);
-  
-  const { data: events } = await supabase
-    .from("order_events")
-    .select("*")
-    .eq("order_id", id)
-    .order("created_at");
-  
-  return c.json({ order, events: events || [] });
-});
 
 // Update order status
 app.put("/orders/:id/status", async (c) => {
@@ -883,36 +779,6 @@ app.put("/orders/:id/status", async (c) => {
   });
   
   return c.json({ order: updatedOrder });
-});
-
-// Customer order history
-app.get("/customer/orders", async (c) => {
-  const authHeader = c.req.header("Authorization");
-  if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
-  
-  const supabase = getSupabase(authHeader);
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return c.json({ error: "Unauthorized" }, 401);
-  
-  const { data: customer } = await supabase
-    .from("customers")
-    .select("id")
-    .eq("user_id", user.id)
-    .single();
-  
-  if (!customer) return c.json({ orders: [] });
-  
-  const { data: orders, error } = await supabase
-    .from("orders")
-    .select(`
-      *,
-      merchant:merchants(id, name, logo_url)
-    `)
-    .eq("customer_id", customer.id)
-    .order("created_at", { ascending: false });
-  
-  if (error) return c.json({ error: error.message }, 500);
-  return c.json({ orders: orders || [] });
 });
 
 // Merchant incoming orders
@@ -1121,20 +987,6 @@ app.post("/orders/:id/accept-delivery", async (c) => {
 // Merchant analytics
 // ============================================================================
 
-type OrderRow = Record<string, unknown>;
-
-function parseOrderItems(items: unknown): { name: string; quantity: number; price?: number }[] {
-  if (!Array.isArray(items)) return [];
-  return items.map((item) => {
-    const row = item as Record<string, unknown>;
-    return {
-      name: String(row.name || "Unknown"),
-      quantity: Number(row.quantity || 1),
-      price: row.price != null ? Number(row.price) : undefined,
-    };
-  });
-}
-
 function bucketKey(date: Date, granularity: string) {
   if (granularity === "day") {
     return date.toISOString().slice(0, 10);
@@ -1288,12 +1140,8 @@ app.get("/merchant/analytics", async (c) => {
   const { from, to, granularity: rawGranularity } = c.req.query();
   const granularity = rawGranularity === "day" ? "day" : "hour";
 
-  const now = new Date();
-  const fromDate = from ? new Date(from) : new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const toDate = to ? new Date(to) : new Date(now);
-  if (!to) {
-    toDate.setHours(23, 59, 59, 999);
-  }
+  // Default last 30 days when from/to omitted — avoid unbounded order scans
+  const { fromDate, toDate } = resolveAnalyticsDateRange(from, to);
 
   const serviceSb = getServiceSupabase();
   const { data: orders, error } = await serviceSb
@@ -1306,14 +1154,8 @@ app.get("/merchant/analytics", async (c) => {
   if (error) return c.json({ error: error.message }, 500);
 
   const allOrders = (orders || []) as OrderRow[];
-  const delivered = allOrders.filter((o) => o.status === "delivered");
-  const cancelled = allOrders.filter((o) => o.status === "cancelled");
-  const active = allOrders.filter((o) =>
-    ["placed", "accepted", "preparing", "ready"].includes(String(o.status))
-  );
-
-  const totalRevenue = delivered.reduce((sum, o) => sum + Number(o.subtotal || 0), 0);
-  const totalOrders = delivered.length;
+  const summary = aggregateAnalyticsByDay(allOrders);
+  const { delivered, cancelled, active, totalRevenue, totalOrders, daily } = summary;
   const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
 
   const prepTimes: number[] = [];
@@ -1330,11 +1172,18 @@ app.get("/merchant/analytics", async (c) => {
 
   const revenueBuckets: Record<string, number> = {};
   const volumeBuckets: Record<string, number> = {};
-  for (const o of delivered) {
-    const placed = new Date(String(o.placed_at || o.created_at));
-    const key = bucketKey(placed, granularity);
-    revenueBuckets[key] = (revenueBuckets[key] || 0) + Number(o.subtotal || 0);
-    volumeBuckets[key] = (volumeBuckets[key] || 0) + 1;
+  if (granularity === "day") {
+    for (const bucket of daily) {
+      revenueBuckets[bucket.key] = bucket.revenue;
+      volumeBuckets[bucket.key] = bucket.orders;
+    }
+  } else {
+    for (const o of delivered) {
+      const placed = new Date(String(o.placed_at || o.created_at));
+      const key = bucketKey(placed, granularity);
+      revenueBuckets[key] = (revenueBuckets[key] || 0) + Number(o.subtotal || 0);
+      volumeBuckets[key] = (volumeBuckets[key] || 0) + 1;
+    }
   }
 
   const bucketKeys = Object.keys(revenueBuckets).sort();
@@ -1415,6 +1264,7 @@ app.get("/merchant/analytics", async (c) => {
   const revenueByDayOfWeek = buildRevenueByDayOfWeek(delivered);
   const revenueByHour = buildRevenueByHour(delivered);
 
+  c.header("Cache-Control", ANALYTICS_CACHE_CONTROL);
   return c.json({
     from: fromDate.toISOString(),
     to: toDate.toISOString(),
@@ -1425,6 +1275,7 @@ app.get("/merchant/analytics", async (c) => {
     avgPrepTime,
     revenueByBucket,
     orderVolumeByBucket,
+    dailySummary: daily,
     topItems,
     categoryBreakdown,
     revenueByDayOfWeek,
@@ -1982,6 +1833,7 @@ import { registerMerchantAdminRoutes } from "./admin/merchantRoutes.ts";
 import { registerOrderAdminRoutes } from "./admin/orderRoutes.ts";
 import { registerCustomerAdminRoutes } from "./admin/customerRoutes.ts";
 import { registerFinanceAdminRoutes } from "./admin/financeRoutes.ts";
+registerCustomerOrderRoutes(app, { getSupabase, getServiceSupabase });
 registerMerchantApplicationRoutes(app);
 registerMerchantAssetsRoutes(app);
 registerMerchantTeamRoutes(app, { getSupabase, getServiceSupabase });

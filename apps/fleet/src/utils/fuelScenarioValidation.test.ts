@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validateFuelScenarioPayload } from '../supabase/functions/server/fuel_scenario_validation';
+import { validateFuelScenarioPayload } from '../../../../supabase/functions/_fleet-server/fuel_scenario_validation';
 
 /**
  * Pins server-side validation for POST /scenarios, which previously kv.set the

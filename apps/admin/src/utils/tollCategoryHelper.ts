@@ -1,6 +1,6 @@
 /**
  * Single source of truth for whether a category is a toll row for ledger / logs / UI.
- * Mirrors src/supabase/functions/server/toll_category_flags.ts (Edge).
+ * Mirrors supabase/functions/_fleet-server/toll_category_flags.ts (Edge).
  *
  * Case-insensitive; trims whitespace.
  */
