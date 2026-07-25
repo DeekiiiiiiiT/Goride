@@ -1,5 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "ignoreCommand": "bash ../../scripts/vercel-should-build.sh apps/rides-passenger",
   "installCommand": "cd ../.. && npm install -g pnpm@9.15.4 && pnpm install --no-frozen-lockfile --ignore-scripts && pnpm rebuild esbuild @tailwindcss/oxide",
   "buildCommand": "cd ../.. && pnpm --filter @roam/rides-passenger build",
   "outputDirectory": "dist",

@@ -1,14 +1,25 @@
-# Deploy Edge Functions when you push to `main` (e.g. Commit + Sync).
+# Deploy Edge Functions when supabase/functions (or this workflow) changes on `main`.
 # Required repo secrets: SUPABASE_ACCESS_TOKEN, SUPABASE_PROJECT_REF
 #
-# Supabase occasionally returns HTTP 502 while uploading function assets (--use-api).
-# Each function is deployed with retries and a short backoff to ride out transient failures.
+# Only deploys functions whose folders changed. Shared/_fleet-server changes
+# redeploy all (or the dependents). Manual "Run workflow" can force deploy-all.
+#
+# Supabase occasionally returns HTTP 502 while uploading (--use-api); we retry.
 name: Deploy Supabase Edge Function
 
 on:
   push:
     branches: [main]
+    paths:
+      - "supabase/functions/**"
+      - "supabase/config.toml"
+      - ".github/workflows/deploy-supabase-edge.yml"
   workflow_dispatch:
+    inputs:
+      deploy_all:
+        description: "Deploy all 18 edge functions (ignore path filter)"
+        type: boolean
+        default: false
 
 concurrency:
   group: deploy-supabase-edge-${{ github.ref }}
@@ -20,9 +31,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
 
-      # setup-cli@v1/v2 download URLs no longer match Supabase release asset names
-      # (expects supabase_linux_amd64.tar.gz; releases ship supabase_<version>_linux_amd64.tar.gz).
       - name: Install Supabase CLI
         env:
           SUPABASE_CLI_VERSION: "2.99.0"
@@ -33,16 +44,38 @@ jobs:
           sudo tar -xzf /tmp/supabase.tar.gz -C /usr/local/bin
           supabase --version
 
-      - name: Deploy Edge Functions (retry on 5xx / network flakes)
+      - name: Deploy changed Edge Functions
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+          DEPLOY_ALL: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_all || 'false' }}
         run: |
           set -u
           if [ -z "${SUPABASE_ACCESS_TOKEN:-}" ] || [ -z "${SUPABASE_PROJECT_REF:-}" ]; then
             echo "Missing SUPABASE_ACCESS_TOKEN or SUPABASE_PROJECT_REF secrets."
             exit 1
           fi
+
+          ALL_FNS=(
+            make-server-37f42386
+            delivery
+            merchant-push
+            payments
+            send-sms
+            rides
+            driver
+            haul
+            toll-brain
+            fuel-brain
+            matching
+            identity
+            evidence-cleanup
+            petrojam-prices
+            fleet-ops
+            platform-catalog
+            before-user-created
+            custom-access-token
+          )
 
           deploy_with_retry() {
             fn="$1"
@@ -60,25 +93,60 @@ jobs:
                 sleep 45
               fi
             done
-            echo ">>> ${fn} failed after ${max} attempts. Re-run the workflow or: supabase functions deploy ${fn} --use-api --project-ref <ref> --debug"
+            echo ">>> ${fn} failed after ${max} attempts."
             return 1
           }
 
-          deploy_with_retry make-server-37f42386
-          deploy_with_retry delivery
-          deploy_with_retry merchant-push
-          deploy_with_retry payments
-          deploy_with_retry send-sms
-          deploy_with_retry rides
-          deploy_with_retry driver
-          deploy_with_retry haul
-          deploy_with_retry toll-brain
-          deploy_with_retry fuel-brain
-          deploy_with_retry matching
-          deploy_with_retry identity
-          deploy_with_retry evidence-cleanup
-          deploy_with_retry petrojam-prices
-          deploy_with_retry fleet-ops
-          deploy_with_retry platform-catalog
-          deploy_with_retry before-user-created
-          deploy_with_retry custom-access-token
+          CHANGED_FILES=""
+          if git rev-parse --verify HEAD^ >/dev/null 2>&1; then
+            CHANGED_FILES="$(git diff --name-only HEAD^ HEAD || true)"
+          else
+            DEPLOY_ALL=true
+          fi
+
+          echo "=== Changed files ==="
+          echo "$CHANGED_FILES"
+          echo "====================="
+
+          FNS=()
+          should_all=false
+
+          if [ "$DEPLOY_ALL" = "true" ]; then
+            should_all=true
+          elif echo "$CHANGED_FILES" | grep -qE '^supabase/functions/_shared/|^supabase/config\.toml|^\.github/workflows/deploy-supabase-edge\.yml'; then
+            # Shared helpers / config / workflow itself → full redeploy
+            should_all=true
+          fi
+
+          if [ "$should_all" = "true" ]; then
+            FNS=("${ALL_FNS[@]}")
+            echo ">>> Deploying ALL functions (shared change or manual deploy_all)"
+          else
+            for fn in "${ALL_FNS[@]}"; do
+              if echo "$CHANGED_FILES" | grep -q "^supabase/functions/${fn}/"; then
+                FNS+=("$fn")
+              fi
+            done
+            # Fleet monolith tree feeds these entrypoints
+            if echo "$CHANGED_FILES" | grep -q '^supabase/functions/_fleet-server/'; then
+              for dep in make-server-37f42386 evidence-cleanup fleet-ops; do
+                already=false
+                for f in "${FNS[@]+"${FNS[@]}"}"; do
+                  [ "$f" = "$dep" ] && already=true && break
+                done
+                if [ "$already" = "false" ]; then
+                  FNS+=("$dep")
+                fi
+              done
+            fi
+          fi
+
+          if [ ${#FNS[@]} -eq 0 ]; then
+            echo ">>> No edge functions changed — nothing to deploy."
+            exit 0
+          fi
+
+          echo ">>> Functions to deploy: ${FNS[*]}"
+          for fn in "${FNS[@]}"; do
+            deploy_with_retry "$fn" || exit 1
+          done
