@@ -1,33 +1,53 @@
 // cache-bust: force recompile — 2026-02-10
 import React from 'react';
 import { Button } from '@roam/ui';
-import { CreditCard, Car } from "lucide-react";
+import { CreditCard, Car, Wallet } from 'lucide-react';
 import { Label } from '@roam/ui';
 
 interface PaymentMethodSelectorProps {
   onSelect: (method: 'gas_card' | 'personal_cash' | 'rideshare_cash') => void;
   onCancel: () => void;
+  /** Fleet drivers can log company gas card; independents cannot. */
+  showGasCard?: boolean;
 }
 
-export function PaymentMethodSelector({ onSelect, onCancel }: PaymentMethodSelectorProps) {
+export function PaymentMethodSelector({
+  onSelect,
+  onCancel,
+  showGasCard = true,
+}: PaymentMethodSelectorProps) {
   return (
     <div className="flex flex-col p-6 pb-8">
       <Label className="text-base font-semibold text-center block mb-4">How did you pay for fuel?</Label>
       <div className="grid grid-cols-1 gap-4">
-        <Button 
-          variant="outline" 
-          className="h-24 flex flex-col items-center justify-center gap-2 border-2 hover:border-blue-500 hover:bg-blue-50 group transition-all"
-          onClick={() => onSelect('gas_card')}
+        {showGasCard && (
+          <Button
+            variant="outline"
+            className="h-24 flex flex-col items-center justify-center gap-2 border-2 hover:border-blue-500 hover:bg-blue-50 group transition-all"
+            onClick={() => onSelect('gas_card')}
+          >
+            <CreditCard className="h-6 w-6 text-blue-500 group-hover:scale-110 transition-transform" />
+            <div className="text-center">
+              <p className="font-bold">Gas Card</p>
+              <p className="text-[10px] text-slate-500">I used the Roam company fuel card</p>
+            </div>
+          </Button>
+        )}
+
+        <Button
+          variant="outline"
+          className="h-24 flex flex-col items-center justify-center gap-2 border-2 hover:border-emerald-500 hover:bg-emerald-50 group transition-all"
+          onClick={() => onSelect('personal_cash')}
         >
-          <CreditCard className="h-6 w-6 text-blue-500 group-hover:scale-110 transition-transform" />
+          <Wallet className="h-6 w-6 text-emerald-500 group-hover:scale-110 transition-transform" />
           <div className="text-center">
-            <p className="font-bold">Gas Card</p>
-            <p className="text-[10px] text-slate-500">I used the Roam company fuel card</p>
+            <p className="font-bold">Personal Cash</p>
+            <p className="text-[10px] text-slate-500">I paid with my own cash or card</p>
           </div>
         </Button>
 
-        <Button 
-          variant="outline" 
+        <Button
+          variant="outline"
           className="h-24 flex flex-col items-center justify-center gap-2 border-2 hover:border-amber-500 hover:bg-amber-50 group transition-all"
           onClick={() => onSelect('rideshare_cash')}
         >

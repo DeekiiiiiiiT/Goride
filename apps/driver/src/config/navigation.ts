@@ -3,17 +3,9 @@ import {
   DollarSign,
   Car,
   User,
-  Wrench,
-  Hammer,
-  Fuel,
   Receipt,
-  CheckCircle,
   FileText,
   Shield,
-  Camera,
-  BarChart3,
-  History,
-  Navigation,
   Settings,
   type LucideIcon,
 } from 'lucide-react';
@@ -26,26 +18,8 @@ export interface NavItem {
   badge?: string;
 }
 
-const commonNavItems: NavItem[] = [
-  { id: 'dashboard', label: 'Home', icon: Home },
-  { id: 'passenger-rides', label: 'Ride offers', icon: Navigation },
-  { id: 'earnings', label: 'Earnings', icon: DollarSign },
-  { id: 'trips', label: 'Trips', icon: Car },
-  { id: 'profile', label: 'Profile', icon: User },
-];
-
-const fleetOnlyNavItems: NavItem[] = [
-  { id: 'expenses', label: 'Expenses', icon: Camera },  // Toll scanning, fuel, etc.
-  { id: 'equipment', label: 'Equipment', icon: Wrench },
-  { id: 'service', label: 'Service request', icon: Hammer },
-  { id: 'fuel', label: 'Log fuel', icon: Fuel },
-  { id: 'performance', label: 'Performance', icon: History },
-  { id: 'fuel-stats', label: 'Fuel Stats', icon: BarChart3 },
-  { id: 'claims', label: 'Claims', icon: Receipt },
-  { id: 'checkin', label: 'Check-in', icon: CheckCircle },
-];
-
-const independentOnlyNavItems: NavItem[] = [
+/** Shared hamburger menu for fleet + independent (fleet extras: Start Trip + Check-in stay outside nav). */
+const drawerNavItems: NavItem[] = [
   { id: 'vehicle', label: 'My Vehicle', icon: Car },
   { id: 'expenses', label: 'Expenses', icon: Receipt },
   { id: 'tax', label: 'Tax Center', icon: FileText },
@@ -53,14 +27,8 @@ const independentOnlyNavItems: NavItem[] = [
   { id: 'settings', label: 'Settings', icon: Settings },
 ];
 
-const settingsNavItem: NavItem = { id: 'settings', label: 'Settings', icon: Settings };
-
-export function getNavigationItems(mode: DriverMode): NavItem[] {
-  if (mode === 'independent') {
-    // Bottom nav covers Home, Earnings, Trips, and Profile for independent drivers.
-    return independentOnlyNavItems;
-  }
-  return [...commonNavItems, ...fleetOnlyNavItems, settingsNavItem];
+export function getNavigationItems(_mode?: DriverMode): NavItem[] {
+  return drawerNavItems;
 }
 
 export function getBottomNavItems(): NavItem[] {

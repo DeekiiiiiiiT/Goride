@@ -1008,8 +1008,8 @@ app.post("/make-server-37f42386/admin/fuel-audit/resolve", requireAuth({ strict:
     }
 });
 
-// Phase 3: Recalculate All History (Logic: 100% Reset / 105% Anomaly)
-app.post("/make-server-37f42386/admin/fuel-audit/recalculate-all", requireAuth({ strict: true }), requirePlatformStaff(), async (c) => {
+// Capacity-cycle history re-score — fleet owners (data.backfill) + platform staff
+app.post("/make-server-37f42386/admin/fuel-audit/recalculate-all", requireAuth({ strict: true }), requirePermission('data.backfill'), async (c) => {
     try {
         const body = await c.req.json().catch(() => ({}));
         const vehicleFilterRaw = String(body?.vehicleId || body?.licensePlate || "").trim();

@@ -248,8 +248,9 @@ export function ComplianceManager() {
               <ShieldCheck className="w-10 h-10 text-slate-600 mb-3" />
               <p className="text-slate-400 text-sm">Select a driver from the queue to begin review.</p>
               <p className="text-slate-600 text-xs mt-2 max-w-sm">
-                Use Approve / Decline / Request resubmit for background checks, verify insurance dates,
-                and activate when all requirements are met.
+                Use Approve / Decline / Request resubmit for background checks. For independent drivers,
+                verify insurance and vehicle; fleet drivers skip those personal gates. Activate when
+                requirements for their mode are met.
               </p>
             </div>
           )}

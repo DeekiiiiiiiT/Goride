@@ -21,11 +21,19 @@ interface OdometerScannerProps {
     onCancel: () => void;
     lastOdometer?: number; // Added for verification
     className?: string;
+    /** Fleet drivers get fleet-ops review copy; independents get neutral copy. */
+    isFleetDriver?: boolean;
 }
 
 type ScannerStep = 'CAPTURE' | 'ANALYZING' | 'CONFIRM_AI' | 'MANUAL_ENTRY' | 'PHOTO_ONLY';
 
-export function OdometerScanner({ onScanComplete, onCancel, lastOdometer = 0, className }: OdometerScannerProps) {
+export function OdometerScanner({
+    onScanComplete,
+    onCancel,
+    lastOdometer = 0,
+    className,
+    isFleetDriver = true,
+}: OdometerScannerProps) {
     const [step, setStep] = useState<ScannerStep>('CAPTURE');
     const [odometer, setOdometer] = useState<string>('');
     const [photo, setPhoto] = useState<File | null>(null);
@@ -444,7 +452,9 @@ export function OdometerScanner({ onScanComplete, onCancel, lastOdometer = 0, cl
                                 <div className="text-xs text-amber-900 leading-relaxed">
                                     <p className="font-bold mb-1 uppercase tracking-wider">Admin Review Required</p>
                                     <p className="opacity-90">
-                                        We&apos;ll send the photo for your fleet to fill in the odometer. Your fuel log will still go through.
+                                        {isFleetDriver
+                                            ? "We'll send the photo for your fleet to fill in the odometer. Your fuel log will still go through."
+                                            : "We'll save the photo with your log. Your fuel log will still go through."}
                                     </p>
                                 </div>
                             </div>
@@ -498,7 +508,11 @@ export function OdometerScanner({ onScanComplete, onCancel, lastOdometer = 0, cl
                                         <CheckCircle className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
                                         <div className="text-xs text-blue-900 leading-relaxed">
                                             <p className="font-semibold mb-0.5">Photo captured successfully</p>
-                                            <p className="opacity-80">We&apos;ll send the photo for your fleet to fill in the odometer. Your fuel log will still go through — continue to enter the fuel details.</p>
+                                            <p className="opacity-80">
+                                                {isFleetDriver
+                                                    ? "We'll send the photo for your fleet to fill in the odometer. Your fuel log will still go through — continue to enter the fuel details."
+                                                    : "We'll save the photo with your log. Your fuel log will still go through — continue to enter the fuel details."}
+                                            </p>
                                         </div>
                                     </div>
 

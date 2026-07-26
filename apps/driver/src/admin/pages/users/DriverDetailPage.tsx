@@ -665,7 +665,8 @@ export function DriverDetailPage() {
           </Link>
           {driver.mode === 'fleet' && (
             <p className="text-xs text-slate-500">
-              Fleet drivers may not receive Roam passenger dispatch when independent-only matching is enabled.
+              Fleet mode: same driver app UI as independents, plus Start Trip, expense logging, and weekly
+              check-in. Passenger dispatch may still be limited when independent-only matching is enabled.
             </p>
           )}
         </div>

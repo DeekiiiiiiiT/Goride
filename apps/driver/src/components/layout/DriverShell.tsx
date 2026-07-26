@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { toast } from 'sonner';
 import { useDriver } from '../../contexts/DriverContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -24,26 +24,16 @@ import { OfflineStatusIndicator } from '../offline/OfflineStatusIndicator';
 import { NotificationCenter } from '../notifications/NotificationCenter';
 
 import { DriverMintHome } from '../home/DriverMintHome';
-import { FleetServiceRequestPage } from '../fleet/FleetServiceRequestPage';
-import { DriverEarnings } from '../fleet/DriverEarnings';
-import { DriverTrips } from '../fleet/DriverTrips';
 import { IndependentEarningsPage } from '../independent/IndependentEarningsPage';
 import { IndependentProfilePage } from '../independent/IndependentProfilePage';
 import { IndependentProfileDocumentsPage } from '../independent/IndependentProfileDocumentsPage';
 import { IndependentTripsPage } from '../independent/IndependentTripsPage';
-import { DriverProfile } from '../fleet/DriverProfile';
 import { DriverExpenses } from '../fleet/DriverExpenses';
-import { DriverEquipment } from '../fleet/DriverEquipment';
-import { DriverClaims } from '../fleet/DriverClaims';
 import { WeeklyCheckInModal } from '../fleet/WeeklyCheckInModal';
-import { DriverFuelStats } from '../fleet/DriverFuelStats';
-import { FleetFuelLogPage } from '../fleet/FleetFuelLogPage';
-import { DriverPerformancePage } from '../fleet/DriverPerformancePage';
 import { useCurrentDriver } from '../../hooks/useCurrentDriver';
 import { useWeeklyCheckIn } from '../../hooks/useWeeklyCheckIn';
 
 import { MyVehicle } from '../independent/MyVehicle';
-import { IndependentExpenses } from '../independent/IndependentExpenses';
 import { TaxCenter } from '../independent/TaxCenter';
 import { InsuranceCenter } from '../independent/InsuranceCenter';
 import { RideDispatchPage } from '../rides/RideDispatchPage';
@@ -57,7 +47,7 @@ import { DriverWalletsPage } from '../rides/DriverWalletsPage';
 import { DriverSettingsPage } from '../settings/DriverSettingsPage';
 
 export function DriverShell({ forcePassengerRides = false }: { forcePassengerRides?: boolean }) {
-  const { mode, isFleetDriver, isIndependentDriver, fleet, loading, profile } = useDriver();
+  const { mode, isFleetDriver, fleet, loading, profile } = useDriver();
   const { user, signOut } = useAuth();
   const { driverRecord } = useCurrentDriver();
   const { needsCheckIn, isLoading: checkInHookLoading, submitCheckIn } = useWeeklyCheckIn(driverRecord?.id);
@@ -71,20 +61,19 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
 
   const checkInModalOpen = isFleetDriver && (needsCheckIn || checkInOpen);
   const checkInForced = isFleetDriver && needsCheckIn;
-  // Home is the shared mint booking UI for every driver mode.
+  // Shared mint chrome for fleet + independent (fleet extras stay outside page routing).
   const mintHomeLayout = currentPage === 'dashboard';
-  const mintEarningsLayout = isIndependentDriver && currentPage === 'earnings';
-  const mintTripsLayout = isIndependentDriver && currentPage === 'trips';
-  const mintProfileLayout = isIndependentDriver && currentPage === 'profile';
-  const mintWalletsLayout = isIndependentDriver && currentPage === 'rides-wallets';
+  const mintEarningsLayout = currentPage === 'earnings';
+  const mintTripsLayout = currentPage === 'trips';
+  const mintProfileLayout = currentPage === 'profile';
+  const mintWalletsLayout = currentPage === 'rides-wallets';
   const mintUtilityLayout =
-    isIndependentDriver &&
-    (currentPage === 'vehicle' ||
-      currentPage === 'expenses' ||
-      currentPage === 'tax' ||
-      currentPage === 'insurance' ||
-      currentPage === 'settings' ||
-      currentPage === 'documents');
+    currentPage === 'vehicle' ||
+    currentPage === 'expenses' ||
+    currentPage === 'tax' ||
+    currentPage === 'insurance' ||
+    currentPage === 'settings' ||
+    currentPage === 'documents';
   const mintDriverLayout =
     mintHomeLayout ||
     mintEarningsLayout ||
@@ -92,8 +81,7 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
     mintProfileLayout ||
     mintWalletsLayout ||
     mintUtilityLayout;
-  const profileFlowActive =
-    currentPage === 'profile' || (isIndependentDriver && currentPage === 'documents');
+  const profileFlowActive = currentPage === 'profile' || currentPage === 'documents';
 
   const profileDisplayName =
     profile?.displayName ||
@@ -102,12 +90,6 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
     'Driver';
   const avatarUrl = profile?.profilePhotoUrl ?? null;
   const profileInitial = profileDisplayName[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase() || 'D';
-
-  useEffect(() => {
-    if (currentPage !== 'checkin' || !isFleetDriver) return;
-    setCheckInOpen(true);
-    setCurrentPage('dashboard');
-  }, [currentPage, isFleetDriver]);
 
   if (loading) {
     return (
@@ -156,54 +138,21 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
           />
         );
       case 'earnings':
-        return isIndependentDriver ? (
-          <IndependentEarningsPage onNavigate={setCurrentPage} />
-        ) : (
-          <DriverEarnings />
-        );
+        return <IndependentEarningsPage onNavigate={setCurrentPage} />;
       case 'trips':
-        return isIndependentDriver ? <IndependentTripsPage /> : <DriverTrips />;
+        return <IndependentTripsPage />;
       case 'profile':
-        return isIndependentDriver ? (
-          <IndependentProfilePage onNavigate={setCurrentPage} />
-        ) : (
-          <DriverProfile onNavigate={setCurrentPage} onLogout={handleSignOut} />
-        );
+        return <IndependentProfilePage onNavigate={setCurrentPage} />;
       case 'documents':
-        return isIndependentDriver ? (
-          <IndependentProfileDocumentsPage onBack={() => setCurrentPage('profile')} />
-        ) : null;
-
-      case 'equipment':
-        return isFleetDriver ? <DriverEquipment onBack={() => setCurrentPage('dashboard')} /> : null;
+        return <IndependentProfileDocumentsPage onBack={() => setCurrentPage('profile')} />;
       case 'expenses':
-        return isFleetDriver ? (
-          <DriverExpenses onBack={() => setCurrentPage('dashboard')} />
-        ) : (
-          <IndependentExpenses />
-        );
-      case 'claims':
-        return isFleetDriver ? <DriverClaims /> : null;
-      case 'fuel':
-        return isFleetDriver ? <FleetFuelLogPage onBack={() => setCurrentPage('dashboard')} /> : null;
-      case 'service':
-        return isFleetDriver ? (
-          <FleetServiceRequestPage onBack={() => setCurrentPage('dashboard')} />
-        ) : null;
-      case 'performance':
-        return isFleetDriver ? <DriverPerformancePage onBack={() => setCurrentPage('dashboard')} /> : null;
-      case 'fuel-stats':
-        return isFleetDriver ? <DriverFuelStats /> : null;
-      case 'checkin':
-        return null;
-
+        return <DriverExpenses onBack={() => setCurrentPage('dashboard')} />;
       case 'vehicle':
-        return !isFleetDriver ? <MyVehicle /> : null;
+        return <MyVehicle />;
       case 'tax':
-        return !isFleetDriver ? <TaxCenter /> : null;
+        return <TaxCenter />;
       case 'insurance':
-        return !isFleetDriver ? <InsuranceCenter /> : null;
-
+        return <InsuranceCenter />;
       case 'settings':
         return <DriverSettingsPage />;
 

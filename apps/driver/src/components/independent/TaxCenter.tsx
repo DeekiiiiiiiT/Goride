@@ -1,11 +1,76 @@
-import React from 'react';
-import { AlertCircle, Calendar, Download, FileText, TrendingUp } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { AlertCircle, FileText } from 'lucide-react';
 import { cn } from '@roam/ui';
+import { useIndependentEarnings } from '../../hooks/useIndependentEarnings';
+import { api } from '../../services/api';
+import type { FinancialTransaction } from '../../types/data';
 
 const cardClass =
   'rounded-2xl border border-slate-200 bg-white shadow-[0_4px_20px_rgba(0,0,0,0.05)] dark:border-slate-700 dark:bg-slate-900';
 
+function formatUsd(amount: number) {
+  return amount.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+}
+
+function categorizeExpense(tx: FinancialTransaction): 'fuel' | 'tolls' | 'maintenance' | 'other' {
+  const cat = String(tx.category || '').toLowerCase();
+  if (cat.includes('fuel') || cat.includes('gas')) return 'fuel';
+  if (cat.includes('toll')) return 'tolls';
+  if (cat.includes('maint') || cat.includes('repair') || cat.includes('service')) return 'maintenance';
+  return 'other';
+}
+
 export function TaxCenter() {
+  const year = new Date().getFullYear();
+  const { data: earnings, loading: earningsLoading } = useIndependentEarnings('all');
+  const [transactions, setTransactions] = useState<FinancialTransaction[]>([]);
+  const [txLoading, setTxLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      setTxLoading(true);
+      try {
+        const txs = await api.getTransactions();
+        if (!cancelled) setTransactions(Array.isArray(txs) ? txs : []);
+      } catch (e) {
+        console.error('[TaxCenter] Failed to load transactions', e);
+        if (!cancelled) setTransactions([]);
+      } finally {
+        if (!cancelled) setTxLoading(false);
+      }
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const yearExpenses = useMemo(() => {
+    const yearPrefix = String(year);
+    return transactions.filter((tx) => {
+      const type = String(tx.type || '').toLowerCase();
+      const isExpense = type === 'expense' || Number(tx.amount) < 0;
+      if (!isExpense) return false;
+      const dateStr = String(tx.date || '');
+      return dateStr.startsWith(yearPrefix);
+    });
+  }, [transactions, year]);
+
+  const deductions = useMemo(() => {
+    const buckets = { fuel: 0, tolls: 0, maintenance: 0, other: 0 };
+    for (const tx of yearExpenses) {
+      const amount = Math.abs(Number(tx.amount) || 0);
+      buckets[categorizeExpense(tx)] += amount;
+    }
+    return buckets;
+  }, [yearExpenses]);
+
+  const totalDeductions = deductions.fuel + deductions.tolls + deductions.maintenance + deductions.other;
+  // Earnings API has no calendar-year period — show lifetime Roam trip income as the available figure.
+  const totalIncome = (earnings?.total_minor ?? 0) / 100;
+  const loading = earningsLoading || txLoading;
+
   return (
     <div className="space-y-6">
       <h1 className="text-xl font-bold text-slate-900 dark:text-white">Tax Center</h1>
@@ -21,85 +86,39 @@ export function TaxCenter() {
             <FileText className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
           </div>
           <div>
-            <p className="font-semibold text-slate-900 dark:text-white">2026 Tax Summary</p>
-            <p className="text-sm text-slate-500 dark:text-slate-400">Year to date</p>
+            <p className="font-semibold text-slate-900 dark:text-white">{year} Tax Summary</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              {loading ? 'Loading…' : 'Records helper — not a tax filing'}
+            </p>
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <p className="mb-1 text-xs text-slate-500 dark:text-slate-400">Total Income</p>
-            <p className="text-xl font-bold tabular-nums text-slate-900 dark:text-white">$0.00</p>
+            <p className="mb-1 text-xs text-slate-500 dark:text-slate-400">Roam trip income</p>
+            <p className="text-xl font-bold tabular-nums text-slate-900 dark:text-white">
+              {loading ? '—' : formatUsd(totalIncome)}
+            </p>
+            <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">All-time in Roam</p>
           </div>
           <div>
-            <p className="mb-1 text-xs text-slate-500 dark:text-slate-400">Total Deductions</p>
-            <p className="text-xl font-bold tabular-nums text-slate-900 dark:text-white">$0.00</p>
+            <p className="mb-1 text-xs text-slate-500 dark:text-slate-400">{year} expenses logged</p>
+            <p className="text-xl font-bold tabular-nums text-slate-900 dark:text-white">
+              {loading ? '—' : formatUsd(totalDeductions)}
+            </p>
           </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3">
-        <div className={cn(cardClass, 'p-4')}>
-          <div className="mb-2 flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-            <TrendingUp className="h-3.5 w-3.5" />
-            <span>Est. Tax Liability</span>
-          </div>
-          <p className="text-xl font-bold tabular-nums text-slate-900 dark:text-white">$0.00</p>
-        </div>
-        <div className={cn(cardClass, 'p-4')}>
-          <div className="mb-2 flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-            <Calendar className="h-3.5 w-3.5" />
-            <span>Quarters Filed</span>
-          </div>
-          <p className="text-xl font-bold text-slate-900 dark:text-white">0/4</p>
         </div>
       </div>
 
       <section>
         <h2 className="mb-3 px-1 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-          Deduction Categories
+          Expense categories ({year})
         </h2>
         <div className={cn(cardClass, 'divide-y divide-slate-100 overflow-hidden dark:divide-slate-800')}>
-          <DeductionRow label="Mileage Deduction" amount="$0.00" rate="$0.67/mi" />
-          <DeductionRow label="Gas Expenses" amount="$0.00" />
-          <DeductionRow label="Car Wash" amount="$0.00" />
-          <DeductionRow label="Phone/Data" amount="$0.00" />
-          <DeductionRow label="Tolls" amount="$0.00" />
-          <DeductionRow label="Maintenance" amount="$0.00" />
-        </div>
-      </section>
-
-      <section>
-        <h2 className="mb-3 px-1 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-          Tax Documents
-        </h2>
-        <div className="space-y-3">
-          <button
-            type="button"
-            className={cn(
-              cardClass,
-              'flex w-full items-center gap-3 p-4 text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/80',
-            )}
-          >
-            <Download className="h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-slate-900 dark:text-white">Export Annual Summary</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">PDF report for tax filing</p>
-            </div>
-          </button>
-          <button
-            type="button"
-            className={cn(
-              cardClass,
-              'flex w-full items-center gap-3 p-4 text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/80',
-            )}
-          >
-            <Download className="h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-slate-900 dark:text-white">Export Expense Report</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">CSV for your accountant</p>
-            </div>
-          </button>
+          <DeductionRow label="Fuel" amount={formatUsd(deductions.fuel)} />
+          <DeductionRow label="Tolls" amount={formatUsd(deductions.tolls)} />
+          <DeductionRow label="Maintenance" amount={formatUsd(deductions.maintenance)} />
+          <DeductionRow label="Other" amount={formatUsd(deductions.other)} />
         </div>
       </section>
 
@@ -107,9 +126,10 @@ export function TaxCenter() {
         <div className="flex items-start gap-3">
           <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
           <div>
-            <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">Tax Reminder</p>
+            <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">Not tax advice</p>
             <p className="mt-1 text-xs text-amber-800/80 dark:text-amber-300/80">
-              Consult a tax professional for personalized advice. This is for tracking purposes only.
+              These totals come from your Roam trip earnings and logged expenses. Consult a tax
+              professional for filing.
             </p>
           </div>
         </div>
@@ -118,13 +138,10 @@ export function TaxCenter() {
   );
 }
 
-function DeductionRow({ label, amount, rate }: { label: string; amount: string; rate?: string }) {
+function DeductionRow({ label, amount }: { label: string; amount: string }) {
   return (
     <div className="flex items-center justify-between px-4 py-3">
-      <div>
-        <p className="text-sm font-medium text-slate-900 dark:text-white">{label}</p>
-        {rate && <p className="text-xs text-slate-500 dark:text-slate-400">{rate}</p>}
-      </div>
+      <p className="text-sm font-medium text-slate-900 dark:text-white">{label}</p>
       <span className="text-sm font-semibold tabular-nums text-slate-900 dark:text-white">{amount}</span>
     </div>
   );

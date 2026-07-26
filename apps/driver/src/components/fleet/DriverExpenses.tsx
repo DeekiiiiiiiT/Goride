@@ -35,17 +35,13 @@ import { resolveVehicleIdForDriver } from '../../utils/resolveDriverVehicleId';
 import { resolveCanonicalDriverIdentity } from '@roam/types/driverIdentity';
 import { toast } from "sonner";
 import { useAuth } from '../../contexts/AuthContext';
+import { useDriver } from '../../contexts/DriverContext';
 import { useCurrentDriver } from '../../hooks/useCurrentDriver';
 import { api } from '../../services/api';
 import { uploadEvidenceFile } from '../../services/uploadEvidence';
 import { EvidenceRetentionNotice } from '../evidence/EvidenceRetentionNotice';
 import { FinancialTransaction, TransactionCategory } from '../../types/data';
 import { StationProfile } from '../../types/station';
-import { DriverClaims } from './DriverClaims';
-import { DriverFuelStats } from './DriverFuelStats';
-import { PortalHome } from './views/PortalHome';
-import { ReimbursementMenu } from './views/ReimbursementMenu';
-import { DriverHeader } from './ui/DriverHeader';
 import { PaymentMethodSelector } from './expenses/PaymentMethodSelector';
 import { GasCardSummary, type FuelPumpStep } from './expenses/GasCardSummary';
 import { FuelCashInputs, derivePricePerLiter } from './expenses/FuelCashInputs';
@@ -113,6 +109,7 @@ interface ExpenseItem {
 
 export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerProps) {
   const { user } = useAuth();
+  const { isFleetDriver } = useDriver();
   const { driverRecord } = useCurrentDriver();
   const { isOnline, addToQueue, queue } = useOffline();
   const { getLocation } = useGeolocation();
@@ -888,23 +885,15 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
         const reason = String(savedTx?.metadata?.decisionReason || '');
         if (savedTx.status === 'Approved' || reason === 'AUTO_AI_STATION' || reason === 'ADMIN_APPROVED' || reason === 'STATION_GATE_RELEASED') {
           toast.success('Fuel log saved');
-        } else if (reason === 'REVIEW_ODO' || reason === 'HOLD_STATION' || reason === 'BLOCKED_NO_VEHICLE') {
-          toast.success('Fuel log sent — waiting for fleet review');
-        } else if (
-          savedTx.status === 'Pending' ||
-          savedTx?.metadata?.needsLogReview ||
-          savedTx?.metadata?.stationGateHold ||
-          fuelEntry.odometerMethod === 'photo_review' ||
-          fuelProceedingWithoutGps
-        ) {
+        } else if (isFleetDriver) {
           toast.success('Fuel log sent — waiting for fleet review');
         } else {
-          toast.success('Fuel log sent — waiting for fleet review');
+          toast.success('Fuel log saved');
         }
       } else if (savedTx.status === 'Approved') {
         toast.success('Expense Auto-Approved & Odometer Verified! 🚀');
       } else {
-        toast.success('Expense submitted for approval');
+        toast.success(isFleetDriver ? 'Expense submitted for approval' : 'Expense saved');
       }
 
       setViewState('list');
@@ -1060,7 +1049,9 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
     setFuelGpsManualRetriesLeft(nextLeft);
     if (nextLeft <= 0) {
       toast.info(
-        "Location couldn't be captured. Your fuel log will still be sent — your fleet will verify the station manually.",
+        isFleetDriver
+          ? "Location couldn't be captured. Your fuel log will still be sent — your fleet will verify the station manually."
+          : "Location couldn't be captured. Your fuel log will still be saved — station verification may take a moment.",
         { duration: 6000 },
       );
       setFuelProceedingWithoutGps(true);
@@ -1216,7 +1207,9 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
            <div className="min-w-0 flex-1">
               <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Expenses</h2>
               <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5 leading-snug">
-                Log your operational costs for reimbursement.
+                {isFleetDriver
+                  ? 'Log your operational costs for reimbursement.'
+                  : 'Log fuel, tolls, and other driving costs.'}
               </p>
            </div>
            <Button
@@ -1372,7 +1365,9 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
         role="status"
       >
         <span className="font-medium">No GPS for this log.</span>{' '}
-        Your submission will go to your fleet for manual station verification (you may see &quot;Verifying location&quot; until they confirm).
+        {isFleetDriver
+          ? 'Your submission will go to your fleet for manual station verification (you may see "Verifying location" until they confirm).'
+          : 'Station verification may take a moment (you may see "Verifying location" until it clears).'}
       </div>
     ) : null;
 
@@ -1455,10 +1450,11 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
 
           {viewState === 'odometer_scan' && (
             <div className="p-0 min-h-[400px] relative">
-              <OdometerScanner 
+              <OdometerScanner
                 lastOdometer={tankStatus?.lastOdometer}
                 onScanComplete={handleOdometerScanComplete}
                 onCancel={goBack}
+                isFleetDriver={isFleetDriver}
               />
             </div>
           )}
@@ -1472,7 +1468,9 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
                 <div>
                   <h3 className="text-base font-semibold text-slate-900">Locking your station location…</h3>
                   <p className="text-sm text-slate-500 mt-1 max-w-sm mx-auto">
-                    This helps your fleet verify the fuel stop.
+                    {isFleetDriver
+                      ? 'This helps your fleet verify the fuel stop.'
+                      : 'This helps confirm the fuel stop.'}
                   </p>
                 </div>
               </div>
@@ -1504,7 +1502,11 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
                   </p>
                 </div>
                 <p className="text-xs text-slate-400">
-                  {fuelGpsManualRetriesLeft} manual {fuelGpsManualRetriesLeft === 1 ? 'retry' : 'retries'} left — after that you can still submit; your fleet will verify the station.
+                  {fuelGpsManualRetriesLeft} manual {fuelGpsManualRetriesLeft === 1 ? 'retry' : 'retries'} left
+                  — after that you can still submit
+                  {isFleetDriver
+                    ? '; your fleet will verify the station.'
+                    : '; station verification may take a moment.'}
                 </p>
               </div>
               <Button
@@ -1529,7 +1531,11 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
           )}
 
           {viewState === 'method_select' && (
-            <PaymentMethodSelector onSelect={handleMethodSelect} onCancel={goBack} />
+            <PaymentMethodSelector
+              onSelect={handleMethodSelect}
+              onCancel={goBack}
+              showGasCard={isFleetDriver}
+            />
           )}
 
           {viewState === 'entry_details' && (
