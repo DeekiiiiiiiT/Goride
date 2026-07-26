@@ -142,6 +142,10 @@ export async function reverseFuelFinancialEventsAndRebuild(
 /**
  * Post fuel close events from a finalized_report snapshot (finalize + heal).
  * Throws if any required post fails (caller may rollback KV).
+ *
+ * After a period reset, prior ledger rows remain (append-only). Re-finalize
+ * uses a new generation suffix on idempotency keys so keys never collide.
+ * If active (unreversed) fuel events already exist, skip re-post and rebuild.
  */
 export async function postFuelFinalizedEventsFromReport(
   report: Record<string, any>,
@@ -157,9 +161,24 @@ export async function postFuelFinalizedEventsFromReport(
     Number(report.driverCashSpend) || Number(report.cashSpend) || 0,
   );
   const gasCard = Math.abs(Number(report.gasCardSpend) || 0);
-  const keyBase = `fuel_finalized:${driverId}:${weekKey}`;
-  const sourceId = String(report.id || keyBase);
   const results: PostFinancialEventResult[] = [];
+
+  // Already closed on the ledger (unreversed) — refresh projection only.
+  const active = await listActiveFuelEventsForWeek(driverId, weekKey);
+  if (active.length > 0) {
+    const { rebuildDriverFinancialPeriod } = await import("./driver_financial_periods.ts");
+    await rebuildDriverFinancialPeriod(driverId, weekKey);
+    return { weekKey, driverId, results };
+  }
+
+  // Next generation after prior closes (including reversed originals).
+  const generation = await nextFuelFinalizeGeneration(driverId, weekKey);
+  // g1 keeps legacy key shape so first-ever finalize matches older rows.
+  const keyBase =
+    generation <= 1
+      ? `fuel_finalized:${driverId}:${weekKey}`
+      : `fuel_finalized:${driverId}:${weekKey}:g${generation}`;
+  const sourceId = String(report.id || keyBase);
 
   const check = (r: PostFinancialEventResult, label: string) => {
     results.push(r);
@@ -180,7 +199,7 @@ export async function postFuelFinalizedEventsFromReport(
       occurredAt: weekKey,
       amountMajor: 0,
       direction: "neutral",
-      payload: { reportId: report.id, weekStart: weekKey },
+      payload: { reportId: report.id, weekStart: weekKey, generation },
     }),
     "finalized",
   );
@@ -269,4 +288,21 @@ export async function postFuelFinalizedEventsFromReport(
   await rebuildDriverFinancialPeriod(driverId, weekKey);
 
   return { weekKey, driverId, results };
+}
+
+/** Count prior non-reversal fuel_finalized rows → next close generation (1-based). */
+async function nextFuelFinalizeGeneration(
+  driverId: string,
+  weekKey: string,
+): Promise<number> {
+  const { count, error } = await sb()
+    .from("financial_events")
+    .select("id", { count: "exact", head: true })
+    .eq("driver_id", driverId)
+    .eq("period_anchor", weekKey)
+    .eq("domain", "fuel")
+    .eq("event_type", "fuel_finalized")
+    .is("reverses_event_id", null);
+  if (error) throw new Error(error.message);
+  return (count || 0) + 1;
 }
