@@ -354,7 +354,7 @@ app.post(`${BASE}/backfill`, requirePermission('transactions.edit'), async (c) =
       if (!fr?.driverId) continue;
       driverIds.add(String(fr.driverId));
       if (dryRun) continue;
-      const start = String(fr.periodStart || fr.startDate || "").slice(0, 10);
+      const start = String(fr.weekStart || fr.periodStart || fr.startDate || "").slice(0, 10);
       if (!start) continue;
       const deduction = Math.abs(Number(fr.driverShare) || 0);
       const fleetShare = Math.abs(Number(fr.companyShare) || 0);

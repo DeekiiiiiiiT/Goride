@@ -19,6 +19,9 @@ import { periodConfirmLabelsMatch } from '../../../utils/fuelWeekPeriod';
 import type { FuelReconciliationPeriod } from '../../../utils/fuelPeriodStatus';
 import { useLockedDialog } from '../../shared/useLockedDialog';
 import { useFuelReconBusy } from './fuelReconBusyLock';
+import { useQueryClient } from '@tanstack/react-query';
+import { DRIVER_FINANCIAL_PERIODS_KEY } from '../../../hooks/useDriverFinancialPeriods';
+import { runBackgroundJobToast } from '../../shared/runBackgroundJobToast';
 
 interface FuelPeriodResetDialogProps {
   open: boolean;
@@ -37,6 +40,7 @@ export function FuelPeriodResetDialog({
   fuelEntries,
   onComplete,
 }: FuelPeriodResetDialogProps) {
+  const queryClient = useQueryClient();
   const { runExclusive, busy: fleetBusy } = useFuelReconBusy();
   const [confirmText, setConfirmText] = useState('');
   const [executing, setExecuting] = useState(false);
@@ -126,6 +130,33 @@ export function FuelPeriodResetDialog({
         toast.success(
           `Reset ${period.label}: ${entries} log(s), ${txs} settlement row(s), ${snaps} snapshot(s) — back to Data quality`,
           { id: toastId },
+        );
+      }
+      // Expenses Fuel Status — invalidate + rebuild touched drivers (toll parity).
+      void queryClient.invalidateQueries({ queryKey: [DRIVER_FINANCIAL_PERIODS_KEY] });
+      const weekKey = period.startDate || period.id;
+      const driverIds = [
+        ...new Set(
+          (finalizedReports || [])
+            .filter((r: any) => String(r.weekStart || '').split('T')[0] === weekKey)
+            .map((r: any) => r.driverId)
+            .filter(Boolean) as string[],
+        ),
+      ];
+      if (driverIds.length > 0) {
+        void runBackgroundJobToast(
+          async () => {
+            for (const id of driverIds) {
+              await api.rebuildDriverFinancialPeriods(id, weekKey);
+            }
+            await api.processDriverFinancialOutbox(50).catch(() => undefined);
+            return driverIds.length;
+          },
+          {
+            loading: `Updating Expenses for ${driverIds.length} driver${driverIds.length === 1 ? '' : 's'}…`,
+            success: (n) => `Expenses refreshed for ${n} driver${Number(n) === 1 ? '' : 's'}`,
+            error: 'Could not refresh Driver Expenses — try again from Admin if needed',
+          },
         );
       }
       lockedOpenChange(false);

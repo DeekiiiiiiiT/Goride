@@ -3547,7 +3547,11 @@ export const api = {
   },
 
   /** Delete by driverId (preferred) or legacy vehicleId — same path param. */
-  async deleteFinalizedReport(weekStart: string, identityId: string): Promise<void> {
+  async deleteFinalizedReport(weekStart: string, identityId: string): Promise<{
+    success?: boolean;
+    eventsReversed?: number;
+    periodsRebuilt?: number;
+  }> {
     const weekKey = String(weekStart).split('T')[0];
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/finalized-reports/${encodeURIComponent(weekKey)}/${encodeURIComponent(identityId)}`, {
       method: 'DELETE',
@@ -3557,6 +3561,7 @@ export const api = {
       const errText = await response.text();
       throw new Error(`Failed to delete finalized report: ${errText}`);
     }
+    return response.json().catch(() => ({ success: true }));
   },
 
   /** Re-open a consumption week: wipe snapshots, reverse settlements, return logs to Pending. */
@@ -3565,6 +3570,8 @@ export const api = {
     snapshotsDeleted?: number;
     deletedTransactions?: number;
     resetFuelEntries?: number;
+    eventsReversed?: number;
+    periodsRebuilt?: number;
     error?: string;
   }> {
     const weekKey = String(weekStart).split('T')[0];
@@ -3579,6 +3586,39 @@ export const api = {
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
       throw new Error((data as { error?: string }).error || 'Failed to reset fuel period');
+    }
+    return data;
+  },
+
+  /**
+   * Heal Consumption Reconciliation ↔ Driver Fuel Expense drift.
+   * Always call with dryRun: true first; execute with dryRun: false.
+   */
+  async syncFuelExpenses(opts?: {
+    dryRun?: boolean;
+    weekStart?: string;
+    driverId?: string;
+  }): Promise<{
+    success: boolean;
+    report?: Record<string, unknown>;
+    message?: string;
+    error?: string;
+  }> {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fuel}/finalized-reports/sync-expenses`,
+      {
+        method: 'POST',
+        headers: await requireAuthHeaders(),
+        body: JSON.stringify({
+          dryRun: opts?.dryRun !== false,
+          ...(opts?.weekStart ? { weekStart: String(opts.weekStart).split('T')[0] } : {}),
+          ...(opts?.driverId ? { driverId: opts.driverId } : {}),
+        }),
+      },
+    );
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error((data as { error?: string }).error || 'Fuel expense sync failed');
     }
     return data;
   },

@@ -27,6 +27,9 @@ import { reportWeekYmdBounds } from '../../utils/fuelWeekPeriod';
 import { api } from '../../services/api';
 import { toast } from 'sonner@2.0.3';
 import { downloadCSV } from '../../utils/export';
+import { useQueryClient } from '@tanstack/react-query';
+import { DRIVER_FINANCIAL_PERIODS_KEY } from '../../hooks/useDriverFinancialPeriods';
+import { runBackgroundJobToast } from '../shared/runBackgroundJobToast';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -56,6 +59,7 @@ interface WeekGroup {
 }
 
 export function FinalizedReportsTab() {
+  const queryClient = useQueryClient();
   const [reports, setReports] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedWeek, setExpandedWeek] = useState<string | null>(null);
@@ -121,11 +125,10 @@ export function FinalizedReportsTab() {
   const handleDelete = async () => {
     if (!deleteTarget) return;
     setIsDeleting(true);
+    const weekKey = String(deleteTarget.weekStart).split('T')[0];
+    const driverId = deleteTarget.driverId || deleteTarget.vehicleId;
     try {
-      await api.deleteFinalizedReport(
-        deleteTarget.weekStart,
-        deleteTarget.driverId || deleteTarget.vehicleId
-      );
+      await api.deleteFinalizedReport(weekKey, driverId);
       setReports((prev) =>
         prev.filter(
           (r) =>
@@ -137,6 +140,22 @@ export function FinalizedReportsTab() {
         )
       );
       toast.success(`Reset ${deleteTarget.label} for this week — wallet/fuel posts unwound`);
+      // Expenses Fuel Status reads driver_financial_periods — refresh like toll reset.
+      void queryClient.invalidateQueries({ queryKey: [DRIVER_FINANCIAL_PERIODS_KEY] });
+      if (deleteTarget.driverId) {
+        void runBackgroundJobToast(
+          async () => {
+            await api.rebuildDriverFinancialPeriods(deleteTarget.driverId!, weekKey);
+            await api.processDriverFinancialOutbox(50).catch(() => undefined);
+            return 1;
+          },
+          {
+            loading: 'Updating Driver Fuel Expense…',
+            success: () => 'Driver Fuel Expense refreshed',
+            error: 'Could not refresh Driver Fuel Expense — try Admin rebuild if needed',
+          },
+        );
+      }
     } catch (err: any) {
       console.error('[FinalizedReportsTab] Delete error:', err);
       toast.error(`Failed to delete: ${err.message}`);

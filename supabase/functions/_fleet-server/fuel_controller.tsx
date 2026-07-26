@@ -37,6 +37,11 @@ import {
   healApprovedFuelEntriesMissingLog,
 } from "./fuel_posted_guarantee.ts";
 import { stampOrg, getOrgId } from "./org_scope.ts";
+import {
+  postFuelFinalizedEventsFromReport,
+  reverseFuelFinancialEventsAndRebuild,
+  listActiveFuelEventsForWeek,
+} from "./fuel_financial_reset.ts";
 
 const app = new Hono();
 
@@ -180,6 +185,7 @@ app.post(`${BASE_PATH}/finalized-reports`, async (c) => {
     }
 
     let saved = 0;
+    const failures: string[] = [];
     for (const report of reports) {
       if (!report.weekStart || !report.driverId) {
         console.log(`[FinalizedReports] Skipping report missing weekStart or driverId`);
@@ -197,98 +203,19 @@ app.post(`${BASE_PATH}/finalized-reports`, async (c) => {
           /* ignore */
         }
       }
-      // Unified financial ledger — versioned fuel close events (append-only).
+      // Unified financial ledger + Expenses projection — must succeed or roll back KV.
       try {
-        const { postFinancialEvent } = await import("./financial_ledger.ts");
-        const { rebuildDriverFinancialPeriod } = await import("./driver_financial_periods.ts");
-        const deduction = Math.abs(Number(report.driverShare) || 0);
-        const fleetShare = Math.abs(Number(report.companyShare) || 0);
-        const driverSpend = Math.abs(Number(report.driverCashSpend) || Number(report.cashSpend) || 0);
-        const gasCard = Math.abs(Number(report.gasCardSpend) || 0);
-        const keyBase = `fuel_finalized:${report.driverId}:${weekKey}`;
-        await postFinancialEvent({
-          idempotencyKey: `${keyBase}|finalized`,
-          domain: "fuel",
-          eventType: "fuel_finalized",
-          sourceSystem: "fuel_ops",
-          sourceId: String(report.id || keyBase),
-          driverId: String(report.driverId),
-          vehicleId: report.vehicleId || null,
-          occurredAt: weekKey,
-          amountMajor: 0,
-          direction: "neutral",
-          payload: { reportId: report.id, weekStart: weekKey },
-        });
-        if (deduction > 0) {
-          await postFinancialEvent({
-            idempotencyKey: `${keyBase}|deduction`,
-            domain: "fuel",
-            eventType: "fuel_deduction",
-            sourceSystem: "fuel_ops",
-            sourceId: String(report.id || keyBase),
-            driverId: String(report.driverId),
-            occurredAt: weekKey,
-            amountMajor: -deduction,
-            direction: "outflow",
-            debitAccountKey: "platform:driver_receivable",
-            creditAccountKey: "platform:fleet_fuel_expense",
-            allocations: [{
-              allocation_type: "driver_share",
-              amount_minor: Math.round(deduction * 100),
-              driver_id: String(report.driverId),
-              fuel_entry_id: String(report.id || ""),
-            }],
-          });
-        }
-        if (fleetShare > 0) {
-          await postFinancialEvent({
-            idempotencyKey: `${keyBase}|fleet_share`,
-            domain: "fuel",
-            eventType: "fuel_fleet_share",
-            sourceSystem: "fuel_ops",
-            sourceId: String(report.id || keyBase),
-            driverId: String(report.driverId),
-            occurredAt: weekKey,
-            amountMajor: -fleetShare,
-            direction: "outflow",
-            allocations: [{
-              allocation_type: "fleet_share",
-              amount_minor: Math.round(fleetShare * 100),
-              driver_id: String(report.driverId),
-            }],
-          });
-        }
-        if (driverSpend > 0) {
-          await postFinancialEvent({
-            idempotencyKey: `${keyBase}|driver_spend`,
-            domain: "fuel",
-            eventType: "fuel_driver_spend",
-            sourceSystem: "fuel_ops",
-            sourceId: String(report.id || keyBase),
-            driverId: String(report.driverId),
-            occurredAt: weekKey,
-            amountMajor: -driverSpend,
-            direction: "outflow",
-          });
-        }
-        if (gasCard > 0) {
-          await postFinancialEvent({
-            idempotencyKey: `${keyBase}|gas_card`,
-            domain: "fuel",
-            eventType: "fuel_gas_card_spend",
-            sourceSystem: "fuel_ops",
-            sourceId: String(report.id || keyBase),
-            driverId: String(report.driverId),
-            occurredAt: weekKey,
-            amountMajor: -gasCard,
-            direction: "outflow",
-            debitAccountKey: "platform:fleet_fuel_expense",
-            creditAccountKey: "platform:fuel_card_clearing",
-          });
-        }
-        await rebuildDriverFinancialPeriod(String(report.driverId), weekKey);
+        await postFuelFinalizedEventsFromReport(stamped);
       } catch (finErr: any) {
-        console.error(`[FinalizedReports] financial ledger post failed: ${finErr?.message || finErr}`);
+        const msg = finErr?.message || String(finErr);
+        console.error(`[FinalizedReports] financial ledger post failed: ${msg}`);
+        try {
+          await kv.del(key);
+        } catch {
+          /* ignore */
+        }
+        failures.push(`${report.driverId}/${weekKey}: ${msg}`);
+        continue;
       }
 
       // Canonical P&L offsets — driver-share portion of each fill (always on).
@@ -326,7 +253,14 @@ app.post(`${BASE_PATH}/finalized-reports`, async (c) => {
     }
 
     console.log(`[FinalizedReports] Saved ${saved} finalized report snapshots (driver-week keys)`);
-    return c.json({ success: true, saved });
+    if (saved === 0 && failures.length > 0) {
+      return c.json({ error: failures[0], failures, saved: 0 }, 500);
+    }
+    return c.json({
+      success: true,
+      saved,
+      ...(failures.length > 0 ? { failures } : {}),
+    });
   } catch (e: any) {
     console.log(`[FinalizedReports] POST error: ${e.message}`);
     return c.json({ error: e.message }, 500);
@@ -774,10 +708,44 @@ app.delete(`${BASE_PATH}/finalized-reports/:weekStart/:identityId`, async (c) =>
       `[FinalizedReports] Deleted driver/vehicle week ${weekKey}/${identityId}; txs=${txIdsToDelete.size}; fuelEntriesReset=${entriesReset}`
     );
 
+    // Toll-parity: reverse fuel ledger events + rebuild Expenses projection.
+    const rebuildDrivers = new Set<string>();
+    if (snapshot?.driverId) rebuildDrivers.add(String(snapshot.driverId));
+    for (const id of driverIds) {
+      if (id) rebuildDrivers.add(String(id));
+    }
+    rebuildDrivers.add(String(identityId));
+
+    let eventsReversed = 0;
+    let periodsRebuilt = 0;
+    const syncErrors: string[] = [];
+    try {
+      const sync = await reverseFuelFinancialEventsAndRebuild(
+        rebuildDrivers,
+        weekKey,
+        "fuel_finalized_report_delete",
+      );
+      eventsReversed = sync.eventsReversed;
+      periodsRebuilt = sync.periodsRebuilt;
+      syncErrors.push(...sync.errors);
+      if (sync.errors.length) {
+        console.warn(`[FinalizedReports] expense sync warnings:`, sync.errors);
+      }
+    } catch (syncErr: any) {
+      console.warn(
+        `[FinalizedReports] expense sync failed (non-fatal):`,
+        syncErr?.message || syncErr,
+      );
+      syncErrors.push(String(syncErr?.message || syncErr));
+    }
+
     return c.json({
       success: true,
       deletedTransactions: txIdsToDelete.size,
       resetFuelEntries: entriesReset,
+      eventsReversed,
+      periodsRebuilt,
+      ...(syncErrors.length ? { syncErrors } : {}),
     });
   } catch (e: any) {
     console.log(`[FinalizedReports] DELETE error: ${e.message}`);
@@ -1007,6 +975,30 @@ app.post(`${BASE_PATH}/finalized-reports/reset-period`, requirePermission('trans
       `[FuelResetPeriod] week=${weekKey} snapshots=${snapshotsDeleted} txs=${txIdsToDelete.size} entries=${entriesReset}`,
     );
 
+    // Toll-parity: reverse fuel ledger + rebuild Expenses for all touched drivers.
+    let eventsReversed = 0;
+    let periodsRebuilt = 0;
+    const syncErrors: string[] = [];
+    try {
+      const sync = await reverseFuelFinancialEventsAndRebuild(
+        driverIds,
+        weekKey,
+        "fuel_period_reset",
+      );
+      eventsReversed = sync.eventsReversed;
+      periodsRebuilt = sync.periodsRebuilt;
+      syncErrors.push(...sync.errors);
+      if (sync.errors.length) {
+        console.warn(`[FuelResetPeriod] expense sync warnings:`, sync.errors);
+      }
+    } catch (syncErr: any) {
+      console.warn(
+        `[FuelResetPeriod] expense sync failed (non-fatal):`,
+        syncErr?.message || syncErr,
+      );
+      syncErrors.push(String(syncErr?.message || syncErr));
+    }
+
     return c.json({
       success: true,
       weekStart: weekKey,
@@ -1014,12 +1006,185 @@ app.post(`${BASE_PATH}/finalized-reports/reset-period`, requirePermission('trans
       snapshotsDeleted,
       deletedTransactions: txIdsToDelete.size,
       resetFuelEntries: entriesReset,
+      eventsReversed,
+      periodsRebuilt,
+      ...(syncErrors.length ? { syncErrors } : {}),
     });
   } catch (e: any) {
     console.log(`[FuelResetPeriod] error: ${e.message}`);
     return c.json({ error: e.message }, 500);
   }
 });
+
+/**
+ * Heal Consumption Reconciliation ↔ Driver Fuel Expense drift:
+ * - KV snapshot without active fuel events → re-post events + rebuild
+ * - Active fuel events without KV snapshot → reverse events + rebuild
+ * Body: { dryRun?: boolean, weekStart?: string, driverId?: string }
+ */
+app.post(
+  `${BASE_PATH}/finalized-reports/sync-expenses`,
+  requirePermission("transactions.edit"),
+  async (c) => {
+    try {
+      const body = await c.req.json().catch(() => ({}));
+      const dryRun = body.dryRun !== false; // default dry-run for safety
+      const onlyWeek = body.weekStart
+        ? String(body.weekStart).split("T")[0]
+        : null;
+      const onlyDriver = body.driverId ? String(body.driverId) : null;
+
+      const snapshots = ((await kv.getByPrefix("finalized_report:")) || []).filter(
+        (s: any) => {
+          if (!s?.driverId) return false;
+          const wk = String(s.weekStart || "").split("T")[0];
+          if (!wk) return false;
+          if (onlyWeek && wk !== onlyWeek) return false;
+          if (onlyDriver && String(s.driverId) !== onlyDriver) return false;
+          return true;
+        },
+      );
+
+      const snapKeys = new Set(
+        snapshots.map(
+          (s: any) =>
+            `${String(s.driverId)}|${String(s.weekStart).split("T")[0]}`,
+        ),
+      );
+
+      // Also scan fuel events for orphan weeks (events without snapshot)
+      let eventsQuery = supabase
+        .from("financial_events")
+        .select("id, driver_id, period_anchor, event_type, reverses_event_id")
+        .eq("domain", "fuel")
+        .eq("event_type", "fuel_finalized");
+      if (onlyDriver) eventsQuery = eventsQuery.eq("driver_id", onlyDriver);
+      if (onlyWeek) eventsQuery = eventsQuery.eq("period_anchor", onlyWeek);
+      const { data: fuelFinalizedRows, error: feErr } = await eventsQuery;
+      if (feErr) throw new Error(feErr.message);
+
+      const reversedIds = new Set<string>();
+      for (const ev of fuelFinalizedRows || []) {
+        if (ev?.reverses_event_id) reversedIds.add(String(ev.reverses_event_id));
+      }
+      const activeFinalized = (fuelFinalizedRows || []).filter(
+        (ev: any) =>
+          ev?.id &&
+          !ev.reverses_event_id &&
+          !reversedIds.has(String(ev.id)),
+      );
+
+      const eventKeys = new Set(
+        activeFinalized.map(
+          (ev: any) => `${String(ev.driver_id)}|${String(ev.period_anchor)}`,
+        ),
+      );
+
+      const toPost: any[] = [];
+      const toRebuild: Array<{ driverId: string; weekKey: string }> = [];
+      const toReverse: Array<{ driverId: string; weekKey: string }> = [];
+
+      for (const s of snapshots) {
+        const weekKey = String(s.weekStart).split("T")[0];
+        const driverId = String(s.driverId);
+        try {
+          const active = await listActiveFuelEventsForWeek(driverId, weekKey);
+          if (active.length === 0) toPost.push(s);
+          else toRebuild.push({ driverId, weekKey });
+        } catch {
+          const key = `${driverId}|${weekKey}`;
+          if (!eventKeys.has(key)) toPost.push(s);
+          else toRebuild.push({ driverId, weekKey });
+        }
+      }
+      for (const key of eventKeys) {
+        if (!snapKeys.has(key)) {
+          const [driverId, weekKey] = key.split("|");
+          toReverse.push({ driverId, weekKey });
+        }
+      }
+
+      const report = {
+        dryRun,
+        snapshotsScanned: snapshots.length,
+        wouldPost: toPost.length,
+        wouldRebuild: toRebuild.length,
+        wouldReverse: toReverse.length,
+        posted: 0,
+        rebuilt: 0,
+        reversed: 0,
+        periodsRebuilt: 0,
+        errors: [] as string[],
+        samplePost: toPost.slice(0, 10).map((s: any) => ({
+          driverId: s.driverId,
+          weekStart: String(s.weekStart).split("T")[0],
+        })),
+        sampleRebuild: toRebuild.slice(0, 10),
+        sampleReverse: toReverse.slice(0, 10),
+      };
+
+      if (dryRun) {
+        return c.json({
+          success: true,
+          report,
+          message:
+            "Dry run complete. Re-run with dryRun=false to post/reverse and rebuild.",
+        });
+      }
+
+      for (const s of toPost) {
+        try {
+          await postFuelFinalizedEventsFromReport(s);
+          report.posted++;
+          report.periodsRebuilt++;
+        } catch (e: any) {
+          report.errors.push(
+            `post ${s.driverId}/${s.weekStart}: ${e?.message || e}`,
+          );
+        }
+      }
+
+      // Snapshot + events exist but projection may be stale (e.g. Jan 12 Pending).
+      try {
+        const { rebuildPeriodsForAnchors } = await import("./driver_financial_periods.ts");
+        for (const { driverId, weekKey } of toRebuild) {
+          try {
+            report.periodsRebuilt += await rebuildPeriodsForAnchors(driverId, [weekKey]);
+            report.rebuilt++;
+          } catch (e: any) {
+            report.errors.push(`rebuild ${driverId}/${weekKey}: ${e?.message || e}`);
+          }
+        }
+      } catch (e: any) {
+        report.errors.push(`rebuild import: ${e?.message || e}`);
+      }
+
+      for (const { driverId, weekKey } of toReverse) {
+        try {
+          const sync = await reverseFuelFinancialEventsAndRebuild(
+            [driverId],
+            weekKey,
+            "fuel_sync_expenses_orphan",
+          );
+          report.reversed += sync.eventsReversed;
+          report.periodsRebuilt += sync.periodsRebuilt;
+          report.errors.push(...sync.errors);
+        } catch (e: any) {
+          report.errors.push(`reverse ${driverId}/${weekKey}: ${e?.message || e}`);
+        }
+      }
+
+      return c.json({
+        success: true,
+        report,
+        message: "Fuel expense sync complete.",
+      });
+    } catch (e: any) {
+      console.log(`[FinalizedReports] sync-expenses error: ${e.message}`);
+      return c.json({ error: e.message }, 500);
+    }
+  },
+);
 
 // ─── Fuel Reconciliation settings (P&L offset flag) ───────────────────────
 app.get(`${BASE_PATH}/fuel-reconciliation/settings`, async (c) => {

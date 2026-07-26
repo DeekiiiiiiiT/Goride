@@ -478,9 +478,23 @@ export async function rebuildDriverFinancialPeriod(
 
   const { data: finEvents } = await sb()
     .from("financial_events")
-    .select("id, event_type, domain, source_system, source_id, amount_minor, occurred_at, payload")
+    .select(
+      "id, event_type, domain, source_system, source_id, amount_minor, occurred_at, payload, reverses_event_id",
+    )
     .eq("driver_id", driverId)
     .eq("period_anchor", periodAnchor);
+
+  // Ignore reversed originals + reversal rows so period reset clears Fuel Status.
+  const reversedIds = new Set<string>();
+  for (const ev of finEvents || []) {
+    if (ev?.reverses_event_id) reversedIds.add(String(ev.reverses_event_id));
+  }
+  const activeFinEvents = (finEvents || []).filter(
+    (ev: any) =>
+      ev?.id &&
+      !ev.reverses_event_id &&
+      !reversedIds.has(String(ev.id)),
+  );
 
   let tollReimbursed = 0;
   let fuelDeduction = 0;
@@ -489,7 +503,7 @@ export async function rebuildDriverFinancialPeriod(
   let fuelGasCardSpend = 0;
   let fuelFinalized = false;
 
-  for (const ev of finEvents || []) {
+  for (const ev of activeFinEvents) {
     const major = minorToMajor(Number(ev.amount_minor) || 0);
     const et = String(ev.event_type || "");
     if (et === "toll_reimbursed" || et === "trip_refund" || et === "unlinked_trip" || et === "dispute_refund") {
@@ -505,10 +519,10 @@ export async function rebuildDriverFinancialPeriod(
     if (et === "fuel_finalized") fuelFinalized = true;
   }
 
-  // Fallback: finalized fuel reports when no fuel events yet
+  // Fallback: finalized fuel reports when no fuel events yet (weekStart is SSOT)
   if (!fuelFinalized) {
     for (const r of context.fuelReports) {
-      const start = String(r.periodStart || r.startDate || "").slice(0, 10);
+      const start = String(r.weekStart || r.periodStart || r.startDate || "").slice(0, 10);
       if (!(start >= periodAnchor && start <= periodEnd)) continue;
       fuelDeduction = round2(fuelDeduction + Math.abs(Number(r.driverShare) || 0));
       fuelFleetShare = round2(fuelFleetShare + Math.abs(Number(r.companyShare) || 0));
@@ -1001,7 +1015,7 @@ export async function rebuildAllPeriodsForDriver(driverId: string): Promise<numb
     anchors.add(await periodAnchorFor(t.date, ctx.timezone));
   }
   for (const r of ctx.fuelReports) {
-    const start = String(r.periodStart || r.startDate || "").slice(0, 10);
+    const start = String(r.weekStart || r.periodStart || r.startDate || "").slice(0, 10);
     if (start) anchors.add(await periodAnchorFor(start, ctx.timezone));
   }
   for (const e of ctx.fareEntries) {
