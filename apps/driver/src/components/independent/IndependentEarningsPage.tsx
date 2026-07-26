@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo } from 'react';
-import { ChevronRight, Wallet } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   Banknote,
@@ -185,15 +185,6 @@ export function IndependentEarningsPage({ onNavigate }: EarningsPageProps) {
                   : 'Cash, digital change fund & debt'}
               </p>
             </div>
-            {onNavigate && (
-              <button
-                type="button"
-                onClick={() => onNavigate('rides-wallets')}
-                className="text-xs font-bold text-[#004ac6] hover:underline dark:text-blue-400"
-              >
-                View all
-              </button>
-            )}
           </div>
           <div className="grid grid-cols-3 gap-2">
             <WalletChip
@@ -220,25 +211,6 @@ export function IndependentEarningsPage({ onNavigate }: EarningsPageProps) {
             </p>
           )}
         </section>
-      )}
-
-      {onNavigate && !CASH_SETTLEMENT_ENABLED && (
-        <button
-          type="button"
-          onClick={() => onNavigate('rides-wallets')}
-          className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-4 text-left shadow-sm dark:border-slate-700 dark:bg-slate-900"
-        >
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-100 dark:bg-blue-950/40">
-              <Wallet className="h-5 w-5 text-blue-700 dark:text-blue-400" aria-hidden />
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-slate-900 dark:text-white">Trip wallet</p>
-              <p className="text-xs text-slate-500">Ledger balance & settlement history</p>
-            </div>
-          </div>
-          <ChevronRight className="h-5 w-5 text-slate-400" aria-hidden />
-        </button>
       )}
 
       <div className="space-y-4">

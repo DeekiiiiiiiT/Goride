@@ -44,7 +44,6 @@ import { DriverOnTripOverlay } from '../rides/DriverOnTripOverlay';
 import { DriverCashSettlementOverlay } from '../rides/DriverCashSettlementOverlay';
 import { DriverDigitalTripCompleteOverlay } from '../rides/DriverDigitalTripCompleteOverlay';
 import { DriverArrivedPickupOverlay } from '../rides/DriverArrivedPickupOverlay';
-import { DriverWalletsPage } from '../rides/DriverWalletsPage';
 import { DriverSettingsPage } from '../settings/DriverSettingsPage';
 
 export function DriverShell({ forcePassengerRides = false }: { forcePassengerRides?: boolean }) {
@@ -67,7 +66,6 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
   const mintEarningsLayout = currentPage === 'earnings';
   const mintTripsLayout = currentPage === 'trips';
   const mintProfileLayout = currentPage === 'profile';
-  const mintWalletsLayout = currentPage === 'rides-wallets';
   const mintUtilityLayout =
     currentPage === 'vehicle' ||
     currentPage === 'expenses' ||
@@ -81,7 +79,6 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
     mintEarningsLayout ||
     mintTripsLayout ||
     mintProfileLayout ||
-    mintWalletsLayout ||
     mintUtilityLayout;
   const profileFlowActive = currentPage === 'profile' || currentPage === 'documents';
 
@@ -132,13 +129,7 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
       case 'dashboard':
         return <DriverMintHome />;
       case 'passenger-rides':
-        return <RideDispatchPage onOpenWallets={() => setCurrentPage('rides-wallets')} />;
-      case 'rides-wallets':
-        return (
-          <DriverWalletsPage
-            onBack={() => setCurrentPage(forcePassengerRides ? 'passenger-rides' : 'earnings')}
-          />
-        );
+        return <RideDispatchPage />;
       case 'earnings':
         return <IndependentEarningsPage onNavigate={setCurrentPage} />;
       case 'trips':
@@ -204,7 +195,7 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
       >
         <div className="mx-auto flex h-14 max-w-lg items-center justify-between gap-3 safe-x sm:max-w-2xl md:max-w-3xl lg:max-w-4xl">
           <div className="flex min-w-0 items-center gap-3">
-            {!mintTripsLayout && !mintProfileLayout && !mintWalletsLayout && (
+            {!mintTripsLayout && !mintProfileLayout && (
               <button
                 type="button"
                 onClick={() => setMenuOpen(true)}
@@ -230,7 +221,7 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
                 </button>
                 <h1 className="text-xl font-bold tracking-tight text-[#004ac6] dark:text-blue-400">Roam</h1>
               </>
-            ) : mintEarningsLayout || mintWalletsLayout || mintUtilityLayout ? (
+            ) : mintEarningsLayout || mintUtilityLayout ? (
               <h1 className="text-xl font-bold tracking-tight text-[#004ac6] dark:text-blue-400">Roam</h1>
             ) : mintHomeLayout ? null : (
               <>
