@@ -479,7 +479,7 @@ export async function rebuildDriverFinancialPeriod(
   const { data: finEvents } = await sb()
     .from("financial_events")
     .select(
-      "id, event_type, domain, source_system, source_id, amount_minor, occurred_at, payload, reverses_event_id",
+      "id, event_type, domain, source_system, source_id, amount_minor, occurred_at, payload, reverses_event_id, reversed_at",
     )
     .eq("driver_id", driverId)
     .eq("period_anchor", periodAnchor);
@@ -493,6 +493,7 @@ export async function rebuildDriverFinancialPeriod(
     (ev: any) =>
       ev?.id &&
       !ev.reverses_event_id &&
+      !ev.reversed_at &&
       !reversedIds.has(String(ev.id)),
   );
 

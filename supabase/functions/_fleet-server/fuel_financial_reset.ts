@@ -25,9 +25,11 @@ function sb() {
   );
 }
 
-function filterActiveEvents<T extends { id?: string; reverses_event_id?: string | null }>(
-  events: T[],
-): T[] {
+function filterActiveEvents<T extends {
+  id?: string;
+  reverses_event_id?: string | null;
+  reversed_at?: string | null;
+}>(events: T[]): T[] {
   const reversedIds = new Set<string>();
   for (const ev of events) {
     if (ev?.reverses_event_id) reversedIds.add(String(ev.reverses_event_id));
@@ -36,6 +38,7 @@ function filterActiveEvents<T extends { id?: string; reverses_event_id?: string 
     (ev) =>
       ev?.id &&
       !ev.reverses_event_id &&
+      !ev.reversed_at &&
       !reversedIds.has(String(ev.id)),
   );
 }
@@ -48,7 +51,7 @@ export async function listActiveFuelEventsForWeek(
   const { data, error } = await sb()
     .from("financial_events")
     .select(
-      "id, event_type, domain, source_system, source_id, amount_minor, occurred_at, payload, reverses_event_id, driver_id, period_anchor",
+      "id, event_type, domain, source_system, source_id, amount_minor, occurred_at, payload, reverses_event_id, reversed_at, driver_id, period_anchor",
     )
     .eq("driver_id", driverId)
     .eq("period_anchor", weekKey)
@@ -143,9 +146,9 @@ export async function reverseFuelFinancialEventsAndRebuild(
  * Post fuel close events from a finalized_report snapshot (finalize + heal).
  * Throws if any required post fails (caller may rollback KV).
  *
- * After a period reset, prior ledger rows remain (append-only). Re-finalize
- * uses a new generation suffix on idempotency keys so keys never collide.
- * If active (unreversed) fuel events already exist, skip re-post and rebuild.
+ * After delete/reset, prior rows stay (append-only) but reversed_at frees the
+ * active-source unique slot. Idempotency keys still need a generation suffix
+ * because keys are globally unique forever. source_id stays the report id.
  */
 export async function postFuelFinalizedEventsFromReport(
   report: Record<string, any>,
@@ -171,14 +174,14 @@ export async function postFuelFinalizedEventsFromReport(
     return { weekKey, driverId, results };
   }
 
-  // Next generation after prior closes (including reversed originals).
+  // Next generation after prior closes (idempotency keys are never reused).
   const generation = await nextFuelFinalizeGeneration(driverId, weekKey);
-  // g1 keeps legacy key shape so first-ever finalize matches older rows.
   const keyBase =
     generation <= 1
       ? `fuel_finalized:${driverId}:${weekKey}`
       : `fuel_finalized:${driverId}:${weekKey}:g${generation}`;
-  const sourceId = String(report.id || keyBase);
+  // Stable source id — reversed_at frees the unique active-source slot on reset.
+  const sourceId = String(report.id || `${driverId}_${weekKey}`);
 
   const check = (r: PostFinancialEventResult, label: string) => {
     results.push(r);
