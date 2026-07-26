@@ -41,6 +41,8 @@ export type DispatchSettings = {
   toll_detect_enroute: boolean;
   /** When true, quote API estimates tolls from route polyline vs toll plaza DB. */
   route_toll_estimation_enabled: boolean;
+  /** Layer C: Roam take-rate in basis points (0 = 0%). Tips excluded. */
+  roam_platform_fee_bps: number;
   updated_at?: string;
   updated_by?: string | null;
 };
@@ -78,6 +80,7 @@ export const DEFAULT_DISPATCH_SETTINGS: DispatchSettings = {
   toll_geofence_radius_m: 100,
   toll_detect_enroute: false,
   route_toll_estimation_enabled: false,
+  roam_platform_fee_bps: 0,
 };
 
 const CACHE_TTL_MS = 30_000;
@@ -221,6 +224,12 @@ export function rowToDispatchSettings(row: Record<string, unknown>): DispatchSet
     ),
     toll_detect_enroute: row.toll_detect_enroute === true,
     route_toll_estimation_enabled: row.route_toll_estimation_enabled === true,
+    roam_platform_fee_bps: Math.max(
+      0,
+      Math.floor(
+        Number(row.roam_platform_fee_bps ?? DEFAULT_DISPATCH_SETTINGS.roam_platform_fee_bps) || 0,
+      ),
+    ),
     updated_at: typeof row.updated_at === "string" ? row.updated_at : undefined,
     updated_by: typeof row.updated_by === "string" ? row.updated_by : null,
   };

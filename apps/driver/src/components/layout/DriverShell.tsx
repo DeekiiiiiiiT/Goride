@@ -29,6 +29,7 @@ import { IndependentProfilePage } from '../independent/IndependentProfilePage';
 import { IndependentProfileDocumentsPage } from '../independent/IndependentProfileDocumentsPage';
 import { IndependentTripsPage } from '../independent/IndependentTripsPage';
 import { DriverExpenses } from '../fleet/DriverExpenses';
+import { FleetSettlementPage } from '../fleet/FleetSettlementPage';
 import { WeeklyCheckInModal } from '../fleet/WeeklyCheckInModal';
 import { useCurrentDriver } from '../../hooks/useCurrentDriver';
 import { useWeeklyCheckIn } from '../../hooks/useWeeklyCheckIn';
@@ -70,6 +71,7 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
   const mintUtilityLayout =
     currentPage === 'vehicle' ||
     currentPage === 'expenses' ||
+    currentPage === 'fleet-settlement' ||
     currentPage === 'tax' ||
     currentPage === 'insurance' ||
     currentPage === 'settings' ||
@@ -147,6 +149,12 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
         return <IndependentProfileDocumentsPage onBack={() => setCurrentPage('profile')} />;
       case 'expenses':
         return <DriverExpenses onBack={() => setCurrentPage('dashboard')} />;
+      case 'fleet-settlement':
+        return isFleetDriver ? (
+          <FleetSettlementPage onBack={() => setCurrentPage('earnings')} />
+        ) : (
+          <IndependentEarningsPage onNavigate={setCurrentPage} />
+        );
       case 'vehicle':
         return <MyVehicle />;
       case 'tax':

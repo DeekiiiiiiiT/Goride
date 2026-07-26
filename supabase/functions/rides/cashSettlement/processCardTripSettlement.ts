@@ -66,12 +66,18 @@ export async function processCardTripSettlement(
     riderWalletAvailableMinor: riderAvailable,
   });
 
+  const { shouldCreditFleetOrg } = await import("../../_shared/fleetOrgPayout.ts");
+  const orgPayout = await shouldCreditFleetOrg(ride);
+
   const lines = buildCardTripJournalLines({
     rideId,
     currency,
     driverUserId,
     riderUserId,
     settlement,
+    tipMinor: Number(ride.tip_minor ?? 0) || 0,
+    organizationId: orgPayout.organizationId,
+    fleetOrgPayout: orgPayout.enabled,
   });
   if (lines.length === 0) {
     return { ok: false, reason: "no_lines" };

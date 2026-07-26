@@ -25,6 +25,8 @@ export interface DriverProfile {
   gender?: 'male' | 'female' | 'other' | null;
   phone?: string;
   profilePhotoUrl?: string;
+  /** Temporary Start Trip bridge — default true for fleet. */
+  manualStartTripEnabled?: boolean;
 }
 
 export interface FleetInfo {
@@ -122,6 +124,7 @@ export const DriverProvider = ({ children }: { children: React.ReactNode }) => {
           gender: (data.gender as DriverProfile['gender']) ?? undefined,
           phone: data.phone,
           profilePhotoUrl: data.profile_photo_url,
+          manualStartTripEnabled: data.manual_start_trip_enabled !== false,
         });
 
         if (data.fleet_id) {

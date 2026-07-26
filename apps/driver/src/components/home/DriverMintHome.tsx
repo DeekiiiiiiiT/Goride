@@ -6,7 +6,7 @@ import { FleetStartTripLauncher } from './FleetStartTripLauncher';
 
 export function DriverMintHome() {
   const { activeRide } = useRideDispatchContext();
-  const { isFleetDriver } = useDriver();
+  const { isFleetDriver, profile } = useDriver();
   const enRouteToPickup =
     activeRide?.status === 'driver_assigned' || activeRide?.status === 'driver_en_route_pickup';
   const onTrip = activeRide?.status === 'on_trip';
@@ -18,7 +18,11 @@ export function DriverMintHome() {
     <div className="flex h-full min-h-0 flex-1 flex-col">
       <DriverHomeDashboard
         tripFlowActive={tripFlowActive}
-        startTripSlot={isFleetDriver && !tripFlowActive ? <FleetStartTripLauncher /> : null}
+        startTripSlot={
+          isFleetDriver && !tripFlowActive && profile?.manualStartTripEnabled !== false ? (
+            <FleetStartTripLauncher />
+          ) : null
+        }
       />
     </div>
   );

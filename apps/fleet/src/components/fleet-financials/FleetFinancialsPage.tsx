@@ -11,6 +11,8 @@ import { toast } from 'sonner@2.0.3';
 import { api } from '../../services/api';
 import {
   aggregateExpectedBankByWeek,
+  aggregateRoamCardExpectedByWeek,
+  mergeFleetBankExpectedRows,
   mergeBankReceiveConfirms,
   fleetBankDisplayStatus,
   fleetBankDisplayStatusLabel,
@@ -264,6 +266,24 @@ export function FleetFinancialsPage({
     queryFn: () => fetchAllPayoutBankEvents(weekFrom || undefined, weekTo || undefined),
   });
 
+  // Roam card trips in fleet KV → expected org bank (Layer A org payout path).
+  const roamTripsQuery = useQuery({
+    queryKey: ['fleet-roam-card-expected', organizationId, weekFrom || null, weekTo || null],
+    queryFn: async () => {
+      const res = await api.getTripsFiltered({
+        platform: 'Roam',
+        organizationId: organizationId || undefined,
+        startDate: weekFrom || undefined,
+        endDate: weekTo || undefined,
+        limit: 2000,
+      });
+      return (res.data ?? []).filter(
+        (t) => String(t.paymentMethod || '').toLowerCase() === 'card',
+      );
+    },
+    enabled: Boolean(organizationId),
+  });
+
   const confirmsQuery = useQuery({
     queryKey: ['fleet-bank-confirms'],
     queryFn: () => api.getFleetBankConfirms(),
@@ -304,9 +324,11 @@ export function FleetFinancialsPage({
   }
 
   const rows = useMemo(() => {
-    const expected = aggregateExpectedBankByWeek(bankQuery.data, fleetTz);
+    const uberIndrive = aggregateExpectedBankByWeek(bankQuery.data, fleetTz);
+    const roam = aggregateRoamCardExpectedByWeek(roamTripsQuery.data, fleetTz);
+    const expected = mergeFleetBankExpectedRows(uberIndrive, roam);
     return mergeBankReceiveConfirms(expected, confirmsQuery.data?.data, organizationId);
-  }, [bankQuery.data, confirmsQuery.data, fleetTz, organizationId]);
+  }, [bankQuery.data, roamTripsQuery.data, confirmsQuery.data, fleetTz, organizationId]);
 
   const scopedByFilters = useMemo(() => {
     return rows

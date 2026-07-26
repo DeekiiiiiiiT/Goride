@@ -339,9 +339,11 @@ export const api = {
   },
 
   async getDriverMetrics(): Promise<DriverMetrics[]> {
+    const authHeaders = await getHeaders(null);
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/driver-metrics`, {
         headers: {
-            'Authorization': `Bearer ${publicAnonKey}`
+            ...authHeaders,
+            apikey: publicAnonKey,
         }
     });
     if (!response.ok) throw new Error("Failed to fetch driver metrics");
@@ -350,19 +352,21 @@ export const api = {
   },
 
   async getTripsFiltered(params: TripFilterParams): Promise<PaginatedTripResponse> {
+    // trips/search requires org auth — use session JWT (anon key returns empty/403).
+    const authHeaders = await getHeaders();
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/trips/search`, {
         method: 'POST',
         headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${publicAnonKey}`
+            ...authHeaders,
+            apikey: publicAnonKey,
         },
         body: JSON.stringify(params)
     });
-    
+
     if (!response.ok) {
         throw new Error(`Failed to search trips: ${response.statusText}`);
     }
-    
+
     return response.json();
   },
 
@@ -804,7 +808,10 @@ export const api = {
     const qs = params.toString();
     if (qs) url += `?${qs}`;
     const response = await fetchWithRetry(url, {
-        headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+        headers: {
+          ...(await getHeaders(null)),
+          apikey: publicAnonKey,
+        }
     });
     if (!response.ok) throw new Error("Failed to fetch transactions");
     return response.json();

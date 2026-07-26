@@ -145,6 +145,8 @@ export async function processCashSettlement(
       walletDeltas = splitJournal.walletDeltas;
       debtOpenedMinor = splitJournal.debtOpenedMinor;
     } else {
+      const { shouldCreditFleetOrg } = await import("../../_shared/fleetOrgPayout.ts");
+      const orgPayout = await shouldCreditFleetOrg(ride);
       const v2 = buildSettlementJournalV2({
         computed: effectiveComputed,
         rideId,
@@ -152,6 +154,8 @@ export async function processCashSettlement(
         riderUserId,
         driverUserId,
         digitalAvailableMinor: digitalAvailable,
+        organizationId: orgPayout.organizationId,
+        fleetOrgPayout: orgPayout.enabled,
       });
       journalLines = v2.lines;
       walletDeltas = v2.walletDeltas;

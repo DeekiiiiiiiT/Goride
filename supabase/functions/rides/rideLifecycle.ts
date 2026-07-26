@@ -88,6 +88,8 @@ export interface ApplyTransitionParams {
     requiredForStart: boolean;
     providedPin?: string;
   };
+  /** Layer C fee bps from dispatch_settings (default 0). */
+  platformFeeBps?: number | null;
 }
 
 export interface ApplyTransitionResult {
@@ -149,6 +151,25 @@ export async function applyRideTransition(
     ...lifecycleTimestampPatch(params.next, nowIso),
   };
 
+  // Stamp fleet attribution on money-relevant transitions (idempotent).
+  if (
+    params.next === "awaiting_cash_settlement" ||
+    params.next === "completed" ||
+    params.next === "cancelled"
+  ) {
+    const driverId = String(ride.assigned_driver_user_id ?? params.actorUserId ?? "");
+    if (driverId) {
+      try {
+        const { resolveRideAttributionPatch } = await import(
+          "../_shared/rideAttribution.ts"
+        );
+        Object.assign(patch, await resolveRideAttributionPatch(driverId));
+      } catch (e) {
+        console.warn("[rideLifecycle] attribution stamp failed:", e);
+      }
+    }
+  }
+
   let generatedPin: string | null = null;
   if (
     params.next === "driver_arrived_pickup" &&
@@ -197,16 +218,14 @@ export async function applyRideTransition(
     if ("error" in fareResult) {
       return { ok: false, error: fareResult.error, current };
     }
-    // Preserve existing tip/platform_fee from ride row
-    const existingTip = Number(ride.tip_minor ?? 0);
-    const existingPlatformFee = Number(ride.platform_fee_minor ?? 0);
-    const driverNet = fareResult.fareMinor + existingTip - existingPlatformFee;
-
-    patch.fare_final_minor = fareResult.fareMinor;
-    patch.fare_final_breakdown = fareResult.fareFinalBreakdown;
-    patch.platform_fee_minor = existingPlatformFee;
-    patch.tip_minor = existingTip;
-    patch.driver_net_minor = Math.max(0, driverNet);
+    Object.assign(
+      patch,
+      completionFinancialPatch(ride, fareResult, nowIso, {
+        platformFeeBps: params.platformFeeBps,
+      }),
+    );
+    // completionFinancialPatch sets completed_at — strip for cash-settlement pending
+    delete patch.completed_at;
     patch.fare_locked_at = nowIso;
     patch.cash_settlement_status = "pending";
     if (!ride.payment_method) patch.payment_method = "cash";
@@ -217,7 +236,12 @@ export async function applyRideTransition(
     if ("error" in fareResult) {
       return { ok: false, error: fareResult.error, current };
     }
-    Object.assign(patch, completionFinancialPatch(ride, fareResult, nowIso));
+    Object.assign(
+      patch,
+      completionFinancialPatch(ride, fareResult, nowIso, {
+        platformFeeBps: params.platformFeeBps,
+      }),
+    );
   }
 
   if (params.next === "cancelled") {

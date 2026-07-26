@@ -2404,6 +2404,16 @@ app.post("/v1/drivers/offers/:offerId/accept", async (c) => {
       status: "driver_assigned",
       assigned_driver_user_id: auth.user.id,
       updated_at: nowIso,
+      ...(await (async () => {
+        try {
+          const { resolveRideAttributionPatch } = await import(
+            "../_shared/rideAttribution.ts"
+          );
+          return await resolveRideAttributionPatch(auth.user.id);
+        } catch {
+          return {};
+        }
+      })()),
     });
 
     freshRide = await loadRideRequestById(rideId);
@@ -2411,6 +2421,16 @@ app.post("/v1/drivers/offers/:offerId/accept", async (c) => {
     if (!freshRide || freshRide.status !== "driver_assigned") {
       await audit(rideId, auth.user.id, "accept_race_lost", { offer_id: offerId });
       return c.json({ error: "assign_failed" }, 409);
+    }
+  } else if (freshRide) {
+    // Atomic accept: stamp attribution in a follow-up patch (RPC may predate columns).
+    try {
+      const { resolveRideAttributionPatch } = await import("../_shared/rideAttribution.ts");
+      const attr = await resolveRideAttributionPatch(auth.user.id);
+      await patchRideRequest(rideId, { ...attr, updated_at: nowIso });
+      freshRide = { ...freshRide, ...attr };
+    } catch (e) {
+      console.warn("[rides] attribution after atomic accept failed:", e);
     }
   }
 
@@ -2754,6 +2774,7 @@ app.patch("/v1/requests/:id/driver-transition", async (c) => {
         ? body.verification_pin
         : undefined,
     } : undefined,
+    platformFeeBps: settings.roam_platform_fee_bps,
   });
 
   if (!result.ok) {

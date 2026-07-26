@@ -15,6 +15,7 @@ import { sumCashInHandFromTrips } from '@roam/types/cashInHand';
 import { useIndependentEarnings } from '../../hooks/useIndependentEarnings';
 import { useIndependentTrips } from '../../hooks/useIndependentTrips';
 import { useDriverWallets } from '../../hooks/useDriverWallets';
+import { useDriver } from '../../contexts/DriverContext';
 import { CASH_SETTLEMENT_ENABLED } from '../../lib/cashSettlementFlags';
 
 type EarningsPageProps = {
@@ -80,6 +81,7 @@ function WalletChip({
 }
 
 export function IndependentEarningsPage({ onNavigate }: EarningsPageProps) {
+  const { isFleetDriver } = useDriver();
   const { data: allData, loading: allLoading, error } = useIndependentEarnings('all');
   const { data: weekData, loading: weekLoading } = useIndependentEarnings('week');
   const { trips, loading: tripsLoading, loadAll } = useIndependentTrips();
@@ -126,7 +128,7 @@ export function IndependentEarningsPage({ onNavigate }: EarningsPageProps) {
       <section className="flex items-end justify-between gap-4">
         <div>
           <p className="mb-1 text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
-            Total earnings
+            {isFleetDriver ? 'Roam trip earnings' : 'Total earnings'}
           </p>
           {allLoading && !allData ? (
             <Loader2 className="h-9 w-9 animate-spin text-emerald-600" />
@@ -136,7 +138,9 @@ export function IndependentEarningsPage({ onNavigate }: EarningsPageProps) {
             </h2>
           )}
           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-            Trip revenue from all completed trips
+            {isFleetDriver
+              ? 'Passenger-app Roam trips only — not Start Trip / Manual Entry'
+              : 'Trip revenue from all completed trips'}
           </p>
         </div>
         <div className="rounded-xl bg-emerald-500/10 p-2.5">
@@ -144,12 +148,42 @@ export function IndependentEarningsPage({ onNavigate }: EarningsPageProps) {
         </div>
       </section>
 
+      {isFleetDriver && (
+        <div className="space-y-2">
+          <p className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300">
+            Roam wallets track passenger-app trips only. Manual / Start Trip cash is under{' '}
+            <span className="font-semibold">Fleet Settlement</span>.
+          </p>
+          {onNavigate && totalMinor === 0 && (
+            <button
+              type="button"
+              onClick={() => onNavigate('fleet-settlement')}
+              className="flex w-full items-center justify-between rounded-2xl border border-blue-200 bg-blue-50/80 px-4 py-3 text-left dark:border-blue-900/40 dark:bg-blue-950/30"
+            >
+              <div>
+                <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                  Open Fleet Settlement
+                </p>
+                <p className="text-xs text-slate-500">
+                  Weekly cash owed, Log Cash, and fuel for your fleet
+                </p>
+              </div>
+              <ChevronRight className="h-5 w-5 text-slate-400" aria-hidden />
+            </button>
+          )}
+        </div>
+      )}
+
       {CASH_SETTLEMENT_ENABLED && (
         <section className="space-y-3">
           <div className="flex items-center justify-between px-0.5">
             <div>
-              <p className="text-sm font-semibold text-slate-900 dark:text-white">Trip wallets</p>
-              <p className="text-xs text-slate-500">Cash, digital change fund & debt</p>
+              <p className="text-sm font-semibold text-slate-900 dark:text-white">Roam trip wallets</p>
+              <p className="text-xs text-slate-500">
+                {isFleetDriver
+                  ? 'Roam cash trips, digital float & change debt — not fleet cash owed'
+                  : 'Cash, digital change fund & debt'}
+              </p>
             </div>
             {onNavigate && (
               <button
@@ -163,7 +197,7 @@ export function IndependentEarningsPage({ onNavigate }: EarningsPageProps) {
           </div>
           <div className="grid grid-cols-3 gap-2">
             <WalletChip
-              label="Cash"
+              label={isFleetDriver ? 'Roam cash' : 'Cash'}
               amount={formatMoneyMinorPlain(cashFareMinor)}
               loading={allLoading && !allData}
             />
@@ -218,7 +252,7 @@ export function IndependentEarningsPage({ onNavigate }: EarningsPageProps) {
               <Banknote className="h-7 w-7" strokeWidth={1.75} aria-hidden />
             </div>
             <p className="text-xs font-bold uppercase tracking-wide text-emerald-600 dark:text-emerald-400">
-              Cash in hand
+              {isFleetDriver ? 'Roam cash in hand' : 'Cash in hand'}
             </p>
           </div>
           <div className="relative space-y-1">
@@ -228,7 +262,9 @@ export function IndependentEarningsPage({ onNavigate }: EarningsPageProps) {
             />
             <p className="flex items-center gap-1 text-sm text-slate-500 dark:text-slate-400">
               <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden />
-              Physical cash you collected — amounts entered at settlement
+              {isFleetDriver
+                ? 'Cash entered at Roam trip settlement — fleet handover is Fleet Settlement'
+                : 'Physical cash you collected — amounts entered at settlement'}
             </p>
           </div>
         </div>

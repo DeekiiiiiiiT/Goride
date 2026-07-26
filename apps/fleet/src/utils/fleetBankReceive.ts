@@ -135,6 +135,104 @@ export function inferFleetBankPlatform(raw: PayoutBankEventLike): FleetBankPlatf
   return 'uber';
 }
 
+/**
+ * Build Roam expected bank rows from fleet KV trips (platform Roam + Card).
+ * Used when org payout is on — card fares belong to the fleet org, not driver share.
+ * Does not invent payout_bank events; callers merge with Uber/InDrive aggregates.
+ */
+export function aggregateRoamCardExpectedByWeek(
+  trips: Array<{
+    platform?: string;
+    paymentMethod?: string;
+    status?: string;
+    date?: string;
+    completed_at?: string;
+    amount?: number;
+    netToDriver?: number;
+    bankTransferred?: number;
+    organizationId?: string;
+  }> | undefined,
+  timezone?: string,
+): Omit<
+  FleetBankReceiveRow,
+  | 'amountReceived'
+  | 'variance'
+  | 'status'
+  | 'confirmedAt'
+  | 'confirmedBy'
+  | 'confirmMethod'
+  | 'bankDateYmd'
+  | 'statementFileName'
+>[] {
+  const byWeek = new Map<string, number>();
+  for (const trip of trips || []) {
+    if (!trip || typeof trip !== 'object') continue;
+    const platform = String(trip.platform || '').toLowerCase();
+    if (!platform.includes('roam')) continue;
+    const method = String(trip.paymentMethod || '').toLowerCase();
+    if (method !== 'card') continue;
+    const status = String(trip.status || '').toLowerCase();
+    if (status && status !== 'completed') continue;
+    const rawDate = trip.completed_at || trip.date;
+    if (!rawDate) continue;
+    // Reuse payout week key helper via a synthetic event shape.
+    const weekStartYmd = payoutBankEventWeekKey(
+      {
+        eventType: 'payout_bank',
+        eventAt: rawDate,
+        netAmount: 0,
+        metadata: { platform: 'roam', recipient: 'org' },
+      } as PayoutBankEventLike,
+      timezone,
+    );
+    if (!weekStartYmd) continue;
+    const add = Math.abs(
+      Number(trip.bankTransferred) ||
+        Number(trip.netToDriver) ||
+        Number(trip.amount) ||
+        0,
+    );
+    if (add < 1e-9) continue;
+    byWeek.set(weekStartYmd, round2((byWeek.get(weekStartYmd) || 0) + add));
+  }
+  return [...byWeek.entries()]
+    .map(([weekStartYmd, expected]) => ({
+      weekStartYmd,
+      expected,
+      platform: 'roam' as const,
+    }))
+    .sort((a, b) => b.weekStartYmd.localeCompare(a.weekStartYmd));
+}
+
+/** Merge Uber/InDrive expected weeks with Roam card expected (same week → sum, prefer roam label if only roam). */
+export function mergeFleetBankExpectedRows(
+  primary: ReturnType<typeof aggregateExpectedBankByWeek>,
+  roamRows: ReturnType<typeof aggregateRoamCardExpectedByWeek>,
+): ReturnType<typeof aggregateExpectedBankByWeek> {
+  const map = new Map<string, { expected: number; platform: FleetBankPlatform }>();
+  for (const row of primary) {
+    map.set(row.weekStartYmd, { expected: row.expected, platform: row.platform });
+  }
+  for (const row of roamRows) {
+    const prev = map.get(row.weekStartYmd);
+    if (!prev) {
+      map.set(row.weekStartYmd, { expected: row.expected, platform: 'roam' });
+    } else {
+      map.set(row.weekStartYmd, {
+        expected: round2(prev.expected + row.expected),
+        platform: prev.platform === 'roam' ? 'roam' : prev.platform,
+      });
+    }
+  }
+  return [...map.entries()]
+    .map(([weekStartYmd, v]) => ({
+      weekStartYmd,
+      expected: v.expected,
+      platform: v.platform,
+    }))
+    .sort((a, b) => b.weekStartYmd.localeCompare(a.weekStartYmd));
+}
+
 export function aggregateExpectedBankByWeek(
   events: PayoutBankEventLike[] | undefined,
   timezone?: string,

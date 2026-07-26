@@ -337,9 +337,12 @@ export function TripLogsPage() {
           <p className="text-slate-500">
             {v('tripsPageSubtitle')}
           </p>
+          <p className="text-xs text-slate-400">
+            Fleet books — Manual Entry / Start Trip do not update Roam driver wallets.
+          </p>
         </div>
         <div className="flex items-center gap-2">
-            <Button onClick={() => setIsManualTripOpen(true)} className="bg-indigo-600 hover:bg-indigo-700">
+            <Button onClick={() => setIsManualTripOpen(true)} className="bg-indigo-600 hover:bg-indigo-700" title="Fleet books only — not Roam driver wallet">
                 <Plus className="mr-2 h-4 w-4" />
                 Log Manual Trip
             </Button>

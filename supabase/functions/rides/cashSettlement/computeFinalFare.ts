@@ -1,3 +1,8 @@
+import {
+  computePlatformFeeMinor,
+  resolvePlatformFeeBps,
+} from "../../_shared/platformFee.ts";
+
 export interface FinalFareResult {
   fareMinor: number;
   waitTimeFeeMinor: number;
@@ -37,17 +42,26 @@ export function completionFinancialPatch(
   ride: Record<string, unknown>,
   fare: FinalFareResult,
   nowIso: string,
+  opts?: { platformFeeBps?: number | null },
 ): Record<string, unknown> {
-  // Preserve existing tip/platform_fee from ride row (don't wipe on complete)
+  // Tips never enter the fee base. Prefer freshly computed fee from bps; else keep row value.
   const existingTip = Number(ride.tip_minor ?? 0);
+  const feeBps = resolvePlatformFeeBps(opts?.platformFeeBps);
+  const computedFee = computePlatformFeeMinor(fare.fareMinor, feeBps);
   const existingPlatformFee = Number(ride.platform_fee_minor ?? 0);
-  const driverNet = fare.fareMinor + existingTip - existingPlatformFee;
+  // When bps is 0, keep any explicitly set fee on the row (admin/tests); otherwise apply engine.
+  const platformFeeMinor = feeBps > 0 ? computedFee : existingPlatformFee;
+  const driverNet = fare.fareMinor + existingTip - platformFeeMinor;
 
   return {
     fare_final_minor: fare.fareMinor,
     completed_at: nowIso,
-    fare_final_breakdown: fare.fareFinalBreakdown,
-    platform_fee_minor: existingPlatformFee,
+    fare_final_breakdown: {
+      ...fare.fareFinalBreakdown,
+      platform_fee_bps: feeBps,
+      platform_fee_minor: platformFeeMinor,
+    },
+    platform_fee_minor: platformFeeMinor,
     tip_minor: existingTip,
     driver_net_minor: Math.max(0, driverNet),
     payment_method: ride.payment_method ?? "cash",

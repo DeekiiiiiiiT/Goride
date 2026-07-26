@@ -60,9 +60,10 @@ export async function ensurePaymentAccount(
   db: SupabaseClient | undefined,
   opts: {
     userId: string | null;
-    role: "rider" | "driver" | "system";
+    role: "rider" | "driver" | "system" | "org";
     accountKey: string;
     currency: string;
+    organizationId?: string | null;
   },
 ): Promise<PaymentAccountRow> {
   const existing = await getAccountByKey(db, opts.accountKey, opts.currency);
@@ -77,6 +78,7 @@ export async function ensurePaymentAccount(
       account_key: opts.accountKey,
       currency: opts.currency,
       balance_minor: 0,
+      ...(opts.organizationId ? { organization_id: opts.organizationId } : {}),
     })
     .select("*")
     .single();
@@ -370,6 +372,21 @@ export async function postPaymentJournal(
 
   let inserted = 0;
   for (const line of lines) {
+    // Ensure org accounts exist before RPC (role=org keys).
+    for (const key of [line.debit_account_key, line.credit_account_key]) {
+      if (String(key).startsWith("org:")) {
+        const parts = String(key).split(":");
+        const organizationId = parts[1] || null;
+        await ensurePaymentAccount(db, {
+          userId: null,
+          role: "org",
+          accountKey: String(key),
+          currency,
+          organizationId,
+        });
+      }
+    }
+
     if (existingTypes.has(line.entry_type)) {
       continue;
     }

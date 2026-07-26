@@ -143,15 +143,26 @@ export async function syncRideToFleetKv(ride: Record<string, unknown>): Promise<
   }
 
   // Fleet attribution: only fleet drivers' rides belong in fleet books.
-  // Independent drivers settle via their personal ride wallets — syncing them
+  // Prefer stamped ride columns; fall back to live context.
+  // Independent drivers settle via personal ride wallets — syncing them
   // creates unscoped trip:* rows in fleet KV (no org, no vehicle).
   try {
-    const { getFleetDriverContext } = await import("./fleetDriverContext.ts");
-    const ctx = await getFleetDriverContext(String(trip.driverId));
-    if (ctx.mode !== "fleet") {
+    if (String(ride.attribution_mode ?? "") === "independent") {
       return;
     }
-    if (ctx.organizationId) trip.organizationId = ctx.organizationId;
+    const stampedOrg = ride.organization_id ? String(ride.organization_id) : null;
+    const stampedFleet = ride.fleet_id ? String(ride.fleet_id) : null;
+    if (stampedOrg) trip.organizationId = stampedOrg;
+    else if (stampedFleet) trip.organizationId = stampedFleet;
+
+    const { getFleetDriverContext } = await import("./fleetDriverContext.ts");
+    const ctx = await getFleetDriverContext(String(trip.driverId));
+    if (ctx.mode !== "fleet" && String(ride.attribution_mode ?? "") !== "fleet") {
+      return;
+    }
+    if (!trip.organizationId && ctx.organizationId) {
+      trip.organizationId = ctx.organizationId;
+    }
     if (ctx.assignedVehicleId) {
       trip.vehicleId = ctx.assignedVehicleId;
       if (ctx.assignedVehiclePlate) trip.vehiclePlate = ctx.assignedVehiclePlate;
@@ -160,6 +171,9 @@ export async function syncRideToFleetKv(ride: Record<string, unknown>): Promise<
         `[rideToFleetTrip] Fleet driver ${trip.driverId} has no assigned vehicle — trip ${rideId} synced without vehicle attribution`,
       );
     }
+    // Layer B: physical cash handover is Fleet Log Cash only (no second Roam cash debt).
+    trip.roamPlatformTrip = true;
+    trip.layerBCashDeskOnly = true;
   } catch (e) {
     console.warn("[rideToFleetTrip] fleet context resolve failed — syncing without attribution:", e);
   }

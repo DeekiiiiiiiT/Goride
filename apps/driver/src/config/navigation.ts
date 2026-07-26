@@ -7,6 +7,7 @@ import {
   FileText,
   Shield,
   Settings,
+  Scale,
   type LucideIcon,
 } from 'lucide-react';
 import { DriverMode } from '../contexts/DriverContext';
@@ -22,13 +23,22 @@ export interface NavItem {
 const drawerNavItems: NavItem[] = [
   { id: 'vehicle', label: 'My Vehicle', icon: Car },
   { id: 'expenses', label: 'Expenses', icon: Receipt },
+  { id: 'fleet-settlement', label: 'Fleet Settlement', icon: Scale },
   { id: 'tax', label: 'Tax Center', icon: FileText },
   { id: 'insurance', label: 'Insurance', icon: Shield },
   { id: 'settings', label: 'Settings', icon: Settings },
 ];
 
-export function getNavigationItems(_mode?: DriverMode): NavItem[] {
-  return drawerNavItems;
+export function getNavigationItems(mode?: DriverMode): NavItem[] {
+  if (mode === 'fleet') {
+    return drawerNavItems.filter((item) => item.id !== 'tax' && item.id !== 'insurance');
+  }
+  if (mode === 'independent') {
+    return drawerNavItems.filter(
+      (item) => item.id !== 'expenses' && item.id !== 'fleet-settlement',
+    );
+  }
+  return drawerNavItems.filter((item) => item.id !== 'fleet-settlement');
 }
 
 export function getBottomNavItems(): NavItem[] {

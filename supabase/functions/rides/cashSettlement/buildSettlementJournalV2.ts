@@ -9,6 +9,9 @@ import {
   type JournalLineSpec,
   type WalletDeltaPreview,
 } from "./buildJournalEntries.ts";
+import {
+  orgCashAccountKey,
+} from "../../_shared/fleetOrgPayout.ts";
 
 export interface BuildSettlementJournalV2Params {
   computed: CashSettlementComputed;
@@ -18,6 +21,12 @@ export interface BuildSettlementJournalV2Params {
   driverUserId: string;
   /** Available balance on driver digital wallet before settlement (minor units, >= 0). */
   digitalAvailableMinor: number;
+  /**
+   * When set (fleet org payout ON), fare allocation credits/debits org cash
+   * instead of driver cash. Change float still uses driver digital/debt.
+   */
+  organizationId?: string | null;
+  fleetOrgPayout?: boolean;
 }
 
 export interface BuildSettlementJournalV2Result {
@@ -36,12 +45,16 @@ export function buildSettlementJournalV2(
     riderUserId,
     driverUserId,
     digitalAvailableMinor,
+    organizationId,
+    fleetOrgPayout,
   } = params;
 
   const riderKey = riderAccountKeyForUser(riderUserId);
   const digitalKey = driverDigitalAccountKeyForUser(driverUserId);
-  const cashKey = driverCashAccountKeyForUser(driverUserId);
+  const driverCashKey = driverCashAccountKeyForUser(driverUserId);
   const debtKey = driverDebtAccountKeyForUser(driverUserId);
+  const useOrg = Boolean(fleetOrgPayout && organizationId);
+  const cashKey = useOrg ? orgCashAccountKey(String(organizationId)) : driverCashKey;
 
   const lines: JournalLineSpec[] = [];
   const baseMeta = {
@@ -51,6 +64,8 @@ export function buildSettlementJournalV2(
     owed_minor: computed.owed_minor,
     cash_received_minor: computed.cash_received_minor,
     settlement_version: 2,
+    fleet_org_payout: useOrg,
+    organization_id: useOrg ? organizationId : null,
   };
 
   const walletDeltas: WalletDeltaPreview = {
@@ -71,7 +86,9 @@ export function buildSettlementJournalV2(
       amount_minor: computed.cash_received_minor,
       metadata: { ...baseMeta },
     });
-    walletDeltas.driver_cash_credit_minor = computed.cash_received_minor;
+    if (!useOrg) {
+      walletDeltas.driver_cash_credit_minor = computed.cash_received_minor;
+    }
   }
 
   const fareToAllocate = Math.min(computed.cash_received_minor, computed.owed_minor);
@@ -84,7 +101,9 @@ export function buildSettlementJournalV2(
       metadata: { ...baseMeta, fare_allocated_minor: fareToAllocate },
     });
     walletDeltas.fare_allocated_minor = fareToAllocate;
-    walletDeltas.driver_cash_credit_minor -= fareToAllocate;
+    if (!useOrg) {
+      walletDeltas.driver_cash_credit_minor -= fareToAllocate;
+    }
   }
 
   if (computed.arrears_minor > 0) {
@@ -123,8 +142,8 @@ export function buildSettlementJournalV2(
         amount_minor: toDebt,
         metadata: { ...baseMeta, change_credit_minor: change, debt_opened_minor: toDebt },
       });
-      walletDeltas.driver_debt_opened_minor = toDebt;
       debtOpenedMinor = toDebt;
+      walletDeltas.driver_debt_opened_minor = toDebt;
     }
   }
 

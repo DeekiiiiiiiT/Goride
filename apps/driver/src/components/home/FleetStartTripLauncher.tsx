@@ -7,6 +7,7 @@ import { TripFareDialog, type TripFareInitialData } from '../trips/TripFareDialo
 import { PendingCatalogRequestsDrawer } from '../vehicles/PendingCatalogRequestsDrawer';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCurrentDriver } from '../../hooks/useCurrentDriver';
+import { useDriver } from '../../contexts/DriverContext';
 import {
   createManualTrip,
   ManualTripInput,
@@ -55,14 +56,16 @@ function clearPendingFareTrip() {
 
 /**
  * Fleet "Start Trip" on the mint home.
- * Small pill button → full-screen sheet hosting the live TripTimer only
- * (no after-the-fact manual entry — drivers must record trips live).
- * Completion flows into TripFareDialog → createManualTrip → api.saveTrips.
- * Auto-reopens when a persisted timer session or pending fare draft exists.
+ * TEMPORARY Layer B bridge (walk-ups / offline) until passenger app is widely available.
+ * Writes ONLY to fleet KV via createManualTrip → api.saveTrips — NEVER rides.ride_requests.
+ * See docs/passenger-rides/MONEY_LEDGER_RULES.md
+ * Controlled by driver_profiles.manual_start_trip_enabled (default on).
  */
 export function FleetStartTripLauncher() {
   const { user } = useAuth();
   const { driverRecord } = useCurrentDriver();
+  const { profile } = useDriver();
+  const manualEnabled = profile?.manualStartTripEnabled !== false;
 
   const [sheetOpen, setSheetOpen] = useState(false);
   const [fareDialogOpen, setFareDialogOpen] = useState(false);
@@ -180,6 +183,10 @@ export function FleetStartTripLauncher() {
     }
   };
 
+  if (!manualEnabled) {
+    return null;
+  }
+
   return (
     <>
       <button
@@ -187,6 +194,7 @@ export function FleetStartTripLauncher() {
         onClick={() => setSheetOpen(true)}
         className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 shadow-sm transition-colors hover:bg-slate-50 active:scale-95 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
         aria-label={activeSession ? 'Return to trip in progress' : 'Start a manual trip'}
+        title="Offline / walk-up trips — counted in Fleet Settlement, not Roam Earnings"
       >
         {activeSession ? (
           <>
@@ -213,7 +221,7 @@ export function FleetStartTripLauncher() {
               <div>
                 <h2 className="text-base font-bold text-slate-900 dark:text-white">Start Trip</h2>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Walk-ups, phone bookings, other platforms
+                  Offline / walk-up — Fleet Settlement only, not Roam Earnings
                 </p>
               </div>
               <button
