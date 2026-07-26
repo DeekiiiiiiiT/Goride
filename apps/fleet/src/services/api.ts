@@ -891,6 +891,48 @@ export const api = {
     }
   },
 
+  /** Pump display / fuel receipt OCR via Gemini (amount + liters). */
+  async processFuelReceipt(file: File): Promise<{
+    odometer: number | null;
+    liters: number | null;
+    amount: number | null;
+    pricePerLiter: number | null;
+    date: string | null;
+    stationName: string | null;
+    confidence_score?: number;
+  }> {
+    const processedFile = await compressImage(file, OCR_COMPRESS_OPTS);
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.onerror = () => reject(new Error('Failed to read image'));
+      reader.readAsDataURL(processedFile);
+    });
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 45000);
+    try {
+      const response = await fetchWithRetry(`${API_ENDPOINTS.ai}/ai/process-fuel-receipt`, {
+        method: 'POST',
+        headers: await requireAuthHeaders(),
+        body: JSON.stringify({ imageBase64: dataUrl }),
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.message || err.error || 'Failed to scan pump display');
+      }
+      return response.json();
+    } catch (err: any) {
+      if (err?.name === 'AbortError') {
+        throw new Error('Pump scan timed out. Please enter total and liters manually.');
+      }
+      throw err;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  },
+
   async parseDocument(file: File, type: 'license' | 'address' | 'vehicle_registration', backFile?: File) {
     const formData = new FormData();
     formData.append('file', file);
@@ -3381,12 +3423,16 @@ export const api = {
     return response.json();
   },
 
-  async recalculateAllIntegrity() {
+  async recalculateAllIntegrity(opts?: { vehicleId?: string }) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/fuel-audit/recalculate-all`, {
         method: 'POST',
-        headers: await requireAuthHeaders(null)
+        headers: await requireAuthHeaders(),
+        body: JSON.stringify(opts?.vehicleId ? { vehicleId: opts.vehicleId } : {}),
     });
-    if (!response.ok) throw new Error("Recalculate failed");
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      throw new Error(errText || "Recalculate failed");
+    }
     return response.json();
   },
 

@@ -1,15 +1,15 @@
 import React from 'react';
 import { Input } from '@roam/ui';
 import { Label } from '@roam/ui';
-import { Checkbox } from '@roam/ui';
 import { Fuel } from "lucide-react";
 
 interface FuelCashInputsProps {
-  pricePerLiter: string;
-  onPriceChange: (value: string) => void;
-  isFullTank: boolean;
-  onFullTankChange: (checked: boolean) => void;
-  currentVolume?: number;
+  /** Pump "This Sale" total ($) */
+  totalSpent: string;
+  onTotalSpentChange: (value: string) => void;
+  /** Pump liters */
+  liters: string;
+  onLitersChange: (value: string) => void;
   tankStatus?: {
     currentCumulative: number;
     tankCapacity: number;
@@ -18,104 +18,105 @@ interface FuelCashInputsProps {
   };
 }
 
-export function FuelCashInputs({ 
-  pricePerLiter, 
-  onPriceChange, 
-  isFullTank, 
-  onFullTankChange,
-  currentVolume = 0,
+/** Derive $/L from pump total ÷ liters (never typed from station board). */
+export function derivePricePerLiter(totalSpent: string, liters: string): number | null {
+  const total = parseFloat(totalSpent || '0');
+  const vol = parseFloat(liters || '0');
+  if (!(total > 0) || !(vol > 0)) return null;
+  return Number((total / vol).toFixed(2));
+}
+
+export function FuelCashInputs({
+  totalSpent,
+  onTotalSpentChange,
+  liters,
+  onLitersChange,
   tankStatus
 }: FuelCashInputsProps) {
+  const currentVolume = parseFloat(liters || '0') || 0;
+  const pricePerLiter = derivePricePerLiter(totalSpent, liters);
   const totalLitersAfter = (tankStatus?.currentCumulative || 0) + currentVolume;
   const newProgressPercent = tankStatus?.tankCapacity ? Math.min(100, (totalLitersAfter / tankStatus.tankCapacity) * 100) : 0;
   const isOverflow = tankStatus?.tankCapacity ? totalLitersAfter > (tankStatus.tankCapacity * 1.05) : false;
+  const capacity = tankStatus?.tankCapacity || 0;
+  const afterFill = Number(totalLitersAfter.toFixed(1));
 
   return (
     <div className="space-y-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
-      {/* Tank Progress Bar (Step 4.1) */}
       {tankStatus && tankStatus.tankCapacity > 0 && (
         <div className="space-y-2 mb-4">
           <div className="flex justify-between items-end">
-            <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Tank Progress</Label>
+            <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Cycle progress</Label>
             <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-              isOverflow ? 'bg-red-100 text-red-700' : 
-              newProgressPercent > 85 ? 'bg-orange-100 text-orange-700' : 
+              isOverflow ? 'bg-red-100 text-red-700' :
+              newProgressPercent > 85 ? 'bg-orange-100 text-orange-700' :
               'bg-blue-100 text-blue-700'
             }`}>
               {isOverflow ? 'OVERFLOW' : tankStatus.status}
             </span>
           </div>
           <div className="h-3 w-full bg-slate-200 rounded-full overflow-hidden flex shadow-inner">
-             {/* Existing Cumulative */}
-             <div 
-                className="h-full bg-slate-400 transition-all duration-500" 
+             <div
+                className="h-full bg-slate-400 transition-all duration-500"
                 style={{ width: `${Math.min(100, (tankStatus.currentCumulative / tankStatus.tankCapacity) * 100)}%` }}
              />
-             {/* Potential New Volume */}
-             <div 
+             <div
                 className={`h-full animate-pulse transition-all duration-500 ${isOverflow ? 'bg-red-500' : 'bg-orange-400'}`}
                 style={{ width: `${Math.min(100 - (tankStatus.currentCumulative / tankStatus.tankCapacity * 100), (currentVolume / tankStatus.tankCapacity) * 100)}%` }}
              />
           </div>
           <div className="flex justify-between text-[10px] text-slate-400 font-medium">
-             <span>{tankStatus.currentCumulative.toFixed(1)}L used</span>
-             <span>Capacity: {tankStatus.tankCapacity}L</span>
+             <span>{tankStatus.currentCumulative.toFixed(1)} / {capacity} L toward next full cycle</span>
+             <span>After this fill: {afterFill} L</span>
           </div>
-          
-          {newProgressPercent > 80 && !isFullTank && !isOverflow && (
-            <p className="text-[11px] text-orange-600 font-medium bg-orange-50 p-2 rounded border border-orange-100 mt-2">
-              ⚠️ Your tank is nearly full. Please check "Full Tank" for accurate reconciliation.
-            </p>
-          )}
 
           {isOverflow && (
              <p className="text-[11px] text-red-600 font-bold bg-red-50 p-2 rounded border border-red-100 mt-2">
-              🚨 ERROR: Total volume ({totalLitersAfter.toFixed(1)}L) exceeds tank capacity! Please verify your inputs.
-            </p>
+              ERROR: Total volume ({totalLitersAfter.toFixed(1)}L) exceeds tank capacity! Please verify your inputs.
+             </p>
           )}
         </div>
       )}
 
       <div className="flex items-center gap-2 mb-2">
         <Fuel className="h-4 w-4 text-orange-500" />
-        <h4 className="text-sm font-semibold text-slate-900">Fuel Price</h4>
+        <h4 className="text-sm font-semibold text-slate-900">Pump Display</h4>
       </div>
-      
+
       <div className="grid grid-cols-1 gap-4">
         <div className="space-y-2">
-          <Label htmlFor="fuel-price" className="text-xs text-slate-500">Price per Liter ($)</Label>
-          <div className="relative">
-            <Input 
-              id="fuel-price"
-              type="number" 
-              inputMode="decimal"
-              step="0.001" 
-              placeholder="0.000" 
-              value={pricePerLiter} 
-              onChange={(e) => onPriceChange(e.target.value)} 
-              required
-              className="pr-20"
-            />
-            {currentVolume > 0 && (
-               <div className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded border border-indigo-100">
-                  {currentVolume} Liters
-               </div>
-            )}
-          </div>
+          <Label htmlFor="pump-total" className="text-xs text-slate-500">This Sale — Total ($)</Label>
+          <Input
+            id="pump-total"
+            type="number"
+            inputMode="decimal"
+            step="0.01"
+            placeholder="0.00"
+            value={totalSpent}
+            onChange={(e) => onTotalSpentChange(e.target.value)}
+            required
+          />
         </div>
 
-        <div className="flex items-center space-x-2">
-          <Checkbox 
-            id="full-tank" 
-            checked={isFullTank}
-            onCheckedChange={(checked) => onFullTankChange(checked as boolean)}
+        <div className="space-y-2">
+          <Label htmlFor="pump-liters" className="text-xs text-slate-500">Liters</Label>
+          <Input
+            id="pump-liters"
+            type="number"
+            inputMode="decimal"
+            step="0.001"
+            placeholder="0.000"
+            value={liters}
+            onChange={(e) => onLitersChange(e.target.value)}
+            required
           />
-          <Label 
-            htmlFor="full-tank" 
-            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-          >
-            Did you fill the tank completely?
-          </Label>
+        </div>
+
+        <div className="rounded-md border border-indigo-100 bg-indigo-50 px-3 py-2 flex justify-between items-center">
+          <span className="text-xs font-medium text-indigo-700">Price per Liter (calculated)</span>
+          <span className="text-sm font-bold text-indigo-900">
+            {pricePerLiter != null ? `$${pricePerLiter.toFixed(2)}` : '—'}
+          </span>
         </div>
       </div>
     </div>

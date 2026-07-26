@@ -359,6 +359,68 @@ export async function ensureFuelEntryForApprovedTx(
     isHighlyTrusted: confidence.isHighlyTrusted,
   };
 
+  // Capacity cycle spine: stamp cycleId + capacity-close flags (driver Full Tank ignored)
+  try {
+    const vehicle =
+      canonical.vehicle ||
+      (fuelEntry.vehicleId ? await kv.get(`vehicle:${fuelEntry.vehicleId}`) : null);
+    const tankCapacity = fuelLogic.resolveTankCapacity(vehicle);
+    const lastAnchor = fuelEntry.vehicleId
+      ? await fuelLogic.getLastAnchor(fuelEntry.vehicleId)
+      : null;
+    const cycleEntries = fuelEntry.vehicleId
+      ? await fuelLogic.getEntriesSinceLastAnchor(
+          fuelEntry.vehicleId,
+          lastAnchor?.date || null,
+        )
+      : [];
+
+    let carryover = 0;
+    if (lastAnchor?.metadata?.isSoftAnchor || lastAnchor?.metadata?.isCapacityClose) {
+      carryover = Number(lastAnchor?.metadata?.excessVolume) || 0;
+    }
+    let prevCumulative = carryover;
+    for (const ce of cycleEntries) {
+      if (ce?.id === fuelEntry.id) continue;
+      prevCumulative = Number(
+        (prevCumulative + (Number(ce.liters) || Number(ce.metadata?.fuelVolume) || 0)).toFixed(4),
+      );
+    }
+
+    const volumeAtEntry = Number(fuelEntry.liters) || 0;
+    const anchor = fuelLogic.classifyAnchor({
+      prevCumulative,
+      volume: volumeAtEntry,
+      tankCapacity,
+      entryType: fuelEntry.type,
+      paymentSource: fuelEntry.paymentSource,
+    });
+    const cycleId = fuelLogic.resolveCycleIdForOpenCycle(
+      cycleEntries.map((e: any) => ({ metadata: e?.metadata })),
+    );
+
+    const meta = { ...(fuelEntry.metadata || {}) };
+    delete meta.isHardAnchor;
+    // Never trust driver checkbox on create — capacity math only
+    meta.isFullTank = anchor.isCapacityClose ? true : false;
+    meta.isSoftAnchor = anchor.isSoft;
+    meta.isCapacityClose = anchor.isCapacityClose || false;
+    meta.isAnchor = anchor.isAnchor;
+    meta.volumeContributed = Number(anchor.volumeContributed.toFixed(2));
+    if (anchor.excessVolume > 0) meta.excessVolume = Number(anchor.excessVolume.toFixed(2));
+    else delete meta.excessVolume;
+    meta.cumulativeLitersAtEntry = Number(anchor.totalVolumeInCycle.toFixed(2));
+    meta.tankCapacityAtEntry = tankCapacity;
+    meta.cycleId = cycleId;
+    fuelEntry.metadata = meta;
+  } catch (cycleErr) {
+    console.warn("[ensureFuelEntryForApprovedTx] cycle stamp failed:", cycleErr);
+    if (fuelEntry.metadata) {
+      delete fuelEntry.metadata.isHardAnchor;
+      delete fuelEntry.metadata.isFullTank;
+    }
+  }
+
   const toSave = opts.stamp ? opts.stamp(fuelEntry) : fuelEntry;
   await kv.set(`fuel_entry:${fuelEntry.id}`, toSave);
   await syncLinkedExpenseTransaction(fuelEntry);

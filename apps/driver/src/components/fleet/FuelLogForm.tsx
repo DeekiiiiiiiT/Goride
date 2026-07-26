@@ -6,9 +6,8 @@ import { Button } from '@roam/ui';
 import { Input } from '@roam/ui';
 import { Label } from '@roam/ui';
 import { RadioGroup, RadioGroupItem } from '@roam/ui';
-import { Checkbox } from '@roam/ui';
 import { Badge } from '@roam/ui';
-import { Fuel, Calendar, Hash, DollarSign, FileText, Camera, Upload, CheckCircle2, Info, Loader2, AlertCircle } from "lucide-react";
+import { Fuel, Calendar, Hash, DollarSign, FileText, Camera, Upload, CheckCircle2, Loader2, AlertCircle } from "lucide-react";
 import { FuelLog, StationProfile, StationAlias } from '../../types/data';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
 import { ImageWithFallback } from '../figma/ImageWithFallback';
@@ -34,10 +33,9 @@ export function FuelLogForm({ open, onOpenChange, onSubmit, vehicleId }: FuelLog
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split('T')[0],
     odometer: '',
-    pricePerLiter: '',
+    liters: '',
     totalCost: '',
     notes: '',
-    isFullTank: false,
     deviationReason: ''
   });
 
@@ -157,34 +155,34 @@ export function FuelLogForm({ open, onOpenChange, onSubmit, vehicleId }: FuelLog
     setIsUploading(true);
 
     const amount = parseFloat(formData.totalCost);
-    const price = parseFloat(formData.pricePerLiter);
+    const liters = parseFloat(formData.liters);
 
-    // Validation Safeguards (Phase 5)
+    // Validation Safeguards (Phase 5) — pump total ÷ liters → $/L
     if (isNaN(amount) || amount <= 0) {
-      toast.error("Please enter a valid total cost");
+      toast.error("Please enter the pump total (This Sale)");
       setIsUploading(false);
       return;
     }
 
-    if (isNaN(price) || price <= 0) {
-      toast.error("Please enter a valid fuel price");
+    if (isNaN(liters) || liters <= 0) {
+      toast.error("Please enter liters from the pump");
       setIsUploading(false);
       return;
     }
+
+    const price = Number((amount / liters).toFixed(2));
 
     if (price < 0.50) {
-      toast.error("Fuel price seems too low. Please verify.");
+      toast.error("Calculated fuel price seems too low. Please verify pump numbers.");
       setIsUploading(false);
       return;
     }
-
-    const calculatedLiters = Number((amount / price).toFixed(2));
 
     try {
       await onSubmit({
         date: formData.date,
         odometer: parseFloat(formData.odometer),
-        liters: calculatedLiters,
+        liters,
         totalCost: amount,
         notes: formData.notes,
         receiptUrl: '',
@@ -201,7 +199,6 @@ export function FuelLogForm({ open, onOpenChange, onSubmit, vehicleId }: FuelLog
         } : undefined,
         metadata: {
           pricePerLiter: price,
-          isFullTank: formData.isFullTank
         }
       } as any);
     
@@ -212,10 +209,9 @@ export function FuelLogForm({ open, onOpenChange, onSubmit, vehicleId }: FuelLog
       setFormData({
           date: new Date().toISOString().split('T')[0],
           odometer: '',
-          pricePerLiter: '',
+          liters: '',
           totalCost: '',
           notes: '',
-          isFullTank: false,
           deviationReason: ''
       });
       setPaymentMethod('reimbursement');
@@ -277,15 +273,9 @@ export function FuelLogForm({ open, onOpenChange, onSubmit, vehicleId }: FuelLog
                     </Badge>
                 </div>
                 <Progress value={tankStatus.percent} className="h-2" />
-                
-                {tankStatus.percent > 80 && (
-                    <div className="flex items-start gap-2 bg-orange-100/50 p-2 rounded-lg border border-orange-100">
-                        <Info className="w-3.5 h-3.5 text-orange-600 shrink-0 mt-0.5" />
-                        <p className="text-[10px] text-orange-800 font-medium leading-tight">
-                            Your tank is nearly full. Please mark as "Full Tank" if you filled it completely.
-                        </p>
-                    </div>
-                )}
+                <p className="text-[10px] text-slate-500 font-medium">
+                  {(tankStatus.currentCumulative ?? 0).toFixed(1)} / {tankStatus.tankCapacity} L toward next full cycle
+                </p>
             </div>
         )}
 
@@ -363,21 +353,7 @@ export function FuelLogForm({ open, onOpenChange, onSubmit, vehicleId }: FuelLog
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="price" className="text-sm font-semibold">Price/Liter ($)</Label>
-              <Input 
-                id="price" 
-                type="number" 
-                inputMode="decimal"
-                step="0.001"
-                placeholder="0.000"
-                className="h-11 text-base"
-                value={formData.pricePerLiter}
-                onChange={e => setFormData({...formData, pricePerLiter: e.target.value})}
-                required 
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="cost" className="text-sm font-semibold">Cash Spent ($)</Label>
+              <Label htmlFor="cost" className="text-sm font-semibold">This Sale ($)</Label>
               <div className="relative">
                 <DollarSign className="absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
                 <Input 
@@ -386,14 +362,42 @@ export function FuelLogForm({ open, onOpenChange, onSubmit, vehicleId }: FuelLog
                   inputMode="decimal"
                   step="0.01"
                   className="pl-9 h-11 text-base"
-                  placeholder="e.g. 6500.00"
+                  placeholder="e.g. 8103.20"
                   value={formData.totalCost}
                   onChange={e => setFormData({...formData, totalCost: e.target.value})}
                   required 
                 />
               </div>
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="liters" className="text-sm font-semibold">Liters</Label>
+              <Input 
+                id="liters" 
+                type="number" 
+                inputMode="decimal"
+                step="0.001"
+                placeholder="e.g. 35.308"
+                className="h-11 text-base"
+                value={formData.liters}
+                onChange={e => setFormData({...formData, liters: e.target.value})}
+                required 
+              />
+            </div>
           </div>
+
+          {(() => {
+            const amt = parseFloat(formData.totalCost || '0');
+            const vol = parseFloat(formData.liters || '0');
+            const ppl = amt > 0 && vol > 0 ? Number((amt / vol).toFixed(2)) : null;
+            return (
+              <div className="rounded-md border border-indigo-100 bg-indigo-50 px-3 py-2 flex justify-between items-center">
+                <span className="text-xs font-medium text-indigo-700">Price per Liter (calculated)</span>
+                <span className="text-sm font-bold text-indigo-900">
+                  {ppl != null ? `$${ppl.toFixed(2)}` : '—'}
+                </span>
+              </div>
+            );
+          })()}
           
           {/* Payment Method Selection */}
           <div className="space-y-3 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-100 dark:border-slate-800">
@@ -416,26 +420,6 @@ export function FuelLogForm({ open, onOpenChange, onSubmit, vehicleId }: FuelLog
                     </div>
                 </Label>
             </RadioGroup>
-          </div>
-
-          <div className="flex items-center space-x-3 p-4 bg-slate-50 rounded-xl border border-slate-100">
-            <Checkbox 
-                id="full-tank" 
-                className="h-5 w-5"
-                checked={formData.isFullTank}
-                onCheckedChange={(checked) => setFormData({...formData, isFullTank: !!checked})}
-            />
-            <div className="grid gap-1.5 leading-none">
-                <label
-                    htmlFor="full-tank"
-                    className="text-sm font-bold leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                >
-                    Filled to capacity (Full Tank)
-                </label>
-                <p className="text-[10px] text-slate-500">
-                    Resets the mathematical cumulative counter for this vehicle.
-                </p>
-            </div>
           </div>
 
           <DialogFooter className="pt-4 flex-col sm:flex-row gap-3">

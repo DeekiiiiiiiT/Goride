@@ -911,7 +911,9 @@ app.get("/make-server-37f42386/vehicles/:id/tank-status", requireAuth(), async (
         lastOdometer = lastTxWithOdo ? Number(lastTxWithOdo.odometer) : 0;
 
         for (const tx of lastTransactions) {
-            if (tx.metadata?.isAnchor || tx.metadata?.isFullTank || tx.metadata?.isSoftAnchor) {
+            if (tx.metadata?.isCapacityClose || tx.metadata?.isAnchor || tx.metadata?.isSoftAnchor || tx.metadata?.isFullTank) {
+                // Fills after this close already summed; spillover starts the open cycle
+                cumulative += Number(tx.metadata?.excessVolume) || 0;
                 lastAnchorFound = true;
                 lastCycleId = tx.metadata?.cycleId;
                 break;
@@ -926,10 +928,11 @@ app.get("/make-server-37f42386/vehicles/:id/tank-status", requireAuth(), async (
             currentCycleId: lastCycleId,
             currentCumulative: Number(cumulative.toFixed(2)),
             progressPercent: tankCapacity > 0 ? Number(((cumulative / tankCapacity) * 100).toFixed(1)) : 0,
-            status: cumulative > (tankCapacity * 1.05) ? 'Critical: Tank Overflow' : 
-                    cumulative > (tankCapacity * 1.00) ? 'Cycle Reset Triggered' :
+            status: tankCapacity <= 0 ? 'No Tank Capacity' :
+                    cumulative > (tankCapacity * 1.05) ? 'Critical: Tank Overflow' : 
+                    cumulative >= (tankCapacity * 0.98) ? 'Capacity Full Ready' :
                     cumulative > (tankCapacity * 0.85) ? 'Approaching Capacity' : 'Normal',
-            isAnomaly: cumulative > (tankCapacity * 1.05)
+            isAnomaly: tankCapacity > 0 && cumulative > (tankCapacity * 1.05)
         });
     } catch (e: any) {
         return c.json({ error: e.message }, 500);
@@ -1008,7 +1011,9 @@ app.post("/make-server-37f42386/admin/fuel-audit/resolve", requireAuth({ strict:
 // Phase 3: Recalculate All History (Logic: 100% Reset / 105% Anomaly)
 app.post("/make-server-37f42386/admin/fuel-audit/recalculate-all", requireAuth({ strict: true }), requirePlatformStaff(), async (c) => {
     try {
-        console.log("[Recalculate] Starting full history recalculation (98% soft-anchor spine)...");
+        const body = await c.req.json().catch(() => ({}));
+        const vehicleFilterRaw = String(body?.vehicleId || body?.licensePlate || "").trim();
+        console.log("[Recalculate] Starting history recalculation (capacity full @ 98% spine)...", vehicleFilterRaw ? `filter=${vehicleFilterRaw}` : "fleet-wide");
 
         // Load configurable frequency threshold
         const auditConfig = await kv.get("config:audit_settings");
@@ -1023,17 +1028,37 @@ app.post("/make-server-37f42386/admin/fuel-audit/recalculate-all", requireAuth({
             .like("key", "vehicle:%");
             
         const vehicleMap = new Map();
+        const plateToId = new Map<string, string>();
         (vehicleData || []).forEach((d: any) => {
             const v = d.value;
             if (v && v.id) {
                 vehicleMap.set(v.id, {
                     capacity: fuelLogic.resolveTankCapacity(v),
                     fuelEconomy: Number(v.specifications?.fuelEconomy) || Number(v.fuelSettings?.efficiencyCity) || 0,
-                    estimatedRangeMin: Number(v.specifications?.estimatedRangeMin) || 0
+                    estimatedRangeMin: Number(v.specifications?.estimatedRangeMin) || 0,
+                    licensePlate: String(v.licensePlate || v.plate || "").toUpperCase(),
                 });
+                const plate = String(v.licensePlate || v.plate || "").toUpperCase().replace(/\s+/g, "");
+                if (plate) plateToId.set(plate, v.id);
             }
         });
         console.log(`[Recalculate] Loaded ${vehicleMap.size} vehicles.`);
+
+        // Optional scope: UUID or license plate (e.g. 5179KZ)
+        let filterVehicleId: string | null = null;
+        if (vehicleFilterRaw) {
+            const normalized = vehicleFilterRaw.toUpperCase().replace(/\s+/g, "");
+            if (vehicleMap.has(vehicleFilterRaw)) {
+                filterVehicleId = vehicleFilterRaw;
+            } else if (plateToId.has(normalized)) {
+                filterVehicleId = plateToId.get(normalized)!;
+            } else if (vehicleMap.has(normalized)) {
+                filterVehicleId = normalized;
+            } else {
+                return c.json({ error: `Vehicle not found for filter: ${vehicleFilterRaw}` }, 404);
+            }
+            console.log(`[Recalculate] Scoped to vehicleId=${filterVehicleId}`);
+        }
 
         // 2. Fetch all Transactions
         const { data: txData, error: txError } = await supabase
@@ -1044,7 +1069,10 @@ app.post("/make-server-37f42386/admin/fuel-audit/recalculate-all", requireAuth({
         if (txError) throw txError;
 
         const allTransactions = (txData || []).map((d: any) => d.value);
-        const fuelTransactions = allTransactions.filter((t: any) => t.category === 'Fuel' || t.category === 'Fuel Reimbursement');
+        let fuelTransactions = allTransactions.filter((t: any) => t.category === 'Fuel' || t.category === 'Fuel Reimbursement');
+        if (filterVehicleId) {
+            fuelTransactions = fuelTransactions.filter((t: any) => t.vehicleId === filterVehicleId);
+        }
         
         console.log(`[Recalculate] Processing ${fuelTransactions.length} fuel transactions...`);
 
@@ -1052,6 +1080,7 @@ app.post("/make-server-37f42386/admin/fuel-audit/recalculate-all", requireAuth({
         const byVehicle = new Map<string, any[]>();
         fuelTransactions.forEach((tx: any) => {
             const vId = tx.vehicleId || 'unknown';
+            if (filterVehicleId && vId !== filterVehicleId) return;
             if (!byVehicle.has(vId)) byVehicle.set(vId, []);
             byVehicle.get(vId)!.push(tx);
         });
@@ -1097,17 +1126,16 @@ app.post("/make-server-37f42386/admin/fuel-audit/recalculate-all", requireAuth({
                 const prevCumulative = runningCumulative;
                 runningCumulative += volume;
 
-                // Soft/hard + SPLIT via shared classifyAnchor (98%). Reimbursements are never anchors.
+                // Capacity full + SPLIT via shared classifyAnchor (98%). Reimbursements never anchor.
                 const anchor = fuelLogic.classifyAnchor({
-                    isFullTank: tx.metadata?.isFullTank === true,
-                    isAnchor: tx.metadata?.isAnchor === true,
-                    isHardAnchor: tx.metadata?.isHardAnchor === true,
-                    isSoftAnchor: tx.metadata?.isSoftAnchor === true,
                     prevCumulative,
                     volume,
                     tankCapacity: capacity,
+                    entryType: tx.type || tx.metadata?.entryType,
+                    paymentSource: tx.paymentSource || tx.metadata?.paymentSource,
                 });
                 const isSoftAnchor = anchor.isSoft;
+                const isCapacityClose = anchor.isCapacityClose;
                 const isAnchor = anchor.isAnchor;
                 const volumeContributed = anchor.volumeContributed;
                 const excessVolume = anchor.excessVolume;
@@ -1184,8 +1212,10 @@ app.post("/make-server-37f42386/admin/fuel-audit/recalculate-all", requireAuth({
                     efficiencyBaseline: txRollingAvg ? 'rolling' : 'skipped',
                     efficiencyVariance: Number(efficiencyVariance.toFixed(4)),
                     isSoftAnchor: isSoftAnchor,
+                    isCapacityClose: isCapacityClose || undefined,
+                    isFullTank: isCapacityClose || undefined,
                     isAnchor: isAnchor,
-                    isHardAnchor: anchor.isHard || undefined,
+                    isHardAnchor: undefined,
                     isHighFrequency,
                     isFragmented,
                     integrityStatus,
@@ -1242,13 +1272,17 @@ app.post("/make-server-37f42386/admin/fuel-audit/recalculate-all", requireAuth({
             console.log(`[Recalculate] Warning: Could not load fuel entries: ${entryError.message}`);
         }
 
-        const allEntries = (entryData || []).map((d: any) => ({ _kvKey: d.key, ...d.value }));
-        console.log(`[Recalculate] Found ${allEntries.length} fuel entries to re-score.`);
+        const allEntriesRaw = (entryData || []).map((d: any) => ({ _kvKey: d.key, ...d.value }));
+        const allEntries = filterVehicleId
+            ? allEntriesRaw.filter((e: any) => e.vehicleId === filterVehicleId)
+            : allEntriesRaw;
+        console.log(`[Recalculate] Found ${allEntries.length} fuel entries to re-score${filterVehicleId ? ` (scoped)` : ''}.`);
 
         // Group fuel entries by vehicle
         const entriesByVehicle = new Map<string, any[]>();
         allEntries.forEach((entry: any) => {
             const vId = entry.vehicleId || 'unknown';
+            if (filterVehicleId && vId !== filterVehicleId) return;
             if (!entriesByVehicle.has(vId)) entriesByVehicle.set(vId, []);
             entriesByVehicle.get(vId)!.push(entry);
         });
@@ -1288,17 +1322,16 @@ app.post("/make-server-37f42386/admin/fuel-audit/recalculate-all", requireAuth({
                 const prevCumulative = runningCumulative;
 
                 const anchor = fuelLogic.classifyAnchor({
-                    isFullTank: entry.metadata?.isFullTank === true,
-                    isAnchor: entry.metadata?.isAnchor === true,
-                    isHardAnchor: entry.metadata?.isHardAnchor === true,
-                    isSoftAnchor: entry.metadata?.isSoftAnchor === true,
                     prevCumulative,
                     volume,
                     tankCapacity: capacity,
+                    entryType: entry.type,
+                    paymentSource: entry.paymentSource,
                 });
                 runningCumulative = anchor.totalVolumeInCycle;
                 const percentOfTank = anchor.percentOfTank;
                 const isSoftAnchor = anchor.isSoft;
+                const isCapacityClose = anchor.isCapacityClose;
                 const isAnchor = anchor.isAnchor;
                 const volumeContributed = anchor.volumeContributed;
                 const excessVolume = anchor.excessVolume;
@@ -1400,8 +1433,10 @@ app.post("/make-server-37f42386/admin/fuel-audit/recalculate-all", requireAuth({
                         isHighFrequency,
                         isFragmented,
                         isSoftAnchor,
+                        isCapacityClose: isCapacityClose || undefined,
+                        isFullTank: isCapacityClose || undefined,
                         isAnchor,
-                        isHardAnchor: anchor.isHard || undefined,
+                        isHardAnchor: undefined,
                         cycleId: currentCycleId,
                         recalculatedAt: new Date().toISOString()
                     };
@@ -1435,6 +1470,7 @@ app.post("/make-server-37f42386/admin/fuel-audit/recalculate-all", requireAuth({
 
         return c.json({ 
             success: true, 
+            vehicleId: filterVehicleId || undefined,
             processed: fuelTransactions.length,
             modified: modifiedCount,
             entriesProcessed: allEntries.length,
@@ -3524,28 +3560,41 @@ app.post("/make-server-37f42386/transactions", requireAuth(), async (c) => {
                 transaction.metadata.anomalyReason = 'Tank Overflow: Single transaction exceeds tank capacity';
             }
 
-            // Step 2.3: Soft Anchor Reset (98% spine — classifyAnchor)
+            // Step 2.3: Capacity full close (98% spine — classifyAnchor + cycleId)
             const prevCum = Math.max(0, cumulative - volume);
+            const cyclePeers: any[] = [];
+            for (const tx of lastTransactions) {
+                const m = tx.metadata || {};
+                if (m.isSoftAnchor || m.isAnchor || m.isCapacityClose || m.isFullTank) break;
+                cyclePeers.push(tx);
+            }
+            const openCycleId = fuelLogic.resolveCycleIdForOpenCycle(
+                cyclePeers.map((t: any) => ({ metadata: t.metadata })),
+            );
+
             const anchor = fuelLogic.classifyAnchor({
-                isFullTank: transaction.metadata?.isFullTank === true,
-                isAnchor: transaction.metadata?.isAnchor === true,
-                isHardAnchor: transaction.metadata?.isHardAnchor === true,
-                isSoftAnchor: transaction.metadata?.isSoftAnchor === true,
                 prevCumulative: prevCum,
                 volume,
                 tankCapacity,
+                entryType: transaction.type || transaction.metadata?.entryType,
+                paymentSource: transaction.paymentSource || transaction.metadata?.paymentSource,
             });
 
-            if (anchor.isSoft) {
+            transaction.metadata.cycleId = openCycleId;
+            delete transaction.metadata.isHardAnchor;
+            if (anchor.isCapacityClose || anchor.isSoft) {
                 transaction.metadata.isSoftAnchor = true;
+                transaction.metadata.isCapacityClose = true;
+                transaction.metadata.isFullTank = true; // derived capacity full
                 transaction.metadata.isAnchor = true;
                 transaction.metadata.volumeContributed = Number(anchor.volumeContributed.toFixed(2));
                 transaction.metadata.excessVolume = anchor.excessVolume > 0 ? Number(anchor.excessVolume.toFixed(2)) : undefined;
-                transaction.metadata.softAnchorNote = `Cycle Reset: Cumulative volume reached ${Math.round(fuelLogic.SOFT_ANCHOR_THRESHOLD * 100)}% of tank capacity.`;
-            } else if (anchor.isHard) {
-                transaction.metadata.isAnchor = true;
-                transaction.metadata.isHardAnchor = true;
+                transaction.metadata.softAnchorNote = `Capacity full: cumulative reached ${Math.round(fuelLogic.SOFT_ANCHOR_THRESHOLD * 100)}% of tank; spillover ${transaction.metadata.excessVolume || 0}L.`;
+            } else {
                 transaction.metadata.isSoftAnchor = false;
+                transaction.metadata.isCapacityClose = false;
+                transaction.metadata.isFullTank = false;
+                transaction.metadata.isAnchor = false;
             }
 
             // --- Phase 3: Fuel Economy & Velocity Algorithms ---

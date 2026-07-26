@@ -86,6 +86,18 @@ import {
     DriverTimeDistance,
     VehicleTimeDistance
 } from '../../utils/csvHelpers';
+import {
+  isJaaStatementDetails,
+  parseJaaStatementDetailsMatrix,
+  jaaFuelLinesToParsedRows,
+} from '../../utils/jaaStatementDetailsParser';
+import {
+  matchJaaStatementToDriverLogs,
+  applyFuelMatchLinks,
+  type FuelMatchPair,
+} from '../../utils/jaaFuelStatementMatcher';
+import { JaaFuelMatchReview } from '../fuel/JaaFuelMatchReview';
+import * as XLSX from 'xlsx';
 import { fetchFullTollHistory, generateBackupCSV } from '../../utils/exportHelpers';
 import { useFleetTimezone } from '../../utils/timezoneDisplay';
 import { Trip, FieldDefinition, FieldType, ParsedRow, DriverMetrics, VehicleMetrics, OrganizationMetrics, ImportAuditState, DisputeRefund } from '../../types/data';
@@ -241,6 +253,7 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
   // Phase 3: Fuel Data
   const [fuelCards, setFuelCards] = useState<FuelCard[]>([]);
   const [processedFuelEntries, setProcessedFuelEntries] = useState<FuelEntry[]>([]);
+  const [jaaMatchPairs, setJaaMatchPairs] = useState<FuelMatchPair[]>([]);
 
   // Phase 1: Time & Distance Data
   const [processedDriverTime, setProcessedDriverTime] = useState<DriverTimeDistance[]>([]);
@@ -368,37 +381,85 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
          setWarning(null); 
     };
 
-    acceptedFiles.forEach(file => {
+    acceptedFiles.forEach(async (file) => {
+        const lower = file.name.toLowerCase();
+        const isExcel = lower.endsWith('.xls') || lower.endsWith('.xlsx');
+
+        const pushParsed = (fileData: FileData) => {
+            fileData.validationErrors = validateFile(fileData);
+            fileData.reportDate = extractReportDate(fileData);
+            newFiles.push(fileData);
+            completed++;
+            if (completed === acceptedFiles.length) processQueue();
+        };
+
+        if (isExcel) {
+            try {
+                const buf = await file.arrayBuffer();
+                const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+                const sheetName = wb.SheetNames[0];
+                const sheet = wb.Sheets[sheetName];
+                const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' }) as unknown[][];
+
+                if (isJaaStatementDetails(sheetName, matrix) || /statementdetails/i.test(file.name)) {
+                    const jaa = parseJaaStatementDetailsMatrix(matrix);
+                    const rows = jaaFuelLinesToParsedRows(jaa.fuelLines) as ParsedRow[];
+                    const headers = rows.length > 0 ? Object.keys(rows[0]) : ['Date', 'Liters', 'Amount', 'Vehicle Plate'];
+                    pushParsed({
+                        id: Math.random().toString(36).substr(2, 9),
+                        name: file.name,
+                        rows,
+                        headers,
+                        type: 'fuel_statement',
+                    });
+                    if (jaa.fuelLines.length === 0) {
+                        toast.warning(`${file.name}: no FUEL line items found (fees/payments ignored).`);
+                    } else {
+                        toast.success(`JAA Details: ${jaa.fuelLines.length} fuel fill(s) from ${file.name}`);
+                    }
+                } else {
+                    // Generic excel → treat first row as headers
+                    const json = XLSX.utils.sheet_to_json(sheet, { defval: '' }) as ParsedRow[];
+                    const headers = json.length > 0 ? Object.keys(json[0]) : [];
+                    const type = detectFileType(headers, file.name);
+                    pushParsed({
+                        id: Math.random().toString(36).substr(2, 9),
+                        name: file.name,
+                        rows: json,
+                        headers,
+                        type,
+                    });
+                }
+            } catch (err) {
+                console.error('Excel parse error', err);
+                toast.error(`Failed to parse ${file.name}`);
+                completed++;
+                if (completed === acceptedFiles.length) processQueue();
+            }
+            return;
+        }
+
         Papa.parse(file, {
             header: true,
             skipEmptyLines: true,
             complete: (results) => {
-                completed++;
-                
                 if (results.meta.fields) {
                     const type = detectFileType(results.meta.fields, file.name);
-                    const fileData: FileData = {
+                    pushParsed({
                         id: Math.random().toString(36).substr(2, 9),
                         name: file.name,
                         rows: results.data as ParsedRow[],
                         headers: results.meta.fields,
                         type
-                    };
-
-                    // Run Validation & Date Extraction
-                    fileData.validationErrors = validateFile(fileData);
-                    fileData.reportDate = extractReportDate(fileData);
-
-                    newFiles.push(fileData);
-                }
-
-                if (completed === acceptedFiles.length) {
-                    processQueue();
+                    });
+                } else {
+                    completed++;
+                    if (completed === acceptedFiles.length) processQueue();
                 }
             },
             error: (err) => {
                 console.error("Parse error", err);
-                completed++; // Ensure we don't hang
+                completed++;
                 if (completed === acceptedFiles.length) processQueue();
             }
         });
@@ -407,7 +468,11 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    accept: { 'text/csv': ['.csv'], 'application/vnd.ms-excel': ['.csv'] },
+    accept: {
+      'text/csv': ['.csv'],
+      'application/vnd.ms-excel': ['.xls', '.csv'],
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+    },
     disabled: isParsing
   });
 
@@ -912,11 +977,53 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
               }
           }
 
-          // Phase 5: Save Fuel Entries
+          // Phase 5: Save Fuel Entries + match JAA statement rows to driver gas-card logs
           if (processedFuelEntries.length > 0) {
-              await Promise.all(processedFuelEntries.map(entry => 
-                  fuelService.createFuelEntry(entry)
-              ));
+              let entriesToSave = [...processedFuelEntries];
+              try {
+                  const vehicles = await api.getVehicles().catch(() => []);
+                  const normalizePlate = (p: string) => p.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+                  entriesToSave = entriesToSave.map((entry) => {
+                      if (entry.vehicleId) return entry;
+                      const plate = String((entry.metadata as any)?.jaaVehiclePlate || '').trim();
+                      if (!plate) return entry;
+                      const match = (vehicles as any[]).find((v) => {
+                          const vp = normalizePlate(String(v.plateNumber || v.licensePlate || ''));
+                          return vp && (vp === normalizePlate(plate) || vp.endsWith(normalizePlate(plate)) || normalizePlate(plate).endsWith(vp));
+                      });
+                      if (!match) return entry;
+                      return {
+                          ...entry,
+                          vehicleId: match.id,
+                          driverId: entry.driverId || match.assignedDriverId || match.currentDriverId,
+                      };
+                  });
+              } catch (plateErr) {
+                  console.warn('[Import] plate→vehicle resolve skipped', plateErr);
+              }
+
+              const saved = await Promise.all(entriesToSave.map((entry) => fuelService.createFuelEntry(entry)));
+
+              try {
+                  const existing = await fuelService.getFuelEntries({ limit: 500 });
+                  const pairs = matchJaaStatementToDriverLogs(saved, existing);
+                  const linked: FuelMatchPair[] = [];
+                  for (const pair of pairs) {
+                      if (pair.status === 'matched' || pair.status === 'amount_mismatch') {
+                          const { statement, driver } = applyFuelMatchLinks(pair);
+                          if (statement) await fuelService.saveFuelEntry(statement);
+                          if (driver) await fuelService.saveFuelEntry(driver);
+                      }
+                      linked.push(pair);
+                  }
+                  setJaaMatchPairs(linked);
+                  const matchedCount = linked.filter((p) => p.status === 'matched').length;
+                  if (matchedCount > 0) {
+                      toast.success(`Matched ${matchedCount} JAA fill(s) to driver logs`);
+                  }
+              } catch (matchErr) {
+                  console.warn('[Import] JAA match step failed', matchErr);
+              }
           }
 
           // Payment ledger lines: persist transaction-grain rows
@@ -1682,7 +1789,7 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
                         {selectedPlatform === 'Uber' 
                         ? 'Upload "Trip Activity" AND "Payment Orders" files together.' 
                         : selectedPlatform === 'Fuel'
-                        ? 'Upload your fuel card statement (CSV).'
+                        ? 'Upload JAA StatementDetails.xls (or a flat fuel CSV). Summary files are not used for fill matching.'
                         : `Upload your ${selectedPlatform} CSV export files.`}
                     </CardDescription>
                 </div>
@@ -1714,10 +1821,10 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
                 ) : (
                   <div>
                     <p className="text-xl font-medium text-slate-900">
-                      Drag & Drop Multiple CSVs
+                      Drag & Drop CSV or Excel
                     </p>
                     <p className="text-slate-500 mt-2">
-                      or click to select files
+                      .csv, .xls, .xlsx — or click to select
                     </p>
                   </div>
                 )}
@@ -2831,6 +2938,7 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
                           </TabsContent>
 
                           <TabsContent value="fuel" className="space-y-4">
+                            {jaaMatchPairs.length > 0 && <JaaFuelMatchReview pairs={jaaMatchPairs} />}
                             <div className="p-3 bg-slate-50 border border-slate-200 rounded-md flex items-start sm:items-center gap-3">
                                 <Fuel className="h-4 w-4 text-rose-500 mt-1 sm:mt-0" />
                                 <div className="flex flex-col sm:flex-row sm:items-center gap-2">
@@ -2892,6 +3000,8 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
       )}
 
       {step === 'success' && (
+        <div className="space-y-4">
+          {jaaMatchPairs.length > 0 && <JaaFuelMatchReview pairs={jaaMatchPairs} />}
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-16 text-center space-y-4">
              <div className="h-16 w-16 rounded-full bg-emerald-100 flex items-center justify-center">
@@ -2955,6 +3065,7 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
              </div>
           </CardContent>
         </Card>
+        </div>
       )}
 
       <BulkImportTollTransactionsModal

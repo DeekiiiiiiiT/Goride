@@ -275,7 +275,8 @@ export const ALL_COLUMNS: RenderColumnDef[] = [
   // ── Metadata Fields (8, default NOT visible) ──
   {
     key: 'isFullTank',
-    label: 'Full Tank?',
+    label: 'Capacity full?',
+    // Derived from capacity-close stamp (legacy column key isFullTank)
     defaultVisible: false,
     group: 'meta',
     render: (e) => {
@@ -471,7 +472,7 @@ function FuelDetailPanel({ entry, colSpan }: { entry: FuelEntry; colSpan: number
             <DetailField label="Amount (Cost)" value={formatCurrency(entry.amount)} />
             <DetailField label="Liters (Volume)" value={entry.liters != null ? `${formatNumber(entry.liters, 1)} L` : undefined} />
             <DetailField label="Price per Liter" value={entry.pricePerLiter != null ? `$${formatNumber(entry.pricePerLiter, 3)}` : undefined} />
-            <DetailField label="Full Tank?" value={(entry as any).isFullTank != null ? ((entry as any).isFullTank ? 'Yes' : 'No') : undefined} />
+            <DetailField label="Capacity full?" value={(entry as any).isFullTank != null ? ((entry as any).isFullTank ? 'Yes' : 'No') : undefined} />
             <DetailField label="Payment Source" value={getPaymentSourceLabel(entry.paymentSource)} />
             <DetailField label="Entry Mode" value={renderBadge(entry.entryMode, ENTRY_MODE_COLORS)} />
             <DetailField label="Type" value={renderBadge(entry.type, TYPE_COLORS, TYPE_LABELS)} />

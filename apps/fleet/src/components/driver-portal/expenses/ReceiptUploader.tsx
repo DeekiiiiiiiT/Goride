@@ -1,7 +1,7 @@
 // cache-bust: force recompile — 2026-02-10
 import React, { useRef } from 'react';
-import { Button } from "../../ui/button";
-import { Label } from "../../ui/label";
+import { Button } from '../../ui/button';
+import { Label } from '../../ui/label';
 import { Camera, Upload, X, Loader2, FileText } from "lucide-react";
 
 interface ReceiptUploaderProps {
@@ -10,6 +10,8 @@ interface ReceiptUploaderProps {
   previewUrl: string | null;
   isScanning: boolean;
   fileName?: string;
+  label?: string;
+  hint?: string;
 }
 
 export function ReceiptUploader({ 
@@ -17,7 +19,9 @@ export function ReceiptUploader({
   onClear, 
   previewUrl, 
   isScanning,
-  fileName 
+  fileName,
+  label = 'Receipt',
+  hint = 'or upload from gallery',
 }: ReceiptUploaderProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -27,7 +31,7 @@ export function ReceiptUploader({
 
   return (
     <div className="space-y-2">
-      <Label>Receipt</Label>
+      <Label>{label}</Label>
       
       {!previewUrl ? (
         <div 
@@ -38,8 +42,8 @@ export function ReceiptUploader({
             <Camera className="h-5 w-5 text-slate-500" />
           </div>
           <div className="text-center">
-            <p className="text-sm font-medium text-slate-900">Take a photo of receipt</p>
-            <p className="text-xs text-slate-500">or upload from gallery</p>
+            <p className="text-sm font-medium text-slate-900">Take a photo of {label.toLowerCase().includes('pump') ? 'the pump' : 'receipt'}</p>
+            <p className="text-xs text-slate-500">{hint}</p>
           </div>
           <input 
             type="file" 

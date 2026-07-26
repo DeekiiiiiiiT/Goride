@@ -28,11 +28,19 @@ export function FuelSettingsCard({ vehicle, onUpdate }: FuelSettingsCardProps) {
     const [isEditing, setIsEditing] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
 
+    const resolvedTankCapacity =
+        Number(vehicle.specifications?.tankCapacity) ||
+        Number(vehicle.fuelSettings?.tankCapacity) ||
+        0;
+    const statusRaw = String(vehicle.status || 'Active').toLowerCase();
+    const isActiveVehicle = statusRaw === 'active' || statusRaw === 'maintenance';
+    const missingTankCapacity = isActiveVehicle && !(resolvedTankCapacity > 0);
+
     const [formData, setFormData] = useState({
         fuelType: vehicle.fuelSettings?.fuelType || 'Gasoline_87',
         efficiencyCity: vehicle.fuelSettings?.efficiencyCity || 12, // Default 12 L/100km
         efficiencyHighway: vehicle.fuelSettings?.efficiencyHighway || 15, // Default 15 L/100km
-        tankCapacity: vehicle.fuelSettings?.tankCapacity || 50, // Default 50L
+        tankCapacity: vehicle.fuelSettings?.tankCapacity || vehicle.specifications?.tankCapacity || 50,
     });
 
     const handleSave = async () => {
@@ -94,6 +102,14 @@ export function FuelSettingsCard({ vehicle, onUpdate }: FuelSettingsCardProps) {
                 )}
             </CardHeader>
             <CardContent>
+                {missingTankCapacity && (
+                    <div className="bg-amber-50 border border-amber-200 p-3 rounded-lg text-xs text-amber-900 flex gap-2 mb-4">
+                        <Info className="h-4 w-4 shrink-0 text-amber-600" />
+                        <p>
+                            <span className="font-semibold">Tank capacity required.</span> This active vehicle has no tank capacity set — fuel cycles cannot close until you enter the real liter capacity.
+                        </p>
+                    </div>
+                )}
                 {isEditing ? (
                     <div className="space-y-4 animate-in slide-in-from-top-2 duration-200">
                         <div className="space-y-2">

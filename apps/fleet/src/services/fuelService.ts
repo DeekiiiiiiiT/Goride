@@ -106,6 +106,11 @@ export const fuelService = {
     return result.data || result;
   },
 
+  /** Alias for ImportsPage fuel statement persistence */
+  createFuelEntry(entry: FuelEntry): Promise<FuelEntry> {
+    return this.saveFuelEntry(entry);
+  },
+
   async deleteFuelEntry(id: string): Promise<void> {
     const enc = encodeURIComponent(id);
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries/${enc}`, {

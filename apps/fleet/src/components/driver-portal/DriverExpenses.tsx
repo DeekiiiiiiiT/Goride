@@ -47,9 +47,10 @@ import { PortalHome } from './views/PortalHome';
 import { ReimbursementMenu } from './views/ReimbursementMenu';
 import { DriverHeader } from './ui/DriverHeader';
 import { PaymentMethodSelector } from './expenses/PaymentMethodSelector';
-import { GasCardSummary } from './expenses/GasCardSummary';
-import { FuelCashInputs } from './expenses/FuelCashInputs';
+import { GasCardSummary, type FuelPumpStep } from './expenses/GasCardSummary';
+import { FuelCashInputs, derivePricePerLiter } from './expenses/FuelCashInputs';
 import { ReceiptUploader } from './expenses/ReceiptUploader';
+import { PumpNumbersConfirm } from './expenses/PumpNumbersConfirm';
 import { OdometerScanner } from './common/OdometerScanner';
 
 interface ExpenseLoggerProps {
@@ -83,7 +84,6 @@ interface FuelEntryState {
   odometerMethod?: string;
   paymentMethod?: 'gas_card' | 'personal_cash' | 'rideshare_cash';
   pricePerLiter?: string;
-  isFullTank?: boolean;
   manualReason?: string;
   volume?: string; 
   locationMetadata?: {
@@ -109,6 +109,8 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
   const [tankStatus, setTankStatus] = useState<any>(null);
   
   const [isScanning, setIsScanning] = useState(false);
+  const [fuelPumpStep, setFuelPumpStep] = useState<FuelPumpStep>('photo');
+  const [pumpFromOcr, setPumpFromOcr] = useState(false);
 
   const [date, setDate] = useState<Date>(new Date());
   const [time, setTime] = useState<string>(format(new Date(), 'HH:mm'));
@@ -164,6 +166,8 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
     setVehicleClass('');
     setCollector('');
     setFuelEntry({});
+    setFuelPumpStep('photo');
+    setPumpFromOcr(false);
     setFuelGpsManualRetriesLeft(MAX_MANUAL_FUEL_GPS_RETRIES);
     setFuelProceedingWithoutGps(false);
     setIsRetryingFuelGps(false);
@@ -199,6 +203,43 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
       const reader = new FileReader();
       reader.onload = (e) => setReceiptPreview(e.target?.result as string);
       reader.readAsDataURL(file);
+
+      // Fuel: pump display OCR (amount + liters). Other categories: generic receipt OCR.
+      if (category === 'Fuel') {
+        setIsScanning(true);
+        setPumpFromOcr(false);
+        toast.info("Reading pump display...", { duration: 2000 });
+        try {
+          const data = await api.processFuelReceipt(file);
+          let gotOcr = false;
+          if (data?.amount != null) {
+            setAmount(String(data.amount));
+            gotOcr = true;
+          }
+          if (data?.liters != null) {
+            setFuelEntry(prev => ({
+              ...prev,
+              volume: String(data.liters),
+              pricePerLiter: data.amount && data.liters
+                ? String(Number((Number(data.amount) / Number(data.liters)).toFixed(2)))
+                : prev.pricePerLiter,
+            }));
+            gotOcr = true;
+          }
+          if (data?.stationName) setMerchant(data.stationName);
+          setPumpFromOcr(gotOcr);
+          setFuelPumpStep('confirm');
+          toast.success(gotOcr ? "Review the numbers from your photo" : "Photo saved — enter pump numbers to confirm");
+        } catch (error) {
+          console.error("Pump scan error:", error);
+          setPumpFromOcr(false);
+          setFuelPumpStep('confirm');
+          toast.error("Could not read pump. Enter total and liters, then confirm.");
+        } finally {
+          setIsScanning(false);
+        }
+        return;
+      }
 
       setIsScanning(true);
       toast.info("Analyzing receipt...", { duration: 2000 });
@@ -348,16 +389,9 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
     const isGasCard = category === 'Fuel' && fuelEntry.paymentMethod === 'gas_card';
     const isFuel = category === 'Fuel';
 
-    let finalAmount = 0;
-    if (isFuel) {
-        if (isGasCard) {
-            finalAmount = 0; 
-        } else {
-            finalAmount = -Math.abs(parseFloat(amount || '0'));
-        }
-    } else {
-        finalAmount = -Math.abs(parseFloat(amount || '0'));
-    }
+    // Cash + gas card both store real pump total (negative expense)
+    let finalAmount = -Math.abs(parseFloat(amount || '0'));
+    if (!isFuel && !amount) finalAmount = 0;
 
     let methodStr = 'Cash'; 
     if (isFuel) {
@@ -366,12 +400,16 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
 
     const finalOdometer = isFuel ? fuelEntry.odometerReading : (odometer ? parseInt(odometer) : undefined);
 
-    const fuelPrice = fuelEntry.pricePerLiter ? parseFloat(fuelEntry.pricePerLiter) : undefined;
     const rawAmount = Math.abs(parseFloat(amount || '0'));
-    
+    // Pump flow: liters typed/OCR'd; $/L = total ÷ liters
     let calculatedVolume = fuelEntry.volume ? parseFloat(fuelEntry.volume) : undefined;
-    if (isFuel && !isGasCard && fuelPrice && fuelPrice > 0) {
-        calculatedVolume = Number((rawAmount / fuelPrice).toFixed(2));
+    let fuelPrice = derivePricePerLiter(amount, fuelEntry.volume || '') ?? undefined;
+    if (fuelPrice == null && fuelEntry.pricePerLiter) {
+      const parsed = parseFloat(fuelEntry.pricePerLiter);
+      if (parsed > 0) fuelPrice = parsed;
+    }
+    if (isFuel && calculatedVolume != null && !(calculatedVolume > 0) && fuelPrice && fuelPrice > 0 && rawAmount > 0) {
+      calculatedVolume = Number((rawAmount / fuelPrice).toFixed(2));
     }
 
     const metadata = {
@@ -381,7 +419,6 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
         collector,
         fuelVolume: calculatedVolume,
         pricePerLiter: fuelPrice,
-        isFullTank: (isFuel) ? fuelEntry.isFullTank : undefined,
         odometerMethod: (isFuel) ? fuelEntry.odometerMethod : undefined,
         odometerProofUrl: (isFuel) ? odometerProofUrl : undefined,
         odometerManualReason: (isFuel) ? fuelEntry.manualReason : undefined,
@@ -426,8 +463,6 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
       return;
     }
     
-    const isGasCard = category === 'Fuel' && fuelEntry.paymentMethod === 'gas_card';
-    
     if (!category || !date) {
       const msg = "Please fill in all required fields";
       console.log('[DriverExpenses] Validation fail:', msg);
@@ -436,18 +471,43 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
       return;
     }
     
-    if (!isGasCard && !amount) {
-        const msg = "Please enter an amount";
+    if (!amount) {
+        const msg = "Please enter the pump total (This Sale)";
         console.log('[DriverExpenses] Validation fail:', msg);
         setSubmitError(msg);
         toast.error(msg);
         return;
     }
 
-    if (category === 'Fuel' && !isGasCard) {
-        const price = parseFloat(fuelEntry.pricePerLiter || '0');
-        if (!fuelEntry.pricePerLiter || isNaN(price) || price <= 0) {
-             const msg = "Please enter a valid fuel price";
+    if (category === 'Fuel') {
+        if (!receiptFile) {
+             const msg = "Pump display photo is required";
+             console.log('[DriverExpenses] Validation fail:', msg);
+             setSubmitError(msg);
+             toast.error(msg);
+             setFuelPumpStep('photo');
+             return;
+        }
+        if (fuelPumpStep !== 'submit') {
+             const msg = "Please confirm the pump numbers before submitting";
+             console.log('[DriverExpenses] Validation fail:', msg);
+             setSubmitError(msg);
+             toast.error(msg);
+             return;
+        }
+
+        const liters = parseFloat(fuelEntry.volume || '0');
+        if (!fuelEntry.volume || isNaN(liters) || liters <= 0) {
+             const msg = "Please enter liters from the pump";
+             console.log('[DriverExpenses] Validation fail:', msg);
+             setSubmitError(msg);
+             toast.error(msg);
+             return;
+        }
+
+        const price = derivePricePerLiter(amount, fuelEntry.volume || '');
+        if (price == null || price <= 0) {
+             const msg = "Could not calculate price per liter — check total and liters";
              console.log('[DriverExpenses] Validation fail:', msg);
              setSubmitError(msg);
              toast.error(msg);
@@ -455,7 +515,7 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
         }
         
         if (price < 0.50) {
-             const msg = "Fuel price seems too low. Please verify.";
+             const msg = "Calculated fuel price seems too low. Please verify pump numbers.";
              console.log('[DriverExpenses] Validation fail:', msg);
              setSubmitError(msg);
              toast.error(msg);
@@ -750,7 +810,31 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
 
   const handleMethodSelect = (method: 'gas_card' | 'personal_cash' | 'rideshare_cash') => {
     setFuelEntry(prev => ({ ...prev, paymentMethod: method }));
+    setFuelPumpStep('photo');
+    setPumpFromOcr(false);
+    setAmount('');
+    setReceiptFile(null);
+    setReceiptPreview(null);
     setViewState('entry_details');
+  };
+
+  const handleRetakePumpPhoto = () => {
+    setReceiptFile(null);
+    setReceiptPreview(null);
+    setAmount('');
+    setFuelEntry(prev => ({ ...prev, volume: undefined, pricePerLiter: undefined }));
+    setPumpFromOcr(false);
+    setFuelPumpStep('photo');
+  };
+
+  const handleConfirmPumpNumbers = () => {
+    const liters = parseFloat(fuelEntry.volume || '0');
+    const price = derivePricePerLiter(amount, fuelEntry.volume || '');
+    if (!amount || !(liters > 0) || price == null || price < 0.5) {
+      toast.error('Enter valid This Sale and Liters from the pump');
+      return;
+    }
+    setFuelPumpStep('submit');
   };
 
   const goBack = () => {
@@ -1049,6 +1133,20 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
                    time={time}
                    isSubmitting={isSubmitting}
                    onSubmit={handleSubmit}
+                   totalSpent={amount}
+                   onTotalSpentChange={setAmount}
+                   liters={fuelEntry.volume || ''}
+                   onLitersChange={(v) => setFuelEntry(prev => ({ ...prev, volume: v }))}
+                   tankStatus={tankStatus}
+                   pumpPreviewUrl={receiptPreview}
+                   isScanningPump={isScanning}
+                   onPumpFileSelect={handleFileChange}
+                   onPumpClear={handleRetakePumpPhoto}
+                   pumpFileName={receiptFile?.name}
+                   pumpStep={fuelPumpStep}
+                   pumpFromOcr={pumpFromOcr}
+                   onConfirmPumpNumbers={handleConfirmPumpNumbers}
+                   onRetakePumpPhoto={handleRetakePumpPhoto}
                 />
                 </div>
             ) : (
@@ -1090,23 +1188,56 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
 
                 {category === 'Fuel' && (fuelEntry.paymentMethod === 'personal_cash' || fuelEntry.paymentMethod === 'rideshare_cash') && (
                   <div className="space-y-4">
-                      <div className="space-y-2">
-                        <Label>Cash Spent ($)</Label>
-                        <Input type="number" inputMode="decimal" step="0.01" placeholder="0.00" value={amount} onChange={e => setAmount(e.target.value)} required />
-                      </div>
-                      
-                      <FuelCashInputs 
-                        pricePerLiter={fuelEntry.pricePerLiter || ''}
-                        onPriceChange={(p) => setFuelEntry(prev => ({ ...prev, pricePerLiter: p }))}
-                        isFullTank={fuelEntry.isFullTank || false}
-                        onFullTankChange={(c) => setFuelEntry(prev => ({ ...prev, isFullTank: c }))}
-                        currentVolume={(() => {
-                            const amt = parseFloat(amount || '0');
-                            const price = parseFloat(fuelEntry.pricePerLiter || '0');
-                            if (amt > 0 && price > 0) return Number((amt / price).toFixed(2));
-                            return 0;
-                        })()}
-                      />
+                      {fuelPumpStep === 'photo' && (
+                        <ReceiptUploader
+                          label="Pump Display Photo (required)"
+                          hint="This Sale + Liters — photo is mandatory"
+                          previewUrl={receiptPreview}
+                          isScanning={isScanning}
+                          onFileSelect={handleFileChange}
+                          onClear={handleRetakePumpPhoto}
+                          fileName={receiptFile?.name}
+                        />
+                      )}
+
+                      {fuelPumpStep === 'confirm' && (
+                        <PumpNumbersConfirm
+                          totalSpent={amount}
+                          onTotalSpentChange={setAmount}
+                          liters={fuelEntry.volume || ''}
+                          onLitersChange={(v) => setFuelEntry(prev => ({ ...prev, volume: v }))}
+                          fromOcr={pumpFromOcr}
+                          onConfirm={handleConfirmPumpNumbers}
+                          onRetakePhoto={handleRetakePumpPhoto}
+                        />
+                      )}
+
+                      {fuelPumpStep === 'submit' && (
+                        <>
+                          <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm flex justify-between gap-3">
+                            <div>
+                              <p className="text-[10px] font-bold uppercase text-emerald-700 tracking-wider">Confirmed</p>
+                              <p className="font-semibold text-slate-900">
+                                ${parseFloat(amount || '0').toFixed(2)} · {parseFloat(fuelEntry.volume || '0').toFixed(3)} L
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              className="text-sm font-medium text-emerald-800 underline"
+                              onClick={handleRetakePumpPhoto}
+                            >
+                              Change
+                            </button>
+                          </div>
+                          <FuelCashInputs
+                            totalSpent={amount}
+                            onTotalSpentChange={setAmount}
+                            liters={fuelEntry.volume || ''}
+                            onLitersChange={(v) => setFuelEntry(prev => ({ ...prev, volume: v }))}
+                            tankStatus={tankStatus}
+                          />
+                        </>
+                      )}
                   </div>
                 )}
 
@@ -1140,6 +1271,7 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
                     {submitError}
                   </div>
                 )}
+                {(category !== 'Fuel' || fuelPumpStep === 'submit') && (
                 <button
                   type="submit"
                   disabled={isSubmitting}
@@ -1147,6 +1279,7 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
                 >
                   {isSubmitting ? <Loader2 className="h-5 w-5 animate-spin" /> : "Save Expense"}
                 </button>
+                )}
                 {category === 'Fuel' && (
                   <button
                     type="button"

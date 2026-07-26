@@ -1,32 +1,55 @@
 /**
- * Shared soft/hard anchor + SPLIT math.
+ * Capacity-close + SPLIT math.
  * Mirrored in supabase/functions/_fleet-server/fuel_logic.ts — keep in sync.
  * See docs/fuel-brain-spine.md.
+ *
+ * Product rule: cycles close at ≥98% tank capacity (capacity full) with spillover.
+ * Driver Full Tank checkbox is ignored. Expense-backed Reimbursement fills DO participate.
  */
 
-/** Soft cycle close at ≥98% tank (roadmap). */
+/** Capacity full close at ≥98% tank. */
 export const SOFT_ANCHOR_THRESHOLD = 0.98;
+export const CAPACITY_CLOSE_THRESHOLD = SOFT_ANCHOR_THRESHOLD;
 
 export type AnchorClassifyInput = {
+  /** @deprecated Ignored — capacity math only. */
   isFullTank?: boolean;
-  /** Legacy/hard marker; ignored as hard when isSoftAnchor is true. */
+  /** @deprecated Ignored — capacity math only. */
   isAnchor?: boolean;
+  /** @deprecated Ignored — capacity math only. */
   isHardAnchor?: boolean;
+  /** @deprecated Ignored — capacity math only. */
   isSoftAnchor?: boolean;
   prevCumulative: number;
   volume: number;
   tankCapacity: number;
+  /** Reserved: future non-fuel memo rows. Do not exclude Roam Reimbursement fills. */
+  entryType?: string | null;
+  paymentSource?: string | null;
 };
 
 export type AnchorClassifyResult = {
+  /** Always false under capacity-only spine (kept for callers). */
   isHard: boolean;
+  /** True when capacity close (compat alias for isCapacityClose). */
   isSoft: boolean;
   isAnchor: boolean;
+  /** Capacity ≥98% close with SPLIT. */
+  isCapacityClose: boolean;
   volumeContributed: number;
   excessVolume: number;
   percentOfTank: number;
   totalVolumeInCycle: number;
 };
+
+/** When true, fill must not close a tank cycle. Roam expense fills use type Reimbursement — do NOT exclude those. */
+export function isNonTankCycleEntry(
+  _entryType?: string | null,
+  _paymentSource?: string | null,
+): boolean {
+  // Reserved for future non-fuel memo rows. Expense-backed fills (type Reimbursement) DO participate in capacity cycles.
+  return false;
+}
 
 /**
  * Tank capacity: specifications first, then fuelSettings. No silent 40 on server paths.
@@ -43,8 +66,8 @@ export function resolveTankCapacity(vehicle: {
 }
 
 /**
- * Classify whether this fill closes a cycle (manual full vs soft cap) and SPLIT liters.
- * Reimbursements are never anchors — callers must not pass type-based hard flags.
+ * Classify capacity full close + SPLIT liters.
+ * Ignores driver Full Tank / legacy hard flags.
  */
 export function classifyAnchor(input: AnchorClassifyInput): AnchorClassifyResult {
   const volume = Math.max(0, Number(input.volume) || 0);
@@ -53,28 +76,34 @@ export function classifyAnchor(input: AnchorClassifyInput): AnchorClassifyResult
   const totalVolumeInCycle = prevCumulative + volume;
   const percentOfTank = tankCapacity > 0 ? (totalVolumeInCycle / tankCapacity) * 100 : 0;
 
-  // Hard = driver Full Tank, explicit hard flag, or legacy isAnchor that is not soft-only
-  const isHard =
-    input.isFullTank === true ||
-    input.isHardAnchor === true ||
-    (input.isAnchor === true && input.isSoftAnchor !== true);
+  if (isNonTankCycleEntry(input.entryType, input.paymentSource)) {
+    return {
+      isHard: false,
+      isSoft: false,
+      isAnchor: false,
+      isCapacityClose: false,
+      volumeContributed: Number(volume.toFixed(4)),
+      excessVolume: 0,
+      percentOfTank: Number(percentOfTank.toFixed(2)),
+      totalVolumeInCycle: Number(totalVolumeInCycle.toFixed(4)),
+    };
+  }
 
-  const approachingSoft =
-    !isHard && tankCapacity > 0 && totalVolumeInCycle >= tankCapacity * SOFT_ANCHOR_THRESHOLD;
-  const isSoft = approachingSoft;
-  const isAnchor = isHard || isSoft;
+  const isCapacityClose =
+    tankCapacity > 0 && totalVolumeInCycle >= tankCapacity * CAPACITY_CLOSE_THRESHOLD;
 
   let volumeContributed = volume;
   let excessVolume = 0;
-  if (isSoft && tankCapacity > 0) {
+  if (isCapacityClose && tankCapacity > 0) {
     volumeContributed = Math.max(0, tankCapacity - prevCumulative);
     excessVolume = Math.max(0, volume - volumeContributed);
   }
 
   return {
-    isHard,
-    isSoft,
-    isAnchor,
+    isHard: false,
+    isSoft: isCapacityClose,
+    isAnchor: isCapacityClose,
+    isCapacityClose,
     volumeContributed: Number(volumeContributed.toFixed(4)),
     excessVolume: Number(excessVolume.toFixed(4)),
     percentOfTank: Number(percentOfTank.toFixed(2)),

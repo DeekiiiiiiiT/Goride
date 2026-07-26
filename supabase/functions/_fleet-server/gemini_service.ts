@@ -19,19 +19,22 @@ export async function processFuelReceiptVision(imageBase64: string): Promise<OCR
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
     const prompt = `
-        You are a specialized OCR engine for fleet management. 
-        Analyze this fuel receipt image and extract the following data:
-        - odometer: Current vehicle odometer reading (usually 5-6 digits).
-        - liters: Total fuel volume in liters (sometimes called 'volume' or 'qty').
-        - amount: Total cost paid.
-        - pricePerLiter: Unit price for fuel.
-        - date: Date of purchase (YYYY-MM-DD).
-        - stationName: Name of the fuel station.
+        You are a specialized OCR engine for fleet management.
+        The image may be a paper fuel receipt OR a digital gas pump LCD display.
 
-        Format the response as a clean JSON object. 
-        Also include a "confidence_score" (0.0 to 1.0) based on how readable the text is.
-        If a value is missing, return null for that field.
-        Return ONLY the JSON object.
+        For pump displays: "This Sale" / total is amount; "Liters" / volume is liters.
+        For receipts: extract amount, liters/qty, unit price, date, station, odometer if present.
+
+        Extract:
+        - odometer: vehicle odometer (5-6 digits) or null
+        - liters: fuel volume in liters
+        - amount: total cost paid (This Sale on pumps)
+        - pricePerLiter: unit price if printed, else null (do not invent)
+        - date: purchase date YYYY-MM-DD or null
+        - stationName: station name or null
+
+        Return ONLY a JSON object with those fields plus confidence_score (0.0-1.0).
+        Missing values must be null.
     `;
 
     try {

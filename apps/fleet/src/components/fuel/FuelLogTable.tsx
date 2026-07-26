@@ -208,7 +208,10 @@ export function FuelLogTable({
         if (filterVehicle !== 'all' && entry.vehicleId !== filterVehicle) return false;
         if (filterDriver !== 'all' && entry.driverId !== filterDriver) return false;
         if (filterAnchor === 'valid' && !validAnchorIds.has(entry.id)) return false;
-        if (filterAnchor === 'invalid' && (entry.type !== 'Reimbursement' || validAnchorIds.has(entry.id))) return false;
+        if (filterAnchor === 'invalid') {
+            const isClose = entry.metadata?.isCapacityClose === true || entry.metadata?.isSoftAnchor === true;
+            if (!isClose || validAnchorIds.has(entry.id)) return false;
+        }
         if (filterSource !== 'all') {
             if (resolveEntrySource(entry) !== filterSource) return false;
         }
@@ -559,17 +562,16 @@ export function FuelLogTable({
                                 onClick={async () => {
                                     setIsRecalculating(true);
                                     try {
-                                        const result = await api.runFuelBackfill();
-                                        console.log('[Recalculate] Backfill result:', result);
-                                        // Phase 6: Also backfill missing paymentSource fields
-                                        const psResult = await api.runPaymentSourceBackfill();
-                                        console.log('[Recalculate] Payment source backfill result:', psResult);
-                                        toast.success('Fleet-wide recalculation complete', {
-                                            description: `Processed ${result?.processed ?? '?'} entries, patched ${psResult?.patched ?? 0} payment sources. Click Refresh Data to see updated results.`
+                                        const scopeId = filterVehicle !== 'all' ? filterVehicle : undefined;
+                                        const result = await api.recalculateAllIntegrity(
+                                            scopeId ? { vehicleId: scopeId } : undefined,
+                                        );
+                                        toast.success(scopeId ? 'Vehicle recalculation complete' : 'Fleet recalculation complete', {
+                                            description: `Re-scored ${result?.entriesModified ?? 0} entries / ${result?.modified ?? 0} transactions (capacity full @ 98%). Refresh to see cycles.`
                                         });
                                     } catch (err) {
-                                        console.error('[Recalculate] Backfill failed:', err);
-                                        toast.error('Failed to update integrity', {
+                                        console.error('[Recalculate] failed:', err);
+                                        toast.error('Failed to recalculate cycles', {
                                             description: String(err)
                                         });
                                     } finally {
@@ -582,8 +584,8 @@ export function FuelLogTable({
                             </Button>
                         </TooltipTrigger>
                         <TooltipContent side="bottom" className="max-w-[240px]">
-                            <p className="text-xs font-semibold">Recalculate Fleet Integrity</p>
-                            <p className="text-[10px] text-slate-400 mt-0.5">Re-syncs all tank capacities, full-tank flags, and fuel cycles across the fleet. Updates the Ledger Health and Fuel Integrity cards above.</p>
+                            <p className="text-xs font-semibold">Recalculate Capacity Cycles</p>
+                            <p className="text-[10px] text-slate-400 mt-0.5">Runs Fuel Audit recalculate-all (optional vehicle filter). Cycles close at 98% capacity with spillover; driver Full Tank removed.</p>
                         </TooltipContent>
                     </Tooltip>
                 </TooltipProvider>
@@ -953,28 +955,28 @@ export function FuelLogTable({
                                                     <Badge className="bg-blue-50 text-blue-700 border-blue-200 animate-pulse">ACTIVE CYCLE</Badge>
                                                     <span className="text-[9px] text-blue-500 font-bold uppercase">Calculating...</span>
                                                 </div>
-                                             ) : cycle.trustTier === 'Soft' || cycle.resetType === 'Auto_Soft' ? (
+                                             ) : cycle.trustTier === 'Soft' || cycle.trustTier === 'Capacity' || cycle.resetType === 'Auto_Soft' ? (
                                                 <Tooltip>
                                                     <TooltipTrigger asChild>
                                                         <Badge className="bg-teal-50 text-teal-800 border-teal-200 gap-1 cursor-help">
-                                                            VERIFIED (SOFT)
+                                                            CAPACITY FULL
                                                         </Badge>
                                                     </TooltipTrigger>
                                                     <TooltipContent className="max-w-[220px]">
-                                                        <p className="text-xs font-bold">Auto Soft cycle close</p>
-                                                        <p className="text-[10px] text-slate-300">System capped the tank near capacity. Not a driver-confirmed Full Tank.</p>
+                                                        <p className="text-xs font-bold">Capacity full cycle close</p>
+                                                        <p className="text-[10px] text-slate-300">Cumulative liters reached ~98% of tank. Spillover liters open the next cycle.</p>
                                                     </TooltipContent>
                                                 </Tooltip>
                                              ) : (
                                                 <Tooltip>
                                                     <TooltipTrigger asChild>
                                                         <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 gap-1 cursor-help">
-                                                            VERIFIED (MANUAL)
+                                                            COMPLETE
                                                         </Badge>
                                                     </TooltipTrigger>
                                                     <TooltipContent className="max-w-[220px]">
-                                                        <p className="text-xs font-bold">Driver/admin Full Tank</p>
-                                                        <p className="text-[10px] text-slate-300">Gold-trust close — preferred for hard charges and critical alerts.</p>
+                                                        <p className="text-xs font-bold">Closed cycle</p>
+                                                        <p className="text-[10px] text-slate-300">Cycle ended from capacity math (historical rows may still show older labels).</p>
                                                     </TooltipContent>
                                                 </Tooltip>
                                              )}

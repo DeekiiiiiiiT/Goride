@@ -285,12 +285,17 @@ function FuelAuditDashboardInner() {
     const handleRecalculateAll = async () => {
         setRecalculating(true);
         try {
-            const result = await api.recalculateAllIntegrity();
+            const scope =
+                selectedVehicleId && selectedVehicleId !== "all"
+                    ? { vehicleId: selectedVehicleId }
+                    : undefined;
+            const result = await api.recalculateAllIntegrity(scope);
             const txMod = result?.modified ?? 0;
             const entryMod = result?.entriesModified ?? 0;
             const effSkipped = result?.efficiencySkippedCount ?? 0;
             const effThresh = result?.efficiencyThreshold != null ? `${Math.round(result.efficiencyThreshold * 100)}%` : `${efficiencyThreshold}%`;
-            toast.success(`Recalculation complete! ${entryMod} entries & ${txMod} transactions re-scored (efficiency threshold: ${effThresh}, ${effSkipped} skipped due to insufficient data).`);
+            const scopeLabel = scope ? ` for selected vehicle` : '';
+            toast.success(`Recalculation complete${scopeLabel}! ${entryMod} entries & ${txMod} transactions re-scored (efficiency threshold: ${effThresh}, ${effSkipped} skipped due to insufficient data).`);
             fetchData(); // Refresh dashboard to show updated counts
         } catch (err) {
             console.error("Recalculate failed:", err);
@@ -750,7 +755,7 @@ function FuelAuditDashboardInner() {
                                                 <div className="flex-1">
                                                     <p className="text-xs font-semibold text-slate-700">Apply to Existing Records</p>
                                                     <p className="text-[11px] text-slate-500 mt-0.5">
-                                                        Saved settings only apply to <em>new</em> entries. Click <strong>Recalculate All</strong> to re-score every existing fuel record with the current rules. This may take a moment.
+                                                        Cycles close at <strong>98% capacity</strong> with spillover; driver Full Tank is removed. Saved settings only apply to <em>new</em> entries — click <strong>Recalculate All</strong> to re-score existing records (uses the vehicle filter above when set).
                                                     </p>
                                                 </div>
                                                 <Button

@@ -4,7 +4,8 @@ import { classifyAnchor, isStableCycleId, resolveTankCapacity } from './fuelAnch
 
 /**
  * Groups fuel entries into tank cycles.
- * Prefers persisted server metadata (isFullTank / isSoftAnchor / volumeContributed).
+ * Prefers persisted server metadata (isCapacityClose / isSoftAnchor / volumeContributed).
+ * Capacity close = full-tank cycle with spillover. Driver Full Tank is ignored.
  * Falls back to local classifyAnchor (98%) only when metadata is missing (legacy rows).
  * See docs/fuel-brain-spine.md.
  */
@@ -138,13 +139,18 @@ export function calculateFuelCycles(entries: FuelEntry[], vehicles: Vehicle[] = 
                         }, 0);
 
                         const status = entry.metadata?.integrityStatus === 'critical' ? 'Anomaly' : 'Complete';
-                        const resetType: FuelCycle['resetType'] = isCapped
+                        const resetType: FuelCycle['resetType'] = isCapped || isSoft || meta.isCapacityClose
                             ? 'Auto_Soft'
                             : entry.metadata?.integrityStatus === 'critical'
                               ? 'Auto_Anomaly'
                               : 'Manual';
+                        // Capacity full is the only trusted close; Soft label kept for older readers
                         const trustTier: FuelCycle['trustTier'] =
-                            status === 'Anomaly' ? undefined : isHard && meta.isFullTank ? 'Manual' : isSoft || isCapped ? 'Soft' : 'Manual';
+                            status === 'Anomaly'
+                              ? undefined
+                              : isSoft || isCapped || meta.isCapacityClose || meta.isSoftAnchor
+                                ? 'Soft'
+                                : 'Manual';
 
                         const persistedCycleId = isStableCycleId(meta.cycleId)
                             ? (meta.cycleId as string)

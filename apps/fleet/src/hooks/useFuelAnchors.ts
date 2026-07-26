@@ -2,6 +2,12 @@ import { useMemo, useCallback } from 'react';
 import { FuelEntry } from '../types/fuel';
 import { FinancialTransaction } from '../types/data';
 
+/** Capacity-close flags = tank cycle anchors (driver Full Tank removed). */
+function isCapacityCycleClose(entry: FuelEntry): boolean {
+    const meta = entry.metadata || {};
+    return meta.isCapacityClose === true || meta.isSoftAnchor === true || meta.isAnchor === true;
+}
+
 export function useFuelAnchors(entries: FuelEntry[], transactions: FinancialTransaction[]) {
     const transactionMap = useMemo(() => {
         return new Map(transactions.map(t => [t.id, t]));
@@ -15,9 +21,12 @@ export function useFuelAnchors(entries: FuelEntry[], transactions: FinancialTran
     const trustedEntryIds = useMemo(() => {
         const trusted = new Set<string>();
         entries.forEach(entry => {
+            if (isCapacityCycleClose(entry)) {
+                trusted.add(entry.id);
+                return;
+            }
             const isVerified = entry.metadata?.isVerified === true || entry.isVerified === true;
-            const isModifiedAnchor = (entry.metadata?.isEdited === true || !!entry.metadata?.editReason || isVerified) && entry.type === 'Reimbursement';
-            if (isModifiedAnchor || isVerified) {
+            if (isVerified) {
                 trusted.add(entry.id);
                 return;
             }
@@ -34,7 +43,8 @@ export function useFuelAnchors(entries: FuelEntry[], transactions: FinancialTran
         const candidates: FuelEntry[] = [];
         
         entries.forEach(e => {
-            if (e.type !== 'Reimbursement') return;
+            // Tank-cycle anchors = capacity closes only (not every Reimbursement row)
+            if (!isCapacityCycleClose(e)) return;
             if ((e.odometer ?? 0) <= 0) {
                 failures.set(e.id, "Invalid Odometer (0)");
                 return;

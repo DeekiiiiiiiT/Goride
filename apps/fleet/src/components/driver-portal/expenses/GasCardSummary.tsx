@@ -1,9 +1,13 @@
-// cache-bust: force recompile — 2026-02-10
 import React from 'react';
-import { Button } from "../../ui/button";
-import { Card, CardContent } from "../../ui/card";
+import { Button } from '../../ui/button';
+import { Card, CardContent } from '../../ui/card';
 import { CheckCircle2, Clock, Loader2 } from "lucide-react";
 import { format } from "date-fns";
+import { FuelCashInputs } from './FuelCashInputs';
+import { ReceiptUploader } from './ReceiptUploader';
+import { PumpNumbersConfirm } from './PumpNumbersConfirm';
+
+export type FuelPumpStep = 'photo' | 'confirm' | 'submit';
 
 interface GasCardSummaryProps {
   odometer: number;
@@ -11,18 +15,59 @@ interface GasCardSummaryProps {
   time: string;
   isSubmitting: boolean;
   onSubmit: (e: React.FormEvent) => void;
+  totalSpent: string;
+  onTotalSpentChange: (value: string) => void;
+  liters: string;
+  onLitersChange: (value: string) => void;
+  tankStatus?: {
+    currentCumulative: number;
+    tankCapacity: number;
+    progressPercent: number;
+    status: string;
+  };
+  pumpPreviewUrl: string | null;
+  isScanningPump: boolean;
+  onPumpFileSelect: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onPumpClear: () => void;
+  pumpFileName?: string;
+  pumpStep: FuelPumpStep;
+  pumpFromOcr: boolean;
+  onConfirmPumpNumbers: () => void;
+  onRetakePumpPhoto: () => void;
 }
 
-export function GasCardSummary({ odometer, date, time, isSubmitting, onSubmit }: GasCardSummaryProps) {
+export function GasCardSummary({
+  odometer,
+  date,
+  time,
+  isSubmitting,
+  onSubmit,
+  totalSpent,
+  onTotalSpentChange,
+  liters,
+  onLitersChange,
+  tankStatus,
+  pumpPreviewUrl,
+  isScanningPump,
+  onPumpFileSelect,
+  onPumpClear,
+  pumpFileName,
+  pumpStep,
+  pumpFromOcr,
+  onConfirmPumpNumbers,
+  onRetakePumpPhoto,
+}: GasCardSummaryProps) {
   return (
-    <div className="p-6 space-y-6">
+    <form onSubmit={onSubmit} className="p-6 space-y-6" noValidate>
       <div className="flex flex-col items-center justify-center space-y-2 text-center">
         <div className="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center mb-2">
            <CheckCircle2 className="h-6 w-6 text-blue-600" />
         </div>
-        <h3 className="text-lg font-semibold text-slate-900">Ready to Submit</h3>
+        <h3 className="text-lg font-semibold text-slate-900">Gas Card Fill</h3>
         <p className="text-sm text-slate-500 max-w-xs">
-           Your odometer reading has been verified. Transaction details will be imported automatically from the fuel card provider.
+           {pumpStep === 'photo' && 'Photo the pump display (required).'}
+           {pumpStep === 'confirm' && 'Confirm the numbers from the pump.'}
+           {pumpStep === 'submit' && 'Numbers confirmed — finish and submit.'}
         </p>
       </div>
 
@@ -36,9 +81,9 @@ export function GasCardSummary({ odometer, date, time, isSubmitting, onSubmit }:
                  {format(date, 'MMM d, yyyy')} • {time}
               </span>
            </div>
-           
+
            <div className="h-px bg-slate-200" />
-           
+
            <div className="flex justify-between items-center text-sm">
               <span className="text-slate-500 flex items-center gap-2">
                  <CheckCircle2 className="h-4 w-4" /> Verified Odometer
@@ -50,10 +95,58 @@ export function GasCardSummary({ odometer, date, time, isSubmitting, onSubmit }:
         </CardContent>
       </Card>
 
-      <Button className="w-full bg-blue-600 hover:bg-blue-700" size="lg" onClick={onSubmit} disabled={isSubmitting}>
-        {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-        Submit Log
-      </Button>
-    </div>
+      {pumpStep === 'photo' && (
+        <ReceiptUploader
+          label="Pump Display Photo (required)"
+          hint="This Sale + Liters — photo is mandatory"
+          previewUrl={pumpPreviewUrl}
+          isScanning={isScanningPump}
+          onFileSelect={onPumpFileSelect}
+          onClear={onPumpClear}
+          fileName={pumpFileName}
+        />
+      )}
+
+      {pumpStep === 'confirm' && (
+        <PumpNumbersConfirm
+          totalSpent={totalSpent}
+          onTotalSpentChange={onTotalSpentChange}
+          liters={liters}
+          onLitersChange={onLitersChange}
+          fromOcr={pumpFromOcr}
+          onConfirm={onConfirmPumpNumbers}
+          onRetakePhoto={onRetakePumpPhoto}
+        />
+      )}
+
+      {pumpStep === 'submit' && (
+        <>
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm flex justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-bold uppercase text-emerald-700 tracking-wider">Confirmed</p>
+              <p className="font-semibold text-slate-900">
+                ${parseFloat(totalSpent || '0').toFixed(2)} · {parseFloat(liters || '0').toFixed(3)} L
+              </p>
+            </div>
+            <Button type="button" variant="ghost" size="sm" className="text-emerald-800" onClick={onRetakePumpPhoto}>
+              Change
+            </Button>
+          </div>
+
+          <FuelCashInputs
+            totalSpent={totalSpent}
+            onTotalSpentChange={onTotalSpentChange}
+            liters={liters}
+            onLitersChange={onLitersChange}
+            tankStatus={tankStatus}
+          />
+
+          <Button className="w-full bg-blue-600 hover:bg-blue-700" size="lg" type="submit" disabled={isSubmitting}>
+            {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            Submit Log
+          </Button>
+        </>
+      )}
+    </form>
   );
 }

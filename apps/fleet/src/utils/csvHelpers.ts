@@ -351,11 +351,14 @@ export function detectFileType(headers: string[], fileName: string = ''): FileDa
     // 8. Rental Contracts
     if (has('TermUUID') || (has('OrganizationUUID') && has('Balance'))) return 'uber_rental_contract';
     
-    // 9. Fuel Statement
+    // 9. Fuel Statement (flat CSV or JAA Details flattened rows)
     if (
-        (has('Card Number') || has('Card #') || has('Pan') || has('Card ID')) && 
         (has('Volume') || has('Liters') || has('Gallons') || has('Qty') || has('Quantity')) && 
-        (has('Amount') || has('Cost') || has('Total') || has('Price'))
+        (has('Amount') || has('Cost') || has('Total') || has('Price')) &&
+        (
+          has('Card Number') || has('Card #') || has('Pan') || has('Card ID') ||
+          has('Vehicle Plate') || has('License Plate') || has('Receipt Number')
+        )
     ) return 'fuel_statement';
     
     return 'generic';
@@ -1001,6 +1004,11 @@ function processFuelData(rows: ParsedRow[], fuelCards: FuelCard[]): FuelEntry[] 
         let date: Date | null = null;
         try {
             date = parseDateString(dateStr, true); // Default to MM/DD
+            // Also accept YYYY-MM-DD from JAA parser
+            if (!date && /^\d{4}-\d{2}-\d{2}/.test(dateStr)) {
+                date = new Date(dateStr.slice(0, 10) + 'T12:00:00');
+                if (isNaN(date.getTime())) date = null;
+            }
         } catch (e) {}
         
         if (!date) return;
@@ -1015,21 +1023,33 @@ function processFuelData(rows: ParsedRow[], fuelCards: FuelCard[]): FuelEntry[] 
         const volStr = getVal(['Volume', 'Liters', 'Gallons', 'Qty', 'Quantity']);
         const liters = volStr ? parseFloat(volStr.replace(/[^0-9.-]/g, '')) : undefined;
 
-        // Price Unit
+        // Price Unit — prefer statement PPL, else derive from amount ÷ liters
         const priceStr = getVal(['Price', 'Unit Price', 'PPG', 'PPL']);
-        const pricePerLiter = priceStr ? parseFloat(priceStr.replace(/[^0-9.-]/g, '')) : undefined;
+        let pricePerLiter = priceStr ? parseFloat(priceStr.replace(/[^0-9.-]/g, '')) : undefined;
+        if ((pricePerLiter == null || isNaN(pricePerLiter)) && liters && liters > 0) {
+            pricePerLiter = Number((amount / liters).toFixed(2));
+        }
 
         // Card
         const cardNumRaw = getVal(['Card Number', 'Card #', 'Pan', 'Card ID']);
         const cardNum = cardNumRaw ? cardNumRaw.replace(/[^0-9]/g, '') : '';
+
+        // Plate (JAA Details has plate, often no card PAN)
+        const plateRaw = getVal(['Vehicle Plate', 'License Plate', 'Plate', 'Lic#', 'Vehicle LIC#']);
+        const plate = plateRaw ? plateRaw.replace(/[^A-Za-z0-9]/g, '').toUpperCase() : '';
         
         // Location
         const location = getVal(['Location', 'Site', 'Station', 'Merchant', 'Site Name']);
+        const receiptNumber = getVal(['Receipt Number', 'Receipt #', 'Receipt']);
+        const driverName = getVal(['Driver', 'Driver Name']);
+        const mileageStr = getVal(['Mileage', 'Odometer']);
+        const mileage = mileageStr ? parseFloat(mileageStr.replace(/[^0-9.-]/g, '')) : undefined;
+        const description = getVal(['Description']);
+        const isJaa = Boolean(plate || (receiptNumber && String(receiptNumber).toUpperCase().startsWith('ZZ')));
 
         // Match Card
         let matchedCard: FuelCard | undefined;
         if (cardNum && fuelCards && fuelCards.length > 0) {
-            // Try exact match (last 4 or full)
             matchedCard = fuelCards.find(c => {
                 const cleanStored = c.cardNumber.replace(/[^0-9]/g, '');
                 return cleanStored.endsWith(cardNum) || cardNum.endsWith(cleanStored);
@@ -1038,15 +1058,28 @@ function processFuelData(rows: ParsedRow[], fuelCards: FuelCard[]): FuelEntry[] 
 
         const entry: FuelEntry = {
             id: crypto.randomUUID(),
-            date: date.toISOString(),
-            amount,
+            date: date.toISOString().slice(0, 10),
+            amount: Math.abs(amount),
             liters,
             pricePerLiter,
             location,
+            odometer: mileage && mileage > 0 ? mileage : null,
             cardId: matchedCard?.id,
             vehicleId: matchedCard?.assignedVehicleId,
             driverId: matchedCard?.assignedDriverId,
-            type: 'Card_Transaction'
+            type: 'Card_Transaction',
+            entryMode: mileage && mileage > 0 ? 'Anchor' : 'Floating',
+            paymentSource: 'Gas_Card',
+            entrySource: 'fuel-card',
+            reconciliationStatus: 'Pending',
+            metadata: {
+                importSource: isJaa ? 'jaa_statement_details' : 'fuel_statement',
+                jaaReceiptNumber: receiptNumber,
+                jaaDriverName: driverName,
+                jaaVehiclePlate: plate || undefined,
+                jaaFuelGrade: description,
+                mileage,
+            },
         };
 
         entries.push(entry);

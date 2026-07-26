@@ -1147,15 +1147,15 @@ export function KmLTracking({ vehicle }: KmLTrackingProps) {
                             <TooltipProvider>
                               <Tooltip>
                                 <TooltipTrigger>
-                                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-indigo-300 text-indigo-600">
-                                    {m.isFullTank || m.isAnchor ? 'Hard' : 'Soft'}
+                                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-teal-300 text-teal-700">
+                                    {m.isCapacityClose || m.isSoftAnchor || m.isFullTank || m.isAnchor ? 'Capacity full' : 'Open'}
                                   </Badge>
                                 </TooltipTrigger>
                                 <TooltipContent>
                                   <p className="text-xs">
-                                    {m.isFullTank || m.isAnchor
-                                      ? 'Manual full-tank anchor'
-                                      : 'System-detected: cumulative fuel >= 100% tank'}
+                                    {m.isCapacityClose || m.isSoftAnchor || m.isFullTank || m.isAnchor
+                                      ? 'Cycle closed at ~98% tank capacity (spillover opens next cycle)'
+                                      : 'Open cycle fill'}
                                   </p>
                                 </TooltipContent>
                               </Tooltip>

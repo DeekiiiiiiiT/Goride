@@ -860,8 +860,12 @@ export async function getEntriesSinceLastAnchor(vehicleId: string, anchorDate: s
 /**
  * Soft cycle close at ≥98% tank. Client mirror: utils/fuelAnchorLogic.ts — keep in sync.
  * See docs/fuel-brain-spine.md.
+ *
+ * Product rule: capacity ≥98% = full-tank close with SPLIT. Driver Full Tank ignored.
+ * Expense-backed Reimbursement fills DO participate in capacity cycles.
  */
 export const SOFT_ANCHOR_THRESHOLD = 0.98;
+export const CAPACITY_CLOSE_THRESHOLD = SOFT_ANCHOR_THRESHOLD;
 
 /**
  * Tank capacity: specifications first, then fuelSettings. No silent 40 on server writes.
@@ -875,27 +879,42 @@ export function resolveTankCapacity(vehicle: any): number {
 }
 
 export type AnchorClassifyInput = {
+  /** @deprecated Ignored — capacity math only. */
   isFullTank?: boolean;
+  /** @deprecated Ignored — capacity math only. */
   isAnchor?: boolean;
+  /** @deprecated Ignored — capacity math only. */
   isHardAnchor?: boolean;
+  /** @deprecated Ignored — capacity math only. */
   isSoftAnchor?: boolean;
   prevCumulative: number;
   volume: number;
   tankCapacity: number;
+  entryType?: string | null;
+  paymentSource?: string | null;
 };
 
 export type AnchorClassifyResult = {
   isHard: boolean;
   isSoft: boolean;
   isAnchor: boolean;
+  isCapacityClose: boolean;
   volumeContributed: number;
   excessVolume: number;
   percentOfTank: number;
   totalVolumeInCycle: number;
 };
 
+/** Reserved — Roam expense fills use type Reimbursement and MUST participate in capacity cycles. */
+export function isNonTankCycleEntry(
+  _entryType?: string | null,
+  _paymentSource?: string | null,
+): boolean {
+  return false;
+}
+
 /**
- * Classify soft/hard cycle close + SPLIT liters. Reimbursements are never anchors.
+ * Capacity full close + SPLIT. Ignores driver Full Tank / legacy hard flags.
  */
 export function classifyAnchor(input: AnchorClassifyInput): AnchorClassifyResult {
   const volume = Math.max(0, Number(input.volume) || 0);
@@ -904,26 +923,34 @@ export function classifyAnchor(input: AnchorClassifyInput): AnchorClassifyResult
   const totalVolumeInCycle = prevCumulative + volume;
   const percentOfTank = tankCapacity > 0 ? (totalVolumeInCycle / tankCapacity) * 100 : 0;
 
-  const isHard =
-    input.isFullTank === true ||
-    input.isHardAnchor === true ||
-    (input.isAnchor === true && input.isSoftAnchor !== true);
+  if (isNonTankCycleEntry(input.entryType, input.paymentSource)) {
+    return {
+      isHard: false,
+      isSoft: false,
+      isAnchor: false,
+      isCapacityClose: false,
+      volumeContributed: Number(volume.toFixed(4)),
+      excessVolume: 0,
+      percentOfTank: Number(percentOfTank.toFixed(2)),
+      totalVolumeInCycle: Number(totalVolumeInCycle.toFixed(4)),
+    };
+  }
 
-  const isSoft =
-    !isHard && tankCapacity > 0 && totalVolumeInCycle >= tankCapacity * SOFT_ANCHOR_THRESHOLD;
-  const isAnchor = isHard || isSoft;
+  const isCapacityClose =
+    tankCapacity > 0 && totalVolumeInCycle >= tankCapacity * CAPACITY_CLOSE_THRESHOLD;
 
   let volumeContributed = volume;
   let excessVolume = 0;
-  if (isSoft && tankCapacity > 0) {
+  if (isCapacityClose && tankCapacity > 0) {
     volumeContributed = Math.max(0, tankCapacity - prevCumulative);
     excessVolume = Math.max(0, volume - volumeContributed);
   }
 
   return {
-    isHard,
-    isSoft,
-    isAnchor,
+    isHard: false,
+    isSoft: isCapacityClose,
+    isAnchor: isCapacityClose,
+    isCapacityClose,
     volumeContributed: Number(volumeContributed.toFixed(4)),
     excessVolume: Number(excessVolume.toFixed(4)),
     percentOfTank: Number(percentOfTank.toFixed(2)),

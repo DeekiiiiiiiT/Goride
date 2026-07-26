@@ -2634,18 +2634,17 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
             const totalVolumeInCycle = Number((runningCumulative + volumeAtEntry).toFixed(4));
             const distanceSinceAnchor = (entry.odometer && lastAnchorOdo) ? (entry.odometer - lastAnchorOdo) : 0;
             
-            // Step 2.2–2.3: Soft/hard + SPLIT via shared classifyAnchor (98%)
+            // Step 2.2–2.3: Capacity full close + SPLIT via shared classifyAnchor (98%)
             const anchor = fuelLogic.classifyAnchor({
-                isFullTank: entry.metadata?.isFullTank === true,
-                isAnchor: entry.metadata?.isAnchor === true,
-                isHardAnchor: entry.metadata?.isHardAnchor === true,
-                isSoftAnchor: entry.metadata?.isSoftAnchor === true,
                 prevCumulative,
                 volume: volumeAtEntry,
                 tankCapacity,
+                entryType: entry.type,
+                paymentSource: entry.paymentSource,
             });
-            const isHardAnchor = anchor.isHard;
+            const isHardAnchor = false;
             const isSoftAnchor = anchor.isSoft;
+            const isCapacityClose = anchor.isCapacityClose;
             const volumeContributed = anchor.volumeContributed;
             const excessVolume = anchor.excessVolume;
 
@@ -2765,8 +2764,11 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
                 efficiencyBaseline: rollingAvg ? 'rolling' : 'skipped',
                 efficiencyVariance: Number((efficiencyVariance * 100).toFixed(1)),
                 isSoftAnchor,
+                isCapacityClose: isCapacityClose || undefined,
+                // Capacity close = product "full tank" (derived); never driver checkbox
+                isFullTank: isCapacityClose || undefined,
                 isAnchor: anchor.isAnchor,
-                isHardAnchor: isHardAnchor || undefined,
+                isHardAnchor: undefined,
                 integrityStatus,
                 anomalyReason,
                 auditStatus,
@@ -3141,49 +3143,12 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
 
     // --- PHASE 8: BACKFILL INTEGRITY JOB (Optimized) ---
     app.post(`${BASE_PATH}/admin/backfill-fuel-integrity`, async (c) => {
-        try {
-            const { vehicleId, batchSize = 100 } = await c.req.json().catch(() => ({}));
-            console.log(`[Backfill] Starting Optimized Integrity Backfill (Batch: ${batchSize})...`);
-            
-            // 1. Fetch data efficiently
-            const [vehicles, allStations] = await Promise.all([
-                vehicleId ? kv.get(`vehicle:${vehicleId}`).then(v => v ? [v] : []) : kv.getByPrefix("vehicle:"),
-                kv.getByPrefix("station:")
-            ]);
-            
-            let processedCount = 0;
-            let anomalyCount = 0;
-
-            for (const vehicle of vehicles) {
-                // Re-fetch only current vehicle entries to save memory
-                const { data: rawEntries } = await supabase
-                    .from("kv_store_37f42386")
-                    .select("value")
-                    .like("key", "fuel_entry:%")
-                    .eq("value->>vehicleId", vehicle.id)
-                    .order("value->>date", { ascending: true });
-
-                const vehicleEntries = (rawEntries || []).map(d => d.value);
-                
-                // Reset context for this vehicle
-                for (const entry of vehicleEntries) {
-                    // Reuse the core logic which now includes Phase 7/8 forensic binding
-                    // We call the logic directly instead of through an internal route for speed
-                    // (Simplified logic for backfill purposes or we could re-post to the entry endpoint)
-                    
-                    // Force a re-calculation by clearing existing metadata markers
-                    // but keeping the core data
-                    processedCount++;
-                }
-                
-                // Phase 8: Batch update would go here if we were using a different DB
-                // With KV store, we process iteratively
-            }
-
-            return c.json({ success: true, processed: processedCount, message: "System Hardening Backfill Complete" });
-        } catch (e: any) {
-            return c.json({ error: e.message }, 500);
-        }
+        // Stub retired — real cycle/capacity re-score is recalculate-all
+        return c.json({
+            success: false,
+            error: "backfill-fuel-integrity is retired. Use POST /admin/fuel-audit/recalculate-all (optional body: { vehicleId: '5179KZ' }).",
+            useEndpoint: "/make-server-37f42386/admin/fuel-audit/recalculate-all",
+        }, 410);
     });
 
     // --- PAYMENT SOURCE BACKFILL (Phase 6) ---
