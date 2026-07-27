@@ -430,14 +430,23 @@ export function TollBucketPanel({
     const smartMatches = filteredTolls.filter(tx => {
         const matches = suggestions.get(tx.id);
         const best = matches?.[0];
-        if (best && isOrphanPersonalMatch(best)) return false;
-        const hasHighScore = best?.confidenceScore != null ? best.confidenceScore >= 50 : (
-            best?.confidence === 'high' ||
-            best?.matchType === 'DEADHEAD_MATCH' ||
-            best?.matchType === 'PERSONAL_MATCH'
+        if (!best || isOrphanPersonalMatch(best)) return false;
+        // Personal Use: only non-orphan PERSONAL_MATCH — never Reimbursed/Underpaid cards.
+        if (stepId === 'personal-use' && best.matchType !== 'PERSONAL_MATCH') return false;
+        const hasHighScore = best.confidenceScore != null ? best.confidenceScore >= 50 : (
+            best.confidence === 'high' ||
+            best.matchType === 'DEADHEAD_MATCH' ||
+            best.matchType === 'PERSONAL_MATCH'
         );
-        return best && hasHighScore;
+        return hasHighScore;
     });
+
+    const smartReadyBannerLabel =
+        stepId === 'personal-use'
+            ? 'Confirm personal'
+            : stepId === 'deadhead'
+                ? 'Confirm deadhead'
+                : 'Ready to link';
 
     const visibleSmart = smartMatches.slice(0, visibleSmartMatches);
     const ambiguousSmartMatches = visibleSmart.filter(tx => needsTripPick(tx, suggestions.get(tx.id)?.[0]));
@@ -479,11 +488,19 @@ export function TollBucketPanel({
     const getMatchBadge = (match: MatchResult) => {
         switch (match.matchType) {
             case 'PERFECT_MATCH':
-                return <Badge className="bg-emerald-500 hover:bg-emerald-600">Reimbursed</Badge>;
+                return (
+                    <Badge className="bg-emerald-500 hover:bg-emerald-600">
+                        {stepId === 'needs-review' ? 'Fully covered' : 'Reimbursed'}
+                    </Badge>
+                );
             case 'DEADHEAD_MATCH':
                 return <Badge className="bg-blue-500 hover:bg-blue-600">Deadhead</Badge>;
             case 'AMOUNT_VARIANCE':
-                return <Badge className="bg-orange-500 hover:bg-orange-600">Underpaid</Badge>;
+                return (
+                    <Badge className="bg-orange-500 hover:bg-orange-600">
+                        {stepId === 'needs-review' ? 'Shortfall' : 'Underpaid'}
+                    </Badge>
+                );
             case 'PERSONAL_MATCH': {
                 const isApproach = match.reasonCode
                     ? match.reasonCode === 'ENROUTE_APPROACH'
@@ -519,6 +536,7 @@ export function TollBucketPanel({
                 match={match}
                 allMatches={matches}
                 orphanMode={orphanMode}
+                pendingMoneyLabels={stepId === 'needs-review'}
                 selectable={isSelectable}
                 selected={selectedIds.has(tx.id)}
                 onSelectedChange={(checked) => toggleSelect(tx.id, checked)}
@@ -875,7 +893,7 @@ export function TollBucketPanel({
                                     {normalSmartMatches.length > 0 && ambiguousSmartMatches.length === 0 && (
                                         <div className="flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50/60 px-3 py-2 text-indigo-800 text-sm mt-3">
                                             <Sparkles className="h-4 w-4 shrink-0" />
-                                            <span className="font-semibold">Ready to link ({normalSmartMatches.length})</span>
+                                            <span className="font-semibold">{smartReadyBannerLabel} ({normalSmartMatches.length})</span>
                                         </div>
                                     )}
                                     <div className="space-y-3 w-full min-w-0">

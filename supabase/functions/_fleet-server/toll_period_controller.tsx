@@ -44,6 +44,7 @@ import {
   isReconcilableTollExpense,
   buildUnresolvedRefundSuggestionStatuses,
 } from "./toll_controller.tsx";
+import { resolvePeriodBucket } from "./toll_period_bucket.ts";
 import { safeErrorResponse } from "./safe_error.ts";
 import { classifyTollReconPeriodStatus } from "../../../apps/fleet/src/utils/tollReconPeriodStatus.ts";
 
@@ -81,67 +82,6 @@ function zeroCounts(): Record<StepId, StepCounts> {
   const counts = {} as Record<StepId, StepCounts>;
   for (const id of STEP_IDS) counts[id] = { actionable: 0, informational: 0 };
   return counts;
-}
-
-/** Mirrors resolveWizardBucket in apps/fleet/src/utils/tollBucket.ts (no live MatchResult on server). */
-function resolvePeriodBucket(tx: any): "needs-review" | "underpaid-claims" | "deadhead" | "personal-use" | null {
-  const stage = tx.workflowStage as string | undefined;
-  const stageBucket = bucketForWorkflowStage(stage);
-  if (stageBucket === null && stage) return null;
-
-  const reasonCode = String(tx.matchReasonCode || "");
-  const isOrphanPersonal =
-    tx.matchTypeCode === "PERSONAL_MATCH" &&
-    (reasonCode.startsWith("ORPHAN_") || !tx.matchedTripId);
-
-  if (isOrphanPersonal || stage === "personal_use_pending" || tx.matchStatus === "orphan_personal") {
-    // Stale personal pin: a later rematch can flip the persisted match type to
-    // underpaid/deadhead — money buckets win (mirrors resolveWizardBucket).
-    if (!isOrphanPersonal) {
-      if (tx.matchTypeCode === "AMOUNT_VARIANCE") return "underpaid-claims";
-      if (tx.matchTypeCode === "DEADHEAD_MATCH") return "deadhead";
-    }
-    return "personal-use";
-  }
-
-  const linkConfirmed = !!(tx.isReconciled && tx.tripId);
-  if (!linkConfirmed && (tx.matchStatus === "ambiguous" || tx.isAmbiguous === true)) {
-    return "needs-review";
-  }
-
-  const matchType = tx.matchTypeCode as string | undefined;
-  if (matchType === "AMOUNT_VARIANCE" || stage === "underpaid_pending") return "underpaid-claims";
-  if (matchType === "DEADHEAD_MATCH" || stage === "deadhead_pending") return "deadhead";
-  if (matchType === "PERSONAL_MATCH" || stage === "personal_use_pending") return "personal-use";
-
-  const isCash = tx.paymentMethod === "Cash" || !!tx.receiptUrl;
-  if (!matchType && !isCash && tx.matchStatus !== "ambiguous") {
-    return "personal-use";
-  }
-
-  return stageBucket ?? "needs-review";
-}
-
-/** Mirrors bucketForWorkflowStage in apps/fleet/src/utils/tollBucket.ts. */
-function bucketForWorkflowStage(stage: string | undefined): "needs-review" | "underpaid-claims" | "deadhead" | "personal-use" | null {
-  switch (stage) {
-    case "needs_review":
-      return "needs-review";
-    case "underpaid_pending":
-      return "underpaid-claims";
-    case "deadhead_pending":
-      return "deadhead";
-    case "personal_use_pending":
-      return "personal-use";
-    case "deadhead_resolved":
-    case "personal_use_resolved":
-    case "claim_filed":
-    case "claim_resolved":
-    case "matched":
-      return null;
-    default:
-      return "needs-review";
-  }
 }
 
 /** Mirrors isDisputeRefundMatched in apps/fleet/src/utils/tollWeekPeriod.ts. */

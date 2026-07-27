@@ -36,10 +36,12 @@ interface SuggestedMatchCardProps {
   selectable?: boolean;
   selected?: boolean;
   onSelectedChange?: (selected: boolean) => void;
+  /** Needs Review: pending money matches use Fully covered / Shortfall wording. */
+  pendingMoneyLabels?: boolean;
 }
 
 export function SuggestedMatchCard({
-  transaction, match, allMatches, orphanMode = false, onConfirm, onApprove, onReject, onDiscard, onFlag, onChargeDriver,
+  transaction, match, allMatches, orphanMode = false, pendingMoneyLabels = false, onConfirm, onApprove, onReject, onDiscard, onFlag, onChargeDriver,
   onClickDetail, onFindMatch, onAcceptPersonal, selectable = false, selected = false, onSelectedChange,
 }: SuggestedMatchCardProps) {
   const { trip, confidence, reason, timeDifferenceMinutes, matchType, varianceAmount, confidenceScore, vehicleMatch, driverMatch, dataQuality, windowHit, isAmbiguous, reasonCode, rateDrift, officialAmount, tagAmount, usedOfficialRate } = match as any;
@@ -55,11 +57,19 @@ export function SuggestedMatchCard({
   const getMatchBadge = () => {
     switch (matchType) {
       case 'PERFECT_MATCH':
-        return <Badge className="mb-2 bg-emerald-500 hover:bg-emerald-600">Reimbursed</Badge>;
+        return (
+          <Badge className="mb-2 bg-emerald-500 hover:bg-emerald-600">
+            {pendingMoneyLabels ? 'Fully covered' : 'Reimbursed'}
+          </Badge>
+        );
       case 'DEADHEAD_MATCH':
         return <Badge className="mb-2 bg-blue-500 hover:bg-blue-600">Deadhead</Badge>;
       case 'AMOUNT_VARIANCE':
-        return <Badge className="mb-2 bg-orange-500 hover:bg-orange-600">Underpaid</Badge>;
+        return (
+          <Badge className="mb-2 bg-orange-500 hover:bg-orange-600">
+            {pendingMoneyLabels ? 'Shortfall' : 'Underpaid'}
+          </Badge>
+        );
       case 'PERSONAL_MATCH':
         if (reason?.includes('Approach')) {
              return <Badge className="mb-2 bg-purple-600 hover:bg-purple-700">Unreimbursed Approach</Badge>;

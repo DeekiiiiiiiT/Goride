@@ -1409,7 +1409,7 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
               advancePrompt={showAdvancePrompt ? renderAdvancePrompt(true) : undefined}
               emptyState={{ icon: CarFront, title: "No personal use tolls this period", description: "No tolls were classified as personal driver use." }}
               listTitle="Personal Use"
-              listDescription=""
+              listDescription="Charge the driver for personal tolls, or have the fleet cover the cost."
             />
           )}
           {activeStepId === 'deadhead' && (

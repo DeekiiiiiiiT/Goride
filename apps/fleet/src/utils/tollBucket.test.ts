@@ -24,8 +24,9 @@ describe('bucketForBestMatch', () => {
     expect(bucketForBestMatch(undefined)).toBe('needs-review');
   });
 
-  it('sends AMOUNT_VARIANCE to underpaid and DEADHEAD to deadhead', () => {
+  it('sends AMOUNT_VARIANCE to underpaid, PERFECT_MATCH to needs-review, and DEADHEAD to deadhead', () => {
     expect(bucketForBestMatch(m({ matchType: 'AMOUNT_VARIANCE' }))).toBe('underpaid');
+    expect(bucketForBestMatch(m({ matchType: 'PERFECT_MATCH' }))).toBe('needs-review');
     expect(bucketForBestMatch(m({ matchType: 'DEADHEAD_MATCH' }))).toBe('deadhead');
   });
 
@@ -164,11 +165,18 @@ describe('resolveWizardBucket', () => {
     )).toBe('deadhead');
   });
 
-  it('stale personal_use_pending + ambiguous live underpaid stays personal-use (no unsettled jump)', () => {
+  it('stale personal_use_pending + clear PERFECT_MATCH → needs-review', () => {
+    expect(resolveWizardBucket(
+      { ...tagTx, workflowStage: 'personal_use_pending' },
+      { matchType: 'PERFECT_MATCH', reasonCode: 'ON_TRIP', trip: { id: 'trip-1' } as any },
+    )).toBe('needs-review');
+  });
+
+  it('stale personal_use_pending + ambiguous live underpaid → needs-review', () => {
     expect(resolveWizardBucket(
       { ...tagTx, workflowStage: 'personal_use_pending' },
       { matchType: 'AMOUNT_VARIANCE', isAmbiguous: true, trip: { id: 'trip-1' } as any },
-    )).toBe('personal-use');
+    )).toBe('needs-review');
   });
 
   it('resolved personal_use_resolved → excluded (null)', () => {

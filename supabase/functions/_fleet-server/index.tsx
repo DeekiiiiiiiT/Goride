@@ -2439,24 +2439,25 @@ app.post(
       console.error("[CanonicalOps] trip fare append after trip save failed:", canonErr);
     }
 
-    // MOI-4a: log-only reverse re-match — finds tolls uploaded before this
-    // trip existed (the "receipt uploaded weeks before the trip was logged"
-    // case) and logs what it WOULD update, without writing anything yet.
-    // No-ops unless matchOnIngestEnabled is on; never throws.
+    // MOI-4: reverse re-match — finds tolls uploaded before this trip existed
+    // and persists match fields + workflowStage when matchOnIngestEnabled is on.
+    // Never throws; no-ops unless the flag is enabled.
     try {
-      await reconsiderTollsForNewTrips(processedTrips, { persist: false });
+      const rematchResult = await reconsiderTollsForNewTrips(processedTrips, { persist: true });
+      console.log(
+        `[MatchOnIngest] reconsiderTollsForNewTrips (POST /trips): scanned=${rematchResult.scanned} wouldUpdate=${rematchResult.wouldUpdate} wouldFlag=${rematchResult.wouldFlag}`,
+      );
     } catch (rematchErr) {
       console.warn("[MatchOnIngest] reconsiderTollsForNewTrips (POST /trips) failed:", rematchErr);
     }
 
-    // MOI-4b (edit case): if any of these trips already had a toll pointing
-    // at them (from an earlier match) and this re-sync moved the trip's
-    // date/time, that match may no longer hold — re-validate and log/clear.
-    // Log-only for now (persist:false), same as above.
+    // MOI-4 (edit case): if any of these trips already had a toll pointing
+    // at them and this re-sync moved the trip's date/time, re-validate and
+    // clear/flag stale suggestions when matchOnIngestEnabled is on.
     try {
       for (const trip of processedTrips) {
         if (trip?.id) {
-          await invalidateStaleTollMatchesForTrip(String(trip.id), { persist: false, currentTrip: trip });
+          await invalidateStaleTollMatchesForTrip(String(trip.id), { persist: true, currentTrip: trip });
         }
       }
     } catch (invalidateErr) {
@@ -2594,11 +2595,10 @@ app.delete("/make-server-37f42386/trips/:id", requireAuth(), requirePermission('
       console.warn(`[DELETE /trips/:id] Ledger cleanup failed (non-fatal) trip=${id}:`, ledgerErr?.message);
     }
 
-    // MOI-4b: clear/flag any toll whose match suggestion pointed at this now-
-    // deleted trip. Log-only for now (persist:false) — see reconsiderTollsForNewTrips
-    // doc comment for why this stays inert until a live volume/behavior check.
+    // MOI-4: clear/flag any toll whose match suggestion pointed at this now-
+    // deleted trip when matchOnIngestEnabled is on.
     try {
-      await invalidateStaleTollMatchesForTrip(id, { persist: false, currentTrip: undefined });
+      await invalidateStaleTollMatchesForTrip(id, { persist: true, currentTrip: undefined });
     } catch (invalidateErr) {
       console.warn(`[MatchOnIngest] invalidateStaleTollMatchesForTrip (DELETE /trips/:id) failed:`, invalidateErr);
     }
@@ -10613,19 +10613,22 @@ app.post("/make-server-37f42386/fleet/sync", async (c) => {
             console.error("[FleetSync] Canonical trip fare append failed:", canonErr);
         }
 
-        // MOI-4a: same log-only reverse re-match as POST /trips (see there for
-        // details). No-ops unless matchOnIngestEnabled is on; never throws.
+        // MOI-4: reverse re-match (same as POST /trips). Persists when
+        // matchOnIngestEnabled is on; never throws.
         try {
-            await reconsiderTollsForNewTrips(uniqueTrips, { persist: false });
+            const rematchResult = await reconsiderTollsForNewTrips(uniqueTrips, { persist: true });
+            console.log(
+                `[MatchOnIngest] reconsiderTollsForNewTrips (fleet/sync): scanned=${rematchResult.scanned} wouldUpdate=${rematchResult.wouldUpdate} wouldFlag=${rematchResult.wouldFlag}`,
+            );
         } catch (rematchErr) {
             console.warn("[MatchOnIngest] reconsiderTollsForNewTrips (fleet/sync) failed:", rematchErr);
         }
 
-        // MOI-4b (edit case): same stale-match re-validation as POST /trips.
+        // MOI-4 (edit case): same stale-match re-validation as POST /trips.
         try {
             for (const trip of uniqueTrips) {
                 if (trip?.id) {
-                    await invalidateStaleTollMatchesForTrip(String(trip.id), { persist: false, currentTrip: trip });
+                    await invalidateStaleTollMatchesForTrip(String(trip.id), { persist: true, currentTrip: trip });
                 }
             }
         } catch (invalidateErr) {

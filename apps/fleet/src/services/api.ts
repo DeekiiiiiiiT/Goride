@@ -2582,6 +2582,43 @@ export const api = {
     return response.json();
   },
 
+  /**
+   * Rescan open personal_use_pending / orphan_personal tolls in a date range,
+   * persist live rematch results, and recompute workflowStage.
+   * dryRun defaults true on the server when omitted.
+   */
+  async backfillPersonalRematch(payload: {
+    startDate: string;
+    endDate: string;
+    dryRun?: boolean;
+    batchSize?: number;
+  }): Promise<{
+    success: boolean;
+    dryRun: boolean;
+    startDate: string;
+    endDate: string;
+    candidateCount?: number;
+    wouldProcess?: number;
+    processed?: number;
+    skippedUnchanged?: number;
+    remaining?: number;
+    sampleIds?: string[];
+    errors?: string[];
+    manifestKey?: string;
+    message: string;
+  }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/personal-rematch/backfill`, {
+      method: 'POST',
+      headers: await requireAuthHeaders(),
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to run personal rematch backfill');
+    }
+    return response.json();
+  },
+
   /** MOI-7: read-only preview of how many historical tolls are missing a matchStatus. */
   async getMatchIndexBackfillStatus(): Promise<{
     success: boolean;

@@ -3201,23 +3201,43 @@ export async function reconsiderTollsForNewTrips(
         } else {
           wouldUpdate++;
           if (opts.persist) {
-            await updateTollLedgerEntry(
-              toll.id,
-              {
-                matchStatus: "matched",
-                matchedTripId: best.tripId || null,
-                matchConfidenceScore: best.confidenceScore ?? null,
-                matchReasonCode: best.reasonCode ?? null,
-                matchTypeCode: best.matchType ?? null,
-                lastMatchedAt: new Date().toISOString(),
-              },
-              "updated",
-              "system-match-on-ingest",
-            );
+            // Mirror computeTollMatchPatch: ambiguous rematches must not look
+            // "matched" with a trip id — that would pin the wrong money bucket.
+            const fresh = await getTollLedgerEntry(toll.id);
+            const baseMeta = (fresh?.metadata || toll.metadata || {}) as Record<string, unknown>;
+            const matchCandidates = matches.slice(0, 3).map((m) => ({
+              tripId: m.tripId ?? null,
+              confidenceScore: m.confidenceScore ?? null,
+              matchType: m.matchType ?? null,
+              timeDifferenceMinutes: m.timeDifferenceMinutes ?? null,
+            }));
+            const now = new Date().toISOString();
+            const patch = best.isAmbiguous
+              ? {
+                  matchStatus: "ambiguous" as const,
+                  matchedTripId: null,
+                  matchConfidenceScore: best.confidenceScore ?? null,
+                  matchReasonCode: best.reasonCode ?? null,
+                  matchTypeCode: best.matchType ?? null,
+                  lastMatchedAt: now,
+                  metadata: { ...baseMeta, isAmbiguous: true, matchCandidates },
+                }
+              : {
+                  matchStatus: "matched" as const,
+                  matchedTripId: best.tripId || null,
+                  matchConfidenceScore: best.confidenceScore ?? null,
+                  matchReasonCode: best.reasonCode ?? null,
+                  matchTypeCode: best.matchType ?? null,
+                  lastMatchedAt: now,
+                  metadata: { ...baseMeta, isAmbiguous: false, matchCandidates },
+                };
+            await updateTollLedgerEntry(toll.id, patch, "updated", "system-match-on-ingest");
             await recomputeAndPersistWorkflowStage(toll.id);
           } else {
             console.log(
-              `[MatchOnIngest] Would update unresolved toll ${toll.id} to matched (trip ${best.tripId}, score ${best.confidenceScore})`,
+              `[MatchOnIngest] Would update unresolved toll ${toll.id} to ${
+                best.isAmbiguous ? "ambiguous" : "matched"
+              } (trip ${best.tripId}, score ${best.confidenceScore})`,
             );
           }
         }
@@ -4875,6 +4895,134 @@ app.post(`${BASE}/workflow-stage/backfill`, async (c) => {
     });
   } catch (e: any) {
     console.log(`[WorkflowStageBackfill] backfill error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ─── POST /personal-rematch/backfill ─── rescan stale personal pins ──────────
+// Re-runs live match for open personal_use_pending / orphan_personal rows in a
+// date window and persists the result (clears stale personal pins when a trip
+// rematch wins). dryRun defaults true.
+app.post(`${BASE}/personal-rematch/backfill`, async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const dryRun = body?.dryRun !== false;
+    const batchSize = Math.max(1, Math.min(200, Number(body?.batchSize) || 50));
+    const startDate = String(body?.startDate || "").slice(0, 10);
+    const endDate = String(body?.endDate || "").slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
+      return c.json({ error: "startDate and endDate (YYYY-MM-DD) are required" }, 400);
+    }
+    if (startDate > endDate) {
+      return c.json({ error: "startDate must be on or before endDate" }, 400);
+    }
+
+    const settings = await getRefundAutomationSettings();
+    const timezone = await getFleetTimezone();
+    const allInRange = await findTollsInDateRange(startDate, endDate);
+    const candidates = allInRange.filter((tx) => {
+      if (!tx?.id) return false;
+      const formallyResolved =
+        tx.status === "approved" ||
+        tx.status === "rejected" ||
+        tx.status === "resolved" ||
+        !!tx.resolution ||
+        !!tx.claimId ||
+        !!tx.isReconciled;
+      if (formallyResolved) return false;
+      return (
+        tx.workflowStage === "personal_use_pending" ||
+        tx.matchStatus === "orphan_personal"
+      );
+    });
+    const batch = candidates.slice(0, batchSize);
+
+    if (dryRun) {
+      return c.json({
+        success: true,
+        dryRun: true,
+        startDate,
+        endDate,
+        candidateCount: candidates.length,
+        wouldProcess: batch.length,
+        sampleIds: batch.slice(0, 20).map((t) => t.id),
+        message:
+          candidates.length > 0
+            ? `Dry run: would rematch ${batch.length} of ${candidates.length} personal-pinned tolls (batchSize=${batchSize}). Re-run with dryRun=false to apply.`
+            : "Nothing to rematch — no open personal_use_pending / orphan_personal tolls in range.",
+      });
+    }
+
+    const touchedIds: string[] = [];
+    const skippedIds: string[] = [];
+    const errors: string[] = [];
+
+    for (const toll of batch) {
+      try {
+        const patch = await computeTollMatchPatch(toll, timezone, settings);
+        const stageBefore = toll.workflowStage;
+        const statusBefore = toll.matchStatus;
+        const typeBefore = toll.matchTypeCode;
+        const changed =
+          patch.matchStatus !== statusBefore ||
+          patch.matchTypeCode !== typeBefore ||
+          (patch.matchedTripId ?? null) !== (toll.matchedTripId ?? null) ||
+          (patch.matchReasonCode ?? null) !== (toll.matchReasonCode ?? null);
+
+        if (!changed) {
+          // Still recompute stage in case pin is stale vs match fields.
+          await recomputeAndPersistWorkflowStage(toll.id);
+          const after = await getTollLedgerEntry(toll.id);
+          if (after?.workflowStage !== stageBefore) {
+            touchedIds.push(toll.id);
+          } else {
+            skippedIds.push(toll.id);
+          }
+          continue;
+        }
+
+        await updateTollLedgerEntry(toll.id, patch, "updated", "system-personal-rematch-backfill");
+        await recomputeAndPersistWorkflowStage(toll.id);
+        touchedIds.push(toll.id);
+      } catch (err: any) {
+        errors.push(`${toll.id}: ${err.message}`);
+        if (errors.length > 50) break;
+      }
+    }
+
+    const remaining = candidates.length - batch.length;
+    const manifestKey = `toll_backfill_run:${new Date().toISOString()}`;
+    await kv.set(manifestKey, {
+      touchedIds,
+      skippedIds,
+      at: new Date().toISOString(),
+      errors,
+      kind: "personal_rematch",
+      startDate,
+      endDate,
+    });
+
+    console.log(
+      `[PersonalRematchBackfill] processed=${touchedIds.length} skipped=${skippedIds.length} remaining=${remaining} errors=${errors.length} manifest=${manifestKey}`,
+    );
+
+    return c.json({
+      success: true,
+      dryRun: false,
+      startDate,
+      endDate,
+      processed: touchedIds.length,
+      skippedUnchanged: skippedIds.length,
+      remaining,
+      errors: errors.slice(0, 50),
+      manifestKey,
+      message:
+        remaining > 0
+          ? `Processed ${touchedIds.length}. Re-run to continue with the remaining ${remaining}.`
+          : `Processed ${touchedIds.length}. Personal rematch backfill complete for this range.`,
+    });
+  } catch (e: any) {
+    console.log(`[PersonalRematchBackfill] error: ${e.message}`);
     return c.json({ error: e.message }, 500);
   }
 });

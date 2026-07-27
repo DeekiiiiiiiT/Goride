@@ -42,6 +42,10 @@ export function bucketForBestMatch(
   switch (best.matchType) {
     case 'AMOUNT_VARIANCE':
       return 'underpaid';
+    case 'PERFECT_MATCH':
+      // Unconfirmed perfect stays Needs Review (matches server computeTollWorkflowStage
+      // / period landing — must not look Completed / Underpaid until linked).
+      return 'needs-review';
     case 'DEADHEAD_MATCH':
       return 'deadhead';
     case 'PERSONAL_MATCH': {
@@ -218,10 +222,12 @@ export function resolveWizardBucket(
     if (stage === 'deadhead_pending' || tx.matchTypeCode === 'DEADHEAD_MATCH') {
       return 'deadhead';
     }
+    if (tx.matchTypeCode === 'PERFECT_MATCH') {
+      return 'needs-review';
+    }
     if (
       stage === 'underpaid_pending' ||
-      tx.matchTypeCode === 'AMOUNT_VARIANCE' ||
-      tx.matchTypeCode === 'PERFECT_MATCH'
+      tx.matchTypeCode === 'AMOUNT_VARIANCE'
     ) {
       // Post-reset underpaid with no trip to attach → Needs Review (not an invisible underpaid ghost).
       if (!hasUnderpaidTripAnchor(tx, usableBest)) return 'needs-review';
@@ -238,12 +244,19 @@ export function resolveWizardBucket(
   }
 
   if (stage === 'personal_use_pending' || tx.matchStatus === 'orphan_personal') {
-    // Stale personal pin: a later trip import can re-match this toll as a clear
-    // underpaid/deadhead — the live money verdict wins over the persisted
-    // personal label (mirrors the knownNonPersonal path above). Ambiguous or
-    // needs-review live results stay pinned to Personal Use.
+    // Stale personal pin: a later trip import can re-match this toll — clear
+    // underpaid/deadhead leave Personal Use; perfect + ambiguous non-orphan
+    // rematches go to Needs Review so the user can approve / pick a trip.
+    // True orphans (no rematch / ORPHAN_*) stay pinned to Personal Use.
     const live = resolveTollBucket(tx, usableBest);
     if (live === 'underpaid' || live === 'deadhead') return live;
+    if (
+      live === 'needs-review' &&
+      usableBest &&
+      !isOrphanPersonalMatch(usableBest)
+    ) {
+      return 'needs-review';
+    }
     return 'personal-use';
   }
 
