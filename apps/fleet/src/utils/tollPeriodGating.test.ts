@@ -7,6 +7,7 @@ import {
   countUnclaimedUnderpaidAsPeriodActionable,
   STEP_ORDER,
 } from './tollPeriodGating';
+import { classifyTollReconPeriodStatus } from './tollReconPeriodStatus';
 import type { Claim, DisputeRefund, FinancialTransaction, Trip } from '../types/data';
 import type { TollBucket } from './tollBucket';
 import { resolveWizardBucket } from './tollBucket';
@@ -259,5 +260,34 @@ describe('computeStepCounts', () => {
     expect(resolveWizardBucket({ paymentMethod: 'Tag' }, undefined)).toBe('personal-use');
     expect(counts['needs-review'].actionable).toBe(0);
     expect(counts['personal-use'].actionable).toBe(1);
+  });
+});
+
+describe('classifyTollReconPeriodStatus', () => {
+  const zero = () => ({
+    'needs-review': { actionable: 0 },
+    'personal-use': { actionable: 0 },
+    deadhead: { actionable: 0 },
+    'underpaid-claims': { actionable: 0 },
+    'dispute-refunds': { actionable: 0 },
+    'unlinked-refunds': { actionable: 0 },
+  });
+
+  it('reconciled when nothing actionable', () => {
+    expect(classifyTollReconPeriodStatus(zero(), 0)).toBe('reconciled');
+  });
+
+  it('outstanding when matching steps still open', () => {
+    const counts = zero();
+    counts['needs-review'].actionable = 2;
+    counts['dispute-refunds'].actionable = 1;
+    expect(classifyTollReconPeriodStatus(counts, 3)).toBe('outstanding');
+  });
+
+  it('in_progress when only claims/disputes/unlinked remain', () => {
+    const counts = zero();
+    counts['underpaid-claims'].actionable = 2;
+    counts['dispute-refunds'].actionable = 1;
+    expect(classifyTollReconPeriodStatus(counts, 3)).toBe('in_progress');
   });
 });

@@ -345,8 +345,76 @@ export async function sumActiveCredits(tollId: string): Promise<number> {
   return activeSettlementCredits(allocs, tollId);
 }
 
+/**
+ * Persist the live trip toll share as a durable trip_refund settlement credit.
+ * Idempotent via applySettlementAllocation. Do NOT reverse on dispute unmatch —
+ * trip pay remains real after the dispute link is removed.
+ */
+export async function ensureTripRefundAllocation(input: {
+  tollId: string;
+  tripId: string;
+  amount: number;
+  tollCost: number;
+  claimId?: string | null;
+  tollPeriodAnchor?: string | null;
+  actor?: string | null;
+  notes?: string | null;
+}): Promise<
+  | { ok: true; applyAmount: number; duplicate: boolean; remainingAfter: number }
+  | { ok: false; error: string; status: number }
+> {
+  const amount = Math.abs(Number(input.amount) || 0);
+  if (!(amount > SETTLEMENT_TOLERANCE) || !input.tollId || !input.tripId) {
+    return {
+      ok: true,
+      applyAmount: 0,
+      duplicate: false,
+      remainingAfter: await getRemainingShortfall(input.tollId, input.tollCost),
+    };
+  }
+  const result = await applySettlementAllocation({
+    sourceType: "trip_refund",
+    sourceId: String(input.tripId),
+    tollId: String(input.tollId),
+    claimId: input.claimId || null,
+    amount,
+    tollCost: Math.abs(Number(input.tollCost) || 0),
+    tollPeriodAnchor: input.tollPeriodAnchor || null,
+    actor: input.actor || "system",
+    notes: input.notes || `Trip refund share $${amount.toFixed(2)}`,
+    metadata: { tripId: String(input.tripId) },
+  });
+  if (!result.ok) return result;
+  return {
+    ok: true,
+    applyAmount: result.applyAmount,
+    duplicate: result.duplicate,
+    remainingAfter: result.remainingAfter,
+  };
+}
+
+/** Active trip_refund + unlinked_trip credits for a toll (excludes dispute). */
+export async function sumActiveTripSideCredits(tollId: string): Promise<number> {
+  const allocs = await loadAllocationsForToll(tollId);
+  const reversed = new Set(
+    allocs
+      .filter((a) => a.sourceType === "reversal" && a.reversesId)
+      .map((a) => String(a.reversesId)),
+  );
+  let sum = 0;
+  for (const a of allocs) {
+    if (a.sourceType === "reversal") continue;
+    if (a.sourceType !== "trip_refund" && a.sourceType !== "unlinked_trip") continue;
+    if (a.id && reversed.has(String(a.id))) continue;
+    if (String(a.tollId) !== String(tollId)) continue;
+    sum += Math.abs(Number(a.amount) || 0);
+  }
+  return Math.round(sum * 100) / 100;
+}
+
 export {
   SETTLEMENT_TOLERANCE,
   settlementIdempotencyKey,
   projectClaimFromSettlement,
+  computeDisputeMatchDetailFinancials,
 } from "../../../apps/fleet/src/utils/tollSettlement.ts";

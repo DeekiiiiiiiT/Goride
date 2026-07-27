@@ -7,7 +7,7 @@ export interface ReconciliationPeriod {
   startDate: string;
   endDate: string;
   label: string;
-  status: 'outstanding' | 'reconciled';
+  status: 'outstanding' | 'in_progress' | 'reconciled';
   actionableTotal: number;
   counts: Record<StepId, { actionable: number; informational: number }>;
   /** Same Reimbursed rule as the wizard cards (includes resolved trip credits). */
@@ -86,11 +86,13 @@ export function useTollReconciliationPeriods(driverId?: string) {
   }, [fetchPeriods]);
 
   const outstanding = periods.filter((p) => p.status === 'outstanding');
+  const inProgress = periods.filter((p) => p.status === 'in_progress');
   const reconciled = periods.filter((p) => p.status === 'reconciled');
 
   return {
     periods,
     outstanding,
+    inProgress,
     reconciled,
     totals,
     workflowStageBackfillComplete,

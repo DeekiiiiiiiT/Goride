@@ -45,6 +45,7 @@ import {
   buildUnresolvedRefundSuggestionStatuses,
 } from "./toll_controller.tsx";
 import { safeErrorResponse } from "./safe_error.ts";
+import { classifyTollReconPeriodStatus } from "../../../apps/fleet/src/utils/tollReconPeriodStatus.ts";
 
 const app = new Hono();
 
@@ -550,7 +551,7 @@ app.get(`${BASE}/periods`, requirePermission('toll.view'), async (c) => {
           startDate: format(acc.weekStart, "yyyy-MM-dd"),
           endDate: format(acc.weekEnd, "yyyy-MM-dd"),
           label: formatWeekPeriodLabel(acc.weekStart, acc.weekEnd),
-          status: actionableTotal > 0 ? ("outstanding" as const) : ("reconciled" as const),
+          status: classifyTollReconPeriodStatus(acc.counts, actionableTotal),
           actionableTotal,
           counts: acc.counts,
           financials: {

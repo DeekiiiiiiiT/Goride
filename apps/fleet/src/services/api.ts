@@ -3125,6 +3125,42 @@ export const api = {
     return response.json();
   },
 
+  /** Seed trip_refund credits + reproject matched dispute claims. Defaults to dryRun. */
+  async repairDisputeRefundSettlements(opts?: {
+    dryRun?: boolean;
+    limit?: number;
+    offset?: number;
+  }): Promise<{
+    success: boolean;
+    report: {
+      dryRun: boolean;
+      scanned: number;
+      pageOffset?: number;
+      pageLimit?: number;
+      pageSize?: number;
+      repaired: number;
+      alreadyOk: number;
+      periodsRebuilt?: number;
+      exceptions: Array<{ refundId: string; tollId?: string; reason: string }>;
+      samples: Array<Record<string, unknown>>;
+    };
+  }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/dispute-refunds/repair-settlements`, {
+      method: 'POST',
+      headers: { ...(await requireAuthHeaders(null)), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        dryRun: opts?.dryRun !== false,
+        limit: opts?.limit,
+        offset: opts?.offset,
+      }),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to repair dispute refund settlements");
+    }
+    return response.json();
+  },
+
   async getDisputeMatchCandidates(opts?: {
     query?: string;
     from?: string;

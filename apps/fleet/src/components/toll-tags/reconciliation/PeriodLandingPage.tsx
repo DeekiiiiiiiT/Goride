@@ -39,6 +39,7 @@ interface PeriodLandingPageProps {
   onSelectPeriod: (period: ReconciliationPeriod) => void;
   onPeriodsReset?: () => void;
   outstanding: ReconciliationPeriod[];
+  inProgress: ReconciliationPeriod[];
   reconciled: ReconciliationPeriod[];
   totals: ReconciliationTotals;
   loading: boolean;
@@ -72,9 +73,22 @@ function StepChip({ stepId, counts }: { stepId: StepId; counts: ReconciliationPe
 }
 
 function PeriodCard({ period, onSelect }: { period: ReconciliationPeriod; onSelect: () => void }) {
-  const isOutstanding = period.status === 'outstanding';
   const f = period.financials;
   const badge = periodDateBadge(period.startDate);
+  const statusCta =
+    period.status === 'reconciled' ? (
+      <span className="inline-flex min-h-[44px] items-center rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-semibold text-emerald-700">
+        Completed
+      </span>
+    ) : period.status === 'in_progress' ? (
+      <span className="inline-flex min-h-[44px] items-center rounded-lg bg-sky-700 px-4 py-2 text-xs font-semibold text-white shadow-sm">
+        {period.actionableTotal} in progress
+      </span>
+    ) : (
+      <span className="inline-flex min-h-[44px] items-center rounded-lg bg-amber-800 px-4 py-2 text-xs font-semibold text-white shadow-sm">
+        {period.actionableTotal} to review
+      </span>
+    );
 
   return (
     <button
@@ -113,15 +127,7 @@ function PeriodCard({ period, onSelect }: { period: ReconciliationPeriod; onSele
         </div>
 
         <div className="flex shrink-0 items-center gap-3 self-end lg:self-center">
-          {isOutstanding ? (
-            <span className="inline-flex min-h-[44px] items-center rounded-lg bg-amber-800 px-4 py-2 text-xs font-semibold text-white shadow-sm">
-              {period.actionableTotal} to review
-            </span>
-          ) : (
-            <span className="inline-flex min-h-[44px] items-center rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-semibold text-emerald-700">
-              Completed
-            </span>
-          )}
+          {statusCta}
         </div>
       </div>
     </button>
@@ -161,20 +167,22 @@ export function PeriodLandingPage({
   onSelectPeriod,
   onPeriodsReset,
   outstanding,
+  inProgress,
   reconciled,
   totals,
   loading,
 }: PeriodLandingPageProps) {
   const [bulkResetOpen, setBulkResetOpen] = useState(false);
   const allPeriods = useMemo(
-    () => [...outstanding, ...reconciled],
-    [outstanding, reconciled],
+    () => [...outstanding, ...inProgress, ...reconciled],
+    [outstanding, inProgress, reconciled],
   );
 
   const pendingLoss = useMemo(() => {
-    const fromOutstanding = outstanding.reduce((sum, p) => sum + (p.financials?.netTollLoss ?? 0), 0);
-    return fromOutstanding > 0 ? fromOutstanding : totals.netTollLoss;
-  }, [outstanding, totals.netTollLoss]);
+    const openWork = [...outstanding, ...inProgress];
+    const fromOpen = openWork.reduce((sum, p) => sum + (p.financials?.netTollLoss ?? 0), 0);
+    return fromOpen > 0 ? fromOpen : totals.netTollLoss;
+  }, [outstanding, inProgress, totals.netTollLoss]);
 
   if (loading) {
     return (
@@ -185,8 +193,9 @@ export function PeriodLandingPage({
     );
   }
 
-  const isEmpty = outstanding.length === 0 && reconciled.length === 0;
-  const defaultTab = outstanding.length > 0 ? 'outstanding' : 'completed';
+  const isEmpty = outstanding.length === 0 && inProgress.length === 0 && reconciled.length === 0;
+  const defaultTab =
+    outstanding.length > 0 ? 'outstanding' : inProgress.length > 0 ? 'in_progress' : 'completed';
   const showActionBanner = totals.needsReviewCount > 0;
 
   return (
@@ -300,6 +309,15 @@ export function PeriodLandingPage({
                 )}
               </TabsTrigger>
               <TabsTrigger
+                value="in_progress"
+                className="min-h-[44px] gap-1.5 rounded-md px-6 py-2 text-xs font-semibold data-[state=active]:bg-white data-[state=active]:text-indigo-700 data-[state=active]:shadow-sm"
+              >
+                In Progress
+                {inProgress.length > 0 && (
+                  <span className="tabular-nums">({inProgress.length})</span>
+                )}
+              </TabsTrigger>
+              <TabsTrigger
                 value="completed"
                 className="min-h-[44px] gap-1.5 rounded-md px-6 py-2 text-xs font-semibold data-[state=active]:bg-white data-[state=active]:text-indigo-700 data-[state=active]:shadow-sm"
               >
@@ -314,7 +332,15 @@ export function PeriodLandingPage({
           <TabsContent value="outstanding" className="mt-0">
             <PeriodList
               periods={outstanding}
-              emptyMessage="No outstanding periods — everything is caught up."
+              emptyMessage="No outstanding periods — everything is caught up or already in progress."
+              onSelectPeriod={onSelectPeriod}
+            />
+          </TabsContent>
+
+          <TabsContent value="in_progress" className="mt-0">
+            <PeriodList
+              periods={inProgress}
+              emptyMessage="No in-progress periods — toll matching still open, or everything is completed."
               onSelectPeriod={onSelectPeriod}
             />
           </TabsContent>

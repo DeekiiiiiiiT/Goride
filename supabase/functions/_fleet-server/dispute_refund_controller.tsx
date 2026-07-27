@@ -15,6 +15,7 @@
  *   PATCH  /dispute-refunds/:id/unmatch      – Unlink a matched refund
  *   GET    /dispute-refunds/suggestions/:id  – Smart match suggestions
  *   GET    /dispute-refunds/match-detail/:id – Linked toll + trip for a matched refund
+ *   POST   /dispute-refunds/repair-settlements – Seed trip credits + reproject matched claims
  */
 
 import { Hono } from "npm:hono";
@@ -61,9 +62,13 @@ import {
   getRemainingShortfall,
   loadAllocationsForToll,
   projectClaimFromSettlement,
+  ensureTripRefundAllocation,
+  sumActiveTripSideCredits,
+  computeDisputeMatchDetailFinancials,
 } from "./toll_settlement.ts";
 import { remainingTollShortfall } from "../../../apps/fleet/src/utils/tollSettlement.ts";
 import { safeErrorResponse } from "./safe_error.ts";
+import { periodAnchorFor } from "./financial_ledger.ts";
 
 const app = new Hono();
 
@@ -282,6 +287,211 @@ async function computeDisputeSuggestions(refund: any): Promise<any[]> {
 }
 
 /** Shared match: link a refund to a toll (+claim), resolving the claim as Reimbursed. */
+/**
+ * Ensure trip_refund credit → apply dispute_refund → project claim from ledger.
+ * Shared by live match and repair so Expenses / claims stay on one shortfall SSOT.
+ */
+async function applyDisputeSettlementToClaim(input: {
+  refund: any;
+  claim: any;
+  claimId: string;
+  tollId: string;
+  suggestedTripId?: string | null;
+  actor: string;
+  c: unknown;
+  /** When repairing, keep existing preDispute* if already set. */
+  preservePreDispute?: boolean;
+  /** Skip per-claim period rebuild (repair batches rebuilds once at the end). */
+  skipPeriodRebuild?: boolean;
+}): Promise<{
+  applyAmt: number;
+  remainingAfter: number;
+  tollCost: number;
+  projected: ReturnType<typeof projectClaimFromSettlement>;
+  tripId: string | null;
+  tripShareApplied: number;
+  driverId: string | null;
+  tollDate: string | null;
+  refundDate: string | null;
+}> {
+  const { refund, claim, claimId, tollId, actor, c } = input;
+  const cs = claim.status;
+  const priorPaid = Math.abs(Number(claim.paidAmount) || 0);
+  const disputeAmount = Math.abs(Number(refund.amount) || 0);
+  const fleetTz = await getFleetTimezone();
+  const tollForDisplay = await loadTollForClaim(tollId);
+  const tollCost = Math.abs(
+    Number(claim.expectedAmount ?? tollForDisplay?.amount ?? claim.amount) || 0,
+  );
+  const periodAnchor = String(claim.date || tollForDisplay?.date || "").slice(0, 10) || null;
+  const settlementOrder = await isCorrectSettlementOrderEnabled();
+
+  let tripId: string | null =
+    input.suggestedTripId || claim.tripId || tollForDisplay?.tripId || null;
+  let tripShareApplied = 0;
+
+  if (settlementOrder && tollId && tollCost > DISPUTE_SHORTFALL_TOLERANCE) {
+    try {
+      const liveCtx = await resolveLiveTripContextForToll(tollForDisplay || { id: tollId }, fleetTz, {
+        suggestedTripId: tripId,
+        // Match/repair must stay cheap — never O(tolls×trips) scan here.
+        skipInferred: true,
+      });
+      if (liveCtx) {
+        tripId = liveCtx.tripId;
+        const share = Math.abs(Number(liveCtx.tripRefund) || 0);
+        if (share > DISPUTE_SHORTFALL_TOLERANCE) {
+          const ensured = await ensureTripRefundAllocation({
+            tollId,
+            tripId: liveCtx.tripId,
+            amount: share,
+            tollCost,
+            claimId,
+            tollPeriodAnchor: periodAnchor,
+            actor,
+            notes: `Trip refund share $${share.toFixed(2)}`,
+          });
+          if (ensured.ok) tripShareApplied = ensured.applyAmount;
+        }
+      }
+    } catch (e: any) {
+      console.warn(`[DisputeRefund] ensure trip_refund warn: ${e?.message}`);
+    }
+  }
+
+  let remainingBefore = Math.abs(Number(claim.amount) || 0);
+  let applyAmt = 0;
+  let remainingAfter = remainingBefore;
+
+  if (settlementOrder && tollId) {
+    remainingBefore = await getRemainingShortfall(tollId, tollCost);
+    applyAmt = Math.min(disputeAmount, remainingBefore);
+    if (applyAmt > DISPUTE_SHORTFALL_TOLERANCE) {
+      try {
+        const applied = await applySettlementAllocation({
+          sourceType: "dispute_refund",
+          sourceId: refund.id,
+          tollId,
+          claimId,
+          amount: applyAmt,
+          tollCost,
+          tollPeriodAnchor: periodAnchor,
+          actor,
+          notes: `Dispute refund $${applyAmt.toFixed(2)}`,
+        });
+        if (applied.ok) {
+          applyAmt = applied.applyAmount;
+          remainingAfter = applied.remainingAfter;
+        } else {
+          remainingAfter = Math.max(0, Math.round((remainingBefore - applyAmt) * 100) / 100);
+        }
+      } catch (e: any) {
+        console.warn(`[DisputeRefund] allocation warn: ${e?.message}`);
+        remainingAfter = Math.max(0, Math.round((remainingBefore - applyAmt) * 100) / 100);
+      }
+    } else {
+      applyAmt = 0;
+      remainingAfter = remainingBefore;
+    }
+  } else {
+    applyAmt = disputeAmount;
+    remainingAfter = 0;
+  }
+
+  const projected = settlementOrder
+    ? projectClaimFromSettlement({
+        tollCost,
+        remaining: remainingAfter,
+        // Ledger remaining already includes trip + dispute credits; don't add shares again.
+        priorPaid,
+        disputeRefundId: refund.id,
+      })
+    : {
+        status: "Resolved" as const,
+        resolutionReason: "Reimbursed" as const,
+        amount: 0,
+        paidAmount: Math.max(priorPaid, disputeAmount),
+        expectedAmount: tollCost,
+      };
+
+  const keepPre = input.preservePreDispute && claim.preDisputeStatus != null;
+  await upsertClaim(
+    {
+      ...claim,
+      status: projected.status,
+      resolutionReason: projected.resolutionReason,
+      disputeRefundId: refund.id,
+      amount: projected.amount,
+      paidAmount: projected.paidAmount,
+      expectedAmount: projected.expectedAmount || tollCost,
+      tripId: tripId || claim.tripId,
+      platform: claim.platform || refund.platform || undefined,
+      pickup:
+        claim.pickup ||
+        (tollForDisplay as { metadata?: { plaza?: string } } | null)?.metadata?.plaza ||
+        undefined,
+      preDisputeStatus: keepPre ? claim.preDisputeStatus : cs,
+      preDisputeResolutionReason: keepPre
+        ? claim.preDisputeResolutionReason
+        : cs === "Resolved"
+          ? claim.resolutionReason
+          : claim.preDisputeResolutionReason,
+      preDisputeAmount: keepPre ? claim.preDisputeAmount : claim.amount,
+      preDisputePaidAmount: keepPre ? claim.preDisputePaidAmount : priorPaid,
+    },
+    c,
+    { syncMode: "force", suggestedTripId: tripId ?? claim.tripId, fleetTz },
+  );
+
+  try {
+    if (!input.skipPeriodRebuild) {
+      await rebuildPeriodsForDisputeMatch({
+        driverId: claim.driverId || refund.driverId || tollForDisplay?.driverId,
+        tollDate: tollForDisplay?.date || claim.date,
+        refundDate: refund.date,
+        fleetTz,
+      });
+    }
+  } catch (e: any) {
+    console.warn(`[DisputeRefund] period rebuild warn: ${e?.message}`);
+  }
+
+  return {
+    applyAmt,
+    remainingAfter,
+    tollCost,
+    projected,
+    tripId,
+    tripShareApplied,
+    driverId: claim.driverId || refund.driverId || tollForDisplay?.driverId || null,
+    tollDate: tollForDisplay?.date || claim.date || null,
+    refundDate: refund.date || null,
+  };
+}
+
+async function rebuildPeriodsForDisputeMatch(input: {
+  driverId?: string | null;
+  tollDate?: string | null;
+  refundDate?: string | null;
+  fleetTz: string;
+}): Promise<void> {
+  const driverId = input.driverId ? String(input.driverId) : "";
+  if (!driverId) return;
+  const { rebuildDriverFinancialPeriod } = await import("./driver_financial_periods.ts");
+  const anchors = new Set<string>();
+  for (const d of [input.tollDate, input.refundDate]) {
+    if (!d) continue;
+    try {
+      anchors.add(await periodAnchorFor(String(d), input.fleetTz));
+    } catch {
+      // skip bad dates
+    }
+  }
+  for (const anchor of anchors) {
+    await rebuildDriverFinancialPeriod(driverId, anchor);
+  }
+}
+
 async function matchRefundToClaim(
   refund: any,
   tollTransactionId: string,
@@ -365,96 +575,24 @@ async function matchRefundToClaim(
       if (cs === "Rejected") {
         console.log(`[DisputeRefund] Claim ${resolvedClaimId} is Rejected — refund marked matched, claim untouched`);
       } else {
-        const priorPaid = Math.abs(Number((claim as any).paidAmount) || 0);
-        const disputeAmount = Math.abs(Number(refund.amount) || 0);
-        const tollCost = Math.abs(
-          Number((claim as any).expectedAmount ?? (claim as any).amount) || 0,
-        );
-        const settlementOrder = await isCorrectSettlementOrderEnabled();
-
-        // Settle only the live remaining shortfall (after trip/unlinked credits).
-        let remainingBefore = Math.abs(Number((claim as any).amount) || 0);
-        if (settlementOrder && tollTransactionId) {
-          remainingBefore = await getRemainingShortfall(tollTransactionId, tollCost);
-          if (remainingBefore <= DISPUTE_SHORTFALL_TOLERANCE && cs !== "Resolved") {
-            // Fall back to claim amount when no allocations yet (legacy rows).
-            remainingBefore = Math.max(
-              remainingBefore,
-              Math.abs(Number((claim as any).amount) || 0),
-            );
-          }
-        }
-        const applyAmt = Math.min(disputeAmount, remainingBefore || disputeAmount);
-
-        if (settlementOrder && tollTransactionId && applyAmt > DISPUTE_SHORTFALL_TOLERANCE) {
-          try {
-            await applySettlementAllocation({
-              sourceType: "dispute_refund",
-              sourceId: id,
-              tollId: tollTransactionId,
-              claimId: resolvedClaimId,
-              amount: applyAmt,
-              tollCost,
-              tollPeriodAnchor: String((claim as any).date || "").slice(0, 10) || null,
-              actor: auto ? "system-auto" : "admin",
-              notes: `Dispute refund $${applyAmt.toFixed(2)}`,
-            });
-          } catch (e: any) {
-            console.warn(`[DisputeRefund] allocation warn: ${e?.message}`);
-          }
-        }
-
-        const remainingAfter = Math.max(
-          0,
-          Math.round(((remainingBefore || disputeAmount) - applyAmt) * 100) / 100,
-        );
-        const projected = settlementOrder
-          ? projectClaimFromSettlement({
-              tollCost,
-              remaining: remainingAfter,
-              priorPaid: priorPaid + applyAmt,
-              disputeRefundId: id,
-            })
-          : {
-              status: "Resolved" as const,
-              resolutionReason: "Reimbursed" as const,
-              amount: 0,
-              paidAmount: Math.max(priorPaid, disputeAmount),
-              expectedAmount: tollCost,
-            };
-
-        const tollForDisplay = tollTransactionId ? await loadTollForClaim(tollTransactionId) : null;
-        await upsertClaim(
-          {
-            ...(claim as any),
-            status: projected.status,
-            resolutionReason: projected.resolutionReason,
-            disputeRefundId: id,
-            amount: projected.amount,
-            paidAmount: projected.paidAmount,
-            expectedAmount: projected.expectedAmount || tollCost,
-            platform: (claim as any).platform || refund.platform || undefined,
-            pickup:
-              (claim as any).pickup ||
-              (tollForDisplay as { metadata?: { plaza?: string } } | null)?.metadata?.plaza ||
-              undefined,
-            preDisputeStatus: cs,
-            preDisputeResolutionReason: cs === "Resolved" ? (claim as any).resolutionReason : (claim as any).preDisputeResolutionReason,
-            preDisputeAmount: (claim as any).amount,
-            preDisputePaidAmount: priorPaid,
-          },
+        const settle = await applyDisputeSettlementToClaim({
+          refund,
+          claim: claim as any,
+          claimId: resolvedClaimId,
+          tollId: tollTransactionId,
+          suggestedTripId: opts?.tripId ?? null,
+          actor: auto ? "system-auto" : "admin",
           c,
-          { syncMode: "force", suggestedTripId: opts?.tripId ?? (claim as any).tripId, fleetTz: await getFleetTimezone() },
-        );
+        });
         // Only auto_resolved when the shortfall is fully closed.
-        if (projected.status === "Resolved") {
+        if (settle.projected.status === "Resolved") {
           updated = { ...updated, status: "auto_resolved", matchedClaimId: resolvedClaimId };
         } else {
           updated = { ...updated, status: "matched", matchedClaimId: resolvedClaimId };
         }
         await kv.set(recordKey, updated);
         console.log(
-          `[DisputeRefund] ${auto ? "Auto-" : ""}matched claim ${resolvedClaimId} (apply $${applyAmt}, remaining $${remainingAfter}) via refund ${id}`,
+          `[DisputeRefund] ${auto ? "Auto-" : ""}matched claim ${resolvedClaimId} (apply $${settle.applyAmt}, remaining $${settle.remainingAfter}) via refund ${id}`,
         );
       }
     }
@@ -556,6 +694,179 @@ app.post(`${BASE}/import`, requirePermission('toll.manage'), async (c) => {
     });
   } catch (err: any) {
     return safeErrorResponse(c, err, "DisputeRefund.import");
+  }
+});
+
+// ─── POST /dispute-refunds/repair-settlements ──────────────────────────
+/** Seed missing trip_refund credits + reproject matched claims from ledger SSOT. */
+app.post(`${BASE}/repair-settlements`, requirePermission('toll.manage'), async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const dryRun = body?.dryRun !== false; // default dry-run for safety
+    const limit = Math.max(1, Math.min(10, Number(body?.limit) || 10));
+    const offset = Math.max(0, Number(body?.offset) || 0);
+    const fleetTz = await getFleetTimezone();
+    const allRefunds = await loadAllByPrefix("dispute-refund:");
+    const matched = (allRefunds || []).filter(
+      (r: any) =>
+        r &&
+        (r.status === "matched" || r.status === "auto_resolved") &&
+        r.matchedTollId,
+    );
+    const page = matched.slice(offset, offset + limit);
+
+    const report = {
+      dryRun,
+      scanned: matched.length,
+      pageOffset: offset,
+      pageLimit: limit,
+      pageSize: page.length,
+      repaired: 0,
+      alreadyOk: 0,
+      exceptions: [] as Array<{ refundId: string; tollId?: string; reason: string }>,
+      samples: [] as Array<{
+        refundId: string;
+        tollId: string;
+        tripShare: number;
+        remainingBefore: number;
+        remainingAfter: number;
+        claimBefore: string;
+        claimAfter: string;
+      }>,
+      periodsRebuilt: 0,
+    };
+
+    const periodKeys = new Set<string>(); // driverId|anchor
+
+    for (const refund of page) {
+      const refundId = String(refund.id);
+      const tollId = String(refund.matchedTollId);
+      try {
+        const claimId = refund.matchedClaimId ? String(refund.matchedClaimId) : null;
+        if (!claimId) {
+          report.exceptions.push({ refundId, tollId, reason: "no matchedClaimId" });
+          continue;
+        }
+        const claim: any = await kv.get(`claim:${claimId}`);
+        if (!claim || typeof claim !== "object") {
+          report.exceptions.push({ refundId, tollId, reason: `claim ${claimId} missing` });
+          continue;
+        }
+        const toll = await loadTollForClaim(tollId);
+        const tollCost = Math.abs(
+          Number(claim.expectedAmount ?? toll?.amount ?? claim.amount) || 0,
+        );
+        if (!(tollCost > 0)) {
+          report.exceptions.push({ refundId, tollId, reason: "missing toll cost" });
+          continue;
+        }
+
+        const liveCtx = await resolveLiveTripContextForToll(toll || { id: tollId }, fleetTz, {
+          suggestedTripId: claim.tripId || null,
+          skipInferred: true,
+        });
+        const tripShare = liveCtx ? Math.abs(Number(liveCtx.tripRefund) || 0) : 0;
+        const remainingBefore = await getRemainingShortfall(tollId, tollCost);
+        const tripSide = await sumActiveTripSideCredits(tollId);
+        const missingTrip = Math.max(0, tripShare - tripSide);
+        const simulatedAfterTrip = Math.max(
+          0,
+          Math.round((remainingBefore - missingTrip) * 100) / 100,
+        );
+        const projected = projectClaimFromSettlement({
+          tollCost,
+          remaining: simulatedAfterTrip,
+          priorPaid: Math.abs(Number(claim.paidAmount) || 0),
+          disputeRefundId: refundId,
+        });
+        const claimBefore = `${claim.status}/${claim.resolutionReason || "none"}:${claim.amount}`;
+        const claimAfter = `${projected.status}/${projected.resolutionReason || "none"}:${projected.amount}`;
+        const needsWork =
+          missingTrip > DISPUTE_SHORTFALL_TOLERANCE ||
+          claim.status !== projected.status ||
+          String(claim.resolutionReason || "") !== String(projected.resolutionReason || "") ||
+          Math.abs(Number(claim.amount) - projected.amount) > DISPUTE_SHORTFALL_TOLERANCE;
+
+        report.samples.push({
+          refundId,
+          tollId,
+          tripShare,
+          remainingBefore,
+          remainingAfter: simulatedAfterTrip,
+          claimBefore,
+          claimAfter,
+        });
+
+        if (!needsWork) {
+          report.alreadyOk++;
+          continue;
+        }
+
+        if (dryRun) {
+          report.repaired++;
+          continue;
+        }
+
+        const settle = await applyDisputeSettlementToClaim({
+          refund,
+          claim,
+          claimId,
+          tollId,
+          suggestedTripId: liveCtx?.tripId || claim.tripId || null,
+          actor: "repair-settlements",
+          c,
+          preservePreDispute: true,
+          skipPeriodRebuild: true,
+        });
+
+        if (settle.projected.status === "Resolved" && refund.status !== "auto_resolved") {
+          await kv.set(`dispute-refund:${refundId}`, {
+            ...refund,
+            status: "auto_resolved",
+            matchedClaimId: claimId,
+          });
+        }
+        const driverId = settle.driverId ? String(settle.driverId) : "";
+        if (driverId) {
+          for (const d of [settle.tollDate, settle.refundDate]) {
+            if (!d) continue;
+            try {
+              const anchor = await periodAnchorFor(String(d), fleetTz);
+              periodKeys.add(`${driverId}|${anchor}`);
+            } catch {
+              // skip
+            }
+          }
+        }
+        report.repaired++;
+      } catch (e: any) {
+        report.exceptions.push({
+          refundId,
+          tollId,
+          reason: e?.message || String(e),
+        });
+      }
+    }
+
+    if (!dryRun && periodKeys.size > 0) {
+      const { rebuildDriverFinancialPeriod } = await import("./driver_financial_periods.ts");
+      for (const key of periodKeys) {
+        const [driverId, anchor] = key.split("|");
+        try {
+          await rebuildDriverFinancialPeriod(driverId, anchor);
+          report.periodsRebuilt++;
+        } catch (e: any) {
+          report.exceptions.push({
+            refundId: "period-rebuild",
+            reason: `${key}: ${e?.message || e}`,
+          });
+        }
+      }
+    }
+
+    return c.json({ success: true, report });
+  } catch (err: any) {
+    return safeErrorResponse(c, err, "DisputeRefund.repairSettlements");
   }
 });
 
@@ -1233,16 +1544,20 @@ app.get(`${BASE}/match-detail/:id`, async (c) => {
     }
 
     const liveTripRefund = toll ? await computeLiveTripRefundForToll(toll, fleetTz) : null;
-    const tripRefundFromClaim =
-      claimAmount != null && tollCost > 0 ? Math.max(0, tollCost - claimAmount) : null;
-    const tripRefund = tripRefundFromClaim ?? liveTripRefund ?? (
-      trip ? Math.max(0, Math.min(Math.abs(Number(trip.tollCharges) || 0), tollCost)) : null
-    );
-    const shortfall = claimAmount ?? (
-      tripRefund != null ? Math.max(0, tollCost - tripRefund) : tollCost
-    );
+    let settlementTripSide: number | null = null;
+    try {
+      settlementTripSide = await sumActiveTripSideCredits(String(refund.matchedTollId));
+    } catch {
+      settlementTripSide = null;
+    }
     const disputeRefund = Math.abs(Number(refund.amount) || 0);
-    const variance = shortfall - disputeRefund;
+    const fin = computeDisputeMatchDetailFinancials({
+      tollCost,
+      liveTripRefund,
+      settlementTripSideCredits: settlementTripSide,
+      disputeRefund,
+    });
+    const { tripRefund, shortfall, variance, coversShortfallFully } = fin;
 
     return c.json({
       refund: {
@@ -1261,7 +1576,7 @@ app.get(`${BASE}/match-detail/:id`, async (c) => {
         shortfall,
         disputeRefund,
         variance,
-        coversShortfallFully: Math.abs(variance) < 0.01,
+        coversShortfallFully,
       },
       toll: toll
         ? {

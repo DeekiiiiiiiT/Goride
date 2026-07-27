@@ -6,6 +6,7 @@ import {
   validateMultiTargetShares,
   projectClaimFromSettlement,
   settlementIdempotencyKey,
+  computeDisputeMatchDetailFinancials,
   type SettlementAllocationLike,
 } from './tollSettlement';
 
@@ -88,5 +89,47 @@ describe('tollSettlement', () => {
     expect(settlementIdempotencyKey('dispute_refund', 'dr-1', 'toll-a', 10)).toBe(
       'dispute_refund:dr-1:toll-a:10.00',
     );
+  });
+
+  it('$380 toll + $370 trip_refund + $10 dispute projects Reimbursed', () => {
+    const allocs: SettlementAllocationLike[] = [
+      { id: '1', sourceType: 'trip_refund', sourceId: 'trip-1', tollId, amount: 370 },
+      { id: '2', sourceType: 'dispute_refund', sourceId: 'dr-1', tollId, amount: 10 },
+    ];
+    expect(remainingTollShortfall(380, allocs, tollId)).toBe(0);
+    const projected = projectClaimFromSettlement({
+      tollCost: 380,
+      remaining: remainingTollShortfall(380, allocs, tollId),
+      priorPaid: 380,
+    });
+    expect(projected.status).toBe('Resolved');
+    expect(projected.resolutionReason).toBe('Reimbursed');
+    expect(projected.amount).toBe(0);
+  });
+
+  it('match-detail financials prefer live trip over inverted claim residual', () => {
+    // Bad claim.amount=370 after broken reproject must NOT become "Paid $10".
+    const fin = computeDisputeMatchDetailFinancials({
+      tollCost: 380,
+      liveTripRefund: 370,
+      settlementTripSideCredits: 10, // ignored when live is present
+      disputeRefund: 10,
+    });
+    expect(fin.tripRefund).toBe(370);
+    expect(fin.shortfall).toBe(10);
+    expect(fin.variance).toBe(0);
+    expect(fin.coversShortfallFully).toBe(true);
+  });
+
+  it('match-detail falls back to settlement trip-side credits', () => {
+    const fin = computeDisputeMatchDetailFinancials({
+      tollCost: 380,
+      liveTripRefund: null,
+      settlementTripSideCredits: 370,
+      disputeRefund: 10,
+    });
+    expect(fin.tripRefund).toBe(370);
+    expect(fin.shortfall).toBe(10);
+    expect(fin.coversShortfallFully).toBe(true);
   });
 });

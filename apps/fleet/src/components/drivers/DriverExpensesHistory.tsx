@@ -770,10 +770,31 @@ export function DriverExpensesHistory({
                                 </span>
                               )}
                             </TableCell>
-                            <TableCell className="px-3 text-right tabular-nums text-rose-600">
-                              {row.tollCharged > 0
-                                ? `$${row.tollCharged.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
-                                : <span className="text-slate-300">-</span>}
+                            <TableCell className="px-3 text-right tabular-nums">
+                              {row.tollCharged > 0.005 ? (
+                                <span className="text-rose-600">
+                                  ${row.tollCharged.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                </span>
+                              ) : (row.tollReconciled + row.tollUnreconciled) > 0 &&
+                                row.tollUnreconciled === 0 &&
+                                !row.tollInProgress ? (
+                                // Reconciled with $0 billed = fully recovered (cash wash / platform / disputes)
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span className="inline-flex flex-col items-end gap-0.5 cursor-help">
+                                        <span className="text-slate-500">$0.00</span>
+                                        <span className="text-[10px] font-medium text-emerald-600">Recovered</span>
+                                      </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top" className="max-w-[240px] text-xs">
+                                      Fully recovered — nothing billed to the driver (platform reimbursements / cash wash).
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              ) : (
+                                <span className="text-slate-300">-</span>
+                              )}
                             </TableCell>
                           </TableRow>
                         ))}

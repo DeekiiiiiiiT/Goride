@@ -162,3 +162,44 @@ export function projectClaimFromSettlement(input: {
     expectedAmount: cost,
   };
 }
+
+/**
+ * Match-detail money story: prefer live trip share (or settlement trip-side
+ * credits) — never derive "Paid on trip" as tollCost − claim.amount (that
+ * inverts paid vs shortfall after a bad Open reproject).
+ */
+export function computeDisputeMatchDetailFinancials(input: {
+  tollCost: number;
+  liveTripRefund?: number | null;
+  settlementTripSideCredits?: number | null;
+  disputeRefund: number;
+}): {
+  tripRefund: number | null;
+  shortfall: number;
+  variance: number;
+  coversShortfallFully: boolean;
+} {
+  const cost = Math.abs(Number(input.tollCost) || 0);
+  const live =
+    input.liveTripRefund != null && Number.isFinite(Number(input.liveTripRefund))
+      ? Math.abs(Number(input.liveTripRefund) || 0)
+      : null;
+  const settled =
+    input.settlementTripSideCredits != null &&
+    Number.isFinite(Number(input.settlementTripSideCredits))
+      ? Math.abs(Number(input.settlementTripSideCredits) || 0)
+      : null;
+  const tripRefund = live != null ? live : settled;
+  const shortfall = Math.max(
+    0,
+    Math.round((cost - (tripRefund ?? 0)) * 100) / 100,
+  );
+  const disputeRefund = Math.abs(Number(input.disputeRefund) || 0);
+  const variance = Math.round((shortfall - disputeRefund) * 100) / 100;
+  return {
+    tripRefund,
+    shortfall,
+    variance,
+    coversShortfallFully: Math.abs(variance) <= SETTLEMENT_TOLERANCE,
+  };
+}

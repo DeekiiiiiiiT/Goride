@@ -98,7 +98,7 @@ export function BulkPeriodResetDialog({
 }: BulkPeriodResetDialogProps) {
   const { runExclusive, setMessage, busy: fleetBusy } = useTollReconBusy();
   const [selectedPeriodIds, setSelectedPeriodIds] = useState<Set<string>>(new Set());
-  const [periodTab, setPeriodTab] = useState<'outstanding' | 'completed'>('outstanding');
+  const [periodTab, setPeriodTab] = useState<'outstanding' | 'in_progress' | 'completed'>('outstanding');
   const [allDrivers, setAllDrivers] = useState(!preselectedDriverId);
   const [selectedDriverIds, setSelectedDriverIds] = useState<Set<string>>(
     () => new Set(preselectedDriverId ? [preselectedDriverId] : []),
@@ -135,12 +135,21 @@ export function BulkPeriodResetDialog({
     () => periods.filter((p) => p.status === 'outstanding'),
     [periods],
   );
+  const inProgress = useMemo(
+    () => periods.filter((p) => p.status === 'in_progress'),
+    [periods],
+  );
   const completed = useMemo(
     () => periods.filter((p) => p.status === 'reconciled'),
     [periods],
   );
 
-  const activePeriodGroup = periodTab === 'outstanding' ? outstanding : completed;
+  const activePeriodGroup =
+    periodTab === 'outstanding'
+      ? outstanding
+      : periodTab === 'in_progress'
+        ? inProgress
+        : completed;
   const allInTabSelected =
     activePeriodGroup.length > 0 &&
     activePeriodGroup.every((p) => selectedPeriodIds.has(p.id));
@@ -298,7 +307,13 @@ export function BulkPeriodResetDialog({
     if (group.length === 0) {
       return (
         <p className="px-2 py-6 text-center text-sm text-slate-500">
-          No {periodTab === 'outstanding' ? 'outstanding' : 'completed'} periods
+          No{' '}
+          {periodTab === 'outstanding'
+            ? 'outstanding'
+            : periodTab === 'in_progress'
+              ? 'in-progress'
+              : 'completed'}{' '}
+          periods
         </p>
       );
     }
@@ -321,6 +336,10 @@ export function BulkPeriodResetDialog({
             {p.status === 'outstanding' ? (
               <span className="shrink-0 rounded-full bg-amber-500 px-2 py-0.5 text-[10px] font-bold text-white">
                 {p.actionableTotal} open
+              </span>
+            ) : p.status === 'in_progress' ? (
+              <span className="shrink-0 rounded-full bg-sky-600 px-2 py-0.5 text-[10px] font-bold text-white">
+                {p.actionableTotal} in progress
               </span>
             ) : (
               <span className="shrink-0 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
@@ -365,15 +384,21 @@ export function BulkPeriodResetDialog({
             </div>
             <Tabs
               value={periodTab}
-              onValueChange={(v) => setPeriodTab(v as 'outstanding' | 'completed')}
+              onValueChange={(v) => setPeriodTab(v as 'outstanding' | 'in_progress' | 'completed')}
               className="w-full"
             >
-              <TabsList className="grid h-auto w-full grid-cols-2 rounded-lg bg-indigo-50 p-1">
+              <TabsList className="grid h-auto w-full grid-cols-3 rounded-lg bg-indigo-50 p-1">
                 <TabsTrigger
                   value="outstanding"
                   className="rounded-md data-[state=active]:bg-white data-[state=active]:shadow-sm"
                 >
                   Outstanding ({outstanding.length})
+                </TabsTrigger>
+                <TabsTrigger
+                  value="in_progress"
+                  className="rounded-md data-[state=active]:bg-white data-[state=active]:shadow-sm"
+                >
+                  In Progress ({inProgress.length})
                 </TabsTrigger>
                 <TabsTrigger
                   value="completed"
@@ -387,6 +412,11 @@ export function BulkPeriodResetDialog({
                   {renderPeriodList(outstanding)}
                 </div>
               </TabsContent>
+              <TabsContent value="in_progress" className="mt-2">
+                <div className="max-h-48 overflow-y-auto rounded-md border border-slate-200 bg-slate-50/80 p-2">
+                  {renderPeriodList(inProgress)}
+                </div>
+              </TabsContent>
               <TabsContent value="completed" className="mt-2">
                 <div className="max-h-48 overflow-y-auto rounded-md border border-slate-200 bg-slate-50/80 p-2">
                   {renderPeriodList(completed)}
@@ -396,9 +426,7 @@ export function BulkPeriodResetDialog({
             {selectedPeriods.length > 0 && (
               <p className="mt-1.5 text-xs text-slate-500">
                 {selectedPeriods.length} period{selectedPeriods.length === 1 ? '' : 's'} selected
-                {selectedPeriods.some((p) => p.status === 'outstanding') &&
-                  selectedPeriods.some((p) => p.status === 'reconciled') &&
-                  ' (both tabs)'}
+                {new Set(selectedPeriods.map((p) => p.status)).size > 1 && ' (across tabs)'}
               </p>
             )}
           </div>

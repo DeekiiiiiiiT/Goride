@@ -46,6 +46,7 @@ export function ReconciliationDashboard() {
       onSelectPeriod={setSelectedPeriod}
       onPeriodsReset={() => void periodData.refresh()}
       outstanding={periodData.outstanding}
+      inProgress={periodData.inProgress}
       reconciled={periodData.reconciled}
       totals={periodData.totals}
       loading={periodData.loading}
