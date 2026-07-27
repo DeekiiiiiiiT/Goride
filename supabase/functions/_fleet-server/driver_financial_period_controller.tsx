@@ -11,7 +11,7 @@
  */
 import { Hono } from "npm:hono";
 import * as kv from "./kv_store.tsx";
-import { requireAuth, requirePermission, type RbacUser } from "./rbac_middleware.ts";
+import { requireAuth, requirePermission, hasPermission, type RbacUser } from "./rbac_middleware.ts";
 import { getServiceClient } from "./service_client.ts";
 import {
   rebuildDriverFinancialPeriod,
@@ -20,6 +20,7 @@ import {
   listDriverFinancialPeriods,
   getDriverFinancialPeriodDetail,
   processFinancialOutbox,
+  type DriverFinancialPeriodRow,
 } from "./driver_financial_periods.ts";
 import {
   postFinancialEvent,
@@ -31,7 +32,9 @@ import {
   isReconcilableTollExpense,
   filterByDriver,
   loadAllByPrefix,
+  getDriverAliasMap,
 } from "./toll_controller.tsx";
+import { driverIdsReferToSamePerson } from "./driver_identity.ts";
 
 const app = new Hono();
 
@@ -43,17 +46,75 @@ const BASE = "/make-server-37f42386/driver-financial-periods";
 // Wave 5: Use shared service client instead of ad-hoc createClient
 const sb = getServiceClient;
 
-app.get(BASE, requirePermission('transactions.view'), async (c) => {
+/** Fleet staff OR the driver reading their own periods (alias-aware). */
+async function assertCanReadDriverPeriods(
+  user: RbacUser,
+  driverId: string,
+): Promise<{ ok: true; aliasMap: Map<string, string> } | { ok: false; status: 403; body: Record<string, unknown> }> {
+  const aliasMap = await getDriverAliasMap();
+  if (hasPermission(user.resolvedRole, "transactions.view")) {
+    return { ok: true, aliasMap };
+  }
+  if (
+    driverId === user.userId ||
+    driverIdsReferToSamePerson(driverId, user.userId, aliasMap)
+  ) {
+    return { ok: true, aliasMap };
+  }
+  return {
+    ok: false,
+    status: 403,
+    body: {
+      error: "Forbidden",
+      message: "You can only view your own cash settlement periods.",
+      required: "transactions.view or self",
+      currentRole: user.resolvedRole,
+    },
+  };
+}
+
+/** Merge periods across identity aliases so driver app + fleet share one SSOT. */
+async function listPeriodsAcrossAliases(
+  driverId: string,
+  aliasMap: Map<string, string>,
+): Promise<DriverFinancialPeriodRow[]> {
+  const canonical = aliasMap.get(driverId) ?? driverId;
+  const ids = new Set<string>([driverId, canonical]);
+  for (const [alias, canon] of aliasMap.entries()) {
+    if (canon === canonical) ids.add(alias);
+  }
+
+  const byAnchor = new Map<string, DriverFinancialPeriodRow>();
+  for (const id of ids) {
+    const rows = await listDriverFinancialPeriods(id);
+    for (const row of rows) {
+      const key = String(row.periodAnchor).slice(0, 10);
+      if (!byAnchor.has(key)) byAnchor.set(key, row);
+    }
+  }
+  return [...byAnchor.values()].sort((a, b) =>
+    String(b.periodAnchor).localeCompare(String(a.periodAnchor)),
+  );
+}
+
+app.get(BASE, async (c) => {
   try {
+    const user = c.get("rbacUser") as RbacUser | undefined;
+    if (!user) return c.json({ error: "Unauthorized: No user context" }, 401);
+
     const driverId = c.req.query("driverId");
     if (!driverId) return c.json({ error: "driverId is required" }, 400);
+
+    const access = await assertCanReadDriverPeriods(user, driverId);
+    if (!access.ok) return c.json(access.body, access.status);
+
     // Drain a tiny outbox slice — list must stay fast for Expenses/Settlement.
     await processFinancialOutbox(8);
-    let periods = await listDriverFinancialPeriods(driverId);
+    let periods = await listPeriodsAcrossAliases(driverId, access.aliasMap);
     if (periods.length === 0) {
-      // First paint: rebuild once (shared context). Client can POST /rebuild later.
+      // First paint: rebuild once for the requested id (shared context).
       await rebuildAllPeriodsForDriver(driverId);
-      periods = await listDriverFinancialPeriods(driverId);
+      periods = await listPeriodsAcrossAliases(driverId, access.aliasMap);
     }
     return c.json({ success: true, data: periods });
   } catch (e: any) {

@@ -232,9 +232,12 @@ export function buildLedgerPayoutPeriodRows(params: {
         tollExpenses,
         tollReconciled,
         tollUnreconciled,
+        disputeRefundMatched: 0,
+        disputeRefundUnmatched: 0,
         fuelDeduction,
         fuelCredits: effectiveFuelCredits,
         totalDeductions,
+        expenseDeductions: Math.round((fuelDeduction + tollExpenses) * 100) / 100,
         netPayout,
         isFinalized,
         tripCount,
@@ -242,6 +245,8 @@ export function buildLedgerPayoutPeriodRows(params: {
         cashOwed,
         cashPaid,
         cashBalance,
+        passengerCash: cashOwed,
+        bankSettled: 0,
         cashPaidBreakdown,
         status: (!isFinalized
           ? 'Pending'

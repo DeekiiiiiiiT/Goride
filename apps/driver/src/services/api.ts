@@ -351,6 +351,26 @@ export const api = {
     try { return JSON.parse(txt); } catch (e) { console.error(`getDriverMetrics JSON parse error, len=${txt.length}, snippet=${txt.slice(0, 200)}`); throw new Error(`Driver metrics response is not valid JSON (len=${txt.length})`); }
   },
 
+  /** Settlement SSOT weeks — same projection Fleet Cash Wallet uses. */
+  async getDriverFinancialPeriods(driverId: string) {
+    const qs = new URLSearchParams({ driverId });
+    const authHeaders = await getHeaders();
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/driver-financial-periods?${qs.toString()}`,
+      {
+        headers: {
+          ...authHeaders,
+          apikey: publicAnonKey,
+        },
+      },
+    );
+    if (!response.ok) {
+      const msg = await parseFinancialApiErrorBody(response);
+      throw new Error(msg || "Failed to fetch driver financial periods");
+    }
+    return response.json();
+  },
+
   async getTripsFiltered(params: TripFilterParams): Promise<PaginatedTripResponse> {
     // trips/search requires org auth — use session JWT (anon key returns empty/403).
     const authHeaders = await getHeaders();

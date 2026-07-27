@@ -1,6 +1,7 @@
 /**
  * Fleet Settlement → Cash Settlement tab.
- * Week cards: Outstanding vs Paid only. Details keeps gross cash breakdown.
+ * Outstanding = Fleet call amount (after driver share) — same SSOT as roamfleet Cash Wallet.
+ * Paid = cash returned (Log Cash). Passenger cash is Details context only.
  */
 
 import React, { useMemo, useState } from 'react';
@@ -16,180 +17,203 @@ import {
   DialogDescription,
 } from '@roam/ui';
 import { ScrollArea } from '@roam/ui';
-import { Trip, FinancialTransaction, DriverMetrics } from '../../../types/data';
 import { format } from 'date-fns';
 import {
-  DollarSign,
-  Info,
   Eye,
-  ArrowUpCircle,
-  ArrowDownCircle,
   Wallet,
   Banknote,
   Fuel,
   Receipt,
-  CreditCard,
+  Scale,
 } from 'lucide-react';
 import { cn } from '@roam/ui';
+import type { PayoutPeriodRow } from '../../../types/driverPayoutPeriod';
 import {
-  computeWeeklyCashSettlement,
-  type CashWeekData,
-} from '../../../utils/cashSettlementCalc';
+  buildWalletCallOutstandingByMonday,
+  type WalletCallOutstanding,
+} from '../../../utils/walletCallOutstanding';
 
 type FleetCashSettlementTabProps = {
-  trips: Trip[];
-  transactions: FinancialTransaction[];
-  csvMetrics: DriverMetrics[];
+  periodRows: PayoutPeriodRow[];
 };
 
-function statusBadgeClass(status: CashWeekData['status'], amountOwed: number) {
+function plainAmount(n: number) {
+  return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+type WeekCardModel = {
+  row: PayoutPeriodRow;
+  call: WalletCallOutstanding;
+  /** Amount the driver still owes the fleet (0 when cleared or fleet owes). */
+  outstanding: number;
+  paid: number;
+  statusLabel: 'Cleared' | 'Cash owed' | 'Cash with you' | 'Fleet owes you';
+};
+
+function buildWeekCards(periodRows: PayoutPeriodRow[]): WeekCardModel[] {
+  const byMonday = buildWalletCallOutstandingByMonday(periodRows);
+  return periodRows.map((row) => {
+    const weekKey = format(row.periodStart, 'yyyy-MM-dd');
+    const call = byMonday[weekKey];
+    const paid = call?.breakdown.cashReturned ?? row.cashPaid ?? 0;
+    const outstanding =
+      call && call.callDirection !== 'fleet_owes' ? call.callAmount : 0;
+    let statusLabel: WeekCardModel['statusLabel'] = 'Cleared';
+    if (call?.callDirection === 'fleet_owes' && call.callAmount > 0.005) {
+      statusLabel = 'Fleet owes you';
+    } else if (outstanding < 0.005) {
+      statusLabel = 'Cleared';
+    } else if (call?.callDirection === 'driver_owes') {
+      statusLabel = 'Cash owed';
+    } else {
+      statusLabel = 'Cash with you';
+    }
+    return { row, call, outstanding, paid, statusLabel };
+  });
+}
+
+function statusBadgeClass(status: WeekCardModel['statusLabel']) {
   return cn(
-    status === 'Paid' &&
-      'bg-emerald-100 text-emerald-700 hover:bg-emerald-200 border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-500/30',
-    status === 'Partial' &&
-      'bg-amber-100 text-amber-700 hover:bg-amber-200 border-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-500/30',
-    status === 'Unpaid' &&
-      amountOwed > 0 &&
-      'bg-red-100 text-red-700 hover:bg-red-200 border-red-200 dark:bg-red-500/15 dark:text-red-300 dark:border-red-500/30',
-    status === 'Overpaid' &&
+    status === 'Cleared' &&
+      'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-500/30',
+    status === 'Cash owed' &&
+      'bg-rose-100 text-rose-700 border-rose-200 dark:bg-rose-500/15 dark:text-rose-300 dark:border-rose-500/30',
+    status === 'Cash with you' &&
+      'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-500/30',
+    status === 'Fleet owes you' &&
       'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-500/15 dark:text-blue-300 dark:border-blue-500/30',
-    status === 'No Activity' &&
-      'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700',
   );
 }
 
-export function FleetCashSettlementTab({
-  trips = [],
-  transactions = [],
-  csvMetrics = [],
-}: FleetCashSettlementTabProps) {
-  const weeks = useMemo(
-    () => computeWeeklyCashSettlement({ trips, transactions, csvMetrics }),
-    [trips, transactions, csvMetrics],
-  );
-
-  const [selectedWeek, setSelectedWeek] = useState<CashWeekData | null>(null);
+export function FleetCashSettlementTab({ periodRows }: FleetCashSettlementTabProps) {
+  const weeks = useMemo(() => buildWeekCards(periodRows), [periodRows]);
+  const [selected, setSelected] = useState<WeekCardModel | null>(null);
 
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-4">
-        {weeks.map((week, idx) => {
-          const denom = week.amountPaid + Math.max(0, week.balance);
-          const progressPct =
-            week.status !== 'No Activity' && denom > 0.01
-              ? Math.min(100, Math.round((week.amountPaid / denom) * 100))
-              : null;
+        {weeks.map((week) => {
+          const passengerCash = week.call.breakdown.passengerCash;
+          // Progress = how much of the settlement call is cleared (not passenger cash).
+          const callBase =
+            week.statusLabel === 'Cleared'
+              ? Math.max(passengerCash, week.paid, 0.01)
+              : week.outstanding + week.paid;
+          const clearedPct =
+            callBase > 0.005
+              ? Math.max(
+                  0,
+                  Math.min(
+                    100,
+                    week.outstanding < 0.005
+                      ? 100
+                      : (1 - week.outstanding / Math.max(week.outstanding + week.paid, 0.01)) * 100,
+                  ),
+                )
+              : 0;
 
           return (
             <Card
-              key={idx}
+              key={week.call.weekKey}
               className={cn(
                 'transition-all hover:shadow-md dark:bg-slate-900/60 dark:border-slate-800',
-                week.status === 'Unpaid' &&
-                  week.amountOwed > 0 &&
+                week.outstanding > 0.005 &&
                   'border-amber-200 bg-amber-50/30 dark:border-amber-500/20 dark:bg-amber-500/5',
               )}
             >
-              <CardContent className="p-4 sm:p-6">
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="space-y-1">
+              <CardContent className="space-y-4 p-4 sm:p-6">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0 space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <h3 className="font-semibold text-slate-900 dark:text-white">
-                        {format(week.start, 'MMM d')} - {format(week.end, 'MMM d, yyyy')}
+                        {format(week.row.periodStart, 'MMM d')} -{' '}
+                        {format(week.row.periodEnd, 'MMM d, yyyy')}
                       </h3>
                       <Badge
-                        variant={
-                          week.status === 'Paid'
-                            ? 'default'
-                            : week.status === 'Partial'
-                              ? 'secondary'
-                              : week.status === 'Overpaid' || week.status === 'No Activity'
-                                ? 'outline'
-                                : 'destructive'
-                        }
-                        className={statusBadgeClass(week.status, week.amountOwed)}
+                        variant={week.outstanding < 0.005 ? 'default' : 'secondary'}
+                        className={statusBadgeClass(week.statusLabel)}
                       >
-                        {week.status}
+                        {week.statusLabel}
                       </Badge>
                     </div>
                     <p className="text-sm text-slate-500 dark:text-slate-400">
-                      {week.isFromCsv ? (
-                        <span className="flex items-center gap-1">
-                          <Info className="h-3 w-3" />
-                          Reported via Import ({week.tripCount} trips linked)
-                        </span>
-                      ) : (
-                        <span>
-                          {week.cashTripCount} cash trips • {week.tripCount} total trips
-                        </span>
-                      )}
+                      {week.row.tripCount} trips
+                      {week.row.tierName ? ` · ${week.row.tierName}` : ''}
                     </p>
                   </div>
 
                   <div className="flex flex-col gap-4 sm:flex-row sm:gap-10">
-                    <div className="space-y-0.5 min-w-[100px]">
+                    <div className="min-w-[110px] space-y-0.5">
                       <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
                         Outstanding
                       </p>
                       <p
                         className={cn(
                           'text-xl font-bold tabular-nums',
-                          week.balance > 0.01
+                          week.outstanding > 0.005
                             ? 'text-red-600 dark:text-red-400'
-                            : week.balance < -0.01
+                            : week.statusLabel === 'Fleet owes you'
                               ? 'text-emerald-600 dark:text-emerald-400'
                               : 'text-slate-400 dark:text-slate-500',
                         )}
                       >
-                        ${Math.abs(week.balance).toFixed(2)}
+                        {week.statusLabel === 'Fleet owes you'
+                          ? `$${plainAmount(week.call.callAmount)}`
+                          : week.outstanding < 0.005
+                            ? '$0.00'
+                            : `$${plainAmount(week.outstanding)}`}
+                      </p>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        {week.call.callLabel}
                       </p>
                     </div>
-                    <div className="space-y-0.5 min-w-[80px]">
+                    <div className="min-w-[90px] space-y-0.5">
                       <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
                         Paid
                       </p>
                       <p
                         className={cn(
                           'text-xl font-bold tabular-nums',
-                          week.amountPaid > 0
+                          week.paid > 0
                             ? 'text-emerald-600 dark:text-emerald-400'
                             : 'text-slate-400 dark:text-slate-500',
                         )}
                       >
-                        ${week.amountPaid.toFixed(2)}
+                        ${plainAmount(week.paid)}
+                      </p>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        Cash returned
                       </p>
                     </div>
                   </div>
 
-                  <div className="shrink-0">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="gap-1.5 text-xs border-slate-300 hover:bg-slate-100 hover:border-blue-300 hover:text-blue-700 dark:border-slate-600 dark:hover:bg-slate-800 dark:hover:text-blue-300"
-                      onClick={() => setSelectedWeek(week)}
-                    >
-                      <Eye className="h-3.5 w-3.5" />
-                      Details
-                    </Button>
-                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0 gap-1.5 text-xs border-slate-300 hover:bg-slate-100 dark:border-slate-600 dark:hover:bg-slate-800"
+                    onClick={() => setSelected(week)}
+                  >
+                    <Eye className="h-3.5 w-3.5" />
+                    Details
+                  </Button>
                 </div>
 
-                {progressPct != null && week.status !== 'No Activity' && (
-                  <div className="mt-4">
+                {(week.paid > 0.005 || week.outstanding > 0.005 || passengerCash > 0.005) && (
+                  <div>
                     <div className="mb-1.5 flex justify-between text-xs">
-                      <span className="text-slate-500 dark:text-slate-400">Paid toward week</span>
+                      <span className="text-slate-500 dark:text-slate-400">Cash position cleared</span>
                       <span className="font-medium text-slate-700 dark:text-slate-300">
-                        {progressPct}%
+                        {Math.round(clearedPct)}%
+                        <span className="font-normal text-slate-400">
+                          {' '}
+                          · ${plainAmount(week.outstanding)} still owed
+                        </span>
                       </span>
                     </div>
                     <Progress
-                      value={progressPct}
+                      value={clearedPct}
                       className="h-2"
-                      indicatorClassName={
-                        week.status === 'Paid' || week.status === 'Overpaid'
-                          ? 'bg-emerald-500'
-                          : 'bg-gradient-to-r from-orange-400 to-amber-600'
-                      }
+                      indicatorClassName="bg-gradient-to-r from-emerald-400 to-emerald-600"
                     />
                   </div>
                 )}
@@ -200,19 +224,19 @@ export function FleetCashSettlementTab({
 
         {weeks.length === 0 && (
           <div className="py-12 text-center text-slate-500 dark:text-slate-400">
-            No cash settlement activity yet.
+            No cash settlement weeks yet.
           </div>
         )}
       </div>
 
       <Dialog
-        open={!!selectedWeek}
+        open={!!selected}
         onOpenChange={(open) => {
-          if (!open) setSelectedWeek(null);
+          if (!open) setSelected(null);
         }}
       >
-        <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col p-0 gap-0 overflow-hidden">
-          {selectedWeek && (
+        <DialogContent className="flex max-h-[85vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
+          {selected && (
             <>
               <div className="border-b bg-slate-50/50 px-6 pb-4 pt-6 dark:border-slate-800 dark:bg-slate-900/50">
                 <DialogHeader>
@@ -222,12 +246,11 @@ export function FleetCashSettlementTab({
                     </div>
                     <div>
                       <DialogTitle className="text-base">
-                        {format(selectedWeek.start, 'MMM d')} -{' '}
-                        {format(selectedWeek.end, 'MMM d, yyyy')}
+                        {format(selected.row.periodStart, 'MMM d')} -{' '}
+                        {format(selected.row.periodEnd, 'MMM d, yyyy')}
                       </DialogTitle>
                       <DialogDescription className="mt-0.5 text-xs">
-                        Cash settlement breakdown · {selectedWeek.cashTripCount} cash trips ·{' '}
-                        {selectedWeek.tripCount} total trips
+                        Same settlement math as Roam Fleet · {selected.row.tripCount} trips
                       </DialogDescription>
                     </div>
                   </div>
@@ -237,7 +260,7 @@ export function FleetCashSettlementTab({
                   <div
                     className={cn(
                       'rounded-lg border bg-white p-2.5 text-center dark:bg-slate-950',
-                      selectedWeek.balance > 0
+                      selected.outstanding > 0.005
                         ? 'border-red-100 dark:border-red-500/30'
                         : 'border-emerald-100 dark:border-emerald-500/30',
                     )}
@@ -248,12 +271,12 @@ export function FleetCashSettlementTab({
                     <p
                       className={cn(
                         'font-mono text-sm font-bold',
-                        selectedWeek.balance > 0
+                        selected.outstanding > 0.005
                           ? 'text-red-600 dark:text-red-400'
                           : 'text-emerald-600 dark:text-emerald-400',
                       )}
                     >
-                      ${Math.abs(selectedWeek.balance).toFixed(2)}
+                      ${plainAmount(selected.outstanding)}
                     </p>
                   </div>
                   <div className="rounded-lg border border-emerald-100 bg-white p-2.5 text-center dark:border-emerald-500/30 dark:bg-slate-950">
@@ -261,7 +284,7 @@ export function FleetCashSettlementTab({
                       Paid
                     </p>
                     <p className="font-mono text-sm font-bold text-emerald-600 dark:text-emerald-400">
-                      ${selectedWeek.amountPaid.toFixed(2)}
+                      ${plainAmount(selected.paid)}
                     </p>
                   </div>
                 </div>
@@ -269,237 +292,134 @@ export function FleetCashSettlementTab({
 
               <ScrollArea className="flex-1 overflow-auto">
                 <div className="space-y-5 px-6 py-5">
-                  <div>
-                    <div className="mb-3 flex items-center gap-2">
-                      <div className="flex h-5 w-5 items-center justify-center rounded bg-red-100 dark:bg-red-500/20">
-                        <ArrowUpCircle className="h-3 w-3 text-red-600 dark:text-red-400" />
+                  <div className="rounded-lg border border-slate-200 dark:border-slate-700">
+                    <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                      <div className="flex items-center justify-between px-4 py-2.5">
+                        <div className="flex items-center gap-2.5">
+                          <Banknote className="h-3.5 w-3.5 text-slate-400" />
+                          <span className="text-sm text-slate-700 dark:text-slate-300">
+                            Passenger cash
+                          </span>
+                        </div>
+                        <span className="font-mono text-sm font-semibold text-slate-900 dark:text-white">
+                          ${plainAmount(selected.call.breakdown.passengerCash)}
+                        </span>
                       </div>
-                      <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
-                        Why you owe (cash collected)
-                      </h4>
-                    </div>
-                    <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700">
-                      <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                      {selected.call.breakdown.personalToll > 0.005 && (
                         <div className="flex items-center justify-between px-4 py-2.5">
                           <div className="flex items-center gap-2.5">
-                            <Banknote className="h-3.5 w-3.5 text-slate-400" />
+                            <Receipt className="h-3.5 w-3.5 text-slate-400" />
                             <span className="text-sm text-slate-700 dark:text-slate-300">
-                              Cash Collected
+                              Personal toll charged
                             </span>
-                            {selectedWeek.isFromCsv && (
-                              <Badge
-                                variant="outline"
-                                className="text-[9px] border-blue-200 text-blue-600"
-                              >
-                                CSV Import
-                              </Badge>
-                            )}
                           </div>
                           <span className="font-mono text-sm font-semibold text-slate-900 dark:text-white">
-                            ${selectedWeek.breakdown.cashCollected.toFixed(2)}
+                            ${plainAmount(selected.call.breakdown.personalToll)}
                           </span>
                         </div>
-                        {selectedWeek.breakdown.floatIssued > 0 && (
-                          <div className="flex items-center justify-between px-4 py-2.5">
-                            <div className="flex items-center gap-2.5">
-                              <CreditCard className="h-3.5 w-3.5 text-slate-400" />
-                              <span className="text-sm text-slate-700 dark:text-slate-300">
-                                Float Issued
-                              </span>
-                            </div>
-                            <span className="font-mono text-sm font-semibold text-slate-900 dark:text-white">
-                              ${selectedWeek.breakdown.floatIssued.toFixed(2)}
-                            </span>
-                          </div>
-                        )}
-                        {selectedWeek.breakdown.tollCharges > 0 && (
-                          <div className="flex items-center justify-between px-4 py-2.5">
-                            <div className="flex items-center gap-2.5">
-                              <Receipt className="h-3.5 w-3.5 text-slate-400" />
-                              <span className="text-sm text-slate-700 dark:text-slate-300">
-                                Personal Toll Charges
-                              </span>
-                            </div>
-                            <span className="font-mono text-sm font-semibold text-slate-900 dark:text-white">
-                              ${selectedWeek.breakdown.tollCharges.toFixed(2)}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex items-center justify-between border-t bg-slate-50 px-4 py-2.5 dark:border-slate-700 dark:bg-slate-800/50">
-                        <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-                          Total cash for period
-                        </span>
-                        <span className="font-mono text-sm font-bold text-slate-900 dark:text-white">
-                          ${selectedWeek.amountOwed.toFixed(2)}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="mb-3 flex items-center gap-2">
-                      <div className="flex h-5 w-5 items-center justify-center rounded bg-emerald-100 dark:bg-emerald-500/20">
-                        <ArrowDownCircle className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
-                      </div>
-                      <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
-                        What counts as paid
-                      </h4>
-                    </div>
-                    <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700">
-                      <div className="divide-y divide-slate-100 dark:divide-slate-800">
-                        {selectedWeek.breakdown.allocatedPayments > 0 && (
-                          <div className="flex items-center justify-between px-4 py-2.5">
-                            <div className="flex items-center gap-2.5">
-                              <DollarSign className="h-3.5 w-3.5 text-emerald-500" />
-                              <span className="text-sm text-slate-700 dark:text-slate-300">
-                                Allocated Payments
-                              </span>
-                            </div>
-                            <span className="font-mono text-sm font-semibold text-emerald-600">
-                              ${selectedWeek.breakdown.allocatedPayments.toFixed(2)}
-                            </span>
-                          </div>
-                        )}
-                        {selectedWeek.breakdown.fifoPayments > 0 && (
-                          <div className="flex items-center justify-between px-4 py-2.5">
-                            <div className="flex items-center gap-2.5">
-                              <DollarSign className="h-3.5 w-3.5 text-blue-500" />
-                              <span className="text-sm text-slate-700 dark:text-slate-300">
-                                FIFO Pool Payments
-                              </span>
-                            </div>
-                            <span className="font-mono text-sm font-semibold text-emerald-600">
-                              ${selectedWeek.breakdown.fifoPayments.toFixed(2)}
-                            </span>
-                          </div>
-                        )}
-                        {selectedWeek.breakdown.surplusPayments > 0 && (
-                          <div className="flex items-center justify-between px-4 py-2.5">
-                            <div className="flex items-center gap-2.5">
-                              <DollarSign className="h-3.5 w-3.5 text-purple-500" />
-                              <span className="text-sm text-slate-700 dark:text-slate-300">
-                                Surplus Distribution
-                              </span>
-                            </div>
-                            <span className="font-mono text-sm font-semibold text-emerald-600">
-                              ${selectedWeek.breakdown.surplusPayments.toFixed(2)}
-                            </span>
-                          </div>
-                        )}
-                        <div className="flex items-center justify-between px-4 py-2.5">
-                          <div className="flex items-center gap-2.5">
-                            <Receipt className="h-3.5 w-3.5 text-amber-500" />
-                            <span className="text-sm text-slate-700 dark:text-slate-300">
-                              Approved Toll Expenses
-                            </span>
-                          </div>
-                          <span
-                            className={cn(
-                              'font-mono text-sm font-semibold',
-                              selectedWeek.breakdown.tollExpenses > 0
-                                ? 'text-emerald-600'
-                                : 'text-slate-400',
-                            )}
-                          >
-                            ${selectedWeek.breakdown.tollExpenses.toFixed(2)}
+                      )}
+                      <div className="flex items-center justify-between px-4 py-2.5">
+                        <div className="flex items-center gap-2.5">
+                          <Banknote className="h-3.5 w-3.5 text-emerald-500" />
+                          <span className="text-sm text-slate-700 dark:text-slate-300">
+                            Cash returned
                           </span>
                         </div>
+                        <span className="font-mono text-sm font-semibold text-emerald-600">
+                          ${plainAmount(selected.call.breakdown.cashReturned)}
+                        </span>
+                      </div>
+                      {selected.call.breakdown.fuelCredit > 0.005 && (
                         <div className="flex items-center justify-between px-4 py-2.5">
                           <div className="flex items-center gap-2.5">
                             <Fuel className="h-3.5 w-3.5 text-teal-500" />
                             <span className="text-sm text-slate-700 dark:text-slate-300">
-                              Fuel Reimbursement Credits
+                              Fuel credit
                             </span>
                           </div>
-                          <span
-                            className={cn(
-                              'font-mono text-sm font-semibold',
-                              selectedWeek.breakdown.fuelCredits > 0
-                                ? 'text-emerald-600'
-                                : 'text-slate-400',
-                            )}
-                          >
-                            ${selectedWeek.breakdown.fuelCredits.toFixed(2)}
+                          <span className="font-mono text-sm font-semibold text-emerald-600">
+                            ${plainAmount(selected.call.breakdown.fuelCredit)}
                           </span>
                         </div>
-                        {selectedWeek.amountPaid === 0 &&
-                          selectedWeek.breakdown.tollExpenses === 0 &&
-                          selectedWeek.breakdown.fuelCredits === 0 && (
-                            <div className="px-4 py-3 text-center text-sm text-slate-400">
-                              No payments or credits applied to this period
-                            </div>
-                          )}
-                      </div>
-                      <div className="flex items-center justify-between border-t bg-emerald-50/50 px-4 py-2.5 dark:border-slate-700 dark:bg-emerald-500/5">
-                        <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-                          Total Paid
+                      )}
+                      {selected.call.breakdown.cashTollCredit > 0.005 && (
+                        <div className="flex items-center justify-between px-4 py-2.5">
+                          <div className="flex items-center gap-2.5">
+                            <Receipt className="h-3.5 w-3.5 text-amber-500" />
+                            <span className="text-sm text-slate-700 dark:text-slate-300">
+                              Cash toll credit
+                            </span>
+                          </div>
+                          <span className="font-mono text-sm font-semibold text-emerald-600">
+                            ${plainAmount(selected.call.breakdown.cashTollCredit)}
+                          </span>
+                        </div>
+                      )}
+                      {selected.call.breakdown.cashWrittenOff > 0.005 && (
+                        <div className="flex items-center justify-between px-4 py-2.5">
+                          <span className="text-sm text-slate-700 dark:text-slate-300">
+                            Written off
+                          </span>
+                          <span className="font-mono text-sm font-semibold text-slate-900 dark:text-white">
+                            ${plainAmount(selected.call.breakdown.cashWrittenOff)}
+                          </span>
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between px-4 py-2.5">
+                        <div className="flex items-center gap-2.5">
+                          <Scale className="h-3.5 w-3.5 text-indigo-500" />
+                          <span className="text-sm text-slate-700 dark:text-slate-300">
+                            Driver share applied
+                          </span>
+                        </div>
+                        <span className="font-mono text-sm font-semibold text-slate-900 dark:text-white">
+                          ${plainAmount(selected.call.breakdown.netPayoutApplied)}
                         </span>
-                        <span className="font-mono text-sm font-bold text-emerald-600">
-                          ${selectedWeek.amountPaid.toFixed(2)}
-                        </span>
                       </div>
+                    </div>
+                    <div className="border-t bg-slate-50 px-4 py-2.5 text-[11px] text-slate-500 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-400">
+                      Outstanding is after fuel, tolls, and your driver share — not the full
+                      passenger cash total.
                     </div>
                   </div>
 
                   <div
                     className={cn(
                       'flex items-center justify-between rounded-lg border-2 p-4',
-                      selectedWeek.balance > 0.01
+                      selected.outstanding > 0.005
                         ? 'border-red-200 bg-red-50/50 dark:border-red-500/30 dark:bg-red-500/10'
-                        : selectedWeek.balance < -0.01
-                          ? 'border-emerald-200 bg-emerald-50/50 dark:border-emerald-500/30 dark:bg-emerald-500/10'
-                          : 'border-slate-200 bg-slate-50/50 dark:border-slate-700 dark:bg-slate-800/50',
+                        : 'border-emerald-200 bg-emerald-50/50 dark:border-emerald-500/30 dark:bg-emerald-500/10',
                     )}
                   >
                     <div>
                       <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
                         Outstanding
                       </p>
-                      <p className="mt-0.5 text-[11px] text-slate-400">
-                        {selectedWeek.balance > 0.01
-                          ? 'Still to hand to the fleet'
-                          : selectedWeek.balance < -0.01
-                            ? 'Overpaid for this week'
-                            : 'Fully settled'}
-                      </p>
+                      <p className="mt-0.5 text-[11px] text-slate-400">{selected.call.callLabel}</p>
                     </div>
                     <p
                       className={cn(
                         'font-mono text-xl font-bold',
-                        selectedWeek.balance > 0.01
+                        selected.outstanding > 0.005
                           ? 'text-red-600 dark:text-red-400'
-                          : selectedWeek.balance < -0.01
-                            ? 'text-emerald-600 dark:text-emerald-400'
-                            : 'text-slate-600 dark:text-slate-300',
+                          : 'text-emerald-600 dark:text-emerald-400',
                       )}
                     >
-                      ${Math.abs(selectedWeek.balance).toFixed(2)}
+                      ${plainAmount(selected.outstanding)}
                     </p>
                   </div>
                 </div>
               </ScrollArea>
 
               <div className="flex items-center justify-between border-t bg-slate-50/50 px-6 py-3 dark:border-slate-800 dark:bg-slate-900/50">
-                <Badge
-                  variant={
-                    selectedWeek.status === 'Paid'
-                      ? 'default'
-                      : selectedWeek.status === 'Partial'
-                        ? 'secondary'
-                        : selectedWeek.status === 'Overpaid'
-                          ? 'outline'
-                          : 'destructive'
-                  }
-                  className={cn('text-xs', statusBadgeClass(selectedWeek.status, selectedWeek.amountOwed))}
-                >
-                  Status: {selectedWeek.status}
+                <Badge className={cn('text-xs', statusBadgeClass(selected.statusLabel))}>
+                  {selected.statusLabel}
                 </Badge>
                 <Button
                   variant="outline"
                   size="sm"
                   className="h-7 text-xs"
-                  onClick={() => setSelectedWeek(null)}
+                  onClick={() => setSelected(null)}
                 >
                   Close
                 </Button>

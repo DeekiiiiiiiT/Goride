@@ -1,9 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, Loader2, Receipt, Scale } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCurrentDriver } from '../../hooks/useCurrentDriver';
 import { api } from '../../services/api';
-import { Trip, FinancialTransaction, DriverMetrics } from '../../types/data';
+import { FinancialTransaction } from '../../types/data';
+import type { DriverFinancialPeriodClient } from '../../types/driverPayoutPeriod';
+import { periodsToPayoutPeriodRows } from '../../utils/periodsToPayoutPeriodRows';
 import { FleetCashSettlementTab } from './settlement/FleetCashSettlementTab';
 import { FleetExpensesSettlementTab } from './settlement/FleetExpensesSettlementTab';
 
@@ -14,8 +16,9 @@ type FleetSettlementPageProps = {
 };
 
 /**
- * Fleet-only Layer B desk: cash outstanding vs paid, plus view-only expenses by week.
- * Read-only for cash; expense logging stays in the Expenses menu.
+ * Fleet-only Layer B desk:
+ * Cash Settlement = same still-owed SSOT as roamfleet Cash Wallet.
+ * Expenses = view-only period expenses (logging stays in Expenses menu).
  */
 export function FleetSettlementPage({ onBack }: FleetSettlementPageProps) {
   const { user } = useAuth();
@@ -23,10 +26,15 @@ export function FleetSettlementPage({ onBack }: FleetSettlementPageProps) {
   const [tab, setTab] = useState<SettlementTab>('cash');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [trips, setTrips] = useState<Trip[]>([]);
   const [transactions, setTransactions] = useState<FinancialTransaction[]>([]);
-  const [metrics, setMetrics] = useState<DriverMetrics[]>([]);
   const [fuelEntries, setFuelEntries] = useState<any[]>([]);
+  const [periods, setPeriods] = useState<DriverFinancialPeriodClient[]>([]);
+
+  const driverIds = useMemo(() => {
+    return [user?.id, driverRecord?.id, driverRecord?.driverId].filter(Boolean) as string[];
+  }, [user?.id, driverRecord?.id, driverRecord?.driverId]);
+
+  const periodRows = useMemo(() => periodsToPayoutPeriodRows(periods), [periods]);
 
   useEffect(() => {
     let cancelled = false;
@@ -38,49 +46,55 @@ export function FleetSettlementPage({ onBack }: FleetSettlementPageProps) {
       setLoading(true);
       setError(null);
       try {
-        const driverIds = [user.id, driverRecord?.id, driverRecord?.driverId].filter(
-          Boolean,
-        ) as string[];
         const vehicleId =
           (driverRecord as { assignedVehicleId?: string; vehicle?: string } | null)
             ?.assignedVehicleId ||
           (driverRecord as { vehicle?: string } | null)?.vehicle ||
           '';
-        const limit = 500;
-        const tripPromises = [
-          api.getTripsFiltered({ driverId: user.id, limit }).then((r) => r.data ?? []).catch(() => []),
-        ];
-        if (driverRecord?.driverId && driverRecord.driverId !== user.id) {
-          tripPromises.push(
-            api
-              .getTripsFiltered({ driverId: driverRecord.driverId, limit })
-              .then((r) => r.data ?? [])
-              .catch(() => []),
-          );
-        }
-        const [tripBatches, txData, metricsData, allFuel, vehicleFuel] = await Promise.all([
-          Promise.all(tripPromises),
+
+        // Prefer canonical fleet driver id first (same id Fleet Detail uses).
+        const periodIdCandidates = [
+          driverRecord?.id,
+          driverRecord?.driverId,
+          user.id,
+        ].filter(Boolean) as string[];
+
+        const periodFetches = periodIdCandidates.map((id) =>
+          api
+            .getDriverFinancialPeriods(id)
+            .then((res) =>
+              Array.isArray(res?.data) ? (res.data as DriverFinancialPeriodClient[]) : [],
+            )
+            .catch(() => [] as DriverFinancialPeriodClient[]),
+        );
+
+        const [periodBatches, txData, allFuel, vehicleFuel] = await Promise.all([
+          Promise.all(periodFetches),
           api.getTransactions(driverIds).catch(() => [] as FinancialTransaction[]),
-          api.getDriverMetrics().catch(() => [] as DriverMetrics[]),
           api.getAllFuelEntries().catch(() => [] as any[]),
           vehicleId
             ? api.getFuelEntriesByVehicle(vehicleId).catch(() => [] as any[])
             : Promise.resolve([] as any[]),
         ]);
-        if (cancelled) return;
-        const combined = tripBatches.flat();
-        const uniqueTrips = Array.from(new Map(combined.map((t) => [t.id, t])).values());
-        setTrips(uniqueTrips);
-        setTransactions(Array.isArray(txData) ? txData : []);
-        const myMetrics = (metricsData || []).filter(
-          (m) =>
-            m.driverId === user.id ||
-            (driverRecord?.id && m.driverId === driverRecord.id) ||
-            (driverRecord?.driverId && m.driverId === driverRecord.driverId),
-        );
-        setMetrics(myMetrics);
 
-        // Fuel entries for this driver (vehicle first, then driver-id match) — all weeks
+        if (cancelled) return;
+
+        // Merge periods by Monday anchor (first non-empty candidate wins per week).
+        const periodMap = new Map<string, DriverFinancialPeriodClient>();
+        for (const batch of periodBatches) {
+          for (const p of batch) {
+            const key = String(p.periodAnchor).slice(0, 10);
+            if (!periodMap.has(key)) periodMap.set(key, p);
+          }
+        }
+        setPeriods(
+          [...periodMap.values()].sort((a, b) =>
+            String(b.periodAnchor).localeCompare(String(a.periodAnchor)),
+          ),
+        );
+
+        setTransactions(Array.isArray(txData) ? txData : []);
+
         const fuelMap = new Map<string, any>();
         (vehicleFuel || []).forEach((f: any) => {
           if (f?.id) fuelMap.set(f.id, f);
@@ -104,7 +118,13 @@ export function FleetSettlementPage({ onBack }: FleetSettlementPageProps) {
     return () => {
       cancelled = true;
     };
-  }, [user?.id, driverRecord?.id, driverRecord?.driverId, driverRecord?.assignedVehicleId]);
+  }, [
+    user?.id,
+    driverRecord?.id,
+    driverRecord?.driverId,
+    driverRecord?.assignedVehicleId,
+    driverIds,
+  ]);
 
   return (
     <div className="space-y-6 pb-4">
@@ -122,8 +142,8 @@ export function FleetSettlementPage({ onBack }: FleetSettlementPageProps) {
         <div>
           <h1 className="text-xl font-bold text-slate-900 dark:text-white">Fleet Settlement</h1>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            Cash outstanding vs paid to your fleet by week. Expenses here are what you already
-            logged — add new ones from the Expenses menu.
+            Cash you still owe the fleet vs cash already returned — after your driver share.
+            Expenses are view-only; log new ones from the Expenses menu.
           </p>
         </div>
       </div>
@@ -161,13 +181,7 @@ export function FleetSettlementPage({ onBack }: FleetSettlementPageProps) {
         </div>
       ) : (
         <>
-          {tab === 'cash' && (
-            <FleetCashSettlementTab
-              trips={trips}
-              transactions={transactions}
-              csvMetrics={metrics}
-            />
-          )}
+          {tab === 'cash' && <FleetCashSettlementTab periodRows={periodRows} />}
           {tab === 'expenses' && (
             <FleetExpensesSettlementTab
               transactions={transactions}
