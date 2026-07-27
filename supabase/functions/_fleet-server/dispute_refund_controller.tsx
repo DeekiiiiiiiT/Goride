@@ -203,11 +203,14 @@ async function loadLinkedDisputeTollIds(): Promise<Set<string>> {
 /** Evaluate claim/toll candidates for one refund (claims-first, bare-toll fallback). */
 async function buildDisputeCandidates(
   refund: any,
-  opts?: { light?: boolean },
+  opts?: { light?: boolean; preferFrom?: string; preferTo?: string },
 ) {
   const driverId = refund.driverId;
   if (!driverId) return [];
   const light = opts?.light === true;
+  const preferFrom = (opts?.preferFrom || "").slice(0, 10);
+  const preferTo = (opts?.preferTo || "").slice(0, 10);
+  const preferPeriod = !!(preferFrom || preferTo);
 
   const fleetTz = await getFleetTimezone();
   const aliasMap = await getDriverAliasMap();
@@ -242,17 +245,29 @@ async function buildDisputeCandidates(
     if (candidate) evaluated.push(candidate);
   }
 
-  if (evaluated.some((c) => c.eligibleForSuggestion)) {
-    return evaluated;
-  }
+  const dayInPreferPeriod = (dateStr: string | null | undefined) => {
+    if (!preferPeriod) return true;
+    const d = fleetTzDay(dateStr, fleetTz);
+    if (!d) return false;
+    if (preferFrom && d < preferFrom) return false;
+    if (preferTo && d > preferTo) return false;
+    return true;
+  };
 
-  if (light) return evaluated;
+  const hasEligibleClaims = evaluated.some((c) => c.eligibleForSuggestion);
+  // Active recon week: always scan bare shortfalls in that week so they surface
+  // even when older open claims score higher on amount/date proximity.
+  // Otherwise keep claims-first short-circuit (light) / full bare fallback (!light).
+  const needBare = !hasEligibleClaims || preferPeriod;
+  if (!needBare) return evaluated;
+  if (light && !preferPeriod) return evaluated;
 
   const ledger = await loadAllByPrefix("toll_ledger:");
   const barePool: any[] = [];
   for (const toll of ledger) {
     if (!toll || typeof toll !== "object") continue;
     if (!driverIdsReferToSamePerson(toll.driverId, driverId, aliasMap)) continue;
+    if (preferPeriod && !dayInPreferPeriod(toll.date)) continue;
     barePool.push(toll);
   }
   const bareToEval = barePool
@@ -261,7 +276,7 @@ async function buildDisputeCandidates(
         Math.abs(Math.abs(Number(a.amount) || 0) - refundAmt) -
         Math.abs(Math.abs(Number(b.amount) || 0) - refundAmt),
     )
-    .slice(0, 8);
+    .slice(0, preferPeriod && light ? 12 : 8);
 
   for (const toll of bareToEval) {
     const candidate = await evaluateDisputeBareTollCandidate({
@@ -277,11 +292,40 @@ async function buildDisputeCandidates(
 }
 
 /** Build ranked match suggestions for a dispute refund (claims first, toll fallback). */
-async function computeDisputeSuggestions(refund: any): Promise<any[]> {
-  const evaluated = await buildDisputeCandidates(refund, { light: true });
+async function computeDisputeSuggestions(
+  refund: any,
+  opts?: { preferFrom?: string; preferTo?: string },
+): Promise<any[]> {
+  const preferFrom = (opts?.preferFrom || "").slice(0, 10);
+  const preferTo = (opts?.preferTo || "").slice(0, 10);
+  const preferPeriod = !!(preferFrom || preferTo);
+  const fleetTz = preferPeriod ? await getFleetTimezone() : "";
+
+  const inPreferPeriod = (dateStr: string | null | undefined) => {
+    if (!preferPeriod) return false;
+    const d = fleetTzDay(dateStr, fleetTz);
+    if (!d) return false;
+    if (preferFrom && d < preferFrom) return false;
+    if (preferTo && d > preferTo) return false;
+    return true;
+  };
+
+  const evaluated = await buildDisputeCandidates(refund, {
+    light: true,
+    preferFrom,
+    preferTo,
+  });
   return evaluated
     .filter((c) => c.eligibleForSuggestion)
-    .sort((a, b) => b.confidence - a.confidence)
+    .sort((a, b) => {
+      // Active recon week shortfalls first, then confidence.
+      if (preferPeriod) {
+        const aIn = inPreferPeriod(a.date) ? 1 : 0;
+        const bIn = inPreferPeriod(b.date) ? 1 : 0;
+        if (aIn !== bIn) return bIn - aIn;
+      }
+      return b.confidence - a.confidence;
+    })
     .slice(0, 5)
     .map(candidateToSuggestion);
 }
@@ -1293,6 +1337,8 @@ app.patch(`${BASE}/:id/unmatch`, requirePermission('toll.manage'), async (c) => 
 app.get(`${BASE}/suggestions/:id`, async (c) => {
   try {
     const id = c.req.param("id");
+    const preferFrom = (c.req.query("from") || "").slice(0, 10);
+    const preferTo = (c.req.query("to") || "").slice(0, 10);
 
     // Load the refund
     const recordKey = `dispute-refund:${id}`;
@@ -1306,7 +1352,11 @@ app.get(`${BASE}/suggestions/:id`, async (c) => {
     }
 
     // Claims-first, variance-aware matching (reads toll_ledger + open claims).
-    const suggestions = await computeDisputeSuggestions(refund);
+    // Optional from/to = active recon week — prefer shortfalls in that week.
+    const suggestions = await computeDisputeSuggestions(refund, {
+      preferFrom: preferFrom || undefined,
+      preferTo: preferTo || undefined,
+    });
     return c.json({ suggestions });
   } catch (err: any) {
     return safeErrorResponse(c, err, "DisputeRefund.suggestions");
@@ -1322,7 +1372,8 @@ app.get(`${BASE}/match-candidates`, async (c) => {
     const from = (c.req.query("from") || "").slice(0, 10); // yyyy-MM-dd
     const to = (c.req.query("to") || "").slice(0, 10);
     const filterDriverId = (c.req.query("driverId") || "").trim();
-    const LIMIT = 25;
+    // Period-scoped lists need room for every shortfall in the week (fleet-wide).
+    const LIMIT = from || to ? 100 : 25;
     // Period boundaries arrive as fleet-tz calendar days; normalize each
     // candidate's date into the same frame before comparing (see fleetTzDay).
     const fleetTz = await getFleetTimezone();
@@ -1361,11 +1412,6 @@ app.get(`${BASE}/match-candidates`, async (c) => {
       (cl: any) => cl && typeof cl === "object" && isMatchableDisputeClaim(cl),
     );
     const claimTollIds = new Set(openClaims.map((cl: any) => cl.transactionId).filter(Boolean));
-    const anyClaimTollIds = new Set(
-      allClaims
-        .filter((cl: any) => cl && typeof cl === "object" && cl.type === "Toll_Refund" && cl.transactionId && !cl.disputeRefundId)
-        .map((cl: any) => cl.transactionId),
-    );
 
     const claimCandidates: any[] = [];
     for (const cl of openClaims) {
@@ -1411,13 +1457,10 @@ app.get(`${BASE}/match-candidates`, async (c) => {
       if (toll.type && toll.type !== "usage") continue;
       if (!dayInRange(toll.date)) continue;
       if (!matchesDriverFilter(toll.driverId)) continue;
-      if (claimTollIds.has(toll.id) || linkedTollIds.has(toll.id) || anyClaimTollIds.has(toll.id)) continue;
-      // Only tolls that can still take a dispute refund belong here:
-      // untriaged, flagged underpaid, or trip-linked ("matched"/"underpaid")
-      // with a leftover shortfall — a prior unmatch keeps the trip link, so
-      // a $10-short toll lands back at "matched" and must stay searchable.
-      // enrichAndFilterDisputeBareTolls drops fully-reimbursed ones below.
-      // Personal Use / Deadhead / resolved stages stay excluded.
+      if (claimTollIds.has(toll.id) || linkedTollIds.has(toll.id)) continue;
+      // Do NOT use a broad "any claim" block — Rejected / stale claims would hide
+      // bare underpaid shortfalls that Underpaid & Claims still lists. Matchable
+      // open claims are already excluded via claimTollIds above.
       const stage = toll.workflowStage;
       const MATCHABLE_STAGES = ["needs_review", "underpaid_pending", "underpaid", "matched"];
       if (stage && !MATCHABLE_STAGES.includes(stage)) continue;

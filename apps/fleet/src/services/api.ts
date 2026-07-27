@@ -3103,8 +3103,15 @@ export const api = {
     return response.json();
   },
 
-  async getDisputeRefundSuggestions(refundId: string): Promise<{ suggestions: Array<{ tollId: string; tripId: string | null; tollAmount: number; claimAmount?: number; tripRefund?: number; shortfall?: number; uberRefund: number; variance: number; date: string; confidence: number; claimId: string | null; claimStatus: string | null; matchType?: 'claim' | 'toll'; eligibleForAuto?: boolean; rejectReason?: string | null }> }> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/dispute-refunds/suggestions/${refundId}`, {
+  async getDisputeRefundSuggestions(
+    refundId: string,
+    opts?: { from?: string; to?: string },
+  ): Promise<{ suggestions: Array<{ tollId: string; tripId: string | null; tollAmount: number; claimAmount?: number; tripRefund?: number; shortfall?: number; uberRefund: number; variance: number; date: string; confidence: number; claimId: string | null; claimStatus: string | null; matchType?: 'claim' | 'toll'; eligibleForAuto?: boolean; rejectReason?: string | null }> }> {
+    const qs = new URLSearchParams();
+    if (opts?.from) qs.set('from', opts.from);
+    if (opts?.to) qs.set('to', opts.to);
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/dispute-refunds/suggestions/${refundId}${suffix}`, {
       headers: await requireAuthHeaders(null)
     });
     if (!response.ok) {

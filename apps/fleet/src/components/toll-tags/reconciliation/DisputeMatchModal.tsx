@@ -11,6 +11,7 @@ import { PeriodWeekDropdown } from "../../ui/PeriodWeekDropdown";
 import { ENTIRE_PERIOD_OPTION_ID, type PeriodWeekOption } from "../../../utils/periodWeekOptions";
 import { FleetBusyProvider, useFleetBusy } from '../../shared/FleetBusyLock';
 import { useLockedDialog } from '../../shared/useLockedDialog';
+import type { PeriodDisputeShortfall } from '../../../utils/pendingUnderpaidListable';
 
 interface SuggestionRow {
   tollId: string;
@@ -27,6 +28,97 @@ interface SuggestionRow {
   matchType?: 'claim' | 'toll';
   eligibleForAuto?: boolean;
   rejectReason?: string | null;
+  /** Bare-toll suggestions: pass through so Link creates claim on the suggested trip. */
+  suggestedTripId?: string | null;
+  driverName?: string | null;
+}
+
+const AMOUNT_ALIGN_TOLERANCE = 0.05;
+
+function dayKey(dateStr: string | null | undefined): string {
+  if (!dateStr) return '';
+  return String(dateStr).slice(0, 10);
+}
+
+function isDateInPeriod(dateStr: string | null | undefined, from?: string, to?: string): boolean {
+  if (!from && !to) return false;
+  const d = dayKey(dateStr);
+  if (!d) return false;
+  if (from && d < from.slice(0, 10)) return false;
+  if (to && d > to.slice(0, 10)) return false;
+  return true;
+}
+
+/** Promote active-week open claims / bare shortfalls into Suggested matches. */
+function periodCandidatesToSuggestions(
+  refundAmount: number,
+  claims: Candidate[],
+  tolls: Candidate[],
+): SuggestionRow[] {
+  const refundAmt = Math.abs(refundAmount || 0);
+  const rows: SuggestionRow[] = [];
+
+  for (const c of claims) {
+    const shortfall = Math.abs(Number(c.claimAmount) || 0);
+    if (Math.abs(shortfall - refundAmt) > AMOUNT_ALIGN_TOLERANCE) continue;
+    rows.push({
+      tollId: c.tollId,
+      tollAmount: Math.abs(Number(c.tollAmount) || 0),
+      claimAmount: shortfall,
+      tripRefund: c.tripRefund ?? Math.max(0, Math.abs(Number(c.tollAmount) || 0) - shortfall),
+      shortfall,
+      uberRefund: refundAmt,
+      variance: shortfall - refundAmt,
+      date: c.date || '',
+      confidence: 96,
+      claimId: c.claimId,
+      claimStatus: c.status,
+      matchType: 'claim',
+      driverName: c.driverName || null,
+    });
+  }
+
+  for (const c of tolls) {
+    const tollAmt = Math.abs(Number(c.tollAmount) || 0);
+    const tripRefund = c.tripRefund != null ? Math.abs(Number(c.tripRefund) || 0) : null;
+    const shortfall =
+      tripRefund != null
+        ? Math.max(0, tollAmt - tripRefund)
+        : c.workflowStage === 'underpaid_pending'
+          ? tollAmt
+          : null;
+    if (shortfall == null) continue;
+    if (Math.abs(shortfall - refundAmt) > AMOUNT_ALIGN_TOLERANCE) continue;
+    rows.push({
+      tollId: c.tollId,
+      tollAmount: tollAmt,
+      claimAmount: shortfall,
+      tripRefund: tripRefund ?? undefined,
+      shortfall,
+      uberRefund: refundAmt,
+      variance: shortfall - refundAmt,
+      date: c.date || '',
+      confidence: 94,
+      claimId: null,
+      claimStatus: null,
+      matchType: 'toll',
+      suggestedTripId: c.suggestedTripId || c.tripId || null,
+      driverName: c.driverName || null,
+    });
+  }
+
+  return rows.sort((a, b) => dayKey(b.date).localeCompare(dayKey(a.date)));
+}
+
+function dedupeSuggestions(rows: SuggestionRow[]): SuggestionRow[] {
+  const seen = new Set<string>();
+  const out: SuggestionRow[] = [];
+  for (const s of rows) {
+    if (!s.tollId || seen.has(s.tollId)) continue;
+    seen.add(s.tollId);
+    out.push(s);
+  }
+  return out;
 }
 
 interface Candidate {
@@ -66,6 +158,8 @@ interface DisputeMatchModalProps {
   /** Active reconciliation week — default search filter (older weeks still selectable). */
   activePeriodStart?: string;
   activePeriodEnd?: string;
+  /** Underpaid & Claims shortfalls for this period (SSOT for "This period" list). */
+  periodShortfalls?: PeriodDisputeShortfall[];
 }
 
 export function DisputeMatchModal(props: DisputeMatchModalProps) {
@@ -83,10 +177,12 @@ function DisputeMatchModalInner({
   onMatched,
   activePeriodStart,
   activePeriodEnd,
+  periodShortfalls = [],
 }: DisputeMatchModalProps) {
   const fleetTz = useFleetTimezone();
   const { runExclusive } = useFleetBusy();
-  const [suggestions, setSuggestions] = useState<SuggestionRow[]>([]);
+  const [periodSuggestions, setPeriodSuggestions] = useState<SuggestionRow[]>([]);
+  const [otherSuggestions, setOtherSuggestions] = useState<SuggestionRow[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [query, setQuery] = useState('');
   const [candidates, setCandidates] = useState<{ claims: Candidate[]; tolls: Candidate[] }>({ claims: [], tolls: [] });
@@ -103,11 +199,14 @@ function DisputeMatchModalInner({
 
   // Default search week = active reconciliation period. Older weeks remain
   // selectable in the dropdown for late Uber dispute cash.
+  // Suggested matches lists EVERY amount-aligned shortfall in that week
+  // (all drivers) — not a capped mix with prior weeks.
   useEffect(() => {
     if (!open || !refund) return;
     let cancelled = false;
     setQuery('');
-    setSuggestions([]);
+    setPeriodSuggestions([]);
+    setOtherSuggestions([]);
     setCandidates({ claims: [], tolls: [] });
     const start = activePeriodStart || '';
     const end = activePeriodEnd || '';
@@ -117,45 +216,83 @@ function DisputeMatchModalInner({
     setLoadingCandidates(true);
 
     (async () => {
-      let nextSuggestions: SuggestionRow[] = [];
-      try {
-        const res = await api.getDisputeRefundSuggestions(refund.id);
-        nextSuggestions = res.suggestions || [];
-      } catch {
-        nextSuggestions = [];
-      }
-      if (cancelled) return;
-      setSuggestions(nextSuggestions);
-      setLoadingSuggestions(false);
-
-      // Scope by driverId (alias-aware on server). Avoid seeding the mangled
-      // Uber CSV name — it used to hide the Roam-named claim/toll rows.
-      setQuery('');
-
-      try {
-        const res = await api.getDisputeMatchCandidates({
+      // Period pool: ALL drivers in the active recon week (matches Underpaid & Claims).
+      const periodPoolPromise = api
+        .getDisputeMatchCandidates({
           from: start || undefined,
           to: end || undefined,
-          driverId: refund.driverId || undefined,
+        })
+        .then((res) => ({ claims: res.claims || [], tolls: res.tolls || [] }))
+        .catch((err: any) => {
+          console.error('[DisputeMatch] period pool failed:', err);
+          toast.error('Failed to load current-period shortfalls');
+          return { claims: [] as Candidate[], tolls: [] as Candidate[] };
         });
-        if (cancelled) return;
-        setCandidates({ claims: res.claims || [], tolls: res.tolls || [] });
-      } catch (err: any) {
-        console.error('[DisputeMatch] candidates failed:', err);
-        if (!cancelled) {
-          toast.error('Failed to load match candidates');
-          setCandidates({ claims: [], tolls: [] });
-        }
-      } finally {
-        if (!cancelled) setLoadingCandidates(false);
-      }
+
+      const apiSuggestionsPromise = api
+        .getDisputeRefundSuggestions(refund.id, {
+          from: start || undefined,
+          to: end || undefined,
+        })
+        .then((res) => res.suggestions || [])
+        .catch(() => [] as SuggestionRow[]);
+
+      // Manual list defaults to same week, all drivers (label already says so).
+      const [periodPool, apiSuggestions] = await Promise.all([
+        periodPoolPromise,
+        apiSuggestionsPromise,
+      ]);
+      if (cancelled) return;
+
+      setCandidates(periodPool);
+      setLoadingCandidates(false);
+
+      // Underpaid & Claims SSOT first — match-candidates alone was returning only 1
+      // bare toll while Underpaid listed many $10 shortfalls for the same week.
+      const fromUnderpaidSsot: SuggestionRow[] = periodShortfalls
+        .filter((s) => Math.abs(s.shortfall - Math.abs(refund.amount || 0)) <= AMOUNT_ALIGN_TOLERANCE)
+        .map((s) => ({
+          tollId: s.tollId,
+          tollAmount: s.tollAmount,
+          claimAmount: s.shortfall,
+          tripRefund: s.tripRefund,
+          shortfall: s.shortfall,
+          uberRefund: Math.abs(refund.amount || 0),
+          variance: s.shortfall - Math.abs(refund.amount || 0),
+          date: s.date,
+          confidence: 98,
+          claimId: s.claimId,
+          claimStatus: null,
+          matchType: s.claimId ? 'claim' as const : 'toll' as const,
+          suggestedTripId: s.tripId,
+          driverName: s.driverName,
+        }));
+
+      const fromApiPeriod = periodCandidatesToSuggestions(
+        refund.amount,
+        periodPool.claims,
+        periodPool.tolls,
+      );
+      const fromPeriod = dedupeSuggestions([...fromUnderpaidSsot, ...fromApiPeriod]);
+      const periodTollIds = new Set(fromPeriod.map((s) => s.tollId));
+      const fromOther = dedupeSuggestions(
+        apiSuggestions.filter(
+          (s) =>
+            !periodTollIds.has(s.tollId) &&
+            !isDateInPeriod(s.date, start || undefined, end || undefined),
+        ),
+      );
+
+      setPeriodSuggestions(fromPeriod);
+      setOtherSuggestions(fromOther);
+      setLoadingSuggestions(false);
     })();
 
     return () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, refund?.id, fleetTz, activePeriodStart, activePeriodEnd]);
+  }, [open, refund?.id, fleetTz, activePeriodStart, activePeriodEnd, periodShortfalls]);
 
   const loadCandidates = async (q: string, from: string, to: string) => {
     setLoadingCandidates(true);
@@ -164,7 +301,7 @@ function DisputeMatchModalInner({
         query: q.trim() || undefined,
         from: from || undefined,
         to: to || undefined,
-        driverId: refund?.driverId || undefined,
+        // Intentionally no driverId — manual search is fleet-wide for the week.
       });
       setCandidates({ claims: res.claims || [], tolls: res.tolls || [] });
     } catch (err: any) {
@@ -231,64 +368,62 @@ function DisputeMatchModalInner({
         </DialogHeader>
 
         <div className="max-h-[62vh] overflow-y-auto space-y-4 pr-1">
-          {/* Suggested matches */}
+          {/* Current period — every amount-aligned shortfall */}
           <section className="space-y-1.5">
-            <div className="flex items-center gap-1.5 text-xs font-semibold text-teal-700">
-              <Sparkles className="h-3.5 w-3.5" /> Suggested matches
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-teal-700">
+                <Sparkles className="h-3.5 w-3.5" />
+                This period
+                {activePeriodStart && activePeriodEnd
+                  ? ` · ${formatStoredDateInFleetTz(activePeriodStart, fleetTz, { month: 'short', day: 'numeric' })} – ${formatStoredDateInFleetTz(activePeriodEnd, fleetTz, { month: 'short', day: 'numeric', year: 'numeric' })}`
+                  : ''}
+              </div>
+              {!loadingSuggestions && periodSuggestions.length > 0 && (
+                <span className="text-[10px] font-medium text-slate-500">
+                  {periodSuggestions.length} match{periodSuggestions.length === 1 ? '' : 'es'}
+                </span>
+              )}
             </div>
             {loadingSuggestions ? (
               <div className="flex items-center justify-center py-3 text-slate-400">
                 <Loader2 className="h-4 w-4 animate-spin" />
               </div>
-            ) : suggestions.length === 0 ? (
-              <div className="text-xs text-slate-500 py-2">No confident auto-match. Search below to pick it yourself.</div>
+            ) : periodSuggestions.length === 0 ? (
+              <div className="text-xs text-slate-500 py-2">
+                No ${refund.amount.toFixed(2)} shortfalls in this period. Check older periods below or search manually.
+              </div>
             ) : (
-              suggestions.map((s) => {
-                const shortfall = s.shortfall ?? s.claimAmount ?? 0;
-                return (
-                <Card key={`s-${s.tollId}`} className="border-slate-200 shadow-none">
-                  <CardContent className="p-2.5 flex items-center justify-between gap-3">
-                    <div className="min-w-0 text-xs">
-                      {s.matchType === 'claim' ? (
-                        <div className="text-slate-700 flex flex-wrap items-center gap-x-1.5">
-                          <span>Toll <span className="font-semibold text-rose-600">-${Math.abs(s.tollAmount).toFixed(2)}</span></span>
-                          <span className="text-slate-300">·</span>
-                          <span>Paid <span className="font-semibold text-emerald-600">${Math.abs(s.tripRefund ?? 0).toFixed(2)}</span></span>
-                          <span className="text-slate-300">·</span>
-                          <span>Shortfall <span className="font-semibold text-amber-600">-${Math.abs(shortfall).toFixed(2)}</span></span>
-                        </div>
-                      ) : (
-                        <div className="text-slate-700">
-                          Toll: <span className="font-semibold text-slate-900">${Math.abs(s.tollAmount).toFixed(2)}</span>
-                        </div>
-                      )}
-                      <div className="text-slate-700 mt-0.5">
-                        Won back <span className="font-semibold text-emerald-600">${s.uberRefund.toFixed(2)}</span>
-                        {' · '}
-                        <span className={Math.abs(s.variance) < 0.01 ? 'text-emerald-600' : 'text-amber-600'}>
-                          {Math.abs(s.variance) < 0.01 ? 'Covers shortfall' : `$${Math.abs(s.variance).toFixed(2)} off`}
-                        </span>
-                      </div>
-                      <div className="text-[10px] text-slate-500 mt-0.5">
-                        {fmtDate(s.date)}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {s.eligibleForAuto && (
-                        <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700">Auto OK</span>
-                      )}
-                      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${confidenceClass(s.confidence)}`}>{s.confidence}%</span>
-                      <Button size="sm" className="h-7 px-3 text-xs bg-teal-600 hover:bg-teal-700"
-                        onClick={() => link(s.tollId, s.claimId, s.matchType === 'toll')}
-                        disabled={linkingTollId === s.tollId}>
-                        {linkingTollId === s.tollId ? <Loader2 className="h-3 w-3 animate-spin" /> : <><LinkIcon className="h-3 w-3 mr-1" /> Link</>}
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              );})
+              periodSuggestions.map((s) => (
+                <SuggestionCard
+                  key={`period-${s.tollId}`}
+                  suggestion={s}
+                  fmtDate={fmtDate}
+                  confidenceClass={confidenceClass}
+                  linking={linkingTollId === s.tollId}
+                  onLink={() => link(s.tollId, s.claimId, s.matchType === 'toll', s.suggestedTripId)}
+                />
+              ))
             )}
           </section>
+
+          {/* Older periods — never steal slots from the active week */}
+          {!loadingSuggestions && otherSuggestions.length > 0 && (
+            <section className="space-y-1.5 border-t border-slate-100 pt-3">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-500">
+                Other periods
+              </div>
+              {otherSuggestions.map((s) => (
+                <SuggestionCard
+                  key={`other-${s.tollId}`}
+                  suggestion={s}
+                  fmtDate={fmtDate}
+                  confidenceClass={confidenceClass}
+                  linking={linkingTollId === s.tollId}
+                  onLink={() => link(s.tollId, s.claimId, s.matchType === 'toll', s.suggestedTripId)}
+                />
+              ))}
+            </section>
+          )}
 
           {/* Manual search */}
           <section className="space-y-2 border-t border-slate-100 pt-3">
@@ -360,6 +495,72 @@ function DisputeMatchModalInner({
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function SuggestionCard({
+  suggestion: s,
+  fmtDate,
+  confidenceClass,
+  linking,
+  onLink,
+}: {
+  suggestion: SuggestionRow;
+  fmtDate: (d?: string | null) => string;
+  confidenceClass: (c: number) => string;
+  linking: boolean;
+  onLink: () => void;
+}) {
+  const shortfall = Math.abs(s.shortfall ?? s.claimAmount ?? 0);
+  const tripRefund = Math.abs(s.tripRefund ?? Math.max(0, Math.abs(s.tollAmount) - shortfall));
+  const showBreakdown = shortfall > 0 || tripRefund > 0;
+  return (
+    <Card className="border-slate-200 shadow-none">
+      <CardContent className="p-2.5 flex items-center justify-between gap-3">
+        <div className="min-w-0 text-xs">
+          {s.driverName ? (
+            <div className="font-medium text-slate-800 truncate">{s.driverName}</div>
+          ) : null}
+          {showBreakdown ? (
+            <div className="text-slate-700 flex flex-wrap items-center gap-x-1.5">
+              <span>Toll <span className="font-semibold text-rose-600">-${Math.abs(s.tollAmount).toFixed(2)}</span></span>
+              <span className="text-slate-300">·</span>
+              <span>Paid <span className="font-semibold text-emerald-600">${tripRefund.toFixed(2)}</span></span>
+              <span className="text-slate-300">·</span>
+              <span>Shortfall <span className="font-semibold text-amber-600">-${shortfall.toFixed(2)}</span></span>
+            </div>
+          ) : (
+            <div className="text-slate-700">
+              Toll: <span className="font-semibold text-slate-900">${Math.abs(s.tollAmount).toFixed(2)}</span>
+            </div>
+          )}
+          <div className="text-slate-700 mt-0.5">
+            Won back <span className="font-semibold text-emerald-600">${s.uberRefund.toFixed(2)}</span>
+            {' · '}
+            <span className={Math.abs(s.variance) < 0.01 ? 'text-emerald-600' : 'text-amber-600'}>
+              {Math.abs(s.variance) < 0.01 ? 'Covers shortfall' : `$${Math.abs(s.variance).toFixed(2)} off`}
+            </span>
+          </div>
+          <div className="text-[10px] text-slate-500 mt-0.5">
+            {fmtDate(s.date)}
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {s.eligibleForAuto && (
+            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700">Auto OK</span>
+          )}
+          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${confidenceClass(s.confidence)}`}>{s.confidence}%</span>
+          <Button
+            size="sm"
+            className="h-7 px-3 text-xs bg-teal-600 hover:bg-teal-700"
+            onClick={onLink}
+            disabled={linking}
+          >
+            {linking ? <Loader2 className="h-3 w-3 animate-spin" /> : <><LinkIcon className="h-3 w-3 mr-1" /> Link</>}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

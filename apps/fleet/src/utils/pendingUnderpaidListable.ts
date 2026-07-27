@@ -269,3 +269,74 @@ export function listFullyCoveredPendingUnderpaid(input: {
   }
   return out;
 }
+
+/** Compact underpaid shortfall row for Dispute Refund match "This period" list. */
+export type PeriodDisputeShortfall = {
+  tollId: string;
+  date: string;
+  driverName: string;
+  tollAmount: number;
+  tripRefund: number;
+  shortfall: number;
+  tripId: string | null;
+  claimId: string | null;
+};
+
+/**
+ * Same shortfalls as Underpaid & Claims "Underpaid Tolls" for this period —
+ * used so Dispute Refund match can offer every period shortfall, not only the
+ * sparse match-candidates API bare-toll set.
+ */
+export function listPeriodUnderpaidShortfallsForDispute(input: {
+  reconciledTolls: FinancialTransaction[];
+  pendingUnderpaidTolls: PendingUnderpaidTx[];
+  suggestions?: PendingUnderpaidSuggestions | null;
+  tripMap: Map<string, Trip>;
+  claimByTollId: Map<string, Claim>;
+  partialByTollId: ReadonlySet<string>;
+  reconciledTollById: Map<string, FinancialTransaction>;
+  trips: Trip[];
+  disputeRefunds: DisputeRefund[];
+  periodWeekKey: string;
+  fleetTz: string;
+}): PeriodDisputeShortfall[] {
+  const { linkedPending, ctx } = buildPendingAwareCtx(input);
+  const seen = new Set<string>();
+  const rows: PeriodDisputeShortfall[] = [];
+
+  const push = (tx: FinancialTransaction, trip: Trip) => {
+    if (seen.has(tx.id)) return;
+    const result = evaluateListableUnderpaidShortfall(tx, trip, ctx);
+    if (!result.ok) return;
+    seen.add(tx.id);
+    const tollAmount = Math.abs(Number(tx.amount) || 0);
+    const shortfall = Math.abs(result.financials.netLoss);
+    const tripRefund = Math.max(0, tollAmount - shortfall);
+    rows.push({
+      tollId: tx.id,
+      date: String(tx.date || ''),
+      driverName: String(tx.driverName || 'Unknown'),
+      tollAmount,
+      tripRefund,
+      shortfall,
+      tripId: trip.id || null,
+      claimId: result.claim?.id || null,
+    });
+  };
+
+  for (const tx of input.reconciledTolls) {
+    if (!tx.tripId) continue;
+    const trip = input.tripMap.get(tx.tripId);
+    if (!trip) continue;
+    push(tx, trip);
+  }
+
+  for (const tx of linkedPending) {
+    if (seen.has(tx.id)) continue;
+    const trip = resolvePendingUnderpaidTrip(tx, input.tripMap, input.suggestions);
+    if (!trip) continue;
+    push({ ...tx, tripId: trip.id }, trip);
+  }
+
+  return rows.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+}

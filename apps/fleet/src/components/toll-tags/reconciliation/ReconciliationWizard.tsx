@@ -28,7 +28,7 @@ import { StepId, StepCounts, STEP_ORDER, computeStepCounts } from "../../../util
 import { buildPeriodTollIdSet, isClaimVisibleInPeriod, isTollInWizardPeriod, tollWeekKey, filterTollsToWizardPeriod, assertTollInWizardPeriod } from "../../../utils/tollWeekPeriod";
 import { mergeReconciledTollsForUnderpaid, buildClaimByTollId } from "../../../utils/claimByToll";
 import { computeUnderpaidPipelineCounts } from "../../../utils/underpaidPipelineCounts";
-import { listFullyCoveredPendingUnderpaid } from "../../../utils/pendingUnderpaidListable";
+import { listFullyCoveredPendingUnderpaid, listPeriodUnderpaidShortfallsForDispute } from "../../../utils/pendingUnderpaidListable";
 import { isRecommendedUnlinkedShortfall } from "../../../utils/unlinkedShortfallEligibility";
 import type { UnlinkedShortfallSuggestion } from "../../../hooks/useTollReconciliation";
 import { toast } from "sonner@2.0.3";
@@ -216,6 +216,10 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
   const handleRefundMatchComplete = useCallback((event: DisputeMatchEvent) => {
     if (event.type === 'match') {
       applyDisputeMatch(event.refundId, event.tollId);
+    } else if (event.type === 'bulk-unmatch') {
+      for (const refundId of event.refundIds) {
+        applyDisputeUnmatch(refundId);
+      }
     } else {
       applyDisputeUnmatch(event.refundId);
     }
@@ -643,6 +647,39 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
     () => filterBucketsToPeriod(buildBuckets(allUnreconciledForGating)),
     [buildBuckets, allUnreconciledForGating, filterBucketsToPeriod],
   );
+
+  /** Same shortfalls as Underpaid Tolls — feed Dispute Refund "This period" matches.
+   *  Must sit after `classified` (TDZ) — referencing it earlier crashed period open. */
+  const periodDisputeShortfalls = useMemo(() => {
+    const tripMapLocal = new Map(trips.filter((t) => t?.id).map((t) => [t.id, t]));
+    const claimByTollId = buildClaimByTollId(claims);
+    const reconciledTollById = new Map(
+      underpaidReconciledTolls.filter((t) => t?.id).map((t) => [t.id, t]),
+    );
+    return listPeriodUnderpaidShortfallsForDispute({
+      reconciledTolls: underpaidReconciledTolls,
+      pendingUnderpaidTolls: classified.underpaid,
+      suggestions,
+      tripMap: tripMapLocal,
+      claimByTollId,
+      // Include partials too — a $10 dispute can still close a remaining shortfall.
+      partialByTollId: new Set(),
+      reconciledTollById,
+      trips,
+      disputeRefunds: disputeRefunds || [],
+      periodWeekKey: period.startDate,
+      fleetTz,
+    });
+  }, [
+    underpaidReconciledTolls,
+    classified.underpaid,
+    suggestions,
+    trips,
+    claims,
+    disputeRefunds,
+    period.startDate,
+    fleetTz,
+  ]);
 
   const underpaidPipeline = useMemo(
     () => {
@@ -1226,6 +1263,10 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
   const lockedRefundMatch = lock('Updating dispute match…', async (event: DisputeMatchEvent) => {
     if (event.type === 'match') {
       applyDisputeMatch(event.refundId, event.tollId);
+    } else if (event.type === 'bulk-unmatch') {
+      for (const refundId of event.refundIds) {
+        applyDisputeUnmatch(refundId);
+      }
     } else {
       applyDisputeUnmatch(event.refundId);
     }
@@ -1401,6 +1442,7 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
               onMatchComplete={lockedRefundMatch}
               activePeriodStart={period.startDate}
               activePeriodEnd={period.endDate}
+              periodShortfalls={periodDisputeShortfalls}
             />
           )}
           {activeStepId === 'unlinked-refunds' && (
