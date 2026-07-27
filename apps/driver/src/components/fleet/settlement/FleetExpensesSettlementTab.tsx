@@ -9,12 +9,12 @@ import { Badge } from '@roam/ui';
 import { format } from 'date-fns';
 import { Fuel, Receipt, Ticket, Wrench, CircleDot } from 'lucide-react';
 import { cn } from '@roam/ui';
-import type { FinancialTransaction } from '../../types/data';
+import type { FinancialTransaction } from '../../../types/data';
 import {
   buildFleetExpenseItems,
   groupFleetExpensesByWeek,
   type FleetExpenseType,
-} from '../../utils/fleetExpenseItems';
+} from '../../../utils/fleetExpenseItems';
 
 type FleetExpensesSettlementTabProps = {
   transactions: FinancialTransaction[];

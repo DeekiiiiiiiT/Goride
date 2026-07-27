@@ -16,7 +16,7 @@ import {
   DialogDescription,
 } from '@roam/ui';
 import { ScrollArea } from '@roam/ui';
-import { Trip, FinancialTransaction, DriverMetrics } from '../../types/data';
+import { Trip, FinancialTransaction, DriverMetrics } from '../../../types/data';
 import { format } from 'date-fns';
 import {
   DollarSign,
@@ -34,7 +34,7 @@ import { cn } from '@roam/ui';
 import {
   computeWeeklyCashSettlement,
   type CashWeekData,
-} from '../../utils/cashSettlementCalc';
+} from '../../../utils/cashSettlementCalc';
 
 type FleetCashSettlementTabProps = {
   trips: Trip[];
