@@ -4,11 +4,11 @@ import { Button } from "../../ui/button";
 import { Card, CardContent } from "../../ui/card";
 import { Loader2, Search, LinkIcon, Sparkles, ChevronDown, ChevronUp, MapPin } from "lucide-react";
 import { DisputeRefund } from "../../../types/data";
-import { formatStoredDateInFleetTz, fleetTzDateKey, useFleetTimezone } from '../../../utils/timezoneDisplay';
+import { formatStoredDateInFleetTz, useFleetTimezone } from '../../../utils/timezoneDisplay';
 import { api } from '../../../services/api';
 import { toast } from 'sonner@2.0.3';
 import { PeriodWeekDropdown } from "../../ui/PeriodWeekDropdown";
-import { ENTIRE_PERIOD_OPTION_ID, generatePeriodWeekOptions, type PeriodWeekOption } from "../../../utils/periodWeekOptions";
+import { ENTIRE_PERIOD_OPTION_ID, type PeriodWeekOption } from "../../../utils/periodWeekOptions";
 import { FleetBusyProvider, useFleetBusy } from '../../shared/FleetBusyLock';
 import { useLockedDialog } from '../../shared/useLockedDialog';
 
@@ -63,6 +63,9 @@ interface DisputeMatchModalProps {
   onOpenChange: (open: boolean) => void;
   refund: DisputeRefund | null;
   onMatched: (tollId: string) => void;
+  /** Active reconciliation week — default search filter (older weeks still selectable). */
+  activePeriodStart?: string;
+  activePeriodEnd?: string;
 }
 
 export function DisputeMatchModal(props: DisputeMatchModalProps) {
@@ -73,7 +76,14 @@ export function DisputeMatchModal(props: DisputeMatchModalProps) {
   );
 }
 
-function DisputeMatchModalInner({ open, onOpenChange, refund, onMatched }: DisputeMatchModalProps) {
+function DisputeMatchModalInner({
+  open,
+  onOpenChange,
+  refund,
+  onMatched,
+  activePeriodStart,
+  activePeriodEnd,
+}: DisputeMatchModalProps) {
   const fleetTz = useFleetTimezone();
   const { runExclusive } = useFleetBusy();
   const [suggestions, setSuggestions] = useState<SuggestionRow[]>([]);
@@ -91,21 +101,20 @@ function DisputeMatchModalInner({ open, onOpenChange, refund, onMatched }: Dispu
   const [periodStart, setPeriodStart] = useState<string>('');
   const [periodEnd, setPeriodEnd] = useState<string>('');
 
-  // Load suggestions first, then default the search week to the best match's
-  // original underpaid week (not the refund's arrival week). No suggestion →
-  // all periods so late refunds stay searchable across charged prior weeks.
+  // Default search week = active reconciliation period. Older weeks remain
+  // selectable in the dropdown for late Uber dispute cash.
   useEffect(() => {
     if (!open || !refund) return;
     let cancelled = false;
     setQuery('');
     setSuggestions([]);
     setCandidates({ claims: [], tolls: [] });
-    setPeriodStart('');
-    setPeriodEnd('');
+    const start = activePeriodStart || '';
+    const end = activePeriodEnd || '';
+    setPeriodStart(start);
+    setPeriodEnd(end);
     setLoadingSuggestions(true);
     setLoadingCandidates(true);
-
-    const weekOptions = generatePeriodWeekOptions(24, fleetTz);
 
     (async () => {
       let nextSuggestions: SuggestionRow[] = [];
@@ -119,16 +128,6 @@ function DisputeMatchModalInner({ open, onOpenChange, refund, onMatched }: Dispu
       setSuggestions(nextSuggestions);
       setLoadingSuggestions(false);
 
-      const anchorYmd = nextSuggestions[0]?.date
-        ? fleetTzDateKey(nextSuggestions[0].date, fleetTz)
-        : null;
-      const targetWeek = anchorYmd
-        ? weekOptions.find((w) => w.startDate <= anchorYmd && w.endDate >= anchorYmd)
-        : null;
-      const start = targetWeek?.startDate ?? '';
-      const end = targetWeek?.endDate ?? '';
-      setPeriodStart(start);
-      setPeriodEnd(end);
       // Scope by driverId (alias-aware on server). Avoid seeding the mangled
       // Uber CSV name — it used to hide the Roam-named claim/toll rows.
       setQuery('');
@@ -156,7 +155,7 @@ function DisputeMatchModalInner({ open, onOpenChange, refund, onMatched }: Dispu
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, refund?.id, fleetTz]);
+  }, [open, refund?.id, fleetTz, activePeriodStart, activePeriodEnd]);
 
   const loadCandidates = async (q: string, from: string, to: string) => {
     setLoadingCandidates(true);

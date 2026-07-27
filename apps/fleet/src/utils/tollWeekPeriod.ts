@@ -565,8 +565,8 @@ export function isActionablePartialShortfall(
   );
 }
 
-/** True when a matched dispute refund already covers this claim's toll. */
-export function isTollCoveredByDisputeRefund(
+/** True when a matched dispute refund is linked to this claim's toll. */
+export function hasMatchedDisputeRefund(
   claim: Pick<Claim, 'id' | 'transactionId'>,
   disputeRefunds: DisputeRefund[],
 ): boolean {
@@ -576,6 +576,22 @@ export function isTollCoveredByDisputeRefund(
       isDisputeRefundMatched(r) &&
       (r.matchedClaimId === claim.id || r.matchedTollId === claim.transactionId),
   );
+}
+
+/**
+ * True when a matched dispute has settled this toll — no shortfall left to act on.
+ * A partial dispute credit (Open claim still has amount remaining) is NOT covered.
+ */
+export function isTollCoveredByDisputeRefund(
+  claim: Pick<Claim, 'id' | 'transactionId' | 'status' | 'amount'>,
+  disputeRefunds: DisputeRefund[],
+): boolean {
+  if (!hasMatchedDisputeRefund(claim, disputeRefunds)) return false;
+  // Open shortfall after a partial dispute credit must stay actionable (Expenses + landing).
+  if (claim.status === 'Open' && Math.abs(Number(claim.amount) || 0) > VARIANCE_THRESHOLD) {
+    return false;
+  }
+  return true;
 }
 
 /**

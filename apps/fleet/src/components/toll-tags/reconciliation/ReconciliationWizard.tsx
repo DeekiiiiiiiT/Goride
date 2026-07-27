@@ -1399,6 +1399,8 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
             <DisputeRefundsList
               refunds={disputeRefunds}
               onMatchComplete={lockedRefundMatch}
+              activePeriodStart={period.startDate}
+              activePeriodEnd={period.endDate}
             />
           )}
           {activeStepId === 'unlinked-refunds' && (

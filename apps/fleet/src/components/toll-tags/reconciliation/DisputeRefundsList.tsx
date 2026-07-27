@@ -19,9 +19,17 @@ export type DisputeMatchEvent =
 interface DisputeRefundsListProps {
   refunds: DisputeRefund[];
   onMatchComplete: (event: DisputeMatchEvent) => void;
+  /** Active reconciliation week — passed through to the match overlay default filter. */
+  activePeriodStart?: string;
+  activePeriodEnd?: string;
 }
 
-export function DisputeRefundsList({ refunds, onMatchComplete }: DisputeRefundsListProps) {
+export function DisputeRefundsList({
+  refunds,
+  onMatchComplete,
+  activePeriodStart,
+  activePeriodEnd,
+}: DisputeRefundsListProps) {
   const fleetTz = useFleetTimezone();
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [unmatchingId, setUnmatchingId] = useState<string | null>(null);
@@ -295,6 +303,8 @@ export function DisputeRefundsList({ refunds, onMatchComplete }: DisputeRefundsL
         open={!!matchModalRefund}
         onOpenChange={(o) => { if (!o) setMatchModalRefund(null); }}
         refund={matchModalRefund}
+        activePeriodStart={activePeriodStart}
+        activePeriodEnd={activePeriodEnd}
         onMatched={(tollId) => {
           if (!matchModalRefund) return;
           onMatchComplete({ type: 'match', refundId: matchModalRefund.id, tollId });

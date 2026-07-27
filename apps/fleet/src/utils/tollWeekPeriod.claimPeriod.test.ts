@@ -267,13 +267,33 @@ describe('dispute-covered partial shortfall visibility', () => {
     },
   ];
 
-  it('isTollCoveredByDisputeRefund matches by toll id', () => {
-    expect(isTollCoveredByDisputeRefund(partialOpen, matchedDispute as any)).toBe(true);
+  it('isTollCoveredByDisputeRefund is false while Open shortfall remains', () => {
+    // paid 370 / amount 10 leftover — dispute link alone must not mark covered
+    expect(isTollCoveredByDisputeRefund(partialOpen, matchedDispute as any)).toBe(false);
   });
 
-  it('hides open partial when dispute already matched to toll', () => {
+  it('isTollCoveredByDisputeRefund is true when Open shortfall is cleared', () => {
+    expect(
+      isTollCoveredByDisputeRefund(
+        { ...partialOpen, amount: 0 },
+        matchedDispute as any,
+      ),
+    ).toBe(true);
+  });
+
+  it('keeps Open partial visible when dispute credit left a shortfall', () => {
     expect(
       isVisiblePartialShortfallClaim(partialOpen, { unlinkedSourceTripId: 'trip-unlinked' }, matchedDispute as any),
+    ).toBe(true);
+  });
+
+  it('hides Open claim when dispute settled and nothing remains', () => {
+    expect(
+      isVisiblePartialShortfallClaim(
+        { ...partialOpen, amount: 0 },
+        { unlinkedSourceTripId: 'trip-unlinked' },
+        matchedDispute as any,
+      ),
     ).toBe(false);
   });
 

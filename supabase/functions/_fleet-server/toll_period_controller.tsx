@@ -164,14 +164,23 @@ function isActionablePartialShortfallServer(claim: any, toll?: any): boolean {
   return claim.resolutionReason === "Charge Driver" && !claim.resolutionTransactionId;
 }
 
-/** Mirrors isTollCoveredByDisputeRefund in apps/fleet/src/utils/tollWeekPeriod.ts. */
-function isTollCoveredByDisputeRefundServer(claim: any, disputeRefunds: any[]): boolean {
+/** Mirrors hasMatchedDisputeRefund / isTollCoveredByDisputeRefund in tollWeekPeriod.ts. */
+function hasMatchedDisputeRefundServer(claim: any, disputeRefunds: any[]): boolean {
   if (!claim?.transactionId && !claim?.id) return false;
   return disputeRefunds.some(
     (r) =>
       isDisputeRefundMatched(r) &&
       (r.matchedClaimId === claim.id || r.matchedTollId === claim.transactionId),
   );
+}
+
+/** Settled by dispute only when no Open shortfall remains (partial credits stay actionable). */
+function isTollCoveredByDisputeRefundServer(claim: any, disputeRefunds: any[]): boolean {
+  if (!hasMatchedDisputeRefundServer(claim, disputeRefunds)) return false;
+  if (claim.status === "Open" && Math.abs(Number(claim.amount) || 0) > VARIANCE_THRESHOLD) {
+    return false;
+  }
+  return true;
 }
 
 /** Mirrors isVisiblePartialShortfallClaim in apps/fleet/src/utils/tollWeekPeriod.ts. */
