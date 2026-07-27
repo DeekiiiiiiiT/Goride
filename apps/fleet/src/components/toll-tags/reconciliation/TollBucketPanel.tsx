@@ -36,7 +36,9 @@ import { EditTollModal } from "./EditTollModal";
 import { formatInFleetTz, useFleetTimezone } from '../../../utils/timezoneDisplay';
 import { MatchResult } from "../../../utils/tollReconciliation";
 import { isTripLinkConfirmed, isOrphanPersonalMatch, personalMatchReasonLabel } from "../../../utils/tollBucket";
+import { partitionSuggestions } from "../../../utils/suggestionPartition";
 import { SuggestedMatchCard } from "./SuggestedMatchCard";
+import { SmartSuggestionsSection } from "./SmartSuggestionsSection";
 import { ManualMatchModal } from "./ManualMatchModal";
 import { CompetingTripsPickerDialog } from "./CompetingTripsPickerDialog";
 import { TollDetailOverlay } from "./TollDetailOverlay";
@@ -420,41 +422,17 @@ export function TollBucketPanel({
         );
     };
 
-    const orphanSmartMatches = stepId === 'personal-use'
-        ? filteredTolls.filter((tx) => {
-            const best = suggestions.get(tx.id)?.[0];
-            return best && isOrphanPersonalMatch(best);
-        })
-        : [];
+    const { suggestions: suggestionEntries, other: otherTolls } = partitionSuggestions(
+        filteredTolls,
+        suggestions,
+        stepId,
+    );
 
-    const smartMatches = filteredTolls.filter(tx => {
-        const matches = suggestions.get(tx.id);
-        const best = matches?.[0];
-        if (!best || isOrphanPersonalMatch(best)) return false;
-        // Personal Use: only non-orphan PERSONAL_MATCH — never Reimbursed/Underpaid cards.
-        if (stepId === 'personal-use' && best.matchType !== 'PERSONAL_MATCH') return false;
-        const hasHighScore = best.confidenceScore != null ? best.confidenceScore >= 50 : (
-            best.confidence === 'high' ||
-            best.matchType === 'DEADHEAD_MATCH' ||
-            best.matchType === 'PERSONAL_MATCH'
-        );
-        return hasHighScore;
-    });
-
-    const smartReadyBannerLabel =
-        stepId === 'personal-use'
-            ? 'Confirm personal'
-            : stepId === 'deadhead'
-                ? 'Confirm deadhead'
-                : 'Ready to link';
+    const smartMatches = suggestionEntries.filter((e) => !e.orphanMode).map((e) => e.toll);
 
     const visibleSmart = smartMatches.slice(0, visibleSmartMatches);
     const ambiguousSmartMatches = visibleSmart.filter(tx => needsTripPick(tx, suggestions.get(tx.id)?.[0]));
     const normalSmartMatches = visibleSmart.filter(tx => !needsTripPick(tx, suggestions.get(tx.id)?.[0]));
-
-    const otherTolls = filteredTolls.filter(
-        (tx) => !smartMatches.includes(tx) && !orphanSmartMatches.includes(tx),
-    );
 
     const renderSmartMatchCards = (items: FinancialTransaction[]) => (
         smartWeekGroupsFor(items).map((week) => (
@@ -805,21 +783,13 @@ export function TollBucketPanel({
     }
 
     if (unifiedPeriodView) {
-        const visibleSmartTolls = [...ambiguousSmartMatches, ...normalSmartMatches];
-        const showOrphanBanner = stepId === 'personal-use' && orphanSmartMatches.length > 0;
-
         return (
             <>
                 <Card>
                     <CardHeader className="flex flex-row items-start justify-between gap-4 pb-4">
                         <div className="space-y-2 min-w-0 flex-1">
                             <CardTitle>{listTitle}</CardTitle>
-                            {showOrphanBanner ? (
-                                <div className="flex items-center gap-2 rounded-lg border border-purple-200 bg-purple-50/60 px-3 py-2 text-purple-900 text-sm max-w-xl">
-                                    <Sparkles className="h-4 w-4 shrink-0" />
-                                    <span className="font-semibold">No trips match these tolls.</span>
-                                </div>
-                            ) : listDescription ? (
+                            {listDescription ? (
                                 <CardDescription>{listDescription}</CardDescription>
                             ) : null}
                         </div>
@@ -869,56 +839,13 @@ export function TollBucketPanel({
                                 </span>
                             </div>
                         )}
-                        {orphanSmartMatches.length > 0 && (
-                            <div className="space-y-3 w-full min-w-0">
-                                {orphanSmartMatches.map((tx) => (
-                                    <div key={tx.id} className="w-full min-w-0">
-                                        {renderSuggestedMatchCard(tx, true)}
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                        {visibleSmartTolls.length > 0 && (
-                            <Collapsible defaultOpen className="group rounded-xl border border-slate-200 bg-slate-50/40 overflow-hidden">
-                                <CollapsibleTrigger className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-slate-100/80 transition-colors">
-                                    <div className="flex items-center gap-2 min-w-0 flex-wrap">
-                                        <Sparkles className="h-4 w-4 text-indigo-600 shrink-0" />
-                                        <span className="font-semibold text-slate-800">
-                                            Smart suggestions ({visibleSmartTolls.length})
-                                        </span>
-                                    </div>
-                                    <ChevronDown className="h-4 w-4 text-slate-500 shrink-0 transition-transform duration-200 group-data-[state=open]:rotate-180" />
-                                </CollapsibleTrigger>
-                                <CollapsibleContent className="px-4 pb-4 space-y-4 border-t border-slate-200/80">
-                                    {normalSmartMatches.length > 0 && ambiguousSmartMatches.length === 0 && (
-                                        <div className="flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50/60 px-3 py-2 text-indigo-800 text-sm mt-3">
-                                            <Sparkles className="h-4 w-4 shrink-0" />
-                                            <span className="font-semibold">{smartReadyBannerLabel} ({normalSmartMatches.length})</span>
-                                        </div>
-                                    )}
-                                    <div className="space-y-3 w-full min-w-0">
-                                        {visibleSmartTolls.map((tx) => (
-                                            <div key={tx.id} className="w-full min-w-0">
-                                                {renderSuggestedMatchCard(tx)}
-                                            </div>
-                                        ))}
-                                    </div>
-                                    {visibleSmartMatches < smartMatches.length && (
-                                        <div className="flex items-center justify-center pt-2 border-t border-slate-200">
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                onClick={() => setVisibleSmartMatches((prev) => prev + 10)}
-                                                className="text-slate-600 hover:text-slate-900"
-                                            >
-                                                <ChevronDown className="h-4 w-4 mr-1" />
-                                                Show more suggestions ({visibleSmartMatches} of {smartMatches.length})
-                                            </Button>
-                                        </div>
-                                    )}
-                                </CollapsibleContent>
-                            </Collapsible>
-                        )}
+                        <SmartSuggestionsSection
+                            entries={suggestionEntries}
+                            visibleCount={visibleSmartMatches}
+                            onShowMore={() => setVisibleSmartMatches((prev) => prev + 10)}
+                            stepId={stepId}
+                            renderCard={(tx, orphanMode) => renderSuggestedMatchCard(tx, orphanMode)}
+                        />
                         {otherTolls.length > 0 && (
                             <Table>
                                 <TableHeader>

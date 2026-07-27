@@ -56,7 +56,12 @@ export function computeTollWorkflowStage(input: WorkflowStageInput): TollWorkflo
   const { claim } = input;
   if (claim) {
     if (claim.status === "Resolved" || claim.status === "Rejected") {
-      return claim.resolutionReason === "Charge Driver" ? "personal_use_resolved" : "claim_resolved";
+      if (claim.resolutionReason === "Charge Driver") {
+        // Underpaid shortfall Charge Driver must not look "personal done".
+        if (input.matchTypeCode === "AMOUNT_VARIANCE") return "claim_resolved";
+        return "personal_use_resolved";
+      }
+      return "claim_resolved";
     }
     return "claim_filed";
   }

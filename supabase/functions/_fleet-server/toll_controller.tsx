@@ -4922,17 +4922,19 @@ app.post(`${BASE}/personal-rematch/backfill`, async (c) => {
     const allInRange = await findTollsInDateRange(startDate, endDate);
     const candidates = allInRange.filter((tx) => {
       if (!tx?.id) return false;
-      const formallyResolved =
+      const settled =
         tx.status === "approved" ||
         tx.status === "rejected" ||
         tx.status === "resolved" ||
         !!tx.resolution ||
-        !!tx.claimId ||
         !!tx.isReconciled;
-      if (formallyResolved) return false;
+      if (settled) return false;
       return (
         tx.workflowStage === "personal_use_pending" ||
-        tx.matchStatus === "orphan_personal"
+        tx.matchStatus === "orphan_personal" ||
+        // Open claim-linked personal pins can still rematch (Resolved claims are handled below).
+        (!!tx.claimId &&
+          (tx.workflowStage === "claim_filed" || tx.workflowStage === "personal_use_pending"))
       );
     });
     const batch = candidates.slice(0, batchSize);
@@ -4959,6 +4961,59 @@ app.post(`${BASE}/personal-rematch/backfill`, async (c) => {
 
     for (const toll of batch) {
       try {
+        // Resolved / settled claims: never rewrite — flag rematchCandidate only.
+        if (toll.claimId) {
+          const claim = (await kv.get(`claim:${toll.claimId}`)) as {
+            status?: string;
+            resolutionReason?: string;
+          } | null;
+          if (claim && (claim.status === "Resolved" || claim.status === "Rejected")) {
+            const patch = await computeTollMatchPatch(toll, timezone, settings);
+            const moneyRematch =
+              patch.matchStatus === "matched" &&
+              (patch.matchTypeCode === "AMOUNT_VARIANCE" ||
+                patch.matchTypeCode === "PERFECT_MATCH" ||
+                patch.matchTypeCode === "DEADHEAD_MATCH");
+            if (moneyRematch && patch.matchedTripId) {
+              const fresh = await getTollLedgerEntry(toll.id);
+              if (fresh) {
+                await updateTollLedgerEntry(
+                  toll.id,
+                  {
+                    metadata: {
+                      ...(fresh.metadata || {}),
+                      rematchCandidate: {
+                        tripId: patch.matchedTripId,
+                        confidenceScore: patch.matchConfidenceScore ?? null,
+                        detectedAt: new Date().toISOString(),
+                        reason: "resolved_claim_blocks_rematch",
+                      },
+                    },
+                  },
+                  "updated",
+                  "system-personal-rematch-backfill",
+                );
+                touchedIds.push(toll.id);
+              } else {
+                skippedIds.push(toll.id);
+              }
+            } else {
+              skippedIds.push(toll.id);
+            }
+            continue;
+          }
+          // Open claim: clear linkage so rematch can move the toll.
+          if (claim && claim.status !== "Resolved" && claim.status !== "Rejected") {
+            await updateTollLedgerEntry(
+              toll.id,
+              { claimId: null },
+              "updated",
+              "system-personal-rematch-backfill",
+            );
+            toll.claimId = null;
+          }
+        }
+
         const patch = await computeTollMatchPatch(toll, timezone, settings);
         const stageBefore = toll.workflowStage;
         const statusBefore = toll.matchStatus;
@@ -5023,6 +5078,177 @@ app.post(`${BASE}/personal-rematch/backfill`, async (c) => {
     });
   } catch (e: any) {
     console.log(`[PersonalRematchBackfill] error: ${e.message}`);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// ─── POST /personal-use/auto-charge ─── ORPHAN_NO_TRIP only (opt-in) ─────────
+// Charges high-confidence personal orphans (no trip that day) to the driver.
+// Requires personalUseAutoChargeEnabled + driverTollChargeSyncEnabled.
+// dryRun defaults true. Never charges nearby / out-of-window / cash / no driver.
+app.post(`${BASE}/personal-use/auto-charge`, async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const dryRun = body?.dryRun !== false;
+    const batchSize = Math.max(1, Math.min(100, Number(body?.batchSize) || 25));
+    const startDate = String(body?.startDate || "").slice(0, 10);
+    const endDate = String(body?.endDate || "").slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
+      return c.json({ error: "startDate and endDate (YYYY-MM-DD) are required" }, 400);
+    }
+
+    const settings = await getRefundAutomationSettings();
+    if (!settings.personalUseAutoChargeEnabled || !settings.driverTollChargeSyncEnabled) {
+      return c.json({
+        success: false,
+        error:
+          "personalUseAutoChargeEnabled and driverTollChargeSyncEnabled must both be ON",
+        code: "AUTO_CHARGE_DISABLED",
+      }, 400);
+    }
+
+    const allInRange = await findTollsInDateRange(startDate, endDate);
+    const isTagImport = (tx: any) =>
+      tx.paymentMethod !== "Cash" && !tx.receiptUrl;
+    const candidates = allInRange.filter((tx) => {
+      if (!tx?.id || !tx.driverId) return false;
+      if (!isTagImport(tx)) return false;
+      if (tx.isReconciled || tx.claimId || tx.resolution) return false;
+      if (tx.status === "approved" || tx.status === "rejected" || tx.status === "resolved") {
+        return false;
+      }
+      const reason = String(tx.matchReasonCode || "");
+      const isOrphanNoTrip =
+        (tx.matchStatus === "orphan_personal" || tx.workflowStage === "personal_use_pending") &&
+        reason === "ORPHAN_NO_TRIP";
+      return isOrphanNoTrip;
+    });
+    const batch = candidates.slice(0, batchSize);
+
+    if (dryRun) {
+      return c.json({
+        success: true,
+        dryRun: true,
+        startDate,
+        endDate,
+        candidateCount: candidates.length,
+        wouldCharge: batch.length,
+        sampleIds: batch.slice(0, 20).map((t: any) => t.id),
+        message:
+          candidates.length > 0
+            ? `Dry run: would auto-charge ${batch.length} of ${candidates.length} ORPHAN_NO_TRIP tolls.`
+            : "Nothing to auto-charge — no ORPHAN_NO_TRIP personal tolls with a driver in range.",
+      });
+    }
+
+    const chargedIds: string[] = [];
+    const errors: string[] = [];
+
+    for (const toll of batch) {
+      try {
+        const amount = Math.abs(Number(toll.amount) || 0);
+        if (amount <= 0) {
+          errors.push(`${toll.id}: zero amount`);
+          continue;
+        }
+        const claimId = crypto.randomUUID();
+        const claim = {
+          id: claimId,
+          transactionId: toll.id,
+          type: "Toll",
+          amount,
+          expectedAmount: amount,
+          paidAmount: 0,
+          status: "Resolved",
+          resolutionReason: "Charge Driver",
+          subject: "Unmatched Toll - Personal Use (auto)",
+          notes: "system-auto-personal ORPHAN_NO_TRIP",
+          createdAt: new Date().toISOString(),
+          resolvedAt: new Date().toISOString(),
+          driverId: toll.driverId,
+          driverName: toll.driverName,
+          vehicleId: toll.vehicleId,
+          date: toll.date,
+        };
+        await kv.set(`claim:${claimId}`, claim);
+        await updateTollLedgerEntry(
+          toll.id,
+          {
+            status: "rejected",
+            resolution: "personal",
+            isReconciled: true,
+            claimId,
+            notes: "system-auto-personal ORPHAN_NO_TRIP",
+            metadata: {
+              ...(toll.metadata || {}),
+              matchedBy: "system-auto",
+              source: "system-auto-personal",
+            },
+          },
+          "resolved",
+          "system-auto-personal",
+        );
+        await recomputeAndPersistWorkflowStage(toll.id, { claim });
+        await emitDriverTollCharge(
+          {
+            tollId: toll.id,
+            claimId,
+            driverId: toll.driverId || "unknown",
+            driverName: toll.driverName || "Unknown",
+            vehicleId: toll.vehicleId,
+            tripId: null,
+            amount,
+            date: toll.date,
+            description: `Toll charged to driver (personal use, auto): ${toll.description || toll.vendor || "Toll"}`,
+            source: "system-auto-personal",
+          },
+          c,
+        );
+        if (amount > 0) {
+          try {
+            await emitTollChargeOffset(
+              {
+                sourceType: "toll_ledger",
+                sourceId: toll.id,
+                driverId: toll.driverId,
+                vehicleId: toll.vehicleId,
+                date: toll.date,
+                amount,
+                reason: "personal",
+              },
+              c,
+            );
+          } catch (err) {
+            console.error(`[PersonalAutoCharge] P&L offset failed for ${toll.id}:`, err);
+          }
+        }
+        chargedIds.push(toll.id);
+      } catch (err: any) {
+        errors.push(`${toll.id}: ${err.message}`);
+        if (errors.length > 50) break;
+      }
+    }
+
+    const remaining = candidates.length - batch.length;
+    console.log(
+      `[PersonalAutoCharge] charged=${chargedIds.length} remaining=${remaining} errors=${errors.length}`,
+    );
+    return c.json({
+      success: true,
+      dryRun: false,
+      startDate,
+      endDate,
+      charged: chargedIds.length,
+      remaining,
+      chargedIds,
+      errors: errors.slice(0, 50),
+      message:
+        remaining > 0
+          ? `Charged ${chargedIds.length}. Re-run to continue with ${remaining} remaining.`
+          : `Charged ${chargedIds.length}. Personal auto-charge complete for this range.`,
+    });
+  } catch (e: any) {
+    console.log(`[PersonalAutoCharge] error: ${e.message}`);
     return c.json({ error: e.message }, 500);
   }
 });
@@ -6338,6 +6564,8 @@ interface RefundAutomationSettings {
   // Personal-use (orphan) toll detection — additive, default OFF.
   personalUseDetectionEnabled: boolean;
   orphanProximityMinutes: number;
+  /** Opt-in auto Charge Driver for ORPHAN_NO_TRIP only — additive, default OFF. */
+  personalUseAutoChargeEnabled: boolean;
   // Sync "charge driver" toll resolutions into the driver financial section
   // (materializes the projection txn) — additive, default OFF.
   driverTollChargeSyncEnabled: boolean;
@@ -6374,6 +6602,7 @@ async function getRefundAutomationSettings(): Promise<RefundAutomationSettings> 
       typeof rec?.orphanProximityMinutes === "number" && rec.orphanProximityMinutes > 0
         ? rec.orphanProximityMinutes
         : DEFAULT_ORPHAN_PROXIMITY_MINUTES,
+    personalUseAutoChargeEnabled: rec?.personalUseAutoChargeEnabled === true, // default OFF
     driverTollChargeSyncEnabled: rec?.driverTollChargeSyncEnabled === true, // default OFF
     unifiedTollSettlementEnabled: rec?.unifiedTollSettlementEnabled === true, // default OFF
     matchOnIngestEnabled: rec?.matchOnIngestEnabled === true, // default OFF
@@ -8163,6 +8392,18 @@ app.put(`${BASE}/automation-settings`, async (c) => {
         typeof body?.driverTollChargeSyncEnabled === "boolean"
           ? body.driverTollChargeSyncEnabled
           : current.driverTollChargeSyncEnabled,
+      // Auto-charge requires sync ON — never enable silently without wallet posting.
+      personalUseAutoChargeEnabled: (() => {
+        const syncOn =
+          typeof body?.driverTollChargeSyncEnabled === "boolean"
+            ? body.driverTollChargeSyncEnabled
+            : current.driverTollChargeSyncEnabled;
+        const requested =
+          typeof body?.personalUseAutoChargeEnabled === "boolean"
+            ? body.personalUseAutoChargeEnabled
+            : current.personalUseAutoChargeEnabled;
+        return syncOn && requested;
+      })(),
       unifiedTollSettlementEnabled:
         typeof body?.unifiedTollSettlementEnabled === "boolean"
           ? body.unifiedTollSettlementEnabled

@@ -35,3 +35,26 @@ Deno.test("computeTollWorkflowStage: AMOUNT_VARIANCE stays underpaid_pending bef
     "underpaid_pending",
   );
 });
+
+Deno.test("computeTollWorkflowStage: personal Charge Driver → personal_use_resolved", () => {
+  assertEquals(
+    computeTollWorkflowStage({
+      matchStatus: "orphan_personal",
+      matchTypeCode: "PERSONAL_MATCH",
+      matchReasonCode: "ORPHAN_NO_TRIP",
+      claim: { status: "Resolved", resolutionReason: "Charge Driver" },
+    }),
+    "personal_use_resolved",
+  );
+});
+
+Deno.test("computeTollWorkflowStage: underpaid Charge Driver → claim_resolved", () => {
+  assertEquals(
+    computeTollWorkflowStage({
+      matchStatus: "matched",
+      matchTypeCode: "AMOUNT_VARIANCE",
+      claim: { status: "Resolved", resolutionReason: "Charge Driver" },
+    }),
+    "claim_resolved",
+  );
+});

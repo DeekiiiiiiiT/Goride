@@ -1256,6 +1256,42 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
   const lockedRefresh = lock('Refreshing…', async () => {
     await refresh({ autoMatch: true });
   });
+
+  const orphanNoTripAutoChargeCount = useMemo(() => {
+    return (classified['personal-use'] || []).filter((tx) => {
+      const best = suggestions.get(tx.id)?.[0];
+      if (!best || !isOrphanPersonalMatch(best)) return false;
+      if (best.reasonCode !== 'ORPHAN_NO_TRIP') return false;
+      if (!tx.driverId) return false;
+      if (tx.paymentMethod === 'Cash' || tx.receiptUrl) return false;
+      return true;
+    }).length;
+  }, [classified, suggestions]);
+
+  const lockedAutoChargePersonal = lock('Auto-charging personal…', async () => {
+    try {
+      const dry = await api.autoChargePersonalUse({
+        startDate: period.startDate,
+        endDate: period.endDate,
+        dryRun: true,
+        batchSize: 25,
+      });
+      if (!dry.wouldCharge && !dry.candidateCount) {
+        toast.message(dry.message || 'Nothing to auto-charge');
+        return;
+      }
+      const apply = await api.autoChargePersonalUse({
+        startDate: period.startDate,
+        endDate: period.endDate,
+        dryRun: false,
+        batchSize: 25,
+      });
+      toast.success(apply.message || `Charged ${apply.charged ?? 0} personal toll(s)`);
+      await Promise.all([refresh(), refreshClaims()]);
+    } catch (e: any) {
+      toast.error(e?.message || 'Auto-charge personal failed');
+    }
+  });
   const lockedCreateClaim = lock('Saving claim…', createClaim);
   const lockedUpdateClaim = lock('Updating claim…', updateClaim);
   const lockedDeleteClaim = lock('Removing claim…', deleteClaim);
@@ -1308,6 +1344,18 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
                 <Button variant="default" size="sm" onClick={() => void lockedAutoMatch()} disabled={actionBusy} className="bg-indigo-600 hover:bg-indigo-700">
                     <Wand2 className="h-4 w-4 mr-2" />
                     Auto-match {highConfidenceCount}
+                </Button>
+            )}
+            {activeStepId === 'personal-use' && orphanNoTripAutoChargeCount > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void lockedAutoChargePersonal()}
+                  disabled={actionBusy}
+                  className="border-purple-300 text-purple-700 hover:bg-purple-50"
+                >
+                    <Wand2 className="h-4 w-4 mr-2" />
+                    Auto-charge personal {orphanNoTripAutoChargeCount}
                 </Button>
             )}
             <TollAutomationSettings onChanged={refresh} />

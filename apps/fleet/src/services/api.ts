@@ -2619,6 +2619,40 @@ export const api = {
     return response.json();
   },
 
+  /** Opt-in auto Charge Driver for ORPHAN_NO_TRIP personal tolls (dryRun defaults true on server). */
+  async autoChargePersonalUse(payload: {
+    startDate: string;
+    endDate: string;
+    dryRun?: boolean;
+    batchSize?: number;
+  }): Promise<{
+    success: boolean;
+    dryRun?: boolean;
+    startDate?: string;
+    endDate?: string;
+    candidateCount?: number;
+    wouldCharge?: number;
+    charged?: number;
+    remaining?: number;
+    chargedIds?: string[];
+    sampleIds?: string[];
+    errors?: string[];
+    message?: string;
+    error?: string;
+    code?: string;
+  }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/personal-use/auto-charge`, {
+      method: 'POST',
+      headers: await requireAuthHeaders(),
+      body: JSON.stringify(payload),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || data.message || 'Failed to auto-charge personal tolls');
+    }
+    return data;
+  },
+
   /** MOI-7: read-only preview of how many historical tolls are missing a matchStatus. */
   async getMatchIndexBackfillStatus(): Promise<{
     success: boolean;
@@ -2805,6 +2839,7 @@ export const api = {
       disputeRefundAutoMinConfidence: number;
       personalUseDetectionEnabled: boolean;
       orphanProximityMinutes: number;
+      personalUseAutoChargeEnabled: boolean;
       driverTollChargeSyncEnabled: boolean;
       unifiedTollSettlementEnabled: boolean;
       matchOnIngestEnabled: boolean;
@@ -2821,7 +2856,7 @@ export const api = {
     return response.json();
   },
 
-  async updateTollAutomationSettings(payload: { refundAutomationEnabled?: boolean; refundAutoMinConfidence?: number; disputeRefundAutoMinConfidence?: number; personalUseDetectionEnabled?: boolean; orphanProximityMinutes?: number; driverTollChargeSyncEnabled?: boolean; unifiedTollSettlementEnabled?: boolean; matchOnIngestEnabled?: boolean; disputeRefundTripSyncEnabled?: boolean; unlinkedRefundUndoEnabled?: boolean; tollPnlOffsetEnabled?: boolean }) {
+  async updateTollAutomationSettings(payload: { refundAutomationEnabled?: boolean; refundAutoMinConfidence?: number; disputeRefundAutoMinConfidence?: number; personalUseDetectionEnabled?: boolean; orphanProximityMinutes?: number; personalUseAutoChargeEnabled?: boolean; driverTollChargeSyncEnabled?: boolean; unifiedTollSettlementEnabled?: boolean; matchOnIngestEnabled?: boolean; disputeRefundTripSyncEnabled?: boolean; unlinkedRefundUndoEnabled?: boolean; tollPnlOffsetEnabled?: boolean }) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/automation-settings`, {
       method: 'PUT',
       headers: await requireAuthHeaders(),

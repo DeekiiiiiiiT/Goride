@@ -20,6 +20,7 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
   const [minConfidence, setMinConfidence] = useState(85);
   const [disputeMinConfidence, setDisputeMinConfidence] = useState(95);
   const [personalUseEnabled, setPersonalUseEnabled] = useState(false);
+  const [personalUseAutoCharge, setPersonalUseAutoCharge] = useState(false);
   const [orphanProximity, setOrphanProximity] = useState(180);
   const [matchDialsFromBrain, setMatchDialsFromBrain] = useState(false);
   const [driverChargeSync, setDriverChargeSync] = useState(false);
@@ -62,6 +63,7 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
     refundAutoMinConfidence: number;
     disputeRefundAutoMinConfidence?: number;
     personalUseDetectionEnabled: boolean;
+    personalUseAutoChargeEnabled?: boolean;
     orphanProximityMinutes: number;
     driverTollChargeSyncEnabled?: boolean;
     unifiedTollSettlementEnabled?: boolean;
@@ -73,6 +75,7 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
     setMinConfidence(data.refundAutoMinConfidence);
     setDisputeMinConfidence(data.disputeRefundAutoMinConfidence ?? 95);
     setPersonalUseEnabled(data.personalUseDetectionEnabled);
+    setPersonalUseAutoCharge(data.personalUseAutoChargeEnabled === true);
     setOrphanProximity(data.orphanProximityMinutes);
     setDriverChargeSync(data.driverTollChargeSyncEnabled === true);
     setUnifiedSettlement(data.unifiedTollSettlementEnabled === true);
@@ -102,6 +105,7 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
     refundAutoMinConfidence?: number;
     disputeRefundAutoMinConfidence?: number;
     personalUseDetectionEnabled?: boolean;
+    personalUseAutoChargeEnabled?: boolean;
     orphanProximityMinutes?: number;
     driverTollChargeSyncEnabled?: boolean;
     unifiedTollSettlementEnabled?: boolean;
@@ -426,6 +430,29 @@ export function TollAutomationSettings({ onChanged }: { onChanged?: () => void }
                   <p className="text-xs text-slate-500 mt-1">
                     Tolls with no trip match are routed to Personal Use. Higher proximity values
                     only affect how confidently “no trip explains this toll” is labeled.
+                  </p>
+                </div>
+
+                <div className="border-t border-slate-100 pt-3">
+                  <label className="flex items-center justify-between">
+                    <span className="text-sm text-slate-700">Auto-charge no-trip orphans</span>
+                    <Switch
+                      checked={personalUseAutoCharge}
+                      disabled={saving || !personalUseEnabled || !driverChargeSync}
+                      onCheckedChange={(v) => {
+                        if (v && !driverChargeSync) {
+                          toast.message("Turn on Sync charges to driver financials first.");
+                          return;
+                        }
+                        setPersonalUseAutoCharge(v);
+                        void save({ personalUseAutoChargeEnabled: v });
+                      }}
+                    />
+                  </label>
+                  <p className="text-xs text-slate-500 mt-1">
+                    When enabled, the wizard can auto-charge drivers for high-confidence
+                    “no trip that day” orphans only. Nearby / ambiguous personal tolls stay
+                    manual. Requires driver financial sync.
                   </p>
                 </div>
               </div>
