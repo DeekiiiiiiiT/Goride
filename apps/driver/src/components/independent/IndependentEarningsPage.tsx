@@ -20,29 +20,6 @@ type EarningsPageProps = {
   onNavigate?: (page: string) => void;
 };
 
-function EarningsAmount({
-  loading,
-  amount,
-  muted = false,
-}: {
-  loading: boolean;
-  amount: string;
-  muted?: boolean;
-}) {
-  if (loading) {
-    return <Loader2 className="h-8 w-8 animate-spin text-slate-400" />;
-  }
-  return (
-    <h3
-      className={`text-3xl font-extrabold tracking-tight tabular-nums ${
-        muted ? 'text-slate-500 dark:text-slate-400' : 'text-slate-900 dark:text-white'
-      }`}
-    >
-      {amount}
-    </h3>
-  );
-}
-
 function WalletChip({
   label,
   amount,
@@ -202,32 +179,27 @@ export function IndependentEarningsPage({ onNavigate }: EarningsPageProps) {
       )}
 
       <div className="space-y-4">
-        <div className="group relative overflow-hidden rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_4px_20px_rgba(0,0,0,0.04)] dark:border-slate-700 dark:bg-slate-900">
-          <div
-            className="pointer-events-none absolute -right-16 -top-16 h-32 w-32 rounded-full bg-emerald-500/5 transition-transform duration-500 group-active:scale-110"
-            aria-hidden
-          />
-          <div className="relative mb-6 flex items-center gap-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-              <Banknote className="h-7 w-7" strokeWidth={1.75} aria-hidden />
+        <div className="relative overflow-hidden rounded-3xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+              <Banknote className="h-5 w-5" strokeWidth={1.75} aria-hidden />
             </div>
-            {!isFleetDriver && (
-              <p className="text-xs font-bold uppercase tracking-wide text-emerald-600 dark:text-emerald-400">
-                Cash in hand
-              </p>
-            )}
-          </div>
-          <div className="relative space-y-1">
-            <EarningsAmount
-              loading={(allLoading && !allData) || (cashInHandMinor === 0 && tripsLoading && trips.length === 0)}
-              amount={cashInHandLabel}
-            />
-            {!isFleetDriver && (
-              <p className="flex items-center gap-1 text-sm text-slate-500 dark:text-slate-400">
-                <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden />
-                Physical cash you collected — amounts entered at settlement
-              </p>
-            )}
+            <div className="flex-1 space-y-1">
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Cash in hand</p>
+              {(allLoading && !allData) || (cashInHandMinor === 0 && tripsLoading && trips.length === 0) ? (
+                <Loader2 className="mt-1 h-4 w-4 animate-spin text-slate-400" />
+              ) : (
+                <p className="text-2xl font-extrabold tabular-nums text-slate-900 dark:text-white">
+                  {cashInHandLabel}
+                </p>
+              )}
+              {!isFleetDriver && (
+                <p className="flex items-center gap-1 text-sm text-slate-500 dark:text-slate-400">
+                  <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden />
+                  Physical cash you collected — amounts entered at settlement
+                </p>
+              )}
+            </div>
           </div>
         </div>
 
