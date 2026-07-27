@@ -131,6 +131,13 @@ export function OverviewTab({ overview, onNavigateTab, onNavigatePage }: Props) 
             value={formatMoney(moneyOut.driverPayouts)}
             onClick={() => onNavigateTab('pnl')}
           />
+          <Row
+            label="Cash written off"
+            hint="Driver Balances"
+            value={formatMoney(moneyOut.cashWrittenOff)}
+            valueClassName={moneyOut.cashWrittenOff > 0.005 ? 'text-rose-700' : undefined}
+            onClick={() => onNavigateTab('driver-balances')}
+          />
         </CardContent>
       </Card>
 

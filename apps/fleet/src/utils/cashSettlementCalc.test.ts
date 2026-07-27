@@ -174,4 +174,41 @@ describe('computeWeeklyCashSettlement — Cash Returned is sticky', () => {
     expect(w.amountPaid).toBe(0);
     expect(w.weeklyFuelCredits).toBeCloseTo(21415.26, 2);
   });
+
+  it('Cash_Write_Off does not inflate Cash Returned (amountPaid)', () => {
+    const writeOff = {
+      id: 'wo1',
+      driverId: 'd1',
+      amount: 500,
+      type: 'Cash_Write_Off',
+      category: 'Cash Write Off',
+      paymentMethod: 'Other',
+      status: 'Completed',
+      date: WEEK_DAY,
+      metadata: { workPeriodStart: '2026-03-09', workPeriodEnd: '2026-03-15' },
+    } as unknown as FinancialTransaction;
+
+    const payment = {
+      id: 'p1',
+      driverId: 'd1',
+      amount: 7500,
+      type: 'Payment_Received',
+      category: 'Cash Collection',
+      paymentMethod: 'Cash',
+      status: 'Completed',
+      date: WEEK_DAY,
+      metadata: { workPeriodStart: '2026-03-09', workPeriodEnd: '2026-03-15' },
+    } as unknown as FinancialTransaction;
+
+    const w = weekOf(
+      computeWeeklyCashSettlement({
+        trips: [trip()],
+        transactions: [writeOff, payment],
+        csvMetrics: [],
+        excludeTollEffects: true,
+      }),
+    );
+
+    expect(w.amountPaid).toBeCloseTo(7500, 2);
+  });
 });

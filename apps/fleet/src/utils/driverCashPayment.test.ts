@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   isCashReturnedForWeek,
+  isCashWriteOffForWeek,
+  isCashWriteOffTransaction,
+  isClearedCashWriteOff,
   isClearedDriverCashPayment,
   isDriverCashPaymentTransaction,
 } from './driverCashPayment';
@@ -52,6 +55,44 @@ describe('isDriverCashPaymentTransaction', () => {
         paymentMethod: 'Cash',
       }),
     ).toBe(false);
+  });
+
+  it('rejects Cash_Write_Off so it never inflates Cash Returned', () => {
+    expect(
+      isDriverCashPaymentTransaction({
+        type: 'Cash_Write_Off',
+        category: 'Cash Write Off',
+        amount: 500,
+        description: 'Cash write-off: lost float',
+        paymentMethod: 'Other',
+      }),
+    ).toBe(false);
+  });
+});
+
+describe('cash write-off detectors', () => {
+  it('accepts Cash_Write_Off / Cash Write Off', () => {
+    expect(
+      isCashWriteOffTransaction({
+        type: 'Cash_Write_Off',
+        category: 'Cash Write Off',
+        amount: 250,
+      }),
+    ).toBe(true);
+  });
+
+  it('counts cleared write-off for the tagged Settlement Week only', () => {
+    const wo = {
+      type: 'Cash_Write_Off' as const,
+      category: 'Cash Write Off',
+      amount: 250,
+      status: 'Completed',
+      metadata: { workPeriodStart: '2026-06-29', workPeriodEnd: '2026-07-05' },
+    };
+    expect(isClearedCashWriteOff(wo)).toBe(true);
+    expect(isCashWriteOffForWeek(wo, '2026-06-29')).toBe(true);
+    expect(isCashWriteOffForWeek(wo, '2026-06-22')).toBe(false);
+    expect(isCashReturnedForWeek(wo as any, '2026-06-29')).toBe(false);
   });
 });
 

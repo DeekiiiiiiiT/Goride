@@ -65,5 +65,24 @@ describe('walletCallOutstandingFromPeriod', () => {
     expect(o.callDirection).toBe('cash_with_driver');
     expect(o.callAmount).toBeCloseTo(650, 2); // 1000-100-200-50
     expect(o.settlement).toBeNull();
+    expect(o.breakdown.cashWrittenOff).toBe(0);
+  });
+
+  it('write-off reduces still held without counting as cash returned', () => {
+    const o = walletCallOutstandingFromPeriod(
+      row({
+        periodStart: new Date('2026-07-06T12:00:00'),
+        isFinalized: false,
+        passengerCash: 1000,
+        cashOwed: 1000,
+        cashPaid: 100,
+        fuelCredits: 0,
+        cashTollWash: 0,
+        cashWrittenOff: 250,
+      }),
+    );
+    expect(o.callAmount).toBeCloseTo(650, 2); // 1000 − 100 − 250
+    expect(o.breakdown.cashReturned).toBeCloseTo(100, 2);
+    expect(o.breakdown.cashWrittenOff).toBeCloseTo(250, 2);
   });
 });

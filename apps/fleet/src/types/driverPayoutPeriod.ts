@@ -61,6 +61,10 @@ export interface PayoutPeriodRow {
    * Toll Recon Charge Driver). Increases Cash Still Held; never pads Cash Returned.
    */
   personalTollCharge?: number;
+  /**
+   * Cash write-offs tagged to this Settlement Week — reduces still held; never cash returned.
+   */
+  cashWrittenOff?: number;
   /** Uber bank settled for the period — informational; never part of cash risk. */
   bankSettled: number;
   status: PayoutStatus;

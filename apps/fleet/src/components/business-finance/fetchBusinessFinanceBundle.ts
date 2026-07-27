@@ -121,6 +121,7 @@ export async function fetchBusinessFinanceBundle(
 
   let cashCollected = 0;
   let cashStillHeld = 0;
+  let cashWrittenOff = 0;
   let fuelFromPeriods = 0;
   let tollFromPeriods = 0;
   let driverPayoutsFromPeriods = 0;
@@ -133,6 +134,7 @@ export async function fetchBusinessFinanceBundle(
     for (const p of inRange) {
       cashCollected += Number(p.cashReturned) || 0;
       cashStillHeld += Math.max(0, Number(p.cashStillHeld) || 0);
+      cashWrittenOff += Math.max(0, Number(p.cashWrittenOff) || 0);
       fuelFromPeriods += (Number(p.fuelGasCardSpend) || 0) + (Number(p.fuelDriverSpend) || 0);
       tollFromPeriods += Number(p.tollSpend) || 0;
       const settlement = Number(p.settlementAmount) || 0;
@@ -181,7 +183,9 @@ export async function fetchBusinessFinanceBundle(
       : round2(driverPayoutsFromPeriods);
 
   const grossLine = pnl.lines.find((l) => l.id === 'gross')?.amount || 0;
-  const profitLine = Number(pnl.lines.find((l) => l.id === 'operating_profit')?.amount) || 0;
+  const profitLineBase = Number(pnl.lines.find((l) => l.id === 'operating_profit')?.amount) || 0;
+  // Cash write-offs are company loss from period projection — not yet a ledger event type.
+  const profitLine = round2(profitLineBase - cashWrittenOff);
 
   // Wallet loads: sum canonical wallet_credit already in ledgerEvents (funding transfer, not P&L).
   const { periodLoads: walletLoads } = computeIndriveWalletLoadsFromLedgerEntries(
@@ -256,6 +260,7 @@ export async function fetchBusinessFinanceBundle(
       fixedOverhead,
       operatingExpenses,
       driverPayouts,
+      cashWrittenOff: round2(cashWrittenOff),
     },
     transfers: {
       bankToIndriveWallet: round2(walletLoads),

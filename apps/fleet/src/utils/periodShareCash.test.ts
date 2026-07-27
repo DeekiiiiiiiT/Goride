@@ -71,5 +71,41 @@ describe('computeWeekCashBase', () => {
     expect(r.nonUberTripCash).toBe(800);
     expect(r.passengerCash).toBe(4800);
     expect(r.cashReturned).toBe(1500);
+    expect(r.cashWrittenOff).toBe(0);
+  });
+
+  it('sums Settlement-Week write-offs separately from cash returned', () => {
+    const r = computeWeekCashBase({
+      periodAnchor: '2026-06-29',
+      periodEnd: '2026-07-05',
+      uberPayoutCash: 0,
+      trips: [],
+      transactions: [
+        {
+          amount: 1500,
+          category: 'Cash Collection',
+          type: 'Payment_Received',
+          paymentMethod: 'Cash',
+          status: 'Completed',
+          metadata: { workPeriodStart: '2026-06-29' },
+        },
+        {
+          amount: 400,
+          category: 'Cash Write Off',
+          type: 'Cash_Write_Off',
+          status: 'Completed',
+          metadata: { workPeriodStart: '2026-06-29' },
+        },
+        {
+          amount: 50,
+          category: 'Cash Write Off',
+          type: 'Cash_Write_Off',
+          status: 'Completed',
+          metadata: { workPeriodStart: '2026-06-22' },
+        },
+      ],
+    });
+    expect(r.cashReturned).toBe(1500);
+    expect(r.cashWrittenOff).toBe(400);
   });
 });

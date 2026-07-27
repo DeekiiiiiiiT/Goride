@@ -918,6 +918,17 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
     }
   }, [isLoading, gatedStates, activeStepId]);
 
+  const orphanNoTripAutoChargeCount = useMemo(() => {
+    return (classified['personal-use'] || []).filter((tx) => {
+      const best = suggestions.get(tx.id)?.[0];
+      if (!best || !isOrphanPersonalMatch(best)) return false;
+      if (best.reasonCode !== 'ORPHAN_NO_TRIP') return false;
+      if (!tx.driverId) return false;
+      if (tx.paymentMethod === 'Cash' || tx.receiptUrl) return false;
+      return true;
+    }).length;
+  }, [classified, suggestions]);
+
   if (isLoading) {
     return (
         <div className="flex h-64 items-center justify-center">
@@ -1256,17 +1267,6 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
   const lockedRefresh = lock('Refreshing…', async () => {
     await refresh({ autoMatch: true });
   });
-
-  const orphanNoTripAutoChargeCount = useMemo(() => {
-    return (classified['personal-use'] || []).filter((tx) => {
-      const best = suggestions.get(tx.id)?.[0];
-      if (!best || !isOrphanPersonalMatch(best)) return false;
-      if (best.reasonCode !== 'ORPHAN_NO_TRIP') return false;
-      if (!tx.driverId) return false;
-      if (tx.paymentMethod === 'Cash' || tx.receiptUrl) return false;
-      return true;
-    }).length;
-  }, [classified, suggestions]);
 
   const lockedAutoChargePersonal = lock('Auto-charging personal…', async () => {
     try {

@@ -15,6 +15,7 @@ export function getAdjCashBalance(cashBalance: number, fuelCredits: number): num
  *     − Cash returned (Settlement Week–tagged Log Cash only)
  *     − Fleet fuel credit (Fuel Reconciliation companyShare)
  *     − Cash toll wash (cash plaza from Toll Reconciliation)
+ *     − Cash written off (Settlement Week–tagged Cash_Write_Off)
  *     = Cash still held
  *   Net Payout − Cash still held
  *     = Settlement (+ fleet owes driver; − driver owes fleet)
@@ -40,7 +41,7 @@ export function getPeriodSettlementComponents(
       ? row.passengerCash
       : row.cashOwed;
 
-  // Cash Returned = Settlement Week–tagged cash payments only (never fuel/toll).
+  // Cash Returned = Settlement Week–tagged cash payments only (never fuel/toll/write-off).
   const cashReturned = Math.max(0, row.cashPaid || 0);
 
   // Cash plaza tolls: prefer explicit field; else breakdown toll credits already
@@ -53,6 +54,7 @@ export function getPeriodSettlementComponents(
   const tollPersonal = Math.max(0, row.personalTollCharge ?? 0);
 
   const fuelCredits = Math.max(0, row.fuelCredits || 0);
+  const cashWrittenOff = Math.max(0, row.cashWrittenOff || 0);
 
   const r = computePeriodSettlement({
     driverShare: netPayoutApplied,
@@ -62,6 +64,7 @@ export function getPeriodSettlementComponents(
     tollCashWash: cashTollWash,
     tollPersonal,
     fuelCredits,
+    cashWrittenOff,
   });
 
   return {

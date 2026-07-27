@@ -113,6 +113,7 @@ export type DriverFinancialPeriodRow = {
   tierName: string | null;
   cashCollected: number;
   cashReturned: number;
+  cashWrittenOff: number;
   cashStillHeld: number;
   settlementAmount: number;
   payoutNet: number;
@@ -590,6 +591,7 @@ export async function rebuildDriverFinancialPeriod(
   });
   const cashCollected = cashBase.passengerCash;
   const cashReturned = cashBase.cashReturned;
+  const cashWrittenOff = cashBase.cashWrittenOff;
 
   const fuelNetPay = round2(fuelDriverSpend - fuelDeduction);
   const settled = computePeriodSettlement({
@@ -600,6 +602,7 @@ export async function rebuildDriverFinancialPeriod(
     tollCashWash: tollCashSpend,
     tollPersonal: Math.max(0, tollChargedToDriver),
     fuelCredits: fuelFleetShare,
+    cashWrittenOff,
   });
   const cashStillHeld = settled.adjCashBalance;
   const payoutNet = settled.netPayout;
@@ -643,6 +646,7 @@ export async function rebuildDriverFinancialPeriod(
     driverShare,
     cashCollected,
     cashReturned,
+    cashWrittenOff,
     lineCount: lines.length,
   });
   const sourceEventHash = await sha256Hex(hashPayload);
@@ -678,6 +682,7 @@ export async function rebuildDriverFinancialPeriod(
     tierName,
     cashCollected: round2(cashCollected),
     cashReturned: round2(cashReturned),
+    cashWrittenOff: round2(cashWrittenOff),
     cashStillHeld: round2(cashStillHeld),
     settlementAmount: round2(settlementAmount),
     payoutNet: round2(payoutNet),
@@ -700,6 +705,7 @@ export async function rebuildDriverFinancialPeriod(
     driverShare > 0.005 ||
     cashCollected > 0.005 ||
     cashReturned > 0.005 ||
+    cashWrittenOff > 0.005 ||
     tripCount > 0;
   if (!hasSettlementActivity) {
     const { data: phantom } = await sb()
@@ -755,6 +761,7 @@ export async function rebuildDriverFinancialPeriod(
     tier_name: row.tierName,
     cash_collected: row.cashCollected,
     cash_returned: row.cashReturned,
+    cash_written_off: row.cashWrittenOff,
     cash_still_held: row.cashStillHeld,
     settlement_amount: row.settlementAmount,
     payout_net: row.payoutNet,
@@ -948,6 +955,7 @@ function mapDbPeriod(r: any): DriverFinancialPeriodRow {
     tierName: r.tier_name ?? null,
     cashCollected: Number(r.cash_collected) || 0,
     cashReturned: Number(r.cash_returned) || 0,
+    cashWrittenOff: Number(r.cash_written_off) || 0,
     cashStillHeld: Number(r.cash_still_held) || 0,
     settlementAmount: Number(r.settlement_amount) || 0,
     payoutNet: Number(r.payout_net) || 0,

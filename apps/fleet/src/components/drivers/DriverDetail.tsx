@@ -131,6 +131,7 @@ import { Calendar } from "../ui/calendar";
 import { toast } from "sonner@2.0.3";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../ui/dialog";
 import { LogCashPaymentModal } from './LogCashPaymentModal';
+import { CashWriteOffModal, type CashWriteOffSavePayload } from './CashWriteOffModal';
 import { WeeklySettlementView } from './WeeklySettlementView';
 import { useDriverPayoutPeriodRows } from '../../hooks/useDriverPayoutPeriodRows';
 import { useDriverFinancialBundle } from '../../hooks/useDriverFinancialBundle';
@@ -159,7 +160,7 @@ import { getTripPhysicalCashCollected, sumTripPhysicalCashCollected } from '../.
 import { isTollCategory } from '../../utils/tollCategoryHelper';
 import { classifyTollLedgerEntry } from '../../utils/tollDisposition';
 import { expandDriverTransactionIds } from '../../utils/expandDriverTransactionIds';
-import { isDriverCashPaymentTransaction } from '../../utils/driverCashPayment';
+import { isCashWriteOffTransaction, isDriverCashPaymentTransaction } from '../../utils/driverCashPayment';
 import { isUberCashEligibleMetricPeriod, isValidDriverMetricPeriod } from '../../utils/driverMetricPeriod';
 import { resolveUberPeriodCashCollected } from '../../utils/resolveUberPeriodCash';
 import { calculateAverageEnroute, estimateEnrouteFallback } from '../../utils/enrouteStrategy';
@@ -341,6 +342,12 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       initialAmount?: number;
       editingTransaction?: FinancialTransaction;
   }>({ isOpen: false });
+  const [writeOffModalState, setWriteOffModalState] = useState<{
+      isOpen: boolean;
+      workPeriodStart: string;
+      workPeriodEnd: string;
+      maxAmount: number;
+  }>({ isOpen: false, workPeriodStart: '', workPeriodEnd: '', maxAmount: 0 });
   const [walletView, setWalletView] = useState<'ledger' | 'settlements'>('settlements');
   const [transactions, setTransactions] = useState<FinancialTransaction[]>([]);
   const [claims, setClaims] = useState<any[]>([]);
@@ -619,15 +626,23 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
   // Manually-logged payments don't carry a tripId and fall outside the trip-date
   // window heuristic, causing them to be incorrectly hidden. Financial records
   // like cash collections / floats / adjustments should always be visible.
+  // Cash Returned + Cash Write Offs (write-offs are not cash collected; shown so ops can undo them).
   const paymentTransactions = useMemo(() => {
     return (transactions || [])
-      .filter(isDriverCashPaymentTransaction)
+      .filter((t) => isDriverCashPaymentTransaction(t) || isCashWriteOffTransaction(t))
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [transactions]);
 
   // Group Payments Log rows by Settlement Week (period), newest period first, untagged last.
   const groupedPaymentTransactions = useMemo(() => {
-    const groups = new Map<string, { key: string; label: string; sortKey: number; total: number; rows: typeof paymentTransactions }>();
+    const groups = new Map<string, {
+      key: string;
+      label: string;
+      sortKey: number;
+      total: number;
+      writeOffTotal: number;
+      rows: typeof paymentTransactions;
+    }>();
     for (const tx of paymentTransactions) {
       const s = tx.metadata?.workPeriodStart;
       const e = tx.metadata?.workPeriodEnd;
@@ -639,8 +654,9 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         : 'Untagged';
       const sortKey = sd ? sd.getTime() : -Infinity;
       let g = groups.get(key);
-      if (!g) { g = { key, label, sortKey, total: 0, rows: [] }; groups.set(key, g); }
-      g.total += tx.amount;
+      if (!g) { g = { key, label, sortKey, total: 0, writeOffTotal: 0, rows: [] }; groups.set(key, g); }
+      if (isCashWriteOffTransaction(tx)) g.writeOffTotal += Math.abs(Number(tx.amount) || 0);
+      else g.total += Number(tx.amount) || 0;
       g.rows.push(tx);
     }
     return Array.from(groups.values()).sort((a, b) => b.sortKey - a.sortKey);
@@ -1033,6 +1049,47 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       void invalidateFinancialPeriods(driverId);
   };
 
+  const handleSaveCashWriteOff = async (payload: CashWriteOffSavePayload) => {
+      if (!payload.workPeriodStart || !payload.workPeriodEnd) {
+        throw new Error('Settlement Week is required for cash write-offs');
+      }
+      const amount = Math.abs(payload.amount);
+      if (!(amount > 0.005)) {
+        throw new Error('Write-off amount must be greater than zero');
+      }
+      if (amount > writeOffModalState.maxAmount + 0.005) {
+        throw new Error(`Cannot write off more than cash still owed (${writeOffModalState.maxAmount.toFixed(2)})`);
+      }
+
+      const description = payload.notes
+        ? `Cash write-off: ${payload.reason} — ${payload.notes}`
+        : `Cash write-off: ${payload.reason}`;
+
+      const newTx: Partial<FinancialTransaction> = {
+          driverId,
+          driverName: driver?.name || driverName,
+          amount,
+          date: payload.date,
+          description,
+          category: 'Cash Write Off',
+          type: 'Cash_Write_Off',
+          paymentMethod: 'Other',
+          status: 'Completed',
+          isReconciled: true,
+          time: new Date().toLocaleTimeString(),
+          metadata: {
+            workPeriodStart: payload.workPeriodStart,
+            workPeriodEnd: payload.workPeriodEnd,
+            writeOffReason: payload.reason,
+          },
+      };
+
+      const saved = await api.saveTransaction(newTx);
+      const savedTx = saved?.data || saved;
+      setTransactions(prev => [savedTx, ...prev].filter(Boolean));
+      void invalidateFinancialPeriods(driverId);
+  };
+
   const handleEditTransaction = (tx: FinancialTransaction) => {
       setPaymentModalState({
           isOpen: true,
@@ -1073,7 +1130,11 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       try {
           await api.deleteTransaction(transactionToDelete);
           void invalidateFinancialPeriods(driverId);
-          toast.success("Transaction deleted");
+          toast.success(
+            isCashWriteOffTransaction(originalTransactions.find((t) => t.id === transactionToDelete))
+              ? 'Write-off undone'
+              : 'Transaction deleted',
+          );
       } catch (e) {
           setTransactions(originalTransactions);
           console.error("Failed to delete transaction", e);
@@ -3974,20 +4035,27 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                 initialWorkPeriodEnd: end.toISOString(),
                                 initialAmount: amount
                             })}
+                            onWriteOff={(start, end, maxAmount) => setWriteOffModalState({
+                                isOpen: true,
+                                workPeriodStart: format(start, 'yyyy-MM-dd'),
+                                workPeriodEnd: format(end, 'yyyy-MM-dd'),
+                                maxAmount,
+                            })}
+                            onDeleteWriteOff={(txId) => handleDeleteTransaction(txId)}
                         />
                     ) : (
                         <Card>
                             <CardHeader>
                                 <div>
                                     <CardTitle>Payments Log</CardTitle>
-                                    <CardDescription>Cash Collection rows tagged to a Settlement Week. Fuel and tolls live on their own desks.</CardDescription>
+                                    <CardDescription>Cash returned and cash write-offs by Settlement Week. Fuel and tolls live on their own desks.</CardDescription>
                                 </div>
                             </CardHeader>
                             <CardContent>
                                     <div className="space-y-4">
                                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                                             <p className="text-sm text-slate-500">
-                                                {paymentTransactions.length} cash payment{paymentTransactions.length !== 1 ? 's' : ''} on record
+                                                {paymentTransactions.length} cash / write-off entr{paymentTransactions.length !== 1 ? 'ies' : 'y'} on record
                                                 {transactions.length > 0 ? ` (${transactions.length.toLocaleString()} total transactions loaded)` : ''}
                                             </p>
                                             {paymentTransactions.length <= 1 && transactions.length <= 10 && (
@@ -4039,15 +4107,20 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                                 </span>
                                                             </TableCell>
                                                             <TableCell colSpan={2} className="py-2 text-xs text-slate-400">
-                                                                {group.rows.length} payment{group.rows.length !== 1 ? 's' : ''}
+                                                                {group.rows.length} entr{group.rows.length !== 1 ? 'ies' : 'y'}
+                                                                {group.writeOffTotal > 0.005
+                                                                  ? ` · write-offs −$${group.writeOffTotal.toFixed(2)}`
+                                                                  : ''}
                                                             </TableCell>
-                                                            <TableCell className="py-2 text-right text-xs text-slate-500">Subtotal</TableCell>
+                                                            <TableCell className="py-2 text-right text-xs text-slate-500">Cash returned</TableCell>
                                                             <TableCell className="py-2 text-right font-bold font-mono text-emerald-700">
                                                                 +${group.total.toFixed(2)}
                                                             </TableCell>
                                                             <TableCell className="py-2"></TableCell>
                                                         </TableRow>,
-                                                        ...(expandedPaymentGroups.has(group.key) ? group.rows : []).map((tx) => (
+                                                        ...(expandedPaymentGroups.has(group.key) ? group.rows : []).map((tx) => {
+                                                        const isWriteOff = isCashWriteOffTransaction(tx);
+                                                        return (
                                                         <TableRow key={tx.id}>
                                                             <TableCell className="font-medium text-slate-600">{(() => { const d = parseTripDate(tx.date); return d ? format(d, 'MMM d, yyyy') : '-'; })()}</TableCell>
                                                             <TableCell className="text-sm text-slate-600">
@@ -4055,6 +4128,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                                   const s = tx.metadata?.workPeriodStart;
                                                                   const e = tx.metadata?.workPeriodEnd;
                                                                   if (!s) {
+                                                                    if (isWriteOff) return <span className="text-xs text-slate-400">Untagged</span>;
                                                                     return (
                                                                       <button
                                                                         type="button"
@@ -4069,15 +4143,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                                   const sd = parseTripDate(String(s).split('T')[0]);
                                                                   const ed = e ? parseTripDate(String(e).split('T')[0]) : null;
                                                                   if (!sd) {
-                                                                    return (
-                                                                      <button
-                                                                        type="button"
-                                                                        className="text-left text-amber-700 hover:underline text-xs font-medium"
-                                                                        onClick={() => handleEditTransaction(tx)}
-                                                                      >
-                                                                        Untagged — Edit to tag
-                                                                      </button>
-                                                                    );
+                                                                    return <span className="text-xs text-slate-400">—</span>;
                                                                   }
                                                                   const pending = String(tx.status || '').toLowerCase() === 'pending';
                                                                   return (
@@ -4091,8 +4157,13 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                                 })()}
                                                             </TableCell>
                                                             <TableCell>
-                                                                <div className="flex flex-col">
+                                                                <div className="flex flex-col gap-1">
                                                                     <span className="font-medium text-slate-900">{tx.description}</span>
+                                                                    {isWriteOff && (
+                                                                      <Badge variant="secondary" className="w-fit font-normal bg-slate-100 text-slate-700">
+                                                                        Write-off
+                                                                      </Badge>
+                                                                    )}
                                                                     {tx.referenceNumber && (
                                                                         <span className="text-xs text-slate-500 font-mono mt-0.5">
                                                                             Ref: {tx.referenceNumber}
@@ -4102,11 +4173,17 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                             </TableCell>
                                                             <TableCell>
                                                                 <div className="flex items-center gap-2 text-slate-600">
-                                                                    {tx.paymentMethod === 'Cash' && <DollarSign className="h-3 w-3" />}
-                                                                    {tx.paymentMethod === 'Bank Transfer' && <Landmark className="h-3 w-3" />}
-                                                                    {tx.paymentMethod === 'Mobile Money' && <Wallet className="h-3 w-3" />}
-                                                                    {tx.paymentMethod === 'Check' && <FileText className="h-3 w-3" />}
-                                                                    <span className="text-sm">{tx.paymentMethod || 'Cash'}</span>
+                                                                    {isWriteOff ? (
+                                                                      <span className="text-sm">Company loss</span>
+                                                                    ) : (
+                                                                      <>
+                                                                        {tx.paymentMethod === 'Cash' && <DollarSign className="h-3 w-3" />}
+                                                                        {tx.paymentMethod === 'Bank Transfer' && <Landmark className="h-3 w-3" />}
+                                                                        {tx.paymentMethod === 'Mobile Money' && <Wallet className="h-3 w-3" />}
+                                                                        {tx.paymentMethod === 'Check' && <FileText className="h-3 w-3" />}
+                                                                        <span className="text-sm">{tx.paymentMethod || 'Cash'}</span>
+                                                                      </>
+                                                                    )}
                                                                 </div>
                                                             </TableCell>
                                                             <TableCell>
@@ -4120,12 +4197,15 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                                     {tx.status}
                                                                 </Badge>
                                                             </TableCell>
-                                                            <TableCell className="text-right font-bold font-mono text-emerald-600">
-                                                                +${tx.amount.toFixed(2)}
+                                                            <TableCell className={cn(
+                                                              "text-right font-bold font-mono",
+                                                              isWriteOff ? "text-slate-700" : "text-emerald-600",
+                                                            )}>
+                                                                {isWriteOff ? '−' : '+'}${Math.abs(Number(tx.amount) || 0).toFixed(2)}
                                                             </TableCell>
                                                             <TableCell>
                                                                 <div className="flex items-center gap-1 justify-end">
-                                                                    {tx.status === 'Pending' && (
+                                                                    {!isWriteOff && tx.status === 'Pending' && (
                                                                         <Button
                                                                             variant="ghost"
                                                                             size="icon"
@@ -4144,26 +4224,31 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                                             </Button>
                                                                         </DropdownMenuTrigger>
                                                                         <DropdownMenuContent align="end">
-                                                                            <DropdownMenuItem onClick={() => handleEditTransaction(tx)}>
-                                                                                <Pencil className="mr-2 h-4 w-4" />
-                                                                                Edit
-                                                                            </DropdownMenuItem>
-                                                                            <DropdownMenuSeparator />
+                                                                            {!isWriteOff && (
+                                                                              <>
+                                                                                <DropdownMenuItem onClick={() => handleEditTransaction(tx)}>
+                                                                                    <Pencil className="mr-2 h-4 w-4" />
+                                                                                    Edit
+                                                                                </DropdownMenuItem>
+                                                                                <DropdownMenuSeparator />
+                                                                              </>
+                                                                            )}
                                                                             <DropdownMenuItem onClick={() => handleDeleteTransaction(tx.id)} className="text-red-600 focus:text-red-600">
                                                                                 <Trash2 className="mr-2 h-4 w-4" />
-                                                                                Delete
+                                                                                {isWriteOff ? 'Undo write-off' : 'Delete'}
                                                                             </DropdownMenuItem>
                                                                         </DropdownMenuContent>
                                                                     </DropdownMenu>
                                                                 </div>
                                                             </TableCell>
                                                         </TableRow>
-                                                    )),
+                                                        );
+                                                    }),
                                                     ]))
                                                 ) : (
                                                     <TableRow>
                                                         <TableCell colSpan={7} className="h-24 text-center text-slate-500">
-                                                            No payments recorded.
+                                                            No payments or write-offs recorded.
                                                         </TableCell>
                                                     </TableRow>
                                                 )}
@@ -4976,18 +5061,37 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         initialTransaction={paymentModalState.editingTransaction}
         periods={logCashPeriods}
       />
+      <CashWriteOffModal
+        isOpen={writeOffModalState.isOpen}
+        onClose={() => setWriteOffModalState({ isOpen: false, workPeriodStart: '', workPeriodEnd: '', maxAmount: 0 })}
+        onSave={handleSaveCashWriteOff}
+        driverName={driverName}
+        maxAmount={writeOffModalState.maxAmount}
+        workPeriodStart={writeOffModalState.workPeriodStart}
+        workPeriodEnd={writeOffModalState.workPeriodEnd}
+      />
         {/* Delete Confirmation Dialog */}
         <AlertDialog open={!!transactionToDelete} onOpenChange={(open) => !open && setTransactionToDelete(null)}>
             <AlertDialogContent>
                 <AlertDialogHeader>
-                    <AlertDialogTitle>Delete Transaction?</AlertDialogTitle>
+                    <AlertDialogTitle>
+                      {transactionToDelete && isCashWriteOffTransaction(transactions.find((t) => t.id === transactionToDelete))
+                        ? 'Undo write-off?'
+                        : 'Delete Transaction?'}
+                    </AlertDialogTitle>
                     <AlertDialogDescription>
-                        Are you sure you want to delete this transaction? This action cannot be undone.
+                        {transactionToDelete && isCashWriteOffTransaction(transactions.find((t) => t.id === transactionToDelete))
+                          ? 'This restores the cash still owed for that Settlement Week. Business Finance will update after delete.'
+                          : 'Are you sure you want to delete this transaction? This action cannot be undone.'}
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                     <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={confirmDeleteTransaction} className="bg-red-600 hover:bg-red-700">Delete</AlertDialogAction>
+                    <AlertDialogAction onClick={confirmDeleteTransaction} className="bg-red-600 hover:bg-red-700">
+                      {transactionToDelete && isCashWriteOffTransaction(transactions.find((t) => t.id === transactionToDelete))
+                        ? 'Undo write-off'
+                        : 'Delete'}
+                    </AlertDialogAction>
                 </AlertDialogFooter>
             </AlertDialogContent>
         </AlertDialog>

@@ -112,4 +112,33 @@ describe('computePeriodSettlement', () => {
     expect(r.adjCashBalance).toBe(-50);   // 100 − 150, driver has a net cash credit
     expect(r.settlement).toBe(75);        // 25 − (−50) = company owes the driver $75
   });
+
+  it('cash write-off reduces still held without counting as cash paid', () => {
+    const r = computePeriodSettlement({
+      driverShare: 25,
+      fuelDeduction: 0,
+      baseCashOwed: 100,
+      baseCashPaid: 20,
+      tollCashWash: 0,
+      tollPersonal: 0,
+      fuelCredits: 0,
+      cashWrittenOff: 30,
+    });
+    expect(r.cashPaid).toBe(20);          // write-off is NOT cash returned
+    expect(r.cashBalance).toBe(80);
+    expect(r.adjCashBalance).toBe(50);    // 80 − 30 write-off
+    expect(r.settlement).toBe(-25);       // 25 − 50
+  });
+
+  it('omitting cashWrittenOff leaves still held unchanged (backward compatible)', () => {
+    const r = computePeriodSettlement({
+      driverShare: 25,
+      fuelDeduction: 0,
+      baseCashOwed: 100,
+      baseCashPaid: 0,
+      tollCashWash: 10,
+      tollPersonal: 0,
+    });
+    expect(r.adjCashBalance).toBe(90);
+  });
 });

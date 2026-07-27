@@ -103,6 +103,8 @@ export type BusinessFinanceOverview = {
     fixedOverhead: number;
     operatingExpenses: number;
     driverPayouts: number;
+    /** Cash Wallet write-offs — company loss; never cash collected. */
+    cashWrittenOff: number;
   };
   /** Bank → platform wallet transfers (not an expense). */
   transfers: {

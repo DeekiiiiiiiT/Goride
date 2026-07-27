@@ -42,6 +42,7 @@ export type DriverFinancialPeriodClient = {
   tierName?: string | null;
   cashCollected: number;
   cashReturned: number;
+  cashWrittenOff: number;
   cashStillHeld: number;
   settlementAmount: number;
   payoutNet: number;
@@ -104,6 +105,7 @@ export function periodsToPayoutPeriodRows(
       const fuelCredits = Number(p.fuelFleetShare) || 0;
       const passengerCash = Number(p.cashCollected) || 0;
       const cashPaid = Number(p.cashReturned) || 0;
+      const cashWrittenOff = Number(p.cashWrittenOff) || 0;
       const tollPersonal = Number(p.tollChargedToDriver) || 0;
       const cashTollWash = Number(p.tollCashSpend) || 0;
       const netPayout = Number(p.payoutNet) || 0;
@@ -136,6 +138,7 @@ export function periodsToPayoutPeriodRows(
         passengerCash,
         cashTollWash,
         personalTollCharge: tollPersonal,
+        cashWrittenOff,
         bankSettled: 0,
         status: mapPayoutStatus(p),
         cashPaidBreakdown: {
@@ -201,6 +204,7 @@ export function overlaySharedPeriodsOntoPayoutRows<T extends {
       disputeRefundUnmatched: Number(p.disputeRefundUnmatched) || 0,
       personalTollCharge: Number(p.tollChargedToDriver) || 0,
       cashTollWash: Number(p.tollCashSpend) || 0,
+      cashWrittenOff: Number(p.cashWrittenOff) || 0,
       fuelDeduction: Number(p.fuelDeduction) || row.fuelDeduction,
       fuelCredits: Number(p.fuelFleetShare) || row.fuelCredits,
       isFinalized: p.fuelFinalized ? true : row.isFinalized,

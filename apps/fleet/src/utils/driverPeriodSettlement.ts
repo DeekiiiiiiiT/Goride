@@ -31,6 +31,11 @@ export interface PeriodSettlementInput {
    * to 0, so existing callers are unaffected.
    */
   fuelCredits?: number;
+  /**
+   * Cash write-offs tagged to this Settlement Week — company loss that reduces
+   * still held without counting as cash returned. Defaults to 0.
+   */
+  cashWrittenOff?: number;
 }
 
 export interface PeriodSettlementResult {
@@ -39,9 +44,9 @@ export interface PeriodSettlementResult {
   tollCashWash: number;
   cashOwed: number;
   cashPaid: number;
-  /** Gross cash balance (cashOwed − cashPaid), before fuel-credit netting. */
+  /** Gross cash balance (cashOwed − cashPaid), before fuel-credit / write-off netting. */
   cashBalance: number;
-  /** cashBalance minus fuelCredits — what settlement is actually computed against. */
+  /** cashBalance minus fuelCredits minus cashWrittenOff — what settlement is actually computed against. */
   adjCashBalance: number;
   /** netPayout − adjCashBalance. Positive = company owes the driver; negative = driver owes the company. */
   settlement: number;
@@ -55,11 +60,12 @@ export function computePeriodSettlement(i: PeriodSettlementInput): PeriodSettlem
   const tollPersonal = round(Math.max(0, i.tollPersonal || 0));
   const tollCashWash = round(Math.max(0, i.tollCashWash || 0));
   const fuelCredits = round(Math.max(0, i.fuelCredits || 0));
+  const cashWrittenOff = round(Math.max(0, i.cashWrittenOff || 0));
 
   const cashOwed = round((i.baseCashOwed || 0) + tollPersonal);
   const cashPaid = round((i.baseCashPaid || 0) + tollCashWash);
   const cashBalance = round(cashOwed - cashPaid);
-  const adjCashBalance = round(cashBalance - fuelCredits);
+  const adjCashBalance = round(cashBalance - fuelCredits - cashWrittenOff);
   const settlement = round(netPayout - adjCashBalance);
 
   return {

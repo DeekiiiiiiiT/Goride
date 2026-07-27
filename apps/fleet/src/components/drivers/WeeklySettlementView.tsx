@@ -5,7 +5,7 @@ import { Button } from "../ui/button";
 import { Progress } from "../ui/progress";
 import { Trip, FinancialTransaction, DriverMetrics } from '../../types/data';
 import { format } from "date-fns";
-import { DollarSign, Info, Eye, Phone } from "lucide-react";
+import { DollarSign, Info, Eye, Phone, Ban } from "lucide-react";
 import { cn } from "../ui/utils";
 import {
   computeWeeklyCashSettlement,
@@ -28,6 +28,9 @@ interface WeeklySettlementViewProps {
     /** Monday yyyy-MM-dd → cash still owed (Settlement SSOT, display only). */
     callOutstandingByMonday?: Record<string, WalletCallOutstanding>;
     onLogPayment?: (periodStart: Date, periodEnd: Date, amountOwed: number) => void;
+    /** Write off cash still owed for this Settlement Week (company loss). */
+    onWriteOff?: (periodStart: Date, periodEnd: Date, maxAmount: number) => void;
+    onDeleteWriteOff?: (txId: string) => void;
     onWeeksComputed?: (weeks: Array<{ start: Date; end: Date; amountOwed: number; amountPaid: number; balance: number; status: string }>) => void;
     readOnly?: boolean;
 }
@@ -43,6 +46,8 @@ export function WeeklySettlementView({
     cashWeeks: cashWeeksProp,
     callOutstandingByMonday = {},
     onLogPayment,
+    onWriteOff,
+    onDeleteWriteOff,
     onWeeksComputed,
     readOnly = false,
 }: WeeklySettlementViewProps) {
@@ -88,15 +93,20 @@ export function WeeklySettlementView({
                         week.amountOwed > 0.005 &&
                         onLogPayment &&
                         (cashOwed > 0.005 || (week.status !== 'Paid' && week.status !== 'Overpaid'));
+                    const showWriteOff =
+                        !readOnly &&
+                        cashOwed > 0.005 &&
+                        !!onWriteOff;
 
                     return (
                     <Card key={idx} className={cn(
                         "transition-all hover:shadow-md",
                         cashOwed > 0.005 ? "border-amber-200 bg-amber-50/20" : ""
                     )}>
-                        <CardContent className="p-4 sm:p-6">
-                            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-                                <div className="space-y-1 min-w-[10rem]">
+                        <CardContent className="p-4 sm:p-6 space-y-4">
+                            {/* Header: week + actions stay on one band so Log Cash never drops into the metrics column */}
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                <div className="space-y-1 min-w-0">
                                     <div className="flex items-center gap-2 flex-wrap">
                                         <h3 className="font-semibold text-slate-900">
                                             {format(week.start, "MMM d")} - {format(week.end, "MMM d, yyyy")}
@@ -129,6 +139,45 @@ export function WeeklySettlementView({
                                     </p>
                                 </div>
 
+                                <div className="flex flex-wrap items-center gap-2 sm:justify-end shrink-0">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-8 gap-1.5 text-xs border-slate-300 hover:bg-slate-100 hover:border-emerald-300 hover:text-emerald-700 transition-colors"
+                                        onClick={(e) => { e.stopPropagation(); setSelectedWalletWeek(week); }}
+                                    >
+                                        <Eye className="h-3.5 w-3.5" />
+                                        Details
+                                    </Button>
+                                    {showWriteOff && (
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="h-8 border-slate-300 text-slate-700 hover:bg-slate-100"
+                                            onClick={() => {
+                                                onWriteOff!(week.start, week.end, cashOwed);
+                                            }}
+                                        >
+                                            <Ban className="h-3.5 w-3.5 mr-1.5" />
+                                            Write Off
+                                        </Button>
+                                    )}
+                                    {showLog && (
+                                        <Button
+                                            size="sm"
+                                            className="h-8 bg-emerald-600 hover:bg-emerald-700"
+                                            onClick={() => {
+                                                onLogPayment!(week.start, week.end, logPrefill);
+                                            }}
+                                        >
+                                            <DollarSign className="h-3.5 w-3.5 mr-1.5" />
+                                            Log Cash
+                                        </Button>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch">
                                 <div className="flex-1 min-w-[12rem] rounded-lg border border-slate-200 bg-white px-4 py-3">
                                     <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500 uppercase tracking-wide">
                                         <Phone className="h-3.5 w-3.5" />
@@ -164,7 +213,7 @@ export function WeeklySettlementView({
                                     )}
                                 </div>
 
-                                <div className="flex flex-col sm:flex-row gap-3 sm:gap-6 text-sm">
+                                <div className="flex gap-6 sm:gap-8 text-sm sm:items-center sm:pl-2">
                                     <div className="space-y-0.5">
                                         <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">Passenger cash</p>
                                         <p className="font-semibold text-slate-700 tabular-nums">{plainAmount(week.amountOwed)}</p>
@@ -172,37 +221,18 @@ export function WeeklySettlementView({
                                     <div className="space-y-0.5">
                                         <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">Cash returned</p>
                                         <p className="font-semibold text-emerald-700 tabular-nums">{plainAmount(week.amountPaid)}</p>
-                                        <p className="text-[10px] text-slate-400">Log Cash this week</p>
                                     </div>
-                                </div>
-
-                                <div className="flex items-center gap-2 shrink-0">
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        className="gap-1.5 text-xs border-slate-300 hover:bg-slate-100 hover:border-emerald-300 hover:text-emerald-700 transition-colors"
-                                        onClick={(e) => { e.stopPropagation(); setSelectedWalletWeek(week); }}
-                                    >
-                                        <Eye className="h-3.5 w-3.5" />
-                                        Details
-                                    </Button>
-                                    {showLog && (
-                                        <Button
-                                            size="sm"
-                                            className="bg-emerald-600 hover:bg-emerald-700 shrink-0"
-                                            onClick={() => {
-                                                onLogPayment!(week.start, week.end, logPrefill);
-                                            }}
-                                        >
-                                            <DollarSign className="h-4 w-4 mr-2" />
-                                            Log Cash
-                                        </Button>
+                                    {(call?.breakdown.cashWrittenOff || 0) > 0.005 && (
+                                        <div className="space-y-0.5">
+                                            <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">Written off</p>
+                                            <p className="font-semibold text-slate-700 tabular-nums">{plainAmount(call!.breakdown.cashWrittenOff)}</p>
+                                        </div>
                                     )}
                                 </div>
                             </div>
 
                             {(week.amountOwed > 0.005 || cashOwed > 0.005) && (
-                                <div className="mt-4">
+                                <div>
                                     <div className="flex justify-between text-xs mb-1.5">
                                         <span className="text-slate-500">Cash position cleared</span>
                                         <span className="text-slate-700 font-medium">
@@ -241,6 +271,19 @@ export function WeeklySettlementView({
                 }
                 open={!!selectedWalletWeek}
                 onOpenChange={(open) => { if (!open) setSelectedWalletWeek(null); }}
+                onWriteOff={
+                    !readOnly && onWriteOff
+                        ? (start, end, maxAmount) => {
+                            setSelectedWalletWeek(null);
+                            onWriteOff(start, end, maxAmount);
+                          }
+                        : undefined
+                }
+                onDeleteWriteOff={
+                    !readOnly && onDeleteWriteOff
+                        ? (txId) => onDeleteWriteOff(txId)
+                        : undefined
+                }
             />
         </div>
     );

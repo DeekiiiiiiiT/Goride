@@ -13,6 +13,7 @@ export type WalletCashBreakdown = {
   cashReturned: number;
   fuelCredit: number;
   cashTollCredit: number;
+  cashWrittenOff: number;
   stillHeld: number;
   /** 0 when earnings not finalized. */
   netPayoutApplied: number;
@@ -44,7 +45,8 @@ function readCashInputs(row: PayoutPeriodRow) {
   const cashTollCredit = round2(Math.max(0, explicitWash - washAlreadyInPaid));
   const personalToll = round2(Math.max(0, row.personalTollCharge ?? 0));
   const fuelCredit = round2(Math.max(0, row.fuelCredits || 0));
-  return { passengerCash, cashReturned, cashTollCredit, personalToll, fuelCredit };
+  const cashWrittenOff = round2(Math.max(0, row.cashWrittenOff || 0));
+  return { passengerCash, cashReturned, cashTollCredit, personalToll, fuelCredit, cashWrittenOff };
 }
 
 export function walletCallOutstandingFromPeriod(

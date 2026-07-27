@@ -9,11 +9,32 @@ type CashPaymentLike = {
   metadata?: { workPeriodStart?: string };
 };
 
+/** Fleet forgives cash still owed — never counts as Cash Returned / cash collected. */
+export function isCashWriteOffTransaction(
+  t: Pick<CashPaymentLike, 'amount' | 'category' | 'type'> | null | undefined,
+): boolean {
+  if (!t || !Number.isFinite(t.amount) || (t.amount as number) <= 0) return false;
+  if (t.type === 'Cash_Write_Off' || t.category === 'Cash Write Off') return true;
+  return false;
+}
+
+/** Cleared write-off (Completed / Verified; blank status treated as completed). */
+export function isClearedCashWriteOff(
+  t: Pick<CashPaymentLike, 'amount' | 'category' | 'type' | 'status'> | null | undefined,
+): boolean {
+  if (!isCashWriteOffTransaction(t)) return false;
+  const status = String(t!.status || '').toLowerCase().trim();
+  return status === 'completed' || status === 'verified' || status === '';
+}
+
 /** Driver → fleet cash handoff (Payments Log, wallet totals, weekly settlement). */
 export function isDriverCashPaymentTransaction(
   t: Pick<CashPaymentLike, 'amount' | 'category' | 'type' | 'description' | 'paymentMethod'> | null | undefined,
 ): boolean {
   if (!t || !Number.isFinite(t.amount) || (t.amount as number) <= 0) return false;
+
+  // Hard wall: write-offs must never inflate Cash Returned / BF cash collected.
+  if (isCashWriteOffTransaction(t)) return false;
 
   if (t.paymentMethod === 'Tag Balance') return false;
   if (t.description?.toLowerCase().includes('top-up')) return false;
@@ -76,6 +97,16 @@ export function isCashReturnedForWeek(
   weekMondayYmd: string,
 ): boolean {
   if (!t || !isClearedDriverCashPayment(t)) return false;
+  const key = cashPaymentWeekKey(t);
+  return key != null && key === weekMondayYmd;
+}
+
+/** True when cleared write-off is tagged exactly to this Settlement Week Monday. */
+export function isCashWriteOffForWeek(
+  t: CashPaymentLike | null | undefined,
+  weekMondayYmd: string,
+): boolean {
+  if (!t || !isClearedCashWriteOff(t)) return false;
   const key = cashPaymentWeekKey(t);
   return key != null && key === weekMondayYmd;
 }

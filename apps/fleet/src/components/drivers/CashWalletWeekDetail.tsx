@@ -12,16 +12,18 @@ import {
 } from '../ui/sheet';
 import { Separator } from '../ui/separator';
 import { Badge } from '../ui/badge';
-import { Calendar, Phone } from 'lucide-react';
+import { Calendar, Phone, Ban, Trash2 } from 'lucide-react';
 import type { CashWeekData } from '../../utils/cashSettlementCalc';
 import type { FinancialTransaction } from '../../types/data';
 import {
   cashPaymentWeekKey,
   isCashReturnedForWeek,
+  isCashWriteOffForWeek,
   isDriverCashPaymentTransaction,
 } from '../../utils/driverCashPayment';
 import type { WalletCallOutstanding } from '../../utils/walletCallOutstanding';
 import { cn } from '../ui/utils';
+import { Button } from '../ui/button';
 
 interface CashWalletWeekDetailProps {
   week: CashWeekData | null;
@@ -29,6 +31,8 @@ interface CashWalletWeekDetailProps {
   callOutstanding?: WalletCallOutstanding;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onWriteOff?: (periodStart: Date, periodEnd: Date, maxAmount: number) => void;
+  onDeleteWriteOff?: (txId: string) => void;
 }
 
 const fmt = (n: number) =>
@@ -85,12 +89,22 @@ export function CashWalletWeekDetail({
   callOutstanding,
   open,
   onOpenChange,
+  onWriteOff,
+  onDeleteWriteOff,
 }: CashWalletWeekDetailProps) {
   const payments = useMemo(() => {
     if (!week) return [];
     const monday = format(week.start, 'yyyy-MM-dd');
     return (transactions || [])
       .filter((t) => isCashReturnedForWeek(t, monday))
+      .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+  }, [week, transactions]);
+
+  const writeOffs = useMemo(() => {
+    if (!week) return [];
+    const monday = format(week.start, 'yyyy-MM-dd');
+    return (transactions || [])
+      .filter((t) => isCashWriteOffForWeek(t, monday))
       .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
   }, [week, transactions]);
 
@@ -223,6 +237,16 @@ export function CashWalletWeekDetail({
               tone="credit"
             />
 
+            {(b.cashWrittenOff || 0) > 0.005 && (
+              <Row
+                label="Written off"
+                hint="Company loss — does not count as cash collected"
+                amount={b.cashWrittenOff}
+                sign="minus"
+                tone="credit"
+              />
+            )}
+
             <Separator />
 
             <Row
@@ -321,6 +345,73 @@ export function CashWalletWeekDetail({
               {pendingTagged.length} pending transfer
               {pendingTagged.length !== 1 ? 's' : ''} tagged here — under Unverified until verified.
             </p>
+          )}
+        </div>
+
+        <div className="mt-6">
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <div className="flex items-center gap-1.5">
+              <Ban className="h-3.5 w-3.5 text-slate-400" />
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                Write-offs
+              </p>
+            </div>
+            {onWriteOff && cashOwed > 0.005 && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs border-slate-300"
+                onClick={() => onWriteOff(week.start, week.end, cashOwed)}
+              >
+                Write Off
+              </Button>
+            )}
+          </div>
+          {writeOffs.length === 0 ? (
+            <p className="text-sm text-slate-500 py-3">
+              No write-offs tagged to this week.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {writeOffs.map((tx) => {
+                const d = tx.date ? new Date(tx.date) : null;
+                return (
+                  <div
+                    key={tx.id}
+                    className="rounded-md border border-slate-100 px-3 py-2.5 flex items-start justify-between gap-3"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-slate-800 truncate">
+                        {tx.description || 'Cash write-off'}
+                      </p>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        {d && !Number.isNaN(d.getTime()) ? format(d, 'MMM d, yyyy') : '—'}
+                        {tx.metadata?.writeOffReason
+                          ? ` · ${String(tx.metadata.writeOffReason)}`
+                          : ''}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <span className="text-sm font-bold text-slate-700 tabular-nums">
+                        −{fmt(tx.amount || 0)}
+                      </span>
+                      {onDeleteWriteOff && tx.id && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-slate-400 hover:text-red-600"
+                          title="Undo write-off"
+                          onClick={() => onDeleteWriteOff(tx.id!)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           )}
         </div>
       </SheetContent>

@@ -543,17 +543,19 @@ export interface ServiceRequest {
 
 // --- Phase 1: Enhanced Transaction Data Structure (Transactions Tab Enhancement) ---
 
-export type TransactionType = 'Revenue' | 'Expense' | 'Payout' | 'Transfer' | 'Adjustment' | 'Float_Given' | 'Payment_Received' | 'Reimbursement' | 'Fuel_Manual_Entry';
+export type TransactionType = 'Revenue' | 'Expense' | 'Payout' | 'Transfer' | 'Adjustment' | 'Float_Given' | 'Payment_Received' | 'Reimbursement' | 'Fuel_Manual_Entry' | 'Cash_Write_Off';
 
-export type TransactionCategory = 
+export type TransactionCategory =
   // Revenue
-  | 'Fare Earnings' | 'Tips' | 'Surge Pricing' | 'Bonuses' | 'Other Income' 
+  | 'Fare Earnings' | 'Tips' | 'Surge Pricing' | 'Bonuses' | 'Other Income'
   // Expenses
   | 'Fuel' | 'Maintenance' | 'Insurance' | 'Registration' | 'Tolls' | 'Driver Payouts' | 'Cash Collection Fees' | 'Bank Charges' | 'Office Expenses' | 'Software/Subscription' | 'Marketing' | 'Other Expenses'
   // Payouts
   | 'Vehicle Payment' | 'Supplier Payment' | 'Tax Payment'
   // Wallet
   | 'Cash Collection' | 'Float Issue'
+  /** Fleet forgives driver cash still owed — reduces still held; never cash returned. */
+  | 'Cash Write Off'
   /** Fleet top-up to driver InDrive digital wallet — maps to ledger `wallet_credit` (see `INDRIVE_WALLET_LOAD_CATEGORY`). */
   | 'InDrive Wallet Credit';
 

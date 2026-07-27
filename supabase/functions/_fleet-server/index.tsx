@@ -3247,7 +3247,9 @@ function cashTxWeekAnchors(tx: unknown): { driverId: string; anchors: string[] }
     cat === "Cash Collection" ||
     type === "Payment_Received" ||
     cat === "Float Issue" ||
-    cat === "Adjustment";
+    cat === "Adjustment" ||
+    cat === "Cash Write Off" ||
+    type === "Cash_Write_Off";
   if (!isCashPaymentLike) return null;
   const anchors: string[] = [];
   const wps = String(rec?.metadata?.workPeriodStart || "").slice(0, 10);
