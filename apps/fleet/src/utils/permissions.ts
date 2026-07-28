@@ -402,7 +402,8 @@ export const PAGE_PERMISSION_MAP: Record<string, Permission> = {
 
   // Finance specialist desks — accountants are view/export finance users.
   'fleet-financials':   'nav.financial_analytics',
-  'driver-payouts':     'nav.financial_analytics',
+  'driver-settlements': 'nav.financial_analytics',
+  'driver-payouts':     'nav.financial_analytics', // alias → Driver Settlements
   'cash-retag':         'nav.financial_analytics',
   'indrive-wallet':     'nav.financial_analytics',
 

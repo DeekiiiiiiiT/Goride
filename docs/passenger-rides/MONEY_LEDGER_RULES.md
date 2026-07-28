@@ -77,7 +77,7 @@ outstanding     = grossSettlement > 0
 
 Write-offs forgive **driver** cash held only. They never count as Cash Returned or as a Driver Payout.
 
-Fleet-wide batch pay runs from **Business Finance → Driver Payouts**. Per-driver settle-up stays on Cash Wallet → Pay Driver.
+Fleet-wide collect + pay runs from **Business Finance → Driver Settlements** (Collect | Pay directions). Per-driver settle-up stays on Cash Wallet.
 
 **Inputs**
 
@@ -123,7 +123,7 @@ Do **not** backfill manual trips into the Roam rides ledger to “fix” the $0.
 1. Never merge Fleet Cash Wallet numbers into Roam Cash / Digital / Debt chips.
 2. Never write Start Trip into `rides.ride_requests`.
 3. Never backfill Start Trip / Manual Entry into Roam Cash-in-Hand.
-4. Physical cash handover for fleet drivers is Log Cash / weekly settlement only. Fleet→driver settle-up is Record Payout only — never Log Cash.
+4. Physical cash handover for fleet drivers is Log Cash / weekly settlement only. Fleet→driver settle-up is Record Payout only — never Log Cash. Both run from Cash Wallet (one driver) or **Driver Settlements** (fleet queue).
 5. `fleet_org_payout_enabled` defaults **off**; pilot one org before global on.
 6. Independents must see zero behavioral change from fleet-only phases.
 7. Driver Payouts never inflate Cash Returned / Business Finance cash collected.

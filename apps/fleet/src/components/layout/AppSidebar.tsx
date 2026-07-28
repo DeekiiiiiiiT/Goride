@@ -93,6 +93,7 @@ export function AppSidebar({
   const canSeeBusinessFinanceNav =
     canSeeBusinessFinanceHome ||
     canView('fleet-financials') ||
+    canView('driver-settlements') ||
     canView('driver-payouts') ||
     canView('cash-retag') ||
     canView('indrive-wallet') ||
@@ -222,9 +223,9 @@ export function AppSidebar({
       id: 'fleet-financials',
       label: 'Bank Deposits',
     },
-    canView('driver-payouts') && {
-      id: 'driver-payouts',
-      label: 'Driver Payouts',
+    canView('driver-settlements') && {
+      id: 'driver-settlements',
+      label: 'Driver Settlements',
     },
     canView('cash-retag') && { id: 'cash-retag', label: 'Cash Retag' },
     canView('indrive-wallet') && {

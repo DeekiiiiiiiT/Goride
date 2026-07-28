@@ -162,6 +162,10 @@ import { isTollCategory } from '../../utils/tollCategoryHelper';
 import { classifyTollLedgerEntry } from '../../utils/tollDisposition';
 import { expandDriverTransactionIds } from '../../utils/expandDriverTransactionIds';
 import { isCashWriteOffTransaction, isDriverCashPaymentTransaction, isDriverPayoutTransaction } from '../../utils/driverCashPayment';
+import {
+  buildCashCollectionTx,
+  buildDriverPayoutTx,
+} from '../../utils/driverSettlementTx';
 import { isUberCashEligibleMetricPeriod, isValidDriverMetricPeriod } from '../../utils/driverMetricPeriod';
 import { resolveUberPeriodCashCollected } from '../../utils/resolveUberPeriodCash';
 import { calculateAverageEnroute, estimateEnrouteFallback } from '../../utils/enrouteStrategy';
@@ -992,77 +996,21 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
     workPeriodStart?: string;
     workPeriodEnd?: string;
   }) => {
-      // Determine fields based on transaction type
-      let category = "Cash Collection";
-      let type: any = "Revenue";
-      let amount = payment.amount;
-
-      if (payment.transactionType === 'float') {
-        category = "Float Issue";
-        type = "Float_Given";
-        // Float increases debt. logic: netOutstanding = (TotalOwed - CashReceived).
-        // To increase netOutstanding, CashReceived must decrease. So amount is negative.
-        amount = -Math.abs(payment.amount); 
-      } else if (payment.transactionType === 'adjustment') {
-        category = "Adjustment";
-        type = "Adjustment";
-        // Assuming positive adjustment reduces debt (like a payment)
-      } else {
-         // Payment
-         category = "Cash Collection";
-         type = "Payment_Received";
-         amount = Math.abs(payment.amount);
-      }
-
-      // Determine Status
-      // Cash is always completed immediately.
-      // Non-cash payments (Bank Transfer, etc.) are Pending until verified.
-      // Outflows (Float) or Adjustments are assumed Completed (Admin action).
-      const isCash = payment.paymentMethod === 'Cash';
-      const isIncomingPayment = payment.transactionType === 'payment';
-      const initialStatus = (isIncomingPayment && !isCash) ? 'Pending' : 'Completed';
-
-      // Cash Collection Cash Returned SSOT = Settlement Week you selected in Log Cash.
-      if (payment.transactionType === 'payment' && (!payment.workPeriodStart || !payment.workPeriodEnd)) {
-        throw new Error('Settlement Week is required for cash payments');
-      }
-
-      const metadata: any = {};
-      if (payment.workPeriodStart && payment.workPeriodEnd) {
-          metadata.workPeriodStart = payment.workPeriodStart;
-          metadata.workPeriodEnd = payment.workPeriodEnd;
-      }
-
-      const newTx: Partial<FinancialTransaction> = {
-          driverId,
-          driverName: driver?.name || driverName,
-          amount: amount,
-          date: payment.date,
-          description: payment.notes || (payment.transactionType === 'float' ? "Cash Float Issued" : "Cash Payment from Driver"),
-          category: category,
-          type: type,
-          paymentMethod: payment.paymentMethod as any,
-          referenceNumber: payment.referenceNumber,
-          status: initialStatus as any,
-          isReconciled: initialStatus === 'Completed',
-          time: new Date().toLocaleTimeString(),
-          metadata: Object.keys(metadata).length > 0 ? metadata : undefined
-      };
+      const newTx = buildCashCollectionTx(payment, {
+        driverId,
+        driverName: driver?.name || driverName,
+      });
       
       if (payment.id) {
           const updatedTx = { ...newTx, id: payment.id };
           await api.saveTransaction(updatedTx);
           setTransactions(prev => prev.map(t => t.id === payment.id ? { ...t, ...updatedTx } as FinancialTransaction : t));
-          // toast.success removed here - LogCashPaymentModal handles it
       } else {
           const saved = await api.saveTransaction(newTx);
-          // api.saveTransaction already unwraps result.data, so `saved` IS the transaction object.
-          // Previously `saved.data` was used here which evaluates to undefined.
           const savedTx = saved?.data || saved;
           console.log('[DriverDetail] New payment saved:', savedTx?.id, savedTx?.category, savedTx?.type, savedTx?.amount);
           setTransactions(prev => [savedTx, ...prev].filter(Boolean));
       }
-      // Server rebuilt the tagged Settlement Week — pull fresh cash_returned / cash_still_held.
       void invalidateFinancialPeriods(driverId);
   };
 
@@ -1108,42 +1056,13 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
   };
 
   const handleSaveDriverPayout = async (payload: RecordPayoutSavePayload) => {
-      if (!payload.workPeriodStart || !payload.workPeriodEnd) {
-        throw new Error('Settlement Week is required for driver payouts');
-      }
-      const amount = Math.abs(payload.amount);
-      if (!(amount > 0.005)) {
-        throw new Error('Payout amount must be greater than zero');
-      }
-      if (amount > payoutModalState.maxAmount + 0.005) {
+      if (payload.amount > payoutModalState.maxAmount + 0.005) {
         throw new Error(`Cannot pay more than fleet owes (${payoutModalState.maxAmount.toFixed(2)})`);
       }
-
-      const pm = payload.paymentMethod || 'Cash';
-      const isInstant = pm === 'Cash';
-      const description = payload.notes
-        ? `Driver payout (${pm}): ${payload.notes}`
-        : `Driver payout via ${pm}`;
-
-      const newTx: Partial<FinancialTransaction> = {
-          driverId,
-          driverName: driver?.name || driverName,
-          amount,
-          date: payload.date,
-          description,
-          category: 'Driver Payouts',
-          type: 'Payout',
-          paymentMethod: pm as FinancialTransaction['paymentMethod'],
-          status: isInstant ? 'Completed' : 'Pending',
-          isReconciled: isInstant,
-          referenceNumber: payload.referenceNumber,
-          time: new Date().toLocaleTimeString(),
-          metadata: {
-            workPeriodStart: payload.workPeriodStart,
-            workPeriodEnd: payload.workPeriodEnd,
-          },
-      };
-
+      const newTx = buildDriverPayoutTx(payload, {
+        driverId,
+        driverName: driver?.name || driverName,
+      });
       const saved = await api.saveTransaction(newTx);
       const savedTx = saved?.data || saved;
       setTransactions(prev => [savedTx, ...prev].filter(Boolean));

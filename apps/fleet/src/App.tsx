@@ -32,7 +32,7 @@ import { DriverAnalytics } from './components/drivers/analytics/DriverAnalytics'
 import { DriverLedgerPage } from './components/drivers/DriverLedgerPage';
 import { FleetFinancialsPage } from './components/fleet-financials/FleetFinancialsPage';
 import { CashRetagPage } from './components/fleet-financials/CashRetagPage';
-import { DriverPayoutsPage } from './components/fleet-financials/DriverPayoutsPage';
+import { DriverSettlementsPage } from './components/fleet-financials/DriverSettlementsPage';
 import { IndriveWalletCenterPage } from './components/fleet-financials/IndriveWalletCenterPage';
 import { BusinessFinancePage } from './components/business-finance/BusinessFinancePage';
 import { ExpenseHubPage } from './components/business-finance/expense-hub/ExpenseHubPage';
@@ -510,9 +510,9 @@ function AppContent() {
             />
           </PermissionGate>
         )}
-        {currentPage === 'driver-payouts' && (
+        {(currentPage === 'driver-settlements' || currentPage === 'driver-payouts') && (
           <PermissionGate permission="nav.financial_analytics" onNavigate={setCurrentPage}>
-            <DriverPayoutsPage
+            <DriverSettlementsPage
               onBackToBusinessFinance={() => handleNavigate('business-finance')}
               onOpenDriver={(driverId) => {
                 setDriverIdForDetail(driverId);

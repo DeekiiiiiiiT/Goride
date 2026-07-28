@@ -4,6 +4,8 @@
  * Routes:
  *   GET  /driver-financial-periods?driverId=
  *   GET  /driver-financial-periods/company-owes
+ *   GET  /driver-financial-periods/driver-owes
+ *   GET  /driver-financial-periods/cash-held
  *   GET  /driver-financial-periods/settlement-paid
  *   GET  /driver-financial-periods/:anchor?driverId=
  *   POST /driver-financial-periods/rebuild { driverId, periodAnchor? }
@@ -23,6 +25,8 @@ import {
   getDriverFinancialPeriodDetail,
   processFinancialOutbox,
   listCompanyOwesPeriods,
+  listDriverOwesPeriods,
+  listCashHeldPeriods,
   listRecentlyPaidSettlementPeriods,
   type DriverFinancialPeriodRow,
 } from "./driver_financial_periods.ts";
@@ -49,6 +53,29 @@ const BASE = "/make-server-37f42386/driver-financial-periods";
 
 // Wave 5: Use shared service client instead of ad-hoc createClient
 const sb = getServiceClient;
+
+async function loadDriverNameMap(): Promise<Map<string, string>> {
+  const nameById = new Map<string, string>();
+  try {
+    const drivers = (await kv.getByPrefix("driver:")) || [];
+    for (const d of drivers) {
+      if (d?.id && d?.name) nameById.set(String(d.id), String(d.name));
+    }
+  } catch {
+    /* ignore */
+  }
+  return nameById;
+}
+
+function queueListQuery(c: { req: { query: (k: string) => string | undefined } }) {
+  return {
+    periodAnchor: c.req.query("periodAnchor") || undefined,
+    periodStart: c.req.query("periodStart") || undefined,
+    periodEnd: c.req.query("periodEnd") || undefined,
+    minAmount: c.req.query("minAmount") ? Number(c.req.query("minAmount")) : undefined,
+    limit: c.req.query("limit") ? Number(c.req.query("limit")) : undefined,
+  };
+}
 
 /** Fleet staff OR the driver reading their own periods (alias-aware). */
 async function assertCanReadDriverPeriods(
@@ -176,38 +203,16 @@ app.get(`${BASE}/health`, requirePermission('transactions.view'), async (c) => {
 
 app.get(`${BASE}/company-owes`, requirePermission('transactions.view'), async (c) => {
   try {
-    const periodAnchor = c.req.query("periodAnchor") || undefined;
-    const periodStart = c.req.query("periodStart") || undefined;
-    const periodEnd = c.req.query("periodEnd") || undefined;
-    const minAmount = c.req.query("minAmount")
-      ? Number(c.req.query("minAmount"))
-      : undefined;
-    const limit = c.req.query("limit") ? Number(c.req.query("limit")) : 500;
-
+    const opts = queueListQuery(c);
     const rows = await listCompanyOwesPeriods({
-      periodAnchor,
-      periodStart,
-      periodEnd,
-      minAmount,
-      limit,
+      ...opts,
+      limit: opts.limit ?? 500,
     });
-
-    // Attach driver display names from KV (best-effort).
-    const nameById = new Map<string, string>();
-    try {
-      const drivers = (await kv.getByPrefix("driver:")) || [];
-      for (const d of drivers) {
-        if (d?.id && d?.name) nameById.set(String(d.id), String(d.name));
-      }
-    } catch {
-      /* ignore */
-    }
-
+    const nameById = await loadDriverNameMap();
     const data = rows.map((r) => ({
       ...r,
       driverName: nameById.get(r.driverId) || r.driverId,
     }));
-
     const totalOwed = data.reduce((s, r) => s + (Number(r.settlementAmount) || 0), 0);
     const driverIds = new Set(data.map((r) => r.driverId));
     return c.json({
@@ -225,23 +230,71 @@ app.get(`${BASE}/company-owes`, requirePermission('transactions.view'), async (c
   }
 });
 
+app.get(`${BASE}/driver-owes`, requirePermission('transactions.view'), async (c) => {
+  try {
+    const opts = queueListQuery(c);
+    const rows = await listDriverOwesPeriods({
+      ...opts,
+      limit: opts.limit ?? 500,
+    });
+    const nameById = await loadDriverNameMap();
+    const data = rows.map((r) => ({
+      ...r,
+      driverName: nameById.get(r.driverId) || r.driverId,
+    }));
+    const totalOwed = data.reduce((s, r) => s + (Number(r.amountOwed) || 0), 0);
+    const driverIds = new Set(data.map((r) => r.driverId));
+    return c.json({
+      success: true,
+      data,
+      summary: {
+        totalOwed: Math.round(totalOwed * 100) / 100,
+        rowCount: data.length,
+        driverCount: driverIds.size,
+      },
+    });
+  } catch (e: any) {
+    console.error("[DFP] driver-owes error:", e.message);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.get(`${BASE}/cash-held`, requirePermission('transactions.view'), async (c) => {
+  try {
+    const opts = queueListQuery(c);
+    const rows = await listCashHeldPeriods({
+      ...opts,
+      limit: opts.limit ?? 500,
+    });
+    const nameById = await loadDriverNameMap();
+    const data = rows.map((r) => ({
+      ...r,
+      driverName: nameById.get(r.driverId) || r.driverId,
+    }));
+    const totalHeld = data.reduce((s, r) => s + (Number(r.amountOwed) || 0), 0);
+    const driverIds = new Set(data.map((r) => r.driverId));
+    return c.json({
+      success: true,
+      data,
+      summary: {
+        totalHeld: Math.round(totalHeld * 100) / 100,
+        rowCount: data.length,
+        driverCount: driverIds.size,
+      },
+    });
+  } catch (e: any) {
+    console.error("[DFP] cash-held error:", e.message);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
 app.get(`${BASE}/settlement-paid`, requirePermission('transactions.view'), async (c) => {
   try {
     const periodStart = c.req.query("periodStart") || undefined;
     const periodEnd = c.req.query("periodEnd") || undefined;
     const limit = c.req.query("limit") ? Number(c.req.query("limit")) : 300;
     const rows = await listRecentlyPaidSettlementPeriods({ periodStart, periodEnd, limit });
-
-    const nameById = new Map<string, string>();
-    try {
-      const drivers = (await kv.getByPrefix("driver:")) || [];
-      for (const d of drivers) {
-        if (d?.id && d?.name) nameById.set(String(d.id), String(d.name));
-      }
-    } catch {
-      /* ignore */
-    }
-
+    const nameById = await loadDriverNameMap();
     const data = rows.map((r) => ({
       ...r,
       driverName: nameById.get(r.driverId) || r.driverId,

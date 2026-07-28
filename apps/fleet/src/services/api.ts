@@ -2168,7 +2168,7 @@ export const api = {
     return response.json();
   },
 
-  /** Org-wide company_owes Settlement Weeks for Driver Payouts desk. */
+  /** Org-wide company_owes Settlement Weeks for Driver Settlements (Pay). */
   async getCompanyOwesPeriods(opts?: {
     periodAnchor?: string;
     periodStart?: string;
@@ -2187,6 +2187,50 @@ export const api = {
       { headers: await requireAuthHeaders(null) },
     );
     if (!response.ok) throw new Error("Failed to fetch company-owes periods");
+    return response.json();
+  },
+
+  /** Org-wide driver_owes weeks for Driver Settlements (Collect). */
+  async getDriverOwesPeriods(opts?: {
+    periodAnchor?: string;
+    periodStart?: string;
+    periodEnd?: string;
+    minAmount?: number;
+    limit?: number;
+  }) {
+    const qs = new URLSearchParams();
+    if (opts?.periodAnchor) qs.set("periodAnchor", opts.periodAnchor);
+    if (opts?.periodStart) qs.set("periodStart", opts.periodStart);
+    if (opts?.periodEnd) qs.set("periodEnd", opts.periodEnd);
+    if (opts?.minAmount != null) qs.set("minAmount", String(opts.minAmount));
+    if (opts?.limit != null) qs.set("limit", String(opts.limit));
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/driver-financial-periods/driver-owes?${qs.toString()}`,
+      { headers: await requireAuthHeaders(null) },
+    );
+    if (!response.ok) throw new Error("Failed to fetch driver-owes periods");
+    return response.json();
+  },
+
+  /** Pre-finalize cash-held weeks for Driver Settlements (Collect). */
+  async getCashHeldPeriods(opts?: {
+    periodAnchor?: string;
+    periodStart?: string;
+    periodEnd?: string;
+    minAmount?: number;
+    limit?: number;
+  }) {
+    const qs = new URLSearchParams();
+    if (opts?.periodAnchor) qs.set("periodAnchor", opts.periodAnchor);
+    if (opts?.periodStart) qs.set("periodStart", opts.periodStart);
+    if (opts?.periodEnd) qs.set("periodEnd", opts.periodEnd);
+    if (opts?.minAmount != null) qs.set("minAmount", String(opts.minAmount));
+    if (opts?.limit != null) qs.set("limit", String(opts.limit));
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/driver-financial-periods/cash-held?${qs.toString()}`,
+      { headers: await requireAuthHeaders(null) },
+    );
+    if (!response.ok) throw new Error("Failed to fetch cash-held periods");
     return response.json();
   },
 

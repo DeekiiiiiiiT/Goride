@@ -1194,3 +1194,120 @@ export async function listRecentlyPaidSettlementPeriods(opts?: {
     tripCount: Number(r.trip_count) || 0,
   }));
 }
+
+export type DriverOwesPeriodRow = CompanyOwesPeriodRow & {
+  /** Positive amount the driver owes the fleet (abs of negative settlement or cash held). */
+  amountOwed: number;
+};
+
+function applyPeriodRangeFilters(
+  q: any,
+  opts?: { periodAnchor?: string; periodStart?: string; periodEnd?: string },
+) {
+  if (opts?.periodAnchor && /^\d{4}-\d{2}-\d{2}$/.test(opts.periodAnchor)) {
+    return q.eq("period_anchor", opts.periodAnchor);
+  }
+  if (opts?.periodStart && /^\d{4}-\d{2}-\d{2}$/.test(opts.periodStart)) {
+    q = q.gte("period_anchor", opts.periodStart);
+  }
+  if (opts?.periodEnd && /^\d{4}-\d{2}-\d{2}$/.test(opts.periodEnd)) {
+    q = q.lte("period_anchor", opts.periodEnd);
+  }
+  return q;
+}
+
+function mapPeriodListRow(r: any): CompanyOwesPeriodRow {
+  return {
+    driverId: String(r.driver_id),
+    periodAnchor: String(r.period_anchor).slice(0, 10),
+    periodEnd: String(r.period_end).slice(0, 10),
+    settlementAmount: Number(r.settlement_amount) || 0,
+    settlementPaid: Number(r.settlement_paid) || 0,
+    cashCollected: Number(r.cash_collected) || 0,
+    cashReturned: Number(r.cash_returned) || 0,
+    cashStillHeld: Number(r.cash_still_held) || 0,
+    payoutNet: Number(r.payout_net) || 0,
+    settlementStatus: String(r.settlement_status || ""),
+    fuelFinalized: !!r.fuel_finalized,
+    tripCount: Number(r.trip_count) || 0,
+  };
+}
+
+/** Org-wide driver_owes queue — collect cash drivers still owe after finalize. */
+export async function listDriverOwesPeriods(opts?: {
+  periodAnchor?: string;
+  periodStart?: string;
+  periodEnd?: string;
+  minAmount?: number;
+  limit?: number;
+}): Promise<DriverOwesPeriodRow[]> {
+  const limit = Math.min(Math.max(Number(opts?.limit) || 500, 1), 2000);
+  let q = sb()
+    .from("driver_financial_periods")
+    .select(
+      "driver_id, period_anchor, period_end, settlement_amount, settlement_paid, cash_collected, cash_returned, cash_still_held, payout_net, settlement_status, fuel_finalized, trip_count",
+    )
+    .eq("settlement_status", "driver_owes")
+    .lt("settlement_amount", -0.005)
+    .order("settlement_amount", { ascending: true })
+    .limit(limit);
+
+  q = applyPeriodRangeFilters(q, opts);
+  if (opts?.minAmount != null && Number(opts.minAmount) > 0) {
+    q = q.lte("settlement_amount", -Number(opts.minAmount));
+  }
+
+  const { data, error } = await q;
+  if (error) {
+    console.error("[DriverFinancialPeriods] driver_owes list:", error.message);
+    throw new Error(error.message);
+  }
+  return (data || []).map((r: any) => {
+    const row = mapPeriodListRow(r);
+    return { ...row, amountOwed: Math.abs(row.settlementAmount) };
+  });
+}
+
+/**
+ * Pre-finalize collect queue — cash still held on pending / not-fuel-finalized weeks.
+ * Excludes company_owes / driver_owes / settled so those stay on their own lists.
+ */
+export async function listCashHeldPeriods(opts?: {
+  periodAnchor?: string;
+  periodStart?: string;
+  periodEnd?: string;
+  minAmount?: number;
+  limit?: number;
+}): Promise<DriverOwesPeriodRow[]> {
+  const limit = Math.min(Math.max(Number(opts?.limit) || 500, 1), 2000);
+  let q = sb()
+    .from("driver_financial_periods")
+    .select(
+      "driver_id, period_anchor, period_end, settlement_amount, settlement_paid, cash_collected, cash_returned, cash_still_held, payout_net, settlement_status, fuel_finalized, trip_count",
+    )
+    .gt("cash_still_held", 0.5)
+    .or("settlement_status.eq.pending,fuel_finalized.eq.false")
+    .order("cash_still_held", { ascending: false })
+    .limit(limit);
+
+  q = applyPeriodRangeFilters(q, opts);
+  if (opts?.minAmount != null && Number(opts.minAmount) > 0) {
+    q = q.gte("cash_still_held", Number(opts.minAmount));
+  }
+
+  const { data, error } = await q;
+  if (error) {
+    console.error("[DriverFinancialPeriods] cash_held list:", error.message);
+    throw new Error(error.message);
+  }
+  return (data || [])
+    .map((r: any) => {
+      const row = mapPeriodListRow(r);
+      const status = String(row.settlementStatus || "").toLowerCase();
+      if (status === "company_owes" || status === "driver_owes" || status === "settled") {
+        return null;
+      }
+      return { ...row, amountOwed: Math.max(0, row.cashStillHeld) };
+    })
+    .filter(Boolean) as DriverOwesPeriodRow[];
+}
