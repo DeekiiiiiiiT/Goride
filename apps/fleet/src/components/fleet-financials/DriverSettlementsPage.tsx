@@ -106,7 +106,8 @@ function rowKey(r: Pick<PeriodRow, 'driverId' | 'periodAnchor'>) {
 }
 
 function collectAmount(r: PeriodRow) {
-  return Math.max(0, Number(r.amountOwed ?? Math.abs(r.settlementAmount) || 0));
+  const raw = r.amountOwed ?? Math.abs(r.settlementAmount || 0);
+  return Math.max(0, Number(raw) || 0);
 }
 
 export function DriverSettlementsPage({
