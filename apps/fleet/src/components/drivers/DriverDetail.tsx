@@ -2557,14 +2557,14 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
     [walletPayoutPeriodRows],
   );
 
-  /** Collection desk totals — passenger vs tagged Cash Returned (open weeks with passenger cash). */
+  /** Collection desk totals — who owes whom + verified cash logged (open weeks). */
   const walletCollectionTotals = useMemo(() => {
     let passengerCash = 0;
     let cashReturned = 0;
     for (const w of walletCashWeeks) {
+      cashReturned += w.amountPaid || 0;
       if ((w.amountOwed || 0) <= 0.005) continue;
       passengerCash += w.amountOwed || 0;
-      cashReturned += w.amountPaid || 0;
     }
     const collectionGap = Math.max(0, Math.round((passengerCash - cashReturned) * 100) / 100);
     let driverOwes = 0;
@@ -3944,7 +3944,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                  <Card className="bg-white border-rose-100">
                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                         <CardTitle className="text-sm font-medium text-slate-500">Cash still owed</CardTitle>
+                         <CardTitle className="text-sm font-medium text-slate-500">Driver owes</CardTitle>
                          <Landmark className="h-4 w-4 text-rose-500" />
                      </CardHeader>
                      <CardContent>
@@ -3952,43 +3952,40 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                              {walletCollectionTotals.callOutstanding.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                          </div>
                          <p className="text-xs text-slate-500 mt-1">
-                           Fleet cash cut / cash with driver (open weeks)
-                           {walletCollectionTotals.fleetOwes > 0.005
-                             ? ` · fleet also owes ${walletCollectionTotals.fleetOwes.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
-                             : ''}
+                           Outstanding cash to collect (open weeks)
                          </p>
                      </CardContent>
                  </Card>
 
-                 <Card className="bg-white">
+                 <Card className="bg-white border-sky-100">
                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                         <CardTitle className="text-sm font-medium text-slate-500">Passenger Cash</CardTitle>
-                         <Wallet className="h-4 w-4 text-slate-400" />
+                         <CardTitle className="text-sm font-medium text-slate-500">Fleet owes</CardTitle>
+                         <Wallet className="h-4 w-4 text-sky-500" />
                      </CardHeader>
                      <CardContent>
-                         <div className="text-2xl font-bold text-slate-900 tabular-nums">
-                             {walletCollectionTotals.passengerCash.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                         <div className={cn("text-2xl font-bold tabular-nums", walletCollectionTotals.fleetOwes > 0.005 ? "text-sky-700" : "text-slate-900")}>
+                             {walletCollectionTotals.fleetOwes.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                          </div>
-                         <p className="text-xs text-slate-500 mt-1">Open weeks</p>
+                         <p className="text-xs text-slate-500 mt-1">Net payout owed to driver (open weeks)</p>
                      </CardContent>
                  </Card>
 
                  <Card className="bg-white">
                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                         <CardTitle className="text-sm font-medium text-slate-500">Cash Returned</CardTitle>
+                         <CardTitle className="text-sm font-medium text-slate-500">Cash logged</CardTitle>
                          <DollarSign className="h-4 w-4 text-emerald-500" />
                      </CardHeader>
                      <CardContent>
                          <div className="text-2xl font-bold text-emerald-600 tabular-nums">
                              {walletCollectionTotals.cashReturned.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                          </div>
-                         <p className="text-xs text-slate-500 mt-1">Log Cash this period</p>
+                         <p className="text-xs text-slate-500 mt-1">Verified cash received from driver</p>
                      </CardContent>
                  </Card>
 
                   <Card>
                       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                         <CardTitle className="text-sm font-medium text-slate-500">Unverified Payments</CardTitle>
+                         <CardTitle className="text-sm font-medium text-slate-500">Awaiting bank clear</CardTitle>
                          <Clock className="h-4 w-4 text-blue-500" />
                      </CardHeader>
                      <CardContent>
@@ -3996,7 +3993,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                              {metrics.pendingClearance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                          </div>
                          <p className="text-xs text-slate-500 mt-1">
-                             Pending bank transfers
+                             Bank/mobile transfers logged but not verified yet
                          </p>
                      </CardContent>
                  </Card>
@@ -4268,7 +4265,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                         </CardHeader>
                         <CardContent className="space-y-3">
                              <div className="p-3 bg-rose-50 rounded-lg space-y-1">
-                                <p className="text-xs text-slate-500">Cash still owed (open weeks)</p>
+                                <p className="text-xs text-slate-500">Driver owes (open weeks)</p>
                                 <p className="text-sm font-semibold text-rose-800 tabular-nums">
                                   {walletCollectionTotals.callOutstanding.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </p>
