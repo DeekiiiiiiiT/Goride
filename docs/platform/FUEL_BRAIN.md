@@ -6,14 +6,14 @@ Platform brain for **fuel purpose classification** — fully automated residual 
 
 1. **Ride Share** — platform trip km (On Trip + Enroute + Open + Unavailable)
 2. **Company Ops** — admin mileage adjustments (Company Misc / Maintenance)
-3. **Deadhead** — estimate from odo gaps first (time-gap fallback), capped to Available km
+3. **Deadhead** — estimate from odo gaps first (time-gap fallback), floored to Available × industry fallback %, capped to Available km
 4. **Personal** — residual: `Available − Deadhead` (includes unlabeled miles; no driver input)
 5. **Misc** — cash only: `Spend − (all four category $)` — not a km type
 
 Math:
 
 - `Available_Km = max(0, TotalOdo − RideShare − CompanyOps)`
-- `Deadhead = min(DeadheadEstimate, Available_Km)`
+- `Deadhead = min(Available_Km, max(DeadheadEstimate, Available_Km × industryFallbackPct%))` (default 35%)
 - `Personal = Available_Km − Deadhead`
 
 ## Surfaces

@@ -709,6 +709,19 @@ export function calculateDeadheadAttribution(params: {
     deadheadKm = nonTripKm;
   }
 
+  // Industry floor: gap/time may raise Deadhead above floor, not collapse below it.
+  // Deadhead = min(nonTrip, max(hint, nonTrip × industryFallbackPct%))
+  if (nonTripKm > 0) {
+    const industryFloor = nonTripKm * (INDUSTRY_FALLBACK_PCT / 100);
+    if (deadheadKm < industryFloor) {
+      deadheadKm = industryFloor;
+      confidenceReason +=
+        confidenceReason.length > 0
+          ? ` | Industry floor ${INDUSTRY_FALLBACK_PCT}% of non-trip km applied`
+          : `Industry floor ${INDUSTRY_FALLBACK_PCT}% of non-trip km applied`;
+    }
+  }
+
   // personalKm = whatever remains after trip + deadhead
   personalKm = Math.max(0, totalOdometerKm - tripKm - deadheadKm);
 

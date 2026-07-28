@@ -99,10 +99,12 @@ describe('5179KZ Jun 15–21 golden spine', () => {
       tripRideshareKm: 1000,
       companyOpsKm: 0,
       deadheadHintKm: 50,
+      industryFallbackPct: 35,
     });
     expect(brain.method).toBe('fuel_brain_v2');
-    expect(brain.personalKm).toBe(414);
-    expect(brain.deadheadKm).toBe(50);
+    // Available = 464; floor = 162.4; hint 50 → Deadhead 162.4; Personal 301.6
+    expect(brain.deadheadKm).toBeCloseTo(162.4, 1);
+    expect(brain.personalKm).toBeCloseTo(301.6, 1);
     expect(brain).not.toHaveProperty('isSoftAnchor');
     expect(brain).not.toHaveProperty('tankCapacity');
   });

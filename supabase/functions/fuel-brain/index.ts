@@ -217,6 +217,7 @@ app.post("/v1/internal/classify-week", async (c) => {
     tripRideshareKm: Number(body.tripRideshareKm) || 0,
     companyOpsKm: Number(body.companyOpsKm) || 0,
     deadheadHintKm: Number(body.deadheadHintKm) || 0,
+    industryFallbackPct: Number(body.industryFallbackPct) || undefined,
   });
 
   logLine({

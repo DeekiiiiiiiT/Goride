@@ -16,17 +16,19 @@ describe('classifyFuelWeek residual Personal', () => {
       tripRideshareKm: 300,
       companyOpsKm: 20,
       deadheadHintKm: 50,
+      industryFallbackPct: 35,
     });
     expect(result.rideShareKm).toBe(300);
     expect(result.companyOpsKm).toBe(20);
-    expect(result.deadheadKm).toBe(50);
-    expect(result.personalKm).toBe(130);
+    // Available = 180; floor = 63; hint 50 → Deadhead 63
+    expect(result.deadheadKm).toBeCloseTo(63, 5);
+    expect(result.personalKm).toBeCloseTo(117, 5);
     expect(
       result.rideShareKm + result.companyOpsKm + result.deadheadKm + result.personalKm,
     ).toBeCloseTo(500, 5);
   });
 
-  it('leftover after deadhead is Personal (no Unknown)', () => {
+  it('leftover after deadhead is Personal (no Unknown); floor raises under-claimed DH', () => {
     const result = classifyFuelWeek({
       driverId: 'd1',
       vehicleId: 'v1',
@@ -36,10 +38,29 @@ describe('classifyFuelWeek residual Personal', () => {
       tripRideshareKm: 200,
       companyOpsKm: 0,
       deadheadHintKm: 40,
+      industryFallbackPct: 35,
     });
-    expect(result.personalKm).toBe(160);
-    expect(result.deadheadKm).toBe(40);
+    // Available = 200; floor = 70; hint 40 → Deadhead 70; Personal 130
+    expect(result.deadheadKm).toBeCloseTo(70, 5);
+    expect(result.personalKm).toBeCloseTo(130, 5);
     expect(result.method).toBe('fuel_brain_v2');
+  });
+
+  it('Kenny-like under-claim: gap hint 20 on Available 650 → floor ~227.5', () => {
+    const result = classifyFuelWeek({
+      driverId: '73e5b1dc-01b4-45ee-a34a-25a3256b9841',
+      vehicleId: '5179KZ',
+      weekStart: '2026-07-20',
+      weekEnd: '2026-07-26',
+      totalOdometerKm: 1819,
+      tripRideshareKm: 1169,
+      companyOpsKm: 0,
+      deadheadHintKm: 20,
+      industryFallbackPct: 35,
+    });
+    expect(result.availableKm).toBe(650);
+    expect(result.deadheadKm).toBeCloseTo(227.5, 1);
+    expect(result.personalKm).toBeCloseTo(422.5, 1);
   });
 
   it('caps deadhead so it cannot exceed Available', () => {
@@ -56,6 +77,23 @@ describe('classifyFuelWeek residual Personal', () => {
     expect(result.availableKm).toBe(10);
     expect(result.deadheadKm).toBe(10);
     expect(result.personalKm).toBe(0);
+  });
+
+  it('keeps hint when already above industry floor', () => {
+    const result = classifyFuelWeek({
+      driverId: 'd1',
+      vehicleId: 'v1',
+      weekStart: '2026-07-06',
+      weekEnd: '2026-07-12',
+      totalOdometerKm: 500,
+      tripRideshareKm: 300,
+      companyOpsKm: 0,
+      deadheadHintKm: 120,
+      industryFallbackPct: 35,
+    });
+    // Available = 200; floor = 70; hint 120 stays
+    expect(result.deadheadKm).toBe(120);
+    expect(result.personalKm).toBe(80);
   });
 });
 

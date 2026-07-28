@@ -11,7 +11,7 @@ import {
 } from '../services/fuelCalculationService';
 import { classifyWeekForRecon } from '../services/fuelBrainClient';
 import { FLEET_USE_FUEL_BRAIN } from '../utils/fuelBrainFlags';
-import { resolveDeadheadHintForBrain } from '../utils/deadheadHintForBrain';
+import { resolveDeadheadHintForBrain, DEFAULT_INDUSTRY_FALLBACK_PCT } from '../utils/deadheadHintForBrain';
 import { sumTripRideshareKm } from '../utils/tripRideshareKm';
 import type { FuelCard, FuelEntry, FuelScenario, MileageAdjustment, WeeklyFuelReport } from '../types/fuel';
 import type { Trip } from '../types/data';
@@ -110,7 +110,9 @@ async function buildBrainMap(opts: {
           server: dh,
           clientTripRideshareKm: tripRideshareKm,
           companyOpsKm,
+          industryFallbackPct: DEFAULT_INDUSTRY_FALLBACK_PCT,
         }),
+        industryFallbackPct: DEFAULT_INDUSTRY_FALLBACK_PCT,
       });
       return {
         key: `${driverId}:${v.id}`,
@@ -184,12 +186,23 @@ export async function buildFuelWeekReportsForFinalize(
 /** Soft cap — keeps bulk under edge timeout risk (one week per API cycle). */
 export const FUEL_BULK_FINALIZE_MAX_WEEKS = 8;
 
+/** Same soft cap for bulk reset of finalized weeks. */
+export const FUEL_BULK_RESET_MAX_WEEKS = 8;
+
 export function formatFuelBulkProgress(done: number, total: number, label: string): string {
   return `Finalizing ${label} (${done}/${total})…`;
 }
 
+export function formatFuelBulkResetProgress(done: number, total: number, label: string): string {
+  return `Resetting ${label} (${done}/${total})…`;
+}
+
 export function fuelBulkConfirmPhrase(count: number): string {
   return `FINALIZE ${count} WEEKS`;
+}
+
+export function fuelBulkResetConfirmPhrase(count: number): string {
+  return `RESET ${count} WEEKS`;
 }
 
 /** Used only for labels in tests / dialogs. */

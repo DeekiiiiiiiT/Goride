@@ -20,12 +20,40 @@ export interface FleetExpenseItem {
   receiptUrl?: string;
 }
 
+export interface FleetExpenseCategorySummary {
+  type: FleetExpenseType;
+  total: number;
+  count: number;
+}
+
 export interface FleetExpenseWeekGroup {
   weekKey: string;
   start: Date;
   end: Date;
   total: number;
   items: FleetExpenseItem[];
+  /** Non-zero category rollups only (Fuel / Toll / Maintenance / Other). */
+  categories: FleetExpenseCategorySummary[];
+}
+
+const CATEGORY_ORDER: FleetExpenseType[] = ['fuel', 'toll', 'maintenance', 'other'];
+
+function rollupCategories(items: FleetExpenseItem[]): FleetExpenseCategorySummary[] {
+  const map = new Map<FleetExpenseType, { total: number; count: number }>();
+  for (const item of items) {
+    const cur = map.get(item.type) || { total: 0, count: 0 };
+    cur.total += Math.abs(Number(item.amount) || 0);
+    cur.count += 1;
+    map.set(item.type, cur);
+  }
+  return CATEGORY_ORDER.filter((type) => (map.get(type)?.total || 0) > 0.005).map((type) => {
+    const cur = map.get(type)!;
+    return {
+      type,
+      total: Math.round(cur.total * 100) / 100,
+      count: cur.count,
+    };
+  });
 }
 
 function isSettlementCredit(t: FinancialTransaction): boolean {
@@ -172,7 +200,7 @@ export function buildFleetExpenseItems(input: {
   return items;
 }
 
-/** Group items by Mon–Sun week, newest first. */
+/** Group items by Mon–Sun week, newest first, with category totals. */
 export function groupFleetExpensesByWeek(items: FleetExpenseItem[]): FleetExpenseWeekGroup[] {
   const map = new Map<string, FleetExpenseItem[]>();
   for (const item of items) {
@@ -185,16 +213,31 @@ export function groupFleetExpensesByWeek(items: FleetExpenseItem[]): FleetExpens
   for (const [weekKey, weekItems] of map) {
     const start = parseISO(weekKey);
     const end = endOfWeek(start, { weekStartsOn: 1 });
-    const total = weekItems.reduce((s, i) => s + Math.abs(Number(i.amount) || 0), 0);
+    const sortedItems = weekItems.sort((a, b) => b.date.getTime() - a.date.getTime());
+    const categories = rollupCategories(sortedItems);
+    const total = Math.round(
+      categories.reduce((s, c) => s + c.total, 0) * 100,
+    ) / 100;
     groups.push({
       weekKey,
       start,
       end,
       total,
-      items: weekItems.sort((a, b) => b.date.getTime() - a.date.getTime()),
+      items: sortedItems,
+      categories,
     });
   }
 
   groups.sort((a, b) => b.start.getTime() - a.start.getTime());
   return groups;
+}
+
+/** Newest weeks first, capped (default last 5). */
+export function selectRecentExpenseWeeks(
+  groups: FleetExpenseWeekGroup[],
+  limit = 5,
+): FleetExpenseWeekGroup[] {
+  return [...groups]
+    .sort((a, b) => b.start.getTime() - a.start.getTime())
+    .slice(0, Math.max(0, limit));
 }

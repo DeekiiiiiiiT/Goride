@@ -49,7 +49,10 @@ import { FuelEntry, MileageAdjustment, WeeklyFuelReport, FuelDispute, FuelScenar
 import { FuelCalculationService, VehicleDeadheadInput, FuelBrainClassificationInput } from '../../services/fuelCalculationService';
 import { classifyWeekForRecon } from '../../services/fuelBrainClient';
 import { sumTripRideshareKm } from '../../utils/tripRideshareKm';
-import { resolveDeadheadHintForBrain } from '../../utils/deadheadHintForBrain';
+import {
+  DEFAULT_INDUSTRY_FALLBACK_PCT,
+  resolveDeadheadHintForBrain,
+} from '../../utils/deadheadHintForBrain';
 import { downloadCSV } from '../../utils/export';
 import { ScenarioSplitDashboard } from './ScenarioSplitDashboard';
 import { api } from '../../services/api';
@@ -314,7 +317,9 @@ export function ReconciliationTable({
                             server: dh,
                             clientTripRideshareKm: tripRideshareKm,
                             companyOpsKm,
+                            industryFallbackPct: DEFAULT_INDUSTRY_FALLBACK_PCT,
                         }),
+                        industryFallbackPct: DEFAULT_INDUSTRY_FALLBACK_PCT,
                     });
                     map.set(`${driverId}:${v.id}`, {
                         rideShareKm: classified.rideShareKm,

@@ -1,7 +1,7 @@
 /**
  * Fuel Brain classifier v2 — fully automated residual Personal:
  * Available = Odo − RideShare − CompanyOps
- * Deadhead = min(hint, Available)
+ * Deadhead = min(Available, max(hint, Available × industryFallbackPct%))
  * Personal = Available − Deadhead
  *
  * Mirrored in supabase/functions/fuel-brain/classify.ts — keep in sync.
@@ -11,6 +11,10 @@ import type {
   FuelBrainClassifyWeekInput,
   FuelBrainClassifyWeekResult,
 } from '@roam/types/fuelBrain';
+import {
+  applyDeadheadFloor,
+  DEFAULT_INDUSTRY_FALLBACK_PCT,
+} from './deadheadHintForBrain';
 
 export function classifyFuelWeek(
   input: FuelBrainClassifyWeekInput,
@@ -22,8 +26,13 @@ export function classifyFuelWeek(
   const availableKm =
     totalOdo > 0 ? Math.max(0, totalOdo - tripKm - companyOpsKm) : 0;
 
+  const industryPct =
+    Number(input.industryFallbackPct) ||
+    Number(input.policy?.industryFallbackPct) ||
+    DEFAULT_INDUSTRY_FALLBACK_PCT;
+
   const deadheadHint = Math.max(0, Number(input.deadheadHintKm) || 0);
-  const deadheadKm = Math.min(deadheadHint, availableKm);
+  const deadheadKm = applyDeadheadFloor(deadheadHint, availableKm, industryPct);
   const personalKm = Math.max(0, availableKm - deadheadKm);
 
   return {

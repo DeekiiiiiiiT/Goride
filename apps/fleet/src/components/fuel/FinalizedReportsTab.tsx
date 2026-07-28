@@ -40,6 +40,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '../ui/alert-dialog';
+import {
+  FuelBulkResetDialog,
+  finalizedWeekOptionsFromGroups,
+} from './reconciliation/FuelBulkResetDialog';
 
 const currency = new Intl.NumberFormat('en-US', {
   style: 'currency',
@@ -71,6 +75,7 @@ export function FinalizedReportsTab() {
     label: string;
   } | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [bulkResetOpen, setBulkResetOpen] = useState(false);
 
   const loadReports = async () => {
     setLoading(true);
@@ -165,6 +170,11 @@ export function FinalizedReportsTab() {
     }
   };
 
+  const bulkResetWeeks = useMemo(
+    () => finalizedWeekOptionsFromGroups(weekGroups),
+    [weekGroups],
+  );
+
   const formatWeekRange = (weekStart: string, weekEnd: string): string => {
     try {
       const { start, end } = reportWeekYmdBounds({ weekStart, weekEnd });
@@ -236,14 +246,27 @@ export function FinalizedReportsTab() {
   // --- Main Render ---
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-slate-500">
           {weekGroups.length} finalized week{weekGroups.length !== 1 ? 's' : ''}
         </p>
-        <Button variant="outline" size="sm" onClick={loadReports} disabled={loading}>
-          <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          {weekGroups.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-rose-700 border-rose-200 hover:bg-rose-50 hover:text-rose-800"
+              onClick={() => setBulkResetOpen(true)}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete weeks
+            </Button>
+          )}
+          <Button variant="outline" size="sm" onClick={loadReports} disabled={loading}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {weekGroups.length === 0 ? (
@@ -499,6 +522,15 @@ export function FinalizedReportsTab() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <FuelBulkResetDialog
+        open={bulkResetOpen}
+        onOpenChange={setBulkResetOpen}
+        weeks={bulkResetWeeks}
+        onComplete={() => {
+          void loadReports();
+        }}
+      />
     </div>
   );
 }

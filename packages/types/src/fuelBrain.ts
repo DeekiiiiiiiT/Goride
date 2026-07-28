@@ -39,8 +39,10 @@ export interface FuelBrainClassifyWeekInput {
   totalOdometerKm: number;
   tripRideshareKm: number;
   companyOpsKm: number;
-  /** Server deadhead estimate (capped to Available_Km). */
+  /** Server deadhead estimate (floored to Available × fallback%, capped to Available). */
   deadheadHintKm?: number;
+  /** Industry floor % of Available when gap/time hint under-claims (default 35). */
+  industryFallbackPct?: number;
   policy?: Partial<FuelBrainPolicy>;
 }
 
