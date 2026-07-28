@@ -2,12 +2,13 @@
  * Read-model for Fleet Settlement → Expenses tab.
  * Mirrors DriverExpenses listing/dedupe rules without importing that screen.
  * Settlement credits (cash collection, fuel settlement credit) are excluded.
+ * Misc = inventory damage / fleet charge-backs outside Fuel, Toll, Maintenance.
  */
 
 import { format, parseISO, startOfWeek, endOfWeek } from 'date-fns';
 import type { FinancialTransaction } from '../types/data';
 
-export type FleetExpenseType = 'fuel' | 'toll' | 'maintenance' | 'other';
+export type FleetExpenseType = 'fuel' | 'toll' | 'maintenance' | 'misc';
 
 export interface FleetExpenseItem {
   id: string;
@@ -32,21 +33,25 @@ export interface FleetExpenseWeekGroup {
   end: Date;
   total: number;
   items: FleetExpenseItem[];
-  /** Non-zero category rollups only (Fuel / Toll / Maintenance / Other). */
+  /** Always Fuel / Toll / Maintenance / Misc (zeros included). */
   categories: FleetExpenseCategorySummary[];
 }
 
-const CATEGORY_ORDER: FleetExpenseType[] = ['fuel', 'toll', 'maintenance', 'other'];
+const CATEGORY_ORDER: FleetExpenseType[] = ['fuel', 'toll', 'maintenance', 'misc'];
 
+/** Always return all four buckets so week cards stay consistent. */
 function rollupCategories(items: FleetExpenseItem[]): FleetExpenseCategorySummary[] {
   const map = new Map<FleetExpenseType, { total: number; count: number }>();
+  for (const type of CATEGORY_ORDER) {
+    map.set(type, { total: 0, count: 0 });
+  }
   for (const item of items) {
     const cur = map.get(item.type) || { total: 0, count: 0 };
     cur.total += Math.abs(Number(item.amount) || 0);
     cur.count += 1;
     map.set(item.type, cur);
   }
-  return CATEGORY_ORDER.filter((type) => (map.get(type)?.total || 0) > 0.005).map((type) => {
+  return CATEGORY_ORDER.map((type) => {
     const cur = map.get(type)!;
     return {
       type,
@@ -78,7 +83,8 @@ function classifyTx(t: FinancialTransaction): FleetExpenseType {
   const c = (t.category || '').toLowerCase();
   if (c.includes('toll')) return 'toll';
   if (c.includes('maintenance') || c.includes('service') || c.includes('repair')) return 'maintenance';
-  return 'other';
+  // Inventory charge-backs, fleet deductions, and anything outside the big three
+  return 'misc';
 }
 
 function txAmountAbs(t: FinancialTransaction) {

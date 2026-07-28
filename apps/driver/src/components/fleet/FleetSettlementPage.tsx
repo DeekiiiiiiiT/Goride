@@ -141,10 +141,6 @@ export function FleetSettlementPage({ onBack }: FleetSettlementPageProps) {
         )}
         <div>
           <h1 className="text-xl font-bold text-slate-900 dark:text-white">Fleet Settlement</h1>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            Cash you still owe the fleet vs cash already returned — after your driver share.
-            Expenses are view-only; log new ones from the Expenses menu.
-          </p>
         </div>
       </div>
 

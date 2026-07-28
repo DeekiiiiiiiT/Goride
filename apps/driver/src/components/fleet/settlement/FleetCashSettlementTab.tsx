@@ -1,22 +1,15 @@
 /**
  * Fleet Settlement → Cash Settlement tab.
  * Outstanding = Fleet call amount (after driver share) — same SSOT as roamfleet Cash Wallet.
- * Week cards mirror Fleet Cash Wallet: Passenger cash / Cash returned / Paid to driver.
+ * Week cards: Cash Received / Cash returned / Paid To You.
  */
 
 import React, { useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Card, CardContent } from '@roam/ui';
 import { Badge } from '@roam/ui';
 import { Button } from '@roam/ui';
 import { Progress } from '@roam/ui';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from '@roam/ui';
-import { ScrollArea } from '@roam/ui';
 import { format } from 'date-fns';
 import {
   Eye,
@@ -25,6 +18,7 @@ import {
   Fuel,
   Receipt,
   Scale,
+  X,
 } from 'lucide-react';
 import { cn } from '@roam/ui';
 import type { PayoutPeriodRow } from '../../../types/driverPayoutPeriod';
@@ -155,10 +149,6 @@ function CashWeekCard({
                 {week.statusLabel}
               </Badge>
             </div>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              {week.row.tripCount} trips
-              {week.row.tierName ? ` · ${week.row.tierName}` : ''}
-            </p>
           </div>
 
           <div className="min-w-[110px] space-y-0.5">
@@ -201,7 +191,7 @@ function CashWeekCard({
         <div className="grid grid-cols-3 gap-3 sm:gap-6">
           <div className="space-y-0.5">
             <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-              Passenger cash
+              Cash Received
             </p>
             <p className="text-base font-semibold tabular-nums text-slate-800 dark:text-slate-200 sm:text-lg">
               ${plainAmount(passengerCash)}
@@ -224,7 +214,7 @@ function CashWeekCard({
           </div>
           <div className="space-y-0.5">
             <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-              Paid to driver
+              Paid To You
             </p>
             <p
               className={cn(
@@ -303,34 +293,55 @@ export function FleetCashSettlementTab({ periodRows }: FleetCashSettlementTabPro
         </div>
       )}
 
-      <Dialog
-        open={!!selected}
-        onOpenChange={(open) => {
-          if (!open) setSelected(null);
-        }}
-      >
-        <DialogContent className="flex max-h-[85vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
-          {selected && (
-            <>
-              <div className="border-b bg-slate-50/50 px-6 pb-4 pt-6 dark:border-slate-800 dark:bg-slate-900/50">
-                <DialogHeader>
-                  <div className="mb-1 flex items-center gap-2.5">
+      {selected &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[100] flex items-end justify-center safe-x p-4 sm:items-center"
+            role="presentation"
+          >
+            <button
+              type="button"
+              className="absolute inset-0 bg-black/50 touch-manipulation"
+              aria-label="Close"
+              onClick={() => setSelected(null)}
+            />
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="cash-week-details-title"
+              className="relative z-[101] flex max-h-[85dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900 sm:rounded-2xl"
+            >
+              <div className="shrink-0 border-b border-slate-200 bg-slate-50/50 px-5 pb-4 pt-5 dark:border-slate-700 dark:bg-slate-900/50">
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
                     <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-500/20">
                       <Wallet className="h-4 w-4 text-blue-600 dark:text-blue-300" />
                     </div>
                     <div>
-                      <DialogTitle className="text-base">
+                      <h2
+                        id="cash-week-details-title"
+                        className="text-base font-semibold text-slate-900 dark:text-white"
+                      >
                         {format(selected.row.periodStart, 'MMM d')} -{' '}
                         {format(selected.row.periodEnd, 'MMM d, yyyy')}
-                      </DialogTitle>
-                      <DialogDescription className="mt-0.5 text-xs">
-                        Same settlement math as Roam Fleet · {selected.row.tripCount} trips
-                      </DialogDescription>
+                      </h2>
+                      <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                        Settlement breakdown
+                      </p>
                     </div>
                   </div>
-                </DialogHeader>
+                  <button
+                    type="button"
+                    onClick={() => setSelected(null)}
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                    aria-label="Close details"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
 
-                <div className="mt-4 grid grid-cols-2 gap-2.5">
+                <div className="grid grid-cols-2 gap-2.5">
                   <div
                     className={cn(
                       'rounded-lg border bg-white p-2.5 text-center dark:bg-slate-950',
@@ -355,24 +366,24 @@ export function FleetCashSettlementTab({ periodRows }: FleetCashSettlementTabPro
                   </div>
                   <div className="rounded-lg border border-emerald-100 bg-white p-2.5 text-center dark:border-emerald-500/30 dark:bg-slate-950">
                     <p className="mb-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-400">
-                      Paid
+                      Paid To You
                     </p>
                     <p className="font-mono text-sm font-bold text-emerald-600 dark:text-emerald-400">
-                      ${plainAmount(selected.paid)}
+                      ${plainAmount(selected.call.breakdown.settlementPaid)}
                     </p>
                   </div>
                 </div>
               </div>
 
-              <ScrollArea className="flex-1 overflow-auto">
-                <div className="space-y-5 px-6 py-5">
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                <div className="space-y-5 px-5 py-5">
                   <div className="rounded-lg border border-slate-200 dark:border-slate-700">
                     <div className="divide-y divide-slate-100 dark:divide-slate-800">
                       <div className="flex items-center justify-between px-4 py-2.5">
                         <div className="flex items-center gap-2.5">
                           <Banknote className="h-3.5 w-3.5 text-slate-400" />
                           <span className="text-sm text-slate-700 dark:text-slate-300">
-                            Passenger cash
+                            Cash Received
                           </span>
                         </div>
                         <span className="font-mono text-sm font-semibold text-slate-900 dark:text-white">
@@ -439,16 +450,14 @@ export function FleetCashSettlementTab({ periodRows }: FleetCashSettlementTabPro
                           </span>
                         </div>
                       )}
-                      {(selected.call.breakdown.settlementPaid || 0) > 0.005 && (
-                        <div className="flex items-center justify-between px-4 py-2.5">
-                          <span className="text-sm text-slate-700 dark:text-slate-300">
-                            Paid to you
-                          </span>
-                          <span className="font-mono text-sm font-semibold text-emerald-600">
-                            ${plainAmount(selected.call.breakdown.settlementPaid)}
-                          </span>
-                        </div>
-                      )}
+                      <div className="flex items-center justify-between px-4 py-2.5">
+                        <span className="text-sm text-slate-700 dark:text-slate-300">
+                          Paid To You
+                        </span>
+                        <span className="font-mono text-sm font-semibold text-emerald-600">
+                          ${plainAmount(selected.call.breakdown.settlementPaid)}
+                        </span>
+                      </div>
                       <div className="flex items-center justify-between px-4 py-2.5">
                         <div className="flex items-center gap-2.5">
                           <Scale className="h-3.5 w-3.5 text-indigo-500" />
@@ -463,7 +472,7 @@ export function FleetCashSettlementTab({ periodRows }: FleetCashSettlementTabPro
                     </div>
                     <div className="border-t bg-slate-50 px-4 py-2.5 text-[11px] text-slate-500 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-400">
                       Outstanding is after fuel, tolls, and your driver share — not the full
-                      passenger cash total.
+                      cash received total.
                     </div>
                   </div>
 
@@ -493,9 +502,9 @@ export function FleetCashSettlementTab({ periodRows }: FleetCashSettlementTabPro
                     </p>
                   </div>
                 </div>
-              </ScrollArea>
+              </div>
 
-              <div className="flex items-center justify-between border-t bg-slate-50/50 px-6 py-3 dark:border-slate-800 dark:bg-slate-900/50">
+              <div className="flex shrink-0 items-center justify-between border-t border-slate-200 bg-slate-50/50 px-5 py-3 dark:border-slate-700 dark:bg-slate-900/50">
                 <Badge className={cn('text-xs', statusBadgeClass(selected.statusLabel))}>
                   {selected.statusLabel}
                 </Badge>
@@ -508,10 +517,10 @@ export function FleetCashSettlementTab({ periodRows }: FleetCashSettlementTabPro
                   Close
                 </Button>
               </div>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
+            </div>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

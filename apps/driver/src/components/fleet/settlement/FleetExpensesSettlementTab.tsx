@@ -1,18 +1,22 @@
 /**
  * Fleet Settlement → Expenses tab (view-only).
- * Category totals per week — not a receipt dump. Logging stays in Expenses menu.
+ * Week cards always show Fuel / Toll / Maintenance / Misc + Details sheet.
  */
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Card, CardContent } from '@roam/ui';
+import { Button } from '@roam/ui';
 import { format } from 'date-fns';
-import { Fuel, Receipt, Ticket, Wrench, CircleDot } from 'lucide-react';
+import { Eye, Fuel, Receipt, Ticket, Wrench, Package, X } from 'lucide-react';
+import { cn } from '@roam/ui';
 import type { FinancialTransaction } from '../../../types/data';
 import {
   buildFleetExpenseItems,
   groupFleetExpensesByWeek,
   selectRecentExpenseWeeks,
   type FleetExpenseType,
+  type FleetExpenseWeekGroup,
 } from '../../../utils/fleetExpenseItems';
 
 const RECENT_WEEK_LIMIT = 5;
@@ -22,6 +26,10 @@ type FleetExpensesSettlementTabProps = {
   fuelEntries: any[];
 };
 
+function plainAmount(n: number) {
+  return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 function typeIcon(type: FleetExpenseType) {
   switch (type) {
     case 'fuel':
@@ -30,8 +38,8 @@ function typeIcon(type: FleetExpenseType) {
       return <Ticket className="h-4 w-4 text-purple-500" />;
     case 'maintenance':
       return <Wrench className="h-4 w-4 text-blue-500" />;
-    default:
-      return <CircleDot className="h-4 w-4 text-slate-400" />;
+    case 'misc':
+      return <Package className="h-4 w-4 text-amber-500" />;
   }
 }
 
@@ -43,9 +51,76 @@ function typeLabel(type: FleetExpenseType) {
       return 'Toll';
     case 'maintenance':
       return 'Maintenance';
-    default:
-      return 'Other';
+    case 'misc':
+      return 'Misc';
   }
+}
+
+function ExpenseWeekCard({
+  week,
+  onDetails,
+}: {
+  week: FleetExpenseWeekGroup;
+  onDetails: (week: FleetExpenseWeekGroup) => void;
+}) {
+  return (
+    <Card className="dark:border-slate-800 dark:bg-slate-900/60">
+      <CardContent className="space-y-3 p-4 sm:p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="font-semibold text-slate-900 dark:text-white">
+              {format(week.start, 'MMM d')} - {format(week.end, 'MMM d, yyyy')}
+            </h3>
+            <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              Total ${plainAmount(week.total)}
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0 gap-1.5 text-xs border-slate-300 hover:bg-slate-100 dark:border-slate-600 dark:hover:bg-slate-800"
+            onClick={() => onDetails(week)}
+          >
+            <Eye className="h-3.5 w-3.5" />
+            Details
+          </Button>
+        </div>
+
+        <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+          {week.categories.map((cat) => (
+            <li
+              key={cat.type}
+              className="flex items-center justify-between gap-3 py-2.5 first:pt-0 last:pb-0"
+            >
+              <div className="flex min-w-0 items-center gap-2.5">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800">
+                  {typeIcon(cat.type)}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-slate-800 dark:text-slate-100">
+                    {typeLabel(cat.type)}
+                  </p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    {cat.count} item{cat.count === 1 ? '' : 's'}
+                  </p>
+                </div>
+              </div>
+              <p
+                className={cn(
+                  'shrink-0 font-mono text-sm font-semibold tabular-nums',
+                  cat.total > 0.005
+                    ? 'text-slate-900 dark:text-white'
+                    : 'text-slate-400 dark:text-slate-500',
+                )}
+              >
+                ${plainAmount(cat.total)}
+              </p>
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+    </Card>
+  );
 }
 
 export function FleetExpensesSettlementTab({
@@ -56,6 +131,7 @@ export function FleetExpensesSettlementTab({
     const items = buildFleetExpenseItems({ transactions, fuelEntries });
     return selectRecentExpenseWeeks(groupFleetExpensesByWeek(items), RECENT_WEEK_LIMIT);
   }, [transactions, fuelEntries]);
+  const [selected, setSelected] = useState<FleetExpenseWeekGroup | null>(null);
 
   if (weeks.length === 0) {
     return (
@@ -65,7 +141,7 @@ export function FleetExpensesSettlementTab({
           No expenses for any week yet
         </p>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          Log fuel, tolls, maintenance, or other costs from the Expenses menu. They will show
+          Log fuel, tolls, maintenance, or misc costs from the Expenses menu. They will show
           up here by week as category totals.
         </p>
       </div>
@@ -75,61 +151,122 @@ export function FleetExpensesSettlementTab({
   return (
     <div className="space-y-4">
       <p className="text-xs text-slate-500 dark:text-slate-400">
-        View only — last {RECENT_WEEK_LIMIT} weeks, totaled by Fuel / Toll / Maintenance / Other.
-        Add or edit from the Expenses menu.
+        View only — add or edit from the Expenses menu.
       </p>
 
       {weeks.map((week) => (
-        <Card key={week.weekKey} className="dark:border-slate-800 dark:bg-slate-900/60">
-          <CardContent className="p-4 sm:p-5">
-            <div className="mb-3 flex items-start justify-between gap-3">
-              <div>
-                <h3 className="font-semibold text-slate-900 dark:text-white">
-                  {format(week.start, 'MMM d')} - {format(week.end, 'MMM d, yyyy')}
-                </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  {week.categories.length} categor
-                  {week.categories.length === 1 ? 'y' : 'ies'} charged
-                </p>
+        <ExpenseWeekCard key={week.weekKey} week={week} onDetails={setSelected} />
+      ))}
+
+      {selected &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[100] flex items-end justify-center safe-x p-4 sm:items-center"
+            role="presentation"
+          >
+            <button
+              type="button"
+              className="absolute inset-0 bg-black/50 touch-manipulation"
+              aria-label="Close"
+              onClick={() => setSelected(null)}
+            />
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="expense-week-details-title"
+              className="relative z-[101] flex max-h-[85dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900 sm:rounded-2xl"
+            >
+              <div className="shrink-0 border-b border-slate-200 px-5 pb-4 pt-5 dark:border-slate-700">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h2
+                      id="expense-week-details-title"
+                      className="text-base font-semibold text-slate-900 dark:text-white"
+                    >
+                      {format(selected.start, 'MMM d')} -{' '}
+                      {format(selected.end, 'MMM d, yyyy')}
+                    </h2>
+                    <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                      Week total ${plainAmount(selected.total)}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelected(null)}
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                    aria-label="Close details"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
-              <div className="text-right">
-                <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500">
-                  Total
-                </p>
-                <p className="text-lg font-bold tabular-nums text-slate-900 dark:text-white">
-                  ${week.total.toFixed(2)}
-                </p>
+
+              <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+                <div className="space-y-5">
+                  {selected.categories.map((cat) => {
+                    const catItems = selected.items.filter((i) => i.type === cat.type);
+                    return (
+                      <div key={cat.type}>
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800">
+                              {typeIcon(cat.type)}
+                            </div>
+                            <p className="text-sm font-semibold text-slate-900 dark:text-white">
+                              {typeLabel(cat.type)}
+                            </p>
+                          </div>
+                          <p className="font-mono text-sm font-semibold tabular-nums text-slate-900 dark:text-white">
+                            ${plainAmount(cat.total)}
+                          </p>
+                        </div>
+                        {catItems.length === 0 ? (
+                          <p className="rounded-lg border border-dashed border-slate-200 px-3 py-2 text-xs text-slate-400 dark:border-slate-700 dark:text-slate-500">
+                            No {typeLabel(cat.type).toLowerCase()} charges this week
+                          </p>
+                        ) : (
+                          <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-700">
+                            {catItems.map((item) => (
+                              <li
+                                key={item.id}
+                                className="flex items-start justify-between gap-3 px-3 py-2.5"
+                              >
+                                <div className="min-w-0">
+                                  <p className="truncate text-sm text-slate-800 dark:text-slate-100">
+                                    {item.description}
+                                  </p>
+                                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                                    {format(item.date, 'MMM d')} · {item.status}
+                                  </p>
+                                </div>
+                                <p className="shrink-0 font-mono text-sm font-semibold tabular-nums text-slate-900 dark:text-white">
+                                  ${plainAmount(Math.abs(item.amount))}
+                                </p>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="flex shrink-0 items-center justify-end border-t border-slate-200 px-5 py-3 dark:border-slate-700">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => setSelected(null)}
+                >
+                  Close
+                </Button>
               </div>
             </div>
-
-            <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-              {week.categories.map((cat) => (
-                <li
-                  key={cat.type}
-                  className="flex items-center justify-between gap-3 py-2.5 first:pt-0 last:pb-0"
-                >
-                  <div className="flex min-w-0 items-center gap-2.5">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800">
-                      {typeIcon(cat.type)}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-slate-800 dark:text-slate-100">
-                        {typeLabel(cat.type)}
-                      </p>
-                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                        {cat.count} item{cat.count === 1 ? '' : 's'}
-                      </p>
-                    </div>
-                  </div>
-                  <p className="shrink-0 font-mono text-sm font-semibold tabular-nums text-slate-900 dark:text-white">
-                    ${cat.total.toFixed(2)}
-                  </p>
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
-      ))}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
