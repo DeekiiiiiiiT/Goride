@@ -1,7 +1,7 @@
 /**
- * Read-model for Fleet Settlement → Expenses tab.
- * Fuel + Toll come from driver_financial_periods (same SSOT as roamfleet Expenses).
- * Maintenance / Misc come from non-fuel/non-toll expense ledger rows.
+ * Read-model for Fleet Settlement → Earnings tab.
+ * Earned = driverShare; Fuel/Toll from periods SSOT; Maint/Misc from expense ledger.
+ * Net = earned − deductions.
  */
 
 import { format, parseISO, startOfWeek, endOfWeek, subWeeks } from 'date-fns';
@@ -21,6 +21,13 @@ export interface FleetExpenseWeekGroup {
   weekKey: string;
   start: Date;
   end: Date;
+  /** Driver share for the week. */
+  earned: number;
+  /** Sum of Fuel / Toll / Maintenance / Misc. */
+  deductionsTotal: number;
+  /** earned − deductionsTotal. */
+  net: number;
+  /** @deprecated Prefer deductionsTotal — kept for any leftover callers. */
   total: number;
   /** Always Fuel / Toll / Maintenance / Misc (zeros included). */
   categories: FleetExpenseCategorySummary[];
@@ -30,10 +37,6 @@ const CATEGORY_ORDER: FleetExpenseType[] = ['fuel', 'toll', 'maintenance', 'misc
 
 function round2(n: number) {
   return Math.round(n * 100) / 100;
-}
-
-function emptyCategories(): FleetExpenseCategorySummary[] {
-  return CATEGORY_ORDER.map((type) => ({ type, total: 0, count: 0 }));
 }
 
 function weekBounds(weekKey: string): { start: Date; end: Date } {
@@ -106,10 +109,10 @@ function rollupMaintMisc(
 }
 
 /**
- * Last N weeks from financial periods — Fuel = finalized fuelDeduction,
- * Toll = tollChargedToDriver (only after fleet charges the driver).
+ * Last N weeks from financial periods.
+ * Earned = driverShare; Fuel = finalized fuelDeduction; Toll = tollChargedToDriver.
  */
-export function buildExpenseWeeksFromPeriods(input: {
+export function buildEarningsWeeksFromPeriods(input: {
   periods: DriverFinancialPeriodClient[];
   transactions: FinancialTransaction[];
   limit?: number;
@@ -139,6 +142,8 @@ export function buildExpenseWeeksFromPeriods(input: {
     const period = periodByAnchor.get(weekKey);
     const maintMisc = rollupMaintMisc(input.transactions || [], weekKey);
 
+    const earned = round2(Math.max(0, Number(period?.driverShare) || 0));
+
     // Fuel: only after finalize — same number fleet shows as Fuel Deduction.
     const fuelTotal =
       period && period.fuelFinalized ? round2(Math.max(0, Number(period.fuelDeduction) || 0)) : 0;
@@ -155,14 +160,21 @@ export function buildExpenseWeeksFromPeriods(input: {
       { type: 'misc', total: maintMisc.misc.total, count: maintMisc.misc.count },
     ];
 
-    const total = round2(categories.reduce((s, c) => s + c.total, 0));
+    const deductionsTotal = round2(categories.reduce((s, c) => s + c.total, 0));
+    const net = round2(earned - deductionsTotal);
 
     return {
       weekKey,
       start: period ? parseISO(`${String(period.periodAnchor).slice(0, 10)}T00:00:00`) : start,
       end: period ? parseISO(`${String(period.periodEnd).slice(0, 10)}T23:59:59`) : end,
-      total,
+      earned,
+      deductionsTotal,
+      net,
+      total: deductionsTotal,
       categories,
     };
   });
 }
+
+/** @deprecated Use buildEarningsWeeksFromPeriods. */
+export const buildExpenseWeeksFromPeriods = buildEarningsWeeksFromPeriods;

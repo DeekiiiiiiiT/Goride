@@ -1,7 +1,6 @@
 /**
- * Fleet Settlement → Expenses tab (view-only).
- * Cards show week total; Details shows Fuel / Toll / Maintenance / Misc only.
- * Fuel + Toll use the same period SSOT as roamfleet Expenses.
+ * Fleet Settlement → Earnings tab (view-only).
+ * Cards: Earned / Deductions / Net. Details: Fuel / Toll / Maintenance / Misc.
  */
 
 import React, { useMemo, useState } from 'react';
@@ -14,14 +13,14 @@ import { cn } from '@roam/ui';
 import type { FinancialTransaction } from '../../../types/data';
 import type { DriverFinancialPeriodClient } from '../../../types/driverPayoutPeriod';
 import {
-  buildExpenseWeeksFromPeriods,
+  buildEarningsWeeksFromPeriods,
   type FleetExpenseType,
   type FleetExpenseWeekGroup,
 } from '../../../utils/fleetExpenseItems';
 
 const RECENT_WEEK_LIMIT = 5;
 
-type FleetExpensesSettlementTabProps = {
+type FleetEarningsSettlementTabProps = {
   periods: DriverFinancialPeriodClient[];
   transactions: FinancialTransaction[];
 };
@@ -56,7 +55,7 @@ function typeLabel(type: FleetExpenseType) {
   }
 }
 
-function ExpenseWeekCard({
+function EarningsWeekCard({
   week,
   onDetails,
 }: {
@@ -65,26 +64,11 @@ function ExpenseWeekCard({
 }) {
   return (
     <Card className="dark:border-slate-800 dark:bg-slate-900/60">
-      <CardContent className="p-4 sm:p-5">
+      <CardContent className="space-y-3 p-4 sm:p-5">
         <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h3 className="font-semibold text-slate-900 dark:text-white">
-              {format(week.start, 'MMM d')} - {format(week.end, 'MMM d, yyyy')}
-            </h3>
-            <p className="mt-1 text-[10px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-              Total
-            </p>
-            <p
-              className={cn(
-                'text-lg font-bold tabular-nums',
-                week.total > 0.005
-                  ? 'text-slate-900 dark:text-white'
-                  : 'text-slate-400 dark:text-slate-500',
-              )}
-            >
-              ${plainAmount(week.total)}
-            </p>
-          </div>
+          <h3 className="font-semibold text-slate-900 dark:text-white">
+            {format(week.start, 'MMM d')} - {format(week.end, 'MMM d, yyyy')}
+          </h3>
           <Button
             variant="outline"
             size="sm"
@@ -95,18 +79,68 @@ function ExpenseWeekCard({
             Details
           </Button>
         </div>
+
+        <div className="grid grid-cols-3 gap-3">
+          <div className="space-y-0.5">
+            <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              Earned
+            </p>
+            <p
+              className={cn(
+                'text-base font-semibold tabular-nums sm:text-lg',
+                week.earned > 0.005
+                  ? 'text-slate-900 dark:text-white'
+                  : 'text-slate-400 dark:text-slate-500',
+              )}
+            >
+              ${plainAmount(week.earned)}
+            </p>
+          </div>
+          <div className="space-y-0.5">
+            <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              Deductions
+            </p>
+            <p
+              className={cn(
+                'text-base font-semibold tabular-nums sm:text-lg',
+                week.deductionsTotal > 0.005
+                  ? 'text-rose-600 dark:text-rose-400'
+                  : 'text-slate-400 dark:text-slate-500',
+              )}
+            >
+              ${plainAmount(week.deductionsTotal)}
+            </p>
+          </div>
+          <div className="space-y-0.5">
+            <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              Net
+            </p>
+            <p
+              className={cn(
+                'text-base font-bold tabular-nums sm:text-lg',
+                week.net >= 0.005
+                  ? 'text-emerald-600 dark:text-emerald-400'
+                  : week.net < -0.005
+                    ? 'text-rose-600 dark:text-rose-400'
+                    : 'text-slate-400 dark:text-slate-500',
+              )}
+            >
+              ${plainAmount(week.net)}
+            </p>
+          </div>
+        </div>
       </CardContent>
     </Card>
   );
 }
 
-export function FleetExpensesSettlementTab({
+export function FleetEarningsSettlementTab({
   periods,
   transactions,
-}: FleetExpensesSettlementTabProps) {
+}: FleetEarningsSettlementTabProps) {
   const weeks = useMemo(
     () =>
-      buildExpenseWeeksFromPeriods({
+      buildEarningsWeeksFromPeriods({
         periods,
         transactions,
         limit: RECENT_WEEK_LIMIT,
@@ -117,13 +151,9 @@ export function FleetExpensesSettlementTab({
 
   return (
     <div className="space-y-4">
-      <p className="text-xs text-slate-500 dark:text-slate-400">
-        View only — add or edit from the menu.
-      </p>
-
       <div className="grid grid-cols-1 gap-4">
         {weeks.map((week) => (
-          <ExpenseWeekCard key={week.weekKey} week={week} onDetails={setSelected} />
+          <EarningsWeekCard key={week.weekKey} week={week} onDetails={setSelected} />
         ))}
       </div>
 
@@ -143,22 +173,19 @@ export function FleetExpensesSettlementTab({
             <div
               role="dialog"
               aria-modal="true"
-              aria-labelledby="expense-week-details-title"
+              aria-labelledby="earnings-week-details-title"
               className="relative z-[101] flex max-h-[85dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900 sm:rounded-2xl"
             >
               <div className="shrink-0 border-b border-slate-200 px-5 pb-4 pt-5 dark:border-slate-700">
-                <div className="flex items-start justify-between gap-3">
+                <div className="mb-3 flex items-start justify-between gap-3">
                   <div>
                     <h2
-                      id="expense-week-details-title"
+                      id="earnings-week-details-title"
                       className="text-base font-semibold text-slate-900 dark:text-white"
                     >
                       {format(selected.start, 'MMM d')} -{' '}
                       {format(selected.end, 'MMM d, yyyy')}
                     </h2>
-                    <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                      Week total ${plainAmount(selected.total)}
-                    </p>
                   </div>
                   <button
                     type="button"
@@ -168,6 +195,34 @@ export function FleetExpensesSettlementTab({
                   >
                     <X className="h-4 w-4" />
                   </button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div className="rounded-lg border border-slate-200 bg-white p-2.5 text-center dark:border-slate-700 dark:bg-slate-950">
+                    <p className="mb-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-400">
+                      Earned
+                    </p>
+                    <p className="font-mono text-sm font-bold text-slate-900 dark:text-white">
+                      ${plainAmount(selected.earned)}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-emerald-100 bg-white p-2.5 text-center dark:border-emerald-500/30 dark:bg-slate-950">
+                    <p className="mb-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-400">
+                      Net
+                    </p>
+                    <p
+                      className={cn(
+                        'font-mono text-sm font-bold',
+                        selected.net >= 0.005
+                          ? 'text-emerald-600 dark:text-emerald-400'
+                          : selected.net < -0.005
+                            ? 'text-rose-600 dark:text-rose-400'
+                            : 'text-slate-400',
+                      )}
+                    >
+                      ${plainAmount(selected.net)}
+                    </p>
+                  </div>
                 </div>
               </div>
 

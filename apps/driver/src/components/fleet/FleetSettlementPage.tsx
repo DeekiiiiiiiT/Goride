@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ChevronLeft, Loader2, Receipt, Scale } from 'lucide-react';
+import { ChevronLeft, Loader2, Scale, Wallet } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCurrentDriver } from '../../hooks/useCurrentDriver';
 import { api } from '../../services/api';
@@ -7,9 +7,9 @@ import { FinancialTransaction } from '../../types/data';
 import type { DriverFinancialPeriodClient } from '../../types/driverPayoutPeriod';
 import { periodsToPayoutPeriodRows } from '../../utils/periodsToPayoutPeriodRows';
 import { FleetCashSettlementTab } from './settlement/FleetCashSettlementTab';
-import { FleetExpensesSettlementTab } from './settlement/FleetExpensesSettlementTab';
+import { FleetEarningsSettlementTab } from './settlement/FleetEarningsSettlementTab';
 
-type SettlementTab = 'cash' | 'expenses';
+type SettlementTab = 'cash' | 'earnings';
 
 type FleetSettlementPageProps = {
   onBack?: () => void;
@@ -18,7 +18,7 @@ type FleetSettlementPageProps = {
 /**
  * Fleet-only Layer B desk:
  * Cash Settlement = same still-owed SSOT as roamfleet Cash Wallet.
- * Expenses = view-only period expenses (logging stays in Expenses menu).
+ * Earnings = driver share − deductions (fuel/toll/maint/misc) → net take-home.
  */
 export function FleetSettlementPage({ onBack }: FleetSettlementPageProps) {
   const { user } = useAuth();
@@ -119,7 +119,7 @@ export function FleetSettlementPage({ onBack }: FleetSettlementPageProps) {
         {(
           [
             { id: 'cash' as const, label: 'Cash Settlement', icon: Scale },
-            { id: 'expenses' as const, label: 'Expenses', icon: Receipt },
+            { id: 'earnings' as const, label: 'Earnings', icon: Wallet },
           ] as const
         ).map(({ id, label, icon: Icon }) => (
           <button
@@ -149,8 +149,8 @@ export function FleetSettlementPage({ onBack }: FleetSettlementPageProps) {
       ) : (
         <>
           {tab === 'cash' && <FleetCashSettlementTab periodRows={periodRows} />}
-          {tab === 'expenses' && (
-            <FleetExpensesSettlementTab periods={periods} transactions={transactions} />
+          {tab === 'earnings' && (
+            <FleetEarningsSettlementTab periods={periods} transactions={transactions} />
           )}
         </>
       )}
