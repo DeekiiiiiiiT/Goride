@@ -1,12 +1,13 @@
 /**
  * Read-model for Fleet Settlement → Expenses tab.
- * Mirrors DriverExpenses listing/dedupe rules without importing that screen.
- * Settlement credits (cash collection, fuel settlement credit) are excluded.
+ * Weeks align to the same financial periods as Cash Settlement (last N Mondays).
  * Misc = inventory damage / fleet charge-backs outside Fuel, Toll, Maintenance.
  */
 
-import { format, parseISO, startOfWeek, endOfWeek } from 'date-fns';
+import { format, parseISO, startOfWeek, endOfWeek, subWeeks } from 'date-fns';
 import type { FinancialTransaction } from '../types/data';
+import type { PayoutPeriodRow } from '../types/driverPayoutPeriod';
+import { isTollCategory } from './tollCategoryHelper';
 
 export type FleetExpenseType = 'fuel' | 'toll' | 'maintenance' | 'misc';
 
@@ -61,6 +62,19 @@ function rollupCategories(items: FleetExpenseItem[]): FleetExpenseCategorySummar
   });
 }
 
+function emptyWeekGroup(weekKey: string): FleetExpenseWeekGroup {
+  const start = parseISO(`${weekKey}T00:00:00`);
+  const end = endOfWeek(start, { weekStartsOn: 1 });
+  return {
+    weekKey,
+    start,
+    end,
+    total: 0,
+    items: [],
+    categories: rollupCategories([]),
+  };
+}
+
 function isSettlementCredit(t: FinancialTransaction): boolean {
   const cat = String(t.category || t.type || '').toLowerCase();
   const desc = `${t.merchant || ''} ${t.description || ''}`.toLowerCase();
@@ -71,9 +85,40 @@ function isSettlementCredit(t: FinancialTransaction): boolean {
   return false;
 }
 
+/** Settlement ledger mirrors — not driver-logged expenses. */
+function isFuelSettlementLedger(t: FinancialTransaction): boolean {
+  const c = String(t.category || '').toLowerCase().trim();
+  return c === 'fuel deduction' || c === 'fuel reimbursement';
+}
+
+function isTollTopUpOrRefund(t: FinancialTransaction): boolean {
+  const c = String(t.category || '').toLowerCase().trim();
+  const ty = String(t.type || '').toLowerCase().trim();
+  return (
+    c === 'toll top-up' ||
+    c === 'toll refund' ||
+    ty === 'top-up' ||
+    ty === 'top_up'
+  );
+}
+
+/**
+ * Same inclusion gate as fleet DriverExpensesHistory:
+ * Expense / negative Adjustment / toll-category rows; no fuel settlement mirrors.
+ */
+function isExpenseLedgerRow(t: FinancialTransaction): boolean {
+  if (!t) return false;
+  if (isSettlementCredit(t) || isFuelSettlementLedger(t) || isTollTopUpOrRefund(t)) return false;
+  if (t.type === 'Expense') return true;
+  if (t.type === 'Adjustment' && Number(t.amount) < 0) return true;
+  if (isTollCategory(t.category)) return true;
+  if (String(t.category || '').toLowerCase().trim() === 'toll charge') return true;
+  return false;
+}
+
 function fuelExpenseMirror(t: FinancialTransaction): boolean {
   const c = (t.category || '').toLowerCase();
-  if (c.includes('fuel') && !c.includes('credit')) return true;
+  if (c.includes('fuel') && !c.includes('credit') && !c.includes('deduction')) return true;
   const d = `${t.merchant || ''} ${t.description || ''}`.toLowerCase();
   return d.includes('fuel expense') || d.includes('fuel:') || d.includes('fuel —');
 }
@@ -83,8 +128,18 @@ function classifyTx(t: FinancialTransaction): FleetExpenseType {
   const c = (t.category || '').toLowerCase();
   if (c.includes('toll')) return 'toll';
   if (c.includes('maintenance') || c.includes('service') || c.includes('repair')) return 'maintenance';
-  // Inventory charge-backs, fleet deductions, and anything outside the big three
   return 'misc';
+}
+
+function isRejectedFuelStatus(status: string): boolean {
+  const s = status.toLowerCase().trim();
+  return (
+    s === 'rejected' ||
+    s === 'cancelled' ||
+    s === 'canceled' ||
+    s === 'void' ||
+    s === 'deleted'
+  );
 }
 
 function txAmountAbs(t: FinancialTransaction) {
@@ -138,8 +193,8 @@ function weekKeyFor(date: Date): string {
 }
 
 /**
- * Build expense items from fuel_entry rows + Expense transactions.
- * Pass all historical fuel for the driver (not only current week).
+ * Build expense items from fuel_entry rows + expense/toll ledger rows.
+ * Caller must pass only this driver's fuel entries.
  */
 export function buildFleetExpenseItems(input: {
   transactions: FinancialTransaction[];
@@ -150,6 +205,9 @@ export function buildFleetExpenseItems(input: {
   const items: FleetExpenseItem[] = [];
 
   for (const f of fuelEntries) {
+    const status = String(f.auditStatus || f.status || 'pending');
+    if (isRejectedFuelStatus(status)) continue;
+
     const rawDate = f.date
       ? typeof f.date === 'string'
         ? parseISO(f.date)
@@ -158,21 +216,23 @@ export function buildFleetExpenseItems(input: {
         ? new Date(f.createdAt)
         : null;
     if (!rawDate || isNaN(rawDate.getTime())) continue;
+
+    const amount = Number(f.cost ?? f.amount ?? 0) || 0;
+    if (Math.abs(amount) < 0.005) continue;
+
     items.push({
       id: String(f.id),
       type: 'fuel',
       date: rawDate,
-      amount: Number(f.cost ?? f.amount ?? 0) || 0,
+      amount,
       description: f.station || f.stationName || 'Fuel Purchase',
-      status: String(f.auditStatus || f.status || 'pending'),
+      status,
       weekKey: weekKeyFor(rawDate),
       receiptUrl: f.receiptUrl,
     });
   }
 
-  const expenseTx = (input.transactions || []).filter(
-    (t) => t && t.type === 'Expense' && !isSettlementCredit(t),
-  );
+  const expenseTx = (input.transactions || []).filter(isExpenseLedgerRow);
 
   for (const t of expenseTx) {
     if (linkedFuelTxIds.has(String(t.id))) continue;
@@ -190,11 +250,14 @@ export function buildFleetExpenseItems(input: {
       if (fuelLogOverlapsExpense(t, txDate, fuelEntries)) continue;
     }
 
+    const amount = Number(t.amount) || 0;
+    if (Math.abs(amount) < 0.005) continue;
+
     items.push({
       id: String(t.id),
       type: classifyTx(t),
       date: txDate,
-      amount: Number(t.amount) || 0,
+      amount,
       description: t.merchant || t.description || t.category || 'Expense',
       status: String(t.status || 'pending'),
       weekKey: weekKeyFor(txDate),
@@ -204,6 +267,26 @@ export function buildFleetExpenseItems(input: {
 
   items.sort((a, b) => b.date.getTime() - a.date.getTime());
   return items;
+}
+
+function weekGroupFromItems(
+  weekKey: string,
+  weekItems: FleetExpenseItem[],
+): FleetExpenseWeekGroup {
+  const start = parseISO(`${weekKey}T00:00:00`);
+  const end = endOfWeek(start, { weekStartsOn: 1 });
+  const sortedItems = [...weekItems].sort((a, b) => b.date.getTime() - a.date.getTime());
+  const categories = rollupCategories(sortedItems);
+  const total =
+    Math.round(categories.reduce((s, c) => s + c.total, 0) * 100) / 100;
+  return {
+    weekKey,
+    start,
+    end,
+    total,
+    items: sortedItems,
+    categories,
+  };
 }
 
 /** Group items by Mon–Sun week, newest first, with category totals. */
@@ -217,28 +300,50 @@ export function groupFleetExpensesByWeek(items: FleetExpenseItem[]): FleetExpens
 
   const groups: FleetExpenseWeekGroup[] = [];
   for (const [weekKey, weekItems] of map) {
-    const start = parseISO(weekKey);
-    const end = endOfWeek(start, { weekStartsOn: 1 });
-    const sortedItems = weekItems.sort((a, b) => b.date.getTime() - a.date.getTime());
-    const categories = rollupCategories(sortedItems);
-    const total = Math.round(
-      categories.reduce((s, c) => s + c.total, 0) * 100,
-    ) / 100;
-    groups.push({
-      weekKey,
-      start,
-      end,
-      total,
-      items: sortedItems,
-      categories,
-    });
+    groups.push(weekGroupFromItems(weekKey, weekItems));
   }
 
   groups.sort((a, b) => b.start.getTime() - a.start.getTime());
   return groups;
 }
 
-/** Newest weeks first, capped (default last 5). */
+/**
+ * Last N weeks matching Cash Settlement periods.
+ * Always returns N cards (zeros when a week has no expenses).
+ */
+export function selectExpenseWeeksForPeriods(
+  items: FleetExpenseItem[],
+  periodRows: PayoutPeriodRow[],
+  limit = 5,
+): FleetExpenseWeekGroup[] {
+  const byWeek = new Map<string, FleetExpenseItem[]>();
+  for (const item of items) {
+    const list = byWeek.get(item.weekKey) || [];
+    list.push(item);
+    byWeek.set(item.weekKey, list);
+  }
+
+  let anchors: string[] = [];
+  if (periodRows.length > 0) {
+    anchors = [...periodRows]
+      .sort((a, b) => b.periodStart.getTime() - a.periodStart.getTime())
+      .slice(0, Math.max(0, limit))
+      .map((r) => format(r.periodStart, 'yyyy-MM-dd'));
+  } else {
+    // No financial periods yet — still show calendar last N Mondays.
+    const thisMonday = startOfWeek(new Date(), { weekStartsOn: 1 });
+    for (let i = 0; i < limit; i++) {
+      anchors.push(format(subWeeks(thisMonday, i), 'yyyy-MM-dd'));
+    }
+  }
+
+  return anchors.map((weekKey) => {
+    const weekItems = byWeek.get(weekKey) || [];
+    return weekItems.length > 0 ? weekGroupFromItems(weekKey, weekItems) : emptyWeekGroup(weekKey);
+  });
+}
+
+/** @deprecated Prefer selectExpenseWeeksForPeriods so empty recent weeks still appear. */
 export function selectRecentExpenseWeeks(
   groups: FleetExpenseWeekGroup[],
   limit = 5,

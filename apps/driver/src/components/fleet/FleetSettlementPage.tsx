@@ -95,15 +95,16 @@ export function FleetSettlementPage({ onBack }: FleetSettlementPageProps) {
 
         setTransactions(Array.isArray(txData) ? txData : []);
 
+        // Only this driver's fuel — vehicle feed can include other drivers on the same car.
         const fuelMap = new Map<string, any>();
+        const isThisDriversFuel = (f: any) =>
+          driverIds.includes(f?.driverId) || driverIds.includes(f?.driver_id);
         (vehicleFuel || []).forEach((f: any) => {
-          if (f?.id) fuelMap.set(f.id, f);
+          if (f?.id && isThisDriversFuel(f)) fuelMap.set(f.id, f);
         });
         (allFuel || []).forEach((f: any) => {
           if (!f?.id || fuelMap.has(f.id)) return;
-          if (driverIds.includes(f.driverId) || driverIds.includes(f.driver_id)) {
-            fuelMap.set(f.id, f);
-          }
+          if (isThisDriversFuel(f)) fuelMap.set(f.id, f);
         });
         setFuelEntries(Array.from(fuelMap.values()));
       } catch (e) {
@@ -180,6 +181,7 @@ export function FleetSettlementPage({ onBack }: FleetSettlementPageProps) {
           {tab === 'cash' && <FleetCashSettlementTab periodRows={periodRows} />}
           {tab === 'expenses' && (
             <FleetExpensesSettlementTab
+              periodRows={periodRows}
               transactions={transactions}
               fuelEntries={fuelEntries}
             />
