@@ -272,12 +272,10 @@ export function WeeklySettlementView({
                                             <p className="font-semibold text-slate-700 tabular-nums">{plainAmount(call!.breakdown.cashWrittenOff)}</p>
                                         </div>
                                     )}
-                                    {(call?.breakdown.settlementPaid || 0) > 0.005 && (
-                                        <div className="space-y-0.5">
-                                            <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">Paid to driver</p>
-                                            <p className="font-semibold text-emerald-800 tabular-nums">{plainAmount(call!.breakdown.settlementPaid)}</p>
-                                        </div>
-                                    )}
+                                    <div className="space-y-0.5">
+                                        <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">Paid to driver</p>
+                                        <p className="font-semibold text-emerald-800 tabular-nums">{plainAmount(call?.breakdown.settlementPaid || 0)}</p>
+                                    </div>
                                 </div>
                             </div>
 

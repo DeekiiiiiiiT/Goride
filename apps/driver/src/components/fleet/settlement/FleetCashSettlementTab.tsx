@@ -1,7 +1,7 @@
 /**
  * Fleet Settlement → Cash Settlement tab.
  * Outstanding = Fleet call amount (after driver share) — same SSOT as roamfleet Cash Wallet.
- * Paid = cash returned (Log Cash). Passenger cash is Details context only.
+ * Week cards mirror Fleet Cash Wallet: Passenger cash / Cash returned / Paid to driver.
  */
 
 import React, { useMemo, useState } from 'react';
@@ -120,7 +120,7 @@ function CashWeekCard({
   week: WeekCardModel;
   onDetails: (week: WeekCardModel) => void;
 }) {
-  const passengerCash = week.call.breakdown.passengerCash;
+  const { passengerCash, cashReturned, settlementPaid } = week.call.breakdown;
   const clearedPct =
     week.outstanding < 0.005
       ? 100
@@ -161,47 +161,29 @@ function CashWeekCard({
             </p>
           </div>
 
-          <div className="flex flex-col gap-4 sm:flex-row sm:gap-10">
-            <div className="min-w-[110px] space-y-0.5">
-              <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                Outstanding
-              </p>
-              <p
-                className={cn(
-                  'text-xl font-bold tabular-nums',
-                  week.outstanding > 0.005
-                    ? 'text-red-600 dark:text-red-400'
-                    : week.statusLabel === 'Fleet owes you'
-                      ? 'text-emerald-600 dark:text-emerald-400'
-                      : 'text-slate-400 dark:text-slate-500',
-                )}
-              >
-                {week.statusLabel === 'Fleet owes you'
-                  ? `$${plainAmount(week.call.callAmount)}`
-                  : week.outstanding < 0.005
-                    ? '$0.00'
-                    : `$${plainAmount(week.outstanding)}`}
-              </p>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                {week.call.callLabel}
-              </p>
-            </div>
-            <div className="min-w-[90px] space-y-0.5">
-              <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                Paid
-              </p>
-              <p
-                className={cn(
-                  'text-xl font-bold tabular-nums',
-                  week.paid > 0
+          <div className="min-w-[110px] space-y-0.5">
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              Outstanding
+            </p>
+            <p
+              className={cn(
+                'text-xl font-bold tabular-nums',
+                week.outstanding > 0.005
+                  ? 'text-red-600 dark:text-red-400'
+                  : week.statusLabel === 'Fleet owes you'
                     ? 'text-emerald-600 dark:text-emerald-400'
                     : 'text-slate-400 dark:text-slate-500',
-                )}
-              >
-                ${plainAmount(week.paid)}
-              </p>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">Cash returned</p>
-            </div>
+              )}
+            >
+              {week.statusLabel === 'Fleet owes you'
+                ? `$${plainAmount(week.call.callAmount)}`
+                : week.outstanding < 0.005
+                  ? '$0.00'
+                  : `$${plainAmount(week.outstanding)}`}
+            </p>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+              {week.call.callLabel}
+            </p>
           </div>
 
           <Button
@@ -213,6 +195,48 @@ function CashWeekCard({
             <Eye className="h-3.5 w-3.5" />
             Details
           </Button>
+        </div>
+
+        {/* Same three cash fields as Fleet Cash Wallet week strip */}
+        <div className="grid grid-cols-3 gap-3 sm:gap-6">
+          <div className="space-y-0.5">
+            <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              Passenger cash
+            </p>
+            <p className="text-base font-semibold tabular-nums text-slate-800 dark:text-slate-200 sm:text-lg">
+              ${plainAmount(passengerCash)}
+            </p>
+          </div>
+          <div className="space-y-0.5">
+            <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              Cash returned
+            </p>
+            <p
+              className={cn(
+                'text-base font-semibold tabular-nums sm:text-lg',
+                cashReturned > 0.005
+                  ? 'text-emerald-600 dark:text-emerald-400'
+                  : 'text-slate-400 dark:text-slate-500',
+              )}
+            >
+              ${plainAmount(cashReturned)}
+            </p>
+          </div>
+          <div className="space-y-0.5">
+            <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              Paid to driver
+            </p>
+            <p
+              className={cn(
+                'text-base font-semibold tabular-nums sm:text-lg',
+                settlementPaid > 0.005
+                  ? 'text-emerald-600 dark:text-emerald-400'
+                  : 'text-slate-400 dark:text-slate-500',
+              )}
+            >
+              ${plainAmount(settlementPaid)}
+            </p>
+          </div>
         </div>
 
         {(week.paid > 0.005 || week.outstanding > 0.005 || passengerCash > 0.005) && (
