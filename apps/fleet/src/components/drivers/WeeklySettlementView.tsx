@@ -5,7 +5,7 @@ import { Button } from "../ui/button";
 import { Progress } from "../ui/progress";
 import { Trip, FinancialTransaction, DriverMetrics } from '../../types/data';
 import { format } from "date-fns";
-import { DollarSign, Info, Eye, Phone, Ban } from "lucide-react";
+import { DollarSign, Info, Eye, Phone, Ban, Banknote } from "lucide-react";
 import { cn } from "../ui/utils";
 import {
   computeWeeklyCashSettlement,
@@ -30,6 +30,8 @@ interface WeeklySettlementViewProps {
     onLogPayment?: (periodStart: Date, periodEnd: Date, amountOwed: number) => void;
     /** Write off cash still owed for this Settlement Week (company loss). */
     onWriteOff?: (periodStart: Date, periodEnd: Date, maxAmount: number) => void;
+    /** Record fleet→driver payout when company owes for this Settlement Week. */
+    onPayDriver?: (periodStart: Date, periodEnd: Date, maxAmount: number) => void;
     onDeleteWriteOff?: (txId: string) => void;
     onWeeksComputed?: (weeks: Array<{ start: Date; end: Date; amountOwed: number; amountPaid: number; balance: number; status: string }>) => void;
     readOnly?: boolean;
@@ -47,6 +49,7 @@ export function WeeklySettlementView({
     callOutstandingByMonday = {},
     onLogPayment,
     onWriteOff,
+    onPayDriver,
     onDeleteWriteOff,
     onWeeksComputed,
     readOnly = false,
@@ -97,6 +100,11 @@ export function WeeklySettlementView({
                         !readOnly &&
                         cashOwed > 0.005 &&
                         !!onWriteOff;
+                    const showPayDriver =
+                        !readOnly &&
+                        call?.callDirection === 'fleet_owes' &&
+                        (call?.callAmount || 0) > 0.005 &&
+                        !!onPayDriver;
 
                     return (
                     <Card key={idx} className={cn(
@@ -160,6 +168,18 @@ export function WeeklySettlementView({
                                         >
                                             <Ban className="h-3.5 w-3.5 mr-1.5" />
                                             Write Off
+                                        </Button>
+                                    )}
+                                    {showPayDriver && (
+                                        <Button
+                                            size="sm"
+                                            className="h-8 bg-emerald-700 hover:bg-emerald-800"
+                                            onClick={() => {
+                                                onPayDriver!(week.start, week.end, call!.callAmount);
+                                            }}
+                                        >
+                                            <Banknote className="h-3.5 w-3.5 mr-1.5" />
+                                            Pay Driver
                                         </Button>
                                     )}
                                     {showLog && (
@@ -228,6 +248,12 @@ export function WeeklySettlementView({
                                             <p className="font-semibold text-slate-700 tabular-nums">{plainAmount(call!.breakdown.cashWrittenOff)}</p>
                                         </div>
                                     )}
+                                    {(call?.breakdown.settlementPaid || 0) > 0.005 && (
+                                        <div className="space-y-0.5">
+                                            <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">Paid to driver</p>
+                                            <p className="font-semibold text-emerald-800 tabular-nums">{plainAmount(call!.breakdown.settlementPaid)}</p>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
@@ -279,7 +305,20 @@ export function WeeklySettlementView({
                           }
                         : undefined
                 }
+                onPayDriver={
+                    !readOnly && onPayDriver
+                        ? (start, end, maxAmount) => {
+                            setSelectedWalletWeek(null);
+                            onPayDriver(start, end, maxAmount);
+                          }
+                        : undefined
+                }
                 onDeleteWriteOff={
+                    !readOnly && onDeleteWriteOff
+                        ? (txId) => onDeleteWriteOff(txId)
+                        : undefined
+                }
+                onDeletePayout={
                     !readOnly && onDeleteWriteOff
                         ? (txId) => onDeleteWriteOff(txId)
                         : undefined

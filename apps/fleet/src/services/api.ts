@@ -2168,6 +2168,46 @@ export const api = {
     return response.json();
   },
 
+  /** Org-wide company_owes Settlement Weeks for Driver Payouts desk. */
+  async getCompanyOwesPeriods(opts?: {
+    periodAnchor?: string;
+    periodStart?: string;
+    periodEnd?: string;
+    minAmount?: number;
+    limit?: number;
+  }) {
+    const qs = new URLSearchParams();
+    if (opts?.periodAnchor) qs.set("periodAnchor", opts.periodAnchor);
+    if (opts?.periodStart) qs.set("periodStart", opts.periodStart);
+    if (opts?.periodEnd) qs.set("periodEnd", opts.periodEnd);
+    if (opts?.minAmount != null) qs.set("minAmount", String(opts.minAmount));
+    if (opts?.limit != null) qs.set("limit", String(opts.limit));
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/driver-financial-periods/company-owes?${qs.toString()}`,
+      { headers: await requireAuthHeaders(null) },
+    );
+    if (!response.ok) throw new Error("Failed to fetch company-owes periods");
+    return response.json();
+  },
+
+  /** Recently settled weeks with settlement_paid > 0. */
+  async getSettlementPaidPeriods(opts?: {
+    periodStart?: string;
+    periodEnd?: string;
+    limit?: number;
+  }) {
+    const qs = new URLSearchParams();
+    if (opts?.periodStart) qs.set("periodStart", opts.periodStart);
+    if (opts?.periodEnd) qs.set("periodEnd", opts.periodEnd);
+    if (opts?.limit != null) qs.set("limit", String(opts.limit));
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/driver-financial-periods/settlement-paid?${qs.toString()}`,
+      { headers: await requireAuthHeaders(null) },
+    );
+    if (!response.ok) throw new Error("Failed to fetch settlement-paid periods");
+    return response.json();
+  },
+
   async getDriverFinancialPeriodDetail(driverId: string, periodAnchor: string) {
     const qs = new URLSearchParams({ driverId });
     const response = await fetchWithRetry(

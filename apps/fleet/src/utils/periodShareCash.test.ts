@@ -72,6 +72,7 @@ describe('computeWeekCashBase', () => {
     expect(r.passengerCash).toBe(4800);
     expect(r.cashReturned).toBe(1500);
     expect(r.cashWrittenOff).toBe(0);
+    expect(r.settlementPaid).toBe(0);
   });
 
   it('sums Settlement-Week write-offs separately from cash returned', () => {
@@ -107,5 +108,35 @@ describe('computeWeekCashBase', () => {
     });
     expect(r.cashReturned).toBe(1500);
     expect(r.cashWrittenOff).toBe(400);
+    expect(r.settlementPaid).toBe(0);
+  });
+
+  it('sums cleared Driver Payouts as settlementPaid without cash returned', () => {
+    const r = computeWeekCashBase({
+      periodAnchor: '2026-07-20',
+      periodEnd: '2026-07-26',
+      uberPayoutCash: 0,
+      trips: [],
+      transactions: [
+        {
+          amount: 1043.65,
+          category: 'Driver Payouts',
+          type: 'Payout',
+          paymentMethod: 'Cash',
+          status: 'Completed',
+          metadata: { workPeriodStart: '2026-07-20' },
+        },
+        {
+          amount: 500,
+          category: 'Driver Payouts',
+          type: 'Payout',
+          paymentMethod: 'Bank Transfer',
+          status: 'Pending',
+          metadata: { workPeriodStart: '2026-07-20' },
+        },
+      ],
+    });
+    expect(r.cashReturned).toBe(0);
+    expect(r.settlementPaid).toBeCloseTo(1043.65, 2);
   });
 });

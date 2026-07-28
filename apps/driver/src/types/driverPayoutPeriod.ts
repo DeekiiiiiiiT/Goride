@@ -38,6 +38,7 @@ export interface PayoutPeriodRow {
   cashTollWash?: number;
   personalTollCharge?: number;
   cashWrittenOff?: number;
+  settlementPaid?: number;
   bankSettled: number;
   status: PayoutStatus;
   cashPaidBreakdown?: CashPaidBreakdown;
@@ -77,6 +78,7 @@ export type DriverFinancialPeriodClient = {
   cashCollected: number;
   cashReturned: number;
   cashWrittenOff: number;
+  settlementPaid: number;
   cashStillHeld: number;
   settlementAmount: number;
   payoutNet: number;

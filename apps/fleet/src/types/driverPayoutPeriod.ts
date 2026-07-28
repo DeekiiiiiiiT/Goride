@@ -65,6 +65,10 @@ export interface PayoutPeriodRow {
    * Cash write-offs tagged to this Settlement Week — reduces still held; never cash returned.
    */
   cashWrittenOff?: number;
+  /**
+   * Cleared Driver Payouts tagged to this Settlement Week — reduces company-owes residual.
+   */
+  settlementPaid?: number;
   /** Uber bank settled for the period — informational; never part of cash risk. */
   bankSettled: number;
   status: PayoutStatus;

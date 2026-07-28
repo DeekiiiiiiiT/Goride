@@ -36,6 +36,11 @@ export interface PeriodSettlementInput {
    * still held without counting as cash returned. Defaults to 0.
    */
   cashWrittenOff?: number;
+  /**
+   * Cleared Driver Payout txs tagged to this Settlement Week — reduces what the
+   * company still owes the driver. Never touches cash returned / still held.
+   */
+  settlementPaid?: number;
 }
 
 export interface PeriodSettlementResult {
@@ -48,7 +53,14 @@ export interface PeriodSettlementResult {
   cashBalance: number;
   /** cashBalance minus fuelCredits minus cashWrittenOff — what settlement is actually computed against. */
   adjCashBalance: number;
-  /** netPayout − adjCashBalance. Positive = company owes the driver; negative = driver owes the company. */
+  /** netPayout − adjCashBalance before payouts. Positive = company owes driver. */
+  grossSettlement: number;
+  /** Cleared payout amount applied (only when grossSettlement > 0). */
+  settlementPaid: number;
+  /**
+   * Outstanding after payouts: grossSettlement − settlementPaid when company owes;
+   * else grossSettlement. Positive = company owes; negative = driver owes.
+   */
   settlement: number;
   // Still Held = adjCashBalance. Bank confirm / CSV match must never alter these inputs.
 }
@@ -61,12 +73,18 @@ export function computePeriodSettlement(i: PeriodSettlementInput): PeriodSettlem
   const tollCashWash = round(Math.max(0, i.tollCashWash || 0));
   const fuelCredits = round(Math.max(0, i.fuelCredits || 0));
   const cashWrittenOff = round(Math.max(0, i.cashWrittenOff || 0));
+  const settlementPaidIn = round(Math.max(0, i.settlementPaid || 0));
 
   const cashOwed = round((i.baseCashOwed || 0) + tollPersonal);
   const cashPaid = round((i.baseCashPaid || 0) + tollCashWash);
   const cashBalance = round(cashOwed - cashPaid);
   const adjCashBalance = round(cashBalance - fuelCredits - cashWrittenOff);
-  const settlement = round(netPayout - adjCashBalance);
+  const grossSettlement = round(netPayout - adjCashBalance);
+  // Payouts only clear company→driver residual; never flip a driver_owes week.
+  const settlementPaid =
+    grossSettlement > 0.005 ? round(Math.min(settlementPaidIn, grossSettlement)) : 0;
+  const settlement =
+    grossSettlement > 0.005 ? round(grossSettlement - settlementPaid) : grossSettlement;
 
   return {
     netPayout,
@@ -76,6 +94,8 @@ export function computePeriodSettlement(i: PeriodSettlementInput): PeriodSettlem
     cashPaid,
     cashBalance,
     adjCashBalance,
+    grossSettlement,
+    settlementPaid,
     settlement,
   };
 }

@@ -49,16 +49,41 @@ Start Trip / Log Manual Trip ──► Layer B only (never Layer A)
 
 ## 3. Layer B — Fleet Cash Wallet / Settlement / Fuel
 
-**Meaning:** “The driver is holding company cash. How much should we collect?”
+**Meaning:** “Who owes whom after passenger cash, returns, fuel, and tolls?”
 
 After weekly math (passenger cash, Log Cash, fuel credits, tolls, driver share):
 
 - Driver owes fleet, or fleet owes driver, or cash still with driver (week not finalized).
 
+**Two desks (do not mix directions)**
+
+| Desk | Direction | Action | Effect |
+|------|-----------|--------|--------|
+| **Collect** | Driver → fleet | Log Cash (`Payment_Received` / Cash Collection) | Increases Cash Returned |
+| **Pay** | Fleet → driver | Record Payout (`Payout` / Driver Payouts) | Increases `settlement_paid`; clears `company_owes` |
+
+Formula (finalized weeks):
+
+```
+grossSettlement = netPayout − cashStillHeld
+outstanding     = grossSettlement > 0
+                  ? grossSettlement − settlementPaid
+                  : grossSettlement
+```
+
+- Positive outstanding → company owes driver (`company_owes`)
+- Negative → driver owes fleet (`driver_owes`)
+- Near zero → `settled`
+
+Write-offs forgive **driver** cash held only. They never count as Cash Returned or as a Driver Payout.
+
+Fleet-wide batch pay runs from **Business Finance → Driver Payouts**. Per-driver settle-up stays on Cash Wallet → Pay Driver.
+
 **Inputs**
 
 - Cash trips in fleet KV (manual, Start Trip, synced Roam cash trips, Uber cash, etc.).
 - Log Cash (Cash Returned).
+- Driver Payouts (`settlement_paid`).
 - Fuel finalize / toll decisions.
 
 **Drivers must see** Weekly Settlement + Fuel Wallet in the driver app under **Fleet Settlement** (separate from Roam Earnings). Admins see the same desk on roamfleet.co.
@@ -98,9 +123,10 @@ Do **not** backfill manual trips into the Roam rides ledger to “fix” the $0.
 1. Never merge Fleet Cash Wallet numbers into Roam Cash / Digital / Debt chips.
 2. Never write Start Trip into `rides.ride_requests`.
 3. Never backfill Start Trip / Manual Entry into Roam Cash-in-Hand.
-4. Physical cash handover for fleet drivers is Log Cash / weekly settlement only.
+4. Physical cash handover for fleet drivers is Log Cash / weekly settlement only. Fleet→driver settle-up is Record Payout only — never Log Cash.
 5. `fleet_org_payout_enabled` defaults **off**; pilot one org before global on.
 6. Independents must see zero behavioral change from fleet-only phases.
+7. Driver Payouts never inflate Cash Returned / Business Finance cash collected.
 
 ---
 

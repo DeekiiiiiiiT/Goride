@@ -3,7 +3,11 @@
  * Mirrors ledger earnings-history tier math and Settlement cash rules.
  */
 import { getTripPhysicalCashCollected } from './tripPhysicalCash.ts';
-import { isCashReturnedForWeek, isCashWriteOffForWeek } from './driverCashPayment.ts';
+import {
+  isCashReturnedForWeek,
+  isCashWriteOffForWeek,
+  isSettlementPaidForWeek,
+} from './driverCashPayment.ts';
 import { normalizePlatform } from './normalizePlatform.ts';
 
 export type LedgerFareLike = {
@@ -164,6 +168,7 @@ export function computeWeekCashBase(params: {
   passengerCash: number;
   cashReturned: number;
   cashWrittenOff: number;
+  settlementPaid: number;
   nonUberTripCash: number;
   uberCash: number;
 } {
@@ -198,10 +203,17 @@ export function computeWeekCashBase(params: {
       .reduce((s, t) => s + Math.abs(Number(t.amount) || 0), 0),
   );
 
+  const settlementPaid = round2(
+    (transactions || [])
+      .filter((t) => isSettlementPaidForWeek(t as any, periodAnchor))
+      .reduce((s, t) => s + Math.abs(Number(t.amount) || 0), 0),
+  );
+
   return {
     passengerCash,
     cashReturned,
     cashWrittenOff,
+    settlementPaid,
     nonUberTripCash: round2(nonUberTripCash),
     uberCash,
   };

@@ -141,4 +141,68 @@ describe('computePeriodSettlement', () => {
     });
     expect(r.adjCashBalance).toBe(90);
   });
+
+  it('settlementPaid clears company_owes residual without touching cash returned', () => {
+    // Net payout exceeds cash still held → fleet owes driver
+    const r = computePeriodSettlement({
+      driverShare: 5000,
+      fuelDeduction: 0,
+      baseCashOwed: 10000,
+      baseCashPaid: 0,
+      tollCashWash: 0,
+      tollPersonal: 0,
+      fuelCredits: 6043.65,
+      cashWrittenOff: 0,
+      settlementPaid: 0,
+    });
+    // still held = 10000 − 6043.65 = 3956.35; settlement = 5000 − 3956.35 = 1043.65
+    expect(r.cashPaid).toBe(0);
+    expect(r.grossSettlement).toBeCloseTo(1043.65, 2);
+    expect(r.settlement).toBeCloseTo(1043.65, 2);
+
+    const paid = computePeriodSettlement({
+      driverShare: 5000,
+      fuelDeduction: 0,
+      baseCashOwed: 10000,
+      baseCashPaid: 0,
+      tollCashWash: 0,
+      tollPersonal: 0,
+      fuelCredits: 6043.65,
+      settlementPaid: 1043.65,
+    });
+    expect(paid.cashPaid).toBe(0); // payout is NOT cash returned
+    expect(paid.adjCashBalance).toBeCloseTo(r.adjCashBalance, 2);
+    expect(paid.settlementPaid).toBeCloseTo(1043.65, 2);
+    expect(paid.settlement).toBeCloseTo(0, 2);
+  });
+
+  it('partial settlementPaid leaves residual company_owes', () => {
+    const r = computePeriodSettlement({
+      driverShare: 100,
+      fuelDeduction: 0,
+      baseCashOwed: 0,
+      baseCashPaid: 0,
+      tollCashWash: 0,
+      tollPersonal: 0,
+      settlementPaid: 40,
+    });
+    expect(r.grossSettlement).toBe(100);
+    expect(r.settlementPaid).toBe(40);
+    expect(r.settlement).toBe(60);
+  });
+
+  it('settlementPaid does not flip or reduce a driver_owes week', () => {
+    const r = computePeriodSettlement({
+      driverShare: 25,
+      fuelDeduction: 0,
+      baseCashOwed: 100,
+      baseCashPaid: 0,
+      tollCashWash: 0,
+      tollPersonal: 0,
+      settlementPaid: 50,
+    });
+    expect(r.grossSettlement).toBe(-75);
+    expect(r.settlementPaid).toBe(0); // ignored when company does not owe
+    expect(r.settlement).toBe(-75);
+  });
 });

@@ -12,7 +12,7 @@ import {
 } from '../ui/sheet';
 import { Separator } from '../ui/separator';
 import { Badge } from '../ui/badge';
-import { Calendar, Phone, Ban, Trash2 } from 'lucide-react';
+import { Calendar, Phone, Ban, Trash2, Banknote } from 'lucide-react';
 import type { CashWeekData } from '../../utils/cashSettlementCalc';
 import type { FinancialTransaction } from '../../types/data';
 import {
@@ -20,6 +20,8 @@ import {
   isCashReturnedForWeek,
   isCashWriteOffForWeek,
   isDriverCashPaymentTransaction,
+  isSettlementPaidForWeek,
+  isPendingDriverPayoutForWeek,
 } from '../../utils/driverCashPayment';
 import type { WalletCallOutstanding } from '../../utils/walletCallOutstanding';
 import { cn } from '../ui/utils';
@@ -32,7 +34,9 @@ interface CashWalletWeekDetailProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onWriteOff?: (periodStart: Date, periodEnd: Date, maxAmount: number) => void;
+  onPayDriver?: (periodStart: Date, periodEnd: Date, maxAmount: number) => void;
   onDeleteWriteOff?: (txId: string) => void;
+  onDeletePayout?: (txId: string) => void;
 }
 
 const fmt = (n: number) =>
@@ -90,7 +94,9 @@ export function CashWalletWeekDetail({
   open,
   onOpenChange,
   onWriteOff,
+  onPayDriver,
   onDeleteWriteOff,
+  onDeletePayout,
 }: CashWalletWeekDetailProps) {
   const payments = useMemo(() => {
     if (!week) return [];
@@ -105,6 +111,17 @@ export function CashWalletWeekDetail({
     const monday = format(week.start, 'yyyy-MM-dd');
     return (transactions || [])
       .filter((t) => isCashWriteOffForWeek(t, monday))
+      .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+  }, [week, transactions]);
+
+  const payouts = useMemo(() => {
+    if (!week) return [];
+    const monday = format(week.start, 'yyyy-MM-dd');
+    return (transactions || [])
+      .filter(
+        (t) =>
+          isSettlementPaidForWeek(t, monday) || isPendingDriverPayoutForWeek(t, monday),
+      )
       .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
   }, [week, transactions]);
 
@@ -274,6 +291,16 @@ export function CashWalletWeekDetail({
               </div>
             )}
 
+            {(b.settlementPaid || 0) > 0.005 && (
+              <Row
+                label="Paid to driver"
+                hint="Cleared Driver Payouts for this Settlement Week"
+                amount={b.settlementPaid}
+                sign="minus"
+                tone="credit"
+              />
+            )}
+
             <Separator />
 
             <Row
@@ -284,7 +311,7 @@ export function CashWalletWeekDetail({
               }
               hint={
                 callOutstanding?.finalized
-                  ? 'Cash still held − net payout'
+                  ? 'Net payout − cash still held − paid to driver'
                   : 'Equals cash still held until payout is finalized'
               }
               amount={
@@ -403,6 +430,76 @@ export function CashWalletWeekDetail({
                           className="h-7 w-7 text-slate-400 hover:text-red-600"
                           title="Undo write-off"
                           onClick={() => onDeleteWriteOff(tx.id!)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="mt-6">
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <div className="flex items-center gap-1.5">
+              <Banknote className="h-3.5 w-3.5 text-slate-400" />
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                Paid to driver
+              </p>
+            </div>
+            {onPayDriver &&
+              callOutstanding?.callDirection === 'fleet_owes' &&
+              (callOutstanding.callAmount || 0) > 0.005 && (
+                <Button
+                  size="sm"
+                  className="h-7 text-xs bg-emerald-700 hover:bg-emerald-800"
+                  onClick={() =>
+                    onPayDriver(week.start, week.end, callOutstanding.callAmount)
+                  }
+                >
+                  Pay Driver
+                </Button>
+              )}
+          </div>
+          {payouts.length === 0 ? (
+            <p className="text-sm text-slate-500 py-3">
+              No driver payouts tagged to this week.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {payouts.map((tx) => {
+                const d = tx.date ? new Date(tx.date) : null;
+                const pending = String(tx.status || '').toLowerCase() === 'pending';
+                return (
+                  <div
+                    key={tx.id}
+                    className="rounded-md border border-slate-100 px-3 py-2.5 flex items-start justify-between gap-3"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-slate-800 truncate">
+                        {tx.description || 'Driver payout'}
+                      </p>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        {d && !Number.isNaN(d.getTime()) ? format(d, 'MMM d, yyyy') : '—'}
+                        {tx.paymentMethod ? ` · ${tx.paymentMethod}` : ''}
+                        {pending ? ' · Awaiting clear' : ''}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <span className="text-sm font-bold text-emerald-700 tabular-nums">
+                        −{fmt(tx.amount || 0)}
+                      </span>
+                      {onDeletePayout && tx.id && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-slate-400 hover:text-red-600"
+                          title="Undo payout"
+                          onClick={() => onDeletePayout(tx.id!)}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>

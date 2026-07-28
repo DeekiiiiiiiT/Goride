@@ -5,7 +5,11 @@ import {
   isCashWriteOffTransaction,
   isClearedCashWriteOff,
   isClearedDriverCashPayment,
+  isClearedDriverPayout,
   isDriverCashPaymentTransaction,
+  isDriverPayoutTransaction,
+  isPendingDriverPayoutForWeek,
+  isSettlementPaidForWeek,
 } from './driverCashPayment';
 
 describe('isDriverCashPaymentTransaction', () => {
@@ -67,6 +71,58 @@ describe('isDriverCashPaymentTransaction', () => {
         paymentMethod: 'Other',
       }),
     ).toBe(false);
+  });
+
+  it('rejects Driver Payout so it never inflates Cash Returned', () => {
+    expect(
+      isDriverCashPaymentTransaction({
+        type: 'Payout',
+        category: 'Driver Payouts',
+        amount: 1043.65,
+        description: 'Driver payout via Cash',
+        paymentMethod: 'Cash',
+      }),
+    ).toBe(false);
+  });
+});
+
+describe('driver payout detectors', () => {
+  it('accepts Payout / Driver Payouts', () => {
+    expect(
+      isDriverPayoutTransaction({
+        type: 'Payout',
+        category: 'Driver Payouts',
+        amount: 500,
+      }),
+    ).toBe(true);
+  });
+
+  it('counts Cash Completed as cleared settlement paid for the week', () => {
+    const tx = {
+      type: 'Payout',
+      category: 'Driver Payouts',
+      amount: 1043.65,
+      paymentMethod: 'Cash',
+      status: 'Completed',
+      metadata: { workPeriodStart: '2026-07-20T12:00:00.000Z', workPeriodEnd: '2026-07-26T12:00:00.000Z' },
+    };
+    expect(isClearedDriverPayout(tx)).toBe(true);
+    expect(isSettlementPaidForWeek(tx as any, '2026-07-20')).toBe(true);
+    expect(isSettlementPaidForWeek(tx as any, '2026-07-13')).toBe(false);
+  });
+
+  it('excludes Pending bank payout from settlement paid', () => {
+    const tx = {
+      type: 'Payout',
+      category: 'Driver Payouts',
+      amount: 500,
+      paymentMethod: 'Bank Transfer',
+      status: 'Pending',
+      metadata: { workPeriodStart: '2026-07-20' },
+    };
+    expect(isClearedDriverPayout(tx)).toBe(false);
+    expect(isSettlementPaidForWeek(tx as any, '2026-07-20')).toBe(false);
+    expect(isPendingDriverPayoutForWeek(tx as any, '2026-07-20')).toBe(true);
   });
 });
 

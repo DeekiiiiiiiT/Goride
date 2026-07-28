@@ -43,6 +43,7 @@ export type DriverFinancialPeriodClient = {
   cashCollected: number;
   cashReturned: number;
   cashWrittenOff: number;
+  settlementPaid: number;
   cashStillHeld: number;
   settlementAmount: number;
   payoutNet: number;
@@ -205,6 +206,7 @@ export function overlaySharedPeriodsOntoPayoutRows<T extends {
       personalTollCharge: Number(p.tollChargedToDriver) || 0,
       cashTollWash: Number(p.tollCashSpend) || 0,
       cashWrittenOff: Number(p.cashWrittenOff) || 0,
+      settlementPaid: Number(p.settlementPaid) || 0,
       fuelDeduction: Number(p.fuelDeduction) || row.fuelDeduction,
       fuelCredits: Number(p.fuelFleetShare) || row.fuelCredits,
       isFinalized: p.fuelFinalized ? true : row.isFinalized,

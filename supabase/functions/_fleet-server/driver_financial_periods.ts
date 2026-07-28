@@ -114,6 +114,7 @@ export type DriverFinancialPeriodRow = {
   cashCollected: number;
   cashReturned: number;
   cashWrittenOff: number;
+  settlementPaid: number;
   cashStillHeld: number;
   settlementAmount: number;
   payoutNet: number;
@@ -592,6 +593,7 @@ export async function rebuildDriverFinancialPeriod(
   const cashCollected = cashBase.passengerCash;
   const cashReturned = cashBase.cashReturned;
   const cashWrittenOff = cashBase.cashWrittenOff;
+  const settlementPaidRaw = cashBase.settlementPaid;
 
   const fuelNetPay = round2(fuelDriverSpend - fuelDeduction);
   const settled = computePeriodSettlement({
@@ -603,9 +605,12 @@ export async function rebuildDriverFinancialPeriod(
     tollPersonal: Math.max(0, tollChargedToDriver),
     fuelCredits: fuelFleetShare,
     cashWrittenOff,
+    settlementPaid: settlementPaidRaw,
   });
   const cashStillHeld = settled.adjCashBalance;
   const payoutNet = settled.netPayout;
+  const settlementPaid = settled.settlementPaid;
+  // Persist outstanding after payouts so Driver Balances / chips stay correct.
   const settlementAmount = settled.settlement;
 
   const tollStatus =
@@ -647,6 +652,7 @@ export async function rebuildDriverFinancialPeriod(
     cashCollected,
     cashReturned,
     cashWrittenOff,
+    settlementPaid,
     lineCount: lines.length,
   });
   const sourceEventHash = await sha256Hex(hashPayload);
@@ -683,6 +689,7 @@ export async function rebuildDriverFinancialPeriod(
     cashCollected: round2(cashCollected),
     cashReturned: round2(cashReturned),
     cashWrittenOff: round2(cashWrittenOff),
+    settlementPaid: round2(settlementPaid),
     cashStillHeld: round2(cashStillHeld),
     settlementAmount: round2(settlementAmount),
     payoutNet: round2(payoutNet),
@@ -706,6 +713,7 @@ export async function rebuildDriverFinancialPeriod(
     cashCollected > 0.005 ||
     cashReturned > 0.005 ||
     cashWrittenOff > 0.005 ||
+    settlementPaid > 0.005 ||
     tripCount > 0;
   if (!hasSettlementActivity) {
     const { data: phantom } = await sb()
@@ -762,6 +770,7 @@ export async function rebuildDriverFinancialPeriod(
     cash_collected: row.cashCollected,
     cash_returned: row.cashReturned,
     cash_written_off: row.cashWrittenOff,
+    settlement_paid: row.settlementPaid,
     cash_still_held: row.cashStillHeld,
     settlement_amount: row.settlementAmount,
     payout_net: row.payoutNet,
@@ -956,6 +965,7 @@ function mapDbPeriod(r: any): DriverFinancialPeriodRow {
     cashCollected: Number(r.cash_collected) || 0,
     cashReturned: Number(r.cash_returned) || 0,
     cashWrittenOff: Number(r.cash_written_off) || 0,
+    settlementPaid: Number(r.settlement_paid) || 0,
     cashStillHeld: Number(r.cash_still_held) || 0,
     settlementAmount: Number(r.settlement_amount) || 0,
     payoutNet: Number(r.payout_net) || 0,
@@ -1069,4 +1079,118 @@ export async function rebuildPeriodsForAnchors(
     n++;
   }
   return n;
+}
+
+export type CompanyOwesPeriodRow = {
+  driverId: string;
+  periodAnchor: string;
+  periodEnd: string;
+  settlementAmount: number;
+  settlementPaid: number;
+  cashCollected: number;
+  cashReturned: number;
+  cashStillHeld: number;
+  payoutNet: number;
+  settlementStatus: string;
+  fuelFinalized: boolean;
+  tripCount: number;
+};
+
+/** Org-wide company_owes queue — single SQL query (not N+1 per driver). */
+export async function listCompanyOwesPeriods(opts?: {
+  periodAnchor?: string;
+  periodStart?: string;
+  periodEnd?: string;
+  minAmount?: number;
+  limit?: number;
+}): Promise<CompanyOwesPeriodRow[]> {
+  const limit = Math.min(Math.max(Number(opts?.limit) || 500, 1), 2000);
+  let q = sb()
+    .from("driver_financial_periods")
+    .select(
+      "driver_id, period_anchor, period_end, settlement_amount, settlement_paid, cash_collected, cash_returned, cash_still_held, payout_net, settlement_status, fuel_finalized, trip_count",
+    )
+    .eq("settlement_status", "company_owes")
+    .gt("settlement_amount", 0.005)
+    .order("settlement_amount", { ascending: false })
+    .limit(limit);
+
+  if (opts?.periodAnchor && /^\d{4}-\d{2}-\d{2}$/.test(opts.periodAnchor)) {
+    q = q.eq("period_anchor", opts.periodAnchor);
+  } else {
+    if (opts?.periodStart && /^\d{4}-\d{2}-\d{2}$/.test(opts.periodStart)) {
+      q = q.gte("period_anchor", opts.periodStart);
+    }
+    if (opts?.periodEnd && /^\d{4}-\d{2}-\d{2}$/.test(opts.periodEnd)) {
+      q = q.lte("period_anchor", opts.periodEnd);
+    }
+  }
+  if (opts?.minAmount != null && Number(opts.minAmount) > 0) {
+    q = q.gte("settlement_amount", Number(opts.minAmount));
+  }
+
+  const { data, error } = await q;
+  if (error) {
+    console.error("[DriverFinancialPeriods] company_owes list:", error.message);
+    throw new Error(error.message);
+  }
+  return (data || []).map((r: any) => ({
+    driverId: String(r.driver_id),
+    periodAnchor: String(r.period_anchor).slice(0, 10),
+    periodEnd: String(r.period_end).slice(0, 10),
+    settlementAmount: Number(r.settlement_amount) || 0,
+    settlementPaid: Number(r.settlement_paid) || 0,
+    cashCollected: Number(r.cash_collected) || 0,
+    cashReturned: Number(r.cash_returned) || 0,
+    cashStillHeld: Number(r.cash_still_held) || 0,
+    payoutNet: Number(r.payout_net) || 0,
+    settlementStatus: String(r.settlement_status || ""),
+    fuelFinalized: !!r.fuel_finalized,
+    tripCount: Number(r.trip_count) || 0,
+  }));
+}
+
+/** Recently paid company-owes weeks (settled with settlement_paid > 0). */
+export async function listRecentlyPaidSettlementPeriods(opts?: {
+  periodStart?: string;
+  periodEnd?: string;
+  limit?: number;
+}): Promise<CompanyOwesPeriodRow[]> {
+  const limit = Math.min(Math.max(Number(opts?.limit) || 300, 1), 1000);
+  let q = sb()
+    .from("driver_financial_periods")
+    .select(
+      "driver_id, period_anchor, period_end, settlement_amount, settlement_paid, cash_collected, cash_returned, cash_still_held, payout_net, settlement_status, fuel_finalized, trip_count",
+    )
+    .eq("settlement_status", "settled")
+    .gt("settlement_paid", 0.005)
+    .order("period_anchor", { ascending: false })
+    .limit(limit);
+
+  if (opts?.periodStart && /^\d{4}-\d{2}-\d{2}$/.test(opts.periodStart)) {
+    q = q.gte("period_anchor", opts.periodStart);
+  }
+  if (opts?.periodEnd && /^\d{4}-\d{2}-\d{2}$/.test(opts.periodEnd)) {
+    q = q.lte("period_anchor", opts.periodEnd);
+  }
+
+  const { data, error } = await q;
+  if (error) {
+    console.error("[DriverFinancialPeriods] paid settlements list:", error.message);
+    throw new Error(error.message);
+  }
+  return (data || []).map((r: any) => ({
+    driverId: String(r.driver_id),
+    periodAnchor: String(r.period_anchor).slice(0, 10),
+    periodEnd: String(r.period_end).slice(0, 10),
+    settlementAmount: Number(r.settlement_amount) || 0,
+    settlementPaid: Number(r.settlement_paid) || 0,
+    cashCollected: Number(r.cash_collected) || 0,
+    cashReturned: Number(r.cash_returned) || 0,
+    cashStillHeld: Number(r.cash_still_held) || 0,
+    payoutNet: Number(r.payout_net) || 0,
+    settlementStatus: String(r.settlement_status || ""),
+    fuelFinalized: !!r.fuel_finalized,
+    tripCount: Number(r.trip_count) || 0,
+  }));
 }

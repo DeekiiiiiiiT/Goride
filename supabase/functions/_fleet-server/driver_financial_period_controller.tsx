@@ -3,6 +3,8 @@
  *
  * Routes:
  *   GET  /driver-financial-periods?driverId=
+ *   GET  /driver-financial-periods/company-owes
+ *   GET  /driver-financial-periods/settlement-paid
  *   GET  /driver-financial-periods/:anchor?driverId=
  *   POST /driver-financial-periods/rebuild { driverId, periodAnchor? }
  *   POST /driver-financial-periods/process-outbox
@@ -20,6 +22,8 @@ import {
   listDriverFinancialPeriods,
   getDriverFinancialPeriodDetail,
   processFinancialOutbox,
+  listCompanyOwesPeriods,
+  listRecentlyPaidSettlementPeriods,
   type DriverFinancialPeriodRow,
 } from "./driver_financial_periods.ts";
 import {
@@ -166,6 +170,93 @@ app.get(`${BASE}/health`, requirePermission('transactions.view'), async (c) => {
       },
     });
   } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.get(`${BASE}/company-owes`, requirePermission('transactions.view'), async (c) => {
+  try {
+    const periodAnchor = c.req.query("periodAnchor") || undefined;
+    const periodStart = c.req.query("periodStart") || undefined;
+    const periodEnd = c.req.query("periodEnd") || undefined;
+    const minAmount = c.req.query("minAmount")
+      ? Number(c.req.query("minAmount"))
+      : undefined;
+    const limit = c.req.query("limit") ? Number(c.req.query("limit")) : 500;
+
+    const rows = await listCompanyOwesPeriods({
+      periodAnchor,
+      periodStart,
+      periodEnd,
+      minAmount,
+      limit,
+    });
+
+    // Attach driver display names from KV (best-effort).
+    const nameById = new Map<string, string>();
+    try {
+      const drivers = (await kv.getByPrefix("driver:")) || [];
+      for (const d of drivers) {
+        if (d?.id && d?.name) nameById.set(String(d.id), String(d.name));
+      }
+    } catch {
+      /* ignore */
+    }
+
+    const data = rows.map((r) => ({
+      ...r,
+      driverName: nameById.get(r.driverId) || r.driverId,
+    }));
+
+    const totalOwed = data.reduce((s, r) => s + (Number(r.settlementAmount) || 0), 0);
+    const driverIds = new Set(data.map((r) => r.driverId));
+    return c.json({
+      success: true,
+      data,
+      summary: {
+        totalOwed: Math.round(totalOwed * 100) / 100,
+        rowCount: data.length,
+        driverCount: driverIds.size,
+      },
+    });
+  } catch (e: any) {
+    console.error("[DFP] company-owes error:", e.message);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.get(`${BASE}/settlement-paid`, requirePermission('transactions.view'), async (c) => {
+  try {
+    const periodStart = c.req.query("periodStart") || undefined;
+    const periodEnd = c.req.query("periodEnd") || undefined;
+    const limit = c.req.query("limit") ? Number(c.req.query("limit")) : 300;
+    const rows = await listRecentlyPaidSettlementPeriods({ periodStart, periodEnd, limit });
+
+    const nameById = new Map<string, string>();
+    try {
+      const drivers = (await kv.getByPrefix("driver:")) || [];
+      for (const d of drivers) {
+        if (d?.id && d?.name) nameById.set(String(d.id), String(d.name));
+      }
+    } catch {
+      /* ignore */
+    }
+
+    const data = rows.map((r) => ({
+      ...r,
+      driverName: nameById.get(r.driverId) || r.driverId,
+    }));
+    const totalPaid = data.reduce((s, r) => s + (Number(r.settlementPaid) || 0), 0);
+    return c.json({
+      success: true,
+      data,
+      summary: {
+        totalPaid: Math.round(totalPaid * 100) / 100,
+        rowCount: data.length,
+      },
+    });
+  } catch (e: any) {
+    console.error("[DFP] settlement-paid error:", e.message);
     return c.json({ error: e.message }, 500);
   }
 });

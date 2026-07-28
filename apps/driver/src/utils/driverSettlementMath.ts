@@ -19,7 +19,8 @@ export function getAdjCashBalance(cashBalance: number, fuelCredits: number): num
  *     − Cash toll wash
  *     − Cash written off
  *     = Cash still held
- *   Net Payout − Cash still held = Settlement
+ *   Net Payout − Cash still held = Gross Settlement
+ *   Gross Settlement − Settlement Paid = Outstanding
  *     (+ fleet owes driver; − driver owes fleet)
  */
 export function getPeriodSettlementComponents(
@@ -29,6 +30,8 @@ export function getPeriodSettlementComponents(
   adjCashBalance: number;
   netPayoutApplied: number;
   settlement: number;
+  grossSettlement: number;
+  settlementPaid: number;
 } {
   const netPayoutApplied =
     row.isFinalized || (opts?.includeEstimate && row.isEstimate) ? row.netPayout : 0;
@@ -48,6 +51,7 @@ export function getPeriodSettlementComponents(
   const tollPersonal = Math.max(0, row.personalTollCharge ?? 0);
   const fuelCredits = Math.max(0, row.fuelCredits || 0);
   const cashWrittenOff = Math.max(0, row.cashWrittenOff || 0);
+  const settlementPaid = Math.max(0, row.settlementPaid || 0);
 
   const r = computePeriodSettlement({
     driverShare: netPayoutApplied,
@@ -58,12 +62,15 @@ export function getPeriodSettlementComponents(
     tollPersonal,
     fuelCredits,
     cashWrittenOff,
+    settlementPaid,
   });
 
   return {
     adjCashBalance: r.adjCashBalance,
     netPayoutApplied,
     settlement: r.settlement,
+    grossSettlement: r.grossSettlement,
+    settlementPaid: r.settlementPaid,
   };
 }
 

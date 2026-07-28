@@ -18,7 +18,9 @@ export function getAdjCashBalance(cashBalance: number, fuelCredits: number): num
  *     − Cash written off (Settlement Week–tagged Cash_Write_Off)
  *     = Cash still held
  *   Net Payout − Cash still held
- *     = Settlement (+ fleet owes driver; − driver owes fleet)
+ *     = Gross Settlement (+ fleet owes driver; − driver owes fleet)
+ *   Gross Settlement − Settlement Paid (cleared Driver Payouts)
+ *     = Outstanding Settlement
  *
  * Sign convention: positive settlement = company owes the driver.
  * Fleet Financials bank confirms / bank CSV match must NEVER feed this function.
@@ -30,6 +32,8 @@ export function getPeriodSettlementComponents(
   adjCashBalance: number;
   netPayoutApplied: number;
   settlement: number;
+  grossSettlement: number;
+  settlementPaid: number;
 } {
   // Settlement ops stay locked until fuel final; Payout paycheck can use estimates.
   const netPayoutApplied =
@@ -41,7 +45,7 @@ export function getPeriodSettlementComponents(
       ? row.passengerCash
       : row.cashOwed;
 
-  // Cash Returned = Settlement Week–tagged cash payments only (never fuel/toll/write-off).
+  // Cash Returned = Settlement Week–tagged cash payments only (never fuel/toll/write-off/payout).
   const cashReturned = Math.max(0, row.cashPaid || 0);
 
   // Cash plaza tolls: prefer explicit field; else breakdown toll credits already
@@ -55,6 +59,7 @@ export function getPeriodSettlementComponents(
 
   const fuelCredits = Math.max(0, row.fuelCredits || 0);
   const cashWrittenOff = Math.max(0, row.cashWrittenOff || 0);
+  const settlementPaid = Math.max(0, row.settlementPaid || 0);
 
   const r = computePeriodSettlement({
     driverShare: netPayoutApplied,
@@ -65,12 +70,15 @@ export function getPeriodSettlementComponents(
     tollPersonal,
     fuelCredits,
     cashWrittenOff,
+    settlementPaid,
   });
 
   return {
     adjCashBalance: r.adjCashBalance,
     netPayoutApplied,
     settlement: r.settlement,
+    grossSettlement: r.grossSettlement,
+    settlementPaid: r.settlementPaid,
   };
 }
 

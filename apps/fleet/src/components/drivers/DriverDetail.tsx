@@ -132,6 +132,7 @@ import { toast } from "sonner@2.0.3";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "../ui/dialog";
 import { LogCashPaymentModal } from './LogCashPaymentModal';
 import { CashWriteOffModal, type CashWriteOffSavePayload } from './CashWriteOffModal';
+import { RecordPayoutModal, type RecordPayoutSavePayload } from './RecordPayoutModal';
 import { WeeklySettlementView } from './WeeklySettlementView';
 import { useDriverPayoutPeriodRows } from '../../hooks/useDriverPayoutPeriodRows';
 import { useDriverFinancialBundle } from '../../hooks/useDriverFinancialBundle';
@@ -160,7 +161,7 @@ import { getTripPhysicalCashCollected, sumTripPhysicalCashCollected } from '../.
 import { isTollCategory } from '../../utils/tollCategoryHelper';
 import { classifyTollLedgerEntry } from '../../utils/tollDisposition';
 import { expandDriverTransactionIds } from '../../utils/expandDriverTransactionIds';
-import { isCashWriteOffTransaction, isDriverCashPaymentTransaction } from '../../utils/driverCashPayment';
+import { isCashWriteOffTransaction, isDriverCashPaymentTransaction, isDriverPayoutTransaction } from '../../utils/driverCashPayment';
 import { isUberCashEligibleMetricPeriod, isValidDriverMetricPeriod } from '../../utils/driverMetricPeriod';
 import { resolveUberPeriodCashCollected } from '../../utils/resolveUberPeriodCash';
 import { calculateAverageEnroute, estimateEnrouteFallback } from '../../utils/enrouteStrategy';
@@ -343,6 +344,12 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       editingTransaction?: FinancialTransaction;
   }>({ isOpen: false });
   const [writeOffModalState, setWriteOffModalState] = useState<{
+      isOpen: boolean;
+      workPeriodStart: string;
+      workPeriodEnd: string;
+      maxAmount: number;
+  }>({ isOpen: false, workPeriodStart: '', workPeriodEnd: '', maxAmount: 0 });
+  const [payoutModalState, setPayoutModalState] = useState<{
       isOpen: boolean;
       workPeriodStart: string;
       workPeriodEnd: string;
@@ -629,7 +636,12 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
   // Cash Returned + Cash Write Offs (write-offs are not cash collected; shown so ops can undo them).
   const paymentTransactions = useMemo(() => {
     return (transactions || [])
-      .filter((t) => isDriverCashPaymentTransaction(t) || isCashWriteOffTransaction(t))
+      .filter(
+        (t) =>
+          isDriverCashPaymentTransaction(t) ||
+          isCashWriteOffTransaction(t) ||
+          isDriverPayoutTransaction(t),
+      )
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [transactions]);
 
@@ -641,6 +653,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       sortKey: number;
       total: number;
       writeOffTotal: number;
+      payoutTotal: number;
       rows: typeof paymentTransactions;
     }>();
     for (const tx of paymentTransactions) {
@@ -654,8 +667,12 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         : 'Untagged';
       const sortKey = sd ? sd.getTime() : -Infinity;
       let g = groups.get(key);
-      if (!g) { g = { key, label, sortKey, total: 0, writeOffTotal: 0, rows: [] }; groups.set(key, g); }
+      if (!g) {
+        g = { key, label, sortKey, total: 0, writeOffTotal: 0, payoutTotal: 0, rows: [] };
+        groups.set(key, g);
+      }
       if (isCashWriteOffTransaction(tx)) g.writeOffTotal += Math.abs(Number(tx.amount) || 0);
+      else if (isDriverPayoutTransaction(tx)) g.payoutTotal += Math.abs(Number(tx.amount) || 0);
       else g.total += Number(tx.amount) || 0;
       g.rows.push(tx);
     }
@@ -1081,6 +1098,49 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
             workPeriodStart: payload.workPeriodStart,
             workPeriodEnd: payload.workPeriodEnd,
             writeOffReason: payload.reason,
+          },
+      };
+
+      const saved = await api.saveTransaction(newTx);
+      const savedTx = saved?.data || saved;
+      setTransactions(prev => [savedTx, ...prev].filter(Boolean));
+      void invalidateFinancialPeriods(driverId);
+  };
+
+  const handleSaveDriverPayout = async (payload: RecordPayoutSavePayload) => {
+      if (!payload.workPeriodStart || !payload.workPeriodEnd) {
+        throw new Error('Settlement Week is required for driver payouts');
+      }
+      const amount = Math.abs(payload.amount);
+      if (!(amount > 0.005)) {
+        throw new Error('Payout amount must be greater than zero');
+      }
+      if (amount > payoutModalState.maxAmount + 0.005) {
+        throw new Error(`Cannot pay more than fleet owes (${payoutModalState.maxAmount.toFixed(2)})`);
+      }
+
+      const pm = payload.paymentMethod || 'Cash';
+      const isInstant = pm === 'Cash';
+      const description = payload.notes
+        ? `Driver payout (${pm}): ${payload.notes}`
+        : `Driver payout via ${pm}`;
+
+      const newTx: Partial<FinancialTransaction> = {
+          driverId,
+          driverName: driver?.name || driverName,
+          amount,
+          date: payload.date,
+          description,
+          category: 'Driver Payouts',
+          type: 'Payout',
+          paymentMethod: pm as FinancialTransaction['paymentMethod'],
+          status: isInstant ? 'Completed' : 'Pending',
+          isReconciled: isInstant,
+          referenceNumber: payload.referenceNumber,
+          time: new Date().toLocaleTimeString(),
+          metadata: {
+            workPeriodStart: payload.workPeriodStart,
+            workPeriodEnd: payload.workPeriodEnd,
           },
       };
 
@@ -2611,6 +2671,22 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
     return null;
   }, [walletCashWeeks, callOutstandingByMonday]);
 
+  /** Newest week where fleet owes the driver (Pay Driver desk). */
+  const openFleetOwesPrefill = useMemo(() => {
+    for (const w of walletCashWeeks) {
+      const key = format(w.start, 'yyyy-MM-dd');
+      const call = callOutstandingByMonday[key];
+      if (call?.callDirection === 'fleet_owes' && call.callAmount > 0.005) {
+        return {
+          start: w.start,
+          end: w.end,
+          amount: Math.round(call.callAmount * 100) / 100,
+        };
+      }
+    }
+    return null;
+  }, [walletCashWeeks, callOutstandingByMonday]);
+
   // ── Auto-Repair: When the completeness guard detects missing ledger platforms,
   // automatically trigger a one-time ledger repair for this driver, then re-fetch.
   // Guards: repairResult starts null on mount, so fires once; repairInProgress prevents overlap.
@@ -3939,7 +4015,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
              ___OLD_FINANCIAL_SUBTABS_BLOCK_2_END___ */}
           <TabsContent value="wallet" className="space-y-6">
              <p className="text-sm text-slate-500">
-               Cash Wallet tracks <span className="font-medium text-slate-700">cash only</span> — how much cash the fleet is still owed after returns, fuel, and tolls (same as Settlement). Log Cash records handoffs. Uber bank received is on Fleet Operations → Fleet Financials → Bank Deposits.
+               Cash Wallet tracks <span className="font-medium text-slate-700">cash only</span> — how much cash the fleet is still owed after returns, fuel, and tolls (same as Settlement). Log Cash records collections; Record Payout clears weeks where the fleet owes the driver. Uber bank received is on Business Finance → Bank Deposits.
              </p>
              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                  <Card className="bg-white border-rose-100">
@@ -4038,6 +4114,12 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                 workPeriodEnd: format(end, 'yyyy-MM-dd'),
                                 maxAmount,
                             })}
+                            onPayDriver={(start, end, maxAmount) => setPayoutModalState({
+                                isOpen: true,
+                                workPeriodStart: format(start, 'yyyy-MM-dd'),
+                                workPeriodEnd: format(end, 'yyyy-MM-dd'),
+                                maxAmount,
+                            })}
                             onDeleteWriteOff={(txId) => handleDeleteTransaction(txId)}
                         />
                     ) : (
@@ -4108,6 +4190,9 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                                 {group.writeOffTotal > 0.005
                                                                   ? ` · write-offs −$${group.writeOffTotal.toFixed(2)}`
                                                                   : ''}
+                                                                {group.payoutTotal > 0.005
+                                                                  ? ` · paid −$${group.payoutTotal.toFixed(2)}`
+                                                                  : ''}
                                                             </TableCell>
                                                             <TableCell className="py-2 text-right text-xs text-slate-500">Cash returned</TableCell>
                                                             <TableCell className="py-2 text-right font-bold font-mono text-emerald-700">
@@ -4117,6 +4202,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                         </TableRow>,
                                                         ...(expandedPaymentGroups.has(group.key) ? group.rows : []).map((tx) => {
                                                         const isWriteOff = isCashWriteOffTransaction(tx);
+                                                        const isPayout = isDriverPayoutTransaction(tx);
                                                         return (
                                                         <TableRow key={tx.id}>
                                                             <TableCell className="font-medium text-slate-600">{(() => { const d = parseTripDate(tx.date); return d ? format(d, 'MMM d, yyyy') : '-'; })()}</TableCell>
@@ -4125,7 +4211,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                                   const s = tx.metadata?.workPeriodStart;
                                                                   const e = tx.metadata?.workPeriodEnd;
                                                                   if (!s) {
-                                                                    if (isWriteOff) return <span className="text-xs text-slate-400">Untagged</span>;
+                                                                    if (isWriteOff || isPayout) return <span className="text-xs text-slate-400">Untagged</span>;
                                                                     return (
                                                                       <button
                                                                         type="button"
@@ -4159,6 +4245,11 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                                     {isWriteOff && (
                                                                       <Badge variant="secondary" className="w-fit font-normal bg-slate-100 text-slate-700">
                                                                         Write-off
+                                                                      </Badge>
+                                                                    )}
+                                                                    {isPayout && (
+                                                                      <Badge variant="secondary" className="w-fit font-normal bg-emerald-50 text-emerald-800">
+                                                                        Driver payout
                                                                       </Badge>
                                                                     )}
                                                                     {tx.referenceNumber && (
@@ -4196,9 +4287,10 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                             </TableCell>
                                                             <TableCell className={cn(
                                                               "text-right font-bold font-mono",
-                                                              isWriteOff ? "text-slate-700" : "text-emerald-600",
+                                                              isWriteOff || isPayout ? "text-slate-700" : "text-emerald-600",
+                                                              isPayout && "text-emerald-800",
                                                             )}>
-                                                                {isWriteOff ? '−' : '+'}${Math.abs(Number(tx.amount) || 0).toFixed(2)}
+                                                                {isWriteOff || isPayout ? '−' : '+'}${Math.abs(Number(tx.amount) || 0).toFixed(2)}
                                                             </TableCell>
                                                             <TableCell>
                                                                 <div className="flex items-center gap-1 justify-end">
@@ -4221,7 +4313,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                                             </Button>
                                                                         </DropdownMenuTrigger>
                                                                         <DropdownMenuContent align="end">
-                                                                            {!isWriteOff && (
+                                                                            {!isWriteOff && !isPayout && (
                                                                               <>
                                                                                 <DropdownMenuItem onClick={() => handleEditTransaction(tx)}>
                                                                                     <Pencil className="mr-2 h-4 w-4" />
@@ -4232,7 +4324,11 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                                             )}
                                                                             <DropdownMenuItem onClick={() => handleDeleteTransaction(tx.id)} className="text-red-600 focus:text-red-600">
                                                                                 <Trash2 className="mr-2 h-4 w-4" />
-                                                                                {isWriteOff ? 'Undo write-off' : 'Delete'}
+                                                                                {isWriteOff
+                                                                                  ? 'Undo write-off'
+                                                                                  : isPayout
+                                                                                    ? 'Undo payout'
+                                                                                    : 'Delete'}
                                                                             </DropdownMenuItem>
                                                                         </DropdownMenuContent>
                                                                     </DropdownMenu>
@@ -4257,7 +4353,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                     )}
                 </div>
 
-                {/* Right Column: quick actions (risk % moved off week settlement desk) */}
+                {/* Right Column: Collect Cash + Pay Driver desks */}
                 <div className="space-y-6">
                     <Card>
                         <CardHeader>
@@ -4281,6 +4377,35 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                })}
                              >
                                Log Cash Payment
+                             </Button>
+                        </CardContent>
+                    </Card>
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="text-sm font-medium">Pay Driver</CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                             <div className="p-3 bg-emerald-50 rounded-lg space-y-1">
+                                <p className="text-xs text-slate-500">Fleet owes (open weeks)</p>
+                                <p className="text-sm font-semibold text-emerald-800 tabular-nums">
+                                  {walletCollectionTotals.fleetOwes.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </p>
+                                <p className="text-[10px] text-slate-400">After cash held, fuel, and tolls</p>
+                             </div>
+                             <Button
+                               className="w-full bg-emerald-700 hover:bg-emerald-800"
+                               disabled={walletCollectionTotals.fleetOwes < 0.005}
+                               onClick={() => {
+                                 if (!openFleetOwesPrefill) return;
+                                 setPayoutModalState({
+                                   isOpen: true,
+                                   workPeriodStart: format(openFleetOwesPrefill.start, 'yyyy-MM-dd'),
+                                   workPeriodEnd: format(openFleetOwesPrefill.end, 'yyyy-MM-dd'),
+                                   maxAmount: openFleetOwesPrefill.amount,
+                                 });
+                               }}
+                             >
+                               Record Payout
                              </Button>
                         </CardContent>
                     </Card>
@@ -5067,6 +5192,15 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         workPeriodStart={writeOffModalState.workPeriodStart}
         workPeriodEnd={writeOffModalState.workPeriodEnd}
       />
+      <RecordPayoutModal
+        isOpen={payoutModalState.isOpen}
+        onClose={() => setPayoutModalState({ isOpen: false, workPeriodStart: '', workPeriodEnd: '', maxAmount: 0 })}
+        onSave={handleSaveDriverPayout}
+        driverName={driverName}
+        maxAmount={payoutModalState.maxAmount}
+        workPeriodStart={payoutModalState.workPeriodStart}
+        workPeriodEnd={payoutModalState.workPeriodEnd}
+      />
         {/* Delete Confirmation Dialog */}
         <AlertDialog open={!!transactionToDelete} onOpenChange={(open) => !open && setTransactionToDelete(null)}>
             <AlertDialogContent>
@@ -5074,12 +5208,16 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                     <AlertDialogTitle>
                       {transactionToDelete && isCashWriteOffTransaction(transactions.find((t) => t.id === transactionToDelete))
                         ? 'Undo write-off?'
-                        : 'Delete Transaction?'}
+                        : transactionToDelete && isDriverPayoutTransaction(transactions.find((t) => t.id === transactionToDelete))
+                          ? 'Undo payout?'
+                          : 'Delete Transaction?'}
                     </AlertDialogTitle>
                     <AlertDialogDescription>
                         {transactionToDelete && isCashWriteOffTransaction(transactions.find((t) => t.id === transactionToDelete))
                           ? 'This restores the cash still owed for that Settlement Week. Business Finance will update after delete.'
-                          : 'Are you sure you want to delete this transaction? This action cannot be undone.'}
+                          : transactionToDelete && isDriverPayoutTransaction(transactions.find((t) => t.id === transactionToDelete))
+                            ? 'This restores the fleet-owes balance for that Settlement Week.'
+                            : 'Are you sure you want to delete this transaction? This action cannot be undone.'}
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>

@@ -32,6 +32,7 @@ import { DriverAnalytics } from './components/drivers/analytics/DriverAnalytics'
 import { DriverLedgerPage } from './components/drivers/DriverLedgerPage';
 import { FleetFinancialsPage } from './components/fleet-financials/FleetFinancialsPage';
 import { CashRetagPage } from './components/fleet-financials/CashRetagPage';
+import { DriverPayoutsPage } from './components/fleet-financials/DriverPayoutsPage';
 import { IndriveWalletCenterPage } from './components/fleet-financials/IndriveWalletCenterPage';
 import { BusinessFinancePage } from './components/business-finance/BusinessFinancePage';
 import { ExpenseHubPage } from './components/business-finance/expense-hub/ExpenseHubPage';
@@ -506,6 +507,17 @@ function AppContent() {
               initialWeekTo={financePeriodHint?.endYmd}
               onBackToBusinessFinance={() => handleNavigate('business-finance')}
               onPeriodHintConsumed={() => setFinancePeriodHint(null)}
+            />
+          </PermissionGate>
+        )}
+        {currentPage === 'driver-payouts' && (
+          <PermissionGate permission="nav.financial_analytics" onNavigate={setCurrentPage}>
+            <DriverPayoutsPage
+              onBackToBusinessFinance={() => handleNavigate('business-finance')}
+              onOpenDriver={(driverId) => {
+                setDriverIdForDetail(driverId);
+                setCurrentPage('drivers');
+              }}
             />
           </PermissionGate>
         )}

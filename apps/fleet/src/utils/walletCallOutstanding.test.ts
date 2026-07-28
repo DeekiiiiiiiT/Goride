@@ -66,6 +66,7 @@ describe('walletCallOutstandingFromPeriod', () => {
     expect(o.callAmount).toBeCloseTo(650, 2); // 1000-100-200-50
     expect(o.settlement).toBeNull();
     expect(o.breakdown.cashWrittenOff).toBe(0);
+    expect(o.breakdown.settlementPaid).toBe(0);
   });
 
   it('write-off reduces still held without counting as cash returned', () => {

@@ -18,6 +18,15 @@ export function isCashWriteOffTransaction(
   return false;
 }
 
+/** Fleet → driver settlement payout — never counts as Cash Returned. */
+export function isDriverPayoutTransaction(
+  t: Pick<CashPaymentLike, 'amount' | 'category' | 'type'> | null | undefined,
+): boolean {
+  if (!t || !Number.isFinite(t.amount) || (t.amount as number) <= 0) return false;
+  if (t.type === 'Payout' || t.category === 'Driver Payouts') return true;
+  return false;
+}
+
 /** Cleared write-off (Completed / Verified; blank status treated as completed). */
 export function isClearedCashWriteOff(
   t: Pick<CashPaymentLike, 'amount' | 'category' | 'type' | 'status'> | null | undefined,
@@ -27,14 +36,29 @@ export function isClearedCashWriteOff(
   return status === 'completed' || status === 'verified' || status === '';
 }
 
+/** Cleared fleet→driver payout (Cash: Completed/Verified/blank; bank/mobile: Completed/Verified only). */
+export function isClearedDriverPayout(
+  t: Pick<CashPaymentLike, 'amount' | 'category' | 'type' | 'paymentMethod' | 'status'> | null | undefined,
+): boolean {
+  if (!isDriverPayoutTransaction(t)) return false;
+  const status = String(t!.status || '').toLowerCase().trim();
+  const pm = String(t!.paymentMethod || 'Cash').toLowerCase().trim();
+  const cleared = status === 'completed' || status === 'verified';
+  if (pm === 'cash' || pm === '') {
+    return cleared || status === '';
+  }
+  return cleared;
+}
+
 /** Driver → fleet cash handoff (Payments Log, wallet totals, weekly settlement). */
 export function isDriverCashPaymentTransaction(
   t: Pick<CashPaymentLike, 'amount' | 'category' | 'type' | 'description' | 'paymentMethod'> | null | undefined,
 ): boolean {
   if (!t || !Number.isFinite(t.amount) || (t.amount as number) <= 0) return false;
 
-  // Hard wall: write-offs must never inflate Cash Returned / BF cash collected.
+  // Hard wall: write-offs / payouts must never inflate Cash Returned / BF cash collected.
   if (isCashWriteOffTransaction(t)) return false;
+  if (isDriverPayoutTransaction(t)) return false;
 
   if (t.paymentMethod === 'Tag Balance') return false;
   if (t.description?.toLowerCase().includes('top-up')) return false;
@@ -107,6 +131,29 @@ export function isCashWriteOffForWeek(
   weekMondayYmd: string,
 ): boolean {
   if (!t || !isClearedCashWriteOff(t)) return false;
+  const key = cashPaymentWeekKey(t);
+  return key != null && key === weekMondayYmd;
+}
+
+/** True when cleared Driver Payout is tagged exactly to this Settlement Week Monday. */
+export function isSettlementPaidForWeek(
+  t: CashPaymentLike | null | undefined,
+  weekMondayYmd: string,
+): boolean {
+  if (!t || !isClearedDriverPayout(t)) return false;
+  const key = cashPaymentWeekKey(t);
+  return key != null && key === weekMondayYmd;
+}
+
+/** Pending (uncleared) Driver Payout tagged to this Settlement Week Monday. */
+export function isPendingDriverPayoutForWeek(
+  t: CashPaymentLike | null | undefined,
+  weekMondayYmd: string,
+): boolean {
+  if (!t || !isDriverPayoutTransaction(t)) return false;
+  if (isClearedDriverPayout(t)) return false;
+  const status = String(t.status || '').toLowerCase().trim();
+  if (status !== 'pending') return false;
   const key = cashPaymentWeekKey(t);
   return key != null && key === weekMondayYmd;
 }

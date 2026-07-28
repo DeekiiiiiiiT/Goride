@@ -415,6 +415,16 @@ export function FleetCashSettlementTab({ periodRows }: FleetCashSettlementTabPro
                           </span>
                         </div>
                       )}
+                      {(selected.call.breakdown.settlementPaid || 0) > 0.005 && (
+                        <div className="flex items-center justify-between px-4 py-2.5">
+                          <span className="text-sm text-slate-700 dark:text-slate-300">
+                            Paid to you
+                          </span>
+                          <span className="font-mono text-sm font-semibold text-emerald-600">
+                            ${plainAmount(selected.call.breakdown.settlementPaid)}
+                          </span>
+                        </div>
+                      )}
                       <div className="flex items-center justify-between px-4 py-2.5">
                         <div className="flex items-center gap-2.5">
                           <Scale className="h-3.5 w-3.5 text-indigo-500" />
