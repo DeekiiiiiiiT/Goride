@@ -1,7 +1,7 @@
 /**
  * Fleet Settlement → Expenses tab (view-only).
- * Cards show week total only; Details shows Fuel / Toll / Maintenance / Misc.
- * Weeks match Cash Settlement (last 5 financial periods).
+ * Cards show week total; Details shows Fuel / Toll / Maintenance / Misc only.
+ * Fuel + Toll use the same period SSOT as roamfleet Expenses.
  */
 
 import React, { useMemo, useState } from 'react';
@@ -9,13 +9,12 @@ import { createPortal } from 'react-dom';
 import { Card, CardContent } from '@roam/ui';
 import { Button } from '@roam/ui';
 import { format } from 'date-fns';
-import { Eye, Fuel, Receipt, Ticket, Wrench, Package, X } from 'lucide-react';
+import { Eye, Fuel, Ticket, Wrench, Package, X } from 'lucide-react';
 import { cn } from '@roam/ui';
 import type { FinancialTransaction } from '../../../types/data';
-import type { PayoutPeriodRow } from '../../../types/driverPayoutPeriod';
+import type { DriverFinancialPeriodClient } from '../../../types/driverPayoutPeriod';
 import {
-  buildFleetExpenseItems,
-  selectExpenseWeeksForPeriods,
+  buildExpenseWeeksFromPeriods,
   type FleetExpenseType,
   type FleetExpenseWeekGroup,
 } from '../../../utils/fleetExpenseItems';
@@ -23,9 +22,8 @@ import {
 const RECENT_WEEK_LIMIT = 5;
 
 type FleetExpensesSettlementTabProps = {
-  periodRows: PayoutPeriodRow[];
+  periods: DriverFinancialPeriodClient[];
   transactions: FinancialTransaction[];
-  fuelEntries: any[];
 };
 
 function plainAmount(n: number) {
@@ -103,14 +101,18 @@ function ExpenseWeekCard({
 }
 
 export function FleetExpensesSettlementTab({
-  periodRows,
+  periods,
   transactions,
-  fuelEntries,
 }: FleetExpensesSettlementTabProps) {
-  const weeks = useMemo(() => {
-    const items = buildFleetExpenseItems({ transactions, fuelEntries });
-    return selectExpenseWeeksForPeriods(items, periodRows, RECENT_WEEK_LIMIT);
-  }, [periodRows, transactions, fuelEntries]);
+  const weeks = useMemo(
+    () =>
+      buildExpenseWeeksFromPeriods({
+        periods,
+        transactions,
+        limit: RECENT_WEEK_LIMIT,
+      }),
+    [periods, transactions],
+  );
   const [selected, setSelected] = useState<FleetExpenseWeekGroup | null>(null);
 
   return (
@@ -170,8 +172,7 @@ export function FleetExpensesSettlementTab({
               </div>
 
               <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-                {/* Card-style category rollup (Fuel / Toll / Maintenance / Misc) */}
-                <ul className="mb-5 divide-y divide-slate-100 rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-700">
+                <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-700">
                   {selected.categories.map((cat) => (
                     <li
                       key={cat.type}
@@ -181,14 +182,9 @@ export function FleetExpensesSettlementTab({
                         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800">
                           {typeIcon(cat.type)}
                         </div>
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-slate-800 dark:text-slate-100">
-                            {typeLabel(cat.type)}
-                          </p>
-                          <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                            {cat.count} item{cat.count === 1 ? '' : 's'}
-                          </p>
-                        </div>
+                        <p className="text-sm font-medium text-slate-800 dark:text-slate-100">
+                          {typeLabel(cat.type)}
+                        </p>
                       </div>
                       <p
                         className={cn(
@@ -203,48 +199,6 @@ export function FleetExpensesSettlementTab({
                     </li>
                   ))}
                 </ul>
-
-                <div className="space-y-4">
-                  {selected.categories.map((cat) => {
-                    const catItems = selected.items.filter((i) => i.type === cat.type);
-                    if (catItems.length === 0) return null;
-                    return (
-                      <div key={`lines-${cat.type}`}>
-                        <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                          {typeLabel(cat.type)} line items
-                        </p>
-                        <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-700">
-                          {catItems.map((item) => (
-                            <li
-                              key={item.id}
-                              className="flex items-start justify-between gap-3 px-3 py-2.5"
-                            >
-                              <div className="min-w-0">
-                                <p className="truncate text-sm text-slate-800 dark:text-slate-100">
-                                  {item.description}
-                                </p>
-                                <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                                  {format(item.date, 'MMM d')} · {item.status}
-                                </p>
-                              </div>
-                              <p className="shrink-0 font-mono text-sm font-semibold tabular-nums text-slate-900 dark:text-white">
-                                ${plainAmount(Math.abs(item.amount))}
-                              </p>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    );
-                  })}
-                  {selected.items.length === 0 && (
-                    <div className="flex flex-col items-center py-6 text-center">
-                      <Receipt className="h-7 w-7 text-slate-300 dark:text-slate-600" />
-                      <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-                        No expenses logged this week
-                      </p>
-                    </div>
-                  )}
-                </div>
               </div>
 
               <div className="flex shrink-0 items-center justify-end border-t border-slate-200 px-5 py-3 dark:border-slate-700">

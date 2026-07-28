@@ -27,7 +27,6 @@ export function FleetSettlementPage({ onBack }: FleetSettlementPageProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [transactions, setTransactions] = useState<FinancialTransaction[]>([]);
-  const [fuelEntries, setFuelEntries] = useState<any[]>([]);
   const [periods, setPeriods] = useState<DriverFinancialPeriodClient[]>([]);
 
   const driverIds = useMemo(() => {
@@ -46,12 +45,6 @@ export function FleetSettlementPage({ onBack }: FleetSettlementPageProps) {
       setLoading(true);
       setError(null);
       try {
-        const vehicleId =
-          (driverRecord as { assignedVehicleId?: string; vehicle?: string } | null)
-            ?.assignedVehicleId ||
-          (driverRecord as { vehicle?: string } | null)?.vehicle ||
-          '';
-
         // Prefer canonical fleet driver id first (same id Fleet Detail uses).
         const periodIdCandidates = [
           driverRecord?.id,
@@ -68,13 +61,9 @@ export function FleetSettlementPage({ onBack }: FleetSettlementPageProps) {
             .catch(() => [] as DriverFinancialPeriodClient[]),
         );
 
-        const [periodBatches, txData, allFuel, vehicleFuel] = await Promise.all([
+        const [periodBatches, txData] = await Promise.all([
           Promise.all(periodFetches),
           api.getTransactions(driverIds).catch(() => [] as FinancialTransaction[]),
-          api.getAllFuelEntries().catch(() => [] as any[]),
-          vehicleId
-            ? api.getFuelEntriesByVehicle(vehicleId).catch(() => [] as any[])
-            : Promise.resolve([] as any[]),
         ]);
 
         if (cancelled) return;
@@ -94,19 +83,6 @@ export function FleetSettlementPage({ onBack }: FleetSettlementPageProps) {
         );
 
         setTransactions(Array.isArray(txData) ? txData : []);
-
-        // Only this driver's fuel — vehicle feed can include other drivers on the same car.
-        const fuelMap = new Map<string, any>();
-        const isThisDriversFuel = (f: any) =>
-          driverIds.includes(f?.driverId) || driverIds.includes(f?.driver_id);
-        (vehicleFuel || []).forEach((f: any) => {
-          if (f?.id && isThisDriversFuel(f)) fuelMap.set(f.id, f);
-        });
-        (allFuel || []).forEach((f: any) => {
-          if (!f?.id || fuelMap.has(f.id)) return;
-          if (isThisDriversFuel(f)) fuelMap.set(f.id, f);
-        });
-        setFuelEntries(Array.from(fuelMap.values()));
       } catch (e) {
         if (!cancelled) {
           setError(e instanceof Error ? e.message : 'Failed to load fleet settlement');
@@ -119,13 +95,7 @@ export function FleetSettlementPage({ onBack }: FleetSettlementPageProps) {
     return () => {
       cancelled = true;
     };
-  }, [
-    user?.id,
-    driverRecord?.id,
-    driverRecord?.driverId,
-    driverRecord?.assignedVehicleId,
-    driverIds,
-  ]);
+  }, [user?.id, driverRecord?.id, driverRecord?.driverId, driverIds]);
 
   return (
     <div className="space-y-6 pb-4">
@@ -180,11 +150,7 @@ export function FleetSettlementPage({ onBack }: FleetSettlementPageProps) {
         <>
           {tab === 'cash' && <FleetCashSettlementTab periodRows={periodRows} />}
           {tab === 'expenses' && (
-            <FleetExpensesSettlementTab
-              periodRows={periodRows}
-              transactions={transactions}
-              fuelEntries={fuelEntries}
-            />
+            <FleetExpensesSettlementTab periods={periods} transactions={transactions} />
           )}
         </>
       )}
