@@ -1112,7 +1112,7 @@ export async function listCompanyOwesPeriods(opts?: {
     )
     .eq("settlement_status", "company_owes")
     .gt("settlement_amount", 0.005)
-    .order("settlement_amount", { ascending: false })
+    .order("period_anchor", { ascending: false })
     .limit(limit);
 
   if (opts?.periodAnchor && /^\d{4}-\d{2}-\d{2}$/.test(opts.periodAnchor)) {
@@ -1249,7 +1249,7 @@ export async function listDriverOwesPeriods(opts?: {
     )
     .eq("settlement_status", "driver_owes")
     .lt("settlement_amount", -0.005)
-    .order("settlement_amount", { ascending: true })
+    .order("period_anchor", { ascending: false })
     .limit(limit);
 
   q = applyPeriodRangeFilters(q, opts);
@@ -1287,7 +1287,7 @@ export async function listCashHeldPeriods(opts?: {
     )
     .gt("cash_still_held", 0.5)
     .or("settlement_status.eq.pending,fuel_finalized.eq.false")
-    .order("cash_still_held", { ascending: false })
+    .order("period_anchor", { ascending: false })
     .limit(limit);
 
   q = applyPeriodRangeFilters(q, opts);

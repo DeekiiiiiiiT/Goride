@@ -259,19 +259,21 @@ export function DriverSettlementsPage({
           r.periodAnchor.includes(q)
         );
       })
-      .sort((a, b) => collectAmount(b) - collectAmount(a));
+      .sort((a, b) => String(b.periodAnchor).localeCompare(String(a.periodAnchor)));
   }, [driverOwesQuery.data?.rows, cashHeldQuery.data?.rows, search]);
 
   const payOutstanding = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return (owesQuery.data?.rows || []).filter((r) => {
-      if (!q) return true;
-      return (
-        String(r.driverName || '').toLowerCase().includes(q) ||
-        String(r.driverId).toLowerCase().includes(q) ||
-        r.periodAnchor.includes(q)
-      );
-    });
+    return (owesQuery.data?.rows || [])
+      .filter((r) => {
+        if (!q) return true;
+        return (
+          String(r.driverName || '').toLowerCase().includes(q) ||
+          String(r.driverId).toLowerCase().includes(q) ||
+          r.periodAnchor.includes(q)
+        );
+      })
+      .sort((a, b) => String(b.periodAnchor).localeCompare(String(a.periodAnchor)));
   }, [owesQuery.data?.rows, search]);
 
   const outstandingRows = direction === 'collect' ? collectOutstanding : payOutstanding;
@@ -303,29 +305,37 @@ export function DriverSettlementsPage({
 
   const donePayRows = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return (paidQuery.data?.rows || []).filter((r) => {
-      if (!q) return true;
-      return (
-        String(r.driverName || '').toLowerCase().includes(q) ||
-        String(r.driverId).toLowerCase().includes(q) ||
-        r.periodAnchor.includes(q)
-      );
-    });
+    return (paidQuery.data?.rows || [])
+      .filter((r) => {
+        if (!q) return true;
+        return (
+          String(r.driverName || '').toLowerCase().includes(q) ||
+          String(r.driverId).toLowerCase().includes(q) ||
+          r.periodAnchor.includes(q)
+        );
+      })
+      .sort((a, b) => String(b.periodAnchor).localeCompare(String(a.periodAnchor)));
   }, [paidQuery.data?.rows, search]);
 
   const doneCollectRows = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return (txsQuery.data || []).filter((t) => {
-      if (!isClearedDriverCashPayment(t)) return false;
-      const d = String(t.date || '').slice(0, 10);
-      if (d < weekFrom || d > weekTo) return false;
-      if (!q) return true;
-      return (
-        String(t.driverName || '').toLowerCase().includes(q) ||
-        String(t.driverId || '').toLowerCase().includes(q) ||
-        String(t.metadata?.workPeriodStart || '').includes(q)
-      );
-    });
+    return (txsQuery.data || [])
+      .filter((t) => {
+        if (!isClearedDriverCashPayment(t)) return false;
+        const d = String(t.date || '').slice(0, 10);
+        if (d < weekFrom || d > weekTo) return false;
+        if (!q) return true;
+        return (
+          String(t.driverName || '').toLowerCase().includes(q) ||
+          String(t.driverId || '').toLowerCase().includes(q) ||
+          String(t.metadata?.workPeriodStart || '').includes(q)
+        );
+      })
+      .sort((a, b) => {
+        const wa = String(a.metadata?.workPeriodStart || a.date || '').slice(0, 10);
+        const wb = String(b.metadata?.workPeriodStart || b.date || '').slice(0, 10);
+        return wb.localeCompare(wa);
+      });
   }, [txsQuery.data, weekFrom, weekTo, search]);
 
   const driverOwesTotal = collectOutstanding.reduce((s, r) => s + collectAmount(r), 0);
