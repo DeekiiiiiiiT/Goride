@@ -25,7 +25,7 @@ export type WalletCallOutstanding = {
   stillHeld: number;
   settlement: number | null;
   callAmount: number;
-  callDirection: 'driver_owes' | 'fleet_owes' | 'cash_with_driver';
+  callDirection: 'driver_owes' | 'fleet_owes' | 'cash_with_driver' | 'settled';
   callLabel: string;
   breakdown: WalletCashBreakdown;
 };
@@ -103,8 +103,8 @@ export function walletCallOutstandingFromPeriod(
       stillHeld,
       settlement: s,
       callAmount: 0,
-      callDirection: 'driver_owes',
-      callLabel: 'Settled — nothing outstanding',
+      callDirection: 'settled',
+      callLabel: 'Reconciled',
       breakdown,
     };
   }

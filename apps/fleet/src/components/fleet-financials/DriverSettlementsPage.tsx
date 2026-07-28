@@ -8,29 +8,39 @@ import { format, parseISO, startOfWeek, endOfWeek, subWeeks } from 'date-fns';
 import {
   ArrowDownLeft,
   ArrowUpRight,
+  Ban,
   Banknote,
   Download,
   Loader2,
+  Plus,
   RefreshCw,
   Search,
+  Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
 import { api } from '../../services/api';
 import {
   isClearedDriverCashPayment,
+  isClearedDriverPayout,
   isDriverCashPaymentTransaction,
   isDriverPayoutTransaction,
 } from '../../utils/driverCashPayment';
 import {
   buildCashCollectionTx,
+  buildCashWriteOffTx,
   buildDriverPayoutTx,
 } from '../../utils/driverSettlementTx';
+import { DRIVER_FINANCIAL_PERIODS_KEY } from '../../hooks/useDriverFinancialPeriods';
 import { BusinessFinanceDeskChrome } from '../business-finance/BusinessFinanceDeskChrome';
 import {
   RecordPayoutModal,
   type RecordPayoutSavePayload,
 } from '../drivers/RecordPayoutModal';
 import { LogCashPaymentModal } from '../drivers/LogCashPaymentModal';
+import {
+  CashWriteOffModal,
+  type CashWriteOffSavePayload,
+} from '../drivers/CashWriteOffModal';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
@@ -53,6 +63,16 @@ import {
   DialogDescription,
 } from '../ui/dialog';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '../ui/alert-dialog';
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -63,7 +83,8 @@ import { Label } from '../ui/label';
 import { cn } from '../ui/utils';
 import type { FinancialTransaction } from '../../types/data';
 
-type Direction = 'collect' | 'pay';
+type MoneyDirection = 'collect' | 'pay';
+type DeskMode = MoneyDirection | 'log-cash';
 type DeskTab = 'outstanding' | 'awaiting' | 'done';
 
 type PeriodRow = {
@@ -110,6 +131,44 @@ function collectAmount(r: PeriodRow) {
   return Math.max(0, Number(raw) || 0);
 }
 
+/** Pay residual after cleared Driver Payouts. */
+function payOutstandingAmount(r: PeriodRow) {
+  return Math.max(0, (Number(r.settlementAmount) || 0) - (Number(r.settlementPaid) || 0));
+}
+
+function ymdKey(value: unknown): string {
+  return String(value || '').slice(0, 10);
+}
+
+/**
+ * Desk-wide order: newest Settlement Week first, then driver name.
+ * Matches Pay → Outstanding; applied to Collect / Awaiting / Done too.
+ */
+function compareBySettlementWeekDesc(
+  a: { periodAnchor?: string; driverName?: string; driverId?: string },
+  b: { periodAnchor?: string; driverName?: string; driverId?: string },
+) {
+  const week = ymdKey(b.periodAnchor).localeCompare(ymdKey(a.periodAnchor));
+  if (week !== 0) return week;
+  const name = String(a.driverName || '').localeCompare(String(b.driverName || ''), undefined, {
+    sensitivity: 'base',
+  });
+  if (name !== 0) return name;
+  return String(a.driverId || '').localeCompare(String(b.driverId || ''));
+}
+
+function normalizePeriodRow(r: PeriodRow & { period_anchor?: string; period_end?: string }): PeriodRow {
+  return {
+    ...r,
+    periodAnchor: ymdKey(r.periodAnchor || r.period_anchor),
+    periodEnd: ymdKey(r.periodEnd || r.period_end || r.periodAnchor || r.period_anchor),
+  };
+}
+
+function txSettlementWeekStart(t: FinancialTransaction): string {
+  return ymdKey(t.metadata?.workPeriodStart || t.date);
+}
+
 export function DriverSettlementsPage({
   onBackToBusinessFinance,
   onOpenDriver,
@@ -127,7 +186,8 @@ export function DriverSettlementsPage({
   );
   const [search, setSearch] = useState('');
   const [minAmount, setMinAmount] = useState('');
-  const [direction, setDirection] = useState<Direction>('collect');
+  const [deskMode, setDeskMode] = useState<DeskMode>('collect');
+  const direction: MoneyDirection = deskMode === 'pay' ? 'pay' : 'collect';
   const [deskTab, setDeskTab] = useState<DeskTab>('outstanding');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [batchOpen, setBatchOpen] = useState(false);
@@ -168,6 +228,26 @@ export function DriverSettlementsPage({
     maxAmount: 0,
   });
 
+  const [writeOffModal, setWriteOffModal] = useState<{
+    isOpen: boolean;
+    driverId: string;
+    driverName: string;
+    workPeriodStart: string;
+    workPeriodEnd: string;
+    maxAmount: number;
+  }>({
+    isOpen: false,
+    driverId: '',
+    driverName: '',
+    workPeriodStart: '',
+    workPeriodEnd: '',
+    maxAmount: 0,
+  });
+
+  const [txToReverse, setTxToReverse] = useState<FinancialTransaction | null>(null);
+  const [reverseBusy, setReverseBusy] = useState(false);
+  const [logCashDriverId, setLogCashDriverId] = useState('');
+
   const rangeOpts = {
     periodStart: weekFrom,
     periodEnd: weekTo,
@@ -180,7 +260,7 @@ export function DriverSettlementsPage({
     queryFn: async () => {
       const res = await api.getCompanyOwesPeriods(rangeOpts);
       return {
-        rows: (res?.data || []) as PeriodRow[],
+        rows: ((res?.data || []) as PeriodRow[]).map(normalizePeriodRow),
         summary: res?.summary as { totalOwed?: number; rowCount?: number; driverCount?: number },
       };
     },
@@ -191,11 +271,13 @@ export function DriverSettlementsPage({
     queryFn: async () => {
       const res = await api.getDriverOwesPeriods(rangeOpts);
       return {
-        rows: ((res?.data || []) as PeriodRow[]).map((r) => ({
-          ...r,
-          collectKind: 'driver_owes' as const,
-          amountOwed: Number(r.amountOwed) || Math.abs(Number(r.settlementAmount) || 0),
-        })),
+        rows: ((res?.data || []) as PeriodRow[]).map((r) =>
+          normalizePeriodRow({
+            ...r,
+            collectKind: 'driver_owes' as const,
+            amountOwed: Number(r.amountOwed) || Math.abs(Number(r.settlementAmount) || 0),
+          }),
+        ),
         summary: res?.summary as { totalOwed?: number; rowCount?: number; driverCount?: number },
       };
     },
@@ -206,27 +288,14 @@ export function DriverSettlementsPage({
     queryFn: async () => {
       const res = await api.getCashHeldPeriods(rangeOpts);
       return {
-        rows: ((res?.data || []) as PeriodRow[]).map((r) => ({
-          ...r,
-          collectKind: 'cash_held' as const,
-          amountOwed: Number(r.amountOwed) || Number(r.cashStillHeld) || 0,
-        })),
+        rows: ((res?.data || []) as PeriodRow[]).map((r) =>
+          normalizePeriodRow({
+            ...r,
+            collectKind: 'cash_held' as const,
+            amountOwed: Number(r.amountOwed) || Number(r.cashStillHeld) || 0,
+          }),
+        ),
         summary: res?.summary as { totalHeld?: number; rowCount?: number; driverCount?: number },
-      };
-    },
-  });
-
-  const paidQuery = useQuery({
-    queryKey: ['settlementPaidPeriods', weekFrom, weekTo],
-    queryFn: async () => {
-      const res = await api.getSettlementPaidPeriods({
-        periodStart: weekFrom,
-        periodEnd: weekTo,
-        limit: 500,
-      });
-      return {
-        rows: (res?.data || []) as PeriodRow[],
-        summary: res?.summary as { totalPaid?: number; rowCount?: number },
       };
     },
   });
@@ -238,6 +307,23 @@ export function DriverSettlementsPage({
       return (Array.isArray(page) ? page : page?.data || []) as FinancialTransaction[];
     },
   });
+
+  const driversQuery = useQuery({
+    queryKey: ['drivers', 'driver-settlements-log-cash'],
+    queryFn: () => api.getDrivers(),
+  });
+
+  const driverOptions = useMemo(() => {
+    const raw = driversQuery.data;
+    const list = Array.isArray(raw) ? raw : raw?.data || [];
+    return (list as any[])
+      .map((d) => {
+        const id = String(d?.id || d?.roamId || '').trim();
+        const name = String(d?.name || d?.fullName || d?.displayName || id).trim();
+        return id ? { id, name } : null;
+      })
+      .filter(Boolean) as { id: string; name: string }[];
+  }, [driversQuery.data]);
 
   const collectOutstanding = useMemo(() => {
     const byKey = new Map<string, PeriodRow>();
@@ -259,12 +345,13 @@ export function DriverSettlementsPage({
           r.periodAnchor.includes(q)
         );
       })
-      .sort((a, b) => String(b.periodAnchor).localeCompare(String(a.periodAnchor)));
+      .sort(compareBySettlementWeekDesc);
   }, [driverOwesQuery.data?.rows, cashHeldQuery.data?.rows, search]);
 
   const payOutstanding = useMemo(() => {
     const q = search.trim().toLowerCase();
     return (owesQuery.data?.rows || [])
+      .filter((r) => payOutstandingAmount(r) > 0.005)
       .filter((r) => {
         if (!q) return true;
         return (
@@ -273,7 +360,7 @@ export function DriverSettlementsPage({
           r.periodAnchor.includes(q)
         );
       })
-      .sort((a, b) => String(b.periodAnchor).localeCompare(String(a.periodAnchor)));
+      .sort(compareBySettlementWeekDesc);
   }, [owesQuery.data?.rows, search]);
 
   const outstandingRows = direction === 'collect' ? collectOutstanding : payOutstanding;
@@ -293,37 +380,8 @@ export function DriverSettlementsPage({
               isDriverPayoutTransaction(t) &&
               String(t.status || '').toLowerCase() === 'pending',
           );
-    return filtered.filter((t) => {
-      if (!q) return true;
-      return (
-        String(t.driverName || '').toLowerCase().includes(q) ||
-        String(t.driverId || '').toLowerCase().includes(q) ||
-        String(t.metadata?.workPeriodStart || '').includes(q)
-      );
-    });
-  }, [txsQuery.data, search, direction]);
-
-  const donePayRows = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return (paidQuery.data?.rows || [])
-      .filter((r) => {
-        if (!q) return true;
-        return (
-          String(r.driverName || '').toLowerCase().includes(q) ||
-          String(r.driverId).toLowerCase().includes(q) ||
-          r.periodAnchor.includes(q)
-        );
-      })
-      .sort((a, b) => String(b.periodAnchor).localeCompare(String(a.periodAnchor)));
-  }, [paidQuery.data?.rows, search]);
-
-  const doneCollectRows = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return (txsQuery.data || [])
+    return filtered
       .filter((t) => {
-        if (!isClearedDriverCashPayment(t)) return false;
-        const d = String(t.date || '').slice(0, 10);
-        if (d < weekFrom || d > weekTo) return false;
         if (!q) return true;
         return (
           String(t.driverName || '').toLowerCase().includes(q) ||
@@ -332,14 +390,76 @@ export function DriverSettlementsPage({
         );
       })
       .sort((a, b) => {
-        const wa = String(a.metadata?.workPeriodStart || a.date || '').slice(0, 10);
-        const wb = String(b.metadata?.workPeriodStart || b.date || '').slice(0, 10);
-        return wb.localeCompare(wa);
+        const week = txSettlementWeekStart(b).localeCompare(txSettlementWeekStart(a));
+        if (week !== 0) return week;
+        const name = String(a.driverName || '').localeCompare(String(b.driverName || ''), undefined, {
+          sensitivity: 'base',
+        });
+        if (name !== 0) return name;
+        return String(b.date || '').localeCompare(String(a.date || ''));
+      });
+  }, [txsQuery.data, search, direction]);
+
+  const donePayRows = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return (txsQuery.data || [])
+      .filter((t) => {
+        if (!isClearedDriverPayout(t)) return false;
+        const week = txSettlementWeekStart(t);
+        if (week && (week < weekFrom || week > weekTo)) return false;
+        if (!week) {
+          const d = String(t.date || '').slice(0, 10);
+          if (d < weekFrom || d > weekTo) return false;
+        }
+        if (!q) return true;
+        return (
+          String(t.driverName || '').toLowerCase().includes(q) ||
+          String(t.driverId || '').toLowerCase().includes(q) ||
+          week.includes(q)
+        );
+      })
+      .sort((a, b) => {
+        const week = txSettlementWeekStart(b).localeCompare(txSettlementWeekStart(a));
+        if (week !== 0) return week;
+        const name = String(a.driverName || '').localeCompare(String(b.driverName || ''), undefined, {
+          sensitivity: 'base',
+        });
+        if (name !== 0) return name;
+        return String(b.date || '').localeCompare(String(a.date || ''));
+      });
+  }, [txsQuery.data, weekFrom, weekTo, search]);
+
+  const doneCollectRows = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return (txsQuery.data || [])
+      .filter((t) => {
+        if (!isClearedDriverCashPayment(t)) return false;
+        const week = txSettlementWeekStart(t);
+        if (week && (week < weekFrom || week > weekTo)) return false;
+        if (!week) {
+          const d = String(t.date || '').slice(0, 10);
+          if (d < weekFrom || d > weekTo) return false;
+        }
+        if (!q) return true;
+        return (
+          String(t.driverName || '').toLowerCase().includes(q) ||
+          String(t.driverId || '').toLowerCase().includes(q) ||
+          week.includes(q)
+        );
+      })
+      .sort((a, b) => {
+        const week = txSettlementWeekStart(b).localeCompare(txSettlementWeekStart(a));
+        if (week !== 0) return week;
+        const name = String(a.driverName || '').localeCompare(String(b.driverName || ''), undefined, {
+          sensitivity: 'base',
+        });
+        if (name !== 0) return name;
+        return String(b.date || '').localeCompare(String(a.date || ''));
       });
   }, [txsQuery.data, weekFrom, weekTo, search]);
 
   const driverOwesTotal = collectOutstanding.reduce((s, r) => s + collectAmount(r), 0);
-  const fleetOwesTotal = Number(owesQuery.data?.summary?.totalOwed) || 0;
+  const fleetOwesTotal = payOutstanding.reduce((s, r) => s + payOutstandingAmount(r), 0);
   const awaitingTotal = awaitingRows.reduce((s, t) => s + Math.abs(Number(t.amount) || 0), 0);
   const clearedThisWeek =
     direction === 'pay'
@@ -360,7 +480,25 @@ export function DriverSettlementsPage({
 
   useEffect(() => {
     setSelected(new Set());
-  }, [deskTab, direction, weekFrom, weekTo, search]);
+  }, [deskTab, deskMode, weekFrom, weekTo, search]);
+
+  const openLogCashForDriver = (driverId: string, driverName: string, row?: PeriodRow) => {
+    const openWeeks = collectOutstanding.filter((r) => r.driverId === driverId);
+    const target = row || openWeeks[0];
+    const maxAmount = target
+      ? collectAmount(target)
+      : openWeeks.reduce((s, r) => s + collectAmount(r), 0);
+    const fallbackStart = format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd');
+    const fallbackEnd = format(endOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd');
+    setCollectModal({
+      isOpen: true,
+      driverId,
+      driverName: driverName || driverId,
+      workPeriodStart: target?.periodAnchor || fallbackStart,
+      workPeriodEnd: target?.periodEnd || fallbackEnd,
+      maxAmount: Math.max(0, maxAmount),
+    });
+  };
 
   const toggleSelect = (key: string) => {
     setSelected((prev) => {
@@ -385,7 +523,7 @@ export function DriverSettlementsPage({
       s +
       (direction === 'collect'
         ? collectAmount(r)
-        : Number(r.settlementAmount) || 0),
+        : payOutstandingAmount(r)),
     0,
   );
 
@@ -393,8 +531,9 @@ export function DriverSettlementsPage({
     void qc.invalidateQueries({ queryKey: ['companyOwesPeriods'] });
     void qc.invalidateQueries({ queryKey: ['driverOwesPeriods'] });
     void qc.invalidateQueries({ queryKey: ['cashHeldPeriods'] });
-    void qc.invalidateQueries({ queryKey: ['settlementPaidPeriods'] });
     void qc.invalidateQueries({ queryKey: ['driverSettlementsTransactions'] });
+    // Cash Wallet / Settlement tabs read the same period projection.
+    void qc.invalidateQueries({ queryKey: [DRIVER_FINANCIAL_PERIODS_KEY] });
   };
 
   const exportCsv = () => {
@@ -425,7 +564,7 @@ export function DriverSettlementsPage({
               `"${String(r.driverName || '').replace(/"/g, '""')}"`,
               r.periodAnchor,
               r.periodEnd,
-              Number(r.settlementAmount || 0).toFixed(2),
+              payOutstandingAmount(r).toFixed(2),
               Number(r.cashCollected || 0).toFixed(2),
               Number(r.settlementPaid || 0).toFixed(2),
             ].join(','),
@@ -476,6 +615,38 @@ export function DriverSettlementsPage({
     refreshAll();
   };
 
+  const saveWriteOff = async (payload: CashWriteOffSavePayload) => {
+    if (payload.amount > writeOffModal.maxAmount + 0.005) {
+      throw new Error(
+        `Cannot write off more than cash still owed (${writeOffModal.maxAmount.toFixed(2)})`,
+      );
+    }
+    await api.saveTransaction(
+      buildCashWriteOffTx(payload, {
+        driverId: writeOffModal.driverId,
+        driverName: writeOffModal.driverName,
+      }),
+    );
+    refreshAll();
+  };
+
+  const confirmReverseTx = async () => {
+    if (!txToReverse?.id) return;
+    setReverseBusy(true);
+    try {
+      await api.deleteTransaction(txToReverse.id);
+      toast.success(
+        isDriverPayoutTransaction(txToReverse) ? 'Payout reversed' : 'Cash payment reversed',
+      );
+      setTxToReverse(null);
+      refreshAll();
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to reverse');
+    } finally {
+      setReverseBusy(false);
+    }
+  };
+
   const runBatch = async () => {
     if (selectedRows.length === 0) return;
     const needsRef =
@@ -496,7 +667,7 @@ export function DriverSettlementsPage({
             await api.saveTransaction(
               buildDriverPayoutTx(
                 {
-                  amount: Math.round((Number(row.settlementAmount) || 0) * 100) / 100,
+                  amount: Math.round(payOutstandingAmount(row) * 100) / 100,
                   date: batchDate,
                   paymentMethod: batchMethod,
                   referenceNumber: batchRef.trim() || undefined,
@@ -559,22 +730,39 @@ export function DriverSettlementsPage({
     owesQuery.isLoading ||
     driverOwesQuery.isLoading ||
     cashHeldQuery.isLoading ||
-    paidQuery.isLoading ||
     txsQuery.isLoading;
 
-  const collectPeriodForModal = collectModal.isOpen
-    ? [
+  const collectPeriodForModal = useMemo(() => {
+    if (!collectModal.isOpen) return [];
+    const forDriver = collectOutstanding.filter((r) => r.driverId === collectModal.driverId);
+    if (forDriver.length > 0) {
+      return forDriver.map((r) => ({
+        start: parseISO(`${r.periodAnchor}T12:00:00`),
+        end: parseISO(`${r.periodEnd}T12:00:00`),
+        amountOwed: collectAmount(r),
+        amountPaid: 0,
+        balance: collectAmount(r),
+        status: 'Unpaid',
+      }));
+    }
+    if (collectModal.workPeriodStart && collectModal.workPeriodEnd) {
+      // amountOwed must be > 0 so LogCashPaymentModal shows the week in the dropdown
+      const amt = Math.max(collectModal.maxAmount, 0.01);
+      return [
         {
           start: parseISO(`${collectModal.workPeriodStart}T12:00:00`),
           end: parseISO(`${collectModal.workPeriodEnd}T12:00:00`),
-          amountOwed: collectModal.maxAmount,
+          amountOwed: amt,
           amountPaid: 0,
-          balance: collectModal.maxAmount,
+          balance: amt,
           status: 'Unpaid',
         },
-      ]
-    : [];
+      ];
+    }
+    return [];
+  }, [collectModal, collectOutstanding]);
 
+  const selectedLogCashDriver = driverOptions.find((d) => d.id === logCashDriverId);
   return (
     <div className="space-y-6 p-4 sm:p-6 max-w-[1400px] mx-auto">
       <BusinessFinanceDeskChrome deskLabel="Driver Settlements" onBack={onBackToBusinessFinance} />
@@ -585,10 +773,6 @@ export function DriverSettlementsPage({
             <Banknote className="h-5 w-5 text-emerald-700" />
             Driver Settlements
           </h1>
-          <p className="text-sm text-slate-500 mt-1 max-w-2xl">
-            Collect cash drivers owe · Pay weeks the fleet owes. Same Log Cash / Record Payout
-            actions as Cash Wallet — built for fleet-wide runs.
-          </p>
         </div>
         <Button type="button" variant="outline" size="sm" className="h-9" onClick={refreshAll} disabled={loading}>
           {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
@@ -598,7 +782,7 @@ export function DriverSettlementsPage({
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Kpi label="Driver owes" value={MONEY(driverOwesTotal)} sub={`${collectOutstanding.length} weeks`} tone="owed" />
-        <Kpi label="Fleet owes" value={MONEY(fleetOwesTotal)} sub={`${owesQuery.data?.summary?.rowCount ?? 0} weeks`} tone="pay" />
+        <Kpi label="Fleet owes" value={MONEY(fleetOwesTotal)} sub={`${payOutstanding.length} weeks`} tone="pay" />
         <Kpi
           label="Awaiting bank clear"
           value={MONEY(awaitingTotal)}
@@ -617,9 +801,9 @@ export function DriverSettlementsPage({
         <Button
           type="button"
           size="sm"
-          variant={direction === 'collect' ? 'default' : 'outline'}
-          className={cn('h-9', direction === 'collect' && 'bg-rose-700 hover:bg-rose-800')}
-          onClick={() => setDirection('collect')}
+          variant={deskMode === 'collect' ? 'default' : 'outline'}
+          className={cn('h-9', deskMode === 'collect' && 'bg-rose-700 hover:bg-rose-800')}
+          onClick={() => setDeskMode('collect')}
         >
           <ArrowDownLeft className="h-4 w-4 mr-1.5" />
           Collect
@@ -627,15 +811,100 @@ export function DriverSettlementsPage({
         <Button
           type="button"
           size="sm"
-          variant={direction === 'pay' ? 'default' : 'outline'}
-          className={cn('h-9', direction === 'pay' && 'bg-emerald-700 hover:bg-emerald-800')}
-          onClick={() => setDirection('pay')}
+          variant={deskMode === 'pay' ? 'default' : 'outline'}
+          className={cn('h-9', deskMode === 'pay' && 'bg-emerald-700 hover:bg-emerald-800')}
+          onClick={() => setDeskMode('pay')}
         >
           <ArrowUpRight className="h-4 w-4 mr-1.5" />
           Pay
         </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant={deskMode === 'log-cash' ? 'default' : 'outline'}
+          className={cn('h-9', deskMode === 'log-cash' && 'bg-emerald-600 hover:bg-emerald-700')}
+          onClick={() => setDeskMode('log-cash')}
+        >
+          <Plus className="h-4 w-4 mr-1.5" />
+          Log cash
+        </Button>
       </div>
 
+      {deskMode === 'log-cash' ? (
+        <div className="space-y-4">
+          <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-3">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-900">Log cash received</h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Same Log Cash flow as Cash Wallet — pick a driver, then tag the Settlement Week.
+              </p>
+            </div>
+            <div className="flex flex-col sm:flex-row sm:items-end gap-3">
+              <div className="space-y-1 flex-1 min-w-[220px]">
+                <Label className="text-xs text-slate-500">Driver</Label>
+                <Select value={logCashDriverId || undefined} onValueChange={setLogCashDriverId}>
+                  <SelectTrigger className="h-9">
+                    <SelectValue placeholder={driversQuery.isLoading ? 'Loading drivers…' : 'Select driver'} />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-72">
+                    {driverOptions
+                      .slice()
+                      .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
+                      .map((d) => (
+                        <SelectItem key={d.id} value={d.id}>
+                          {d.name}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button
+                type="button"
+                className="h-9 bg-emerald-600 hover:bg-emerald-700"
+                disabled={!logCashDriverId}
+                onClick={() => {
+                  if (!selectedLogCashDriver) return;
+                  openLogCashForDriver(selectedLogCashDriver.id, selectedLogCashDriver.name);
+                }}
+              >
+                <Plus className="h-4 w-4 mr-1.5" />
+                Log Cash Payment
+              </Button>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-medium text-slate-800">Open weeks to collect</p>
+              <p className="text-xs text-slate-500">
+                {collectOutstanding.length} week{collectOutstanding.length !== 1 ? 's' : ''}
+              </p>
+            </div>
+            <OutstandingTable
+              direction="collect"
+              rows={collectOutstanding}
+              loading={loading}
+              selected={selected}
+              onToggle={toggleSelect}
+              onToggleAll={toggleSelectAll}
+              onOpenDriver={onOpenDriver}
+              onPay={() => {}}
+              onCollect={(r) => openLogCashForDriver(r.driverId, r.driverName || r.driverId, r)}
+              onWriteOff={(r) =>
+                setWriteOffModal({
+                  isOpen: true,
+                  driverId: r.driverId,
+                  driverName: r.driverName || r.driverId,
+                  workPeriodStart: r.periodAnchor,
+                  workPeriodEnd: r.periodEnd,
+                  maxAmount: collectAmount(r),
+                })
+              }
+            />
+          </div>
+        </div>
+      ) : (
+        <>
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div className="flex flex-wrap gap-3 items-end">
           <div className="space-y-1">
@@ -715,11 +984,21 @@ export function DriverSettlementsPage({
                 driverName: r.driverName || r.driverId,
                 workPeriodStart: r.periodAnchor,
                 workPeriodEnd: r.periodEnd,
-                maxAmount: Number(r.settlementAmount) || 0,
+                maxAmount: payOutstandingAmount(r),
               })
             }
             onCollect={(r) =>
               setCollectModal({
+                isOpen: true,
+                driverId: r.driverId,
+                driverName: r.driverName || r.driverId,
+                workPeriodStart: r.periodAnchor,
+                workPeriodEnd: r.periodEnd,
+                maxAmount: collectAmount(r),
+              })
+            }
+            onWriteOff={(r) =>
+              setWriteOffModal({
                 isOpen: true,
                 driverId: r.driverId,
                 driverName: r.driverName || r.driverId,
@@ -737,12 +1016,22 @@ export function DriverSettlementsPage({
 
         <TabsContent value="done" className="mt-4">
           {direction === 'pay' ? (
-            <DonePayTable rows={donePayRows} onOpenDriver={onOpenDriver} />
+            <DonePayTable
+              rows={donePayRows}
+              onOpenDriver={onOpenDriver}
+              onReverse={(tx) => setTxToReverse(tx)}
+            />
           ) : (
-            <DoneCollectTable rows={doneCollectRows} onOpenDriver={onOpenDriver} />
+            <DoneCollectTable
+              rows={doneCollectRows}
+              onOpenDriver={onOpenDriver}
+              onReverse={(tx) => setTxToReverse(tx)}
+            />
           )}
         </TabsContent>
       </Tabs>
+        </>
+      )}
 
       <RecordPayoutModal
         isOpen={payoutModal.isOpen}
@@ -771,6 +1060,57 @@ export function DriverSettlementsPage({
         initialAmount={collectModal.maxAmount}
         periods={collectPeriodForModal}
       />
+
+      <CashWriteOffModal
+        isOpen={writeOffModal.isOpen}
+        onClose={() => setWriteOffModal((s) => ({ ...s, isOpen: false }))}
+        onSave={saveWriteOff}
+        driverName={writeOffModal.driverName}
+        maxAmount={writeOffModal.maxAmount}
+        workPeriodStart={writeOffModal.workPeriodStart}
+        workPeriodEnd={writeOffModal.workPeriodEnd}
+      />
+
+      <AlertDialog
+        open={!!txToReverse}
+        onOpenChange={(open) => {
+          if (!open && !reverseBusy) setTxToReverse(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {txToReverse && isDriverPayoutTransaction(txToReverse)
+                ? 'Undo payout?'
+                : 'Undo cash payment?'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {txToReverse && isDriverPayoutTransaction(txToReverse)
+                ? 'This restores the fleet-owes balance for that Settlement Week — same as Cash Wallet undo.'
+                : 'This restores cash still owed for that Settlement Week — same as Cash Wallet undo.'}
+              {txToReverse ? (
+                <span className="block mt-2 font-medium text-slate-700 tabular-nums">
+                  {MONEY(txToReverse.amount)}
+                  {txToReverse.driverName ? ` · ${txToReverse.driverName}` : ''}
+                </span>
+              ) : null}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={reverseBusy}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={reverseBusy}
+              onClick={(e) => {
+                e.preventDefault();
+                void confirmReverseTx();
+              }}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {reverseBusy ? 'Reversing…' : 'Undo'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Dialog open={batchOpen} onOpenChange={(o) => !o && !batchBusy && setBatchOpen(false)}>
         <DialogContent className="sm:max-w-md">
@@ -885,8 +1225,9 @@ function OutstandingTable({
   onOpenDriver,
   onPay,
   onCollect,
+  onWriteOff,
 }: {
-  direction: Direction;
+  direction: MoneyDirection;
   rows: PeriodRow[];
   loading: boolean;
   selected: Set<string>;
@@ -895,6 +1236,7 @@ function OutstandingTable({
   onOpenDriver?: (id: string) => void;
   onPay: (r: PeriodRow) => void;
   onCollect: (r: PeriodRow) => void;
+  onWriteOff: (r: PeriodRow) => void;
 }) {
   return (
     <div className="rounded-lg border border-slate-200 overflow-hidden bg-white">
@@ -919,7 +1261,7 @@ function OutstandingTable({
             <TableHead className="text-right">
               {direction === 'collect' ? 'Driver owes' : 'Fleet owes'}
             </TableHead>
-            <TableHead className="w-[120px]"></TableHead>
+            <TableHead className={direction === 'collect' ? 'w-[220px]' : 'w-[120px]'}></TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -988,17 +1330,29 @@ function OutstandingTable({
                       direction === 'collect' ? 'text-rose-700' : 'text-emerald-800',
                     )}
                   >
-                    {MONEY(direction === 'collect' ? collectAmount(r) : r.settlementAmount)}
+                    {MONEY(direction === 'collect' ? collectAmount(r) : payOutstandingAmount(r))}
                   </TableCell>
                   <TableCell>
                     {direction === 'collect' ? (
-                      <Button
-                        size="sm"
-                        className="h-8 bg-rose-700 hover:bg-rose-800"
-                        onClick={() => onCollect(r)}
-                      >
-                        Log Cash
-                      </Button>
+                      <div className="flex items-center justify-end gap-1.5">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-8"
+                          onClick={() => onWriteOff(r)}
+                        >
+                          <Ban className="h-3.5 w-3.5 mr-1" />
+                          Write Off
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="h-8 bg-rose-700 hover:bg-rose-800"
+                          onClick={() => onCollect(r)}
+                        >
+                          Log Cash
+                        </Button>
+                      </div>
                     ) : (
                       <Button
                         size="sm"
@@ -1026,7 +1380,7 @@ function PendingTable({
   onVerify,
 }: {
   rows: FinancialTransaction[];
-  direction: Direction;
+  direction: MoneyDirection;
   onOpenDriver?: (id: string) => void;
   onVerify: (tx: FinancialTransaction) => void;
 }) {
@@ -1094,9 +1448,11 @@ function PendingTable({
 function DonePayTable({
   rows,
   onOpenDriver,
+  onReverse,
 }: {
-  rows: PeriodRow[];
+  rows: FinancialTransaction[];
   onOpenDriver?: (id: string) => void;
+  onReverse: (tx: FinancialTransaction) => void;
 }) {
   return (
     <div className="rounded-lg border border-slate-200 overflow-hidden bg-white">
@@ -1105,37 +1461,65 @@ function DonePayTable({
           <TableRow className="bg-slate-50">
             <TableHead>Driver</TableHead>
             <TableHead>Settlement Week</TableHead>
+            <TableHead>Method</TableHead>
             <TableHead className="text-right">Paid to driver</TableHead>
             <TableHead>Status</TableHead>
+            <TableHead className="w-[100px]"></TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {rows.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={4} className="h-24 text-center text-slate-500">
-                No paid settlement weeks in this range.
+              <TableCell colSpan={6} className="h-24 text-center text-slate-500">
+                No paid settlement payouts in this range.
               </TableCell>
             </TableRow>
           ) : (
-            rows.map((r) => (
-              <TableRow key={rowKey(r)}>
+            rows.map((tx) => (
+              <TableRow key={tx.id}>
                 <TableCell>
                   <button
                     type="button"
                     className="text-left font-medium text-slate-900 hover:text-indigo-600"
-                    onClick={() => onOpenDriver?.(r.driverId)}
+                    onClick={() => tx.driverId && onOpenDriver?.(tx.driverId)}
                   >
-                    {r.driverName || r.driverId}
+                    {tx.driverName || tx.driverId}
                   </button>
                 </TableCell>
                 <TableCell className="text-sm text-slate-600">
-                  {weekLabel(r.periodAnchor, r.periodEnd)}
+                  {tx.metadata?.workPeriodStart
+                    ? weekLabel(
+                        String(tx.metadata.workPeriodStart).slice(0, 10),
+                        String(tx.metadata.workPeriodEnd || tx.metadata.workPeriodStart).slice(0, 10),
+                      )
+                    : '—'}
+                </TableCell>
+                <TableCell className="text-sm text-slate-600">
+                  {tx.paymentMethod || 'Cash'}
+                  {tx.description ? (
+                    <span className="block text-[11px] text-slate-400 truncate max-w-[180px]">
+                      {tx.description}
+                    </span>
+                  ) : null}
                 </TableCell>
                 <TableCell className="text-right tabular-nums font-semibold text-emerald-800">
-                  {MONEY(r.settlementPaid)}
+                  {MONEY(tx.amount)}
                 </TableCell>
                 <TableCell>
-                  <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200">Settled</Badge>
+                  <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200">Paid</Badge>
+                </TableCell>
+                <TableCell>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-8 text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
+                    title="Undo payout"
+                    onClick={() => onReverse(tx)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5 mr-1" />
+                    Undo
+                  </Button>
                 </TableCell>
               </TableRow>
             ))
@@ -1149,9 +1533,11 @@ function DonePayTable({
 function DoneCollectTable({
   rows,
   onOpenDriver,
+  onReverse,
 }: {
   rows: FinancialTransaction[];
   onOpenDriver?: (id: string) => void;
+  onReverse: (tx: FinancialTransaction) => void;
 }) {
   return (
     <div className="rounded-lg border border-slate-200 overflow-hidden bg-white">
@@ -1163,12 +1549,13 @@ function DoneCollectTable({
             <TableHead>Settlement Week</TableHead>
             <TableHead>Method</TableHead>
             <TableHead className="text-right">Cash returned</TableHead>
+            <TableHead className="w-[100px]"></TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {rows.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={5} className="h-24 text-center text-slate-500">
+              <TableCell colSpan={6} className="h-24 text-center text-slate-500">
                 No cleared collections in this range.
               </TableCell>
             </TableRow>
@@ -1198,6 +1585,19 @@ function DoneCollectTable({
                 <TableCell>{tx.paymentMethod || 'Cash'}</TableCell>
                 <TableCell className="text-right tabular-nums font-semibold text-emerald-700">
                   {MONEY(tx.amount)}
+                </TableCell>
+                <TableCell>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-8 text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
+                    title="Undo cash payment"
+                    onClick={() => onReverse(tx)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5 mr-1" />
+                    Undo
+                  </Button>
                 </TableCell>
               </TableRow>
             ))

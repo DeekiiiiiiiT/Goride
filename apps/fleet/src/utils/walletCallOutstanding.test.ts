@@ -86,4 +86,24 @@ describe('walletCallOutstandingFromPeriod', () => {
     expect(o.breakdown.cashReturned).toBeCloseTo(100, 2);
     expect(o.breakdown.cashWrittenOff).toBeCloseTo(250, 2);
   });
+
+  it('finalized zero settlement → settled / reconciled', () => {
+    // stillHeld = 5000 − 2000 − 1000 = 2000; net payout 2000 → settlement 0
+    const o = walletCallOutstandingFromPeriod(
+      row({
+        periodStart: new Date('2026-07-20T12:00:00'),
+        isFinalized: true,
+        netPayout: 2000,
+        passengerCash: 5000,
+        cashOwed: 5000,
+        cashPaid: 0,
+        fuelCredits: 2000,
+        cashTollWash: 1000,
+        settlementPaid: 0,
+      }),
+    );
+    expect(o.callDirection).toBe('settled');
+    expect(o.callAmount).toBe(0);
+    expect(o.callLabel).toBe('Reconciled');
+  });
 });

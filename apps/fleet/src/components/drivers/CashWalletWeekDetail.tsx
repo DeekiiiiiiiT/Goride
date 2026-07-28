@@ -141,8 +141,11 @@ export function CashWalletWeekDetail({
   const periodLabel = `${format(week.start, 'MMM d')} – ${format(week.end, 'MMM d, yyyy')}`;
   const br = week.breakdown;
   const b = callOutstanding?.breakdown;
+  const isSettled = callOutstanding?.callDirection === 'settled';
   const cashOwed =
-    callOutstanding && callOutstanding.callDirection !== 'fleet_owes'
+    callOutstanding &&
+    callOutstanding.callDirection !== 'fleet_owes' &&
+    callOutstanding.callDirection !== 'settled'
       ? callOutstanding.callAmount
       : 0;
 
@@ -154,7 +157,7 @@ export function CashWalletWeekDetail({
           <SheetDescription className="text-xs">{periodLabel}</SheetDescription>
         </SheetHeader>
 
-        {callOutstanding && (
+        {callOutstanding && !isSettled && (
           <div
             className={cn(
               'rounded-lg px-4 py-3 mt-2 border',
@@ -166,14 +169,15 @@ export function CashWalletWeekDetail({
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500 uppercase tracking-wide">
                 <Phone className="h-3.5 w-3.5" />
-                Cash still owed
+                {callOutstanding.callDirection === 'fleet_owes'
+                  ? 'Fleet owes'
+                  : 'Cash still owed'}
               </div>
               <Badge
                 variant="secondary"
                 className={cn(
                   'font-normal',
-                  cashOwed < 0.005 && callOutstanding.callDirection !== 'fleet_owes' && 'bg-emerald-100 text-emerald-700',
-                  callOutstanding.callDirection === 'driver_owes' && cashOwed > 0.005 && 'bg-rose-100 text-rose-700',
+                  callOutstanding.callDirection === 'driver_owes' && 'bg-rose-100 text-rose-700',
                   callOutstanding.callDirection === 'cash_with_driver' && 'bg-amber-100 text-amber-800',
                   callOutstanding.callDirection === 'fleet_owes' && 'bg-emerald-100 text-emerald-700',
                 )}
@@ -182,19 +186,33 @@ export function CashWalletWeekDetail({
                   ? 'Fleet owes driver'
                   : callOutstanding.callDirection === 'driver_owes'
                     ? 'Fleet cash cut'
-                    : cashOwed < 0.005
-                      ? 'Cleared'
-                      : 'With driver'}
+                    : 'With driver'}
               </Badge>
             </div>
             <p className="text-2xl font-bold mt-1 tabular-nums text-slate-900">
-              {callOutstanding.callDirection === 'fleet_owes'
-                ? fmt(callOutstanding.callAmount)
-                : cashOwed < 0.005
-                  ? '—'
-                  : fmt(cashOwed)}
+              {fmt(callOutstanding.callAmount)}
             </p>
             <p className="text-[11px] text-slate-500 mt-1">
+              Add and subtract the lines below — same math as Financials → Settlement.
+            </p>
+          </div>
+        )}
+
+        {callOutstanding && isSettled && (
+          <div className="rounded-lg px-4 py-3 mt-2 border bg-emerald-50 border-emerald-100">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-800 uppercase tracking-wide">
+                <Phone className="h-3.5 w-3.5" />
+                Reconciled
+              </div>
+              <Badge
+                variant="secondary"
+                className="font-normal bg-emerald-100 text-emerald-700"
+              >
+                Settled
+              </Badge>
+            </div>
+            <p className="text-[11px] text-slate-500 mt-2">
               Add and subtract the lines below — same math as Financials → Settlement.
             </p>
           </div>
@@ -203,7 +221,7 @@ export function CashWalletWeekDetail({
         {b && (
           <div className="mt-5 rounded-lg border border-slate-100 px-3">
             <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 pt-3 pb-1">
-              Why this cash is owed
+              {isSettled ? 'How this week reconciled' : 'Why this cash is owed'}
             </p>
 
             <Row
@@ -305,22 +323,28 @@ export function CashWalletWeekDetail({
 
             <Row
               label={
-                callOutstanding?.callDirection === 'fleet_owes'
-                  ? 'Fleet owes driver'
-                  : 'Cash still owed'
+                isSettled
+                  ? 'Reconciled'
+                  : callOutstanding?.callDirection === 'fleet_owes'
+                    ? 'Fleet owes driver'
+                    : 'Cash still owed'
               }
               hint={
-                callOutstanding?.finalized
-                  ? 'Net payout − cash still held − paid to driver'
-                  : 'Equals cash still held until payout is finalized'
+                isSettled
+                  ? 'Nothing left to collect or pay for this week'
+                  : callOutstanding?.finalized
+                    ? 'Net payout − cash still held − paid to driver'
+                    : 'Equals cash still held until payout is finalized'
               }
               amount={
-                callOutstanding?.callDirection === 'fleet_owes'
-                  ? callOutstanding.callAmount
-                  : cashOwed
+                isSettled
+                  ? 0
+                  : callOutstanding?.callDirection === 'fleet_owes'
+                    ? callOutstanding.callAmount
+                    : cashOwed
               }
               bold
-              tone="owed"
+              tone={isSettled ? 'total' : 'owed'}
             />
           </div>
         )}

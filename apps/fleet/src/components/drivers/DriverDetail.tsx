@@ -164,6 +164,7 @@ import { expandDriverTransactionIds } from '../../utils/expandDriverTransactionI
 import { isCashWriteOffTransaction, isDriverCashPaymentTransaction, isDriverPayoutTransaction } from '../../utils/driverCashPayment';
 import {
   buildCashCollectionTx,
+  buildCashWriteOffTx,
   buildDriverPayoutTx,
 } from '../../utils/driverSettlementTx';
 import { isUberCashEligibleMetricPeriod, isValidDriverMetricPeriod } from '../../utils/driverMetricPeriod';
@@ -638,6 +639,11 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
   // window heuristic, causing them to be incorrectly hidden. Financial records
   // like cash collections / floats / adjustments should always be visible.
   // Cash Returned + Cash Write Offs (write-offs are not cash collected; shown so ops can undo them).
+  const isBankTransferPaymentMethod = (pm?: string | null) => {
+    const m = String(pm || '').toLowerCase().trim();
+    return m === 'bank transfer' || m === 'mobile money' || m === 'check';
+  };
+
   const paymentTransactions = useMemo(() => {
     return (transactions || [])
       .filter(
@@ -649,8 +655,32 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [transactions]);
 
+  // Cash received: physical cash collections + write-offs + cash payouts.
+  const cashReceivedTransactions = useMemo(
+    () =>
+      paymentTransactions.filter((t) => {
+        if (isCashWriteOffTransaction(t)) return true;
+        if (isBankTransferPaymentMethod(t.paymentMethod)) return false;
+        return isDriverCashPaymentTransaction(t) || isDriverPayoutTransaction(t);
+      }),
+    [paymentTransactions],
+  );
+
+  // Bank transfers: Log Cash / payouts via bank, mobile money, or check (incl. awaiting verify).
+  const bankTransferTransactions = useMemo(
+    () =>
+      paymentTransactions.filter((t) => {
+        if (isCashWriteOffTransaction(t)) return false;
+        if (!isBankTransferPaymentMethod(t.paymentMethod)) return false;
+        return isDriverCashPaymentTransaction(t) || isDriverPayoutTransaction(t);
+      }),
+    [paymentTransactions],
+  );
+
+  const [paymentsLogTab, setPaymentsLogTab] = useState<'cash' | 'bank'>('cash');
+
   // Group Payments Log rows by Settlement Week (period), newest period first, untagged last.
-  const groupedPaymentTransactions = useMemo(() => {
+  const groupWalletPaymentsByWeek = (rows: typeof paymentTransactions) => {
     const groups = new Map<string, {
       key: string;
       label: string;
@@ -660,7 +690,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       payoutTotal: number;
       rows: typeof paymentTransactions;
     }>();
-    for (const tx of paymentTransactions) {
+    for (const tx of rows) {
       const s = tx.metadata?.workPeriodStart;
       const e = tx.metadata?.workPeriodEnd;
       const sd = s ? parseTripDate(String(s).split('T')[0]) : null;
@@ -681,7 +711,21 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       g.rows.push(tx);
     }
     return Array.from(groups.values()).sort((a, b) => b.sortKey - a.sortKey);
-  }, [paymentTransactions]);
+  };
+
+  const groupedCashReceivedTransactions = useMemo(
+    () => groupWalletPaymentsByWeek(cashReceivedTransactions),
+    [cashReceivedTransactions],
+  );
+  const groupedBankTransferTransactions = useMemo(
+    () => groupWalletPaymentsByWeek(bankTransferTransactions),
+    [bankTransferTransactions],
+  );
+
+  const activePaymentTransactions =
+    paymentsLogTab === 'cash' ? cashReceivedTransactions : bankTransferTransactions;
+  const groupedPaymentTransactions =
+    paymentsLogTab === 'cash' ? groupedCashReceivedTransactions : groupedBankTransferTransactions;
 
   // Periods collapsed by default; track which ones the user expanded.
   const [expandedPaymentGroups, setExpandedPaymentGroups] = useState<Set<string>>(new Set());
@@ -1015,40 +1059,13 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
   };
 
   const handleSaveCashWriteOff = async (payload: CashWriteOffSavePayload) => {
-      if (!payload.workPeriodStart || !payload.workPeriodEnd) {
-        throw new Error('Settlement Week is required for cash write-offs');
-      }
-      const amount = Math.abs(payload.amount);
-      if (!(amount > 0.005)) {
-        throw new Error('Write-off amount must be greater than zero');
-      }
-      if (amount > writeOffModalState.maxAmount + 0.005) {
+      if (payload.amount > writeOffModalState.maxAmount + 0.005) {
         throw new Error(`Cannot write off more than cash still owed (${writeOffModalState.maxAmount.toFixed(2)})`);
       }
-
-      const description = payload.notes
-        ? `Cash write-off: ${payload.reason} — ${payload.notes}`
-        : `Cash write-off: ${payload.reason}`;
-
-      const newTx: Partial<FinancialTransaction> = {
-          driverId,
-          driverName: driver?.name || driverName,
-          amount,
-          date: payload.date,
-          description,
-          category: 'Cash Write Off',
-          type: 'Cash_Write_Off',
-          paymentMethod: 'Other',
-          status: 'Completed',
-          isReconciled: true,
-          time: new Date().toLocaleTimeString(),
-          metadata: {
-            workPeriodStart: payload.workPeriodStart,
-            workPeriodEnd: payload.workPeriodEnd,
-            writeOffReason: payload.reason,
-          },
-      };
-
+      const newTx = buildCashWriteOffTx(payload, {
+        driverId,
+        driverName: driver?.name || driverName,
+      });
       const saved = await api.saveTransaction(newTx);
       const savedTx = saved?.data || saved;
       setTransactions(prev => [savedTx, ...prev].filter(Boolean));
@@ -2032,10 +2049,14 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         .filter(t => t && t.category === "Float Issue")
         .reduce((sum, t) => sum + (t?.amount || 0), 0));
 
-     // Pending Clearance: Sum of transactions with status "Pending"
-     // Only count positive payments (inflows) as pending clearance, not floats or adjustments unless positive
+     // Pending Clearance: Log Cash bank/mobile/check still awaiting Verify — not every Pending tx.
      const pendingClearance = (transactions || [])
-        .filter(t => t && t.status === 'Pending' && t.amount > 0)
+        .filter((t) => {
+          if (!t || !isDriverCashPaymentTransaction(t)) return false;
+          if (String(t.status || '').toLowerCase().trim() !== 'pending') return false;
+          const pm = String(t.paymentMethod || 'Cash').toLowerCase().trim();
+          return pm !== 'cash' && pm !== '';
+        })
         .reduce((sum, t) => sum + (t?.amount || 0), 0);
 
      // Trip Ratio Logic (from Vehicle Metrics)
@@ -3933,9 +3954,6 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
           <TabsContent value="wallet" className="space-y-6">
              ___OLD_FINANCIAL_SUBTABS_BLOCK_2_END___ */}
           <TabsContent value="wallet" className="space-y-6">
-             <p className="text-sm text-slate-500">
-               Cash Wallet tracks <span className="font-medium text-slate-700">cash only</span> — how much cash the fleet is still owed after returns, fuel, and tolls (same as Settlement). Log Cash records collections; Record Payout clears weeks where the fleet owes the driver. Uber bank received is on Business Finance → Bank Deposits.
-             </p>
              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                  <Card className="bg-white border-rose-100">
                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -4046,17 +4064,56 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                             <CardHeader>
                                 <div>
                                     <CardTitle>Payments Log</CardTitle>
-                                    <CardDescription>Cash returned and cash write-offs by Settlement Week. Fuel and tolls live on their own desks.</CardDescription>
+                                    <CardDescription>
+                                      {paymentsLogTab === 'cash'
+                                        ? 'Cash received from the driver and write-offs, by Settlement Week.'
+                                        : 'Bank, mobile money, and check transfers — including ones still awaiting verify.'}
+                                    </CardDescription>
                                 </div>
                             </CardHeader>
                             <CardContent>
                                     <div className="space-y-4">
+                                        <div className="flex p-1 bg-slate-100 rounded-lg w-fit">
+                                            <button
+                                              type="button"
+                                              className={cn(
+                                                "px-3 py-1.5 text-sm font-medium rounded-md transition-all",
+                                                paymentsLogTab === 'cash'
+                                                  ? "bg-white shadow-sm text-slate-900"
+                                                  : "text-slate-500 hover:text-slate-900",
+                                              )}
+                                              onClick={() => setPaymentsLogTab('cash')}
+                                            >
+                                              Cash received
+                                              <span className="ml-1.5 text-xs text-slate-400 tabular-nums">
+                                                {cashReceivedTransactions.length}
+                                              </span>
+                                            </button>
+                                            <button
+                                              type="button"
+                                              className={cn(
+                                                "px-3 py-1.5 text-sm font-medium rounded-md transition-all",
+                                                paymentsLogTab === 'bank'
+                                                  ? "bg-white shadow-sm text-slate-900"
+                                                  : "text-slate-500 hover:text-slate-900",
+                                              )}
+                                              onClick={() => setPaymentsLogTab('bank')}
+                                            >
+                                              Bank transfers
+                                              <span className="ml-1.5 text-xs text-slate-400 tabular-nums">
+                                                {bankTransferTransactions.length}
+                                              </span>
+                                            </button>
+                                        </div>
+
                                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                                             <p className="text-sm text-slate-500">
-                                                {paymentTransactions.length} cash / write-off entr{paymentTransactions.length !== 1 ? 'ies' : 'y'} on record
+                                                {paymentsLogTab === 'cash'
+                                                  ? `${activePaymentTransactions.length} cash / write-off entr${activePaymentTransactions.length !== 1 ? 'ies' : 'y'} on record`
+                                                  : `${activePaymentTransactions.length} bank / mobile / check entr${activePaymentTransactions.length !== 1 ? 'ies' : 'y'} on record`}
                                                 {transactions.length > 0 ? ` (${transactions.length.toLocaleString()} total transactions loaded)` : ''}
                                             </p>
-                                            {paymentTransactions.length <= 1 && transactions.length <= 10 && (
+                                            {activePaymentTransactions.length <= 1 && transactions.length <= 10 && (
                                               <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2 sm:max-w-md">
                                                 Older cash logs may be stored under a linked platform ID or hidden until the server update is deployed. This screen does not delete payment history.
                                               </p>
@@ -4089,7 +4146,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                 </TableRow>
                                             </TableHeader>
                                             <TableBody>
-                                                {paymentTransactions.length > 0 ? (
+                                                {groupedPaymentTransactions.length > 0 ? (
                                                     groupedPaymentTransactions.flatMap((group) => ([
                                                         <TableRow
                                                             key={`grp-${group.key}`}
@@ -4113,7 +4170,9 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                                   ? ` · paid −$${group.payoutTotal.toFixed(2)}`
                                                                   : ''}
                                                             </TableCell>
-                                                            <TableCell className="py-2 text-right text-xs text-slate-500">Cash returned</TableCell>
+                                                            <TableCell className="py-2 text-right text-xs text-slate-500">
+                                                              {paymentsLogTab === 'bank' ? 'Bank received' : 'Cash returned'}
+                                                            </TableCell>
                                                             <TableCell className="py-2 text-right font-bold font-mono text-emerald-700">
                                                                 +${group.total.toFixed(2)}
                                                             </TableCell>
@@ -4260,7 +4319,9 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                                 ) : (
                                                     <TableRow>
                                                         <TableCell colSpan={7} className="h-24 text-center text-slate-500">
-                                                            No payments or write-offs recorded.
+                                                            {paymentsLogTab === 'bank'
+                                                              ? 'No bank, mobile money, or check transfers recorded.'
+                                                              : 'No cash payments or write-offs recorded.'}
                                                         </TableCell>
                                                     </TableRow>
                                                 )}
@@ -4284,7 +4345,6 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                                 <p className="text-sm font-semibold text-rose-800 tabular-nums">
                                   {walletCollectionTotals.callOutstanding.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </p>
-                                <p className="text-[10px] text-slate-400">Cash only — fuel/tolls already applied</p>
                              </div>
                              <Button
                                className="w-full bg-emerald-600 hover:bg-emerald-700"

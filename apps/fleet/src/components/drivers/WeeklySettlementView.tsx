@@ -81,16 +81,32 @@ export function WeeklySettlementView({
                 {weeks.map((week, idx) => {
                     const weekKey = format(week.start, 'yyyy-MM-dd');
                     const call = callOutstandingByMonday[weekKey];
+                    // Collection residual only (never treat fleet_owes as $0 collectable).
                     const cashOwed =
-                        call && call.callDirection !== 'fleet_owes' ? call.callAmount : 0;
+                        call && call.callDirection === 'driver_owes'
+                            ? call.callAmount
+                            : call && call.callDirection === 'cash_with_driver'
+                              ? call.callAmount
+                              : 0;
+                    const fleetOwes =
+                        call?.callDirection === 'fleet_owes' ? call.callAmount : 0;
+                    const outstandingCall =
+                        call?.callDirection === 'fleet_owes'
+                            ? fleetOwes
+                            : cashOwed;
+                    const isSettled =
+                        call?.callDirection === 'settled' ||
+                        (!!call?.finalized && outstandingCall < 0.005);
                     const logPrefill = call
                         ? (call.callDirection === 'fleet_owes' ? 0 : call.callAmount)
                         : Math.max(0, week.balance);
-                    // Cleared vs passenger cash collected that week (context only — owed is cashOwed).
+                    // Progress = collection desk only (passenger cash vs still collecting).
                     const clearedPct =
                         week.amountOwed > 0.005
                             ? Math.max(0, Math.min(100, (1 - cashOwed / week.amountOwed) * 100))
-                            : 0;
+                            : isSettled
+                              ? 100
+                              : 0;
                     const showLog =
                         !readOnly &&
                         week.amountOwed > 0.005 &&
@@ -103,13 +119,14 @@ export function WeeklySettlementView({
                     const showPayDriver =
                         !readOnly &&
                         call?.callDirection === 'fleet_owes' &&
-                        (call?.callAmount || 0) > 0.005 &&
+                        fleetOwes > 0.005 &&
                         !!onPayDriver;
 
                     return (
                     <Card key={idx} className={cn(
                         "transition-all hover:shadow-md",
-                        cashOwed > 0.005 ? "border-amber-200 bg-amber-50/20" : ""
+                        cashOwed > 0.005 ? "border-amber-200 bg-amber-50/20" : "",
+                        fleetOwes > 0.005 ? "border-emerald-200 bg-emerald-50/10" : "",
                     )}>
                         <CardContent className="p-4 sm:p-6 space-y-4">
                             {/* Header: week + actions stay on one band so Log Cash never drops into the metrics column */}
@@ -120,19 +137,23 @@ export function WeeklySettlementView({
                                             {format(week.start, "MMM d")} - {format(week.end, "MMM d, yyyy")}
                                         </h3>
                                         <Badge variant={
-                                            cashOwed < 0.005 ? 'default' :
+                                            isSettled ? 'default' :
                                             call?.callDirection === 'driver_owes' ? 'destructive' :
+                                            call?.callDirection === 'fleet_owes' ? 'secondary' :
                                             'secondary'
                                         } className={cn(
-                                            cashOwed < 0.005 && "bg-emerald-100 text-emerald-700 hover:bg-emerald-200 border-emerald-200",
+                                            isSettled && "bg-emerald-100 text-emerald-700 hover:bg-emerald-200 border-emerald-200",
                                             call?.callDirection === 'driver_owes' && cashOwed > 0.005 && "bg-rose-100 text-rose-700 border-rose-200",
+                                            call?.callDirection === 'fleet_owes' && fleetOwes > 0.005 && "bg-sky-100 text-sky-800 border-sky-200",
                                             call?.callDirection === 'cash_with_driver' && "bg-amber-100 text-amber-800 border-amber-200",
                                         )}>
-                                            {cashOwed < 0.005
-                                                ? 'Cleared'
-                                                : call?.callDirection === 'driver_owes'
-                                                    ? 'Cash owed'
-                                                    : 'Cash with driver'}
+                                            {isSettled
+                                                ? 'Settled'
+                                                : call?.callDirection === 'fleet_owes'
+                                                    ? 'Fleet owes'
+                                                    : call?.callDirection === 'driver_owes'
+                                                        ? 'Cash owed'
+                                                        : 'Cash with driver'}
                                         </Badge>
                                     </div>
                                     <p className="text-sm text-slate-500">
@@ -198,10 +219,14 @@ export function WeeklySettlementView({
                             </div>
 
                             <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch">
+                                {/* Settled weeks: badge is enough — no owed/outstanding callout */}
+                                {!isSettled && (
                                 <div className="flex-1 min-w-[12rem] rounded-lg border border-slate-200 bg-white px-4 py-3">
                                     <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500 uppercase tracking-wide">
                                         <Phone className="h-3.5 w-3.5" />
-                                        Cash still owed
+                                        {call?.callDirection === 'fleet_owes'
+                                              ? 'Fleet owes'
+                                              : 'Cash still owed'}
                                     </div>
                                     {call ? (
                                         <>
@@ -211,10 +236,8 @@ export function WeeklySettlementView({
                                                 call.callDirection === 'driver_owes' && "text-rose-700",
                                                 call.callDirection === 'cash_with_driver' && "text-amber-800",
                                             )}>
-                                                {cashOwed < 0.005 && call.callDirection !== 'fleet_owes'
-                                                    ? '—'
-                                                    : call.callDirection === 'fleet_owes'
-                                                        ? plainAmount(call.callAmount)
+                                                {call.callDirection === 'fleet_owes'
+                                                        ? plainAmount(fleetOwes)
                                                         : plainAmount(cashOwed)}
                                             </p>
                                             <p className="text-sm font-medium text-slate-800 mt-0.5">
@@ -224,16 +247,17 @@ export function WeeklySettlementView({
                                                         ? 'Fleet cash cut still due'
                                                         : 'Cash still with driver'}
                                             </p>
-                                            <p className="text-[11px] text-slate-500 mt-1">
-                                                Cash only — fuel, tolls, and driver share already applied on Settlement
-                                            </p>
                                         </>
                                     ) : (
                                         <p className="text-sm text-slate-500 mt-2">Loading cash position…</p>
                                     )}
                                 </div>
+                                )}
 
-                                <div className="flex gap-6 sm:gap-8 text-sm sm:items-center sm:pl-2">
+                                <div className={cn(
+                                  "flex gap-6 sm:gap-8 text-sm sm:items-center",
+                                  !isSettled && "sm:pl-2",
+                                )}>
                                     <div className="space-y-0.5">
                                         <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">Passenger cash</p>
                                         <p className="font-semibold text-slate-700 tabular-nums">{plainAmount(week.amountOwed)}</p>
@@ -257,22 +281,34 @@ export function WeeklySettlementView({
                                 </div>
                             </div>
 
-                            {(week.amountOwed > 0.005 || cashOwed > 0.005) && (
+                            {!isSettled && (week.amountOwed > 0.005 || cashOwed > 0.005 || fleetOwes > 0.005) && (
                                 <div>
                                     <div className="flex justify-between text-xs mb-1.5">
-                                        <span className="text-slate-500">Cash position cleared</span>
+                                        <span className="text-slate-500">
+                                          {call?.callDirection === 'fleet_owes'
+                                            ? 'Payout progress'
+                                            : 'Cash position cleared'}
+                                        </span>
                                         <span className="text-slate-700 font-medium">
-                                            {Math.round(clearedPct)}%
-                                            <span className="text-slate-400 font-normal">
-                                                {' '}· {plainAmount(cashOwed)} still owed
-                                            </span>
+                                            {call?.callDirection === 'fleet_owes'
+                                              ? `${plainAmount(fleetOwes)} still owed to driver`
+                                              : (
+                                                <>
+                                                  {Math.round(clearedPct)}%
+                                                  <span className="text-slate-400 font-normal">
+                                                    {' '}· {plainAmount(cashOwed)} still owed
+                                                  </span>
+                                                </>
+                                              )}
                                         </span>
                                     </div>
+                                    {call?.callDirection !== 'fleet_owes' && (
                                     <Progress
                                         value={clearedPct}
                                         className="h-2"
                                         indicatorClassName="bg-gradient-to-r from-emerald-400 to-emerald-600"
                                     />
+                                    )}
                                 </div>
                             )}
                         </CardContent>

@@ -107,6 +107,7 @@ export function periodsToPayoutPeriodRows(
       const passengerCash = Number(p.cashCollected) || 0;
       const cashPaid = Number(p.cashReturned) || 0;
       const cashWrittenOff = Number(p.cashWrittenOff) || 0;
+      const settlementPaid = Number(p.settlementPaid) || 0;
       const tollPersonal = Number(p.tollChargedToDriver) || 0;
       const cashTollWash = Number(p.tollCashSpend) || 0;
       const netPayout = Number(p.payoutNet) || 0;
@@ -140,6 +141,7 @@ export function periodsToPayoutPeriodRows(
         cashTollWash,
         personalTollCharge: tollPersonal,
         cashWrittenOff,
+        settlementPaid,
         bankSettled: 0,
         status: mapPayoutStatus(p),
         cashPaidBreakdown: {

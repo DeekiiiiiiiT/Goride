@@ -1,5 +1,5 @@
 /**
- * Shared Cash Collection / Driver Payout transaction builders for
+ * Shared Cash Collection / Driver Payout / Cash Write Off transaction builders for
  * Cash Wallet + Driver Settlements desk (same Ledger types).
  */
 import type { FinancialTransaction } from '../types/data';
@@ -121,6 +121,53 @@ export function buildDriverPayoutTx(
     metadata: {
       workPeriodStart: String(input.workPeriodStart).slice(0, 10),
       workPeriodEnd: String(input.workPeriodEnd).slice(0, 10),
+    },
+  };
+}
+
+export type CashWriteOffSaveInput = {
+  amount: number;
+  date: string;
+  reason: string;
+  notes?: string;
+  workPeriodStart: string;
+  workPeriodEnd: string;
+};
+
+/** Map Cash Write Off modal payload → company-loss tx (never Payment_Received). */
+export function buildCashWriteOffTx(
+  input: CashWriteOffSaveInput,
+  ctx: { driverId: string; driverName: string },
+): Partial<FinancialTransaction> {
+  if (!input.workPeriodStart || !input.workPeriodEnd) {
+    throw new Error('Settlement Week is required for cash write-offs');
+  }
+  const amount = Math.abs(input.amount);
+  if (!(amount > 0.005)) {
+    throw new Error('Write-off amount must be greater than zero');
+  }
+  const reason = String(input.reason || '').trim();
+  if (!reason) {
+    throw new Error('A reason is required for write-offs');
+  }
+  return {
+    driverId: ctx.driverId,
+    driverName: ctx.driverName,
+    amount,
+    date: input.date,
+    description: input.notes
+      ? `Cash write-off: ${reason} — ${input.notes}`
+      : `Cash write-off: ${reason}`,
+    category: 'Cash Write Off',
+    type: 'Cash_Write_Off',
+    paymentMethod: 'Other',
+    status: 'Completed',
+    isReconciled: true,
+    time: new Date().toLocaleTimeString(),
+    metadata: {
+      workPeriodStart: String(input.workPeriodStart).slice(0, 10),
+      workPeriodEnd: String(input.workPeriodEnd).slice(0, 10),
+      writeOffReason: reason,
     },
   };
 }
