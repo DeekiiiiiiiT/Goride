@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "build:mobile": "vite build",
+    "build:mobile": "node ../../scripts/assert-vite-supabase-env.mjs && vite build",
     "cap:sync": "pnpm run build:mobile && cap sync android",
     "cap:release": "node scripts/bump-android-version.mjs && pnpm run cap:sync",
     "cap:aab": "node scripts/build-android-aab.mjs",

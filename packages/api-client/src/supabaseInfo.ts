@@ -1,24 +1,14 @@
-function viteEnv(): Record<string, string | undefined> | undefined {
-  try {
-    return (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env;
-  } catch {
-    return undefined;
-  }
-}
-
 function projectRefFromSupabaseUrl(url: string): string | undefined {
   const trimmed = url.trim().replace(/\/$/, "");
   const m = trimmed.match(/^https:\/\/([a-z0-9-]+)\.supabase\.co$/i);
   return m?.[1];
 }
 
-const env = viteEnv();
-
+/** Direct import.meta.env.* so Vite statically inlines these for store bundles. */
 function requireProjectId(): string {
-  const fromUrl = env?.VITE_SUPABASE_URL
-    ? projectRefFromSupabaseUrl(env.VITE_SUPABASE_URL)
-    : undefined;
-  const fromId = env?.VITE_SUPABASE_PROJECT_ID?.trim();
+  const rawUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+  const fromUrl = rawUrl ? projectRefFromSupabaseUrl(rawUrl) : undefined;
+  const fromId = (import.meta.env.VITE_SUPABASE_PROJECT_ID as string | undefined)?.trim();
   const projectId = fromUrl ?? fromId;
   if (!projectId) {
     throw new Error(
@@ -29,7 +19,7 @@ function requireProjectId(): string {
 }
 
 function requireAnonKey(): string {
-  const key = env?.VITE_SUPABASE_ANON_KEY?.trim();
+  const key = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim();
   if (!key) {
     throw new Error(
       "Missing Supabase config: set VITE_SUPABASE_URL (or VITE_SUPABASE_PROJECT_ID) and VITE_SUPABASE_ANON_KEY",

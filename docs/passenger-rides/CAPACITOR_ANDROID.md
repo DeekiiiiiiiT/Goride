@@ -52,6 +52,8 @@ After that, **Build Bundle(s)** signs automatically — no Generate Signed Bundl
 
 Version numbers live in `apps/rides-passenger/android/version.properties`. Use `cap:sync` alone for local testing — only run `cap:release` when shipping to Play (each run bumps by 1).
 
+**Blank white screen on device:** the Play bundle was built without `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` (website works because Vercel injects them). Keep those in `apps/rides-passenger/.env.production` (gitignored). `build:mobile` fails if they are missing.
+
 ## Play Store
 
 - Separate listing from **Roam Driver** (`co.roamenterprise.rides` vs `co.roamenterprise.driver`)
