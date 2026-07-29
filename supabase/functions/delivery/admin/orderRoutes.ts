@@ -2,10 +2,12 @@
  * Shared order admin routes — dash and courier product admins.
  */
 import { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { requireProductAdmin, type ProductAdminUser } from "../../_shared/productAdmin.ts";
 import { requireDashWrite } from "./dashPermissions.ts";
 import { requireWrite as requireCourierWrite } from "./permissions.ts";
 import { getDb } from "./merchantAdminShared.ts";
+import { orchestrateOrderRefund } from "./orderRefund.ts";
 
 async function requireDashOrCourierAdmin(c: { req: { header: (n: string) => string | undefined } }) {
   const dash = await requireProductAdmin(c, "dash");
@@ -18,6 +20,14 @@ async function requireDashOrCourierAdmin(c: { req: { header: (n: string) => stri
 function requireOrderWrite(admin: ProductAdminUser, product: "dash" | "courier"): Response | null {
   if (product === "dash") return requireDashWrite(admin);
   return requireCourierWrite(admin);
+}
+
+function getPaymentsDb() {
+  return createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    { db: { schema: "payments" } },
+  );
 }
 
 export function registerOrderAdminRoutes(app: Hono) {
@@ -64,6 +74,7 @@ export function registerOrderAdminRoutes(app: Hono) {
   orders.get("/:orderId", async (c) => {
     const orderId = c.req.param("orderId");
     const db = getDb();
+    const pdb = getPaymentsDb();
 
     const { data: order, error } = await db.from("orders")
       .select(`*, merchant:merchants(id, name, phone, address), customer:customers(id, name, phone)`)
@@ -86,7 +97,64 @@ export function registerOrderAdminRoutes(app: Hono) {
       courierName = (cp?.display_name as string | null) ?? null;
     }
 
-    return c.json({ order: { ...order, courier_display_name: courierName }, events: events ?? [] });
+    const { data: transaction } = await pdb
+      .from("transactions")
+      .select("id, amount, currency, status, provider, created_at")
+      .eq("order_id", orderId)
+      .eq("status", "completed")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const { data: refunds } = await pdb
+      .from("refunds")
+      .select("id, amount, status, reason, created_at, completed_at")
+      .eq("order_id", orderId)
+      .order("created_at", { ascending: false });
+
+    return c.json({
+      order: { ...order, courier_display_name: courierName },
+      events: events ?? [],
+      transaction: transaction ?? null,
+      refunds: refunds ?? [],
+    });
+  });
+
+  orders.post("/:orderId/refund", async (c) => {
+    const adminUser = c.get("adminUser") as ProductAdminUser;
+    const product = c.get("adminProduct") as "dash" | "courier";
+    // Money movement is Dash write only (courier admin cannot refund)
+    if (product !== "dash") {
+      return c.json({ error: "forbidden", message: "Dash write role required for refunds" }, 403);
+    }
+    const denied = requireDashWrite(adminUser);
+    if (denied) return denied;
+
+    const orderId = c.req.param("orderId");
+    const body = await c.req.json().catch(() => ({})) as { amount?: number; reason?: string };
+    const reason = String(body.reason || "").trim();
+    if (!reason) return c.json({ error: "reason is required" }, 400);
+
+    const authHeader = c.req.header("Authorization") || "";
+    const result = await orchestrateOrderRefund({
+      orderId,
+      amount: body.amount != null ? Number(body.amount) : null,
+      reason,
+      admin: adminUser,
+      authHeader,
+    });
+
+    if (!result.ok) return c.json({ error: result.error }, result.status);
+
+    const { data: order } = await getDb().from("orders").select("*").eq("id", orderId).maybeSingle();
+    return c.json({
+      ok: true,
+      refund: result.refund,
+      payment_status: result.payment_status,
+      providerCompleted: result.providerCompleted,
+      providerError: result.providerError ?? null,
+      order,
+    }, 201);
   });
 
   orders.post("/:orderId/cancel", async (c) => {
@@ -102,7 +170,7 @@ export function registerOrderAdminRoutes(app: Hono) {
     const now = new Date().toISOString();
 
     const { data: existing } = await db.from("orders")
-      .select("courier_id")
+      .select("courier_id, payment_status")
       .eq("id", orderId)
       .maybeSingle();
 
@@ -137,7 +205,35 @@ export function registerOrderAdminRoutes(app: Hono) {
       notes: reason,
     });
 
-    return c.json({ ok: true, order });
+    let refund: RefundOrchestratorResultSummary | null = null;
+    const payStatus = String(
+      (existing as { payment_status?: string } | null)?.payment_status
+        ?? (order as { payment_status?: string }).payment_status
+        ?? "",
+    );
+    if (product === "dash" && payStatus === "paid") {
+      const authHeader = c.req.header("Authorization") || "";
+      const result = await orchestrateOrderRefund({
+        orderId,
+        amount: null,
+        reason: `Admin cancel: ${reason}`,
+        admin: adminUser,
+        authHeader,
+      });
+      if (result.ok) {
+        refund = {
+          payment_status: result.payment_status,
+          providerCompleted: result.providerCompleted,
+          providerError: result.providerError ?? null,
+          refund_id: String(result.refund.id || ""),
+        };
+      } else {
+        refund = { error: result.error };
+      }
+    }
+
+    const { data: refreshed } = await db.from("orders").select("*").eq("id", orderId).maybeSingle();
+    return c.json({ ok: true, order: refreshed || order, refund });
   });
 
   orders.post("/:orderId/complete", async (c) => {
@@ -171,3 +267,11 @@ export function registerOrderAdminRoutes(app: Hono) {
 
   app.route("/admin/orders", orders);
 }
+
+type RefundOrchestratorResultSummary = {
+  payment_status?: string;
+  providerCompleted?: boolean;
+  providerError?: string | null;
+  refund_id?: string;
+  error?: string;
+};

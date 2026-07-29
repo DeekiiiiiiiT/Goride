@@ -55,12 +55,16 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
     const body = await validateBody(c, PlaceOrderBody);
     if (body instanceof Response) return body;
 
-    // Get or create customer
+    // Get or create customer — enforce suspend before pricing/insert
     let { data: customer } = await supabase
       .from("customers")
-      .select("id")
+      .select("id, account_status")
       .eq("user_id", user.id)
-      .single();
+      .maybeSingle();
+
+    if (customer && String((customer as { account_status?: string }).account_status) === "suspended") {
+      return c.json({ error: "Account suspended" }, 403);
+    }
 
     if (!customer) {
       const { data: newCustomer, error: customerError } = await supabase
@@ -71,7 +75,7 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
           phone: body.phone,
           email: user.email,
         })
-        .select("id")
+        .select("id, account_status")
         .single();
 
       if (customerError) return c.json({ error: customerError.message }, 500);

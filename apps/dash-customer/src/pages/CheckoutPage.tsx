@@ -16,6 +16,7 @@ import {
 import { calculateOrderTotals, parseDeliveryFeeLabel } from '@/lib/orderPricing';
 import { formatJmd, getRestaurantProfile } from '@/lib/restaurantContent';
 import { toast } from 'sonner';
+import { fetchCustomerProfile } from '@/lib/customerApi';
 import PharmacyNoticeSheet, {
   isPharmacyNoticeAcknowledged,
 } from '@/components/checkout/PharmacyNoticeSheet';
@@ -44,6 +45,7 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const [showPharmacyNotice, setShowPharmacyNotice] = useState(false);
   const [platformFeeRate, setPlatformFeeRate] = useState(0.05);
+  const [accountSuspended, setAccountSuspended] = useState(false);
 
   const deliveryAddress = savedAddress
     ? `${savedAddress.line1}${savedAddress.line2 ? `, ${savedAddress.line2}` : ''}`
@@ -128,10 +130,32 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
     saveCheckoutPreferences({ tip: amount });
   };
 
+  useEffect(() => {
+    if (!session) {
+      setAccountSuspended(false);
+      return;
+    }
+    let cancelled = false;
+    void fetchCustomerProfile()
+      .then((profile) => {
+        if (!cancelled) setAccountSuspended(profile?.accountStatus === 'suspended');
+      })
+      .catch(() => {
+        if (!cancelled) setAccountSuspended(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [session]);
+
   const handlePlaceOrder = async () => {
     if (!session) {
       toast.error('Please sign in to place an order');
       onNavigate('login');
+      return;
+    }
+    if (accountSuspended) {
+      toast.error('Your account is suspended. Contact support for help.');
       return;
     }
     if (items.length === 0) {
@@ -458,10 +482,15 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
       </main>
 
       <div className="fixed bottom-0 w-full z-50 bg-surface px-4 py-4 pb-safe shadow-[0px_-4px_20px_rgba(0,0,0,0.04)]">
+        {accountSuspended && (
+          <p className="text-sm text-error text-center mb-2 max-w-2xl mx-auto">
+            Your account is suspended. Contact support — you cannot place orders.
+          </p>
+        )}
         <button
           type="button"
           onClick={handlePlaceOrder}
-          disabled={isPlacingOrder}
+          disabled={isPlacingOrder || accountSuspended}
           className="w-full max-w-2xl mx-auto bg-primary text-on-primary text-headline-sm font-semibold py-4 rounded-xl flex justify-between items-center px-6 active:scale-[0.98] transition-transform disabled:opacity-50"
         >
           <span>{isPlacingOrder ? 'Processing...' : 'Place Order'}</span>

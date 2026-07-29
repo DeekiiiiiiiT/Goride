@@ -67,10 +67,10 @@ async function getCustomerForUser(userId: string) {
   const { data: customer } = await serviceSupabase
     .schema("delivery")
     .from("customers")
-    .select("id")
+    .select("id, account_status")
     .eq("user_id", userId)
     .maybeSingle();
-  return customer;
+  return customer as { id: string; account_status?: string } | null;
 }
 
 /** Ensure the authenticated user owns the order (by customer_id). */
@@ -83,6 +83,9 @@ async function assertCustomerOwnsOrder(
 > {
   const customer = await getCustomerForUser(userId);
   if (!customer) return { ok: false, status: 403, error: "Forbidden" };
+  if (String(customer.account_status || "active") === "suspended") {
+    return { ok: false, status: 403, error: "Account suspended" };
+  }
 
   const serviceSupabase = getServiceSupabase();
   const { data: order, error } = await serviceSupabase
@@ -579,6 +582,20 @@ app.post("/refunds", async (c) => {
   const admin = await requireProductAdmin(c, "dash");
   if (admin instanceof Response) return admin;
 
+  // Align with Dash write bar — dash_ops cannot move money
+  const DASH_REFUND_ROLES = new Set([
+    "dash_admin",
+    "platform_owner",
+    "platform_support",
+    "superadmin",
+  ]);
+  if (!admin.roles.some((r) => DASH_REFUND_ROLES.has(r))) {
+    return c.json({
+      error: "forbidden",
+      message: "dash_admin or platform role required for refunds",
+    }, 403);
+  }
+
   const limited = await assertRateLimit(c, `payments:refunds:${admin.id}`, {
     max: 20,
     windowMs: 60_000,
@@ -605,7 +622,7 @@ app.post("/refunds", async (c) => {
   const { data: order } = await serviceSupabase
     .schema("delivery")
     .from("orders")
-    .select("merchant_id")
+    .select("merchant_id, total, payment_status")
     .eq("id", transaction.order_id)
     .single();
   
@@ -741,6 +758,27 @@ app.post("/refunds", async (c) => {
       .eq("id", refund.id)
       .select()
       .single();
+
+    // Sync delivery order payment_status when provider completes
+    if (refundStatus === "completed" && transaction.order_id) {
+      const paidAmt = Number(transaction.amount) || 0;
+      const { data: allRefunds } = await serviceSupabase
+        .schema("payments")
+        .from("refunds")
+        .select("amount, status")
+        .eq("order_id", transaction.order_id)
+        .in("status", ["pending", "completed"]);
+      const refundedSum = (allRefunds || []).reduce(
+        (s, r) => s + Number((r as { amount?: number }).amount || 0),
+        0,
+      );
+      const nextStatus = refundedSum >= paidAmt - 0.001 ? "refunded" : "partially_refunded";
+      await serviceSupabase
+        .schema("delivery")
+        .from("orders")
+        .update({ payment_status: nextStatus, updated_at: new Date().toISOString() })
+        .eq("id", transaction.order_id);
+    }
 
     return c.json({ refund: updated || refund }, 201);
   } catch (e) {

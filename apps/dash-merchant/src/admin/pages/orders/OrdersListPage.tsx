@@ -10,6 +10,7 @@ export function OrdersListPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const status = searchParams.get('status') || 'all';
+  const customerId = searchParams.get('customer_id') || '';
   const [q, setQ] = useState('');
   const [orders, setOrders] = useState<DashOrderRow[]>([]);
   const [total, setTotal] = useState(0);
@@ -20,6 +21,7 @@ export function OrdersListPage() {
     try {
       const res = await listOrders(session.access_token, {
         status: status === 'all' ? undefined : status,
+        customer_id: customerId || undefined,
         q: q || undefined,
         limit: 50,
       });
@@ -30,7 +32,7 @@ export function OrdersListPage() {
     } finally {
       setLoading(false);
     }
-  }, [session.access_token, status, q]);
+  }, [session.access_token, status, q, customerId]);
 
   useEffect(() => {
     const t = setTimeout(() => void load(), 300);
@@ -42,6 +44,18 @@ export function OrdersListPage() {
       <div>
         <h2 className="text-xl font-semibold text-white">Orders</h2>
         <p className="text-sm text-slate-400">{total} total</p>
+        {customerId && (
+          <p className="text-sm text-amber-300/90 mt-1">
+            Filtered by customer{' '}
+            <button type="button" className="underline" onClick={() => navigate(`/customers/${customerId}`)}>
+              {customerId.slice(0, 8)}…
+            </button>
+            {' · '}
+            <button type="button" className="underline text-slate-400" onClick={() => navigate('/orders')}>
+              Clear
+            </button>
+          </p>
+        )}
       </div>
 
       <div className="flex flex-wrap gap-2">

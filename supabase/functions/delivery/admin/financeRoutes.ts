@@ -134,14 +134,52 @@ export function registerFinanceAdminRoutes(app: Hono) {
   });
 
   admin.patch("/disputes/:id", async (c) => {
-    const admin = c.get("adminUser") as ProductAdminUser;
-    const denied = requireDashWrite(admin);
+    const adminUser = c.get("adminUser") as ProductAdminUser;
+    const denied = requireDashWrite(adminUser);
     if (denied) return denied;
     const body = await c.req.json().catch(() => ({}));
     const db = getDb();
+
+    const { data: existing, error: fetchErr } = await db
+      .from("order_disputes")
+      .select("*")
+      .eq("id", c.req.param("id"))
+      .maybeSingle();
+    if (fetchErr || !existing) return c.json({ error: "Dispute not found" }, 404);
+
+    const nextStatus = body.status != null ? String(body.status) : String(existing.status);
+    const refundAmount = body.refund_amount != null
+      ? Number(body.refund_amount)
+      : (existing.refund_amount != null ? Number(existing.refund_amount) : null);
+
+    let refundResult: Record<string, unknown> | null = null;
+    if (nextStatus === "refunded" && refundAmount != null && refundAmount > 0) {
+      const { orchestrateOrderRefund } = await import("./orderRefund.ts");
+      const authHeader = c.req.header("Authorization") || "";
+      const result = await orchestrateOrderRefund({
+        orderId: String(existing.order_id),
+        amount: refundAmount,
+        reason: String(body.resolution_notes || existing.resolution_notes || "Dispute refund"),
+        admin: adminUser,
+        authHeader,
+      });
+      if (!result.ok) {
+        return c.json({
+          error: result.error,
+          message: "Refund failed — dispute was not marked refunded",
+        }, result.status);
+      }
+      refundResult = {
+        payment_status: result.payment_status,
+        providerCompleted: result.providerCompleted,
+        providerError: result.providerError ?? null,
+        refund: result.refund,
+      };
+    }
+
     const updates: Record<string, unknown> = {
       updated_at: new Date().toISOString(),
-      handled_by: admin.id,
+      handled_by: adminUser.id,
     };
     if (body.status) updates.status = body.status;
     if (body.resolution_notes != null) updates.resolution_notes = body.resolution_notes;
@@ -149,7 +187,7 @@ export function registerFinanceAdminRoutes(app: Hono) {
     const { data, error } = await db.from("order_disputes")
       .update(updates).eq("id", c.req.param("id")).select().single();
     if (error) return c.json({ error: error.message }, 500);
-    return c.json({ dispute: data });
+    return c.json({ dispute: data, refund: refundResult });
   });
 
   admin.get("/reviews", async (c) => {

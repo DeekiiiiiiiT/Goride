@@ -389,6 +389,7 @@ export function listOrders(
   opts: {
     status?: string;
     merchant_id?: string;
+    customer_id?: string;
     q?: string;
     page?: number;
     limit?: number;
@@ -397,6 +398,7 @@ export function listOrders(
   const sp = new URLSearchParams();
   if (opts.status) sp.set('status', opts.status);
   if (opts.merchant_id) sp.set('merchant_id', opts.merchant_id);
+  if (opts.customer_id) sp.set('customer_id', opts.customer_id);
   if (opts.q) sp.set('q', opts.q);
   if (opts.page != null) sp.set('page', String(opts.page));
   if (opts.limit != null) sp.set('limit', String(opts.limit));
@@ -406,7 +408,12 @@ export function listOrders(
 export function getOrderDetail(
   accessToken: string,
   orderId: string,
-): Promise<{ order: Record<string, unknown>; events: Array<Record<string, unknown>> }> {
+): Promise<{
+  order: Record<string, unknown>;
+  events: Array<Record<string, unknown>>;
+  transaction?: Record<string, unknown> | null;
+  refunds?: Array<Record<string, unknown>>;
+}> {
   return deliveryFetch(accessToken, `/admin/orders/${orderId}`);
 }
 
@@ -417,22 +424,46 @@ export function cancelOrder(accessToken: string, orderId: string, reason: string
   });
 }
 
+export function refundOrder(
+  accessToken: string,
+  orderId: string,
+  payload: { amount?: number; reason: string },
+) {
+  return deliveryFetch(accessToken, `/admin/orders/${orderId}/refund`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
 export function completeOrder(accessToken: string, orderId: string) {
   return deliveryFetch(accessToken, `/admin/orders/${orderId}/complete`, { method: 'POST' });
 }
 
 export function listCustomers(
   accessToken: string,
-  opts: { q?: string; page?: number } = {},
+  opts: { q?: string; page?: number; status?: string } = {},
 ) {
   const sp = new URLSearchParams();
   if (opts.q) sp.set('q', opts.q);
   if (opts.page) sp.set('page', String(opts.page));
+  if (opts.status) sp.set('status', opts.status);
   return deliveryFetch(accessToken, `/admin/customers?${sp}`);
 }
 
 export function getCustomerDetail(accessToken: string, id: string) {
-  return deliveryFetch(accessToken, `/admin/customers/${id}`);
+  return deliveryFetch<{
+    customer: Record<string, unknown>;
+    recentOrders: Array<Record<string, unknown>>;
+    orderCount?: number;
+    lifetimeSpend?: number;
+  }>(accessToken, `/admin/customers/${id}`);
+}
+
+export function patchCustomerNotes(accessToken: string, id: string, admin_internal_notes: string | null) {
+  return deliveryFetch(accessToken, `/admin/customers/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ admin_internal_notes }),
+  });
 }
 
 export function suspendCustomer(accessToken: string, id: string, reason: string) {
@@ -518,6 +549,21 @@ export function releasePayout(accessToken: string, payoutId: string) {
 export function listDisputes(accessToken: string, status?: string) {
   const sp = status ? `?status=${status}` : '';
   return deliveryFetch(accessToken, `/admin/finance/disputes${sp}`);
+}
+
+export function resolveDispute(
+  accessToken: string,
+  id: string,
+  payload: {
+    status: string;
+    resolution_notes?: string;
+    refund_amount?: number;
+  },
+) {
+  return deliveryFetch(accessToken, `/admin/finance/disputes/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
 }
 
 export function listReviews(accessToken: string, merchantId?: string) {
