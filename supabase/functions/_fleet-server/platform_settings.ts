@@ -89,7 +89,7 @@ function defaultFleetProductSettings(platformName: string, rideshareOnly: boolea
   };
 }
 
-function defaultConsumerSettings(platformName: string): Record<string, unknown> {
+function defaultConsumerSettings(platformName: string, opts?: { platformFeeRate?: number }): Record<string, unknown> {
   return {
     platformName,
     defaultCurrency: "JMD",
@@ -102,6 +102,7 @@ function defaultConsumerSettings(platformName: string): Record<string, unknown> 
     welcomeEmailMessage: "",
     securityPolicies: { ...DEFAULT_SECURITY },
     announcement: { ...DEFAULT_ANNOUNCEMENT },
+    ...(opts?.platformFeeRate != null ? { platformFeeRate: opts.platformFeeRate } : {}),
   };
 }
 
@@ -125,7 +126,7 @@ export function defaultSettingsForSegment(segment: SettingsSegment): Record<stri
     case "haul":
       return defaultConsumerSettings("Roam Haul");
     case "dash":
-      return defaultConsumerSettings("Roam Dash");
+      return defaultConsumerSettings("Roam Dash", { platformFeeRate: 0.05 });
     default:
       return defaultFleetProductSettings("Roam Fleet", true);
   }

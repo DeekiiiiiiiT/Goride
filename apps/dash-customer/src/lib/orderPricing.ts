@@ -1,6 +1,7 @@
 /** Client totals must match server formula in customerOrderRoutes.ts */
 
 export const TAX_RATE_PERCENT = 16.5;
+/** Fallback only — prefer resolved rate from merchant pricing API. */
 export const PLATFORM_FEE_RATE = 0.05;
 
 export type PromoCode = {
@@ -57,6 +58,13 @@ export function parseDeliveryFeeLabel(label: string | null | undefined): number 
   return Number(match[1].replace(/,/g, '')) || 0;
 }
 
+function clampFeeRate(rate: number | null | undefined): number {
+  if (rate == null) return PLATFORM_FEE_RATE;
+  const n = Number(rate);
+  if (!Number.isFinite(n) || n < 0 || n > 1) return PLATFORM_FEE_RATE;
+  return n;
+}
+
 /**
  * Mirrors server: tax on (subtotal - discount), platform fee on subtotal,
  * delivery fee from merchant (passed in — never trust a hardcoded client constant).
@@ -66,11 +74,12 @@ export function calculateOrderTotals(
   appliedPromo: PromoCode | null,
   tip = 0,
   deliveryFee = 0,
+  platformFeeRate: number = PLATFORM_FEE_RATE,
 ): OrderTotals {
   const discount = computeDiscount(subtotal, appliedPromo);
   const discountedSubtotal = roundMoney(Math.max(0, subtotal - discount));
   const safeDeliveryFee = Math.max(0, deliveryFee);
-  const serviceFee = roundMoney(subtotal * PLATFORM_FEE_RATE);
+  const serviceFee = roundMoney(subtotal * clampFeeRate(platformFeeRate));
   const tax = roundMoney(discountedSubtotal * (TAX_RATE_PERCENT / 100));
   const safeTip = Math.max(0, tip);
   const total = roundMoney(discountedSubtotal + safeDeliveryFee + serviceFee + tax + safeTip);

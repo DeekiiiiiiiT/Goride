@@ -60,6 +60,9 @@ export function MerchantDetailPage() {
   const [actionStatus, setActionStatus] = useState<MerchantVerificationStatus | null>(null);
   const [checklist, setChecklist] = useState<Record<string, boolean>>({});
   const [actionBusy, setActionBusy] = useState(false);
+  const [globalFeePercent, setGlobalFeePercent] = useState(5);
+  const [feeOverridePercent, setFeeOverridePercent] = useState('');
+  const [feeSaving, setFeeSaving] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -71,6 +74,13 @@ export function MerchantDetailPage() {
       setOwnerEmail(res.ownerEmail);
       setDocuments(res.documents || []);
       setChecklist(res.merchant.verification_checklist || {});
+      setGlobalFeePercent(res.global_platform_fee_percent ?? 5);
+      const override = res.merchant.commission_rate;
+      setFeeOverridePercent(
+        override != null && Number.isFinite(Number(override))
+          ? String(Math.round(Number(override) * 10000) / 100)
+          : '',
+      );
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to load merchant');
     } finally {
@@ -167,6 +177,46 @@ export function MerchantDetailPage() {
       void load();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Restaurant Management update failed');
+    }
+  };
+
+  const saveFeeOverride = async () => {
+    if (!merchant || !canWrite) return;
+    const raw = feeOverridePercent.trim();
+    if (!raw) {
+      toast.error('Enter a fee % or clear the override');
+      return;
+    }
+    const pct = Number(raw);
+    if (!Number.isFinite(pct) || pct < 0 || pct > 100) {
+      toast.error('Platform fee must be between 0 and 100%');
+      return;
+    }
+    setFeeSaving(true);
+    try {
+      await patchMerchantOps(token, merchant.id, {
+        commission_rate: Math.round(pct * 100) / 10000,
+      });
+      toast.success('Merchant fee override saved');
+      void load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to save fee override');
+    } finally {
+      setFeeSaving(false);
+    }
+  };
+
+  const clearFeeOverride = async () => {
+    if (!merchant || !canWrite) return;
+    setFeeSaving(true);
+    try {
+      await patchMerchantOps(token, merchant.id, { commission_rate: null });
+      toast.success('Override cleared — using global fee');
+      void load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to clear override');
+    } finally {
+      setFeeSaving(false);
     }
   };
 
@@ -379,6 +429,48 @@ export function MerchantDetailPage() {
           ))}
         </section>
       )}
+
+      <section className="rounded-xl border border-slate-800 bg-slate-900/50 p-4 space-y-3">
+        <h3 className="text-sm font-medium text-white">Platform fee</h3>
+        <p className="text-sm text-slate-400">
+          {merchant.commission_rate != null
+            ? `Override active — ${Math.round(Number(merchant.commission_rate) * 10000) / 100}% on new orders`
+            : `Using global ${globalFeePercent}%`}
+        </p>
+        {canWrite && (
+          <div className="flex flex-wrap items-end gap-2">
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">Override (%)</label>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                step={0.1}
+                value={feeOverridePercent}
+                onChange={(e) => setFeeOverridePercent(e.target.value)}
+                placeholder={String(globalFeePercent)}
+                className="w-28 px-3 py-1.5 text-sm rounded-lg bg-slate-950 border border-slate-700 text-white"
+              />
+            </div>
+            <button
+              type="button"
+              disabled={feeSaving}
+              onClick={() => void saveFeeOverride()}
+              className="px-3 py-1.5 text-sm rounded-lg bg-amber-600 text-white disabled:opacity-50"
+            >
+              Save override
+            </button>
+            <button
+              type="button"
+              disabled={feeSaving || merchant.commission_rate == null}
+              onClick={() => void clearFeeOverride()}
+              className="px-3 py-1.5 text-sm rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+            >
+              Clear override
+            </button>
+          </div>
+        )}
+      </section>
 
       <section className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
         <h3 className="text-sm font-medium text-white mb-3">Audit log</h3>

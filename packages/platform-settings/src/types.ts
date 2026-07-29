@@ -71,6 +71,8 @@ export interface ConsumerSegmentSettings {
   welcomeEmailMessage: string;
   announcement: AnnouncementSettings;
   securityPolicies: SecurityPolicies;
+  /** Dash only: platform fee as 0–1 fraction (0.05 = 5%). Ignored for other segments. */
+  platformFeeRate?: number;
   updatedAt?: string;
 }
 

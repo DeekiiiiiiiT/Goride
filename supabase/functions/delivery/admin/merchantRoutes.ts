@@ -38,6 +38,10 @@ import {
   type SetupChecklist,
 } from "./merchantSetupProgress.ts";
 import { incompleteSetupStageLabel } from "../partnerOnboarding.ts";
+import {
+  feeRateToPercent,
+  resolveFeeRateForMerchant,
+} from "../platformFeeRate.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SLA_HOURS = 48;
@@ -446,6 +450,8 @@ export function registerMerchantAdminRoutes(app: Hono) {
     const ownerEmail = await fetchOwnerEmail(ownerId);
     const { documents, bankAccount } = await extendAdminMerchantDetail(id);
 
+    const feeResolved = await resolveFeeRateForMerchant(sb, id);
+
     return c.json({
       merchant,
       hours: hours || [],
@@ -455,6 +461,10 @@ export function registerMerchantAdminRoutes(app: Hono) {
       bankAccount,
       team: team || [],
       pendingInvites: invites || [],
+      platform_fee_rate: feeResolved.rate,
+      global_platform_fee_rate: feeResolved.globalRate ?? 0.05,
+      platform_fee_percent: feeRateToPercent(feeResolved.rate),
+      global_platform_fee_percent: feeRateToPercent(feeResolved.globalRate ?? 0.05),
     });
   });
 
@@ -648,7 +658,17 @@ export function registerMerchantAdminRoutes(app: Hono) {
     const body = await c.req.json().catch(() => ({}));
     const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
     if (body.is_accepting_orders != null) updates.is_accepting_orders = Boolean(body.is_accepting_orders);
-    if (body.commission_rate != null) updates.commission_rate = Number(body.commission_rate);
+    if (Object.prototype.hasOwnProperty.call(body, "commission_rate")) {
+      if (body.commission_rate === null) {
+        updates.commission_rate = null;
+      } else {
+        const rate = Number(body.commission_rate);
+        if (!Number.isFinite(rate) || rate < 0 || rate > 1) {
+          return c.json({ error: "commission_rate must be between 0 and 1" }, 400);
+        }
+        updates.commission_rate = rate;
+      }
+    }
     if (body.delivery_radius_km != null) updates.delivery_radius_km = Number(body.delivery_radius_km);
     if (body.admin_internal_notes != null) updates.admin_internal_notes = String(body.admin_internal_notes);
     if (body.capabilities != null && Array.isArray(body.capabilities)) {

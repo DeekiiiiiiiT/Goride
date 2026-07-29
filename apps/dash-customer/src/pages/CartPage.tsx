@@ -32,6 +32,7 @@ export default function CartPage({ onNavigate, session }: Props) {
   const [promoInput, setPromoInput] = useState(getCheckoutPreferences().appliedPromoCode ?? '');
   const [promoMessage, setPromoMessage] = useState('');
   const [appliedPromo, setAppliedPromo] = useState(getAppliedPromo());
+  const [platformFeeRate, setPlatformFeeRate] = useState(0.05);
 
   const editingCartItem = items.find((i) => i.id === editingCartItemId);
   const editingMenuItem = editingCartItem && merchantId
@@ -48,6 +49,28 @@ export default function CartPage({ onNavigate, session }: Props) {
     }
   }, [savedAddress?.instructions]);
 
+  useEffect(() => {
+    if (!merchantId) {
+      setPlatformFeeRate(0.05);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(`${API_ENDPOINTS.delivery}/merchants/${merchantId}/pricing`);
+        const data = (await res.json().catch(() => ({}))) as { platform_fee_rate?: number };
+        if (!cancelled && typeof data.platform_fee_rate === 'number') {
+          setPlatformFeeRate(data.platform_fee_rate);
+        }
+      } catch {
+        /* keep fallback */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [merchantId]);
+
   const merchantDeliveryFee = merchantId
     ? parseDeliveryFeeLabel(getRestaurantProfile(merchantId).deliveryFee)
     : 0;
@@ -56,6 +79,7 @@ export default function CartPage({ onNavigate, session }: Props) {
     appliedPromo,
     0,
     merchantDeliveryFee,
+    platformFeeRate,
   );
 
   const handleApplyPromo = async () => {

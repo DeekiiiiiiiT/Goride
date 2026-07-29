@@ -25,6 +25,10 @@ import {
 } from "./merchantStationRoutes.ts";
 import { registerMerchantVenueOpsRoutes } from "./merchantVenueOps.ts";
 import {
+  feeRateToPercent,
+  resolveFeeRateForMerchant,
+} from "./platformFeeRate.ts";
+import {
   inStoreStatusTransitions,
   registerMerchantRestaurantRoutes,
   roamStatusTransitions,
@@ -172,10 +176,33 @@ app.get("/merchants", async (c) => {
       .eq("is_available", true)
       .order("sort_order");
 
+    const feeResolved = await resolveFeeRateForMerchant(supabase, merchantId);
+
     return c.json({
       merchant,
       categories: categories || [],
       items: items || [],
+      platform_fee_rate: feeResolved.rate,
+    });
+  });
+
+  // Resolved platform fee for cart/checkout display (server remains authoritative on order create)
+  app.get("/merchants/:id/pricing", async (c) => {
+    const supabase = getServiceSupabase();
+    const { id } = c.req.param();
+    let merchantId: string | null = null;
+    const byId = await supabase.from("merchants").select("id").eq("id", id).maybeSingle();
+    if (byId.data) merchantId = String(byId.data.id);
+    else {
+      const bySlug = await supabase.from("merchants").select("id").eq("slug", id).maybeSingle();
+      if (bySlug.data) merchantId = String(bySlug.data.id);
+    }
+    if (!merchantId) return c.json({ error: "Merchant not found" }, 404);
+    const resolved = await resolveFeeRateForMerchant(supabase, merchantId);
+    return c.json({
+      merchant_id: merchantId,
+      platform_fee_rate: resolved.rate,
+      has_override: resolved.merchantOverride != null,
     });
   });
 
@@ -1571,8 +1598,8 @@ app.get("/merchant/earnings", async (c) => {
 
   const merchant = access.resolved.merchant;
   const merchantId = merchant.id as string;
-  // Model A: platform fee is 5% of subtotal (stored on orders) — not merchants.commission_rate
-  const platformFeePercent = 5;
+  const feeResolved = await resolveFeeRateForMerchant(getServiceSupabase(), merchantId);
+  const platformFeePercent = feeRateToPercent(feeResolved.rate);
 
   const sb = getServiceSupabase();
   const { data: orders, error: ordersError } = await sb
@@ -1703,8 +1730,8 @@ app.get("/merchant/earnings/payouts/:id", async (c) => {
   const merchant = access.resolved.merchant;
   const merchantId = merchant.id as string;
   const payoutId = c.req.param("id");
-  // Model A: platform fee is 5% (order platform_fee), not merchants.commission_rate
-  const platformFeePercent = 5;
+  const feeResolved = await resolveFeeRateForMerchant(getServiceSupabase(), merchantId);
+  const platformFeePercent = feeRateToPercent(feeResolved.rate);
 
   const paymentsSb = getPaymentsSupabase();
   const { data: payout, error } = await paymentsSb

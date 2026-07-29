@@ -157,6 +157,10 @@ export interface MerchantDetailResponse {
   bankAccount?: MerchantBankAccountDetail | null;
   team?: MerchantTeamMemberRow[];
   pendingInvites?: Array<Record<string, unknown>>;
+  platform_fee_rate?: number;
+  global_platform_fee_rate?: number;
+  platform_fee_percent?: number;
+  global_platform_fee_percent?: number;
 }
 
 export interface MerchantDocumentDetail {
@@ -339,7 +343,7 @@ export function patchMerchantOps(
   id: string,
   payload: {
     is_accepting_orders?: boolean;
-    commission_rate?: number;
+    commission_rate?: number | null;
     delivery_radius_km?: number;
     admin_internal_notes?: string;
     capabilities?: string[];

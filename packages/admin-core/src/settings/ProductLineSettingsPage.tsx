@@ -387,6 +387,35 @@ export function ProductLineSettingsPage({
           </div>
         </div>
 
+        {segment === 'dash' && (
+          <div className="mt-4">
+            <label className="block text-xs font-medium text-slate-700 dark:text-slate-400 mb-1.5">
+              Platform fee (%)
+            </label>
+            <input
+              type="number"
+              min={0}
+              max={100}
+              step={0.1}
+              value={
+                typeof (settings as ConsumerSegmentSettings).platformFeeRate === 'number'
+                  ? Math.round(((settings as ConsumerSegmentSettings).platformFeeRate as number) * 10000) / 100
+                  : 5
+              }
+              onChange={(e) => {
+                const pct = Number(e.target.value);
+                if (!Number.isFinite(pct)) return;
+                const clamped = Math.max(0, Math.min(100, pct));
+                updateField('platformFeeRate', Math.round(clamped * 100) / 10000);
+              }}
+              className="w-full max-w-xs px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+            />
+            <p className="text-[10px] text-slate-500 mt-1">
+              Default fee on new Dash orders (0–100%). Merchants can override this individually.
+            </p>
+          </div>
+        )}
+
         {/* Maintenance Message — only shown when maintenance mode is enabled */}
         {settings.maintenanceMode && (
           <div className="mt-4">

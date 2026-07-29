@@ -17185,6 +17185,13 @@ app.put("/make-server-37f42386/admin/platform-settings", async (c) => {
     const oldSettings = await kv.get(settingsKey);
 
     const settings = await c.req.json();
+    if (segment === "dash" && settings.platformFeeRate != null) {
+      const rate = Number(settings.platformFeeRate);
+      if (!Number.isFinite(rate) || rate < 0 || rate > 1) {
+        return c.json({ error: "platformFeeRate must be between 0 and 1" }, 400);
+      }
+      settings.platformFeeRate = rate;
+    }
     settings.updatedAt = new Date().toISOString();
     // Writes go to segment keys only — LEGACY_PLATFORM_SETTINGS_KEY is read-only (dual-read fallback).
     await kv.set(settingsKey, settings);
@@ -17197,7 +17204,7 @@ app.put("/make-server-37f42386/admin/platform-settings", async (c) => {
     if (oldSettings && typeof oldSettings === "object") {
       const changes: string[] = [];
       const fieldsToCheck = [
-        "platformName", "defaultCurrency", "fleetTimezone", "platformVersion", "maintenanceMode", "maintenanceMessage", "registrationMode", "requireApproval", "welcomeEmailMessage",
+        "platformName", "defaultCurrency", "fleetTimezone", "platformVersion", "maintenanceMode", "maintenanceMessage", "registrationMode", "requireApproval", "welcomeEmailMessage", "platformFeeRate",
       ];
       for (const field of fieldsToCheck) {
         const oldVal = (oldSettings as any)[field];

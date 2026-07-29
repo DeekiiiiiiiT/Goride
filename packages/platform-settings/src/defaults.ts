@@ -114,6 +114,7 @@ export function defaultConsumerSegmentSettings(
     welcomeEmailMessage: '',
     announcement: { ...DEFAULT_ANNOUNCEMENT },
     securityPolicies: { ...DEFAULT_SECURITY_POLICIES },
+    ...(segment === 'dash' ? { platformFeeRate: 0.05 } : {}),
   };
 }
 

@@ -43,6 +43,7 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const [showPharmacyNotice, setShowPharmacyNotice] = useState(false);
+  const [platformFeeRate, setPlatformFeeRate] = useState(0.05);
 
   const deliveryAddress = savedAddress
     ? `${savedAddress.line1}${savedAddress.line2 ? `, ${savedAddress.line2}` : ''}`
@@ -56,8 +57,8 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
     ? parseDeliveryFeeLabel(getRestaurantProfile(merchantId).deliveryFee)
     : 0;
   const totals = useMemo(
-    () => calculateOrderTotals(subtotal, appliedPromo, tip, merchantDeliveryFee),
-    [subtotal, appliedPromo, tip, merchantDeliveryFee],
+    () => calculateOrderTotals(subtotal, appliedPromo, tip, merchantDeliveryFee, platformFeeRate),
+    [subtotal, appliedPromo, tip, merchantDeliveryFee, platformFeeRate],
   );
   const paymentLabel = getPaymentLabel(getCheckoutPreferences().paymentMethodId);
 
@@ -66,6 +67,28 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
       onNavigate('cart');
     }
   }, [items.length, onNavigate]);
+
+  useEffect(() => {
+    if (!merchantId) {
+      setPlatformFeeRate(0.05);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(`${API_ENDPOINTS.delivery}/merchants/${merchantId}/pricing`);
+        const data = (await res.json().catch(() => ({}))) as { platform_fee_rate?: number };
+        if (!cancelled && typeof data.platform_fee_rate === 'number') {
+          setPlatformFeeRate(data.platform_fee_rate);
+        }
+      } catch {
+        /* keep fallback */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [merchantId]);
 
   useEffect(() => {
     const vertical = sessionStorage.getItem('roam_cart_vertical');

@@ -12,6 +12,10 @@ import {
   computePromoDiscount,
   resolveActivePromoByCode,
 } from "./customerDiscoveryRoutes.ts";
+import {
+  loadDashGlobalPlatformFeeRate,
+  resolveDashPlatformFeeRate,
+} from "./platformFeeRate.ts";
 
 const PlaceOrderBody = z.object({
   merchantId: z.string().min(1),
@@ -175,13 +179,18 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       taxRatePercent: 16.5,
       discount,
     });
-    const platformFee = Math.round(pricing.subtotal * 0.05 * 100) / 100;
-    // Do not trust client deliveryFee — load from merchant row (soft-launch fee engine)
+    // Soft-launch fee engine: merchant commission_rate override → global settings → 5%
     const { data: merchantRow } = await serviceSb
       .from("merchants")
-      .select("delivery_fee")
+      .select("delivery_fee, commission_rate")
       .eq("id", body.merchantId)
       .maybeSingle();
+    const globalRate = await loadDashGlobalPlatformFeeRate(serviceSb);
+    const merchantOverride = merchantRow?.commission_rate != null
+      ? Number(merchantRow.commission_rate)
+      : null;
+    const feeRate = resolveDashPlatformFeeRate(merchantOverride, globalRate);
+    const platformFee = Math.round(pricing.subtotal * feeRate * 100) / 100;
     const deliveryFee = Math.max(0, Number(merchantRow?.delivery_fee ?? 0));
     const tip = Math.max(0, Number(body.tip) || 0);
     const total = Math.round(
