@@ -478,6 +478,39 @@ export function listPayouts(accessToken: string, opts: { merchant_id?: string; s
   return deliveryFetch(accessToken, `/admin/finance/payouts?${sp}`);
 }
 
+export function createPayout(
+  accessToken: string,
+  payload: {
+    merchant_id: string;
+    amount: number;
+    fee?: number;
+    currency?: string;
+    period_start?: string;
+    period_end?: string;
+    order_count?: number;
+    bank_account_last4?: string;
+    notes?: string;
+  },
+) {
+  return deliveryFetch(accessToken, '/admin/finance/payouts', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function holdPayout(accessToken: string, payoutId: string, reason?: string) {
+  return deliveryFetch(accessToken, `/admin/finance/payouts/${payoutId}/hold`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export function releasePayout(accessToken: string, payoutId: string) {
+  return deliveryFetch(accessToken, `/admin/finance/payouts/${payoutId}/release`, {
+    method: 'POST',
+  });
+}
+
 export function listDisputes(accessToken: string, status?: string) {
   const sp = status ? `?status=${status}` : '';
   return deliveryFetch(accessToken, `/admin/finance/disputes${sp}`);

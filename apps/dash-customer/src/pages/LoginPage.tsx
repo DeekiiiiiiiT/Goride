@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { useForgotPassword, GOOGLE_OAUTH_EMAIL_ONLY_SCOPES } from '@roam/auth-client';
 import { toast } from 'sonner';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
-import { PhoneInput, toE164JamaicaPhone } from '@/components/forms/PhoneInput';
 import { ABOUT_LINKS } from '@/lib/aboutContent';
 import { saveProfile } from '@/lib/accountContent';
 import { supabase } from '@/lib/supabase';
@@ -58,7 +57,6 @@ export default function LoginPage({
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
   const [signupEmail, setSignupEmail] = useState('');
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -121,20 +119,15 @@ export default function LoginPage({
       return;
     }
 
-    if (isSignUp && !phone.trim()) {
-      toast.error('Please enter your phone number.');
-      return;
-    }
-
     setIsLoading(true);
     try {
       if (isSignUp) {
-        const e164Phone = toE164JamaicaPhone(phone);
-        const { error } = await supabase.auth.signUp({
+        // Soft launch: email auth only (Digicel/Flow SMS later)
+        const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: {
-            data: { name, phone: e164Phone },
+            data: { name },
             emailRedirectTo: `${window.location.origin}/`,
           },
         });
@@ -144,10 +137,15 @@ export default function LoginPage({
           firstName: firstName || name,
           lastName: rest.join(' ') || '',
           email,
-          phone: e164Phone,
+          phone: '',
         });
-        toast.success('Account created! Check your email to verify.');
-        onSignUpSuccess?.();
+        if (data.session) {
+          toast.success('Account created!');
+          onSignUpSuccess?.();
+        } else {
+          toast.success('Account created! Check your email to verify, then sign in.');
+          setIsSignUp(false);
+        }
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
@@ -215,12 +213,6 @@ export default function LoginPage({
                   required
                   className="w-full bg-surface-container-high text-on-surface text-base rounded-lg px-4 py-4 border-2 border-transparent focus:bg-surface-container-lowest focus:border-primary focus:outline-none transition-all placeholder:text-on-surface-variant/60"
                 />
-                <PhoneInput value={phone} onChange={setPhone} required />
-                <div className="flex items-center gap-4">
-                  <div className="flex-1 h-px bg-surface-container-highest" />
-                  <span className="text-sm text-on-surface-variant">or</span>
-                  <div className="flex-1 h-px bg-surface-container-highest" />
-                </div>
                 <input
                   type="email"
                   value={signupEmail}
@@ -231,14 +223,13 @@ export default function LoginPage({
                 />
               </>
             )}
-
             {!isSignUp && (
             <input
               id="identifier"
-              type="text"
+              type="email"
               value={identifier}
               onChange={(e) => setIdentifier(e.target.value)}
-              placeholder="Email or phone number"
+              placeholder="Email address"
               required
               className="w-full bg-surface-container-high text-on-surface text-base rounded-lg px-4 py-4 border-2 border-transparent focus:bg-surface-container-lowest focus:border-primary focus:outline-none transition-all placeholder:text-on-surface-variant/60"
             />

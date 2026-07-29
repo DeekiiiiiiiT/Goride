@@ -13,6 +13,7 @@ interface PreparingOrderDetailProps {
   avgPrepTimeMins: number;
   onBack: () => void;
   onMarkReady: () => void;
+  onNeedMoreTime: () => void;
   onCancel: () => void;
   isSubmitting?: boolean;
 }
@@ -22,6 +23,7 @@ export default function PreparingOrderDetail({
   avgPrepTimeMins,
   onBack,
   onMarkReady,
+  onNeedMoreTime,
   onCancel,
   isSubmitting = false,
 }: PreparingOrderDetailProps) {
@@ -216,7 +218,9 @@ export default function PreparingOrderDetail({
           <div className="flex items-center justify-center gap-6">
             <button
               type="button"
-              className="flex min-h-[48px] items-center gap-1 px-2 text-label-md font-semibold text-on-surface-variant transition-all hover:text-primary active:scale-95"
+              disabled={isSubmitting}
+              onClick={onNeedMoreTime}
+              className="flex min-h-[48px] items-center gap-1 px-2 text-label-md font-semibold text-on-surface-variant transition-all hover:text-primary active:scale-95 disabled:opacity-50"
             >
               <MaterialIcon name="hourglass_bottom" size={16} />
               Need more time

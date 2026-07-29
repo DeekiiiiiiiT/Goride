@@ -213,6 +213,7 @@ export type EnterpriseInventoryView =
   | 'recipes'
   | 'variance'
   | 'locations'
-  | 'ledger';
+  | 'ledger'
+  | 'uom';
 
 export type InventoryMode = 'legacy' | 'enterprise';

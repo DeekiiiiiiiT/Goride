@@ -33,6 +33,12 @@ import { registerMerchantInventoryRoutes } from "./merchantInventoryRoutes.ts";
 import { registerCustomerOrderRoutes } from "./customerOrderRoutes.ts";
 import { registerCustomerAccountRoutes } from "./customerAccountRoutes.ts";
 import { registerCustomerDiscoveryRoutes } from "./customerDiscoveryRoutes.ts";
+import {
+  registerCourierConsumerRoutes,
+  requireActiveCourier,
+  COURIER_TRANSITIONS,
+  dispatchOffersForOrder,
+} from "./courierConsumerRoutes.ts";
 import { notifyCustomerOrderStatus } from "../_shared/dashOrderSms.ts";
 import {
   aggregateAnalyticsByDay,
@@ -719,9 +725,64 @@ app.put("/orders/:id/status", async (c) => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return c.json({ error: "Unauthorized" }, 401);
 
+  const serviceSb = getServiceSupabase();
+
   if (actorType === "merchant") {
     const access = await requireResolvedMerchantWithPermission(user.id, user.email, "orders");
     if (!access.ok) return c.json({ error: access.message }, access.status);
+  }
+
+  if (actorType === "courier") {
+    const { data: orderRow, error: orderLookupError } = await serviceSb
+      .from("orders")
+      .select("status, channel, courier_id")
+      .eq("id", id)
+      .single();
+    if (orderLookupError) return c.json({ error: orderLookupError.message }, 404);
+    if (String(orderRow.courier_id) !== user.id) {
+      return c.json({ error: "Forbidden" }, 403);
+    }
+    const courierAllowed = COURIER_TRANSITIONS[String(orderRow.status)] || [];
+    if (!courierAllowed.includes(status)) {
+      return c.json({ error: `Invalid status transition from ${orderRow.status} to ${status}` }, 400);
+    }
+
+    const updateData: Record<string, unknown> = { status };
+    if (status === "picked_up") updateData.picked_up_at = new Date().toISOString();
+    if (status === "delivered") updateData.delivered_at = new Date().toISOString();
+    if (status === "cancelled") {
+      updateData.cancelled_at = new Date().toISOString();
+      updateData.cancelled_by = "courier";
+      updateData.cancellation_reason = notes;
+    }
+
+    const { data: updatedOrder, error: updateError } = await serviceSb
+      .from("orders")
+      .update(updateData)
+      .eq("id", id)
+      .eq("courier_id", user.id)
+      .select()
+      .single();
+
+    if (updateError) return c.json({ error: updateError.message }, 500);
+
+    await serviceSb.from("order_events").insert({
+      order_id: id,
+      status,
+      actor_type: "courier",
+      actor_id: user.id,
+      notes,
+    });
+
+    if (status === "delivered" || status === "cancelled") {
+      await serviceSb
+        .from("courier_availability")
+        .update({ active_order_id: null })
+        .eq("driver_id", user.id);
+    }
+
+    await notifyCustomerOrderStatus(serviceSb, id, status);
+    return c.json({ order: updatedOrder });
   }
   
   // Get current order
@@ -743,6 +804,7 @@ app.put("/orders/:id/status", async (c) => {
   if (status === "accepted") updateData.accepted_at = new Date().toISOString();
   if (status === "preparing") updateData.preparing_at = new Date().toISOString();
   if (status === "ready") updateData.ready_at = new Date().toISOString();
+  if (status === "assigned") updateData.assigned_at = new Date().toISOString();
   if (status === "picked_up") updateData.picked_up_at = new Date().toISOString();
   if (status === "delivered") updateData.delivered_at = new Date().toISOString();
   if (status === "cancelled") {
@@ -763,12 +825,16 @@ app.put("/orders/:id/status", async (c) => {
   
   if (updateError) return c.json({ error: updateError.message }, 500);
 
+  // Soft-launch: when merchant marks ready, fan out courier offers
+  if (status === "ready" && actorType === "merchant") {
+    await dispatchOffersForOrder(serviceSb, id);
+  }
+
   const shiftHeader = c.req.header("X-Staff-Shift-Token");
   let teamMemberId: string | null = null;
   if (shiftHeader && actorType === "merchant") {
     const access = await requireResolvedMerchantWithPermission(user.id, user.email, "orders");
     if (access.ok) {
-      const serviceSb = getServiceSupabase();
       const shift = await resolveShiftTokenFromRequest(
         shiftHeader,
         access.resolved.merchant.id as string,
@@ -942,6 +1008,12 @@ app.get("/courier/available-orders", async (c) => {
   if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
   
   const supabase = getSupabase(authHeader);
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+  const serviceSb = getServiceSupabase();
+  const gate = await requireActiveCourier(serviceSb, user.id);
+  if (!gate.ok) return c.json({ error: gate.error }, gate.status);
   
   const { data: orders, error } = await supabase
     .from("orders")
@@ -957,7 +1029,7 @@ app.get("/courier/available-orders", async (c) => {
   return c.json({ orders: orders || [] });
 });
 
-// Courier accepts order
+// Courier accepts order (pull claim → assigned, not picked_up)
 app.post("/orders/:id/accept-delivery", async (c) => {
   const authHeader = c.req.header("Authorization");
   if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
@@ -967,30 +1039,44 @@ app.post("/orders/:id/accept-delivery", async (c) => {
   if (!user) return c.json({ error: "Unauthorized" }, 401);
   
   const { id } = c.req.param();
+  const serviceSb = getServiceSupabase();
+
+  const gate = await requireActiveCourier(serviceSb, user.id);
+  if (!gate.ok) return c.json({ error: gate.error }, gate.status);
   
-  // Assign courier to order
-  const { data: order, error } = await supabase
+  // Atomic claim via service role + status predicates (race-safe)
+  const { data: order, error } = await serviceSb
     .from("orders")
     .update({
       courier_id: user.id,
-      status: "picked_up",
-      picked_up_at: new Date().toISOString(),
+      status: "assigned",
+      assigned_at: new Date().toISOString(),
     })
     .eq("id", id)
     .eq("status", "ready")
     .is("courier_id", null)
     .select()
-    .single();
+    .maybeSingle();
   
-  if (error) return c.json({ error: "Order not available" }, 400);
+  if (error || !order) return c.json({ error: "Order not available" }, 400);
   
-  // Log event
-  await supabase.from("order_events").insert({
+  await serviceSb.from("order_events").insert({
     order_id: id,
-    status: "picked_up",
+    status: "assigned",
     actor_type: "courier",
     actor_id: user.id,
   });
+
+  await serviceSb
+    .from("courier_offers")
+    .update({ status: "superseded" })
+    .eq("order_id", id)
+    .eq("status", "pending");
+
+  await serviceSb
+    .from("courier_availability")
+    .update({ active_order_id: id, is_online: true })
+    .eq("driver_id", user.id);
   
   return c.json({ order });
 });
@@ -1931,6 +2017,7 @@ import { registerFinanceAdminRoutes } from "./admin/financeRoutes.ts";
 registerCustomerOrderRoutes(app, { getSupabase, getServiceSupabase });
 registerCustomerAccountRoutes(app, { getSupabase, getServiceSupabase });
 registerCustomerDiscoveryRoutes(app, { getServiceSupabase });
+registerCourierConsumerRoutes(app, { getSupabase, getServiceSupabase });
 registerMerchantApplicationRoutes(app);
 registerMerchantAssetsRoutes(app);
 registerMerchantTeamRoutes(app, { getSupabase, getServiceSupabase });

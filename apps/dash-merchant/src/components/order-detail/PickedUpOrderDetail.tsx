@@ -16,6 +16,14 @@ export default function PickedUpOrderDetail({ order, onBack, onClose }: PickedUp
       ? getDurationMinutes(prepStart, order.picked_up_at)
       : order.estimated_prep_time_mins ?? null;
 
+  const courierName = order.courier?.display_name?.trim() || 'Courier';
+  const courierPhone = order.courier?.phone?.trim() || null;
+
+  const callCourier = () => {
+    if (!courierPhone) return;
+    window.location.href = `tel:${courierPhone}`;
+  };
+
   return (
     <div className="min-h-dvh bg-background pb-inset-xl text-on-background antialiased">
       <header className="sticky top-0 z-50 flex h-16 items-center justify-between border-b border-outline-variant bg-surface px-margin-mobile shadow-sm">
@@ -32,12 +40,6 @@ export default function PickedUpOrderDetail({ order, onBack, onClose }: PickedUp
             <span className="text-headline-md font-bold text-primary">Roam Dash Merchant</span>
           </div>
         </div>
-        <button
-          type="button"
-          className="rounded-full px-3 py-2 text-label-md font-semibold text-primary transition-colors hover:bg-surface-container-low active:scale-95"
-        >
-          Open
-        </button>
       </header>
 
       <main className="mx-auto flex max-w-lg flex-col gap-inset-sm px-margin-mobile py-margin-mobile">
@@ -78,15 +80,22 @@ export default function PickedUpOrderDetail({ order, onBack, onClose }: PickedUp
               <MaterialIcon name="person" className="text-on-surface-variant" />
             </div>
             <div className="flex flex-1 flex-col">
-              <span className="text-headline-md font-semibold text-on-surface">Marcus</span>
+              <span className="text-headline-md font-semibold text-on-surface">{courierName}</span>
               <div className="mt-0.5 flex items-center gap-1">
                 <span className="h-2 w-2 animate-subtle-pulse rounded-full bg-primary-container" />
-                <span className="text-body-sm text-on-surface-variant">En route to customer</span>
+                <span className="text-body-sm text-on-surface-variant">
+                  {order.courier?.vehicle_type
+                    ? `${order.courier.vehicle_type} · En route to customer`
+                    : 'En route to customer'}
+                </span>
               </div>
             </div>
             <button
               type="button"
-              className="flex h-10 w-10 items-center justify-center rounded-full border border-outline-variant text-primary transition-colors hover:bg-surface-container"
+              disabled={!courierPhone}
+              onClick={callCourier}
+              className="flex h-10 w-10 items-center justify-center rounded-full border border-outline-variant text-primary transition-colors hover:bg-surface-container disabled:opacity-40"
+              aria-label="Call courier"
             >
               <MaterialIcon name="call" />
             </button>

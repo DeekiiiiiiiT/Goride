@@ -13,10 +13,12 @@ import KitchenTicketCard, {
 } from '../../components/staff-ops/kitchen/KitchenTicketCard';
 import { CAPABILITY_IN_STORE, hasCapability } from '../../lib/merchant-capabilities';
 import { useRestaurantSettings } from '../../hooks/useRestaurantSettings';
+import { usePrepStations } from '../../hooks/usePrepStations';
 import {
   barQueueOrders,
-  buildBarItemLookup,
+  buildItemPrepStationLookup,
   filterBarOrderItems,
+  resolveBarPrepStationIds,
 } from '../../lib/staff-ops-order-filters';
 import type { MerchantOrdersChannel } from '../../lib/merchant-orders-query';
 import { Order } from '../../types/order';
@@ -32,10 +34,14 @@ export default function BarQueuePage({ merchant, staffName }: BarQueuePageProps)
   const showChannelBadge = hasCapability(merchant, CAPABILITY_IN_STORE);
   const restaurantSettings = useRestaurantSettings(merchant);
   const menuQuery = useMerchantMenu(merchant.id);
-  const barLookup = useMemo(
-    () =>
-      buildBarItemLookup(menuQuery.data?.categories ?? [], menuQuery.data?.items ?? []),
-    [menuQuery.data?.categories, menuQuery.data?.items],
+  const { prepStations } = usePrepStations(merchant.id);
+  const itemPrepLookup = useMemo(
+    () => buildItemPrepStationLookup(menuQuery.data?.items ?? []),
+    [menuQuery.data?.items],
+  );
+  const barStationIds = useMemo(
+    () => resolveBarPrepStationIds(prepStations),
+    [prepStations],
   );
   const showInStore =
     showChannelBadge && Boolean(restaurantSettings.data?.showInStoreOnKitchen);
@@ -49,14 +55,17 @@ export default function BarQueuePage({ merchant, staffName }: BarQueuePageProps)
     channel: ordersChannel,
   });
 
-  const queue = useMemo(() => barQueueOrders(orders, barLookup), [orders, barLookup]);
+  const queue = useMemo(
+    () => barQueueOrders(orders, barStationIds, itemPrepLookup),
+    [orders, barStationIds, itemPrepLookup],
+  );
   const selectedOrderRaw = selectedOrderId
     ? queue.find((order) => order.id === selectedOrderId) ?? null
     : queue[0] ?? null;
   const selectedOrder: Order | null = selectedOrderRaw
     ? {
         ...selectedOrderRaw,
-        items: filterBarOrderItems(selectedOrderRaw.items, barLookup),
+        items: filterBarOrderItems(selectedOrderRaw.items, barStationIds, itemPrepLookup),
       }
     : null;
 
@@ -93,7 +102,7 @@ export default function BarQueuePage({ merchant, staffName }: BarQueuePageProps)
               key={order.id}
               order={{
                 ...order,
-                items: filterBarOrderItems(order.items, barLookup),
+                items: filterBarOrderItems(order.items, barStationIds, itemPrepLookup),
               }}
               selected={selectedOrderRaw?.id === order.id}
               showChannelBadge={showChannelBadge && Boolean(order.channel)}

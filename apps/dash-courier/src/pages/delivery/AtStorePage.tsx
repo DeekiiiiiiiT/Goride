@@ -13,7 +13,7 @@ const STORE_MAP =
 type AtStorePageProps = {
   delivery: ActiveDelivery;
   onClose: () => void;
-  onConfirmPickup: () => void;
+  onConfirmPickup: (pickupPhotoUrl?: string) => void;
   onRequestUnassign: () => void;
   onReportIssue: () => void;
 };
@@ -54,6 +54,8 @@ export function AtStorePage({
   });
   const [confirmAll, setConfirmAll] = useState(false);
   const [waitSheetOpen, setWaitSheetOpen] = useState(false);
+  const [pickupPhotoUrl, setPickupPhotoUrl] = useState<string | undefined>();
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const allItemIds = delivery.checklist.map((item) => item.id);
@@ -185,14 +187,37 @@ export function AtStorePage({
         </section>
 
         <section>
-          <input ref={fileInputRef} type="file" accept="image/*" capture="environment" className="hidden" />
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              setUploadingPhoto(true);
+              void import('@/lib/courierFileUpload').then(async ({ uploadAndGetProofUrl }) => {
+                const url = await uploadAndGetProofUrl(file, 'proofs');
+                setUploadingPhoto(false);
+                if (url) setPickupPhotoUrl(url);
+              });
+            }}
+          />
           <button
             type="button"
+            disabled={uploadingPhoto}
             onClick={() => fileInputRef.current?.click()}
             className="flex w-full flex-col items-center justify-center rounded-xl border-2 border-dashed border-outline-variant py-6 text-on-surface-variant transition-colors hover:bg-surface-container active:scale-[0.98]"
           >
             <MaterialIcon name="add_a_photo" className="mb-2 text-4xl" />
-            <span className="text-label-lg font-semibold">Add pickup photo (optional)</span>
+            <span className="text-label-lg font-semibold">
+              {uploadingPhoto
+                ? 'Uploading…'
+                : pickupPhotoUrl
+                  ? 'Pickup photo attached'
+                  : 'Add pickup photo (optional)'}
+            </span>
           </button>
         </section>
       </main>
@@ -200,7 +225,11 @@ export function AtStorePage({
       <footer className="fixed bottom-0 z-50 w-full border-t border-outline-variant bg-surface px-4 pb-8 pt-4">
         <div className="mx-auto max-w-lg">
           {canConfirm ? (
-            <SlideToConfirm label="Confirm pickup" onComplete={onConfirmPickup} variant="stacked" />
+            <SlideToConfirm
+              label="Confirm pickup"
+              onComplete={() => onConfirmPickup(pickupPhotoUrl)}
+              variant="stacked"
+            />
           ) : (
             <SlideToConfirm label="Confirm pickup" onComplete={() => {}} variant="stacked" disabled />
           )}

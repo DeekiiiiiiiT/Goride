@@ -41,6 +41,12 @@ export interface Order {
     name: string;
     phone: string;
   };
+  courier?: {
+    display_name: string | null;
+    phone: string | null;
+    vehicle_type: string | null;
+    rating: number | null;
+  } | null;
   delivery_address?: string;
   delivery_instructions?: string;
   payment_method: string;

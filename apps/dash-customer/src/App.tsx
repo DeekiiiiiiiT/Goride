@@ -55,6 +55,7 @@ import {
   DASH_CUSTOMER_OAUTH_INTENT_KEY,
   DASH_CUSTOMER_OAUTH_INTENT_LOGIN,
   DASH_CUSTOMER_OAUTH_INTENT_SIGNUP,
+  ENABLE_PHONE_AUTH,
 } from './lib/dashCustomerAuth';
 
 type StackPage =
@@ -213,7 +214,12 @@ function DashCustomerShell() {
       }
 
       if (intent === DASH_CUSTOMER_OAUTH_INTENT_SIGNUP) {
-        setPhase('verify-phone');
+        // Soft launch: email/Google only (SMS later when Digicel/Flow is live)
+        if (ENABLE_PHONE_AUTH) {
+          setPhase('verify-phone');
+        } else {
+          goToAddressSetup();
+        }
         return true;
       }
 
@@ -333,8 +339,12 @@ function DashCustomerShell() {
   }, []);
 
   const handleSignUpSuccess = useCallback(() => {
-    setPhase('verify-phone');
-  }, []);
+    if (ENABLE_PHONE_AUTH) {
+      setPhase('verify-phone');
+      return;
+    }
+    goToAddressSetup();
+  }, [goToAddressSetup]);
 
   const handleSignInSuccess = useCallback(() => {
     goToAddressSetup();
@@ -426,7 +436,7 @@ function DashCustomerShell() {
     );
   }
 
-  if (phase === 'verify-phone') {
+  if (phase === 'verify-phone' && ENABLE_PHONE_AUTH) {
     return (
       <VerifyPhonePage
         onBack={() => setPhase('login')}
@@ -448,7 +458,7 @@ function DashCustomerShell() {
   if (phase === 'delivery-address') {
     return (
       <DeliveryAddressPage
-        onBack={() => setPhase(session ? 'app' : 'verify-phone')}
+        onBack={() => setPhase(session ? 'app' : 'login')}
         onOutOfZone={handleOutOfZoneFromOnboarding}
         onConfirm={(address) => {
           setPendingAddress(address);

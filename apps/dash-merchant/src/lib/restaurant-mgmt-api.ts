@@ -106,11 +106,16 @@ export async function createPosOrder(input: CreatePosOrderInput) {
   });
 }
 
+export interface PosPayResult {
+  order: Record<string, unknown>;
+  printJobCreated: boolean;
+}
+
 export async function payPosOrder(
   orderId: string,
   paymentMethod: PosPaymentMethod,
   cashierMemberId?: string | null,
-) {
+): Promise<PosPayResult> {
   return deliveryFetch(`/merchant/pos/orders/${orderId}/pay`, {
     method: 'POST',
     body: JSON.stringify({ paymentMethod, cashierMemberId }),
@@ -121,10 +126,21 @@ export interface PosPaymentIntentResult {
   clientSecret: string | null;
   mockMode: boolean;
   orderId: string;
+  message?: string;
 }
 
 export async function createPosPaymentIntent(orderId: string): Promise<PosPaymentIntentResult> {
   return deliveryFetch(`/merchant/pos/orders/${orderId}/payment-intent`, { method: 'POST' });
+}
+
+export interface PosConnectionTokenResult {
+  secret: string | null;
+  mockMode: boolean;
+  message?: string;
+}
+
+export async function fetchPosConnectionToken(): Promise<PosConnectionTokenResult> {
+  return deliveryFetch('/merchant/pos/connection-token', { method: 'POST' });
 }
 
 export async function fetchPrintJobs(): Promise<PrintJobFixture[]> {

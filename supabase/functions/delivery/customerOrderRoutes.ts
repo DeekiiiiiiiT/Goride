@@ -273,7 +273,31 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       .eq("order_id", id)
       .order("created_at");
 
-    return c.json({ order, events: events || [] });
+    // Merchant/customer-safe courier slice (service-role; RLS blocks direct client reads)
+    let courier: {
+      display_name: string | null;
+      phone: string | null;
+      vehicle_type: string | null;
+      rating: number | null;
+    } | null = null;
+    const courierId = (order as { courier_id?: string | null }).courier_id;
+    if (courierId) {
+      const { data: cp } = await serviceSb
+        .from("courier_profiles")
+        .select("display_name, phone, vehicle_type, rating")
+        .eq("user_id", courierId)
+        .maybeSingle();
+      if (cp) {
+        courier = {
+          display_name: (cp.display_name as string | null) ?? null,
+          phone: (cp.phone as string | null) ?? null,
+          vehicle_type: (cp.vehicle_type as string | null) ?? null,
+          rating: cp.rating != null ? Number(cp.rating) : null,
+        };
+      }
+    }
+
+    return c.json({ order: { ...order, courier }, events: events || [] });
   });
 
   // Customer order history

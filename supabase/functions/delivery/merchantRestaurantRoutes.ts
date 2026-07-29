@@ -223,6 +223,7 @@ export function registerMerchantRestaurantRoutes(app: {
       cashier_member_id: body.cashierMemberId ?? null,
     });
 
+    let printJobCreated = false;
     if (body.markPaid) {
       try {
         await processOrderInventoryDepletion(
@@ -239,7 +240,7 @@ export function registerMerchantRestaurantRoutes(app: {
       }
 
       if (merchant.pos_printer_id) {
-        await sb.from("print_jobs").insert({
+        const { error: printError } = await sb.from("print_jobs").insert({
           merchant_id: merchantId,
           order_id: order.id,
           job_type: "customer_receipt",
@@ -247,10 +248,46 @@ export function registerMerchantRestaurantRoutes(app: {
           status: "queued",
           printer_id: merchant.pos_printer_id,
         });
+        printJobCreated = !printError;
       }
     }
 
-    return c.json({ order });
+    return c.json({ order, printJobCreated });
+  });
+
+  app.post("/merchant/pos/connection-token", async (c) => {
+    const resolved = await resolveOwnerAccess(c);
+    if (!resolved.ok) return c.json({ error: resolved.message }, resolved.status);
+    if (!hasInStoreCapability(resolved.access.merchant)) {
+      return c.json({ error: "Restaurant management not enabled" }, 403);
+    }
+
+    const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
+    if (!stripeKey) {
+      return c.json({
+        secret: null,
+        mockMode: true,
+        message: "Stripe not configured — Terminal connection token unavailable",
+      });
+    }
+
+    try {
+      const tokenRes = await fetch("https://api.stripe.com/v1/terminal/connection_tokens", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${stripeKey}`,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: "",
+      });
+      const token = await tokenRes.json();
+      if (!tokenRes.ok) {
+        return c.json({ error: token.error?.message ?? "Connection token failed" }, 502);
+      }
+      return c.json({ secret: token.secret, mockMode: false });
+    } catch (error) {
+      return c.json({ error: String(error) }, 500);
+    }
   });
 
   app.post("/merchant/pos/orders/:id/payment-intent", async (c) => {
@@ -336,6 +373,7 @@ export function registerMerchantRestaurantRoutes(app: {
     const sb = getServiceDb();
     const merchant = resolved.access.merchant;
     const merchantId = String(merchant.id);
+    const paymentMethod = body.paymentMethod ?? "card";
 
     const { data: order, error: fetchError } = await sb
       .from("orders")
@@ -347,12 +385,34 @@ export function registerMerchantRestaurantRoutes(app: {
 
     if (fetchError) return c.json({ error: fetchError.message }, 404);
 
+    // Card: verify Stripe PI succeeded when Stripe is configured and a PI exists
+    if (paymentMethod === "card") {
+      const { data: fulfillment } = await sb
+        .from("order_fulfillment")
+        .select("payment_intent_id")
+        .eq("order_id", id)
+        .maybeSingle();
+      const paymentIntentId = (fulfillment as { payment_intent_id?: string } | null)?.payment_intent_id;
+      const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
+      if (stripeKey && paymentIntentId) {
+        const piRes = await fetch(`https://api.stripe.com/v1/payment_intents/${paymentIntentId}`, {
+          headers: { Authorization: `Bearer ${stripeKey}` },
+        });
+        const pi = await piRes.json();
+        if (!piRes.ok || pi.status !== "succeeded") {
+          return c.json({
+            error: pi.error?.message ?? `Payment not completed (status: ${pi.status ?? "unknown"})`,
+          }, 402);
+        }
+      }
+    }
+
     const { data: updated, error } = await sb
       .from("orders")
       .update({
         status: "paid",
         payment_status: "paid",
-        payment_method: body.paymentMethod ?? "card",
+        payment_method: paymentMethod,
       })
       .eq("id", id)
       .select()
@@ -372,8 +432,9 @@ export function registerMerchantRestaurantRoutes(app: {
       return c.json({ error: String(stockError) }, 409);
     }
 
+    let printJobCreated = false;
     if (merchant.pos_printer_id) {
-      await sb.from("print_jobs").insert({
+      const { error: printError } = await sb.from("print_jobs").insert({
         merchant_id: merchantId,
         order_id: id,
         job_type: "customer_receipt",
@@ -381,9 +442,10 @@ export function registerMerchantRestaurantRoutes(app: {
         status: "queued",
         printer_id: merchant.pos_printer_id,
       });
+      printJobCreated = !printError;
     }
 
-    return c.json({ order: updated });
+    return c.json({ order: updated, printJobCreated });
   });
 
   app.get("/merchant/print-jobs", async (c) => {
@@ -494,9 +556,10 @@ export function roamStatusTransitions(): Record<string, string[]> {
     placed: ["accepted", "cancelled"],
     accepted: ["preparing", "cancelled"],
     preparing: ["ready"],
-    ready: ["picked_up", "cancelled"],
-    picked_up: ["in_transit"],
-    in_transit: ["delivered"],
+    ready: ["assigned", "picked_up", "cancelled"],
+    assigned: ["picked_up", "cancelled"],
+    picked_up: ["in_transit", "cancelled"],
+    in_transit: ["delivered", "cancelled"],
     delivered: ["completed"],
     completed: [],
     cancelled: [],

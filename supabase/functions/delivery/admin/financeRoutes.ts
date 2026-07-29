@@ -46,6 +46,35 @@ export function registerFinanceAdminRoutes(app: Hono) {
     return c.json({ payout: data });
   });
 
+  admin.post("/payouts", async (c) => {
+    const admin = c.get("adminUser") as ProductAdminUser;
+    const denied = requireDashWrite(admin);
+    if (denied) return denied;
+    const body = await c.req.json().catch(() => ({}));
+    const merchantId = body.merchant_id as string;
+    const amountNum = Number(body.amount);
+    const feeNum = Number(body.fee ?? 0) || 0;
+    if (!merchantId || Number.isNaN(amountNum) || amountNum <= 0) {
+      return c.json({ error: "merchant_id and positive amount required" }, 400);
+    }
+    const pdb = getPaymentsDb();
+    const { data, error } = await pdb.from("merchant_payouts").insert({
+      merchant_id: merchantId,
+      amount: amountNum,
+      fee: feeNum,
+      net_amount: amountNum - feeNum,
+      currency: body.currency ?? "JMD",
+      status: "pending",
+      period_start: body.period_start ?? null,
+      period_end: body.period_end ?? null,
+      order_count: Number(body.order_count ?? 0) || 0,
+      bank_account_last4: body.bank_account_last4 ?? null,
+      notes: body.notes ?? body.reference ?? null,
+    }).select().single();
+    if (error) return c.json({ error: error.message }, 500);
+    return c.json({ payout: data }, 201);
+  });
+
   admin.post("/payouts/:id/hold", async (c) => {
     const admin = c.get("adminUser") as ProductAdminUser;
     const denied = requireDashWrite(admin);

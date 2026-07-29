@@ -738,32 +738,52 @@ app.post("/payouts/merchant", async (c) => {
   if (admin instanceof Response) return admin;
 
   const body = await c.req.json();
-  const { merchantId, amount, currency = "JMD", reference } = body;
+  const {
+    merchantId,
+    amount,
+    currency = "JMD",
+    reference,
+    fee = 0,
+    periodStart,
+    periodEnd,
+    orderCount = 0,
+    bankAccountLast4,
+  } = body;
 
-  if (!merchantId || !amount) {
+  if (!merchantId || amount == null) {
     return c.json({ error: "merchantId and amount required" }, 400);
   }
 
-  const serviceSupabase = getServiceSupabase();
+  const amountNum = Number(amount);
+  const feeNum = Number(fee) || 0;
+  if (Number.isNaN(amountNum) || amountNum <= 0) {
+    return c.json({ error: "amount must be a positive number" }, 400);
+  }
 
-  // Create payout record
+  const serviceSupabase = getServiceSupabase();
+  const netAmount = amountNum - feeNum;
+
   const { data: payout, error } = await serviceSupabase
     .schema("payments")
-    .from("payouts")
+    .from("merchant_payouts")
     .insert({
-      recipient_type: "merchant",
-      recipient_id: merchantId,
-      amount,
+      merchant_id: merchantId,
+      amount: amountNum,
+      fee: feeNum,
+      net_amount: netAmount,
       currency,
       status: "pending",
-      reference,
+      period_start: periodStart ?? null,
+      period_end: periodEnd ?? null,
+      order_count: orderCount,
+      bank_account_last4: bankAccountLast4 ?? null,
+      notes: reference ?? null,
     })
     .select()
     .single();
 
   if (error) return c.json({ error: error.message }, 500);
 
-  // Dual-write to unified ledger
   if (payout?.id) {
     try {
       const { dualWriteDashPayment } = await import("../_shared/unifiedLedger/dualWriteDash.ts");
@@ -771,7 +791,7 @@ app.post("/payouts/merchant", async (c) => {
         transactionId: `payout:${payout.id}`,
         orderId: reference || `payout-${payout.id}`,
         merchantId: String(merchantId),
-        amount,
+        amount: amountNum,
         currency,
         kind: "merchant_payout",
       });
@@ -792,32 +812,45 @@ app.post("/payouts/courier", async (c) => {
   if (admin instanceof Response) return admin;
 
   const body = await c.req.json();
-  const { courierId, amount, currency = "JMD", reference } = body;
+  const {
+    courierId,
+    amount,
+    currency = "JMD",
+    reference,
+    periodStart,
+    periodEnd,
+    deliveryCount = 0,
+  } = body;
 
-  if (!courierId || !amount) {
+  if (!courierId || amount == null) {
     return c.json({ error: "courierId and amount required" }, 400);
+  }
+
+  const amountNum = Number(amount);
+  if (Number.isNaN(amountNum) || amountNum <= 0) {
+    return c.json({ error: "amount must be a positive number" }, 400);
   }
 
   const serviceSupabase = getServiceSupabase();
 
-  // Create payout record
   const { data: payout, error } = await serviceSupabase
     .schema("payments")
-    .from("payouts")
+    .from("courier_payouts")
     .insert({
-      recipient_type: "courier",
-      recipient_id: courierId,
-      amount,
+      courier_id: courierId,
+      amount: amountNum,
       currency,
       status: "pending",
-      reference,
+      period_start: periodStart ?? null,
+      period_end: periodEnd ?? null,
+      delivery_count: deliveryCount,
+      notes: reference ?? null,
     })
     .select()
     .single();
 
   if (error) return c.json({ error: error.message }, 500);
 
-  // Dual-write to unified ledger
   if (payout?.id) {
     try {
       const { dualWriteDashPayment } = await import("../_shared/unifiedLedger/dualWriteDash.ts");
@@ -825,7 +858,7 @@ app.post("/payouts/courier", async (c) => {
         transactionId: `payout:${payout.id}`,
         orderId: reference || `payout-${payout.id}`,
         courierId: String(courierId),
-        amount,
+        amount: amountNum,
         currency,
         kind: "courier_payout",
       });

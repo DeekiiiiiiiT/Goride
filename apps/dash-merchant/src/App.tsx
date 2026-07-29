@@ -51,6 +51,7 @@ import StoreTabletApp from './components/store-tablet/StoreTabletApp';
 import { isTabletEntryPath, captureTabletReturnUrl, clearTabletReturnUrl } from './lib/storeTabletUrl';
 import { resetPartnerScroll } from './lib/reset-partner-scroll';
 import QueryErrorState from './components/QueryErrorState';
+import { useNetworkStatus } from './hooks/useNetworkStatus';
 
 const SPLASH_MIN_MS = 1800;
 const AUTH_READY_MAX_MS = 6_000;
@@ -180,6 +181,14 @@ function DashMerchantApp() {
 
   const { merchant, membership, pendingTeamInvite, isLoading: merchantLoading, error: merchantError, refetch } =
     useMerchant(session);
+  const { isOnline, wasOffline, clearWasOffline } = useNetworkStatus();
+
+  useEffect(() => {
+    if (wasOffline && isOnline) {
+      toast.success('Back online');
+      clearWasOffline();
+    }
+  }, [wasOffline, isOnline, clearWasOffline]);
 
   useEffect(() => {
     if (!session?.user) {
@@ -514,6 +523,14 @@ function DashMerchantApp() {
 
   return (
     <div className="partner-app-shell min-h-dvh bg-background sm:mx-auto sm:max-w-xl lg:mx-0 lg:max-w-none">
+      {!isOnline && (
+        <div
+          role="status"
+          className="sticky top-0 z-[60] bg-error px-margin-mobile py-2 text-center text-label-md font-semibold text-on-error"
+        >
+          No internet connection — live order updates paused
+        </div>
+      )}
       <PartnerMobileNavDrawer
         open={mobileNavOpen}
         onClose={() => setMobileNavOpen(false)}

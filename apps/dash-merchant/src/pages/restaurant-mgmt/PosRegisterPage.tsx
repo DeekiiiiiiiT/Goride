@@ -74,6 +74,9 @@ export default function PosRegisterPage({
   const [lastOrderNumber, setLastOrderNumber] = useState('');
   const [pendingOrderId, setPendingOrderId] = useState<string | null>(null);
   const [terminalReady, setTerminalReady] = useState(false);
+  const [paymentMockMode, setPaymentMockMode] = useState(false);
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [printJobCreated, setPrintJobCreated] = useState<boolean | null>(null);
 
   const cart = usePosCart(taxRate);
   const displayStoreName = storeName ?? merchant.name;
@@ -113,6 +116,9 @@ export default function PosRegisterPage({
     setPaymentMethod(method);
     setTerminalReady(false);
     setPendingOrderId(null);
+    setClientSecret(null);
+    setPaymentMockMode(false);
+    setPrintJobCreated(null);
   };
 
   const completeSale = async () => {
@@ -132,13 +138,27 @@ export default function PosRegisterPage({
             const order = result.order as { id?: string; order_number?: string };
             const orderId = String(order?.id ?? '');
             setPendingOrderId(orderId);
-            await createPosPaymentIntent(orderId);
+            const intent = await createPosPaymentIntent(orderId);
+            setPaymentMockMode(Boolean(intent.mockMode));
+            setClientSecret(intent.clientSecret);
             setTerminalReady(true);
             setLastOrderNumber(String(order.order_number ?? ''));
-            toast.message('Present card on reader, then tap Complete sale again');
+            if (intent.mockMode) {
+              toast.message('Stripe not configured — confirm to mark paid locally (mock)');
+            } else {
+              toast.message('Present card on reader, then tap Complete sale again');
+            }
             return;
           }
-          await payPosOrder(pendingOrderId, 'card');
+          if (!paymentMockMode) {
+            if (!clientSecret) {
+              throw new Error('Missing payment client secret');
+            }
+            const { collectAndConfirmCardPresentPayment } = await import('../../lib/stripe-terminal');
+            await collectAndConfirmCardPresentPayment(clientSecret);
+          }
+          const payResult = await payPosOrder(pendingOrderId, 'card');
+          setPrintJobCreated(Boolean(payResult.printJobCreated));
         } else {
           const result = await createPosOrder({
             lines: cart.lines,
@@ -149,16 +169,20 @@ export default function PosRegisterPage({
             tableLabel: tableLabel || null,
           });
           setLastOrderNumber(String(result.order?.order_number ?? ''));
+          setPrintJobCreated(Boolean((result as { printJobCreated?: boolean }).printJobCreated));
         }
       } else {
         setLastOrderNumber(orderNumber);
+        setPrintJobCreated(null);
       }
       setStep('success');
       cart.clear();
       setGuestName('');
       setTableLabel('');
       setPendingOrderId(null);
+      setClientSecret(null);
       setTerminalReady(false);
+      setPaymentMockMode(false);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Payment failed');
     } finally {
@@ -169,14 +193,17 @@ export default function PosRegisterPage({
   const startNewOrder = () => {
     setStep('register');
     setOrderNumber(draftOrderNumber());
+    setPrintJobCreated(null);
+    setPaymentMockMode(false);
+    setClientSecret(null);
   };
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
       {showHeader && (
         <PosRegisterHeader
-          storeName={displayStoreName}
-          staffName={staffName}
+          storeName={displayStoreName ?? 'Store'}
+          staffName={staffName || undefined}
           onUnpair={onUnpair}
           onEndShift={onEndShift}
         />
@@ -208,6 +235,8 @@ export default function PosRegisterPage({
           tableLabel={tableLabel}
           paymentMethod={paymentMethod}
           terminalReady={terminalReady}
+          paymentMockMode={paymentMockMode}
+          printJobCreated={printJobCreated}
           useApi={useApi}
           onUpdateQuantity={cart.updateQuantity}
           onClearCart={handleClearCart}

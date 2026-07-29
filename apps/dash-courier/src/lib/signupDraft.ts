@@ -5,6 +5,9 @@ export type SignupDraft = {
   fullName: string;
   displayName: string;
   vehicleType: 'bicycle' | 'motorcycle' | 'car';
+  makeModel: string;
+  licensePlate: string;
+  color: string;
 };
 
 const STORAGE_KEY = 'roam-dash-courier-signup-draft';
@@ -16,6 +19,9 @@ const defaultDraft: SignupDraft = {
   fullName: '',
   displayName: '',
   vehicleType: 'motorcycle',
+  makeModel: '',
+  licensePlate: '',
+  color: '',
 };
 
 export function loadSignupDraft(): SignupDraft {

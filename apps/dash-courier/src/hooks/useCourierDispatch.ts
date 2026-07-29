@@ -1,8 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
 import { mockDispatchProvider } from '@/services/courierDispatch/MockDispatchProvider';
+import { realDispatchProvider } from '@/services/courierDispatch/RealDispatchProvider';
 import type { CourierDispatchService, DispatchState } from '@/services/courierDispatch/types';
 
-export function useCourierDispatch(provider: CourierDispatchService = mockDispatchProvider) {
+/** Soft-launch default is real dispatch. Set VITE_COURIER_USE_MOCK_DISPATCH=true for demos. */
+const defaultProvider: CourierDispatchService =
+  (import.meta as ImportMeta & { env: Record<string, string> }).env.VITE_COURIER_USE_MOCK_DISPATCH ===
+  'true'
+    ? mockDispatchProvider
+    : realDispatchProvider;
+
+export function useCourierDispatch(provider: CourierDispatchService = defaultProvider) {
   const [state, setState] = useState<DispatchState>(() => provider.getState());
 
   useEffect(() => provider.subscribe(setState), [provider]);
@@ -32,6 +40,7 @@ export function useCourierDispatch(provider: CourierDispatchService = mockDispat
 
   return {
     ...state,
+    provider,
     goOnline,
     goOffline,
     receiveOffer,

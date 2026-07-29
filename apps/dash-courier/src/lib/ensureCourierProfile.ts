@@ -3,6 +3,7 @@ import { projectId, publicAnonKey } from '@roam/api-client';
 import { supabase } from '@/lib/supabase';
 import { loadSignupDraft } from '@/lib/signupDraft';
 import { toE164JamaicaPhone } from '@/components/forms/PhoneInput';
+import { syncVehicleFromSignupDraft } from '@/lib/courierVehicleService';
 
 /**
  * Ensures a delivery.courier_profiles row exists for the signed-in courier.
@@ -55,11 +56,14 @@ export async function ensureCourierProfile(): Promise<void> {
   };
 
   if (existing) {
-    await delivery.from('courier_profiles').update(payload).eq('user_id', user.id);
-    return;
+    // Do not overwrite status on existing profiles
+    const { status: _status, ...safePayload } = payload;
+    await delivery.from('courier_profiles').update(safePayload).eq('user_id', user.id);
+  } else {
+    await delivery.from('courier_profiles').upsert(payload, { onConflict: 'user_id' });
   }
 
-  await delivery.from('courier_profiles').upsert(payload, { onConflict: 'user_id' });
+  await syncVehicleFromSignupDraft();
 }
 
 export async function syncCourierProfileFromDraft(): Promise<void> {

@@ -306,6 +306,7 @@ export type OrderStatus =
   | 'accepted'
   | 'preparing'
   | 'ready'
+  | 'assigned'
   | 'picked_up'
   | 'in_transit'
   | 'delivered'
@@ -440,6 +441,7 @@ export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
   accepted: 'Accepted',
   preparing: 'Preparing',
   ready: 'Ready for Pickup',
+  assigned: 'Courier Assigned',
   picked_up: 'Picked Up',
   in_transit: 'On the Way',
   delivered: 'Delivered',
@@ -451,9 +453,10 @@ export const ORDER_STATUS_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   placed: ['accepted', 'cancelled'],
   accepted: ['preparing', 'cancelled'],
   preparing: ['ready'],
-  ready: ['picked_up', 'cancelled'],
-  picked_up: ['in_transit'],
-  in_transit: ['delivered'],
+  ready: ['assigned', 'picked_up', 'cancelled'],
+  assigned: ['picked_up', 'cancelled'],
+  picked_up: ['in_transit', 'cancelled'],
+  in_transit: ['delivered', 'cancelled'],
   delivered: ['completed'],
   completed: [],
   cancelled: [],

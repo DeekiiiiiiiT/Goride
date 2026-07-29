@@ -21,9 +21,9 @@ const COLOR_OPTIONS = ['Black', 'White', 'Silver / Grey', 'Red', 'Blue', 'Other'
 export function VehicleSetupPage({ onBack, onContinue }: VehicleSetupPageProps) {
   const draft = loadSignupDraft();
   const [vehicleType, setVehicleType] = useState<VehicleType>(draft.vehicleType);
-  const [makeModel, setMakeModel] = useState('');
-  const [licensePlate, setLicensePlate] = useState('');
-  const [color, setColor] = useState('');
+  const [makeModel, setMakeModel] = useState(draft.makeModel || '');
+  const [licensePlate, setLicensePlate] = useState(draft.licensePlate || '');
+  const [color, setColor] = useState(draft.color || '');
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -37,7 +37,15 @@ export function VehicleSetupPage({ onBack, onContinue }: VehicleSetupPageProps) 
   };
 
   const handleContinue = () => {
-    saveSignupDraft({ vehicleType });
+    if (showMotorizedFields && (!makeModel.trim() || !licensePlate.trim() || !color)) {
+      return;
+    }
+    saveSignupDraft({
+      vehicleType,
+      makeModel: showMotorizedFields ? makeModel.trim() : 'Bicycle',
+      licensePlate: showMotorizedFields ? licensePlate.trim().toUpperCase() : 'N/A',
+      color: showMotorizedFields ? color : 'N/A',
+    });
     onContinue();
   };
 

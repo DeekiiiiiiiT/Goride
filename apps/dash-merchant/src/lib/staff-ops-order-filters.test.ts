@@ -56,15 +56,15 @@ describe('staff-ops-order-filters', () => {
       { id: 'coleslaw', name: 'Coleslaw', prep_station_id: null },
     ]);
 
-    expect(orderHasPrepStationItems({ items: [{ name: 'Burger', quantity: 1, price: 10 }] }, 'grill', lookup)).toBe(true);
-    expect(orderHasPrepStationItems({ items: [{ name: 'Fries', quantity: 1, price: 5 }] }, 'grill', lookup)).toBe(false);
-    expect(orderHasPrepStationItems({ items: [{ name: 'Coleslaw', quantity: 1, price: 3 }] }, 'grill', lookup)).toBe(true);
+    expect(orderHasPrepStationItems({ items: [{ name: 'Burger' }] }, 'grill', lookup)).toBe(true);
+    expect(orderHasPrepStationItems({ items: [{ name: 'Fries' }] }, 'grill', lookup)).toBe(false);
+    expect(orderHasPrepStationItems({ items: [{ name: 'Coleslaw' }] }, 'grill', lookup)).toBe(true);
 
     const filtered = filterOrderItemsForPrepStation(
       [
-        { name: 'Burger', quantity: 1, price: 10 },
-        { name: 'Fries', quantity: 1, price: 5 },
-        { name: 'Coleslaw', quantity: 1, price: 3 },
+        { name: 'Burger' },
+        { name: 'Fries' },
+        { name: 'Coleslaw' },
       ],
       'grill',
       lookup,

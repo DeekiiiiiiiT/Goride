@@ -2,12 +2,17 @@ import { deliveryFetch } from './partner-api';
 import type {
   InventoryHubKpis,
   InventoryNode,
+  InventoryTransfer,
   ItemMaster,
   LedgerEntry,
+  LocationHierarchyNode,
+  PhysicalCount,
   PurchaseOrder,
   RecipeV2,
   ReceivingLineInput,
   VarianceRow,
+  Vendor,
+  VendorCatalogEntry,
 } from '../types/enterprise-inventory';
 
 function mapNode(row: Record<string, unknown>): InventoryNode {
@@ -137,6 +142,75 @@ export async function fetchVariance(
   return (data.rows as VarianceRow[]) ?? [];
 }
 
+export async function createPhysicalCount(
+  nodeId: string,
+  blindMode = true,
+): Promise<PhysicalCount> {
+  const data = await deliveryFetch('/merchant/enterprise-inventory/counts', {
+    method: 'POST',
+    body: JSON.stringify({ nodeId, blindMode }),
+  });
+  return (data.count as PhysicalCount) ?? {
+    id: String(data.countId),
+    nodeId,
+    status: 'open',
+    blindMode,
+    countDate: new Date().toISOString(),
+    items: [],
+  };
+}
+
+export async function fetchPhysicalCount(countId: string): Promise<PhysicalCount> {
+  const data = await deliveryFetch(`/merchant/enterprise-inventory/counts/${countId}`);
+  return data.count as PhysicalCount;
+}
+
+export async function saveCountItem(
+  countId: string,
+  itemId: string,
+  countedQty: number,
+  uomCode = 'each',
+): Promise<void> {
+  await deliveryFetch(`/merchant/enterprise-inventory/counts/${countId}/items/${itemId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ countedQty, uomCode }),
+  });
+}
+
+export async function postPhysicalCount(countId: string): Promise<void> {
+  await deliveryFetch(`/merchant/enterprise-inventory/counts/${countId}/post`, {
+    method: 'POST',
+  });
+}
+
+export async function fetchVendors(): Promise<Vendor[]> {
+  const data = await deliveryFetch('/merchant/enterprise-inventory/vendors');
+  return (data.vendors as Vendor[]) ?? [];
+}
+
+export async function fetchVendorCatalog(vendorId: string): Promise<VendorCatalogEntry[]> {
+  const data = await deliveryFetch(`/merchant/enterprise-inventory/vendors/${vendorId}/catalog`);
+  return (data.entries as VendorCatalogEntry[]) ?? [];
+}
+
+export async function fetchTransfers(nodeId: string): Promise<InventoryTransfer[]> {
+  const data = await deliveryFetch(
+    `/merchant/enterprise-inventory/transfers?nodeId=${encodeURIComponent(nodeId)}`,
+  );
+  return (data.transfers as InventoryTransfer[]) ?? [];
+}
+
+export async function receiveTransfer(transferId: string): Promise<void> {
+  await deliveryFetch(`/merchant/enterprise-inventory/transfers/${transferId}/receive`, {
+    method: 'POST',
+  });
+}
+
+export async function fetchRecipes(): Promise<RecipeV2[]> {
+  const data = await deliveryFetch('/merchant/enterprise-inventory/recipes');
+  return (data.recipes as RecipeV2[]) ?? [];
+}
+
 export async function saveRecipe(menuItemId: string, recipe: RecipeV2): Promise<void> {
   await deliveryFetch(`/merchant/enterprise-inventory/recipes/${menuItemId}`, {
     method: 'PUT',
@@ -151,6 +225,22 @@ export async function saveRecipe(menuItemId: string, recipe: RecipeV2): Promise<
       })),
     }),
   });
+}
+
+export async function createTransfer(input: {
+  fromNodeId: string;
+  toNodeId: string;
+  lines: Array<{ itemId: string; qty: number; uomId?: string; uomCode?: string }>;
+}): Promise<{ transferId: string }> {
+  return deliveryFetch('/merchant/enterprise-inventory/transfers', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export async function fetchHierarchy(): Promise<LocationHierarchyNode[]> {
+  const data = await deliveryFetch('/merchant/enterprise-inventory/hierarchy');
+  return (data.tree as LocationHierarchyNode[]) ?? [];
 }
 
 export async function patchInventorySettings(patch: {

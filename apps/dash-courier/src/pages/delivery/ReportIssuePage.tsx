@@ -2,11 +2,13 @@ import React, { useRef, useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import type { ActiveDelivery } from '@/lib/mockActiveDelivery';
 import { ISSUE_CATEGORIES } from '@/lib/mockPromotions';
+import { uploadAndGetProofUrl } from '@/lib/courierFileUpload';
+import { toast } from '@/lib/toast';
 
 type ReportIssuePageProps = {
   delivery: ActiveDelivery;
   onClose: () => void;
-  onSubmit: (issueId: string) => void;
+  onSubmit: (issueId: string, notes?: string, photoUrl?: string) => void;
   onRequestUnassign: () => void;
 };
 
@@ -18,6 +20,8 @@ export function ReportIssuePage({
 }: ReportIssuePageProps) {
   const [selected, setSelected] = useState<string | null>(null);
   const [details, setDetails] = useState('');
+  const [photoUrl, setPhotoUrl] = useState<string | undefined>();
+  const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   return (
@@ -88,14 +92,37 @@ export function ReportIssuePage({
           <h3 className="text-xs font-semibold uppercase tracking-wider text-muted pl-1">
             Evidence (Optional)
           </h3>
-          <input ref={fileInputRef} type="file" accept="image/*" capture="environment" className="hidden" />
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              setUploading(true);
+              void uploadAndGetProofUrl(file, 'issues').then((url) => {
+                setUploading(false);
+                if (!url) {
+                  toast.error('Upload failed');
+                  return;
+                }
+                setPhotoUrl(url);
+                toast.success('Photo attached');
+              });
+            }}
+          />
           <button
             type="button"
+            disabled={uploading}
             onClick={() => fileInputRef.current?.click()}
             className="w-full flex items-center justify-center gap-2 p-4 border-2 border-dashed border-outline-variant rounded-xl bg-surface hover:bg-surface-container-low active:scale-[0.98] transition-colors"
           >
             <MaterialIcon name="add_a_photo" className="text-primary" />
-            <span className="text-base text-primary font-medium">Upload Photo</span>
+            <span className="text-base text-primary font-medium">
+              {uploading ? 'Uploading…' : photoUrl ? 'Photo attached' : 'Upload Photo'}
+            </span>
           </button>
           <textarea
             value={details}
@@ -109,17 +136,13 @@ export function ReportIssuePage({
         <div className="pt-2 space-y-6">
           <button
             type="button"
-            disabled={!selected}
-            onClick={() => selected && onSubmit(selected)}
+            disabled={!selected || uploading}
+            onClick={() => selected && onSubmit(selected, details || undefined, photoUrl)}
             className="w-full min-h-14 bg-error text-on-error rounded-xl text-xl font-semibold flex items-center justify-center shadow-[0_6px_12px_rgba(186,26,26,0.15)] active:scale-95 transition-transform disabled:opacity-50"
           >
             Submit Issue
           </button>
           <div className="text-center pb-4">
-            <div className="flex items-center justify-center gap-2 mb-2 text-warning">
-              <MaterialIcon name="info" className="text-base" />
-              <span className="text-[11px] uppercase tracking-widest font-medium">Warning</span>
-            </div>
             <button
               type="button"
               onClick={onRequestUnassign}
@@ -127,7 +150,6 @@ export function ReportIssuePage({
             >
               Unassign from delivery
             </button>
-            <p className="text-sm text-muted mt-1">This may negatively impact your completion rate.</p>
           </div>
         </div>
       </main>

@@ -338,39 +338,17 @@ export default function DashboardPage({ merchant, onNavigate, onOpenMobileNav }:
   }, [newOrders, preparingOrders]);
 
   const recentActivity: ActivityItem[] = useMemo(() => {
-    const delivered = activeOrders
+    return activeOrders
       .filter((order) => order.status === 'delivered' && order.delivered_at)
-      .slice(0, 2)
+      .slice(0, 3)
       .map((order) => ({
         id: order.id,
-        title: `Order ${order.order_number} picked up`,
-        subtitle: 'Courier arrived and collected order',
+        title: `Order ${order.order_number} delivered`,
+        subtitle: 'Order completed',
         time: formatTimeAgo(order.delivered_at!),
         icon: 'local_mall',
         iconClass: 'bg-surface-variant text-on-surface-variant',
       }));
-
-    const fallback: ActivityItem[] = [
-      {
-        id: 'review',
-        title: 'New 5-star review',
-        subtitle: '"Food was hot and amazing!"',
-        time: '1h ago',
-        icon: 'star',
-        iconClass: 'bg-secondary-container/20 text-secondary',
-        filled: true,
-      },
-      {
-        id: 'sold-out',
-        title: 'Item marked Sold Out',
-        subtitle: 'Spicy Chicken Sandwich',
-        time: '2h ago',
-        icon: 'inventory_2',
-        iconClass: 'bg-surface-variant text-on-surface-variant',
-      },
-    ];
-
-    return [...delivered, ...fallback].slice(0, 3);
   }, [activeOrders]);
 
   const snapshotValues = {
@@ -616,7 +594,12 @@ export default function DashboardPage({ merchant, onNavigate, onOpenMobileNav }:
         <section>
           <h2 className="mb-inset-sm text-headline-md font-semibold text-on-surface">Recent Activity</h2>
           <div className="flex flex-col gap-inset-sm rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-sm shadow-sm">
-            {recentActivity.map((activity, index) => (
+            {recentActivity.length === 0 ? (
+              <p className="py-inset-sm text-center text-body-sm text-on-surface-variant">
+                No recent activity yet
+              </p>
+            ) : (
+              recentActivity.map((activity, index) => (
               <div
                 key={activity.id}
                 className={`flex items-start gap-inset-sm ${
@@ -636,7 +619,8 @@ export default function DashboardPage({ merchant, onNavigate, onOpenMobileNav }:
                 </div>
                 <span className="text-label-sm text-on-surface-variant">{activity.time}</span>
               </div>
-            ))}
+            ))
+            )}
           </div>
         </section>
       </main>

@@ -483,7 +483,7 @@ export function registerMerchantInventoryRoutes(app: {
   app.post("/merchant/enterprise-inventory/transfers", async (c) => {
     const g = await guard(c);
     if ("error" in g) return g.error;
-    const { sb } = g;
+    const { access, sb } = g;
     const body = await c.req.json();
 
     const { data: transfer, error } = await sb.from("inventory_transfers").insert({
@@ -498,8 +498,17 @@ export function registerMerchantInventoryRoutes(app: {
     for (const line of body.lines ?? []) {
       const itemId = String(line.itemId);
       const qty = Number(line.qty);
-      const uomId = String(line.uomId);
-      const qtyBase = await toBaseQty(sb, itemId, qty, uomId);
+      let uomId = typeof line.uomId === "string" && line.uomId.length >= 32 ? String(line.uomId) : undefined;
+      if (!uomId) {
+        const companyId = await companyIdForMerchant(sb, access.merchant);
+        const code = String(line.uomCode ?? line.uomId ?? "each");
+        uomId = await resolveUomIdByCode(sb, companyId, code);
+      }
+      if (!uomId) {
+        const { data: im } = await sb.from("item_master").select("base_uom_id").eq("id", itemId).single();
+        uomId = String((im as Record<string, unknown>).base_uom_id);
+      }
+      await toBaseQty(sb, itemId, qty, uomId);
 
       await sb.from("inventory_transfer_lines").insert({
         transfer_id: transferId,
@@ -562,13 +571,13 @@ export function registerMerchantInventoryRoutes(app: {
       node_id: nodeId,
       blind_mode: body.blindMode !== false,
       created_by: null,
-    }).select("id").single();
+    }).select("*").single();
 
     if (error) return c.json({ error: error.message }, 500);
     const countId = String((count as Record<string, unknown>).id);
 
     const companyId = await companyIdForMerchant(sb, access.merchant);
-    const { data: items } = await sb.from("item_master").select("id").eq("company_id", companyId).eq("is_active", true);
+    const { data: items } = await sb.from("item_master").select("id, name").eq("company_id", companyId).eq("is_active", true);
 
     for (const item of items ?? []) {
       await sb.from("physical_count_items").insert({
@@ -577,17 +586,103 @@ export function registerMerchantInventoryRoutes(app: {
       });
     }
 
-    return c.json({ countId });
+    const { data: countItems } = await sb
+      .from("physical_count_items")
+      .select("id, item_id, counted_qty, counted_uom_id")
+      .eq("count_id", countId);
+
+    const itemIds = (countItems ?? []).map((r) => String((r as Record<string, unknown>).item_id));
+    const { data: masterRows } = itemIds.length
+      ? await sb.from("item_master").select("id, name").in("id", itemIds)
+      : { data: [] as Record<string, unknown>[] };
+    const nameById = new Map(
+      (masterRows ?? []).map((r) => [String((r as Record<string, unknown>).id), String((r as Record<string, unknown>).name)]),
+    );
+
+    return c.json({
+      countId,
+      count: {
+        id: countId,
+        nodeId,
+        status: String((count as Record<string, unknown>).status ?? "open"),
+        blindMode: Boolean((count as Record<string, unknown>).blind_mode ?? true),
+        countDate: String((count as Record<string, unknown>).created_at ?? new Date().toISOString()),
+        items: (countItems ?? []).map((row) => {
+          const r = row as Record<string, unknown>;
+          return {
+            id: String(r.id),
+            itemId: String(r.item_id),
+            itemName: nameById.get(String(r.item_id)) ?? "Item",
+            countedQty: r.counted_qty != null ? Number(r.counted_qty) : null,
+            countedUomCode: null,
+          };
+        }),
+      },
+    });
+  });
+
+  app.get("/merchant/enterprise-inventory/counts/:id", async (c) => {
+    const g = await guard(c);
+    if ("error" in g) return g.error;
+    const { sb } = g;
+    const { id } = c.req.param();
+
+    const { data: count, error } = await sb.from("physical_counts").select("*").eq("id", id).single();
+    if (error || !count) return c.json({ error: "Not found" }, 404);
+    const cnt = count as Record<string, unknown>;
+
+    const { data: countItems } = await sb
+      .from("physical_count_items")
+      .select("id, item_id, counted_qty, counted_uom_id")
+      .eq("count_id", id);
+
+    const itemIds = (countItems ?? []).map((r) => String((r as Record<string, unknown>).item_id));
+    const { data: masterRows } = itemIds.length
+      ? await sb.from("item_master").select("id, name").in("id", itemIds)
+      : { data: [] as Record<string, unknown>[] };
+    const nameById = new Map(
+      (masterRows ?? []).map((r) => [String((r as Record<string, unknown>).id), String((r as Record<string, unknown>).name)]),
+    );
+
+    return c.json({
+      count: {
+        id: String(cnt.id),
+        nodeId: String(cnt.node_id),
+        status: String(cnt.status ?? "open"),
+        blindMode: Boolean(cnt.blind_mode ?? true),
+        countDate: String(cnt.created_at ?? new Date().toISOString()),
+        items: (countItems ?? []).map((row) => {
+          const r = row as Record<string, unknown>;
+          return {
+            id: String(r.id),
+            itemId: String(r.item_id),
+            itemName: nameById.get(String(r.item_id)) ?? "Item",
+            countedQty: r.counted_qty != null ? Number(r.counted_qty) : null,
+            countedUomCode: null,
+          };
+        }),
+      },
+    });
   });
 
   app.patch("/merchant/enterprise-inventory/counts/:id/items/:itemId", async (c) => {
     const g = await guard(c);
     if ("error" in g) return g.error;
-    const { sb } = g;
+    const { access, sb } = g;
     const { id, itemId } = c.req.param();
     const body = await c.req.json();
 
-    const uomId = body.uomId as string;
+    let uomId = body.uomId as string | undefined;
+    if (!uomId && body.uomCode) {
+      const companyId = await companyIdForMerchant(sb, access.merchant);
+      uomId = await resolveUomIdByCode(sb, companyId, String(body.uomCode));
+    }
+    if (!uomId) {
+      // Fall back to item base UOM
+      const { data: im } = await sb.from("item_master").select("base_uom_id").eq("id", itemId).single();
+      uomId = String((im as Record<string, unknown>).base_uom_id);
+    }
+
     const qty = Number(body.countedQty);
     const qtyBase = await toBaseQty(sb, itemId, qty, uomId);
 
@@ -637,6 +732,217 @@ export function registerMerchantInventoryRoutes(app: {
 
     await sb.from("physical_counts").update({ status: "posted", posted_at: new Date().toISOString() }).eq("id", id);
     return c.json({ ok: true });
+  });
+
+  app.get("/merchant/enterprise-inventory/vendors", async (c) => {
+    const g = await guard(c);
+    if ("error" in g) return g.error;
+    const { access, sb } = g;
+    const companyId = await companyIdForMerchant(sb, access.merchant);
+
+    const { data, error } = await sb
+      .from("vendors")
+      .select("id, name, contact_email, contact_phone, is_active")
+      .eq("company_id", companyId)
+      .order("name");
+
+    if (error) return c.json({ error: error.message }, 500);
+    return c.json({
+      vendors: (data ?? []).map((row) => {
+        const r = row as Record<string, unknown>;
+        return {
+          id: String(r.id),
+          name: String(r.name),
+          contactEmail: r.contact_email ? String(r.contact_email) : null,
+          contactPhone: r.contact_phone ? String(r.contact_phone) : null,
+          isActive: Boolean(r.is_active ?? true),
+        };
+      }),
+    });
+  });
+
+  app.get("/merchant/enterprise-inventory/vendors/:id/catalog", async (c) => {
+    const g = await guard(c);
+    if ("error" in g) return g.error;
+    const { access, sb } = g;
+    const { id } = c.req.param();
+    const companyId = await companyIdForMerchant(sb, access.merchant);
+
+    const { data: vendor } = await sb
+      .from("vendors")
+      .select("id, name")
+      .eq("id", id)
+      .eq("company_id", companyId)
+      .maybeSingle();
+    if (!vendor) return c.json({ error: "Vendor not found" }, 404);
+
+    const { data, error } = await sb
+      .from("vendor_catalogs")
+      .select("id, vendor_id, item_id, vendor_sku, pack_size, current_price, contract_end_date, is_preferred, item_master(name), uom_definitions(code)")
+      .eq("vendor_id", id);
+
+    if (error) return c.json({ error: error.message }, 500);
+    const vendorName = String((vendor as Record<string, unknown>).name);
+    return c.json({
+      entries: (data ?? []).map((row) => {
+        const r = row as Record<string, unknown>;
+        const im = r.item_master as { name?: string } | null;
+        const uom = r.uom_definitions as { code?: string } | null;
+        return {
+          id: String(r.id),
+          vendorId: String(r.vendor_id),
+          vendorName,
+          itemId: String(r.item_id),
+          itemName: String(im?.name ?? "Item"),
+          vendorSku: String(r.vendor_sku),
+          packSize: Number(r.pack_size ?? 1),
+          packUomCode: String(uom?.code ?? "each"),
+          currentPrice: Number(r.current_price ?? 0),
+          contractEndDate: r.contract_end_date ? String(r.contract_end_date) : null,
+          isPreferred: Boolean(r.is_preferred),
+        };
+      }),
+    });
+  });
+
+  app.get("/merchant/enterprise-inventory/transfers", async (c) => {
+    const g = await guard(c);
+    if ("error" in g) return g.error;
+    const { access, sb } = g;
+
+    const { data: nodes } = await sb
+      .from("inventory_nodes")
+      .select("id, name")
+      .eq("merchant_id", access.merchant.id);
+    const nodeIds = (nodes ?? []).map((n) => String((n as Record<string, unknown>).id));
+    const nodeName = new Map(
+      (nodes ?? []).map((n) => {
+        const r = n as Record<string, unknown>;
+        return [String(r.id), String(r.name)] as const;
+      }),
+    );
+    if (nodeIds.length === 0) return c.json({ transfers: [] });
+
+    const { data, error } = await sb
+      .from("inventory_transfers")
+      .select("id, from_node_id, to_node_id, status, created_at, received_at, inventory_transfer_lines(item_id, qty, uom_id, item_master(name), uom_definitions(code))")
+      .or(`from_node_id.in.(${nodeIds.join(",")}),to_node_id.in.(${nodeIds.join(",")})`)
+      .order("created_at", { ascending: false })
+      .limit(50);
+
+    if (error) return c.json({ error: error.message }, 500);
+    return c.json({
+      transfers: (data ?? []).map((row) => {
+        const r = row as Record<string, unknown>;
+        const lines = (r.inventory_transfer_lines as Record<string, unknown>[] | null) ?? [];
+        return {
+          id: String(r.id),
+          fromNodeId: String(r.from_node_id),
+          fromNodeName: nodeName.get(String(r.from_node_id)) ?? "From",
+          toNodeId: String(r.to_node_id),
+          toNodeName: nodeName.get(String(r.to_node_id)) ?? "To",
+          status: String(r.status),
+          createdAt: String(r.created_at),
+          receivedAt: r.received_at ? String(r.received_at) : null,
+          lines: lines.map((line) => {
+            const im = line.item_master as { name?: string } | null;
+            const uom = line.uom_definitions as { code?: string } | null;
+            return {
+              itemId: String(line.item_id),
+              itemName: String(im?.name ?? "Item"),
+              qty: Number(line.qty),
+              uomCode: String(uom?.code ?? "each"),
+            };
+          }),
+        };
+      }),
+    });
+  });
+
+  app.get("/merchant/enterprise-inventory/recipes", async (c) => {
+    const g = await guard(c);
+    if ("error" in g) return g.error;
+    const { access, sb } = g;
+    const companyId = await companyIdForMerchant(sb, access.merchant);
+
+    const { data, error } = await sb
+      .from("recipes")
+      .select("id, menu_item_id, name, yield_pct, recipe_ingredients(id, item_id, qty_required, yield_pct, item_master(name), uom_definitions(code))")
+      .eq("company_id", companyId)
+      .eq("is_active", true);
+
+    if (error) return c.json({ error: error.message }, 500);
+
+    const menuItemIds = (data ?? [])
+      .map((r) => (r as Record<string, unknown>).menu_item_id)
+      .filter(Boolean)
+      .map(String);
+    let menuNames = new Map<string, string>();
+    if (menuItemIds.length > 0) {
+      const { data: menuRows } = await sb.from("menu_items").select("id, name").in("id", menuItemIds);
+      menuNames = new Map(
+        (menuRows ?? []).map((m) => {
+          const row = m as Record<string, unknown>;
+          return [String(row.id), String(row.name)] as const;
+        }),
+      );
+    }
+
+    return c.json({
+      recipes: (data ?? []).map((row) => {
+        const r = row as Record<string, unknown>;
+        const menuItemId = String(r.menu_item_id ?? "");
+        const ingredients = (r.recipe_ingredients as Record<string, unknown>[] | null) ?? [];
+        return {
+          id: String(r.id),
+          menuItemId,
+          menuItemName: menuNames.get(menuItemId) ?? String(r.name ?? "Recipe"),
+          yieldPct: Number(r.yield_pct ?? 100),
+          ingredients: ingredients.map((ing) => {
+            const im = ing.item_master as { name?: string } | null;
+            const uom = ing.uom_definitions as { code?: string } | null;
+            return {
+              id: String(ing.id),
+              itemId: String(ing.item_id),
+              itemName: String(im?.name ?? "Item"),
+              qtyRequired: Number(ing.qty_required),
+              uomCode: String(uom?.code ?? "each"),
+              yieldPct: Number(ing.yield_pct ?? 100),
+            };
+          }),
+        };
+      }),
+    });
+  });
+
+  app.get("/merchant/enterprise-inventory/hierarchy", async (c) => {
+    const g = await guard(c);
+    if ("error" in g) return g.error;
+    const { access, sb } = g;
+
+    const { data: nodes } = await sb
+      .from("inventory_nodes")
+      .select("id, name, node_type, group_id, is_active")
+      .eq("merchant_id", access.merchant.id)
+      .eq("is_active", true);
+
+    const tree = [
+      {
+        id: `merchant-${access.merchant.id}`,
+        name: String(access.merchant.name ?? "Locations"),
+        kind: "company" as const,
+        children: (nodes ?? []).map((row) => {
+          const r = row as Record<string, unknown>;
+          return {
+            id: String(r.id),
+            name: String(r.name),
+            kind: "node" as const,
+            nodeType: String(r.node_type) as "storefront" | "commissary" | "warehouse",
+          };
+        }),
+      },
+    ];
+    return c.json({ tree });
   });
 
   app.put("/merchant/enterprise-inventory/recipes/:menuItemId", async (c) => {

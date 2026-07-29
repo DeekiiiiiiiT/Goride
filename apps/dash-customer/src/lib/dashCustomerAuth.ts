@@ -4,6 +4,9 @@ export const DASH_CUSTOMER_OAUTH_INTENT_KEY = 'roam_dash_customer_oauth_intent';
 export const DASH_CUSTOMER_OAUTH_INTENT_SIGNUP = 'signup';
 export const DASH_CUSTOMER_OAUTH_INTENT_LOGIN = 'login';
 
+/** Phone OTP sign-up/verify. Enable when Digicel/Flow SMS is paid and configured. */
+export const ENABLE_PHONE_AUTH = false;
+
 export function getDashCustomerAuthRedirectUrl(): string {
   if (typeof window !== 'undefined' && window.location?.origin) {
     return `${window.location.origin}/`;

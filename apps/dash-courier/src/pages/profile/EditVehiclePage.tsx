@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { SubPageHeader } from '@/components/layout/SubPageHeader';
-import { MOCK_COURIER_VEHICLE } from '@/lib/mockProfile';
 import { loadSignupDraft, saveSignupDraft } from '@/lib/signupDraft';
 import { updateCourierProfile } from '@/lib/courierProfileService';
+import { loadPrimaryVehicle, upsertCourierVehicle } from '@/lib/courierVehicleService';
 import { toast } from '@/lib/toast';
 
 type EditVehiclePageProps = {
@@ -14,16 +14,51 @@ type EditVehiclePageProps = {
 const COLOR_OPTIONS = ['Black', 'White', 'Silver / Grey', 'Red', 'Blue', 'Other'];
 
 export function EditVehiclePage({ onBack, onSave }: EditVehiclePageProps) {
-  const vehicle = MOCK_COURIER_VEHICLE;
   const draft = loadSignupDraft();
-  const [makeModel, setMakeModel] = useState(`${vehicle.make} ${vehicle.model}`.trim());
-  const [licensePlate, setLicensePlate] = useState(vehicle.licensePlate);
-  const [color, setColor] = useState(vehicle.color);
+  const [makeModel, setMakeModel] = useState(draft.makeModel || '');
+  const [licensePlate, setLicensePlate] = useState(draft.licensePlate || '');
+  const [color, setColor] = useState(draft.color || 'Black');
   const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+
+  useEffect(() => {
+    void loadPrimaryVehicle().then((vehicle) => {
+      if (!vehicle) {
+        setLoadError(false);
+        return;
+      }
+      setMakeModel(`${vehicle.make} ${vehicle.model}`.trim());
+      setLicensePlate(vehicle.license_plate);
+      setColor(vehicle.color || 'Black');
+    });
+  }, []);
 
   const handleSave = async () => {
+    if (!makeModel.trim() || !licensePlate.trim()) {
+      toast.error('Missing details', 'Make/model and license plate are required.');
+      return;
+    }
     setSaving(true);
-    saveSignupDraft({ vehicleType: draft.vehicleType });
+    saveSignupDraft({
+      vehicleType: draft.vehicleType,
+      makeModel: makeModel.trim(),
+      licensePlate: licensePlate.trim().toUpperCase(),
+      color,
+    });
+
+    const result = await upsertCourierVehicle({
+      makeModel: makeModel.trim(),
+      licensePlate: licensePlate.trim().toUpperCase(),
+      color,
+      vehicleType: draft.vehicleType,
+    });
+
+    if (!result.ok) {
+      setSaving(false);
+      toast.error('Could not save vehicle', result.error);
+      return;
+    }
+
     await updateCourierProfile({ vehicle_type: draft.vehicleType });
     setSaving(false);
     toast.success('Vehicle updated');
@@ -35,6 +70,9 @@ export function EditVehiclePage({ onBack, onSave }: EditVehiclePageProps) {
       <SubPageHeader title="Edit Vehicle" onBack={onBack} />
 
       <main className="flex-1 overflow-y-auto px-[var(--spacing-edge)] py-6 pb-32 space-y-4">
+        {loadError && (
+          <p className="text-sm text-error">Could not load saved vehicle. Enter details to save.</p>
+        )}
         <div>
           <label className="block text-xs font-semibold text-on-surface-variant mb-1 uppercase tracking-wide">
             Make &amp; Model

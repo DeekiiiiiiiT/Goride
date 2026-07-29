@@ -104,48 +104,40 @@ export function kitchenQueueForPrepStation(
   );
 }
 
-const BAR_ITEM_HINT = /drink|beverage|bar|cocktail|beer|wine|coffee|tea|soda|juice|spirit|mocktail|latte|espresso/i;
-
-export type BarItemLookup = Map<string, boolean>;
-
-export function buildBarItemLookup(
-  categories: Array<{ id: string; name: string }>,
-  items: Array<{ id: string; name: string; category_id: string }>,
-): BarItemLookup {
-  const categoryIsBar = new Map<string, boolean>();
-  for (const category of categories) {
-    categoryIsBar.set(category.id, BAR_ITEM_HINT.test(category.name));
-  }
-  const lookup: BarItemLookup = new Map();
-  for (const item of items) {
-    lookup.set(
-      item.id,
-      categoryIsBar.get(item.category_id) ?? BAR_ITEM_HINT.test(item.name),
-    );
-  }
-  return lookup;
+/** Prep stations whose name indicates bar/drinks (KDS routing). */
+export function resolveBarPrepStationIds(
+  prepStations: Array<{ id: string; name: string }>,
+): string[] {
+  return prepStations
+    .filter((station) => /bar|drink|beverage|cocktail/i.test(station.name))
+    .map((station) => station.id);
 }
 
-export function itemLooksLikeBarItem(
+export function itemMatchesBarStations(
   item: { menuItemId?: string; name: string },
-  lookup: BarItemLookup,
+  barStationIds: string[],
+  lookup: ItemPrepStationLookup,
 ): boolean {
-  if (item.menuItemId && lookup.has(item.menuItemId)) {
-    return lookup.get(item.menuItemId) ?? false;
-  }
-  return BAR_ITEM_HINT.test(item.name);
+  if (barStationIds.length === 0) return false;
+  const assigned = resolveItemPrepStationId(item, lookup);
+  return assigned != null && barStationIds.includes(assigned);
 }
 
 export function filterBarOrderItems<T extends { menuItemId?: string; name: string }>(
   items: T[],
-  lookup: BarItemLookup,
+  barStationIds: string[],
+  lookup: ItemPrepStationLookup,
 ): T[] {
-  return items.filter((item) => itemLooksLikeBarItem(item, lookup));
+  return items.filter((item) => itemMatchesBarStations(item, barStationIds, lookup));
 }
 
-export function barQueueOrders(orders: Order[], lookup: BarItemLookup) {
+export function barQueueOrders(
+  orders: Order[],
+  barStationIds: string[],
+  lookup: ItemPrepStationLookup,
+) {
   return kitchenQueueOrders(orders).filter((order) =>
-    order.items.some((item) => itemLooksLikeBarItem(item, lookup)),
+    order.items.some((item) => itemMatchesBarStations(item, barStationIds, lookup)),
   );
 }
 

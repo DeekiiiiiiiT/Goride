@@ -7,7 +7,6 @@ import { uploadMerchantAsset } from '../lib/partner-api';
 interface ImageUploadProps {
   value?: string;
   onChange: (url: string) => void;
-  bucket?: string;
   folder?: string;
   aspectRatio?: 'square' | 'cover' | 'logo';
   label?: string;
@@ -52,7 +51,6 @@ const VARIANT_CONFIG = {
 export default function ImageUpload({
   value,
   onChange,
-  bucket: _bucket = 'merchant-assets',
   folder = 'images',
   aspectRatio = 'square',
   label,

@@ -199,31 +199,96 @@ export function ReceivingWorkflowView({
 
 export function TransferListView({
   transfers,
+  nodes,
+  items,
   onReceive,
+  onCreate,
   onBack,
+  useApi,
 }: {
   transfers: InventoryTransfer[];
-  onReceive: (id: string) => void;
+  nodes?: Array<{ id: string; name: string }>;
+  items?: Array<{ id: string; name: string; baseUomCode?: string }>;
+  onReceive: (id: string) => void | Promise<void>;
+  onCreate?: (input: {
+    fromNodeId: string;
+    toNodeId: string;
+    itemId: string;
+    qty: number;
+    uomId: string;
+  }) => Promise<void>;
   onBack?: () => void;
+  useApi?: boolean;
 }) {
+  const [fromNodeId, setFromNodeId] = useState(nodes?.[0]?.id ?? '');
+  const [toNodeId, setToNodeId] = useState(nodes?.[1]?.id ?? nodes?.[0]?.id ?? '');
+  const [itemId, setItemId] = useState(items?.[0]?.id ?? '');
+  const [qty, setQty] = useState('1');
+  const [creating, setCreating] = useState(false);
+
+  const handleCreate = async () => {
+    if (!onCreate || !fromNodeId || !toNodeId || !itemId) return;
+    setCreating(true);
+    try {
+      const selected = items?.find((i) => i.id === itemId);
+      await onCreate({
+        fromNodeId,
+        toNodeId,
+        itemId,
+        qty: Number(qty) || 1,
+        uomId: selected?.baseUomCode ?? 'each',
+      });
+    } finally {
+      setCreating(false);
+    }
+  };
+
   return (
     <div className="mx-auto max-w-4xl space-y-inset-md p-margin-mobile md:p-margin-tablet">
       {onBack && (
         <button type="button" onClick={onBack} className="text-label-md text-primary-container">← Back</button>
       )}
       <h2 className="text-title-md font-semibold">Transfers</h2>
+      {onCreate && nodes && items && (
+        <div className="rounded-xl border border-outline-variant p-inset-md space-y-inset-sm">
+          <p className="text-label-md font-semibold">Create transfer</p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <select value={fromNodeId} onChange={(e) => setFromNodeId(e.target.value)} className="rounded-lg border border-outline-variant px-3 py-2 text-body-sm">
+              {nodes.map((n) => <option key={n.id} value={n.id}>From: {n.name}</option>)}
+            </select>
+            <select value={toNodeId} onChange={(e) => setToNodeId(e.target.value)} className="rounded-lg border border-outline-variant px-3 py-2 text-body-sm">
+              {nodes.map((n) => <option key={n.id} value={n.id}>To: {n.name}</option>)}
+            </select>
+            <select value={itemId} onChange={(e) => setItemId(e.target.value)} className="rounded-lg border border-outline-variant px-3 py-2 text-body-sm">
+              {items.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
+            </select>
+            <input type="number" min="0.01" step="any" value={qty} onChange={(e) => setQty(e.target.value)} className="rounded-lg border border-outline-variant px-3 py-2 text-body-sm" placeholder="Qty" />
+          </div>
+          <button
+            type="button"
+            disabled={!useApi || creating || fromNodeId === toNodeId}
+            onClick={() => void handleCreate()}
+            className="rounded-lg bg-primary-container px-4 py-2 text-label-md font-semibold text-on-primary-container disabled:opacity-50"
+          >
+            {creating ? 'Creating…' : 'Send transfer'}
+          </button>
+        </div>
+      )}
       <ul className="space-y-inset-sm">
         {transfers.map((t) => (
           <li key={t.id} className="rounded-xl border border-outline-variant p-inset-md">
             <p className="font-semibold">{t.fromNodeName} → {t.toNodeName}</p>
             <StatusChip label={t.status.replace('_', ' ')} tone={t.status === 'in_transit' ? 'warning' : 'success'} />
             {t.status === 'in_transit' && (
-              <button type="button" onClick={() => onReceive(t.id)} className="mt-2 text-label-md font-semibold text-primary-container">
+              <button type="button" onClick={() => void onReceive(t.id)} className="mt-2 text-label-md font-semibold text-primary-container">
                 Receive at destination
               </button>
             )}
           </li>
         ))}
+        {transfers.length === 0 && (
+          <li className="text-body-sm text-on-surface-variant">No transfers yet.</li>
+        )}
       </ul>
     </div>
   );
@@ -232,15 +297,18 @@ export function TransferListView({
 export function BlindCountView({
   count,
   onSubmitItem,
+  onReview,
   onBack,
   useApi,
 }: {
   count: PhysicalCount;
   onSubmitItem: (itemId: string, qty: number, uomCode: string) => Promise<void>;
+  onReview?: () => Promise<void>;
   onBack: () => void;
   useApi?: boolean;
 }) {
   const [values, setValues] = useState<Record<string, string>>({});
+  const [reviewing, setReviewing] = useState(false);
 
   return (
     <div className="mx-auto max-w-lg space-y-inset-md p-margin-mobile">
@@ -255,15 +323,14 @@ export function BlindCountView({
               <input
                 type="number"
                 placeholder="Count"
-                value={values[item.itemId] ?? ''}
+                value={values[item.itemId] ?? (item.countedQty != null ? String(item.countedQty) : '')}
                 onChange={(e) => setValues((v) => ({ ...v, [item.itemId]: e.target.value }))}
                 className="flex-1 rounded-lg border border-outline-variant px-3 py-2"
               />
               <button
                 type="button"
-                disabled={!useApi}
-                onClick={() => void onSubmitItem(item.itemId, Number(values[item.itemId] ?? 0), 'each')}
-                className="rounded-lg bg-primary-container px-3 py-2 text-label-sm font-semibold text-on-primary-container disabled:opacity-50"
+                onClick={() => void onSubmitItem(item.itemId, Number(values[item.itemId] ?? item.countedQty ?? 0), item.countedUomCode ?? 'each')}
+                className="rounded-lg bg-primary-container px-3 py-2 text-label-sm font-semibold text-on-primary-container"
               >
                 Save
               </button>
@@ -271,6 +338,19 @@ export function BlindCountView({
           </li>
         ))}
       </ul>
+      {onReview && (
+        <button
+          type="button"
+          disabled={reviewing}
+          onClick={() => {
+            setReviewing(true);
+            void onReview().finally(() => setReviewing(false));
+          }}
+          className="w-full rounded-lg bg-primary px-4 py-3 text-label-md font-semibold text-on-primary disabled:opacity-50"
+        >
+          {reviewing ? 'Posting…' : useApi ? 'Review & post count' : 'Review variance'}
+        </button>
+      )}
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { toast } from 'sonner';
 import { Merchant } from '../../hooks/useMerchant';
 import { CAPABILITY_IN_STORE, hasCapability } from '../../lib/merchant-capabilities';
 import {
@@ -16,7 +17,16 @@ import {
   FIXTURE_VENDOR_CATALOG,
   FIXTURE_VENDORS,
 } from '../../lib/enterprise-inventory-fixtures';
-import type { EnterpriseInventoryView } from '../../types/enterprise-inventory';
+import type {
+  EnterpriseInventoryView,
+  InventoryTransfer,
+  LocationHierarchyNode,
+  PhysicalCount,
+  RecipeV2,
+  VarianceRow,
+  Vendor,
+  VendorCatalogEntry,
+} from '../../types/enterprise-inventory';
 import InventoryHubChrome from '../../components/enterprise-inventory/InventoryHubChrome';
 import InventoryHubView from '../../components/enterprise-inventory/InventoryHubView';
 import {
@@ -43,6 +53,25 @@ interface EnterpriseInventoryFlowProps {
   sectionTitle?: string;
 }
 
+function nodesToLocationTree(
+  nodes: Array<{ id: string; name: string; nodeType: string }>,
+  merchantName: string,
+): LocationHierarchyNode[] {
+  return [
+    {
+      id: `merchant-root`,
+      name: merchantName,
+      kind: 'company',
+      children: nodes.map((n) => ({
+        id: n.id,
+        name: n.name,
+        kind: 'node' as const,
+        nodeType: n.nodeType as LocationHierarchyNode['nodeType'],
+      })),
+    },
+  ];
+}
+
 export default function EnterpriseInventoryFlow({
   merchant,
   onBack,
@@ -60,31 +89,118 @@ export default function EnterpriseInventoryFlow({
   const [kpis, setKpis] = useState(FIXTURE_KPIS);
   const [orders, setOrders] = useState(FIXTURE_POS);
   const [ledger, setLedger] = useState(FIXTURE_LEDGER);
+  const [activeCount, setActiveCount] = useState<PhysicalCount | null>(null);
+  const [varianceRows, setVarianceRows] = useState<VarianceRow[]>(FIXTURE_VARIANCE);
+  const [vendors, setVendors] = useState<Vendor[]>(FIXTURE_VENDORS);
+  const [vendorCatalog, setVendorCatalog] = useState<VendorCatalogEntry[]>(FIXTURE_VENDOR_CATALOG);
+  const [transfers, setTransfers] = useState<InventoryTransfer[]>(FIXTURE_TRANSFERS);
+  const [recipes, setRecipes] = useState<RecipeV2[]>(FIXTURE_RECIPES_V2);
+  const [menuItems, setMenuItems] = useState(FIXTURE_MENU_ITEMS);
+  const [locationTree, setLocationTree] = useState<LocationHierarchyNode[]>(FIXTURE_LOCATION_TREE);
 
   const loadApi = useCallback(async () => {
     if (!useApi) return;
     try {
       const api = await import('../../lib/enterprise-inventory-api');
-      const [nodeList, itemList, kpiData, poList, ledgerList] = await Promise.all([
-        api.fetchNodes(),
-        api.fetchItems(selectedNodeId),
-        api.fetchHubKpis(selectedNodeId),
-        api.fetchPurchaseOrders(selectedNodeId),
-        api.fetchLedger({ nodeId: selectedNodeId }),
+      const nodeList = await api.fetchNodes();
+      const nodeId =
+        (nodeList.some((n) => n.id === selectedNodeId) ? selectedNodeId : null) ??
+        nodeList[0]?.id ??
+        selectedNodeId;
+
+      if (nodeList.length > 0 && nodeId !== selectedNodeId) {
+        setSelectedNodeId(nodeId);
+      }
+
+      const [
+        itemList,
+        kpiData,
+        poList,
+        ledgerList,
+        varianceList,
+        vendorList,
+        transferList,
+        recipeList,
+        hierarchy,
+        menuData,
+      ] = await Promise.all([
+        api.fetchItems(nodeId),
+        api.fetchHubKpis(nodeId),
+        api.fetchPurchaseOrders(nodeId),
+        api.fetchLedger({ nodeId }),
+        api.fetchVariance(nodeId),
+        api.fetchVendors(),
+        api.fetchTransfers(nodeId),
+        api.fetchRecipes(),
+        api.fetchHierarchy(),
+        import('../../lib/partner-api').then((m) => m.deliveryFetch('/merchant/menu')),
       ]);
-      setNodes(nodeList);
+
+      setNodes(nodeList.length > 0 ? nodeList : FIXTURE_NODES);
       setItems(itemList);
       setKpis(kpiData);
       setOrders(poList);
       setLedger(ledgerList);
-    } catch {
-      // Keep fixtures on error
+      setVarianceRows(varianceList);
+      setVendors(vendorList);
+      setTransfers(transferList);
+      setRecipes(recipeList);
+      setLocationTree(
+        hierarchy.length > 0
+          ? hierarchy
+          : nodesToLocationTree(nodeList, merchant.name ?? 'Locations'),
+      );
+      const apiMenu = ((menuData.items as Array<{ id: string; name: string }>) ?? []).map((m) => ({
+        id: m.id,
+        name: m.name,
+      }));
+      if (apiMenu.length > 0) setMenuItems(apiMenu);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to load inventory');
     }
-  }, [useApi, selectedNodeId]);
+  }, [useApi, selectedNodeId, merchant.name]);
 
   useEffect(() => {
     void loadApi();
   }, [loadApi]);
+
+  useEffect(() => {
+    if (!useApi || view !== 'count') return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const api = await import('../../lib/enterprise-inventory-api');
+        const count = await api.createPhysicalCount(selectedNodeId);
+        if (!cancelled) setActiveCount(count);
+      } catch (error) {
+        if (!cancelled) {
+          toast.error(error instanceof Error ? error.message : 'Failed to start count');
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [useApi, view, selectedNodeId]);
+
+  useEffect(() => {
+    if (!useApi || view !== 'vendor-catalog' || !selectedVendorId) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const api = await import('../../lib/enterprise-inventory-api');
+        const entries = await api.fetchVendorCatalog(selectedVendorId);
+        if (!cancelled) setVendorCatalog(entries);
+      } catch (error) {
+        if (!cancelled) {
+          toast.error(error instanceof Error ? error.message : 'Failed to load vendor catalog');
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [useApi, view, selectedVendorId]);
 
   const selectedItem = useMemo(
     () => items.find((i) => i.id === selectedItemId) ?? null,
@@ -96,7 +212,7 @@ export default function EnterpriseInventoryFlow({
     [orders, selectedPoId],
   );
 
-  const selectedVendor = FIXTURE_VENDORS.find((v) => v.id === selectedVendorId);
+  const selectedVendor = vendors.find((v) => v.id === selectedVendorId);
 
   const goHub = () => {
     setView('hub');
@@ -133,7 +249,7 @@ export default function EnterpriseInventoryFlow({
           <ItemMasterDetailView
             item={selectedItem}
             onBack={() => setView('items')}
-            onOpenUom={() => setView('items')}
+            onOpenUom={() => setView('uom')}
             useApi={useApi}
             onAdjust={useApi ? async (delta, reason) => {
               const api = await import('../../lib/enterprise-inventory-api');
@@ -142,10 +258,18 @@ export default function EnterpriseInventoryFlow({
             } : undefined}
           />
         ) : null;
+      case 'uom':
+        return selectedItem ? (
+          <UomConversionEditorView
+            item={selectedItem}
+            onBack={() => setView('item-detail')}
+            useApi={useApi}
+          />
+        ) : null;
       case 'vendors':
         return (
           <VendorDirectoryView
-            vendors={FIXTURE_VENDORS}
+            vendors={vendors}
             onOpenCatalog={(id) => {
               setSelectedVendorId(id);
               setView('vendor-catalog');
@@ -157,7 +281,11 @@ export default function EnterpriseInventoryFlow({
         return selectedVendor ? (
           <VendorCatalogView
             vendorName={selectedVendor.name}
-            entries={FIXTURE_VENDOR_CATALOG.filter((e) => e.vendorId === selectedVendor.id)}
+            entries={
+              useApi
+                ? vendorCatalog
+                : FIXTURE_VENDOR_CATALOG.filter((e) => e.vendorId === selectedVendor.id)
+            }
             onBack={() => setView('vendors')}
           />
         ) : null;
@@ -192,47 +320,149 @@ export default function EnterpriseInventoryFlow({
       case 'transfers':
         return (
           <TransferListView
-            transfers={FIXTURE_TRANSFERS}
-            onReceive={() => setView('transfer-receive')}
+            transfers={transfers}
+            nodes={nodes}
+            items={items.map((i) => ({ id: i.id, name: i.name, baseUomCode: i.baseUomCode }))}
+            useApi={useApi}
             onBack={goHub}
+            onReceive={async (id) => {
+              if (useApi) {
+                try {
+                  const api = await import('../../lib/enterprise-inventory-api');
+                  await api.receiveTransfer(id);
+                  await loadApi();
+                  toast.success('Transfer received');
+                } catch (error) {
+                  toast.error(error instanceof Error ? error.message : 'Receive failed');
+                }
+              } else {
+                setView('transfer-receive');
+              }
+            }}
+            onCreate={
+              useApi
+                ? async (input) => {
+                    try {
+                      const api = await import('../../lib/enterprise-inventory-api');
+                      await api.createTransfer({
+                        fromNodeId: input.fromNodeId,
+                        toNodeId: input.toNodeId,
+                        lines: [
+                          {
+                            itemId: input.itemId,
+                            qty: input.qty,
+                            uomCode: input.uomId,
+                          },
+                        ],
+                      });
+                      await loadApi();
+                      toast.success('Transfer created');
+                    } catch (error) {
+                      toast.error(error instanceof Error ? error.message : 'Transfer failed');
+                    }
+                  }
+                : undefined
+            }
           />
         );
       case 'transfer-receive':
         return (
-          <TransferListView transfers={FIXTURE_TRANSFERS.filter((t) => t.status === 'in_transit')} onReceive={goHub} />
+          <TransferListView
+            transfers={transfers.filter((t) => t.status === 'in_transit')}
+            onReceive={async (id) => {
+              if (useApi) {
+                const api = await import('../../lib/enterprise-inventory-api');
+                await api.receiveTransfer(id);
+                await loadApi();
+              }
+              goHub();
+            }}
+            onBack={goHub}
+          />
         );
       case 'count':
         return (
           <BlindCountView
-            count={FIXTURE_COUNT}
+            count={activeCount ?? FIXTURE_COUNT}
             useApi={useApi}
             onBack={goHub}
-            onSubmitItem={async () => {
+            onSubmitItem={async (itemId, qty, uomCode) => {
+              if (useApi && activeCount) {
+                try {
+                  const api = await import('../../lib/enterprise-inventory-api');
+                  await api.saveCountItem(activeCount.id, itemId, qty, uomCode);
+                  setActiveCount((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          items: prev.items.map((item) =>
+                            item.itemId === itemId
+                              ? { ...item, countedQty: qty, countedUomCode: uomCode }
+                              : item,
+                          ),
+                        }
+                      : prev,
+                  );
+                  toast.success('Count saved');
+                } catch (error) {
+                  toast.error(error instanceof Error ? error.message : 'Failed to save count');
+                }
+              }
+            }}
+            onReview={async () => {
+              if (useApi && activeCount) {
+                try {
+                  const api = await import('../../lib/enterprise-inventory-api');
+                  await api.postPhysicalCount(activeCount.id);
+                  const rows = await api.fetchVariance(selectedNodeId);
+                  setVarianceRows(rows);
+                  toast.success('Count posted');
+                } catch (error) {
+                  toast.error(error instanceof Error ? error.message : 'Failed to post count');
+                  return;
+                }
+              } else {
+                setVarianceRows(FIXTURE_VARIANCE.slice(0, 2));
+              }
               setView('count-review');
             }}
           />
         );
       case 'count-review':
         return (
-          <VarianceReportView rows={FIXTURE_VARIANCE.slice(0, 2)} onBack={() => setView('count')} />
+          <VarianceReportView
+            rows={useApi ? varianceRows : FIXTURE_VARIANCE.slice(0, 2)}
+            onBack={() => setView('count')}
+          />
         );
       case 'recipes':
         return (
           <RecipeEditorV2View
-            recipes={FIXTURE_RECIPES_V2}
-            menuItems={FIXTURE_MENU_ITEMS}
+            recipes={recipes}
+            menuItems={menuItems}
             useApi={useApi}
             onBack={goHub}
             onSave={useApi ? async (menuItemId, recipe) => {
-              const api = await import('../../lib/enterprise-inventory-api');
-              await api.saveRecipe(menuItemId, recipe);
+              try {
+                const api = await import('../../lib/enterprise-inventory-api');
+                await api.saveRecipe(menuItemId, recipe);
+                await loadApi();
+                toast.success('Recipe saved');
+              } catch (error) {
+                toast.error(error instanceof Error ? error.message : 'Failed to save recipe');
+              }
             } : undefined}
           />
         );
       case 'variance':
-        return <VarianceReportView rows={FIXTURE_VARIANCE} onBack={goHub} />;
+        return (
+          <VarianceReportView
+            rows={useApi ? varianceRows : FIXTURE_VARIANCE}
+            onBack={goHub}
+          />
+        );
       case 'locations':
-        return <LocationHierarchyView tree={FIXTURE_LOCATION_TREE} onBack={goHub} />;
+        return <LocationHierarchyView tree={locationTree} onBack={goHub} />;
       case 'ledger':
         return <LedgerAuditView entries={ledger} onBack={goHub} />;
       default:

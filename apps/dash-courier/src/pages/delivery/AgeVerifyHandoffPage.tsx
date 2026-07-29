@@ -1,13 +1,14 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { SlideToConfirm } from '@/components/ui/SlideToConfirm';
-
-const ID_CAPTURE_IMAGE =
-  'https://lh3.googleusercontent.com/aida-public/AB6AXuCHp39bI4iGduBQmwM3ohch5G_folfKgqIGFHLLivVggHNM9NCgHXqs5yswIEtQiW_NCwZa9WL1NcUskeJ7VuG8Mr3z8uS_DYcIT805O02VU6ikG3MkQNKT6aU6W0ptvPHrNy7U9aewhD8xX2YqI8WdDYG49kEN_xWulejrYZAMAWloIOobH4rXhmSHogXpMs2TH_04lpGdtHOqzxGkpX4JGfs9uOzS4BVnLW42l0-M1fj2rgTSs6j2V7TvQubdSqCAVMjmJWBU3Us';
+import { submitCourierProof } from '@/lib/courierApi';
+import { uploadAndGetProofUrl } from '@/lib/courierFileUpload';
+import { toast } from '@/lib/toast';
 
 type AgeVerifyHandoffPageProps = {
   customerName: string;
   dropoffAddress?: string;
+  orderId: string;
   onComplete: () => void;
   onBack: () => void;
 };
@@ -20,18 +21,51 @@ const CHECKLIST = [
 
 export function AgeVerifyHandoffPage({
   customerName,
-  dropoffAddress = '242 West End Ave, Apt 4C',
+  dropoffAddress = 'Delivery address',
+  orderId,
   onComplete,
   onBack,
 }: AgeVerifyHandoffPageProps) {
   const [checks, setChecks] = useState<Record<number, boolean>>({});
-  const [photoCaptured, setPhotoCaptured] = useState(false);
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const allChecked = CHECKLIST.every((_, i) => checks[i]);
-  const canComplete = allChecked && photoCaptured;
+  const canComplete = allChecked && !!photoUrl && !uploading;
 
   const toggleCheck = (index: number) => {
     setChecks((prev) => ({ ...prev, [index]: !prev[index] }));
+  };
+
+  const handleCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPreview(URL.createObjectURL(file));
+    setUploading(true);
+    const url = await uploadAndGetProofUrl(file, 'proofs');
+    setUploading(false);
+    if (!url) {
+      toast.error('Upload failed', 'Could not store ID verification photo.');
+      setPreview(null);
+      return;
+    }
+    setPhotoUrl(url);
+    toast.success('ID photo saved');
+  };
+
+  const handleConfirm = async () => {
+    if (!photoUrl || !orderId) return;
+    setSubmitting(true);
+    const ok = await submitCourierProof(orderId, 'age_verify', photoUrl);
+    setSubmitting(false);
+    if (!ok) {
+      toast.error('Verification failed', 'Could not record ID verification. Try again.');
+      return;
+    }
+    onComplete();
   };
 
   return (
@@ -43,9 +77,6 @@ export function AgeVerifyHandoffPage({
           </button>
           <h1 className="text-headline-md font-bold text-primary">VERIFY ID</h1>
         </div>
-        <button type="button" className="rounded-full p-2 text-primary hover:bg-surface-container">
-          <MaterialIcon name="help" />
-        </button>
       </nav>
 
       <main className="mx-auto w-full max-w-lg flex-1 overflow-y-auto px-4 pb-32 pt-20">
@@ -70,7 +101,7 @@ export function AgeVerifyHandoffPage({
           <div className="flex gap-4 rounded-xl border border-error/20 bg-error-container p-4 text-on-error-container">
             <MaterialIcon name="warning" className="shrink-0 text-error" />
             <p className="text-body-md font-semibold leading-snug">
-              Do not leave alcohol unattended or with minors. You must verify identity before handing off the order.
+              Do not leave alcohol unattended or with minors. Capture a photo of the verified ID before handoff.
             </p>
           </div>
         </section>
@@ -95,16 +126,27 @@ export function AgeVerifyHandoffPage({
 
         <section className="mb-8">
           <h3 className="mb-2 px-1 text-label-lg font-semibold text-on-surface">Verification Evidence</h3>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={(e) => void handleCapture(e)}
+          />
           <button
             type="button"
-            onClick={() => setPhotoCaptured(true)}
+            disabled={uploading}
+            onClick={() => fileInputRef.current?.click()}
             className="relative flex aspect-[16/9] w-full flex-col items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed border-outline-variant bg-surface-container transition-colors hover:border-primary"
           >
-            <img alt="" src={ID_CAPTURE_IMAGE} className="absolute inset-0 h-full w-full object-cover opacity-60" />
+            {preview ? (
+              <img alt="ID capture preview" src={preview} className="absolute inset-0 h-full w-full object-cover" />
+            ) : null}
             <div className="relative z-10 flex flex-col items-center rounded-xl border border-white bg-white/90 px-6 py-4 shadow-lg backdrop-blur">
               <MaterialIcon name="photo_camera" className="mb-2 text-4xl text-primary" filled />
               <p className="text-label-lg font-semibold text-primary">
-                {photoCaptured ? 'ID photo captured' : 'Capture ID verification'}
+                {uploading ? 'Uploading…' : photoUrl ? 'ID photo captured' : 'Capture ID verification'}
               </p>
               <p className="mt-1 text-center text-[10px] text-on-surface-variant">
                 Blur personal details except photo/birthdate
@@ -112,19 +154,18 @@ export function AgeVerifyHandoffPage({
             </div>
           </button>
         </section>
-
-        <div className="text-center">
-          <button type="button" className="px-4 py-2 text-label-lg font-semibold text-error hover:underline">
-            Cannot verify — return to store
-          </button>
-        </div>
       </main>
 
       <div className="fixed bottom-0 left-0 z-50 w-full border-t border-outline-variant bg-white px-4 py-4 pb-safe">
-        {canComplete ? (
-          <SlideToConfirm label="Confirm delivery" onComplete={onComplete} variant="pill" />
+        {canComplete && !submitting ? (
+          <SlideToConfirm label="Confirm delivery" onComplete={() => void handleConfirm()} variant="pill" />
         ) : (
-          <SlideToConfirm label="Confirm delivery" onComplete={() => {}} variant="pill" disabled />
+          <SlideToConfirm
+            label={submitting ? 'Saving…' : 'Confirm delivery'}
+            onComplete={() => {}}
+            variant="pill"
+            disabled
+          />
         )}
       </div>
     </div>

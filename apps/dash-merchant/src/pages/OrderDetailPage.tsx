@@ -50,7 +50,13 @@ export default function OrderDetailPage({
   });
 
   const updateStatusMutation = useMutation({
-    mutationFn: async ({ status }: { status: string }) => {
+    mutationFn: async ({
+      status,
+      estimatedPrepTimeMins,
+    }: {
+      status: string;
+      estimatedPrepTimeMins?: number;
+    }) => {
       const {
         data: { session },
       } = await supabase.auth.getSession();
@@ -62,7 +68,11 @@ export default function OrderDetailPage({
           'Content-Type': 'application/json',
           Authorization: `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify({ status, actorType: 'merchant' }),
+        body: JSON.stringify({
+          status,
+          actorType: 'merchant',
+          estimatedPrepTimeMins,
+        }),
       });
       if (!res.ok) {
         const body = await res.json();
@@ -106,6 +116,8 @@ export default function OrderDetailPage({
   const status = order.status;
 
   if (status === 'preparing' || status === 'accepted') {
+    const currentPrep =
+      order.estimated_prep_time_mins ?? merchant.avg_prep_time_mins ?? 20;
     return (
       <div className="fixed inset-0 z-[55] overflow-y-auto bg-background">
         <PreparingOrderDetail
@@ -113,6 +125,12 @@ export default function OrderDetailPage({
           avgPrepTimeMins={merchant.avg_prep_time_mins}
           onBack={onBack}
           onMarkReady={() => updateStatusMutation.mutate({ status: 'ready' })}
+          onNeedMoreTime={() =>
+            updateStatusMutation.mutate({
+              status: order.status,
+              estimatedPrepTimeMins: currentPrep + 10,
+            })
+          }
           onCancel={() => onReject(order.id)}
           isSubmitting={updateStatusMutation.isPending}
         />
@@ -123,7 +141,12 @@ export default function OrderDetailPage({
   if (status === 'ready') {
     return (
       <div className="fixed inset-0 z-[55] overflow-y-auto bg-background">
-        <ReadyOrderDetail order={order} onBack={onBack} />
+        <ReadyOrderDetail
+          order={order}
+          onBack={onBack}
+          onConfirmPickup={() => updateStatusMutation.mutate({ status: 'picked_up' })}
+          isSubmitting={updateStatusMutation.isPending}
+        />
       </div>
     );
   }

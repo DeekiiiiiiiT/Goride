@@ -62,6 +62,8 @@ import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { useCourierDispatch } from '@/hooks/useCourierDispatch';
 import { OfflineError, assertOnline } from '@/lib/networkGuard';
 import { loadCourierProfile } from '@/lib/courierProfileService';
+import { patchCourierLocation, putCourierAvailability, submitCourierIssue, updateCourierOrderStatus } from '@/lib/courierApi';
+import { realDispatchProvider } from '@/services/courierDispatch/RealDispatchProvider';
 import { toast } from '@/lib/toast';
 
 type ProfileScreen =
@@ -86,7 +88,7 @@ type CourierHomePageProps = {
 
 export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
   const dispatch = useCourierDispatch();
-  const { mode, offerPhase, deliveryPhase, acceptedStacked } = dispatch;
+  const { mode, offerPhase, deliveryPhase, acceptedStacked, provider } = dispatch;
   const [activeTab, setActiveTab] = useState<CourierTab>('home');
   const [selectedDeliveryId, setSelectedDeliveryId] = useState<string | null>(null);
   const [profileScreen, setProfileScreen] = useState<ProfileScreen>(null);
@@ -113,6 +115,29 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
         y: 50 + (coords.lat - 18.0179) * 800,
       }
     : { x: 50, y: 50 };
+
+  // Transmit GPS to availability + active order
+  useEffect(() => {
+    if (!coords || !isOnline) return;
+    realDispatchProvider.setLastCoords(coords.lat, coords.lng);
+    void putCourierAvailability({
+      isOnline: true,
+      lat: coords.lat,
+      lng: coords.lng,
+      activeOrderId: realDispatchProvider.activeOrderId,
+    });
+    if (realDispatchProvider.activeOrderId) {
+      void patchCourierLocation(realDispatchProvider.activeOrderId, coords.lat, coords.lng);
+    }
+  }, [coords, isOnline]);
+
+  // When an offer appears from real polling, surface feedback/push banner
+  useEffect(() => {
+    if (mode === 'online' && offerPhase === 'single') {
+      feedback.onOfferReceived();
+      if (document.hidden) setPushBannerOpen(true);
+    }
+  }, [mode, offerPhase, feedback]);
 
   useEffect(() => {
     void loadCourierProfile().then((profile) => {
@@ -220,47 +245,88 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
   const handleAcceptSingleOffer = useCallback(() => {
     guardAction(() => {
       feedback.onAccept();
-      const isGrocery = MOCK_GROCERY_OFFER.fulfillment_type === 'pick_and_pack';
-      setActiveDelivery(isGrocery ? MOCK_GROCERY_PICK_DELIVERY : MOCK_ACTIVE_DELIVERY);
-      toast.success('Offer accepted', isGrocery ? 'Head to Fresh Mart to shop.' : 'Navigation started to pickup.');
-      dispatch.acceptOffer(isGrocery ? MOCK_GROCERY_OFFER.id : MOCK_SINGLE_OFFER.id);
+      const offerId =
+        'getCurrentOfferId' in provider &&
+        typeof (provider as { getCurrentOfferId?: () => string }).getCurrentOfferId === 'function'
+          ? (provider as { getCurrentOfferId: () => string }).getCurrentOfferId()
+          : MOCK_SINGLE_OFFER.id;
+      const pending =
+        'getPendingOrder' in provider &&
+        typeof (provider as { getPendingOrder?: () => {
+          id: string;
+          merchant?: { name?: string } | null;
+          delivery_address?: string;
+          order_number?: string;
+        } | null }).getPendingOrder === 'function'
+          ? (
+              provider as {
+                getPendingOrder: () => {
+                  id: string;
+                  merchant?: { name?: string } | null;
+                  delivery_address?: string;
+                  order_number?: string;
+                } | null;
+              }
+            ).getPendingOrder()
+          : null;
+
+      if (pending) {
+        setActiveDelivery({
+          ...MOCK_ACTIVE_DELIVERY,
+          orderId: pending.id,
+          displayOrderId: pending.order_number || pending.id.slice(0, 8),
+          restaurant: pending.merchant?.name || MOCK_ACTIVE_DELIVERY.restaurant,
+          dropoffAddress: pending.delivery_address || MOCK_ACTIVE_DELIVERY.dropoffAddress,
+        });
+      }
+
+      toast.success('Offer accepted', 'Navigation started to pickup.');
+      dispatch.acceptOffer(offerId);
       setActiveTab('home');
     });
-  }, [feedback, dispatch, guardAction]);
+  }, [feedback, dispatch, guardAction, provider]);
+
+  const handleReportIssueSubmit = useCallback(
+    (issueId: string, notes?: string, photoUrl?: string) => {
+      const orderId = realDispatchProvider.activeOrderId || activeDelivery.orderId;
+      void submitCourierIssue(orderId, issueId, notes, photoUrl);
+      setReportIssueOpen(false);
+      if (issueId === 'restaurant_closed' || issueId === 'customer_unavailable') {
+        dispatch.setDeliveryPhase('order-cancelled');
+        void updateCourierOrderStatus(orderId, 'cancelled', issueId);
+      }
+    },
+    [dispatch, activeDelivery.orderId],
+  );
 
   const handleUnassign = useCallback(() => {
     setShowUnassignModal(false);
     setReportIssueOpen(false);
+    const orderId = realDispatchProvider.activeOrderId || activeDelivery.orderId;
+    void updateCourierOrderStatus(orderId, 'cancelled', 'courier_unassign');
     dispatch.cancelDelivery();
-  }, [dispatch]);
+  }, [dispatch, activeDelivery.orderId]);
 
   const handleRequestUnassign = useCallback(() => {
     setShowUnassignModal(true);
   }, []);
 
-  const handleReportIssueSubmit = useCallback(
-    (issueId: string) => {
-      setReportIssueOpen(false);
-      if (issueId === 'restaurant_closed' || issueId === 'customer_unavailable') {
-        dispatch.setDeliveryPhase('order-cancelled');
-      }
-    },
-    [dispatch],
-  );
-
   useEffect(() => {
     if (mode !== 'going-online') return undefined;
 
+    // RealDispatchProvider completes go-online async; only block if GPS never resolves.
     const timer = window.setTimeout(() => {
-      if (!hasResolvedLocation.current) {
+      if (mode === 'going-online' && !hasResolvedLocation.current && !coords) {
         setLocationIssueOpen(true);
-        return;
       }
-      dispatch.setMode('online');
-    }, 2000);
+    }, 8000);
 
     return () => window.clearTimeout(timer);
-  }, [mode, dispatch]);
+  }, [mode, coords]);
+
+  useEffect(() => {
+    if (coords) hasResolvedLocation.current = true;
+  }, [coords]);
 
   const handleLocationRetry = useCallback(() => {
     hasResolvedLocation.current = true;
@@ -278,7 +344,13 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
   }, []);
 
   const handleAtCustomerComplete = useCallback(
-    (method: DropoffMethod) => {
+    (method: DropoffMethod, _hasPhoto: boolean, photoUrl?: string) => {
+      const orderId = realDispatchProvider.activeOrderId || activeDelivery.orderId;
+      if (photoUrl) {
+        void import('@/lib/courierApi').then(({ submitCourierProof }) =>
+          submitCourierProof(orderId, 'delivery', photoUrl),
+        );
+      }
       if (method === 'hand-to-customer') {
         if (activeDelivery.vertical_type === 'alcohol') {
           setAgeVerifyOpen(true);
@@ -286,10 +358,11 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
         }
         dispatch.setDeliveryPhase('confirm-handoff');
       } else {
+        void updateCourierOrderStatus(orderId, 'delivered');
         dispatch.setDeliveryPhase('complete');
       }
     },
-    [dispatch, activeDelivery.vertical_type],
+    [dispatch, activeDelivery.vertical_type, activeDelivery.orderId],
   );
 
   const handleProfileNavigate = useCallback((destination: ProfileDestination) => {
@@ -466,8 +539,19 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
         <AtStorePage
           delivery={activeDelivery}
           onClose={handleRequestUnassign}
-          onConfirmPickup={() =>
-            guardAction(() => dispatch.setDeliveryPhase('en-route'))
+          onConfirmPickup={(pickupPhotoUrl) =>
+            guardAction(() => {
+              const orderId = realDispatchProvider.activeOrderId || activeDelivery.orderId;
+              if (pickupPhotoUrl) {
+                void import('@/lib/courierApi').then(({ submitCourierProof }) =>
+                  submitCourierProof(orderId, 'pickup', pickupPhotoUrl),
+                );
+              }
+              void updateCourierOrderStatus(orderId, 'picked_up').then(() =>
+                updateCourierOrderStatus(orderId, 'in_transit'),
+              );
+              dispatch.setDeliveryPhase('en-route');
+            })
           }
           onRequestUnassign={handleRequestUnassign}
           onReportIssue={() => setReportIssueOpen(true)}
@@ -517,6 +601,7 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
         <AgeVerifyHandoffPage
           customerName={activeDelivery.customerName}
           dropoffAddress={activeDelivery.dropoffAddress}
+          orderId={realDispatchProvider.activeOrderId || activeDelivery.orderId}
           onBack={() => setAgeVerifyOpen(false)}
           onComplete={() => {
             setAgeVerifyOpen(false);

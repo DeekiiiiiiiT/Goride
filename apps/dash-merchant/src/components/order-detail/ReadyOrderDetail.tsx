@@ -4,20 +4,19 @@ import { formatTimeAgo } from '../../lib/partner-utils';
 import { getItemModifiersText, HANDOFF_CHECKLIST_ITEMS } from '../../lib/order-utils';
 import { Order } from '../../types/order';
 
-const COURIER_PLACEHOLDER = {
-  name: 'Marcus',
-  vehicle: 'Motorcycle',
-  eta: '3 min',
-  avatar:
-    'https://images.unsplash.com/photo-1566576912321-d58ddd7a6088?w=96&h=96&fit=crop&crop=face',
-};
-
 interface ReadyOrderDetailProps {
   order: Order;
   onBack: () => void;
+  onConfirmPickup: () => void;
+  isSubmitting?: boolean;
 }
 
-export default function ReadyOrderDetail({ order, onBack }: ReadyOrderDetailProps) {
+export default function ReadyOrderDetail({
+  order,
+  onBack,
+  onConfirmPickup,
+  isSubmitting = false,
+}: ReadyOrderDetailProps) {
   const [checklist, setChecklist] = useState<Record<number, boolean>>({
     0: true,
     1: true,
@@ -25,10 +24,20 @@ export default function ReadyOrderDetail({ order, onBack }: ReadyOrderDetailProp
   });
 
   const courierAssigned = Boolean(order.courier_id);
+  const courierName = order.courier?.display_name?.trim() || null;
+  const courierVehicle = order.courier?.vehicle_type?.trim() || null;
+  const courierPhone = order.courier?.phone?.trim() || null;
   const readySince = order.ready_at;
+  const checklistComplete = HANDOFF_CHECKLIST_ITEMS.every((_, i) => checklist[i]);
+  const canConfirmPickup = courierAssigned && checklistComplete && !isSubmitting;
 
   const toggleChecklist = (index: number) => {
     setChecklist((prev) => ({ ...prev, [index]: !prev[index] }));
+  };
+
+  const callCourier = () => {
+    if (!courierPhone) return;
+    window.location.href = `tel:${courierPhone}`;
   };
 
   return (
@@ -78,25 +87,26 @@ export default function ReadyOrderDetail({ order, onBack }: ReadyOrderDetailProp
         <div className="flex flex-col gap-inset-sm rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-sm">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-inset-xs">
-              <img
-                src={COURIER_PLACEHOLDER.avatar}
-                alt={`Courier ${COURIER_PLACEHOLDER.name}`}
-                className="h-12 w-12 rounded-full bg-surface-variant object-cover"
-              />
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-surface-variant text-on-surface-variant">
+                <MaterialIcon name="person" size={28} />
+              </div>
               <div className="flex flex-col">
                 <span className="text-body-lg font-semibold">
-                  {courierAssigned ? COURIER_PLACEHOLDER.name : 'Assigning courier'}
+                  {courierAssigned
+                    ? courierName || 'Courier assigned'
+                    : 'Assigning courier'}
                 </span>
                 <span className="text-body-sm text-on-surface-variant">
                   {courierAssigned
-                    ? `${COURIER_PLACEHOLDER.vehicle} • Arriving in ${COURIER_PLACEHOLDER.eta}`
+                    ? courierVehicle || 'En route to restaurant'
                     : 'Courier will be assigned soon'}
                 </span>
               </div>
             </div>
             <button
               type="button"
-              disabled={!courierAssigned}
+              disabled={!courierPhone}
+              onClick={callCourier}
               className="flex h-10 w-10 items-center justify-center rounded-full border border-outline-variant text-primary transition-colors hover:bg-surface-container-low disabled:opacity-40"
               aria-label="Call courier"
             >
@@ -169,14 +179,19 @@ export default function ReadyOrderDetail({ order, onBack }: ReadyOrderDetailProp
       <div className="fixed bottom-0 left-0 z-40 w-full border-t border-outline-variant bg-surface-container-lowest p-margin-mobile pb-[max(16px,env(safe-area-inset-bottom))] shadow-[0_-4px_12px_rgba(0,0,0,0.05)]">
         <button
           type="button"
-          disabled
-          className="flex h-12 w-full cursor-not-allowed items-center justify-center gap-2 rounded-lg bg-surface-variant text-headline-md font-semibold text-on-surface-variant opacity-70"
+          disabled={!canConfirmPickup}
+          onClick={onConfirmPickup}
+          className="flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-primary text-headline-md font-semibold text-on-primary transition-opacity disabled:cursor-not-allowed disabled:bg-surface-variant disabled:text-on-surface-variant disabled:opacity-70"
         >
           <MaterialIcon name="local_shipping" />
-          CONFIRM PICKUP
+          {isSubmitting ? 'CONFIRMING…' : 'CONFIRM PICKUP'}
         </button>
         <p className="mt-2 text-center text-label-sm text-on-surface-variant">
-          Action available when courier arrives
+          {!courierAssigned
+            ? 'Available when a courier is assigned'
+            : !checklistComplete
+              ? 'Complete the handoff checklist first'
+              : 'Confirm when the courier has the order'}
         </p>
       </div>
     </div>

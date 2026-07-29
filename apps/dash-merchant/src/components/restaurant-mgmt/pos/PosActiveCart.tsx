@@ -17,6 +17,8 @@ interface PosActiveCartProps {
   tableLabel: string;
   paymentMethod: PosPaymentMethod;
   terminalReady: boolean;
+  paymentMockMode: boolean;
+  printJobCreated: boolean | null;
   useApi: boolean;
   onUpdateQuantity: (id: string, quantity: number) => void;
   onClearCart: () => void;
@@ -103,6 +105,8 @@ export default function PosActiveCart({
   tableLabel,
   paymentMethod,
   terminalReady,
+  paymentMockMode,
+  printJobCreated,
   useApi,
   onUpdateQuantity,
   onClearCart,
@@ -121,6 +125,11 @@ export default function PosActiveCart({
   const inCheckoutFlow = step === 'checkout' || step === 'payment';
 
   if (step === 'success') {
+    const receiptLabel = !useApi
+      ? 'preview mode'
+      : printJobCreated
+        ? 'sent to printer'
+        : 'no printer configured';
     return (
       <aside className="flex h-full w-full min-h-0 flex-1 flex-col border-t border-outline-variant bg-surface-container-low shadow-md lg:w-[40%] lg:flex-none lg:border-l lg:border-t-0">
         <div className="flex flex-1 flex-col items-center justify-center px-6 py-12 text-center">
@@ -128,7 +137,7 @@ export default function PosActiveCart({
           <h3 className="mt-4 text-headline-md font-bold text-on-surface">Payment successful</h3>
           <p className="text-body-md text-on-surface-variant">Order #{lastOrderNumber}</p>
           <p className="mt-1 text-body-sm text-on-surface-variant">
-            Receipt {useApi ? 'sent to printer' : 'preview mode'}
+            Receipt {receiptLabel}
           </p>
           <button
             type="button"
@@ -346,11 +355,17 @@ export default function PosActiveCart({
                 {paymentMethod === 'card' && (
                   <div className="mt-6 rounded-xl border border-dashed border-outline-variant bg-surface-container-low p-4 text-center">
                     <MaterialIcon name="contactless" className="text-4xl text-primary-container" />
-                    <p className="mt-2 text-body-sm font-semibold">Stripe Terminal</p>
+                    <p className="mt-2 text-body-sm font-semibold">
+                      {paymentMockMode ? 'Local mock payment' : 'Stripe Terminal'}
+                    </p>
                     <p className="text-label-sm text-on-surface-variant">
-                      {terminalReady || !useApi
-                        ? 'Tap or insert card on the reader'
-                        : 'Tap Complete sale to connect the reader'}
+                      {!useApi
+                        ? 'Preview mode — no real charge'
+                        : paymentMockMode && terminalReady
+                          ? 'Stripe not configured — confirm to mark paid locally'
+                          : terminalReady
+                            ? 'Tap or insert card on the reader'
+                            : 'Tap Complete sale to connect the reader'}
                     </p>
                   </div>
                 )}
@@ -395,7 +410,9 @@ export default function PosActiveCart({
                     ? 'Processing…'
                     : paymentMethod === 'card' && useApi && !terminalReady
                       ? 'Connect reader'
-                      : 'Complete sale'}
+                      : paymentMethod === 'card' && useApi && paymentMockMode
+                        ? 'Confirm mock payment'
+                        : 'Complete sale'}
                 </button>
               </>
             )}

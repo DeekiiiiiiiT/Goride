@@ -6,7 +6,7 @@ import { CUSTOMER_AVATAR } from '@/lib/mockActiveDelivery';
 type AtCustomerPageProps = {
   delivery: ActiveDelivery;
   onBack: () => void;
-  onComplete: (method: DropoffMethod, hasPhoto: boolean) => void;
+  onComplete: (method: DropoffMethod, hasPhoto: boolean, photoUrl?: string) => void;
   onCustomerUnavailable: () => void;
 };
 
@@ -18,7 +18,9 @@ export function AtCustomerPage({
 }: AtCustomerPageProps) {
   const [method, setMethod] = useState<DropoffMethod>('leave-at-door');
   const [hasPhoto, setHasPhoto] = useState(false);
+  const [photoUrl, setPhotoUrl] = useState<string | undefined>();
   const [note, setNote] = useState('');
+  const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const canComplete = method === 'hand-to-customer' || hasPhoto;
@@ -190,7 +192,18 @@ export function AtCustomerPage({
               accept="image/*"
               capture="environment"
               className="hidden"
-              onChange={() => setHasPhoto(true)}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                setUploading(true);
+                void import('@/lib/courierFileUpload').then(async ({ uploadAndGetProofUrl }) => {
+                  const url = await uploadAndGetProofUrl(file, 'proofs');
+                  setUploading(false);
+                  if (!url) return;
+                  setPhotoUrl(url);
+                  setHasPhoto(true);
+                });
+              }}
             />
             <button
               type="button"
@@ -205,7 +218,7 @@ export function AtCustomerPage({
                 <MaterialIcon name={hasPhoto ? 'check_circle' : 'photo_camera'} className="text-[28px]" />
               </div>
               <span className="text-sm font-medium">
-                {hasPhoto ? 'Photo captured' : 'Take photo of order at door'}
+                {uploading ? 'Uploading…' : hasPhoto ? 'Photo captured' : 'Take photo of order at door'}
               </span>
             </button>
           </section>
@@ -245,8 +258,8 @@ export function AtCustomerPage({
       <div className="fixed bottom-0 left-0 w-full bg-surface/90 backdrop-blur-md shadow-[0_-8px_32px_rgba(0,0,0,0.08)] p-[var(--spacing-edge)] pb-safe z-50 rounded-t-[32px] border-t border-surface-variant">
         <button
           type="button"
-          onClick={() => onComplete(method, hasPhoto)}
-          disabled={!canComplete}
+          onClick={() => onComplete(method, hasPhoto, photoUrl)}
+          disabled={!canComplete || uploading}
           className="w-full h-[60px] rounded-[20px] bg-primary text-on-primary text-lg font-semibold tracking-wide flex items-center justify-center gap-3 shadow-[0_8px_20px_rgba(0,108,73,0.3)] active:scale-[0.97] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <span>Complete Delivery</span>

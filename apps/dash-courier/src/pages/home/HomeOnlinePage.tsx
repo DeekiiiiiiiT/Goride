@@ -15,14 +15,12 @@ type HomeOnlinePageProps = {
 
 export function HomeOnlinePage({
   onRequestEndDash,
-  onOfferReceived,
+  onOfferReceived: _onOfferReceived,
   onViewPromotions,
   mapOffset = { x: 50, y: 50 },
 }: HomeOnlinePageProps) {
-  React.useEffect(() => {
-    const timer = window.setTimeout(() => onOfferReceived?.(), 5000);
-    return () => window.clearTimeout(timer);
-  }, [onOfferReceived]);
+  // Offers arrive via RealDispatchProvider polling / Realtime — no fake timer.
+  void _onOfferReceived;
 
   return (
     <main className="relative w-full flex-1 min-h-[calc(100dvh-var(--app-bottom-nav-total)-3.5rem)] flex flex-col bg-surface-variant overflow-hidden md:rounded-xl md:mx-auto md:max-w-xl md:my-2 md:min-h-[calc(100dvh-1rem)]">
