@@ -16,7 +16,6 @@ import {
 import { calculateOrderTotals } from '@/lib/orderPricing';
 import { formatJmd } from '@/lib/restaurantContent';
 import { toast } from 'sonner';
-import { isAgeVerified } from '@/pages/AgeVerificationPage';
 import PharmacyNoticeSheet, {
   isPharmacyNoticeAcknowledged,
 } from '@/components/checkout/PharmacyNoticeSheet';
@@ -64,9 +63,7 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
 
   useEffect(() => {
     const vertical = sessionStorage.getItem('roam_cart_vertical');
-    if (vertical === 'alcohol' && !isAgeVerified()) {
-      onNavigate('age-verification');
-    }
+    // Alcohol vertical deferred for soft launch — no client-side age theater
     if (vertical === 'pharmacy' && !isPharmacyNoticeAcknowledged()) {
       setShowPharmacyNotice(true);
     }
@@ -127,6 +124,8 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
         body: JSON.stringify({
           merchantId,
           items: items.map(item => ({
+            id: item.itemId,
+            menuItemId: item.itemId,
             item_id: item.itemId,
             name: item.name,
             price: item.price,
@@ -138,6 +137,7 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
           deliveryFee: totals.deliveryFee,
           tip: totals.tip,
           paymentMethod,
+          promoCode: getAppliedPromo()?.code ?? getCheckoutPreferences().appliedPromoCode ?? undefined,
           scheduledFor:
             deliveryMode === 'scheduled' && scheduledDateId && scheduledSlotId
               ? { date: scheduledDateId, slot: scheduledSlotId }

@@ -1,4 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { API_ENDPOINTS, publicAnonKey } from '@roam/api-client';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PullToRefresh } from '@/components/ui/PullToRefresh';
@@ -7,10 +9,11 @@ import { FilterSortSheet, type FilterState } from '@/components/search/FilterSor
 import { useCart } from '@/hooks/useCart';
 import { toast } from '@/lib/toast';
 import { RECENT_SEARCHES, SEARCH_RESULTS } from '@/lib/discoverContent';
-import { searchDishes, type DishSearchResult } from '@/lib/searchDishes';
+import { allowMocks } from '@/lib/mocksGate';
+import { fetchDiscoverMerchants, type DiscoverMerchant } from '@/lib/merchantDiscovery';
+import { type DishSearchResult } from '@/lib/searchDishes';
 import { getGroupedSearchResults } from '@/lib/searchGroupedResults';
 import { hapticLight, hapticSuccess } from '@/lib/haptics';
-import { getRestaurantProfile } from '@/lib/restaurantContent';
 import type { VerticalType } from '@roam/types';
 
 type SearchResultsPageProps = {
@@ -25,10 +28,24 @@ const VERTICAL_FILTERS: { id: 'all' | VerticalType | 'retail'; label: string }[]
   { id: 'restaurant', label: 'Food' },
   { id: 'grocery', label: 'Grocery' },
   { id: 'retail', label: 'Retail' },
-  { id: 'alcohol', label: 'Alcohol' },
 ];
 
-function applyRestaurantFilters(results: typeof SEARCH_RESULTS, filters: FilterState, query: string) {
+type SearchableRestaurant = {
+  id: string;
+  name: string;
+  cuisines: string;
+  rating: number;
+  eta: string;
+  image: string;
+  tags?: string[];
+  vertical_type?: VerticalType;
+};
+
+function applyRestaurantFilters(
+  results: SearchableRestaurant[],
+  filters: FilterState,
+  query: string,
+) {
   let list = results.filter(
     (r) =>
       !query ||
@@ -50,6 +67,18 @@ function applyRestaurantFilters(results: typeof SEARCH_RESULTS, filters: FilterS
   return list;
 }
 
+function merchantToSearchable(m: DiscoverMerchant): SearchableRestaurant {
+  return {
+    id: m.id,
+    name: m.name,
+    cuisines: m.cuisines,
+    rating: m.rating,
+    eta: m.eta,
+    image: m.image,
+    vertical_type: m.vertical_type,
+  };
+}
+
 export default function SearchResultsPage({
   query,
   onNavigate,
@@ -67,18 +96,81 @@ export default function SearchResultsPage({
     deliveryFee: '',
   });
   const { addItem } = useCart();
+  const mocksOk = allowMocks();
+
+  const { data: merchants = [], refetch: refetchMerchants } = useQuery({
+    queryKey: ['search-merchants'],
+    queryFn: () => fetchDiscoverMerchants(),
+    retry: false,
+  });
+
+  const { data: apiSearch, refetch: refetchApiSearch } = useQuery({
+    queryKey: ['customer-search', query],
+    queryFn: async () => {
+      const q = query.trim();
+      if (q.length < 2) return { merchants: [] as SearchableRestaurant[], items: [] as DishSearchResult[] };
+      const res = await fetch(`${API_ENDPOINTS.delivery}/search?q=${encodeURIComponent(q)}`, {
+        headers: { apikey: publicAnonKey },
+      });
+      if (!res.ok) throw new Error('Search failed');
+      const json = await res.json();
+      const searchMerchants = ((json.merchants as Array<Record<string, unknown>>) ?? []).map((m) => ({
+        id: String(m.id),
+        name: String(m.name ?? ''),
+        cuisines: String(m.cuisineType ?? m.cuisine_type ?? ''),
+        rating: Number(m.rating ?? 0),
+        eta: m.etaMins != null ? `${m.etaMins}-${Number(m.etaMins) + 10} min` : '25-35 min',
+        image: String(m.coverImageUrl ?? m.logoUrl ?? m.cover_image_url ?? m.logo_url ?? ''),
+      }));
+      const items = ((json.items as Array<Record<string, unknown>>) ?? []).map((item) => ({
+        itemId: String(item.id),
+        name: String(item.name ?? ''),
+        description: '',
+        price: Number(item.price ?? 0),
+        image: String(item.imageUrl ?? item.image_url ?? ''),
+        merchantId: String(item.merchantId ?? item.merchant_id ?? ''),
+        merchantName: String(item.merchantName ?? ''),
+        hasModifiers: false,
+      }));
+      return { merchants: searchMerchants, items };
+    },
+    enabled: query.trim().length >= 2,
+    retry: false,
+  });
 
   const groupedResults = useMemo(() => getGroupedSearchResults(query), [query]);
 
   const handleRefresh = useCallback(async () => {
-    await new Promise((r) => setTimeout(r, 600));
+    await Promise.all([refetchMerchants(), refetchApiSearch()]);
     toast.success('Results updated');
-  }, []);
+  }, [refetchMerchants, refetchApiSearch]);
 
-  const dishResults = useMemo(() => searchDishes(query), [query]);
+  const dishResults = apiSearch?.items ?? [];
+
+  const restaurantSource: SearchableRestaurant[] = useMemo(() => {
+    if (apiSearch?.merchants && apiSearch.merchants.length > 0) {
+      return apiSearch.merchants;
+    }
+    if (merchants.length > 0) {
+      return merchants.map(merchantToSearchable);
+    }
+    if (mocksOk) {
+      return SEARCH_RESULTS.map((r) => ({
+        id: r.id,
+        name: r.name,
+        cuisines: r.cuisines,
+        rating: r.rating,
+        eta: r.eta,
+        image: r.image,
+        tags: r.tags,
+      }));
+    }
+    return [];
+  }, [apiSearch?.merchants, merchants, mocksOk]);
+
   const filteredResults = useMemo(
-    () => applyRestaurantFilters(SEARCH_RESULTS, filters, query),
-    [filters, query],
+    () => applyRestaurantFilters(restaurantSource, filters, query),
+    [filters, query, restaurantSource],
   );
 
   const handleDishAdd = (dish: DishSearchResult) => {
@@ -86,7 +178,6 @@ export default function SearchResultsPage({
       onNavigate('restaurant', { merchantId: dish.merchantId, itemId: dish.itemId });
       return;
     }
-    const profile = getRestaurantProfile(dish.merchantId);
     hapticLight();
     addItem(
       {
@@ -97,7 +188,7 @@ export default function SearchResultsPage({
         quantity: 1,
         imageUrl: dish.image,
       },
-      profile.name,
+      dish.merchantName || 'Restaurant',
     );
     hapticSuccess();
     toast.itemAdded(dish.name);
@@ -138,19 +229,19 @@ export default function SearchResultsPage({
 
         <div className="sticky top-[64px] z-40 border-b border-outline-variant/10 bg-background/95 py-4 backdrop-blur-sm">
           <div className="mb-3 flex items-center gap-1 px-4 text-on-surface-variant">
-            <span className="text-label-md uppercase tracking-wider">Sort by:</span>
+            <span className="text-label-md tracking-wider uppercase">Sort by:</span>
             <button type="button" className="flex items-center gap-1 text-label-md opacity-70">
               Relevance
               <MaterialIcon name="expand_more" className="text-base" />
             </button>
           </div>
-          <div className="flex gap-2 overflow-x-auto px-4 no-scrollbar">
+          <div className="no-scrollbar flex gap-2 overflow-x-auto px-4">
             {VERTICAL_FILTERS.map((chip) => (
               <button
                 key={chip.id}
                 type="button"
                 onClick={() => setVerticalFilter(chip.id)}
-                className={`whitespace-nowrap rounded-full px-6 py-2 text-label-lg font-semibold transition-all active:scale-95 ${
+                className={`rounded-full px-6 py-2 text-label-lg font-semibold whitespace-nowrap transition-all active:scale-95 ${
                   verticalFilter === chip.id
                     ? 'bg-primary-container text-on-primary-container'
                     : 'bg-surface-container-highest text-on-surface-variant hover:bg-surface-variant'
@@ -183,7 +274,7 @@ export default function SearchResultsPage({
                       <img alt={restaurant.name} src={restaurant.image} className="h-full w-full object-cover" />
                       {restaurant.badge && (
                         <span
-                          className={`absolute left-2 top-2 rounded-lg px-2 py-1 text-label-md font-semibold ${restaurant.badgeClass}`}
+                          className={`absolute top-2 left-2 rounded-lg px-2 py-1 text-label-md font-semibold ${restaurant.badgeClass}`}
                         >
                           {restaurant.badge}
                         </span>
@@ -226,8 +317,8 @@ export default function SearchResultsPage({
                     <img alt={item.productName} src={item.image} className="h-full w-full object-cover" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-label-md uppercase text-primary">{item.storeName}</p>
-                    <h3 className="text-label-lg font-semibold leading-tight text-on-surface">{item.productName}</h3>
+                    <p className="text-label-md text-primary uppercase">{item.storeName}</p>
+                    <h3 className="text-label-lg leading-tight font-semibold text-on-surface">{item.productName}</h3>
                     <p className="text-body-md text-on-surface-variant">
                       {item.price} • {item.stock}
                     </p>
@@ -256,7 +347,7 @@ export default function SearchResultsPage({
                       <img alt={product.name} src={product.image} className="h-full w-full object-cover" />
                       <button
                         type="button"
-                        className="absolute bottom-2 right-2 flex h-8 w-8 items-center justify-center rounded-full bg-surface shadow-md active:scale-95"
+                        className="absolute right-2 bottom-2 flex h-8 w-8 items-center justify-center rounded-full bg-surface shadow-md active:scale-95"
                       >
                         <MaterialIcon name="add" className="text-xl text-primary" />
                       </button>
@@ -285,9 +376,9 @@ export default function SearchResultsPage({
 
   return (
     <PullToRefresh onRefresh={handleRefresh} className="flex min-h-full flex-col bg-background pb-24">
-      <section className="sticky top-16 z-30 bg-background px-4 pb-4 pt-4">
+      <section className="sticky top-16 z-30 bg-background px-4 pt-4 pb-4">
         <div className="group relative mb-4 w-full">
-          <MaterialIcon name="search" className="absolute left-3 top-1/2 ml-1 -translate-y-1/2 text-outline" />
+          <MaterialIcon name="search" className="absolute top-1/2 left-3 ml-1 -translate-y-1/2 text-outline" />
           <input
             type="text"
             value={query}
@@ -295,13 +386,13 @@ export default function SearchResultsPage({
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !query.trim()) onClear();
             }}
-            className="w-full rounded-xl border-none bg-[#F3F4F6] py-3 pl-12 pr-12 text-base text-on-surface shadow-sm transition-all focus:bg-surface-container-lowest focus:outline-none focus:ring-2 focus:ring-primary"
+            className="w-full rounded-xl border-none bg-[#F3F4F6] py-3 pr-12 pl-12 text-base text-on-surface shadow-sm transition-all focus:bg-surface-container-lowest focus:ring-2 focus:ring-primary focus:outline-none"
           />
           <button
             type="button"
             aria-label="Clear search"
             onClick={onClear}
-            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-surface-container p-2 transition-colors hover:bg-surface-variant"
+            className="absolute top-1/2 right-2 -translate-y-1/2 rounded-full bg-surface-container p-2 transition-colors hover:bg-surface-variant"
           >
             <MaterialIcon name="close" className="text-sm text-on-surface-variant" />
           </button>
@@ -311,7 +402,7 @@ export default function SearchResultsPage({
           <button
             type="button"
             onClick={() => setFiltersOpen(true)}
-            className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-outline-variant bg-surface-container px-4 py-2 text-sm font-semibold tracking-wide"
+            className="flex shrink-0 items-center gap-1 rounded-full border border-outline-variant bg-surface-container px-4 py-2 text-sm font-semibold tracking-wide whitespace-nowrap"
           >
             <MaterialIcon name="tune" className="text-lg" />
             Sort
@@ -321,7 +412,7 @@ export default function SearchResultsPage({
               key={label}
               type="button"
               onClick={() => setFiltersOpen(true)}
-              className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-outline-variant bg-surface-container px-4 py-2 text-sm font-semibold tracking-wide"
+              className="flex shrink-0 items-center gap-1 rounded-full border border-outline-variant bg-surface-container px-4 py-2 text-sm font-semibold tracking-wide whitespace-nowrap"
             >
               {label}
               <MaterialIcon name="keyboard_arrow_down" className="text-lg" />
@@ -351,7 +442,7 @@ export default function SearchResultsPage({
               : 'border-transparent text-outline hover:text-on-surface'
           }`}
         >
-          Dishes ({dishResults.length})
+          Dishes {mocksOk ? `(${dishResults.length})` : ''}
         </button>
       </section>
 
@@ -362,38 +453,55 @@ export default function SearchResultsPage({
               <EmptyState
                 icon="search_off"
                 title="No restaurants found"
-                description={`We couldn't find matches for "${query}". Try a different search.`}
+                description={
+                  query.trim()
+                    ? `We couldn't find matches for "${query}". Try a different search.`
+                    : 'No restaurants available yet.'
+                }
                 actionLabel="Clear search"
                 onAction={onClear}
               />
-              <div className="flex flex-wrap justify-center gap-2">
-                {suggestions.map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => onQueryChange(s)}
-                    className="rounded-full bg-surface-container px-4 py-2 text-sm font-semibold text-on-surface"
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
+              {mocksOk && (
+                <div className="flex flex-wrap justify-center gap-2">
+                  {suggestions.map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => onQueryChange(s)}
+                      className="rounded-full bg-surface-container px-4 py-2 text-sm font-semibold text-on-surface"
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           ) : (
             filteredResults.map((restaurant) => (
               <button
                 key={restaurant.id}
                 type="button"
-                onClick={() => onNavigate('restaurant', { merchantId: restaurant.id })}
+                onClick={() =>
+                  onNavigate('restaurant', {
+                    merchantId: restaurant.id,
+                    verticalType: restaurant.vertical_type,
+                  })
+                }
                 className="cursor-pointer overflow-hidden rounded-[24px] bg-surface-container-lowest text-left shadow-[0px_4px_20px_rgba(0,0,0,0.04)] transition-transform active:scale-[0.98]"
               >
                 <div className="relative h-48 w-full">
-                  <img alt={restaurant.name} className="h-full w-full object-cover" src={restaurant.image} />
+                  {restaurant.image ? (
+                    <img alt={restaurant.name} className="h-full w-full object-cover" src={restaurant.image} />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center bg-surface-container-high">
+                      <MaterialIcon name="storefront" className="text-5xl text-outline" />
+                    </div>
+                  )}
                   <button
                     type="button"
                     onClick={(e) => e.stopPropagation()}
                     aria-label="Save"
-                    className="absolute right-4 top-4 rounded-full bg-surface-container-lowest/80 p-2 text-on-surface backdrop-blur-sm"
+                    className="absolute top-4 right-4 rounded-full bg-surface-container-lowest/80 p-2 text-on-surface backdrop-blur-sm"
                   >
                     <MaterialIcon name="favorite" />
                   </button>
@@ -428,6 +536,14 @@ export default function SearchResultsPage({
               </button>
             ))
           )
+        ) : !mocksOk ? (
+          <EmptyState
+            icon="restaurant"
+            title="Dish search coming soon"
+            description="For now, search by restaurant name — or open a store to browse its menu."
+            actionLabel="Back to restaurants"
+            onAction={() => setActiveTab('restaurants')}
+          />
         ) : dishResults.length === 0 ? (
           <div className="flex flex-col gap-4">
             <EmptyState

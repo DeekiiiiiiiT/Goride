@@ -1,4 +1,5 @@
 import { FEATURED_RESTAURANTS, POPULAR_RESTAURANTS } from '@/lib/discoverContent';
+import { allowMocks } from '@/lib/mocksGate';
 import { ISLAND_GRILL } from '@/lib/restaurantContent';
 
 export type DishSearchResult = {
@@ -60,7 +61,10 @@ function buildDishIndex(): DishSearchResult[] {
 
 const DISH_INDEX = buildDishIndex();
 
+/** Dish search is DEV/mock-only until a real menu search API ships. */
 export function searchDishes(query: string): DishSearchResult[] {
+  if (!allowMocks()) return [];
+
   const q = query.trim().toLowerCase();
   if (!q) return DISH_INDEX;
 
@@ -73,5 +77,6 @@ export function searchDishes(query: string): DishSearchResult[] {
 }
 
 export function getDishIndexCount(): number {
+  if (!allowMocks()) return 0;
   return DISH_INDEX.length;
 }

@@ -622,10 +622,111 @@ app.post("/refunds", async (c) => {
     }
   }
   
-  // TODO: Process actual refund with payment provider
-  // For now, mark as pending for manual processing
-  
-  return c.json({ refund }, 201);
+  // Process refund with payment provider when configured
+  let providerRefundId: string | null = null;
+  let refundStatus = "pending";
+  const provider = String(transaction.provider || "").toLowerCase();
+
+  try {
+    if (provider === "paypal") {
+      const paypalEnv = Deno.env.get("PAYPAL_ENV") || "sandbox";
+      const clientId = Deno.env.get("PAYPAL_CLIENT_ID");
+      const clientSecret = Deno.env.get("PAYPAL_CLIENT_SECRET");
+      const captureId = String(transaction.provider_transaction_id || "");
+      if (!clientId || !clientSecret || !captureId) {
+        return c.json({
+          error: "PayPal refund not configured (missing credentials or capture id)",
+          refund,
+        }, 502);
+      }
+      const base = paypalEnv === "live" ? "https://api-m.paypal.com" : "https://api-m.sandbox.paypal.com";
+      const basic = btoa(`${clientId}:${clientSecret}`);
+      const tokenRes = await fetch(`${base}/v1/oauth2/token`, {
+        method: "POST",
+        headers: {
+          Authorization: `Basic ${basic}`,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: "grant_type=client_credentials",
+      });
+      if (!tokenRes.ok) {
+        return c.json({ error: "PayPal auth failed", refund }, 502);
+      }
+      const tokenJson = await tokenRes.json();
+      const refundRes = await fetch(`${base}/v2/payments/captures/${captureId}/refund`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${tokenJson.access_token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          amount: {
+            value: Number(refundAmount).toFixed(2),
+            currency_code: String(transaction.currency || "USD"),
+          },
+        }),
+      });
+      const refundJson = await refundRes.json().catch(() => ({}));
+      if (!refundRes.ok) {
+        return c.json({ error: "PayPal refund failed", details: refundJson, refund }, 502);
+      }
+      providerRefundId = String(refundJson.id || "");
+      refundStatus = "completed";
+    } else if (provider === "wipay") {
+      // WiPay refund API varies by account — fail closed until WIPAY_REFUND_URL is set
+      const refundUrl = Deno.env.get("WIPAY_REFUND_URL");
+      const apiKey = Deno.env.get("WIPAY_API_KEY");
+      if (!refundUrl || !apiKey) {
+        return c.json({
+          error: "WiPay refund not configured (set WIPAY_REFUND_URL + WIPAY_API_KEY)",
+          refund,
+        }, 502);
+      }
+      const wipayRes = await fetch(refundUrl, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          transaction_id: transaction.provider_transaction_id,
+          amount: refundAmount,
+          reason,
+        }),
+      });
+      const wipayJson = await wipayRes.json().catch(() => ({}));
+      if (!wipayRes.ok) {
+        return c.json({ error: "WiPay refund failed", details: wipayJson, refund }, 502);
+      }
+      providerRefundId = String(wipayJson.id || wipayJson.refund_id || "");
+      refundStatus = "completed";
+    } else {
+      return c.json({
+        error: `Refund provider '${provider || "unknown"}' not supported`,
+        refund,
+      }, 400);
+    }
+
+    const { data: updated } = await serviceSupabase
+      .schema("payments")
+      .from("refunds")
+      .update({
+        status: refundStatus,
+        provider_refund_id: providerRefundId,
+        completed_at: new Date().toISOString(),
+      })
+      .eq("id", refund.id)
+      .select()
+      .single();
+
+    return c.json({ refund: updated || refund }, 201);
+  } catch (e) {
+    console.error("[payments/refund] provider error:", e);
+    return c.json({
+      error: e instanceof Error ? e.message : "Refund provider error",
+      refund,
+    }, 502);
+  }
 });
 
 // ============================================================================
@@ -764,11 +865,109 @@ app.get("/methods", async (c) => {
   const { data: methods } = await serviceSupabase
     .schema("payments")
     .from("customer_payment_methods")
-    .select("id, type, last4, brand, exp_month, exp_year, is_default")
+    .select("id, type, last4, brand, exp_month, exp_year, is_default, provider")
     .eq("customer_id", customer.id)
     .eq("is_active", true);
   
   return c.json({ methods: methods || [] });
+});
+
+/**
+ * Store tokenized card metadata only.
+ * Requires provider_token from WiPay (or other processor) — never accepts raw PAN.
+ * Production card vault needs real WiPay tokenization before customers can save cards.
+ */
+const SaveMethodBody = z.object({
+  providerToken: z.string().min(8).max(512),
+  provider: z.enum(["wipay", "paypal"]).default("wipay"),
+  type: z.enum(["card", "paypal"]).default("card"),
+  last4: z.string().regex(/^\d{4}$/),
+  brand: z.string().min(1).max(32),
+  expMonth: z.coerce.number().int().min(1).max(12),
+  expYear: z.coerce.number().int().min(2024).max(2100),
+  isDefault: z.boolean().optional(),
+});
+
+app.post("/methods", async (c) => {
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
+
+  const supabase = getSupabase(authHeader);
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+  const limited = await assertRateLimit(c, `payments:methods:${user.id}`, {
+    max: 10,
+    windowMs: 60_000,
+  });
+  if (limited) return limited;
+
+  const body = await validateBody(c, SaveMethodBody);
+  if (body instanceof Response) return body;
+
+  // Reject anything that looks like a full PAN was pasted into token field
+  if (/^\d{12,19}$/.test(body.providerToken.replace(/\s/g, ""))) {
+    return c.json({
+      error: "Raw card numbers are not accepted. Use a processor provider_token from WiPay tokenization.",
+    }, 400);
+  }
+
+  const serviceSupabase = getServiceSupabase();
+  let { data: customer } = await serviceSupabase
+    .schema("delivery")
+    .from("customers")
+    .select("id")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (!customer) {
+    const { data: created, error: createErr } = await serviceSupabase
+      .schema("delivery")
+      .from("customers")
+      .insert({
+        user_id: user.id,
+        name: user.email?.split("@")[0] || "Customer",
+        email: user.email,
+      })
+      .select("id")
+      .single();
+    if (createErr || !created) {
+      return c.json({ error: createErr?.message || "Failed to create customer" }, 500);
+    }
+    customer = created;
+  }
+
+  if (body.isDefault) {
+    await serviceSupabase
+      .schema("payments")
+      .from("customer_payment_methods")
+      .update({ is_default: false })
+      .eq("customer_id", customer.id);
+  }
+
+  const { data: method, error } = await serviceSupabase
+    .schema("payments")
+    .from("customer_payment_methods")
+    .insert({
+      customer_id: customer.id,
+      provider: body.provider,
+      provider_method_id: body.providerToken,
+      type: body.type,
+      last4: body.last4,
+      brand: body.brand,
+      exp_month: body.expMonth,
+      exp_year: body.expYear,
+      is_default: body.isDefault ?? false,
+      is_active: true,
+    })
+    .select("id, type, last4, brand, exp_month, exp_year, is_default, provider")
+    .single();
+
+  if (error) return c.json({ error: error.message }, 500);
+  return c.json({
+    method,
+    note: "Stored tokenized metadata only. Real WiPay tokenization is required for production card saving.",
+  }, 201);
 });
 
 // ============================================================================

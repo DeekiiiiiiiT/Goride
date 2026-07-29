@@ -1,7 +1,14 @@
 import { Session } from '@supabase/supabase-js';
+import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
-import { ACCOUNT_MENU, getProfile, PROFILE_HEADER_AVATAR } from '@/lib/accountContent';
+import {
+  ACCOUNT_MENU,
+  getProfile,
+  PROFILE_HEADER_AVATAR,
+  syncProfileFromBackend,
+  type UserProfile,
+} from '@/lib/accountContent';
 
 type AccountPageProps = {
   session: Session | null;
@@ -9,9 +16,17 @@ type AccountPageProps = {
 };
 
 export default function AccountPage({ session, onNavigate }: AccountPageProps) {
-  const profile = getProfile();
-  const displayName = session ? `${profile.firstName} ${profile.lastName}` : 'Guest';
-  const email = session ? profile.email : 'Sign in to save your preferences';
+  const [profile, setProfile] = useState<UserProfile>(getProfile);
+
+  useEffect(() => {
+    if (!session) return;
+    void syncProfileFromBackend().then(setProfile);
+  }, [session]);
+
+  const displayName = session
+    ? `${profile.firstName} ${profile.lastName}`.trim() || 'Customer'
+    : 'Guest';
+  const email = session ? profile.email || session.user.email || '' : 'Sign in to save your preferences';
   const phone = session ? profile.phone : '';
 
   const handleMenuClick = (page?: string) => {

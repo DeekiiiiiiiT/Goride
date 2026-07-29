@@ -37,7 +37,17 @@ export function resolveFavoriteRestaurant(merchantId: string) {
 export function resolveFavoriteItem(key: FavoriteItemKey) {
   const [merchantId, itemId] = key.split(':');
   const dish = searchDishes('').find((d) => d.merchantId === merchantId && d.itemId === itemId);
-  if (dish) return dish;
+  if (dish) {
+    return {
+      id: key,
+      itemId: dish.itemId,
+      merchantId: dish.merchantId,
+      merchantName: dish.merchantName,
+      name: dish.name,
+      price: dish.price,
+      image: dish.image,
+    };
+  }
   const profile = getRestaurantProfile(merchantId);
   const item = profile.items.find((i) => i.id === itemId);
   if (!item) return null;

@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { resolveVerticalType } from '@roam/vertical-config';
 import RestaurantPage from './RestaurantPage';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { FavoriteButton } from '@/components/ui/FavoriteButton';
 import { useCart } from '@/hooks/useCart';
+import { allowMocks } from '@/lib/mocksGate';
+import { mapMerchantMenuResponse } from '@/lib/merchantMenu';
 import { formatJmd } from '@/lib/restaurantContent';
-import { fetchDiscoverMerchants } from '@/lib/merchantDiscovery';
 import { getSavedAddress } from '@/lib/addressStorage';
+import { API_ENDPOINTS, publicAnonKey } from '@roam/api-client';
 
 type Props = {
   merchantId?: string;
@@ -26,7 +29,7 @@ type GroceryProduct = {
 const GROCERY_HERO =
   'https://lh3.googleusercontent.com/aida-public/AB6AXuC9zpbZpaIuGGcHz0R-UxtaiP-EbPxKOLY-2q_MvLEu5StPRsZGT1bZ6BTDARLUZMRJWy8I7rP-cig0H40VgXCnDYkKQaLgT6dqtoDL0YVOUbV6JdaJlyzR4ucTqCbio0NYwrBe_bN7pRw9tTKWb66OndckPQhYo1p-Dcayexpk_9y2Y4MKMVDBAHIL3FDqbrJHfnJIjfrDlO_WOmeJIUFBId87pqvSkUqgCRqqHRc-OCDadNaVxDa4MRHkbAApzycax7ZYOliTK_M';
 
-const GROCERY_PRODUCTS: GroceryProduct[] = [
+const MOCK_GROCERY_PRODUCTS: GroceryProduct[] = [
   {
     id: 'bananas',
     name: 'Bananas',
@@ -61,11 +64,11 @@ const GROCERY_PRODUCTS: GroceryProduct[] = [
     unit: '/unit',
     category: 'produce',
     image:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuAO0ggDMh55g3_mPyGcNuzJHwAJnsuQ-uqrGbrhJo3w59_7Jpg-IkZY96AOLRdvWm5JVA8BkqLu-yAIaJeDHB-uTOZh5UQEhbVWm54kvoCvpTCRDUa7y9Vz6npLD3k5rM1QOkKext9gzYpYlj7KCtRtlBG21Dd4s4l7ymzCIZE-NBoB18STLkxh8_unC2n9Mva4Qx7yvz4mYCSvXgIP2UFZxyx4TWMZ4eMy3m-0JmKsdt0ntrL3gAPnYI-fnqyhQbnNX85lzO1ofeM',
+      'https://lh3.googleusercontent.com/aida-public/AB6AXuAO0ggDMh55g3_mPyGcNuzJHwAJnsuQ-uqrGbrhJo3w59_7Jpg-IkZY96AOLRdvWm5YVA8BkqLu-yAIaJeDHB-uTOZh5UQEhbVWm54kvoCvpTCRDUa7y9Vz6npLD3k5rM1QOkKext9gzYpYlj7KCtRtlBG21Dd4s4l7ymzCIZE-NBoB18STLkxh8_unC2n9Mva4Qx7yvz4mYCSvXgIP2UFZxyx4TWMZ4eMy3m-0JmKsdt0ntrL3gAPnYI-fnqyhQbnNX85lzO1ofeM',
   },
 ];
 
-const CATEGORIES = [
+const FALLBACK_CATEGORIES = [
   { id: 'produce', label: 'Produce' },
   { id: 'dairy', label: 'Dairy' },
   { id: 'pantry', label: 'Pantry' },
@@ -80,31 +83,76 @@ function GroceryStoreView({
   merchantId?: string;
   onNavigate: (page: string, data?: Record<string, unknown>) => void;
 }) {
-  const storeId = merchantId ?? 'fresh-mart';
+  const storeLookup = merchantId ?? '';
   const { addItem, updateQuantity, items, itemCount, subtotal, merchantId: cartMerchantId } = useCart();
-  const [storeName, setStoreName] = useState('Fresh Mart');
-  const [activeCategory, setActiveCategory] = useState('produce');
+  const [activeCategory, setActiveCategory] = useState('');
   const [search, setSearch] = useState('');
   const savedAddress = getSavedAddress();
   const deliveryLabel = savedAddress
     ? `Deliver to · ${savedAddress.line1}`
     : 'Deliver to · Kingston, JM';
 
+  const { data: menu, isLoading, isError, refetch } = useQuery({
+    queryKey: ['merchant-menu', storeLookup, 'grocery'],
+    queryFn: async () => {
+      // Bypass restaurant mock profile — grocery uses its own DEV product fallback
+      const res = await fetch(`${API_ENDPOINTS.delivery}/merchants/${encodeURIComponent(storeLookup)}`, {
+        headers: { apikey: publicAnonKey },
+      });
+      if (!res.ok) throw new Error('Failed to fetch store');
+      const data = await res.json();
+      if (!data.merchant) throw new Error('Store not found');
+      return mapMerchantMenuResponse(data);
+    },
+    enabled: Boolean(storeLookup),
+    retry: false,
+  });
+
+  const mocksOk = allowMocks();
+
+  const categories = useMemo(() => {
+    if (menu?.categories.length) return menu.categories.map((c) => ({ id: c.id, label: c.label }));
+    if (mocksOk) return FALLBACK_CATEGORIES;
+    return [];
+  }, [menu, mocksOk]);
+
   useEffect(() => {
-    void fetchDiscoverMerchants('grocery').then((merchants) => {
-      const match = merchants.find((m) => m.id === storeId);
-      if (match) setStoreName(match.name);
-    });
-  }, [storeId]);
+    if (categories[0]?.id) setActiveCategory(categories[0].id);
+  }, [categories]);
+
+  const products: GroceryProduct[] = useMemo(() => {
+    if (menu?.items.length) {
+      return menu.items.map((item) => ({
+        id: item.id,
+        name: item.name,
+        price: item.price,
+        unit: '',
+        image: item.image,
+        category: item.categoryId,
+      }));
+    }
+    if (mocksOk) return MOCK_GROCERY_PRODUCTS;
+    return [];
+  }, [menu, mocksOk]);
+
+  const storeId = menu?.id || storeLookup;
+  const storeName = menu?.name || 'Store';
+  const heroImage = menu?.heroImage || GROCERY_HERO;
+  const rating = menu?.rating ? String(menu.rating) : '—';
+  const eta = menu?.eta || '—';
 
   const filteredProducts = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return GROCERY_PRODUCTS.filter((p) => {
+    return products.filter((p) => {
       if (q && !p.name.toLowerCase().includes(q)) return false;
-      if (activeCategory === 'produce') return true;
+      if (!activeCategory) return true;
       return p.category === activeCategory;
     });
-  }, [activeCategory, search]);
+  }, [activeCategory, search, products]);
+
+  const displayProducts = search.trim()
+    ? products.filter((p) => p.name.toLowerCase().includes(search.trim().toLowerCase()))
+    : filteredProducts;
 
   const getQty = (productId: string) => {
     const match = items.find((i) => i.itemId === productId && i.merchantId === storeId);
@@ -146,6 +194,44 @@ function GroceryStoreView({
 
   const showCart = itemCount > 0 && cartMerchantId === storeId;
 
+  if (!storeLookup) {
+    return (
+      <div className="flex min-h-full flex-col items-center justify-center gap-4 px-4">
+        <p className="text-on-surface-variant">No store selected</p>
+        <button type="button" onClick={() => onNavigate('home')} className="font-semibold text-primary">
+          Back home
+        </button>
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-full items-center justify-center py-24">
+        <div className="h-10 w-10 animate-spin rounded-full border-t-2 border-b-2 border-primary-container" />
+      </div>
+    );
+  }
+
+  if (isError && !mocksOk) {
+    return (
+      <div className="flex min-h-full flex-col items-center justify-center gap-4 px-4">
+        <MaterialIcon name="error_outline" className="text-4xl text-on-surface-variant" />
+        <p className="text-center text-on-surface-variant">Couldn&apos;t load this store.</p>
+        <button
+          type="button"
+          onClick={() => void refetch()}
+          className="rounded-lg bg-primary px-6 py-3 font-semibold text-on-primary"
+        >
+          Retry
+        </button>
+        <button type="button" onClick={() => onNavigate('home')} className="font-semibold text-primary">
+          Back home
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-full bg-background pb-36">
       <header className="sticky top-0 z-50 flex h-16 w-full items-center justify-between border-b border-outline-variant/30 bg-surface px-4 shadow-sm">
@@ -168,9 +254,9 @@ function GroceryStoreView({
       </header>
 
       <section className="relative h-56 w-full overflow-hidden">
-        <img alt={storeName} src={GROCERY_HERO} className="h-full w-full object-cover" />
+        <img alt={storeName} src={heroImage} className="h-full w-full object-cover" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-        <div className="absolute bottom-4 left-4 right-4 text-white">
+        <div className="absolute right-4 bottom-4 left-4 text-white">
           <span className="rounded bg-primary px-2 py-0.5 text-xs font-bold tracking-wide text-on-primary">
             GROCERY
           </span>
@@ -178,11 +264,11 @@ function GroceryStoreView({
           <div className="mt-1 flex items-center gap-4 text-label-md">
             <span className="flex items-center gap-1">
               <MaterialIcon name="star" className="text-sm" filled />
-              4.6
+              {rating}
             </span>
             <span className="flex items-center gap-1">
               <MaterialIcon name="schedule" className="text-sm" />
-              35-50 min
+              {eta}
             </span>
           </div>
         </div>
@@ -203,28 +289,44 @@ function GroceryStoreView({
         </div>
       </section>
 
-      <nav className="mt-6 flex gap-3 overflow-x-auto px-4 no-scrollbar">
-        {CATEGORIES.map((cat) => (
-          <button
-            key={cat.id}
-            type="button"
-            onClick={() => setActiveCategory(cat.id)}
-            className={`whitespace-nowrap rounded-full px-6 py-2 text-label-lg font-semibold transition-transform active:scale-95 ${
-              activeCategory === cat.id
-                ? 'bg-primary-container text-on-primary-container'
-                : 'bg-surface-container-high text-on-surface-variant'
-            }`}
-          >
-            {cat.label}
-          </button>
-        ))}
-      </nav>
+      {categories.length > 0 && (
+        <nav className="no-scrollbar mt-6 flex gap-3 overflow-x-auto px-4">
+          {categories.map((cat) => (
+            <button
+              key={cat.id}
+              type="button"
+              onClick={() => setActiveCategory(cat.id)}
+              className={`rounded-full px-6 py-2 text-label-lg font-semibold whitespace-nowrap transition-transform active:scale-95 ${
+                activeCategory === cat.id
+                  ? 'bg-primary-container text-on-primary-container'
+                  : 'bg-surface-container-high text-on-surface-variant'
+              }`}
+            >
+              {cat.label}
+            </button>
+          ))}
+        </nav>
+      )}
 
       <section className="mt-6 px-4">
-        <h2 className="mb-4 text-headline-md font-bold text-on-surface">Popular Items</h2>
-        <div className="grid grid-cols-2 gap-4">
-          {(search ? GROCERY_PRODUCTS.filter((p) => p.name.toLowerCase().includes(search.toLowerCase())) : filteredProducts).map(
-            (product) => {
+        <h2 className="mb-4 text-headline-md font-bold text-on-surface">
+          {products.length ? 'Popular Items' : 'Catalog'}
+        </h2>
+        {displayProducts.length === 0 ? (
+          <div className="flex flex-col items-center gap-2 py-16 text-center">
+            <MaterialIcon name="shopping_basket" className="text-4xl text-on-surface-variant" />
+            <p className="text-headline-md font-semibold text-on-surface">
+              {search.trim() ? 'No matching products' : 'Catalog coming soon'}
+            </p>
+            <p className="text-body-md text-on-surface-variant">
+              {search.trim()
+                ? 'Try a different search.'
+                : "This store hasn't published products yet."}
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-4">
+            {displayProducts.map((product) => {
               const qty = getQty(product.id);
               return (
                 <div
@@ -232,11 +334,17 @@ function GroceryStoreView({
                   className="group flex flex-col overflow-hidden rounded-xl border border-outline-variant bg-white shadow-sm"
                 >
                   <div className="relative h-40 bg-gray-100">
-                    <img
-                      alt={product.name}
-                      src={product.image}
-                      className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                    />
+                    {product.image ? (
+                      <img
+                        alt={product.name}
+                        src={product.image}
+                        className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center">
+                        <MaterialIcon name="shopping_basket" className="text-4xl text-outline" />
+                      </div>
+                    )}
                   </div>
                   <div className="flex flex-grow flex-col p-3">
                     <h3 className="truncate text-label-lg font-semibold text-on-surface">{product.name}</h3>
@@ -269,13 +377,13 @@ function GroceryStoreView({
                   </div>
                 </div>
               );
-            },
-          )}
-        </div>
+            })}
+          </div>
+        )}
       </section>
 
       {showCart && (
-        <div className="fixed bottom-4 left-4 right-4 z-50 mx-auto max-w-screen-sm">
+        <div className="fixed right-4 bottom-4 left-4 z-50 mx-auto max-w-screen-sm">
           <button
             type="button"
             onClick={() => onNavigate('cart')}

@@ -7,6 +7,16 @@ export type DeliveryAddressInput = {
   line1: string;
   line2?: string;
   city?: string;
+  lat?: number;
+  lng?: number;
+};
+
+/** Soft-launch Kingston metro bounding box */
+const KINGSTON_BOUNDS = {
+  minLat: 17.92,
+  maxLat: 18.12,
+  minLng: -76.92,
+  maxLng: -76.68,
 };
 
 const IN_ZONE_KEYWORDS = [
@@ -42,7 +52,31 @@ function normalizeAddress(address: DeliveryAddressInput): string {
   return [address.line1, address.line2, address.city].filter(Boolean).join(' ').toLowerCase();
 }
 
+function inKingstonBounds(lat: number, lng: number): boolean {
+  return (
+    lat >= KINGSTON_BOUNDS.minLat &&
+    lat <= KINGSTON_BOUNDS.maxLat &&
+    lng >= KINGSTON_BOUNDS.minLng &&
+    lng <= KINGSTON_BOUNDS.maxLng
+  );
+}
+
 export function checkDeliveryZone(address: DeliveryAddressInput): DeliveryZoneResult {
+  if (
+    address.lat != null &&
+    address.lng != null &&
+    Number.isFinite(address.lat) &&
+    Number.isFinite(address.lng)
+  ) {
+    if (inKingstonBounds(address.lat, address.lng)) {
+      return { inZone: true };
+    }
+    return {
+      inZone: false,
+      reason: 'This address is outside our current Kingston delivery area.',
+    };
+  }
+
   const normalized = normalizeAddress(address);
 
   for (const keyword of OUT_OF_ZONE_KEYWORDS) {
@@ -66,6 +100,7 @@ export function checkDeliveryZone(address: DeliveryAddressInput): DeliveryZoneRe
 
   return {
     inZone: false,
-    reason: 'We do not deliver to this location yet.',
+    reason:
+      'We could not confirm this location is in zone. Enable maps geocode or pick a Kingston address.',
   };
 }

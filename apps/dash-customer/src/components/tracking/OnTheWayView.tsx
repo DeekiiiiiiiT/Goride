@@ -19,15 +19,24 @@ const COURIER_POSITIONS = [
 ];
 
 export function OnTheWayView({ order, onBack }: Props) {
+  const hasGps =
+    order.courierLat != null &&
+    order.courierLng != null &&
+    Number.isFinite(order.courierLat) &&
+    Number.isFinite(order.courierLng);
+
   const [courierIndex, setCourierIndex] = useState(0);
-  const pos = COURIER_POSITIONS[courierIndex];
+  const pos = hasGps
+    ? { top: '45%', left: '50%' }
+    : COURIER_POSITIONS[courierIndex];
 
   useEffect(() => {
+    if (hasGps) return;
     const interval = setInterval(() => {
       setCourierIndex((i) => (i + 1) % COURIER_POSITIONS.length);
     }, 5000);
     return () => clearInterval(interval);
-  }, []);
+  }, [hasGps]);
 
   return (
     <div className="app-fullscreen-screen safe-x safe-t bg-background w-full overflow-hidden flex flex-col relative">
@@ -61,10 +70,30 @@ export function OnTheWayView({ order, onBack }: Props) {
           style={{ top: pos.top, left: pos.left }}
         >
           <div className="bg-surface rounded-full shadow-lg p-1 border-2 border-primary-container tracking-pulse-animation">
-            <img src={TRACKING_MAP_IMAGES.driverMarker} alt="Courier" className="w-10 h-10 rounded-full object-cover" />
+            {order.courier.avatar ? (
+              <img src={order.courier.avatar} alt="Courier" className="w-10 h-10 rounded-full object-cover" />
+            ) : (
+              <img src={TRACKING_MAP_IMAGES.driverMarker} alt="Courier" className="w-10 h-10 rounded-full object-cover" />
+            )}
           </div>
         </div>
       </div>
+
+      {(order.locationApproximate || !hasGps) && (
+        <div className="absolute top-20 left-0 right-0 z-40 flex justify-center px-4 pointer-events-none">
+          <span className="bg-surface/95 text-label-sm text-on-surface-variant px-3 py-1 rounded-full shadow">
+            Approximate location — live GPS when courier shares it
+          </span>
+        </div>
+      )}
+
+      {hasGps && (
+        <div className="absolute bottom-40 left-0 right-0 z-40 flex justify-center px-4 pointer-events-none">
+          <span className="bg-surface/95 text-label-sm px-3 py-1 rounded-full shadow">
+            Courier GPS {order.courierLat!.toFixed(4)}, {order.courierLng!.toFixed(4)}
+          </span>
+        </div>
+      )}
 
       <div className="absolute top-0 left-0 w-full z-30 pt-safe px-4 pt-4">
         <div className="flex justify-between items-center mb-4">

@@ -143,6 +143,95 @@ export function getOrderById(orderId?: string): OrderHistoryEntry | undefined {
   return MOCK_ORDERS.find(o => o.id === orderId || o.orderNumber === orderId);
 }
 
+/** Map GET /orders/:id payload into OrderHistoryEntry for details UI. */
+export function mapApiOrderToDetails(order: Record<string, unknown>): OrderHistoryEntry {
+  const merchant = (order.merchant as Record<string, unknown>) ?? {};
+  const statusRaw = String(order.status ?? '');
+  const active = !['completed', 'cancelled', 'delivered'].includes(statusRaw);
+  const itemsRaw = (order.items as Array<Record<string, unknown>>) ?? [];
+
+  const items: OrderLineItem[] = itemsRaw.map((item) => {
+    const modifiers = item.modifiers as Array<Record<string, unknown>> | undefined;
+    const options = item.options as Array<Record<string, unknown>> | undefined;
+    const noteFromMods = modifiers?.map((m) => String(m.name ?? '')).filter(Boolean).join(', ');
+    const noteFromOpts = options
+      ?.flatMap((o) => {
+        const sels = (o.selections as Array<Record<string, unknown>>) ?? [];
+        return sels.map((s) => String(s.name ?? ''));
+      })
+      .filter(Boolean)
+      .join(', ');
+    return {
+      quantity: Number(item.quantity ?? 1),
+      name: String(item.name ?? 'Item'),
+      note: noteFromMods || noteFromOpts || undefined,
+      price: Number(item.price ?? item.unitPrice ?? 0),
+    };
+  });
+
+  const deliveredAt = order.delivered_at ? String(order.delivered_at) : undefined;
+  const placedAt = String(order.created_at ?? order.placed_at ?? new Date().toISOString());
+  const deliveredLabel = deliveredAt
+    ? `Delivered on ${new Date(deliveredAt).toLocaleString('en-US', {
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+      })}`
+    : statusRaw === 'cancelled'
+      ? 'Cancelled'
+      : active
+        ? undefined
+        : 'Delivered';
+
+  return {
+    id: String(order.id ?? ''),
+    orderNumber: String(order.order_number ?? order.id ?? ''),
+    merchantId: String(order.merchant_id ?? merchant.id ?? merchant.slug ?? ''),
+    merchantName: String(merchant.name ?? 'Restaurant'),
+    merchantLogo: String(merchant.logo_url ?? ''),
+    status: statusRaw === 'cancelled' ? 'cancelled' : active ? 'active' : 'delivered',
+    trackingStatus: active ? statusRaw : undefined,
+    items,
+    itemSummary: items.map((i) => `${i.quantity}x ${i.name}`).join(', '),
+    total: Number(order.total ?? 0),
+    placedAt,
+    deliveredAt,
+    deliveredLabel,
+    paymentMethod: order.payment_method ? String(order.payment_method) : undefined,
+    deliveryAddress: order.delivery_address ? String(order.delivery_address) : undefined,
+    subtotal: Number(order.subtotal ?? 0),
+    deliveryFee: Number(order.delivery_fee ?? 0),
+    serviceFee: Number(order.platform_fee ?? 0),
+    tax: Number(order.tax ?? 0),
+    tip: Number(order.tip ?? 0),
+  };
+}
+
+export type ReorderLine = {
+  itemId: string;
+  name: string;
+  price: number;
+  quantity: number;
+  imageUrl?: string;
+};
+
+/** Build cart lines from a live order detail (menu item UUIDs when present). */
+export function buildReorderFromOrder(order: OrderHistoryEntry, rawItems?: Array<Record<string, unknown>>): ReorderLine[] {
+  if (rawItems?.length) {
+    return rawItems.map((item) => ({
+      itemId: String(item.menuItemId ?? item.id ?? item.item_id ?? ''),
+      name: String(item.name ?? 'Item'),
+      price: Number(item.price ?? item.unitPrice ?? 0),
+      quantity: Number(item.quantity ?? 1),
+      imageUrl: item.image_url ? String(item.image_url) : undefined,
+    })).filter((line) => line.itemId);
+  }
+  // Fallback: name-only lines without menu UUIDs — skip to avoid invalid checkout
+  return [];
+}
+
 export function groupOrdersByDate(orders: OrderHistoryEntry[]): { label: string; orders: OrderHistoryEntry[] }[] {
   const today = new Date();
   const yesterday = new Date(today);

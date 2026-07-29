@@ -1,12 +1,14 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { KINGSTON_MAP_PREVIEW } from '@/lib/accountContent';
 import {
-  deleteSavedAddress,
+  deleteSavedAddressAsync,
   getSavedAddresses,
+  syncAddressesFromBackend,
   type AddressLabel,
   type SavedAddress,
 } from '@/lib/addressStorage';
+import { toast } from '@/lib/toast';
 
 type Props = {
   onNavigate: (page: string, data?: Record<string, unknown>) => void;
@@ -75,9 +77,17 @@ function AddressCard({
 export default function SavedAddressesPage({ onNavigate }: Props) {
   const [addresses, setAddresses] = useState(getSavedAddresses);
 
-  const handleDelete = (id: string) => {
-    deleteSavedAddress(id);
-    setAddresses(getSavedAddresses());
+  useEffect(() => {
+    void syncAddressesFromBackend().then(setAddresses);
+  }, []);
+
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteSavedAddressAsync(id);
+      setAddresses(getSavedAddresses());
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not delete address');
+    }
   };
 
   return (
@@ -104,7 +114,7 @@ export default function SavedAddressesPage({ onNavigate }: Props) {
               key={address.id}
               address={address}
               onEdit={() => onNavigate('add-address', { addressId: address.id })}
-              onDelete={() => handleDelete(address.id)}
+              onDelete={() => void handleDelete(address.id)}
             />
           ))}
         </div>

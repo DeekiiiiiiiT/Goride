@@ -6,6 +6,7 @@ import {
   RECOMMENDED_RESTAURANTS,
   type DiscoverRestaurant,
 } from './discoverContent';
+import { allowMocks } from './mocksGate';
 
 export type DiscoverMerchant = DiscoverRestaurant & {
   vertical_type: VerticalType;
@@ -43,7 +44,7 @@ export const HOME_VERTICAL_TABS: {
   { id: 'grocery', label: 'Grocery', icon: 'shopping_basket' },
   { id: 'convenience', label: 'Convenience', icon: 'local_convenience_store' },
   { id: 'pharmacy', label: 'Pharmacy', icon: 'medical_services' },
-  { id: 'alcohol', label: 'Alcohol', icon: 'liquor' },
+  // Alcohol vertical deferred — no age-restricted items at soft launch
 ];
 
 function mapApiMerchant(row: Record<string, unknown>): DiscoverMerchant {
@@ -94,10 +95,14 @@ export async function fetchDiscoverMerchants(vertical?: VerticalType): Promise<D
     if (!res.ok) throw new Error('fetch failed');
     const data = (await res.json()) as { merchants?: Record<string, unknown>[] };
     const rows = data.merchants ?? [];
-    if (!rows.length) throw new Error('empty');
+    if (!rows.length) {
+      if (allowMocks()) return mockMerchants(vertical);
+      return [];
+    }
     return rows.map(mapApiMerchant);
   } catch {
-    return mockMerchants(vertical);
+    if (allowMocks()) return mockMerchants(vertical);
+    return [];
   }
 }
 

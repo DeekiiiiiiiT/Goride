@@ -28,9 +28,7 @@ import RestaurantReviewsPage from './pages/RestaurantReviewsPage';
 import OutOfDeliveryPage from './pages/OutOfDeliveryPage';
 import ConnectionErrorPage from './pages/ConnectionErrorPage';
 import AboutPage from './pages/AboutPage';
-import type { TrackingPhase } from './lib/trackingContent';
 import CheckoutPage from './pages/CheckoutPage';
-import AgeVerificationPage from './pages/AgeVerificationPage';
 import PaymentMethodsPage from './pages/PaymentMethodsPage';
 import AddCardPage from './pages/AddCardPage';
 import LoginPage from './pages/LoginPage';
@@ -48,7 +46,9 @@ import { DeliveryDetailsPage } from './pages/onboarding/DeliveryDetailsPage';
 import { DashAppHeader } from './components/layout/DashAppHeader';
 import { DashBottomNav, type DashTab } from './components/layout/DashBottomNav';
 import { isOnboardingComplete, markOnboardingComplete } from './lib/onboardingStorage';
-import { hasDeliveryAddress, saveDeliveryAddress } from './lib/addressStorage';
+import { hasDeliveryAddress, persistOnboardingAddress, syncAddressesFromBackend } from './lib/addressStorage';
+import { syncProfileFromBackend } from './lib/accountContent';
+import { syncFavoritesFromBackend } from './lib/favoritesStorage';
 import { supabase } from './lib/supabase';
 import {
   consumeDashCustomerOAuthIntent,
@@ -79,7 +79,6 @@ type StackPage =
   | 'restaurant-reviews'
   | 'out-of-delivery'
   | 'connection-error'
-  | 'age-verification'
   | 'tracking'
   | 'login'
   | 'payment-callback-wipay'
@@ -227,6 +226,13 @@ function DashCustomerShell() {
     supabase.auth.getSession().then(async ({ data: { session: initialSession } }) => {
       setSession(initialSession);
       await completeOAuthReturn(initialSession);
+      if (initialSession) {
+        void Promise.all([
+          syncProfileFromBackend(),
+          syncAddressesFromBackend(),
+          syncFavoritesFromBackend(),
+        ]);
+      }
       setLoading(false);
     });
 
@@ -236,6 +242,11 @@ function DashCustomerShell() {
       setSession(nextSession);
       if (event === 'SIGNED_IN' && nextSession) {
         await completeOAuthReturn(nextSession);
+        void Promise.all([
+          syncProfileFromBackend(),
+          syncAddressesFromBackend(),
+          syncFavoritesFromBackend(),
+        ]);
       }
     });
 
@@ -454,8 +465,7 @@ function DashCustomerShell() {
         onBack={() => setPhase('delivery-address')}
         onOutOfZone={handleOutOfZoneFromOnboarding}
         onSave={(details) => {
-          saveDeliveryAddress(details);
-          enterApp();
+          void persistOnboardingAddress(details).finally(() => enterApp());
         }}
       />
     );
@@ -552,13 +562,6 @@ function DashCustomerShell() {
         return <CartPage onNavigate={navigate} session={session} />;
       case 'checkout':
         return <CheckoutPage onNavigate={navigate} session={session} />;
-      case 'age-verification':
-        return (
-          <AgeVerificationPage
-            onVerified={() => navigate('checkout', pageData)}
-            onCancel={() => navigate('cart')}
-          />
-        );
       case 'payment-methods':
         return (
           <PaymentMethodsPage
@@ -589,7 +592,6 @@ function DashCustomerShell() {
         return (
           <OrderTrackingPage
             orderId={pageData?.orderId as string | undefined}
-            demoPhase={pageData?.demoPhase as TrackingPhase | undefined}
             onNavigate={navigate}
           />
         );

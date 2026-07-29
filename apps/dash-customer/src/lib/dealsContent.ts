@@ -1,3 +1,5 @@
+import { allowMocks } from './mocksGate';
+
 export type DealFilter = 'all' | 'free-delivery' | 'percent-off' | 'bogo';
 
 export const DEAL_FILTERS: { id: DealFilter; label: string }[] = [
@@ -94,6 +96,10 @@ export const DAILY_PICKS: DailyPick[] = [
 ];
 
 export function filterDeals(filter: DealFilter) {
+  // Soft launch: no static promo catalog in production
+  if (!allowMocks()) {
+    return { featured: [] as FeaturedDeal[], daily: [] as DailyPick[] };
+  }
   if (filter === 'all') {
     return { featured: FEATURED_DEALS, daily: DAILY_PICKS };
   }

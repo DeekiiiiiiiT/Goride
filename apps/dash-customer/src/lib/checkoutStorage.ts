@@ -1,7 +1,8 @@
 import type { PromoCode } from './orderPricing';
 import { PROMO_CODES } from './orderPricing';
 
-export type PaymentMethodId = 'visa-4521' | 'mastercard-8832' | 'apple_pay' | 'cash';
+/** Soft-launch: only real checkout rails — no fake saved cards */
+export type PaymentMethodId = 'wipay' | 'paypal' | 'cash';
 
 export type CheckoutPreferences = {
   appliedPromoCode: string | null;
@@ -16,26 +17,54 @@ export type CheckoutPreferences = {
 const STORAGE_KEY = 'roam-dash-checkout';
 
 const DEFAULTS: CheckoutPreferences = {
-  appliedPromoCode: 'WELCOME',
+  appliedPromoCode: null,
   tip: 100,
   deliveryMode: 'standard',
   scheduledDateId: null,
   scheduledSlotId: null,
   handoff: 'door',
-  paymentMethodId: 'visa-4521',
+  paymentMethodId: 'wipay',
 };
+
+function normalizePaymentMethodId(id: unknown): PaymentMethodId {
+  if (id === 'paypal' || id === 'cash' || id === 'wipay') return id;
+  // Migrate legacy fake card ids → wipay
+  return 'wipay';
+}
 
 export function getCheckoutPreferences(): CheckoutPreferences {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? { ...DEFAULTS, ...JSON.parse(raw) } : { ...DEFAULTS };
+    if (!raw) return { ...DEFAULTS };
+    const parsed = JSON.parse(raw) as Partial<CheckoutPreferences>;
+    return {
+      ...DEFAULTS,
+      ...parsed,
+      paymentMethodId: normalizePaymentMethodId(parsed.paymentMethodId),
+      appliedPromoCode:
+        typeof parsed.appliedPromoCode === 'string' && parsed.appliedPromoCode.trim()
+          ? parsed.appliedPromoCode.trim().toUpperCase()
+          : null,
+    };
   } catch {
     return { ...DEFAULTS };
   }
 }
 
 export function saveCheckoutPreferences(prefs: Partial<CheckoutPreferences>): void {
-  const next = { ...getCheckoutPreferences(), ...prefs };
+  const current = getCheckoutPreferences();
+  const next: CheckoutPreferences = {
+    ...current,
+    ...prefs,
+  };
+  if (prefs.paymentMethodId) {
+    next.paymentMethodId = normalizePaymentMethodId(prefs.paymentMethodId);
+  }
+  if ('appliedPromoCode' in prefs) {
+    next.appliedPromoCode = prefs.appliedPromoCode
+      ? String(prefs.appliedPromoCode).trim().toUpperCase()
+      : null;
+  }
   localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
 }
 
@@ -44,32 +73,25 @@ export function getAppliedPromo(): PromoCode | null {
   return code ? PROMO_CODES[code] ?? null : null;
 }
 
-export type SavedCard = {
+export type LivePaymentOption = {
   id: PaymentMethodId;
-  brand: string;
-  last4: string;
-  expires: string;
   label: string;
+  icon: string;
+  description: string;
 };
 
-export const PAYMENT_OPTIONS: Array<
-  SavedCard | { id: PaymentMethodId; label: string; icon: string; group: 'other' }
-> = [
-  { id: 'visa-4521', brand: 'VISA', last4: '4242', expires: '12/24', label: 'Visa •••• 4242' },
-  { id: 'mastercard-8832', brand: 'MC', last4: '5555', expires: '08/25', label: 'Mastercard •••• 5555' },
-  { id: 'apple_pay', label: 'Apple Pay', icon: 'phone_iphone', group: 'other' },
-  { id: 'cash', label: 'Cash on delivery', icon: 'payments', group: 'other' },
+export const PAYMENT_OPTIONS: LivePaymentOption[] = [
+  { id: 'wipay', label: 'WiPay', icon: 'credit_card', description: 'Pay securely with WiPay' },
+  { id: 'paypal', label: 'PayPal', icon: 'account_balance_wallet', description: 'Pay with PayPal' },
+  { id: 'cash', label: 'Cash on delivery', icon: 'payments', description: 'Pay the courier in cash' },
 ];
 
 export function getPaymentLabel(id: PaymentMethodId): string {
-  const option = PAYMENT_OPTIONS.find(o => o.id === id);
-  if (!option) return 'Visa •••• 4521';
-  return 'label' in option && option.label ? option.label : 'Payment';
+  return PAYMENT_OPTIONS.find((o) => o.id === id)?.label ?? 'WiPay';
 }
 
 export function getApiPaymentMethod(id: PaymentMethodId): 'cash' | 'wipay' | 'paypal' {
-  if (id === 'cash') return 'cash';
-  return 'wipay';
+  return id;
 }
 
 export type ScheduleDate = {
@@ -117,3 +139,13 @@ export const SCHEDULE_SLOTS: ScheduleSlot[] = [
   { id: '14-00', label: '2:00 PM - 2:30 PM' },
   { id: '14-30', label: '2:30 PM - 3:00 PM' },
 ];
+
+/** @deprecated use buildScheduleDates */
+export function getScheduleDates(): ScheduleDate[] {
+  return buildScheduleDates();
+}
+
+/** @deprecated use SCHEDULE_SLOTS */
+export function getScheduleSlots(): ScheduleSlot[] {
+  return SCHEDULE_SLOTS;
+}

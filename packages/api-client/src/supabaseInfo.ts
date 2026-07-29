@@ -1,8 +1,3 @@
-/** Default project (fallback when VITE_* env vars are unset — e.g. local dev). */
-const DEFAULT_PROJECT_REF = "csfllzzastacofsvcdsc";
-const DEFAULT_ANON_KEY =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNzZmxsenphc3RhY29mc3ZjZHNjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU4NDUyMzQsImV4cCI6MjA4MTQyMTIzNH0.1L3uqNj1qctfFM1bXrm1sK97PQtyKldGDTrojbQOD00";
-
 function viteEnv(): Record<string, string | undefined> | undefined {
   try {
     return (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env;
@@ -19,6 +14,30 @@ function projectRefFromSupabaseUrl(url: string): string | undefined {
 
 const env = viteEnv();
 
+function requireProjectId(): string {
+  const fromUrl = env?.VITE_SUPABASE_URL
+    ? projectRefFromSupabaseUrl(env.VITE_SUPABASE_URL)
+    : undefined;
+  const fromId = env?.VITE_SUPABASE_PROJECT_ID?.trim();
+  const projectId = fromUrl ?? fromId;
+  if (!projectId) {
+    throw new Error(
+      "Missing Supabase config: set VITE_SUPABASE_URL (or VITE_SUPABASE_PROJECT_ID) and VITE_SUPABASE_ANON_KEY",
+    );
+  }
+  return projectId;
+}
+
+function requireAnonKey(): string {
+  const key = env?.VITE_SUPABASE_ANON_KEY?.trim();
+  if (!key) {
+    throw new Error(
+      "Missing Supabase config: set VITE_SUPABASE_URL (or VITE_SUPABASE_PROJECT_ID) and VITE_SUPABASE_ANON_KEY",
+    );
+  }
+  return key;
+}
+
 /**
  * Supabase project ref (subdomain), e.g. `abcd` for https://abcd.supabase.co
  *
@@ -26,17 +45,14 @@ const env = viteEnv();
  * - `VITE_SUPABASE_URL` = https://YOUR_REF.supabase.co  (recommended), or
  * - `VITE_SUPABASE_PROJECT_ID` = YOUR_REF
  */
-export const projectId: string =
-  (env?.VITE_SUPABASE_URL ? projectRefFromSupabaseUrl(env.VITE_SUPABASE_URL) : undefined) ??
-  env?.VITE_SUPABASE_PROJECT_ID?.trim() ??
-  DEFAULT_PROJECT_REF;
+export const projectId: string = requireProjectId();
 
 /**
  * Supabase anon (public) key — safe to expose in the browser; still prefer env in production.
  *
  * Vercel: `VITE_SUPABASE_ANON_KEY` = (anon public key from Supabase → Project Settings → API)
  */
-export const publicAnonKey: string = env?.VITE_SUPABASE_ANON_KEY?.trim() ?? DEFAULT_ANON_KEY;
+export const publicAnonKey: string = requireAnonKey();
 
 /**
  * Supabase Edge Functions reject browser requests without `apikey` + `Authorization`

@@ -1,15 +1,19 @@
 import { useEffect, useState } from 'react';
 import { Session } from '@supabase/supabase-js';
+import { API_ENDPOINTS } from '@roam/api-client';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { DeliveryInstructionsSheet } from '@/components/cart/DeliveryInstructionsSheet';
 import { ItemDetailSheet } from '@/components/restaurant/ItemDetailSheet';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { PromoCodeInput } from '@/components/ui/PromoCodeInput';
 import { QuantityStepper } from '@/components/ui/QuantityStepper';
 import { useCart } from '@/hooks/useCart';
 import { getSavedAddress } from '@/lib/addressStorage';
-import { saveCheckoutPreferences } from '@/lib/checkoutStorage';
-import { calculateOrderTotals, PROMO_CODES, type PromoCode } from '@/lib/orderPricing';
+import {
+  getAppliedPromo,
+  getCheckoutPreferences,
+  saveCheckoutPreferences,
+} from '@/lib/checkoutStorage';
+import { cacheValidatedPromo, calculateOrderTotals } from '@/lib/orderPricing';
 import { formatJmd, getRestaurantProfile } from '@/lib/restaurantContent';
 import { toast } from '@/lib/toast';
 
@@ -22,11 +26,12 @@ export default function CartPage({ onNavigate, session }: Props) {
   const { items, merchantName, merchantId, updateQuantity, removeItem, replaceItem, clearCart, subtotal } = useCart();
   const savedAddress = getSavedAddress();
 
-  const [deliveryInstructions, setDeliveryInstructions] = useState(savedAddress?.instructions ?? 'Leave at door • Gate code: 1234');
+  const [deliveryInstructions, setDeliveryInstructions] = useState(savedAddress?.instructions ?? '');
   const [instructionsOpen, setInstructionsOpen] = useState(false);
   const [editingCartItemId, setEditingCartItemId] = useState<string | null>(null);
-  const [promoCode, setPromoCode] = useState('');
-  const [appliedPromo, setAppliedPromo] = useState<PromoCode | null>(PROMO_CODES.WELCOME);
+  const [promoInput, setPromoInput] = useState(getCheckoutPreferences().appliedPromoCode ?? '');
+  const [promoMessage, setPromoMessage] = useState('');
+  const [appliedPromo, setAppliedPromo] = useState(getAppliedPromo());
 
   const editingCartItem = items.find((i) => i.id === editingCartItemId);
   const editingMenuItem = editingCartItem && merchantId
@@ -35,7 +40,7 @@ export default function CartPage({ onNavigate, session }: Props) {
 
   const deliveryAddress = savedAddress
     ? `${savedAddress.line1}${savedAddress.line2 ? `, ${savedAddress.line2}` : ''}`
-    : '45 Constant Spring Rd, Apt 12B';
+    : 'Add a delivery address';
 
   useEffect(() => {
     if (savedAddress?.instructions) {
@@ -43,22 +48,62 @@ export default function CartPage({ onNavigate, session }: Props) {
     }
   }, [savedAddress?.instructions]);
 
-  const applyPromoCode = () => {
-    const code = promoCode.toUpperCase().trim();
-    const promo = PROMO_CODES[code];
-    if (!promo) {
-      toast.error('Invalid promo code');
+  const { discount, deliveryFee, serviceFee, tax, total } = calculateOrderTotals(subtotal, appliedPromo);
+
+  const handleApplyPromo = async () => {
+    const code = promoInput.trim().toUpperCase();
+    if (!code) {
+      setPromoMessage('Enter a code');
       return;
     }
-    if (subtotal < promo.minOrder) {
-      toast.error(`Minimum order of ${formatJmd(promo.minOrder)} required`);
-      return;
+    try {
+      const res = await fetch(`${API_ENDPOINTS.delivery}/promotions/redeem`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code, merchantId: merchantId || undefined, subtotal }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        discount?: number;
+        promo?: {
+          code: string;
+          title: string;
+          type: string;
+          discountPercent: number | null;
+          discountAmount: number | null;
+          minOrder: number | null;
+        };
+      };
+      if (!res.ok || !data.promo) {
+        setPromoMessage(data.error || 'Invalid promo');
+        return;
+      }
+      const value =
+        data.promo.discountPercent != null
+          ? Number(data.promo.discountPercent)
+          : Number(data.promo.discountAmount || 0);
+      const cached = {
+        code: data.promo.code,
+        title: data.promo.title,
+        type: data.promo.type as 'percent_off' | 'amount_off',
+        value,
+        minOrder: Number(data.promo.minOrder || 0),
+      };
+      cacheValidatedPromo(cached);
+      saveCheckoutPreferences({ appliedPromoCode: data.promo.code });
+      setAppliedPromo(cached);
+      setPromoMessage(`Applied (−${formatJmd(Number(data.discount || 0))})`);
+    } catch {
+      setPromoMessage('Could not validate promo');
     }
-    setAppliedPromo(promo);
-    toast.promoApplied(code);
   };
 
-  const { discount, deliveryFee, serviceFee, tax, total } = calculateOrderTotals(subtotal, appliedPromo);
+  const handleClearPromo = () => {
+    saveCheckoutPreferences({ appliedPromoCode: null });
+    setAppliedPromo(null);
+    setPromoInput('');
+    setPromoMessage('');
+  };
 
   const handleCheckout = () => {
     if (!session) {
@@ -70,7 +115,6 @@ export default function CartPage({ onNavigate, session }: Props) {
       toast.error('Your cart is empty');
       return;
     }
-    saveCheckoutPreferences({ appliedPromoCode: appliedPromo?.code ?? null });
     onNavigate('checkout');
   };
 
@@ -201,17 +245,37 @@ export default function CartPage({ onNavigate, session }: Props) {
         </section>
 
         <section className="px-4 mb-6">
-          <div className="bg-surface-container-lowest p-4 rounded-xl shadow-[0px_4px_20px_rgba(0,0,0,0.04)] border border-surface-variant">
-            <PromoCodeInput
-              value={promoCode}
-              onChange={setPromoCode}
-              onApply={applyPromoCode}
-              appliedLabel={
-                appliedPromo
-                  ? `${appliedPromo.code}${appliedPromo.type === 'free_delivery' ? ' — Free delivery' : ` — ${appliedPromo.value}% off`}`
-                  : null
-              }
-            />
+          <div className="bg-surface-container-lowest rounded-xl p-4 shadow-[0px_4px_20px_rgba(0,0,0,0.04)]">
+            <label htmlFor="cart-promo" className="block text-label-md font-semibold mb-2">
+              Promo code
+            </label>
+            <div className="flex gap-2">
+              <input
+                id="cart-promo"
+                value={promoInput}
+                onChange={(e) => setPromoInput(e.target.value)}
+                placeholder="Enter code"
+                className="flex-1 bg-surface-container rounded-lg px-4 py-3 text-body-md"
+              />
+              {appliedPromo ? (
+                <button
+                  type="button"
+                  onClick={handleClearPromo}
+                  className="px-4 py-3 rounded-lg border border-outline-variant text-label-md font-semibold"
+                >
+                  Clear
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => void handleApplyPromo()}
+                  className="bg-primary text-on-primary font-semibold text-label-md px-4 py-3 rounded-lg"
+                >
+                  Apply
+                </button>
+              )}
+            </div>
+            {promoMessage && <p className="text-body-sm text-primary mt-2">{promoMessage}</p>}
           </div>
         </section>
 
@@ -237,7 +301,7 @@ export default function CartPage({ onNavigate, session }: Props) {
               <span>{formatJmd(serviceFee)}</span>
             </div>
             <div className="flex justify-between text-body-md text-on-surface-variant">
-              <span>Tax</span>
+              <span>Tax (GCT 16.5%)</span>
               <span>{formatJmd(tax)}</span>
             </div>
             <div className="h-px w-full bg-surface-variant my-2" />

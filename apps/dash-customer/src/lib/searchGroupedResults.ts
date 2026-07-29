@@ -1,3 +1,5 @@
+import { allowMocks } from '@/lib/mocksGate';
+
 export type SearchRestaurantResult = {
   id: string;
   name: string;
@@ -61,7 +63,7 @@ const CHICKEN_GROCERY: SearchGroceryResult[] = [
     price: '$14.50',
     stock: 'In stock',
     image:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuCLaI-3E8XswO9g54SNBUxpXI6g1Cq2NaOJLCNve6yUlixEIGdpUK5CC2gWe5dBF2LLGHZ0u-RBqilhdyzViDu2RNBBOCHg2FNDEjuCuCWYojhxq2i5bvhTlsIwgr6hQebjmCg17xIwB6Wybri4qt00kxc9EZ3-xK3iBFZi1Sdwe3fPSmfjHGElJjcwGQxJygfj_i0rVrt6BJG-P60sKIOjOadrQKDzLuRgwHobM0XoxC3-C5Wrz_blCi2cgBgPE5pgwt4UtXNM-nQ',
+      'https://lh3.googleusercontent.com/aida-public/AB6AXuCLaI-3E8XswO9g54SNBUxpXI6g1Cq2NaOJLCNve6yUlixEIGdpUK5CC2gWe5dBF2LLGHZ0u-RBqilhdyzViDu2RNBBOCHgFNDEjuCuCWYojhxq2i5bvhTlsIwgr6hQebjmCg17xIwB6Wybri4qt00kxc9EZ3-xK3iBFZi1Sdwe3fPSmfjHGElJjcwGQxJygfj_i0rVrt6BJG-P60sKIOjOadrQKDzLuRgwHobM0XoxC3-C5Wrz_blCi2cgBgPE5pgwt4UtXNM-nQ',
   },
 ];
 
@@ -71,18 +73,21 @@ const CHICKEN_PRODUCTS: SearchProductResult[] = [
     name: 'Chicken Bouillon',
     price: '$3.99',
     image:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuBdiHXujXNCo1iX9B-1BUkpzXzmkCC3_QwagUjivdFGMNFIQyE99Cl-h8J2D6GJkenqvlL01aX_2QUvsM5tB46XDugORTgAYzEeg5qCzXETM_6SAa5gF9m3YqGX8by55TutT0gELR2XPV1xzjRtKh6i34fFcwWo9XUkFrKmxTPY404VlBQZm_mmq_iBuAaCHgZCTlLqR8dZgB91HhWe1YF5jEsU3OMQYIo8jGhVnPULrH8pU5L9H_pYSyPeYDPGa3v9uowjCU-tGgU',
+      'https://lh3.googleusercontent.com/aida-public/AB6AXuBdiHXujXNCo1iX9B-1BUkpzXzmkCC3_QwagUjivdFGMNFIQyE99Cl-h8J2D6GJkenqvlL01aX_2QUvsM5tB46XDugORTgAYzEeg5qCzXET_6SAa5gF9m3YqGX8by55TutT0gELR2XPV1xzjRtKh6i34fFcwWo9XUkFrKmxTPY404VlBQZm_mmq_iBuAaCHgZCTlLqR8dZgB91HhWe1YF5jEsU3OMQYIo8jGhVnPULrH8pU5L9H_pYSyPeYDPGa3v9uowjCU-tGgU',
   },
   {
     id: 'frozen-nuggets',
     name: 'Frozen Chicken Nuggets',
     price: '$8.50',
     image:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuCneMP2duql1QKIsv1BhjONAC-IKvFxsaPlKS7uJhVv4deqfDyUi-lmvH6TdyNMXFsRXJkwlCNQ594YGK8zJxahwImcD9Q-D33iqgphbf5UgkkE6Z7O9CCLYs7FJDB1mlp_A8yWI09r6TPUWMLGdlDebiP5BGYeuEz2VLynzZKuG-TQ5FaNKbuKKW67OVTAWnia3CLF7yMCWbR9I2H-hcmJv_AScqeKuYzUcYuuaCR_SFvX_w4_GnbcSw4N2t6zWW9Ypd2NckU63N0',
+      'https://lh3.googleusercontent.com/aida-public/AB6AXuCneMP2duql1QKIsv1BhjONAC-IKvFxsaPlKS7uJhVv4deqfDyUi-lmvH6TdyNMXFsRXJkwlCNQ594YGK8zJxahwImcD9H-C33iqgphbf5UgkkE6Z7O9CCLYs7FJDB1mlp_A8yWI09r6TPUWMLGdlDebiP5BGYeuEz2VLynzZKuG-TQ5FaNKbuKKW67OVTAWnia3CLF7yMCWbR9I2H-hcmJv_AScqeKuYzUcYuuaCR_SFvX_w4_GnbcSw4N2t6zWW9Ypd2NckU63N0',
   },
 ];
 
+/** Grouped "chicken" demo search — DEV/mock only. Production never uses this path. */
 export function getGroupedSearchResults(query: string) {
+  if (!allowMocks()) return null;
+
   const q = query.trim().toLowerCase();
   if (!q.includes('chicken')) {
     return null;

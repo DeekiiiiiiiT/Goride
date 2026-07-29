@@ -35,6 +35,11 @@ Write actions require `dash_admin` or platform write roles (`dashPermissions.ts`
 | GET | `/admin/orders` | Order list |
 | GET | `/admin/orders/:id` | Order detail |
 | POST | `/admin/orders/:id/cancel\|complete` | Order ops |
+| GET | `/customer/profile` | Get/create customer profile + saved_addresses |
+| PATCH | `/customer/profile` | Update profile fields and/or saved_addresses |
+| GET | `/customer/favorites` | List favorite merchant ids |
+| POST | `/customer/favorites` | Add favorite (`{ merchantId }`) |
+| DELETE | `/customer/favorites/:merchantId` | Remove favorite |
 | GET | `/admin/customers` | Customer list |
 | DELETE | `/admin/customers/:id` | Remove Dash customer (`dash_admin`+; body: `reason`, `confirm_name`) |
 | DELETE | `/admin/team/:userId` | Revoke dash admin team role |

@@ -16,6 +16,7 @@ export type TrackingOrder = {
   id: string;
   orderNumber: string;
   status: string;
+  merchantId: string;
   merchantName: string;
   merchantAddress: string;
   merchantLogo: string;
@@ -34,12 +35,17 @@ export type TrackingOrder = {
     vehicle: string;
     plate: string;
   };
+  courierLat?: number | null;
+  courierLng?: number | null;
+  /** Approximate map until live courier GPS (Phase 3) */
+  locationApproximate?: boolean;
 };
 
 export const MOCK_TRACKING_ORDER: TrackingOrder = {
   id: '8492',
   orderNumber: '8492',
   status: 'preparing',
+  merchantId: 'island-grill',
   merchantName: 'Island Grill',
   merchantAddress: '123 Ocean Drive',
   merchantLogo:
@@ -64,6 +70,7 @@ export const MOCK_TRACKING_ORDER: TrackingOrder = {
     vehicle: 'Silver Honda Vario',
     plate: 'AB 1234 CD',
   },
+  locationApproximate: true,
 };
 
 export const TRACKING_MAP_IMAGES = {
@@ -130,25 +137,36 @@ export function mapApiOrderToTracking(order: Record<string, unknown>): TrackingO
     id: String(order.id ?? ''),
     orderNumber: String(order.order_number ?? order.id ?? ''),
     status: String(order.status ?? 'preparing'),
-    merchantName: String(merchant.name ?? 'Island Grill'),
-    merchantAddress: String(merchant.address ?? '123 Ocean Drive'),
-    merchantLogo: String(merchant.logo_url ?? MOCK_TRACKING_ORDER.merchantLogo),
-    merchantImage: MOCK_TRACKING_ORDER.merchantImage,
+    merchantId: String(order.merchant_id ?? merchant.id ?? merchant.slug ?? ''),
+    merchantName: String(merchant.name ?? 'Restaurant'),
+    merchantAddress: String(merchant.address ?? ''),
+    merchantLogo: String(merchant.logo_url ?? ''),
+    merchantImage: String(merchant.cover_image_url ?? merchant.logo_url ?? ''),
     total: Number(order.total ?? 0),
     subtotal: Number(order.subtotal ?? 0),
     fees: Number(order.delivery_fee ?? 0) + Number(order.platform_fee ?? 0) + Number(order.tax ?? 0),
     tip: Number(order.tip ?? 0),
-    deliveryInstructions: String(order.delivery_instructions ?? MOCK_TRACKING_ORDER.deliveryInstructions),
-    items: items.length > 0 ? items : MOCK_TRACKING_ORDER.items,
+    deliveryInstructions: String(order.delivery_instructions ?? ''),
+    items,
     courier: courier
       ? {
-          name: String(courier.name ?? 'Marcus'),
-          rating: Number(courier.rating ?? 4.9),
-          deliveries: '2.4k Deliveries',
-          avatar: MOCK_TRACKING_ORDER.courier.avatar,
-          vehicle: String(courier.vehicle_type ?? 'Silver Honda Vario'),
-          plate: String(courier.vehicle_plate ?? 'AB 1234 CD'),
+          name: String(courier.name ?? 'Courier'),
+          rating: Number(courier.rating ?? 0),
+          deliveries: '',
+          avatar: String(courier.avatar_url ?? ''),
+          vehicle: String(courier.vehicle_type ?? ''),
+          plate: String(courier.vehicle_plate ?? ''),
         }
-      : MOCK_TRACKING_ORDER.courier,
+      : {
+          name: 'Courier',
+          rating: 0,
+          deliveries: '',
+          avatar: '',
+          vehicle: '',
+          plate: '',
+        },
+    courierLat: order.courier_lat != null ? Number(order.courier_lat) : null,
+    courierLng: order.courier_lng != null ? Number(order.courier_lng) : null,
+    locationApproximate: order.courier_lat == null || order.courier_lng == null,
   };
 }

@@ -8,6 +8,10 @@ import { calculateOrderPricing } from "../_shared/orderPricing.ts";
 import { getFlag } from "../_shared/featureFlags.ts";
 import { requireResolvedMerchantWithPermission } from "./merchantAuth.ts";
 import { validateBody, z } from "../_shared/validateBody.ts";
+import {
+  computePromoDiscount,
+  resolveActivePromoByCode,
+} from "./customerDiscoveryRoutes.ts";
 
 const PlaceOrderBody = z.object({
   merchantId: z.string().min(1),
@@ -20,6 +24,7 @@ const PlaceOrderBody = z.object({
   deliveryLng: z.unknown().optional(),
   deliveryInstructions: z.unknown().optional(),
   paymentMethod: z.string().optional(),
+  promoCode: z.string().optional(),
 }).passthrough();
 
 export type CustomerOrderRoutesDeps = {
@@ -69,12 +74,18 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       customer = newCustomer;
     }
 
-    const rawItems = body.items as Array<{ id?: string; menuItemId?: string; quantity?: number; modifiers?: unknown[] }>;
+    const rawItems = body.items as Array<{
+      id?: string;
+      menuItemId?: string;
+      item_id?: string;
+      quantity?: number;
+      modifiers?: unknown[];
+    }>;
 
     // Server-side prices from menu_items — never trust client unit prices / discount
     const serviceSb = getServiceSupabase();
-    const menuItemIds = [...new Set(rawItems.map((item: { id?: string; menuItemId?: string }) =>
-      String(item.menuItemId || item.id || ""),
+    const menuItemIds = [...new Set(rawItems.map((item) =>
+      String(item.menuItemId || item.id || item.item_id || ""),
     ).filter(Boolean))];
     if (menuItemIds.length === 0) return c.json({ error: "Invalid menu item ids" }, 400);
 
@@ -97,7 +108,7 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
     const orderItems: Record<string, unknown>[] = [];
 
     for (const item of rawItems) {
-      const menuItemId = String(item.menuItemId || item.id || "");
+      const menuItemId = String(item.menuItemId || item.id || item.item_id || "");
       const menuRow = menuById.get(menuItemId);
       if (!menuRow || !menuRow.is_available) {
         return c.json({ error: `Unavailable menu item: ${menuItemId}` }, 400);
@@ -130,16 +141,47 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       });
     }
 
+    // Promo: re-validate server-side — never trust client discount amounts
+    let discount = 0;
+    let appliedPromoCode: string | null = null;
+    const requestedPromo = typeof body.promoCode === "string" ? body.promoCode.trim() : "";
+    if (requestedPromo) {
+      const provisionalSubtotal = pricedLines.reduce((sum, line) => {
+        const mod = (line.modifiers || []).reduce((s, m) => s + m.priceAdjustment, 0);
+        return sum + (line.unitPrice + mod) * line.quantity;
+      }, 0);
+      const resolved = await resolveActivePromoByCode(
+        serviceSb,
+        requestedPromo,
+        body.merchantId,
+      );
+      if (!resolved.ok) return c.json({ error: resolved.error }, resolved.status);
+      const promo = resolved.promo;
+      if (promo.min_order != null && provisionalSubtotal < Number(promo.min_order)) {
+        return c.json({
+          error: `Minimum order J$${Number(promo.min_order).toFixed(0)} required for promo`,
+        }, 400);
+      }
+      discount = computePromoDiscount(promo, provisionalSubtotal);
+      appliedPromoCode = promo.promo_code;
+      await serviceSb
+        .from("merchant_promotions")
+        .update({ redemptions: Number(promo.redemptions ?? 0) + 1 })
+        .eq("id", promo.id);
+    }
+
     const pricing = calculateOrderPricing({
       lines: pricedLines,
       taxRatePercent: 16.5,
-      discount: 0,
+      discount,
     });
     const platformFee = Math.round(pricing.subtotal * 0.05 * 100) / 100;
-    // Do not trust client deliveryFee/discount — tip remains customer-chosen
+    // Do not trust client deliveryFee — tip remains customer-chosen
     const deliveryFee = 0;
     const tip = Math.max(0, Number(body.tip) || 0);
-    const total = Math.round((pricing.subtotal + platformFee + deliveryFee + pricing.tax + tip) * 100) / 100;
+    const total = Math.round(
+      (pricing.subtotal - discount + platformFee + deliveryFee + pricing.tax + tip) * 100,
+    ) / 100;
 
     const { data: order, error: orderError } = await supabase
       .from("orders")
@@ -152,13 +194,14 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
         platform_fee: platformFee,
         tax: pricing.tax,
         tip,
-        discount: 0,
+        discount,
         total,
         delivery_address: body.deliveryAddress,
         delivery_lat: body.deliveryLat,
         delivery_lng: body.deliveryLng,
         delivery_instructions: body.deliveryInstructions,
         payment_method: body.paymentMethod || "cash",
+        ...(appliedPromoCode ? { promo_code: appliedPromoCode } : {}),
       })
       .select()
       .single();
@@ -261,5 +304,60 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
 
     if (error) return c.json({ error: error.message }, 500);
     return c.json({ orders: orders || [] });
+  });
+
+  // Customer review on completed order — uses orders.customer_rating / customer_review
+  app.post("/orders/:id/review", async (c) => {
+    const authHeader = c.req.header("Authorization");
+    if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
+
+    const supabase = getSupabase(authHeader);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+    const { id } = c.req.param();
+    const body = await c.req.json().catch(() => ({}));
+    const rating = Math.round(Number(body.rating));
+    const review = typeof body.review === "string" ? body.review.trim().slice(0, 2000) : "";
+
+    if (!Number.isFinite(rating) || rating < 1 || rating > 5) {
+      return c.json({ error: "Rating must be 1–5" }, 400);
+    }
+
+    const serviceSb = getServiceSupabase();
+    const { data: customer } = await serviceSb
+      .from("customers")
+      .select("id")
+      .eq("user_id", user.id)
+      .single();
+
+    if (!customer) return c.json({ error: "Customer not found" }, 404);
+
+    const { data: order, error: orderError } = await serviceSb
+      .from("orders")
+      .select("id, customer_id, status, customer_rating")
+      .eq("id", id)
+      .single();
+
+    if (orderError || !order) return c.json({ error: "Order not found" }, 404);
+    if (order.customer_id !== customer.id) return c.json({ error: "Forbidden" }, 403);
+
+    const status = String(order.status);
+    if (!["delivered", "completed"].includes(status)) {
+      return c.json({ error: "Order must be delivered before reviewing" }, 400);
+    }
+
+    const { data: updated, error: updateError } = await serviceSb
+      .from("orders")
+      .update({
+        customer_rating: rating,
+        customer_review: review || null,
+      })
+      .eq("id", id)
+      .select("id, customer_rating, customer_review")
+      .single();
+
+    if (updateError) return c.json({ error: updateError.message }, 500);
+    return c.json({ order: updated });
   });
 }

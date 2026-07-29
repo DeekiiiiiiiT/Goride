@@ -1,17 +1,22 @@
 import { useState } from 'react';
+import { API_ENDPOINTS } from '@roam/api-client';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { StarRating } from '@/components/rating/StarRating';
 import { ISSUE_CHIPS } from '@/lib/ordersContent';
+import { supabase } from '@/lib/supabase';
+import { toast } from 'sonner';
 
 type Props = {
+  orderId?: string;
   merchantName?: string;
   deliveredAt?: string;
   onNavigate: (page: string, data?: Record<string, unknown>) => void;
 };
 
 export default function RateOrderPage({
-  merchantName = 'Sushi Zen',
-  deliveredAt = '12:45 PM',
+  orderId,
+  merchantName = 'Restaurant',
+  deliveredAt = '',
   onNavigate,
 }: Props) {
   const [overall, setOverall] = useState(0);
@@ -19,13 +24,64 @@ export default function RateOrderPage({
   const [deliverySpeed, setDeliverySpeed] = useState(5);
   const [feedback, setFeedback] = useState('');
   const [issues, setIssues] = useState<string[]>([]);
+  const [submitting, setSubmitting] = useState(false);
 
   const toggleIssue = (chip: string) => {
-    setIssues(prev => (prev.includes(chip) ? prev.filter(c => c !== chip) : [...prev, chip]));
+    setIssues((prev) => (prev.includes(chip) ? prev.filter((c) => c !== chip) : [...prev, chip]));
   };
 
-  const handleSubmit = () => {
-    onNavigate('orders');
+  const handleSubmit = async () => {
+    if (!orderId) {
+      toast.error('Missing order');
+      return;
+    }
+    if (overall < 1) {
+      toast.error('Please select an overall rating');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session) {
+        toast.error('Please sign in');
+        onNavigate('login');
+        return;
+      }
+
+      const reviewParts = [
+        feedback.trim(),
+        issues.length ? `Issues: ${issues.join(', ')}` : '',
+        `Food: ${foodQuality}/5`,
+        `Delivery: ${deliverySpeed}/5`,
+      ].filter(Boolean);
+
+      const res = await fetch(`${API_ENDPOINTS.delivery}/orders/${orderId}/review`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          rating: overall,
+          review: reviewParts.join(' · '),
+        }),
+      });
+
+      if (!res.ok) {
+        const err = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(err.error || 'Failed to submit rating');
+      }
+
+      toast.success('Thanks for your feedback');
+      onNavigate('orders');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to submit rating');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -47,7 +103,8 @@ export default function RateOrderPage({
         <div className="mb-6 text-center">
           <h2 className="text-headline-lg-mobile font-bold mb-1">How was your order?</h2>
           <p className="text-body-sm text-on-surface-variant">
-            {merchantName} • Delivered {deliveredAt}
+            {merchantName}
+            {deliveredAt ? ` • Delivered ${deliveredAt}` : ''}
           </p>
         </div>
 
@@ -78,7 +135,7 @@ export default function RateOrderPage({
           <textarea
             id="feedback"
             value={feedback}
-            onChange={e => setFeedback(e.target.value)}
+            onChange={(e) => setFeedback(e.target.value)}
             placeholder="Tell us more (optional)"
             rows={4}
             className="w-full bg-[#F3F4F6] border-none rounded-lg p-4 text-body-md text-on-surface focus:bg-surface-container-lowest focus:ring-2 focus:ring-primary focus:outline-none transition-all resize-none shadow-sm"
@@ -88,12 +145,9 @@ export default function RateOrderPage({
         <section className="bg-surface-container-lowest rounded-xl p-4 shadow-[0px_4px_20px_rgba(0,0,0,0.04)] mb-8">
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-headline-sm font-semibold">Something wrong?</h3>
-            <button type="button" className="text-label-md font-semibold text-tertiary">
-              Report a problem
-            </button>
           </div>
           <div className="flex flex-wrap gap-2">
-            {ISSUE_CHIPS.map(chip => (
+            {ISSUE_CHIPS.map((chip) => (
               <button
                 key={chip}
                 type="button"
@@ -115,10 +169,11 @@ export default function RateOrderPage({
         <div className="max-w-[600px] mx-auto">
           <button
             type="button"
-            onClick={handleSubmit}
-            className="w-full bg-primary text-on-primary font-semibold text-label-md h-12 rounded-lg flex items-center justify-center hover:opacity-90 active:scale-95 transition-all shadow-md"
+            disabled={submitting}
+            onClick={() => void handleSubmit()}
+            className="w-full bg-primary text-on-primary font-semibold text-label-md h-12 rounded-lg flex items-center justify-center hover:opacity-90 active:scale-95 transition-all shadow-md disabled:opacity-70"
           >
-            Submit Rating
+            {submitting ? 'Submitting…' : 'Submit Rating'}
           </button>
         </div>
       </div>

@@ -1,3 +1,6 @@
+import { allowMocks } from './mocksGate';
+import { fetchCustomerProfile, patchCustomerProfile, isCustomerLoggedIn } from './customerApi';
+
 export const PROFILE_AVATAR =
   'https://lh3.googleusercontent.com/aida-public/AB6AXuD91c0rjILQv1vBE3_Geadu5PDiMEoNZAk2l0Ir6ZxWXnjHfgI3QqnMljx6GsduMoKmTzzc7cUl7mnGmz_0nfqqFBATmtZVDRO6Giau6I_eVPdX-ReqQXEWkmU2277bplPpYNnyFwO1ra4gCvi9_sdXWi9G9Y8fEhZHzuKNeqbkV22DvMZjQnoIJNq4TKyM6qCIeYqcPEiMRNjb3ydCAYzZLjrYnz5mh-SPEU6yQt_Erh1M6NAxlVgiLzUXrm_Wh0La_sM1BFI3_jWl';
 
@@ -14,6 +17,7 @@ export type UserProfile = {
 
 const PROFILE_KEY = 'roam-dash-profile';
 
+/** Demo-only seed — never shown as a real logged-in identity in production. */
 export const DEFAULT_PROFILE: UserProfile = {
   firstName: 'Sarah',
   lastName: 'Johnson',
@@ -22,22 +26,87 @@ export const DEFAULT_PROFILE: UserProfile = {
   avatarUrl: PROFILE_AVATAR,
 };
 
-export function getProfile(): UserProfile {
+const EMPTY_PROFILE: UserProfile = {
+  firstName: '',
+  lastName: '',
+  email: '',
+  phone: '',
+  avatarUrl: PROFILE_AVATAR,
+};
+
+function readLocalProfile(): UserProfile {
   try {
     const raw = localStorage.getItem(PROFILE_KEY);
-    return raw ? { ...DEFAULT_PROFILE, ...(JSON.parse(raw) as Partial<UserProfile>) } : DEFAULT_PROFILE;
+    if (raw) {
+      return { ...EMPTY_PROFILE, ...(JSON.parse(raw) as Partial<UserProfile>), avatarUrl: PROFILE_AVATAR };
+    }
   } catch {
-    return DEFAULT_PROFILE;
+    // fall through
   }
+  return allowMocks() ? { ...DEFAULT_PROFILE } : { ...EMPTY_PROFILE };
 }
 
-export function saveProfile(profile: Partial<UserProfile>): void {
+function writeLocalProfile(profile: UserProfile): void {
   try {
-    const current = getProfile();
-    localStorage.setItem(PROFILE_KEY, JSON.stringify({ ...current, ...profile }));
+    localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
   } catch {
     // ignore
   }
+}
+
+export function getProfile(): UserProfile {
+  return readLocalProfile();
+}
+
+export function saveProfile(profile: Partial<UserProfile>): void {
+  const current = readLocalProfile();
+  writeLocalProfile({ ...current, ...profile, avatarUrl: PROFILE_AVATAR });
+}
+
+/** Pull profile from delivery edge when logged in; cache locally for UX. */
+export async function syncProfileFromBackend(): Promise<UserProfile> {
+  if (!(await isCustomerLoggedIn())) return readLocalProfile();
+  try {
+    const remote = await fetchCustomerProfile();
+    if (!remote) return readLocalProfile();
+    const next: UserProfile = {
+      firstName: remote.firstName || '',
+      lastName: remote.lastName || '',
+      email: remote.email || '',
+      phone: remote.phone || '',
+      avatarUrl: PROFILE_AVATAR,
+    };
+    writeLocalProfile(next);
+    return next;
+  } catch {
+    return readLocalProfile();
+  }
+}
+
+/** Persist profile to backend + local cache. Local-only when signed out. */
+export async function persistProfile(profile: Partial<UserProfile>): Promise<UserProfile> {
+  const merged = { ...readLocalProfile(), ...profile, avatarUrl: PROFILE_AVATAR };
+  writeLocalProfile(merged);
+
+  if (!(await isCustomerLoggedIn())) return merged;
+
+  const remote = await patchCustomerProfile({
+    firstName: merged.firstName,
+    lastName: merged.lastName,
+    name: `${merged.firstName} ${merged.lastName}`.trim(),
+    phone: merged.phone,
+    email: merged.email,
+  });
+
+  const next: UserProfile = {
+    firstName: remote.firstName || merged.firstName,
+    lastName: remote.lastName || merged.lastName,
+    email: remote.email || merged.email,
+    phone: remote.phone || merged.phone,
+    avatarUrl: PROFILE_AVATAR,
+  };
+  writeLocalProfile(next);
+  return next;
 }
 
 export const ACCOUNT_MENU = [

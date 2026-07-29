@@ -14,6 +14,7 @@ import {
   MOCK_ORDERS,
   type OrderHistoryEntry,
 } from '@/lib/ordersContent';
+import { allowMocks } from '@/lib/mocksGate';
 import { formatJmd } from '@/lib/restaurantContent';
 
 type Props = {
@@ -56,7 +57,7 @@ export default function OrdersPage({ onNavigate }: Props) {
   const { itemCount, addItem } = useCart();
   const [reorderOpen, setReorderOpen] = useState(false);
 
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['customer-orders'],
     queryFn: async () => {
       const {
@@ -77,8 +78,11 @@ export default function OrdersPage({ onNavigate }: Props) {
     if (data?.orders?.length) {
       return (data.orders as ApiOrder[]).map(mapApiOrder);
     }
-    return MOCK_ORDERS;
-  }, [data]);
+    if (allowMocks() && (isError || data !== undefined)) {
+      return MOCK_ORDERS;
+    }
+    return [];
+  }, [data, isError]);
 
   const activeOrders = orders.filter(o => o.status === 'active');
   const pastOrders = orders.filter(o => o.status === 'delivered');

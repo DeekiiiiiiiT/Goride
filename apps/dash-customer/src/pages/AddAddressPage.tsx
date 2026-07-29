@@ -4,11 +4,12 @@ import { AddressAutocomplete } from '@/components/ui/AddressAutocomplete';
 import { ADD_ADDRESS_MAP } from '@/lib/accountContent';
 import {
   getSavedAddressById,
-  upsertSavedAddress,
+  upsertSavedAddressAsync,
   type AddressLabel,
   type SavedAddress,
 } from '@/lib/addressStorage';
 import { checkDeliveryZone } from '@/lib/deliveryZones';
+import { toast } from '@/lib/toast';
 
 type Props = {
   addressId?: string;
@@ -24,15 +25,26 @@ const LABEL_OPTIONS: { id: AddressLabel; icon: string; label: string }[] = [
 export default function AddAddressPage({ addressId, onNavigate }: Props) {
   const existing = addressId ? getSavedAddressById(addressId) : undefined;
 
-  const [line1, setLine1] = useState(existing?.line1 ?? '123 Culinary Ave');
+  const [line1, setLine1] = useState(existing?.line1 ?? '');
   const [line2, setLine2] = useState(existing?.line2 ?? '');
   const [instructions, setInstructions] = useState(existing?.instructions ?? '');
   const [label, setLabel] = useState<AddressLabel>(existing?.label ?? 'home');
+  const [coords, setCoords] = useState<{ lat?: number; lng?: number }>({
+    lat: existing?.lat,
+    lng: existing?.lng,
+  });
+  const [saving, setSaving] = useState(false);
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     const city = existing?.city ?? 'Kingston, Jamaica';
-    const zone = checkDeliveryZone({ line1, line2, city });
+    const zone = checkDeliveryZone({
+      line1,
+      line2,
+      city,
+      lat: coords.lat,
+      lng: coords.lng,
+    });
     if (!zone.inZone) {
       onNavigate('out-of-delivery', { returnTo: 'add-address', attemptedAddress: line1 });
       return;
@@ -44,10 +56,19 @@ export default function AddAddressPage({ addressId, onNavigate }: Props) {
       line2: line2 || undefined,
       instructions: instructions || undefined,
       city,
+      lat: coords.lat,
+      lng: coords.lng,
       isDefault: existing?.isDefault ?? !addressId,
     };
-    upsertSavedAddress(address);
-    onNavigate('saved-addresses');
+    setSaving(true);
+    try {
+      await upsertSavedAddressAsync(address);
+      onNavigate('saved-addresses');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not save address');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -89,6 +110,7 @@ export default function AddAddressPage({ addressId, onNavigate }: Props) {
             onSelect={(s) => {
               setLine1(s.line1);
               if (s.line2) setLine2(s.line2);
+              setCoords({ lat: s.lat, lng: s.lng });
             }}
             placeholder="Search for address in Kingston"
           />
@@ -164,10 +186,11 @@ export default function AddAddressPage({ addressId, onNavigate }: Props) {
       <div className="fixed bottom-0 left-0 w-full bg-surface/90 backdrop-blur-md border-t border-surface-container-low p-4 pb-safe z-50 flex justify-center shadow-[0px_-10px_30px_rgba(0,0,0,0.03)]">
         <button
           type="button"
-          onClick={handleSubmit}
-          className="w-full max-w-[1200px] bg-primary-container text-on-primary text-headline-sm font-semibold py-4 rounded-lg shadow-md hover:opacity-90 active:scale-[0.98] transition-all"
+          onClick={(e) => void handleSubmit(e as unknown as FormEvent)}
+          disabled={saving || !line1.trim()}
+          className="w-full max-w-[1200px] bg-primary-container text-on-primary text-headline-sm font-semibold py-4 rounded-lg shadow-md hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-50"
         >
-          Save Address
+          {saving ? 'Saving…' : 'Save Address'}
         </button>
       </div>
     </div>

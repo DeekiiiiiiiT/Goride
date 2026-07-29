@@ -1,15 +1,27 @@
+/** Client totals must match server formula in customerOrderRoutes.ts */
+
+export const TAX_RATE_PERCENT = 16.5;
+export const PLATFORM_FEE_RATE = 0.05;
+/** Soft launch: server forces delivery fee to 0 until a real fee engine ships */
+export const DELIVERY_FEE = 0;
+
 export type PromoCode = {
   code: string;
-  type: 'percentage' | 'fixed' | 'free_delivery';
+  type: 'percentage' | 'fixed' | 'free_delivery' | 'percent_off' | 'amount_off';
   value: number;
   minOrder: number;
+  title?: string;
 };
 
-export const PROMO_CODES: Record<string, PromoCode> = {
-  WELCOME: { code: 'WELCOME', type: 'free_delivery', value: 0, minOrder: 0 },
-  WELCOME10: { code: 'WELCOME10', type: 'percentage', value: 10, minOrder: 500 },
-  ISLAND20: { code: 'ISLAND20', type: 'percentage', value: 20, minOrder: 1000 },
-};
+/** Local cache of last server-validated promo — empty until redeem succeeds */
+export const PROMO_CODES: Record<string, PromoCode> = {};
+
+export function cacheValidatedPromo(promo: PromoCode): void {
+  PROMO_CODES[promo.code.toUpperCase()] = {
+    ...promo,
+    code: promo.code.toUpperCase(),
+  };
+}
 
 export type OrderTotals = {
   discount: number;
@@ -21,18 +33,38 @@ export type OrderTotals = {
   total: number;
 };
 
+function roundMoney(value: number) {
+  return Math.round(value * 100) / 100;
+}
+
+function computeDiscount(subtotal: number, promo: PromoCode | null): number {
+  if (!promo) return 0;
+  if (subtotal < (promo.minOrder || 0)) return 0;
+  const type = promo.type;
+  if (type === 'percentage' || type === 'percent_off') {
+    return roundMoney(subtotal * (promo.value / 100));
+  }
+  if (type === 'fixed' || type === 'amount_off') {
+    return roundMoney(Math.min(subtotal, promo.value));
+  }
+  return 0;
+}
+
+/**
+ * Mirrors server: tax on (subtotal - discount), platform fee on subtotal, delivery fee fixed.
+ */
 export function calculateOrderTotals(
   subtotal: number,
   appliedPromo: PromoCode | null,
-  tip = 0
+  tip = 0,
 ): OrderTotals {
-  const discount =
-    appliedPromo?.type === 'percentage' ? Math.round(subtotal * (appliedPromo.value / 100)) : 0;
-  const discountedSubtotal = subtotal - discount;
-  const deliveryFee = appliedPromo?.type === 'free_delivery' ? 0 : 150;
-  const serviceFee = Math.round(discountedSubtotal * 0.0208);
-  const tax = Math.round(discountedSubtotal * 0.05);
-  const total = discountedSubtotal + deliveryFee + serviceFee + tax + tip;
+  const discount = computeDiscount(subtotal, appliedPromo);
+  const discountedSubtotal = roundMoney(Math.max(0, subtotal - discount));
+  const deliveryFee = DELIVERY_FEE;
+  const serviceFee = roundMoney(subtotal * PLATFORM_FEE_RATE);
+  const tax = roundMoney(discountedSubtotal * (TAX_RATE_PERCENT / 100));
+  const safeTip = Math.max(0, tip);
+  const total = roundMoney(discountedSubtotal + deliveryFee + serviceFee + tax + safeTip);
 
-  return { discount, discountedSubtotal, deliveryFee, serviceFee, tax, tip, total };
+  return { discount, discountedSubtotal, deliveryFee, serviceFee, tax, tip: safeTip, total };
 }

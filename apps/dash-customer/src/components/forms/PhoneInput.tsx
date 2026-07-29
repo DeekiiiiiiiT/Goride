@@ -35,6 +35,10 @@ export function formatJamaicaPhone(digits: string): string {
 
 export function toE164JamaicaPhone(local: string): string {
   const digits = local.replace(/\D/g, '');
+  // Already includes country code 1 + area 876…
+  if (digits.startsWith('1876') && digits.length === 11) return `+${digits}`;
   if (digits.startsWith('1') && digits.length === 11) return `+${digits}`;
+  // National JM mobile: 876XXXXXXX → +1876XXXXXXX
+  if (digits.startsWith('876') && digits.length === 10) return `+1${digits}`;
   return `+1${digits}`;
 }

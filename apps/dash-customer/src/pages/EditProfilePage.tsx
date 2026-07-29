@@ -1,22 +1,50 @@
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
-import { DEFAULT_PROFILE, getProfile, saveProfile } from '@/lib/accountContent';
+import { DEFAULT_PROFILE, getProfile, persistProfile, syncProfileFromBackend, type UserProfile } from '@/lib/accountContent';
+import { toast } from '@/lib/toast';
 
 type Props = {
   onNavigate: (page: string) => void;
 };
 
 export default function EditProfilePage({ onNavigate }: Props) {
-  const initial = getProfile();
-  const [firstName, setFirstName] = useState(initial.firstName);
-  const [lastName, setLastName] = useState(initial.lastName);
-  const [email, setEmail] = useState(initial.email);
-  const [phone, setPhone] = useState(initial.phone);
+  const [profile, setProfile] = useState<UserProfile>(getProfile);
+  const [firstName, setFirstName] = useState(profile.firstName);
+  const [lastName, setLastName] = useState(profile.lastName);
+  const [email, setEmail] = useState(profile.email);
+  const [phone, setPhone] = useState(profile.phone);
+  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  const handleSubmit = (e: FormEvent) => {
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const remote = await syncProfileFromBackend();
+      if (cancelled) return;
+      setProfile(remote);
+      setFirstName(remote.firstName);
+      setLastName(remote.lastName);
+      setEmail(remote.email);
+      setPhone(remote.phone);
+      setLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    saveProfile({ firstName, lastName, email, phone });
-    onNavigate('account');
+    setSaving(true);
+    try {
+      await persistProfile({ firstName, lastName, email, phone });
+      toast.success('Profile saved');
+      onNavigate('account');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not save profile');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -40,7 +68,11 @@ export default function EditProfilePage({ onNavigate }: Props) {
         <div className="flex flex-col items-center justify-center mb-8">
           <div className="relative group cursor-pointer">
             <div className="w-32 h-32 rounded-full overflow-hidden shadow-sm">
-              <img src={DEFAULT_PROFILE.avatarUrl} alt="Profile" className="w-full h-full object-cover" />
+              <img
+                src={profile.avatarUrl || DEFAULT_PROFILE.avatarUrl}
+                alt="Profile"
+                className="w-full h-full object-cover"
+              />
             </div>
             <div className="absolute inset-0 bg-black/40 rounded-full flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
               <MaterialIcon name="photo_camera" className="text-white mb-1" filled />
@@ -52,75 +84,80 @@ export default function EditProfilePage({ onNavigate }: Props) {
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6 max-w-md mx-auto">
-          <div className="space-y-4">
-            <div>
-              <label htmlFor="firstName" className="block text-label-md font-semibold text-on-surface-variant mb-2">
-                First name
-              </label>
-              <input
-                id="firstName"
-                value={firstName}
-                onChange={e => setFirstName(e.target.value)}
-                className="input-field w-full rounded-lg px-4 py-3 text-body-md"
-                required
-              />
-            </div>
-            <div>
-              <label htmlFor="lastName" className="block text-label-md font-semibold text-on-surface-variant mb-2">
-                Last name
-              </label>
-              <input
-                id="lastName"
-                value={lastName}
-                onChange={e => setLastName(e.target.value)}
-                className="input-field w-full rounded-lg px-4 py-3 text-body-md"
-                required
-              />
-            </div>
-            <div>
-              <label htmlFor="email" className="block text-label-md font-semibold text-on-surface-variant mb-2">
-                Email
-              </label>
-              <div className="relative">
-                <MaterialIcon name="mail" className="absolute left-4 top-1/2 -translate-y-1/2 text-outline" />
+        {loading ? (
+          <p className="text-center text-on-surface-variant text-body-md">Loading profile…</p>
+        ) : (
+          <form onSubmit={(e) => void handleSubmit(e)} className="space-y-6 max-w-md mx-auto">
+            <div className="space-y-4">
+              <div>
+                <label htmlFor="firstName" className="block text-label-md font-semibold text-on-surface-variant mb-2">
+                  First name
+                </label>
                 <input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  className="input-field w-full rounded-lg pl-12 pr-4 py-3 text-body-md"
+                  id="firstName"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  className="input-field w-full rounded-lg px-4 py-3 text-body-md"
                   required
                 />
               </div>
-            </div>
-            <div>
-              <label htmlFor="phone" className="block text-label-md font-semibold text-on-surface-variant mb-2">
-                Phone number
-              </label>
-              <div className="relative">
-                <MaterialIcon name="phone" className="absolute left-4 top-1/2 -translate-y-1/2 text-outline" />
+              <div>
+                <label htmlFor="lastName" className="block text-label-md font-semibold text-on-surface-variant mb-2">
+                  Last name
+                </label>
                 <input
-                  id="phone"
-                  type="tel"
-                  value={phone}
-                  onChange={e => setPhone(e.target.value)}
-                  className="input-field w-full rounded-lg pl-12 pr-4 py-3 text-body-md"
+                  id="lastName"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  className="input-field w-full rounded-lg px-4 py-3 text-body-md"
                   required
                 />
               </div>
+              <div>
+                <label htmlFor="email" className="block text-label-md font-semibold text-on-surface-variant mb-2">
+                  Email
+                </label>
+                <div className="relative">
+                  <MaterialIcon name="mail" className="absolute left-4 top-1/2 -translate-y-1/2 text-outline" />
+                  <input
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="input-field w-full rounded-lg pl-12 pr-4 py-3 text-body-md"
+                    required
+                  />
+                </div>
+              </div>
+              <div>
+                <label htmlFor="phone" className="block text-label-md font-semibold text-on-surface-variant mb-2">
+                  Phone number
+                </label>
+                <div className="relative">
+                  <MaterialIcon name="phone" className="absolute left-4 top-1/2 -translate-y-1/2 text-outline" />
+                  <input
+                    id="phone"
+                    type="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    className="input-field w-full rounded-lg pl-12 pr-4 py-3 text-body-md"
+                    required
+                  />
+                </div>
+              </div>
             </div>
-          </div>
 
-          <div className="pt-6 mt-8 border-t border-surface-container-high">
-            <button
-              type="submit"
-              className="w-full bg-primary text-white text-headline-sm font-semibold py-4 rounded-lg shadow-sm hover:opacity-90 active:scale-[0.98] transition-all"
-            >
-              Save Changes
-            </button>
-          </div>
-        </form>
+            <div className="pt-6 mt-8 border-t border-surface-container-high">
+              <button
+                type="submit"
+                disabled={saving}
+                className="w-full bg-primary text-white text-headline-sm font-semibold py-4 rounded-lg shadow-sm hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-50"
+              >
+                {saving ? 'Saving…' : 'Save Changes'}
+              </button>
+            </div>
+          </form>
+        )}
       </main>
     </div>
   );

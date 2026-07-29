@@ -31,6 +31,9 @@ import {
 } from "./merchantRestaurantRoutes.ts";
 import { registerMerchantInventoryRoutes } from "./merchantInventoryRoutes.ts";
 import { registerCustomerOrderRoutes } from "./customerOrderRoutes.ts";
+import { registerCustomerAccountRoutes } from "./customerAccountRoutes.ts";
+import { registerCustomerDiscoveryRoutes } from "./customerDiscoveryRoutes.ts";
+import { notifyCustomerOrderStatus } from "../_shared/dashOrderSms.ts";
 import {
   aggregateAnalyticsByDay,
   ANALYTICS_CACHE_CONTROL,
@@ -127,44 +130,48 @@ app.get("/merchants", async (c) => {
   return c.json({ merchants: data });
 });
 
-// Get merchant details with menu
-app.get("/merchants/:id", async (c) => {
-  const supabase = getServiceSupabase();
-  const { id } = c.req.param();
-  
-  const { data: merchant, error: merchantError } = await supabase
-    .from("merchants")
-    .select("*")
-    .eq("id", id)
-    .single();
-  
-  if (merchantError) return c.json({ error: merchantError.message }, 404);
+  // Get merchant details with menu (UUID or slug)
+  app.get("/merchants/:id", async (c) => {
+    const supabase = getServiceSupabase();
+    const { id } = c.req.param();
 
-  const m = merchant as Record<string, unknown>;
-  if (m.onboarding_status === "draft" || !m.is_active) {
-    return c.json({ error: "Merchant not found" }, 404);
-  }
-  
-  const { data: categories } = await supabase
-    .from("menu_categories")
-    .select("*")
-    .eq("merchant_id", id)
-    .eq("is_active", true)
-    .order("sort_order");
-  
-  const { data: items } = await supabase
-    .from("menu_items")
-    .select("*")
-    .eq("merchant_id", id)
-    .eq("is_available", true)
-    .order("sort_order");
-  
-  return c.json({
-    merchant,
-    categories: categories || [],
-    items: items || [],
+    let merchant: Record<string, unknown> | null = null;
+    const byId = await supabase.from("merchants").select("*").eq("id", id).maybeSingle();
+    if (byId.data) {
+      merchant = byId.data as Record<string, unknown>;
+    } else {
+      const bySlug = await supabase.from("merchants").select("*").eq("slug", id).maybeSingle();
+      if (bySlug.data) merchant = bySlug.data as Record<string, unknown>;
+    }
+
+    if (!merchant) return c.json({ error: "Merchant not found" }, 404);
+
+    if (merchant.onboarding_status === "draft" || !merchant.is_active) {
+      return c.json({ error: "Merchant not found" }, 404);
+    }
+
+    const merchantId = String(merchant.id);
+
+    const { data: categories } = await supabase
+      .from("menu_categories")
+      .select("*")
+      .eq("merchant_id", merchantId)
+      .eq("is_active", true)
+      .order("sort_order");
+
+    const { data: items } = await supabase
+      .from("menu_items")
+      .select("*")
+      .eq("merchant_id", merchantId)
+      .eq("is_available", true)
+      .order("sort_order");
+
+    return c.json({
+      merchant,
+      categories: categories || [],
+      items: items || [],
+    });
   });
-});
 
 // Get current user's merchant profile
 app.get("/merchant/profile", async (c) => {
@@ -700,6 +707,9 @@ app.put("/orders/:id/status", async (c) => {
       notes,
     });
 
+    // Best-effort customer SMS on status change
+    await notifyCustomerOrderStatus(serviceSb, id, status);
+
     return c.json({ order: updatedOrder });
   }
 
@@ -777,7 +787,9 @@ app.put("/orders/:id/status", async (c) => {
     team_member_id: teamMemberId,
     notes,
   });
-  
+
+  await notifyCustomerOrderStatus(getServiceSupabase(), id, status);
+
   return c.json({ order: updatedOrder });
 });
 
@@ -981,6 +993,89 @@ app.post("/orders/:id/accept-delivery", async (c) => {
   });
   
   return c.json({ order });
+});
+
+// Courier live GPS — assigned courier only
+app.patch("/orders/:id/courier-location", async (c) => {
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
+
+  const supabase = getSupabase(authHeader);
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+  const { id } = c.req.param();
+  const body = await c.req.json().catch(() => ({}));
+  const lat = Number(body.lat ?? body.courierLat);
+  const lng = Number(body.lng ?? body.courierLng);
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return c.json({ error: "lat and lng required" }, 400);
+  }
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+    return c.json({ error: "Invalid coordinates" }, 400);
+  }
+
+  const serviceSb = getServiceSupabase();
+  const { data: order, error: orderError } = await serviceSb
+    .from("orders")
+    .select("id, courier_id, status")
+    .eq("id", id)
+    .single();
+
+  if (orderError || !order) return c.json({ error: "Order not found" }, 404);
+  if (String(order.courier_id) !== user.id) {
+    return c.json({ error: "Forbidden" }, 403);
+  }
+
+  const liveStatuses = ["picked_up", "in_transit", "ready"];
+  if (!liveStatuses.includes(String(order.status))) {
+    return c.json({ error: "Order is not in a live delivery state" }, 400);
+  }
+
+  const { data: updated, error: updateError } = await serviceSb
+    .from("orders")
+    .update({
+      courier_lat: lat,
+      courier_lng: lng,
+      courier_location_updated_at: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .select("id, courier_lat, courier_lng, courier_location_updated_at")
+    .single();
+
+  if (updateError) return c.json({ error: updateError.message }, 500);
+
+  // Mirror onto courier_availability (best-effort)
+  const { data: existingAvail } = await serviceSb
+    .from("courier_availability")
+    .select("id")
+    .eq("driver_id", user.id)
+    .maybeSingle();
+
+  if (existingAvail?.id) {
+    await serviceSb
+      .from("courier_availability")
+      .update({
+        current_lat: lat,
+        current_lng: lng,
+        last_location_update: new Date().toISOString(),
+        active_order_id: id,
+        is_online: true,
+      })
+      .eq("id", existingAvail.id);
+  } else {
+    await serviceSb.from("courier_availability").insert({
+      driver_id: user.id,
+      current_lat: lat,
+      current_lng: lng,
+      last_location_update: new Date().toISOString(),
+      active_order_id: id,
+      is_online: true,
+    });
+  }
+
+  return c.json({ location: updated });
 });
 
 // ============================================================================
@@ -1834,6 +1929,8 @@ import { registerOrderAdminRoutes } from "./admin/orderRoutes.ts";
 import { registerCustomerAdminRoutes } from "./admin/customerRoutes.ts";
 import { registerFinanceAdminRoutes } from "./admin/financeRoutes.ts";
 registerCustomerOrderRoutes(app, { getSupabase, getServiceSupabase });
+registerCustomerAccountRoutes(app, { getSupabase, getServiceSupabase });
+registerCustomerDiscoveryRoutes(app, { getServiceSupabase });
 registerMerchantApplicationRoutes(app);
 registerMerchantAssetsRoutes(app);
 registerMerchantTeamRoutes(app, { getSupabase, getServiceSupabase });
