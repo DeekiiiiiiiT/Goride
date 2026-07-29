@@ -2,8 +2,6 @@
 
 export const TAX_RATE_PERCENT = 16.5;
 export const PLATFORM_FEE_RATE = 0.05;
-/** Soft launch: server forces delivery fee to 0 until a real fee engine ships */
-export const DELIVERY_FEE = 0;
 
 export type PromoCode = {
   code: string;
@@ -50,21 +48,40 @@ function computeDiscount(subtotal: number, promo: PromoCode | null): number {
   return 0;
 }
 
+/** Parse "J$150 delivery fee" / "Free delivery" labels from restaurant profiles. */
+export function parseDeliveryFeeLabel(label: string | null | undefined): number {
+  if (!label) return 0;
+  if (/free/i.test(label)) return 0;
+  const match = label.match(/J\$\s*([\d,]+)/i);
+  if (!match) return 0;
+  return Number(match[1].replace(/,/g, '')) || 0;
+}
+
 /**
- * Mirrors server: tax on (subtotal - discount), platform fee on subtotal, delivery fee fixed.
+ * Mirrors server: tax on (subtotal - discount), platform fee on subtotal,
+ * delivery fee from merchant (passed in — never trust a hardcoded client constant).
  */
 export function calculateOrderTotals(
   subtotal: number,
   appliedPromo: PromoCode | null,
   tip = 0,
+  deliveryFee = 0,
 ): OrderTotals {
   const discount = computeDiscount(subtotal, appliedPromo);
   const discountedSubtotal = roundMoney(Math.max(0, subtotal - discount));
-  const deliveryFee = DELIVERY_FEE;
+  const safeDeliveryFee = Math.max(0, deliveryFee);
   const serviceFee = roundMoney(subtotal * PLATFORM_FEE_RATE);
   const tax = roundMoney(discountedSubtotal * (TAX_RATE_PERCENT / 100));
   const safeTip = Math.max(0, tip);
-  const total = roundMoney(discountedSubtotal + deliveryFee + serviceFee + tax + safeTip);
+  const total = roundMoney(discountedSubtotal + safeDeliveryFee + serviceFee + tax + safeTip);
 
-  return { discount, discountedSubtotal, deliveryFee, serviceFee, tax, tip: safeTip, total };
+  return {
+    discount,
+    discountedSubtotal,
+    deliveryFee: safeDeliveryFee,
+    serviceFee,
+    tax,
+    tip: safeTip,
+    total,
+  };
 }

@@ -13,7 +13,7 @@ import {
   getCheckoutPreferences,
   saveCheckoutPreferences,
 } from '@/lib/checkoutStorage';
-import { cacheValidatedPromo, calculateOrderTotals } from '@/lib/orderPricing';
+import { cacheValidatedPromo, calculateOrderTotals, parseDeliveryFeeLabel } from '@/lib/orderPricing';
 import { formatJmd, getRestaurantProfile } from '@/lib/restaurantContent';
 import { toast } from '@/lib/toast';
 
@@ -48,7 +48,15 @@ export default function CartPage({ onNavigate, session }: Props) {
     }
   }, [savedAddress?.instructions]);
 
-  const { discount, deliveryFee, serviceFee, tax, total } = calculateOrderTotals(subtotal, appliedPromo);
+  const merchantDeliveryFee = merchantId
+    ? parseDeliveryFeeLabel(getRestaurantProfile(merchantId).deliveryFee)
+    : 0;
+  const { discount, deliveryFee, serviceFee, tax, total } = calculateOrderTotals(
+    subtotal,
+    appliedPromo,
+    0,
+    merchantDeliveryFee,
+  );
 
   const handleApplyPromo = async () => {
     const code = promoInput.trim().toUpperCase();

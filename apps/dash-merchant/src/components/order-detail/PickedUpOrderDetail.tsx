@@ -18,6 +18,15 @@ export default function PickedUpOrderDetail({ order, onBack, onClose }: PickedUp
 
   const courierName = order.courier?.display_name?.trim() || 'Courier';
   const courierPhone = order.courier?.phone?.trim() || null;
+  const inTransit = order.status === 'in_transit';
+  const statusBadge = inTransit ? 'In Transit' : 'Picked Up';
+  const courierSubline = inTransit
+    ? order.courier?.vehicle_type
+      ? `${order.courier.vehicle_type} · Almost at customer`
+      : 'Almost at customer'
+    : order.courier?.vehicle_type
+      ? `${order.courier.vehicle_type} · En route to customer`
+      : 'En route to customer';
 
   const callCourier = () => {
     if (!courierPhone) return;
@@ -52,10 +61,16 @@ export default function PickedUpOrderDetail({ order, onBack, onClose }: PickedUp
               #{order.order_number}
             </h1>
           </div>
-          <div className="flex items-center gap-1.5 rounded-full border border-outline-variant/50 bg-surface-container-highest px-3 py-1.5">
-            <MaterialIcon name="check_circle" size={16} />
-            <span className="text-label-md font-semibold uppercase tracking-wider text-on-surface">
-              Picked Up
+          <div
+            className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 ${
+              inTransit
+                ? 'border-primary-container bg-primary-fixed text-on-primary-fixed'
+                : 'border-outline-variant/50 bg-surface-container-highest'
+            }`}
+          >
+            <MaterialIcon name={inTransit ? 'local_shipping' : 'check_circle'} size={16} />
+            <span className="text-label-md font-semibold uppercase tracking-wider">
+              {statusBadge}
             </span>
           </div>
         </div>
@@ -83,11 +98,7 @@ export default function PickedUpOrderDetail({ order, onBack, onClose }: PickedUp
               <span className="text-headline-md font-semibold text-on-surface">{courierName}</span>
               <div className="mt-0.5 flex items-center gap-1">
                 <span className="h-2 w-2 animate-subtle-pulse rounded-full bg-primary-container" />
-                <span className="text-body-sm text-on-surface-variant">
-                  {order.courier?.vehicle_type
-                    ? `${order.courier.vehicle_type} · En route to customer`
-                    : 'En route to customer'}
-                </span>
+                <span className="text-body-sm text-on-surface-variant">{courierSubline}</span>
               </div>
             </div>
             <button

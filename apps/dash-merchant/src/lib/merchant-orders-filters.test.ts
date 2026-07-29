@@ -38,26 +38,27 @@ describe('merchant-orders-filters', () => {
     makeOrder({ id: '2', status: 'accepted', placed_at: '2026-06-22T11:00:00Z' }),
     makeOrder({ id: '3', status: 'preparing', placed_at: '2026-06-22T12:00:00Z' }),
     makeOrder({ id: '4', status: 'ready', placed_at: '2026-06-22T13:00:00Z' }),
+    makeOrder({ id: '6', status: 'assigned', placed_at: '2026-06-22T13:30:00Z' }),
   ];
 
   it('filterOrdersByTab filters placed/preparing/ready', () => {
     expect(filterOrdersByTab(orders, 'placed')).toHaveLength(1);
     expect(filterOrdersByTab(orders, 'preparing')).toHaveLength(2);
-    expect(filterOrdersByTab(orders, 'ready')).toHaveLength(1);
+    expect(filterOrdersByTab(orders, 'ready')).toHaveLength(2);
   });
 
   it('sortOrders sorts oldest and newest', () => {
     const oldest = sortOrders(orders, 'oldest');
-    expect(oldest.map((o) => o.id)).toEqual(['1', '2', '3', '4']);
+    expect(oldest.map((o) => o.id)).toEqual(['1', '2', '3', '4', '6']);
     const newest = sortOrders(orders, 'newest');
-    expect(newest.map((o) => o.id)).toEqual(['4', '3', '2', '1']);
+    expect(newest.map((o) => o.id)).toEqual(['6', '4', '3', '2', '1']);
   });
 
   it('countOrdersByStatus returns tab badge counts', () => {
     expect(countOrdersByStatus(orders)).toEqual({
       placed: 1,
       preparing: 2,
-      ready: 1,
+      ready: 2,
     });
   });
 
@@ -66,7 +67,11 @@ describe('merchant-orders-filters', () => {
       ...orders,
       makeOrder({ id: '5', status: 'cancelled', placed_at: '2026-06-22T14:00:00Z' }),
     ];
-    expect(getActiveQueueOrders(withCancelled, 'oldest')).toHaveLength(4);
+    expect(getActiveQueueOrders(withCancelled, 'oldest')).toHaveLength(5);
+  });
+
+  it('getActiveQueueOrders keeps assigned orders visible', () => {
+    expect(getActiveQueueOrders(orders, 'oldest').map((o) => o.id)).toContain('6');
   });
 
   it('computeTodayStats sums today orders', () => {

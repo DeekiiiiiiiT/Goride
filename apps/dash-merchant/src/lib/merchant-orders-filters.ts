@@ -17,7 +17,7 @@ export function filterOrdersByTab(orders: Order[], filter: OrderTabFilter): Orde
     return orders.filter((o) => ['accepted', 'preparing'].includes(o.status));
   }
   if (filter === 'ready') {
-    return orders.filter((o) => o.status === 'ready');
+    return orders.filter((o) => o.status === 'ready' || o.status === 'assigned');
   }
   return orders;
 }
@@ -34,13 +34,13 @@ export function countOrdersByStatus(orders: Order[]): OrderStatusCounts {
   return {
     placed: orders.filter((o) => o.status === 'placed').length,
     preparing: orders.filter((o) => ['accepted', 'preparing'].includes(o.status)).length,
-    ready: orders.filter((o) => o.status === 'ready').length,
+    ready: orders.filter((o) => o.status === 'ready' || o.status === 'assigned').length,
   };
 }
 
 export function getActiveQueueOrders(orders: Order[], sortOrder: OrderSortOrder): Order[] {
   const active = orders.filter((order) =>
-    ['placed', 'accepted', 'preparing', 'ready'].includes(order.status),
+    ['placed', 'accepted', 'preparing', 'ready', 'assigned'].includes(order.status),
   );
   return sortOrders(active, sortOrder);
 }

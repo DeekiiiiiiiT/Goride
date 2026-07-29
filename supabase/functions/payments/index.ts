@@ -293,13 +293,16 @@ app.post("/webhooks/wipay", async (c) => {
     .eq("id", intent.id);
   
   if (isSuccess) {
-    // Get merchant_id from order
+    // Get fee fields for Model A split
     const { data: order } = await serviceSupabase
       .schema("delivery")
       .from("orders")
-      .select("merchant_id")
+      .select("merchant_id, courier_id, platform_fee, delivery_fee, tip")
       .eq("id", intent.order_id)
       .single();
+
+    const { computeDashCaptureSplit } = await import("../_shared/dashMoneySplit.ts");
+    const split = computeDashCaptureSplit(order || {}, Number(intent.amount));
 
     const { data: txn } = await serviceSupabase
       .schema("payments")
@@ -309,12 +312,15 @@ app.post("/webhooks/wipay", async (c) => {
         order_id: intent.order_id,
         customer_id: intent.customer_id,
         amount: intent.amount,
-        net_amount: intent.amount,
+        net_amount: split.merchantReceivable,
         currency: "JMD",
         status: "completed",
         provider: "wipay",
         provider_transaction_id: transaction_id,
-        provider_data: body,
+        provider_data: {
+          ...body,
+          money_split: split,
+        },
         payment_method: "credit_card"
       })
       .select("id")
@@ -327,10 +333,12 @@ app.post("/webhooks/wipay", async (c) => {
         await dualWriteDashPayment({
           transactionId: String(txn.id),
           orderId: String(intent.order_id),
-          merchantId: order?.merchant_id ? String(order.merchant_id) : null,
-          amount: Number(intent.amount),
+          merchantId: split.merchantId,
+          courierId: split.courierId,
+          amount: split.merchantReceivable,
           currency: "JMD",
           kind: "order_capture",
+          split,
         });
       } catch (e) {
         console.error("[payments/wipay] unified dual-write failed:", e);
@@ -496,6 +504,19 @@ app.post("/paypal/capture", async (c) => {
       
       const order = owned.order;
       const capture = result.purchase_units[0].payments.captures[0];
+
+      const { data: feeOrder } = await serviceSupabase
+        .schema("delivery")
+        .from("orders")
+        .select("merchant_id, courier_id, platform_fee, delivery_fee, tip")
+        .eq("id", intent.order_id)
+        .single();
+
+      const { computeDashCaptureSplit } = await import("../_shared/dashMoneySplit.ts");
+      const split = computeDashCaptureSplit(
+        feeOrder || order || {},
+        Number(intent.amount),
+      );
       
       const { data: txn } = await serviceSupabase
         .schema("payments")
@@ -505,12 +526,12 @@ app.post("/paypal/capture", async (c) => {
           order_id: intent.order_id,
           customer_id: intent.customer_id,
           amount: intent.amount,
-          net_amount: intent.amount,
+          net_amount: split.merchantReceivable,
           currency: "JMD",
           status: "completed",
           provider: "paypal",
           provider_transaction_id: capture.id,
-          provider_data: result,
+          provider_data: { ...result, money_split: split },
           payment_method: "paypal",
         })
         .select("id")
@@ -522,10 +543,12 @@ app.post("/paypal/capture", async (c) => {
           await dualWriteDashPayment({
             transactionId: String(txn.id),
             orderId: String(intent.order_id),
-            merchantId: order?.merchant_id ? String(order.merchant_id) : null,
-            amount: Number(intent.amount),
+            merchantId: split.merchantId,
+            courierId: split.courierId,
+            amount: split.merchantReceivable,
             currency: "JMD",
             kind: "order_capture",
+            split,
           });
         } catch (e) {
           console.error("[payments/paypal] unified dual-write failed:", e);
@@ -734,142 +757,35 @@ app.post("/refunds", async (c) => {
 // ============================================================================
 
 app.post("/payouts/merchant", async (c) => {
-  const admin = await requireProductAdmin(c, "dash");
-  if (admin instanceof Response) return admin;
-
-  const body = await c.req.json();
-  const {
-    merchantId,
-    amount,
-    currency = "JMD",
-    reference,
-    fee = 0,
-    periodStart,
-    periodEnd,
-    orderCount = 0,
-    bankAccountLast4,
-  } = body;
-
-  if (!merchantId || amount == null) {
-    return c.json({ error: "merchantId and amount required" }, 400);
-  }
-
-  const amountNum = Number(amount);
-  const feeNum = Number(fee) || 0;
-  if (Number.isNaN(amountNum) || amountNum <= 0) {
-    return c.json({ error: "amount must be a positive number" }, 400);
-  }
-
-  const serviceSupabase = getServiceSupabase();
-  const netAmount = amountNum - feeNum;
-
-  const { data: payout, error } = await serviceSupabase
-    .schema("payments")
-    .from("merchant_payouts")
-    .insert({
-      merchant_id: merchantId,
-      amount: amountNum,
-      fee: feeNum,
-      net_amount: netAmount,
-      currency,
-      status: "pending",
-      period_start: periodStart ?? null,
-      period_end: periodEnd ?? null,
-      order_count: orderCount,
-      bank_account_last4: bankAccountLast4 ?? null,
-      notes: reference ?? null,
-    })
-    .select()
-    .single();
-
-  if (error) return c.json({ error: error.message }, 500);
-
-  if (payout?.id) {
-    try {
-      const { dualWriteDashPayment } = await import("../_shared/unifiedLedger/dualWriteDash.ts");
-      await dualWriteDashPayment({
-        transactionId: `payout:${payout.id}`,
-        orderId: reference || `payout-${payout.id}`,
-        merchantId: String(merchantId),
-        amount: amountNum,
-        currency,
-        kind: "merchant_payout",
-      });
-    } catch (e) {
-      console.error("[payments/merchant-payout] unified dual-write failed:", e);
-    }
-  }
-
-  return c.json({ payout }, 201);
+  return c.json(
+    {
+      error: "deprecated",
+      message:
+        "Use POST /delivery/admin/finance/payouts. payments.merchant_payouts exists; this duplicate route is retired.",
+    },
+    410,
+  );
 });
 
 // ============================================================================
-// Courier Payouts (Roam Courier earnings)
+// Courier Payouts — DEPRECATED (use /delivery/courier/payouts/close-period)
 // ============================================================================
 
 app.post("/payouts/courier", async (c) => {
-  const admin = await requireProductAdmin(c, "dash");
-  if (admin instanceof Response) return admin;
-
-  const body = await c.req.json();
-  const {
-    courierId,
-    amount,
-    currency = "JMD",
-    reference,
-    periodStart,
-    periodEnd,
-    deliveryCount = 0,
-  } = body;
-
-  if (!courierId || amount == null) {
-    return c.json({ error: "courierId and amount required" }, 400);
-  }
-
-  const amountNum = Number(amount);
-  if (Number.isNaN(amountNum) || amountNum <= 0) {
-    return c.json({ error: "amount must be a positive number" }, 400);
-  }
-
-  const serviceSupabase = getServiceSupabase();
-
-  const { data: payout, error } = await serviceSupabase
-    .schema("payments")
-    .from("courier_payouts")
-    .insert({
-      courier_id: courierId,
-      amount: amountNum,
-      currency,
-      status: "pending",
-      period_start: periodStart ?? null,
-      period_end: periodEnd ?? null,
-      delivery_count: deliveryCount,
-      notes: reference ?? null,
-    })
-    .select()
-    .single();
-
-  if (error) return c.json({ error: error.message }, 500);
-
-  if (payout?.id) {
-    try {
-      const { dualWriteDashPayment } = await import("../_shared/unifiedLedger/dualWriteDash.ts");
-      await dualWriteDashPayment({
-        transactionId: `payout:${payout.id}`,
-        orderId: reference || `payout-${payout.id}`,
-        courierId: String(courierId),
-        amount: amountNum,
-        currency,
-        kind: "courier_payout",
-      });
-    } catch (e) {
-      console.error("[payments/courier-payout] unified dual-write failed:", e);
-    }
-  }
-
-  return c.json({ payout }, 201);
+  return c.json(
+    {
+      error: "deprecated",
+      message:
+        "Use POST /delivery/courier/payouts/close-period. payments.courier_payouts exists; this duplicate route is retired.",
+    },
+    410,
+  );
 });
 
+/* LEGACY payout bodies removed — see git history if needed.
+app.post("/payouts/merchant_LEGACY_REMOVED", async () => {});
+app.post("/payouts/courier_LEGACY_REMOVED", async () => {});
+*/
 // ============================================================================
 // Customer Payment Methods
 // ============================================================================

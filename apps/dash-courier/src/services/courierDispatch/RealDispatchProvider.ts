@@ -5,7 +5,9 @@ import {
   declineCourierOffer,
   fetchAvailableOrders,
   fetchCourierOffers,
+  fetchCourierOrderStatus,
   putCourierAvailability,
+  subscribeCourierPush,
   type AvailableOrder,
   type CourierOfferRow,
 } from '@/lib/courierApi';
@@ -33,6 +35,7 @@ export class RealDispatchProvider implements CourierDispatchService {
   private state: DispatchState = { ...INITIAL_STATE };
   private listeners = new Set<DispatchListener>();
   private pollTimer: number | null = null;
+  private activeOrderPollTimer: number | null = null;
   private pendingOffers: CourierOfferRow[] = [];
   private pendingOrders: AvailableOrder[] = [];
   private currentOfferId = '';
@@ -88,16 +91,47 @@ export class RealDispatchProvider implements CourierDispatchService {
     }
     this.setState({ mode: 'online' });
     this.startPolling();
+    void this.ensurePushSubscription();
+  }
+
+  /** Best-effort web-push subscribe for background offer alerts. */
+  private async ensurePushSubscription(): Promise<void> {
+    try {
+      if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+      const vapidKey = import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undefined;
+      if (!vapidKey) return;
+
+      const registration = await navigator.serviceWorker.register('/sw.js').catch(() => null);
+      if (!registration) return;
+
+      const existing = await registration.pushManager.getSubscription();
+      const subscription =
+        existing ||
+        (await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(vapidKey),
+        }));
+
+      const json = subscription.toJSON();
+      if (!json.endpoint) return;
+      await subscribeCourierPush(json.endpoint, json.keys as Record<string, string> | undefined);
+    } catch {
+      // non-fatal — polling still works while foregrounded
+    }
   }
 
   setMode(mode: HomeMode): void {
     this.setState({ mode });
     if (mode === 'online') this.startPolling();
-    if (mode === 'offline') this.stopPolling();
+    if (mode === 'offline') {
+      this.stopPolling();
+      this.stopActiveOrderWatch();
+    }
   }
 
   goOffline(): void {
     this.stopPolling();
+    this.stopActiveOrderWatch();
     void putCourierAvailability({
       isOnline: false,
       lat: this.lastCoords.lat,
@@ -129,6 +163,51 @@ export class RealDispatchProvider implements CourierDispatchService {
       window.clearInterval(this.pollTimer);
       this.pollTimer = null;
     }
+  }
+
+  /** Watch active order so merchant/admin cancel surfaces mid-delivery. */
+  private startActiveOrderWatch(orderId: string): void {
+    this.stopActiveOrderWatch();
+    void this.pollActiveOrderStatus(orderId);
+    this.activeOrderPollTimer = window.setInterval(() => {
+      void this.pollActiveOrderStatus(orderId);
+    }, 5000);
+  }
+
+  private stopActiveOrderWatch(): void {
+    if (this.activeOrderPollTimer != null) {
+      window.clearInterval(this.activeOrderPollTimer);
+      this.activeOrderPollTimer = null;
+    }
+  }
+
+  private async pollActiveOrderStatus(orderId: string): Promise<void> {
+    if (this.state.mode !== 'on-delivery' || this.activeOrderId !== orderId) return;
+    if (this.state.deliveryPhase === 'order-cancelled' || this.state.deliveryPhase === 'complete') {
+      return;
+    }
+
+    const row = await fetchCourierOrderStatus(orderId);
+    if (!row) return;
+    if (row.status === 'cancelled') {
+      this.handleRemoteCancel();
+    }
+  }
+
+  private handleRemoteCancel(): void {
+    this.stopActiveOrderWatch();
+    this.activeOrderId = null;
+    void putCourierAvailability({
+      isOnline: true,
+      lat: this.lastCoords.lat,
+      lng: this.lastCoords.lng,
+      activeOrderId: null,
+    });
+    this.setState({
+      mode: 'on-delivery',
+      deliveryPhase: 'order-cancelled',
+      acceptedStacked: false,
+    });
   }
 
   private async pollOffers(): Promise<void> {
@@ -194,6 +273,7 @@ export class RealDispatchProvider implements CourierDispatchService {
           lng: this.lastCoords.lng,
           activeOrderId: result.order.id,
         });
+        this.startActiveOrderWatch(result.order.id);
       } else {
         this.setState({ mode: 'online', deliveryPhase: null });
         this.startPolling();
@@ -217,6 +297,7 @@ export class RealDispatchProvider implements CourierDispatchService {
         lng: this.lastCoords.lng,
         activeOrderId: result.order.id,
       });
+      this.startActiveOrderWatch(result.order.id);
     } else {
       this.setState({ mode: 'online', deliveryPhase: null });
       this.startPolling();
@@ -244,6 +325,7 @@ export class RealDispatchProvider implements CourierDispatchService {
   }
 
   finishDelivery(): void {
+    this.stopActiveOrderWatch();
     this.activeOrderId = null;
     void putCourierAvailability({
       isOnline: true,
@@ -260,6 +342,7 @@ export class RealDispatchProvider implements CourierDispatchService {
   }
 
   cancelDelivery(): void {
+    this.stopActiveOrderWatch();
     this.activeOrderId = null;
     void putCourierAvailability({
       isOnline: true,
@@ -277,3 +360,14 @@ export class RealDispatchProvider implements CourierDispatchService {
 }
 
 export const realDispatchProvider = new RealDispatchProvider();
+
+function urlBase64ToUint8Array(base64String: string): BufferSource {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; i += 1) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}

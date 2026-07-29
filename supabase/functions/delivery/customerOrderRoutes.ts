@@ -3,7 +3,7 @@
  * Extracted from delivery/index.ts for maintainability — behavior identical.
  */
 import type { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
-import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { calculateOrderPricing } from "../_shared/orderPricing.ts";
 import { getFlag } from "../_shared/featureFlags.ts";
 import { requireResolvedMerchantWithPermission } from "./merchantAuth.ts";
@@ -176,8 +176,13 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       discount,
     });
     const platformFee = Math.round(pricing.subtotal * 0.05 * 100) / 100;
-    // Do not trust client deliveryFee — tip remains customer-chosen
-    const deliveryFee = 0;
+    // Do not trust client deliveryFee — load from merchant row (soft-launch fee engine)
+    const { data: merchantRow } = await serviceSb
+      .from("merchants")
+      .select("delivery_fee")
+      .eq("id", body.merchantId)
+      .maybeSingle();
+    const deliveryFee = Math.max(0, Number(merchantRow?.delivery_fee ?? 0));
     const tip = Math.max(0, Number(body.tip) || 0);
     const total = Math.round(
       (pricing.subtotal - discount + platformFee + deliveryFee + pricing.tax + tip) * 100,
@@ -245,9 +250,11 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
 
     const customerRow = order.customer as { id?: string; user_id?: string } | null;
     const isCustomer = customerRow?.user_id === user.id;
+    const isAssignedCourier =
+      String((order as { courier_id?: string | null }).courier_id || "") === user.id;
 
     let isMerchantStaff = false;
-    if (!isCustomer) {
+    if (!isCustomer && !isAssignedCourier) {
       const merchantAccess = await requireResolvedMerchantWithPermission(
         user.id,
         user.email,
@@ -263,7 +270,7 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       }
     }
 
-    if (!isCustomer && !isMerchantStaff) {
+    if (!isCustomer && !isMerchantStaff && !isAssignedCourier) {
       return c.json({ error: "Forbidden" }, 403);
     }
 
@@ -383,5 +390,123 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
 
     if (updateError) return c.json({ error: updateError.message }, 500);
     return c.json({ order: updated });
+  });
+
+  // Customer self-serve cancel — only placed / accepted (before kitchen prep)
+  app.post("/orders/:id/cancel", async (c) => {
+    const authHeader = c.req.header("Authorization");
+    if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
+
+    const supabase = getSupabase(authHeader);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+    const { id } = c.req.param();
+    const body = await c.req.json().catch(() => ({}));
+    const reason =
+      typeof body.reason === "string" && body.reason.trim()
+        ? body.reason.trim().slice(0, 500)
+        : "Cancelled by customer";
+
+    const serviceSb = getServiceSupabase();
+    const { data: customer } = await serviceSb
+      .from("customers")
+      .select("id")
+      .eq("user_id", user.id)
+      .single();
+
+    if (!customer) return c.json({ error: "Customer not found" }, 404);
+
+    const { data: order, error: orderError } = await serviceSb
+      .from("orders")
+      .select("id, customer_id, status, courier_id, payment_status, total")
+      .eq("id", id)
+      .single();
+
+    if (orderError || !order) return c.json({ error: "Order not found" }, 404);
+    if (order.customer_id !== customer.id) return c.json({ error: "Forbidden" }, 403);
+
+    const status = String(order.status);
+    if (!["placed", "accepted"].includes(status)) {
+      return c.json(
+        {
+          error:
+            "Orders can only be cancelled before the restaurant starts preparing. Contact support for help.",
+        },
+        400,
+      );
+    }
+
+    const now = new Date().toISOString();
+    const { data: updated, error: updateError } = await serviceSb
+      .from("orders")
+      .update({
+        status: "cancelled",
+        cancelled_at: now,
+        cancelled_by: "customer",
+        cancellation_reason: reason,
+      })
+      .eq("id", id)
+      .eq("customer_id", customer.id)
+      .in("status", ["placed", "accepted"])
+      .select()
+      .single();
+
+    if (updateError || !updated) {
+      return c.json({ error: updateError?.message ?? "Cancel failed" }, 500);
+    }
+
+    await serviceSb.from("order_events").insert({
+      order_id: id,
+      status: "cancelled",
+      actor_type: "customer",
+      actor_id: user.id,
+      notes: reason,
+    });
+
+    if (order.courier_id) {
+      await serviceSb
+        .from("courier_availability")
+        .update({ active_order_id: null })
+        .eq("driver_id", order.courier_id);
+    }
+
+    // Queue refund for paid orders (provider call may be pending if WiPay refund URL unset)
+    let refundQueued = false;
+    if (String(order.payment_status || "") === "paid") {
+      const paymentsSb = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+        { db: { schema: "payments" } },
+      );
+      const { data: txn } = await paymentsSb
+        .from("transactions")
+        .select("id, amount, currency")
+        .eq("order_id", id)
+        .eq("status", "completed")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (txn?.id) {
+        const { error: refundErr } = await paymentsSb.from("refunds").insert({
+          transaction_id: txn.id,
+          order_id: id,
+          amount: Number(txn.amount),
+          currency: txn.currency || "JMD",
+          reason,
+          status: "pending",
+        });
+        if (!refundErr) {
+          refundQueued = true;
+          await serviceSb
+            .from("orders")
+            .update({ payment_status: "refund_pending" })
+            .eq("id", id);
+        }
+      }
+    }
+
+    return c.json({ order: updated, refundQueued });
   });
 }

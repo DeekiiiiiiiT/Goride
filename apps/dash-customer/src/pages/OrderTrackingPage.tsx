@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { API_ENDPOINTS } from '@roam/api-client';
 import { supabase } from '@/lib/supabase';
@@ -15,6 +15,7 @@ import {
   type TrackingOrder,
   type TrackingPhase,
 } from '@/lib/trackingContent';
+import { toast } from 'sonner';
 
 type Props = {
   orderId?: string;
@@ -24,6 +25,7 @@ type Props = {
 
 export default function OrderTrackingPage({ orderId, demoPhase, onNavigate }: Props) {
   const mocksOk = allowMocks();
+  const [cancelPending, setCancelPending] = useState(false);
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['order', orderId],
     queryFn: async () => {
@@ -95,6 +97,41 @@ export default function OrderTrackingPage({ orderId, demoPhase, onNavigate }: Pr
 
   const handleClose = () => onNavigate('home');
 
+  const handleCancelOrder = async () => {
+    if (!orderId || cancelPending) return;
+    const confirmed = window.confirm('Cancel this order? You can only cancel before the restaurant starts preparing.');
+    if (!confirmed) return;
+    setCancelPending(true);
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        toast.error('Sign in to cancel this order');
+        return;
+      }
+      const res = await fetch(`${API_ENDPOINTS.delivery}/orders/${orderId}/cancel`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ reason: 'Cancelled by customer' }),
+      });
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        toast.error(body.error || 'Could not cancel order');
+        return;
+      }
+      toast.success('Order cancelled');
+      onNavigate('orders');
+    } catch {
+      toast.error('Could not cancel order');
+    } finally {
+      setCancelPending(false);
+    }
+  };
+
   if (!orderId) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center px-4">
@@ -150,6 +187,13 @@ export default function OrderTrackingPage({ orderId, demoPhase, onNavigate }: Pr
       return <AlmostThereView order={order} onClose={handleClose} />;
     case 'preparing':
     default:
-      return <PreparingTrackingView order={order} onClose={handleClose} />;
+      return (
+        <PreparingTrackingView
+          order={order}
+          onClose={handleClose}
+          onCancel={handleCancelOrder}
+          cancelPending={cancelPending}
+        />
+      );
   }
 }

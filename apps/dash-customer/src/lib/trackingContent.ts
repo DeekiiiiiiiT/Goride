@@ -102,6 +102,7 @@ export function getTrackingPhase(status: string): TrackingPhase {
     case 'preparing':
       return 'preparing';
     case 'ready':
+    case 'assigned':
       return 'courier_assigned';
     case 'picked_up':
       return 'on_the_way';

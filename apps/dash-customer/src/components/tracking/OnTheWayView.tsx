@@ -1,99 +1,18 @@
-import { useEffect, useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { DEFAULT_ORDER_STEPS, OrderStatusStepper } from '@/components/ui/OrderStatusStepper';
 import type { TrackingOrder } from '@/lib/trackingContent';
-import { TRACKING_MAP_IMAGES } from '@/lib/trackingContent';
 import { CourierActions, CourierProfileCard } from './CourierShared';
+import { CourierTrackingMap } from './CourierTrackingMap';
 
 type Props = {
   order: TrackingOrder;
   onBack: () => void;
 };
 
-const COURIER_POSITIONS = [
-  { top: '62.5%', left: '50%' },
-  { top: '55%', left: '48%' },
-  { top: '48%', left: '45%' },
-  { top: '40%', left: '42%' },
-  { top: '32%', left: '40%' },
-];
-
 export function OnTheWayView({ order, onBack }: Props) {
-  const hasGps =
-    order.courierLat != null &&
-    order.courierLng != null &&
-    Number.isFinite(order.courierLat) &&
-    Number.isFinite(order.courierLng);
-
-  const [courierIndex, setCourierIndex] = useState(0);
-  const pos = hasGps
-    ? { top: '45%', left: '50%' }
-    : COURIER_POSITIONS[courierIndex];
-
-  useEffect(() => {
-    if (hasGps) return;
-    const interval = setInterval(() => {
-      setCourierIndex((i) => (i + 1) % COURIER_POSITIONS.length);
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [hasGps]);
-
   return (
     <div className="app-fullscreen-screen safe-x safe-t bg-background w-full overflow-hidden flex flex-col relative">
-      <div className="absolute inset-0 tracking-map-bg z-0">
-        <svg className="absolute inset-0 w-full h-full pointer-events-none" preserveAspectRatio="xMidYMid slice" viewBox="0 0 400 800">
-          <path
-            d="M 150,200 C 180,300 250,350 200,500 C 180,560 120,600 180,700"
-            fill="none"
-            stroke="#10b981"
-            strokeDasharray="8 8"
-            strokeWidth="4"
-            className="opacity-60"
-          />
-          <path d="M 150,200 C 180,300 250,350 200,500" fill="none" stroke="#10b981" strokeLinecap="round" strokeWidth="4" />
-        </svg>
-
-        <div className="absolute top-[25%] left-[37.5%] -translate-x-1/2 -translate-y-1/2 flex flex-col items-center">
-          <div className="w-8 h-8 bg-surface rounded-full shadow-md flex items-center justify-center border-2 border-primary-container z-10">
-            <MaterialIcon name="restaurant" className="text-[16px] text-primary" filled />
-          </div>
-        </div>
-
-        <div className="absolute top-[87.5%] left-[45%] -translate-x-1/2 -translate-y-1/2">
-          <div className="w-10 h-10 bg-primary rounded-full shadow-lg flex items-center justify-center tracking-pulse-animation">
-            <MaterialIcon name="home" className="text-[20px] text-on-primary" filled />
-          </div>
-        </div>
-
-        <div
-          className="absolute -translate-x-1/2 -translate-y-1/2 z-20 transition-all duration-[5000ms] ease-linear"
-          style={{ top: pos.top, left: pos.left }}
-        >
-          <div className="bg-surface rounded-full shadow-lg p-1 border-2 border-primary-container tracking-pulse-animation">
-            {order.courier.avatar ? (
-              <img src={order.courier.avatar} alt="Courier" className="w-10 h-10 rounded-full object-cover" />
-            ) : (
-              <img src={TRACKING_MAP_IMAGES.driverMarker} alt="Courier" className="w-10 h-10 rounded-full object-cover" />
-            )}
-          </div>
-        </div>
-      </div>
-
-      {(order.locationApproximate || !hasGps) && (
-        <div className="absolute top-20 left-0 right-0 z-40 flex justify-center px-4 pointer-events-none">
-          <span className="bg-surface/95 text-label-sm text-on-surface-variant px-3 py-1 rounded-full shadow">
-            Approximate location — live GPS when courier shares it
-          </span>
-        </div>
-      )}
-
-      {hasGps && (
-        <div className="absolute bottom-40 left-0 right-0 z-40 flex justify-center px-4 pointer-events-none">
-          <span className="bg-surface/95 text-label-sm px-3 py-1 rounded-full shadow">
-            Courier GPS {order.courierLat!.toFixed(4)}, {order.courierLng!.toFixed(4)}
-          </span>
-        </div>
-      )}
+      <CourierTrackingMap order={order} className="absolute inset-0 z-0" preferCourier />
 
       <div className="absolute top-0 left-0 w-full z-30 pt-safe px-4 pt-4">
         <div className="flex justify-between items-center mb-4">
@@ -115,7 +34,7 @@ export function OnTheWayView({ order, onBack }: Props) {
               </p>
             </div>
             <div className="bg-surface-variant px-3 py-1 rounded-full">
-              <span className="text-label-sm text-on-surface-variant">3.2 km away</span>
+              <span className="text-label-sm text-on-surface-variant">Live map</span>
             </div>
           </div>
           <OrderStatusStepper steps={DEFAULT_ORDER_STEPS} currentIndex={2} />
@@ -132,7 +51,7 @@ export function OnTheWayView({ order, onBack }: Props) {
               <MaterialIcon name="receipt_long" className="text-[16px]" />
             </div>
             <p className="text-body-sm text-on-surface">
-              {order.courier.name} picked up your order at <span className="font-semibold">2:26 PM</span>
+              {order.courier.name} picked up your order
             </p>
           </div>
 

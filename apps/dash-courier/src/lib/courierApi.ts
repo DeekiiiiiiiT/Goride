@@ -131,6 +131,19 @@ export async function updateCourierOrderStatus(
   return res.ok;
 }
 
+/** Poll active delivery order status (detect merchant/admin remote cancel). */
+export async function fetchCourierOrderStatus(
+  orderId: string,
+): Promise<{ status: string } | null> {
+  const headers = await authHeaders();
+  if (!headers) return null;
+  const res = await fetch(`${BASE}/orders/${orderId}`, { headers });
+  if (!res.ok) return null;
+  const json = (await res.json()) as { order?: { status?: string } };
+  const status = json.order?.status;
+  return status ? { status } : null;
+}
+
 export async function patchCourierLocation(orderId: string, lat: number, lng: number): Promise<boolean> {
   const headers = await authHeaders();
   if (!headers) return false;

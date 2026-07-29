@@ -138,7 +138,7 @@ export default function OrderDetailPage({
     );
   }
 
-  if (status === 'ready') {
+  if (status === 'ready' || status === 'assigned') {
     return (
       <div className="fixed inset-0 z-[55] overflow-y-auto bg-background">
         <ReadyOrderDetail

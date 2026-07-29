@@ -198,10 +198,11 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
     if (mode === 'online' && offerPhase === null) {
       feedback.onOfferReceived();
       toast.info('New offer incoming', 'Tap to view before it expires.');
+      // Stacked multi-order offers are not backend-backed yet — always single.
       if (document.hidden) {
         setPushBannerOpen(true);
       } else {
-        dispatch.receiveOffer('stacked');
+        dispatch.receiveOffer('single');
       }
     }
   }, [mode, offerPhase, feedback, dispatch]);
@@ -473,7 +474,9 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
 
       {showBottomNav && <CourierBottomNav active={activeTab} onChange={setActiveTab} />}
 
-      {offerPhase === 'stacked' && (
+      {/* Stacked multi-order UI deferred — no backend order "stack" yet.
+          offerPhase === 'stacked' is never set by RealDispatchProvider. */}
+      {false && offerPhase === 'stacked' && (
         <ImmersiveScreen>
           <StackedOfferPage
             offer={MOCK_STACKED_OFFER}
@@ -516,7 +519,8 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
         onSubmit={(reasonId) => finishDeclineOffer(reasonId)}
       />
 
-      {deliveryPhase === 'stacked-active' && (
+      {/* Multi-order stacked delivery deferred until backend stacks exist */}
+      {false && deliveryPhase === 'stacked-active' && (
         <ImmersiveScreen>
           <StackedDeliveryFlow
             onComplete={finishStackedDelivery}

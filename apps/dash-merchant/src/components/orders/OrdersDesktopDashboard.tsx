@@ -39,9 +39,9 @@ function getStatusBadge(order: Order) {
         'bg-tertiary-container text-on-tertiary-container border border-tertiary-fixed-dim',
     };
   }
-  if (order.status === 'ready') {
+  if (order.status === 'ready' || order.status === 'assigned') {
     return {
-      label: 'Ready',
+      label: order.status === 'assigned' ? 'Courier Assigned' : 'Ready',
       className: 'bg-primary-fixed text-on-primary-fixed',
     };
   }
@@ -401,10 +401,10 @@ export default function OrdersDesktopDashboard({
                       Mark Ready for Pickup
                     </button>
                   )}
-                  {selectedOrder.status === 'ready' && (
+                  {(selectedOrder.status === 'ready' || selectedOrder.status === 'assigned') && (
                     <span className="flex h-12 items-center gap-2 rounded-lg border border-primary-container px-inset-xl py-3 text-label-md font-semibold text-primary">
                       <MaterialIcon name="check_circle" size={18} />
-                      Waiting for Pickup
+                      {selectedOrder.status === 'assigned' ? 'Courier En Route' : 'Waiting for Pickup'}
                     </span>
                   )}
                 </div>

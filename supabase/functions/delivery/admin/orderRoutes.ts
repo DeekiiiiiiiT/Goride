@@ -101,6 +101,11 @@ export function registerOrderAdminRoutes(app: Hono) {
     const db = getDb();
     const now = new Date().toISOString();
 
+    const { data: existing } = await db.from("orders")
+      .select("courier_id")
+      .eq("id", orderId)
+      .maybeSingle();
+
     const { data: order, error } = await db.from("orders")
       .update({
         status: "cancelled",
@@ -114,6 +119,15 @@ export function registerOrderAdminRoutes(app: Hono) {
       .maybeSingle();
 
     if (error || !order) return c.json({ error: error?.message ?? "not_found" }, 404);
+
+    const courierId = (existing as { courier_id?: string | null } | null)?.courier_id
+      ?? (order as { courier_id?: string | null }).courier_id;
+    if (courierId) {
+      await db
+        .from("courier_availability")
+        .update({ active_order_id: null })
+        .eq("driver_id", courierId);
+    }
 
     await db.from("order_events").insert({
       order_id: orderId,

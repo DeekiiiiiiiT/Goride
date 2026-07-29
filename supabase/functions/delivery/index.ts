@@ -635,6 +635,19 @@ app.put("/merchant/menu/reorder", async (c) => {
 // ============================================================================
 
 // Update order status
+/** When any actor cancels an assigned order, free the courier's availability slot. */
+async function clearCourierActiveOrderOnCancel(
+  serviceSb: ReturnType<typeof getServiceSupabase>,
+  status: string,
+  courierId: string | null | undefined,
+) {
+  if (status !== "cancelled" || !courierId) return;
+  await serviceSb
+    .from("courier_availability")
+    .update({ active_order_id: null })
+    .eq("driver_id", courierId);
+}
+
 app.put("/orders/:id/status", async (c) => {
   const deviceToken = c.req.header("X-Station-Device-Token");
   const authHeader = c.req.header("Authorization");
@@ -654,7 +667,7 @@ app.put("/orders/:id/status", async (c) => {
 
     const { data: order, error: orderError } = await serviceSb
       .from("orders")
-      .select("status, merchant_id, channel")
+      .select("status, merchant_id, channel, courier_id")
       .eq("id", id)
       .single();
 
@@ -692,6 +705,12 @@ app.put("/orders/:id/status", async (c) => {
       .single();
 
     if (updateError) return c.json({ error: updateError.message }, 500);
+
+    await clearCourierActiveOrderOnCancel(
+      serviceSb,
+      status,
+      orderRow.courier_id as string | null | undefined,
+    );
 
     const shiftHeader = c.req.header("X-Staff-Shift-Token");
     let teamMemberId: string | null = null;
@@ -788,7 +807,7 @@ app.put("/orders/:id/status", async (c) => {
   // Get current order
   const { data: order, error: orderError } = await supabase
     .from("orders")
-    .select("status, channel")
+    .select("status, channel, courier_id")
     .eq("id", id)
     .single();
   
@@ -824,6 +843,12 @@ app.put("/orders/:id/status", async (c) => {
     .single();
   
   if (updateError) return c.json({ error: updateError.message }, 500);
+
+  await clearCourierActiveOrderOnCancel(
+    serviceSb,
+    status,
+    (order as { courier_id?: string | null }).courier_id,
+  );
 
   // Soft-launch: when merchant marks ready, fan out courier offers
   if (status === "ready" && actorType === "merchant") {
@@ -1479,11 +1504,21 @@ app.get("/merchant/analytics", async (c) => {
 const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 function orderMerchantNet(order: OrderRow): number {
-  const subtotal = Number(order.subtotal || 0);
+  // Model A: merchant receivable = total - platform_fee - delivery_fee - tip
+  const total = Number(order.total || 0);
   const platformFee = Number(order.platform_fee || 0);
+  const deliveryFee = Number(order.delivery_fee || 0);
   const tip = Number(order.tip || 0);
+  if (total > 0) {
+    return Math.max(0, Math.round((total - platformFee - deliveryFee - tip) * 100) / 100);
+  }
+  const subtotal = Number(order.subtotal || 0);
   const discount = Number(order.discount || 0);
-  return subtotal - platformFee + tip - discount;
+  const tax = Number(order.tax || 0);
+  return Math.max(
+    0,
+    Math.round((subtotal - discount + tax - platformFee) * 100) / 100,
+  );
 }
 
 function formatEarningsDate(value: string | Date): string {
@@ -1536,8 +1571,8 @@ app.get("/merchant/earnings", async (c) => {
 
   const merchant = access.resolved.merchant;
   const merchantId = merchant.id as string;
-  const commissionRate = Number(merchant.commission_rate ?? 0.15);
-  const platformFeePercent = Math.round(commissionRate * 100);
+  // Model A: platform fee is 5% of subtotal (stored on orders) — not merchants.commission_rate
+  const platformFeePercent = 5;
 
   const sb = getServiceSupabase();
   const { data: orders, error: ordersError } = await sb
@@ -1668,8 +1703,8 @@ app.get("/merchant/earnings/payouts/:id", async (c) => {
   const merchant = access.resolved.merchant;
   const merchantId = merchant.id as string;
   const payoutId = c.req.param("id");
-  const commissionRate = Number(merchant.commission_rate ?? 0.15);
-  const platformFeePercent = Math.round(commissionRate * 100);
+  // Model A: platform fee is 5% (order platform_fee), not merchants.commission_rate
+  const platformFeePercent = 5;
 
   const paymentsSb = getPaymentsSupabase();
   const { data: payout, error } = await paymentsSb

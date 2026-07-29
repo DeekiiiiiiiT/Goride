@@ -5,9 +5,11 @@ import { formatJmd, TRACKING_MAP_IMAGES } from '@/lib/trackingContent';
 type Props = {
   order: TrackingOrder;
   onClose: () => void;
+  onCancel?: () => void | Promise<void>;
+  cancelPending?: boolean;
 };
 
-export function PreparingTrackingView({ order, onClose }: Props) {
+export function PreparingTrackingView({ order, onClose, onCancel, cancelPending }: Props) {
   return (
     <div className="app-fullscreen-screen safe-x safe-t bg-background flex flex-col">
       <header className="bg-surface shadow-sm flex justify-between items-center safe-x h-16 shrink-0 z-40">
@@ -71,9 +73,20 @@ export function PreparingTrackingView({ order, onClose }: Props) {
         <OrderSummaryAccordion order={order} />
 
         <section className="flex flex-col gap-2 mb-8">
-          <button type="button" className="w-full py-3 rounded-lg border border-primary text-primary font-semibold text-label-md">
-            Cancel Order
-          </button>
+          {['placed', 'accepted'].includes(order.status) && onCancel ? (
+            <button
+              type="button"
+              disabled={cancelPending}
+              onClick={() => void onCancel()}
+              className="w-full py-3 rounded-lg border border-primary text-primary font-semibold text-label-md disabled:opacity-50"
+            >
+              {cancelPending ? 'Cancelling…' : 'Cancel Order'}
+            </button>
+          ) : (
+            <p className="text-center text-body-sm text-on-surface-variant">
+              Once the restaurant starts preparing, cancel from Help if you need support.
+            </p>
+          )}
           <button type="button" className="w-full py-3 text-on-surface-variant text-body-md">
             Need Help?
           </button>

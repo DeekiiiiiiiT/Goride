@@ -74,7 +74,28 @@ async function dispatchOffersForOrder(serviceSb: Sb, orderId: string): Promise<n
       },
       { onConflict: "order_id,courier_user_id,wave", ignoreDuplicates: true },
     );
-    if (!error) created += 1;
+    if (!error) {
+      created += 1;
+      // Notify on new offer creation (not only accept)
+      try {
+        const notifUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/notifications/courier-offer`;
+        await fetch(notifUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+            "x-service-role": Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
+          },
+          body: JSON.stringify({
+            courierUserId: row.driver_id,
+            orderId,
+            event: "new_offer",
+          }),
+        });
+      } catch {
+        // non-fatal
+      }
+    }
   }
   return created;
 }

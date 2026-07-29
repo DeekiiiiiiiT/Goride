@@ -88,6 +88,8 @@ Separately, two back-office tables (`merchant_business_types(_sections)`, `merch
 
 ### F. Merchant Payments, Payouts & Earnings — richer scaffolding than courier, but payout creation is broken
 
+**Correction (2026-07-29 cross-app remediation):** `POST /payments/payouts/merchant` targeted real `payments.merchant_payouts` (not a nonexistent `payments.payouts` table) but had zero app callers and is now **retired (HTTP 410)**. Live merchant payout creation is `POST /delivery/admin/finance/payouts`. Courier self-service remains `POST /delivery/courier/payouts/close-period`.
+
 Unlike the courier app (where `payments.courier_payouts` is completely untouched by any code), the merchant side has real bank-account linking, a real admin finance surface (`GET /admin/finance/payouts`, hold, release, adjustments, disputes — all operating on real tables with real policies), and audit logging. **But nothing in the codebase ever successfully creates a payout row**: the admin hold/release routes only update existing rows by ID, and the one route that looks like "create a payout" (`POST /payouts/merchant` in `supabase/functions/payments/index.ts`) inserts into a `payments.payouts` table that **does not exist anywhere in the migration history** — this would fail at runtime with a "relation does not exist" error. It appears to be a leftover from, or parallel to, an in-progress ledger-unification effort elsewhere in the codebase. Net effect: the admin payout UI is real but has nothing to operate on, because the creation path is broken — a more specific, more fixable problem than courier's "nothing touches this table at all," but still non-functional today.
 
 ### G. Web Push & Realtime Alerts — the best-built notification story of the three apps
@@ -122,7 +124,7 @@ Beyond what's cited above, the two inventory RPCs that were briefly callable by 
 
 **P0 — Business-critical/data-integrity blockers:**
 1. POS card payment: wire the frontend to check the backend's `mockMode` flag and integrate a real card-present terminal (Stripe Terminal SDK or equivalent) before this handles real transactions — currently a manually-confirmed step with no way to know if a real charge occurred.
-2. Fix merchant payout creation — `POST /payouts/merchant` targets a `payments.payouts` table that doesn't exist in any migration and would fail at runtime; until fixed, no merchant payout can ever be created despite real admin tooling built around it.
+2. Fix merchant payout creation — **RESOLVED 2026-07-29**: use `POST /delivery/admin/finance/payouts` (real `payments.merchant_payouts`). Duplicate `POST /payments/payouts/merchant` retired (410). Older claim of nonexistent `payments.payouts` was stale.
 3. `ReadyOrderDetail.tsx` — replace the fabricated courier identity (hardcoded name + stock photo) with real courier data, and wire the permanently-disabled "Confirm Pickup" CTA to an actual completion action.
 4. Enterprise inventory blind-count "Save" — stop silently discarding the counted quantities; either wire it to a real (currently nonexistent) submit-count endpoint or disable the flow honestly until one exists.
 5. Resolve the `ImageUpload.tsx`/`EditProfileView.tsx` upload-path discrepancy (§I) with a direct read — confirm whether any merchant-facing upload currently bypasses the secure, validated edge-function path. **Done 2026-07-29 — edge-function-only; no bypass.**

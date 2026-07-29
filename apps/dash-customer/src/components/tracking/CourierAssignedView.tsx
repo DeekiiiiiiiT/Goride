@@ -1,7 +1,7 @@
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import type { TrackingOrder } from '@/lib/trackingContent';
-import { TRACKING_MAP_IMAGES } from '@/lib/trackingContent';
 import { CourierProfileCard } from './CourierShared';
+import { CourierTrackingMap } from './CourierTrackingMap';
 
 type Props = {
   order: TrackingOrder;
@@ -9,6 +9,8 @@ type Props = {
 };
 
 export function CourierAssignedView({ order, onBack }: Props) {
+  const hasCourier = Boolean(order.courier?.name);
+
   return (
     <div className="app-fullscreen-screen safe-x safe-t text-on-surface flex flex-col overflow-hidden">
       <header className="absolute top-0 left-0 right-0 z-10 flex justify-between items-center px-4 h-16 bg-surface/80 backdrop-blur-md">
@@ -22,17 +24,18 @@ export function CourierAssignedView({ order, onBack }: Props) {
       </header>
 
       <main className="flex-grow relative bg-surface-container w-full">
-        <div
-          className="absolute inset-0 bg-cover bg-center opacity-80"
-          style={{ backgroundImage: `url('${TRACKING_MAP_IMAGES.courierAssigned}')` }}
-        />
+        <CourierTrackingMap order={order} className="absolute inset-0" preferCourier />
 
         <div className="absolute bottom-0 left-0 right-0 bg-surface rounded-t-3xl shadow-[0px_-10px_40px_rgba(0,0,0,0.08)] px-4 pt-6 pb-8 max-w-[1200px] mx-auto w-full">
           <div className="w-12 h-1.5 bg-outline-variant rounded-full mx-auto mb-6 opacity-50" />
 
           <div className="text-center mb-6">
-            <h2 className="text-headline-lg-mobile font-bold mb-1">Courier Assigned</h2>
-            <p className="text-body-md text-on-surface-variant">Arriving at restaurant in ~5 min</p>
+            <h2 className="text-headline-lg-mobile font-bold mb-1">
+              {hasCourier ? 'Courier Assigned' : 'Finding a courier'}
+            </h2>
+            <p className="text-body-md text-on-surface-variant">
+              {hasCourier ? 'Heading to the restaurant' : 'We will assign a courier shortly'}
+            </p>
           </div>
 
           <div className="relative flex items-center justify-between mb-8 px-4">

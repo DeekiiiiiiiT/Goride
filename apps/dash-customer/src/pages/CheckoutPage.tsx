@@ -13,8 +13,8 @@ import {
   getPaymentLabel,
   saveCheckoutPreferences,
 } from '@/lib/checkoutStorage';
-import { calculateOrderTotals } from '@/lib/orderPricing';
-import { formatJmd } from '@/lib/restaurantContent';
+import { calculateOrderTotals, parseDeliveryFeeLabel } from '@/lib/orderPricing';
+import { formatJmd, getRestaurantProfile } from '@/lib/restaurantContent';
 import { toast } from 'sonner';
 import PharmacyNoticeSheet, {
   isPharmacyNoticeAcknowledged,
@@ -52,7 +52,13 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
     savedAddress?.instructions ?? 'Leave at door • Gate code: 1234';
 
   const appliedPromo = getAppliedPromo();
-  const totals = useMemo(() => calculateOrderTotals(subtotal, appliedPromo, tip), [subtotal, appliedPromo, tip]);
+  const merchantDeliveryFee = merchantId
+    ? parseDeliveryFeeLabel(getRestaurantProfile(merchantId).deliveryFee)
+    : 0;
+  const totals = useMemo(
+    () => calculateOrderTotals(subtotal, appliedPromo, tip, merchantDeliveryFee),
+    [subtotal, appliedPromo, tip, merchantDeliveryFee],
+  );
   const paymentLabel = getPaymentLabel(getCheckoutPreferences().paymentMethodId);
 
   useEffect(() => {

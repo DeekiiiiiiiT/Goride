@@ -3,9 +3,9 @@ import type { MerchantOrdersChannel } from './merchant-orders-query';
 
 /** Active statuses returned by the orders API for each channel scope. */
 export function activeStatusesForChannel(channel: MerchantOrdersChannel): string[] {
-  if (channel === 'roam_app') return ['placed', 'accepted', 'preparing', 'ready'];
+  if (channel === 'roam_app') return ['placed', 'accepted', 'preparing', 'ready', 'assigned'];
   if (channel === 'in_store') return ['paid', 'preparing', 'ready'];
-  return ['placed', 'accepted', 'preparing', 'ready', 'paid'];
+  return ['placed', 'accepted', 'preparing', 'ready', 'assigned', 'paid'];
 }
 
 export function counterOrdersForTab(orders: Order[], tab: 'new' | 'kitchen' | 'ready') {
@@ -18,7 +18,7 @@ export function counterOrdersForTab(orders: Order[], tab: 'new' | 'kitchen' | 'r
         (order.channel === 'in_store' && order.status === 'paid'),
     );
   }
-  return orders.filter((order) => order.status === 'ready');
+  return orders.filter((order) => order.status === 'ready' || order.status === 'assigned');
 }
 
 export function kitchenQueueOrders(orders: Order[]) {
