@@ -3,7 +3,6 @@ import { Button } from '@roam/ui';
 import { Card, CardContent } from '@roam/ui';
 import { CheckCircle2, Clock, Loader2 } from "lucide-react";
 import { format } from "date-fns";
-import { FuelCashInputs } from './FuelCashInputs';
 import { ReceiptUploader } from './ReceiptUploader';
 import { PumpNumbersConfirm } from './PumpNumbersConfirm';
 
@@ -19,12 +18,6 @@ interface GasCardSummaryProps {
   onTotalSpentChange: (value: string) => void;
   liters: string;
   onLitersChange: (value: string) => void;
-  tankStatus?: {
-    currentCumulative: number;
-    tankCapacity: number;
-    progressPercent: number;
-    status: string;
-  };
   pumpPreviewUrl: string | null;
   isScanningPump: boolean;
   onPumpFileSelect: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -46,7 +39,6 @@ export function GasCardSummary({
   onTotalSpentChange,
   liters,
   onLitersChange,
-  tankStatus,
   pumpPreviewUrl,
   isScanningPump,
   onPumpFileSelect,
@@ -121,30 +113,28 @@ export function GasCardSummary({
 
       {pumpStep === 'submit' && (
         <>
-          <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm flex justify-between gap-3">
-            <div>
-              <p className="text-[10px] font-bold uppercase text-emerald-700 tracking-wider">Confirmed</p>
-              <p className="font-semibold text-slate-900">
-                ${parseFloat(totalSpent || '0').toFixed(2)} · {parseFloat(liters || '0').toFixed(3)} L
-              </p>
-            </div>
-            <Button type="button" variant="ghost" size="sm" className="text-emerald-800" onClick={onRetakePumpPhoto}>
-              Change
-            </Button>
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm">
+            <p className="text-[10px] font-bold uppercase text-emerald-700 tracking-wider">Confirmed</p>
+            <p className="font-semibold text-slate-900">
+              ${parseFloat(totalSpent || '0').toFixed(2)} · {parseFloat(liters || '0').toFixed(3)} L
+            </p>
           </div>
 
-          <FuelCashInputs
-            totalSpent={totalSpent}
-            onTotalSpentChange={onTotalSpentChange}
-            liters={liters}
-            onLitersChange={onLitersChange}
-            tankStatus={tankStatus}
-          />
-
-          <Button className="w-full bg-blue-600 hover:bg-blue-700" size="lg" type="submit" disabled={isSubmitting}>
-            {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-            Submit Log
-          </Button>
+          <div className="space-y-3">
+            <Button className="w-full bg-blue-600 hover:bg-blue-700" size="lg" type="submit" disabled={isSubmitting}>
+              {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Submit Log
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full h-12 text-base font-semibold border-red-300 text-red-700 hover:bg-red-50 hover:text-red-800"
+              disabled={isSubmitting}
+              onClick={onRetakePumpPhoto}
+            >
+              Reject
+            </Button>
+          </div>
         </>
       )}
     </form>

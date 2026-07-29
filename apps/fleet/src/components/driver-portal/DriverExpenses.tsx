@@ -48,7 +48,7 @@ import { ReimbursementMenu } from './views/ReimbursementMenu';
 import { DriverHeader } from './ui/DriverHeader';
 import { PaymentMethodSelector } from './expenses/PaymentMethodSelector';
 import { GasCardSummary, type FuelPumpStep } from './expenses/GasCardSummary';
-import { FuelCashInputs, derivePricePerLiter } from './expenses/FuelCashInputs';
+import { derivePricePerLiter } from './expenses/FuelCashInputs';
 import { ReceiptUploader } from './expenses/ReceiptUploader';
 import { PumpNumbersConfirm } from './expenses/PumpNumbersConfirm';
 import { OdometerScanner } from './common/OdometerScanner';
@@ -1137,7 +1137,6 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
                    onTotalSpentChange={setAmount}
                    liters={fuelEntry.volume || ''}
                    onLitersChange={(v) => setFuelEntry(prev => ({ ...prev, volume: v }))}
-                   tankStatus={tankStatus}
                    pumpPreviewUrl={receiptPreview}
                    isScanningPump={isScanning}
                    onPumpFileSelect={handleFileChange}
@@ -1151,7 +1150,7 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
                 </div>
             ) : (
             <form onSubmit={handleSubmit} className="p-6 space-y-6" id="expense-form" ref={formRef} noValidate>
-              <EvidenceRetentionNotice />
+              {category !== 'Fuel' && <EvidenceRetentionNotice />}
               <div className="space-y-4">
                 {fuelNoGpsManualVerifyNotice}
                 {category !== 'Fuel' && (
@@ -1213,30 +1212,12 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
                       )}
 
                       {fuelPumpStep === 'submit' && (
-                        <>
-                          <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm flex justify-between gap-3">
-                            <div>
-                              <p className="text-[10px] font-bold uppercase text-emerald-700 tracking-wider">Confirmed</p>
-                              <p className="font-semibold text-slate-900">
-                                ${parseFloat(amount || '0').toFixed(2)} · {parseFloat(fuelEntry.volume || '0').toFixed(3)} L
-                              </p>
-                            </div>
-                            <button
-                              type="button"
-                              className="text-sm font-medium text-emerald-800 underline"
-                              onClick={handleRetakePumpPhoto}
-                            >
-                              Change
-                            </button>
-                          </div>
-                          <FuelCashInputs
-                            totalSpent={amount}
-                            onTotalSpentChange={setAmount}
-                            liters={fuelEntry.volume || ''}
-                            onLitersChange={(v) => setFuelEntry(prev => ({ ...prev, volume: v }))}
-                            tankStatus={tankStatus}
-                          />
-                        </>
+                        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm">
+                          <p className="text-[10px] font-bold uppercase text-emerald-700 tracking-wider">Confirmed</p>
+                          <p className="font-semibold text-slate-900">
+                            ${parseFloat(amount || '0').toFixed(2)} · {parseFloat(fuelEntry.volume || '0').toFixed(3)} L
+                          </p>
+                        </div>
                       )}
                   </div>
                 )}
@@ -1279,6 +1260,16 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
                 >
                   {isSubmitting ? <Loader2 className="h-5 w-5 animate-spin" /> : "Save Expense"}
                 </button>
+                )}
+                {category === 'Fuel' && fuelPumpStep === 'submit' && (
+                  <button
+                    type="button"
+                    disabled={isSubmitting}
+                    onClick={handleRetakePumpPhoto}
+                    className="w-full h-12 text-base font-semibold rounded-xl bg-white text-red-700 border border-red-300 hover:bg-red-50 active:bg-red-100 disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-2 transition-colors mt-3"
+                  >
+                    Reject
+                  </button>
                 )}
                 {category === 'Fuel' && (
                   <button

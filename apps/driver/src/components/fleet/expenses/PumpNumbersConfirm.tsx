@@ -23,7 +23,6 @@ export function PumpNumbersConfirm({
   onTotalSpentChange,
   liters,
   onLitersChange,
-  fromOcr,
   onConfirm,
   onRetakePhoto,
 }: PumpNumbersConfirmProps) {
@@ -39,11 +38,6 @@ export function PumpNumbersConfirm({
           <CheckCircle2 className="h-6 w-6 text-emerald-600" />
         </div>
         <h3 className="text-lg font-semibold text-slate-900">Confirm pump numbers</h3>
-        <p className="text-sm text-slate-500 max-w-sm mx-auto">
-          {fromOcr
-            ? 'We read these from your photo. Check they match the pump before continuing.'
-            : 'Enter the exact numbers from the pump display, then confirm.'}
-        </p>
       </div>
 
       <Card className="border-emerald-200 bg-emerald-50/40 shadow-sm">
