@@ -361,8 +361,11 @@ export function requireAuth(options?: RequireAuthOptions) {
       path.includes("/platform-status") ||
       path.includes("/platform-feature-flags") ||
       path.includes("/health") ||
-      // Public Maps JS bootstrap (browser key only; Places calls still need a loaded Maps session)
+      // Public Maps JS bootstrap (browser key only)
       path.includes("/maps-config") ||
+      // Server Places proxy — Fleet address fields (key stays server-side)
+      path.includes("/places/autocomplete") ||
+      (path.includes("/places/") && path.includes("/details")) ||
       // OCR helpers — auth enforced by the route handler / client session JWT
       path.includes("/scan-receipt") ||
       path.includes("/scan-odometer") ||

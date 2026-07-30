@@ -221,51 +221,36 @@ export const reverseGeocode = async (
 };
 
 /**
- * Search for addresses using Google Places Autocomplete (New API)
- * Restricted to Jamaica (country: 'jm')
+ * Address autocomplete via Edge Places proxy (GOOGLE_MAPS_API_KEY server-side).
+ * Browser Places JS fails silently on referrer/key mismatches across Roam apps.
  */
 export const searchAddress = async (query: string): Promise<AddressResult[]> => {
   if (!query || query.length < 3) return [];
 
   try {
-    await loadGoogleMapsApi();
-
-    // Try modern API (AutocompleteSuggestion)
-    // This is the new Places Library (v3.54+)
-    // We prioritize this to avoid Deprecation warnings for AutocompleteService
-    if (window.google?.maps?.importLibrary) {
-        try {
-            const { AutocompleteSuggestion } = await google.maps.importLibrary("places") as any;
-            
-            if (AutocompleteSuggestion) {
-                // Static method on the class
-                const request = {
-                    input: query,
-                    includedRegionCodes: ['jm'],
-                };
-                
-                const response = await AutocompleteSuggestion.fetchAutocompleteSuggestions(request);
-                const suggestions = response.suggestions || [];
-                
-                if (suggestions.length > 0) {
-                    return suggestions.map((suggestion: any) => ({
-                        display_name: suggestion.placePrediction?.text?.text || suggestion.placePrediction?.mainText?.text || "Unknown Location",
-                        lat: '', 
-                        lon: '', 
-                        place_id: suggestion.placePrediction?.placeId || suggestion.placePrediction?.place?.split('/').pop(), 
-                    }));
-                }
-            }
-        } catch (e) {
-            console.error("Modern AutocompleteSuggestion failed:", e);
-            // If the modern API fails completely (e.g. network or specific account restriction), 
-            // we have no choice but to return empty or try a different fallback if available.
-            // But we avoid AutocompleteService to stop the error reported by the user.
-        }
+    const response = await fetch(
+      `https://${projectId}.supabase.co/functions/v1/make-server-37f42386/places/autocomplete?q=${encodeURIComponent(query)}`,
+      { headers: await getHeaders(null, { allowAnon: true }) },
+    );
+    if (!response.ok) {
+      console.error("Address search HTTP", response.status, await response.text().catch(() => ""));
+      return [];
     }
-    
-    return [];
-
+    const data = (await response.json()) as {
+      suggestions?: Array<{ display_name?: string; place_id?: string }>;
+      error?: string;
+    };
+    if (data.error === "places_not_configured") {
+      console.error("Fleet Places key missing — set GOOGLE_MAPS_API_KEY on make-server");
+    }
+    return (data.suggestions ?? [])
+      .filter((s) => !!s.place_id)
+      .map((s) => ({
+        display_name: s.display_name || "Unknown location",
+        lat: "",
+        lon: "",
+        place_id: s.place_id,
+      }));
   } catch (error) {
     console.error("Address search error:", error);
     return [];
@@ -273,34 +258,21 @@ export const searchAddress = async (query: string): Promise<AddressResult[]> => 
 };
 
 /**
- * Fetch Place Details (lat, lon) from Place ID using modern Place Class
+ * Fetch Place Details (lat, lon) from Place ID via Edge Places proxy.
  */
 export const getPlaceDetails = async (placeId: string): Promise<{ lat: number; lon: number; address: string } | null> => {
+  if (!placeId?.trim()) return null;
+
   try {
-    await loadGoogleMapsApi();
-
-    if (window.google?.maps?.importLibrary) {
-        try {
-            const { Place } = await google.maps.importLibrary("places") as any;
-            if (Place) {
-                const place = new Place({ id: placeId });
-                await place.fetchFields({ fields: ['location', 'displayName', 'formattedAddress'] });
-                const location = place.location;
-                if (location) {
-                    return {
-                        lat: location.lat(),
-                        lon: location.lng(),
-                        address: place.formattedAddress || place.displayName,
-                    };
-                }
-            }
-        } catch (e) {
-             console.error("Modern Place Details API failed:", e);
-        }
+    const response = await fetch(
+      `https://${projectId}.supabase.co/functions/v1/make-server-37f42386/places/${encodeURIComponent(placeId)}/details`,
+      { headers: await getHeaders(null, { allowAnon: true }) },
+    );
+    if (!response.ok) {
+      console.error("Place details HTTP", response.status);
+      return null;
     }
-
-    return null;
-
+    return (await response.json()) as { lat: number; lon: number; address: string };
   } catch (error) {
     console.error("Get place details error:", error);
     return null;

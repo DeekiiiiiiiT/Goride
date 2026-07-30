@@ -2,8 +2,9 @@
  * Google Maps / Places — Roam Rides uses its own browser key via Edge:
  * `make-server-37f42386/maps-config-rides` → secret `GOOGLE_MAPS_API_KEY_RIDES`.
  *
- * Capacitor Android serves the app at https://localhost, so the browser key’s HTTP
- * referrer rules block Places JS. Native builds use `/rides/v1/places/*` instead.
+ * Address autocomplete/details always go through `/rides/v1/places/*` (server key).
+ * Capacitor WebView is https://localhost; the browser key’s HTTP referrer rules
+ * block Places JS there — and silent empty results look like “search is broken”.
  */
 import { API_ENDPOINTS, projectId, publicAnonKey } from '@roam/api-client';
 import { isNativeCapacitorPlatform } from '@roam/types';
@@ -165,98 +166,31 @@ async function getPlaceDetailsViaEdge(
   return (await res.json()) as { lat: number; lon: number; address: string };
 }
 
+/**
+ * Always use Edge Places — never browser Places JS.
+ * Capacitor WebView origin is https://localhost; the rides browser key is
+ * referrer-locked to roam-s.co, so client AutocompleteSuggestion returns empty.
+ * Web uses the same server path so address search stays reliable across apps.
+ */
 export const searchAddress = async (query: string): Promise<AddressResult[]> => {
   if (!query || query.length < 3) return [];
-  if (isNativeCapacitorPlatform()) {
-    try {
-      return await searchAddressViaEdge(query);
-    } catch (e) {
-      console.error('Native address search error:', e);
-      return [];
-    }
-  }
   try {
-    await loadGoogleMapsApi();
-    if (window.google?.maps?.importLibrary) {
-      const { AutocompleteSuggestion } = (await google.maps.importLibrary('places')) as {
-        AutocompleteSuggestion: {
-          fetchAutocompleteSuggestions: (req: {
-            input: string;
-            includedRegionCodes: string[];
-          }) => Promise<{ suggestions?: unknown[] }>;
-        };
-      };
-      if (AutocompleteSuggestion) {
-        const response = await AutocompleteSuggestion.fetchAutocompleteSuggestions({
-          input: query,
-          includedRegionCodes: ['jm'],
-        });
-        const suggestions = response.suggestions || [];
-        return suggestions.map((suggestion: unknown) => {
-          const s = suggestion as {
-            placePrediction?: {
-              text?: { text?: string };
-              mainText?: { text?: string };
-              placeId?: string;
-              place?: string;
-            };
-          };
-          const pred = s.placePrediction;
-          return {
-            display_name:
-              pred?.text?.text || pred?.mainText?.text || 'Unknown location',
-            lat: '',
-            lon: '',
-            place_id: pred?.placeId || pred?.place?.split('/').pop(),
-          };
-        });
-      }
-    }
+    return await searchAddressViaEdge(query);
   } catch (e) {
     console.error('Address search error:', e);
+    return [];
   }
-  return [];
 };
 
 export const getPlaceDetails = async (
   placeId: string,
 ): Promise<{ lat: number; lon: number; address: string } | null> => {
-  if (isNativeCapacitorPlatform()) {
-    try {
-      return await getPlaceDetailsViaEdge(placeId);
-    } catch (e) {
-      console.error('Native place details error:', e);
-      return null;
-    }
-  }
   try {
-    await loadGoogleMapsApi();
-    if (window.google?.maps?.importLibrary) {
-      const { Place } = (await google.maps.importLibrary('places')) as {
-        Place: new (opts: { id: string }) => {
-          fetchFields: (o: { fields: string[] }) => Promise<void>;
-          location: { lat: () => number; lng: () => number } | null;
-          formattedAddress?: string;
-          displayName?: string;
-        };
-      };
-      if (Place) {
-        const place = new Place({ id: placeId });
-        await place.fetchFields({ fields: ['location', 'displayName', 'formattedAddress'] });
-        const location = place.location;
-        if (location) {
-          return {
-            lat: location.lat(),
-            lon: location.lng(),
-            address: place.formattedAddress || place.displayName || '',
-          };
-        }
-      }
-    }
+    return await getPlaceDetailsViaEdge(placeId);
   } catch (e) {
     console.error('Get place details error:', e);
+    return null;
   }
-  return null;
 };
 
 const readCurrentPosition = (options: PositionOptions): Promise<GeoCoordinates> =>
@@ -475,15 +409,13 @@ function formatCoordsAsAddress(lat: number, lon: number): string {
   return `Current location (${lat.toFixed(5)}, ${lon.toFixed(5)})`;
 }
 
-/** Best-effort address string for coordinates (server on native → Google → OSM → coords label). */
+/** Best-effort address string for coordinates (server Places → Google → OSM → coords label). */
 export async function resolveAddressFromCoordinates(lat: number, lon: number): Promise<string> {
-  if (isNativeCapacitorPlatform()) {
-    try {
-      const fromEdge = await reverseGeocodeViaEdge(lat, lon);
-      if (fromEdge) return fromEdge;
-    } catch (e) {
-      console.warn('Edge reverse geocode failed:', e);
-    }
+  try {
+    const fromEdge = await reverseGeocodeViaEdge(lat, lon);
+    if (fromEdge) return fromEdge;
+  } catch (e) {
+    console.warn('Edge reverse geocode failed:', e);
   }
 
   try {
