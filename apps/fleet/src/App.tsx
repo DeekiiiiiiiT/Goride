@@ -60,6 +60,8 @@ import { PRODUCT_LINE, IS_ENTERPRISE_PRODUCT } from './config/productLine';
 import { AuthRecoveryGate } from '@roam/auth-client';
 // Soft path rules shared with apps/fleet/middleware.js (Vercel Edge cookie gate).
 import { requiresSessionGate } from './middleware/sessionGate';
+import { PwaProvider } from './components/pwa/PwaProvider';
+import { PwaLifecycleHost } from './components/pwa/PwaLifecycleHost';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -586,32 +588,35 @@ export default function App() {
     typeof window !== 'undefined' && window.location.pathname.startsWith('/admin');
 
   return (
-    <AuthRecoveryGate
-      title="Reset password"
-      subtitle={isAdmin ? 'Roam Fleet Admin' : IS_ENTERPRISE_PRODUCT ? 'Roam Enterprise' : 'Roam Fleet'}
-      signInHref={isAdmin ? '/admin' : '/'}
-    >
-      {isAdmin ? (
-        <QueryClientProvider client={queryClient}>
-          <AdminConfirmProvider>
-            <FleetProductAdminPortal />
-          </AdminConfirmProvider>
-        </QueryClientProvider>
-      ) : (
-        <QueryClientProvider client={queryClient}>
-          <AuthProvider>
-            <OfflineProvider>
-              <BusinessConfigProvider>
-                <PlatformConfigProvider>
-                  <FeatureFlagProvider>
-                    <AppContent />
-                  </FeatureFlagProvider>
-                </PlatformConfigProvider>
-              </BusinessConfigProvider>
-            </OfflineProvider>
-          </AuthProvider>
-        </QueryClientProvider>
-      )}
-    </AuthRecoveryGate>
+    <PwaProvider>
+      <PwaLifecycleHost />
+      <AuthRecoveryGate
+        title="Reset password"
+        subtitle={isAdmin ? 'Roam Fleet Admin' : IS_ENTERPRISE_PRODUCT ? 'Roam Enterprise' : 'Roam Fleet'}
+        signInHref={isAdmin ? '/admin' : '/'}
+      >
+        {isAdmin ? (
+          <QueryClientProvider client={queryClient}>
+            <AdminConfirmProvider>
+              <FleetProductAdminPortal />
+            </AdminConfirmProvider>
+          </QueryClientProvider>
+        ) : (
+          <QueryClientProvider client={queryClient}>
+            <AuthProvider>
+              <OfflineProvider>
+                <BusinessConfigProvider>
+                  <PlatformConfigProvider>
+                    <FeatureFlagProvider>
+                      <AppContent />
+                    </FeatureFlagProvider>
+                  </PlatformConfigProvider>
+                </BusinessConfigProvider>
+              </OfflineProvider>
+            </AuthProvider>
+          </QueryClientProvider>
+        )}
+      </AuthRecoveryGate>
+    </PwaProvider>
   );
 }

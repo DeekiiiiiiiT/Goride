@@ -7,9 +7,9 @@
  * See docs/passenger-rides/RIDES_SPEC.md
  */
 import { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
-import { cors } from "https://deno.land/x/hono@v4.3.11/middleware.ts";
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { deniesPassengerSurface, jsonEdgeForbidden, ridesUserSurfaceRole, allowsPassengerSurface, allowsHaulerOrDriverSurfaceAsync } from "../_shared/authEdge.ts";
+import { applyCors } from "../_shared/corsAllowlist.ts";
 import { buildFareQuote, gridCellKey } from "./fare/buildQuote.ts";
 import { FareRuleNotFoundError } from "./fare/rules.ts";
 import { rankDriversByDriveTime } from "./fare/distanceMatrix.ts";
@@ -175,59 +175,8 @@ type RideStatus =
   | "completed"
   | "cancelled";
 
-// ---------------------------------------------------------------------------
-// Wave 5: CORS Allowlist (env-driven)
-// ---------------------------------------------------------------------------
-function buildCorsOriginFn(): (origin: string) => string | null {
-  const rawEnv = Deno.env.get("CORS_ALLOWED_ORIGINS") ?? "";
-  const envMode = (Deno.env.get("ENVIRONMENT") ?? Deno.env.get("DENO_ENV") ?? "").toLowerCase();
-  const isDev = envMode === "development" || envMode === "local" || envMode === "";
-
-  const allowed = rawEnv
-    .split(",")
-    .map((o) => o.trim().toLowerCase())
-    .filter(Boolean);
-
-  // Dev fallback: allow all if no explicit list
-  if (allowed.length === 0 && isDev) {
-    return () => "*";
-  }
-
-  // Add known frontend URLs
-  const viteUrl = Deno.env.get("VITE_APP_URL") ?? "";
-  if (viteUrl) allowed.push(viteUrl.toLowerCase());
-  if (SUPABASE_URL) allowed.push(SUPABASE_URL.toLowerCase());
-
-  const allowSet = new Set(allowed);
-
-  return (origin: string): string | null => {
-    if (!origin) return null;
-    const lower = origin.toLowerCase();
-    if (allowSet.has(lower)) return origin;
-    for (const a of allowSet) {
-      if (lower.endsWith(`.${a.replace(/^https?:\/\//, "")}`)) return origin;
-      if (lower === a) return origin;
-    }
-    return null;
-  };
-}
-
-const corsOriginFn = buildCorsOriginFn();
-
-app.use(
-  "*",
-  cors({
-    origin: corsOriginFn,
-    allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
-    allowHeaders: [
-      "Content-Type",
-      "Authorization",
-      "apikey",
-      "x-client-info",
-      "x-request-id",
-    ],
-  }),
-);
+// Wave 5 CORS + Capacitor WebView origins (https://localhost) — see _shared/corsAllowlist.ts
+applyCors(app);
 
 function svc(): SupabaseClient {
   return createClient(

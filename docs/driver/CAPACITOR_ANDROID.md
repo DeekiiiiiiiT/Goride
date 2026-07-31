@@ -91,6 +91,7 @@ Run `pnpm --filter @roam/driver dev`, then `cap run android`. Remove `server.url
 
 | Issue | Fix |
 |-------|-----|
+| Failed to fetch / earnings blank in Play app | Server CORS was blocking Capacitor’s `https://localhost` origin while allowing roamdriver.co. Fixed in `_shared/corsAllowlist.ts` — redeploy `rides` + `make-server-37f42386` (no new Play upload needed). |
 | White / blank screen | Almost always missing `VITE_SUPABASE_*` in the store build. Ensure `apps/driver/.env.production` has the same Supabase URL + anon key as Vercel, then re-run `cap:release` + `cap:aab`. `build:mobile` now fails if those vars are absent. |
 | Gradle sync failed | Open Android Studio, install SDK Platform 34+, accept licenses |
 | Location denied | Grant location in Android settings; use disclosure flow in app |

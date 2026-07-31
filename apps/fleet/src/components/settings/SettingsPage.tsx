@@ -46,6 +46,7 @@ import {
 } from 'lucide-react';
 import { Badge } from '../ui/badge';
 import { toast } from 'sonner@2.0.3';
+import { InstallDesktopGuideCard } from '../pwa/PwaLifecycleHost';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
 import {
   AlertDialog,
@@ -817,7 +818,8 @@ function HelpPanel() {
            <CardTitle>Documentation & Training</CardTitle>
            <CardDescription>Resources to help you get the most out of Roam Fleet Management.</CardDescription>
          </CardHeader>
-         <CardContent className="grid gap-4 md:grid-cols-3">
+         <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <InstallDesktopGuideCard />
             <a href="#" className="block p-6 border rounded-lg hover:bg-slate-50 transition-colors group">
                <BookOpen className="h-8 w-8 text-indigo-600 mb-4 group-hover:scale-110 transition-transform" />
                <h3 className="font-semibold mb-2">Getting Started Guide</h3>

@@ -17,6 +17,7 @@ import {
 } from '../../config/productLine';
 import { supabaseAnonFunctionHeaders } from '@roam/api-client';
 import { useForgotPassword } from '@roam/auth-client';
+import { InstallAppButton } from '../pwa/PwaLifecycleHost';
 
 // Map icon string names from BUSINESS_TYPES to actual lucide components
 const ICON_MAP: Record<string, React.ComponentType<any>> = {
@@ -583,6 +584,10 @@ export function LoginPage() {
                   Registration is restricted to: {allowedDomains.map(d => '@' + d).join(', ')}
                 </p>
               )}
+            </div>
+
+            <div className="mt-6">
+              <InstallAppButton />
             </div>
 
             {/* Footer */}

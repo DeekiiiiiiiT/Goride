@@ -4,6 +4,7 @@ import { streamText } from "npm:hono/streaming";
 import { cors } from "npm:hono/cors";
 import { logger } from "npm:hono/logger";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { buildCorsOriginFn } from "../_shared/corsAllowlist.ts";
 import { assertRequiredEnv } from "./env_boot.ts";
 import OpenAI from "npm:openai";
 import { GoogleGenerativeAI } from "npm:@google/generative-ai";
@@ -316,59 +317,7 @@ app.use("*", async (c, next) => {
   await next();
 });
 
-// ---------------------------------------------------------------------------
-// Wave 5: CORS Allowlist (env-driven)
-// ---------------------------------------------------------------------------
-// Parse CORS_ALLOWED_ORIGINS (comma-separated). Use "*" for temporary allow-all.
-// Always expands each https host to include/exclude www so roamfleet.co and
-// www.roamfleet.co both work.
-function buildCorsOriginFn(): (origin: string) => string | null {
-  const rawEnv = Deno.env.get("CORS_ALLOWED_ORIGINS") ?? "";
-  const envMode = (Deno.env.get("ENVIRONMENT") ?? Deno.env.get("DENO_ENV") ?? "").toLowerCase();
-  const isDev = envMode === "development" || envMode === "local" || envMode === "";
-
-  const allowed = rawEnv
-    .split(",")
-    .map((o) => o.trim().toLowerCase())
-    .filter(Boolean);
-
-  // Explicit "*" (or empty list in local/dev) → allow every browser origin
-  if (allowed.includes("*") || (allowed.length === 0 && isDev)) {
-    return () => "*";
-  }
-
-  // Also accept origins from known Fleet frontend env vars
-  const viteUrl = Deno.env.get("VITE_APP_URL") ?? "";
-  if (viteUrl) allowed.push(viteUrl.toLowerCase());
-
-  // Expand www / non-www pairs for every https/http origin in the list
-  const expanded: string[] = [];
-  for (const a of allowed) {
-    expanded.push(a);
-    try {
-      const u = new URL(a);
-      if (u.hostname.startsWith("www.")) {
-        const bare = `${u.protocol}//${u.hostname.slice(4)}${u.port ? `:${u.port}` : ""}`;
-        expanded.push(bare);
-      } else if (u.hostname.includes(".")) {
-        const withWww = `${u.protocol}//www.${u.hostname}${u.port ? `:${u.port}` : ""}`;
-        expanded.push(withWww);
-      }
-    } catch {
-      // ignore malformed entries
-    }
-  }
-
-  const allowSet = new Set(expanded);
-
-  return (origin: string): string | null => {
-    if (!origin) return null;
-    const lower = origin.toLowerCase();
-    if (allowSet.has(lower)) return origin;
-    return null;
-  };
-}
-
+// Wave 5 CORS + Capacitor WebView origins — shared allowlist (Play app is https://localhost)
 const corsOriginFn = buildCorsOriginFn();
 
 // CORS must be registered before route handlers so all responses (including 4xx/5xx) expose
