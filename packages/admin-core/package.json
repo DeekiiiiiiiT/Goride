@@ -12,7 +12,8 @@
   },
   "peerDependencies": {
     "react": "^18.0.0",
-    "react-dom": "^18.0.0"
+    "react-dom": "^18.0.0",
+    "@tanstack/react-query": "^5.0.0"
   },
   "dependencies": {
     "@roam/types": "workspace:*",
@@ -20,6 +21,7 @@
     "@roam/auth-client": "workspace:*",
     "@roam/api-client": "workspace:*",
     "@roam/platform-settings": "workspace:*",
+    "@roam/business-config": "workspace:*",
     "@supabase/supabase-js": "^2",
     "lucide-react": "^0.487.0",
     "sonner": "^2.0.3",

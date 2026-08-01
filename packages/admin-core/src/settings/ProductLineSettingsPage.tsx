@@ -14,6 +14,7 @@ import {
   Navigation,
   Truck,
   Ship,
+  Boxes,
   Shield,
   RefreshCw,
   Info,
@@ -53,6 +54,7 @@ import {
   type SettingsSegment,
   type ConsumerSegmentSettings,
 } from '@roam/platform-settings';
+import { businessTypesForSegment } from '@roam/business-config';
 
 // -------------------------------------------------------------------
 // Types
@@ -86,13 +88,14 @@ function isProductLineSegment(segment: SettingsSegment): segment is ProductLineS
   return segment === 'fleet' || segment === 'enterprise';
 }
 
-const BUSINESS_TYPE_DEFS = [
-  { key: 'rideshare', label: 'Rideshare', description: 'Uber, InDrive-style ride services', icon: Car },
-  { key: 'delivery', label: 'Delivery / Courier', description: 'Package delivery, document courier, last-mile', icon: Package },
-  { key: 'taxi', label: 'Taxi / Cab', description: 'Traditional taxi and dispatch services', icon: Navigation },
-  { key: 'trucking', label: 'Trucking / Haulage', description: 'Long-haul freight, cargo transport', icon: Truck },
-  { key: 'shipping', label: 'Shipping / Logistics', description: 'Maritime, port logistics, container transport', icon: Ship },
-];
+const BUSINESS_TYPE_ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
+  Car,
+  Package,
+  Navigation,
+  Truck,
+  Ship,
+  Boxes,
+};
 
 const CURRENCY_OPTIONS = [
   { value: 'JMD', label: 'JMD — Jamaican Dollar' },
@@ -136,6 +139,16 @@ export function ProductLineSettingsPage({
   appearanceSlot,
 }: ProductLineSettingsPageProps) {
   const segmentDefaults = useMemo(() => defaultForSegment(segment), [segment]);
+
+  const businessTypeDefs = useMemo(() => {
+    const listSegment = segment === 'enterprise' ? 'enterprise' : 'fleet';
+    return businessTypesForSegment(listSegment).map((bt) => ({
+      key: bt.key,
+      label: bt.label,
+      description: bt.description,
+      icon: BUSINESS_TYPE_ICON_MAP[bt.icon] ?? Building2,
+    }));
+  }, [segment]);
 
   const [settings, setSettings] = useState<SettingsData>(segmentDefaults);
   const [resolvedSegment, setResolvedSegment] = useState<string>(segment);
@@ -457,8 +470,10 @@ export function ProductLineSettingsPage({
         description="Toggle which business types appear on the Fleet Manager registration form. Disabling a type does NOT delete existing accounts of that type — it only hides the option from new signups."
       >
         <div className="space-y-2">
-          {BUSINESS_TYPE_DEFS.map(bt => {
-            const enabled = settings.enabledBusinessTypes[bt.key] !== false;
+          {businessTypeDefs.map(bt => {
+            const enabled =
+              'enabledBusinessTypes' in settings &&
+              settings.enabledBusinessTypes?.[bt.key] !== false;
             const IconComp = bt.icon;
             return (
               <button
@@ -695,9 +710,59 @@ export function ProductLineSettingsPage({
       <SettingsSection
         icon={<Wrench className="w-4 h-4 text-indigo-400" />}
         title="Modules"
-        description="Enable or disable additional features for fleet management."
+        description={
+          segment === 'enterprise'
+            ? 'Enable or disable Enterprise back-office modules.'
+            : 'Enable or disable additional features for fleet management.'
+        }
       >
         <div className="space-y-2">
+          {segment === 'enterprise' ? (
+            <>
+              {(
+                [
+                  { key: 'shipments', label: 'Shipments', description: 'Create and track freight shipments.', icon: Truck },
+                  { key: 'carriers', label: 'Carriers', description: 'Own fleet and 3PL carrier directory.', icon: Building2 },
+                  { key: 'clients', label: 'Clients', description: 'Bill-to clients for freight jobs.', icon: UserPlus },
+                  { key: 'rateCards', label: 'Rate Cards', description: 'Client and route pricing (JMD).', icon: FileText },
+                  { key: 'businessFinance', label: 'Business Finance', description: 'P&L and billing for freight orgs.', icon: BarChart3 },
+                  { key: 'claimableLoss', label: 'Cargo Claims', description: 'Dispute and resolve cargo claims.', icon: FileText },
+                ] as const
+              ).map((mod) => {
+                const on = Boolean(
+                  settings.enabledModules &&
+                    (settings.enabledModules as Record<string, boolean>)[mod.key],
+                );
+                const IconComp = mod.icon;
+                return (
+                  <button
+                    key={mod.key}
+                    onClick={() => toggleModule(mod.key)}
+                    className={`w-full flex items-center gap-4 rounded-xl border-2 px-4 py-3.5 text-left transition-all
+                      ${on
+                        ? 'border-amber-500/40 bg-amber-500/5'
+                        : 'border-slate-200 bg-white opacity-60 dark:border-slate-800 dark:bg-slate-900/50'
+                      }
+                    `}
+                  >
+                    <div className={`p-2 rounded-lg ${on ? 'bg-amber-500/15' : 'bg-slate-100 dark:bg-slate-800'}`}>
+                      <IconComp className={`w-5 h-5 ${on ? 'text-amber-700 dark:text-amber-400' : 'text-slate-500'}`} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-sm font-medium ${on ? 'text-slate-900 dark:text-white' : 'text-slate-500'}`}>
+                        {mod.label}
+                      </p>
+                      <p className="text-xs text-slate-500 truncate">{mod.description}</p>
+                    </div>
+                    <div className={`shrink-0 ${on ? 'text-amber-700 dark:text-amber-400' : 'text-slate-600'}`}>
+                      {on ? <ToggleRight className="w-6 h-6" /> : <ToggleLeft className="w-6 h-6" />}
+                    </div>
+                  </button>
+                );
+              })}
+            </>
+          ) : (
+            <>
           <button
             onClick={() => toggleModule('fuelManagement')}
             className={`w-full flex items-center gap-4 rounded-xl border-2 px-4 py-3.5 text-left transition-all
@@ -853,6 +918,8 @@ export function ProductLineSettingsPage({
               }
             </div>
           </button>
+            </>
+          )}
         </div>
       </SettingsSection>
       </>}

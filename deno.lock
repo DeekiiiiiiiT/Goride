@@ -217,6 +217,7 @@
             "npm:@supabase/supabase-js@2",
             "npm:@tailwindcss/vite@4.1.12",
             "npm:@tanstack/react-query@*",
+            "npm:@types/google.maps@^3.64.1",
             "npm:@types/node@^20.10.0",
             "npm:@types/react-dom@^18.3.0",
             "npm:@types/react@^18.3.0",
@@ -240,6 +241,7 @@
             "npm:@dnd-kit/core@^6.3.1",
             "npm:@dnd-kit/sortable@10",
             "npm:@dnd-kit/utilities@^3.2.2",
+            "npm:@stripe/terminal-js@0.24",
             "npm:@supabase/supabase-js@2",
             "npm:@tailwindcss/vite@4.1.12",
             "npm:@tanstack/react-query@*",
@@ -388,7 +390,8 @@
             "npm:tailwindcss@4.1.12",
             "npm:tw-animate-css@^1.3.8",
             "npm:vaul@^1.1.2",
-            "npm:vite@6.3.5"
+            "npm:vite@6.3.5",
+            "npm:zod@^3.24.2"
           ]
         }
       },
@@ -453,13 +456,16 @@
             "npm:react-resizable-panels@^2.1.7",
             "npm:react@^18.3.1",
             "npm:recharts@*",
+            "npm:sharp@~0.35.3",
             "npm:sonner@^2.0.3",
             "npm:tailwind-merge@*",
             "npm:tailwindcss@4.1.12",
             "npm:tw-animate-css@^1.3.8",
             "npm:vaul@^1.1.2",
+            "npm:vite-plugin-pwa@^1.3.0",
             "npm:vite@6.3.5",
             "npm:vitest@^3.2.4",
+            "npm:workbox-window@^7.4.1",
             "npm:xlsx@~0.18.5"
           ]
         }

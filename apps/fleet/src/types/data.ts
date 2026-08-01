@@ -339,7 +339,8 @@ export interface TeamMember {
   invitedAt?: string | null;
 }
 
-export type BusinessType = 'rideshare' | 'delivery' | 'taxi' | 'trucking' | 'shipping';
+export type { BusinessType } from '@roam/types';
+import type { BusinessType } from '@roam/types';
 
 export interface FleetConfig {
   fleetName: string;

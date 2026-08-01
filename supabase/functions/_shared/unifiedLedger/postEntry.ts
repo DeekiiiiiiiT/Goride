@@ -19,6 +19,7 @@ export type PostEntryParams = {
   product?: 
     | "roam_rides" | "roam_driver" | "roam_fleet"  // Rideshare
     | "roam_dash" | "roam_partner" | "roam_courier" // Delivery
+    | "roam_enterprise"                             // Enterprise freight
     | "platform"                                    // System
     | "rides" | "fleet" | "dash";                  // Legacy (deprecated)
   effectiveAt?: string;

@@ -21,7 +21,8 @@ export interface AnnouncementSettings {
   dismissible: boolean;
 }
 
-export interface EnabledModules {
+/** Fleet product-line feature modules. */
+export interface FleetEnabledModules {
   fuelManagement: boolean;
   tollManagement: boolean;
   driverPortal: boolean;
@@ -29,6 +30,19 @@ export interface EnabledModules {
   claimableLoss: boolean;
   performanceAnalytics: boolean;
 }
+
+/** Enterprise product-line feature modules (Path B). */
+export interface EnterpriseEnabledModules {
+  shipments: boolean;
+  carriers: boolean;
+  clients: boolean;
+  rateCards: boolean;
+  businessFinance: boolean;
+  claimableLoss: boolean;
+}
+
+/** @deprecated Prefer FleetEnabledModules / EnterpriseEnabledModules — kept for merge compat. */
+export type EnabledModules = FleetEnabledModules & Partial<EnterpriseEnabledModules>;
 
 /** Full product-line settings blob (fleet + enterprise). */
 export interface FleetProductSettings {

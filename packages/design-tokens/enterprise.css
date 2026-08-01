@@ -1,0 +1,7 @@
+/* Enterprise product accent overrides on shared tokens */
+@import './theme.css';
+
+@theme {
+  --color-enterprise-accent: #d97706;
+  --color-enterprise-accent-foreground: #0f172a;
+}

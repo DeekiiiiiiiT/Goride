@@ -11,13 +11,23 @@
 
 Fleet managers are tagged `productLine: fleet` and `businessType: rideshare`.
 
-## Roam Enterprise (multi-vertical fleet)
+## Roam Enterprise (Path B — standalone product)
 
-| Domain | Audience | Admin |
-|--------|----------|-------|
-| [roamenterprise.co](https://roamenterprise.co) | Delivery, taxi, trucking, shipping fleets | [roamdominion.co](https://roamdominion.co) — platform Super Admin (Dominion) |
+| Domain | Audience | Surfaces |
+|--------|----------|----------|
+| [roamenterprise.co](https://roamenterprise.co) | Delivery, trucking, shipping, freight-forwarding orgs | Marketing (public) + `/login` + `/app/*` tenant back-office + `/admin` product ops |
+| [roamdominion.co](https://roamdominion.co) | Platform Super Admin | Dominion segment `enterprise` |
 
-Enterprise fleet managers are tagged `productLine: enterprise` with their chosen `businessType`.
+**Architecture (locked 2026-07-31):** Enterprise is its **own authenticated app** inside `apps/enterprise` (Path B). It is **not** a second deploy of `apps/fleet`. Shared packages (`@roam/ui`, `@roam/auth-client`, `@roam/admin-core`, etc.) are reused; Fleet’s app shell is not.
+
+Enterprise orgs are tagged `productLine: enterprise` with business types from `@roam/business-config` (default vertical: `freight_forwarding`). Rideshare/taxi are excluded from Enterprise signup toggles.
+
+### Locked v1 scope (Freight Forwarding)
+
+- Back-office desktop only (no courier field app / offline PWA)
+- Own fleet + 3PL carriers modeled from day one
+- Domestic Jamaica first (no customs)
+- Fuel/toll deferred to v1.1
 
 ## Roam Dash
 
@@ -34,7 +44,7 @@ One Supabase project. Platform settings are stored per segment:
 |---------|--------|-------------|
 | Global | `platform:settings:global` | [roamdominion.co](https://roamdominion.co) → Global Settings |
 | Fleet | `platform:settings:fleet` | Dominion → Roam Fleet; roamfleet.co/admin |
-| Enterprise | `platform:settings:enterprise` | Dominion → Roam Enterprise; roamdominion.co |
+| Enterprise | `platform:settings:enterprise` | Dominion → Roam Enterprise; roamenterprise.co/admin |
 | Rides | `platform:settings:rides` | roam-s.co/admin |
 | Driver | `platform:settings:driver` | roamdriver.co/admin |
 | Haul | `platform:settings:haul` | roamhaul.co/admin |
@@ -46,7 +56,9 @@ Legacy key `platform:settings` is read-only (dual-read fallback for fleet/enterp
 Clients send:
 
 - `X-Roam-Settings-Segment` — primary segment selector
-- `X-Roam-Product-Line: fleet|enterprise` — backward compat (from `VITE_PRODUCT_LINE`)
+- `X-Roam-Product-Line: fleet|enterprise` — from `VITE_PRODUCT_LINE`
+
+Freight APIs live at `supabase/functions/freight` (`API_ENDPOINTS.freight`), not `_fleet-server`.
 
 Full architecture: [`docs/platform/SETTINGS_ARCHITECTURE.md`](../platform/SETTINGS_ARCHITECTURE.md)
 
@@ -56,7 +68,9 @@ Full architecture: [`docs/platform/SETTINGS_ARCHITECTURE.md`](../platform/SETTIN
 |---------|---------------------|
 | `@roam/fleet` | `fleet` |
 | `@roam/enterprise` | `enterprise` |
-| `@roam/admin` | `enterprise` |
+| `@roam/admin` | `enterprise` (Dominion default segment for Enterprise ops) |
+
+Auth clients: `supabaseEnterpriseApp` / `supabaseEnterpriseAdmin` in `@roam/auth-client`.
 
 ## Migrations (superadmin)
 

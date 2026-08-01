@@ -138,6 +138,7 @@ export async function checkProductBalances(): Promise<BalanceCheck[]> {
     "roam_dash",
     "roam_partner",
     "roam_courier",
+    "roam_enterprise",
     "platform",
   ];
   

@@ -50,15 +50,12 @@ export function assertFleetOwnerProductLine(
   return inferProductLineFromUser(meta) === expected;
 }
 
-export const ALL_BUSINESS_TYPES = [
-  "rideshare",
-  "delivery",
-  "taxi",
-  "trucking",
-  "shipping",
-] as const;
+import {
+  ALL_BUSINESS_TYPES,
+  type BusinessTypeKey,
+} from "../_shared/businessTypes.ts";
 
-export type BusinessTypeKey = (typeof ALL_BUSINESS_TYPES)[number];
+export { ALL_BUSINESS_TYPES, type BusinessTypeKey };
 
 export function isEnabledBusinessType(
   settings: Record<string, unknown> | null | undefined,

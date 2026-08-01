@@ -2,6 +2,8 @@ import type {
   AnnouncementSettings,
   ConsumerSegmentSettings,
   EnabledModules,
+  EnterpriseEnabledModules,
+  FleetEnabledModules,
   FleetProductSettings,
   GlobalPlatformSettings,
   SecurityPolicies,
@@ -27,7 +29,7 @@ export const DEFAULT_ANNOUNCEMENT: AnnouncementSettings = {
   dismissible: true,
 };
 
-export const DEFAULT_ENABLED_MODULES: EnabledModules = {
+export const DEFAULT_FLEET_ENABLED_MODULES: FleetEnabledModules = {
   fuelManagement: true,
   tollManagement: true,
   driverPortal: true,
@@ -36,12 +38,18 @@ export const DEFAULT_ENABLED_MODULES: EnabledModules = {
   performanceAnalytics: true,
 };
 
-const ALL_BUSINESS_TYPES_ENABLED: Record<string, boolean> = {
-  rideshare: true,
-  delivery: true,
-  taxi: true,
-  trucking: true,
-  shipping: true,
+export const DEFAULT_ENTERPRISE_ENABLED_MODULES: EnterpriseEnabledModules = {
+  shipments: true,
+  carriers: true,
+  clients: true,
+  rateCards: true,
+  businessFinance: true,
+  claimableLoss: true,
+};
+
+/** @deprecated Use DEFAULT_FLEET_ENABLED_MODULES */
+export const DEFAULT_ENABLED_MODULES: EnabledModules = {
+  ...DEFAULT_FLEET_ENABLED_MODULES,
 };
 
 const FLEET_BUSINESS_TYPES: Record<string, boolean> = {
@@ -50,11 +58,22 @@ const FLEET_BUSINESS_TYPES: Record<string, boolean> = {
   taxi: false,
   trucking: false,
   shipping: false,
+  freight_forwarding: false,
+};
+
+const ENTERPRISE_BUSINESS_TYPES: Record<string, boolean> = {
+  rideshare: false,
+  delivery: true,
+  taxi: false,
+  trucking: true,
+  shipping: true,
+  freight_forwarding: true,
 };
 
 function baseFleetProductSettings(
   platformName: string,
   enabledBusinessTypes: Record<string, boolean>,
+  enabledModules: EnabledModules,
 ): FleetProductSettings {
   return {
     platformName,
@@ -64,7 +83,7 @@ function baseFleetProductSettings(
     maintenanceMode: false,
     maintenanceMessage: '',
     enabledBusinessTypes,
-    enabledModules: { ...DEFAULT_ENABLED_MODULES },
+    enabledModules: { ...enabledModules },
     registrationMode: 'open',
     allowedDomains: [],
     requireApproval: false,
@@ -77,11 +96,21 @@ function baseFleetProductSettings(
 export const DEFAULT_FLEET_SETTINGS: FleetProductSettings = baseFleetProductSettings(
   'Roam Fleet',
   FLEET_BUSINESS_TYPES,
+  { ...DEFAULT_FLEET_ENABLED_MODULES },
 );
 
 export const DEFAULT_ENTERPRISE_SETTINGS: FleetProductSettings = baseFleetProductSettings(
   'Roam Enterprise',
-  ALL_BUSINESS_TYPES_ENABLED,
+  ENTERPRISE_BUSINESS_TYPES,
+  {
+    // Fleet keys off for enterprise segment
+    fuelManagement: false,
+    tollManagement: false,
+    driverPortal: false,
+    fleetEquipment: false,
+    performanceAnalytics: false,
+    ...DEFAULT_ENTERPRISE_ENABLED_MODULES,
+  },
 );
 
 export const DEFAULT_GLOBAL_SETTINGS: GlobalPlatformSettings = {
@@ -91,7 +120,7 @@ export const DEFAULT_GLOBAL_SETTINGS: GlobalPlatformSettings = {
   announcement: { ...DEFAULT_ANNOUNCEMENT },
 };
 
-const CONSUMER_SEGMENT_NAMES: Record<'rides' | 'driver' | 'haul' | 'dash', string> = {
+const CONSUMER_SEGMENT_NAMES: Record<'rides' | 'driver' | 'haul' | 'dash' | 'courier', string> = {
   rides: 'Roam Rides',
   driver: 'Roam Driver',
   haul: 'Roam Haul',
@@ -118,7 +147,9 @@ export function defaultConsumerSegmentSettings(
   };
 }
 
-export function defaultSettingsForSegment(segment: SettingsSegment): FleetProductSettings | GlobalPlatformSettings | ConsumerSegmentSettings {
+export function defaultSettingsForSegment(
+  segment: SettingsSegment,
+): FleetProductSettings | GlobalPlatformSettings | ConsumerSegmentSettings {
   switch (segment) {
     case 'global':
       return { ...DEFAULT_GLOBAL_SETTINGS };

@@ -1,11 +1,18 @@
 import { BusinessType } from '@roam/types';
 
 /**
- * Business Type Constants & Helpers
- * 
- * Central source of truth for multi-industry business type definitions.
- * Used by the Settings UI, sidebar visibility rules, and vocabulary system.
+ * Canonical business-type defs for Fleet + Enterprise.
+ * All apps/admin-core/edge lists must derive from here (or the Deno mirror).
  */
+
+export const BUSINESS_TYPE_KEYS = [
+  'rideshare',
+  'delivery',
+  'taxi',
+  'trucking',
+  'shipping',
+  'freight_forwarding',
+] as const satisfies readonly BusinessType[];
 
 export const BUSINESS_TYPES = [
   {
@@ -38,58 +45,143 @@ export const BUSINESS_TYPES = [
     description: 'Maritime, port logistics, container transport',
     icon: 'Ship',
   },
+  {
+    key: 'freight_forwarding' as BusinessType,
+    label: 'Freight Forwarding',
+    description: 'Multi-leg freight ops, own fleet and 3PL carriers',
+    icon: 'Boxes',
+  },
 ] as const;
 
-/**
- * The default business type used when no preference has been set.
- * This ensures the app behaves exactly as it does today (rideshare mode)
- * until an admin explicitly changes it in Settings.
- */
+/** Business types shown/toggleable on the Enterprise product line. */
+export const ENTERPRISE_BUSINESS_TYPES: BusinessType[] = [
+  'freight_forwarding',
+  'trucking',
+  'shipping',
+  'delivery',
+];
+
+/** Business types excluded from Enterprise Dominion toggles. */
+export const ENTERPRISE_EXCLUDED_BUSINESS_TYPES: BusinessType[] = [
+  'rideshare',
+  'taxi',
+];
+
 export const DEFAULT_BUSINESS_TYPE: BusinessType = 'rideshare';
 
-/**
- * Validates whether a string is a valid BusinessType.
- * Used when reading from KV/localStorage to guard against corrupted values.
- */
+export const DEFAULT_ENTERPRISE_BUSINESS_TYPE: BusinessType = 'freight_forwarding';
+
 export function isValidBusinessType(value: unknown): value is BusinessType {
   return (
     typeof value === 'string' &&
-    ['rideshare', 'delivery', 'taxi', 'trucking', 'shipping'].includes(value)
+    (BUSINESS_TYPE_KEYS as readonly string[]).includes(value)
   );
 }
 
+export function businessTypesForSegment(
+  segment: 'fleet' | 'enterprise',
+): typeof BUSINESS_TYPES[number][] {
+  if (segment === 'enterprise') {
+    return BUSINESS_TYPES.filter((bt) =>
+      ENTERPRISE_BUSINESS_TYPES.includes(bt.key),
+    );
+  }
+  return [...BUSINESS_TYPES];
+}
+
 // ---------------------------------------------------------------------------
-// Sidebar Visibility Rules
+// Sidebar Visibility Rules (Fleet admin shell)
 // ---------------------------------------------------------------------------
 
-/**
- * Maps each sidebar item key to the business types where it should appear.
- * Items not listed here default to visible (safe fallback).
- */
 export const SIDEBAR_VISIBILITY: Record<string, BusinessType[]> = {
-  // Universal — always visible
-  'dashboard': ['rideshare', 'delivery', 'taxi', 'trucking', 'shipping'],
-  'imports': ['rideshare', 'delivery', 'taxi', 'trucking', 'shipping'],
-  'drivers': ['rideshare', 'delivery', 'taxi', 'trucking', 'shipping'],
-  'vehicles': ['rideshare', 'delivery', 'taxi', 'trucking', 'shipping'],
-  'fleet': ['rideshare', 'delivery', 'taxi', 'trucking', 'shipping'],
-  'fuel-management': ['rideshare', 'delivery', 'taxi', 'trucking', 'shipping'],
-  'trips': ['rideshare', 'delivery', 'taxi', 'trucking', 'shipping'],
-  'reports': ['rideshare', 'delivery', 'taxi', 'trucking', 'shipping'],
-  'settings': ['rideshare', 'delivery', 'taxi', 'trucking', 'shipping'],
-
-  // Conditionally visible
+  dashboard: [
+    'rideshare',
+    'delivery',
+    'taxi',
+    'trucking',
+    'shipping',
+    'freight_forwarding',
+  ],
+  imports: [
+    'rideshare',
+    'delivery',
+    'taxi',
+    'trucking',
+    'shipping',
+    'freight_forwarding',
+  ],
+  drivers: [
+    'rideshare',
+    'delivery',
+    'taxi',
+    'trucking',
+    'shipping',
+    'freight_forwarding',
+  ],
+  vehicles: [
+    'rideshare',
+    'delivery',
+    'taxi',
+    'trucking',
+    'shipping',
+    'freight_forwarding',
+  ],
+  fleet: [
+    'rideshare',
+    'delivery',
+    'taxi',
+    'trucking',
+    'shipping',
+    'freight_forwarding',
+  ],
+  'fuel-management': [
+    'rideshare',
+    'delivery',
+    'taxi',
+    'trucking',
+    'shipping',
+    'freight_forwarding',
+  ],
+  trips: [
+    'rideshare',
+    'delivery',
+    'taxi',
+    'trucking',
+    'shipping',
+    'freight_forwarding',
+  ],
+  reports: [
+    'rideshare',
+    'delivery',
+    'taxi',
+    'trucking',
+    'shipping',
+    'freight_forwarding',
+  ],
+  settings: [
+    'rideshare',
+    'delivery',
+    'taxi',
+    'trucking',
+    'shipping',
+    'freight_forwarding',
+  ],
+  'earnings-policy': ['rideshare'],
   'tier-config': ['rideshare'],
-  'performance': ['rideshare', 'taxi'],
+  performance: ['rideshare', 'taxi'],
   'toll-management': ['rideshare', 'taxi', 'trucking', 'shipping'],
+  shipments: ['freight_forwarding', 'trucking', 'shipping'],
+  carriers: ['freight_forwarding', 'trucking', 'shipping'],
+  clients: ['freight_forwarding', 'trucking', 'shipping', 'delivery'],
+  'rate-cards': ['freight_forwarding', 'trucking', 'shipping'],
+  claims: ['freight_forwarding', 'trucking', 'shipping'],
 };
 
-/**
- * Returns whether a sidebar item should be rendered for the given business type.
- * Items not in SIDEBAR_VISIBILITY default to visible (safe fallback).
- */
-export function isSidebarItemVisible(itemKey: string, businessType: BusinessType): boolean {
+export function isSidebarItemVisible(
+  itemKey: string,
+  businessType: BusinessType,
+): boolean {
   const allowed = SIDEBAR_VISIBILITY[itemKey];
-  if (!allowed) return true; // Not in the map → show by default
+  if (!allowed) return true;
   return allowed.includes(businessType);
 }

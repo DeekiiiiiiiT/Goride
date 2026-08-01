@@ -7,6 +7,7 @@ export type ProductKey = 'fleet' | 'enterprise' | 'dash' | 'rides' | 'driver' | 
 export const PLATFORM_ROLES = new Set([
   'platform_owner',
   'platform_support',
+  'platform_analyst',
   'superadmin',
 ]);
 

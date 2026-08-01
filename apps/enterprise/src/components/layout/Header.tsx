@@ -4,7 +4,7 @@ import { Menu } from 'lucide-react';
 import { RoamLogo } from '@/components/icons/SiteIcons';
 import { MobileNav } from '@/components/layout/MobileNav';
 import { ThemeToggle } from '@/components/layout/ThemeToggle';
-import { DEFAULT_CTA, MAIN_NAV, SECONDARY_NAV } from '@/lib/navContent';
+import { DEFAULT_CTA, MAIN_NAV, SECONDARY_NAV, SIGN_IN_CTA } from '@/lib/navContent';
 
 export type HeaderProps = {
   cta?: {
@@ -97,6 +97,12 @@ export function Header({ cta = DEFAULT_CTA }: HeaderProps) {
               ))}
             </nav>
             <ThemeToggle className="hidden sm:flex" />
+            <Link
+              to={SIGN_IN_CTA.href}
+              className="hidden text-sm font-medium text-on-surface-variant transition-colors hover:text-on-surface sm:inline-flex"
+            >
+              {SIGN_IN_CTA.label}
+            </Link>
             {cta.external ? (
               <a href={cta.href} target="_blank" rel="noopener noreferrer" className={ctaClass}>
                 {cta.label}

@@ -29,4 +29,5 @@ export const API_ENDPOINTS = {
   rides: `${BASE_URL}/rides`,
   driver: `${BASE_URL}/driver`,
   haul: `${BASE_URL}/haul`,
+  freight: `${BASE_URL}/freight`,
 };

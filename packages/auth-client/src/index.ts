@@ -11,6 +11,8 @@ export {
   supabaseDashPartner,
   supabaseDashCustomer,
   supabaseFleetAdmin,
+  supabaseEnterpriseApp,
+  supabaseEnterpriseAdmin,
 } from './supabase';
 export { supabaseRecovery, isPasswordRecoveryUrl } from './supabaseRecovery';
 export { PasswordRecoveryPage } from './components/PasswordRecoveryPage';

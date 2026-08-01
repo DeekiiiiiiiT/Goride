@@ -81,5 +81,17 @@ export const supabaseDashPartner = createRoamAuthClient(`sb-${projectId}-auth-da
  */
 export const supabaseFleetAdmin = createRoamAuthClient(`sb-${projectId}-auth-fleet-admin`);
 
+/**
+ * Roam Enterprise tenant back-office (`/app`). Isolated from product-admin session.
+ */
+export const supabaseEnterpriseApp = createRoamAuthClient(`sb-${projectId}-auth-enterprise`);
+
+/**
+ * Roam Enterprise product admin portal (`/admin`).
+ */
+export const supabaseEnterpriseAdmin = createRoamAuthClient(
+  `sb-${projectId}-auth-enterprise-admin`,
+);
+
 /** Default export for packages that expect a single client (driver app surface). */
 export const supabase = supabaseDriverApp;

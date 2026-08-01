@@ -8,6 +8,7 @@
 export const PLATFORM_ROLES = [
   'platform_owner',
   'platform_support',
+  'platform_analyst',
   'superadmin',
 ] as const;
 

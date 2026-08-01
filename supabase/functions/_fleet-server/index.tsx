@@ -50,6 +50,7 @@ import {
   assertFleetOwnerProductLine,
   isEnabledBusinessType,
   isProductLine,
+  ALL_BUSINESS_TYPES,
   type ProductLine,
 } from "./product_line.ts";
 import {
@@ -166,6 +167,8 @@ import {
 } from "./evidence_routes.ts";
 import { registerFleetAdminStorageRoutes } from "./fleet_admin_storage_routes.ts";
 import { registerFleetAdminMaintenanceLedgerRoutes } from "./fleet_admin_maintenance_ledger_routes.ts";
+import { registerEnterpriseAdminRoutes } from "./enterprise_admin_routes.ts";
+import { ensureCustomerOrganization } from "./ensure_customer_org.ts";
 import {
   buildEphemeralStoragePath,
   EPHEMERAL_EVIDENCE_BUCKET,
@@ -11931,18 +11934,23 @@ app.post("/make-server-37f42386/admin/team/invite", requireAuth(), async (c) => 
 app.post("/make-server-37f42386/admin/create-customer", requireAuth(), async (c) => {
   try {
     const rbacUser = c.get('rbacUser') as any;
-    const callerRole = rbacUser?.resolvedRole || rbacUser?.role;
-    if (callerRole !== 'platform_owner' && callerRole !== 'superadmin') {
-      return c.json({ error: "Only the platform owner can create customer accounts" }, 403);
+    const callerRole = rbacUser?.resolvedRole || rbacUser?.role || rbacUser?.rawRole;
+    const productLine = resolveProductLine(c);
+    const canCreate =
+      callerRole === 'platform_owner' ||
+      callerRole === 'superadmin' ||
+      (productLine === 'enterprise' &&
+        (callerRole === 'enterprise_admin' || rbacUser?.rawRole === 'enterprise_admin'));
+    if (!canCreate) {
+      return c.json({ error: "Only the platform owner or enterprise admin can create customer accounts" }, 403);
     }
 
-    const productLine = resolveProductLine(c);
     const { email, name, businessType } = await c.req.json();
     if (!email || !name || !businessType) {
       return c.json({ error: "email, name, and businessType are all required" }, 400);
     }
 
-    const allowedTypes = ['rideshare', 'delivery', 'taxi', 'trucking', 'shipping'];
+    const allowedTypes = [...ALL_BUSINESS_TYPES];
     if (!allowedTypes.includes(businessType)) {
       return c.json({ error: `Invalid businessType. Must be one of: ${allowedTypes.join(', ')}` }, 400);
     }
@@ -11962,17 +11970,23 @@ app.post("/make-server-37f42386/admin/create-customer", requireAuth(), async (c)
       .join('')
       .slice(0, 12);
 
-    // Create the user — auth fields in app_metadata so org trigger can fire safely
+    const resolvedLine = productLine === 'fleet' ? 'fleet' : 'enterprise';
+
+    // Create the user — mirror role/productLine on user_metadata for admin list filters
+    // and app_metadata for org trigger / JWT claims.
     const { data, error } = await supabase.auth.admin.createUser({
       email,
       password: tempPassword,
       user_metadata: {
         name,
+        role: 'admin',
+        businessType,
+        productLine: resolvedLine,
       },
       app_metadata: {
         role: 'admin',
         businessType,
-        productLine: productLine === 'fleet' ? 'fleet' : 'enterprise',
+        productLine: resolvedLine,
       },
       email_confirm: true,
     });
@@ -11984,19 +11998,37 @@ app.post("/make-server-37f42386/admin/create-customer", requireAuth(), async (c)
       throw error;
     }
 
-    // Set organizationId on app_metadata (trigger may already have set it)
+    // Set organizationId on app + user metadata (trigger may already have set it)
     const userId = data.user.id;
     const { error: updateErr } = await supabase.auth.admin.updateUserById(userId, {
       app_metadata: {
         ...(data.user.app_metadata || {}),
         organizationId: userId,
-        productLine: productLine === 'fleet' ? 'fleet' : 'enterprise',
+        productLine: resolvedLine,
+        role: 'admin',
+        businessType,
+      },
+      user_metadata: {
+        ...(data.user.user_metadata || {}),
+        name,
+        role: 'admin',
+        businessType,
+        productLine: resolvedLine,
+        organizationId: userId,
       },
     });
     if (updateErr) {
       console.error(`[Create Customer] Failed to set organizationId for ${userId}:`, updateErr);
       // Non-fatal: the account was still created, just missing organizationId
     }
+
+    await ensureCustomerOrganization(supabase, {
+      userId,
+      email,
+      name,
+      businessType,
+      productLine: resolvedLine,
+    });
 
     console.log(`[Create Customer] Created ${email} as fleet owner (${businessType})`);
     await logAdminAction({ actorId: rbacUser?.id, actorName: rbacUser?.name || 'Admin', action: 'create_customer', targetId: userId, targetEmail: email, details: `Business type: ${businessType}` });
@@ -15404,14 +15436,18 @@ async function fetchCustomersWithCache(productLineFilter?: ProductLine): Promise
   
   if (error) throw new Error(`Auth API error: ${error.message}`);
   
-  // Filter to fleet managers (role === 'admin')
+  // Filter to fleet managers (role === 'admin') — check user + app metadata
   let customers = (data?.users || [])
-    .filter((u: any) => u.user_metadata?.role === "admin");
+    .filter((u: any) => {
+      const role = u.user_metadata?.role || u.app_metadata?.role;
+      return role === "admin";
+    });
 
   if (productLineFilter) {
-    customers = customers.filter((u: any) =>
-      inferProductLineFromUser(u.user_metadata) === productLineFilter
-    );
+    customers = customers.filter((u: any) => {
+      const merged = { ...(u.app_metadata || {}), ...(u.user_metadata || {}) };
+      return inferProductLineFromUser(merged) === productLineFilter;
+    });
   }
 
   customers = customers.map((u: any) => ({
@@ -15449,6 +15485,14 @@ async function invalidateCustomerCache(): Promise<void> {
   }
   console.log("[AdminCustomers] Cache invalidated");
 }
+
+registerEnterpriseAdminRoutes(app, {
+  fetchCustomersWithCache,
+  invalidateCustomerCache,
+  logAdminAction,
+  FLEET_SUB_ROLES,
+  canonicalizeRole,
+});
 
 // ═══════════════════════════════════════════════════════════════════════════
 // FEATURE FLAGS ADMIN ENDPOINTS (Phase 0 of Fleet Data Isolation)
@@ -17291,7 +17335,7 @@ app.put("/make-server-37f42386/admin/platform-settings", async (c) => {
 // Stored as `ledger_config:{businessType}` in KV.
 // ---------------------------------------------------------------------------
 
-const VALID_BUSINESS_TYPES = ['rideshare', 'delivery', 'taxi', 'trucking', 'shipping'];
+const VALID_BUSINESS_TYPES = [...ALL_BUSINESS_TYPES];
 const VALID_LEDGER_TYPES = ['main', 'trip', 'fuel', 'toll'];
 
 // GET /admin/ledger-config/:businessType — Get ledger config for a business type

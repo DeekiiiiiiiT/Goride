@@ -75,3 +75,6 @@ export {
 
 // Settings
 export * from './settings';
+
+// Customer / team account management
+export * from './customers';

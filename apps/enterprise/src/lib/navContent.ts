@@ -26,6 +26,11 @@ export const DEFAULT_CTA = {
   href: '/contact',
 } as const;
 
+export const SIGN_IN_CTA = {
+  label: 'Sign In',
+  href: '/login',
+} as const;
+
 export const FOOTER_SERVICES: NavLink[] = [
   { label: 'Roam Rides', href: '/rides' },
   { label: 'Roam Driver', href: '/driver' },
