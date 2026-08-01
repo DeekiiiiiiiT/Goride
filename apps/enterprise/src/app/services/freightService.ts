@@ -26,11 +26,16 @@ async function freightFetch<T>(
   });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(
+    const detail =
       typeof json.error === 'string'
         ? json.error
-        : json.error?.formErrors?.[0] || res.statusText || 'Request failed',
-    );
+        : json.error?.formErrors?.[0] ||
+          json.message ||
+          json.msg ||
+          (typeof json === 'object' && json.error ? JSON.stringify(json.error) : null) ||
+          res.statusText ||
+          'Request failed';
+    throw new Error(`${res.status}: ${detail}`);
   }
   return json as T;
 }

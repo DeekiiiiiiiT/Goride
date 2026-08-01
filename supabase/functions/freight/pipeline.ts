@@ -377,14 +377,39 @@ export function registerPipelineRoutes(app: FreightApp) {
     const status = c.req.query("status");
     let q = freightDb()
       .from("packages")
-      .select("*, suites(suite_code, contact_name, contact_phone)")
+      .select("*")
       .eq("organization_id", user.organizationId)
       .order("created_at", { ascending: false })
       .limit(300);
     if (status) q = q.eq("status", status);
     const { data, error } = await q;
     if (error) return c.json({ error: error.message }, 500);
-    return c.json({ packages: data ?? [] });
+
+    const suiteIds = [
+      ...new Set(
+        (data ?? [])
+          .map((p: { suite_id?: string | null }) => p.suite_id)
+          .filter(Boolean) as string[],
+      ),
+    ];
+    const suiteMap: Record<
+      string,
+      { suite_code?: string; contact_name?: string; contact_phone?: string }
+    > = {};
+    if (suiteIds.length) {
+      const { data: suites } = await freightDb()
+        .from("suites")
+        .select("id, suite_code, contact_name, contact_phone")
+        .in("id", suiteIds);
+      for (const s of suites ?? []) {
+        suiteMap[s.id] = s;
+      }
+    }
+    const packages = (data ?? []).map((p: { suite_id?: string | null }) => ({
+      ...p,
+      suites: p.suite_id ? suiteMap[p.suite_id] ?? null : null,
+    }));
+    return c.json({ packages });
   });
 
   app.get("/packages/:id", async (c) => {
@@ -394,18 +419,37 @@ export function registerPipelineRoutes(app: FreightApp) {
     const db = freightDb();
     const { data: pkg, error } = await db
       .from("packages")
-      .select("*, suites(*), facilities:current_facility_id(name, code, facility_type)")
+      .select("*")
       .eq("id", id)
       .eq("organization_id", user.organizationId)
       .maybeSingle();
     if (error) return c.json({ error: error.message }, 500);
     if (!pkg) return c.json({ error: "Not found" }, 404);
+
+    let suite = null;
+    if (pkg.suite_id) {
+      const { data: s } = await db.from("suites").select("*").eq("id", pkg.suite_id).maybeSingle();
+      suite = s;
+    }
+    let facility = null;
+    if (pkg.current_facility_id) {
+      const { data: f } = await db
+        .from("facilities")
+        .select("name, code, facility_type")
+        .eq("id", pkg.current_facility_id)
+        .maybeSingle();
+      facility = f;
+    }
+
     const { data: scans } = await db
       .from("package_scan_events")
       .select("*")
       .eq("package_id", id)
       .order("occurred_at", { ascending: false });
-    return c.json({ package: pkg, scanEvents: scans ?? [] });
+    return c.json({
+      package: { ...pkg, suites: suite, facilities: facility },
+      scanEvents: scans ?? [],
+    });
   });
 
   app.post("/packages", async (c) => {
