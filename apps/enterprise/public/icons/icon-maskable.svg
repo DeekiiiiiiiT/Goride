@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <!-- Safe zone: keep mark inside center ~80% for maskable crop -->
+  <rect width="512" height="512" fill="#030213"/>
+  <g transform="translate(56 56) scale(0.78)">
+    <path d="M96 224h320l-24 144H120L96 224z" stroke="#a5b4fc" stroke-width="24" stroke-linejoin="round"/>
+    <path d="M144 152h224l22 72H122l22-72z" fill="#818cf8"/>
+    <circle cx="160" cy="384" r="28" fill="#e0e7ff"/>
+    <circle cx="352" cy="384" r="28" fill="#e0e7ff"/>
+    <rect x="232" y="256" width="48" height="80" rx="8" fill="#c7d2fe"/>
+  </g>
+</svg>

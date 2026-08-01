@@ -1,5 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { PwaProvider } from '@fleet/components/pwa/PwaProvider';
+import { PwaLifecycleHost } from '@fleet/components/pwa/PwaLifecycleHost';
 
 import { AccessibilityPage } from '@/pages/AccessibilityPage';
 import { CookiesPage } from '@/pages/CookiesPage';
@@ -155,7 +157,9 @@ function Fall() {
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <PwaProvider>
+      <PwaLifecycleHost />
+      <BrowserRouter>
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/rides" element={<RidesPage />} />
@@ -312,6 +316,12 @@ export default function App() {
               </Gated>
             }
           />
+          <Route path="warehouse" element={<Navigate to="/app/miami-scan" replace />} />
+          <Route path="mailbox" element={<Navigate to="/app/packages" replace />} />
+          <Route path="last-mile" element={<Navigate to="/app/fulfillment" replace />} />
+          <Route path="setup" element={<Navigate to="/app/shipments" replace />} />
+          <Route path="fleet-ops" element={<Navigate to="/app/fuel/logs" replace />} />
+          <Route path="system" element={<Navigate to="/app/settings" replace />} />
           <Route
             path="miami-scan"
             element={
@@ -601,6 +611,7 @@ export default function App() {
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-    </BrowserRouter>
+      </BrowserRouter>
+    </PwaProvider>
   );
 }

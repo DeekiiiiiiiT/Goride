@@ -5,8 +5,11 @@ import {
   isStandaloneDisplay,
   type BeforeInstallPromptEvent,
 } from '../../pwa/pwaMeta';
+import { IS_ENTERPRISE_PRODUCT } from '../../config/productLine';
 
-const DISMISS_INSTALL_KEY = 'roam-fleet-pwa-install-dismissed';
+const DISMISS_INSTALL_KEY = IS_ENTERPRISE_PRODUCT
+  ? 'roam-enterprise-pwa-install-dismissed'
+  : 'roam-fleet-pwa-install-dismissed';
 
 function wasInstallDismissed(): boolean {
   try {

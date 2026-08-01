@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "icons:generate": "node scripts/generate-pwa-icons.mjs"
   },
   "dependencies": {
     "@roam/types": "workspace:*",
@@ -75,7 +76,8 @@
     "sonner": "^2.0.3",
     "tailwind-merge": "*",
     "tw-animate-css": "^1.3.8",
-    "vaul": "^1.1.2"
+    "vaul": "^1.1.2",
+    "workbox-window": "^7.4.1"
   },
   "devDependencies": {
     "@tailwindcss/vite": "4.1.12",
@@ -83,7 +85,9 @@
     "@types/leaflet": "*",
     "@types/papaparse": "*",
     "@vitejs/plugin-react": "^4.7.0",
+    "sharp": "^0.35.3",
     "tailwindcss": "4.1.12",
-    "vite": "6.3.5"
+    "vite": "6.3.5",
+    "vite-plugin-pwa": "^1.3.0"
   }
 }

@@ -62,9 +62,9 @@ export function MiamiScanPage() {
     <div className="mx-auto max-w-xl space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">Miami Scan Station</h1>
+          <h1 className="text-2xl font-semibold">Warehouse receive</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Scan courier barcode → match pre-alert or create unknown with suite.
+            Scan courier barcode — match pre-alert or create unknown with suite.
           </p>
         </div>
         {!(facilities.data?.facilities ?? []).length && (

@@ -1,5 +1,6 @@
 import { FormEvent, useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { InstallAppButton } from '@fleet/components/pwa/PwaLifecycleHost';
 import { useAuth } from '@/app/auth/AuthProvider';
 
 const GENERIC_AUTH_ERROR = 'Invalid email or password';
@@ -80,6 +81,10 @@ export function LoginPage() {
             {submitting ? 'Signing in…' : 'Sign in'}
           </button>
         </form>
+
+        <div className="mt-6">
+          <InstallAppButton className="h-10 w-full border-slate-700 bg-transparent text-slate-200 hover:bg-slate-800 hover:text-white" />
+        </div>
 
         <p className="mt-6 text-center text-sm text-slate-500">
           <Link to="/" className="text-slate-300 underline-offset-2 hover:underline">

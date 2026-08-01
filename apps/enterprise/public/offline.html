@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#030213" />
+    <title>Offline — Roam Enterprise</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #0f172a;
+        --card: #1e293b;
+        --text: #f1f5f9;
+        --muted: #94a3b8;
+        --accent: #f59e0b;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        font-family: "Segoe UI", system-ui, sans-serif;
+        background: radial-gradient(ellipse at top, #1c1917 0%, var(--bg) 55%);
+        color: var(--text);
+        padding: 24px;
+      }
+      .card {
+        max-width: 420px;
+        width: 100%;
+        background: color-mix(in srgb, var(--card) 92%, transparent);
+        border: 1px solid #334155;
+        border-radius: 16px;
+        padding: 32px 28px;
+        text-align: center;
+      }
+      .mark {
+        width: 64px;
+        height: 64px;
+        margin: 0 auto 20px;
+        border-radius: 16px;
+        background: #030213;
+        display: grid;
+        place-items: center;
+      }
+      h1 {
+        margin: 0 0 8px;
+        font-size: 1.35rem;
+        font-weight: 650;
+      }
+      p {
+        margin: 0 0 24px;
+        color: var(--muted);
+        line-height: 1.5;
+        font-size: 0.95rem;
+      }
+      button {
+        appearance: none;
+        border: 0;
+        border-radius: 10px;
+        background: var(--accent);
+        color: #030213;
+        font-weight: 650;
+        font-size: 0.95rem;
+        padding: 12px 20px;
+        cursor: pointer;
+        min-height: 44px;
+      }
+      button:hover { filter: brightness(1.05); }
+    </style>
+  </head>
+  <body>
+    <main class="card">
+      <div class="mark" aria-hidden="true">
+        <svg width="36" height="36" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M7 14h18l-1.4 9H8.4L7 14z" stroke="#fcd34d" stroke-width="1.75" stroke-linejoin="round"/>
+          <path d="M10 10h12l1.2 4H8.8L10 10z" fill="#f59e0b"/>
+          <circle cx="11" cy="24" r="1.6" fill="#fef3c7"/>
+          <circle cx="21" cy="24" r="1.6" fill="#fef3c7"/>
+        </svg>
+      </div>
+      <h1>You’re offline</h1>
+      <p>
+        Roam Enterprise needs a connection to show live ops data.
+        Reconnect, then try again — nothing is served from a stale cache.
+      </p>
+      <button type="button" onclick="location.reload()">Try again</button>
+    </main>
+  </body>
+</html>

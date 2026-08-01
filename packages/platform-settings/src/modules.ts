@@ -30,8 +30,8 @@ export const ENTERPRISE_MODULE_CATALOG: readonly ModuleCatalogEntry[] = [
   },
   {
     key: 'miamiScan',
-    label: 'Miami Scan',
-    description: 'Warehouse intake scanning station.',
+    label: 'Warehouse Receive',
+    description: 'Miami warehouse intake scanning station.',
     group: 'freight',
   },
   {
