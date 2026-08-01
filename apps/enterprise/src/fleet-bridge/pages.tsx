@@ -26,8 +26,20 @@ export const BridgedDriversPage = bridge(() =>
   import('@fleet/components/drivers/DriversPage').then((m) => ({ default: m.DriversPage })),
 );
 
+export const BridgedDriverAnalyticsPage = bridge(() =>
+  import('@fleet/components/drivers/analytics/DriverAnalytics').then((m) => ({
+    default: m.DriverAnalytics,
+  })),
+);
+
 export const BridgedVehiclesPage = bridge(() =>
   import('@fleet/components/vehicles/VehiclesPage').then((m) => ({ default: m.VehiclesPage })),
+);
+
+export const BridgedVehicleAnalyticsPage = bridge(() =>
+  import('@fleet/components/vehicles/VehicleAnalytics').then((m) => ({
+    default: m.VehicleAnalytics,
+  })),
 );
 
 export const BridgedMaintenancePage = bridge(() =>
@@ -40,26 +52,24 @@ export const BridgedEquipmentPage = bridge(() =>
   import('@fleet/components/fleet/FleetPage').then((m) => ({ default: m.FleetPage })),
 );
 
-export const BridgedFuelPage = bridge(() =>
-  import('@fleet/pages/FuelManagement').then((m) => ({ default: m.FuelManagement })),
-);
+export {
+  BridgedFuelPage,
+  BridgedFuelLogsPage,
+  BridgedFuelReviewQueuePage,
+  BridgedFuelCardsPage,
+  BridgedFuelAnalyticsPage,
+} from '@/fleet-bridge/FuelPages';
 
-export const BridgedTollLogsPage = bridge(() =>
-  import('@fleet/pages/TollLogs').then((m) => ({ default: m.TollLogsPage })),
-);
+export {
+  BridgedTollLogsPage,
+  BridgedTagInventoryPage,
+  BridgedTollAnalyticsPage,
+} from '@/fleet-bridge/TollPages';
 
 export const BridgedTollReconciliationPage = bridge(() =>
   import('@fleet/pages/TollReconciliation').then((m) => {
     const Comp = (m as { default?: React.ComponentType }).default
       || (() => <div>Toll reconciliation</div>);
-    return { default: Comp };
-  }),
-);
-
-export const BridgedTagInventoryPage = bridge(() =>
-  import('@fleet/pages/TagInventory').then((m) => {
-    const Comp = (m as { default?: React.ComponentType }).default
-      || (() => <div>Tag inventory</div>);
     return { default: Comp };
   }),
 );

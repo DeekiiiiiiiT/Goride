@@ -1,6 +1,6 @@
 /**
  * Roam Enterprise — Freight Forwarding service (Path B)
- * Domestic Jamaica v1: shipments, legs, consignments, carriers, clients, rate cards, tracking, billing.
+ * Domestic shipments + Jamaica intl mailbox pipeline (packages/manifests/hub/fulfillment).
  */
 import { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import { z } from "https://deno.land/x/zod@v3.24.2/mod.ts";
@@ -12,6 +12,7 @@ import {
 } from "../_shared/enterpriseAccess.ts";
 import { ledgerPostEntry } from "../_shared/unifiedLedger/postEntry.ts";
 import { SHIPMENT_TRANSITIONS } from "./transitions.ts";
+import { registerPipelineRoutes } from "./pipeline.ts";
 
 const app = new Hono().basePath("/freight");
 
@@ -70,6 +71,8 @@ async function appendTracking(
 // Health
 // ---------------------------------------------------------------------------
 app.get("/health", (c) => c.json({ ok: true, service: "freight" }));
+
+registerPipelineRoutes(app);
 
 // ---------------------------------------------------------------------------
 // Carriers

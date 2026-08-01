@@ -15,6 +15,15 @@ export function useFreightDashboard() {
   });
 }
 
+export function usePipelineDashboard() {
+  const { organizationId, session } = useAuth();
+  return useQuery({
+    queryKey: ['freight', 'pipeline-dashboard', organizationId],
+    queryFn: () => freightService.pipelineDashboard(organizationId),
+    enabled: Boolean(session),
+  });
+}
+
 export function useFreightShipments(status?: string) {
   const { organizationId, session } = useAuth();
   return useQuery({
@@ -122,5 +131,170 @@ export function useCreateRateCard() {
   return useMutation({
     mutationFn: (body: unknown) => freightService.createRateCard(body, organizationId),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['freight', 'rate-cards'] }),
+  });
+}
+
+// --- Pipeline hooks ---
+
+export function useFacilities(type?: string) {
+  const { organizationId, session } = useAuth();
+  return useQuery({
+    queryKey: ['freight', 'facilities', organizationId, type],
+    queryFn: () => freightService.listFacilities(organizationId, type),
+    enabled: Boolean(session),
+  });
+}
+
+export function useSeedFacilities() {
+  const organizationId = useFreightOrgId();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => freightService.seedFacilities(organizationId),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['freight', 'facilities'] }),
+  });
+}
+
+export function useSuites() {
+  const { organizationId, session } = useAuth();
+  return useQuery({
+    queryKey: ['freight', 'suites', organizationId],
+    queryFn: () => freightService.listSuites(organizationId),
+    enabled: Boolean(session),
+  });
+}
+
+export function useCreateSuite() {
+  const organizationId = useFreightOrgId();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: unknown) => freightService.createSuite(body, organizationId),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['freight', 'suites'] }),
+  });
+}
+
+export function usePackages(status?: string) {
+  const { organizationId, session } = useAuth();
+  return useQuery({
+    queryKey: ['freight', 'packages', organizationId, status],
+    queryFn: () => freightService.listPackages(organizationId, status),
+    enabled: Boolean(session),
+  });
+}
+
+export function usePackage(id: string | undefined) {
+  const { organizationId, session } = useAuth();
+  return useQuery({
+    queryKey: ['freight', 'package', organizationId, id],
+    queryFn: () => freightService.getPackage(id!, organizationId),
+    enabled: Boolean(session && id),
+  });
+}
+
+export function useCreatePackage() {
+  const organizationId = useFreightOrgId();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: unknown) => freightService.createPackage(body, organizationId),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['freight', 'packages'] });
+      void qc.invalidateQueries({ queryKey: ['freight', 'pipeline-dashboard'] });
+    },
+  });
+}
+
+export function useScanPackage() {
+  const organizationId = useFreightOrgId();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (args: { body: unknown; idempotencyKey?: string }) =>
+      freightService.scan(args.body, organizationId, args.idempotencyKey),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['freight', 'packages'] });
+      void qc.invalidateQueries({ queryKey: ['freight', 'pipeline-dashboard'] });
+    },
+  });
+}
+
+export function useHubSort() {
+  const organizationId = useFreightOrgId();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: unknown) => freightService.hubSort(body, organizationId),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['freight', 'packages'] });
+      void qc.invalidateQueries({ queryKey: ['freight', 'fulfillment'] });
+    },
+  });
+}
+
+export function useManifests(status?: string) {
+  const { organizationId, session } = useAuth();
+  return useQuery({
+    queryKey: ['freight', 'manifests', organizationId, status],
+    queryFn: () => freightService.listManifests(organizationId, status),
+    enabled: Boolean(session),
+  });
+}
+
+export function useManifest(id: string | undefined) {
+  const { organizationId, session } = useAuth();
+  return useQuery({
+    queryKey: ['freight', 'manifest', organizationId, id],
+    queryFn: () => freightService.getManifest(id!, organizationId),
+    enabled: Boolean(session && id),
+  });
+}
+
+export function useCreateManifest() {
+  const organizationId = useFreightOrgId();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: unknown) => freightService.createManifest(body, organizationId),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['freight', 'manifests'] }),
+  });
+}
+
+export function useCustomsCases() {
+  const { organizationId, session } = useAuth();
+  return useQuery({
+    queryKey: ['freight', 'customs', organizationId],
+    queryFn: () => freightService.listCustomsCases(organizationId),
+    enabled: Boolean(session),
+  });
+}
+
+export function useReadyFulfillment() {
+  const { organizationId, session } = useAuth();
+  return useQuery({
+    queryKey: ['freight', 'fulfillment', organizationId],
+    queryFn: () => freightService.listReadyFulfillment(organizationId),
+    enabled: Boolean(session),
+  });
+}
+
+export function useClientFleet(clientId?: string) {
+  const { organizationId, session } = useAuth();
+  return useQuery({
+    queryKey: ['freight', 'client-fleet', organizationId, clientId],
+    queryFn: () => freightService.listClientFleet(organizationId, clientId),
+    enabled: Boolean(session),
+  });
+}
+
+export function useCreateClientFleet() {
+  const organizationId = useFreightOrgId();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: unknown) => freightService.createClientFleet(body, organizationId),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['freight', 'client-fleet'] }),
+  });
+}
+
+export function useDeliveryBatches() {
+  const { organizationId, session } = useAuth();
+  return useQuery({
+    queryKey: ['freight', 'batches', organizationId],
+    queryFn: () => freightService.listDeliveryBatches(organizationId),
+    enabled: Boolean(session),
   });
 }

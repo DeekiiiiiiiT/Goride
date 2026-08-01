@@ -20,15 +20,23 @@ export function DashboardPage() {
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">Operations</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Jamaica freight overview · America/Jamaica
+            Jamaica freight overview · America/Jamaica — domestic shipments + intl mailbox pipeline
           </p>
         </div>
-        <Link
-          to="/app/shipments/new"
-          className="rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-semibold text-slate-950 hover:bg-amber-400"
-        >
-          New shipment
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            to="/app/packages"
+            className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium hover:bg-slate-50"
+          >
+            Packages
+          </Link>
+          <Link
+            to="/app/shipments/new"
+            className="rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-semibold text-slate-950 hover:bg-amber-400"
+          >
+            New shipment
+          </Link>
+        </div>
       </div>
 
       {isLoading && <p className="text-sm text-slate-500">Loading dashboard…</p>}

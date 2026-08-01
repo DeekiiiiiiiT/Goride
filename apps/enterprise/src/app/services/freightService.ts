@@ -35,9 +35,31 @@ async function freightFetch<T>(
   return json as T;
 }
 
+/** Public POD endpoints (no auth). */
+async function publicFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${API_ENDPOINTS.freight}${path}`, {
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: publicAnonKey,
+      ...(init?.headers || {}),
+    },
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(typeof json.error === 'string' ? json.error : res.statusText);
+  }
+  return json as T;
+}
+
 export const freightService = {
   dashboard: (organizationId?: string | null) =>
     freightFetch<{ counts: Record<string, number>; exceptions: number }>('/dashboard', {
+      organizationId,
+    }),
+
+  pipelineDashboard: (organizationId?: string | null) =>
+    freightFetch<{ counts: Record<string, number> }>('/pipeline/dashboard', {
       organizationId,
     }),
 
@@ -118,5 +140,237 @@ export const freightService = {
       method: 'POST',
       body: JSON.stringify(body),
       organizationId,
+    }),
+
+  // --- Pipeline ---
+  listFacilities: (organizationId?: string | null, type?: string) =>
+    freightFetch<{ facilities: Record<string, unknown>[] }>(
+      `/facilities${type ? `?type=${encodeURIComponent(type)}` : ''}`,
+      { organizationId },
+    ),
+
+  createFacility: (body: unknown, organizationId?: string | null) =>
+    freightFetch<{ facility: Record<string, unknown> }>('/facilities', {
+      method: 'POST',
+      body: JSON.stringify(body),
+      organizationId,
+    }),
+
+  seedFacilities: (organizationId?: string | null) =>
+    freightFetch<{ facilities: Record<string, unknown>[] }>('/facilities/seed-defaults', {
+      method: 'POST',
+      organizationId,
+    }),
+
+  listSuites: (organizationId?: string | null) =>
+    freightFetch<{ suites: Record<string, unknown>[] }>('/suites', { organizationId }),
+
+  createSuite: (body: unknown, organizationId?: string | null) =>
+    freightFetch<{ suite: Record<string, unknown> }>('/suites', {
+      method: 'POST',
+      body: JSON.stringify(body),
+      organizationId,
+    }),
+
+  listPackages: (organizationId?: string | null, status?: string) =>
+    freightFetch<{ packages: Record<string, unknown>[] }>(
+      `/packages${status ? `?status=${encodeURIComponent(status)}` : ''}`,
+      { organizationId },
+    ),
+
+  getPackage: (id: string, organizationId?: string | null) =>
+    freightFetch<{
+      package: Record<string, unknown>;
+      scanEvents: Record<string, unknown>[];
+    }>(`/packages/${id}`, { organizationId }),
+
+  createPackage: (body: unknown, organizationId?: string | null) =>
+    freightFetch<{ package: Record<string, unknown> }>('/packages', {
+      method: 'POST',
+      body: JSON.stringify(body),
+      organizationId,
+    }),
+
+  updatePackage: (id: string, body: unknown, organizationId?: string | null) =>
+    freightFetch<{ package: Record<string, unknown> }>(`/packages/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+      organizationId,
+    }),
+
+  scan: (body: unknown, organizationId?: string | null, idempotencyKey?: string) =>
+    freightFetch<{
+      package: Record<string, unknown>;
+      scanEvent: Record<string, unknown>;
+      createdUnknown?: boolean;
+      duplicate?: boolean;
+    }>('/scans', {
+      method: 'POST',
+      body: JSON.stringify(body),
+      organizationId,
+      headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {},
+    }),
+
+  hubSort: (body: unknown, organizationId?: string | null) =>
+    freightFetch<{ package: Record<string, unknown> }>('/hub/sort', {
+      method: 'POST',
+      body: JSON.stringify(body),
+      organizationId,
+    }),
+
+  listManifests: (organizationId?: string | null, status?: string) =>
+    freightFetch<{ manifests: Record<string, unknown>[] }>(
+      `/manifests${status ? `?status=${encodeURIComponent(status)}` : ''}`,
+      { organizationId },
+    ),
+
+  getManifest: (id: string, organizationId?: string | null) =>
+    freightFetch<{
+      manifest: Record<string, unknown>;
+      lines: Record<string, unknown>[];
+      customsCase: Record<string, unknown> | null;
+    }>(`/manifests/${id}`, { organizationId }),
+
+  createManifest: (body: unknown, organizationId?: string | null) =>
+    freightFetch<{ manifest: Record<string, unknown> }>('/manifests', {
+      method: 'POST',
+      body: JSON.stringify(body),
+      organizationId,
+    }),
+
+  addManifestPackages: (
+    id: string,
+    packageIds: string[],
+    organizationId?: string | null,
+  ) =>
+    freightFetch<{ added: Record<string, unknown>[] }>(`/manifests/${id}/packages`, {
+      method: 'POST',
+      body: JSON.stringify({ packageIds }),
+      organizationId,
+    }),
+
+  sealManifest: (id: string, organizationId?: string | null) =>
+    freightFetch<{ manifest: Record<string, unknown> }>(`/manifests/${id}/seal`, {
+      method: 'POST',
+      organizationId,
+      headers: { 'Idempotency-Key': `seal-ui:${id}` },
+    }),
+
+  transitionManifest: (
+    id: string,
+    status: string,
+    awbOrBl?: string,
+    organizationId?: string | null,
+  ) =>
+    freightFetch<{ manifest: Record<string, unknown> }>(`/manifests/${id}/transition`, {
+      method: 'POST',
+      body: JSON.stringify({ status, awbOrBl }),
+      organizationId,
+    }),
+
+  customsExport: (id: string, organizationId?: string | null) =>
+    freightFetch<{
+      manifestNumber: string;
+      csv: string;
+      invoicePaths: string[];
+    }>(`/manifests/${id}/customs-export`, { organizationId }),
+
+  listCustomsCases: (organizationId?: string | null) =>
+    freightFetch<{ customsCases: Record<string, unknown>[] }>('/customs-cases', {
+      organizationId,
+    }),
+
+  updateCustomsCase: (id: string, body: unknown, organizationId?: string | null) =>
+    freightFetch<{ customsCase: Record<string, unknown> }>(`/customs-cases/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+      organizationId,
+    }),
+
+  listClientFleet: (organizationId?: string | null, clientId?: string) =>
+    freightFetch<{ assets: Record<string, unknown>[] }>(
+      `/client-fleet${clientId ? `?clientId=${encodeURIComponent(clientId)}` : ''}`,
+      { organizationId },
+    ),
+
+  createClientFleet: (body: unknown, organizationId?: string | null) =>
+    freightFetch<{ asset: Record<string, unknown> }>('/client-fleet', {
+      method: 'POST',
+      body: JSON.stringify(body),
+      organizationId,
+    }),
+
+  listReadyFulfillment: (organizationId?: string | null) =>
+    freightFetch<{ packages: Record<string, unknown>[] }>('/fulfillment/ready', {
+      organizationId,
+    }),
+
+  collectPickup: (body: unknown, organizationId?: string | null) =>
+    freightFetch<{ package: Record<string, unknown> }>('/fulfillment/pickup/collect', {
+      method: 'POST',
+      body: JSON.stringify(body),
+      organizationId,
+    }),
+
+  createDeliveryBatch: (body: unknown, organizationId?: string | null) =>
+    freightFetch<{ batch: Record<string, unknown>; podToken: string }>(
+      '/fulfillment/batches',
+      {
+        method: 'POST',
+        body: JSON.stringify(body),
+        organizationId,
+      },
+    ),
+
+  listDeliveryBatches: (organizationId?: string | null) =>
+    freightFetch<{ batches: Record<string, unknown>[] }>('/fulfillment/batches', {
+      organizationId,
+    }),
+
+  getDeliveryBatch: (id: string, organizationId?: string | null) =>
+    freightFetch<{
+      batch: Record<string, unknown>;
+      stops: Record<string, unknown>[];
+    }>(`/fulfillment/batches/${id}`, { organizationId }),
+
+  loadBatchStop: (
+    batchId: string,
+    packageId: string,
+    organizationId?: string | null,
+  ) =>
+    freightFetch<{ stop: Record<string, unknown> }>(
+      `/fulfillment/batches/${batchId}/load`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ packageId }),
+        organizationId,
+      },
+    ),
+
+  deliverBatchStop: (
+    batchId: string,
+    body: unknown,
+    organizationId?: string | null,
+  ) =>
+    freightFetch<{ stop: Record<string, unknown> }>(
+      `/fulfillment/batches/${batchId}/deliver-stop`,
+      {
+        method: 'POST',
+        body: JSON.stringify(body),
+        organizationId,
+      },
+    ),
+
+  publicPod: (token: string) =>
+    publicFetch<{
+      batchNumber: string;
+      status: string;
+      stops: Record<string, unknown>[];
+    }>(`/public/pod/${token}`),
+
+  publicPodDeliver: (token: string, body: unknown) =>
+    publicFetch<{ stop: Record<string, unknown> }>(`/public/pod/${token}/deliver`, {
+      method: 'POST',
+      body: JSON.stringify(body),
     }),
 };

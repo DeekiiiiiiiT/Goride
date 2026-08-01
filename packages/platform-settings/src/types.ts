@@ -37,6 +37,14 @@ export interface EnterpriseEnabledModules {
   carriers: boolean;
   clients: boolean;
   rateCards: boolean;
+  suites: boolean;
+  mailboxPackages: boolean;
+  miamiScan: boolean;
+  manifests: boolean;
+  customsBoard: boolean;
+  hubStation: boolean;
+  fulfillmentDesk: boolean;
+  clientFleet: boolean;
   fuelManagement: boolean;
   tollManagement: boolean;
   drivers: boolean;

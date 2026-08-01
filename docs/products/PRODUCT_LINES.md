@@ -24,10 +24,15 @@ Enterprise orgs are tagged `productLine: enterprise` with business types from `@
 
 ### Locked v1 scope (Freight Forwarding)
 
-- Back-office desktop only (no courier field app / offline PWA)
+- Back-office desktop only (no customer self-serve portal in intl pipeline)
 - Own fleet + 3PL carriers modeled from day one
-- Domestic Jamaica first (no customs)
-- Fuel/toll deferred to v1.1
+- Domestic Jamaica shipments **and** international mailbox pipeline (Miami → customs broker pack → JA hub → pickup/door)
+- Mixed last-mile fleets: Roam marketplace, org fleet, client-owned, 3PL
+- Customs: broker CSV export + manual status board (no live ASYCUDA API)
+- Monetization / payment wall deferred
+- Fuel/toll available via fleet-bridge modules
+
+Full ops runbook: [`docs/enterprise-intl-freight-pipeline.md`](../enterprise-intl-freight-pipeline.md)
 
 ## Roam Dash
 
