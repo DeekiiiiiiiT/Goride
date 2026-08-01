@@ -12,6 +12,11 @@ import {
 } from "./product_line.ts";
 import { getPlatformSettingsCached } from "./platform_settings.ts";
 import { ensureCustomerOrganization } from "./ensure_customer_org.ts";
+import {
+  DEFAULT_ENTERPRISE_MODULES,
+  resolveEffectiveModules,
+  sanitizeModuleOverrides,
+} from "./enterprise_modules.ts";
 
 type RegisterDeps = {
   fetchCustomersWithCache: (productLine?: "fleet" | "enterprise") => Promise<any[]>;
@@ -428,6 +433,109 @@ export function registerEnterpriseAdminRoutes(app: Hono, deps: RegisterDeps) {
         });
 
       return c.json({ members });
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // GET org feature modules (product-line + overrides + effective)
+  app.get(`${base}/customers/:orgId/modules`, async (c) => {
+    try {
+      const auth = await requireProductAdmin(c, "enterprise");
+      if (auth instanceof Response) return auth;
+      const orgId = c.req.param("orgId");
+      const supabase = serviceClient();
+      const { data: org, error } = await supabase
+        .from("organizations")
+        .select("id, product_line, enabled_modules, name")
+        .eq("id", orgId)
+        .maybeSingle();
+      if (error) throw error;
+      if (!org) return c.json({ error: "Organization not found" }, 404);
+      if (org.product_line !== "enterprise") {
+        return c.json({ error: "Not an Enterprise organization" }, 400);
+      }
+
+      const settings = await getPlatformSettingsCached("enterprise");
+      const productLineModules = {
+        ...DEFAULT_ENTERPRISE_MODULES,
+        ...((settings?.enabledModules as Record<string, boolean>) || {}),
+      };
+      const orgOverrides = (org.enabled_modules as Record<string, boolean> | null) || null;
+      const effective = resolveEffectiveModules(productLineModules, orgOverrides);
+
+      return c.json({
+        orgId,
+        productLineModules,
+        orgOverrides,
+        effectiveModules: effective,
+      });
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // PUT org feature module overrides
+  app.put(`${base}/customers/:orgId/modules`, async (c) => {
+    try {
+      const auth = await requireProductAdmin(c, "enterprise");
+      if (auth instanceof Response) return auth;
+      const WRITE_ROLES = new Set([
+        "platform_owner",
+        "superadmin",
+        "enterprise_admin",
+        "enterprise_ops",
+      ]);
+      if (!WRITE_ROLES.has(auth.role) && !auth.isPlatformRole) {
+        return c.json({ error: "Forbidden" }, 403);
+      }
+
+      const orgId = c.req.param("orgId");
+      const body = await c.req.json();
+      const overrides = sanitizeModuleOverrides(
+        body.enabledModules === undefined ? body : body.enabledModules,
+      );
+
+      const supabase = serviceClient();
+      const { data: org, error: getErr } = await supabase
+        .from("organizations")
+        .select("id, product_line, name")
+        .eq("id", orgId)
+        .maybeSingle();
+      if (getErr) throw getErr;
+      if (!org) return c.json({ error: "Organization not found" }, 404);
+      if (org.product_line !== "enterprise") {
+        return c.json({ error: "Not an Enterprise organization" }, 400);
+      }
+
+      const { error: updErr } = await supabase
+        .from("organizations")
+        .update({ enabled_modules: overrides })
+        .eq("id", orgId);
+      if (updErr) throw updErr;
+
+      const settings = await getPlatformSettingsCached("enterprise");
+      const productLineModules = {
+        ...DEFAULT_ENTERPRISE_MODULES,
+        ...((settings?.enabledModules as Record<string, boolean>) || {}),
+      };
+      const effective = resolveEffectiveModules(productLineModules, overrides);
+
+      await logAdminAction({
+        actorId: auth.id,
+        actorName: auth.email,
+        action: "update_enterprise_org_modules",
+        targetId: orgId,
+        targetEmail: "",
+        details: `Updated feature modules for ${org.name || orgId}`,
+      });
+
+      return c.json({
+        success: true,
+        orgId,
+        orgOverrides: overrides,
+        effectiveModules: effective,
+      });
     } catch (e: any) {
       return c.json({ error: e.message }, 500);
     }

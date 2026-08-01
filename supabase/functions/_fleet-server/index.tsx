@@ -15494,6 +15494,55 @@ registerEnterpriseAdminRoutes(app, {
   canonicalizeRole,
 });
 
+import {
+  DEFAULT_ENTERPRISE_MODULES,
+  resolveEffectiveModules,
+} from "./enterprise_modules.ts";
+
+// GET /enterprise/me/modules — tenant effective feature modules
+app.get("/make-server-37f42386/enterprise/me/modules", requireAuth(), async (c) => {
+  try {
+    const rbacUser = c.get("rbacUser") as RbacUser;
+    let orgId = rbacUser.organizationId;
+    if (!orgId && (rbacUser.resolvedRole === "fleet_owner" || rbacUser.rawRole === "admin")) {
+      orgId = rbacUser.userId;
+    }
+    if (!orgId) {
+      return c.json({ error: "No organization on session" }, 403);
+    }
+
+    const { data: org, error } = await supabase
+      .from("organizations")
+      .select("id, product_line, enabled_modules")
+      .eq("id", orgId)
+      .maybeSingle();
+    if (error) throw error;
+    if (!org) {
+      return c.json({ error: "Organization not found" }, 404);
+    }
+
+    const settings = await getPlatformSettingsCached(
+      org.product_line === "fleet" ? "fleet" : "enterprise",
+    );
+    const productLineModules = {
+      ...DEFAULT_ENTERPRISE_MODULES,
+      ...((settings?.enabledModules as Record<string, boolean>) || {}),
+    };
+    const orgOverrides = (org.enabled_modules as Record<string, boolean> | null) || null;
+    const effectiveModules = resolveEffectiveModules(productLineModules, orgOverrides);
+
+    return c.json({
+      orgId,
+      productLine: org.product_line,
+      orgOverrides,
+      effectiveModules,
+    });
+  } catch (e: any) {
+    console.error("[enterprise/me/modules]", e);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
 // ═══════════════════════════════════════════════════════════════════════════
 // FEATURE FLAGS ADMIN ENDPOINTS (Phase 0 of Fleet Data Isolation)
 // ═══════════════════════════════════════════════════════════════════════════

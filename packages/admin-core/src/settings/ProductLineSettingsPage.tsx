@@ -55,6 +55,7 @@ import {
   type ConsumerSegmentSettings,
 } from '@roam/platform-settings';
 import { businessTypesForSegment } from '@roam/business-config';
+import { ENTERPRISE_MODULE_CATALOG } from '@roam/platform-settings';
 
 // -------------------------------------------------------------------
 // Types
@@ -719,21 +720,22 @@ export function ProductLineSettingsPage({
         <div className="space-y-2">
           {segment === 'enterprise' ? (
             <>
-              {(
-                [
-                  { key: 'shipments', label: 'Shipments', description: 'Create and track freight shipments.', icon: Truck },
-                  { key: 'carriers', label: 'Carriers', description: 'Own fleet and 3PL carrier directory.', icon: Building2 },
-                  { key: 'clients', label: 'Clients', description: 'Bill-to clients for freight jobs.', icon: UserPlus },
-                  { key: 'rateCards', label: 'Rate Cards', description: 'Client and route pricing (JMD).', icon: FileText },
-                  { key: 'businessFinance', label: 'Business Finance', description: 'P&L and billing for freight orgs.', icon: BarChart3 },
-                  { key: 'claimableLoss', label: 'Cargo Claims', description: 'Dispute and resolve cargo claims.', icon: FileText },
-                ] as const
-              ).map((mod) => {
+              {ENTERPRISE_MODULE_CATALOG.map((mod) => {
                 const on = Boolean(
                   settings.enabledModules &&
                     (settings.enabledModules as Record<string, boolean>)[mod.key],
                 );
-                const IconComp = mod.icon;
+                const IconComp =
+                  mod.key === 'fuelManagement' ? Fuel
+                  : mod.key === 'tollManagement' ? MapPin
+                  : mod.key === 'drivers' || mod.key === 'driverPortal' ? Car
+                  : mod.key === 'vehicles' || mod.key === 'fleetEquipment' ? Truck
+                  : mod.key === 'businessFinance' || mod.key === 'reports' || mod.key === 'performanceAnalytics' ? BarChart3
+                  : mod.key === 'claimableLoss' ? FileText
+                  : mod.key === 'teamManagement' || mod.key === 'clients' ? UserPlus
+                  : mod.key === 'carriers' ? Building2
+                  : mod.key === 'shipments' ? Ship
+                  : Wrench;
                 return (
                   <button
                     key={mod.key}

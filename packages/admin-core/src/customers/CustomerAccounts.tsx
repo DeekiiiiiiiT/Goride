@@ -31,6 +31,7 @@ import { recoveryRedirectForSurface, type AuthRecoverySurface } from '@roam/auth
 import { toast } from 'sonner';
 import { ConfirmationModal } from './ConfirmationModal';
 import { SetPasswordModal } from './SetPasswordModal';
+import { CustomerDetailPanel } from './CustomerDetailPanel';
 import type { CustomerAccountsProps } from './types';
 import { deriveAccountCapabilities } from './capabilities';
 import { buildCustomerApiPaths, productLineHeaders } from './apiPaths';
@@ -135,7 +136,9 @@ export function CustomerAccounts({
   const [createCopied, setCreateCopied] = useState(false);
 
   // Phase 6: Organization detail drill-down
-  const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null);
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const canOpenDetail =
+    !!renderOrganizationDetail || apiNamespace === '/enterprise-admin';
 
   // Phase 7: Set Password modal
   const [setPasswordTarget, setSetPasswordTarget] = useState<Customer | null>(null);
@@ -492,12 +495,28 @@ export function CustomerAccounts({
   // ---------------------------------------------------------------
 
   // Phase 6: If an org is selected, show the detail view
-  if (selectedOrgId && renderOrganizationDetail) {
-    return renderOrganizationDetail({
-      orgId: selectedOrgId,
-      accessToken,
-      onBack: () => setSelectedOrgId(null),
-    });
+  if (selectedCustomer) {
+    if (renderOrganizationDetail) {
+      return renderOrganizationDetail({
+        orgId: selectedCustomer.id,
+        accessToken,
+        onBack: () => setSelectedCustomer(null),
+      });
+    }
+    if (apiNamespace === '/enterprise-admin') {
+      return (
+        <CustomerDetailPanel
+          orgId={selectedCustomer.id}
+          name={selectedCustomer.name}
+          email={selectedCustomer.email}
+          businessType={selectedCustomer.businessType}
+          apiBaseUrl={apiBaseUrl}
+          accessToken={accessToken}
+          canEditModules={canCreate || canEdit}
+          onBack={() => setSelectedCustomer(null)}
+        />
+      );
+    }
   }
 
   return (
@@ -642,8 +661,8 @@ export function CustomerAccounts({
                   return (
                     <tr
                       key={c.id}
-                      className={`hover:bg-slate-50 transition-colors dark:hover:bg-slate-800/50${renderOrganizationDetail ? ' cursor-pointer' : ''}`}
-                      onClick={() => renderOrganizationDetail && setSelectedOrgId(c.id)}
+                      className={`hover:bg-slate-50 transition-colors dark:hover:bg-slate-800/50${canOpenDetail ? ' cursor-pointer' : ''}`}
+                      onClick={() => canOpenDetail && setSelectedCustomer(c)}
                     >
                       {/* Name */}
                       <td className="px-4 py-3 whitespace-nowrap">

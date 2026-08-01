@@ -31,17 +31,28 @@ export interface FleetEnabledModules {
   performanceAnalytics: boolean;
 }
 
-/** Enterprise product-line feature modules (Path B). */
+/** Enterprise product-line feature modules (Path B — full sellable catalog). */
 export interface EnterpriseEnabledModules {
   shipments: boolean;
   carriers: boolean;
   clients: boolean;
   rateCards: boolean;
+  fuelManagement: boolean;
+  tollManagement: boolean;
+  drivers: boolean;
+  vehicles: boolean;
+  fleetEquipment: boolean;
+  trips: boolean;
+  dataCenter: boolean;
+  reports: boolean;
   businessFinance: boolean;
   claimableLoss: boolean;
+  teamManagement: boolean;
+  driverPortal: boolean;
+  performanceAnalytics: boolean;
 }
 
-/** @deprecated Prefer FleetEnabledModules / EnterpriseEnabledModules — kept for merge compat. */
+/** Merge compat: fleet keys + enterprise keys. */
 export type EnabledModules = FleetEnabledModules & Partial<EnterpriseEnabledModules>;
 
 /** Full product-line settings blob (fleet + enterprise). */

@@ -1,5 +1,6 @@
 import { ProductProviders } from '@/app/ProductProviders';
 import { RequireAuth, WrongProductLineGate } from '@/app/auth/RequireAuth';
+import { ModuleAccessProvider } from '@/app/modules/ModuleAccessProvider';
 import { AppShell } from '@/app/layout/AppShell';
 
 export default function AppEntry() {
@@ -7,7 +8,9 @@ export default function AppEntry() {
     <ProductProviders>
       <RequireAuth>
         <WrongProductLineGate>
-          <AppShell />
+          <ModuleAccessProvider>
+            <AppShell />
+          </ModuleAccessProvider>
         </WrongProductLineGate>
       </RequireAuth>
     </ProductProviders>

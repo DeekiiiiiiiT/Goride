@@ -9,6 +9,7 @@ import * as memCache from "./memory_cache.ts";
 import { resolveProductLine, type ProductLine } from "./product_line.ts";
 import { isPlatformStaffFromAuthUser } from "./rbac_middleware.ts";
 import { requireProductAdmin, type FleetProductKey } from "./product_admin_guard.ts";
+import { DEFAULT_ENTERPRISE_MODULES } from "./enterprise_modules.ts";
 
 export type SettingsSegment =
   | "global"
@@ -65,12 +66,29 @@ const DEFAULT_MODULES = {
 
 function fleetBusinessTypes(rideshareOnly: boolean): Record<string, boolean> {
   if (rideshareOnly) {
-    return { rideshare: true, delivery: false, taxi: false, trucking: false, shipping: false };
+    return {
+      rideshare: true,
+      delivery: false,
+      taxi: false,
+      trucking: false,
+      shipping: false,
+      freight_forwarding: false,
+    };
   }
-  return { rideshare: true, delivery: true, taxi: true, trucking: true, shipping: true };
+  return {
+    rideshare: false,
+    delivery: true,
+    taxi: false,
+    trucking: true,
+    shipping: true,
+    freight_forwarding: true,
+  };
 }
 
-function defaultFleetProductSettings(platformName: string, rideshareOnly: boolean): Record<string, unknown> {
+function defaultFleetProductSettings(
+  platformName: string,
+  rideshareOnly: boolean,
+): Record<string, unknown> {
   return {
     platformName,
     defaultCurrency: "JMD",
@@ -79,7 +97,9 @@ function defaultFleetProductSettings(platformName: string, rideshareOnly: boolea
     maintenanceMode: false,
     maintenanceMessage: "",
     enabledBusinessTypes: fleetBusinessTypes(rideshareOnly),
-    enabledModules: { ...DEFAULT_MODULES },
+    enabledModules: rideshareOnly
+      ? { ...DEFAULT_MODULES }
+      : { ...DEFAULT_ENTERPRISE_MODULES },
     registrationMode: "open",
     allowedDomains: [] as string[],
     requireApproval: false,

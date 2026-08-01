@@ -17,6 +17,7 @@ import { HelpPage } from '@/pages/HelpPage';
 import { HomePage } from '@/pages/HomePage';
 import { RidesPage } from '@/pages/RidesPage';
 import { SafetyPage } from '@/pages/SafetyPage';
+import { Gated } from '@/app/modules/Gated';
 
 const LoginEntry = lazy(() => import('@/app/entries/LoginEntry'));
 const ResetPasswordEntry = lazy(() => import('@/app/entries/ResetPasswordEntry'));
@@ -44,14 +45,45 @@ const ClientsPage = lazy(() =>
 const RateCardsPage = lazy(() =>
   import('@/app/freight/RateCardsPage').then((m) => ({ default: m.RateCardsPage })),
 );
-const FinancePage = lazy(() =>
-  import('@/app/freight/PlaceholderPages').then((m) => ({ default: m.FinancePage })),
+
+const BridgedDriversPage = lazy(() =>
+  import('@/fleet-bridge/pages').then((m) => ({ default: m.BridgedDriversPage })),
 );
-const ClaimsPage = lazy(() =>
-  import('@/app/freight/PlaceholderPages').then((m) => ({ default: m.ClaimsPage })),
+const BridgedVehiclesPage = lazy(() =>
+  import('@/fleet-bridge/pages').then((m) => ({ default: m.BridgedVehiclesPage })),
 );
-const SettingsPage = lazy(() =>
-  import('@/app/freight/PlaceholderPages').then((m) => ({ default: m.SettingsPage })),
+const BridgedMaintenancePage = lazy(() =>
+  import('@/fleet-bridge/pages').then((m) => ({ default: m.BridgedMaintenancePage })),
+);
+const BridgedEquipmentPage = lazy(() =>
+  import('@/fleet-bridge/pages').then((m) => ({ default: m.BridgedEquipmentPage })),
+);
+const BridgedFuelPage = lazy(() =>
+  import('@/fleet-bridge/pages').then((m) => ({ default: m.BridgedFuelPage })),
+);
+const BridgedTollLogsPage = lazy(() =>
+  import('@/fleet-bridge/pages').then((m) => ({ default: m.BridgedTollLogsPage })),
+);
+const BridgedTripsPage = lazy(() =>
+  import('@/fleet-bridge/pages').then((m) => ({ default: m.BridgedTripsPage })),
+);
+const BridgedDataCenterPage = lazy(() =>
+  import('@/fleet-bridge/pages').then((m) => ({ default: m.BridgedDataCenterPage })),
+);
+const BridgedReportsPage = lazy(() =>
+  import('@/fleet-bridge/pages').then((m) => ({ default: m.BridgedReportsPage })),
+);
+const BridgedBusinessFinancePage = lazy(() =>
+  import('@/fleet-bridge/pages').then((m) => ({ default: m.BridgedBusinessFinancePage })),
+);
+const BridgedClaimsPage = lazy(() =>
+  import('@/fleet-bridge/pages').then((m) => ({ default: m.BridgedClaimsPage })),
+);
+const BridgedUserManagementPage = lazy(() =>
+  import('@/fleet-bridge/pages').then((m) => ({ default: m.BridgedUserManagementPage })),
+);
+const BridgedSettingsPage = lazy(() =>
+  import('@/fleet-bridge/pages').then((m) => ({ default: m.BridgedSettingsPage })),
 );
 
 function Fall() {
@@ -126,72 +158,188 @@ export default function App() {
           <Route
             path="shipments"
             element={
-              <Suspense fallback={<Fall />}>
-                <ShipmentsListPage />
-              </Suspense>
+              <Gated module="shipments">
+                <Suspense fallback={<Fall />}>
+                  <ShipmentsListPage />
+                </Suspense>
+              </Gated>
             }
           />
           <Route
             path="shipments/new"
             element={
-              <Suspense fallback={<Fall />}>
-                <NewShipmentPage />
-              </Suspense>
+              <Gated module="shipments">
+                <Suspense fallback={<Fall />}>
+                  <NewShipmentPage />
+                </Suspense>
+              </Gated>
             }
           />
           <Route
             path="shipments/:id"
             element={
-              <Suspense fallback={<Fall />}>
-                <ShipmentDetailPage />
-              </Suspense>
+              <Gated module="shipments">
+                <Suspense fallback={<Fall />}>
+                  <ShipmentDetailPage />
+                </Suspense>
+              </Gated>
             }
           />
           <Route
             path="carriers"
             element={
-              <Suspense fallback={<Fall />}>
-                <CarriersPage />
-              </Suspense>
+              <Gated module="carriers">
+                <Suspense fallback={<Fall />}>
+                  <CarriersPage />
+                </Suspense>
+              </Gated>
             }
           />
           <Route
             path="clients"
             element={
-              <Suspense fallback={<Fall />}>
-                <ClientsPage />
-              </Suspense>
+              <Gated module="clients">
+                <Suspense fallback={<Fall />}>
+                  <ClientsPage />
+                </Suspense>
+              </Gated>
             }
           />
           <Route
             path="rate-cards"
             element={
-              <Suspense fallback={<Fall />}>
-                <RateCardsPage />
-              </Suspense>
+              <Gated module="rateCards">
+                <Suspense fallback={<Fall />}>
+                  <RateCardsPage />
+                </Suspense>
+              </Gated>
+            }
+          />
+          <Route
+            path="drivers"
+            element={
+              <Gated module="drivers">
+                <Suspense fallback={<Fall />}>
+                  <BridgedDriversPage />
+                </Suspense>
+              </Gated>
+            }
+          />
+          <Route
+            path="vehicles"
+            element={
+              <Gated module="vehicles">
+                <Suspense fallback={<Fall />}>
+                  <BridgedVehiclesPage />
+                </Suspense>
+              </Gated>
+            }
+          />
+          <Route
+            path="maintenance"
+            element={
+              <Gated module="vehicles">
+                <Suspense fallback={<Fall />}>
+                  <BridgedMaintenancePage />
+                </Suspense>
+              </Gated>
+            }
+          />
+          <Route
+            path="equipment"
+            element={
+              <Gated module="fleetEquipment">
+                <Suspense fallback={<Fall />}>
+                  <BridgedEquipmentPage />
+                </Suspense>
+              </Gated>
+            }
+          />
+          <Route
+            path="fuel"
+            element={
+              <Gated module="fuelManagement">
+                <Suspense fallback={<Fall />}>
+                  <BridgedFuelPage />
+                </Suspense>
+              </Gated>
+            }
+          />
+          <Route
+            path="toll"
+            element={
+              <Gated module="tollManagement">
+                <Suspense fallback={<Fall />}>
+                  <BridgedTollLogsPage />
+                </Suspense>
+              </Gated>
+            }
+          />
+          <Route
+            path="trips"
+            element={
+              <Gated module="trips">
+                <Suspense fallback={<Fall />}>
+                  <BridgedTripsPage />
+                </Suspense>
+              </Gated>
+            }
+          />
+          <Route
+            path="data-center"
+            element={
+              <Gated module="dataCenter">
+                <Suspense fallback={<Fall />}>
+                  <BridgedDataCenterPage />
+                </Suspense>
+              </Gated>
+            }
+          />
+          <Route
+            path="reports"
+            element={
+              <Gated module="reports">
+                <Suspense fallback={<Fall />}>
+                  <BridgedReportsPage />
+                </Suspense>
+              </Gated>
             }
           />
           <Route
             path="finance"
             element={
-              <Suspense fallback={<Fall />}>
-                <FinancePage />
-              </Suspense>
+              <Gated module="businessFinance">
+                <Suspense fallback={<Fall />}>
+                  <BridgedBusinessFinancePage />
+                </Suspense>
+              </Gated>
             }
           />
           <Route
             path="claims"
             element={
-              <Suspense fallback={<Fall />}>
-                <ClaimsPage />
-              </Suspense>
+              <Gated module="claimableLoss">
+                <Suspense fallback={<Fall />}>
+                  <BridgedClaimsPage />
+                </Suspense>
+              </Gated>
+            }
+          />
+          <Route
+            path="team"
+            element={
+              <Gated module="teamManagement">
+                <Suspense fallback={<Fall />}>
+                  <BridgedUserManagementPage />
+                </Suspense>
+              </Gated>
             }
           />
           <Route
             path="settings"
             element={
               <Suspense fallback={<Fall />}>
-                <SettingsPage />
+                <BridgedSettingsPage />
               </Suspense>
             }
           />

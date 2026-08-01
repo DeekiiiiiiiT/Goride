@@ -38,13 +38,25 @@ export const DEFAULT_FLEET_ENABLED_MODULES: FleetEnabledModules = {
   performanceAnalytics: true,
 };
 
+/** Full product on by default so packaging can turn modules off per customer. */
 export const DEFAULT_ENTERPRISE_ENABLED_MODULES: EnterpriseEnabledModules = {
   shipments: true,
   carriers: true,
   clients: true,
   rateCards: true,
+  fuelManagement: true,
+  tollManagement: true,
+  drivers: true,
+  vehicles: true,
+  fleetEquipment: true,
+  trips: true,
+  dataCenter: true,
+  reports: true,
   businessFinance: true,
   claimableLoss: true,
+  teamManagement: true,
+  driverPortal: true,
+  performanceAnalytics: true,
 };
 
 /** @deprecated Use DEFAULT_FLEET_ENABLED_MODULES */
@@ -102,15 +114,7 @@ export const DEFAULT_FLEET_SETTINGS: FleetProductSettings = baseFleetProductSett
 export const DEFAULT_ENTERPRISE_SETTINGS: FleetProductSettings = baseFleetProductSettings(
   'Roam Enterprise',
   ENTERPRISE_BUSINESS_TYPES,
-  {
-    // Fleet keys off for enterprise segment
-    fuelManagement: false,
-    tollManagement: false,
-    driverPortal: false,
-    fleetEquipment: false,
-    performanceAnalytics: false,
-    ...DEFAULT_ENTERPRISE_ENABLED_MODULES,
-  },
+  { ...DEFAULT_ENTERPRISE_ENABLED_MODULES },
 );
 
 export const DEFAULT_GLOBAL_SETTINGS: GlobalPlatformSettings = {
