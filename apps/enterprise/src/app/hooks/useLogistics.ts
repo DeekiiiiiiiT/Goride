@@ -65,3 +65,73 @@ export function useTransitionLogisticsJob() {
     },
   });
 }
+
+export function useLogisticsJobLive(id: string | undefined, enabled = true) {
+  const { organizationId, session } = useAuth();
+  return useQuery({
+    queryKey: ['logistics', 'job-live', organizationId, id],
+    queryFn: () => logisticsService.getJobLive(id!, organizationId),
+    enabled: Boolean(session && id && enabled),
+    refetchInterval: 12_000,
+  });
+}
+
+export function useServiceZones(kind?: string) {
+  const { organizationId, session } = useAuth();
+  return useQuery({
+    queryKey: ['logistics', 'zones', organizationId, kind ?? 'all'],
+    queryFn: () => logisticsService.listZones(organizationId, kind),
+    enabled: Boolean(session),
+  });
+}
+
+export function useCreateServiceZone() {
+  const { organizationId } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: {
+      name: string;
+      kind: 'service' | 'pricing';
+      geojson: Record<string, unknown>;
+      active?: boolean;
+    }) => logisticsService.createZone(body, organizationId),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['logistics', 'zones'] }),
+  });
+}
+
+export function useDeleteServiceZone() {
+  const { organizationId } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => logisticsService.deleteZone(id, organizationId),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['logistics', 'zones'] }),
+  });
+}
+
+export function useOpsAlerts(enabled = true) {
+  const { organizationId, session } = useAuth();
+  return useQuery({
+    queryKey: ['logistics', 'alerts', organizationId],
+    queryFn: () => logisticsService.listAlerts(organizationId),
+    enabled: Boolean(session && enabled),
+    refetchInterval: 20_000,
+  });
+}
+
+export function useMarkAlertRead() {
+  const { organizationId } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => logisticsService.markAlertRead(id, organizationId),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['logistics', 'alerts'] }),
+  });
+}
+
+export function useMarkAllAlertsRead() {
+  const { organizationId } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => logisticsService.markAllAlertsRead(organizationId),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['logistics', 'alerts'] }),
+  });
+}

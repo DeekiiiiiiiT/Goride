@@ -84,4 +84,79 @@ export const logisticsService = {
       body: JSON.stringify({ status, note }),
       organizationId,
     }),
+
+  getJobLive: (id: string, organizationId?: string | null) =>
+    logisticsFetch<{
+      job: LogisticsJobRow;
+      position: {
+        lat: number;
+        lng: number;
+        heading: number | null;
+        updated_at: string;
+        source: string;
+      } | null;
+      stops: LogisticsJobRow[];
+      stale: boolean;
+    }>(`/jobs/${id}/live`, { organizationId }),
+
+  listZones: (organizationId?: string | null, kind?: string) =>
+    logisticsFetch<{ zones: LogisticsJobRow[] }>(
+      `/zones${kind ? `?kind=${encodeURIComponent(kind)}` : ''}`,
+      { organizationId },
+    ),
+
+  createZone: (
+    body: {
+      name: string;
+      kind: 'service' | 'pricing';
+      geojson: Record<string, unknown>;
+      active?: boolean;
+    },
+    organizationId?: string | null,
+  ) =>
+    logisticsFetch<{ zone: LogisticsJobRow }>('/zones', {
+      method: 'POST',
+      body: JSON.stringify(body),
+      organizationId,
+    }),
+
+  updateZone: (
+    id: string,
+    body: Partial<{
+      name: string;
+      kind: 'service' | 'pricing';
+      geojson: Record<string, unknown>;
+      active: boolean;
+    }>,
+    organizationId?: string | null,
+  ) =>
+    logisticsFetch<{ zone: LogisticsJobRow }>(`/zones/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+      organizationId,
+    }),
+
+  deleteZone: (id: string, organizationId?: string | null) =>
+    logisticsFetch<{ ok: boolean }>(`/zones/${id}`, {
+      method: 'DELETE',
+      organizationId,
+    }),
+
+  listAlerts: (organizationId?: string | null, unreadOnly?: boolean) =>
+    logisticsFetch<{ alerts: LogisticsJobRow[]; unreadCount: number }>(
+      `/alerts${unreadOnly ? '?unread=1' : ''}`,
+      { organizationId },
+    ),
+
+  markAlertRead: (id: string, organizationId?: string | null) =>
+    logisticsFetch<{ alert: LogisticsJobRow }>(`/alerts/${id}/read`, {
+      method: 'POST',
+      organizationId,
+    }),
+
+  markAllAlertsRead: (organizationId?: string | null) =>
+    logisticsFetch<{ ok: boolean }>('/alerts/read-all', {
+      method: 'POST',
+      organizationId,
+    }),
 };

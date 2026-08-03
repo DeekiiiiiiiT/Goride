@@ -1,11 +1,13 @@
-import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useFreightCarriers, useClientFleet } from '@/app/hooks/useFreight';
 import {
   useAssignLogisticsJob,
+  useLogisticsJobLive,
   useLogisticsJobs,
   useTransitionLogisticsJob,
 } from '@/app/hooks/useLogistics';
+import { JobLiveMap } from '@/app/dispatch/JobLiveMap';
 import { useModuleAccess } from '@/app/modules/ModuleAccessProvider';
 
 const COLUMNS: { key: string; label: string; statuses: string[] }[] = [
@@ -33,6 +35,7 @@ export function DispatchBoardPage() {
   const clientFleet = useClientFleet();
   const assign = useAssignLogisticsJob();
   const transition = useTransitionLogisticsJob();
+  const [searchParams] = useSearchParams();
 
   const [filter, setFilter] = useState<string>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -42,6 +45,11 @@ export function DispatchBoardPage() {
   const [carrierId, setCarrierId] = useState('');
   const [assetId, setAssetId] = useState('');
   const [actionError, setActionError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const jobFromUrl = searchParams.get('job');
+    if (jobFromUrl) setSelectedId(jobFromUrl);
+  }, [searchParams]);
 
   const jobs = data?.jobs ?? [];
   const filtered = useMemo(() => {
@@ -58,6 +66,10 @@ export function DispatchBoardPage() {
   }, [filtered]);
 
   const selected = jobs.find((j) => String(j.id) === selectedId) ?? null;
+  const showLive =
+    selected != null &&
+    (String(selected.status) === 'assigned' || String(selected.status) === 'in_progress');
+  const live = useLogisticsJobLive(selected ? String(selected.id) : undefined, showLive);
 
   async function onAssign() {
     if (!selected) return;
@@ -278,6 +290,45 @@ export function DispatchBoardPage() {
               </button>
             </div>
           </div>
+
+          {showLive ? (
+            <div className="mt-4 border-t border-slate-100 pt-4">
+              {live.isError ? (
+                <p className="text-sm text-slate-500">
+                  Live map unavailable{(live.error as Error)?.message ? `: ${(live.error as Error).message}` : ''}
+                </p>
+              ) : (
+                <JobLiveMap
+                  position={
+                    live.data?.position
+                      ? {
+                          lat: live.data.position.lat,
+                          lng: live.data.position.lng,
+                          heading: live.data.position.heading,
+                        }
+                      : null
+                  }
+                  stale={Boolean(live.data?.stale ?? true)}
+                  stops={(live.data?.stops ?? []) as {
+                    lat?: number | null;
+                    lng?: number | null;
+                    label?: string | null;
+                    stop_type?: string | null;
+                  }[]}
+                  pickup={{
+                    lat: selected.pickup_lat as number | null,
+                    lng: selected.pickup_lng as number | null,
+                    label: selected.pickup_label as string | null,
+                  }}
+                  dropoff={{
+                    lat: selected.dropoff_lat as number | null,
+                    lng: selected.dropoff_lng as number | null,
+                    label: selected.dropoff_label as string | null,
+                  }}
+                />
+              )}
+            </div>
+          ) : null}
 
           {(selected.status === 'unassigned' ||
             selected.status === 'assigned' ||

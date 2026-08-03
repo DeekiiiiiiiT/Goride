@@ -70,6 +70,18 @@ export const ENTERPRISE_MODULE_CATALOG: readonly ModuleCatalogEntry[] = [
     description: 'Domestic logistics job board — assign and track freight jobs.',
     group: 'ops',
   },
+  {
+    key: 'serviceZones',
+    label: 'Service Zones',
+    description: 'Draw service areas that gate bookings and support zone pricing.',
+    group: 'ops',
+  },
+  {
+    key: 'opsInbox',
+    label: 'Ops Inbox',
+    description: 'In-app alerts for matching failures, exceptions, and stale GPS.',
+    group: 'ops',
+  },
   { key: 'fuelManagement', label: 'Fuel Management', description: 'Fuel spend, cards, and reconciliation.', group: 'ops' },
   { key: 'tollManagement', label: 'Toll Management', description: 'Toll logs, tags, and reconciliation.', group: 'ops' },
   { key: 'drivers', label: 'Drivers', description: 'Driver roster and analytics.', group: 'ops' },

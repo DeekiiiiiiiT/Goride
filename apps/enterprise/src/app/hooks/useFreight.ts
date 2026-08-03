@@ -136,6 +136,16 @@ export function useCreateRateCard() {
   });
 }
 
+export function useUpdateRateCard() {
+  const { organizationId } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (args: { id: string; body: unknown }) =>
+      freightService.updateRateCard(args.id, args.body, organizationId),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['freight', 'rate-cards'] }),
+  });
+}
+
 // --- Pipeline hooks ---
 
 export function useFacilities(type?: string) {

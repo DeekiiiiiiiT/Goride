@@ -88,6 +88,9 @@ const PodCapturePage = lazy(() =>
 const DispatchBoardPage = lazy(() =>
   import('@/app/dispatch/DispatchBoardPage').then((m) => ({ default: m.DispatchBoardPage })),
 );
+const ServiceZonesPage = lazy(() =>
+  import('@/app/dispatch/ServiceZonesPage').then((m) => ({ default: m.ServiceZonesPage })),
+);
 
 const BridgedDriversPage = lazy(() =>
   import('@/fleet-bridge/pages').then((m) => ({ default: m.BridgedDriversPage })),
@@ -245,6 +248,16 @@ export default function App() {
               <Gated module="dispatchBoard">
                 <Suspense fallback={<Fall />}>
                   <DispatchBoardPage />
+                </Suspense>
+              </Gated>
+            }
+          />
+          <Route
+            path="service-zones"
+            element={
+              <Gated module="serviceZones">
+                <Suspense fallback={<Fall />}>
+                  <ServiceZonesPage />
                 </Suspense>
               </Gated>
             }

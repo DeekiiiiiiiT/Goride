@@ -46,6 +46,8 @@ export interface EnterpriseEnabledModules {
   fulfillmentDesk: boolean;
   clientFleet: boolean;
   dispatchBoard: boolean;
+  serviceZones: boolean;
+  opsInbox: boolean;
   fuelManagement: boolean;
   tollManagement: boolean;
   drivers: boolean;

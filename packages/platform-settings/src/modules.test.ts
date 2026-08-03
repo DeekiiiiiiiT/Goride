@@ -37,6 +37,13 @@ describe('resolveEffectiveModules', () => {
     expect(DEFAULT_ENTERPRISE_ENABLED_MODULES.dispatchBoard).toBe(true);
   });
 
+  it('includes serviceZones and opsInbox', () => {
+    expect(ENTERPRISE_MODULE_KEYS).toContain('serviceZones');
+    expect(ENTERPRISE_MODULE_KEYS).toContain('opsInbox');
+    expect(DEFAULT_ENTERPRISE_ENABLED_MODULES.serviceZones).toBe(true);
+    expect(DEFAULT_ENTERPRISE_ENABLED_MODULES.opsInbox).toBe(true);
+  });
+
   it('org cannot re-enable when product-line turns dispatchBoard off', () => {
     const effective = resolveEffectiveModules(
       { ...DEFAULT_ENTERPRISE_ENABLED_MODULES, dispatchBoard: false },

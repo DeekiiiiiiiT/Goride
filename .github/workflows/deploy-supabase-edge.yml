@@ -65,6 +65,8 @@ jobs:
             rides
             driver
             haul
+            freight
+            logistics
             toll-brain
             fuel-brain
             matching

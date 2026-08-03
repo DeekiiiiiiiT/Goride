@@ -48,6 +48,51 @@ export interface LogisticsJob {
   completedAt?: string | null;
   createdAt: string;
   updatedAt: string;
+  lastLat?: number | null;
+  lastLng?: number | null;
+  lastHeading?: number | null;
+  lastLocatedAt?: string | null;
+}
+
+export interface LogisticsLivePosition {
+  lat: number;
+  lng: number;
+  heading: number | null;
+  updated_at: string;
+  source: 'presence' | 'job_snapshot';
+}
+
+export interface LogisticsJobLivePayload {
+  job: LogisticsJob | Record<string, unknown>;
+  position: LogisticsLivePosition | null;
+  stops: LogisticsJobStop[] | Record<string, unknown>[];
+  stale: boolean;
+}
+
+export interface LogisticsServiceZone {
+  id: string;
+  organizationId: string;
+  name: string;
+  kind: 'service' | 'pricing';
+  geojson: Record<string, unknown>;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type LogisticsOpsAlertKind = 'matching_exhausted' | 'job_exception' | 'stale_gps';
+
+export interface LogisticsOpsAlert {
+  id: string;
+  organizationId: string;
+  kind: LogisticsOpsAlertKind;
+  severity: 'info' | 'warning' | 'critical';
+  title: string;
+  body: string;
+  jobId?: string | null;
+  shipmentId?: string | null;
+  readAt?: string | null;
+  createdAt: string;
 }
 
 export interface LogisticsJobStop {

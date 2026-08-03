@@ -147,6 +147,13 @@ export const freightService = {
       organizationId,
     }),
 
+  updateRateCard: (id: string, body: unknown, organizationId?: string | null) =>
+    freightFetch<{ rateCard: Record<string, unknown> }>(`/rate-cards/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+      organizationId,
+    }),
+
   // --- Pipeline ---
   listFacilities: (organizationId?: string | null, type?: string) =>
     freightFetch<{ facilities: Record<string, unknown>[] }>(

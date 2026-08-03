@@ -14,6 +14,8 @@ import { ledgerPostEntry } from "../_shared/unifiedLedger/postEntry.ts";
 import { SHIPMENT_TRANSITIONS } from "./transitions.ts";
 import { registerPipelineRoutes } from "./pipeline.ts";
 import { syncJobFromShipment } from "../logistics/syncFromShipment.ts";
+import { computeRateCardAmountMinor } from "./rateBill.ts";
+import { assertInsideServiceZones } from "./serviceZoneGate.ts";
 
 const app = new Hono().basePath("/freight");
 
@@ -209,6 +211,8 @@ const rateCardBody = z.object({
   destinationLabel: z.string().max(300).optional().nullable(),
   currency: z.string().length(3).default("JMD"),
   amountMinor: z.number().int().nonnegative(),
+  pricingStrategy: z.enum(["flat", "distance_tier", "zone", "per_stop"]).optional(),
+  rules: z.record(z.unknown()).optional(),
   effectiveFrom: z.string().optional().nullable(),
   effectiveTo: z.string().optional().nullable(),
   status: z.enum(["active", "inactive"]).optional(),
@@ -242,6 +246,8 @@ app.post("/rate-cards", async (c) => {
       destination_label: b.destinationLabel || null,
       currency: b.currency,
       amount_minor: b.amountMinor,
+      pricing_strategy: b.pricingStrategy ?? "flat",
+      rules: b.rules ?? {},
       effective_from: b.effectiveFrom || null,
       effective_to: b.effectiveTo || null,
       status: b.status ?? "active",
@@ -250,6 +256,37 @@ app.post("/rate-cards", async (c) => {
     .single();
   if (error) return c.json({ error: error.message }, 500);
   return c.json({ rateCard: data }, 201);
+});
+
+app.patch("/rate-cards/:id", async (c) => {
+  const user = await requireUser(c);
+  if (user instanceof Response) return user;
+  const id = c.req.param("id");
+  const parsed = rateCardBody.partial().safeParse(await c.req.json());
+  if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
+  const b = parsed.data;
+  const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (b.name != null) patch.name = b.name;
+  if (b.clientId !== undefined) patch.client_id = b.clientId || null;
+  if (b.originLabel !== undefined) patch.origin_label = b.originLabel || null;
+  if (b.destinationLabel !== undefined) patch.destination_label = b.destinationLabel || null;
+  if (b.currency != null) patch.currency = b.currency;
+  if (b.amountMinor != null) patch.amount_minor = b.amountMinor;
+  if (b.pricingStrategy != null) patch.pricing_strategy = b.pricingStrategy;
+  if (b.rules != null) patch.rules = b.rules;
+  if (b.effectiveFrom !== undefined) patch.effective_from = b.effectiveFrom || null;
+  if (b.effectiveTo !== undefined) patch.effective_to = b.effectiveTo || null;
+  if (b.status != null) patch.status = b.status;
+  const { data, error } = await freightDb()
+    .from("rate_cards")
+    .update(patch)
+    .eq("id", id)
+    .eq("organization_id", user.organizationId)
+    .select("*")
+    .maybeSingle();
+  if (error) return c.json({ error: error.message }, 500);
+  if (!data) return c.json({ error: "Not found" }, 404);
+  return c.json({ rateCard: data });
 });
 
 // ---------------------------------------------------------------------------
@@ -346,6 +383,17 @@ app.post("/shipments", async (c) => {
   const b = parsed.data;
   const db = freightDb();
   const status = b.book ? "booked" : "draft";
+
+  // Phase E: hard reject when active service zones exist and points are outside
+  if (status === "booked") {
+    const zoneCheck = await assertInsideServiceZones(serviceClient(), user.organizationId, [
+      { lat: b.originLat, lng: b.originLng, label: "Pickup" },
+      { lat: b.destinationLat, lng: b.destinationLng, label: "Dropoff" },
+    ]);
+    if (!zoneCheck.ok) {
+      return c.json({ error: zoneCheck.code, message: zoneCheck.message }, 400);
+    }
+  }
 
   const { data: shipment, error } = await db
     .from("shipments")
@@ -474,6 +522,16 @@ app.post("/shipments/:id/transition", async (c) => {
     );
   }
 
+  if (body.data.status === "booked") {
+    const zoneCheck = await assertInsideServiceZones(serviceClient(), user.organizationId, [
+      { lat: shipment.origin_lat, lng: shipment.origin_lng, label: "Pickup" },
+      { lat: shipment.destination_lat, lng: shipment.destination_lng, label: "Dropoff" },
+    ]);
+    if (!zoneCheck.ok) {
+      return c.json({ error: zoneCheck.code, message: zoneCheck.message }, 400);
+    }
+  }
+
   const { data: updated, error: upErr } = await db
     .from("shipments")
     .update({
@@ -528,7 +586,7 @@ app.post("/shipments/:id/bill", async (c) => {
   const db = freightDb();
   const { data: shipment, error } = await db
     .from("shipments")
-    .select("*, rate_cards(amount_minor, currency)")
+    .select("*, rate_cards(*)")
     .eq("id", id)
     .eq("organization_id", user.organizationId)
     .maybeSingle();
@@ -541,11 +599,46 @@ app.post("/shipments/:id/bill", async (c) => {
     return c.json({ shipment, skipped: true, reason: "already_billed" });
   }
 
-  const amountMinor =
-    (shipment.rate_cards as { amount_minor?: number } | null)?.amount_minor ??
-    0;
+  const card = shipment.rate_cards as Record<string, unknown> | null;
+  const { data: legs } = await db
+    .from("shipment_legs")
+    .select("id")
+    .eq("shipment_id", id);
+  const stopCount = Math.max(2, (legs?.length ?? 0) + 1);
+
+  let pricingZones: { id: string; geojson: unknown }[] = [];
+  if ((card?.pricing_strategy as string | undefined) === "zone") {
+    const { data: zones } = await serviceClient()
+      .schema("logistics")
+      .from("service_zones")
+      .select("id, geojson")
+      .eq("organization_id", user.organizationId)
+      .eq("kind", "pricing")
+      .eq("active", true);
+    pricingZones = (zones ?? []).map((z) => ({ id: String(z.id), geojson: z.geojson }));
+  }
+
+  const computed = computeRateCardAmountMinor({
+    card: {
+      amount_minor: Number(card?.amount_minor ?? 0),
+      pricing_strategy: (card?.pricing_strategy as string) || "flat",
+      rules: (card?.rules as Record<string, unknown>) || {},
+    },
+    origin:
+      shipment.origin_lat != null && shipment.origin_lng != null
+        ? { lat: Number(shipment.origin_lat), lng: Number(shipment.origin_lng) }
+        : null,
+    destination:
+      shipment.destination_lat != null && shipment.destination_lng != null
+        ? { lat: Number(shipment.destination_lat), lng: Number(shipment.destination_lng) }
+        : null,
+    stopCount,
+    pricingZones,
+  });
+
+  const amountMinor = computed.amountMinor;
   const currency =
-    (shipment.rate_cards as { currency?: string } | null)?.currency ??
+    (card?.currency as string | undefined) ??
     shipment.currency ??
     "JMD";
 
@@ -569,7 +662,11 @@ app.post("/shipments/:id/bill", async (c) => {
     sourceSystem: "freight",
     sourceId: id,
     sourceIdempotencyKey: idem,
-    metadata: { reference_code: shipment.reference_code },
+    metadata: {
+      reference_code: shipment.reference_code,
+      pricing_strategy: computed.strategy,
+      pricing_detail: computed.detail,
+    },
   });
 
   if (result.conflict) {

@@ -133,6 +133,16 @@ export async function syncJobFromShipment(
         note: `Mirrored from shipment ${shipment.status}`,
         idempotencyKey: `mirror:${shipment.id}:${shipment.status}:${nextStatus}`,
       });
+      if (nextStatus === "exception") {
+        const { emitJobExceptionAlert } = await import("./opsAlerts.ts");
+        await emitJobExceptionAlert(svc, {
+          orgId: shipment.organization_id,
+          jobId: String(existing.id),
+          shipmentId: shipment.id,
+          referenceCode: shipment.reference_code,
+          note: `Shipment status: ${shipment.status}`,
+        });
+      }
     }
   } else {
     const { data, error } = await db

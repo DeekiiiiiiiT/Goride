@@ -24,6 +24,12 @@ import {
   startEnterpriseJobMatching,
 } from "./enterpriseMatching.ts";
 import { requireLogisticsDriver } from "./driverAuth.ts";
+import {
+  isLiveStale,
+  loadDriverPresence,
+  positionFromJobSnapshot,
+} from "./liveTracking.ts";
+import { maybeEmitStaleGpsAlert } from "./opsAlerts.ts";
 
 const app = new Hono().basePath("/logistics");
 
@@ -113,6 +119,89 @@ app.get("/jobs/:id", async (c) => {
     job,
     stops: stops.data ?? [],
     events: events.data ?? [],
+  });
+});
+
+/** Ops live position for assigned / in-progress jobs (Phase D). */
+app.get("/jobs/:id/live", async (c) => {
+  const user = await requireUser(c);
+  if (user instanceof Response) return user;
+  const id = c.req.param("id");
+  const db = logisticsDb();
+  const svc = serviceClient();
+
+  const { data: job, error } = await db
+    .from("jobs")
+    .select("*")
+    .eq("id", id)
+    .eq("organization_id", user.organizationId)
+    .maybeSingle();
+  if (error) return c.json({ error: error.message }, 500);
+  if (!job) return c.json({ error: "Not found" }, 404);
+
+  const status = String(job.status);
+  if (status !== "assigned" && status !== "in_progress") {
+    return c.json({
+      error: "live_unavailable",
+      message: "Live tracking is only available for assigned or in-progress jobs",
+      job,
+      position: null,
+      stops: [],
+      stale: true,
+    }, 409);
+  }
+
+  const { data: stops } = await db
+    .from("job_stops")
+    .select("*")
+    .eq("job_id", id)
+    .order("sequence");
+
+  let position = job.assignee_driver_id
+    ? await loadDriverPresence(svc, String(job.assignee_driver_id))
+    : null;
+
+  if (position) {
+    const now = new Date().toISOString();
+    await db
+      .from("jobs")
+      .update({
+        last_lat: position.lat,
+        last_lng: position.lng,
+        last_heading: position.heading,
+        last_located_at: position.updated_at || now,
+        updated_at: now,
+      })
+      .eq("id", id)
+      .eq("organization_id", user.organizationId);
+  } else {
+    position = positionFromJobSnapshot(job as Record<string, unknown>);
+  }
+
+  const stale = isLiveStale(position?.updated_at);
+  if (stale && status === "in_progress") {
+    await maybeEmitStaleGpsAlert(svc, {
+      orgId: user.organizationId,
+      jobId: id,
+      shipmentId: job.external_ref_type === "freight_shipment"
+        ? String(job.external_ref_id)
+        : null,
+      referenceCode: job.reference_code ? String(job.reference_code) : null,
+      locatedAt: position?.updated_at ?? null,
+    });
+  }
+
+  return c.json({
+    job: {
+      ...job,
+      last_lat: position?.lat ?? job.last_lat,
+      last_lng: position?.lng ?? job.last_lng,
+      last_heading: position?.heading ?? job.last_heading,
+      last_located_at: position?.updated_at ?? job.last_located_at,
+    },
+    position,
+    stops: stops ?? [],
+    stale,
   });
 });
 
@@ -293,6 +382,19 @@ app.post("/jobs/:id/transition", async (c) => {
     note: body.data.note,
   });
 
+  if (body.data.status === "exception") {
+    const { emitJobExceptionAlert } = await import("./opsAlerts.ts");
+    await emitJobExceptionAlert(serviceClient(), {
+      orgId: user.organizationId,
+      jobId: id,
+      shipmentId: job.external_ref_type === "freight_shipment"
+        ? String(job.external_ref_id)
+        : null,
+      referenceCode: job.reference_code ? String(job.reference_code) : null,
+      note: body.data.note,
+    });
+  }
+
   return c.json({ job: updated });
 });
 
@@ -421,6 +523,165 @@ app.post("/internal/sync-from-shipment", async (c) => {
   });
   if (result.error) return c.json({ error: result.error }, 500);
   return c.json(result);
+});
+
+// ---------------------------------------------------------------------------
+// Service zones (Phase E)
+// ---------------------------------------------------------------------------
+const zoneBody = z.object({
+  name: z.string().min(1).max(200),
+  kind: z.enum(["service", "pricing"]).default("service"),
+  geojson: z.record(z.unknown()),
+  active: z.boolean().optional(),
+});
+
+app.get("/zones", async (c) => {
+  const user = await requireUser(c);
+  if (user instanceof Response) return user;
+  const kind = c.req.query("kind");
+  let q = logisticsDb()
+    .from("service_zones")
+    .select("*")
+    .eq("organization_id", user.organizationId)
+    .order("name");
+  if (kind) q = q.eq("kind", kind);
+  const { data, error } = await q;
+  if (error) return c.json({ error: error.message }, 500);
+  return c.json({ zones: data ?? [] });
+});
+
+app.post("/zones", async (c) => {
+  const user = await requireUser(c);
+  if (user instanceof Response) return user;
+  const parsed = zoneBody.safeParse(await c.req.json());
+  if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
+  const b = parsed.data;
+  const { parseZoneGeoJson } = await import("./geo.ts");
+  if (!parseZoneGeoJson(b.geojson)) {
+    return c.json({ error: "invalid_geojson", message: "geojson must be Polygon or MultiPolygon" }, 400);
+  }
+  const { data, error } = await logisticsDb()
+    .from("service_zones")
+    .insert({
+      organization_id: user.organizationId,
+      name: b.name,
+      kind: b.kind,
+      geojson: b.geojson,
+      active: b.active ?? true,
+    })
+    .select("*")
+    .single();
+  if (error) return c.json({ error: error.message }, 500);
+  return c.json({ zone: data }, 201);
+});
+
+app.patch("/zones/:id", async (c) => {
+  const user = await requireUser(c);
+  if (user instanceof Response) return user;
+  const id = c.req.param("id");
+  const parsed = zoneBody.partial().safeParse(await c.req.json());
+  if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
+  const b = parsed.data;
+  if (b.geojson) {
+    const { parseZoneGeoJson } = await import("./geo.ts");
+    if (!parseZoneGeoJson(b.geojson)) {
+      return c.json({ error: "invalid_geojson" }, 400);
+    }
+  }
+  const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (b.name != null) patch.name = b.name;
+  if (b.kind != null) patch.kind = b.kind;
+  if (b.geojson != null) patch.geojson = b.geojson;
+  if (b.active != null) patch.active = b.active;
+  const { data, error } = await logisticsDb()
+    .from("service_zones")
+    .update(patch)
+    .eq("id", id)
+    .eq("organization_id", user.organizationId)
+    .select("*")
+    .maybeSingle();
+  if (error) return c.json({ error: error.message }, 500);
+  if (!data) return c.json({ error: "Not found" }, 404);
+  return c.json({ zone: data });
+});
+
+app.delete("/zones/:id", async (c) => {
+  const user = await requireUser(c);
+  if (user instanceof Response) return user;
+  const id = c.req.param("id");
+  const { error } = await logisticsDb()
+    .from("service_zones")
+    .delete()
+    .eq("id", id)
+    .eq("organization_id", user.organizationId);
+  if (error) return c.json({ error: error.message }, 500);
+  return c.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
+// Ops alerts inbox (Phase F)
+// ---------------------------------------------------------------------------
+app.get("/alerts", async (c) => {
+  const user = await requireUser(c);
+  if (user instanceof Response) return user;
+  const unreadOnly = c.req.query("unread") === "1";
+  let q = logisticsDb()
+    .from("ops_alerts")
+    .select("*")
+    .eq("organization_id", user.organizationId)
+    .order("created_at", { ascending: false })
+    .limit(100);
+  if (unreadOnly) q = q.is("read_at", null);
+  const [{ data, error }, unreadRes] = await Promise.all([
+    q,
+    logisticsDb()
+      .from("ops_alerts")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", user.organizationId)
+      .is("read_at", null),
+  ]);
+  if (error) return c.json({ error: error.message }, 500);
+  return c.json({ alerts: data ?? [], unreadCount: unreadRes.count ?? 0 });
+});
+
+app.post("/alerts/:id/read", async (c) => {
+  const user = await requireUser(c);
+  if (user instanceof Response) return user;
+  const id = c.req.param("id");
+  const now = new Date().toISOString();
+  const { data, error } = await logisticsDb()
+    .from("ops_alerts")
+    .update({ read_at: now })
+    .eq("id", id)
+    .eq("organization_id", user.organizationId)
+    .is("read_at", null)
+    .select("*")
+    .maybeSingle();
+  if (error) return c.json({ error: error.message }, 500);
+  if (!data) {
+    const { data: existing } = await logisticsDb()
+      .from("ops_alerts")
+      .select("*")
+      .eq("id", id)
+      .eq("organization_id", user.organizationId)
+      .maybeSingle();
+    if (!existing) return c.json({ error: "Not found" }, 404);
+    return c.json({ alert: existing });
+  }
+  return c.json({ alert: data });
+});
+
+app.post("/alerts/read-all", async (c) => {
+  const user = await requireUser(c);
+  if (user instanceof Response) return user;
+  const now = new Date().toISOString();
+  const { error } = await logisticsDb()
+    .from("ops_alerts")
+    .update({ read_at: now })
+    .eq("organization_id", user.organizationId)
+    .is("read_at", null);
+  if (error) return c.json({ error: error.message }, 500);
+  return c.json({ ok: true });
 });
 
 Deno.serve(app.fetch);

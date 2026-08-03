@@ -323,6 +323,16 @@ export async function reconcileEnterpriseJob(jobId: string): Promise<EnterpriseM
       note: timedOut ? "Matching timed out" : "No drivers accepted",
       idempotencyKey: `match-exhaust:${jobId}:${currentWave}`,
     });
+    const { emitMatchingExhaustedAlert } = await import("./opsAlerts.ts");
+    await emitMatchingExhaustedAlert(pub(), {
+      orgId: String(job.organization_id),
+      jobId,
+      shipmentId: job.external_ref_type === "freight_shipment"
+        ? String(job.external_ref_id)
+        : null,
+      referenceCode: job.reference_code ? String(job.reference_code) : null,
+      reason: timedOut ? "Matching timed out" : "No drivers accepted",
+    });
     return {
       ok: true,
       status: "unassigned",

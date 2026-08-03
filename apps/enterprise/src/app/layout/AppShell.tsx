@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import {
   Boxes,
   Building2,
+  Bell,
   Car,
   ChevronRight,
   CreditCard,
@@ -27,6 +28,8 @@ import {
 import type { ModuleKey } from '@roam/platform-settings';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useModuleAccess } from '@/app/modules/ModuleAccessProvider';
+import { OpsInboxDrawer } from '@/app/layout/OpsInboxDrawer';
+import { useOpsAlerts } from '@/app/hooks/useLogistics';
 
 type NavItem = {
   to: string;
@@ -68,6 +71,7 @@ const NAV_ITEMS: NavItem[] = [
     icon: Ship,
     children: [
       { to: '/app/dispatch', label: 'Dispatch Board', icon: LayoutDashboard, module: 'dispatchBoard' },
+      { to: '/app/service-zones', label: 'Service Zones', icon: MapPin, module: 'serviceZones' },
       { to: '/app/shipments', label: 'Shipments', icon: Ship, module: 'shipments' },
       { to: '/app/carriers', label: 'Carriers', icon: Truck, module: 'carriers' },
       { to: '/app/clients', label: 'Clients', icon: Users, module: 'clients' },
@@ -486,6 +490,10 @@ function isTopLevelVisible(item: NavItem, isModuleEnabled: (key: ModuleKey) => b
 export function AppShell() {
   const { user, role, signOut } = useAuth();
   const { isModuleEnabled, loading } = useModuleAccess();
+  const [inboxOpen, setInboxOpen] = useState(false);
+  const opsInboxOn = isModuleEnabled('opsInbox');
+  const alerts = useOpsAlerts(opsInboxOn);
+  const unread = opsInboxOn ? (alerts.data?.unreadCount ?? 0) : 0;
   const displayName =
     (user?.user_metadata?.full_name as string | undefined) ||
     (user?.user_metadata?.name as string | undefined) ||
@@ -524,10 +532,28 @@ export function AppShell() {
         </div>
       </aside>
       <main className="min-w-0 flex-1 overflow-auto">
+        <div className="sticky top-0 z-20 flex justify-end border-b border-slate-200/80 bg-slate-50/90 px-6 py-2 backdrop-blur md:px-8">
+          {opsInboxOn ? (
+            <button
+              type="button"
+              onClick={() => setInboxOpen(true)}
+              className="relative inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              <Bell className="h-4 w-4" aria-hidden />
+              Alerts
+              {unread > 0 ? (
+                <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-bold text-slate-950">
+                  {unread > 99 ? '99+' : unread}
+                </span>
+              ) : null}
+            </button>
+          ) : null}
+        </div>
         <div className="mx-auto max-w-6xl p-6 md:p-8">
           <Outlet />
         </div>
       </main>
+      {opsInboxOn ? <OpsInboxDrawer open={inboxOpen} onClose={() => setInboxOpen(false)} /> : null}
     </div>
   );
 }
