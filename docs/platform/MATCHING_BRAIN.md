@@ -126,6 +126,10 @@ GET  /v1/policy                # Query resolved policy (auth required)
 
 ## Integration Guide
 
+### Enterprise logistics jobs (Phase C)
+
+Enterprise domestic freight syncs onto `logistics.jobs`. Marketplace assign (`roam_marketplace`) runs **org-fleet auto-matching** (drivers with `driver_profiles.fleet_id = org`) into `logistics.job_offers` — never `rides.ride_requests`. Matching Brain `product_key: 'enterprise'` is active for policy + internal start/reconcile/accept routes. Independent Roam Driver marketplace supply is deferred.
+
 ### For New Products
 
 1. Create a product profile:

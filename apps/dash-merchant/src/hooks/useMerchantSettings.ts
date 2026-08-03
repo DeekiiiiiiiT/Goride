@@ -303,6 +303,31 @@ export function useMerchantSettings(merchant: Merchant) {
     },
   });
 
+  const { data: specialHoursData } = useQuery({
+    queryKey: ['merchant-special-hours', merchant.id],
+    queryFn: async () => {
+      const res = await fetch(`${API_ENDPOINTS.delivery}/merchants/${merchant.id}/special-hours`);
+      if (!res.ok) return [] as SpecialDate[];
+      const body = await res.json();
+      const rows = (body.specialHours || []) as Array<{
+        id?: string;
+        date?: string;
+        isClosed?: boolean;
+        openTime?: string;
+        closeTime?: string;
+        label?: string;
+      }>;
+      return rows.map((row) => ({
+        id: String(row.id ?? crypto.randomUUID()),
+        name: String(row.label || 'Special hours'),
+        date: String(row.date || ''),
+        isClosed: row.isClosed !== false,
+        open: row.openTime?.slice(0, 5),
+        close: row.closeTime?.slice(0, 5),
+      })) as SpecialDate[];
+    },
+  });
+
   const { data: serverSettings } = useQuery({
     queryKey: ['merchant-settings', merchant.id],
     queryFn: fetchMerchantSettings,
@@ -346,12 +371,16 @@ export function useMerchantSettings(merchant: Merchant) {
     const extras = loadHoursExtras(merchant.id);
     const apiSchedule = hoursData?.length ? scheduleFromApi(hoursData) : createDefaultSchedule();
     const nextHours = extras?.schedule?.length === 7 ? extras.schedule : apiSchedule;
-    const nextSpecialDates = extras?.specialDates ?? [];
+    // Prefer server special hours; fall back to localStorage only until first successful sync
+    const nextSpecialDates =
+      (specialHoursData && specialHoursData.length > 0
+        ? specialHoursData
+        : extras?.specialDates) ?? [];
 
     setHours(nextHours);
     setSpecialDates(nextSpecialDates);
     setSavedSnapshot({ hours: nextHours, specialDates: nextSpecialDates });
-  }, [hoursData, merchant.id]);
+  }, [hoursData, specialHoursData, merchant.id]);
 
   const toggleDayOpen = (dayIndex: number, isOpen: boolean) => {
     setHours((prev) => {
@@ -500,10 +529,36 @@ export function useMerchantSettings(merchant: Merchant) {
         body: JSON.stringify({ hours: hoursPayload }),
       });
       if (!res.ok) throw new Error('Failed to update hours');
+
+      // Persist holiday/exception hours server-side (place-order gate consumes these)
+      const specialRes = await fetch(
+        `${API_ENDPOINTS.delivery}/merchants/${merchant.id}/special-hours`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            specialHours: specialDates.map((entry) => ({
+              date: entry.date,
+              isClosed: entry.isClosed,
+              openTime: entry.open ?? null,
+              closeTime: entry.close ?? null,
+              label: entry.name,
+            })),
+          }),
+        },
+      );
+      if (!specialRes.ok) throw new Error('Failed to update special hours');
+
+      // Clear local-only extras after successful server sync
+      localStorage.removeItem(hoursExtrasKey(merchant.id));
       return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['merchant-hours', merchant.id] });
+      queryClient.invalidateQueries({ queryKey: ['merchant-special-hours', merchant.id] });
     },
     onError: () => toast.error('Failed to save hours'),
   });
@@ -519,7 +574,6 @@ export function useMerchantSettings(merchant: Merchant) {
   };
 
   const saveHours = async () => {
-    saveHoursExtras(merchant.id, { schedule: hours, specialDates });
     await hoursMutation.mutateAsync();
     setSavedSnapshot({
       hours: hours.map((day) => ({

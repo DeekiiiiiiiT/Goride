@@ -6,6 +6,7 @@ import { AddTipSheet } from '@/components/checkout/AddTipSheet';
 import { ScheduleDeliverySheet } from '@/components/checkout/ScheduleDeliverySheet';
 import { useCart } from '@/hooks/useCart';
 import { getSavedAddress } from '@/lib/addressStorage';
+import { resolveCheckoutAddress } from '@/lib/checkoutAddress';
 import {
   getApiPaymentMethod,
   getAppliedPromo,
@@ -13,8 +14,8 @@ import {
   getPaymentLabel,
   saveCheckoutPreferences,
 } from '@/lib/checkoutStorage';
-import { calculateOrderTotals, parseDeliveryFeeLabel } from '@/lib/orderPricing';
-import { formatJmd, getRestaurantProfile } from '@/lib/restaurantContent';
+import { calculateOrderTotals } from '@/lib/orderPricing';
+import { formatJmd } from '@/lib/restaurantContent';
 import { toast } from 'sonner';
 import { fetchCustomerProfile } from '@/lib/customerApi';
 import PharmacyNoticeSheet, {
@@ -45,19 +46,14 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const [showPharmacyNotice, setShowPharmacyNotice] = useState(false);
   const [platformFeeRate, setPlatformFeeRate] = useState(0.05);
+  const [merchantDeliveryFee, setMerchantDeliveryFee] = useState(0);
   const [accountSuspended, setAccountSuspended] = useState(false);
 
-  const deliveryAddress = savedAddress
-    ? `${savedAddress.line1}${savedAddress.line2 ? `, ${savedAddress.line2}` : ''}`
-    : '45 Constant Spring Rd, Apt 12B';
-
-  const instructions =
-    savedAddress?.instructions ?? 'Leave at door • Gate code: 1234';
+  const resolvedAddress = resolveCheckoutAddress(savedAddress);
+  const deliveryAddress = resolvedAddress.address;
+  const instructions = resolvedAddress.instructions;
 
   const appliedPromo = getAppliedPromo();
-  const merchantDeliveryFee = merchantId
-    ? parseDeliveryFeeLabel(getRestaurantProfile(merchantId).deliveryFee)
-    : 0;
   const totals = useMemo(
     () => calculateOrderTotals(subtotal, appliedPromo, tip, merchantDeliveryFee, platformFeeRate),
     [subtotal, appliedPromo, tip, merchantDeliveryFee, platformFeeRate],
@@ -73,15 +69,23 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
   useEffect(() => {
     if (!merchantId) {
       setPlatformFeeRate(0.05);
+      setMerchantDeliveryFee(0);
       return;
     }
     let cancelled = false;
     void (async () => {
       try {
         const res = await fetch(`${API_ENDPOINTS.delivery}/merchants/${merchantId}/pricing`);
-        const data = (await res.json().catch(() => ({}))) as { platform_fee_rate?: number };
-        if (!cancelled && typeof data.platform_fee_rate === 'number') {
+        const data = (await res.json().catch(() => ({}))) as {
+          platform_fee_rate?: number;
+          delivery_fee?: number;
+        };
+        if (cancelled) return;
+        if (typeof data.platform_fee_rate === 'number') {
           setPlatformFeeRate(data.platform_fee_rate);
+        }
+        if (typeof data.delivery_fee === 'number' && Number.isFinite(data.delivery_fee)) {
+          setMerchantDeliveryFee(Math.max(0, data.delivery_fee));
         }
       } catch {
         /* keep fallback */
@@ -163,6 +167,11 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
       onNavigate('cart');
       return;
     }
+    if (!deliveryAddress) {
+      toast.error('Add a delivery address before placing your order');
+      onNavigate('address');
+      return;
+    }
 
     setIsPlacingOrder(true);
     const paymentMethod = getApiPaymentMethod(getCheckoutPreferences().paymentMethodId);
@@ -204,6 +213,8 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
       }
 
       const { order } = await res.json();
+      // Prefer server totals — client fees are display-only
+      const serverTotal = Number(order.total ?? totals.total);
 
       if (paymentMethod === 'wipay' || paymentMethod === 'paypal') {
         const paymentRes = await fetch(`${API_ENDPOINTS.payments}/intents`, {
@@ -226,7 +237,7 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
       onNavigate('order-confirmation', {
         orderId: order.id,
         orderNumber,
-        total: totals.total,
+        total: serverTotal,
         eta: deliveryMode === 'scheduled' && scheduledLabel ? scheduledLabel : '25-35 minutes',
         items: items.map(i => ({
           name: i.name,
@@ -267,11 +278,17 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
               <MaterialIcon name="location_on" className="text-primary mt-1" filled />
               <div>
                 <h2 className="text-headline-sm font-semibold text-on-surface">Delivery Address</h2>
-                <p className="text-body-md text-on-surface-variant mt-2">{deliveryAddress}</p>
+                <p className="text-body-md text-on-surface-variant mt-2">
+                  {deliveryAddress ?? 'Add a delivery address to continue'}
+                </p>
               </div>
             </div>
-            <button type="button" className="text-label-md font-semibold text-primary border border-primary px-3 py-1 rounded-lg">
-              Edit
+            <button
+              type="button"
+              onClick={() => onNavigate('address')}
+              className="text-label-md font-semibold text-primary border border-primary px-3 py-1 rounded-lg"
+            >
+              {deliveryAddress ? 'Edit' : 'Add'}
             </button>
           </div>
           <div className="mt-4 h-32 rounded-lg overflow-hidden relative bg-surface-container">
@@ -487,10 +504,15 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
             Your account is suspended. Contact support — you cannot place orders.
           </p>
         )}
+        {!deliveryAddress && (
+          <p className="text-sm text-error text-center mb-2 max-w-2xl mx-auto">
+            Add a delivery address before placing your order.
+          </p>
+        )}
         <button
           type="button"
           onClick={handlePlaceOrder}
-          disabled={isPlacingOrder || accountSuspended}
+          disabled={isPlacingOrder || accountSuspended || !deliveryAddress}
           className="w-full max-w-2xl mx-auto bg-primary text-on-primary text-headline-sm font-semibold py-4 rounded-xl flex justify-between items-center px-6 active:scale-[0.98] transition-transform disabled:opacity-50"
         >
           <span>{isPlacingOrder ? 'Processing...' : 'Place Order'}</span>

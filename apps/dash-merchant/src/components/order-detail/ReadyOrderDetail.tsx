@@ -18,9 +18,9 @@ export default function ReadyOrderDetail({
   isSubmitting = false,
 }: ReadyOrderDetailProps) {
   const [checklist, setChecklist] = useState<Record<number, boolean>>({
-    0: true,
-    1: true,
-    2: true,
+    0: false,
+    1: false,
+    2: false,
   });
 
   const courierAssigned = Boolean(order.courier_id);

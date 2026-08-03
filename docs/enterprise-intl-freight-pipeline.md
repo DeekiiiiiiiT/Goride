@@ -2,7 +2,7 @@
 
 ## Scope
 
-Ops-managed mailbox freight (no customer portal). SMS status updates. Pickup **and** door delivery. Mixed fleets: Roam marketplace, org fleet, client-owned vehicles, 3PL. Monetization wall deferred. Customs = broker CSV + manual board (not live ASYCUDA).
+Ops-managed mailbox freight (no customer portal). SMS status updates. Pickup **and** door delivery. Mixed fleets: org fleet, client-owned vehicles, 3PL. Domestic freight auto-dispatch (org drivers) is live on the Dispatch Board; full Roam Driver marketplace supply and mailbox-batch auto-dispatch are later. Monetization wall deferred. Customs = broker CSV + manual board (not live ASYCUDA).
 
 ## Smoke path
 
@@ -16,7 +16,7 @@ Ops-managed mailbox freight (no customer portal). SMS status updates. Pickup **a
 8. **Hub Station** — inbound scan → sort (pickup or door).
 9. **Fulfillment**
    - Pickup: Mark collected.
-   - Door: select packages → assignee type (org / Roam / client fleet / 3PL) → Create batch → Load / Delivered (or client `/pod/:token` link).
+   - Door: select packages → assignee type (org / client fleet / 3PL) → Create batch → Load / Delivered (or client `/pod/:token` link).
 
 ## Apply migration
 

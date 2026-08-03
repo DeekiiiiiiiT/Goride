@@ -52,6 +52,7 @@ export const DEFAULT_ENTERPRISE_ENABLED_MODULES: EnterpriseEnabledModules = {
   hubStation: true,
   fulfillmentDesk: true,
   clientFleet: true,
+  dispatchBoard: true,
   fuelManagement: true,
   tollManagement: true,
   drivers: true,

@@ -77,6 +77,7 @@ export function useCreateShipment() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['freight', 'shipments'] });
       void qc.invalidateQueries({ queryKey: ['freight', 'dashboard'] });
+      void qc.invalidateQueries({ queryKey: ['logistics', 'jobs'] });
     },
   });
 }
@@ -91,6 +92,7 @@ export function useTransitionShipment() {
       void qc.invalidateQueries({ queryKey: ['freight', 'shipment', organizationId, vars.id] });
       void qc.invalidateQueries({ queryKey: ['freight', 'shipments'] });
       void qc.invalidateQueries({ queryKey: ['freight', 'dashboard'] });
+      void qc.invalidateQueries({ queryKey: ['logistics', 'jobs'] });
     },
   });
 }

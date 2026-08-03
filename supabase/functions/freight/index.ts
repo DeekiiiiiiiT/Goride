@@ -13,6 +13,7 @@ import {
 import { ledgerPostEntry } from "../_shared/unifiedLedger/postEntry.ts";
 import { SHIPMENT_TRANSITIONS } from "./transitions.ts";
 import { registerPipelineRoutes } from "./pipeline.ts";
+import { syncJobFromShipment } from "../logistics/syncFromShipment.ts";
 
 const app = new Hono().basePath("/freight");
 
@@ -407,6 +408,28 @@ app.post("/shipments", async (c) => {
     status === "booked" ? "Shipment booked" : "Shipment drafted",
   );
 
+  // Mirror booked shipments onto shared logistics dispatch board
+  if (status !== "draft") {
+    const { data: legs } = await db
+      .from("shipment_legs")
+      .select("id, sequence, status, notes")
+      .eq("shipment_id", shipment.id)
+      .order("sequence");
+    const sync = await syncJobFromShipment(serviceClient(), shipment, {
+      legs: legs ?? [],
+      actorUserId: user.id,
+    });
+    if (sync.error) {
+      console.error(
+        JSON.stringify({
+          event: "logistics_sync_failed",
+          shipmentId: shipment.id,
+          error: sync.error,
+        }),
+      );
+    }
+  }
+
   return c.json({ shipment }, 201);
 });
 
@@ -470,6 +493,25 @@ app.post("/shipments/:id/transition", async (c) => {
     user.id,
     body.data.note,
   );
+
+  const { data: legs } = await db
+    .from("shipment_legs")
+    .select("id, sequence, status, notes")
+    .eq("shipment_id", id)
+    .order("sequence");
+  const sync = await syncJobFromShipment(serviceClient(), updated, {
+    legs: legs ?? [],
+    actorUserId: user.id,
+  });
+  if (sync.error) {
+    console.error(
+      JSON.stringify({
+        event: "logistics_sync_failed",
+        shipmentId: id,
+        error: sync.error,
+      }),
+    );
+  }
 
   return c.json({ shipment: updated });
 });

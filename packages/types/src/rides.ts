@@ -392,6 +392,8 @@ export interface DriverOfferRideSummary {
 
 export interface DriverOfferWithRide extends DriverOfferRow {
   ride: DriverOfferRideSummary | null;
+  /** Phase C: enterprise logistics marketplace offers mixed into the driver feed. */
+  offer_kind?: 'ride' | 'logistics_job';
 }
 
 export interface FareQuoteResponse {

@@ -134,7 +134,7 @@ export function SuitesPage() {
             Default fleet
             <select name="defaultAssigneeType" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2">
               <option value="org_fleet">Org fleet</option>
-              <option value="roam_marketplace">Roam drivers</option>
+              <option value="roam_marketplace">Auto-dispatch (org drivers)</option>
               <option value="client_fleet">Client fleet</option>
               <option value="third_party">3PL</option>
             </select>

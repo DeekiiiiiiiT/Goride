@@ -85,6 +85,9 @@ const ClientFleetPage = lazy(() =>
 const PodCapturePage = lazy(() =>
   import('@/app/freight/PodCapturePage').then((m) => ({ default: m.PodCapturePage })),
 );
+const DispatchBoardPage = lazy(() =>
+  import('@/app/dispatch/DispatchBoardPage').then((m) => ({ default: m.DispatchBoardPage })),
+);
 
 const BridgedDriversPage = lazy(() =>
   import('@/fleet-bridge/pages').then((m) => ({ default: m.BridgedDriversPage })),
@@ -232,6 +235,16 @@ export default function App() {
               <Gated module="shipments">
                 <Suspense fallback={<Fall />}>
                   <ShipmentsListPage />
+                </Suspense>
+              </Gated>
+            }
+          />
+          <Route
+            path="dispatch"
+            element={
+              <Gated module="dispatchBoard">
+                <Suspense fallback={<Fall />}>
+                  <DispatchBoardPage />
                 </Suspense>
               </Gated>
             }

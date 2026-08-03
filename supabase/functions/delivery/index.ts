@@ -43,6 +43,8 @@ import {
   COURIER_TRANSITIONS,
   dispatchOffersForOrder,
 } from "./courierConsumerRoutes.ts";
+import { registerDashHealthRoutes } from "./dashHealthRoutes.ts";
+import { registerStripeConnectRoutes } from "./stripeConnectRoutes.ts";
 import { notifyCustomerOrderStatus } from "../_shared/dashOrderSms.ts";
 import {
   aggregateAnalyticsByDay,
@@ -186,22 +188,29 @@ app.get("/merchants", async (c) => {
     });
   });
 
-  // Resolved platform fee for cart/checkout display (server remains authoritative on order create)
+  // Resolved platform fee + delivery fee for cart/checkout display (server remains authoritative on order create)
   app.get("/merchants/:id/pricing", async (c) => {
     const supabase = getServiceSupabase();
     const { id } = c.req.param();
     let merchantId: string | null = null;
-    const byId = await supabase.from("merchants").select("id").eq("id", id).maybeSingle();
-    if (byId.data) merchantId = String(byId.data.id);
-    else {
-      const bySlug = await supabase.from("merchants").select("id").eq("slug", id).maybeSingle();
-      if (bySlug.data) merchantId = String(bySlug.data.id);
+    let deliveryFee = 0;
+    const byId = await supabase.from("merchants").select("id, delivery_fee").eq("id", id).maybeSingle();
+    if (byId.data) {
+      merchantId = String(byId.data.id);
+      deliveryFee = Math.max(0, Number(byId.data.delivery_fee ?? 0));
+    } else {
+      const bySlug = await supabase.from("merchants").select("id, delivery_fee").eq("slug", id).maybeSingle();
+      if (bySlug.data) {
+        merchantId = String(bySlug.data.id);
+        deliveryFee = Math.max(0, Number(bySlug.data.delivery_fee ?? 0));
+      }
     }
     if (!merchantId) return c.json({ error: "Merchant not found" }, 404);
     const resolved = await resolveFeeRateForMerchant(supabase, merchantId);
     return c.json({
       merchant_id: merchantId,
       platform_fee_rate: resolved.rate,
+      delivery_fee: deliveryFee,
       has_override: resolved.merchantOverride != null,
     });
   });
@@ -401,6 +410,84 @@ app.post("/merchants/:id/hours", async (c) => {
   
   if (error) return c.json({ error: error.message }, 500);
   return c.json({ hours: data }, 201);
+});
+
+// Holiday / exception hours
+app.get("/merchants/:id/special-hours", async (c) => {
+  const supabase = getServiceSupabase();
+  const { id } = c.req.param();
+  const { data, error } = await supabase
+    .from("merchant_special_hours")
+    .select("*")
+    .eq("merchant_id", id)
+    .order("special_date");
+  if (error) return c.json({ error: error.message }, 500);
+  return c.json({
+    specialHours: (data || []).map((row: Record<string, unknown>) => ({
+      id: row.id,
+      date: row.special_date,
+      isClosed: row.is_closed,
+      openTime: row.open_time,
+      closeTime: row.close_time,
+      label: row.label,
+    })),
+  });
+});
+
+app.put("/merchants/:id/special-hours", async (c) => {
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
+
+  const supabase = getSupabase(authHeader);
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+  const { id } = c.req.param();
+  const merchant = await getMerchantForUser(supabase, user.id, user.email);
+  if (!merchant || merchant.id !== id) {
+    return c.json({ error: "Forbidden" }, 403);
+  }
+
+  const body = await c.req.json().catch(() => ({}));
+  const specialHours = Array.isArray(body.specialHours) ? body.specialHours : [];
+  const serviceSb = getServiceSupabase();
+
+  await serviceSb.from("merchant_special_hours").delete().eq("merchant_id", id);
+
+  if (specialHours.length === 0) {
+    return c.json({ specialHours: [] });
+  }
+
+  const rows = specialHours.map((entry: Record<string, unknown>) => ({
+    merchant_id: id,
+    special_date: String(entry.date || entry.special_date || "").slice(0, 10),
+    is_closed: entry.isClosed !== false && entry.is_closed !== false,
+    open_time: entry.openTime || entry.open_time || null,
+    close_time: entry.closeTime || entry.close_time || null,
+    label: entry.label ? String(entry.label) : null,
+    updated_at: new Date().toISOString(),
+  })).filter((r: { special_date: string }) => /^\d{4}-\d{2}-\d{2}$/.test(r.special_date));
+
+  if (rows.length === 0) {
+    return c.json({ specialHours: [] });
+  }
+
+  const { data, error } = await serviceSb
+    .from("merchant_special_hours")
+    .insert(rows)
+    .select();
+
+  if (error) return c.json({ error: error.message }, 500);
+  return c.json({
+    specialHours: (data || []).map((row: Record<string, unknown>) => ({
+      id: row.id,
+      date: row.special_date,
+      isClosed: row.is_closed,
+      openTime: row.open_time,
+      closeTime: row.close_time,
+      label: row.label,
+    })),
+  });
 });
 
 // ============================================================================
@@ -1146,6 +1233,11 @@ app.patch("/orders/:id/courier-location", async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const lat = Number(body.lat ?? body.courierLat);
   const lng = Number(body.lng ?? body.courierLng);
+  const clientSeqRaw = body.client_seq ?? body.clientSeq;
+  const clientSeq =
+    clientSeqRaw != null && Number.isFinite(Number(clientSeqRaw))
+      ? Math.trunc(Number(clientSeqRaw))
+      : null;
 
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
     return c.json({ error: "lat and lng required" }, 400);
@@ -1213,7 +1305,7 @@ app.patch("/orders/:id/courier-location", async (c) => {
     });
   }
 
-  return c.json({ location: updated });
+  return c.json({ location: updated, client_seq: clientSeq });
 });
 
 // ============================================================================
@@ -2080,6 +2172,8 @@ registerCustomerOrderRoutes(app, { getSupabase, getServiceSupabase });
 registerCustomerAccountRoutes(app, { getSupabase, getServiceSupabase });
 registerCustomerDiscoveryRoutes(app, { getServiceSupabase });
 registerCourierConsumerRoutes(app, { getSupabase, getServiceSupabase });
+registerDashHealthRoutes(app, { getServiceSupabase });
+registerStripeConnectRoutes(app, { getSupabase, getServiceSupabase });
 registerMerchantApplicationRoutes(app);
 registerMerchantAssetsRoutes(app);
 registerMerchantTeamRoutes(app, { getSupabase, getServiceSupabase });

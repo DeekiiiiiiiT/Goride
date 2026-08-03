@@ -157,7 +157,6 @@ export function FulfillmentDeskPage() {
               className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
             >
               <option value="org_fleet">Org fleet</option>
-              <option value="roam_marketplace">Roam marketplace</option>
               <option value="client_fleet">Client fleet</option>
               <option value="third_party">3PL</option>
             </select>

@@ -37,6 +37,11 @@ import {
 } from '../utils/networkReconnect';
 import { mergeDriverActiveRide, normalizeDriverRide } from '../utils/mergeActiveRide';
 import {
+  logisticsDriverAcceptOffer,
+  logisticsDriverDeclineOffer,
+  logisticsDriverPendingOffers,
+} from '../services/logisticsDriverEdge';
+import {
   checkGeolocationGranted,
   isBlockedByPolicy,
   isNativeCapacitorPlatform,
@@ -277,8 +282,12 @@ export function useRideDispatch() {
 
   const refreshOffers = useCallback(async () => {
     try {
-      const { offers: nextOffers } = await ridesDriverPendingOffers();
-      const filtered = nextOffers.filter(dispatchConfig.filterOffer);
+      const [{ offers: rideOffers }, logistics] = await Promise.all([
+        ridesDriverPendingOffers(),
+        logisticsDriverPendingOffers().catch(() => ({ offers: [] as DriverOfferWithRide[] })),
+      ]);
+      const merged = [...rideOffers, ...logistics.offers];
+      const filtered = merged.filter(dispatchConfig.filterOffer);
       const nextIds = new Set(filtered.map((o) => o.id));
       const hasNew = filtered.some((o) => !knownOfferIds.current.has(o.id));
       knownOfferIds.current = nextIds;
@@ -290,7 +299,7 @@ export function useRideDispatch() {
     } catch {
       /* offline / unauthorized handled elsewhere */
     }
-  }, [online, activeRide?.id, activeRide?.status]);
+  }, [online, activeRide?.id, activeRide?.status, dispatchConfig]);
 
   type PollResult = 'active' | 'terminal' | 'error';
 
@@ -708,6 +717,13 @@ export function useRideDispatch() {
   const accept = useCallback(
     async (offer: DriverOfferWithRide) => {
       try {
+        if (offer.offer_kind === 'logistics_job') {
+          await logisticsDriverAcceptOffer(offer.id);
+          setOffers([]);
+          knownOfferIds.current.clear();
+          toast.success('Freight job assigned — check Dispatch Board for details');
+          return;
+        }
         const { ride } = await ridesDriverAcceptOffer(offer.id);
         syncActiveRide(ride);
         setOffers([]);
@@ -723,7 +739,11 @@ export function useRideDispatch() {
   const decline = useCallback(
     async (offer: DriverOfferWithRide) => {
       try {
-        await ridesDriverDeclineOffer(offer.id);
+        if (offer.offer_kind === 'logistics_job') {
+          await logisticsDriverDeclineOffer(offer.id);
+        } else {
+          await ridesDriverDeclineOffer(offer.id);
+        }
         toast.message('Offer declined');
         await refreshOffers();
       } catch (e: unknown) {

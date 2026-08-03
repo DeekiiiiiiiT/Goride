@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { SubPageHeader } from '@/components/layout/SubPageHeader';
-import { HELP_TOPICS, SUPPORT_TICKETS } from '@/lib/mockSettings';
+import { HELP_TOPICS } from '@/lib/mockSettings';
 import { HELP_ARTICLES } from '@/lib/helpContent';
 import { ROAM_LEGAL } from '@roam/business-config/legalUrls';
 
@@ -25,15 +25,6 @@ export function HelpSupportPage({ onBack, onTopicSelect }: HelpSupportPageProps)
           a.answer.toLowerCase().includes(normalized),
       );
     });
-  }, [normalized]);
-
-  const filteredTickets = useMemo(() => {
-    if (!normalized) return SUPPORT_TICKETS;
-    return SUPPORT_TICKETS.filter(
-      (t) =>
-        t.title.toLowerCase().includes(normalized) ||
-        t.status.toLowerCase().includes(normalized),
-    );
   }, [normalized]);
 
   return (
@@ -69,8 +60,8 @@ export function HelpSupportPage({ onBack, onTopicSelect }: HelpSupportPageProps)
           <MaterialIcon name="chevron_right" className="text-error" />
         </button>
 
-        <section className="mb-6">
-          <h3 className="text-2xl font-semibold text-on-background mb-4">Topics</h3>
+        <section className="mb-8">
+          <h3 className="text-2xl font-semibold text-on-background mb-4">FAQ</h3>
           <div className="grid grid-cols-2 gap-4">
             {filteredTopics.map((topic) => (
               <button
@@ -84,51 +75,12 @@ export function HelpSupportPage({ onBack, onTopicSelect }: HelpSupportPageProps)
               </button>
             ))}
           </div>
+          {filteredTopics.length === 0 && (
+            <p className="text-sm text-muted text-center py-6">No FAQ topics match your search.</p>
+          )}
         </section>
 
-        <section className="mb-6">
-          <div className="flex justify-between items-end mb-4">
-            <h3 className="text-2xl font-semibold text-on-background">Recent Tickets</h3>
-            <button type="button" className="text-primary text-xs font-semibold uppercase tracking-wide">
-              View All
-            </button>
-          </div>
-          <div className="bg-surface rounded-xl shadow-soft overflow-hidden">
-            {filteredTickets.map((ticket, i) => (
-              <button
-                key={ticket.id}
-                type="button"
-                className={`w-full flex items-center justify-between p-4 hover:bg-surface-container-lowest active:bg-surface-container-low transition-colors text-left ${
-                  i < filteredTickets.length - 1 ? 'border-b border-surface-variant' : ''
-                }`}
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <div
-                    className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 relative ${ticket.iconBg}`}
-                  >
-                    <MaterialIcon name={ticket.icon} className="text-xl" />
-                    {ticket.hasNotification && (
-                      <span className="absolute -top-1 -right-1 w-3 h-3 bg-error rounded-full border-2 border-surface" />
-                    )}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-base font-medium text-on-background truncate">{ticket.title}</p>
-                    <p
-                      className={`text-sm ${
-                        ticket.statusTone === 'primary' ? 'text-primary font-medium' : 'text-muted'
-                      }`}
-                    >
-                      {ticket.status}
-                    </p>
-                  </div>
-                </div>
-                <MaterialIcon name="chevron_right" className="text-outline shrink-0" />
-              </button>
-            ))}
-          </div>
-        </section>
-
-        <div className="mt-8">
+        <div className="mt-4">
           <a
             href={`mailto:${ROAM_LEGAL.supportEmail}?subject=${encodeURIComponent('Courier support request')}`}
             className="w-full bg-primary text-on-primary h-14 rounded-xl shadow-primary active:scale-95 transition-transform flex items-center justify-center gap-2 text-xl font-semibold"

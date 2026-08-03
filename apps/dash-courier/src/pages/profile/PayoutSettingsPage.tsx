@@ -1,45 +1,68 @@
 import React, { useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { SubPageHeader } from '@/components/layout/SubPageHeader';
-import type { PayoutSchedule } from '@/lib/mockSettings';
+import { closeCourierPayoutPeriod } from '@/lib/courierApi';
+import { API_ENDPOINTS } from '@roam/api-client';
+import { supabase } from '@/lib/supabase';
+import { toast } from '@/lib/toast';
 
 type PayoutSettingsPageProps = {
   onBack: () => void;
   onViewHistory?: () => void;
 };
 
-const SCHEDULE_OPTIONS: {
-  id: PayoutSchedule;
-  title: string;
-  fee: string;
-  feeTone?: 'success';
-  description: string;
-  bolt?: boolean;
-}[] = [
-  {
-    id: 'weekly',
-    title: 'Weekly',
-    fee: 'Free',
-    feeTone: 'success',
-    description: 'Deposited every Tuesday. Takes 2-3 business days.',
-  },
-  {
-    id: 'daily',
-    title: 'Daily',
-    fee: '$0.50 fee',
-    description: 'Deposited at the end of each day. Takes 1-2 business days.',
-  },
-  {
-    id: 'instant',
-    title: 'Instant',
-    fee: '$1.99 fee',
-    description: 'Available immediately to your linked debit card.',
-    bolt: true,
-  },
-];
+function weekPeriodBounds(): { start: string; end: string } {
+  const now = new Date();
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() - start.getDay());
+  return { start: start.toISOString(), end: now.toISOString() };
+}
 
 export function PayoutSettingsPage({ onBack, onViewHistory }: PayoutSettingsPageProps) {
-  const [schedule, setSchedule] = useState<PayoutSchedule>('weekly');
+  const [busy, setBusy] = useState(false);
+
+  const startConnect = async () => {
+    setBusy(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Sign in required');
+      const res = await fetch(`${API_ENDPOINTS.delivery}/courier/connect/onboard`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ returnUrl: window.location.href }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || 'Connect onboarding failed');
+      if (body.url) {
+        window.location.href = String(body.url);
+        return;
+      }
+      toast.error('No onboarding URL returned');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not start payout setup');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const requestPayout = async () => {
+    setBusy(true);
+    try {
+      const { start, end } = weekPeriodBounds();
+      const result = await closeCourierPayoutPeriod(start, end);
+      if (!result) throw new Error('Could not close payout period');
+      toast.success('Payout period recorded', 'Pending until Connect payouts are enabled.');
+      onViewHistory?.();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Payout request failed');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-[70] bg-background flex flex-col overflow-hidden">
@@ -48,117 +71,50 @@ export function PayoutSettingsPage({ onBack, onViewHistory }: PayoutSettingsPage
       <main className="flex-1 overflow-y-auto px-[var(--spacing-edge)] py-6 pb-8 max-w-2xl mx-auto w-full space-y-6">
         <section className="space-y-4">
           <h2 className="text-xl font-semibold text-on-background">Payout Method</h2>
-          <div className="bg-surface rounded-xl p-4 shadow-soft border border-surface-variant flex items-center justify-between relative overflow-hidden">
-            <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary" />
-            <div className="flex items-center gap-4 ml-1 min-w-0">
-              <div className="w-12 h-12 rounded-full bg-surface-container flex items-center justify-center text-primary shrink-0">
-                <MaterialIcon name="account_balance" filled />
-              </div>
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className="text-base font-semibold text-on-background">
-                    Bank account ending in ****4521
-                  </h3>
-                  <span className="bg-primary-container text-on-primary-container text-[11px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wider">
-                    Primary
-                  </span>
-                </div>
-                <p className="text-sm text-muted mt-1">Chase Checking</p>
-              </div>
-            </div>
+          <div className="bg-surface rounded-xl p-4 shadow-soft border border-surface-variant space-y-3">
+            <p className="text-sm text-on-surface-variant">
+              Bank payouts run through Stripe Connect. No bank account is stored in Roam until you
+              finish Connect onboarding. Weekly standard payouts only at launch (no instant payout).
+            </p>
             <button
               type="button"
-              aria-label="Edit payment method"
-              className="p-2 rounded-full hover:bg-surface-container text-muted shrink-0"
+              disabled={busy}
+              onClick={() => void startConnect()}
+              className="w-full min-h-12 rounded-xl bg-primary text-on-primary font-semibold disabled:opacity-50"
             >
-              <MaterialIcon name="more_vert" />
+              {busy ? 'Working…' : 'Set up payouts with Stripe Connect'}
             </button>
           </div>
+        </section>
+
+        <section className="space-y-3">
+          <h2 className="text-xl font-semibold text-on-background">This week</h2>
           <button
             type="button"
-            className="w-full min-h-14 border border-outline border-dashed rounded-xl flex items-center justify-center gap-2 text-primary font-medium hover:bg-surface-container-low active:scale-[0.98] transition-all"
+            disabled={busy}
+            onClick={() => void requestPayout()}
+            className="w-full min-h-12 rounded-xl border border-outline font-medium disabled:opacity-50"
           >
-            <MaterialIcon name="add" />
-            Add payment method
+            Request weekly payout
           </button>
+          {onViewHistory && (
+            <button
+              type="button"
+              onClick={onViewHistory}
+              className="w-full min-h-12 rounded-xl text-primary font-medium"
+            >
+              View payout history
+            </button>
+          )}
         </section>
 
-        <hr className="border-surface-variant" />
-
-        <section className="space-y-4">
-          <div>
-            <h2 className="text-xl font-semibold text-on-background">Payout Schedule</h2>
-            <p className="text-sm text-muted mt-1">Choose how often you get paid.</p>
-          </div>
-          <div className="space-y-2">
-            {SCHEDULE_OPTIONS.map((option) => {
-              const selected = schedule === option.id;
-              return (
-                <button
-                  key={option.id}
-                  type="button"
-                  onClick={() => setSchedule(option.id)}
-                  className={`w-full text-left bg-surface border rounded-xl p-4 flex items-start gap-4 transition-all shadow-sm hover:border-outline-variant ${
-                    selected ? 'border-primary bg-surface-container-low' : 'border-surface-variant'
-                  }`}
-                >
-                  <div
-                    className={`w-5 h-5 rounded-full border-2 mt-0.5 flex items-center justify-center shrink-0 ${
-                      selected ? 'border-primary' : 'border-outline-variant'
-                    }`}
-                  >
-                    {selected && <div className="w-2.5 h-2.5 rounded-full bg-primary" />}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex justify-between items-start gap-2">
-                      <div className="flex items-center gap-2">
-                        <h3 className="text-base font-semibold text-on-background">{option.title}</h3>
-                        {option.bolt && (
-                          <MaterialIcon name="bolt" className="text-warning text-xl" filled />
-                        )}
-                      </div>
-                      <span
-                        className={`text-sm font-medium shrink-0 ${
-                          option.feeTone === 'success' ? 'text-success' : 'text-on-background'
-                        }`}
-                      >
-                        {option.fee}
-                      </span>
-                    </div>
-                    <p className="text-sm text-muted mt-1">{option.description}</p>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </section>
-
-        <hr className="border-surface-variant" />
-
-        <section className="space-y-4">
-          <button
-            type="button"
-            onClick={onViewHistory}
-            className="w-full flex items-center justify-between p-4 bg-surface rounded-xl shadow-soft border border-surface-variant active:scale-[0.98] transition-transform group"
-          >
-            <div className="flex items-center gap-4">
-              <div className="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center text-on-surface-variant">
-                <MaterialIcon name="history" />
-              </div>
-              <span className="text-base font-medium text-on-background">Payout history</span>
-            </div>
-            <MaterialIcon name="chevron_right" className="text-muted group-hover:text-primary transition-colors" />
-          </button>
-          <div className="p-4 bg-surface-container-low rounded-xl border border-surface-variant flex items-start gap-4">
-            <MaterialIcon name="info" className="text-muted mt-0.5 shrink-0" />
-            <div>
-              <h4 className="text-base font-semibold text-on-background">Minimum payout threshold</h4>
-              <p className="text-sm text-muted mt-1">
-                You must have a minimum balance of $5.00 to trigger an automatic or instant payout.
-              </p>
-            </div>
-          </div>
-        </section>
+        <div className="flex items-start gap-2 text-sm text-muted">
+          <MaterialIcon name="info" className="text-base shrink-0 mt-0.5" />
+          <p>
+            Closing a payout period is idempotent — requesting the same week twice will not create
+            duplicate payout rows.
+          </p>
+        </div>
       </main>
     </div>
   );

@@ -29,6 +29,8 @@ export type ActiveDelivery = {
   fulfillment_type?: FulfillmentType;
   pickupAddress: string;
   pickupAddressFull: string;
+  pickupLat?: number;
+  pickupLng?: number;
   customerName: string;
   customerFirstName: string;
   dropoffAddress: string;

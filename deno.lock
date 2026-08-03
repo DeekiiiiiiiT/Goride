@@ -189,6 +189,13 @@
       "apps/dash-courier": {
         "packageJson": {
           "dependencies": [
+            "npm:@capacitor/android@^7.6.5",
+            "npm:@capacitor/app@^7.1.2",
+            "npm:@capacitor/cli@^7.6.5",
+            "npm:@capacitor/core@^7.6.5",
+            "npm:@capacitor/geolocation@^7.1.8",
+            "npm:@capacitor/splash-screen@^7.0.5",
+            "npm:@capacitor/status-bar@^7.0.6",
             "npm:@supabase/supabase-js@2",
             "npm:@tailwindcss/vite@4.1.12",
             "npm:@tanstack/react-query@*",
@@ -207,7 +214,8 @@
             "npm:tailwind-merge@*",
             "npm:tailwindcss@4.1.12",
             "npm:typescript@^5.4.0",
-            "npm:vite@6.3.5"
+            "npm:vite@6.3.5",
+            "npm:vitest@^3.2.4"
           ]
         }
       },
@@ -231,7 +239,8 @@
             "npm:tailwind-merge@*",
             "npm:tailwindcss@4.1.12",
             "npm:typescript@^5.4.0",
-            "npm:vite@6.3.5"
+            "npm:vite@6.3.5",
+            "npm:vitest@^3.2.4"
           ]
         }
       },
@@ -385,12 +394,15 @@
             "npm:react-router-dom@^7.6.0",
             "npm:react@^18.3.1",
             "npm:recharts@*",
+            "npm:sharp@~0.35.3",
             "npm:sonner@^2.0.3",
             "npm:tailwind-merge@*",
             "npm:tailwindcss@4.1.12",
             "npm:tw-animate-css@^1.3.8",
             "npm:vaul@^1.1.2",
+            "npm:vite-plugin-pwa@^1.3.0",
             "npm:vite@6.3.5",
+            "npm:workbox-window@^7.4.1",
             "npm:zod@^3.24.2"
           ]
         }

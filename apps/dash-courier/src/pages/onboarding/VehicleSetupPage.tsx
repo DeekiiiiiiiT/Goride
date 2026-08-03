@@ -1,7 +1,9 @@
 import React, { useRef, useState } from 'react';
 import { OnboardingHeader } from '@/components/layout/OnboardingHeader';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
+import { uploadAndGetProofUrl } from '@/lib/courierFileUpload';
 import { loadSignupDraft, saveSignupDraft, type SignupDraft } from '@/lib/signupDraft';
+import { toast } from '@/lib/toast';
 
 type VehicleSetupPageProps = {
   onBack: () => void;
@@ -24,7 +26,9 @@ export function VehicleSetupPage({ onBack, onContinue }: VehicleSetupPageProps) 
   const [makeModel, setMakeModel] = useState(draft.makeModel || '');
   const [licensePlate, setLicensePlate] = useState(draft.licensePlate || '');
   const [color, setColor] = useState(draft.color || '');
-  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(draft.equipmentPhotoUrl || null);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const showMotorizedFields = vehicleType !== 'bicycle';
@@ -32,20 +36,35 @@ export function VehicleSetupPage({ onBack, onContinue }: VehicleSetupPageProps) 
   const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const url = URL.createObjectURL(file);
-    setPhotoPreview(url);
+    setPhotoFile(file);
+    setPhotoPreview(URL.createObjectURL(file));
   };
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     if (showMotorizedFields && (!makeModel.trim() || !licensePlate.trim() || !color)) {
       return;
     }
+
+    setUploading(true);
+    let equipmentPhotoUrl = draft.equipmentPhotoUrl;
+    if (photoFile) {
+      const url = await uploadAndGetProofUrl(photoFile, 'vehicles');
+      if (!url) {
+        setUploading(false);
+        toast.error('Upload failed', 'Could not save your equipment photo. Try again.');
+        return;
+      }
+      equipmentPhotoUrl = url;
+    }
+
     saveSignupDraft({
       vehicleType,
       makeModel: showMotorizedFields ? makeModel.trim() : 'Bicycle',
       licensePlate: showMotorizedFields ? licensePlate.trim().toUpperCase() : 'N/A',
       color: showMotorizedFields ? color : 'N/A',
+      equipmentPhotoUrl,
     });
+    setUploading(false);
     onContinue();
   };
 
@@ -172,10 +191,11 @@ export function VehicleSetupPage({ onBack, onContinue }: VehicleSetupPageProps) 
         <div className="max-w-md mx-auto">
           <button
             type="button"
-            onClick={handleContinue}
-            className="w-full bg-primary-container text-on-primary-container font-semibold text-xl h-14 rounded-full flex items-center justify-center active:scale-95 transition-transform shadow-lg shadow-primary-container/20"
+            onClick={() => void handleContinue()}
+            disabled={uploading}
+            className="w-full bg-primary-container text-on-primary-container font-semibold text-xl h-14 rounded-full flex items-center justify-center active:scale-95 transition-transform shadow-lg shadow-primary-container/20 disabled:opacity-60"
           >
-            Continue
+            {uploading ? 'Saving…' : 'Continue'}
           </button>
         </div>
       </div>

@@ -67,6 +67,7 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Domestic & Setup',
     icon: Ship,
     children: [
+      { to: '/app/dispatch', label: 'Dispatch Board', icon: LayoutDashboard, module: 'dispatchBoard' },
       { to: '/app/shipments', label: 'Shipments', icon: Ship, module: 'shipments' },
       { to: '/app/carriers', label: 'Carriers', icon: Truck, module: 'carriers' },
       { to: '/app/clients', label: 'Clients', icon: Users, module: 'clients' },

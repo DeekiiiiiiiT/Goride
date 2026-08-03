@@ -2,9 +2,9 @@ import React, { useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { SlideToArrive } from '@/components/delivery/SlideToArrive';
 import { NavigationPickerSheet } from '@/components/ui/NavigationPickerSheet';
-import { toast } from '@/lib/toast';
 import type { ActiveDelivery } from '@/lib/mockActiveDelivery';
 import { NAV_MAP } from '@/lib/mockActiveDelivery';
+import { openNavigationApp } from '@/lib/navigationUrls';
 
 type ActiveDeliveryNavPageProps = {
   delivery: ActiveDelivery;
@@ -119,7 +119,14 @@ export function ActiveDeliveryNavPage({ delivery, onArrived }: ActiveDeliveryNav
       <NavigationPickerSheet
         open={navPickerOpen}
         destination={delivery.restaurant}
-        onSelect={(app) => toast.info(`Opening ${app}`, delivery.pickupAddress)}
+        onSelect={(app) => {
+          openNavigationApp(app as 'google' | 'waze' | 'apple', {
+            lat: delivery.pickupLat,
+            lng: delivery.pickupLng,
+            address: delivery.pickupAddressFull || delivery.pickupAddress,
+          });
+          setNavPickerOpen(false);
+        }}
         onClose={() => setNavPickerOpen(false)}
       />
     </div>

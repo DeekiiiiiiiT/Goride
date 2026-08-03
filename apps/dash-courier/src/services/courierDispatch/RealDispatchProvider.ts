@@ -11,6 +11,7 @@ import {
   type AvailableOrder,
   type CourierOfferRow,
 } from '@/lib/courierApi';
+import { supabase } from '@/lib/supabase';
 import type {
   AcceptOfferResult,
   CourierDispatchService,
@@ -156,12 +157,49 @@ export class RealDispatchProvider implements CourierDispatchService {
     this.pollTimer = window.setInterval(() => {
       void this.pollOffers();
     }, 8000);
+    void this.startOffersRealtime();
   }
 
   private stopPolling(): void {
     if (this.pollTimer != null) {
       window.clearInterval(this.pollTimer);
       this.pollTimer = null;
+    }
+    void this.stopOffersRealtime();
+  }
+
+  private offersChannel: { unsubscribe: () => void } | null = null;
+
+  private async startOffersRealtime(): Promise<void> {
+    await this.stopOffersRealtime();
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const channel = supabase
+        .channel(`courier-offers:${user.id}`)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'delivery',
+            table: 'courier_offers',
+            filter: `courier_user_id=eq.${user.id}`,
+          },
+          () => {
+            void this.pollOffers();
+          },
+        )
+        .subscribe();
+      this.offersChannel = { unsubscribe: () => { void supabase.removeChannel(channel); } };
+    } catch {
+      // polling remains the fallback
+    }
+  }
+
+  private async stopOffersRealtime(): Promise<void> {
+    if (this.offersChannel) {
+      this.offersChannel.unsubscribe();
+      this.offersChannel = null;
     }
   }
 

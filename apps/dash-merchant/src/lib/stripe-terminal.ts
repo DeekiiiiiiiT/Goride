@@ -59,18 +59,36 @@ async function getTerminal(): Promise<TerminalInstance> {
   return terminalPromise;
 }
 
-/** Connect reader (simulated when none found) and confirm card-present PaymentIntent. */
+/** Connect reader and confirm card-present PaymentIntent. */
+export function isStripeTerminalSimulated(): boolean {
+  try {
+    const env = (import.meta as ImportMeta & { env?: Record<string, string | boolean | undefined> }).env;
+    if (env?.VITE_STRIPE_TERMINAL_SIMULATED === 'true' || env?.VITE_STRIPE_TERMINAL_SIMULATED === true) {
+      return true;
+    }
+    // Dev builds default to simulated so local QA works without hardware
+    return Boolean(env?.DEV);
+  } catch {
+    return false;
+  }
+}
+
 export async function collectAndConfirmCardPresentPayment(
   clientSecret: string,
 ): Promise<{ status: string }> {
   const terminal = await getTerminal();
-  const discover = await terminal.discoverReaders({ simulated: true });
+  const simulated = isStripeTerminalSimulated();
+  const discover = await terminal.discoverReaders({ simulated });
   if (discover.error) {
     throw new Error(discover.error.message ?? 'Reader discovery failed');
   }
   const reader = discover.discoveredReaders?.[0];
   if (!reader) {
-    throw new Error('No card reader found');
+    throw new Error(
+      simulated
+        ? 'No simulated card reader found'
+        : 'No card reader found — pair a Stripe Terminal reader or set VITE_STRIPE_TERMINAL_SIMULATED=true for QA',
+    );
   }
   const connected = await terminal.connectReader(reader);
   if (connected.error) {

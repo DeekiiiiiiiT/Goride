@@ -144,13 +144,22 @@ export async function fetchCourierOrderStatus(
   return status ? { status } : null;
 }
 
-export async function patchCourierLocation(orderId: string, lat: number, lng: number): Promise<boolean> {
+export async function patchCourierLocation(
+  orderId: string,
+  lat: number,
+  lng: number,
+  clientSeq?: number,
+): Promise<boolean> {
   const headers = await authHeaders();
   if (!headers) return false;
+  const body: Record<string, number> = { lat, lng };
+  if (clientSeq != null && Number.isFinite(clientSeq)) {
+    body.client_seq = Math.trunc(clientSeq);
+  }
   const res = await fetch(`${BASE}/orders/${orderId}/courier-location`, {
     method: 'PATCH',
     headers,
-    body: JSON.stringify({ lat, lng }),
+    body: JSON.stringify(body),
   });
   return res.ok;
 }
@@ -186,6 +195,25 @@ export async function submitCourierIssue(
   return res.ok;
 }
 
+export type CourierPayout = {
+  id: string;
+  amount: number;
+  status: string;
+  currency?: string;
+  period_start?: string;
+  period_end?: string;
+  delivery_count?: number;
+  created_at?: string;
+};
+
+export type CourierConnectStatus = {
+  onboarded: boolean;
+  charges_enabled: boolean;
+  payouts_enabled: boolean;
+  accountId: string | null;
+  error?: string;
+};
+
 export async function fetchCourierEarnings(period: 'today' | 'week' | 'month') {
   const headers = await authHeaders(false);
   if (!headers) return null;
@@ -203,8 +231,28 @@ export async function fetchCourierEarnings(period: 'today' | 'week' | 'month') {
       amount: number;
       time?: string;
     }>;
-    payouts: unknown[];
+    payouts: CourierPayout[];
   };
+}
+
+export async function fetchCourierConnectStatus(): Promise<CourierConnectStatus | null> {
+  const headers = await authHeaders(false);
+  if (!headers) return null;
+  const res = await fetch(`${BASE}/courier/connect/status`, { headers });
+  if (!res.ok) return null;
+  return (await res.json()) as CourierConnectStatus;
+}
+
+export async function startCourierConnectOnboard(returnUrl?: string) {
+  const headers = await authHeaders();
+  if (!headers) return null;
+  const res = await fetch(`${BASE}/courier/connect/onboard`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ returnUrl }),
+  });
+  if (!res.ok) return null;
+  return (await res.json()) as { url: string; accountId: string };
 }
 
 export async function closeCourierPayoutPeriod(periodStart: string, periodEnd: string) {

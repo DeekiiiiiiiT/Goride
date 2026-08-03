@@ -16,6 +16,7 @@ import {
   loadDashGlobalPlatformFeeRate,
   resolveDashPlatformFeeRate,
 } from "./platformFeeRate.ts";
+import { assertMerchantAcceptingOrders } from "./merchantOpenCheck.ts";
 
 const PlaceOrderBody = z.object({
   merchantId: z.string().min(1),
@@ -54,6 +55,12 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
 
     const body = await validateBody(c, PlaceOrderBody);
     if (body instanceof Response) return body;
+
+    // Enforce accepting + hours + holiday specials before pricing/insert
+    const openCheck = await assertMerchantAcceptingOrders(getServiceSupabase(), body.merchantId);
+    if (!openCheck.ok) {
+      return c.json({ error: openCheck.error }, openCheck.status);
+    }
 
     // Get or create customer — enforce suspend before pricing/insert
     let { data: customer } = await supabase

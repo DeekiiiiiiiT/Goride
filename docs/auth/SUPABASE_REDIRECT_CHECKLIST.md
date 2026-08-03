@@ -4,7 +4,9 @@ Use this checklist in the **Supabase Dashboard** (Authentication → URL Configu
 
 ## Site URL (production)
 
-Pick a single primary production URL for the project default (often your main marketing or admin entry). This does **not** block other redirect URLs if they are listed below; it mainly affects default email links if paths are wrong. Document your choice here: _______________
+Pick a single primary production URL for the project default (often your main marketing or admin entry). This does **not** block other redirect URLs if they are listed below; it mainly affects default email links if paths are wrong. Document your choice here: **`https://roamfleet.co`** (set 2026-08-02 after courier Google OAuth was falling back to `http://127.0.0.1:3000`).
+
+**Never** push local `supabase/config.toml` Auth URL defaults to the hosted project (`supabase config push`) — local `site_url` is `http://127.0.0.1:3000` and will break phone/production OAuth.
 
 ## Redirect URLs (add every exact pattern you use)
 

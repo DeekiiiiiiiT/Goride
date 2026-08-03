@@ -45,38 +45,88 @@ async function requireActiveCourier(
   return { ok: true };
 }
 
-/** Fan out pending offers to online couriers near a ready order (simple distance-agnostic wave). */
-async function dispatchOffersForOrder(serviceSb: Sb, orderId: string): Promise<number> {
+/** Haversine distance in km */
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const R = 6371;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+const DISPATCH_RADIUS_KM = Number(Deno.env.get("COURIER_DISPATCH_RADIUS_KM") || 12);
+const DISPATCH_MAX_OFFERS = Number(Deno.env.get("COURIER_DISPATCH_MAX_OFFERS") || 15);
+const DISPATCH_OFFER_TTL_MS = Number(Deno.env.get("COURIER_DISPATCH_OFFER_TTL_MS") || 90_000);
+
+/** Fan out pending offers to nearby online couriers (proximity-ranked, capped). */
+async function dispatchOffersForOrder(
+  serviceSb: Sb,
+  orderId: string,
+  wave = 1,
+): Promise<number> {
   const { data: order } = await serviceSb
     .from("orders")
-    .select("id, status, courier_id, delivery_lat, delivery_lng")
+    .select("id, status, courier_id, delivery_lat, delivery_lng, merchant_id")
     .eq("id", orderId)
     .maybeSingle();
   if (!order || order.status !== "ready" || order.courier_id) return 0;
 
+  let originLat = Number(order.delivery_lat);
+  let originLng = Number(order.delivery_lng);
+  if (!Number.isFinite(originLat) || !Number.isFinite(originLng)) {
+    const { data: merchant } = await serviceSb
+      .from("merchants")
+      .select("lat, lng")
+      .eq("id", order.merchant_id)
+      .maybeSingle();
+    originLat = Number(merchant?.lat);
+    originLng = Number(merchant?.lng);
+  }
+
   const { data: online } = await serviceSb
     .from("courier_availability")
-    .select("driver_id")
+    .select("driver_id, current_lat, current_lng")
     .eq("is_online", true)
     .is("active_order_id", null)
-    .limit(25);
+    .limit(80);
 
-  const expiresAt = new Date(Date.now() + 90_000).toISOString();
-  let created = 0;
+  type Ranked = { driver_id: string; km: number };
+  const ranked: Ranked[] = [];
   for (const row of online || []) {
+    const lat = Number(row.current_lat);
+    const lng = Number(row.current_lng);
+    if (!Number.isFinite(originLat) || !Number.isFinite(originLng)) {
+      // No origin coords — fall back to unranked include (soft-launch safety)
+      ranked.push({ driver_id: row.driver_id, km: 999 });
+      continue;
+    }
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+    const km = haversineKm(originLat, originLng, lat, lng);
+    if (km <= DISPATCH_RADIUS_KM) {
+      ranked.push({ driver_id: row.driver_id, km });
+    }
+  }
+  ranked.sort((a, b) => a.km - b.km);
+  const targets = ranked.slice(0, DISPATCH_MAX_OFFERS);
+
+  const expiresAt = new Date(Date.now() + DISPATCH_OFFER_TTL_MS).toISOString();
+  let created = 0;
+  for (const row of targets) {
     const { error } = await serviceSb.from("courier_offers").upsert(
       {
         order_id: orderId,
         courier_user_id: row.driver_id,
         status: "pending",
-        wave: 1,
+        wave,
         expires_at: expiresAt,
       },
       { onConflict: "order_id,courier_user_id,wave", ignoreDuplicates: true },
     );
     if (!error) {
       created += 1;
-      // Notify on new offer creation (not only accept)
       try {
         const notifUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/notifications/courier-offer`;
         await fetch(notifUrl, {
@@ -98,6 +148,56 @@ async function dispatchOffersForOrder(serviceSb: Sb, orderId: string): Promise<n
     }
   }
   return created;
+}
+
+/** Expire stale offers and re-dispatch ready orders that still need a courier. */
+async function redispatchExpiredOffers(serviceSb: Sb): Promise<{ expired: number; redispatched: number }> {
+  const nowIso = new Date().toISOString();
+  const { data: expiredRows } = await serviceSb
+    .from("courier_offers")
+    .update({ status: "expired", updated_at: nowIso })
+    .eq("status", "pending")
+    .lt("expires_at", nowIso)
+    .select("order_id");
+
+  const expired = expiredRows?.length || 0;
+  const orderIds = [...new Set((expiredRows || []).map((r) => String(r.order_id)))];
+
+  const { data: stranded } = await serviceSb
+    .from("orders")
+    .select("id")
+    .eq("status", "ready")
+    .is("courier_id", null)
+    .limit(40);
+
+  const toRedispatch = new Set([
+    ...orderIds,
+    ...(stranded || []).map((o) => String(o.id)),
+  ]);
+
+  let redispatched = 0;
+  for (const orderId of toRedispatch) {
+    const { data: pending } = await serviceSb
+      .from("courier_offers")
+      .select("id")
+      .eq("order_id", orderId)
+      .eq("status", "pending")
+      .limit(1);
+    if (pending && pending.length > 0) continue;
+
+    const { data: lastWave } = await serviceSb
+      .from("courier_offers")
+      .select("wave")
+      .eq("order_id", orderId)
+      .order("wave", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const nextWave = Number(lastWave?.wave || 0) + 1;
+    const created = await dispatchOffersForOrder(serviceSb, orderId, nextWave);
+    if (created > 0) redispatched += 1;
+  }
+
+  return { expired, redispatched };
 }
 
 export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
@@ -196,6 +296,22 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
     const serviceSb = getServiceSupabase();
     const created = await dispatchOffersForOrder(serviceSb, orderId);
     return c.json({ created });
+  });
+
+  // Cron/internal: expire stale offers and re-dispatch stranded ready orders
+  app.post("/courier/offers/redispatch", async (c) => {
+    const cronSecret = c.req.header("x-fleet-cron-secret") || c.req.header("x-rides-cron-secret") || "";
+    const serviceKey = c.req.header("x-service-role") || "";
+    const expectedCron = Deno.env.get("FLEET_CRON_SECRET") || Deno.env.get("RIDES_CRON_SECRET") || "";
+    const expectedService = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+    const ok =
+      (expectedCron && cronSecret && cronSecret === expectedCron) ||
+      (expectedService && serviceKey && serviceKey === expectedService);
+    if (!ok) return c.json({ error: "Forbidden" }, 403);
+
+    const serviceSb = getServiceSupabase();
+    const result = await redispatchExpiredOffers(serviceSb);
+    return c.json({ ok: true, ...result });
   });
 
   // Accept a courier_offers row (or fall back to order accept)
@@ -401,15 +517,53 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
 
     if (error) return c.json({ error: error.message }, 500);
 
+    // Abort-class issues must cancel the order and free the courier (clear active_order_id)
+    const abortTypes = new Set([
+      "customer_unavailable",
+      "wrong_address",
+      "unsafe",
+      "accident",
+      "vehicle_issue",
+      "unable_to_complete",
+      "cancel",
+      "cancelled",
+    ]);
+    const shouldAbort = abortTypes.has(issueType.toLowerCase()) ||
+      String(body.abort || body.cancelOrder || "").toLowerCase() === "true";
+
+    if (shouldAbort) {
+      await serviceSb
+        .from("orders")
+        .update({ status: "cancelled", updated_at: new Date().toISOString() })
+        .eq("id", orderId)
+        .eq("courier_id", auth.userId);
+
+      // Clear by active_order_id so a mismatched courier_id cannot leave the courier stuck
+      await serviceSb
+        .from("courier_availability")
+        .update({
+          active_order_id: null,
+          status: "online",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("active_order_id", orderId);
+
+      await serviceSb
+        .from("courier_offers")
+        .update({ status: "superseded", updated_at: new Date().toISOString() })
+        .eq("order_id", orderId)
+        .in("status", ["pending", "offered", "sent"]);
+    }
+
     await serviceSb.from("order_events").insert({
       order_id: orderId,
-      status: "cancelled",
+      status: shouldAbort ? "cancelled" : "issue_reported",
       actor_type: "courier",
       actor_id: auth.userId,
       notes: `issue:${issueType}`,
     });
 
-    return c.json({ issue: data });
+    return c.json({ issue: data, aborted: shouldAbort });
   });
 
   // Earnings from completed deliveries
@@ -477,7 +631,7 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
     });
   });
 
-  // Ops: create a payout period row from completed deliveries (service/admin style, courier-auth for SL)
+  // Ops: create a payout period row from completed deliveries (idempotent per courier+period)
   app.post("/courier/payouts/close-period", async (c) => {
     const auth = await requireCourierUser(c.req.header("Authorization"), getSupabase);
     if (auth instanceof Response) return auth;
@@ -486,6 +640,23 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
     const periodEnd = String(body.periodEnd || body.period_end || "");
     if (!periodStart || !periodEnd) {
       return c.json({ error: "periodStart and periodEnd required" }, 400);
+    }
+
+    const periodStartDate = periodStart.slice(0, 10);
+    const periodEndDate = periodEnd.slice(0, 10);
+    const paymentsSb = createPaymentsClient();
+
+    // Idempotency: return existing row for this exact period instead of inserting again
+    const { data: existing } = await paymentsSb
+      .from("courier_payouts")
+      .select("*")
+      .eq("courier_id", auth.userId)
+      .eq("period_start", periodStartDate)
+      .eq("period_end", periodEndDate)
+      .maybeSingle();
+
+    if (existing) {
+      return c.json({ payout: existing, idempotent: true });
     }
 
     const serviceSb = getServiceSupabase();
@@ -504,7 +675,6 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
       0,
     );
 
-    const paymentsSb = createPaymentsClient();
     const { data: payout, error: payoutError } = await paymentsSb
       .from("courier_payouts")
       .insert({
@@ -512,14 +682,28 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
         amount,
         currency: "JMD",
         status: "pending",
-        period_start: periodStart.slice(0, 10),
-        period_end: periodEnd.slice(0, 10),
+        period_start: periodStartDate,
+        period_end: periodEndDate,
         delivery_count: rows.length,
       })
       .select()
       .single();
 
-    if (payoutError) return c.json({ error: payoutError.message }, 500);
+    // Race: unique index may reject a concurrent insert — return the winner
+    if (payoutError) {
+      const msg = String(payoutError.message || "");
+      if (/unique|duplicate/i.test(msg)) {
+        const { data: raced } = await paymentsSb
+          .from("courier_payouts")
+          .select("*")
+          .eq("courier_id", auth.userId)
+          .eq("period_start", periodStartDate)
+          .eq("period_end", periodEndDate)
+          .maybeSingle();
+        if (raced) return c.json({ payout: raced, idempotent: true });
+      }
+      return c.json({ error: payoutError.message }, 500);
+    }
     return c.json({ payout });
   });
 }
@@ -533,4 +717,4 @@ function createPaymentsClient() {
 }
 
 // Re-export for status handler use
-export { COURIER_TRANSITIONS, requireActiveCourier, dispatchOffersForOrder };
+export { COURIER_TRANSITIONS, requireActiveCourier, dispatchOffersForOrder, redispatchExpiredOffers };

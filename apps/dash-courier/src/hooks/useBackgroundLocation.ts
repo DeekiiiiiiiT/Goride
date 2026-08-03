@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { checkCourierPermission } from '@/lib/courierPermissions';
 import { toast } from '@/lib/toast';
+import { isCourierNativePlatform } from '@/capacitor-native';
 
 type LocationCoords = { lat: number; lng: number };
 
@@ -17,43 +18,77 @@ export function useBackgroundLocation(enabled: boolean) {
       return undefined;
     }
 
-    let watchId: number | undefined;
+    let cancelled = false;
+    let watchId: number | string | undefined;
+    let clearNative: (() => Promise<void>) | undefined;
 
-    const startWatch = () => {
+    const onError = () => {
+      setCoords(KINGSTON_FALLBACK);
+      setTracking(false);
+      if (!warnedRef.current) {
+        warnedRef.current = true;
+        toast.info('Using approximate location', 'Enable GPS for accurate routing.');
+      }
+    };
+
+    const startWebWatch = () => {
       if (!navigator.geolocation) {
-        setCoords(KINGSTON_FALLBACK);
-        setTracking(false);
+        onError();
         return;
       }
-
       watchId = navigator.geolocation.watchPosition(
         (pos) => {
+          if (cancelled) return;
           setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
           setTracking(true);
         },
-        () => {
-          setCoords(KINGSTON_FALLBACK);
-          setTracking(false);
-          if (!warnedRef.current) {
-            warnedRef.current = true;
-            toast.info('Using approximate location', 'Enable GPS for accurate routing.');
-          }
-        },
+        onError,
         { enableHighAccuracy: true, maximumAge: 10000, timeout: 15000 },
       );
     };
 
-    void checkCourierPermission('location').then((state) => {
-      if (state === 'granted') {
-        startWatch();
-      } else {
-        setCoords(KINGSTON_FALLBACK);
-        setTracking(false);
+    const startNativeWatch = async () => {
+      const { Geolocation } = await import('@capacitor/geolocation');
+      const perm = await Geolocation.requestPermissions();
+      if (perm.location !== 'granted' && perm.location !== 'limited') {
+        onError();
+        return;
       }
-    });
+      watchId = await Geolocation.watchPosition(
+        { enableHighAccuracy: true, timeout: 20000 },
+        (pos, err) => {
+          if (cancelled) return;
+          if (err || !pos) {
+            onError();
+            return;
+          }
+          setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+          setTracking(true);
+        },
+      );
+      clearNative = async () => {
+        if (typeof watchId === 'string') {
+          await Geolocation.clearWatch({ id: watchId });
+        }
+      };
+    };
+
+    void (async () => {
+      const native = await isCourierNativePlatform();
+      if (native) {
+        await startNativeWatch();
+        return;
+      }
+      const state = await checkCourierPermission('location');
+      if (state === 'granted') startWebWatch();
+      else onError();
+    })();
 
     return () => {
-      if (watchId !== undefined) {
+      cancelled = true;
+      if (clearNative) {
+        void clearNative();
+      } else if (typeof watchId === 'number') {
         navigator.geolocation.clearWatch(watchId);
       }
       setTracking(false);

@@ -177,8 +177,9 @@ export default function PayoutSetupSheet({ open, onClose, onSaved }: PayoutSetup
           <div className="flex items-start gap-inset-xs rounded bg-surface-container-low p-inset-sm text-on-surface-variant">
             <MaterialIcon name="lock" size={16} className="mt-0.5 shrink-0" />
             <p className="text-body-sm">
-              Your banking information is securely encrypted and used solely for depositing your
-              earnings.
+              We store only the last 4 digits of your account for display. Full bank details are not
+              kept in our database. Payouts will move through Stripe Connect once your account is
+              fully onboarded — until then, this form only confirms payout contact details.
             </p>
           </div>
         </form>

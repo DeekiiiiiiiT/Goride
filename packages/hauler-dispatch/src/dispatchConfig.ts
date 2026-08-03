@@ -47,6 +47,7 @@ export const RIDESHARE_DISPATCH_CONFIG: DispatchProductConfig = {
   dispatchMode: 'rideshare',
   defaultBodyTypeSlug: 'sedan',
   filterOffer: (offer) => {
+    if (offer.offer_kind === 'logistics_job') return true;
     const vo = offer.ride?.vehicle_option?.trim().toLowerCase();
     return vo !== 'haulage';
   },
@@ -57,7 +58,10 @@ export const RIDESHARE_DISPATCH_CONFIG: DispatchProductConfig = {
 export const HAUL_DISPATCH_CONFIG: DispatchProductConfig = {
   dispatchMode: 'haulage',
   defaultBodyTypeSlug: 'cargo-van',
-  filterOffer: (offer) => offer.ride?.vehicle_option?.trim().toLowerCase() === 'haulage',
+  filterOffer: (offer) => {
+    if (offer.offer_kind === 'logistics_job') return false;
+    return offer.ride?.vehicle_option?.trim().toLowerCase() === 'haulage';
+  },
   filterTrip: (ride) => ride.vehicle_option?.trim().toLowerCase() === 'haulage',
   ui: HAUL_UI,
 };

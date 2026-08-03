@@ -3,7 +3,10 @@ import ReactDOM from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'sonner';
 import App from './App';
+import { initCourierNative } from './capacitor-native';
 import './index.css';
+
+void initCourierNative();
 
 const queryClient = new QueryClient({
   defaultOptions: {

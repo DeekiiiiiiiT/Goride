@@ -126,6 +126,20 @@ const assigneeType = z.enum([
   "third_party",
 ]);
 
+/** Reject marketplace only on execute paths that lack a matching adapter yet (intl batches). */
+function marketplaceRejectPayload(
+  type: string | null | undefined,
+): { error: string; message: string } | null {
+  if (type === "roam_marketplace") {
+    return {
+      error: "marketplace_not_enabled",
+      message:
+        "Auto-dispatch for mailbox delivery batches is not available yet. Use the Dispatch Board for domestic freight, or assign org/client/3PL fleet here.",
+    };
+  }
+  return null;
+}
+
 const fulfillmentMode = z.enum(["pickup", "door_delivery"]);
 
 export function registerPipelineRoutes(app: FreightApp) {
@@ -1529,6 +1543,8 @@ export function registerPipelineRoutes(app: FreightApp) {
     const parsed = buildBatchBody.safeParse(await c.req.json());
     if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
     const b = parsed.data;
+    const mkt = marketplaceRejectPayload(b.assigneeType);
+    if (mkt) return c.json(mkt, 400);
 
     const { data: pkgs } = await freightDb()
       .from("packages")

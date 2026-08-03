@@ -31,6 +31,12 @@ import { getFlag } from "../_shared/featureFlags.ts";
 import { loadMatchingPolicy, invalidatePolicyCache, type ResolvedPolicy } from "./policy/loadPolicy.ts";
 import { startMatching, reconcileMatching as doReconcile } from "./dispatch/reconcileMatching.ts";
 import { patchDriverOfferRow, supersedePendingOffersForRide, loadDriverOfferById } from "./dispatch/offerWrites.ts";
+import {
+  acceptEnterpriseJobOffer,
+  declineEnterpriseJobOffer,
+  reconcileEnterpriseJob,
+  startEnterpriseJobMatching,
+} from "../logistics/enterpriseMatching.ts";
 
 /** Match Supabase path prefix: .../functions/v1/matching/<route> → /matching/<route> */
 const app = new Hono().basePath("/matching");
@@ -546,6 +552,35 @@ app.post("/v1/internal/start-matching", async (c) => {
     return c.json({ error: "invalid_product_key" }, 400);
   }
 
+  // Enterprise logistics jobs — never touch ride_requests
+  if (productKey === "enterprise") {
+    const jobId = body.job_id || body.ride_request_id;
+    if (!jobId || typeof jobId !== "string") {
+      return c.json({ error: "job_id_required" }, 400);
+    }
+    logLine({
+      event: "start_matching_enterprise",
+      job_id: jobId,
+      request_id: body.request_id ?? null,
+    });
+    try {
+      const result = await startEnterpriseJobMatching(jobId, body.actor_user_id ?? null);
+      return c.json({
+        ok: result.ok,
+        job_id: jobId,
+        ride_request_id: jobId,
+        wave: result.wave,
+        offers_created: result.offers_created ?? result.pending_offers,
+        status: result.status,
+        action_taken: result.action_taken,
+        error: result.error,
+      });
+    } catch (e) {
+      logLine({ event: "start_matching_enterprise_error", job_id: jobId, error: String(e) });
+      return c.json({ ok: false, error: "start_matching_failed", message: String(e) }, 500);
+    }
+  }
+
   const rideRequestId = body.ride_request_id;
   if (!rideRequestId || typeof rideRequestId !== "string") {
     return c.json({ error: "ride_request_id_required" }, 400);
@@ -611,6 +646,28 @@ app.post("/v1/internal/reconcile", async (c) => {
     return c.json({ error: "invalid_product_key" }, 400);
   }
 
+  if (productKey === "enterprise") {
+    const jobId = body.job_id || body.ride_request_id;
+    if (!jobId || typeof jobId !== "string") {
+      return c.json({ error: "job_id_required" }, 400);
+    }
+    try {
+      const result = await reconcileEnterpriseJob(jobId);
+      return c.json({
+        ok: result.ok,
+        job_id: jobId,
+        ride_request_id: jobId,
+        status: result.status,
+        wave: result.wave,
+        pending_offers: result.pending_offers,
+        action_taken: result.action_taken,
+        error: result.error,
+      });
+    } catch (e) {
+      return c.json({ ok: false, error: "reconcile_failed", message: String(e) }, 500);
+    }
+  }
+
   const rideRequestId = body.ride_request_id;
   if (!rideRequestId || typeof rideRequestId !== "string") {
     return c.json({ error: "ride_request_id_required" }, 400);
@@ -674,6 +731,19 @@ app.post("/v1/internal/accept-offer", async (c) => {
     offer_id: offerId,
     driver_user_id: driverUserId,
   });
+
+  if (productKey === "enterprise") {
+    const result = await acceptEnterpriseJobOffer(offerId, driverUserId);
+    if (!result.ok) {
+      return c.json({ ok: false, offer_id: offerId, error: result.error }, 409);
+    }
+    return c.json({
+      ok: true,
+      offer_id: offerId,
+      job_id: result.job_id,
+      status: result.status,
+    });
+  }
 
   const db = svc();
 
@@ -759,6 +829,21 @@ app.post("/v1/internal/decline-offer", async (c) => {
   const driverUserId = body.driver_user_id;
   if (!driverUserId || typeof driverUserId !== "string") {
     return c.json({ error: "driver_user_id_required" }, 400);
+  }
+
+  if (productKey === "enterprise") {
+    const result = await declineEnterpriseJobOffer(offerId, driverUserId);
+    if (!result.ok && result.error === "offer_not_found") {
+      return c.json({ error: "offer_not_found" }, 404);
+    }
+    return c.json({
+      ok: result.ok,
+      offer_id: offerId,
+      status: result.status,
+      wave: result.wave,
+      pending_offers: result.pending_offers,
+      action_taken: result.action_taken,
+    });
   }
 
   const offer = await loadDriverOfferById(offerId);

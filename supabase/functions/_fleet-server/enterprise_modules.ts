@@ -5,6 +5,15 @@ export const ENTERPRISE_MODULE_KEYS = [
   "carriers",
   "clients",
   "rateCards",
+  "suites",
+  "mailboxPackages",
+  "miamiScan",
+  "manifests",
+  "customsBoard",
+  "hubStation",
+  "fulfillmentDesk",
+  "clientFleet",
+  "dispatchBoard",
   "fuelManagement",
   "tollManagement",
   "drivers",
@@ -27,6 +36,15 @@ export const DEFAULT_ENTERPRISE_MODULES: Record<EnterpriseModuleKey, boolean> = 
   carriers: true,
   clients: true,
   rateCards: true,
+  suites: true,
+  mailboxPackages: true,
+  miamiScan: true,
+  manifests: true,
+  customsBoard: true,
+  hubStation: true,
+  fulfillmentDesk: true,
+  clientFleet: true,
+  dispatchBoard: true,
   fuelManagement: true,
   tollManagement: true,
   drivers: true,
@@ -69,6 +87,15 @@ export function sanitizeModuleOverrides(
     if (key in (body as Record<string, unknown>)) {
       out[key] = Boolean((body as Record<string, unknown>)[key]);
     }
+  }
+  return out;
+}
+
+/** All catalog keys explicitly false — fail-closed when modules cannot be loaded. */
+export function allModulesOff(): Record<string, boolean> {
+  const out: Record<string, boolean> = {};
+  for (const key of ENTERPRISE_MODULE_KEYS) {
+    out[key] = false;
   }
   return out;
 }

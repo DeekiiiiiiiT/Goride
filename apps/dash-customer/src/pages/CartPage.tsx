@@ -13,7 +13,7 @@ import {
   getCheckoutPreferences,
   saveCheckoutPreferences,
 } from '@/lib/checkoutStorage';
-import { cacheValidatedPromo, calculateOrderTotals, parseDeliveryFeeLabel } from '@/lib/orderPricing';
+import { cacheValidatedPromo, calculateOrderTotals } from '@/lib/orderPricing';
 import { formatJmd, getRestaurantProfile } from '@/lib/restaurantContent';
 import { toast } from '@/lib/toast';
 
@@ -33,6 +33,7 @@ export default function CartPage({ onNavigate, session }: Props) {
   const [promoMessage, setPromoMessage] = useState('');
   const [appliedPromo, setAppliedPromo] = useState(getAppliedPromo());
   const [platformFeeRate, setPlatformFeeRate] = useState(0.05);
+  const [merchantDeliveryFee, setMerchantDeliveryFee] = useState(0);
 
   const editingCartItem = items.find((i) => i.id === editingCartItemId);
   const editingMenuItem = editingCartItem && merchantId
@@ -52,15 +53,23 @@ export default function CartPage({ onNavigate, session }: Props) {
   useEffect(() => {
     if (!merchantId) {
       setPlatformFeeRate(0.05);
+      setMerchantDeliveryFee(0);
       return;
     }
     let cancelled = false;
     void (async () => {
       try {
         const res = await fetch(`${API_ENDPOINTS.delivery}/merchants/${merchantId}/pricing`);
-        const data = (await res.json().catch(() => ({}))) as { platform_fee_rate?: number };
-        if (!cancelled && typeof data.platform_fee_rate === 'number') {
+        const data = (await res.json().catch(() => ({}))) as {
+          platform_fee_rate?: number;
+          delivery_fee?: number;
+        };
+        if (cancelled) return;
+        if (typeof data.platform_fee_rate === 'number') {
           setPlatformFeeRate(data.platform_fee_rate);
+        }
+        if (typeof data.delivery_fee === 'number' && Number.isFinite(data.delivery_fee)) {
+          setMerchantDeliveryFee(Math.max(0, data.delivery_fee));
         }
       } catch {
         /* keep fallback */
@@ -71,9 +80,6 @@ export default function CartPage({ onNavigate, session }: Props) {
     };
   }, [merchantId]);
 
-  const merchantDeliveryFee = merchantId
-    ? parseDeliveryFeeLabel(getRestaurantProfile(merchantId).deliveryFee)
-    : 0;
   const { discount, deliveryFee, serviceFee, tax, total } = calculateOrderTotals(
     subtotal,
     appliedPromo,

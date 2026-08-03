@@ -49,9 +49,10 @@
     "deploy:rides": "npx supabase functions deploy rides --use-api --project-ref csfllzzastacofsvcdsc",
     "deploy:haul": "npx supabase functions deploy haul --use-api --project-ref csfllzzastacofsvcdsc",
     "deploy:freight": "npx supabase functions deploy freight --use-api --project-ref csfllzzastacofsvcdsc",
+    "deploy:logistics": "npx supabase functions deploy logistics --use-api --project-ref csfllzzastacofsvcdsc",
     "deploy:toll-brain": "npx supabase functions deploy toll-brain --use-api --project-ref csfllzzastacofsvcdsc",
     "deploy:fuel-brain": "npx supabase functions deploy fuel-brain --use-api --project-ref csfllzzastacofsvcdsc",
-    "deploy:functions:all": "pnpm deploy:edge && pnpm deploy:delivery && pnpm deploy:merchant-push && pnpm deploy:payments && pnpm deploy:send-sms && pnpm deploy:rides && pnpm deploy:driver && pnpm deploy:haul && pnpm deploy:freight && pnpm deploy:toll-brain && pnpm deploy:fuel-brain && pnpm deploy:matching && pnpm deploy:identity && pnpm deploy:evidence-cleanup && pnpm deploy:petrojam-prices && pnpm deploy:fleet-ops && pnpm deploy:platform-catalog && pnpm deploy:before-user-created && pnpm deploy:custom-access-token"
+    "deploy:functions:all": "pnpm deploy:edge && pnpm deploy:delivery && pnpm deploy:merchant-push && pnpm deploy:payments && pnpm deploy:send-sms && pnpm deploy:rides && pnpm deploy:driver && pnpm deploy:haul && pnpm deploy:freight && pnpm deploy:logistics && pnpm deploy:toll-brain && pnpm deploy:fuel-brain && pnpm deploy:matching && pnpm deploy:identity && pnpm deploy:evidence-cleanup && pnpm deploy:petrojam-prices && pnpm deploy:fleet-ops && pnpm deploy:platform-catalog && pnpm deploy:before-user-created && pnpm deploy:custom-access-token"
   },
   "devDependencies": {
     "typescript": "^5.4.0"

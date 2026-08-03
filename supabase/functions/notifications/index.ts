@@ -20,7 +20,34 @@ applyCors(app, {
   ],
 });
 
-app.get("/health", (c) => c.json({ ok: true, service: "notifications" }));
+app.get("/health", (c) => {
+  const vapidOk = Boolean(Deno.env.get("VAPID_PUBLIC_KEY") && Deno.env.get("VAPID_PRIVATE_KEY"));
+  const requireVapid =
+    Deno.env.get("REQUIRE_VAPID") === "1" ||
+    Deno.env.get("REQUIRE_VAPID") === "true" ||
+    Deno.env.get("DASH_REQUIRE_VAPID") === "1";
+  if (requireVapid && !vapidOk) {
+    return c.json({ ok: false, service: "notifications", error: "VAPID keys missing" }, 503);
+  }
+  return c.json({ ok: true, service: "notifications", vapidConfigured: vapidOk });
+});
+
+function configureVapid(): boolean {
+  const publicKey = Deno.env.get("VAPID_PUBLIC_KEY");
+  const privateKey = Deno.env.get("VAPID_PRIVATE_KEY");
+  const subject = Deno.env.get("VAPID_SUBJECT") || "mailto:support@roam.app";
+  if (!publicKey || !privateKey) return false;
+  webpush.setVapidDetails(subject, publicKey, privateKey);
+  return true;
+}
+
+function requireVapidConfigured(): boolean {
+  return (
+    Deno.env.get("REQUIRE_VAPID") === "1" ||
+    Deno.env.get("REQUIRE_VAPID") === "true" ||
+    Deno.env.get("DASH_REQUIRE_VAPID") === "1"
+  );
+}
 
 function getAuthClient(authHeader: string) {
   return createClient(
@@ -36,15 +63,6 @@ function getServiceDelivery() {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     { db: { schema: "delivery" } },
   );
-}
-
-function configureVapid(): boolean {
-  const publicKey = Deno.env.get("VAPID_PUBLIC_KEY");
-  const privateKey = Deno.env.get("VAPID_PRIVATE_KEY");
-  const subject = Deno.env.get("VAPID_SUBJECT") || "mailto:support@roam.app";
-  if (!publicKey || !privateKey) return false;
-  webpush.setVapidDetails(subject, publicKey, privateKey);
-  return true;
 }
 
 /** Persist courier push subscription (requires VAPID for later delivery). */
@@ -125,12 +143,19 @@ app.post("/courier-offer", async (c) => {
   }
 
   if (!configureVapid()) {
-    console.log("[notifications/courier-offer] VAPID not configured — subscription stored only", {
+    console.error("[notifications/courier-offer] VAPID not configured", {
       courier: courierUserId.slice(0, 8),
       orderId,
       event,
       subscribers: subs.length,
     });
+    if (requireVapidConfigured()) {
+      return c.json({
+        ok: false,
+        error: "VAPID keys not configured — set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY",
+        status: "vapid_required",
+      }, 503);
+    }
     return c.json({
       ok: true,
       status: "queued_awaiting_vapid",

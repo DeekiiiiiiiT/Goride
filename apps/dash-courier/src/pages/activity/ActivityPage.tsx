@@ -1,14 +1,15 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PullToRefresh } from '@/components/ui/PullToRefresh';
+import { SkeletonEarnings } from '@/components/ui/Skeleton';
+import { ErrorScreen } from '@/components/ui/ErrorScreen';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
+import { fetchCourierEarnings } from '@/lib/courierApi';
 import { toast } from '@/lib/toast';
 import {
   formatJmd,
   groupHistoryByDate,
-  MOCK_ACTIVE_DELIVERY_SUMMARY,
-  MOCK_ACTIVITY_HISTORY,
   type ActivityTab,
   type HistoryFilter,
   type HistoryDelivery,
@@ -28,6 +29,46 @@ const HISTORY_FILTERS: { id: HistoryFilter; label: string }[] = [
   { id: 'completed', label: 'Completed' },
   { id: 'cancelled', label: 'Cancelled' },
 ];
+
+function formatDeliveryTime(iso?: string): string {
+  if (!iso) return '';
+  return new Date(iso).toLocaleTimeString('en-JM', { hour: 'numeric', minute: '2-digit' });
+}
+
+function dateGroupLabel(iso?: string): string {
+  if (!iso) return 'Unknown';
+  const d = new Date(iso);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const day = new Date(d);
+  day.setHours(0, 0, 0, 0);
+  if (day.getTime() === today.getTime()) return 'Today';
+  if (day.getTime() === yesterday.getTime()) return 'Yesterday';
+  return d.toLocaleDateString('en-JM', { weekday: 'long', month: 'short', day: 'numeric' });
+}
+
+function mapDeliveriesToHistory(
+  rows: Array<{
+    id: string;
+    restaurant: string;
+    dropoff: string;
+    amount: number;
+    time?: string;
+  }>,
+): HistoryDelivery[] {
+  return rows.map((row) => ({
+    id: row.id,
+    restaurant: row.restaurant,
+    dropoff: row.dropoff,
+    time: formatDeliveryTime(row.time),
+    amount: row.amount,
+    status: 'completed' as const,
+    icon: 'restaurant',
+    dateGroup: dateGroupLabel(row.time),
+  }));
+}
 
 function HistoryCard({
   delivery,
@@ -98,32 +139,58 @@ function HistoryCard({
 export function ActivityPage({
   initialTab = 'current',
   embedded = false,
-  hasActiveDelivery = true,
+  hasActiveDelivery = false,
   onBack,
   onDeliverySelect,
   onViewActiveDelivery,
 }: ActivityPageProps) {
   const [tab, setTab] = useState<ActivityTab>(initialTab);
   const [filter, setFilter] = useState<HistoryFilter>('all');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [history, setHistory] = useState<HistoryDelivery[]>([]);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(false);
+    const data = await fetchCourierEarnings('week');
+    setLoading(false);
+    if (!data) {
+      setError(true);
+      return;
+    }
+    setHistory(mapDeliveriesToHistory(data.deliveries));
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   const { refreshing, scrollRef, handleTouchStart, handleTouchEnd } = usePullToRefresh({
     onRefresh: async () => {
-      await new Promise((r) => window.setTimeout(r, 800));
+      await load();
       toast.success('Activity updated');
     },
   });
 
-  const active = MOCK_ACTIVE_DELIVERY_SUMMARY;
   const groupedHistory = useMemo(
-    () => groupHistoryByDate(MOCK_ACTIVITY_HISTORY, filter),
-    [filter],
+    () => groupHistoryByDate(history, filter),
+    [history, filter],
   );
 
-  const isEmptyHistory = tab === 'history' && groupedHistory.length === 0;
+  const isEmptyHistory = tab === 'history' && !loading && groupedHistory.length === 0;
 
   const shellClass = embedded
     ? 'min-h-full flex flex-col pb-24'
     : 'fixed inset-0 z-[65] bg-background flex flex-col';
+
+  if (error && !loading) {
+    return (
+      <div className={shellClass}>
+        <ErrorScreen variant="server" onPrimary={() => void load()} fullScreen={!embedded} />
+      </div>
+    );
+  }
 
   return (
     <div className={shellClass}>
@@ -187,31 +254,25 @@ export function ActivityPage({
               <div className="bg-surface rounded-xl p-4 shadow-soft border-l-4 border-primary flex flex-col gap-4">
                 <div className="flex justify-between items-start gap-3">
                   <div>
-                    <h3 className="text-xl font-semibold text-on-surface mb-1">{active.restaurant}</h3>
+                    <h3 className="text-xl font-semibold text-on-surface mb-1">In progress</h3>
                     <p className="text-sm text-muted flex items-center gap-1">
                       <MaterialIcon name="location_on" className="text-base" />
-                      {active.dropoff}
+                      Tap below to resume navigation
                     </p>
                   </div>
                   <div className="bg-primary/10 text-primary px-3 py-1 rounded-full text-[11px] font-medium flex items-center gap-1 shrink-0">
-                    <MaterialIcon name={active.statusIcon} className="text-sm" />
-                    {active.status}
+                    <MaterialIcon name="directions_car" className="text-sm" />
+                    Active
                   </div>
                 </div>
                 <div className="h-px w-full bg-surface-variant" />
-                <div className="flex justify-between items-center gap-4">
-                  <div className="flex flex-col">
-                    <span className="text-[11px] text-muted uppercase tracking-wider">Est. Arrival</span>
-                    <span className="text-base font-semibold text-on-surface">{active.estimatedArrival}</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={onViewActiveDelivery}
-                    className="bg-primary text-on-primary px-6 py-3 rounded-lg text-xs font-semibold uppercase tracking-wide active:scale-95 transition-transform min-h-12"
-                  >
-                    View Details
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={onViewActiveDelivery}
+                  className="bg-primary text-on-primary px-6 py-3 rounded-lg text-xs font-semibold uppercase tracking-wide active:scale-95 transition-transform min-h-12 w-full"
+                >
+                  View Details
+                </button>
               </div>
             ) : (
               <EmptyState
@@ -242,11 +303,13 @@ export function ActivityPage({
               ))}
             </div>
 
-            {isEmptyHistory ? (
+            {loading ? (
+              <SkeletonEarnings />
+            ) : isEmptyHistory ? (
               <EmptyState
                 icon="history"
                 title="No deliveries yet"
-                description="Your completed and cancelled deliveries will appear here."
+                description="Your completed deliveries from this week will appear here."
               />
             ) : (
               <div className="flex flex-col gap-4">

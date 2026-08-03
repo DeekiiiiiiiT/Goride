@@ -54,3 +54,4 @@ export * from './tollBrain';
 export * from './haulage';
 export * from './evidence';
 export * from './freight';
+export * from './logistics';
