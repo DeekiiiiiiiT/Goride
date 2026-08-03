@@ -191,7 +191,7 @@ export function ZoneDrawMap({
         {points.length === 0
           ? 'No area drawn yet'
           : points.length < 3
-            ? `${points.length} point${points.length === 1 ? '' : 's'} — keep clicking`}
+            ? `${points.length} point${points.length === 1 ? '' : 's'} — keep clicking`
             : `Area ready (${points.length} corners)`}
       </p>
     </div>
