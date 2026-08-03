@@ -1,57 +1,30 @@
-import { FormEvent, useMemo, useState } from 'react';
+import { FormEvent, useState } from 'react';
 import {
   useCreateServiceZone,
   useDeleteServiceZone,
   useServiceZones,
 } from '@/app/hooks/useLogistics';
-
-/** Simple Kingston-area default rectangle as GeoJSON Polygon (lng,lat). */
-function defaultPolygon(): Record<string, unknown> {
-  return {
-    type: 'Polygon',
-    coordinates: [[
-      [-76.95, 17.95],
-      [-76.7, 17.95],
-      [-76.7, 18.1],
-      [-76.95, 18.1],
-      [-76.95, 17.95],
-    ]],
-  };
-}
-
-function parseGeoJsonInput(raw: string): Record<string, unknown> | null {
-  try {
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    if (parsed.type === 'Feature') {
-      return (parsed.geometry as Record<string, unknown>) || null;
-    }
-    if (parsed.type === 'Polygon' || parsed.type === 'MultiPolygon') return parsed;
-    return null;
-  } catch {
-    return null;
-  }
-}
+import {
+  LatLngPoint,
+  pointsToPolygonGeoJson,
+  ZoneDrawMap,
+} from '@/app/dispatch/ZoneDrawMap';
 
 export function ServiceZonesPage() {
   const { data, isLoading, error } = useServiceZones();
   const create = useCreateServiceZone();
   const del = useDeleteServiceZone();
   const [formError, setFormError] = useState<string | null>(null);
-  const [geoText, setGeoText] = useState(() => JSON.stringify(defaultPolygon(), null, 2));
+  const [points, setPoints] = useState<LatLngPoint[]>([]);
   const zones = data?.zones ?? [];
-
-  const previewHint = useMemo(() => {
-    const g = parseGeoJsonInput(geoText);
-    return g ? 'GeoJSON looks valid' : 'Paste a Polygon / MultiPolygon (or Feature)';
-  }, [geoText]);
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setFormError(null);
     const fd = new FormData(e.currentTarget);
-    const geojson = parseGeoJsonInput(geoText);
+    const geojson = pointsToPolygonGeoJson(points);
     if (!geojson) {
-      setFormError('Invalid GeoJSON polygon');
+      setFormError('Draw a zone on the map (at least 3 corners)');
       return;
     }
     try {
@@ -62,7 +35,7 @@ export function ServiceZonesPage() {
         active: true,
       });
       e.currentTarget.reset();
-      setGeoText(JSON.stringify(defaultPolygon(), null, 2));
+      setPoints([]);
     } catch (err) {
       setFormError((err as Error).message);
     }
@@ -90,20 +63,19 @@ export function ServiceZonesPage() {
             <option value="pricing">Pricing</option>
           </select>
         </div>
-        <label className="block text-sm text-slate-600">
-          GeoJSON polygon
-          <textarea
-            value={geoText}
-            onChange={(e) => setGeoText(e.target.value)}
-            rows={8}
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-xs"
-          />
-        </label>
-        <p className="text-xs text-slate-500">{previewHint}</p>
+        <ZoneDrawMap
+          points={points}
+          onChange={setPoints}
+          existingZones={zones.map((z) => ({
+            id: String(z.id),
+            name: String(z.name),
+            geojson: (z.geojson as Record<string, unknown> | null | undefined) ?? null,
+          }))}
+        />
         <button
           type="submit"
-          disabled={create.isPending}
-          className="rounded-lg bg-amber-500 px-3 py-2 text-sm font-semibold text-slate-950"
+          disabled={create.isPending || points.length < 3}
+          className="rounded-lg bg-amber-500 px-3 py-2 text-sm font-semibold text-slate-950 disabled:opacity-50"
         >
           Save zone
         </button>
