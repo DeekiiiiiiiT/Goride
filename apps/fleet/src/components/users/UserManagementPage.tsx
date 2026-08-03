@@ -47,9 +47,14 @@ import { toast } from 'sonner@2.0.3';
 import { TeamMember } from '../../types/data';
 import { api } from '../../services/api';
 import { usePermissions } from '../../hooks/usePermissions';
+import {
+  ENTERPRISE_INVITABLE_ROLES,
+  resolveEnterpriseSeatRole,
+  enterpriseSeatHasPermission,
+} from '@roam/auth-client';
 
 // Role display configuration
-const ROLE_CONFIG: Record<string, { label: string; description: string; color: string }> = {
+const FLEET_ROLE_CONFIG: Record<string, { label: string; description: string; color: string }> = {
   admin:            { label: 'Fleet Owner',      description: 'Full access to all features',           color: 'bg-purple-50 text-purple-700 border-purple-200' },
   fleet_owner:      { label: 'Fleet Owner',      description: 'Full access to all features',           color: 'bg-purple-50 text-purple-700 border-purple-200' },
   fleet_manager:    { label: 'Fleet Manager',    description: 'Manage drivers, vehicles, and operations', color: 'bg-blue-50 text-blue-700 border-blue-200' },
@@ -58,25 +63,74 @@ const ROLE_CONFIG: Record<string, { label: string; description: string; color: s
   driver:           { label: 'Driver',           description: 'Driver app access only',                color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
 };
 
-const INVITABLE_ROLES = [
+const ENTERPRISE_ROLE_CONFIG: Record<string, { label: string; description: string; color: string }> = {
+  ...FLEET_ROLE_CONFIG,
+  enterprise_owner: {
+    label: 'Owner',
+    description: 'Full access to all Enterprise features',
+    color: 'bg-purple-50 text-purple-700 border-purple-200',
+  },
+  enterprise_dispatcher: {
+    label: 'Dispatcher',
+    description: 'Assign jobs, fulfillment, zones',
+    color: 'bg-blue-50 text-blue-700 border-blue-200',
+  },
+  enterprise_customs: {
+    label: 'Customs & Mailbox',
+    description: 'Mailbox intake, customs, hub',
+    color: 'bg-teal-50 text-teal-700 border-teal-200',
+  },
+  enterprise_finance: {
+    label: 'Finance',
+    description: 'Rate cards, clients, finance',
+    color: 'bg-amber-50 text-amber-700 border-amber-200',
+  },
+  enterprise_viewer: {
+    label: 'Viewer',
+    description: 'Read-only access',
+    color: 'bg-slate-50 text-slate-600 border-slate-200',
+  },
+};
+
+const FLEET_INVITABLE_ROLES = [
   { value: 'fleet_manager',    label: 'Fleet Manager',    description: 'Manage drivers, vehicles, and operations' },
   { value: 'fleet_accountant', label: 'Fleet Accountant', description: 'View financials, reports, and exports' },
   { value: 'fleet_viewer',     label: 'Fleet Viewer',     description: 'Read-only dashboard access' },
 ];
 
-function getRoleDisplay(role: string) {
-  return ROLE_CONFIG[role] || ROLE_CONFIG.fleet_viewer;
+export type UserManagementPageProps = {
+  productLine?: 'fleet' | 'enterprise';
+};
+
+function getRoleDisplay(role: string, productLine: 'fleet' | 'enterprise') {
+  const cfg = productLine === 'enterprise' ? ENTERPRISE_ROLE_CONFIG : FLEET_ROLE_CONFIG;
+  return (
+    cfg[role] ||
+    (productLine === 'enterprise' ? ENTERPRISE_ROLE_CONFIG.enterprise_viewer : FLEET_ROLE_CONFIG.fleet_viewer)
+  );
 }
 
-export function UserManagementPage() {
-  const { can } = usePermissions();
+export function UserManagementPage({ productLine = 'fleet' }: UserManagementPageProps) {
+  const { can, jwtRole } = usePermissions();
+  const invitableRoles =
+    productLine === 'enterprise' ? [...ENTERPRISE_INVITABLE_ROLES] : FLEET_INVITABLE_ROLES;
+  const defaultInviteRole =
+    productLine === 'enterprise' ? 'enterprise_dispatcher' : 'fleet_manager';
+  const canInvite =
+    productLine === 'enterprise'
+      ? enterpriseSeatHasPermission(resolveEnterpriseSeatRole(jwtRole), 'ops.team.manage')
+      : can('users.invite');
+  const canEditRole =
+    productLine === 'enterprise'
+      ? enterpriseSeatHasPermission(resolveEnterpriseSeatRole(jwtRole), 'ops.team.manage')
+      : can('users.edit_role');
   const [members, setMembers] = useState<(TeamMember & { isOwner?: boolean })[]>([]);
   const [isInviteOpen, setIsInviteOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [fetchLoading, setFetchLoading] = useState(true);
 
   // Invite form
-  const [inviteForm, setInviteForm] = useState({ name: '', email: '', role: 'fleet_manager' });
+  const [inviteForm, setInviteForm] = useState({ name: '', email: '', role: defaultInviteRole });
   // Invite result (temp password)
   const [inviteResult, setInviteResult] = useState<{ name: string; email: string; temporaryPassword: string } | null>(null);
   const [copied, setCopied] = useState(false);
@@ -127,7 +181,7 @@ export function UserManagementPage() {
         email: inviteForm.email,
         temporaryPassword: result.temporaryPassword,
       });
-      toast.success(`${inviteForm.name} invited as ${getRoleDisplay(inviteForm.role).label}`);
+      toast.success(`${inviteForm.name} invited as ${getRoleDisplay(inviteForm.role, productLine).label}`);
       fetchMembers();
     } catch (error: any) {
       console.error(error);
@@ -148,7 +202,7 @@ export function UserManagementPage() {
   const closeInviteDialog = () => {
     setIsInviteOpen(false);
     setInviteResult(null);
-    setInviteForm({ name: '', email: '', role: 'fleet_manager' });
+    setInviteForm({ name: '', email: '', role: defaultInviteRole });
     setCopied(false);
   };
 
@@ -176,7 +230,7 @@ export function UserManagementPage() {
     setLoading(true);
     try {
       await api.updateTeamMemberRole(roleChangeTarget.id, newRole);
-      toast.success(`${roleChangeTarget.name}'s role updated to ${getRoleDisplay(newRole).label}`);
+      toast.success(`${roleChangeTarget.name}'s role updated to ${getRoleDisplay(newRole, productLine).label}`);
       setIsRoleChangeOpen(false);
       setRoleChangeTarget(null);
       setNewRole('');
@@ -227,7 +281,7 @@ export function UserManagementPage() {
             </CardDescription>
           </div>
           <Dialog open={isInviteOpen} onOpenChange={(open) => { if (!open) closeInviteDialog(); else setIsInviteOpen(true); }}>
-            {can('users.invite') && (
+            {canInvite && (
             <DialogTrigger asChild>
               <Button>
                 <UserPlus className="mr-2 h-4 w-4" />
@@ -276,7 +330,7 @@ export function UserManagementPage() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {INVITABLE_ROLES.map((r) => (
+                          {invitableRoles.map((r) => (
                             <SelectItem key={r.value} value={r.value}>
                               <div className="flex flex-col">
                                 <span>{r.label}</span>
@@ -286,7 +340,7 @@ export function UserManagementPage() {
                         </SelectContent>
                       </Select>
                       <p className="text-xs text-slate-500">
-                        {INVITABLE_ROLES.find(r => r.value === inviteForm.role)?.description}
+                        {invitableRoles.find(r => r.value === inviteForm.role)?.description}
                       </p>
                     </div>
                     <DialogFooter>
@@ -358,7 +412,7 @@ export function UserManagementPage() {
             </TableHeader>
             <TableBody>
               {members.map((member) => {
-                const roleInfo = getRoleDisplay(member.role);
+                const roleInfo = getRoleDisplay(member.role, productLine);
                 const isOwner = (member as any).isOwner || member.role === 'admin';
                 return (
                   <TableRow key={member.id}>
@@ -397,7 +451,7 @@ export function UserManagementPage() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            {can('users.edit_role') && (
+                            {canEditRole && (
                               <DropdownMenuItem onClick={() => {
                                 setRoleChangeTarget(member);
                                 setNewRole(member.role);
@@ -500,16 +554,18 @@ export function UserManagementPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {INVITABLE_ROLES.map((r) => (
+                  {invitableRoles.map((r) => (
                     <SelectItem key={r.value} value={r.value}>
                       {r.label}
                     </SelectItem>
                   ))}
-                  <SelectItem value="driver">Driver</SelectItem>
+                  {productLine === 'fleet' ? (
+                    <SelectItem value="driver">Driver</SelectItem>
+                  ) : null}
                 </SelectContent>
               </Select>
               <p className="text-xs text-slate-500">
-                {INVITABLE_ROLES.find(r => r.value === newRole)?.description || 
+                {invitableRoles.find(r => r.value === newRole)?.description ||
                  (newRole === 'driver' ? 'Driver app access only' : '')}
               </p>
             </div>

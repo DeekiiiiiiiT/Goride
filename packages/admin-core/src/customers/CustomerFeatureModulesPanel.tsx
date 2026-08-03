@@ -24,6 +24,7 @@ type ModulesResponse = {
 
 const GROUPS: { id: string; label: string }[] = [
   { id: 'freight', label: 'Freight' },
+  { id: 'grocery', label: 'Grocery (reserved)' },
   { id: 'ops', label: 'Operations' },
   { id: 'money', label: 'Finance & Claims' },
   { id: 'people', label: 'People' },

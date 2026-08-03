@@ -7,6 +7,7 @@ import { z } from "https://deno.land/x/zod@v3.24.2/mod.ts";
 import { applyCors } from "../_shared/corsAllowlist.ts";
 import {
   requireEnterpriseAccess,
+  requireSeatPermission,
   serviceClient,
   type EnterpriseAccessUser,
 } from "../_shared/enterpriseAccess.ts";
@@ -109,6 +110,8 @@ app.get("/carriers", async (c) => {
 app.post("/carriers", async (c) => {
   const user = await requireUser(c);
   if (user instanceof Response) return user;
+  const seat = requireSeatPermission(user, "freight.carriers.write");
+  if (seat instanceof Response) return seat;
   const parsed = carrierBody.safeParse(await c.req.json());
   if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
   const b = parsed.data;
@@ -133,6 +136,8 @@ app.post("/carriers", async (c) => {
 app.patch("/carriers/:id", async (c) => {
   const user = await requireUser(c);
   if (user instanceof Response) return user;
+  const seat = requireSeatPermission(user, "freight.carriers.write");
+  if (seat instanceof Response) return seat;
   const parsed = carrierBody.partial().safeParse(await c.req.json());
   if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
   const b = parsed.data;
@@ -182,6 +187,8 @@ app.get("/clients", async (c) => {
 app.post("/clients", async (c) => {
   const user = await requireUser(c);
   if (user instanceof Response) return user;
+  const seat = requireSeatPermission(user, "freight.clients.write");
+  if (seat instanceof Response) return seat;
   const parsed = clientBody.safeParse(await c.req.json());
   if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
   const b = parsed.data;
@@ -233,6 +240,8 @@ app.get("/rate-cards", async (c) => {
 app.post("/rate-cards", async (c) => {
   const user = await requireUser(c);
   if (user instanceof Response) return user;
+  const seat = requireSeatPermission(user, "freight.rates.write");
+  if (seat instanceof Response) return seat;
   const parsed = rateCardBody.safeParse(await c.req.json());
   if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
   const b = parsed.data;
@@ -261,6 +270,8 @@ app.post("/rate-cards", async (c) => {
 app.patch("/rate-cards/:id", async (c) => {
   const user = await requireUser(c);
   if (user instanceof Response) return user;
+  const seat = requireSeatPermission(user, "freight.rates.write");
+  if (seat instanceof Response) return seat;
   const id = c.req.param("id");
   const parsed = rateCardBody.partial().safeParse(await c.req.json());
   if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
@@ -378,6 +389,8 @@ app.get("/shipments/:id", async (c) => {
 app.post("/shipments", async (c) => {
   const user = await requireUser(c);
   if (user instanceof Response) return user;
+  const seat = requireSeatPermission(user, "freight.shipments.write");
+  if (seat instanceof Response) return seat;
   const parsed = createShipmentBody.safeParse(await c.req.json());
   if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
   const b = parsed.data;
@@ -484,6 +497,8 @@ app.post("/shipments", async (c) => {
 app.post("/shipments/:id/transition", async (c) => {
   const user = await requireUser(c);
   if (user instanceof Response) return user;
+  const seat = requireSeatPermission(user, "freight.shipments.write");
+  if (seat instanceof Response) return seat;
   const body = z
     .object({
       status: z.enum([
@@ -578,6 +593,8 @@ app.post("/shipments/:id/transition", async (c) => {
 app.post("/shipments/:id/bill", async (c) => {
   const user = await requireUser(c);
   if (user instanceof Response) return user;
+  const seat = requireSeatPermission(user, "ops.finance.read");
+  if (seat instanceof Response) return seat;
   const id = c.req.param("id");
   const idem =
     c.req.header("Idempotency-Key") ||

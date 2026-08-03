@@ -6,11 +6,17 @@ import type { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import { z } from "https://deno.land/x/zod@v3.24.2/mod.ts";
 import {
   requireEnterpriseAccess,
+  requireSeatPermission,
   serviceClient,
   type EnterpriseAccessUser,
 } from "../_shared/enterpriseAccess.ts";
 import { canTransitionPackage } from "./packageTransitions.ts";
 import { notifyPackageContact } from "./notifyPackage.ts";
+import {
+  completeStopDelivery,
+  issuePodToken,
+  loadPodSessionByToken,
+} from "./podService.ts";
 
 type FreightApp = Hono;
 
@@ -39,11 +45,6 @@ function batchNumber(): string {
     .toString()
     .padStart(4, "0");
   return `DB-${d}-${n}`;
-}
-
-function randomToken(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(24));
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 async function appendScan(input: {
@@ -1540,6 +1541,8 @@ export function registerPipelineRoutes(app: FreightApp) {
   app.post("/fulfillment/batches", async (c) => {
     const user = await requireUser(c);
     if (user instanceof Response) return user;
+    const seat = requireSeatPermission(user, "freight.fulfillment.write");
+    if (seat instanceof Response) return seat;
     const parsed = buildBatchBody.safeParse(await c.req.json());
     if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
     const b = parsed.data;
@@ -1565,8 +1568,7 @@ export function registerPipelineRoutes(app: FreightApp) {
       withCoords.reduce((s, p) => s + Number(p.lng), 0) / withCoords.length;
     const ordered = nearestNeighborOrder(withCoords, meanLat, meanLng);
 
-    const token = randomToken();
-    const expires = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
+    const { token, expiresAt: expires } = issuePodToken();
     const now = new Date().toISOString();
 
     const { data: batch, error } = await freightDb()
@@ -1697,6 +1699,8 @@ export function registerPipelineRoutes(app: FreightApp) {
   app.post("/fulfillment/batches/:id/load", async (c) => {
     const user = await requireUser(c);
     if (user instanceof Response) return user;
+    const seat = requireSeatPermission(user, "freight.fulfillment.write");
+    if (seat instanceof Response) return seat;
     const body = z
       .object({ packageId: z.string().uuid(), barcode: z.string().optional() })
       .safeParse(await c.req.json());
@@ -1737,6 +1741,8 @@ export function registerPipelineRoutes(app: FreightApp) {
   app.post("/fulfillment/batches/:id/deliver-stop", async (c) => {
     const user = await requireUser(c);
     if (user instanceof Response) return user;
+    const seat = requireSeatPermission(user, "freight.fulfillment.write");
+    if (seat instanceof Response) return seat;
     const body = z
       .object({
         packageId: z.string().uuid(),
@@ -1746,59 +1752,22 @@ export function registerPipelineRoutes(app: FreightApp) {
       .safeParse(await c.req.json());
     if (!body.success) return c.json({ error: body.error.flatten() }, 400);
     const id = c.req.param("id");
-    const now = new Date().toISOString();
 
-    const { data: stop, error } = await freightDb()
-      .from("delivery_batch_stops")
-      .update({
-        status: "delivered",
-        delivered_at: now,
-        pod_note: body.data.podNote || null,
-        pod_photo_path: body.data.podPhotoPath || null,
-        updated_at: now,
-      })
-      .eq("batch_id", id)
-      .eq("package_id", body.data.packageId)
-      .eq("organization_id", user.organizationId)
-      .select("*")
-      .single();
-    if (error) return c.json({ error: error.message }, 500);
-
-    const { data: pkg } = await freightDb()
-      .from("packages")
-      .update({ status: "delivered", updated_at: now })
-      .eq("id", body.data.packageId)
-      .select("*")
-      .single();
-
-    await freightDb()
-      .from("fulfillment_orders")
-      .update({ status: "completed", completed_at: now, updated_at: now })
-      .eq("package_id", body.data.packageId);
-
-    await appendScan({
-      orgId: user.organizationId,
+    const result = await completeStopDelivery({
+      batchId: id,
+      organizationId: user.organizationId,
       packageId: body.data.packageId,
-      eventType: "delivered",
+      podNote: body.data.podNote,
+      podPhotoPath: body.data.podPhotoPath,
       actorUserId: user.id,
-      note: body.data.podNote,
+      defaultNote: "Confirmed by ops",
     });
-    if (pkg) await maybeNotifyPackage(pkg, "delivered");
-
-    const { data: remaining } = await freightDb()
-      .from("delivery_batch_stops")
-      .select("id")
-      .eq("batch_id", id)
-      .neq("status", "delivered")
-      .neq("status", "skipped");
-    if (!remaining?.length) {
-      await freightDb()
-        .from("delivery_batches")
-        .update({ status: "completed", completed_at: now, updated_at: now })
-        .eq("id", id);
-    }
-
-    return c.json({ stop, package: pkg });
+    if (!result.ok) return c.json({ error: result.error }, 500);
+    return c.json({
+      stop: result.stop,
+      package: result.package,
+      batchCompleted: result.batchCompleted,
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -1806,29 +1775,12 @@ export function registerPipelineRoutes(app: FreightApp) {
   // -------------------------------------------------------------------------
   app.get("/public/pod/:token", async (c) => {
     const token = c.req.param("token");
-    const { data: batch } = await freightDb()
-      .from("delivery_batches")
-      .select("*")
-      .eq("pod_token", token)
-      .maybeSingle();
-    if (!batch) return c.json({ error: "Invalid link" }, 404);
-    if (
-      batch.pod_token_expires_at &&
-      new Date(batch.pod_token_expires_at).getTime() < Date.now()
-    ) {
-      return c.json({ error: "Link expired" }, 410);
-    }
-    const { data: stops } = await freightDb()
-      .from("delivery_batch_stops")
-      .select(
-        "id, stop_order, address, status, packages(id, courier_tracking_number, description, suites(suite_code))",
-      )
-      .eq("batch_id", batch.id)
-      .order("stop_order");
+    const session = await loadPodSessionByToken(token);
+    if (!session.ok) return c.json({ error: session.error }, session.status);
     return c.json({
-      batchNumber: batch.batch_number,
-      status: batch.status,
-      stops: stops ?? [],
+      batchNumber: session.batch.batch_number,
+      status: session.batch.status,
+      stops: session.stops,
     });
   });
 
@@ -1838,59 +1790,29 @@ export function registerPipelineRoutes(app: FreightApp) {
       .object({
         packageId: z.string().uuid(),
         podNote: z.string().max(500).optional().nullable(),
+        podPhotoPath: z.string().optional().nullable(),
       })
       .safeParse(await c.req.json());
     if (!body.success) return c.json({ error: body.error.flatten() }, 400);
 
-    const { data: batch } = await freightDb()
-      .from("delivery_batches")
-      .select("*")
-      .eq("pod_token", token)
-      .maybeSingle();
-    if (!batch) return c.json({ error: "Invalid link" }, 404);
-    if (
-      batch.pod_token_expires_at &&
-      new Date(batch.pod_token_expires_at).getTime() < Date.now()
-    ) {
-      return c.json({ error: "Link expired" }, 410);
-    }
+    const session = await loadPodSessionByToken(token);
+    if (!session.ok) return c.json({ error: session.error }, session.status);
 
-    const now = new Date().toISOString();
-    const { data: stop, error } = await freightDb()
-      .from("delivery_batch_stops")
-      .update({
-        status: "delivered",
-        delivered_at: now,
-        pod_note: body.data.podNote || "Client fleet POD",
-        updated_at: now,
-      })
-      .eq("batch_id", batch.id)
-      .eq("package_id", body.data.packageId)
-      .select("*")
-      .single();
-    if (error) return c.json({ error: error.message }, 500);
-
-    const { data: pkg } = await freightDb()
-      .from("packages")
-      .update({ status: "delivered", updated_at: now })
-      .eq("id", body.data.packageId)
-      .select("*")
-      .single();
-
-    await freightDb()
-      .from("fulfillment_orders")
-      .update({ status: "completed", completed_at: now, updated_at: now })
-      .eq("package_id", body.data.packageId);
-
-    await appendScan({
-      orgId: batch.organization_id,
+    const result = await completeStopDelivery({
+      batchId: session.batch.id,
+      organizationId: session.batch.organization_id,
       packageId: body.data.packageId,
-      eventType: "delivered",
-      note: body.data.podNote || "Client fleet POD",
+      podNote: body.data.podNote,
+      podPhotoPath: body.data.podPhotoPath,
+      actorUserId: null,
+      defaultNote: "Confirmed via POD link",
     });
-    if (pkg) await maybeNotifyPackage(pkg, "delivered");
-
-    return c.json({ stop, package: pkg });
+    if (!result.ok) return c.json({ error: result.error }, 500);
+    return c.json({
+      stop: result.stop,
+      package: result.package,
+      batchCompleted: result.batchCompleted,
+    });
   });
 
   // Pipeline dashboard counts

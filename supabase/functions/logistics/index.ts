@@ -7,6 +7,7 @@ import { z } from "https://deno.land/x/zod@v3.24.2/mod.ts";
 import { applyCors } from "../_shared/corsAllowlist.ts";
 import {
   requireEnterpriseAccess,
+  requireSeatPermission,
   serviceClient,
   type EnterpriseAccessUser,
 } from "../_shared/enterpriseAccess.ts";
@@ -217,6 +218,8 @@ const assignBody = z.object({
 app.post("/jobs/:id/assign", async (c) => {
   const user = await requireUser(c);
   if (user instanceof Response) return user;
+  const seat = requireSeatPermission(user, "freight.dispatch.assign");
+  if (seat instanceof Response) return seat;
   const parsed = assignBody.safeParse(await c.req.json());
   if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
   const b = parsed.data;
@@ -296,6 +299,8 @@ app.post("/jobs/:id/assign", async (c) => {
 app.post("/jobs/:id/transition", async (c) => {
   const user = await requireUser(c);
   if (user instanceof Response) return user;
+  const seat = requireSeatPermission(user, "freight.dispatch.assign");
+  if (seat instanceof Response) return seat;
   const body = z
     .object({
       status: z.enum([
@@ -553,6 +558,8 @@ app.get("/zones", async (c) => {
 app.post("/zones", async (c) => {
   const user = await requireUser(c);
   if (user instanceof Response) return user;
+  const seat = requireSeatPermission(user, "freight.zones.write");
+  if (seat instanceof Response) return seat;
   const parsed = zoneBody.safeParse(await c.req.json());
   if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
   const b = parsed.data;
@@ -578,6 +585,8 @@ app.post("/zones", async (c) => {
 app.patch("/zones/:id", async (c) => {
   const user = await requireUser(c);
   if (user instanceof Response) return user;
+  const seat = requireSeatPermission(user, "freight.zones.write");
+  if (seat instanceof Response) return seat;
   const id = c.req.param("id");
   const parsed = zoneBody.partial().safeParse(await c.req.json());
   if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
@@ -608,6 +617,8 @@ app.patch("/zones/:id", async (c) => {
 app.delete("/zones/:id", async (c) => {
   const user = await requireUser(c);
   if (user instanceof Response) return user;
+  const seat = requireSeatPermission(user, "freight.zones.write");
+  if (seat instanceof Response) return seat;
   const id = c.req.param("id");
   const { error } = await logisticsDb()
     .from("service_zones")
@@ -647,6 +658,8 @@ app.get("/alerts", async (c) => {
 app.post("/alerts/:id/read", async (c) => {
   const user = await requireUser(c);
   if (user instanceof Response) return user;
+  const seat = requireSeatPermission(user, "freight.alerts.write");
+  if (seat instanceof Response) return seat;
   const id = c.req.param("id");
   const now = new Date().toISOString();
   const { data, error } = await logisticsDb()
@@ -674,6 +687,8 @@ app.post("/alerts/:id/read", async (c) => {
 app.post("/alerts/read-all", async (c) => {
   const user = await requireUser(c);
   if (user instanceof Response) return user;
+  const seat = requireSeatPermission(user, "freight.alerts.write");
+  if (seat instanceof Response) return seat;
   const now = new Date().toISOString();
   const { error } = await logisticsDb()
     .from("ops_alerts")

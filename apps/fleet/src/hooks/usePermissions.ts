@@ -25,6 +25,12 @@ export interface UsePermissionsReturn {
   /** The organization ID of the current user, or null. */
   organizationId: string | null;
 
+  /**
+   * Raw JWT role when available (Enterprise seats via Fleet auth shim).
+   * Falls back to resolvedRole.
+   */
+  jwtRole: string | null;
+
   /** Check a single permission. Returns false if not logged in. */
   can: (permission: Permission) => boolean;
 
@@ -48,9 +54,15 @@ export interface UsePermissionsReturn {
 }
 
 export function usePermissions(): UsePermissionsReturn {
-  const { resolvedRole, organizationId } = useAuth();
+  const auth = useAuth() as {
+    resolvedRole: Role | null;
+    organizationId: string | null;
+    jwtRole?: string | null;
+  };
+  const { resolvedRole, organizationId } = auth;
 
   const role = resolvedRole ?? null;
+  const jwtRole = auth.jwtRole ?? role;
 
   const can = (permission: Permission): boolean => {
     if (!role) return false;
@@ -79,5 +91,5 @@ export function usePermissions(): UsePermissionsReturn {
 
   const permissions = role ? getPermissions(role) : ([] as const);
 
-  return { role, organizationId, can, canAny, canAll, canView, isAtLeast, permissions };
+  return { role, organizationId, jwtRole, can, canAny, canAll, canView, isAtLeast, permissions };
 }

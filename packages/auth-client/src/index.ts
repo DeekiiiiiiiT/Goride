@@ -35,6 +35,7 @@ export {
 } from './recoverySignInStorage';
 export { shouldMainClientDetectSessionInUrl } from './detectSessionInUrl';
 export * from './permissions';
+export * from './enterpriseCustomerPermissions';
 export * from './platformPermissions';
 export * from './roleHierarchy';
 export * from './hooks/usePermissions';

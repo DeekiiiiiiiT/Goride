@@ -732,9 +732,10 @@ export function ProductLineSettingsPage({
                   : mod.key === 'vehicles' || mod.key === 'fleetEquipment' ? Truck
                   : mod.key === 'businessFinance' || mod.key === 'reports' || mod.key === 'performanceAnalytics' ? BarChart3
                   : mod.key === 'claimableLoss' ? FileText
-                  : mod.key === 'teamManagement' || mod.key === 'clients' ? UserPlus
-                  : mod.key === 'carriers' ? Building2
-                  : mod.key === 'shipments' ? Ship
+                  : mod.key === 'teamManagement' || mod.key === 'freight_clients' ? UserPlus
+                  : mod.key === 'freight_carriers' ? Building2
+                  : mod.key === 'freight_shipments' || mod.key.startsWith('freight_') ? Ship
+                  : mod.key.startsWith('grocery_') ? Package
                   : Wrench;
                 return (
                   <button

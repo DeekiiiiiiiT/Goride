@@ -1,6 +1,7 @@
 import { ProductProviders } from '@/app/ProductProviders';
 import { RequireAuth, WrongProductLineGate } from '@/app/auth/RequireAuth';
 import { ModuleAccessProvider } from '@/app/modules/ModuleAccessProvider';
+import { SeatAccessProvider } from '@/app/seats/SeatAccessProvider';
 import { AppShell } from '@/app/layout/AppShell';
 
 export default function AppEntry() {
@@ -9,7 +10,9 @@ export default function AppEntry() {
       <RequireAuth>
         <WrongProductLineGate>
           <ModuleAccessProvider>
-            <AppShell />
+            <SeatAccessProvider>
+              <AppShell />
+            </SeatAccessProvider>
           </ModuleAccessProvider>
         </WrongProductLineGate>
       </RequireAuth>

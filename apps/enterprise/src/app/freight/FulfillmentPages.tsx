@@ -245,6 +245,10 @@ export function DeliveryBatchDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const [podNote, setPodNote] = useState('');
+  const [podPhoto, setPodPhoto] = useState<File | null>(null);
+  const [deliveringId, setDeliveringId] = useState<string | null>(null);
+
   async function refresh() {
     if (!id) return;
     setLoading(true);
@@ -273,9 +277,35 @@ export function DeliveryBatchDetailPage() {
 
   async function deliver(packageId: string) {
     if (!id) return;
-    await freightService.deliverBatchStop(id, { packageId }, orgId);
-    await refresh();
-    void qc.invalidateQueries({ queryKey: ['freight', 'packages'] });
+    setDeliveringId(packageId);
+    try {
+      let podPhotoPath: string | null = null;
+      if (podPhoto) {
+        podPhotoPath = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result || ''));
+          reader.onerror = () => reject(new Error('Could not read photo'));
+          reader.readAsDataURL(podPhoto);
+        });
+      }
+      await freightService.deliverBatchStop(
+        id,
+        {
+          packageId,
+          podNote: podNote.trim() || 'Confirmed by ops',
+          podPhotoPath,
+        },
+        orgId,
+      );
+      setPodNote('');
+      setPodPhoto(null);
+      await refresh();
+      void qc.invalidateQueries({ queryKey: ['freight', 'packages'] });
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setDeliveringId(null);
+    }
   }
 
   if (loading) return <p className="text-sm text-slate-500">Loading batch…</p>;
@@ -312,6 +342,27 @@ export function DeliveryBatchDetailPage() {
         </a>
       )}
 
+      <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-2">
+        <label className="block text-sm text-slate-600">
+          POD note (used on next Delivered)
+          <input
+            value={podNote}
+            onChange={(e) => setPodNote(e.target.value)}
+            placeholder="Left with security / signed…"
+            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          />
+        </label>
+        <label className="block text-sm text-slate-600">
+          POD photo (optional)
+          <input
+            type="file"
+            accept="image/*"
+            onChange={(e) => setPodPhoto(e.target.files?.[0] ?? null)}
+            className="mt-1 block w-full text-xs"
+          />
+        </label>
+      </div>
+
       <ul className="space-y-2">
         {data.stops.map((s) => {
           const pkg = s.packages as Record<string, unknown> | null;
@@ -337,10 +388,11 @@ export function DeliveryBatchDetailPage() {
                 {(s.status === 'pending' || s.status === 'loaded') && (
                   <button
                     type="button"
+                    disabled={deliveringId === String(s.package_id)}
                     onClick={() => void deliver(String(s.package_id))}
-                    className="rounded-lg bg-amber-500 px-2 py-1 text-xs font-semibold text-slate-950"
+                    className="rounded-lg bg-amber-500 px-2 py-1 text-xs font-semibold text-slate-950 disabled:opacity-60"
                   >
-                    Delivered
+                    {deliveringId === String(s.package_id) ? 'Saving…' : 'Delivered'}
                   </button>
                 )}
               </span>

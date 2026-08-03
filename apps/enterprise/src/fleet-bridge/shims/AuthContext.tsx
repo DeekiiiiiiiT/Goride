@@ -22,6 +22,8 @@ type AuthContextType = {
   user: User | null;
   role: UserRole | null;
   resolvedRole: Role | null;
+  /** Raw JWT role (includes enterprise_* seat roles). */
+  jwtRole: string | null;
   organizationId: string | null;
   loading: boolean;
   needsProvision: boolean;
@@ -34,6 +36,7 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   role: null,
   resolvedRole: null,
+  jwtRole: null,
   organizationId: null,
   loading: true,
   needsProvision: false,
@@ -43,22 +46,34 @@ const AuthContext = createContext<AuthContextType>({
 
 function mapRole(role: string | null): { raw: UserRole | null; resolved: Role | null } {
   if (!role) return { raw: null, resolved: null };
-  if (role === 'admin' || role === 'fleet_owner') {
+  if (
+    role === 'admin' ||
+    role === 'fleet_owner' ||
+    role === 'enterprise_owner'
+  ) {
     return { raw: 'admin', resolved: 'fleet_owner' };
   }
-  if (role === 'manager' || role === 'fleet_manager') {
+  if (
+    role === 'manager' ||
+    role === 'fleet_manager' ||
+    role === 'enterprise_dispatcher' ||
+    role === 'enterprise_customs'
+  ) {
     return { raw: 'manager', resolved: 'fleet_manager' };
   }
-  if (role === 'viewer' || role === 'fleet_viewer') {
+  if (role === 'viewer' || role === 'fleet_viewer' || role === 'enterprise_viewer') {
     return { raw: 'viewer', resolved: 'fleet_viewer' };
   }
-  if (role === 'fleet_accountant') {
+  if (role === 'fleet_accountant' || role === 'enterprise_finance') {
     return { raw: 'manager', resolved: 'fleet_accountant' };
   }
-  if (role === 'superadmin' || role === 'platform_owner') {
+  if (role === 'superadmin' || role === 'platform_owner' || role === 'enterprise_admin') {
     return { raw: 'superadmin', resolved: 'platform_owner' };
   }
-  return { raw: 'admin', resolved: 'fleet_owner' };
+  if (role === 'enterprise_ops') {
+    return { raw: 'manager', resolved: 'fleet_manager' };
+  }
+  return { raw: 'viewer', resolved: 'fleet_viewer' };
 }
 
 /** No-op provider — Enterprise already wraps with AuthProvider; this just adapts. */
@@ -71,6 +86,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       user: ent.user,
       role: mapped.raw,
       resolvedRole: mapped.resolved,
+      jwtRole: ent.role,
       organizationId: ent.organizationId,
       loading: ent.loading,
       needsProvision: false,

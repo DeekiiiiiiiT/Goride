@@ -28,4 +28,4 @@ npx supabase functions deploy freight --use-api --project-ref <ref>
 
 ## Modules
 
-New Enterprise modules (Dominion packaging): `suites`, `mailboxPackages`, `miamiScan`, `manifests`, `customsBoard`, `hubStation`, `fulfillmentDesk`, `clientFleet`.
+New Enterprise modules (Dominion packaging): `freight_suites`, `freight_mailbox_packages`, `freight_miami_scan`, `freight_manifests`, `freight_customs_board`, `freight_hub_station`, `freight_fulfillment`, `freight_client_fleet`, plus domestic `freight_shipments` / `freight_dispatch` / `freight_service_zones` / `freight_ops_inbox`. Reserved (off): `grocery_catalog`, `grocery_orders`, `grocery_fulfillment`.

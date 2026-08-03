@@ -28,6 +28,7 @@ import {
 import type { ModuleKey } from '@roam/platform-settings';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useModuleAccess } from '@/app/modules/ModuleAccessProvider';
+import { useSeatAccess } from '@/app/seats/SeatAccessProvider';
 import { OpsInboxDrawer } from '@/app/layout/OpsInboxDrawer';
 import { useOpsAlerts } from '@/app/hooks/useLogistics';
 
@@ -48,21 +49,21 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Mailbox & Intake',
     icon: Package,
     children: [
-      { to: '/app/suites', label: 'Suites', icon: Tags, module: 'suites' },
-      { to: '/app/packages', label: 'Packages', icon: Package, module: 'mailboxPackages' },
-      { to: '/app/miami-scan', label: 'Receive', icon: ClipboardList, module: 'miamiScan' },
-      { to: '/app/manifests', label: 'Manifests', icon: Boxes, module: 'manifests' },
+      { to: '/app/suites', label: 'Suites', icon: Tags, module: 'freight_suites' },
+      { to: '/app/packages', label: 'Packages', icon: Package, module: 'freight_mailbox_packages' },
+      { to: '/app/miami-scan', label: 'Receive', icon: ClipboardList, module: 'freight_miami_scan' },
+      { to: '/app/manifests', label: 'Manifests', icon: Boxes, module: 'freight_manifests' },
     ],
   },
-  { to: '/app/customs', label: 'Customs', icon: FileText, module: 'customsBoard' },
-  { to: '/app/hub', label: 'Hub Station', icon: MapPin, module: 'hubStation' },
+  { to: '/app/customs', label: 'Customs', icon: FileText, module: 'freight_customs_board' },
+  { to: '/app/hub', label: 'Hub Station', icon: MapPin, module: 'freight_hub_station' },
   {
     to: '/app/last-mile',
     label: 'Last Mile',
     icon: Route,
     children: [
-      { to: '/app/fulfillment', label: 'Fulfillment', icon: Route, module: 'fulfillmentDesk' },
-      { to: '/app/client-fleet', label: 'Client Fleet', icon: Car, module: 'clientFleet' },
+      { to: '/app/fulfillment', label: 'Fulfillment', icon: Route, module: 'freight_fulfillment' },
+      { to: '/app/client-fleet', label: 'Client Fleet', icon: Car, module: 'freight_client_fleet' },
     ],
   },
   {
@@ -70,12 +71,12 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Domestic & Setup',
     icon: Ship,
     children: [
-      { to: '/app/dispatch', label: 'Dispatch Board', icon: LayoutDashboard, module: 'dispatchBoard' },
-      { to: '/app/service-zones', label: 'Service Zones', icon: MapPin, module: 'serviceZones' },
-      { to: '/app/shipments', label: 'Shipments', icon: Ship, module: 'shipments' },
-      { to: '/app/carriers', label: 'Carriers', icon: Truck, module: 'carriers' },
-      { to: '/app/clients', label: 'Clients', icon: Users, module: 'clients' },
-      { to: '/app/rate-cards', label: 'Rate Cards', icon: FileText, module: 'rateCards' },
+      { to: '/app/dispatch', label: 'Dispatch Board', icon: LayoutDashboard, module: 'freight_dispatch' },
+      { to: '/app/service-zones', label: 'Service Zones', icon: MapPin, module: 'freight_service_zones' },
+      { to: '/app/shipments', label: 'Shipments', icon: Ship, module: 'freight_shipments' },
+      { to: '/app/carriers', label: 'Carriers', icon: Truck, module: 'freight_carriers' },
+      { to: '/app/clients', label: 'Clients', icon: Users, module: 'freight_clients' },
+      { to: '/app/rate-cards', label: 'Rate Cards', icon: FileText, module: 'freight_rate_cards' },
     ],
   },
   {
@@ -171,13 +172,13 @@ const NAV_ITEMS: NavItem[] = [
 
 function useVisibleChildren(children: NavItem[] | undefined) {
   const { isModuleEnabled } = useModuleAccess();
+  const { canAccessModule } = useSeatAccess();
+  const ok = (mod?: ModuleKey) => !mod || (isModuleEnabled(mod) && canAccessModule(mod));
   return (children ?? []).filter((c) => {
     if (c.children?.length) {
-      return c.children.some((gc) => !gc.module || isModuleEnabled(gc.module)) ||
-        !c.module ||
-        isModuleEnabled(c.module);
+      return c.children.some((gc) => ok(gc.module)) || ok(c.module);
     }
-    return !c.module || isModuleEnabled(c.module);
+    return ok(c.module);
   });
 }
 
@@ -471,27 +472,30 @@ function NavItemLink({ item }: { item: NavItem }) {
   );
 }
 
-function isTopLevelVisible(item: NavItem, isModuleEnabled: (key: ModuleKey) => boolean): boolean {
+function isTopLevelVisible(
+  item: NavItem,
+  isModuleEnabled: (key: ModuleKey) => boolean,
+  canAccessModule: (key: string) => boolean,
+): boolean {
+  const ok = (mod?: ModuleKey) => !mod || (isModuleEnabled(mod) && canAccessModule(mod));
   if (item.children?.length) {
     return item.children.some((c) => {
       if (c.children?.length) {
-        return (
-          c.children.some((gc) => !gc.module || isModuleEnabled(gc.module)) ||
-          !c.module ||
-          isModuleEnabled(c.module)
-        );
+        return c.children.some((gc) => ok(gc.module)) || ok(c.module);
       }
-      return !c.module || isModuleEnabled(c.module);
+      return ok(c.module);
     });
   }
-  return !item.module || isModuleEnabled(item.module);
+  return ok(item.module);
 }
 
 export function AppShell() {
   const { user, role, signOut } = useAuth();
   const { isModuleEnabled, loading } = useModuleAccess();
+  const { canAccessModule, can } = useSeatAccess();
   const [inboxOpen, setInboxOpen] = useState(false);
-  const opsInboxOn = isModuleEnabled('opsInbox');
+  const opsInboxOn =
+    isModuleEnabled('freight_ops_inbox') && can('freight.alerts.read');
   const alerts = useOpsAlerts(opsInboxOn);
   const unread = opsInboxOn ? (alerts.data?.unreadCount ?? 0) : 0;
   const displayName =
@@ -513,7 +517,9 @@ export function AppShell() {
           {loading ? (
             <p className="px-3 text-xs text-slate-400">Loading modules…</p>
           ) : (
-            NAV_ITEMS.filter((item) => isTopLevelVisible(item, isModuleEnabled)).map((item) => (
+            NAV_ITEMS.filter((item) =>
+              isTopLevelVisible(item, isModuleEnabled, canAccessModule),
+            ).map((item) => (
               <NavItemLink key={item.to} item={item} />
             ))
           )}

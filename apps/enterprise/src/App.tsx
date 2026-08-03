@@ -237,7 +237,7 @@ export default function App() {
           <Route
             path="shipments"
             element={
-              <Gated module="shipments">
+              <Gated module="freight_shipments">
                 <Suspense fallback={<Fall />}>
                   <ShipmentsListPage />
                 </Suspense>
@@ -247,7 +247,7 @@ export default function App() {
           <Route
             path="dispatch"
             element={
-              <Gated module="dispatchBoard">
+              <Gated module="freight_dispatch">
                 <Suspense fallback={<Fall />}>
                   <DispatchBoardPage />
                 </Suspense>
@@ -257,7 +257,7 @@ export default function App() {
           <Route
             path="service-zones"
             element={
-              <Gated module="serviceZones">
+              <Gated module="freight_service_zones">
                 <Suspense fallback={<Fall />}>
                   <ServiceZonesPage />
                 </Suspense>
@@ -267,7 +267,7 @@ export default function App() {
           <Route
             path="shipments/new"
             element={
-              <Gated module="shipments">
+              <Gated module="freight_shipments">
                 <Suspense fallback={<Fall />}>
                   <NewShipmentPage />
                 </Suspense>
@@ -277,7 +277,7 @@ export default function App() {
           <Route
             path="shipments/:id"
             element={
-              <Gated module="shipments">
+              <Gated module="freight_shipments">
                 <Suspense fallback={<Fall />}>
                   <ShipmentDetailPage />
                 </Suspense>
@@ -287,7 +287,7 @@ export default function App() {
           <Route
             path="carriers"
             element={
-              <Gated module="carriers">
+              <Gated module="freight_carriers">
                 <Suspense fallback={<Fall />}>
                   <CarriersPage />
                 </Suspense>
@@ -297,7 +297,7 @@ export default function App() {
           <Route
             path="clients"
             element={
-              <Gated module="clients">
+              <Gated module="freight_clients">
                 <Suspense fallback={<Fall />}>
                   <ClientsPage />
                 </Suspense>
@@ -307,7 +307,7 @@ export default function App() {
           <Route
             path="rate-cards"
             element={
-              <Gated module="rateCards">
+              <Gated module="freight_rate_cards">
                 <Suspense fallback={<Fall />}>
                   <RateCardsPage />
                 </Suspense>
@@ -317,7 +317,7 @@ export default function App() {
           <Route
             path="suites"
             element={
-              <Gated module="suites">
+              <Gated module="freight_suites">
                 <Suspense fallback={<Fall />}>
                   <SuitesPage />
                 </Suspense>
@@ -327,7 +327,7 @@ export default function App() {
           <Route
             path="packages"
             element={
-              <Gated module="mailboxPackages">
+              <Gated module="freight_mailbox_packages">
                 <Suspense fallback={<Fall />}>
                   <PackagesListPage />
                 </Suspense>
@@ -337,7 +337,7 @@ export default function App() {
           <Route
             path="packages/:id"
             element={
-              <Gated module="mailboxPackages">
+              <Gated module="freight_mailbox_packages">
                 <Suspense fallback={<Fall />}>
                   <PackageDetailPage />
                 </Suspense>
@@ -353,7 +353,7 @@ export default function App() {
           <Route
             path="miami-scan"
             element={
-              <Gated module="miamiScan">
+              <Gated module="freight_miami_scan">
                 <Suspense fallback={<Fall />}>
                   <MiamiScanPage />
                 </Suspense>
@@ -363,7 +363,7 @@ export default function App() {
           <Route
             path="manifests"
             element={
-              <Gated module="manifests">
+              <Gated module="freight_manifests">
                 <Suspense fallback={<Fall />}>
                   <ManifestsListPage />
                 </Suspense>
@@ -373,7 +373,7 @@ export default function App() {
           <Route
             path="manifests/:id"
             element={
-              <Gated module="manifests">
+              <Gated module="freight_manifests">
                 <Suspense fallback={<Fall />}>
                   <ManifestDetailPage />
                 </Suspense>
@@ -383,7 +383,7 @@ export default function App() {
           <Route
             path="customs"
             element={
-              <Gated module="customsBoard">
+              <Gated module="freight_customs_board">
                 <Suspense fallback={<Fall />}>
                   <CustomsBoardPage />
                 </Suspense>
@@ -393,7 +393,7 @@ export default function App() {
           <Route
             path="hub"
             element={
-              <Gated module="hubStation">
+              <Gated module="freight_hub_station">
                 <Suspense fallback={<Fall />}>
                   <HubStationPage />
                 </Suspense>
@@ -403,7 +403,7 @@ export default function App() {
           <Route
             path="fulfillment"
             element={
-              <Gated module="fulfillmentDesk">
+              <Gated module="freight_fulfillment">
                 <Suspense fallback={<Fall />}>
                   <FulfillmentDeskPage />
                 </Suspense>
@@ -413,7 +413,7 @@ export default function App() {
           <Route
             path="fulfillment/batches/:id"
             element={
-              <Gated module="fulfillmentDesk">
+              <Gated module="freight_fulfillment">
                 <Suspense fallback={<Fall />}>
                   <DeliveryBatchDetailPage />
                 </Suspense>
@@ -423,7 +423,7 @@ export default function App() {
           <Route
             path="client-fleet"
             element={
-              <Gated module="clientFleet">
+              <Gated module="freight_client_fleet">
                 <Suspense fallback={<Fall />}>
                   <ClientFleetPage />
                 </Suspense>

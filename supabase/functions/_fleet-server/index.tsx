@@ -11660,7 +11660,15 @@ app.post("/make-server-37f42386/invite-user", requireAuth(), requirePermission('
 // ─── Phase 9: Team Invitation System ─────────────────────────────────────────
 
 // Step 9.1: POST /team/invite — Invite team member with auto-generated temp password
-const TEAM_ROLES = ['fleet_manager', 'fleet_accountant', 'fleet_viewer'] as const;
+const TEAM_ROLES = [
+  'fleet_manager',
+  'fleet_accountant',
+  'fleet_viewer',
+  'enterprise_dispatcher',
+  'enterprise_customs',
+  'enterprise_finance',
+  'enterprise_viewer',
+] as const;
 
 app.post("/make-server-37f42386/team/invite", requireAuth(), requirePermission('users.invite'), async (c) => {
   try {
@@ -11781,7 +11789,7 @@ app.put("/make-server-37f42386/team/members/:id/role", requireAuth(), requirePer
     const { role: newRole } = await c.req.json();
     const orgId = getOrgId(c);
 
-    if (!['fleet_manager', 'fleet_accountant', 'fleet_viewer', 'driver'].includes(newRole)) {
+    if (!['fleet_manager', 'fleet_accountant', 'fleet_viewer', 'driver', 'enterprise_dispatcher', 'enterprise_customs', 'enterprise_finance', 'enterprise_viewer'].includes(newRole)) {
       return c.json({ error: "Invalid role. Cannot promote to fleet_owner." }, 400);
     }
 

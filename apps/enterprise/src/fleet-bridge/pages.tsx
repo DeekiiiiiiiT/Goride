@@ -94,7 +94,9 @@ export const BridgedBusinessFinancePage = bridge(() =>
 
 export const BridgedUserManagementPage = bridge(() =>
   import('@fleet/components/users/UserManagementPage').then((m) => ({
-    default: m.UserManagementPage,
+    default: function EnterpriseTeamPage() {
+      return <m.UserManagementPage productLine="enterprise" />;
+    },
   })),
 );
 

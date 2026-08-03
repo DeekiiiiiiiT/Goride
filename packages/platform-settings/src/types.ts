@@ -31,23 +31,30 @@ export interface FleetEnabledModules {
   performanceAnalytics: boolean;
 }
 
-/** Enterprise product-line feature modules (Path B — full sellable catalog). */
+/**
+ * Enterprise sellable modules — freight_* / grocery_* vertical prefixes
+ * plus shared ops / money / people keys (unchanged camelCase for Fleet bridge).
+ */
 export interface EnterpriseEnabledModules {
-  shipments: boolean;
-  carriers: boolean;
-  clients: boolean;
-  rateCards: boolean;
-  suites: boolean;
-  mailboxPackages: boolean;
-  miamiScan: boolean;
-  manifests: boolean;
-  customsBoard: boolean;
-  hubStation: boolean;
-  fulfillmentDesk: boolean;
-  clientFleet: boolean;
-  dispatchBoard: boolean;
-  serviceZones: boolean;
-  opsInbox: boolean;
+  freight_shipments: boolean;
+  freight_carriers: boolean;
+  freight_clients: boolean;
+  freight_rate_cards: boolean;
+  freight_suites: boolean;
+  freight_mailbox_packages: boolean;
+  freight_miami_scan: boolean;
+  freight_manifests: boolean;
+  freight_customs_board: boolean;
+  freight_hub_station: boolean;
+  freight_fulfillment: boolean;
+  freight_client_fleet: boolean;
+  freight_dispatch: boolean;
+  freight_service_zones: boolean;
+  freight_ops_inbox: boolean;
+  /** Reserved grocery vertical SKUs — off by default; no Enterprise UI yet. */
+  grocery_catalog: boolean;
+  grocery_orders: boolean;
+  grocery_fulfillment: boolean;
   fuelManagement: boolean;
   tollManagement: boolean;
   drivers: boolean;

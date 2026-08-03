@@ -2,6 +2,15 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { freightService } from '@/app/services/freightService';
 
+async function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('Could not read photo'));
+    reader.readAsDataURL(file);
+  });
+}
+
 /** Public client-fleet POD capture — no login. */
 export function PodCapturePage() {
   const { token } = useParams();
@@ -10,6 +19,8 @@ export function PodCapturePage() {
   const [stops, setStops] = useState<Record<string, unknown>[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [notes, setNotes] = useState<Record<string, string>>({});
+  const [photos, setPhotos] = useState<Record<string, File | null>>({});
 
   async function load() {
     if (!token) return;
@@ -32,9 +43,12 @@ export function PodCapturePage() {
     if (!token) return;
     setBusy(packageId);
     try {
+      const file = photos[packageId];
+      const podPhotoPath = file ? await fileToDataUrl(file) : null;
       await freightService.publicPodDeliver(token, {
         packageId,
-        podNote: 'Confirmed via POD link',
+        podNote: notes[packageId]?.trim() || 'Confirmed via POD link',
+        podPhotoPath,
       });
       await load();
     } catch (e) {
@@ -85,14 +99,42 @@ export function PodCapturePage() {
                 {done ? (
                   <p className="mt-3 text-sm font-medium text-emerald-700">Delivered</p>
                 ) : (
-                  <button
-                    type="button"
-                    disabled={Boolean(busy)}
-                    onClick={() => void deliver(packageId)}
-                    className="mt-3 w-full rounded-lg bg-amber-500 py-2.5 text-sm font-semibold text-slate-950 disabled:opacity-60"
-                  >
-                    {busy === packageId ? 'Saving…' : 'Confirm delivered'}
-                  </button>
+                  <div className="mt-3 space-y-2">
+                    <label className="block text-xs text-slate-600">
+                      Delivery note
+                      <input
+                        value={notes[packageId] || ''}
+                        onChange={(e) =>
+                          setNotes((prev) => ({ ...prev, [packageId]: e.target.value }))
+                        }
+                        placeholder="Left with recipient / gate…"
+                        className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                      />
+                    </label>
+                    <label className="block text-xs text-slate-600">
+                      Photo (optional)
+                      <input
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        onChange={(e) =>
+                          setPhotos((prev) => ({
+                            ...prev,
+                            [packageId]: e.target.files?.[0] ?? null,
+                          }))
+                        }
+                        className="mt-1 block w-full text-xs"
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      disabled={Boolean(busy)}
+                      onClick={() => void deliver(packageId)}
+                      className="w-full rounded-lg bg-amber-500 py-2.5 text-sm font-semibold text-slate-950 disabled:opacity-60"
+                    >
+                      {busy === packageId ? 'Saving…' : 'Confirm delivered'}
+                    </button>
+                  </div>
                 )}
               </li>
             );

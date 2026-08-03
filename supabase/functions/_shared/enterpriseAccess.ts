@@ -1,9 +1,15 @@
 /**
- * Freight edge auth — org owner with product_line=enterprise (or platform).
+ * Freight / logistics edge auth — enterprise org members (owner + seats) or platform.
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getJwtRoles, jwtPrimaryRole } from "./authEdge.ts";
 import { PLATFORM_ROLES } from "./productAdmin.ts";
+import {
+  enterpriseSeatHasPermission,
+  resolveEnterpriseSeatRole,
+  seatForbiddenResponse,
+  type EnterpriseSeatPermission,
+} from "./enterpriseSeat.ts";
 
 export type EnterpriseAccessUser = {
   id: string;
@@ -28,6 +34,21 @@ export function serviceClient() {
   );
 }
 
+const ORG_SEAT_ROLES = new Set([
+  "fleet_owner",
+  "fleet_manager",
+  "fleet_accountant",
+  "fleet_viewer",
+  "admin",
+  "manager",
+  "viewer",
+  "enterprise_owner",
+  "enterprise_dispatcher",
+  "enterprise_customs",
+  "enterprise_finance",
+  "enterprise_viewer",
+]);
+
 export async function requireEnterpriseAccess(c: {
   req: { header: (n: string) => string | undefined };
   json: (b: unknown, s?: number) => Response;
@@ -43,14 +64,15 @@ export async function requireEnterpriseAccess(c: {
   }
 
   const roles = getJwtRoles(user);
+  const primaryRole = jwtPrimaryRole(user);
   const isPlatform = roles.some((r) => PLATFORM_ROLES.has(r));
   const svc = serviceClient();
 
   const orgIdHeader = c.req.header("X-Roam-Organization-Id");
   let organizationId =
     orgIdHeader ||
-    (user.user_metadata?.organizationId as string | undefined) ||
     (user.app_metadata?.organizationId as string | undefined) ||
+    (user.user_metadata?.organizationId as string | undefined) ||
     "";
 
   if (!organizationId) {
@@ -81,16 +103,35 @@ export async function requireEnterpriseAccess(c: {
     if (org.product_line !== "enterprise" && !isPlatform) {
       return c.json({ error: "Forbidden: not an enterprise organization" }, 403);
     }
-    if (org.owner_id !== user.id && !isPlatform) {
-      return c.json({ error: "Forbidden: not organization owner" }, 403);
+    const isOwner = org.owner_id === user.id;
+    const jwtOrg =
+      (user.app_metadata?.organizationId as string | undefined) ||
+      (user.user_metadata?.organizationId as string | undefined) ||
+      "";
+    const isOrgSeat =
+      jwtOrg === organizationId &&
+      (ORG_SEAT_ROLES.has(primaryRole) || roles.some((r) => ORG_SEAT_ROLES.has(r)));
+    if (!isOwner && !isOrgSeat && !isPlatform) {
+      return c.json({ error: "Forbidden: not an organization member" }, 403);
     }
   }
 
   return {
     id: user.id,
     email: user.email ?? "",
-    role: jwtPrimaryRole(user),
+    role: primaryRole,
     organizationId,
     isPlatformRole: isPlatform,
   };
+}
+
+/** Seat permission gate after requireEnterpriseAccess. Platform staff bypass. */
+export function requireSeatPermission(
+  user: EnterpriseAccessUser,
+  permission: EnterpriseSeatPermission,
+): true | Response {
+  if (user.isPlatformRole) return true;
+  const seat = resolveEnterpriseSeatRole(user.role);
+  if (enterpriseSeatHasPermission(seat, permission)) return true;
+  return seatForbiddenResponse(`Missing permission: ${permission}`);
 }

@@ -1,6 +1,7 @@
 import type { ModuleKey } from '@roam/platform-settings';
 import { Navigate } from 'react-router-dom';
 import { useModuleAccess } from '@/app/modules/ModuleAccessProvider';
+import { useSeatAccess } from '@/app/seats/SeatAccessProvider';
 
 export function RequireModule({
   module,
@@ -10,6 +11,7 @@ export function RequireModule({
   children: React.ReactNode;
 }) {
   const { isModuleEnabled, loading, modulesError, refresh } = useModuleAccess();
+  const { canAccessModule } = useSeatAccess();
 
   if (loading) {
     return (
@@ -19,8 +21,8 @@ export function RequireModule({
     );
   }
 
-  if (!isModuleEnabled(module)) {
-    if (modulesError) {
+  if (!isModuleEnabled(module) || !canAccessModule(module)) {
+    if (modulesError && !isModuleEnabled(module)) {
       return (
         <div className="mx-auto max-w-md space-y-3 rounded-xl border border-amber-200 bg-amber-50 px-6 py-8 text-center">
           <p className="text-sm font-medium text-amber-950">Couldn’t verify module access</p>
