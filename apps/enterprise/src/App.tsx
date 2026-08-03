@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { PwaProvider } from '@fleet/components/pwa/PwaProvider';
 import { PwaLifecycleHost } from '@fleet/components/pwa/PwaLifecycleHost';
+import { StandaloneHomeToLoginRedirect } from '@/app/pwa/StandaloneHomeToLoginRedirect';
 
 import { AccessibilityPage } from '@/pages/AccessibilityPage';
 import { CookiesPage } from '@/pages/CookiesPage';
@@ -166,6 +167,7 @@ export default function App() {
     <PwaProvider>
       <PwaLifecycleHost />
       <BrowserRouter>
+      <StandaloneHomeToLoginRedirect />
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/rides" element={<RidesPage />} />

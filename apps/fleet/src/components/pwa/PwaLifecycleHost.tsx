@@ -2,6 +2,52 @@ import React from 'react';
 import { Download, RefreshCw, X } from 'lucide-react';
 import { usePwa } from './PwaProvider';
 
+/** Inline styles: Enterprise Tailwind may not include Fleet-only utilities; never hide the CTA. */
+const updateBtnStyle: React.CSSProperties = {
+  flexShrink: 0,
+  height: 36,
+  padding: '0 14px',
+  borderRadius: 8,
+  border: 'none',
+  background: '#f59e0b',
+  color: '#020617',
+  fontSize: 14,
+  fontWeight: 700,
+  cursor: 'pointer',
+};
+
+const dismissBtnStyle: React.CSSProperties = {
+  flexShrink: 0,
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  width: 32,
+  height: 32,
+  borderRadius: 6,
+  border: 'none',
+  background: 'transparent',
+  color: '#94a3b8',
+  cursor: 'pointer',
+};
+
+const bannerStyle: React.CSSProperties = {
+  position: 'fixed',
+  bottom: 16,
+  left: 16,
+  right: 16,
+  zIndex: 2147483646,
+  margin: '0 auto',
+  maxWidth: 512,
+  display: 'flex',
+  alignItems: 'center',
+  gap: 12,
+  padding: '12px 16px',
+  borderRadius: 12,
+  border: '1px solid #fde68a',
+  background: '#ffffff',
+  boxShadow: '0 10px 25px rgba(15, 23, 42, 0.15)',
+};
+
 /** Floating install + update chrome (mount under PwaProvider). */
 export function PwaLifecycleHost() {
   const {
@@ -20,28 +66,46 @@ export function PwaLifecycleHost() {
       {needRefresh && (
         <div
           role="status"
-          className="fixed bottom-4 left-4 right-4 z-[100] mx-auto flex max-w-lg items-center gap-3 rounded-xl border border-amber-200 bg-white px-4 py-3 shadow-lg"
+          style={bannerStyle}
+          onClick={applyUpdate}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              applyUpdate();
+            }
+          }}
         >
-          <RefreshCw className="h-5 w-5 shrink-0 text-amber-600" aria-hidden />
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-slate-900">Update available</p>
-            <p className="text-xs text-slate-500">
-              Restart {appName} to load the latest version.
+          <RefreshCw
+            className="h-5 w-5 shrink-0"
+            style={{ color: '#d97706', flexShrink: 0 }}
+            aria-hidden
+          />
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: '#0f172a' }}>
+              Update available
+            </p>
+            <p style={{ margin: '2px 0 0', fontSize: 12, color: '#64748b' }}>
+              Tap Update to restart {appName} with the latest version.
             </p>
           </div>
-          {/* Native button: Fleet shadcn Button styles are not in Enterprise CSS. */}
           <button
             type="button"
-            className="h-9 shrink-0 rounded-lg bg-amber-500 px-3 text-sm font-semibold text-slate-950 hover:bg-amber-400"
-            onClick={applyUpdate}
+            style={updateBtnStyle}
+            onClick={(e) => {
+              e.stopPropagation();
+              applyUpdate();
+            }}
           >
             Update
           </button>
           <button
             type="button"
             aria-label="Dismiss update"
-            className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-            onClick={dismissUpdate}
+            style={dismissBtnStyle}
+            onClick={(e) => {
+              e.stopPropagation();
+              dismissUpdate();
+            }}
           >
             <X className="h-4 w-4" />
           </button>
@@ -52,18 +116,24 @@ export function PwaLifecycleHost() {
         <div
           role="dialog"
           aria-label={`Install ${appName}`}
-          className="fixed bottom-4 left-4 right-4 z-[99] mx-auto flex max-w-lg items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-lg"
+          style={{ ...bannerStyle, border: '1px solid #e2e8f0', zIndex: 2147483645 }}
         >
-          <Download className="h-5 w-5 shrink-0 text-amber-600" aria-hidden />
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-slate-900">Install {appName}</p>
-            <p className="text-xs text-slate-500">
+          <Download
+            className="h-5 w-5 shrink-0"
+            style={{ color: '#d97706', flexShrink: 0 }}
+            aria-hidden
+          />
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: '#0f172a' }}>
+              Install {appName}
+            </p>
+            <p style={{ margin: '2px 0 0', fontSize: 12, color: '#64748b' }}>
               Add to your desktop for quick access — same live dashboard, own window.
             </p>
           </div>
           <button
             type="button"
-            className="h-9 shrink-0 rounded-lg bg-amber-500 px-3 text-sm font-semibold text-slate-950 hover:bg-amber-400 disabled:opacity-50"
+            style={{ ...updateBtnStyle, opacity: installing ? 0.6 : 1 }}
             disabled={installing}
             onClick={() => void promptInstall()}
           >
@@ -72,7 +142,7 @@ export function PwaLifecycleHost() {
           <button
             type="button"
             aria-label="Dismiss install"
-            className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+            style={dismissBtnStyle}
             onClick={dismissInstall}
           >
             <X className="h-4 w-4" />
@@ -124,7 +194,7 @@ export function InstallDesktopGuideCard() {
       ) : canInstallAnytime ? (
         <button
           type="button"
-          className="h-9 rounded-lg bg-amber-500 px-3 text-sm font-semibold text-slate-950 hover:bg-amber-400 disabled:opacity-50"
+          style={updateBtnStyle}
           disabled={installing}
           onClick={() => void promptInstall()}
         >

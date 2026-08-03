@@ -84,7 +84,7 @@ export default defineConfig({
         background_color: '#030213',
         display: 'standalone',
         orientation: 'any',
-        start_url: '/',
+        start_url: '/login',
         scope: '/',
         lang: 'en',
         categories: ['business', 'productivity'],

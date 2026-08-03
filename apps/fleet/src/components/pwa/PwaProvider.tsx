@@ -129,6 +129,23 @@ export function PwaProvider({ children }: { children: React.ReactNode }) {
     void updateServiceWorker(true);
   }, [updateServiceWorker]);
 
+  // Enterprise only: recover installs where the Update CTA was invisible / dismissed.
+  useEffect(() => {
+    if (!IS_ENTERPRISE_PRODUCT || !needRefresh) return;
+    const apply = () => {
+      void updateServiceWorker(true);
+    };
+    const t = window.setTimeout(apply, 8_000);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') apply();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.clearTimeout(t);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [needRefresh, updateServiceWorker]);
+
   const dismissUpdate = useCallback(() => {
     setNeedRefresh(false);
   }, [setNeedRefresh]);
