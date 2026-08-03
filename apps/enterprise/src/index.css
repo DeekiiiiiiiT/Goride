@@ -1,6 +1,7 @@
 @import 'tailwindcss';
 @import '@roam/design-tokens/enterprise.css';
 @source './**/*.{js,ts,jsx,tsx}';
+@source '../../fleet/src/components/pwa/**/*.{js,ts,jsx,tsx}';
 @source '../../../packages/design-tokens/**/*.css';
 
 html {
