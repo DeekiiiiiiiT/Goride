@@ -48,6 +48,7 @@ import { Badge } from '../ui/badge';
 import { toast } from 'sonner@2.0.3';
 import { InstallDesktopGuideCard } from '../pwa/PwaLifecycleHost';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
+import { UBER_FLEET_PORTAL } from '../../constants/uberFleetPortal';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -312,98 +313,93 @@ function GeneralPanel() {
 }
 
 function IntegrationsPanel() {
-  // Default structure for available platforms
-  const defaultIntegrations = [
-    { id: 'uber', name: 'Uber Fleet', status: 'disconnected', lastSync: '-', icon: 'figma:asset/e81b41be1a56e0ba817406c557cd6e02c443dfd4.png' },
-  ];
-
-  const [integrations, setIntegrations] = useState(defaultIntegrations);
-  
-  const [isConnectDialogOpen, setIsConnectDialogOpen] = useState(false);
-  const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
-  const [credentials, setCredentials] = useState({ clientId: '', clientSecret: '' });
+  const [status, setStatus] = useState<'connected' | 'disconnected'>('disconnected');
+  const [lastSync, setLastSync] = useState('-');
+  const [secretsConfigured, setSecretsConfigured] = useState(false);
+  const [scopes, setScopes] = useState('');
+  const [lastSyncSummary, setLastSyncSummary] = useState<{
+    vehiclesMatched?: number;
+    vehiclesUpdated?: number;
+    driversLinked?: number;
+    unmatchedCount?: number;
+  } | null>(null);
+  const [busy, setBusy] = useState<'connect' | 'disconnect' | 'sync' | null>(null);
+  const [setupOpen, setSetupOpen] = useState(false);
 
   useEffect(() => {
-    loadIntegrations();
+    loadStatus();
   }, []);
 
-  const loadIntegrations = async () => {
+  const loadStatus = async () => {
     try {
-      const savedIntegrations = await api.getIntegrations();
-      // Merge saved data with default structure
-      setIntegrations(prev => prev.map(def => {
-        const saved = savedIntegrations.find((s: any) => s.id === def.id);
-        return saved ? { ...def, ...saved } : def;
-      }));
+      const s = await api.getUberFleetStatus();
+      setStatus(s.status === 'connected' ? 'connected' : 'disconnected');
+      setLastSync(s.lastSync || '-');
+      setSecretsConfigured(!!s.secretsConfigured);
+      setScopes(s.scopes || '');
+      setLastSyncSummary(s.lastSyncSummary || null);
     } catch (error) {
-      console.error("Failed to load integrations", error);
-      // Don't show toast on load failure to avoid annoyance
+      console.error('Failed to load Uber Fleet status', error);
     }
   };
 
-  const handleConnectClick = (platformId: string) => {
-      setSelectedPlatform(platformId);
-      setIsConnectDialogOpen(true);
-  };
-
-  const handleSaveCredentials = async () => {
-      if (!selectedPlatform) return;
-      
-      const targetIntegration = integrations.find(i => i.id === selectedPlatform);
-      if (!targetIntegration) return;
-
-      const updatedIntegration = {
-          ...targetIntegration,
-          status: 'connected',
-          lastSync: 'Just now',
-          credentials: { // In a real production app, never store secrets in client-side readable KV
-              clientId: credentials.clientId,
-              clientSecret: credentials.clientSecret
-          }
-      };
-
-      try {
-          await api.saveIntegration(updatedIntegration);
-          
-          setIntegrations(prev => prev.map(int => {
-              if (int.id === selectedPlatform) {
-                  return updatedIntegration;
-              }
-              return int;
-          }));
-          
-          toast.success(`${selectedPlatform} connected successfully!`);
-          setIsConnectDialogOpen(false);
-          setCredentials({ clientId: '', clientSecret: '' });
-      } catch (error) {
-          console.error(error);
-          toast.error("Failed to save credentials");
+  const handleConnect = async () => {
+    setBusy('connect');
+    try {
+      await api.connectUberFleet();
+      toast.success('Uber Fleet connected');
+      await loadStatus();
+    } catch (error: any) {
+      console.error(error);
+      if (error?.code === 'SECRETS_MISSING') {
+        toast.error('Server secrets missing — open Setup checklist');
+        setSetupOpen(true);
+      } else {
+        toast.error(error?.message || 'Connect failed');
       }
+    } finally {
+      setBusy(null);
+    }
   };
 
-  const toggleIntegration = async (id: string) => {
-    // If it's already connected, disconnect it
-    const target = integrations.find(i => i.id === id);
-    if (target?.status === 'connected') {
-        const updatedIntegration = { ...target, status: 'disconnected', lastSync: '-', credentials: null };
-        
-        try {
-            await api.saveIntegration(updatedIntegration);
-            setIntegrations(prev => prev.map(int => {
-                if (int.id === id) {
-                    return updatedIntegration;
-                }
-                return int;
-            }));
-            toast.info(`${target.name} disconnected.`);
-        } catch (error) {
-            toast.error("Failed to disconnect");
-        }
-        return;
+  const handleDisconnect = async () => {
+    setBusy('disconnect');
+    try {
+      await api.disconnectUberFleet();
+      toast.info('Uber Fleet disconnected');
+      await loadStatus();
+    } catch (error: any) {
+      toast.error(error?.message || 'Disconnect failed');
+    } finally {
+      setBusy(null);
     }
+  };
 
-    // Otherwise open the dialog
-    handleConnectClick(id);
+  const handleSync = async () => {
+    setBusy('sync');
+    try {
+      const summary = await api.syncUberFleet();
+      const matched = summary.vehiclesMatched ?? 0;
+      const linked = summary.driversLinked ?? 0;
+      const unmatched = summary.unmatchedUberVehicles?.length ?? 0;
+      toast.success(
+        `Synced ${matched} vehicle${matched === 1 ? '' : 's'}, linked ${linked} driver${linked === 1 ? '' : 's'}` +
+          (unmatched ? ` (${unmatched} unmatched on Uber)` : ''),
+      );
+      if (summary.warning) toast.warning(summary.warning);
+      if (summary.errors?.length) toast.error(`${summary.errors.length} sync error(s) — check console`);
+      await loadStatus();
+    } catch (error: any) {
+      console.error(error);
+      if (error?.code === 'SECRETS_MISSING') {
+        toast.error('Server secrets missing — open Setup checklist');
+        setSetupOpen(true);
+      } else {
+        toast.error(error?.message || 'Sync failed');
+      }
+    } finally {
+      setBusy(null);
+    }
   };
 
   return (
@@ -411,118 +407,174 @@ function IntegrationsPanel() {
       <CardHeader>
         <CardTitle>Platform Integrations</CardTitle>
         <CardDescription>
-          Connect your fleet accounts to automatically import trip data via API.
+          Connect Uber Fleet (Vehicles API) to sync vehicles and driver assignments. Trip CSV imports stay separate.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        {integrations.map((item) => (
-          <div key={item.id} className="flex items-center justify-between p-4 border rounded-lg bg-white dark:bg-slate-950">
-            <div className="flex items-center gap-4">
-              <div className="h-12 w-12 bg-slate-100 rounded-lg flex items-center justify-center overflow-hidden p-2">
-                 {/* Simple fallback icon logic if image fails */}
-                 <div className="font-bold text-slate-400 text-xl">{item.name.charAt(0)}</div>
-              </div>
-              <div>
-                <h4 className="font-medium text-slate-900 dark:text-slate-100">{item.name}</h4>
-                <div className="flex items-center gap-2 text-sm text-slate-500">
-                  {item.status === 'connected' ? (
-                    <>
-                      <Check className="h-3 w-3 text-emerald-500" />
-                      <span className="text-emerald-600">Connected</span>
-                      <span className="text-slate-300">•</span>
-                      <span>Synced {item.lastSync}</span>
-                    </>
-                  ) : (
-                    <span className="text-slate-400">Not connected</span>
-                  )}
-                </div>
-              </div>
+        <div className="flex items-center justify-between p-4 border rounded-lg bg-white dark:bg-slate-950">
+          <div className="flex items-center gap-4">
+            <div className="h-12 w-12 bg-slate-100 rounded-lg flex items-center justify-center overflow-hidden p-2">
+              <div className="font-bold text-slate-400 text-xl">U</div>
             </div>
-            <div className="flex items-center gap-3">
-              {item.status === 'connected' && (
-                 <Button variant="outline" size="sm" onClick={() => toast.info(`Syncing ${item.name}...`)}>
-                   <RefreshCw className="h-4 w-4 mr-2" />
-                   Sync Now
-                 </Button>
+            <div>
+              <h4 className="font-medium text-slate-900 dark:text-slate-100">Uber Fleet</h4>
+              <div className="flex items-center gap-2 text-sm text-slate-500">
+                {status === 'connected' ? (
+                  <>
+                    <Check className="h-3 w-3 text-emerald-500" />
+                    <span className="text-emerald-600">Connected</span>
+                    <span className="text-slate-300">•</span>
+                    <span>Synced {lastSync === '-' ? 'never' : lastSync}</span>
+                  </>
+                ) : (
+                  <span className="text-slate-400">
+                    {secretsConfigured ? 'Not connected' : 'Server secrets not set yet'}
+                  </span>
+                )}
+              </div>
+              {lastSyncSummary && status === 'connected' && (
+                <p className="text-xs text-slate-400 mt-1">
+                  Last sync: {lastSyncSummary.vehiclesUpdated ?? 0} vehicles updated,{' '}
+                  {lastSyncSummary.driversLinked ?? 0} drivers linked
+                  {(lastSyncSummary.unmatchedCount ?? 0) > 0
+                    ? `, ${lastSyncSummary.unmatchedCount} unmatched`
+                    : ''}
+                </p>
               )}
-              <Button 
-                variant={item.status === 'connected' ? 'outline' : 'default'} 
-                size="sm"
-                className={item.status === 'connected' ? "border-rose-200 text-rose-600 hover:bg-rose-50 hover:text-rose-700" : ""}
-                onClick={() => toggleIntegration(item.id)}
-              >
-                {item.status === 'connected' ? 'Disconnect' : 'Connect'}
-              </Button>
             </div>
           </div>
-        ))}
+          <div className="flex items-center gap-3">
+            <Button variant="outline" size="sm" onClick={() => setSetupOpen(true)}>
+              Setup
+            </Button>
+            {status === 'connected' && (
+              <Button variant="outline" size="sm" onClick={handleSync} disabled={!!busy}>
+                {busy === 'sync' ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                )}
+                Sync Now
+              </Button>
+            )}
+            <Button
+              variant={status === 'connected' ? 'outline' : 'default'}
+              size="sm"
+              className={
+                status === 'connected'
+                  ? 'border-rose-200 text-rose-600 hover:bg-rose-50 hover:text-rose-700'
+                  : ''
+              }
+              onClick={() => (status === 'connected' ? handleDisconnect() : handleConnect())}
+              disabled={!!busy}
+            >
+              {(busy === 'connect' || busy === 'disconnect') && (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              )}
+              {status === 'connected' ? 'Disconnect' : 'Connect'}
+            </Button>
+          </div>
+        </div>
 
-        <Dialog open={isConnectDialogOpen} onOpenChange={setIsConnectDialogOpen}>
-            <DialogContent>
-                <DialogHeader>
-                    <DialogTitle>Connect {integrations.find(i => i.id === selectedPlatform)?.name}</DialogTitle>
-                    <DialogDescription>
-                        Enter your API credentials from the {selectedPlatform} Developer Dashboard.
-                    </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4 py-4">
-                    <div className="space-y-2">
-                        <Label>Client ID</Label>
-                        <Input 
-                            value={credentials.clientId}
-                            onChange={(e) => setCredentials(prev => ({...prev, clientId: e.target.value}))}
-                            placeholder="e.g. j48f-2k9d-..."
-                        />
-                    </div>
-                    <div className="space-y-2">
-                        <Label>Client Secret</Label>
-                        <Input 
-                            type="password"
-                            value={credentials.clientSecret}
-                            onChange={(e) => setCredentials(prev => ({...prev, clientSecret: e.target.value}))}
-                            placeholder="••••••••••••••••"
-                        />
-                    </div>
-                    <div className="bg-slate-50 p-3 rounded text-xs text-slate-500">
-                        <p className="font-medium mb-1">Redirect URL:</p>
-                        <code className="bg-slate-100 p-1 rounded break-all block">https://chorus-tech-15470154.figma.site</code>
-                        <p className="mt-2">Copy this URL to your app settings in the developer dashboard.</p>
-                    </div>
-
-                    <div className="space-y-2">
-                        <Label>Requested Scopes</Label>
-                        <div className="bg-slate-50 p-3 rounded text-xs border border-slate-100 space-y-2">
-                           <div className="flex items-center gap-2">
-                              <Badge variant="secondary" className="text-[10px] h-5">profile</Badge>
-                              <span className="text-slate-500">Basic account details</span>
-                           </div>
-                           <div className="flex items-center gap-2">
-                              <Badge variant="secondary" className="text-[10px] h-5">history</Badge>
-                              <span className="text-slate-500">Trip history and financial data</span>
-                           </div>
-                           <div className="flex items-center gap-2">
-                              <Badge variant="secondary" className="text-[10px] h-5">places</Badge>
-                              <span className="text-slate-500">Saved locations</span>
-                           </div>
-                           <p className="text-slate-400 italic mt-2 text-[10px]">
-                              Note: As the app owner, you have "Limited Access" to these scopes immediately for testing.
-                           </p>
-                        </div>
-                    </div>
-                </div>
-                <DialogFooter>
-                    <Button variant="outline" onClick={() => setIsConnectDialogOpen(false)}>Cancel</Button>
-                    <Button onClick={handleSaveCredentials} disabled={!credentials.clientId || !credentials.clientSecret}>
-                        Save & Connect
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
+        <Dialog open={setupOpen} onOpenChange={setSetupOpen}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Uber Fleet setup</DialogTitle>
+              <DialogDescription>
+                Do this once in Uber&apos;s developer portal (org: {UBER_FLEET_PORTAL.orgName}), then set server secrets.
+                Never paste your Client Secret into RoamFleet.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3 text-sm py-2">
+              <ol className="list-decimal pl-5 space-y-2 text-slate-600 dark:text-slate-300">
+                <li>
+                  Open{' '}
+                  <a
+                    className="text-indigo-600 hover:underline"
+                    href="https://developer.uber.com/dashboard"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    developer.uber.com/dashboard
+                  </a>
+                  , stay in <strong>{UBER_FLEET_PORTAL.orgName}</strong>, click{' '}
+                  <strong>Applications</strong> (or Create Application).
+                </li>
+                <li>
+                  Name the app <code className="text-xs bg-slate-100 px-1 rounded">{UBER_FLEET_PORTAL.appNameSuggestion}</code>.
+                </li>
+                <li>
+                  In Setup, set Privacy Policy to:
+                  <code className="block text-xs bg-slate-100 p-2 rounded mt-1 break-all">
+                    {UBER_FLEET_PORTAL.privacyPolicyUrl}
+                  </code>
+                </li>
+                <li>
+                  Redirect URI:
+                  <code className="block text-xs bg-slate-100 p-2 rounded mt-1 break-all">
+                    {UBER_FLEET_PORTAL.redirectUriProduction}
+                  </code>
+                </li>
+                <li>
+                  Webhook URL:
+                  <code className="block text-xs bg-slate-100 p-2 rounded mt-1 break-all">
+                    {UBER_FLEET_PORTAL.webhookUrl}
+                  </code>
+                </li>
+                <li>
+                  Confirm Vehicles scopes include{' '}
+                  {UBER_FLEET_PORTAL.phase1Scopes.map((s) => (
+                    <Badge key={s} variant="secondary" className="text-[10px] h-5 mr-1">
+                      {s}
+                    </Badge>
+                  ))}
+                </li>
+                <li>
+                  Set Supabase Edge Function secrets{' '}
+                  <code className="text-xs">UBER_CLIENT_ID</code> and{' '}
+                  <code className="text-xs">UBER_CLIENT_SECRET</code> (Dashboard → Edge Functions → Secrets), then redeploy
+                  fleet server.
+                </li>
+              </ol>
+              <div className="bg-slate-50 dark:bg-slate-900 p-3 rounded text-xs text-slate-500 space-y-1">
+                <p>
+                  Secrets on server:{' '}
+                  <span className={secretsConfigured ? 'text-emerald-600' : 'text-amber-600'}>
+                    {secretsConfigured ? 'configured' : 'missing'}
+                  </span>
+                </p>
+                {scopes ? <p>Requested scopes: {scopes}</p> : null}
+                <p>
+                  Docs:{' '}
+                  <a className="text-indigo-600 hover:underline" href={UBER_FLEET_PORTAL.docsUrl} target="_blank" rel="noreferrer">
+                    Vehicles getting started
+                  </a>
+                </p>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setSetupOpen(false)}>
+                Close
+              </Button>
+              <Button
+                onClick={() => {
+                  setSetupOpen(false);
+                  handleConnect();
+                }}
+                disabled={!secretsConfigured || !!busy}
+              >
+                Connect now
+              </Button>
+            </DialogFooter>
+          </DialogContent>
         </Dialog>
       </CardContent>
       <CardFooter className="bg-slate-50 dark:bg-slate-900 border-t px-6 py-4">
         <div className="flex items-center gap-2 text-sm text-slate-500">
           <LinkIcon className="h-4 w-4" />
-          <span>Need help finding your keys? <a href="#" className="text-indigo-600 hover:underline">View Integration Guide</a></span>
+          <span>
+            Client ID/Secret stay on the server only — use Setup if Connect fails.
+          </span>
         </div>
       </CardFooter>
     </Card>

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { GOOGLE_OAUTH_EMAIL_ONLY_SCOPES } from '@roam/auth-client';
+import { isNativeCapacitorPlatform } from '@roam/types';
 import { GoogleIcon } from '@/components/icons/GoogleIcon';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import {
@@ -34,15 +35,22 @@ export function CourierGoogleAuthButton({
         COURIER_OAUTH_INTENT_KEY,
         variant === 'login' ? COURIER_OAUTH_INTENT_LOGIN : COURIER_OAUTH_INTENT_SIGNUP,
       );
-      const { error } = await supabase.auth.signInWithOAuth({
+      const redirectTo = getCourierAuthRedirectUrl();
+      const native = isNativeCapacitorPlatform();
+      const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: getCourierAuthRedirectUrl(),
+          redirectTo,
+          skipBrowserRedirect: native,
           scopes: GOOGLE_OAUTH_EMAIL_ONLY_SCOPES,
           queryParams: { prompt: 'select_account' },
         },
       });
       if (error) throw error;
+      if (native && data?.url) {
+        const { Browser } = await import('@capacitor/browser');
+        await Browser.open({ url: data.url });
+      }
     } catch (err: unknown) {
       sessionStorage.removeItem(COURIER_OAUTH_INTENT_KEY);
       onError?.(

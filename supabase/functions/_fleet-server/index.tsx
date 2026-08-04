@@ -185,6 +185,7 @@ import { registerPendingVehicleCatalogRoutes } from "./pending_vehicle_catalog_r
 import { registerPartSourcingRoutes } from "./part_sourcing_routes.ts";
 import { registerExpenseHubRoutes } from "./expense_hub_routes.ts";
 import { registerPlatformVendorRoutes } from "./platform_vendor_routes.ts";
+import { registerUberFleetRoutes } from "./uber_fleet_routes.ts";
 import {
   provisionFleetOwner,
   enableDriverForFleetOwner,
@@ -448,6 +449,7 @@ registerFleetAdminStorageRoutes(app, supabase, kv);
 registerFleetAdminMaintenanceLedgerRoutes(app, supabase, kv);
 registerPendingVehicleCatalogRoutes(app, supabase);
 registerPartSourcingRoutes(app, supabase);
+registerUberFleetRoutes(app);
 registerExpenseHubRoutes(app);
 
 // ─── Toll Ledger Primary Write Helper (Phase 6) ──────────────────────────
@@ -8878,13 +8880,24 @@ app.get("/make-server-37f42386/batches", requireAuth(), async (c) => {
   }
 });
 
-app.post("/make-server-37f42386/batches", async (c) => {
+app.post("/make-server-37f42386/batches", requireAuth(), requirePermission('data.import'), async (c) => {
   try {
+    const rbacUser = c.get('rbacUser') as { userId?: string; email?: string } | undefined;
     const batch = await c.req.json();
     if (!batch.id) {
         batch.id = crypto.randomUUID();
     }
+    // Default to processing so failed mid-import commits never look completed
+    if (!batch.status) batch.status = "processing";
     await kv.set(`batch:${batch.id}`, stampOrg(batch, c));
+    await logAdminAction({
+      actorId: rbacUser?.userId || "unknown",
+      actorName: rbacUser?.email || "Admin",
+      action: "create_import_batch",
+      targetId: String(batch.id),
+      targetEmail: "N/A",
+      details: `status=${batch.status} records=${batch.recordCount ?? 0} type=${batch.type || "unknown"}`,
+    });
     return c.json({ success: true, data: batch });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
@@ -8904,6 +8917,10 @@ app.patch("/make-server-37f42386/batches/:id", requireAuth(), async (c) => {
     "uploadedBy",
     "processedBy",
     "contentFingerprint",
+    "status",
+    "paymentLedgerLinesImported",
+    "paymentLedgerLinesSkipped",
+    "usesPaymentLineSsot",
   ]);
   try {
     const existing = await kv.get(`batch:${id}`);
@@ -8923,14 +8940,26 @@ app.patch("/make-server-37f42386/batches/:id", requireAuth(), async (c) => {
       merged[k] = v;
     }
     await kv.set(`batch:${id}`, merged);
+    if (patch.status === "completed" || patch.status === "error") {
+      const rbacUser = c.get('rbacUser') as { userId?: string; email?: string } | undefined;
+      await logAdminAction({
+        actorId: rbacUser?.userId || "unknown",
+        actorName: rbacUser?.email || "Admin",
+        action: patch.status === "completed" ? "complete_import_batch" : "fail_import_batch",
+        targetId: id,
+        targetEmail: "N/A",
+        details: `status=${patch.status}`,
+      });
+    }
     return c.json({ success: true, data: merged });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }
 });
 
-app.delete("/make-server-37f42386/batches/:id", async (c) => {
+app.delete("/make-server-37f42386/batches/:id", requireAuth(), requirePermission('data.backfill'), async (c) => {
   const batchId = c.req.param("id");
+  const rbacUser = c.get('rbacUser') as { userId?: string; email?: string } | undefined;
   try {
     console.log(`[Batch delete] Starting cascade delete for batch ${batchId}`);
 
@@ -9034,6 +9063,82 @@ app.delete("/make-server-37f42386/batches/:id", async (c) => {
       );
     } catch (drErr: any) {
       console.warn("[Batch delete] Dispute refund cleanup failed (non-fatal):", drErr?.message);
+    }
+
+    // ── 0c. Payment ledger lines + dedup keys for this batch (Uber payments_transaction.csv)
+    let deletedPaymentLedgerLines = 0;
+    let deletedPaymentLedgerDedupKeys = 0;
+    try {
+      const pllRows = await paginatedKeyFetch(() =>
+        supabase
+          .from("kv_store_37f42386")
+          .select("key, value")
+          .like("key", "payment_ledger_line:%")
+          .eq("value->>batchId", batchId)
+      );
+      const mainPll = pllRows.filter((row: { key: string }) => {
+        const k = row.key;
+        return k.startsWith("payment_ledger_line:") && !k.startsWith("payment_ledger_line-dedup");
+      });
+      if (mainPll.length > 0) {
+        const keysToDel = mainPll.map((r: { key: string }) => r.key);
+        for (let i = 0; i < keysToDel.length; i += 100) {
+          await kv.mdel(keysToDel.slice(i, i + 100));
+        }
+        deletedPaymentLedgerLines = keysToDel.length;
+        const dedupIds = new Set<string>();
+        for (const row of mainPll) {
+          const v = row.value as { idempotencyKey?: string } | null;
+          const idem = v?.idempotencyKey;
+          if (typeof idem === "string" && idem.trim()) dedupIds.add(idem.trim());
+        }
+        for (const idem of dedupIds) {
+          try {
+            await kv.del(`payment_ledger_line-dedup:${idem}`);
+            deletedPaymentLedgerDedupKeys++;
+          } catch {
+            /* non-fatal */
+          }
+        }
+      }
+      console.log(
+        `[Batch delete] Removed ${deletedPaymentLedgerLines} payment_ledger_line(s), ${deletedPaymentLedgerDedupKeys} dedup key(s)`,
+      );
+    } catch (pllErr: any) {
+      console.warn("[Batch delete] Payment ledger line cleanup failed (non-fatal):", pllErr?.message);
+    }
+
+    // ── 0d. Driver period snapshots scoped by batchId (key: driver_period_snapshot:{driverId}:{batchId})
+    let deletedDriverPeriodSnapshots = 0;
+    try {
+      const snapRows = await paginatedKeyFetch(() =>
+        supabase
+          .from("kv_store_37f42386")
+          .select("key")
+          .like("key", `driver_period_snapshot:%:${batchId}`)
+      );
+      // Fallback: value->>batchId scan if key suffix pattern misses variants
+      const snapByValue = await paginatedKeyFetch(() =>
+        supabase
+          .from("kv_store_37f42386")
+          .select("key")
+          .like("key", "driver_period_snapshot:%")
+          .eq("value->>batchId", batchId)
+      );
+      const snapKeySet = new Set<string>();
+      for (const row of [...snapRows, ...snapByValue]) {
+        if (row?.key) snapKeySet.add(row.key);
+      }
+      const snapKeys = Array.from(snapKeySet);
+      if (snapKeys.length > 0) {
+        for (let i = 0; i < snapKeys.length; i += 100) {
+          await kv.mdel(snapKeys.slice(i, i + 100));
+        }
+        deletedDriverPeriodSnapshots = snapKeys.length;
+      }
+      console.log(`[Batch delete] Removed ${deletedDriverPeriodSnapshots} driver_period_snapshot key(s)`);
+    } catch (snapErr: any) {
+      console.warn("[Batch delete] Driver period snapshot cleanup failed (non-fatal):", snapErr?.message);
     }
 
     // ── 1. Fetch all trips in this batch (paginated, with values for ID extraction) ──
@@ -9260,6 +9365,15 @@ app.delete("/make-server-37f42386/batches/:id", async (c) => {
 
     console.log(`[Batch delete] Cascade complete for batch ${batchId}`);
 
+    await logAdminAction({
+      actorId: rbacUser?.userId || "unknown",
+      actorName: rbacUser?.email || "Admin",
+      action: "cascade_delete_batch",
+      targetId: batchId,
+      targetEmail: "N/A",
+      details: `trips=${tripKeys.length} tx=${txKeys.length} ledger=${deletedCanonicalLedger} paymentLines=${deletedPaymentLedgerLines} snapshots=${deletedDriverPeriodSnapshots} disputes=${deletedDisputeRefundKeys}`,
+    });
+
     return c.json({
       success: true,
       deletedTrips: tripKeys.length,
@@ -9271,6 +9385,9 @@ app.delete("/make-server-37f42386/batches/:id", async (c) => {
       deletedUberPaymentMetrics,
       deletedDisputeRefundKeys,
       deletedDisputeRefundDedupKeys,
+      deletedPaymentLedgerLines,
+      deletedPaymentLedgerDedupKeys,
+      deletedDriverPeriodSnapshots,
       deletedVehicleMetrics,
       skippedVehicleMetrics,
       deletedBatch: batchId
@@ -9284,7 +9401,7 @@ app.delete("/make-server-37f42386/batches/:id", async (c) => {
 // ---------------------------------------------------------------------------
 // Batch Delete Preview — returns impact summary for deleting a batch
 // ---------------------------------------------------------------------------
-app.get("/make-server-37f42386/batches/:id/delete-preview", requireAuth(), async (c) => {
+app.get("/make-server-37f42386/batches/:id/delete-preview", requireAuth(), requirePermission('data.backfill'), async (c) => {
   const batchId = c.req.param("id");
   try {
     // 0. Fetch the batch record itself
@@ -9604,6 +9721,16 @@ app.post("/make-server-37f42386/reset-by-date", requireAuth(), requirePermission
                 filesDeletedCount += chunk.length;
             }
         }
+
+        const rbacUser = c.get('rbacUser') as { userId?: string; email?: string } | undefined;
+        await logAdminAction({
+          actorId: rbacUser?.userId || "unknown",
+          actorName: rbacUser?.email || "Admin",
+          action: "reset_by_date",
+          targetId: "keys",
+          targetEmail: "N/A",
+          details: `deletedKeys=${keys.length} filesDeleted=${filesDeletedCount}`,
+        });
         
         return c.json({ success: true, deletedCount: keys.length, filesDeletedCount });
     }
@@ -9810,11 +9937,23 @@ app.post("/make-server-37f42386/ai/map-csv", async (c) => {
   }
 });
 
-// Integration Settings Endpoints
+// Integration Settings Endpoints (never return token secrets or client secrets)
 app.get("/make-server-37f42386/settings/integrations", requireAuth(), async (c) => {
   try {
     const integrations = await kv.getByPrefix("integration:");
-    return c.json(filterByOrg(integrations || [], c));
+    const safe = (integrations || [])
+      .filter((row: any) => {
+        if (!row || typeof row !== "object") return false;
+        // Token stores have access_token; integration cards have an id.
+        if (row.access_token) return false;
+        if (!row.id) return false;
+        return true;
+      })
+      .map((row: any) => {
+        const { credentials, ...rest } = row;
+        return rest;
+      });
+    return c.json(filterByOrg(safe, c));
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }
@@ -9826,6 +9965,16 @@ app.post("/make-server-37f42386/settings/integrations", requireAuth(), requirePe
     if (!integration.id) {
         return c.json({ error: "Integration ID is required" }, 400);
     }
+    // Uber Fleet credentials must live in Deno env — reject browser secret posts.
+    if (integration.id === "uber") {
+      const { credentials: _drop, ...safe } = integration;
+      await kv.set(`integration:uber`, stampOrg({ ...safe, id: "uber", credentials: undefined }, c));
+      return c.json({
+        success: true,
+        data: { ...safe, credentials: undefined },
+        warning: "Uber secrets must be set as UBER_CLIENT_ID / UBER_CLIENT_SECRET. Use POST /uber/connect.",
+      });
+    }
     await kv.set(`integration:${integration.id}`, stampOrg(integration, c));
     return c.json({ success: true, data: integration });
   } catch (e: any) {
@@ -9833,263 +9982,7 @@ app.post("/make-server-37f42386/settings/integrations", requireAuth(), requirePe
   }
 });
 
-// Uber OAuth Endpoints
-
-// 1. Generate Auth URL
-app.get("/make-server-37f42386/uber/auth-url", async (c) => {
-  try {
-    const integration = await kv.get("integration:uber");
-    if (!integration || !integration.credentials?.clientId) {
-       return c.json({ error: "Uber integration not configured." }, 400);
-    }
-    
-    // Allow frontend to specify redirect URI (must match exactly what is in Uber Dashboard)
-    const clientRedirectUri = c.req.query("redirect_uri");
-    const defaultRedirectUri = "https://csfllzzastacofsvcdsc.supabase.co/functions/v1/make-server-37f42386/uber/callback";
-    
-    // If client provides a URI, use it. Otherwise fallback to old default (which we are deprecating)
-    const redirectUri = clientRedirectUri || defaultRedirectUri;
-    
-    const clientId = integration.credentials.clientId;
-    
-    // Allow frontend to request specific scopes (default to 'profile')
-    // The user must enable these in Uber Dashboard -> Scopes
-    const clientScope = c.req.query("scope");
-    const scope = clientScope || "profile"; 
-    
-    const authUrl = `https://login.uber.com/oauth/v2/authorize?client_id=${clientId}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}`;
-    
-    return c.json({ url: authUrl });
-  } catch (e: any) {
-    return c.json({ error: e.message }, 500);
-  }
-});
-
-// 2. Exchange Code (Called by Frontend)
-app.post("/make-server-37f42386/uber/exchange", async (c) => {
-    try {
-        const { code, redirect_uri } = await c.req.json();
-        
-        if (!code || !redirect_uri) {
-            return c.json({ error: "Missing code or redirect_uri" }, 400);
-        }
-
-        const integration = await kv.get("integration:uber");
-        if (!integration || !integration.credentials) {
-            return c.json({ error: "Integration settings missing." }, 400);
-        }
-
-        const { clientId, clientSecret } = integration.credentials;
-
-        const body = new URLSearchParams();
-        body.append("client_id", clientId);
-        body.append("client_secret", clientSecret);
-        body.append("grant_type", "authorization_code");
-        body.append("redirect_uri", redirect_uri);
-        body.append("code", code);
-
-        const tokenRes = await fetch("https://login.uber.com/oauth/v2/token", {
-            method: "POST",
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            body
-        });
-
-        const tokenData = await tokenRes.json();
-        
-        if (!tokenRes.ok) {
-            console.error("Uber Token Exchange Failed:", tokenData);
-            return c.json({ error: "Token exchange failed", details: tokenData }, 400);
-        }
-
-        // Save Tokens
-        const tokenStore = {
-            access_token: tokenData.access_token,
-            refresh_token: tokenData.refresh_token,
-            expires_at: Date.now() + (tokenData.expires_in * 1000),
-            scope: tokenData.scope,
-            token_type: tokenData.token_type
-        };
-        
-        await kv.set("integration:uber_token", tokenStore);
-        
-        // Update status
-        integration.status = 'connected';
-        integration.lastConnected = new Date().toISOString();
-        await kv.set("integration:uber", integration);
-
-        return c.json({ success: true });
-
-    } catch (e: any) {
-        console.error("Exchange Error:", e);
-        return c.json({ error: e.message }, 500);
-    }
-});
-
-// 3. Handle Callback (Deprecated/Legacy for Backend-to-Backend)
-app.get("/make-server-37f42386/uber/callback", async (c) => {
-  const code = c.req.query("code");
-  const error = c.req.query("error");
-  
-  if (error) {
-    return c.html(`<h1>Login Failed</h1><p>${error}</p>`);
-  }
-  if (!code) {
-    return c.html(`<h1>Error</h1><p>No code provided.</p>`);
-  }
-
-  try {
-    const integration = await kv.get("integration:uber");
-    if (!integration || !integration.credentials) {
-       return c.html(`<h1>Error</h1><p>Integration settings missing.</p>`);
-    }
-
-    const { clientId, clientSecret } = integration.credentials;
-    const redirectUri = "https://csfllzzastacofsvcdsc.supabase.co/functions/v1/make-server-37f42386/uber/callback";
-
-    const body = new URLSearchParams();
-    body.append("client_id", clientId);
-    body.append("client_secret", clientSecret);
-    body.append("grant_type", "authorization_code");
-    body.append("redirect_uri", redirectUri);
-    body.append("code", code);
-
-    const tokenRes = await fetch("https://login.uber.com/oauth/v2/token", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body
-    });
-
-    const tokenData = await tokenRes.json();
-    
-    if (!tokenRes.ok) {
-        console.error("Uber Token Exchange Failed:", tokenData);
-        return c.html(`<h1>Auth Failed</h1><p>${JSON.stringify(tokenData)}</p>`);
-    }
-
-    // Save Tokens
-    const tokenStore = {
-        access_token: tokenData.access_token,
-        refresh_token: tokenData.refresh_token,
-        expires_at: Date.now() + (tokenData.expires_in * 1000),
-        scope: tokenData.scope,
-        token_type: tokenData.token_type
-    };
-    
-    await kv.set("integration:uber_token", tokenStore);
-    
-    // Update status
-    integration.status = 'connected';
-    integration.lastConnected = new Date().toISOString();
-    await kv.set("integration:uber", integration);
-
-    return c.html(`
-      <div style="font-family: sans-serif; text-align: center; padding: 50px;">
-        <h1 style="color: green;">Success!</h1>
-        <p>Uber has been connected successfully.</p>
-        <p>You can close this window and return to the dashboard.</p>
-        <script>
-          if (window.opener) {
-            window.opener.postMessage("uber-connected", "*");
-            setTimeout(() => window.close(), 1500);
-          }
-        </script>
-      </div>
-    `);
-
-  } catch (e: any) {
-    return c.html(`<h1>System Error</h1><p>${e.message}</p>`);
-  }
-});
-
-// Uber API Sync Endpoint
-app.post("/make-server-37f42386/uber/sync", async (c) => {
-  try {
-    // 1. Get Tokens
-    let tokenStore = await kv.get("integration:uber_token");
-    
-    if (!tokenStore || !tokenStore.access_token) {
-       return c.json({ error: "Uber not connected. Please click 'Connect' first.", code: "AUTH_REQUIRED" }, 401);
-    }
-
-    // 2. Check Expiry & Refresh if needed
-    if (Date.now() > tokenStore.expires_at) {
-        console.log("Token expired, attempting refresh...");
-        const integration = await kv.get("integration:uber");
-        if (integration?.credentials && tokenStore.refresh_token) {
-            const { clientId, clientSecret } = integration.credentials;
-            const body = new URLSearchParams();
-            body.append("client_id", clientId);
-            body.append("client_secret", clientSecret);
-            body.append("grant_type", "refresh_token");
-            body.append("refresh_token", tokenStore.refresh_token);
-            
-            const refreshRes = await fetch("https://login.uber.com/oauth/v2/token", {
-                method: "POST",
-                headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                body
-            });
-            
-            if (refreshRes.ok) {
-                const newData = await refreshRes.json();
-                tokenStore = {
-                    access_token: newData.access_token,
-                    refresh_token: newData.refresh_token,
-                    expires_at: Date.now() + (newData.expires_in * 1000),
-                    scope: newData.scope,
-                    token_type: newData.token_type
-                };
-                await kv.set("integration:uber_token", tokenStore);
-                console.log("Token refreshed successfully.");
-            } else {
-                return c.json({ error: "Session expired. Please reconnect.", code: "AUTH_REQUIRED" }, 401);
-            }
-        } else {
-             return c.json({ error: "Session expired. Please reconnect.", code: "AUTH_REQUIRED" }, 401);
-        }
-    }
-
-    const accessToken = tokenStore.access_token;
-    let trips = [];
-
-    // 3. Fetch Data (Rider History API)
-    // Note: The 'history' scope provides this data.
-    const historyRes = await fetch("https://api.uber.com/v1.2/history?limit=50", {
-        headers: {
-            "Authorization": `Bearer ${accessToken}`,
-            "Content-Type": "application/json"
-        }
-    });
-
-    if (historyRes.ok) {
-        const data = await historyRes.json();
-        if (data.history && Array.isArray(data.history)) {
-            trips = data.history.map((t: any) => ({
-                trip_id: t.request_id,
-                date: new Date(t.start_time * 1000).toISOString(),
-                platform: 'Uber',
-                driverId: 'Self', 
-                pickupLocation: t.start_city?.display_name || 'Unknown',
-                dropoffLocation: t.end_city?.display_name || 'Unknown',
-                amount: 0, // Price is often hidden in history-lite
-                netPayout: 0,
-                status: t.status,
-                source: 'uber_oauth_api'
-            }));
-            return c.json({ success: true, trips });
-        } else {
-            return c.json({ success: true, trips: [], warning: "Connected, but no history found." });
-        }
-    } else {
-        const errText = await historyRes.text();
-        console.error("Uber API Error:", errText);
-        return c.json({ error: "Failed to fetch history from Uber.", details: errText }, 500);
-    }
-
-  } catch (e: any) {
-    console.error("Uber Sync Error:", e);
-    return c.json({ error: e.message }, 500);
-  }
-});
+// Uber Vehicles/Fleet routes registered via registerUberFleetRoutes(app)
 
 // Budget Management Endpoints
 app.get("/make-server-37f42386/budgets", requireAuth(), async (c) => {
@@ -17723,6 +17616,15 @@ app.post("/make-server-37f42386/bulk-delete-execute", requireAuth(), requirePerm
     }
 
     console.log(`bulk-delete-execute: deleted ${keys.length} keys, ${filesDeletedCount} storage files`);
+    const rbacUser = c.get('rbacUser') as { userId?: string; email?: string } | undefined;
+    await logAdminAction({
+      actorId: rbacUser?.userId || "unknown",
+      actorName: rbacUser?.email || "Admin",
+      action: "bulk_delete_execute",
+      targetId: "bulk",
+      targetEmail: "N/A",
+      details: `deletedKeys=${keys.length} filesDeleted=${filesDeletedCount}`,
+    });
     return c.json({ success: true, deletedCount: keys.length, filesDeletedCount });
   } catch (e: any) {
     console.log(`bulk-delete-execute error: ${e.message}`);

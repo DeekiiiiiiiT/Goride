@@ -6,8 +6,6 @@ import App from './App';
 import { initCourierNative } from './capacitor-native';
 import './index.css';
 
-void initCourierNative();
-
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -19,11 +17,13 @@ const queryClient = new QueryClient({
   },
 });
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <App />
-      <Toaster position="top-center" richColors />
-    </QueryClientProvider>
-  </React.StrictMode>,
-);
+void initCourierNative().finally(() => {
+  ReactDOM.createRoot(document.getElementById('root')!).render(
+    <React.StrictMode>
+      <QueryClientProvider client={queryClient}>
+        <App />
+        <Toaster position="top-center" richColors />
+      </QueryClientProvider>
+    </React.StrictMode>,
+  );
+});

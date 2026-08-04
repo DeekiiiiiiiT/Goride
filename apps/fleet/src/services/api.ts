@@ -188,7 +188,13 @@ export const api = {
         | 'uploadedBy'
         | 'processedBy'
         | 'contentFingerprint'
-      >
+        | 'status'
+        | 'usesPaymentLineSsot'
+        | 'paymentLedgerLineCount'
+      > & {
+        paymentLedgerLinesImported?: number;
+        paymentLedgerLinesSkipped?: number;
+      }
     >,
   ): Promise<{ success: boolean; data: ImportBatch }> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/batches/${id}`, {
@@ -578,6 +584,58 @@ export const api = {
     });
     if (!response.ok) throw new Error("Failed to save integration");
     return response.json();
+  },
+
+  /** Uber Vehicles/Fleet — server secrets + client-credentials connect (never send Client Secret from browser). */
+  async getUberFleetStatus() {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/uber/status`, {
+      headers: await requireAuthHeaders(null),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to load Uber Fleet status');
+    }
+    return response.json();
+  },
+
+  async connectUberFleet() {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/uber/connect`, {
+      method: 'POST',
+      headers: await requireAuthHeaders(),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const err = new Error(body.error || 'Uber connect failed') as Error & { code?: string; details?: unknown };
+      err.code = body.code;
+      err.details = body.details;
+      throw err;
+    }
+    return body;
+  },
+
+  async disconnectUberFleet() {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/uber/disconnect`, {
+      method: 'POST',
+      headers: await requireAuthHeaders(),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.error || 'Uber disconnect failed');
+    return body;
+  },
+
+  async syncUberFleet() {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/uber/sync`, {
+      method: 'POST',
+      headers: await requireAuthHeaders(),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const err = new Error(body.error || 'Uber sync failed') as Error & { code?: string; details?: unknown };
+      err.code = body.code;
+      err.details = body.details;
+      throw err;
+    }
+    return body;
   },
 
   async getBudgets() {

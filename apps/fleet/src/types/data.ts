@@ -233,7 +233,7 @@ export interface ImportBatch {
   id: string;
   fileName: string; // or multiple files joined
   uploadDate: string;
-  status: 'completed' | 'error';
+  status: 'processing' | 'completed' | 'error';
   recordCount: number;
   type: string; // 'uber_trip', 'uber_payment', 'merged', etc.
   processedBy?: string;

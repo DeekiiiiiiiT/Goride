@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -30,8 +30,8 @@ import {
   Search,
 } from 'lucide-react';
 import { toast } from 'sonner@2.0.3';
-import { logAuditEntry } from '../../services/audit-log';
 import { api } from '../../services/api';
+import { Progress } from '../ui/progress';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Types
@@ -64,8 +64,8 @@ export interface DeleteFlowModalProps {
   entityLabel: string;
   /** Fetch function: returns array of deletable items */
   fetchItems: (config: DeleteConfig) => Promise<DeletePreviewItem[]>;
-  /** Delete function: takes array of keys, returns count deleted */
-  deleteItems: (keys: string[]) => Promise<number>;
+  /** Delete function: takes array of keys (+ optional progress), returns count deleted */
+  deleteItems: (keys: string[], onProgress?: (deleted: number, total: number) => void) => Promise<number>;
   /** Column definitions for the preview table */
   columns: DeletePreviewColumn[];
   /** Show date range filter (default: true) */
@@ -128,9 +128,8 @@ export function DeleteFlowModal({
 
   // Processing state
   const [deletedCount, setDeletedCount] = useState(0);
-
-  // Timing for audit
-  const startTimeRef = useRef(0);
+  const [progressDone, setProgressDone] = useState(0);
+  const [progressTotal, setProgressTotal] = useState(0);
 
   // ─── Load drivers when needed ────────────────────────────────────────
   useEffect(() => {
@@ -154,6 +153,8 @@ export function DeleteFlowModal({
       setSelectedKeys([]);
       setConfirmText('');
       setDeletedCount(0);
+      setProgressDone(0);
+      setProgressTotal(0);
       setIsLoadingPreview(false);
     }
   }, [isOpen]);
@@ -173,7 +174,6 @@ export function DeleteFlowModal({
     }
 
     setIsLoadingPreview(true);
-    startTimeRef.current = Date.now();
 
     try {
       const config: DeleteConfig = {
@@ -201,7 +201,7 @@ export function DeleteFlowModal({
       }
     } catch (err: any) {
       console.error(`Preview fetch failed for ${entityLabel}:`, err);
-      toast.error(`Failed to load preview: ${err.message || 'Unknown error'}`);
+      toast.error(`Could not load preview. Please try again.`);
     } finally {
       setIsLoadingPreview(false);
     }
@@ -226,36 +226,22 @@ export function DeleteFlowModal({
     }
 
     setStep('processing');
-    const operationStart = startTimeRef.current || Date.now();
+    setProgressDone(0);
+    setProgressTotal(selectedKeys.length);
 
     try {
-      const count = await deleteItems(selectedKeys);
+      const count = await deleteItems(selectedKeys, (done, total) => {
+        setProgressDone(done);
+        setProgressTotal(total);
+      });
       setDeletedCount(count);
       setStep('success');
       toast.success(`Successfully deleted ${count.toLocaleString()} ${entityLabel}.`);
 
-      logAuditEntry({
-        operation: 'import', // closest match in AuditOperation type — represents a data mutation
-        category: `delete:${entityLabel}`,
-        recordCount: count,
-        status: 'success',
-        format: 'csv',
-        durationMs: Date.now() - operationStart,
-      });
-
       onSuccess?.(count);
     } catch (err: any) {
       console.error(`Deletion failed for ${entityLabel}:`, err);
-      toast.error(`Deletion failed: ${err.message || 'Unknown error'}. Some items may still exist.`);
-
-      logAuditEntry({
-        operation: 'import',
-        category: `delete:${entityLabel}`,
-        recordCount: 0,
-        status: 'failed',
-        errors: [err.message || 'Unknown error'],
-        durationMs: Date.now() - operationStart,
-      });
+      toast.error(`Deletion failed. Some items may still exist — try again or contact support.`);
 
       setStep('preview');
     }
@@ -591,14 +577,23 @@ export function DeleteFlowModal({
         {/* STEP 4: PROCESSING                                            */}
         {/* ═══════════════════════════════════════════════════════════════ */}
         {step === 'processing' && (
-          <div className="py-12 flex flex-col items-center justify-center space-y-4">
+          <div className="py-12 flex flex-col items-center justify-center space-y-4 w-full">
             <div className="h-12 w-12 border-4 border-slate-200 border-t-rose-600 rounded-full animate-spin" />
             <p className="text-slate-500 text-sm">
               Deleting {entityLabel}...
             </p>
-            <p className="text-xs text-slate-400">
-              Please do not close this window.
-            </p>
+            {progressTotal > 0 ? (
+              <div className="w-full max-w-sm space-y-2 px-4">
+                <Progress value={Math.min(100, Math.round((progressDone / progressTotal) * 100))} />
+                <p className="text-xs text-slate-500 text-center">
+                  Deleted {progressDone.toLocaleString()} of {progressTotal.toLocaleString()}…
+                </p>
+              </div>
+            ) : (
+              <p className="text-xs text-slate-400">
+                Please do not close this window.
+              </p>
+            )}
           </div>
         )}
 

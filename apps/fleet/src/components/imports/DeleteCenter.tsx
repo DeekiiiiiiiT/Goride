@@ -19,6 +19,8 @@ import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from '../ui/dialog';
 import { Progress } from '../ui/progress';
+import { FACTORY_RESET_PREFIXES } from '../../constants/factoryResetPrefixes';
+import { PermissionGate } from '../auth/PermissionGate';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Record count interface
@@ -446,6 +448,47 @@ async function fetchTollPlazas(_config: DeleteConfig) {
   return items;
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// Shared helpers — Factory Reset (Phase 7)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Prefer ledger row when both ledger + legacy transaction exist with same id. */
+function isLegacyTollCategory(item: { category?: string }): boolean {
+  const cat = (item.category || '').toLowerCase();
+  return cat.includes('toll') || cat.includes('top-up') || cat.includes('topup');
+}
+
+function mergeTollLedgerAndLegacyItems(
+  ledgerItemsRaw: any[],
+  legacyItemsRaw: any[],
+): any[] {
+  const ledgerItems = (ledgerItemsRaw || []).map((item: any) => ({
+    ...item,
+    description: item.description || item.location || item.plaza || '—',
+    type: item.type || 'usage',
+    _source: 'toll_ledger' as const,
+  }));
+  const ledgerIds = new Set(ledgerItems.map((i: any) => i.id).filter(Boolean));
+  const legacyItems = (legacyItemsRaw || [])
+    .filter((item: any) => isLegacyTollCategory(item))
+    .filter((item: any) => item.id && !ledgerIds.has(item.id))
+    .map((item: any) => ({
+      ...item,
+      type: item.type || item.category || 'usage',
+      _source: 'transaction' as const,
+    }));
+  return [...ledgerItems, ...legacyItems];
+}
+
+async function countTollTransactionsMerged(): Promise<number> {
+  const [ledger, legacy] = await Promise.all([
+    api.bulkDeletePreview({ prefix: 'toll_ledger:', fields: ['id'] }),
+    api.bulkDeletePreview({ prefix: 'transaction:', fields: ['id', 'category'] }),
+  ]);
+  const merged = mergeTollLedgerAndLegacyItems(ledger.items || [], legacy.items || []);
+  return merged.length;
+}
+
 async function fetchTollTransactions(config: DeleteConfig) {
   // Toll Logs merges toll_ledger:* (SSOT) + leftover legacy transaction:* tolls.
   // Delete Center must use the same sources or date filters look "empty" while
@@ -473,27 +516,7 @@ async function fetchTollTransactions(config: DeleteConfig) {
     }),
   ]);
 
-  const ledgerItems = (ledgerRes.items || []).map((item: any) => ({
-    ...item,
-    description: item.description || item.location || item.plaza || '—',
-    type: item.type || 'usage',
-    _source: 'toll_ledger' as const,
-  }));
-
-  const ledgerIds = new Set(ledgerItems.map((i: any) => i.id).filter(Boolean));
-
-  const legacyItems = (legacyRes.items || [])
-    .filter((item: any) => {
-      const cat = (item.category || '').toLowerCase();
-      return cat.includes('toll') || cat.includes('top-up') || cat.includes('topup');
-    })
-    // Prefer ledger row when both exist (post-migration duplicate)
-    .filter((item: any) => item.id && !ledgerIds.has(item.id))
-    .map((item: any) => ({
-      ...item,
-      type: item.type || item.category || 'usage',
-      _source: 'transaction' as const,
-    }));
+  const merged = mergeTollLedgerAndLegacyItems(ledgerRes.items || [], legacyRes.items || []);
 
   // Client-side date clamp — belt-and-suspenders if PostgREST JSON date ops miss a row
   const inRange = (item: any) => {
@@ -503,7 +526,7 @@ async function fetchTollTransactions(config: DeleteConfig) {
     return d >= startDate && d <= endDate;
   };
 
-  return [...ledgerItems, ...legacyItems].filter(inRange);
+  return merged.filter(inRange);
 }
 
 async function tollTxnDeleteItems(keys: string[]): Promise<number> {
@@ -614,34 +637,6 @@ async function fetchCheckins(config: DeleteConfig) {
 // Shared helpers — Factory Reset (Phase 7)
 // ═══════════════════════════════════════════════════════════════════════════
 
-const FACTORY_RESET_PREFIXES = [
-  'trip:', 'batch:', 'driver:', 'driver_metric:', 'vehicle:', 'vehicle_metric:',
-  'transaction:', 'fuel_entry:', 'fuel_card:', 'station:', 'learnt_location:',
-  'toll_tag:', 'toll_plaza:', 'toll_ledger:', 'claim:', 'equipment:', 'inventory:',
-  'maintenance_log:', 'odometer_reading:', 'checkin:', 'organization_metric:',
-  'ledger_event:', 'ledger_event_idem:',
-];
-
-async function fetchAllForFactoryReset(_config: DeleteConfig) {
-  const results = await Promise.all(
-    FACTORY_RESET_PREFIXES.map(prefix =>
-      api.bulkDeletePreview({ prefix, fields: ['id'] }).catch(() => ({ items: [], totalCount: 0 }))
-    )
-  );
-  return results.flatMap(r => r.items);
-}
-
-async function factoryResetDeleteItems(keys: string[]): Promise<number> {
-  let total = 0;
-  const chunkSize = 1000;
-  for (let i = 0; i < keys.length; i += chunkSize) {
-    const chunk = keys.slice(i, i + chunkSize);
-    const result = await api.bulkDeleteExecute({ keys: chunk, cleanupStorage: true });
-    total += result.deletedCount;
-  }
-  return total;
-}
-
 const FACTORY_RESET_CHECKLIST = (
   <div className="space-y-2">
     <span>This operation will permanently erase <strong>ALL</strong> data from the system:</span>
@@ -657,6 +652,10 @@ const FACTORY_RESET_CHECKLIST = (
         'Equipment & inventory records',
         'Service logs & odometer readings',
         'Weekly check-in submissions',
+        'Payment ledger lines & driver period snapshots',
+        'Dispute refunds',
+        'Expense Hub records',
+        'Organization settings',
       ].map(item => (
         <li key={item} className="flex items-center gap-2 text-rose-700">
           <span className="inline-block w-3.5 h-3.5 rounded bg-rose-200 text-[9px] text-center leading-[14px] shrink-0">&#10003;</span>
@@ -668,10 +667,58 @@ const FACTORY_RESET_CHECKLIST = (
 );
 
 // ═══════════════════════════════════════════════════════════════════════════
+// Shared helpers — Factory Reset (Phase 7)
+// ═══════════════════════════════════════════════════════════════════════════
+
+async function fetchAllForFactoryReset(_config: DeleteConfig) {
+  const results = await Promise.all(
+    FACTORY_RESET_PREFIXES.map(prefix =>
+      api.bulkDeletePreview({ prefix, fields: ['id'] }).catch(() => ({ items: [], totalCount: 0 }))
+    )
+  );
+  return results.flatMap(r => r.items);
+}
+
+async function factoryResetDeleteItems(
+  keys: string[],
+  onProgress?: (deleted: number, total: number) => void,
+): Promise<number> {
+  let total = 0;
+  const chunkSize = 1000;
+  const errors: string[] = [];
+  for (let i = 0; i < keys.length; i += chunkSize) {
+    const chunk = keys.slice(i, i + chunkSize);
+    try {
+      const result = await api.bulkDeleteExecute({ keys: chunk, cleanupStorage: true });
+      total += result.deletedCount;
+    } catch (err: any) {
+      errors.push(err?.message || `Chunk at ${i} failed`);
+      console.error('[FactoryReset] chunk failed:', err);
+    }
+    onProgress?.(Math.min(i + chunk.length, keys.length), keys.length);
+  }
+  if (errors.length > 0 && total === 0) {
+    throw new Error(errors[0] || 'Factory reset failed');
+  }
+  if (errors.length > 0) {
+    toast.warning(`Factory reset partially completed (${total.toLocaleString()} deleted). ${errors.length} chunk(s) failed.`);
+  }
+  return total;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // Component
 // ═══════════════════════════════════════════════════════════════════════════
 
 export function DeleteCenter() {
+  return (
+    <PermissionGate permission="data.backfill">
+      <DeleteCenterInner />
+    </PermissionGate>
+  );
+}
+
+function DeleteCenterInner() {
   const [deleteGroup, setDeleteGroup] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeModal, setActiveModal] = useState<string | null>(null);
@@ -706,30 +753,6 @@ export function DeleteCenter() {
     results: Array<{ batchId: string; fileName: string; success: boolean; trips?: number; error?: string }>;
   } | null>(null);
   const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
-
-  // ─── Database Diagnostic counts (orphan detection) ────────────────────
-  const [diagCounts, setDiagCounts] = useState<{
-    trips: number;
-    ledgerEntries: number;
-    transactions: number;
-  } | null>(null);
-  const [diagLoading, setDiagLoading] = useState(false);
-  const [diagError, setDiagError] = useState<string | null>(null);
-
-  const fetchDiagCounts = useCallback(async () => {
-    setDiagLoading(true);
-    setDiagError(null);
-    try {
-      const result = await api.getLedgerCount();
-      setDiagCounts(result);
-    } catch (err: any) {
-      setDiagError(err.message || 'Failed to fetch counts');
-    } finally {
-      setDiagLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { fetchDiagCounts(); }, [fetchDiagCounts]);
 
   // ─── Load record counts on mount ──────────────────────────────────────
   useEffect(() => {
@@ -784,17 +807,8 @@ export function DeleteCenter() {
 
     // Toll transactions: live ledger + leftover legacy tolls (same universe as Toll Logs)
     safeCount('tollTransactions', async () => {
-      const [ledger, legacy] = await Promise.all([
-        api.bulkDeletePreview({ prefix: 'toll_ledger:', fields: ['id'] }),
-        api.bulkDeletePreview({ prefix: 'transaction:', fields: ['id', 'category'] }),
-      ]);
-      const ledgerIds = new Set((ledger.items || []).map((i: any) => i.id).filter(Boolean));
-      const legacyToll = (legacy.items || []).filter((item: any) => {
-        const cat = (item.category || '').toLowerCase();
-        const isToll = cat.includes('toll') || cat.includes('top-up') || cat.includes('topup');
-        return isToll && item.id && !ledgerIds.has(item.id);
-      });
-      return { total: ledgerIds.size + legacyToll.length };
+      const total = await countTollTransactionsMerged();
+      return { total };
     });
 
     return () => { cancelled = true; };
@@ -805,7 +819,7 @@ export function DeleteCenter() {
     const refetch = async () => {
       try {
         const [tripStats, drivers, vehicles, driverMetrics, vehicleMetrics, stations, transactions, tollTags, tollPlazas, claims,
-          fuelResult, fuelCardsResult, learntResult, serviceResult, odoResult, checkinResult, tollLedgerResult, tollLegacyResult] = await Promise.all([
+          fuelResult, fuelCardsResult, learntResult, serviceResult, odoResult, checkinResult] = await Promise.all([
           api.getTripStats({}).catch(() => null),
           api.getDrivers().catch(() => null),
           api.getVehicles().catch(() => null),
@@ -822,15 +836,8 @@ export function DeleteCenter() {
           api.bulkDeletePreview({ prefix: 'maintenance_log:', fields: ['id'] }).catch(() => null),
           api.bulkDeletePreview({ prefix: 'odometer_reading:', fields: ['id'] }).catch(() => null),
           api.bulkDeletePreview({ prefix: 'checkin:', fields: ['id'] }).catch(() => null),
-          api.bulkDeletePreview({ prefix: 'toll_ledger:', fields: ['id'] }).catch(() => null),
-          api.bulkDeletePreview({ prefix: 'transaction:', fields: ['id', 'category'] }).catch(() => null),
         ]);
-        const ledgerIds = new Set((tollLedgerResult?.items || []).map((i: any) => i.id).filter(Boolean));
-        const legacyOnly = (tollLegacyResult?.items || []).filter((item: any) => {
-          const cat = (item.category || '').toLowerCase();
-          const isToll = cat.includes('toll') || cat.includes('top-up') || cat.includes('topup');
-          return isToll && item.id && !ledgerIds.has(item.id);
-        });
+        const tollMergedCount = await countTollTransactionsMerged().catch(() => null);
         setCounts(prev => ({
           ...prev,
           trips: tripStats ? (tripStats.totalTrips ?? tripStats.total ?? prev.trips) : prev.trips,
@@ -842,22 +849,20 @@ export function DeleteCenter() {
           transactions: Array.isArray(transactions) ? transactions.length : prev.transactions,
           tollTags: Array.isArray(tollTags) ? tollTags.length : prev.tollTags,
           tollPlazas: Array.isArray(tollPlazas) ? tollPlazas.length : prev.tollPlazas,
-          tollTransactions: tollLedgerResult || tollLegacyResult
-            ? ledgerIds.size + legacyOnly.length
-            : prev.tollTransactions,
           claims: Array.isArray(claims) ? claims.length : prev.claims,
-          fuel: fuelResult ? fuelResult.totalCount : prev.fuel,
-          fuelCards: fuelCardsResult ? fuelCardsResult.totalCount : prev.fuelCards,
-          learntLocations: learntResult ? learntResult.totalCount : prev.learntLocations,
-          service: serviceResult ? serviceResult.totalCount : prev.service,
-          odometer: odoResult ? odoResult.totalCount : prev.odometer,
-          checkins: checkinResult ? checkinResult.totalCount : prev.checkins,
+          fuel: fuelResult ? (fuelResult.totalCount ?? fuelResult.items?.length ?? prev.fuel) : prev.fuel,
+          fuelCards: fuelCardsResult ? (fuelCardsResult.totalCount ?? fuelCardsResult.items?.length ?? prev.fuelCards) : prev.fuelCards,
+          learntLocations: learntResult ? (learntResult.totalCount ?? learntResult.items?.length ?? prev.learntLocations) : prev.learntLocations,
+          service: serviceResult ? (serviceResult.totalCount ?? serviceResult.items?.length ?? prev.service) : prev.service,
+          odometer: odoResult ? (odoResult.totalCount ?? odoResult.items?.length ?? prev.odometer) : prev.odometer,
+          checkins: checkinResult ? (checkinResult.totalCount ?? checkinResult.items?.length ?? prev.checkins) : prev.checkins,
+          tollTransactions: tollMergedCount != null ? tollMergedCount : prev.tollTransactions,
         }));
-      } catch {
-        // Ignore
+      } catch (e) {
+        console.error('[DeleteCenter] count refresh failed', e);
       }
     };
-    refetch();
+    void refetch();
   }, []);
 
   // ─── Fetch batches when entering Import History group ─────────────────
@@ -1508,173 +1513,6 @@ export function DeleteCenter() {
             Permanently remove fleet data. All deletions are irreversible.
           </p>
         </div>
-      </div>
-
-      {/* Database Record Counts — Diagnostic */}
-      <div className="rounded-lg border border-blue-200 bg-blue-50/50 p-4">
-        <div className="flex items-center justify-between mb-3">
-          <h4 className="text-sm font-semibold text-blue-900 flex items-center gap-2">
-            <HardDrive className="h-4 w-4" />
-            Database Record Counts
-          </h4>
-          <Button variant="ghost" size="sm" onClick={() => { fetchDiagCounts(); }} disabled={diagLoading} className="h-7 text-xs text-blue-700 hover:text-blue-900 hover:bg-blue-100">
-            <RefreshCw className={`h-3 w-3 mr-1 ${diagLoading ? 'animate-spin' : ''}`} /> Refresh
-          </Button>
-        </div>
-
-        {diagError ? (
-          <p className="text-xs text-red-600">Error: {diagError}</p>
-        ) : diagCounts ? (
-          <>
-            {/* Top-level KV prefix totals */}
-            <div className="grid grid-cols-3 gap-4 mb-4">
-              <div className="text-center">
-                <p className="text-2xl font-bold text-slate-900">{diagCounts.trips.toLocaleString()}</p>
-                <p className="text-xs text-slate-500 mt-0.5">Trip Records</p>
-                <p className="text-[10px] text-slate-400 font-mono">trip:*</p>
-              </div>
-              <div className="text-center">
-                <p className="text-2xl font-bold text-slate-900">{diagCounts.ledgerEntries.toLocaleString()}</p>
-                <p className="text-xs text-slate-500 mt-0.5">Ledger events (canonical)</p>
-                <p className="text-[10px] text-slate-400 font-mono">ledger_event:*</p>
-                <p className="text-[10px] text-slate-400 mt-1 max-w-[11rem] mx-auto leading-snug">
-                  Money SSOT — append via <span className="font-medium text-slate-600">Imports</span>.
-                </p>
-              </div>
-              <div className="text-center">
-                <p className="text-2xl font-bold text-slate-900">{diagCounts.transactions.toLocaleString()}</p>
-                <p className="text-xs text-slate-500 mt-0.5">Transactions</p>
-                <p className="text-[10px] text-slate-400 font-mono">transaction:*</p>
-              </div>
-            </div>
-
-            {/* Per-group breakdown */}
-            <div className="border-t border-blue-200 pt-3">
-              <p className="text-[11px] font-semibold text-blue-800 mb-2 uppercase tracking-wider">Per-Section Breakdown</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                {/* Trips & Earnings */}
-                <div className="rounded-md border border-slate-200 bg-white p-2.5">
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <div className="h-5 w-5 rounded bg-rose-50 text-rose-600 flex items-center justify-center"><MapPin className="h-3 w-3" /></div>
-                    <span className="text-xs font-semibold text-slate-800">Trips & Earnings</span>
-                  </div>
-                  <div className="space-y-0.5 text-[11px] text-slate-600">
-                    <div className="flex justify-between"><span>Trips</span><span className="font-mono font-medium text-slate-900">{counts.trips !== null ? counts.trips.toLocaleString() : '—'}</span></div>
-                  </div>
-                </div>
-
-                {/* Drivers & Staff */}
-                <div className="rounded-md border border-slate-200 bg-white p-2.5">
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <div className="h-5 w-5 rounded bg-rose-50 text-rose-600 flex items-center justify-center"><Users className="h-3 w-3" /></div>
-                    <span className="text-xs font-semibold text-slate-800">Drivers & Staff</span>
-                  </div>
-                  <div className="space-y-0.5 text-[11px] text-slate-600">
-                    <div className="flex justify-between"><span>Drivers</span><span className="font-mono font-medium text-slate-900">{counts.drivers !== null ? counts.drivers.toLocaleString() : '—'}</span></div>
-                    <div className="flex justify-between"><span>Driver Metrics</span><span className="font-mono font-medium text-slate-900">{counts.driverMetrics !== null ? counts.driverMetrics.toLocaleString() : '—'}</span></div>
-                  </div>
-                </div>
-
-                {/* Fleet & Vehicles */}
-                <div className="rounded-md border border-slate-200 bg-white p-2.5">
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <div className="h-5 w-5 rounded bg-rose-50 text-rose-600 flex items-center justify-center"><Car className="h-3 w-3" /></div>
-                    <span className="text-xs font-semibold text-slate-800">Fleet & Vehicles</span>
-                  </div>
-                  <div className="space-y-0.5 text-[11px] text-slate-600">
-                    <div className="flex justify-between"><span>Vehicles</span><span className="font-mono font-medium text-slate-900">{counts.vehicles !== null ? counts.vehicles.toLocaleString() : '—'}</span></div>
-                    <div className="flex justify-between"><span>Vehicle Metrics</span><span className="font-mono font-medium text-slate-900">{counts.vehicleMetrics !== null ? counts.vehicleMetrics.toLocaleString() : '—'}</span></div>
-                  </div>
-                </div>
-
-                {/* Fuel & Stations */}
-                <div className="rounded-md border border-slate-200 bg-white p-2.5">
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <div className="h-5 w-5 rounded bg-rose-50 text-rose-600 flex items-center justify-center"><Fuel className="h-3 w-3" /></div>
-                    <span className="text-xs font-semibold text-slate-800">Fuel & Stations</span>
-                  </div>
-                  <div className="space-y-0.5 text-[11px] text-slate-600">
-                    <div className="flex justify-between"><span>Fuel Logs</span><span className="font-mono font-medium text-slate-900">{counts.fuel !== null ? counts.fuel.toLocaleString() : '—'}</span></div>
-                    <div className="flex justify-between"><span>Fuel Cards</span><span className="font-mono font-medium text-slate-900">{counts.fuelCards !== null ? counts.fuelCards.toLocaleString() : '—'}</span></div>
-                    <div className="flex justify-between"><span>Stations</span><span className="font-mono font-medium text-slate-900">{counts.stations !== null ? counts.stations.toLocaleString() : '—'}</span></div>
-                    <div className="flex justify-between"><span>Learnt Locations</span><span className="font-mono font-medium text-slate-900">{counts.learntLocations !== null ? counts.learntLocations.toLocaleString() : '—'}</span></div>
-                  </div>
-                </div>
-
-                {/* Toll Management */}
-                <div className="rounded-md border border-slate-200 bg-white p-2.5">
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <div className="h-5 w-5 rounded bg-rose-50 text-rose-600 flex items-center justify-center"><CreditCard className="h-3 w-3" /></div>
-                    <span className="text-xs font-semibold text-slate-800">Toll Management</span>
-                  </div>
-                  <div className="space-y-0.5 text-[11px] text-slate-600">
-                    <div className="flex justify-between"><span>Toll Tags</span><span className="font-mono font-medium text-slate-900">{counts.tollTags !== null ? counts.tollTags.toLocaleString() : '—'}</span></div>
-                    <div className="flex justify-between"><span>Toll Plazas</span><span className="font-mono font-medium text-slate-900">{counts.tollPlazas !== null ? counts.tollPlazas.toLocaleString() : '—'}</span></div>
-                    <div className="flex justify-between"><span>Toll Transactions</span><span className="font-mono font-medium text-slate-900">{counts.tollTransactions !== null ? counts.tollTransactions.toLocaleString() : '—'}</span></div>
-                  </div>
-                </div>
-
-                {/* Finance & Assets */}
-                <div className="rounded-md border border-slate-200 bg-white p-2.5">
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <div className="h-5 w-5 rounded bg-rose-50 text-rose-600 flex items-center justify-center"><DollarSign className="h-3 w-3" /></div>
-                    <span className="text-xs font-semibold text-slate-800">Finance & Assets</span>
-                  </div>
-                  <div className="space-y-0.5 text-[11px] text-slate-600">
-                    <div className="flex justify-between"><span>Transactions</span><span className="font-mono font-medium text-slate-900">{counts.transactions !== null ? counts.transactions.toLocaleString() : '—'}</span></div>
-                    <div className="flex justify-between"><span>Claims</span><span className="font-mono font-medium text-slate-900">{counts.claims !== null ? counts.claims.toLocaleString() : '—'}</span></div>
-                    <div className="flex justify-between"><span>Equipment</span><span className="font-mono font-medium text-slate-900">{counts.equipment !== null ? counts.equipment.toLocaleString() : '—'}</span></div>
-                    <div className="flex justify-between"><span>Inventory</span><span className="font-mono font-medium text-slate-900">{counts.inventory !== null ? counts.inventory.toLocaleString() : '—'}</span></div>
-                  </div>
-                </div>
-
-                {/* Maintenance & Ops */}
-                <div className="rounded-md border border-slate-200 bg-white p-2.5">
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <div className="h-5 w-5 rounded bg-rose-50 text-rose-600 flex items-center justify-center"><Wrench className="h-3 w-3" /></div>
-                    <span className="text-xs font-semibold text-slate-800">Maintenance & Ops</span>
-                  </div>
-                  <div className="space-y-0.5 text-[11px] text-slate-600">
-                    <div className="flex justify-between"><span>Service Logs</span><span className="font-mono font-medium text-slate-900">{counts.service !== null ? counts.service.toLocaleString() : '—'}</span></div>
-                    <div className="flex justify-between"><span>Odometer</span><span className="font-mono font-medium text-slate-900">{counts.odometer !== null ? counts.odometer.toLocaleString() : '—'}</span></div>
-                    <div className="flex justify-between"><span>Check-ins</span><span className="font-mono font-medium text-slate-900">{counts.checkins !== null ? counts.checkins.toLocaleString() : '—'}</span></div>
-                  </div>
-                </div>
-
-                {/* Import History */}
-                <div className="rounded-md border border-slate-200 bg-white p-2.5">
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <div className="h-5 w-5 rounded bg-rose-50 text-rose-600 flex items-center justify-center"><HardDrive className="h-3 w-3" /></div>
-                    <span className="text-xs font-semibold text-slate-800">Import History</span>
-                    <Badge variant="outline" className="text-[9px] h-4 px-1 border-blue-300 text-blue-600">Cascade</Badge>
-                  </div>
-                  <div className="space-y-0.5 text-[11px] text-slate-600">
-                    <div className="flex justify-between"><span>Batches</span><span className="font-mono font-medium text-slate-900">{batches.length > 0 ? batches.length.toLocaleString() : '—'}</span></div>
-                  </div>
-                </div>
-
-                {/* Ledger — canonical KV only */}
-                <div className="rounded-md border border-slate-200 bg-white p-2.5">
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <div className="h-5 w-5 rounded flex items-center justify-center bg-blue-50 text-blue-600"><FileText className="h-3 w-3" /></div>
-                    <span className="text-xs font-semibold text-slate-800">Ledger (Financial)</span>
-                  </div>
-                  <div className="space-y-0.5 text-[11px] text-slate-600">
-                    <div className="flex justify-between"><span>Canonical events</span><span className="font-mono font-medium text-slate-900">{diagCounts.ledgerEntries.toLocaleString()}</span></div>
-                  </div>
-                  <p className="text-[10px] text-slate-400 mt-2 leading-snug">
-                    Old <span className="font-mono">ledger:*</span> trip-ledger KV was removed. Stragglers (rare): use API <span className="font-mono">POST /ledger/purge-legacy-all</span> with <span className="font-mono">data.backfill</span> or SQL in repo scripts.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </>
-        ) : (
-          <div className="flex items-center justify-center py-3">
-            <Loader2 className="h-5 w-5 animate-spin text-blue-400" />
-            <span className="text-xs text-blue-500 ml-2">Loading counts...</span>
-          </div>
-        )}
       </div>
 
       {/* Search bar */}

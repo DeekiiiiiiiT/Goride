@@ -39,3 +39,12 @@
 - [ ] Applied `20260803120000_courier_payouts_period_unique.sql`
 - [ ] Applied `20260803121000_merchant_special_hours.sql`
 - [ ] Applied Connect account id migration(s) if present
+
+## Uber Fleet (Vehicles API — RoamFleet Settings → Integrations)
+
+- [ ] Uber Developer org **RoamFleet** (renamed from GoRide Fleet if needed) has an Application with Vehicles scopes
+- [ ] Privacy Policy `https://roamenterprise.co/privacy` + Redirect `https://roamfleet.co/uber-callback` registered
+- [ ] Webhook URL `…/make-server-37f42386/uber/webhook` registered (subscription may need Uber POC)
+- [ ] Supabase Edge Function secrets: `UBER_CLIENT_ID` + `UBER_CLIENT_SECRET` on fleet server (`make-server-37f42386`)
+- [ ] Optional: `UBER_FLEET_SCOPES` override (default `vehicle_suppliers.vehicles.read vehicle_suppliers.vehicles.assignment`)
+- [ ] Smoke: Settings → Connect → Sync Now returns vehicle match summary (not 401/403)

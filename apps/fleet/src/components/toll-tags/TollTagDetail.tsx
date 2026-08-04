@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../ui/card";
 import { Button } from "../ui/button";
-import { ArrowLeft, Car, Calendar, CreditCard, Tag, Wallet, TrendingDown, Receipt, ArrowUpRight, ArrowDownRight, DollarSign, ShieldCheck, ArrowRight, AlertTriangle, Pencil, Check, XIcon, Settings2, CalendarRange, Filter } from "lucide-react";
+import { ArrowLeft, Car, Calendar, Tag, Wallet, TrendingDown, ArrowUpRight, ArrowDownRight, DollarSign, ShieldCheck, ArrowRight, AlertTriangle, Pencil, Check, XIcon, Settings2, CalendarRange, Filter } from "lucide-react";
 import { Badge } from "../ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { TollTag } from "../../types/vehicle";
@@ -10,9 +10,7 @@ import { TollTopupHistory } from "../vehicles/TollTopupHistory";
 import { api } from "../../services/api";
 import { toast } from "sonner@2.0.3";
 import { calculateTollFinancials } from "../../utils/tollReconciliation";
-import { isTagLedgerTx, isTagUsage, isTagCredit, isOffTagToll } from "../../utils/tollTagLedger";
-import { SafeResponsiveContainer } from "../ui/SafeResponsiveContainer";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip } from 'recharts';
+import { isTagLedgerTx, isTagUsage, isTagCredit } from "../../utils/tollTagLedger";
 import { Clock, History } from "lucide-react";
 
 interface TollTagDetailProps {
@@ -80,11 +78,6 @@ export function TollTagDetail({ tag, onBack, onNavigateToReconciliation }: TollT
     totalRecovered: 0,
     netLoss: 0,
     calculatedBalance: 0,
-    tagTollCount: 0,
-    // Count of this vehicle's tolls that were paid off-tag (cash/card/fleet) —
-    // used only for the "view in Reconciliation" pointer, never shown as tag data.
-    offTagCount: 0,
-    monthlySpend: [] as { month: string; tagAmount: number }[],
     loading: true,
     claims: [] as Claim[]
   });
@@ -121,11 +114,6 @@ export function TollTagDetail({ tag, onBack, onNavigateToReconciliation }: TollT
       // Server (scope=tag) already excludes off-tag rows; the client filter stays
       // as defense-in-depth in case an older/un-scoped response comes back.
       const tagLedgerAll = filteredVehicleTx.filter(isTagLedgerTx);
-      // Off-tag count for this vehicle comes from the server (those rows were
-      // filtered out of `data`), falling back to a client count if absent.
-      const offTagCount = typeof tollResponse?.offTagCount === 'number'
-        ? tollResponse.offTagCount
-        : filteredVehicleTx.filter(isOffTagToll).length;
 
       // Apply date filter for period-specific stats (balance always uses all-time data)
       const dateFilteredTx = filterByDate(tagLedgerAll);
@@ -183,31 +171,6 @@ export function TollTagDetail({ tag, onBack, onNavigateToReconciliation }: TollT
           }
       }
 
-      // Count of tag-usage tolls in the period (for the monthly-chart gate + stats)
-      const tagTollCount = dateFilteredTx.filter(isTagUsage).length;
-
-      // Monthly tag-usage spend (last 6 months)
-      const monthlyMap = new Map<string, { tagAmount: number }>();
-      const now = new Date();
-      for (let i = 5; i >= 0; i--) {
-        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-        monthlyMap.set(key, { tagAmount: 0 });
-      }
-      dateFilteredTx.forEach((tx: any) => {
-        if (!isTagUsage(tx)) return; // Only tag-balance deductions
-        const txDate = new Date(tx.date || tx.createdAt);
-        const key = `${txDate.getFullYear()}-${String(txDate.getMonth() + 1).padStart(2, '0')}`;
-        const entry = monthlyMap.get(key);
-        if (!entry) return; // Outside 6-month window
-        entry.tagAmount += Math.abs(tx.amount);
-      });
-      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      const monthlySpend = Array.from(monthlyMap.entries()).map(([key, val]) => ({
-        month: monthNames[parseInt(key.split('-')[1]) - 1],
-        tagAmount: Math.round(val.tagAmount * 100) / 100,
-      }));
-
       setStats({
         balance: calculatedBalance,
         tagSpent,
@@ -215,9 +178,6 @@ export function TollTagDetail({ tag, onBack, onNavigateToReconciliation }: TollT
         totalRecovered,
         netLoss: totalNetLoss,
         calculatedBalance,
-        tagTollCount,
-        offTagCount,
-        monthlySpend,
         loading: false,
         claims: claims
       });
@@ -660,24 +620,6 @@ export function TollTagDetail({ tag, onBack, onNavigateToReconciliation }: TollT
         </div>
       )}
 
-      {/* Off-tag pointer — cash/card/fleet tolls on this vehicle live in Reconciliation */}
-      {tag.assignedVehicleId && !stats.loading && stats.offTagCount > 0 && (
-        <div className="flex items-center gap-2 text-xs text-slate-500 px-1">
-          <Receipt className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-          <span>
-            {stats.offTagCount} toll{stats.offTagCount !== 1 ? 's' : ''} on this vehicle {stats.offTagCount !== 1 ? 'were' : 'was'} paid off-tag (cash, card, or fleet account) and {stats.offTagCount !== 1 ? 'are' : 'is'} not counted here.
-          </span>
-          {onNavigateToReconciliation && tag.assignedVehicleId && (
-            <button
-              onClick={() => onNavigateToReconciliation(tag.assignedVehicleId!)}
-              className="text-indigo-600 hover:text-indigo-800 underline underline-offset-2 shrink-0"
-            >
-              View in Reconciliation
-            </button>
-          )}
-        </div>
-      )}
-
       {/* Activity Summary Card — Full Width */}
       {tag.assignedVehicleId && (
         <Card>
@@ -757,33 +699,6 @@ export function TollTagDetail({ tag, onBack, onNavigateToReconciliation }: TollT
                           </div>
                       </div>
                   </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Monthly tag-usage spend */}
-      {tag.assignedVehicleId && !stats.loading && stats.tagTollCount > 0 && (
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Monthly Tag Spend</CardTitle>
-            <CreditCard className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            {stats.monthlySpend.some(m => m.tagAmount > 0) ? (
-              <SafeResponsiveContainer width="100%" height={200} minHeight={200}>
-                <BarChart data={stats.monthlySpend} margin={{ top: 5, right: 5, bottom: 5, left: -10 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => `$${v}`} />
-                  <RechartsTooltip formatter={(value: any) => [`$${Number(value).toFixed(2)}`, 'Tag Usage']} />
-                  <Bar dataKey="tagAmount" fill="#6366f1" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </SafeResponsiveContainer>
-            ) : (
-              <div className="py-8 text-center text-sm text-slate-400">
-                No tag spending data in the last 6 months.
               </div>
             )}
           </CardContent>

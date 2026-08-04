@@ -101,6 +101,7 @@ export function ExportCategoryCard({
                         ? 'bg-white text-indigo-700 shadow-sm ring-1 ring-slate-200'
                         : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
                     }`}
+                    aria-pressed={format === 'csv'}
                     onClick={(e) => { e.stopPropagation(); setFormat('csv'); }}
                   >
                     <FileSpreadsheet className="h-3.5 w-3.5" />CSV
@@ -111,6 +112,7 @@ export function ExportCategoryCard({
                         ? 'bg-white text-indigo-700 shadow-sm ring-1 ring-slate-200'
                         : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
                     }`}
+                    aria-pressed={format === 'json'}
                     onClick={(e) => { e.stopPropagation(); setFormat('json'); }}
                   >
                     <FileJson className="h-3.5 w-3.5" />JSON

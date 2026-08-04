@@ -2,8 +2,6 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { ExportCategoryCard, ExportFormat } from './ExportCategoryCard';
 import { DateRangeExportFilter } from './DateRangeExportFilter';
 import { SystemBackupRestore } from './SystemBackupRestore';
-import { ImportExportHistory } from './ImportExportHistory';
-import { logAuditEntry } from '../../services/audit-log';
 import {
   fetchAllTrips, fetchAllDrivers, fetchAllDriverMetrics,
   fetchAllVehicles, fetchAllVehicleMetrics, fetchAllTransactions,
@@ -12,6 +10,7 @@ import {
   fetchAllTollTransactions,
   exportFetchAllFuelLogs, exportFetchAllServiceLogs,
   exportFetchAllOdometerReadings, exportFetchAllCheckIns,
+  BACKUP_CATEGORIES,
 } from '../../services/data-export';
 import { jsonToCsv, downloadBlob } from '../../utils/csv-helper';
 import {
@@ -110,6 +109,9 @@ const EXPORT_GROUP_CARDS: Record<string, string[]> = {
 // Helper: Generic CSV export handler
 // ═══════════════════════════════════════════════════════════════════════════
 
+// Exclusive client-side export lock (individual cards + Export All).
+let exportLockHeld = false;
+
 async function handleGenericExport<T>(
   label: string,
   fetchFn: () => Promise<T[]>,
@@ -117,15 +119,21 @@ async function handleGenericExport<T>(
   filenameBase: string,
   dateRange?: DateRange,
   format: ExportFormat = 'csv',
+  opts?: { nested?: boolean },
 ): Promise<number> {
-  const startTime = Date.now();
+  if (!opts?.nested) {
+    if (exportLockHeld) {
+      toast.message('Another export is still running — try again when it finishes.');
+      return 0;
+    }
+    exportLockHeld = true;
+  }
   const toastId = toast.loading(`Fetching ${label}...`);
   try {
     const data = await fetchFn();
     if (data.length === 0) {
       toast.dismiss(toastId);
       toast.info(`No ${label} found${dateRange?.start ? ' for the selected date range' : ''}.`);
-      logAuditEntry({ operation: 'export', category: label, recordCount: 0, status: 'success', format, durationMs: Date.now() - startTime });
       return 0;
     }
 
@@ -152,14 +160,14 @@ async function handleGenericExport<T>(
 
     toast.dismiss(toastId);
     toast.success(`Exported ${data.length.toLocaleString()} ${label} as ${ext.toUpperCase()}.`);
-    logAuditEntry({ operation: 'export', category: label, recordCount: data.length, status: 'success', fileName: filename, format, durationMs: Date.now() - startTime });
     return data.length;
   } catch (err: any) {
     toast.dismiss(toastId);
-    toast.error(`${label} export failed: ${err.message || 'Unknown error'}`);
+    toast.error(`${label} export failed. Please try again.`);
     console.error(`${label} export error:`, err);
-    logAuditEntry({ operation: 'export', category: label, recordCount: 0, status: 'failed', format, errors: [err.message || 'Unknown error'], durationMs: Date.now() - startTime });
-    return 0;
+    throw err;
+  } finally {
+    if (!opts?.nested) exportLockHeld = false;
   }
 }
 
@@ -183,15 +191,32 @@ export function ExportCenter() {
     tollTransactions: null,
   });
 
-  // Export All state
+  // Export All / exclusive export busy lock
   const [isExportingAll, setIsExportingAll] = useState(false);
+  const [isExportBusy, setIsExportBusy] = useState(false);
+  const [platformTripCounts, setPlatformTripCounts] = useState<{ uber: number | null; indrive: number | null; roam: number | null }>({
+    uber: null, indrive: null, roam: null,
+  });
+  const backupCategoryCount = BACKUP_CATEGORIES.length;
+
+  const runExclusiveExport = useCallback(async <T,>(fn: () => Promise<T>): Promise<T | undefined> => {
+    if (isExportBusy || isExportingAll) {
+      toast.message('Another export is still running — try again when it finishes.');
+      return undefined;
+    }
+    setIsExportBusy(true);
+    try {
+      return await fn();
+    } finally {
+      setIsExportBusy(false);
+    }
+  }, [isExportBusy, isExportingAll]);
 
   // Phase 7: Full system backup/restore
   const [showBackupRestore, setShowBackupRestore] = useState(false);
 
-  // Phase 8: Search filter and audit log
+  // Phase 8: Search filter
   const [searchQuery, setSearchQuery] = useState('');
-  const [auditKey, setAuditKey] = useState(0);
 
   // Phase 3: Group drill-in
   const [exportGroup, setExportGroup] = useState<string | null>(null);
@@ -249,6 +274,19 @@ export function ExportCenter() {
       return inventoryService.getInventory();
     });
     safeCount('tollTransactions', () => api.getTollTransactionsExport());
+
+    (async () => {
+      try {
+        const [uber, indrive, roam] = await Promise.all([
+          fetchAllTrips(undefined, undefined, 'Uber').then((t) => t.length).catch(() => null),
+          fetchAllTrips(undefined, undefined, 'InDrive').then((t) => t.length).catch(() => null),
+          fetchAllTrips(undefined, undefined, 'Roam').then((t) => t.length).catch(() => null),
+        ]);
+        if (!cancelled) setPlatformTripCounts({ uber, indrive, roam });
+      } catch {
+        /* non-critical */
+      }
+    })();
 
     return () => { cancelled = true; };
   }, []);
@@ -349,33 +387,39 @@ export function ExportCenter() {
   // ─── Export All ────────────────────────────────────────────────────────
 
   const handleExportAll = useCallback(async () => {
-    if (isExportingAll) return;
+    if (isExportingAll || isExportBusy || exportLockHeld) {
+      toast.message('Another export is still running — try again when it finishes.');
+      return;
+    }
     setIsExportingAll(true);
+    setIsExportBusy(true);
 
     await runBackgroundJobToast(
       async () => {
         const categories = [
-          { label: 'trips', fn: () => handleGenericExport('trips', () => fetchAllTrips(), TRIP_CSV_COLUMNS, 'trips') },
-          { label: 'drivers', fn: () => handleGenericExport('driver profiles', fetchAllDrivers, DRIVER_CSV_COLUMNS, 'drivers') },
-          { label: 'driver metrics', fn: () => handleGenericExport('driver metrics', fetchAllDriverMetrics, DRIVER_METRICS_CSV_COLUMNS, 'driver_metrics') },
-          { label: 'vehicles', fn: () => handleGenericExport('vehicle profiles', fetchAllVehicles, VEHICLE_CSV_COLUMNS, 'vehicles') },
-          { label: 'vehicle metrics', fn: () => handleGenericExport('vehicle metrics', fetchAllVehicleMetrics, VEHICLE_METRICS_CSV_COLUMNS, 'vehicle_metrics') },
-          { label: 'transactions', fn: () => handleGenericExport('transactions', fetchAllTransactions, TRANSACTION_CSV_COLUMNS, 'transactions') },
-          { label: 'fuel', fn: () => handleGenericExport('fuel logs', exportFetchAllFuelLogs, FUEL_CSV_COLUMNS, 'fuel') },
-          { label: 'service', fn: () => handleGenericExport('service logs', exportFetchAllServiceLogs, SERVICE_CSV_COLUMNS, 'service') },
-          { label: 'odometer', fn: () => handleGenericExport('odometer readings', exportFetchAllOdometerReadings, ODOMETER_CSV_COLUMNS, 'odometer') },
-          { label: 'check-ins', fn: () => handleGenericExport('check-ins', exportFetchAllCheckIns, CHECKIN_CSV_COLUMNS, 'checkins') },
-          { label: 'toll tags', fn: () => handleGenericExport('toll tags', fetchAllTollTags, TOLL_TAG_CSV_COLUMNS, 'toll_tags') },
-          { label: 'toll plazas', fn: () => handleGenericExport('toll plazas', fetchAllTollPlazas, TOLL_PLAZA_CSV_COLUMNS, 'toll_plazas') },
-          { label: 'stations', fn: () => handleGenericExport('gas stations', fetchAllStations, STATION_CSV_COLUMNS, 'stations') },
-          { label: 'claims', fn: () => handleGenericExport('claims', fetchAllClaims, CLAIM_CSV_COLUMNS, 'claims') },
-          { label: 'equipment', fn: () => handleGenericExport('equipment', fetchAllEquipment, EQUIPMENT_CSV_COLUMNS, 'equipment') },
-          { label: 'inventory', fn: () => handleGenericExport('inventory', fetchAllInventory, INVENTORY_CSV_COLUMNS, 'inventory') },
-          { label: 'toll transactions', fn: () => handleGenericExport('toll transactions', fetchAllTollTransactions, TOLL_TRANSACTION_CSV_COLUMNS, 'toll_transactions') },
+          { label: 'trips', fn: () => handleGenericExport('trips', () => fetchAllTrips(), TRIP_CSV_COLUMNS, 'trips', undefined, 'csv', { nested: true }) },
+          { label: 'drivers', fn: () => handleGenericExport('driver profiles', fetchAllDrivers, DRIVER_CSV_COLUMNS, 'drivers', undefined, 'csv', { nested: true }) },
+          { label: 'driver metrics', fn: () => handleGenericExport('driver metrics', fetchAllDriverMetrics, DRIVER_METRICS_CSV_COLUMNS, 'driver_metrics', undefined, 'csv', { nested: true }) },
+          { label: 'vehicles', fn: () => handleGenericExport('vehicle profiles', fetchAllVehicles, VEHICLE_CSV_COLUMNS, 'vehicles', undefined, 'csv', { nested: true }) },
+          { label: 'vehicle metrics', fn: () => handleGenericExport('vehicle metrics', fetchAllVehicleMetrics, VEHICLE_METRICS_CSV_COLUMNS, 'vehicle_metrics', undefined, 'csv', { nested: true }) },
+          { label: 'transactions', fn: () => handleGenericExport('transactions', fetchAllTransactions, TRANSACTION_CSV_COLUMNS, 'transactions', undefined, 'csv', { nested: true }) },
+          { label: 'fuel', fn: () => handleGenericExport('fuel logs', exportFetchAllFuelLogs, FUEL_CSV_COLUMNS, 'fuel', undefined, 'csv', { nested: true }) },
+          { label: 'service', fn: () => handleGenericExport('service logs', exportFetchAllServiceLogs, SERVICE_CSV_COLUMNS, 'service', undefined, 'csv', { nested: true }) },
+          { label: 'odometer', fn: () => handleGenericExport('odometer readings', exportFetchAllOdometerReadings, ODOMETER_CSV_COLUMNS, 'odometer', undefined, 'csv', { nested: true }) },
+          { label: 'check-ins', fn: () => handleGenericExport('check-ins', exportFetchAllCheckIns, CHECKIN_CSV_COLUMNS, 'checkins', undefined, 'csv', { nested: true }) },
+          { label: 'toll tags', fn: () => handleGenericExport('toll tags', fetchAllTollTags, TOLL_TAG_CSV_COLUMNS, 'toll_tags', undefined, 'csv', { nested: true }) },
+          { label: 'toll plazas', fn: () => handleGenericExport('toll plazas', fetchAllTollPlazas, TOLL_PLAZA_CSV_COLUMNS, 'toll_plazas', undefined, 'csv', { nested: true }) },
+          { label: 'stations', fn: () => handleGenericExport('gas stations', fetchAllStations, STATION_CSV_COLUMNS, 'stations', undefined, 'csv', { nested: true }) },
+          { label: 'claims', fn: () => handleGenericExport('claims', fetchAllClaims, CLAIM_CSV_COLUMNS, 'claims', undefined, 'csv', { nested: true }) },
+          { label: 'equipment', fn: () => handleGenericExport('equipment', fetchAllEquipment, EQUIPMENT_CSV_COLUMNS, 'equipment', undefined, 'csv', { nested: true }) },
+          { label: 'inventory', fn: () => handleGenericExport('inventory', fetchAllInventory, INVENTORY_CSV_COLUMNS, 'inventory', undefined, 'csv', { nested: true }) },
+          { label: 'toll transactions', fn: () => handleGenericExport('toll transactions', fetchAllTollTransactions, TOLL_TRANSACTION_CSV_COLUMNS, 'toll_transactions', undefined, 'csv', { nested: true }) },
         ];
 
         let totalRecords = 0;
         let successCount = 0;
+        const failed: string[] = [];
+        exportLockHeld = true;
 
         for (let i = 0; i < categories.length; i++) {
           const cat = categories[i];
@@ -385,23 +429,28 @@ export function ExportCenter() {
             if (count > 0) successCount++;
             totalRecords += count;
           } catch {
-            // Individual errors already toasted inside handleGenericExport
+            failed.push(cat.label);
           }
         }
 
         toast.dismiss('export-all-progress');
-        return { successCount, totalRecords };
+        if (failed.length > 0) {
+          toast.warning(`Export All finished with failures: ${failed.join(', ')}`);
+        }
+        return { successCount, totalRecords, failed };
       },
       {
         loading: 'Exporting all categories…',
         success: (r: any) =>
-          `Export All complete: ${r.successCount} files, ${Number(r.totalRecords).toLocaleString()} total records.`,
+          `Export All complete: ${r.successCount} files, ${Number(r.totalRecords).toLocaleString()} total records${r.failed?.length ? ` (${r.failed.length} failed)` : ''}.`,
         error: 'Export All failed',
       },
     );
 
+    exportLockHeld = false;
     setIsExportingAll(false);
-  }, [isExportingAll]);
+    setIsExportBusy(false);
+  }, [isExportingAll, isExportBusy]);
 
   // ─── Render ────────────────────────────────────────────────────────────
 
@@ -442,7 +491,7 @@ export function ExportCenter() {
         </div>
         <Button
           onClick={handleExportAll}
-          disabled={isExportingAll}
+          disabled={isExportingAll || isExportBusy}
           className="bg-indigo-600 hover:bg-indigo-700 text-sm"
         >
           {isExportingAll ? (
@@ -450,7 +499,7 @@ export function ExportCenter() {
           ) : (
             <Download className="h-4 w-4 mr-2" />
           )}
-          {isExportingAll ? 'Exporting All...' : 'Export All (17 files)'}
+          {isExportingAll ? 'Exporting All...' : `Export All (${backupCategoryCount} files)`}
         </Button>
       </div>
 
@@ -462,6 +511,7 @@ export function ExportCenter() {
           onChange={e => setSearchQuery(e.target.value)}
           onKeyDown={e => { if (e.key === 'Escape') { if (searchQuery) setSearchQuery(''); else if (exportGroup) { setExportGroup(null); setSearchQuery(''); } } }}
           placeholder={exportGroup ? `Filter ${activeExportGroupMeta?.title || 'exports'}...` : 'Search all export categories...'}
+          aria-label="Search export categories"
           className="pl-9 pr-8 h-9 text-sm"
         />
         {searchQuery && (
@@ -531,7 +581,7 @@ export function ExportCenter() {
               title="Uber Trips Only"
               description="Export only Uber platform trips with earnings, distances, and fare breakdowns."
               icon={<span className="font-bold text-sm">UB</span>}
-              recordCount={null}
+              recordCount={platformTripCounts.uber}
               badge="Uber"
               onExport={exportTripsUber}
               showFormatToggle
@@ -551,7 +601,7 @@ export function ExportCenter() {
               title="InDrive Trips Only"
               description="Export only InDrive platform trips with earnings and trip details."
               icon={<span className="font-bold text-sm">IN</span>}
-              recordCount={null}
+              recordCount={platformTripCounts.indrive}
               badge="InDrive"
               onExport={exportTripsInDrive}
               showFormatToggle
@@ -571,7 +621,7 @@ export function ExportCenter() {
               title="Roam Trips Only"
               description="Export only Roam (formerly GoRide) platform trips with earnings and trip details."
               icon={<span className="font-bold text-sm">RM</span>}
-              recordCount={null}
+              recordCount={platformTripCounts.roam}
               badge="Roam"
               onExport={exportTripsRoam}
               showFormatToggle
@@ -773,11 +823,11 @@ export function ExportCenter() {
             />
             )}
 
-            {/* ═══ 17. FULL SYSTEM BACKUP (Phase 7) ═══ */}
+            {/* ═══ FULL SYSTEM BACKUP (Phase 7) ═══ */}
             {isInActiveGroup('backup') && matchesSearch(CATEGORY_SEARCH_TERMS.backup) && (
             <ExportCategoryCard
               title="Full System Backup (ZIP)"
-              description="Download all 17 categories as a single compressed ZIP archive with manifest."
+              description={`Download all ${backupCategoryCount} categories as a single compressed ZIP archive with manifest.`}
               icon={<HardDrive className="h-5 w-5" />}
               recordCount={null}
               badge="ZIP"
@@ -814,9 +864,6 @@ export function ExportCenter() {
       {showBackupRestore && (
         <SystemBackupRestore onBack={() => setShowBackupRestore(false)} />
       )}
-
-      {/* Phase 8: Activity Log */}
-      <ImportExportHistory refreshKey={auditKey} />
     </div>
   );
 }

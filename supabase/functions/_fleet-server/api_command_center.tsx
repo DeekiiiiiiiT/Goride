@@ -244,6 +244,7 @@ const KEY_ENV: Record<Provider, string> = {
   gemini: "GEMINI_API_KEY",
   google_maps: "GOOGLE_MAPS_API_KEY",
   supabase: "SUPABASE_SERVICE_ROLE_KEY",
+  // Masking uses secret; pair with UBER_CLIENT_ID (also required for Vehicles API).
   uber: "UBER_CLIENT_SECRET",
 };
 
@@ -291,7 +292,33 @@ async function validateProviderKey(provider: Provider, key: string): Promise<{ o
       if (body?.status === "REQUEST_DENIED") return { ok: false, detail: body?.error_message || "REQUEST_DENIED" };
       return { ok: true };
     }
-    // supabase & uber — skip live ping (requires additional context).
+    // supabase — skip live ping. uber — optional Client Credentials probe when both env vars set.
+    if (provider === "uber") {
+      const clientId = Deno.env.get("UBER_CLIENT_ID") || "";
+      if (!clientId) return { ok: true, detail: "UBER_CLIENT_ID not set; secret shape accepted without live ping." };
+      const body = new URLSearchParams();
+      body.append("client_id", clientId);
+      body.append("client_secret", key);
+      body.append("grant_type", "client_credentials");
+      body.append(
+        "scope",
+        Deno.env.get("UBER_FLEET_SCOPES") ||
+          "vehicle_suppliers.vehicles.read vehicle_suppliers.vehicles.assignment",
+      );
+      const r = await fetch("https://auth.uber.com/oauth/v2/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body,
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        return {
+          ok: false,
+          detail: err?.error_description || err?.error || `Uber token endpoint returned ${r.status}`,
+        };
+      }
+      return { ok: true };
+    }
     return { ok: true, detail: "Validation skipped for this provider." };
   } catch (e: any) {
     return { ok: false, detail: e.message };

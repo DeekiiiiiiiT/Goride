@@ -4,6 +4,7 @@ import { OnboardingHeader } from '@/components/layout/OnboardingHeader';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { CourierGoogleAuthButton } from '@/components/auth/CourierGoogleAuthButton';
 import { PhoneInput, toE164JamaicaPhone } from '@/components/forms/PhoneInput';
+import { getCourierAuthRedirectUrl } from '@/lib/courierAuth';
 import { saveSignupDraft } from '@/lib/signupDraft';
 import { supabase } from '@/lib/supabase';
 
@@ -50,6 +51,7 @@ export function SignUpPage({ onBack, onContinue }: SignUpPageProps) {
           email: trimmedEmail,
           password,
           options: {
+            emailRedirectTo: getCourierAuthRedirectUrl(),
             data: {
               phone: hasPhone ? toE164JamaicaPhone(trimmedPhone) : null,
               countryCode: '+1',

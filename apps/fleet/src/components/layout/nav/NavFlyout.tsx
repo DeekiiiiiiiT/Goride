@@ -118,9 +118,6 @@ export function NavFlyout({
           onOpenAutoFocus={(e) => e.preventDefault()}
           onCloseAutoFocus={(e) => e.preventDefault()}
         >
-          <div className="px-2.5 pb-1.5 pt-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-            {label}
-          </div>
           <ul className="flex flex-col gap-0.5" role="none">
             {items.map((item) => {
               const active = isLeafActive(item, currentPage);

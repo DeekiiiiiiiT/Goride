@@ -106,6 +106,13 @@ export interface Vehicle {
   currentDriverId?: string;
   currentDriverName?: string;
 
+  /** Uber Vehicles API id — set by Settings → Uber Fleet sync. */
+  uberVehicleId?: string;
+  uberOwnerId?: string;
+  uberComplianceStatus?: string;
+  uberAssignedDriverIds?: string[];
+  uberLastSyncedAt?: string;
+
   /** Who had this vehicle over time — used to attribute fuel fills on shared cars. */
   driverAssignmentHistory?: Array<{
     driverId: string;

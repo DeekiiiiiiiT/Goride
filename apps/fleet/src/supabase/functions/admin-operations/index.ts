@@ -383,52 +383,26 @@ app.post("/admin-operations/upload", requirePlatformAdmin, async (c) => {
   } catch (e: any) { return safeAdminError(c, e, "AdminOps.upload"); }
 });
 
-// --- UBER INTEGRATION ---
+// --- UBER INTEGRATION (deprecated consumer Rides — use fleet Vehicles API) ---
 app.get("/admin-operations/uber/auth-url", requirePlatformAdmin, async (c) => {
-  try {
-    const integration = await kv.get("integration:uber");
-    if (!integration?.credentials?.clientId) return c.json({ error: "Uber not configured" }, 400);
-    const redirectUri = c.req.query("redirect_uri") || "https://csfllzzastacofsvcdsc.supabase.co/functions/v1/admin-operations/uber/callback";
-    const clientId = integration.credentials.clientId;
-    const scope = c.req.query("scope") || "profile";
-    const authUrl = `https://login.uber.com/oauth/v2/authorize?client_id=${clientId}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}`;
-    return c.json({ url: authUrl });
-  } catch (e: any) { return safeAdminError(c, e, "AdminOps.uberAuthUrl"); }
+  return c.json({
+    error: "Deprecated. Use fleet Vehicles API: GET /make-server-37f42386/uber/auth-url or POST /uber/connect",
+    code: "UBER_RIDES_DEPRECATED",
+  }, 410);
 });
 
 app.post("/admin-operations/uber/exchange", requirePlatformAdmin, async (c) => {
-    try {
-        const { code, redirect_uri } = await c.req.json();
-        const integration = await kv.get("integration:uber");
-        if (!integration?.credentials) return c.json({ error: "Settings missing" }, 400);
-        const { clientId, clientSecret } = integration.credentials;
-        const body = new URLSearchParams({ client_id: clientId, client_secret: clientSecret, grant_type: "authorization_code", redirect_uri, code });
-        const tokenRes = await fetch("https://login.uber.com/oauth/v2/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body });
-        const tokenData = await tokenRes.json();
-        if (!tokenRes.ok) return c.json({ error: "Exchange failed", details: tokenData }, 400);
-        const tokenStore = { access_token: tokenData.access_token, refresh_token: tokenData.refresh_token, expires_at: Date.now() + (tokenData.expires_in * 1000), scope: tokenData.scope, token_type: tokenData.token_type };
-        await kv.set("integration:uber_token", tokenStore);
-        integration.status = 'connected';
-        integration.lastConnected = new Date().toISOString();
-        await kv.set("integration:uber", integration);
-        return c.json({ success: true });
-    } catch (e: any) { return safeAdminError(c, e, "AdminOps.uberExchange"); }
+  return c.json({
+    error: "Deprecated. Use fleet Vehicles API: POST /make-server-37f42386/uber/exchange or /uber/connect",
+    code: "UBER_RIDES_DEPRECATED",
+  }, 410);
 });
 
 app.post("/admin-operations/uber/sync", requirePlatformAdmin, async (c) => {
-    // Sync logic (simplified)
-    try {
-        let tokenStore = await kv.get("integration:uber_token");
-        if (!tokenStore?.access_token) return c.json({ error: "Uber not connected", code: "AUTH_REQUIRED" }, 401);
-        // Refresh logic omitted for brevity, assume valid or handle error
-        const historyRes = await fetch("https://api.uber.com/v1.2/history?limit=50", { headers: { "Authorization": `Bearer ${tokenStore.access_token}`, "Content-Type": "application/json" } });
-        if (historyRes.ok) {
-            const data = await historyRes.json();
-            const trips = data.history.map((t: any) => ({ trip_id: t.request_id, date: new Date(t.start_time * 1000).toISOString(), platform: 'Uber', driverId: 'Self', pickupLocation: t.start_city?.display_name, dropoffLocation: t.end_city?.display_name, amount: 0, status: t.status, source: 'uber_oauth_api' }));
-            return c.json({ success: true, trips });
-        }
-        return c.json({ error: "internal_error", code: "INTERNAL", message: "Something went wrong" }, 500);
-    } catch(e: any) { return safeAdminError(c, e, "AdminOps.uberSync"); }
+  return c.json({
+    error: "Deprecated consumer history sync removed. Use POST /make-server-37f42386/uber/sync (Vehicles/Fleet).",
+    code: "UBER_RIDES_DEPRECATED",
+  }, 410);
 });
 
 Deno.serve(async (req) => {

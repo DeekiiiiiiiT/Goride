@@ -15,6 +15,8 @@ import { generateFullBackup, parseBackupZip, BackupManifest, BACKUP_CATEGORIES }
 import { restoreFullBackup, FullRestoreResult } from '../../services/data-import-executor';
 import JSZip from 'jszip';
 import { FleetBusyProvider, useFleetBusy } from '../shared/FleetBusyLock';
+import { PermissionGate } from '../auth/PermissionGate';
+import { usePermissions } from '../../hooks/usePermissions';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Types
@@ -34,6 +36,11 @@ interface Props {
 
 export function SystemBackupRestore({ onBack }: Props) {
   const [mode, setMode] = useState<Mode>('menu');
+  const { can } = usePermissions();
+
+  if (!can('data.export') && !can('data.backfill')) {
+    return <PermissionGate permission="data.export">{null}</PermissionGate>;
+  }
 
   return (
     <FleetBusyProvider>
@@ -55,9 +62,16 @@ export function SystemBackupRestore({ onBack }: Props) {
         </div>
       </div>
 
-      {mode === 'menu' && <MenuView onBackup={() => setMode('backup')} onRestore={() => setMode('restore')} />}
-      {mode === 'backup' && <BackupView />}
-      {mode === 'restore' && <RestoreView />}
+      {mode === 'menu' && (
+        <MenuView
+          canBackup={can('data.export')}
+          canRestore={can('data.backfill')}
+          onBackup={() => setMode('backup')}
+          onRestore={() => setMode('restore')}
+        />
+      )}
+      {mode === 'backup' && can('data.export') && <BackupView />}
+      {mode === 'restore' && can('data.backfill') && <RestoreView />}
     </div>
     </FleetBusyProvider>
   );
@@ -67,13 +81,23 @@ export function SystemBackupRestore({ onBack }: Props) {
 // Menu View
 // ═══════════════════════════════════════════════════════════════════════════
 
-function MenuView({ onBackup, onRestore }: { onBackup: () => void; onRestore: () => void }) {
+function MenuView({
+  onBackup,
+  onRestore,
+  canBackup,
+  canRestore,
+}: {
+  onBackup: () => void;
+  onRestore: () => void;
+  canBackup: boolean;
+  canRestore: boolean;
+}) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       {/* Backup Card */}
       <Card
-        className="cursor-pointer border-2 border-emerald-100 hover:border-emerald-400 hover:shadow-md transition-all"
-        onClick={onBackup}
+        className={`border-2 border-emerald-100 transition-all ${canBackup ? 'cursor-pointer hover:border-emerald-400 hover:shadow-md' : 'opacity-50 pointer-events-none'}`}
+        onClick={canBackup ? onBackup : undefined}
       >
         <CardContent className="p-6 flex flex-col items-center text-center gap-3">
           <div className="w-14 h-14 rounded-full bg-emerald-100 flex items-center justify-center">
@@ -91,8 +115,8 @@ function MenuView({ onBackup, onRestore }: { onBackup: () => void; onRestore: ()
 
       {/* Restore Card */}
       <Card
-        className="cursor-pointer border-2 border-red-100 hover:border-red-400 hover:shadow-md transition-all"
-        onClick={onRestore}
+        className={`border-2 border-red-100 transition-all ${canRestore ? 'cursor-pointer hover:border-red-400 hover:shadow-md' : 'opacity-50 pointer-events-none'}`}
+        onClick={canRestore ? onRestore : undefined}
       >
         <CardContent className="p-6 flex flex-col items-center text-center gap-3">
           <div className="w-14 h-14 rounded-full bg-red-100 flex items-center justify-center">

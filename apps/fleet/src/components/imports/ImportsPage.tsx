@@ -117,6 +117,7 @@ import type { PaymentLedgerLine } from '@roam/types/paymentLedgerLine';
 import type { DriverQualitySnapshot } from '../../types/data';
 import { computeUberImportReconciliation } from '../../utils/uberImportReconciliation';
 import { reconcileUberNetFareByDriver } from '../../utils/uberStatementReconciliation';
+import { usePermissions } from '../../hooks/usePermissions';
 
 import { AuditSummaryCard } from './AuditSummaryCard';
 import { CalibrationReport } from './CalibrationReport';
@@ -124,8 +125,6 @@ import { QuarantineList } from './QuarantineList';
 import { TripReImportFlow } from './TripReImportFlow';
 import { BulkEntityImportFlow } from './BulkEntityImportFlow';
 import { SystemBackupRestore } from './SystemBackupRestore';
-import { ImportExportHistory } from './ImportExportHistory';
-import { ImportBatchAuditPanel } from './ImportBatchAuditPanel';
 import { ImportReconciliationSummary } from './ImportReconciliationSummary';
 import { CategoryGroupCard, CategoryGroup } from './CategoryGroupCard';
 import { FleetBusyProvider, useFleetBusy } from '../shared/FleetBusyLock';
@@ -226,9 +225,11 @@ export function ImportsPage(props: ImportsPageProps) {
 function ImportsPageInner({ onNavigate }: ImportsPageProps) {
   const queryClient = useQueryClient();
   const { runExclusive, setMessage } = useFleetBusy();
+  const { can } = usePermissions();
   const fleetTimezone = useFleetTimezone();
   const [activeTab, setActiveTab] = useState<'import' | 'export' | 'delete'>('import');
   const [step, setStep] = useState<Step>('select_platform');
+  const [commitProgress, setCommitProgress] = useState(0);
   
   // Staging: Multiple files
   const [uploadedFiles, setUploadedFiles] = useState<FileData[]>([]);
@@ -282,11 +283,6 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
   const [importGroup, setImportGroup] = useState<string | null>(null);
   const [importSearch, setImportSearch] = useState('');
 
-  // Phase 8: Onboarding banner
-  const [showOnboarding, setShowOnboarding] = useState(() => {
-    return localStorage.getItem('roam_data_center_onboarded') !== 'true';
-  });
-
   /** Last merged import: canonical `ledger_event:*` append stats (for success-screen verification). */
   const [importCanonicalSummary, setImportCanonicalSummary] = useState<{
     eventsBuilt: number;
@@ -321,10 +317,24 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
               setFuelCards(cards);
           } catch (e) {
               console.error("Failed to load fuel cards for matching", e);
+              toast.warning('Could not load fuel cards — fuel matching may be incomplete.');
           }
       };
       loadFuelCards();
   }, []);
+
+  useEffect(() => {
+    if (activeTab === 'import' && !can('data.import')) {
+      if (can('data.export')) setActiveTab('export');
+      else if (can('data.backfill')) setActiveTab('delete');
+    } else if (activeTab === 'export' && !can('data.export')) {
+      if (can('data.import')) setActiveTab('import');
+      else if (can('data.backfill')) setActiveTab('delete');
+    } else if (activeTab === 'delete' && !can('data.backfill')) {
+      if (can('data.import')) setActiveTab('import');
+      else if (can('data.export')) setActiveTab('export');
+    }
+  }, [activeTab, can]);
 
   const saveFields = (fields: FieldDefinition[]) => {
     setAvailableFields(fields);
@@ -357,9 +367,12 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
             if (data.success && data.mapping) {
                 fileData.customMapping = data.mapping;
                 console.log("AI Mapping Applied for " + fileData.name, data.mapping);
+            } else {
+                toast.warning(`AI column mapping did not return a mapping for ${fileData.name}. Check fields manually.`);
             }
         } catch (e) {
             console.error("AI Mapping Failed:", e);
+            toast.warning(`AI column mapping failed for ${fileData.name}. Check fields manually.`);
         }
     };
 
@@ -484,82 +497,61 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
       });
   };
 
-  const handleMerge = () => {
-      // 1. Merge
-      // Phase 1: Capture Organization Name
-      const knownFleetName = localStorage.getItem('roam_fleet_name') || undefined;
-      const {
-        trips,
-        driverMetrics,
-        vehicleMetrics,
-        rentalContracts,
-        organizationMetrics,
-        fuelEntries,
-        organizationName,
-        calibrationStats,
-        driverTimeData,
-        vehicleTimeData,
-        disputeRefunds,
-        importWarnings,
-        uberStatementsByDriverId,
-        paymentLedgerLines,
-        driverQualitySnapshots,
-      } = mergeAndProcessData(uploadedFiles, availableFields, knownFleetName, fuelCards, fleetTimezone);
-
-      if (organizationName) {
-          localStorage.setItem('roam_fleet_name', organizationName);
-          // Trigger update for AppLayout
+  /** Shared post-merge side effects so AI and non-AI paths cannot drift. */
+  const applyMergedImportResult = useCallback((
+    result: ReturnType<typeof mergeAndProcessData>,
+  ) => {
+      if (result.organizationName) {
+          localStorage.setItem('roam_fleet_name', result.organizationName);
           window.dispatchEvent(new Event('fleetNameUpdated'));
       }
 
-      console.log('Processed Time Data:', { 
-          drivers: driverTimeData?.length, 
-          vehicles: vehicleTimeData?.length 
-      });
-
-      // 2. Apply Platform Override
-      const finalTrips = trips.map(t => ({
+      const finalTrips = result.trips.map(t => ({
           ...t,
           platform: selectedPlatform as any
       }));
 
-      // Recalculate actual cash collected from individual trips (Uber summary undercounts)
       const tripCashTotal = finalTrips
           .filter(t => t.paymentMethod === 'Cash' && t.cashCollected)
           .reduce((sum, t) => sum + Math.abs(t.cashCollected || 0), 0);
-      if (tripCashTotal > 0 && organizationMetrics.length > 0) {
-          organizationMetrics[0].totalCashExposure = tripCashTotal;
+      if (tripCashTotal > 0 && result.organizationMetrics.length > 0) {
+          result.organizationMetrics[0].totalCashExposure = tripCashTotal;
       }
 
       setProcessedData(finalTrips);
-      setProcessedDriverMetrics(driverMetrics);
-      setProcessedVehicleMetrics(vehicleMetrics);
-      setProcessedOrganizationMetrics(organizationMetrics);
-      setProcessedRentalContracts(rentalContracts);
-      setProcessedFuelEntries(fuelEntries || []);
-      setCalibrationStats(calibrationStats);
-      setProcessedDriverTime(driverTimeData || []);
-      setProcessedVehicleTime(vehicleTimeData || []);
-      setProcessedDisputeRefunds(disputeRefunds || []);
-      setProcessedPaymentLedgerLines(paymentLedgerLines || []);
-      setProcessedDriverQualitySnapshots(driverQualitySnapshots || []);
-      setProcessedUberStatementsByDriverId(uberStatementsByDriverId);
-      if ((disputeRefunds || []).length > 0) {
-          console.log(`[Import] Found ${disputeRefunds!.length} dispute refund(s) in CSV`);
-      }
-      if (importWarnings?.uberTripsMissingTripActivity) {
+      setProcessedDriverMetrics(result.driverMetrics);
+      setProcessedVehicleMetrics(result.vehicleMetrics);
+      setProcessedOrganizationMetrics(result.organizationMetrics);
+      setProcessedRentalContracts(result.rentalContracts);
+      setProcessedFuelEntries(result.fuelEntries || []);
+      setCalibrationStats(result.calibrationStats);
+      setProcessedDriverTime(result.driverTimeData || []);
+      setProcessedVehicleTime(result.vehicleTimeData || []);
+      setProcessedDisputeRefunds(result.disputeRefunds || []);
+      setProcessedPaymentLedgerLines(result.paymentLedgerLines || []);
+      setProcessedDriverQualitySnapshots(result.driverQualitySnapshots || []);
+      setProcessedUberStatementsByDriverId(result.uberStatementsByDriverId);
+
+      if (result.importWarnings?.uberTripsMissingTripActivity) {
           toast.warning(
-              `${importWarnings.uberTripsMissingTripActivity} Uber trip(s) have earnings but no trip_activity row — addresses were not imported. Use a trip_activity export that includes those Trip UUIDs, or import the next weekly bundle.`,
+              `${result.importWarnings.uberTripsMissingTripActivity} Uber trip(s) have earnings but no trip_activity row — addresses were not imported. Use a trip_activity export that includes those Trip UUIDs, or import the next weekly bundle.`,
               { duration: 12_000 }
           );
       }
-      if (importWarnings?.tollRefundMismatch) {
-          const { statedTotal, capturedTotal, difference } = importWarnings.tollRefundMismatch;
+      if (result.importWarnings?.tollRefundMismatch) {
+          const { statedTotal, capturedTotal, difference } = result.importWarnings.tollRefundMismatch;
           toast.warning(
               `Toll refund mismatch: Uber's statement reports $${statedTotal.toFixed(2)} in toll refunds, but only $${capturedTotal.toFixed(2)} was captured from this import (${difference > 0 ? 'short' : 'over'} by $${Math.abs(difference).toFixed(2)}). Check payments_transaction.csv for a Support Adjustment row that may not have parsed correctly.`,
               { duration: 15_000 }
           );
       }
+      return finalTrips;
+  }, [selectedPlatform]);
+
+  const handleMerge = () => {
+      const knownFleetName = localStorage.getItem('roam_fleet_name') || undefined;
+      const result = mergeAndProcessData(uploadedFiles, availableFields, knownFleetName, fuelCards, fleetTimezone);
+      applyMergedImportResult(result);
       setStep('preview_merged');
   };
 
@@ -641,51 +633,8 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
         // This also runs the robust "Bottom-Up" financial calculation we just fixed.
         const knownFleetName = localStorage.getItem('roam_fleet_name') || undefined;
         const localResult = mergeAndProcessData(filteredFiles, availableFields, knownFleetName, fuelCards, fleetTimezone);
-        if (localResult.importWarnings?.uberTripsMissingTripActivity) {
-            toast.warning(
-                `${localResult.importWarnings.uberTripsMissingTripActivity} Uber trip(s) have earnings but no trip_activity row — addresses were not imported. Include trip_activity.csv that lists those trips, or re-import when Uber’s export includes them.`,
-                { duration: 12_000 }
-            );
-        }
-        if (localResult.importWarnings?.tollRefundMismatch) {
-            const { statedTotal, capturedTotal, difference } = localResult.importWarnings.tollRefundMismatch;
-            toast.warning(
-                `Toll refund mismatch: Uber's statement reports $${statedTotal.toFixed(2)} in toll refunds, but only $${capturedTotal.toFixed(2)} was captured from this import (${difference > 0 ? 'short' : 'over'} by $${Math.abs(difference).toFixed(2)}). Check payments_transaction.csv for a Support Adjustment row that may not have parsed correctly.`,
-                { duration: 15_000 }
-            );
-        }
+        const finalTrips = applyMergedImportResult(localResult);
 
-        if (localResult.organizationName) {
-            localStorage.setItem('roam_fleet_name', localResult.organizationName);
-            window.dispatchEvent(new Event('fleetNameUpdated'));
-        }
-        
-        // Apply Platform Override (Parity with Legacy Merge)
-        const finalTrips = localResult.trips.map(t => ({
-            ...t,
-            platform: selectedPlatform as any
-        }));
-
-        // Recalculate actual cash collected from individual trips (Uber summary undercounts)
-        const tripCashTotal = finalTrips
-            .filter(t => t.paymentMethod === 'Cash' && t.cashCollected)
-            .reduce((sum, t) => sum + Math.abs(t.cashCollected || 0), 0);
-        if (tripCashTotal > 0 && localResult.organizationMetrics.length > 0) {
-            localResult.organizationMetrics[0].totalCashExposure = tripCashTotal;
-        }
-
-        // 3. Merge AI Data into State
-        setProcessedData(finalTrips); // Keep local trips for table
-        setCalibrationStats(localResult.calibrationStats);
-        setProcessedFuelEntries(localResult.fuelEntries || []);
-        setProcessedDriverTime(localResult.driverTimeData || []);
-        setProcessedVehicleTime(localResult.vehicleTimeData || []);
-        setProcessedDisputeRefunds(localResult.disputeRefunds || []);
-        setProcessedUberStatementsByDriverId(localResult.uberStatementsByDriverId);
-        if ((localResult.disputeRefunds || []).length > 0) {
-            console.log(`[Import] Found ${localResult.disputeRefunds!.length} dispute refund(s) in CSV (AI flow)`);
-        }
-        
         // Phase 1: Run AI Auditor
         if (aiData.drivers || aiData.vehicles || aiData.financials) {
             
@@ -766,7 +715,9 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
       }
 
       setIsUploading(true);
+      setCommitProgress(0);
       const locked = await runExclusive('Committing import…', async () => {
+      let batchId = '';
       try {
           setMessage('Calibrating trips against physical odometer anchors…');
           // Phase 6: Automatic Anchor Calibration
@@ -776,7 +727,8 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
           setMessage('Saving import batch…');
           
           // Generate a Batch ID
-          const batchId = crypto.randomUUID();
+          batchId = crypto.randomUUID();
+          setCommitProgress(5);
           const contentFingerprint = await computeImportBundleFingerprint(uploadedFiles);
 
           const orgForBatch =
@@ -797,7 +749,7 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
             id: batchId,
             fileName: uploadedFiles.map(f => f.name).join(', '),
             uploadDate: new Date().toISOString(),
-            status: 'completed' as const,
+            status: 'processing' as const,
             recordCount: calibratedTrips.length,
             type: 'merged_import',
             processedBy: uploadedBy || 'Admin',
@@ -819,8 +771,9 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
             ...(usesLineSsot ? { usesPaymentLineSsot: true } : {}),
           }));
 
-          // Save Batch Record FIRST
+          // Save batch as processing — mark completed only after sub-steps succeed
           await api.createBatch(batchMeta);
+          setCommitProgress(15);
           
           if (auditState) {
               // PHASE 7: NEW SAVE FLOW (Mega-JSON)
@@ -834,6 +787,7 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
               };
               
               await api.saveFleetState(fleetState);
+              setCommitProgress(40);
               
               // Notifications from AI Insights
               if (fleetState.insights) {
@@ -874,6 +828,7 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
               const tripsWithBatch = tripsForSave;
 
               await api.saveTrips(tripsWithBatch);
+              setCommitProgress(40);
 
               if (processedDriverMetrics.length > 0) {
                   await api.saveDriverMetrics(processedDriverMetrics);
@@ -1026,11 +981,30 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
               }
           }
 
+
+          const IMPORT_CHUNK = 200;
+          const chunkedImport = async <T,>(
+            items: T[],
+            runner: (chunk: T[]) => Promise<{ imported?: number; skipped?: number } | void>,
+          ) => {
+              let imported = 0;
+              let skipped = 0;
+              for (let i = 0; i < items.length; i += IMPORT_CHUNK) {
+                  const chunk = items.slice(i, i + IMPORT_CHUNK);
+                  const r = await runner(chunk);
+                  imported += r?.imported ?? chunk.length;
+                  skipped += r?.skipped ?? 0;
+              }
+              return { imported, skipped };
+          };
+
           // Payment ledger lines: persist transaction-grain rows
+          let paymentLinesFailed = 0;
           if (processedPaymentLedgerLines.length > 0) {
               try {
-                  const plResult = await api.importPaymentLedgerLines(
+                  const plResult = await chunkedImport(
                       processedPaymentLedgerLines.map((l) => ({ ...l, batchId })),
+                      (chunk) => api.importPaymentLedgerLines(chunk),
                   );
                   if (plResult.imported > 0) {
                       toast.success(`Imported ${plResult.imported} payment ledger line(s)`);
@@ -1045,31 +1019,41 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
                       /* non-fatal */
                   }
               } catch (plErr: unknown) {
+                  paymentLinesFailed = 1;
                   const msg = plErr instanceof Error ? plErr.message : String(plErr);
                   toast.error(`Payment ledger line import failed: ${msg}`);
               }
           }
+          setCommitProgress(70);
 
+          let qualityFailed = 0;
           if (processedDriverQualitySnapshots.length > 0) {
               try {
-                  const dqResult = await api.importDriverQualitySnapshots(
-                      batchId,
-                      processedDriverQualitySnapshots.map((s) => ({ ...s, batchId })),
-                  );
-                  if (dqResult.imported > 0) {
-                      toast.success(`Saved ${dqResult.imported} driver quality snapshot(s)`);
+                  const snaps = processedDriverQualitySnapshots.map((s) => ({ ...s, batchId }));
+                  let imported = 0;
+                  for (let i = 0; i < snaps.length; i += IMPORT_CHUNK) {
+                      const chunk = snaps.slice(i, i + IMPORT_CHUNK);
+                      const dqResult = await api.importDriverQualitySnapshots(batchId, chunk);
+                      imported += dqResult.imported;
+                  }
+                  if (imported > 0) {
+                      toast.success(`Saved ${imported} driver quality snapshot(s)`);
                   }
               } catch (dqErr: unknown) {
+                  qualityFailed = 1;
                   const msg = dqErr instanceof Error ? dqErr.message : String(dqErr);
                   toast.error(`Driver quality snapshot import failed: ${msg}`);
               }
           }
+          setCommitProgress(85);
 
           // Dispute Refunds: Persist to server
+          let disputeFailed = 0;
           if (processedDisputeRefunds.length > 0) {
               try {
-                  const drResult = await api.importDisputeRefunds(
+                  const drResult = await chunkedImport(
                       processedDisputeRefunds.map((r) => ({ ...r, batchId })),
+                      (chunk) => api.importDisputeRefunds(chunk),
                   );
                   if (drResult.imported > 0) {
                       const msg = drResult.skipped > 0
@@ -1079,12 +1063,13 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
                   } else if (drResult.skipped > 0) {
                       toast.info(`${drResult.skipped} dispute refund(s) already imported — no new refunds`);
                   }
-                  console.log(`[Import] Dispute refunds: ${drResult.imported} imported, ${drResult.skipped} skipped`);
               } catch (drErr: any) {
+                  disputeFailed = 1;
                   console.error('[Import] Failed to import dispute refunds:', drErr);
                   toast.error(`Dispute refund import failed: ${drErr.message}`);
               }
           }
+          setCommitProgress(95);
 
           queryClient.invalidateQueries({ queryKey: ['driverMetrics'] });
           queryClient.invalidateQueries({ queryKey: ['trips'] });
@@ -1092,17 +1077,39 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
           queryClient.invalidateQueries({ queryKey: ['driver-ledger'] });
           queryClient.invalidateQueries({ queryKey: ['batches'] });
 
+          const verifyPassed =
+              canonFailed === 0 &&
+              paymentLinesFailed === 0 &&
+              qualityFailed === 0 &&
+              disputeFailed === 0;
+
+          try {
+              await api.patchImportBatch(batchId, {
+                  status: verifyPassed ? 'completed' : 'error',
+              });
+          } catch (statusErr) {
+              console.warn('[Import] Failed to finalize batch status', statusErr);
+          }
+
           setImportCanonicalSummary({
               eventsBuilt: canonicalEvents.length,
               inserted: canonInserted,
               skipped: canonSkipped,
               failed: canonFailed,
-              verifyPassed: true,
+              verifyPassed,
           });
+          setCommitProgress(100);
           
           setStep('success');
           return true;
       } catch (e: any) {
+          if (batchId) {
+              try {
+                  await api.patchImportBatch(batchId, { status: 'error' });
+              } catch {
+                  /* best-effort */
+              }
+          }
           setError(e.message || "Failed to save trips");
           return false;
       } finally {
@@ -1306,135 +1313,45 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
       return <Badge variant="secondary">Generic CSV</Badge>;
   };
 
-  // --- API Sync Handler ---
+  // --- Uber Fleet vehicle/driver sync (Vehicles API; trips still via CSV) ---
   const handleUberSync = async () => {
     setIsParsing(true);
     setWarning(null);
     setError(null);
 
-    const performSync = async () => {
-        try {
-            const response = await fetch(`${API_ENDPOINTS.fleet}/uber/sync`, {
-                method: 'POST',
-                headers: await requireAuthHeaders(null)
-            });
-
-            if (response.status === 401) {
-                // Auth Required - Trigger Login Flow
-                return "AUTH_REQUIRED";
-            }
-
-            if (!response.ok) {
-                let errorMsg = "Failed to sync with Uber";
-                try {
-                    const errData = await response.json();
-                    errorMsg = errData.error || errData.message || JSON.stringify(errData);
-                } catch (e) {
-                    errorMsg = await response.text();
-                }
-                throw new Error(errorMsg);
-            }
-
-            const data = await response.json();
-            
-            if (data.warning) {
-                setWarning(data.warning);
-            }
-
-            const newTrips = data.trips.map((t: any) => ({
-                ...t,
-                id: t.trip_id || crypto.randomUUID(),
-                source: 'uber_api'
-            }));
-
-            setProcessedData(newTrips);
-            setStep('preview_merged');
-            return "SUCCESS";
-
-        } catch (e: any) {
-            setError(e.message);
-            return "ERROR";
-        }
-    };
-
     try {
-        // 1. Try to Sync
-        const result = await performSync();
-
-        // 2. If Auth Required, Start OAuth Flow
-        if (result === "AUTH_REQUIRED") {
-            // ALWAYS use the production URL for consistency (No trailing slash)
-            const redirectUri = "https://chorus-tech-15470154.figma.site";
-            
-            // Request permissions. 
-            // NOTE: You must enable these in Uber Dashboard -> Scopes / Products
-            const scope = "profile history";
-
-            // Get Auth URL
-            const urlRes = await fetch(`${API_ENDPOINTS.fleet}/uber/auth-url?redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}`, {
-                headers: await requireAuthHeaders(null)
-            });
-            const urlData = await urlRes.json();
-            
-            if (urlData.url) {
-                // Open Popup
-                const width = 600;
-                const height = 700;
-                const left = (window.screen.width / 2) - (width / 2);
-                const top = (window.screen.height / 2) - (height / 2);
-                const popup = window.open(urlData.url, 'UberAuth', `width=${width},height=${height},top=${top},left=${left}`);
-
-                // Listen for Success or Code
-                const messageHandler = async (event: MessageEvent) => {
-                    // Handle the new frontend-based flow
-                    if (event.data?.type === 'uber-auth-code') {
-                        const code = event.data.code;
-                        window.removeEventListener('message', messageHandler);
-                        
-                        // Exchange Code
-                        try {
-                            const exchangeRes = await fetch(`${API_ENDPOINTS.fleet}/uber/exchange`, {
-                                method: 'POST',
-                                headers: await requireAuthHeaders(),
-                                body: JSON.stringify({ code, redirect_uri: redirectUri })
-                            });
-                            
-                            if (!exchangeRes.ok) {
-                                throw new Error("Token exchange failed");
-                            }
-
-                            // Retry Sync
-                            await performSync();
-                        } catch (e: any) {
-                            setError(e.message);
-                        } finally {
-                            setIsParsing(false);
-                        }
-                    }
-                };
-                window.addEventListener('message', messageHandler);
-
-                // Check if popup closed manually
-                const timer = setInterval(() => {
-                    if (popup && popup.closed) {
-                        clearInterval(timer);
-                        window.removeEventListener('message', messageHandler);
-                        // If we didn't get a message by now, user closed it.
-                        // We check if isParsing is still true to decide if we should stop loading
-                        // But since we can't share state easily with the event listener, we just rely on the user trying again.
-                        setIsParsing(false);
-                    }
-                }, 1000);
-            } else {
-                 throw new Error("Could not generate login URL.");
-            }
-        } else {
-            setIsParsing(false);
+      // Ensure org client-credentials token, then sync vehicles/drivers
+      try {
+        await api.connectUberFleet();
+      } catch (connectErr: any) {
+        if (connectErr?.code === 'SECRETS_MISSING') {
+          setError(
+            'Uber Fleet server secrets are not set. Open Settings → Integrations → Setup, then set UBER_CLIENT_ID / UBER_CLIENT_SECRET.',
+          );
+          return;
         }
+        // If already connected / token mint race — still try sync
+        if (!String(connectErr?.message || '').toLowerCase().includes('already')) {
+          console.warn('[UberFleet] connect before sync:', connectErr);
+        }
+      }
 
+      const summary = await api.syncUberFleet();
+      const matched = summary.vehiclesMatched ?? 0;
+      const linked = summary.driversLinked ?? 0;
+      const unmatched = summary.unmatchedUberVehicles?.length ?? 0;
+      setWarning(
+        `Uber Fleet sync: ${matched} vehicle(s) matched, ${linked} driver(s) linked` +
+          (unmatched ? `, ${unmatched} unmatched on Uber` : '') +
+          '. Trip earnings still import from CSV uploads.',
+      );
+      if (summary.errors?.length) {
+        setError(summary.errors.slice(0, 3).join('; '));
+      }
     } catch (e: any) {
-        setError(e.message);
-        setIsParsing(false);
+      setError(e?.message || 'Uber Fleet sync failed');
+    } finally {
+      setIsParsing(false);
     }
   };
 
@@ -1516,6 +1433,7 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
 
       {/* Top-Level Tab Switcher */}
       <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-lg w-fit">
+        {can('data.import') && (
         <button
           onClick={() => setActiveTab('import')}
           className={`px-4 py-2 text-sm font-medium rounded-md transition-all ${
@@ -1526,6 +1444,8 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
         >
           Import
         </button>
+        )}
+        {can('data.export') && (
         <button
           onClick={() => setActiveTab('export')}
           className={`px-4 py-2 text-sm font-medium rounded-md transition-all ${
@@ -1536,6 +1456,8 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
         >
           Export
         </button>
+        )}
+        {can('data.backfill') && (
         <button
           onClick={() => setActiveTab('delete')}
           className={`px-4 py-2 text-sm font-medium rounded-md transition-all ${
@@ -1546,40 +1468,17 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
         >
           Delete
         </button>
+        )}
       </div>
 
-      {/* Phase 8: Onboarding Banner */}
-      {showOnboarding && (
-        <div className="flex items-start justify-between gap-4 p-4 rounded-lg bg-gradient-to-r from-indigo-50 to-emerald-50 border border-indigo-100">
-          <div className="flex items-start gap-3">
-            <div className="p-2 rounded-lg bg-indigo-100 shrink-0 mt-0.5">
-              <HardDrive className="h-5 w-5 text-indigo-600" />
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-slate-800">Welcome to the Data Center</p>
-              <p className="text-xs text-slate-600 mt-0.5">
-                Import your fleet data from CSV files, export reports for analysis, manage data deletion, or create full system backups for disaster recovery.
-                Use the <strong>Import</strong> tab to upload data, the <strong>Export</strong> tab to download it, and the <strong>Delete</strong> tab to permanently remove records.
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={() => { setShowOnboarding(false); localStorage.setItem('roam_data_center_onboarded', 'true'); }}
-            className="text-slate-400 hover:text-slate-600 text-lg leading-none shrink-0 mt-1"
-          >
-            &times;
-          </button>
-        </div>
-      )}
-
       {/* ═══ DELETE TAB ═══ */}
-      {activeTab === 'delete' && <DeleteCenter />}
+      {activeTab === 'delete' && can('data.backfill') && <DeleteCenter />}
 
       {/* ═══ EXPORT TAB ═══ */}
-      {activeTab === 'export' && <ExportCenter />}
+      {activeTab === 'export' && can('data.export') && <ExportCenter />}
 
       {/* ═══ IMPORT TAB (all existing import content below) ═══ */}
-      {activeTab === 'import' && (<>
+      {activeTab === 'import' && can('data.import') && (<>
 
       {error && (
         <Alert variant="destructive">
@@ -1615,7 +1514,7 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
         // ── Card definitions with descriptions ──
         const allImportCards: Record<string, Array<{ id: string; icon: React.ReactNode | string; color: string; subtext?: string; description: string; action?: () => void }>> = {
           'platform': [
-            { id: 'Uber Sync', icon: isParsing ? <Zap className="h-6 w-6" /> : <CloudDownload className="h-6 w-6" />, color: 'bg-indigo-600 text-white', description: 'Connect your Uber account to automatically sync trip data via API', action: handleUberSync },
+            { id: 'Uber Sync', icon: isParsing ? <Zap className="h-6 w-6" /> : <CloudDownload className="h-6 w-6" />, color: 'bg-indigo-600 text-white', description: 'Sync Uber Fleet vehicles & driver assignments (trips still via CSV)', action: handleUberSync },
             { id: 'Uber', icon: 'UB', color: 'bg-black text-white', description: 'Upload Uber Trip Activity and Payment Orders CSV files' },
             { id: 'InDrive', icon: 'IN', color: 'bg-blue-500 text-white', description: 'Upload your InDrive trip export CSV file' },
           ],
@@ -1794,10 +1693,10 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
                     </CardDescription>
                 </div>
                 <div className="flex gap-2">
-                    <Button variant="outline" size="sm" onClick={() => downloadTemplate(availableFields)}>
+                    <Button variant="outline" size="sm" onClick={() => downloadTemplate(availableFields)} disabled={isParsing || isUploading}>
                         <CloudDownload className="mr-2 h-4 w-4" /> Template
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => setStep('select_platform')}>
+                    <Button variant="ghost" size="sm" onClick={() => setStep('select_platform')} disabled={isParsing || isUploading}>
                         Change Platform
                     </Button>
                 </div>
@@ -1806,9 +1705,11 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
           <CardContent>
             <div 
               {...getRootProps()} 
+              aria-label="Upload CSV or Excel import files"
               className={`
                 border-2 border-dashed rounded-lg p-16 text-center cursor-pointer transition-all duration-200
                 ${isDragActive ? 'border-indigo-500 bg-indigo-50' : 'border-slate-200 hover:border-indigo-400 hover:bg-slate-50'}
+                ${(isParsing || isUploading) ? 'pointer-events-none opacity-60' : ''}
               `}
             >
               <input {...getInputProps()} />
@@ -2396,6 +2297,12 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
                                   <Button onClick={handleConfirmImport} disabled={isUploading || (auditState?.report.status === 'critical')} className={auditState?.report.status === 'critical' ? 'bg-red-600 hover:bg-red-700' : 'bg-emerald-600 hover:bg-emerald-700'}>
                                      {isUploading ? "Uploading..." : (auditState?.report.status === 'critical' ? "Force Import (Risky)" : "Confirm Import")}
                                   </Button>
+                                  {isUploading && (
+                                    <div className="w-full max-w-xs space-y-1">
+                                      <Progress value={commitProgress} />
+                                      <p className="text-[11px] text-slate-500 text-center">{commitProgress}%</p>
+                                    </div>
+                                  )}
                               </div>
                           </div>
                       </CardHeader>
@@ -3076,11 +2983,6 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
       />
 
       </>)}
-
-      <ImportBatchAuditPanel />
-
-      {/* Phase 8: Activity Log */}
-      <ImportExportHistory />
     </div>
   );
 }

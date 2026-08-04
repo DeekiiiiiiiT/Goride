@@ -46,6 +46,22 @@ interface ExportState {
 }
 
 /**
+ * Bounded concurrency map — avoids thousands of parallel vehicle requests on export.
+ */
+async function mapPool<T, R>(items: T[], concurrency: number, worker: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  const runners = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await worker(items[i]);
+    }
+  });
+  await Promise.all(runners);
+  return results;
+}
+
+/**
  * Fetches all fuel entries from the backend.
  * Filters for Anchors if requested, but generally we want the raw data.
  * In the context of "Disaster Recovery", we probably want EVERYTHING,
@@ -75,9 +91,8 @@ async function fetchAllServiceLogs(): Promise<ServiceRequest[]> {
         // 1. Get all vehicles
         const vehicles = await api.getVehicles();
         
-        // 2. Fetch logs for each vehicle in parallel
-        const promises = vehicles.map((v: any) => api.getMaintenanceLogs(v.id));
-        const results = await Promise.all(promises);
+        // 2. Fetch logs for each vehicle with bounded concurrency
+        const results = await mapPool(vehicles, 5, (v: any) => api.getMaintenanceLogs(v.id));
         
         // 3. Flatten and sort
         const flatLogs: ServiceRequest[] = results.flat();
@@ -236,9 +251,8 @@ async function fetchAllOdometerReadings(): Promise<OdometerReading[]> {
         const fuelReadings = normalizeFuelReadings(fuelEntries);
         const serviceReadings = normalizeServiceReadings(serviceLogs);
         
-        // 3. Fetch Vehicle-Specific Logs (Manual & Check-ins)
-        // These endpoints require iterating by vehicle ID
-        const vehiclePromises = vehicles.map(async (v: any) => {
+        // 3. Fetch Vehicle-Specific Logs (Manual & Check-ins) with bounded concurrency
+        const vehicleSpecificReadings = (await mapPool(vehicles, 5, async (v: any) => {
             try {
                 const [history, checkIns] = await Promise.all([
                     api.getOdometerHistory(v.id).catch(e => {
@@ -259,9 +273,7 @@ async function fetchAllOdometerReadings(): Promise<OdometerReading[]> {
                 console.warn(`Failed to export odometer data for vehicle ${v.id}`, e);
                 return [];
             }
-        });
-
-        const vehicleSpecificReadings = (await Promise.all(vehiclePromises)).flat();
+        })).flat();
         
         // 4. Merge and Sort
         const allReadings = [
@@ -286,8 +298,8 @@ async function fetchAllCheckIns(): Promise<any[]> {
         // 1. Get all vehicles
         const vehicles = await api.getVehicles();
         
-        // 2. Fetch check-ins for each vehicle in parallel
-        const promises = vehicles.map(async (v: any) => {
+        // 2. Fetch check-ins for each vehicle with bounded concurrency
+        const results = await mapPool(vehicles, 5, async (v: any) => {
             try {
                 const checkIns = await api.getCheckInsByVehicle(v.id);
                 // Map to CSV format
@@ -302,8 +314,6 @@ async function fetchAllCheckIns(): Promise<any[]> {
                 return [];
             }
         });
-
-        const results = await Promise.all(promises);
         
         // 3. Flatten and sort
         const flatCheckIns: any[] = results.flat();
@@ -375,8 +385,17 @@ export async function fetchAllVehicleMetrics(): Promise<any[]> {
  */
 export async function fetchAllTransactions(startDate?: string, endDate?: string): Promise<any[]> {
     try {
-        const transactions = await api.getTransactions();
-        let filtered = transactions || [];
+        const PAGE_SIZE = 500;
+        const all: any[] = [];
+        let offset = 0;
+        while (offset < 50000) {
+            const page = await api.getTransactions(undefined, { limit: PAGE_SIZE, offset });
+            const batch = Array.isArray(page) ? page : [];
+            all.push(...batch);
+            if (batch.length < PAGE_SIZE) break;
+            offset += PAGE_SIZE;
+        }
+        let filtered = all;
 
         // Client-side date filter
         if (startDate) {
@@ -781,7 +800,7 @@ export interface BackupManifest {
 
 /**
  * Generates a full system backup as a ZIP blob.
- * Fetches all 17 data categories in parallel, converts to CSV, bundles with manifest.json.
+ * Fetches all data categories in parallel, converts to CSV, bundles with manifest.json.
  * @param onProgress — callback with (completedSteps, totalSteps, currentLabel)
  */
 export async function generateFullBackup(
