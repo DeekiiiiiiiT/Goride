@@ -26,6 +26,8 @@ type TabId = 'checklist' | 'releases' | 'data_safety';
 export interface PlayStoreLaunchPageProps {
   data: PlayStoreLaunchPayload | null;
   dataSafetyTemplateUrl?: string;
+  /** Button label when loading the CSV fixture (e.g. "Courier template"). */
+  dataSafetyTemplateLoadLabel?: string;
   dataSafetyIntro?: string;
   loading: boolean;
   canEdit: boolean;
@@ -59,6 +61,7 @@ async function copyText(text: string) {
 export function PlayStoreLaunchPage({
   data,
   dataSafetyTemplateUrl,
+  dataSafetyTemplateLoadLabel,
   dataSafetyIntro,
   loading,
   canEdit,
@@ -470,7 +473,16 @@ export function PlayStoreLaunchPage({
           rowsPayload={data.data_safety_rows}
           privacyPolicyUrl={data.meta.privacyPolicyUrl}
           templateUrl={dataSafetyTemplateUrl}
-          templateLoadLabel={dataSafetyTemplateUrl?.includes('driver') ? 'Driver template' : 'Rides template'}
+          templateLoadLabel={
+            dataSafetyTemplateLoadLabel ??
+            (dataSafetyTemplateUrl?.includes('courier')
+              ? 'Courier template'
+              : dataSafetyTemplateUrl?.includes('customer') || dataSafetyTemplateUrl?.includes('dash-customer')
+                ? 'Rush template'
+                : dataSafetyTemplateUrl?.includes('driver')
+                  ? 'Driver template'
+                  : 'Rides template')
+          }
           templateVersion={data.data_safety_template_version ?? undefined}
           importedAt={data.data_safety_imported_at}
           updatedAt={data.updated_at}

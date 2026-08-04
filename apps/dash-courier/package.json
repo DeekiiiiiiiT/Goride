@@ -27,6 +27,7 @@
     "@roam/api-client": "workspace:*",
     "@roam/auth-client": "workspace:*",
     "@roam/business-config": "workspace:*",
+    "@roam/play-store-launch": "workspace:*",
     "@roam/types": "workspace:*",
     "@roam/vertical-config": "workspace:*",
     "@roam/ui": "workspace:*",

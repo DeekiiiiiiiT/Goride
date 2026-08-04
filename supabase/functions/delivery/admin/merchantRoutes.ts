@@ -15,6 +15,7 @@ import {
 } from "./dashPermissions.ts";
 import { mountDashTeamRoutes } from "./dashTeamRoutes.ts";
 import { mountOnboardingConfigAdminRoutes } from "./onboardingConfigRoutes.ts";
+import { registerDashPlayStoreLaunchRoutes } from "./playStoreLaunchShared.ts";
 import {
   ALLOWED_TRANSITIONS,
   canSuspendMerchant,
@@ -880,5 +881,14 @@ export function registerMerchantAdminRoutes(app: Hono) {
 
   mountDashTeamRoutes(admin);
   mountOnboardingConfigAdminRoutes(admin);
+
+  registerDashPlayStoreLaunchRoutes(admin, {
+    basePath: "/play-store",
+    launchTable: "dash_customer_play_store_launch",
+    releasesTable: "dash_customer_play_store_releases",
+    writeRoles: new Set(["dash_admin", "platform_owner", "superadmin"]),
+    forbiddenMessage: "dash_admin role required",
+  });
+
   app.route("/admin", admin);
 }

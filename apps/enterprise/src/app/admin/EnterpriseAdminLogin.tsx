@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
-import { useForgotPassword } from '@roam/auth-client';
+import { useForgotPassword, consumeAdminLoginErrorFlash } from '@roam/auth-client';
 import { useAdminAuth } from '@/app/auth/AdminAuthProvider';
 
 export function EnterpriseAdminLogin() {
   const { signIn } = useAdminAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(() => consumeAdminLoginErrorFlash());
   const [loading, setLoading] = useState(false);
   const {
     forgotMode,

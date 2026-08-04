@@ -14590,7 +14590,7 @@ app.post("/make-server-37f42386/admin-login", async (c) => {
       console.log(`[AdminLogin] Login failed for ${email}: ${signInError.message}`);
       await recordFailedAttempt(clientIp, 'admin');
       await recordFailedAttempt(email.toLowerCase(), 'admin');
-      return c.json({ error: "Invalid email or password." }, 401);
+      return c.json({ error: "Incorrect credentials" }, 401);
     }
 
     if (!data?.session) {
@@ -14618,9 +14618,11 @@ app.post("/make-server-37f42386/admin-login", async (c) => {
         }
       } else {
         console.log(`User ${email} is not the registered superadmin (KV email: ${kvRecord?.email || 'none'})`);
+        await anonClient.auth.signOut();
         await recordFailedAttempt(clientIp, 'admin');
         await recordFailedAttempt(email.toLowerCase(), 'admin');
-        return c.json({ error: "This account does not have super admin privileges." }, 403);
+        // Same copy as wrong password — do not disclose role / portal mismatch
+        return c.json({ error: "Incorrect credentials" }, 401);
       }
     }
 

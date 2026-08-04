@@ -1,6 +1,14 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { supabaseFleetAdmin as supabase } from '@roam/auth-client';
-import { hasProductAdminRole, jwtPrimaryRole, useForgotPassword, hasAnyJwtRole } from '@roam/auth-client';
+import {
+  hasProductAdminRole,
+  jwtPrimaryRole,
+  useForgotPassword,
+  hasAnyJwtRole,
+  ADMIN_INCORRECT_CREDENTIALS,
+  consumeAdminLoginErrorFlash,
+  flashAdminLoginError,
+} from '@roam/auth-client';
 import type { Session } from '@supabase/supabase-js';
 import {
   LayoutDashboard,
@@ -41,7 +49,7 @@ type AdminPage = 'dashboard' | 'customers' | 'storage' | 'ledger-maintenance';
 function FleetAdminLogin({ onSession }: { onSession: (s: Session) => void }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(() => consumeAdminLoginErrorFlash());
   const [loading, setLoading] = useState(false);
   const {
     forgotMode,
@@ -64,16 +72,18 @@ function FleetAdminLogin({ onSession }: { onSession: (s: Session) => void }) {
     setError(null);
     try {
       const { data, error: signErr } = await supabase.auth.signInWithPassword({ email, password });
-      if (signErr) throw signErr;
-      if (!data.session) throw new Error('No session returned');
-      const role = jwtPrimaryRole(data.session.user);
+      if (signErr || !data.session) {
+        setError(ADMIN_INCORRECT_CREDENTIALS);
+        return;
+      }
       if (!hasProductAdminRole(data.session.user, 'fleet')) {
         await supabase.auth.signOut();
-        throw new Error('Fleet product admin access required');
+        setError(ADMIN_INCORRECT_CREDENTIALS);
+        return;
       }
       onSession(data.session);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Login failed');
+    } catch {
+      setError(ADMIN_INCORRECT_CREDENTIALS);
     } finally {
       setLoading(false);
     }
@@ -152,9 +162,12 @@ export function FleetProductAdminPortal() {
   const [actionLoading, setActionLoading] = useState(false);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session: s } }) => {
+    void supabase.auth.getSession().then(async ({ data: { session: s } }) => {
       if (s && hasProductAdminRole(s.user, 'fleet')) {
         setSession(s);
+      } else if (s) {
+        flashAdminLoginError();
+        await supabase.auth.signOut();
       }
       setLoading(false);
     });

@@ -24,6 +24,8 @@ export {
   canWriteAppPermissionPolicy,
   RIDER_APP_PERMISSION_WRITE_ROLES,
   DRIVER_APP_PERMISSION_WRITE_ROLES,
+  DASH_APP_PERMISSION_WRITE_ROLES,
+  COURIER_APP_PERMISSION_WRITE_ROLES,
 } from './appPermissionPolicyAuth';
 
 // Hooks

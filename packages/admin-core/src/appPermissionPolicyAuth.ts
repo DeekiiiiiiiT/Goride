@@ -14,11 +14,29 @@ export const DRIVER_APP_PERMISSION_WRITE_ROLES = new Set([
   'driver_admin',
 ]);
 
+export const DASH_APP_PERMISSION_WRITE_ROLES = new Set([
+  'platform_owner',
+  'superadmin',
+  'dash_admin',
+]);
+
+export const COURIER_APP_PERMISSION_WRITE_ROLES = new Set([
+  'platform_owner',
+  'superadmin',
+  'courier_admin',
+]);
+
 export function canWriteAppPermissionPolicy(
   user: JwtUser,
-  surface: 'rider' | 'driver',
+  surface: 'rider' | 'driver' | 'dash' | 'courier',
 ): boolean {
   const allowed =
-    surface === 'driver' ? DRIVER_APP_PERMISSION_WRITE_ROLES : RIDER_APP_PERMISSION_WRITE_ROLES;
+    surface === 'driver'
+      ? DRIVER_APP_PERMISSION_WRITE_ROLES
+      : surface === 'dash'
+        ? DASH_APP_PERMISSION_WRITE_ROLES
+        : surface === 'courier'
+          ? COURIER_APP_PERMISSION_WRITE_ROLES
+          : RIDER_APP_PERMISSION_WRITE_ROLES;
   return hasAnyJwtRole(user, allowed);
 }

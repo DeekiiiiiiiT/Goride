@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { supabaseRidesAdmin as supabase, hasProductAdminRole, jwtPrimaryRole } from '@roam/auth-client';
+import { supabaseRidesAdmin as supabase, hasProductAdminRole, jwtPrimaryRole, flashAdminLoginError } from '@roam/auth-client';
 import { Session } from '@supabase/supabase-js';
 import {
   LayoutDashboard,
@@ -15,7 +15,6 @@ import {
   ChevronRight,
   ChevronDown,
   Loader2,
-  ShieldAlert,
   ExternalLink,
   Shield,
   Store,
@@ -253,7 +252,15 @@ export function RidesAdminLayout() {
     window.location.href = '/admin';
   };
 
-  if (loading) {
+  const hasAccess = !!session && hasProductAdminRole(session.user, 'rides');
+
+  useEffect(() => {
+    if (loading || !session || hasAccess) return;
+    flashAdminLoginError();
+    void supabase.auth.signOut();
+  }, [loading, session, hasAccess]);
+
+  if (loading || (session && !hasAccess)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-950 text-slate-400">
         <Loader2 className="w-8 h-8 animate-spin" />
@@ -266,28 +273,6 @@ export function RidesAdminLayout() {
   }
 
   const userRole = jwtPrimaryRole(session.user);
-  const hasAccess = hasProductAdminRole(session.user, 'rides');
-
-  if (!hasAccess) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-950 text-slate-200 p-8">
-        <div className="w-16 h-16 rounded-full bg-red-500/15 flex items-center justify-center mb-4">
-          <ShieldAlert className="w-8 h-8 text-red-400" />
-        </div>
-        <h1 className="text-xl font-semibold mb-2">Access Denied</h1>
-        <p className="text-slate-400 text-center max-w-md mb-6">
-          You don&apos;t have permission to access the Rides Admin Portal. Your role:{' '}
-          <span className="font-mono text-slate-300">{userRole || '(none)'}</span>
-        </p>
-        <button
-          onClick={() => navigate('/')}
-          className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-medium"
-        >
-          Back to App
-        </button>
-      </div>
-    );
-  }
 
   const userName = session.user.email?.split('@')[0] || 'Admin';
   const initials = userName.slice(0, 2).toUpperCase();

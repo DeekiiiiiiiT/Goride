@@ -3,7 +3,7 @@ import { Shield, Loader2, AlertCircle, KeyRound, UserPlus } from 'lucide-react';
 import { supabase } from '../../utils/supabase/client';
 import { API_ENDPOINTS } from '../../services/apiConfig';
 import { supabaseAnonFunctionHeaders } from '@roam/api-client';
-import { requestPasswordReset, rememberRecoverySignInHref } from '@roam/auth-client';
+import { requestPasswordReset, rememberRecoverySignInHref, consumeAdminLoginErrorFlash, ADMIN_INCORRECT_CREDENTIALS } from '@roam/auth-client';
 import { LockoutCountdown } from '../auth/LockoutCountdown';
 
 /**
@@ -19,7 +19,7 @@ export function AdminLoginPage() {
   const [name, setName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [checking, setChecking] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(() => consumeAdminLoginErrorFlash());
   const [success, setSuccess] = useState<string | null>(null);
   const [adminExists, setAdminExists] = useState(true);
   const [lockoutSeconds, setLockoutSeconds] = useState<number | null>(null);
@@ -150,7 +150,13 @@ export function AdminLoginPage() {
         return;
       }
 
-      if (!res.ok) throw new Error(data.error || 'Login failed');
+      if (!res.ok) {
+        throw new Error(
+          res.status === 401 || res.status === 403
+            ? ADMIN_INCORRECT_CREDENTIALS
+            : data.error || ADMIN_INCORRECT_CREDENTIALS,
+        );
+      }
 
       // Set session client-side so AuthContext picks it up
       await supabase.auth.setSession({
@@ -161,7 +167,7 @@ export function AdminLoginPage() {
       // Auth state change will trigger re-render via AuthContext
     } catch (err: any) {
       console.error('Admin login error:', err);
-      setError(err.message || 'Login failed');
+      setError(err.message || ADMIN_INCORRECT_CREDENTIALS);
     } finally {
       setIsLoading(false);
     }

@@ -1,6 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, Outlet, useLocation, Link } from 'react-router-dom';
-import { supabaseDriverAdmin as supabase, hasProductAdminRole, jwtPrimaryRole } from '@roam/auth-client';
+import {
+  supabaseDriverAdmin as supabase,
+  hasProductAdminRole,
+  jwtPrimaryRole,
+  flashAdminLoginError,
+} from '@roam/auth-client';
 import { Session } from '@supabase/supabase-js';
 import {
   LayoutDashboard,
@@ -14,7 +19,6 @@ import {
   X,
   ChevronRight,
   Loader2,
-  ShieldAlert,
   ExternalLink,
   ScrollText,
   Shield,
@@ -211,7 +215,16 @@ export function DriverAdminPortal() {
     return () => subscription.unsubscribe();
   }, []);
 
-  if (loading) {
+  const hasAccess = !!session && hasProductAdminRole(session.user, 'driver');
+
+  // Wrong role: clear admin session and return to login (no Access Denied / redirects)
+  useEffect(() => {
+    if (loading || !session || hasAccess) return;
+    flashAdminLoginError();
+    void supabase.auth.signOut();
+  }, [loading, session, hasAccess]);
+
+  if (loading || (session && !hasAccess)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-950 text-slate-400">
         <Loader2 className="w-8 h-8 animate-spin" />
@@ -221,38 +234,6 @@ export function DriverAdminPortal() {
 
   if (!session) {
     return <DriverAdminLoginForm />;
-  }
-
-  const userRole = jwtPrimaryRole(session.user);
-  const hasAccess = hasProductAdminRole(session.user, 'driver');
-
-  if (!hasAccess) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-950 text-slate-200 p-8">
-        <div className="w-16 h-16 rounded-full bg-red-500/15 flex items-center justify-center mb-4">
-          <ShieldAlert className="w-8 h-8 text-red-400" />
-        </div>
-        <h1 className="text-xl font-semibold mb-2">Access Denied</h1>
-        <p className="text-slate-400 text-center max-w-md mb-2">
-          You don&apos;t have permission to access the Driver Admin Portal.
-        </p>
-        <p className="text-slate-500 text-center text-sm max-w-md mb-6 font-mono">
-          Signed in as: {session.user.email ?? '(unknown)'}
-          <br />
-          Role: {String(userRole || '(none)')}
-          <br />
-          <span className="text-slate-600 text-xs">
-            Admin access requires app_metadata role driver_admin (set in Supabase Dashboard).
-          </span>
-        </p>
-        <a
-          href="/"
-          className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-medium"
-        >
-          Back to App
-        </a>
-      </div>
-    );
   }
 
   return (

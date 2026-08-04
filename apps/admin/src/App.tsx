@@ -1,11 +1,9 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { AuthRecoveryGate } from '@roam/auth-client';
+import { AuthRecoveryGate, flashAdminLoginError } from '@roam/auth-client';
 import { AuthProvider, useAuth } from './components/auth/AuthContext';
 import { AdminLoginPage } from './components/admin/AdminLoginPage';
 import { AdminPortal } from './components/admin/AdminPortal';
-import { isPassengerOnlyMetadataRole } from '@roam/auth-client';
-import { WrongAdminSurfaceGate } from './components/auth/WrongAdminSurfaceGate';
 // Soft path rules shared with apps/admin/middleware.js (Vercel Edge cookie gate).
 import { requiresSessionGate } from './middleware/sessionGate';
 
@@ -26,21 +24,18 @@ function AppContent() {
   const pathNeedsSession =
     typeof window !== 'undefined' && requiresSessionGate(window.location.pathname);
 
-  if (loading) {
+  // Non-platform account: kick back to login with generic error (no wrong-portal redirects)
+  useEffect(() => {
+    if (loading || !user || isPlatformUser) return;
+    flashAdminLoginError();
+    void signOut();
+  }, [loading, user, isPlatformUser, signOut]);
+
+  if (loading || (user && !isPlatformUser)) {
     return (
       <div className="flex items-center justify-center h-screen bg-slate-100 text-slate-600 dark:bg-slate-950 dark:text-slate-400">
         Loading...
       </div>
-    );
-  }
-
-  if (user && !isPlatformUser) {
-    const raw = user.user_metadata?.role as string | undefined;
-    return (
-      <WrongAdminSurfaceGate
-        variant={isPassengerOnlyMetadataRole(raw) ? 'passenger' : 'other'}
-        onSignOut={signOut}
-      />
     );
   }
 

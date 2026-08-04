@@ -5,6 +5,7 @@ import {
   hasProductAdminRole,
   jwtPrimaryRole,
   usePermissions,
+  flashAdminLoginError,
 } from '@roam/auth-client';
 import { Session } from '@supabase/supabase-js';
 import { Loader2 } from 'lucide-react';
@@ -36,6 +37,7 @@ import { CustomersListPage } from './pages/customers/CustomersListPage';
 import { CustomerDetailPage } from './pages/customers/CustomerDetailPage';
 import { FinancePage } from './pages/finance/FinancePage';
 import { ReviewsPage } from './pages/reviews/ReviewsPage';
+import { DashPlayStoreLaunchPage } from './pages/PlayStoreLaunchPage';
 
 export type AdminOutletContext = { session: Session };
 
@@ -72,21 +74,6 @@ function AdminLayoutShell({ session }: { session: Session }) {
   );
 }
 
-function AccessDenied({ role }: { role: string }) {
-  return (
-    <div className="dash-admin-portal min-h-screen flex flex-col items-center justify-center bg-slate-950 text-slate-200 p-8">
-      <h1 className="text-xl font-semibold mb-2 text-white">Access Denied</h1>
-      <p className="text-slate-400 text-center max-w-md mb-6">
-        You don&apos;t have permission to access the Dash Admin Portal. Role:{' '}
-        <span className="font-mono text-amber-300/90">{role || '(none)'}</span>
-      </p>
-      <a href="/" className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg font-medium border border-slate-700">
-        Back to App
-      </a>
-    </div>
-  );
-}
-
 export function DashAdminPortal() {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
@@ -101,7 +88,18 @@ export function DashAdminPortal() {
     return () => subscription.unsubscribe();
   }, []);
 
-  if (loading) {
+  const hasJwtAccess = !!session && hasProductAdminRole(session.user, 'dash');
+  const hasDbAccess = !!session && !permsLoading && hasPermission('dash.portal.access');
+  const accessResolved = !session || hasJwtAccess || !permsLoading;
+  const hasAccess = hasJwtAccess || hasDbAccess;
+
+  useEffect(() => {
+    if (loading || !session || !accessResolved || hasAccess) return;
+    flashAdminLoginError();
+    void supabase.auth.signOut();
+  }, [loading, session, accessResolved, hasAccess]);
+
+  if (loading || (session && !hasAccess)) {
     return (
       <div className="dash-admin-portal min-h-screen flex items-center justify-center bg-slate-950">
         <Loader2 className="w-8 h-8 animate-spin text-amber-400" />
@@ -115,23 +113,6 @@ export function DashAdminPortal() {
         <Toaster position="top-right" theme="dark" />
         <AdminLoginForm />
       </>
-    );
-  }
-
-  const userRole = jwtPrimaryRole(session.user);
-  const hasJwtAccess = hasProductAdminRole(session.user, 'dash');
-  const hasDbAccess = hasPermission('dash.portal.access');
-  const hasAccess = hasJwtAccess || (!permsLoading && hasDbAccess);
-
-  if (!hasAccess && !permsLoading) {
-    return <AccessDenied role={userRole || ''} />;
-  }
-
-  if (permsLoading && !hasJwtAccess) {
-    return (
-      <div className="dash-admin-portal min-h-screen flex items-center justify-center bg-slate-950">
-        <Loader2 className="w-8 h-8 animate-spin text-amber-400" />
-      </div>
     );
   }
 
@@ -159,6 +140,7 @@ export function DashAdminPortal() {
             <Route path="finance" element={<FinancePage />} />
             <Route path="reviews" element={<ReviewsPage />} />
             <Route path="support" element={<SupportToolsPage />} />
+            <Route path="play-store" element={<DashPlayStoreLaunchPage />} />
             <Route path="settings" element={<PlatformSettingsPage session={session} />} />
           </Route>
         </Routes>

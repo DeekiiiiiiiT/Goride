@@ -1,5 +1,11 @@
 import React, { useState } from 'react';
-import { supabaseDriverAdmin as supabase, useForgotPassword } from '@roam/auth-client';
+import {
+  supabaseDriverAdmin as supabase,
+  useForgotPassword,
+  hasProductAdminRole,
+  ADMIN_INCORRECT_CREDENTIALS,
+  consumeAdminLoginErrorFlash,
+} from '@roam/auth-client';
 import { Loader2, AlertCircle, KeyRound, Car } from 'lucide-react';
 import '../../../../../packages/admin-core/src/styles/rides-admin-login.css';
 
@@ -7,7 +13,7 @@ export function DriverAdminLoginForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(() => consumeAdminLoginErrorFlash());
   const {
     forgotMode,
     setForgotMode,
@@ -29,10 +35,17 @@ export function DriverAdminLoginForm() {
     setLoading(true);
     setError(null);
     try {
-      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
-      if (signInError) throw signInError;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Sign in failed');
+      const { data, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+      if (signInError || !data.session) {
+        setError(ADMIN_INCORRECT_CREDENTIALS);
+        return;
+      }
+      if (!hasProductAdminRole(data.session.user, 'driver')) {
+        await supabase.auth.signOut();
+        setError(ADMIN_INCORRECT_CREDENTIALS);
+      }
+    } catch {
+      setError(ADMIN_INCORRECT_CREDENTIALS);
     } finally {
       setLoading(false);
     }
@@ -150,9 +163,6 @@ export function DriverAdminLoginForm() {
                 </a>
                 .
               </p>
-              <a href="/" className="rides-admin-login__back">
-                Back to Driver App
-              </a>
             </div>
           </div>
         </div>

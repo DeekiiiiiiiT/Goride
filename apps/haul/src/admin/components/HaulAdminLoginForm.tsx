@@ -1,5 +1,10 @@
 import React, { useState } from 'react';
-import { supabaseHaulAdmin as supabase, useForgotPassword } from '@roam/auth-client';
+import {
+  supabaseHaulAdmin as supabase,
+  useForgotPassword,
+  ADMIN_INCORRECT_CREDENTIALS,
+  consumeAdminLoginErrorFlash,
+} from '@roam/auth-client';
 import { Loader2, AlertCircle, KeyRound, Truck } from 'lucide-react';
 import '../../../../../packages/admin-core/src/styles/rides-admin-login.css';
 
@@ -7,7 +12,7 @@ export function HaulAdminLoginForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(() => consumeAdminLoginErrorFlash());
   const {
     forgotMode,
     setForgotMode,
@@ -29,10 +34,13 @@ export function HaulAdminLoginForm() {
     setLoading(true);
     setError(null);
     try {
-      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
-      if (signInError) throw signInError;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Sign in failed');
+      const { data, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+      if (signInError || !data.session) {
+        setError(ADMIN_INCORRECT_CREDENTIALS);
+        return;
+      }
+    } catch {
+      setError(ADMIN_INCORRECT_CREDENTIALS);
     } finally {
       setLoading(false);
     }

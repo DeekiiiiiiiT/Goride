@@ -1,29 +1,29 @@
 import React, { useState } from 'react';
 import { supabaseDashAdmin as supabase } from '@roam/auth-client';
 import type { AuthRecoverySurface } from '@roam/auth-client';
-import { useForgotPassword } from '@roam/auth-client';
+import {
+  useForgotPassword,
+  ADMIN_INCORRECT_CREDENTIALS,
+  consumeAdminLoginErrorFlash,
+} from '@roam/auth-client';
 import { Loader2, AlertCircle, KeyRound, Utensils } from 'lucide-react';
 import '../../../../../packages/admin-core/src/styles/admin-login.css';
 
 interface AdminLoginFormProps {
   productName?: string;
   productSubtitle?: string;
-  backHref?: string;
-  backLabel?: string;
   recoverySurface?: AuthRecoverySurface;
 }
 
 export function AdminLoginForm({
   productName = 'Roam Dash',
   productSubtitle = 'Admin Portal',
-  backHref = '/',
-  backLabel = 'Back to Roam Dash',
   recoverySurface = 'dash',
 }: AdminLoginFormProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(() => consumeAdminLoginErrorFlash());
   const {
     forgotMode,
     setForgotMode,
@@ -45,10 +45,14 @@ export function AdminLoginForm({
     setLoading(true);
     setError(null);
     try {
-      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
-      if (signInError) throw signInError;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Sign in failed');
+      const { data, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+      if (signInError || !data.session) {
+        setError(ADMIN_INCORRECT_CREDENTIALS);
+        return;
+      }
+      // Non-admins cleared by DashAdminPortal (supports DB-permission team access)
+    } catch {
+      setError(ADMIN_INCORRECT_CREDENTIALS);
     } finally {
       setLoading(false);
     }
@@ -186,9 +190,6 @@ export function AdminLoginForm({
                 </a>
                 .
               </p>
-              <a href={backHref} className="dash-admin-login__back">
-                {backLabel}
-              </a>
             </div>
           </div>
         </div>

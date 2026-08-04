@@ -12,6 +12,8 @@ import {
   hasProductAdminRole,
   jwtPrimaryRole,
   supabaseEnterpriseAdmin,
+  ADMIN_INCORRECT_CREDENTIALS,
+  flashAdminLoginError,
 } from '@roam/auth-client';
 
 type AdminAuthContextValue = {
@@ -24,8 +26,6 @@ type AdminAuthContextValue = {
 };
 
 const AdminAuthContext = createContext<AdminAuthContextValue | null>(null);
-
-const GENERIC_AUTH_ERROR = 'Invalid email or password';
 
 export function AdminAuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
@@ -52,6 +52,7 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
         const { data } = await supabaseEnterpriseAdmin.auth.getSession();
         if (!mounted) return;
         if (data.session?.user && !hasProductAdminRole(data.session.user, 'enterprise')) {
+          flashAdminLoginError();
           await supabaseEnterpriseAdmin.auth.signOut();
           applySession(null);
         } else {
@@ -64,6 +65,7 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
 
     const { data: sub } = supabaseEnterpriseAdmin.auth.onAuthStateChange((_event, next) => {
       if (next?.user && !hasProductAdminRole(next.user, 'enterprise')) {
+        flashAdminLoginError();
         void supabaseEnterpriseAdmin.auth.signOut();
         applySession(null);
       } else {
@@ -84,11 +86,11 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
       password,
     });
     if (error || !data.session?.user) {
-      return { error: GENERIC_AUTH_ERROR };
+      return { error: ADMIN_INCORRECT_CREDENTIALS };
     }
     if (!hasProductAdminRole(data.session.user, 'enterprise')) {
       await supabaseEnterpriseAdmin.auth.signOut();
-      return { error: GENERIC_AUTH_ERROR };
+      return { error: ADMIN_INCORRECT_CREDENTIALS };
     }
     applySession(data.session);
     return { error: null };

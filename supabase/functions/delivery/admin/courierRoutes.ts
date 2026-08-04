@@ -30,6 +30,7 @@ import {
   generateRecoveryLink,
   recoveryRedirectForProduct,
 } from "../../_shared/authRecoveryRedirects.ts";
+import { registerDashPlayStoreLaunchRoutes } from "./playStoreLaunchShared.ts";
 
 const ONLINE_STALE_MS = 5 * 60 * 1000;
 
@@ -925,6 +926,14 @@ export function registerCourierAdminRoutes(app: Hono) {
   });
 
   admin.route("/couriers", couriers);
+
+  registerDashPlayStoreLaunchRoutes(admin, {
+    basePath: "/courier-play-store",
+    launchTable: "dash_courier_play_store_launch",
+    releasesTable: "dash_courier_play_store_releases",
+    writeRoles: new Set(["courier_admin", "platform_owner", "superadmin"]),
+    forbiddenMessage: "courier_admin role required",
+  });
 
   app.route("/admin", admin);
 }
