@@ -522,7 +522,7 @@ function IntegrationsPanel() {
                   </code>
                 </li>
                 <li>
-                  Confirm Vehicles scopes include{' '}
+                  Confirm Vehicles / Supplier Platform scopes include reports + metrics + payments (not just vehicle read). RoamFleet period imports need{" "}
                   {UBER_FLEET_PORTAL.phase1Scopes.map((s) => (
                     <Badge key={s} variant="secondary" className="text-[10px] h-5 mr-1">
                       {s}

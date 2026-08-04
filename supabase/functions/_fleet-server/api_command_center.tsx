@@ -303,7 +303,7 @@ async function validateProviderKey(provider: Provider, key: string): Promise<{ o
       body.append(
         "scope",
         Deno.env.get("UBER_FLEET_SCOPES") ||
-          "vehicle_suppliers.vehicles.read vehicle_suppliers.vehicles.assignment",
+          "vehicle_suppliers.vehicles.read vehicle_suppliers.vehicles.assignment vehicle_suppliers.organizations.read solutions.suppliers.reports solutions.suppliers.metrics.read supplier.partner.payments",
       );
       const r = await fetch("https://auth.uber.com/oauth/v2/token", {
         method: "POST",

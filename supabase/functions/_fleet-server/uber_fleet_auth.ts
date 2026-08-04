@@ -9,9 +9,15 @@ export const UBER_META_KV_KEY = "integration:uber";
 export const UBER_TOKEN_URL = "https://auth.uber.com/oauth/v2/token";
 export const UBER_API_BASE = "https://api.uber.com";
 
-/** Phase-1 org scopes (Vehicles search / assignment). Override via UBER_FLEET_SCOPES. */
-export const DEFAULT_FLEET_SCOPES =
-  "vehicle_suppliers.vehicles.read vehicle_suppliers.vehicles.assignment";
+/** Full org scopes: vehicle ops + period reports + metrics + payments (CSV replacement). Override via UBER_FLEET_SCOPES. */
+export const DEFAULT_FLEET_SCOPES = [
+  "vehicle_suppliers.vehicles.read",
+  "vehicle_suppliers.vehicles.assignment",
+  "vehicle_suppliers.organizations.read",
+  "solutions.suppliers.reports",
+  "solutions.suppliers.metrics.read",
+  "supplier.partner.payments",
+].join(" ");
 
 export type UberTokenStore = {
   access_token: string;
