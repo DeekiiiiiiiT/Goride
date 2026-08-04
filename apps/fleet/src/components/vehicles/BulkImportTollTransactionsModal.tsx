@@ -645,13 +645,25 @@ function BulkImportTollTransactionsModalInner({
                  }
              }
 
-             // Data Center card mode wins for header CSVs (except refunds)
-             if (mode === 'usage' && type !== 'Refund') {
-                 type = 'Usage';
-                 if (amount > 0) amount = -amount;
-             } else if (mode === 'topup') {
+             // Card mode only nudges ambiguous rows. Never override a clearly
+             // detected top-up file (TransJam provider) or statement credits —
+             // uploading a Top Up CSV via the Usage card previously rewrote
+             // +$3000 "Balance Top-up" into Usage / -$3000.
+             const formatLocksType =
+                 detectedFormat === 'topup-provider' ||
+                 (detectedFormat === 'tag-statement' && type === 'Top-up');
+             if (!formatLocksType) {
+                 if (mode === 'usage' && type !== 'Refund') {
+                     type = 'Usage';
+                     if (amount > 0) amount = -amount;
+                 } else if (mode === 'topup') {
+                     type = 'Top-up';
+                     if (amount < 0) amount = Math.abs(amount);
+                 }
+             } else if (detectedFormat === 'topup-provider') {
                  type = 'Top-up';
                  if (amount < 0) amount = Math.abs(amount);
+                 if (!category) category = 'Toll Top-up';
              }
 
              // Phase 5: Vehicle Matching

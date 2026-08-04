@@ -216,9 +216,17 @@ const TOLL_PLAZA_COLUMNS: DeletePreviewColumn[] = [
 
 const TOLL_TXN_COLUMNS: DeletePreviewColumn[] = [
   { key: 'date', label: 'Date', render: (val: any) => val ? new Date(val).toLocaleDateString() : '—' },
+  { key: 'type', label: 'Type', render: (v: any) => {
+    const t = String(v || '').toLowerCase().replace(/_/g, '-');
+    if (t === 'top-up' || t === 'topup') return 'Top-up';
+    if (t === 'usage') return 'Usage';
+    if (t === 'refund') return 'Refund';
+    return v || '—';
+  }},
   { key: 'amount', label: 'Amount', render: (v: any) => v != null ? `$${Number(v).toFixed(2)}` : '—' },
   { key: 'description', label: 'Description', render: (v: any) => v || '—' },
   { key: 'driverName', label: 'Driver', render: (v: any) => v || '—' },
+  { key: 'batchName', label: 'Import file', render: (v: any) => v || '—' },
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -439,20 +447,37 @@ async function fetchTollPlazas(_config: DeleteConfig) {
 }
 
 async function fetchTollTransactions(config: DeleteConfig) {
-  // Toll transactions share the `transaction:` prefix; filter by toll-related categories
+  // Phase-6 SSOT: CSV imports and live tolls live in toll_ledger:*, not transaction:*
   const { items } = await api.bulkDeletePreview({
-    prefix: 'transaction:',
+    prefix: 'toll_ledger:',
     startDate: config.isAllTime ? '1970-01-01' : config.startDate,
     endDate: config.isAllTime ? '2100-01-01' : config.endDate,
     dateField: 'date',
     driverId: config.driverId && config.driverId !== '__all__' ? config.driverId : undefined,
-    fields: ['id', 'date', 'amount', 'description', 'driverName', 'category'],
+    fields: ['id', 'date', 'amount', 'description', 'location', 'plaza', 'driverName', 'type', 'batchName', 'vehiclePlate'],
   });
-  // Client-side filter for toll-related categories
-  return items.filter((item: any) => {
-    const cat = (item.category || '').toLowerCase();
-    return cat.includes('toll') || cat.includes('top-up') || cat.includes('topup');
-  });
+  return items.map((item: any) => ({
+    ...item,
+    description: item.description || item.location || item.plaza || '—',
+    type: item.type || 'usage',
+  }));
+}
+
+async function tollTxnDeleteItems(keys: string[]): Promise<number> {
+  // Mirror trip delete: remove KV keys, then clean canonical ledger rows linked to those ids
+  const result = await api.bulkDeleteExecute({ keys, cleanupStorage: true });
+  const tollIds = keys.map((k) => k.replace(/^toll_ledger:/, '')).filter(Boolean);
+  const CHUNK = 80;
+  try {
+    for (let i = 0; i < tollIds.length; i += CHUNK) {
+      const chunk = tollIds.slice(i, i + CHUNK);
+      // deleteTollLedgerEntry uses sourceType "transaction" for these ledger rows
+      await api.deleteLedgerBySource({ sourceType: 'transaction', sourceIds: chunk });
+    }
+  } catch (ledgerErr) {
+    console.warn('[TollTxnDelete] Ledger cleanup failed (non-fatal):', ledgerErr);
+  }
+  return result.deletedCount;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -713,14 +738,10 @@ export function DeleteCenter() {
     bulkCount('odometer', 'odometer_reading:');
     bulkCount('checkins', 'checkin:');
 
-    // Toll transactions: count transaction: items that are toll-category
+    // Toll transactions: toll_ledger:* is the Phase-6 SSOT (CSV imports + live tolls)
     safeCount('tollTransactions', async () => {
-      const { items } = await api.bulkDeletePreview({ prefix: 'transaction:', fields: ['id', 'category'] });
-      const tollItems = items.filter((item: any) => {
-        const cat = (item.category || '').toLowerCase();
-        return cat.includes('toll') || cat.includes('top-up') || cat.includes('topup');
-      });
-      return { total: tollItems.length };
+      const { totalCount } = await api.bulkDeletePreview({ prefix: 'toll_ledger:', fields: ['id'] });
+      return { total: totalCount ?? 0 };
     });
 
     return () => { cancelled = true; };
@@ -731,7 +752,7 @@ export function DeleteCenter() {
     const refetch = async () => {
       try {
         const [tripStats, drivers, vehicles, driverMetrics, vehicleMetrics, stations, transactions, tollTags, tollPlazas, claims,
-          fuelResult, fuelCardsResult, learntResult, serviceResult, odoResult, checkinResult] = await Promise.all([
+          fuelResult, fuelCardsResult, learntResult, serviceResult, odoResult, checkinResult, tollTxnResult] = await Promise.all([
           api.getTripStats({}).catch(() => null),
           api.getDrivers().catch(() => null),
           api.getVehicles().catch(() => null),
@@ -748,6 +769,7 @@ export function DeleteCenter() {
           api.bulkDeletePreview({ prefix: 'maintenance_log:', fields: ['id'] }).catch(() => null),
           api.bulkDeletePreview({ prefix: 'odometer_reading:', fields: ['id'] }).catch(() => null),
           api.bulkDeletePreview({ prefix: 'checkin:', fields: ['id'] }).catch(() => null),
+          api.bulkDeletePreview({ prefix: 'toll_ledger:', fields: ['id'] }).catch(() => null),
         ]);
         setCounts(prev => ({
           ...prev,
@@ -760,6 +782,7 @@ export function DeleteCenter() {
           transactions: Array.isArray(transactions) ? transactions.length : prev.transactions,
           tollTags: Array.isArray(tollTags) ? tollTags.length : prev.tollTags,
           tollPlazas: Array.isArray(tollPlazas) ? tollPlazas.length : prev.tollPlazas,
+          tollTransactions: tollTxnResult ? tollTxnResult.totalCount : prev.tollTransactions,
           claims: Array.isArray(claims) ? claims.length : prev.claims,
           fuel: fuelResult ? fuelResult.totalCount : prev.fuel,
           fuelCards: fuelCardsResult ? fuelCardsResult.totalCount : prev.fuelCards,
@@ -1727,9 +1750,9 @@ export function DeleteCenter() {
         configNote="Deleting toll plazas removes the GPS coordinate database used for automatic toll detection." />
 
       <DeleteFlowModal isOpen={activeModal === 'deleteTollTransactions'} onClose={() => setActiveModal(null)} onSuccess={handleDeleteSuccess}
-        title="Delete Toll Transactions" entityLabel="toll transactions" fetchItems={fetchTollTransactions} deleteItems={financialTxnDeleteItems}
+        title="Delete Toll Transactions" entityLabel="toll transactions" fetchItems={fetchTollTransactions} deleteItems={tollTxnDeleteItems}
         columns={TOLL_TXN_COLUMNS} showDateFilter showDriverFilter dangerThreshold={100}
-        configNote="Only transactions with toll-related categories (Toll Usage, Tolls, Top-Up) will be shown." />
+        configNote="Shows live toll ledger rows (usage, top-ups, refunds) — the same data Toll Logs uses. Filter by date, then uncheck anything you want to keep." />
 
       {/* ═══════════════════════════════════════════════════════════════════ */}
       {/* DELETE FLOW MODALS — Finance & Assets (Phase 6)                   */}
