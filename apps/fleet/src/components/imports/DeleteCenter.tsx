@@ -447,31 +447,75 @@ async function fetchTollPlazas(_config: DeleteConfig) {
 }
 
 async function fetchTollTransactions(config: DeleteConfig) {
-  // Phase-6 SSOT: CSV imports and live tolls live in toll_ledger:*, not transaction:*
-  const { items } = await api.bulkDeletePreview({
-    prefix: 'toll_ledger:',
-    startDate: config.isAllTime ? '1970-01-01' : config.startDate,
-    endDate: config.isAllTime ? '2100-01-01' : config.endDate,
-    dateField: 'date',
-    driverId: config.driverId && config.driverId !== '__all__' ? config.driverId : undefined,
-    fields: ['id', 'date', 'amount', 'description', 'location', 'plaza', 'driverName', 'type', 'batchName', 'vehiclePlate'],
-  });
-  return items.map((item: any) => ({
+  // Toll Logs merges toll_ledger:* (SSOT) + leftover legacy transaction:* tolls.
+  // Delete Center must use the same sources or date filters look "empty" while
+  // the old card count (legacy only) still shows hundreds of rows.
+  const startDate = config.isAllTime ? '1970-01-01' : config.startDate;
+  const endDate = config.isAllTime ? '2100-01-01' : config.endDate;
+  const driverId = config.driverId && config.driverId !== '__all__' ? config.driverId : undefined;
+
+  const [ledgerRes, legacyRes] = await Promise.all([
+    api.bulkDeletePreview({
+      prefix: 'toll_ledger:',
+      startDate,
+      endDate,
+      dateField: 'date',
+      driverId,
+      fields: ['id', 'date', 'amount', 'description', 'location', 'plaza', 'driverName', 'type', 'batchName', 'vehiclePlate'],
+    }),
+    api.bulkDeletePreview({
+      prefix: 'transaction:',
+      startDate,
+      endDate,
+      dateField: 'date',
+      driverId,
+      fields: ['id', 'date', 'amount', 'description', 'driverName', 'category', 'batchName', 'type'],
+    }),
+  ]);
+
+  const ledgerItems = (ledgerRes.items || []).map((item: any) => ({
     ...item,
     description: item.description || item.location || item.plaza || '—',
     type: item.type || 'usage',
+    _source: 'toll_ledger' as const,
   }));
+
+  const ledgerIds = new Set(ledgerItems.map((i: any) => i.id).filter(Boolean));
+
+  const legacyItems = (legacyRes.items || [])
+    .filter((item: any) => {
+      const cat = (item.category || '').toLowerCase();
+      return cat.includes('toll') || cat.includes('top-up') || cat.includes('topup');
+    })
+    // Prefer ledger row when both exist (post-migration duplicate)
+    .filter((item: any) => item.id && !ledgerIds.has(item.id))
+    .map((item: any) => ({
+      ...item,
+      type: item.type || item.category || 'usage',
+      _source: 'transaction' as const,
+    }));
+
+  // Client-side date clamp — belt-and-suspenders if PostgREST JSON date ops miss a row
+  const inRange = (item: any) => {
+    if (config.isAllTime || !startDate || !endDate) return true;
+    const d = String(item.date || '').slice(0, 10);
+    if (!d) return false;
+    return d >= startDate && d <= endDate;
+  };
+
+  return [...ledgerItems, ...legacyItems].filter(inRange);
 }
 
 async function tollTxnDeleteItems(keys: string[]): Promise<number> {
-  // Mirror trip delete: remove KV keys, then clean canonical ledger rows linked to those ids
+  // Mix of toll_ledger:* and transaction:* keys from the merged preview
   const result = await api.bulkDeleteExecute({ keys, cleanupStorage: true });
-  const tollIds = keys.map((k) => k.replace(/^toll_ledger:/, '')).filter(Boolean);
+  const tollIds = keys
+    .map((k) => k.replace(/^toll_ledger:/, '').replace(/^transaction:/, ''))
+    .filter(Boolean);
   const CHUNK = 80;
   try {
     for (let i = 0; i < tollIds.length; i += CHUNK) {
       const chunk = tollIds.slice(i, i + CHUNK);
-      // deleteTollLedgerEntry uses sourceType "transaction" for these ledger rows
       await api.deleteLedgerBySource({ sourceType: 'transaction', sourceIds: chunk });
     }
   } catch (ledgerErr) {
@@ -738,10 +782,19 @@ export function DeleteCenter() {
     bulkCount('odometer', 'odometer_reading:');
     bulkCount('checkins', 'checkin:');
 
-    // Toll transactions: toll_ledger:* is the Phase-6 SSOT (CSV imports + live tolls)
+    // Toll transactions: live ledger + leftover legacy tolls (same universe as Toll Logs)
     safeCount('tollTransactions', async () => {
-      const { totalCount } = await api.bulkDeletePreview({ prefix: 'toll_ledger:', fields: ['id'] });
-      return { total: totalCount ?? 0 };
+      const [ledger, legacy] = await Promise.all([
+        api.bulkDeletePreview({ prefix: 'toll_ledger:', fields: ['id'] }),
+        api.bulkDeletePreview({ prefix: 'transaction:', fields: ['id', 'category'] }),
+      ]);
+      const ledgerIds = new Set((ledger.items || []).map((i: any) => i.id).filter(Boolean));
+      const legacyToll = (legacy.items || []).filter((item: any) => {
+        const cat = (item.category || '').toLowerCase();
+        const isToll = cat.includes('toll') || cat.includes('top-up') || cat.includes('topup');
+        return isToll && item.id && !ledgerIds.has(item.id);
+      });
+      return { total: ledgerIds.size + legacyToll.length };
     });
 
     return () => { cancelled = true; };
@@ -752,7 +805,7 @@ export function DeleteCenter() {
     const refetch = async () => {
       try {
         const [tripStats, drivers, vehicles, driverMetrics, vehicleMetrics, stations, transactions, tollTags, tollPlazas, claims,
-          fuelResult, fuelCardsResult, learntResult, serviceResult, odoResult, checkinResult, tollTxnResult] = await Promise.all([
+          fuelResult, fuelCardsResult, learntResult, serviceResult, odoResult, checkinResult, tollLedgerResult, tollLegacyResult] = await Promise.all([
           api.getTripStats({}).catch(() => null),
           api.getDrivers().catch(() => null),
           api.getVehicles().catch(() => null),
@@ -770,7 +823,14 @@ export function DeleteCenter() {
           api.bulkDeletePreview({ prefix: 'odometer_reading:', fields: ['id'] }).catch(() => null),
           api.bulkDeletePreview({ prefix: 'checkin:', fields: ['id'] }).catch(() => null),
           api.bulkDeletePreview({ prefix: 'toll_ledger:', fields: ['id'] }).catch(() => null),
+          api.bulkDeletePreview({ prefix: 'transaction:', fields: ['id', 'category'] }).catch(() => null),
         ]);
+        const ledgerIds = new Set((tollLedgerResult?.items || []).map((i: any) => i.id).filter(Boolean));
+        const legacyOnly = (tollLegacyResult?.items || []).filter((item: any) => {
+          const cat = (item.category || '').toLowerCase();
+          const isToll = cat.includes('toll') || cat.includes('top-up') || cat.includes('topup');
+          return isToll && item.id && !ledgerIds.has(item.id);
+        });
         setCounts(prev => ({
           ...prev,
           trips: tripStats ? (tripStats.totalTrips ?? tripStats.total ?? prev.trips) : prev.trips,
@@ -782,7 +842,9 @@ export function DeleteCenter() {
           transactions: Array.isArray(transactions) ? transactions.length : prev.transactions,
           tollTags: Array.isArray(tollTags) ? tollTags.length : prev.tollTags,
           tollPlazas: Array.isArray(tollPlazas) ? tollPlazas.length : prev.tollPlazas,
-          tollTransactions: tollTxnResult ? tollTxnResult.totalCount : prev.tollTransactions,
+          tollTransactions: tollLedgerResult || tollLegacyResult
+            ? ledgerIds.size + legacyOnly.length
+            : prev.tollTransactions,
           claims: Array.isArray(claims) ? claims.length : prev.claims,
           fuel: fuelResult ? fuelResult.totalCount : prev.fuel,
           fuelCards: fuelCardsResult ? fuelCardsResult.totalCount : prev.fuelCards,
@@ -1752,7 +1814,7 @@ export function DeleteCenter() {
       <DeleteFlowModal isOpen={activeModal === 'deleteTollTransactions'} onClose={() => setActiveModal(null)} onSuccess={handleDeleteSuccess}
         title="Delete Toll Transactions" entityLabel="toll transactions" fetchItems={fetchTollTransactions} deleteItems={tollTxnDeleteItems}
         columns={TOLL_TXN_COLUMNS} showDateFilter showDriverFilter dangerThreshold={100}
-        configNote="Shows live toll ledger rows (usage, top-ups, refunds) — the same data Toll Logs uses. Filter by date, then uncheck anything you want to keep." />
+        configNote="Lists the same toll data as Toll Logs (live toll ledger + any leftover legacy toll rows). Filter by date, uncheck what to keep, then delete." />
 
       {/* ═══════════════════════════════════════════════════════════════════ */}
       {/* DELETE FLOW MODALS — Finance & Assets (Phase 6)                   */}
