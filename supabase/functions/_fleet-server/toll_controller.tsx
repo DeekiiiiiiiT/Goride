@@ -3541,7 +3541,7 @@ function transactionToTollLedgerServer(tx: any): TollLedgerRecord {
     sourceFile: tx.metadata?.sourceFile || null,
 
     receiptUrl: tx.receiptUrl || null,
-    referenceNumber: tx.referenceNumber || null,
+    referenceNumber: tx.referenceNumber || tx.metadata?.referenceNumber || null,
     description: tx.description || null,
     notes: tx.notes || null,
 

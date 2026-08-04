@@ -22,6 +22,101 @@ function wallClockStorageFromDate(d: Date): { date: string; time: string } {
   };
 }
 
+/** Strip Excel/CSV noise from Tag IDs (leading tabs, BOM, spaces). */
+function normalizeCsvTagId(id: string): string {
+  return (id || '').replace(/^\uFEFF/, '').replace(/\t/g, '').trim();
+}
+
+/** Calendar YYYY-MM-DD from ledger/parsed values without UTC day-shift. */
+function calendarDateKey(dateVal: Date | string | undefined | null): string | null {
+  if (!dateVal) return null;
+  if (typeof dateVal === 'string') {
+    const m = dateVal.trim().match(/^(\d{4}-\d{2}-\d{2})/);
+    if (m) return m[1];
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return null;
+    return wallClockStorageFromDate(d).date;
+  }
+  if (isNaN(dateVal.getTime())) return null;
+  return wallClockStorageFromDate(dateVal).date;
+}
+
+/**
+ * Jamaica TransJam dates are DD/MM/YYYY. Prefer that for numeric slash dates
+ * before trusting Date() (which treats ambiguous values as US MM/DD).
+ */
+function parseCsvDateTime(dateStr: string): Date | null {
+  const trimmed = (dateStr || '').trim();
+  if (!trimmed) return null;
+
+  // DD-Mon-YY (e.g. "24-Dec-25 11:26 am")
+  const monMatch = trimmed.match(/^(\d{1,2})[\-\/]([A-Za-z]{3})[\-\/](\d{2,4})\s*(.*)?$/);
+  if (monMatch) {
+    const [, dayStr, monStr, yearStr, timePart] = monMatch;
+    const months: Record<string, number> = {
+      jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
+      jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11,
+    };
+    const mon = months[monStr.toLowerCase()];
+    if (mon !== undefined) {
+      let year = parseInt(yearStr, 10);
+      if (year < 100) year += 2000;
+      const d = new Date(year, mon, parseInt(dayStr, 10));
+      if (timePart && !isNaN(d.getTime())) {
+        const timeMatch = timePart.trim().match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(am|pm)?$/i);
+        if (timeMatch) {
+          let hours = parseInt(timeMatch[1], 10);
+          const mins = parseInt(timeMatch[2], 10);
+          const secs = timeMatch[3] ? parseInt(timeMatch[3], 10) : 0;
+          const ampm = (timeMatch[4] || '').toLowerCase();
+          if (ampm === 'pm' && hours < 12) hours += 12;
+          if (ampm === 'am' && hours === 12) hours = 0;
+          d.setHours(hours, mins, secs, 0);
+        }
+      }
+      if (!isNaN(d.getTime())) return d;
+    }
+  }
+
+  // Numeric D/M/YYYY or DD/MM/YYYY (Jamaica) — run BEFORE Date() to avoid MM/DD misreads
+  const dmyMatch = trimmed.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})\s*(.*)?$/);
+  if (dmyMatch) {
+    const [, dayOrMonth, monthOrDay, year, timePart] = dmyMatch;
+    const num1 = parseInt(dayOrMonth, 10);
+    const num2 = parseInt(monthOrDay, 10);
+    let day: number;
+    let month: number;
+    if (num1 > 12) {
+      day = num1;
+      month = num2;
+    } else if (num2 > 12) {
+      day = num2;
+      month = num1;
+    } else {
+      // Ambiguous — Jamaica / TransJam default DD/MM/YYYY
+      day = num1;
+      month = num2;
+    }
+    const d = new Date(parseInt(year, 10), month - 1, day);
+    if (timePart && !isNaN(d.getTime())) {
+      const timeMatch = timePart.trim().match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(am|pm)?$/i);
+      if (timeMatch) {
+        let hours = parseInt(timeMatch[1], 10);
+        const mins = parseInt(timeMatch[2], 10);
+        const secs = timeMatch[3] ? parseInt(timeMatch[3], 10) : 0;
+        const ampm = (timeMatch[4] || '').toLowerCase();
+        if (ampm === 'pm' && hours < 12) hours += 12;
+        if (ampm === 'am' && hours === 12) hours = 0;
+        d.setHours(hours, mins, secs, 0);
+      }
+    }
+    if (!isNaN(d.getTime())) return d;
+  }
+
+  const fallback = new Date(trimmed);
+  return isNaN(fallback.getTime()) ? null : fallback;
+}
+
 interface BulkImportTollTransactionsModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -137,21 +232,23 @@ function BulkImportTollTransactionsModalInner({
       let error = '';
 
       // 1. Tag ID Match (Highest Priority)
-      if (tagId) {
-          // Normalize tag IDs: trim whitespace, strip leading zeros for comparison
-          const normalizeTagId = (id: string) => id.trim().replace(/^0+/, '');
-          const normalizedInput = normalizeTagId(tagId);
+      const cleanedTagId = normalizeCsvTagId(tagId || '');
+      if (cleanedTagId) {
+          // Normalize tag IDs: trim whitespace/tabs, strip leading zeros for comparison
+          const normalizeTagId = (id: string) => normalizeCsvTagId(id).replace(/^0+/, '');
+          const normalizedInput = normalizeTagId(cleanedTagId);
           const tag = tollTags.find((t: any) => {
               if (!t.tagNumber) return false;
               // Try exact match first, then normalized match
-              return t.tagNumber === tagId || normalizeTagId(t.tagNumber) === normalizedInput;
+              return normalizeCsvTagId(t.tagNumber) === cleanedTagId
+                  || normalizeTagId(t.tagNumber) === normalizedInput;
           });
           if (tag) {
               if (tag.assignedVehicleId) {
                   matchedVehicleId = tag.assignedVehicleId;
                   matchedVehicleName = tag.assignedVehicleName;
               } else {
-                  error = `Tag ${tagId} is unassigned`;
+                  error = `Tag ${cleanedTagId} is unassigned`;
               }
           } else {
               // Only error if we strictly expect a tag (i.e. not a cash transaction)
@@ -159,7 +256,7 @@ function BulkImportTollTransactionsModalInner({
               // but usually Cash won't have Tag ID. If it DOES have Tag ID and it's invalid, maybe still error?
               // Let's rely on Plate match if Tag fails for Cash.
               if (paymentMethod !== 'Cash') {
-                  error = `Tag ${tagId} not found in system`;
+                  error = `Tag ${cleanedTagId} not found in system`;
               }
           }
       } else if (!matchedVehicleId && !plate && !driverName) {
@@ -178,7 +275,7 @@ function BulkImportTollTransactionsModalInner({
               matchedVehicleId = vehicle.id;
               matchedVehicleName = `${vehicle.year} ${vehicle.make} ${vehicle.model} (${vehicle.licensePlate})`;
               error = ''; // Clear error if Plate matched
-          } else if (!tagId) {
+          } else if (!cleanedTagId) {
                // Only error on plate if we didn't have a tag to blame
                error = `Vehicle Plate ${plate} not found`;
           }
@@ -203,7 +300,7 @@ function BulkImportTollTransactionsModalInner({
                    matchedVehicleName = `${vehicle.year} ${vehicle.make} ${vehicle.model} (${vehicle.licensePlate})`;
                    error = '';
                }
-           } else if (!tagId && !plate) {
+           } else if (!cleanedTagId && !plate) {
                error = `Driver ${driverName} not found`;
            }
       }
@@ -223,13 +320,15 @@ function BulkImportTollTransactionsModalInner({
       return { matchedVehicleId, matchedVehicleName, matchedDriverId, matchedDriverName, error };
   };
 
-  // Helper: parse a row in "tag-statement" format (Tag ID, Plaza Name, Plaza Lane ID, Date & Time, Topup Amount)
+  // Helper: parse a row in "tag-statement" / TransJam usage format
+  // Tag ID, Plaza Name, Plaza Lane ID, Date & Time, Amount|Topup Amount
   const parseTagStatementRow = (parts: string[], getCol: (row: string[], ...names: string[]) => string) => {
-      const tagId = getCol(parts, 'tag id');
+      const tagId = normalizeCsvTagId(getCol(parts, 'tag id'));
       const location = getCol(parts, 'plaza name');
       const laneId = getCol(parts, 'plaza lane id');
       const dateStr = getCol(parts, 'date & time');
-      const amountStr = getCol(parts, 'topup amount');
+      // TransJam usage uses "Amount"; older statements use "Topup Amount"
+      const amountStr = getCol(parts, 'amount', 'topup amount');
       const paymentMethod = 'Tag Balance';
       const description = location;
       const rawAmtCheck = parseFloat(amountStr.replace(/[^0-9.\-]/g, ''));
@@ -255,7 +354,11 @@ function BulkImportTollTransactionsModalInner({
                      lower === 'vehicleid' || lower === 'vehicleplate' ||
                      lower === 'reconciliationstatus' || lower === 'paymentmethod' ||
                      lower === 'topup amount' || lower === 'product account number' ||
-                     lower === 'plaza name' || lower === 'plaza lane id';
+                     lower === 'plaza name' || lower === 'plaza lane id' ||
+                     lower === 'tag id' || lower === 'transaction id' ||
+                     lower === 'transactions id' || lower === 'amount' ||
+                     lower === 'date & time' || lower === 'top up status' ||
+                     lower === 'payment status';
           })
       );
       
@@ -273,10 +376,25 @@ function BulkImportTollTransactionsModalInner({
               if (key) headerMap[key] = idx;
           });
           
+          const hasPlazaCols = 'plaza name' in headerMap || 'plaza lane id' in headerMap;
+          const hasAmountCols = 'amount' in headerMap || 'topup amount' in headerMap || 'date & time' in headerMap;
+          // TransJam top-up markers — detect BEFORE tag-statement (which also has Date & Time + Topup Amount)
+          const isTopupProvider =
+              'top up status' in headerMap ||
+              'payment status' in headerMap ||
+              'transaction id' in headerMap ||
+              'transactions id' in headerMap ||
+              'product account number' in headerMap ||
+              (mode === 'topup' && 'topup amount' in headerMap) ||
+              ('topup amount' in headerMap && !hasPlazaCols);
+          const isTagStatement = hasPlazaCols && hasAmountCols;
+
           // Detect format by unique header signatures
           if ('reconciliationstatus' in headerMap || 'matchedtripid' in headerMap || 'vehicleid' in headerMap) {
               detectedFormat = 'current-export';
-          } else if (('topup amount' in headerMap) && ('plaza name' in headerMap || 'date & time' in headerMap || 'plaza lane id' in headerMap)) {
+          } else if (isTopupProvider) {
+              detectedFormat = 'topup-provider';
+          } else if (isTagStatement) {
               detectedFormat = 'tag-statement';
           } else if ('topup amount' in headerMap || 'product account number' in headerMap) {
               detectedFormat = 'topup-provider';
@@ -353,7 +471,7 @@ function BulkImportTollTransactionsModalInner({
                          amountStr = getCol(parts, 'amount');
                          vehiclePlate = getCol(parts, 'vehicleplate', 'vehicleid');
                          driverName = getCol(parts, 'drivername');
-                         tagId = getCol(parts, 'referencetagid');
+                         tagId = normalizeCsvTagId(getCol(parts, 'referencetagid'));
                          typeStr = getCol(parts, 'type');
                          location = getCol(parts, 'plaza');
                          description = getCol(parts, 'description') || location;
@@ -376,7 +494,7 @@ function BulkImportTollTransactionsModalInner({
                          }
                          typeStr = getCol(parts, 'type');
                          paymentMethod = getCol(parts, 'payment method') || 'Tag Balance';
-                         tagId = getCol(parts, 'tag id');
+                         tagId = normalizeCsvTagId(getCol(parts, 'tag id'));
                          referenceNumber = getCol(parts, 'reference #');
                          // IGNORE: Status, Reconciled, Trip ID, Batch ID -- import as fresh unreconciled
                          break;
@@ -384,24 +502,25 @@ function BulkImportTollTransactionsModalInner({
                      case 'legacy-v1':
                      default:
                          // Old Format #1: Date, Time, Amount, Type, Category, Description, Payment Method, Status, Vehicle Plate, Driver Name, Tag ID, Lane ID, Reference Number
-                         dateStr = `${getCol(parts, 'date')} ${getCol(parts, 'time')}`;
-                         amountStr = getCol(parts, 'amount');
+                         // Also accept combined Date & Time / Plaza Lane ID when present
+                         dateStr = getCol(parts, 'date & time') || `${getCol(parts, 'date')} ${getCol(parts, 'time')}`;
+                         amountStr = getCol(parts, 'amount', 'topup amount');
                          typeStr = getCol(parts, 'type');
                          category = getCol(parts, 'category');
-                         description = getCol(parts, 'description');
-                         location = description;
+                         description = getCol(parts, 'description') || getCol(parts, 'plaza name');
+                         location = description || getCol(parts, 'plaza name');
                          paymentMethod = getCol(parts, 'payment method') || 'Tag Balance';
                          // IGNORE old status -- import as fresh unreconciled
                          vehiclePlate = getCol(parts, 'vehicle plate');
                          driverName = getCol(parts, 'driver name');
-                         tagId = getCol(parts, 'tag id');
-                         laneId = getCol(parts, 'lane id');
-                         referenceNumber = getCol(parts, 'reference number');
+                         tagId = normalizeCsvTagId(getCol(parts, 'tag id'));
+                         laneId = getCol(parts, 'plaza lane id', 'lane id');
+                         referenceNumber = getCol(parts, 'reference number', 'transaction id', 'transactions id');
                          break;
 
                      case 'tag-statement': {
-                         // Toll Tag Account Statement Format:
-                         // Tag ID, Plaza Name, Plaza Lane ID, Date & Time, Topup Amount
+                         // Toll Tag Account Statement / TransJam Usage:
+                         // Tag ID, Plaza Name, Plaza Lane ID, Date & Time, Amount|Topup Amount
                          const tsResult = parseTagStatementRow(parts, getCol);
                          tagId = tsResult.tagId;
                          location = tsResult.location;
@@ -415,11 +534,10 @@ function BulkImportTollTransactionsModalInner({
                      }
 
                      case 'topup-provider': {
-                         // Toll Tag Top-up Provider Format:
-                         // Product Account Number, Transactions ID, Payment, Top Up Status, Top Up Type, Date, Time, Discount / Bonus, Payment After Discount / Bonus, Topup Amount
-                         tagId = getCol(parts, 'product account number');
-                         referenceNumber = getCol(parts, 'transactions id');
-                         dateStr = `${getCol(parts, 'date')} ${getCol(parts, 'time')}`;
+                         // TransJam Top-up + legacy provider headers
+                         tagId = normalizeCsvTagId(getCol(parts, 'tag id', 'product account number'));
+                         referenceNumber = getCol(parts, 'transaction id', 'transactions id');
+                         dateStr = getCol(parts, 'date & time') || `${getCol(parts, 'date')} ${getCol(parts, 'time')}`;
                          amountStr = getCol(parts, 'topup amount');
                          paymentMethod = 'Tag Balance';
                          typeStr = 'Top-up';
@@ -427,7 +545,7 @@ function BulkImportTollTransactionsModalInner({
                          category = 'Toll Top-up';
                          location = getCol(parts, 'top up type') || 'Top-up';
                          // Mark failed transactions
-                         const paymentStatus = getCol(parts, 'payment');
+                         const paymentStatus = getCol(parts, 'payment status', 'payment');
                          const topUpStatus = getCol(parts, 'top up status');
                          if (paymentStatus.toLowerCase() === 'failure' || topUpStatus.toLowerCase() === 'failure') {
                              status = 'Failed';
@@ -440,7 +558,7 @@ function BulkImportTollTransactionsModalInner({
              } else {
                  // No header -- basic legacy schema (positional)
                  if (parts.length >= 5) {
-                     tagId = parts[0];
+                     tagId = normalizeCsvTagId(parts[0]);
                      location = parts[1];
                      laneId = parts[2];
                      dateStr = parts[3];
@@ -463,63 +581,8 @@ function BulkImportTollTransactionsModalInner({
                  isValid = false;
                  error = 'Missing Date';
              } else {
-                 // Smart date parsing: handle DD/MM/YYYY, MM/DD/YYYY, DD-Mon-YY, and ISO formats
-                 let d = new Date(dateStr);
-                 
-                 if (isNaN(d.getTime())) {
-                     // Try DD-Mon-YY format (e.g. "24-Dec-25 11:26 am")
-                     const monMatch = dateStr.match(/^(\d{1,2})[\-\/]([A-Za-z]{3})[\-\/](\d{2,4})\s*(.*)?$/);
-                     if (monMatch) {
-                         const [, dayStr, monStr, yearStr, timePart] = monMatch;
-                         const months: Record<string, number> = { jan:0, feb:1, mar:2, apr:3, may:4, jun:5, jul:6, aug:7, sep:8, oct:9, nov:10, dec:11 };
-                         const mon = months[monStr.toLowerCase()];
-                         if (mon !== undefined) {
-                             let year = parseInt(yearStr);
-                             if (year < 100) year += 2000; // 25 -> 2025
-                             d = new Date(year, mon, parseInt(dayStr));
-                             // Parse time part if present (e.g. "11:26 am" or "6:11 am")
-                             if (timePart && !isNaN(d.getTime())) {
-                                 const timeMatch = timePart.trim().match(/^(\d{1,2}):(\d{2})\s*(am|pm)?$/i);
-                                 if (timeMatch) {
-                                     let hours = parseInt(timeMatch[1]);
-                                     const mins = parseInt(timeMatch[2]);
-                                     const ampm = (timeMatch[3] || '').toLowerCase();
-                                     if (ampm === 'pm' && hours < 12) hours += 12;
-                                     if (ampm === 'am' && hours === 12) hours = 0;
-                                     d.setHours(hours, mins, 0, 0);
-                                 }
-                             }
-                         }
-                     }
-                 }
-                 
-                 if (isNaN(d.getTime())) {
-                     // Try parsing DD/MM/YYYY or D/M/YYYY format (common in non-US locales)
-                     // Match patterns like "16/1/2026 7:29:32 am" or "16/1/2026"
-                     const dmyMatch = dateStr.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})\s*(.*)?$/);
-                     if (dmyMatch) {
-                         const [, dayOrMonth, monthOrDay, year, timePart] = dmyMatch;
-                         const num1 = parseInt(dayOrMonth);
-                         const num2 = parseInt(monthOrDay);
-                         
-                         // If first number > 12, it MUST be a day (DD/MM/YYYY)
-                         // If second number > 12, it MUST be a day (MM/DD/YYYY) 
-                         // If both <= 12, assume DD/MM/YYYY (non-US default for this system)
-                         let day: number, month: number;
-                         if (num1 > 12) {
-                             day = num1; month = num2; // DD/MM/YYYY
-                         } else if (num2 > 12) {
-                             day = num2; month = num1; // MM/DD/YYYY
-                         } else {
-                             day = num1; month = num2; // Ambiguous -- default DD/MM/YYYY
-                         }
-                         
-                         const reconstructed = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}${timePart ? ' ' + timePart.trim() : ''}`;
-                         d = new Date(reconstructed);
-                     }
-                 }
-                 
-                 if (isNaN(d.getTime())) {
+                 const d = parseCsvDateTime(dateStr);
+                 if (!d) {
                      isValid = false;
                      error = 'Invalid Date format';
                  } else {
@@ -582,6 +645,15 @@ function BulkImportTollTransactionsModalInner({
                  }
              }
 
+             // Data Center card mode wins for header CSVs (except refunds)
+             if (mode === 'usage' && type !== 'Refund') {
+                 type = 'Usage';
+                 if (amount > 0) amount = -amount;
+             } else if (mode === 'topup') {
+                 type = 'Top-up';
+                 if (amount < 0) amount = Math.abs(amount);
+             }
+
              // Phase 5: Vehicle Matching
              const match = matchVehicle(tagId, vehiclePlate, driverName, paymentMethod);
              
@@ -617,11 +689,16 @@ function BulkImportTollTransactionsModalInner({
         });
   };
 
-  // Duplicate detection: checks parsed transactions against existing KV store data + intra-batch duplicates
+  // Duplicate detection against toll_ledger (Phase-6 SSOT) + intra-batch refs
   const checkForDuplicates = async (parsed: ParsedTransaction[]): Promise<ParsedTransaction[]> => {
     try {
-      // Fetch existing transactions from the KV store
-      const existingTx = await api.getTransactions(undefined, { limit: 5000 });
+      // Tolls live in toll_ledger — GET /transactions no longer sees them
+      const tollLogsRes = await api.getTollLogs({ limit: 10000 });
+      const existingTx: any[] = Array.isArray(tollLogsRes?.data)
+        ? tollLogsRes.data
+        : Array.isArray(tollLogsRes)
+          ? tollLogsRes
+          : [];
       
       // Build a Set of existing reference numbers (Transaction IDs) for fast lookup
       const existingRefNumbers = new Set<string>();
@@ -629,13 +706,13 @@ function BulkImportTollTransactionsModalInner({
       const existingFingerprints = new Set<string>();
       
       existingTx.forEach((tx: any) => {
-        const refNum = tx.metadata?.referenceNumber;
+        const refNum = tx.referenceNumber || tx.metadata?.referenceNumber;
         if (refNum) {
           existingRefNumbers.add(refNum.toString().trim().toUpperCase());
         }
-        // Build fingerprint: date (day-level) + amount + vehicleId
-        if (tx.date && tx.amount !== undefined && tx.vehicleId) {
-          const dateKey = new Date(tx.date).toISOString().split('T')[0]; // YYYY-MM-DD
+        // Build fingerprint: calendar date + amount + vehicleId (no UTC day-shift)
+        const dateKey = calendarDateKey(tx.date);
+        if (dateKey && tx.amount !== undefined && tx.vehicleId) {
           const fp = `${dateKey}|${tx.amount}|${tx.vehicleId}`;
           existingFingerprints.add(fp);
         }
@@ -667,11 +744,13 @@ function BulkImportTollTransactionsModalInner({
         
         // Check 2: Fingerprint match (fallback -- same day, same amount, same vehicle)
         if (!isDuplicate && tx.vehicleId && !isNaN(tx.date.getTime())) {
-          const dateKey = tx.date.toISOString().split('T')[0];
-          const fp = `${dateKey}|${tx.amount}|${tx.vehicleId}`;
-          if (existingFingerprints.has(fp)) {
-            isDuplicate = true;
-            dupReason = `Likely duplicate (same date, amount & vehicle)`;
+          const dateKey = calendarDateKey(tx.date);
+          if (dateKey) {
+            const fp = `${dateKey}|${tx.amount}|${tx.vehicleId}`;
+            if (existingFingerprints.has(fp)) {
+              isDuplicate = true;
+              dupReason = `Likely duplicate (same date, amount & vehicle)`;
+            }
           }
         }
         
@@ -754,9 +833,10 @@ function BulkImportTollTransactionsModalInner({
                        if (finalAmount < 0) finalAmount = Math.abs(finalAmount);
                    }
  
-                   const match = matchVehicle(tx.tagId);
+                   const aiTagId = normalizeCsvTagId(tx.tagId || '');
+                   const match = matchVehicle(aiTagId || undefined);
                    
-                   const dateObj = new Date(tx.date);
+                   const dateObj = parseCsvDateTime(String(tx.date || '')) || new Date(tx.date);
                    const isDateValid = !isNaN(dateObj.getTime());
                    
                    const isValid = !!match.matchedVehicleId && 
@@ -777,7 +857,7 @@ function BulkImportTollTransactionsModalInner({
                        isValid: isValid, 
                        error: match.error || error,
                        vehicleId: match.matchedVehicleId,
-                       tagId: tx.tagId,
+                       tagId: aiTagId,
                        matchedVehicleName: match.matchedVehicleName,
                        driverId: match.matchedDriverId,
                        driverName: match.matchedDriverName,
@@ -895,6 +975,10 @@ function BulkImportTollTransactionsModalInner({
                         ? `Balance Top-up`
                         : `${tx.location} ${tx.laneId ? `(${tx.laneId})` : ''}`.trim()
                 );
+                const plazaName = tx.location && tx.location !== 'Top-up' && tx.location !== 'Unknown'
+                    ? tx.location
+                    : undefined;
+                const tagNumber = normalizeCsvTagId(tx.tagId || txTollTagId || '');
 
                 await api.saveTransaction({
                     date: wallClockStorageFromDate(tx.date).date,
@@ -902,6 +986,7 @@ function BulkImportTollTransactionsModalInner({
                     type: (tx.type === 'Usage' ? 'Usage' : 'Expense'), // Maps Top-up/Refund to Expense
                     category: finalCategory,
                     description: finalDescription,
+                    vendor: plazaName, // maps to toll_ledger.plaza for recon
                     vehicleId: tx.vehicleId,
                     vehiclePlate: tx.matchedVehicleName || vehicleName || tx.vehiclePlate || 'Unknown Vehicle',
                     driverId: tx.driverId,
@@ -912,9 +997,13 @@ function BulkImportTollTransactionsModalInner({
                     time: wallClockStorageFromDate(tx.date).time,
                     batchId: currentBatchId,
                     batchName: currentBatchName,
+                    // Top-level so transactionToTollLedgerServer persists it on toll_ledger
+                    referenceNumber: tx.referenceNumber || undefined,
                     metadata: {
                         tollTagId: txTollTagId,
                         tollTagUuid: txTollTagUuid,
+                        tagNumber: tagNumber || undefined,
+                        tollPlaza: plazaName,
                         laneId: tx.laneId,
                         imported: true,
                         importDate: new Date().toISOString(),

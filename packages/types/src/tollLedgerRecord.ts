@@ -229,7 +229,7 @@ export function transactionToTollLedger(tx: FinancialTransaction): TollLedgerRec
     sourceFile: tx.metadata?.sourceFile as string || null,
 
     receiptUrl: tx.receiptUrl || null,
-    referenceNumber: tx.referenceNumber || null,
+    referenceNumber: tx.referenceNumber || (tx.metadata?.referenceNumber as string) || null,
     description: tx.description || null,
     notes: tx.notes || null,
 
