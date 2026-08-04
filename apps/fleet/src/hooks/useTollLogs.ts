@@ -4,7 +4,7 @@ import { FinancialTransaction } from '../types/data';
 import { Vehicle } from '../types/vehicle';
 import { TollPlaza } from '../types/toll';
 import { TollLogEntry } from '../types/tollLog';
-import { tollLogKindFromCategory } from '../utils/tollCategoryHelper';
+import { tollLogKindFromTx } from '../utils/tollCategoryHelper';
 
 // Simple driver shape returned by api.getDrivers()
 interface DriverRecord {
@@ -162,16 +162,10 @@ export function useTollLogs() {
       // Note: server already filters to toll categories and sorts by date desc,
       // so we skip client-side filtering/deduplication/sorting.
       const enriched: TollLogEntry[] = tollTransactions.map((tx: any) => {
-        const kind = tollLogKindFromCategory(tx.category);
+        const kind = tollLogKindFromTx(tx);
         const isUsage = kind === 'usage';
-        const typeLabel =
-          kind === 'top-up'
-            ? 'Top-up'
-            : kind === 'refund'
-              ? 'Refund'
-              : kind === 'adjustment'
-                ? 'Adjustment'
-                : 'Usage';
+        // TollLogEntry.typeLabel is Usage | Top-up; credits/refunds share Top-up lane
+        const typeLabel: 'Usage' | 'Top-up' = isUsage ? 'Usage' : 'Top-up';
 
         // Resolve vehicle
         const vehicle = tx.vehicleId ? vehicleMap.get(tx.vehicleId) : undefined;

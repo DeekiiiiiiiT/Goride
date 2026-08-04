@@ -1234,6 +1234,16 @@ function tollLedgerToTxShape(entry: TollLedgerRecord): any {
   else if (entry.status === "reconciled") status = "Approved";
   else if (entry.status === "pending") status = "Pending";
 
+  // Category must reflect ledger type — Toll Logs / Tag Balance use category
+  // to decide Usage vs Top-up. Hardcoding "Toll Usage" previously labeled
+  // every top_up as Usage and forced a minus sign on the amount.
+  let category = "Toll Usage";
+  if (entry.type === "top_up") category = "Toll Top-up";
+  else if (entry.type === "refund") category = "Toll Refund";
+  else if (entry.type === "adjustment" || entry.type === "balance_transfer") {
+    category = "Toll Adjustment";
+  }
+
   // Build the transaction-like object
   return {
     id: entry.id,
@@ -1241,8 +1251,8 @@ function tollLedgerToTxShape(entry: TollLedgerRecord): any {
     time: entry.time,
     amount: entry.amount,
     type: entry.type === "usage" ? "Usage" : entry.type === "top_up" ? "Top-up" : "Refund",
-    category: "Toll Usage",
-    description: entry.location || entry.plaza || "",
+    category,
+    description: entry.description || entry.location || entry.plaza || "",
     vendor: entry.plaza || entry.location || "",
     vehicleId: entry.vehicleId,
     vehiclePlate: entry.vehiclePlate,

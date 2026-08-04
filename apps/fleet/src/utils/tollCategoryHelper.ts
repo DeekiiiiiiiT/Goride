@@ -30,12 +30,27 @@ export function isTollLedgerCategory(category: string | undefined | null): boole
 
 export type TollLogKind = 'usage' | 'top-up' | 'refund' | 'adjustment';
 
-/** Toll Logs table: label column from category. */
+/** Toll Logs table: label column from category and/or ledger type field. */
 export function tollLogKindFromCategory(category: string | undefined | null): TollLogKind {
   if (!category) return 'usage';
   const lower = category.toLowerCase().trim();
-  if (lower === 'toll top-up') return 'top-up';
-  if (lower === 'toll refund') return 'refund';
-  if (lower === 'toll adjustment') return 'adjustment';
+  if (lower === 'toll top-up' || lower === 'top-up' || lower === 'top_up' || lower === 'topup') {
+    return 'top-up';
+  }
+  if (lower === 'toll refund' || lower === 'refund') return 'refund';
+  if (lower === 'toll adjustment' || lower === 'adjustment' || lower === 'balance_transfer') {
+    return 'adjustment';
+  }
+  return 'usage';
+}
+
+/** Prefer explicit API type when present (avoids bad hardcoded categories). */
+export function tollLogKindFromTx(tx: { type?: string | null; category?: string | null }): TollLogKind {
+  const typeKind = tollLogKindFromCategory(tx.type);
+  if (tx.type && typeKind !== 'usage') return typeKind;
+  const catKind = tollLogKindFromCategory(tx.category);
+  if (catKind !== 'usage') return catKind;
+  // Signed amount fallback for credits mis-labeled as usage
+  if (typeof (tx as any).amount === 'number' && (tx as any).amount > 0) return 'top-up';
   return 'usage';
 }
