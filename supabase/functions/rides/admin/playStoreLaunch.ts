@@ -21,8 +21,10 @@ const WRITE_ROLES = new Set(["platform_owner", "superadmin", "rides_admin"]);
 const VALID_STATUS = new Set(["todo", "done", "na"]);
 const VALID_TRACK = new Set(["internal", "closed", "open", "production"]);
 
-function canWrite(role: string): boolean {
-  return WRITE_ROLES.has(role);
+function canWrite(adminUser: { role: string; roles: string[] }): boolean {
+  // Multi-role users (e.g. primary courier_admin + rides_admin) must write via roles[].
+  return WRITE_ROLES.has(adminUser.role) ||
+    adminUser.roles.some((r) => WRITE_ROLES.has(r));
 }
 
 type ChecklistState = Record<
@@ -111,7 +113,7 @@ export function registerPlayStoreLaunchAdminRoutes(
   admin.patch("/play-store/checklist", async (c) => {
     const adminUser = await requireProductAdmin(c, "rides");
     if (adminUser instanceof Response) return adminUser;
-    if (!canWrite(adminUser.role)) {
+    if (!canWrite(adminUser)) {
       return c.json({ error: "forbidden", message: "rides_admin role required" }, 403);
     }
 
@@ -180,7 +182,7 @@ export function registerPlayStoreLaunchAdminRoutes(
   admin.post("/play-store/releases", async (c) => {
     const adminUser = await requireProductAdmin(c, "rides");
     if (adminUser instanceof Response) return adminUser;
-    if (!canWrite(adminUser.role)) {
+    if (!canWrite(adminUser)) {
       return c.json({ error: "forbidden", message: "rides_admin role required" }, 403);
     }
 
@@ -227,7 +229,7 @@ export function registerPlayStoreLaunchAdminRoutes(
   admin.delete("/play-store/releases/:id", async (c) => {
     const adminUser = await requireProductAdmin(c, "rides");
     if (adminUser instanceof Response) return adminUser;
-    if (!canWrite(adminUser.role)) {
+    if (!canWrite(adminUser)) {
       return c.json({ error: "forbidden", message: "rides_admin role required" }, 403);
     }
 
@@ -247,7 +249,7 @@ export function registerPlayStoreLaunchAdminRoutes(
   admin.put("/play-store/data-safety", async (c) => {
     const adminUser = await requireProductAdmin(c, "rides");
     if (adminUser instanceof Response) return adminUser;
-    if (!canWrite(adminUser.role)) {
+    if (!canWrite(adminUser)) {
       return c.json({ error: "forbidden", message: "rides_admin role required" }, 403);
     }
 
@@ -317,7 +319,7 @@ export function registerPlayStoreLaunchAdminRoutes(
   admin.post("/play-store/data-safety/import", async (c) => {
     const adminUser = await requireProductAdmin(c, "rides");
     if (adminUser instanceof Response) return adminUser;
-    if (!canWrite(adminUser.role)) {
+    if (!canWrite(adminUser)) {
       return c.json({ error: "forbidden", message: "rides_admin role required" }, 403);
     }
 

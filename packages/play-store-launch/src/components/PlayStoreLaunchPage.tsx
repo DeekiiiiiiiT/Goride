@@ -143,7 +143,7 @@ export function PlayStoreLaunchPage({
   if (!data) {
     return (
       <p className="text-sm text-slate-400">
-        Could not load Play Store tracker. Check rides admin API and migrations.
+        Could not load Play Store tracker. Refresh and try again.
       </p>
     );
   }

@@ -237,6 +237,9 @@ importers:
       '@capacitor/geolocation':
         specifier: ^7.1.8
         version: 7.1.8(@capacitor/core@7.6.5)
+      '@capacitor/push-notifications':
+        specifier: ^7.0.7
+        version: 7.0.7(@capacitor/core@7.6.5)
       '@capacitor/splash-screen':
         specifier: ^7.0.5
         version: 7.0.5(@capacitor/core@7.6.5)
@@ -276,6 +279,9 @@ importers:
       '@types/leaflet':
         specifier: ^1.9.21
         version: 1.9.21
+      capacitor-native-settings:
+        specifier: ^7.0.2
+        version: 7.0.2(@capacitor/core@7.6.5)
       clsx:
         specifier: '*'
         version: 2.1.1
@@ -2351,6 +2357,11 @@ packages:
 
   '@capacitor/keyboard@7.0.6':
     resolution: {integrity: sha512-mH9EHo4EnBA9zJAi6domGVB/PdEkcm0h27nJDHG4Y3fd2oKsheCxDRXlYrbgj8hcyQPe0cGWqAfzfwKzkWQoFQ==}
+    peerDependencies:
+      '@capacitor/core': '>=7.0.0'
+
+  '@capacitor/push-notifications@7.0.7':
+    resolution: {integrity: sha512-TgFsPV4uOez0RtFKsWPz3XCrLxc9th+UyAkillUY9vL6ezVKT35te9Sn4vGR0jeU2U0KUNU7Dt6oSCALnSiEKg==}
     peerDependencies:
       '@capacitor/core': '>=7.0.0'
 
@@ -6774,6 +6785,10 @@ snapshots:
       '@capacitor/synapse': 1.0.4
 
   '@capacitor/keyboard@7.0.6(@capacitor/core@7.6.5)':
+    dependencies:
+      '@capacitor/core': 7.6.5
+
+  '@capacitor/push-notifications@7.0.7(@capacitor/core@7.6.5)':
     dependencies:
       '@capacitor/core': 7.6.5
 

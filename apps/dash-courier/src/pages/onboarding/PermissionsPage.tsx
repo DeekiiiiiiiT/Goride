@@ -1,13 +1,16 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Capacitor } from '@capacitor/core';
 import { OnboardingHeader } from '@/components/layout/OnboardingHeader';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import {
+  canContinueCourierPermissions,
   checkCourierPermission,
   requestCourierPermission,
   type CourierPermissionId,
   type PermissionGrantState,
 } from '@/lib/courierPermissions';
 import { ensureCourierProfile } from '@/lib/ensureCourierProfile';
+import { toast } from '@/lib/toast';
 
 type PermissionCard = {
   id: CourierPermissionId;
@@ -47,37 +50,107 @@ type PermissionsPageProps = {
   onContinue: () => void;
 };
 
+function buttonLabel(
+  id: CourierPermissionId,
+  state: PermissionGrantState,
+  busy: boolean,
+): string {
+  if (busy) return 'Requesting…';
+  if (state === 'granted') return 'Granted';
+  if (state === 'unsupported') return 'Unsupported';
+  if (state === 'denied' && id === 'location') return 'Open Settings';
+  if (state === 'denied') return 'Denied — Retry';
+  return 'Allow Access';
+}
+
 export function PermissionsPage({ onBack, onContinue }: PermissionsPageProps) {
   const [granted, setGranted] = useState<Record<CourierPermissionId, PermissionGrantState>>({
     location: 'prompt',
     notifications: 'prompt',
     camera: 'prompt',
   });
+  const [busyId, setBusyId] = useState<CourierPermissionId | null>(null);
 
-  useEffect(() => {
-    void Promise.all(
+  const refreshAll = useCallback(async () => {
+    const results = await Promise.all(
       PERMISSIONS.map(async (perm) => {
         const state = await checkCourierPermission(perm.id);
         return [perm.id, state] as const;
       }),
-    ).then((results) => {
-      setGranted((prev) => {
-        const next = { ...prev };
-        results.forEach(([id, state]) => {
-          next[id] = state;
-        });
-        return next;
+    );
+    setGranted((prev) => {
+      const next = { ...prev };
+      results.forEach(([id, state]) => {
+        next[id] = state;
       });
+      return next;
     });
   }, []);
 
+  useEffect(() => {
+    void refreshAll();
+  }, [refreshAll]);
+
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    let handle: { remove: () => Promise<void> } | undefined;
+    void import('@capacitor/app').then(({ App }) => {
+      void App.addListener('appStateChange', ({ isActive }) => {
+        if (isActive) void refreshAll();
+      }).then((h) => {
+        handle = h;
+      });
+    });
+    return () => {
+      void handle?.remove();
+    };
+  }, [refreshAll]);
+
   const requestPermission = async (id: CourierPermissionId) => {
-    const result = await requestCourierPermission(id);
-    setGranted((prev) => ({ ...prev, [id]: result }));
+    if (busyId) return;
+    setBusyId(id);
+    try {
+      // After a hard deny, Android won't re-show the dialog — send user to app settings.
+      if (id === 'location' && granted.location === 'denied' && Capacitor.isNativePlatform()) {
+        try {
+          const { NativeSettings, AndroidSettings, IOSSettings } = await import(
+            'capacitor-native-settings'
+          );
+          if (Capacitor.getPlatform() === 'ios') {
+            await NativeSettings.openIOS({ option: IOSSettings.App });
+          } else {
+            await NativeSettings.openAndroid({ option: AndroidSettings.ApplicationDetails });
+          }
+          toast.info('Enable Location', "Set location to 'Allow all the time', then return here.");
+        } catch {
+          toast.info(
+            'Enable Location',
+            "Open phone Settings → Apps → Roam Rush Courier → Permissions → Location → Allow all the time.",
+          );
+        }
+        await refreshAll();
+        return;
+      }
+
+      const result = await requestCourierPermission(id);
+      setGranted((prev) => ({ ...prev, [id]: result }));
+
+      if (result === 'denied') {
+        toast.info(
+          id === 'location' ? 'Location blocked' : 'Permission blocked',
+          id === 'location'
+            ? "Tap Open Settings and choose 'Allow all the time'."
+            : 'Permission was denied. You can retry from system settings.',
+        );
+      } else if (result === 'unsupported' && id === 'notifications') {
+        toast.info('Notifications', 'This build will skip notifications for now.');
+      }
+    } finally {
+      setBusyId(null);
+    }
   };
 
-  const canContinue =
-    granted.location === 'granted' && granted.notifications === 'granted';
+  const canContinue = canContinueCourierPermissions(granted);
 
   return (
     <div className="bg-background text-on-background min-h-full flex flex-col items-center">
@@ -96,6 +169,7 @@ export function PermissionsPage({ onBack, onContinue }: PermissionsPageProps) {
             {PERMISSIONS.map((perm) => {
               const state = granted[perm.id];
               const isGranted = state === 'granted';
+              const busy = busyId === perm.id;
               return (
                 <div
                   key={perm.id}
@@ -116,14 +190,14 @@ export function PermissionsPage({ onBack, onContinue }: PermissionsPageProps) {
                       <button
                         type="button"
                         onClick={() => void requestPermission(perm.id)}
-                        disabled={isGranted || state === 'unsupported'}
+                        disabled={isGranted || state === 'unsupported' || busy}
                         className={`text-xs font-semibold uppercase tracking-wide px-4 py-2 rounded-full transition-colors active:scale-95 disabled:opacity-60 ${
                           isGranted
                             ? 'bg-primary-container text-on-primary-container'
                             : 'text-primary-container bg-surface-container-high hover:bg-primary-container hover:text-on-primary-container'
                         }`}
                       >
-                        {isGranted ? 'Granted' : state === 'unsupported' ? 'Unsupported' : 'Allow Access'}
+                        {buttonLabel(perm.id, state, busy)}
                       </button>
                     </div>
                   </div>
