@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useForgotPassword, GOOGLE_OAUTH_EMAIL_ONLY_SCOPES } from '@roam/auth-client';
+import { isNativeCapacitorPlatform } from '@roam/types';
 import { toast } from 'sonner';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { ABOUT_LINKS } from '@/lib/aboutContent';
@@ -78,18 +79,26 @@ export default function LoginPage({
         DASH_CUSTOMER_OAUTH_INTENT_KEY,
         isSignUp ? DASH_CUSTOMER_OAUTH_INTENT_SIGNUP : DASH_CUSTOMER_OAUTH_INTENT_LOGIN,
       );
-      const { error } = await supabase.auth.signInWithOAuth({
+      const redirectTo = getDashCustomerAuthRedirectUrl();
+      const native = isNativeCapacitorPlatform();
+      const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: getDashCustomerAuthRedirectUrl(),
+          redirectTo,
+          skipBrowserRedirect: native,
           scopes: GOOGLE_OAUTH_EMAIL_ONLY_SCOPES,
           queryParams: { prompt: 'select_account' },
         },
       });
       if (error) throw error;
+      if (native && data?.url) {
+        const { Browser } = await import('@capacitor/browser');
+        await Browser.open({ url: data.url });
+      }
     } catch (error) {
       clearDashCustomerOAuthIntent();
       toast.error(error instanceof Error ? error.message : 'Google sign-in failed');
+    } finally {
       setOauthLoading(false);
     }
   };
@@ -128,7 +137,7 @@ export default function LoginPage({
           password,
           options: {
             data: { name },
-            emailRedirectTo: `${window.location.origin}/`,
+            emailRedirectTo: getDashCustomerAuthRedirectUrl(),
           },
         });
         if (error) throw error;
