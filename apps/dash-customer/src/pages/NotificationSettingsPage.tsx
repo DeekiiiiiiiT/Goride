@@ -18,7 +18,7 @@ type ToggleRow = {
 const PUSH_ROWS: ToggleRow[] = [
   { key: 'orderUpdates', title: 'Order updates', description: 'Essential real-time tracking for active orders.', disabled: true },
   { key: 'promotions', title: 'Promotions & deals', description: 'Special offers, discounts, and exclusive events.' },
-  { key: 'newRestaurants', title: 'New restaurant alerts', description: 'Be the first to know when hot new spots join Roam Dash.' },
+  { key: 'newRestaurants', title: 'New restaurant alerts', description: 'Be the first to know when hot new spots join Roam Rush.' },
   { key: 'personalizedPicks', title: 'Personalized picks', description: 'Curated suggestions based on your past orders.' },
 ];
 
@@ -54,7 +54,7 @@ export default function NotificationSettingsPage({ onNavigate }: Props) {
 
       <main className="flex-grow px-4 py-6 max-w-[1200px] mx-auto w-full pb-32">
         <p className="text-body-md text-on-surface-variant mb-6">
-          Manage how Roam Dash communicates with you. We&apos;ll always send essential order updates.
+          Manage how Roam Rush communicates with you. We&apos;ll always send essential order updates.
         </p>
 
         <section className="bg-surface-container-lowest rounded-xl shadow-[0px_4px_20px_rgba(0,0,0,0.04)] p-4 mb-6">

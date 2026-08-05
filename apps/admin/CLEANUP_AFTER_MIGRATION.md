@@ -5,7 +5,7 @@ This file tracks components and services that can be removed from `apps/admin` a
 ## Prerequisites
 
 Before removing any files, verify:
-1. `roamdash.co/admin` is working with full merchant management
+1. `roamrush.app/admin` is working with full merchant management
 2. `roam-s.co/admin` is working with fare rules and surge management  
 3. `roamdriver.co/admin` is working with driver management
 4. The overview cards in Dominion are fetching data correctly
@@ -14,7 +14,7 @@ Before removing any files, verify:
 
 Once verified, these can be safely deleted (they have been moved to product apps):
 
-### Roam Dash Components
+### Roam Rush Components
 - `src/components/admin/roam-dash/MerchantVerificationManager.tsx` → moved to `apps/dash-merchant/src/admin/`
 - `src/components/admin/roam-dash/MerchantDetailModal.tsx` → moved to `apps/dash-merchant/src/admin/`
 - `src/components/admin/roam-dash/MerchantActionDialog.tsx` → moved to `apps/dash-merchant/src/admin/`
@@ -34,7 +34,7 @@ These services are still used by the overview cards and should NOT be deleted:
 
 Once verified, run:
 ```bash
-# Remove Roam Dash components (keep service for overview)
+# Remove Roam Rush components (keep service for overview)
 rm -rf apps/admin/src/components/admin/roam-dash/
 
 # Remove Roam Rides components (keep service for overview)

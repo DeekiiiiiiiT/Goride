@@ -23,7 +23,7 @@ export default function DashboardSimpleHeader({
         <MaterialIcon name="menu" size={24} />
       </button>
 
-      <h1 className="text-headline-md font-bold text-primary">Roam Dash</h1>
+      <h1 className="text-headline-md font-bold text-primary">Roam Rush</h1>
 
       <button
         type="button"

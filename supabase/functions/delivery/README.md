@@ -1,6 +1,6 @@
-# Roam Dash - Delivery Edge Function
+# Roam Rush - Delivery Edge Function
 
-Backend service for Roam Dash (merchants, menus, orders, courier assignment, admin).
+Backend service for Roam Rush (merchants, menus, orders, courier assignment, admin).
 
 Mounted at `/delivery`.
 
@@ -109,7 +109,7 @@ Required Edge Function secrets for transactional email (merchant approval, team 
 | `SMTP_PORT` | `465` | |
 | `SMTP_USER` | `resend` | Auth username only — **not** used as From address |
 | `SMTP_PASS` | `re_...` | Resend API key |
-| `SMTP_FROM` | `Roam Dash <noreply@roam-s.co>` | **Required** — must be a verified Resend domain |
+| `SMTP_FROM` | `Roam Rush <noreply@roam-s.co>` | **Required** — must be a verified Resend domain |
 | `RESEND_FROM` | (optional) | Overrides `SMTP_FROM` for Resend API sends |
 
 Resend sends use the REST API when `SMTP_HOST` contains `resend.com` and `SMTP_PASS` starts with `re_`.
@@ -131,7 +131,7 @@ Never use the SMTP username (`resend`) as the sender — it is not a valid email
 | POST | `/merchant/team/invites/:id/accept` | Invitee | Join store team |
 | POST | `/merchant/team/invites/:id/decline` | Invitee | Decline invite |
 
-Env: `PARTNER_PORTAL_URL` (default `https://partner.roamdash.co`) for invite links.
+Env: `PARTNER_PORTAL_URL` (default `https://partner.roamrush.app`) for invite links.
 
 Hosting: partner SPA must serve `index.html` for `/team-invite/*` paths.
 

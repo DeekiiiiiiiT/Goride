@@ -217,7 +217,7 @@ export function DashPreviewSection() {
           <div className="flex w-full flex-col items-center lg:w-1/3">
             <div className="relative mb-6 h-[560px] w-[280px] overflow-hidden rounded-[3rem] border-[8px] border-slate-800 bg-black shadow-2xl">
               <div className="absolute left-1/2 top-0 z-20 h-6 w-1/3 -translate-x-1/2 rounded-b-xl bg-slate-800" />
-              <img src={DASH_APP_MOCKUP} alt="Roam Dash customer app" className="h-full w-full object-cover" loading="lazy" />
+              <img src={DASH_APP_MOCKUP} alt="Roam Rush customer app" className="h-full w-full object-cover" loading="lazy" />
             </div>
             <p className="text-center text-sm text-on-surface-variant">Intuitive Customer App</p>
           </div>
@@ -231,7 +231,7 @@ export function DashPreviewSection() {
               </div>
               <img
                 src={DASH_PORTAL_MOCKUP}
-                alt="Roam Dash merchant portal dashboard"
+                alt="Roam Rush merchant portal dashboard"
                 className="aspect-video w-full object-cover"
               />
             </div>

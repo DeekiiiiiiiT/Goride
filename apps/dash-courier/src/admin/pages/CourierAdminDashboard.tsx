@@ -88,7 +88,7 @@ export function CourierAdminDashboard() {
       <div>
         <h2 className="text-xl font-semibold text-white">Dashboard</h2>
         <p className="text-sm text-slate-400 mt-1">
-          Roam Dash Courier admin overview. Click a card to drill down.
+          Roam Rush Courier admin overview. Click a card to drill down.
         </p>
       </div>
 

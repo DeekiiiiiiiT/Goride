@@ -6,7 +6,7 @@ const MAP_BG =
 
 const TROUBLESHOOTING_STEPS = [
   { icon: 'my_location', text: 'Make sure location services are enabled' },
-  { icon: 'rule_settings', text: "Check that Roam Dash has 'Always' location permission" },
+  { icon: 'rule_settings', text: "Check that Roam Rush has 'Always' location permission" },
   { icon: 'directions_run', text: 'Try moving to an open area' },
 ] as const;
 
@@ -41,7 +41,7 @@ export function LocationIssueSheet({ onOpenSettings, onRetry }: LocationIssueShe
               We can&apos;t find your location
             </h1>
             <p className="text-base text-on-surface-variant px-2">
-              Roam Dash needs your precise location to route deliveries accurately and ensure you
+              Roam Rush needs your precise location to route deliveries accurately and ensure you
               get paid for your active time.
             </p>
           </div>

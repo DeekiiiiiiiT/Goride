@@ -94,7 +94,7 @@ export default function OnboardingCompletePage({
     <div className="min-h-dvh bg-background text-on-surface">
       <header className="sticky top-0 z-50 border-b border-outline-variant bg-surface">
         <div className="mx-auto flex h-14 max-w-4xl items-center justify-between px-margin-mobile">
-          <h1 className="text-title-lg font-semibold text-primary">Roam Dash Partner</h1>
+          <h1 className="text-title-lg font-semibold text-primary">Roam Rush Partner</h1>
           {verticalBadge && (
             <span className="rounded-full bg-primary-container px-3 py-1 text-label-md text-on-primary-container">
               {verticalBadge}

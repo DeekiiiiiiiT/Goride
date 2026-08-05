@@ -25,6 +25,14 @@ apps/rides-passenger/android/build/
 apps/rides-passenger/android/local.properties
 apps/rides-passenger/android/.idea/
 apps/rides-passenger/android/capacitor-cordova-android-plugins/build/
+
+# Capacitor / Android (dash-customer / Roam Rush)
+apps/dash-customer/android/.gradle/
+apps/dash-customer/android/app/build/
+apps/dash-customer/android/build/
+apps/dash-customer/android/local.properties
+apps/dash-customer/android/.idea/
+apps/dash-customer/android/capacitor-cordova-android-plugins/build/
 **/.DS_Store
 .vercel
 .env*

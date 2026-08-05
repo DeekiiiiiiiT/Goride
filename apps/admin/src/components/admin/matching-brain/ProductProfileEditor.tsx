@@ -53,7 +53,7 @@ const OVERRIDABLE_FIELDS: Array<{
 const PRODUCT_LABELS: Record<string, string> = {
   rides: 'Rideshare',
   fleet: 'Fleet',
-  dash: 'Roam Dash',
+  dash: 'Roam Rush',
   enterprise: 'Enterprise',
 };
 

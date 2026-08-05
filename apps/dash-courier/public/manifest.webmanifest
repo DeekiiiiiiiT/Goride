@@ -1,7 +1,7 @@
 {
-  "name": "Roam Dash Courier",
-  "short_name": "Roam Dash",
-  "description": "Deliver food from local restaurants and earn on your schedule with Roam Dash Courier.",
+  "name": "Roam Rush Courier",
+  "short_name": "Roam Courier",
+  "description": "Deliver food from local restaurants and earn on your schedule with Roam Rush Courier.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#fafafa",

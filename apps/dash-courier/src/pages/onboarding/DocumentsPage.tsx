@@ -107,7 +107,7 @@ export function DocumentsPage({ onBack, onContinue }: DocumentsPageProps) {
         >
           <MaterialIcon name="arrow_back" />
         </button>
-        <div className="text-xl font-bold text-primary">Roam Dash Courier</div>
+        <div className="text-xl font-bold text-primary">Roam Rush Courier</div>
         <div className="w-10" aria-hidden />
       </header>
 

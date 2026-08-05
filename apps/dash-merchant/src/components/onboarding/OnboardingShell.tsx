@@ -47,7 +47,7 @@ export function OnboardingHeader({
           ) : (
             <div className="w-10" />
           )}
-          <h1 className="text-title-lg font-semibold text-primary">Roam Dash Partner</h1>
+          <h1 className="text-title-lg font-semibold text-primary">Roam Rush Partner</h1>
           <span className="rounded-full bg-surface-container px-3 py-1 text-label-md text-on-surface-variant">
             Step {currentStep} of {WIZARD_TOTAL_STEPS}
           </span>
@@ -70,7 +70,7 @@ export function OnboardingHeader({
               <MaterialIcon name="arrow_back" className="text-primary" />
             </button>
           ) : null}
-          <h1 className="text-title-lg font-semibold text-primary">Roam Dash Partner</h1>
+          <h1 className="text-title-lg font-semibold text-primary">Roam Rush Partner</h1>
           {currentStep && (
             <span className="ml-auto hidden rounded-full bg-surface-container px-3 py-1 text-label-md text-on-surface-variant md:inline">
               Step {currentStep} of {WIZARD_TOTAL_STEPS}

@@ -555,7 +555,7 @@ export function registerMerchantAdminRoutes(app: Hono) {
         : newStatus === "docs_requested" ? "Additional info needed"
         : `Status: ${newStatus}`;
       const bodyText = newStatus === "approved"
-        ? "Congratulations! Your restaurant is now live on Roam Dash."
+        ? "Congratulations! Your restaurant is now live on Roam Rush."
         : newStatus === "rejected" ? (notes || "Please review and resubmit.")
         : newStatus === "docs_requested" ? (notes || "Please update your application.")
         : `Status changed to ${newStatus}.`;

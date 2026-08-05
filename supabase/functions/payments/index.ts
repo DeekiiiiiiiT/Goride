@@ -1,5 +1,5 @@
 /**
- * Payments Service - Roam Dash
+ * Payments Service - Roam Rush
  * Handles WiPay and PayPal payment processing for Jamaica market
  */
 
@@ -407,7 +407,7 @@ async function createPayPalOrder(order: any) {
         intent: "CAPTURE",
         purchase_units: [{
           reference_id: order.id,
-          description: `Roam Dash Order #${order.order_number}`,
+          description: `Roam Rush Order #${order.order_number}`,
           custom_id: order.id,
           amount: {
             currency_code: "USD",
@@ -415,7 +415,7 @@ async function createPayPalOrder(order: any) {
           }
         }],
         application_context: {
-          brand_name: "Roam Dash",
+          brand_name: "Roam Rush",
           landing_page: "NO_PREFERENCE",
           user_action: "PAY_NOW",
           return_url: `${returnUrl}/payment/callback/paypal?orderId=${order.id}`,

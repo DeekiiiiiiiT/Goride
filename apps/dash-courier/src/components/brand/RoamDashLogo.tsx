@@ -17,7 +17,7 @@ export function RoamDashLogo({ className = 'w-full h-auto' }: RoamDashLogoProps)
         fill="#1C1917"
         letterSpacing="-1"
       >
-        ROAM DASH
+        ROAM RUSH
       </text>
       <path d="M15 45H10V40H15V45ZM20 40H15V35H20V40ZM25 35H20V30H25V35Z" fill="#10B981" />
     </svg>

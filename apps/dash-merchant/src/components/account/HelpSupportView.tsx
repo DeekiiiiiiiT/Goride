@@ -101,7 +101,7 @@ export default function HelpSupportView({
         <h1 className="flex-1 text-headline-md font-bold text-primary">Help &amp; Support</h1>
         <button
           type="button"
-          onClick={() => toast.info('Roam Dash Partner Support', { description: SUPPORT_EMAIL })}
+          onClick={() => toast.info('Roam Rush Partner Support', { description: SUPPORT_EMAIL })}
           className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-primary transition-colors hover:bg-surface-container-low active:scale-95"
           aria-label="Support"
         >

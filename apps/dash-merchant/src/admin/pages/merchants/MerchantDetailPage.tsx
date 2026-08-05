@@ -228,7 +228,7 @@ export function MerchantDetailPage() {
       description: (
         <>
           This permanently removes <span className="text-white font-medium">{displayName}</span> from
-          Roam Dash only — menu, documents, orders, and payouts. The owner&apos;s Roam login and
+          Roam Rush only — menu, documents, orders, and payouts. The owner&apos;s Roam login and
           profiles in Driver, Courier, or other apps are untouched.
         </>
       ),

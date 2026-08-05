@@ -1,4 +1,4 @@
--- Payments schema for Roam Dash
+-- Payments schema for Roam Rush
 -- Created: 2026-05-11
 -- Supports WiPay and PayPal for Jamaica market
 
@@ -175,7 +175,7 @@ CREATE TRIGGER trigger_transactions_updated_at
   BEFORE UPDATE ON payments.transactions
   FOR EACH ROW EXECUTE FUNCTION delivery.set_updated_at();
 
-COMMENT ON SCHEMA payments IS 'Payment processing for Roam Dash';
+COMMENT ON SCHEMA payments IS 'Payment processing for Roam Rush';
 COMMENT ON TABLE payments.payment_intents IS 'Pre-authorization payment records';
 COMMENT ON TABLE payments.transactions IS 'Completed payment transactions';
 COMMENT ON TABLE payments.merchant_payouts IS 'Settlement payouts to merchants';

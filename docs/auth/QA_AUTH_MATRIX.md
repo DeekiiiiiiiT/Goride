@@ -9,7 +9,7 @@ Run after changing Supabase **Redirect URLs** or OAuth clients. Mark each row Pa
 | Rides passenger | `http://localhost:5180` | Same origin + `/login` |
 | Driver | `http://localhost:3002` | Same origin `/` |
 | Dash customer | `http://localhost:5174` | Same origin `/` |
-| Repeat on **production** hosts | roam-s.co, roamdriver.co, roamdash.co | Same host that started OAuth |
+| Repeat on **production** hosts | roam-s.co, roamdriver.co, roamrush.app | Same host that started OAuth |
 
 ## Email magic link
 

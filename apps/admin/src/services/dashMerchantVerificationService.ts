@@ -1,5 +1,5 @@
 /**
- * Roam Dash - Merchant Verification Service
+ * Roam Rush - Merchant Verification Service
  *
  * Frontend client for the admin endpoints exposed by the delivery edge
  * function (supabase/functions/delivery/index.ts).

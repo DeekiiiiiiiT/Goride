@@ -1,5 +1,5 @@
 /**
- * Dash Admin Service - API client for Roam Dash admin portal
+ * Dash Admin Service - API client for Roam Rush admin portal
  */
 
 import { API_ENDPOINTS, publicAnonKey } from '@roam/api-client';

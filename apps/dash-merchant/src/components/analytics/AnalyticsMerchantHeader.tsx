@@ -39,7 +39,7 @@ export default function AnalyticsMerchantHeader({
             <MaterialIcon name="restaurant" className="text-[20px] text-on-surface-variant" />
           )}
         </div>
-        <span className="truncate text-headline-md font-bold text-primary">Roam Dash Merchant</span>
+        <span className="truncate text-headline-md font-bold text-primary">Roam Rush Merchant</span>
       </div>
 
       <StoreStatusToggle

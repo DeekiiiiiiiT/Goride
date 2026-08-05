@@ -191,7 +191,7 @@ export default function NotificationSettingsView({
             />
             <ToggleRow
               id="toggle_promos"
-              label="Promotional tips from Roam Dash"
+              label="Promotional tips from Roam Rush"
               checked={settings.promotionalTips}
               onChange={(checked) => updateAlert('promotionalTips', checked)}
             />

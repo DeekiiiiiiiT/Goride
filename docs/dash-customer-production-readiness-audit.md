@@ -1,7 +1,7 @@
 # RoamDash (`apps/dash-customer`) — Production Readiness Audit
 
 **Date:** 2026-07-28
-**Scope:** `apps/dash-customer` (the customer-facing RoamDash food/grocery delivery web app, roamdash.co) plus the backend surfaces it depends on: `supabase/functions/delivery`, `supabase/functions/payments`, the `delivery` and `payments` Postgres schemas, and shared packages (`@roam/api-client`, `@roam/auth-client`, `@roam/location`).
+**Scope:** `apps/dash-customer` (the customer-facing RoamDash food/grocery delivery web app, roamrush.app) plus the backend surfaces it depends on: `supabase/functions/delivery`, `supabase/functions/payments`, the `delivery` and `payments` Postgres schemas, and shared packages (`@roam/api-client`, `@roam/auth-client`, `@roam/location`).
 **Out of scope:** other apps in the monorepo (driver, fleet, haul, enterprise, admin, rides-passenger, dash-courier, dash-merchant) except where they share backend surface with dash-customer.
 **Method:** Static, read-only audit. Three independent workstreams (frontend data layer, backend/Supabase schema+RLS+edge functions, third-party integrations/secrets) cross-referenced against each other and against prior audit docs in `docs/`. Live Supabase advisors (`get_advisors`) were queried to confirm which prior findings are actually resolved vs. still open today. **No code was changed as part of this audit.**
 
@@ -13,7 +13,7 @@ RoamDash's *checkout core* is more real than it looks at first glance — order 
 
 Everything *around* that core, however, is a stage set. Restaurant catalogs, menus, reviews, deals, search, order history/tracking (with mock fallback), favorites, saved addresses, saved payment cards, notification preferences, and the entire phone-OTP onboarding step are hardcoded static data, `localStorage`, or `setTimeout`-simulated network calls. Several of these mock fallbacks are **silent** — a broken or misconfigured backend endpoint in production will not surface an error, it will quietly show fake restaurants, fake orders, or a fake courier animation instead. That is the single most dangerous property of the current codebase for a production launch: **failure and success currently look identical to the user.**
 
-There is also one live, unresolved compliance/security gap worth flagging above everything else: **age verification for restricted items (alcohol) is entirely client-side and trivially bypassable** (a `localStorage` flag set after a fake delay), while the app's own copy claims it is "Official Roam Dash verification gate." If RoamDash sells age-restricted items, this cannot ship as-is.
+There is also one live, unresolved compliance/security gap worth flagging above everything else: **age verification for restricted items (alcohol) is entirely client-side and trivially bypassable** (a `localStorage` flag set after a fake delay), while the app's own copy claims it is "Official Roam Rush verification gate." If RoamDash sells age-restricted items, this cannot ship as-is.
 
 The good news: because the backend team already built real schema, RLS, and edge-function coverage for orders/payments/merchants, most of the remaining work is *frontend wiring* (call the real endpoint instead of the mock) rather than backend design-from-scratch. The payments vault (saved cards), notifications, maps/geocoding, and live courier location are the exceptions — those need real backend/vendor work, not just frontend rewiring.
 

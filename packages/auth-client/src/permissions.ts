@@ -92,13 +92,13 @@ export const ROLE_META: Record<Role, RoleMeta> = {
   dash_admin: {
     level: 800,
     label: 'Dash Admin',
-    description: 'Full access to Roam Dash admin — merchants, orders, payouts.',
+    description: 'Full access to Roam Rush admin — merchants, orders, payouts.',
     tier: 'platform',
   },
   dash_ops: {
     level: 600,
     label: 'Dash Operations',
-    description: 'Manage merchants and orders in Roam Dash.',
+    description: 'Manage merchants and orders in Roam Rush.',
     tier: 'platform',
   },
   rides_admin: {

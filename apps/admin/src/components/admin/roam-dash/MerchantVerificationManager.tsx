@@ -173,7 +173,7 @@ export function MerchantVerificationManager() {
         <div>
           <h1 className="text-xl font-semibold text-slate-900 dark:text-white flex items-center gap-2">
             <Utensils className="w-5 h-5 text-emerald-400" />
-            Roam Dash — Merchant Verification
+            Roam Rush — Merchant Verification
           </h1>
           <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
             Review and approve restaurant applications. Only approved merchants appear on the customer app.

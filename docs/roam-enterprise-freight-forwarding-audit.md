@@ -55,7 +55,7 @@ Lean toward **Path A**, because the enforcement, tenancy, and settings plumbing 
 - No genuine dead code beyond a "coming soon" language selector in the footer — this is a clean, well-organized marketing site, just not a product.
 
 ### Naming collisions to not fall into (found during this audit)
-1. **`docs/enterprise-inventory.md`** and migrations `20260801120000_enterprise_inventory_foundation.sql` / `20260802120000_enterprise_inventory_rpcs.sql` — this is **Roam Dash merchant restaurant inventory** ("advanced inventory mode" for a Dash Partner), unrelated to the B2B Roam Enterprise product. Don't reuse or reference this schema when building freight inventory/assets.
+1. **`docs/enterprise-inventory.md`** and migrations `20260801120000_enterprise_inventory_foundation.sql` / `20260802120000_enterprise_inventory_rpcs.sql` — this is **Roam Rush merchant restaurant inventory** ("advanced inventory mode" for a Dash Partner), unrelated to the B2B Roam Enterprise product. Don't reuse or reference this schema when building freight inventory/assets.
 2. **`rides.haulage_categories` / `haulage_items`** — this is a catalog of item categories for booking a Roam Haul *consumer moving job*, not a freight/logistics domain model. Not reusable for Freight Forwarding despite the name proximity.
 3. **`@roam/vertical-config`** — despite the name, its `VerticalType` is `restaurant | grocery | convenience | retail | pharmacy | alcohol` (Dash merchant verticals). Do not extend this for Freight/Taxi/Trucking/Shipping — it's a different axis entirely.
 

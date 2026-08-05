@@ -139,7 +139,7 @@ export default function OnboardingCarouselPage({ onComplete }: OnboardingCarouse
       className="flex min-h-dvh touch-pan-y flex-col overflow-hidden bg-background font-body-sm text-on-background selection:bg-primary-container selection:text-on-primary-container"
     >
       <header className="relative z-10 mx-auto flex h-16 w-full max-w-full items-center justify-between px-margin-mobile">
-        <div className="text-headline-md font-semibold text-primary">Roam Dash Partner</div>
+        <div className="text-headline-md font-semibold text-primary">Roam Rush Partner</div>
         <button
           type="button"
           onClick={handleSkip}

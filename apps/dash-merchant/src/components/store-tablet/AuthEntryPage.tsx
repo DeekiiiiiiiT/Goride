@@ -15,7 +15,7 @@ export default function AuthEntryPage({ onOwnerSignIn, onStoreTablet }: AuthEntr
 
         <div className="mb-inset-xl flex flex-col gap-inset-sm">
           <h1 className="text-headline-lg-mobile font-bold text-on-background md:text-headline-lg">
-            Roam Dash Partner
+            Roam Rush Partner
           </h1>
           <p className="mx-auto max-w-sm text-body-lg text-on-surface-variant">
             Sign in to manage your store, or set up a floor tablet for your team.

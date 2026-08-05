@@ -310,7 +310,7 @@ export function AdminDashboard({ onNavigate }: AdminDashboardProps) {
           />
           <QuickAction
             label="Review Merchants"
-            description={`${dashMerchantCounts.pending} pending Roam Dash restaurant applications`}
+            description={`${dashMerchantCounts.pending} pending Roam Rush restaurant applications`}
             onClick={() => onNavigate('dash-merchants')}
           />
           <QuickAction

@@ -253,7 +253,7 @@ export function UnifiedLedgerFeed({ onBack }: Props) {
                 <option value="roam_fleet">Roam Fleet (Fleet Ops)</option>
               </optgroup>
               <optgroup label="Delivery">
-                <option value="roam_dash">Roam Dash (Orders)</option>
+                <option value="roam_dash">Roam Rush (Orders)</option>
                 <option value="roam_partner">Roam Partner (Merchants)</option>
                 <option value="roam_courier">Roam Courier (Couriers)</option>
               </optgroup>

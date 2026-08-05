@@ -45,7 +45,7 @@ export default function PartnerTopBar({
             <h1 className="text-headline-md font-bold tracking-tight text-primary">{merchant.name}</h1>
           </>
         ) : (
-          <h1 className="truncate text-headline-md font-bold text-primary">Roam Dash Partner</h1>
+          <h1 className="truncate text-headline-md font-bold text-primary">Roam Rush Partner</h1>
         )}
       </div>
 

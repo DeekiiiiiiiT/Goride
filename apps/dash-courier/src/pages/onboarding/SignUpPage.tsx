@@ -98,7 +98,7 @@ export function SignUpPage({ onBack, onContinue }: SignUpPageProps) {
           <div className="flex flex-col gap-3">
             <CourierGoogleAuthButton variant="signup" onError={(msg) => setGoogleError(msg || null)} />
             <p className="text-xs text-muted leading-relaxed text-center px-2">
-              By continuing with Google, you agree to Roam Dash Courier&apos;s{' '}
+              By continuing with Google, you agree to Roam Rush Courier&apos;s{' '}
               <a href={ROAM_LEGAL.termsOfServiceUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-medium">
                 Terms of Service
               </a>{' '}
@@ -191,7 +191,7 @@ export function SignUpPage({ onBack, onContinue }: SignUpPageProps) {
                 />
               </div>
               <span className="text-sm text-on-surface-variant leading-tight">
-                I agree to Roam Dash Courier&apos;s{' '}
+                I agree to Roam Rush Courier&apos;s{' '}
                 <a href={ROAM_LEGAL.termsOfServiceUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-medium">
                   Terms of Service
                 </a>{' '}

@@ -70,7 +70,7 @@ export function VehicleSetupPage({ onBack, onContinue }: VehicleSetupPageProps) 
 
   return (
     <div className="bg-background text-on-background min-h-full flex flex-col antialiased">
-      <OnboardingHeader title="Roam Dash Courier" onBack={onBack} variant="centered" />
+      <OnboardingHeader title="Roam Rush Courier" onBack={onBack} variant="centered" />
 
       <main className="flex-grow pt-6 px-[var(--spacing-edge)] pb-[calc(56px+32px+env(safe-area-inset-bottom))] max-w-md mx-auto w-full">
         <h1 className="text-[28px] leading-9 font-bold tracking-tight mb-2">How do you deliver?</h1>

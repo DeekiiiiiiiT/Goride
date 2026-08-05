@@ -12,9 +12,9 @@ describe('AUTH_RECOVERY_REDIRECTS', () => {
     expect(AUTH_RECOVERY_REDIRECTS.dominion).toBe('https://roamdominion.co/reset-password');
     expect(AUTH_RECOVERY_REDIRECTS.driver).toBe('https://roamdriver.co/reset-password');
     expect(AUTH_RECOVERY_REDIRECTS.rides).toBe('https://roam-s.co/reset-password');
-    expect(AUTH_RECOVERY_REDIRECTS.courier).toBe('https://courier.roamdash.co/reset-password');
-    expect(AUTH_RECOVERY_REDIRECTS.dash).toBe('https://roamdash.co/reset-password');
-    expect(AUTH_RECOVERY_REDIRECTS.partner).toBe('https://partner.roamdash.co/reset-password');
+    expect(AUTH_RECOVERY_REDIRECTS.courier).toBe('https://courier.roamrush.app/reset-password');
+    expect(AUTH_RECOVERY_REDIRECTS.dash).toBe('https://roamrush.app/reset-password');
+    expect(AUTH_RECOVERY_REDIRECTS.partner).toBe('https://partner.roamrush.app/reset-password');
     expect(AUTH_RECOVERY_REDIRECTS.haul).toBe('https://roamhaul.co/reset-password');
     expect(AUTH_RECOVERY_REDIRECTS.fleet).toBe('https://roamfleet.co/reset-password');
     expect(AUTH_RECOVERY_REDIRECTS.enterprise).toBe('https://roamenterprise.co/reset-password');
@@ -24,7 +24,7 @@ describe('AUTH_RECOVERY_REDIRECTS', () => {
 describe('recoveryRedirectForSurface', () => {
   it('returns canonical URL regardless of environment', () => {
     expect(recoveryRedirectForSurface('driver')).toBe('https://roamdriver.co/reset-password');
-    expect(recoveryRedirectForSurface('dash')).toBe('https://roamdash.co/reset-password');
+    expect(recoveryRedirectForSurface('dash')).toBe('https://roamrush.app/reset-password');
   });
 });
 

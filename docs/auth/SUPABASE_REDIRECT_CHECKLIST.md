@@ -21,10 +21,10 @@ Include **scheme + host + port + path** where your apps handle the post-auth lan
 | Driver | `http://localhost:3002/` | `https://roamdriver.co/` |
 | Driver (Android app) | — | `co.roamenterprise.driver://login` |
 | Driver admin tracker | — | Same URLs; see `docs/legal/PLAY_STORE_DRIVER_LAUNCH.md` |
-| Dash customer | `http://localhost:5174/` | `https://roamdash.co/` (or customer subdomain) |
-| Dash courier | `http://localhost:5176/` | `https://courier.roamdash.co/` |
-| Dash courier admin | `http://localhost:5176/admin` | `https://courier.roamdash.co/admin` |
-| Dash merchant | `http://localhost:5175/` | `https://partner.roamdash.co/` (if used) |
+| Dash customer | `http://localhost:5174/` | `https://roamrush.app/` (or customer subdomain) |
+| Dash courier | `http://localhost:5176/` | `https://courier.roamrush.app/` |
+| Dash courier admin | `http://localhost:5176/admin` | `https://courier.roamrush.app/admin` |
+| Dash merchant | `http://localhost:5175/` | `https://partner.roamrush.app/` (if used) |
 | Rides passenger | `http://localhost:5180/login` | `https://roam-s.co/login` |
 | Rides passenger (Android app) | — | `co.roamenterprise.rides://login` |
 | Roam Haul (hauler) | `http://localhost:3004/` | `https://roamhaul.co/` |
@@ -49,11 +49,11 @@ Add every production and dev recovery landing URL. See [`PASSWORD_RECOVERY.md`](
 | Driver | `http://localhost:3002/reset-password` | `https://roamdriver.co/reset-password` |
 | Rides passenger | `http://localhost:5180/reset-password` | `https://roam-s.co/reset-password` |
 | Roam Haul | `http://localhost:3004/reset-password` | `https://roamhaul.co/reset-password` |
-| Dash customer / admin | `http://localhost:5174/reset-password` | `https://roamdash.co/reset-password` |
-| Dash merchant (partner) | `http://localhost:5175/reset-password` | `https://partner.roamdash.co/reset-password` |
-| Dash courier | `http://localhost:5176/reset-password` | `https://courier.roamdash.co/reset-password` |
+| Dash customer / admin | `http://localhost:5174/reset-password` | `https://roamrush.app/reset-password` |
+| Dash merchant (partner) | `http://localhost:5175/reset-password` | `https://partner.roamrush.app/reset-password` |
+| Dash courier | `http://localhost:5176/reset-password` | `https://courier.roamrush.app/reset-password` |
 
-Also add admin recovery on same hosts: `https://courier.roamdash.co/reset-password`, etc. (same path as consumer — `AuthRecoveryGate` handles the token).
+Also add admin recovery on same hosts: `https://courier.roamrush.app/reset-password`, etc. (same path as consumer — `AuthRecoveryGate` handles the token).
 
 ## Google OAuth — Authorized redirect URIs
 

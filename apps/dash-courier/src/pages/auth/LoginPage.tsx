@@ -102,7 +102,7 @@ export function LoginPage({ onBack, onSignIn, onSignUp }: LoginPageProps) {
             </button>
             <div className="flex items-center gap-1 text-primary mb-4">
               <MaterialIcon name="local_shipping" filled />
-              <span className="text-xl font-bold">Roam Dash Courier</span>
+              <span className="text-xl font-bold">Roam Rush Courier</span>
             </div>
             <h1 className="text-[28px] leading-9 font-bold tracking-tight text-on-surface">
               Welcome back

@@ -1,7 +1,7 @@
 import { SERVICE_URLS } from '@/lib/siteContent';
 
 export const DASH_CUSTOMER_URL = SERVICE_URLS.dash;
-export const DASH_MERCHANT_URL = 'https://merchant.roamdash.co';
+export const DASH_MERCHANT_URL = 'https://partner.roamrush.app';
 
 export const MERCHANT_KITCHEN_IMAGE =
   'https://lh3.googleusercontent.com/aida-public/AB6AXuBze2MB8Ah7WcBMmCLasQTrUq0BxLdyLOtIpNELsw0JwZ8Rv7Vfx-M9AspmgWi9I7BP5p8fJgzffF6n0lXQslu4ffDx0nIfm_uRlSx9ceMi8gy9Gj28yVJ-UalUxLWHM6HmlcTDa9tC289rxpY2JvaPl81SmKN82AmQ4RHv_f0GMFoZxGsw8SouGSi8nde4cp0BJD4K6j7wR8kQDvpJbVbrNKtcjRWzlAhXK48K75icax9SaLtQqo3CvdfZw15faJc7grKJtXReBnVQ';

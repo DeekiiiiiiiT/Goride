@@ -1,5 +1,5 @@
 /**
- * Roam Dash - Delivery Service
+ * Roam Rush - Delivery Service
  * 
  * Handles all delivery/food ordering operations:
  * - Merchant management

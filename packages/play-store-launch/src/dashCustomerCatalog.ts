@@ -11,7 +11,7 @@ export const DASH_CUSTOMER_PLAY_STORE_META: PlayStoreProductMeta = {
   productLabel: 'Roam Rush',
   packageId: 'co.roamenterprise.rush',
   privacyPolicyUrl: ROAM_LEGAL.privacyPolicyUrl,
-  supabaseRedirectUrl: 'https://roamdash.co/',
+  supabaseRedirectUrl: 'https://roamrush.app/',
   reviewerEmail: 'deekiiiiiii+roam.rush.review@gmail.com',
   reviewerPassword: 'RoamPlay2026!Rush',
   reviewerSteps:

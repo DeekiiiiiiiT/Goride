@@ -4,12 +4,12 @@ export default function SplashPage() {
       <main className="z-10 flex flex-grow flex-col items-center justify-center p-margin-mobile md:p-margin-tablet">
         <div className="partner-fade-in mb-inset-xl flex flex-col items-center">
           <img
-            alt="Roam Dash Partner Logo"
+            alt="Roam Rush Partner Logo"
             className="mb-inset-sm h-[120px] w-[120px] object-contain"
             src="/assets/logo.png"
           />
           <h1 className="mb-inset-base text-center text-headline-lg-mobile font-bold tracking-tight text-on-surface md:text-headline-lg">
-            ROAM DASH
+            Roam Rush
           </h1>
           <p className="text-center text-headline-md font-semibold text-on-surface-variant">
             Partner

@@ -97,7 +97,7 @@ export function CustomerDetailPage() {
       title: 'Remove Dash customer?',
       description: (
         <>
-          This removes <span className="text-white font-medium">{displayName}</span> from Roam Dash
+          This removes <span className="text-white font-medium">{displayName}</span> from Roam Rush
           only. Their Roam login and profiles in other apps are untouched.
         </>
       ),

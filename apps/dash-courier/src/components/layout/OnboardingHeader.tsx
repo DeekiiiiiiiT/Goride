@@ -19,7 +19,7 @@ export function OnboardingHeader({ title, onBack, variant = 'simple' }: Onboardi
         >
           <MaterialIcon name="arrow_back" />
         </button>
-        <div className="text-xl font-bold text-primary">{title ?? 'Roam Dash Courier'}</div>
+        <div className="text-xl font-bold text-primary">{title ?? 'Roam Rush Courier'}</div>
         <div className="w-10" aria-hidden />
       </header>
     );

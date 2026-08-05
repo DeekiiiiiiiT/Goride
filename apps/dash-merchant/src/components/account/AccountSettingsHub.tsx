@@ -83,7 +83,7 @@ export default function AccountSettingsHub({
           </div>
 
           <h1 className="pointer-events-none absolute left-1/2 -translate-x-1/2 text-headline-md font-bold text-primary">
-            Roam Dash
+            Roam Rush
           </h1>
 
           <div className="z-10 flex shrink-0 items-center gap-1">

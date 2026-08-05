@@ -272,7 +272,7 @@ export default function OrdersDesktopDashboard({
                         {selectedOrder.courier_id ? 'Assigned' : 'Assigning...'}
                       </div>
                       <div className="mt-1 text-body-sm text-on-surface-variant">
-                        Roam Dash Network
+                        Roam Rush Network
                       </div>
                     </div>
                   </div>

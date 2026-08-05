@@ -1,7 +1,7 @@
 import { isNativeCapacitorPlatform } from '@roam/types';
 
 /** Production web host for Dash Courier (not the Android package id). */
-export const COURIER_PRODUCTION_ORIGIN = 'https://courier.roamdash.co';
+export const COURIER_PRODUCTION_ORIGIN = 'https://courier.roamrush.app';
 
 /** Native deep link registered in AndroidManifest + Supabase redirect URLs. */
 export const COURIER_NATIVE_AUTH_CALLBACK = 'co.roamenterprise.courier://login';

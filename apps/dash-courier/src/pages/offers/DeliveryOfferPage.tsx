@@ -151,7 +151,7 @@ export function DeliveryOfferPage({
                 <MaterialIcon name="info" className="mt-0.5 text-on-surface-variant" />
                 <p className="text-body-md leading-relaxed text-on-surface-variant">
                   <span className="font-bold text-on-surface">Pick & pack order:</span> Ensure cold items are selected
-                  last to maintain freshness. Use the Roam Dash insulated bag.
+                  last to maintain freshness. Use the Roam Rush insulated bag.
                 </p>
               </div>
             )}

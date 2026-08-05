@@ -17,7 +17,7 @@ export function WelcomePage({ onGetStarted, onSignIn }: WelcomePageProps) {
         />
         <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-transparent to-black/40" />
         <div className="absolute top-8 left-1/2 -translate-x-1/2 bg-white/90 backdrop-blur-sm px-6 py-2 rounded-full shadow-lg pt-safe">
-          <span className="text-xl font-semibold text-primary tracking-tight">Roam Dash</span>
+          <span className="text-xl font-semibold text-primary tracking-tight">Roam Rush</span>
         </div>
       </div>
 
@@ -25,7 +25,7 @@ export function WelcomePage({ onGetStarted, onSignIn }: WelcomePageProps) {
         <div className="text-center space-y-3 w-full shrink-0">
           <h1 className="text-[28px] leading-[34px] font-bold text-on-surface tracking-tight md:text-[48px] md:leading-[56px]">
             Welcome to <br className="md:hidden" />
-            <span className="text-primary-container">Roam Dash</span>
+            <span className="text-primary-container">Roam Rush</span>
           </h1>
           <p className="text-lg leading-7 text-on-surface-variant max-w-md mx-auto">
             Your favorite restaurants, delivered to your door with exceptional care.

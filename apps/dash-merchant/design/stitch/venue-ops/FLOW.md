@@ -1,6 +1,6 @@
 # Venue Operations — Flow Map
 
-How owner setup, back-office admin, and tablet stations connect in the Roam Dash Partner app.
+How owner setup, back-office admin, and tablet stations connect in the Roam Rush Partner app.
 
 ## Owner setup swimlane
 
@@ -28,7 +28,7 @@ When **venue operations** is on, POS is removed from Restaurant Management — c
 ## Tablet kiosk swimlane
 
 ```
-partner.roamdash.co/tablet  (or station deep link with ?code=&station=)
+partner.roamrush.app/tablet  (or station deep link with ?code=&station=)
   └─ Enter pairing code (if needed)
   └─ Pick station (disabled stations greyed out)
   └─ Pairing success

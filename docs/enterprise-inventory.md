@@ -1,6 +1,6 @@
 # Enterprise Inventory
 
-Enterprise inventory for Roam Dash Partner merchants with Restaurant Management enabled.
+Enterprise inventory for Roam Rush Partner merchants with Restaurant Management enabled.
 
 ## Architecture
 
@@ -14,7 +14,7 @@ Enterprise inventory for Roam Dash Partner merchants with Restaurant Management 
 
 | Control | Where | Effect |
 |---------|-------|--------|
-| Restaurant Management | Roam Dash Admin Portal → merchant → **Enable Restaurant Management** | Adds `in_store_operations` capability; sets `inventory_mode = enterprise` |
+| Restaurant Management | Roam Rush Admin Portal → merchant → **Enable Restaurant Management** | Adds `in_store_operations` capability; sets `inventory_mode = enterprise` |
 | Partner UI | Account → Restaurant Management → module picker → **Inventory** | `EnterpriseInventoryFlow` (live API when capability on) |
 
 Merchants cannot self-enable. `POST /merchant/capabilities/enable` returns 403.

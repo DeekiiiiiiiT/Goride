@@ -95,7 +95,7 @@ export default function RateOrderPage({
         >
           <MaterialIcon name="close" className="text-[24px]" />
         </button>
-        <h1 className="text-headline-md font-bold text-primary">Roam Dash</h1>
+        <h1 className="text-headline-md font-bold text-primary">Roam Rush</h1>
         <div className="w-10" />
       </header>
 

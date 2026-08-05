@@ -16,7 +16,7 @@ interface AdminLoginFormProps {
 }
 
 export function AdminLoginForm({
-  productName = 'Roam Dash',
+  productName = 'Roam Rush',
   productSubtitle = 'Admin Portal',
   recoverySurface = 'dash',
 }: AdminLoginFormProps) {
@@ -68,7 +68,7 @@ export function AdminLoginForm({
           <h1 className="dash-admin-login__title">{productName}</h1>
           <p className="dash-admin-login__subtitle">{productSubtitle}</p>
           <p className="dash-admin-login__tagline">
-            Manage merchant verification, orders, and delivery operations for the Roam Dash platform.
+            Manage merchant verification, orders, and delivery operations for the Roam Rush platform.
           </p>
         </div>
       </aside>
@@ -99,7 +99,7 @@ export function AdminLoginForm({
                   {forgotMode ? 'Reset Password' : 'Admin Login'}
                 </h2>
                 <p className="dash-admin-login__card-desc">
-                  {forgotMode ? 'We will email a link on this domain' : 'Sign in to manage Roam Dash'}
+                  {forgotMode ? 'We will email a link on this domain' : 'Sign in to manage Roam Rush'}
                 </p>
               </div>
             </div>

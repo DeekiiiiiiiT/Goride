@@ -100,7 +100,7 @@ export const EXPIRED_PROMOS = [
 export const FAQ_CATEGORIES = [
   'Delivery & Tracking',
   'Refunds & Cancellations',
-  'Roam Dash Pass',
+  'Roam Rush Pass',
   'Promos & Credits',
 ] as const;
 

@@ -115,7 +115,7 @@ export default function PartnerMobileNavDrawer({
       <aside className="safe-t safe-b absolute left-0 top-0 flex h-full w-[min(18rem,85vw)] flex-col border-r border-outline-variant bg-surface shadow-xl">
         <div className="flex items-center justify-between border-b border-outline-variant px-margin-mobile py-inset-sm">
           <div className="min-w-0">
-            <p className="truncate text-headline-md font-bold text-primary">{merchant.name || 'Roam Dash'}</p>
+            <p className="truncate text-headline-md font-bold text-primary">{merchant.name || 'Roam Rush'}</p>
             <p className="text-body-sm text-on-surface-variant">Terminal ID: {terminalId}</p>
           </div>
           <button

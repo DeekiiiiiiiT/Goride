@@ -534,7 +534,7 @@ export function registerMerchantStationRoutes(app: Hono, deps: StationDeps) {
     const merchant = access.resolved.merchant as Record<string, unknown>;
     const code = await ensurePairingCode(sb, merchantId);
 
-    const origin = c.req.header("origin") || "https://partner.roamdash.co";
+    const origin = c.req.header("origin") || "https://partner.roamrush.app";
     const stationLinks = pairingStationLinks(origin, code, merchant);
 
     return c.json({
@@ -577,7 +577,7 @@ export function registerMerchantStationRoutes(app: Hono, deps: StationDeps) {
     if (error) return c.json({ error: error.message }, 500);
     const row = data as Record<string, unknown>;
     const code = String(row.kiosk_pairing_code || await ensurePairingCode(sb, merchantId));
-    const origin = c.req.header("origin") || "https://partner.roamdash.co";
+    const origin = c.req.header("origin") || "https://partner.roamrush.app";
 
     return c.json({
       storeName: String(row.name || "Store"),
@@ -617,7 +617,7 @@ export function registerMerchantStationRoutes(app: Hono, deps: StationDeps) {
 
     if (error) return c.json({ error: error.message }, 500);
     const row = data as Record<string, unknown>;
-    const origin = c.req.header("origin") || "https://partner.roamdash.co";
+    const origin = c.req.header("origin") || "https://partner.roamrush.app";
 
     return c.json({
       storeName: String(row.name || "Store"),

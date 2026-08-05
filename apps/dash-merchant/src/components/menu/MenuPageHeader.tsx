@@ -28,7 +28,7 @@ export default function MenuPageHeader({ merchant, onOpenNav }: MenuPageHeaderPr
           )}
         </div>
         <h1 className="text-headline-md font-bold tracking-tight text-primary md:text-headline-md">
-          Roam Dash
+          Roam Rush
         </h1>
       </div>
       <button

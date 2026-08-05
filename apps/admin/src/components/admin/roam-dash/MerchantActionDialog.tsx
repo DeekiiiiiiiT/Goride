@@ -58,7 +58,7 @@ const ACTION_COPY: Record<
   },
   approved: {
     title: "Approve merchant",
-    description: "The restaurant will go live on Roam Dash and be visible to customers immediately.",
+    description: "The restaurant will go live on Roam Rush and be visible to customers immediately.",
     confirmLabel: "Approve",
     confirmTone: "success",
     notesLabel: "Internal notes (optional)",

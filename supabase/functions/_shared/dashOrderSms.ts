@@ -13,17 +13,17 @@ export async function sendDashOrderStatusSms(input: {
   const label = input.merchantName ? ` from ${input.merchantName}` : "";
   const orderRef = input.orderNumber || "your order";
   const statusMessages: Record<string, string> = {
-    accepted: `Roam Dash: ${orderRef}${label} was accepted and is being prepared.`,
-    preparing: `Roam Dash: ${orderRef}${label} is being prepared.`,
-    ready: `Roam Dash: ${orderRef}${label} is ready for pickup.`,
-    picked_up: `Roam Dash: Your courier picked up ${orderRef}. Track in the app.`,
-    in_transit: `Roam Dash: ${orderRef} is on the way.`,
-    delivered: `Roam Dash: ${orderRef} was delivered. Enjoy!`,
-    completed: `Roam Dash: ${orderRef} is complete. Thanks for ordering.`,
-    cancelled: `Roam Dash: ${orderRef} was cancelled.`,
+    accepted: `Roam Rush: ${orderRef}${label} was accepted and is being prepared.`,
+    preparing: `Roam Rush: ${orderRef}${label} is being prepared.`,
+    ready: `Roam Rush: ${orderRef}${label} is ready for pickup.`,
+    picked_up: `Roam Rush: Your courier picked up ${orderRef}. Track in the app.`,
+    in_transit: `Roam Rush: ${orderRef} is on the way.`,
+    delivered: `Roam Rush: ${orderRef} was delivered. Enjoy!`,
+    completed: `Roam Rush: ${orderRef} is complete. Thanks for ordering.`,
+    cancelled: `Roam Rush: ${orderRef} was cancelled.`,
   };
   const message = statusMessages[input.status] ||
-    `Roam Dash: ${orderRef} update — status is now ${input.status}.`;
+    `Roam Rush: ${orderRef} update — status is now ${input.status}.`;
 
   const stub = Deno.env.get("SMS_HOOK_STUB_LOG_OK") === "1" ||
     Deno.env.get("DASH_SMS_STUB_LOG_OK") === "1";

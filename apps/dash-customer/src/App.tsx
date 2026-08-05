@@ -111,19 +111,19 @@ const IMMERSIVE_STACK_PAGES: StackPage[] = [
   'edit-profile',
 ];
 
-/** Customer ordering app (roamdash.co). Admin portal: partner.roamdash.co/admin */
+/** Customer ordering app (roamrush.app). Admin portal: partner.roamrush.app/admin */
 export default function App() {
   const isAdmin = window.location.pathname.startsWith('/admin');
 
   if (isAdmin) {
-    window.location.replace('https://partner.roamdash.co/admin');
+    window.location.replace('https://partner.roamrush.app/admin');
     return null;
   }
 
   return (
     <AuthRecoveryGate
       title="Reset password"
-      subtitle="Roam Dash"
+      subtitle="Roam Rush"
       signInHref="/"
     >
       <DashCustomerApp />
@@ -166,7 +166,7 @@ function DashCustomerShell() {
   }, [wasOffline, isOnline, clearWasOffline]);
 
   useEffect(() => {
-    document.title = 'Roam Dash';
+    document.title = 'Roam Rush';
   }, []);
 
   const clearOAuthUrl = useCallback(() => {

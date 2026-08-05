@@ -38,7 +38,7 @@ export function CustomerUnavailablePage({
         >
           <MaterialIcon name="close" />
         </button>
-        <h1 className="text-xl font-bold text-primary">Roam Dash Courier</h1>
+        <h1 className="text-xl font-bold text-primary">Roam Rush Courier</h1>
         <div className="flex items-center text-primary text-xs font-semibold uppercase tracking-wide">
           <MaterialIcon name="bolt" className="text-base mr-1" />
           Online

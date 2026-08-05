@@ -1,7 +1,7 @@
 # RoamDash Courier (`apps/dash-courier`) — Production Readiness Audit
 
 **Date:** 2026-07-28
-**Scope:** `apps/dash-courier` (courier.roamdash.co) — both the consumer-facing courier app (`src/`, excluding `src/admin`) and the embedded courier admin/compliance portal (`src/admin`) — plus the backend surfaces it depends on: `supabase/functions/delivery` (courier + admin routes), the `delivery` and `payments` Postgres schemas, and shared packages (`@roam/auth-client`, `@roam/api-client`, `@roam/location`).
+**Scope:** `apps/dash-courier` (courier.roamrush.app) — both the consumer-facing courier app (`src/`, excluding `src/admin`) and the embedded courier admin/compliance portal (`src/admin`) — plus the backend surfaces it depends on: `supabase/functions/delivery` (courier + admin routes), the `delivery` and `payments` Postgres schemas, and shared packages (`@roam/auth-client`, `@roam/api-client`, `@roam/location`).
 **Companion doc:** [`dash-customer-production-readiness-audit.md`](./dash-customer-production-readiness-audit.md) — this audit builds on it for shared backend surface (schemas, RLS methodology, remediation-status doc trust level) and reports only courier-specific findings in those sections.
 **Method:** Static, read-only audit. Three independent workstreams (frontend data layer, backend/Supabase schema+RLS+edge functions, third-party integrations/secrets) cross-referenced against each other, against the customer-app audit, and against migration files directly (not just prior audit docs). **No code was changed as part of this audit.**
 

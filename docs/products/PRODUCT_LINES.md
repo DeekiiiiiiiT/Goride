@@ -34,12 +34,13 @@ Enterprise orgs are tagged `productLine: enterprise` with business types from `@
 
 Full ops runbook: [`docs/enterprise-intl-freight-pipeline.md`](../enterprise-intl-freight-pipeline.md)
 
-## Roam Dash
+## Roam Rush
 
 | Domain | Audience | Admin |
 |--------|----------|-------|
-| [roamdash.co](https://roamdash.co) | Merchants & ops | `/admin` — dash product ops |
-| [courier.roamdash.co](https://courier.roamdash.co) | Couriers | `/admin` — courier product ops |
+| [roamrush.app](https://roamrush.app) | Customers & ops | `/admin` — rush product ops |
+| [partner.roamrush.app](https://partner.roamrush.app) | Merchants (Partner) | Partner portal + embedded admin |
+| [courier.roamrush.app](https://courier.roamrush.app) | Couriers | `/admin` — courier product ops |
 
 ## Shared backend
 
@@ -53,8 +54,8 @@ One Supabase project. Platform settings are stored per segment:
 | Rides | `platform:settings:rides` | roam-s.co/admin |
 | Driver | `platform:settings:driver` | roamdriver.co/admin |
 | Haul | `platform:settings:haul` | roamhaul.co/admin |
-| Dash | `platform:settings:dash` | roamdash.co/admin |
-| Courier | `platform:settings:courier` | courier.roamdash.co/admin |
+| Dash | `platform:settings:dash` | roamrush.app/admin |
+| Courier | `platform:settings:courier` | courier.roamrush.app/admin |
 
 Legacy key `platform:settings` is read-only (dual-read fallback for fleet/enterprise migration).
 

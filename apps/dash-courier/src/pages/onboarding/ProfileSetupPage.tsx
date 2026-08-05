@@ -27,7 +27,7 @@ export function ProfileSetupPage({ onBack, onContinue }: ProfileSetupPageProps) 
   return (
     <div className="bg-background text-on-background min-h-dvh flex flex-col">
       <div className="w-full max-w-[480px] mx-auto bg-surface min-h-dvh flex flex-col relative shadow-lg border border-surface-variant/50">
-        <OnboardingHeader title="Roam Dash Courier" onBack={onBack} variant="centered" />
+        <OnboardingHeader title="Roam Rush Courier" onBack={onBack} variant="centered" />
 
         <div className="flex-1 px-[var(--spacing-edge)] pt-6 pb-[100px] overflow-y-auto flex flex-col">
           <div className="mb-8 text-center flex flex-col items-center">

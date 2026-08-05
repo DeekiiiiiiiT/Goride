@@ -28,7 +28,7 @@ export const HELP_CATEGORIES = [
   },
   {
     label: 'Restaurants',
-    href: '/dash',
+    href: '/rush',
     icon: 'restaurants' as const,
     iconBg: 'bg-secondary-fixed',
     iconColor: 'text-on-secondary-fixed',

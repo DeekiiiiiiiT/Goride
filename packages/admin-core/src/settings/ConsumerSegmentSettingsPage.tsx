@@ -10,7 +10,7 @@ const SEGMENT_LABELS: Record<ConsumerSegment, string> = {
   rides: 'Roam Rides',
   driver: 'Roam Driver',
   haul: 'Roam Haul',
-  dash: 'Roam Dash',
+  dash: 'Roam Rush',
 };
 
 export type ConsumerSegmentSettingsPageProps = Omit<

@@ -52,7 +52,7 @@ export function HowItWorksPage({ onComplete, onSkip }: HowItWorksPageProps) {
   return (
     <div ref={containerRef} className="app-fullscreen-screen bg-background text-on-background touch-pan-y">
       <header className="flex justify-between items-center p-4 z-20 absolute top-0 w-full pt-safe pointer-events-none">
-        <div className="text-xl font-bold text-primary pointer-events-auto">Roam Dash</div>
+        <div className="text-xl font-bold text-primary pointer-events-auto">Roam Rush</div>
         <button
           type="button"
           onClick={onSkip}

@@ -1,4 +1,4 @@
-export const DASH_CUSTOMER_PRODUCTION_ORIGIN = 'https://roamdash.co';
+export const DASH_CUSTOMER_PRODUCTION_ORIGIN = 'https://roamrush.app';
 
 export const DASH_CUSTOMER_OAUTH_INTENT_KEY = 'roam_dash_customer_oauth_intent';
 export const DASH_CUSTOMER_OAUTH_INTENT_SIGNUP = 'signup';

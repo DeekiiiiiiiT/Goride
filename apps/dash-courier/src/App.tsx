@@ -10,7 +10,7 @@ export default function App() {
   return (
     <AuthRecoveryGate
       title="Reset password"
-      subtitle={isAdmin ? 'Roam Dash Courier Admin' : 'Roam Dash Courier'}
+      subtitle={isAdmin ? 'Roam Rush Courier Admin' : 'Roam Rush Courier'}
       signInHref={isAdmin ? '/admin' : '/'}
     >
       {isAdmin ? (

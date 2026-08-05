@@ -1,5 +1,5 @@
 /**
- * Courier admin types for Roam Dash Courier workforce management
+ * Courier admin types for Roam Rush Courier workforce management
  */
 
 export type CourierAccountStatus = 'active' | 'pending' | 'suspended' | 'deactivated';

@@ -1,4 +1,4 @@
-export const PARTNER_PRODUCTION_ORIGIN = 'https://partner.roamdash.co';
+export const PARTNER_PRODUCTION_ORIGIN = 'https://partner.roamrush.app';
 
 export const PARTNER_OAUTH_INTENT_KEY = 'roam_partner_oauth_intent';
 export const PARTNER_OAUTH_INTENT_SIGNUP = 'signup';

@@ -142,8 +142,8 @@ const CONSUMER_SEGMENT_NAMES: Record<'rides' | 'driver' | 'haul' | 'dash' | 'cou
   rides: 'Roam Rides',
   driver: 'Roam Driver',
   haul: 'Roam Haul',
-  dash: 'Roam Dash',
-  courier: 'Roam Dash Courier',
+  dash: 'Roam Rush',
+  courier: 'Roam Rush Courier',
 };
 
 export function defaultConsumerSegmentSettings(

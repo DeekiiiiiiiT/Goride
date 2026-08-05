@@ -11,7 +11,7 @@ export const MAIN_NAV: NavLink[] = [
   { label: 'Drive', href: '/driver' },
   { label: 'Haul', href: '/haul' },
   { label: 'Fleet', href: '/fleet' },
-  { label: 'Dash', href: '/dash' },
+  { label: 'Rush', href: '/rush' },
   { label: 'Enterprise', href: '/enterprise' },
   { label: 'About', href: '/about' },
 ];
@@ -36,7 +36,7 @@ export const FOOTER_SERVICES: NavLink[] = [
   { label: 'Roam Driver', href: '/driver' },
   { label: 'Roam Haul', href: '/haul' },
   { label: 'Roam Fleet', href: '/fleet' },
-  { label: 'Roam Dash', href: '/dash' },
+  { label: 'Roam Rush', href: '/rush' },
 ];
 
 export const FOOTER_COMPANY: NavLink[] = [

@@ -46,7 +46,7 @@ export default function PickedUpOrderDetail({ order, onBack, onClose }: PickedUp
           </button>
           <div className="flex items-center gap-2">
             <MaterialIcon name="storefront" filled className="text-primary" />
-            <span className="text-headline-md font-bold text-primary">Roam Dash Merchant</span>
+            <span className="text-headline-md font-bold text-primary">Roam Rush Merchant</span>
           </div>
         </div>
       </header>

@@ -1,6 +1,6 @@
 # Store Tablet Pairing — Stitch Reference
 
-**Project:** Roam Dash Partner App (`projects/4244471701037965477`)  
+**Project:** Roam Rush Partner App (`projects/4244471701037965477`)  
 **Design system:** `assets/6024588716ea41f0a6263c2a0e2acb8e`
 
 | # | Screen | Stitch screen ID | Status |
@@ -23,7 +23,7 @@ React implementation: `apps/dash-merchant/src/components/store-tablet/`
 1. Sign in as owner → **Account → Team Members**.
 2. Under **Store tablets**, enable **Enable staff stations** and **Tablet PIN sign-in**.
 3. Copy the pairing code or scan/copy the **Dispatch / Kitchen / Manager** QR link on each iPad.
-4. On the iPad, open `partner.roamdash.co` → **Store tablet** (or use the QR link).
+4. On the iPad, open `partner.roamrush.app` → **Store tablet** (or use the QR link).
 5. Enter the code (or skip if the link includes `code` + `station`), pick station if needed, then staff pick name + PIN each shift.
 6. **Regenerate code** disconnects all tablets — use after staff turnover or a lost device.
 

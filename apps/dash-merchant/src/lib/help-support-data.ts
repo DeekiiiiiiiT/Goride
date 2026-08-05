@@ -62,7 +62,7 @@ export const COMMON_QUESTIONS: HelpArticle[] = [
     id: 'printer',
     title: 'Troubleshooting printer connection',
     summary:
-      'Confirm your printer is on the same Wi‑Fi network, restart the Roam Dash app, and re-pair from device settings.',
+      'Confirm your printer is on the same Wi‑Fi network, restart the Roam Rush app, and re-pair from device settings.',
     keywords: ['printer', 'print', 'receipt', 'bluetooth', 'wifi'],
   },
   {

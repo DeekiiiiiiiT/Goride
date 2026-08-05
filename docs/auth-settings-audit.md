@@ -13,7 +13,7 @@ Auth is enabled; anonymous sign-ins are off. Several local-template defaults are
 | `enable_confirmations = false` (email) | High | **Ops: set in Dashboard** | Require email confirmation before sign-in in production |
 | `minimum_password_length = 6` | High | **Ops: raise to 8+** | Prefer 8+ with `letters_digits` requirements |
 | `password_requirements = ""` | Medium | **Ops: set** | Use at least `letters_digits` |
-| `site_url` / redirect allowlist local-only in config.toml | High | **Fixed 2026-08-02** | Hosted `site_url` → `https://roamfleet.co`; full `uri_allow_list` from `docs/auth/SUPABASE_REDIRECT_CHECKLIST.md` (courier.roamdash.co + all products). Do not `config push` local Auth URLs. |
+| `site_url` / redirect allowlist local-only in config.toml | High | **Fixed 2026-08-02** | Hosted `site_url` → `https://roamfleet.co`; full `uri_allow_list` from `docs/auth/SUPABASE_REDIRECT_CHECKLIST.md` (courier.roamrush.app + all products). Do not `config push` local Auth URLs. |
 | `otp_expiry = 3600` (1 hour) | Medium | **Review** | Prefer 10–15 minutes for SMS/email OTP |
 | `max_frequency = "1s"` on email | Medium | **Tighten** | Prefer ≥60s to reduce abuse |
 | `enable_refresh_token_rotation = true` | OK | Done | Keep |

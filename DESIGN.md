@@ -1,6 +1,6 @@
 ---
 name: Merchant Core
-source: Stitch — Roam Dash Partner App (projects/4244471701037965477)
+source: Stitch — Roam Rush Partner App (projects/4244471701037965477)
 device: MOBILE (390×884 base) + TABLET (1280×1024+)
 colorMode: LIGHT
 colorVariant: FIDELITY
@@ -112,7 +112,7 @@ spacing:
 
 ## Brand & Style
 
-The brand identity for this design system is rooted in operational clarity and professional reliability, specifically tailored for the Roam Dash Partner Merchant experience. The aesthetic is **Modern Minimalist**, prioritizing high-speed information processing and "at-a-glance" status monitoring.
+The brand identity for this design system is rooted in operational clarity and professional reliability, specifically tailored for the Roam Rush Partner Merchant experience. The aesthetic is **Modern Minimalist**, prioritizing high-speed information processing and "at-a-glance" status monitoring.
 
 The emotional response should be one of confidence and calm efficiency. By utilizing a high-ratio of whitespace and a warm, off-white background, the interface reduces cognitive load for busy merchants. The style avoids unnecessary decorative elements, focusing instead on structural hierarchy and purposeful color usage to signify business health and order status.
 
@@ -190,7 +190,7 @@ Screen inventory from the Stitch project, organized by user journey.
 | Login | Merchant sign-in |
 | Onboarding - Welcome | First-run introduction |
 | Onboarding - How It Works | Product walkthrough |
-| Home - Discover Roam Dash | Marketing / discovery landing |
+| Home - Discover Roam Rush | Marketing / discovery landing |
 | Onboarding Complete - Go Live | Post-onboarding confirmation |
 
 ### Sign Up & Verification
@@ -318,5 +318,5 @@ Screen inventory from the Stitch project, organized by user journey.
 
 | Screen | Purpose |
 |--------|---------|
-| Roam Dash Partner Logo | App logo (200×200) |
+| Roam Rush Partner Logo | App logo (200×200) |
 | Animated SVG | Brand animation asset |

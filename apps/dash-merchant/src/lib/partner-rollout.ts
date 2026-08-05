@@ -22,6 +22,6 @@
  *
  * GCP / Supabase prerequisites:
  * - Maps JavaScript API, Places API (new), Geocoding API enabled
- * - GOOGLE_MAPS_API_KEY secret on delivery edge (referrer: partner.roamdash.co)
+ * - GOOGLE_MAPS_API_KEY secret on delivery edge (referrer: partner.roamrush.app)
  * - Storage buckets: merchant-assets (public), merchant-documents (private)
  */

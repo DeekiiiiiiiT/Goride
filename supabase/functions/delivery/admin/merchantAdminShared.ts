@@ -158,7 +158,7 @@ export async function sendNotificationEmail(opts: {
 
   if (!from && useResendApi) {
     // Last resort: verified domain default (override via RESEND_FROM or SMTP_FROM secrets)
-    from = normalizeSmtpFrom("Roam Dash <noreply@roam-s.co>");
+    from = normalizeSmtpFrom("Roam Rush <noreply@roam-s.co>");
   }
 
   if (!host || !port || !user || !pass || !from || !isValidFromField(from)) {
@@ -200,17 +200,17 @@ export function renderStatusEmail(
   status: VerificationStatus,
   merchant: { name: string; rejection_reason?: string | null; verification_notes?: string | null },
 ): { subject: string; html: string; text: string } {
-  const portalUrl = "https://partner.roamdash.co";
+  const portalUrl = "https://partner.roamrush.app";
   switch (status) {
     case "approved":
       return {
-        subject: `${merchant.name} is now live on Roam Dash!`,
+        subject: `${merchant.name} is now live on Roam Rush!`,
         text: `Great news! Your restaurant "${merchant.name}" has been approved.\n\n${portalUrl}`,
         html: `<p><strong>${merchant.name}</strong> has been approved. <a href="${portalUrl}">Open Partner Portal</a></p>`,
       };
     case "rejected":
       return {
-        subject: `Update on your Roam Dash application`,
+        subject: `Update on your Roam Rush application`,
         text: `Reason: ${merchant.rejection_reason || "Not specified"}\n\n${portalUrl}`,
         html: `<p>Application not approved. Reason: ${merchant.rejection_reason || "Not specified"}</p>`,
       };
@@ -222,7 +222,7 @@ export function renderStatusEmail(
       };
     case "in_review":
       return {
-        subject: `Your Roam Dash application is being reviewed`,
+        subject: `Your Roam Rush application is being reviewed`,
         text: `Application for "${merchant.name}" is under review.`,
         html: `<p>Application for <strong>${merchant.name}</strong> is under review.</p>`,
       };

@@ -50,7 +50,7 @@ export default function AccountPage({ session, onNavigate }: AccountPageProps) {
                 className="w-full h-full object-cover"
               />
             </div>
-            <h1 className="text-headline-lg-mobile font-bold text-primary">Roam Dash</h1>
+            <h1 className="text-headline-lg-mobile font-bold text-primary">Roam Rush</h1>
           </div>
           <button
             type="button"

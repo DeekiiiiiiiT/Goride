@@ -23,7 +23,7 @@ export function ConfirmHandoffPage({
         >
           <MaterialIcon name="arrow_back" />
         </button>
-        <h1 className="text-xl font-bold text-primary">Roam Dash Courier</h1>
+        <h1 className="text-xl font-bold text-primary">Roam Rush Courier</h1>
         <div className="w-8" aria-hidden />
       </header>
 

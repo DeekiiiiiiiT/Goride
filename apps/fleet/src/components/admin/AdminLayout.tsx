@@ -89,7 +89,7 @@ const VEHICLE_DATABASE_CHILDREN = [
   { id: 'parts-sourcing', label: 'Parts sourcing', icon: ShoppingCart },
 ];
 
-// Collapsible section for Roam Dash (food delivery)
+// Collapsible section for Roam Rush (food delivery)
 const ROAM_DASH_CHILDREN = [
   { id: 'roam-dash-merchants', label: 'Merchant Verification', icon: Inbox },
 ];
@@ -450,7 +450,7 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
           </div>
           )}
 
-          {/* Roam Dash collapsible section */}
+          {/* Roam Rush collapsible section */}
           {visibleRoamDashChildren.length > 0 && (
           <div>
             <button
@@ -464,7 +464,7 @@ export function AdminLayout({ children, currentPage, onNavigate }: AdminLayoutPr
               `}
             >
               <Utensils className="w-4.5 h-4.5 shrink-0" />
-              <span className="truncate">Roam Dash</span>
+              <span className="truncate">Roam Rush</span>
               {roamDashOpen
                 ? <ChevronDown className="w-3.5 h-3.5 ml-auto text-slate-500" />
                 : <ChevronRight className="w-3.5 h-3.5 ml-auto text-slate-500" />

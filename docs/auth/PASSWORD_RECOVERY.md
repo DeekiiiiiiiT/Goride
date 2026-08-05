@@ -12,9 +12,9 @@ Password reset links must return the user to the **same product domain** where t
 | `roamdriver.co` | `roamdriver.co/reset-password` |
 | `roam-s.co` | `roam-s.co/reset-password` |
 | `roamhaul.co` | `roamhaul.co/reset-password` |
-| `roamdash.co` | `roamdash.co/reset-password` |
-| `partner.roamdash.co` | `partner.roamdash.co/reset-password` |
-| `courier.roamdash.co` | `courier.roamdash.co/reset-password` |
+| `roamrush.app` | `roamrush.app/reset-password` |
+| `partner.roamrush.app` | `partner.roamrush.app/reset-password` |
+| `courier.roamrush.app` | `courier.roamrush.app/reset-password` |
 
 ## How it works
 

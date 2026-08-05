@@ -1,6 +1,6 @@
 # Restaurant Management — Stitch Reference
 
-**Project:** Roam Dash Partner App (`projects/4244471701037965477`)  
+**Project:** Roam Rush Partner App (`projects/4244471701037965477`)  
 **Design system:** `assets/6024588716ea41f0a6263c2a0e2acb8e`
 
 | # | Screen | Stitch screen ID | Device | Status |

@@ -53,7 +53,7 @@ const ACTION_CONFIG: Record<string, { icon: React.ComponentType<any>; label: str
   remove_team_member:   { icon: UserMinus,       label: 'Removed team member',      color: 'text-red-400 bg-red-500/15',         category: 'remove' },
   'roam_dash.merchant_status_changed': {
     icon: Store,
-    label: 'Updated Roam Dash merchant',
+    label: 'Updated Roam Rush merchant',
     color: 'text-emerald-400 bg-emerald-500/15',
     category: 'roam_dash',
   },
@@ -67,7 +67,7 @@ const CATEGORY_FILTERS = [
   { value: 'invite', label: 'Invites & Create' },
   { value: 'remove', label: 'Remove' },
   { value: 'link', label: 'Link / Unlink' },
-  { value: 'roam_dash', label: 'Roam Dash' },
+  { value: 'roam_dash', label: 'Roam Rush' },
 ];
 
 const DATE_FILTERS = [

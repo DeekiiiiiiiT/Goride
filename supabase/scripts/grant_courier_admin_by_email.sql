@@ -1,6 +1,6 @@
 -- Grant Dash Courier Admin Portal access to the platform admin account.
 -- Preserves existing roles and adds courier_admin.
--- Run in Supabase Dashboard → SQL Editor, then sign out/in at courier.roamdash.co/admin.
+-- Run in Supabase Dashboard → SQL Editor, then sign out/in at courier.roamrush.app/admin.
 
 UPDATE auth.users
 SET raw_app_meta_data = jsonb_set(

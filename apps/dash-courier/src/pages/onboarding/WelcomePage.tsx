@@ -12,7 +12,7 @@ export function WelcomePage({ onGetStarted, onSignIn }: WelcomePageProps) {
       <header className="w-full flex justify-center items-center pt-safe pt-6 px-[var(--spacing-edge)] h-20 shrink-0">
         <div className="flex items-center gap-2">
           <MaterialIcon name="moped" className="text-primary-container text-[32px]" filled />
-          <h1 className="text-2xl font-semibold text-on-surface tracking-tight">Roam Dash</h1>
+          <h1 className="text-2xl font-semibold text-on-surface tracking-tight">Roam Rush</h1>
         </div>
       </header>
 
@@ -33,7 +33,7 @@ export function WelcomePage({ onGetStarted, onSignIn }: WelcomePageProps) {
             <h2 className="text-[28px] leading-9 font-bold tracking-tight text-on-background">
               Welcome to
               <br />
-              Roam Dash Courier
+              Roam Rush Courier
             </h2>
             <p className="text-base leading-6 text-muted px-4">
               Deliver food from local restaurants and earn on your schedule.

@@ -95,7 +95,7 @@ export function generateInviteToken(): string {
 }
 
 export function buildTeamInviteUrl(token: string): string {
-  const base = (Deno.env.get("PARTNER_PORTAL_URL") || "https://partner.roamdash.co")
+  const base = (Deno.env.get("PARTNER_PORTAL_URL") || "https://partner.roamrush.app")
     .replace(/\/$/, "");
   return `${base}/team-invite/${token}`;
 }
@@ -150,9 +150,9 @@ export function renderTeamInviteEmail(opts: {
     hour: "numeric",
     minute: "2-digit",
   });
-  const subject = `You're invited to join ${opts.merchantName} on Roam Dash`;
+  const subject = `You're invited to join ${opts.merchantName} on Roam Rush`;
   const text = [
-    `You've been invited to join ${opts.merchantName} on Roam Dash as ${roleLabel}.`,
+    `You've been invited to join ${opts.merchantName} on Roam Rush as ${roleLabel}.`,
     opts.inviterEmail ? `Invited by: ${opts.inviterEmail}` : "",
     "",
     `Accept your invite: ${opts.inviteUrl}`,
@@ -160,7 +160,7 @@ export function renderTeamInviteEmail(opts: {
     `This invite expires on ${expiryLabel}.`,
   ].filter(Boolean).join("\n");
   const html = `
-    <p>You've been invited to join <strong>${opts.merchantName}</strong> on Roam Dash as <strong>${roleLabel}</strong>.</p>
+    <p>You've been invited to join <strong>${opts.merchantName}</strong> on Roam Rush as <strong>${roleLabel}</strong>.</p>
     ${opts.inviterEmail ? `<p>Invited by: ${opts.inviterEmail}</p>` : ""}
     <p><a href="${opts.inviteUrl}">Accept your invite</a></p>
     <p>This invite expires on ${expiryLabel}.</p>

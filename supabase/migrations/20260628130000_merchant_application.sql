@@ -1,4 +1,4 @@
--- Roam Dash Partner: merchant application fields, documents, notification settings
+-- Roam Rush Partner: merchant application fields, documents, notification settings
 -- Backward-compatible: all new merchant columns nullable
 
 ALTER TABLE delivery.merchants

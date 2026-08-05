@@ -1,4 +1,4 @@
--- Roam Dash - Merchant Verification (Phase 1)
+-- Roam Rush - Merchant Verification (Phase 1)
 -- Adds multi-stage verification workflow for restaurants:
 --   pending -> in_review -> docs_requested -> approved/rejected
 -- Plus audit log + in-app notifications queue.

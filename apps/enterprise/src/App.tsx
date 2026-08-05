@@ -174,7 +174,8 @@ export default function App() {
         <Route path="/driver" element={<DriverPage />} />
         <Route path="/haul" element={<HaulPage />} />
         <Route path="/fleet" element={<FleetPage />} />
-        <Route path="/dash" element={<DashPage />} />
+        <Route path="/rush" element={<DashPage />} />
+        <Route path="/dash" element={<Navigate to="/rush" replace />} />
         <Route path="/enterprise" element={<EnterprisePage />} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="/careers" element={<CareersPage />} />

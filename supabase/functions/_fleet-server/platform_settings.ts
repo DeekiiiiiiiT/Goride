@@ -146,7 +146,7 @@ export function defaultSettingsForSegment(segment: SettingsSegment): Record<stri
     case "haul":
       return defaultConsumerSettings("Roam Haul");
     case "dash":
-      return defaultConsumerSettings("Roam Dash", { platformFeeRate: 0.05 });
+      return defaultConsumerSettings("Roam Rush", { platformFeeRate: 0.05 });
     default:
       return defaultFleetProductSettings("Roam Fleet", true);
   }
@@ -194,7 +194,7 @@ function segmentFromHost(hostHint: string): SettingsSegment | null {
   if (hostHint.includes("roam-s") || hostHint.includes("roamrides")) return "rides";
   if (hostHint.includes("roamdriver")) return "driver";
   if (hostHint.includes("roamhaul")) return "haul";
-  if (hostHint.includes("roamdash")) return "dash";
+  if (hostHint.includes("roamdash") || hostHint.includes("roamrush")) return "dash";
   return null;
 }
 
@@ -360,7 +360,7 @@ const SEGMENT_DEFAULT_NAMES: Record<SettingsSegment, string> = {
   rides: "Roam Rides",
   driver: "Roam Driver",
   haul: "Roam Haul",
-  dash: "Roam Dash",
+  dash: "Roam Rush",
 };
 
 /** Public platform-status payload for a resolved segment. */

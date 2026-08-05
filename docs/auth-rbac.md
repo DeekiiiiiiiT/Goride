@@ -77,7 +77,7 @@ Different driver vs admin emails are fine — each account needs its own roles. 
 
 You can stay signed in as admin and driver at the same time in two tabs.
 
-## Same host (`localhost:5176` / `courier.roamdash.co`)
+## Same host (`localhost:5176` / `courier.roamrush.app`)
 
 Courier consumer (`/`) and admin (`/admin`) use isolated Supabase sessions:
 
@@ -97,7 +97,7 @@ Grant courier admin with `supabase/scripts/provision_product_admin.sql` (`courie
 | `user_metadata.role = driver` only | Open `/admin` | Access denied |
 | `platform_owner` | Login driver app | No `user_metadata.role` overwrite; admin unchanged |
 | Pure driver | Open `/admin` | Access denied |
-| `app_metadata.role = courier_admin` | Login on courier.roamdash.co/admin | Dashboard loads; consumer app session unchanged |
+| `app_metadata.role = courier_admin` | Login on courier.roamrush.app/admin | Dashboard loads; consumer app session unchanged |
 | `courier_ops` | Write actions (suspend, approve) | API 403 |
 
 ## Supabase hardening (recommended)

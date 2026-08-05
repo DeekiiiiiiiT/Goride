@@ -60,7 +60,7 @@ export function AccountPendingPage({
       <header className="w-full max-w-md flex justify-between items-center px-[var(--spacing-edge)] min-h-14 pt-safe">
         <div className="flex items-center gap-2">
           <MaterialIcon name="local_shipping" className="text-[28px] text-primary" filled />
-          <span className="text-xl font-semibold text-primary tracking-tight">Roam Dash</span>
+          <span className="text-xl font-semibold text-primary tracking-tight">Roam Rush</span>
         </div>
         <button
           type="button"

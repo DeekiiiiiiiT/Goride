@@ -1,8 +1,8 @@
-# Roam Dash — Production Readiness Audit (vs. Roam Rideshare Baseline)
+# Roam Rush — Production Readiness Audit (vs. Roam Rideshare Baseline)
 
 **Date:** 2026-08-03
 **Author:** Consolidated audit — static, read-only code review. No code was changed as part of this audit.
-**Scope:** `apps/dash-customer`, `apps/dash-courier`, `apps/dash-merchant` (the "Roam Dash" DoorDash-style marketplace), benchmarked against `apps/rides-passenger`, `apps/driver`, and `apps/fleet` (the "Roam Rideshare" suite, currently production and serving real riders/drivers). Also covers the shared backend these apps depend on: `supabase/functions/delivery`, `supabase/functions/payments`, `supabase/functions/matching`, `supabase/functions/notifications`, `supabase/functions/merchant-push`, the `delivery`/`payments` Postgres schemas, and shared packages (`@roam/api-client`, `@roam/auth-client`, `@roam/location`, `@roam/vertical-config`, `@roam/platform-settings`).
+**Scope:** `apps/dash-customer`, `apps/dash-courier`, `apps/dash-merchant` (the "Roam Rush" DoorDash-style marketplace), benchmarked against `apps/rides-passenger`, `apps/driver`, and `apps/fleet` (the "Roam Rideshare" suite, currently production and serving real riders/drivers). Also covers the shared backend these apps depend on: `supabase/functions/delivery`, `supabase/functions/payments`, `supabase/functions/matching`, `supabase/functions/notifications`, `supabase/functions/merchant-push`, the `delivery`/`payments` Postgres schemas, and shared packages (`@roam/api-client`, `@roam/auth-client`, `@roam/location`, `@roam/vertical-config`, `@roam/platform-settings`).
 
 **Method:** This document merges two layers of evidence:
 1. Four prior static audits already in this repo (`docs/dash-customer-production-readiness-audit.md`, `docs/dash-courier-production-readiness-audit.md`, `docs/dash-merchant-production-readiness-audit.md`, `docs/dash-cross-app-integration-audit.md`, all dated 2026-07-28/29), and
@@ -14,11 +14,11 @@ Where the fresh pass confirmed a prior finding is now **fixed in code** (not jus
 
 ## 0. Executive Summary
 
-Roam Dash is **not a UI shell** — it's a partially-real marketplace with a genuinely substantial backend (order placement, real WiPay/PayPal payment capture, real-time order sync via Supabase Realtime, real RLS, real admin tooling) that is meaningfully more built-out than a first read of the file tree suggests. The team has also been actively fixing things: several P0 items flagged in the 2026-07-29 audits (the `assigned`-status marketplace-breaking bug, missing live courier map, missing customer cancellation, missing commission/fee split, duplicate payout routes) were independently re-verified as **fixed** in this pass, days after they were documented. That's a good sign for velocity.
+Roam Rush is **not a UI shell** — it's a partially-real marketplace with a genuinely substantial backend (order placement, real WiPay/PayPal payment capture, real-time order sync via Supabase Realtime, real RLS, real admin tooling) that is meaningfully more built-out than a first read of the file tree suggests. The team has also been actively fixing things: several P0 items flagged in the 2026-07-29 audits (the `assigned`-status marketplace-breaking bug, missing live courier map, missing customer cancellation, missing commission/fee split, duplicate payout routes) were independently re-verified as **fixed** in this pass, days after they were documented. That's a good sign for velocity.
 
-That said, **Roam Dash is not at rideshare parity, and there are new blockers the July audits didn't catch.** The honest comparison:
+That said, **Roam Rush is not at rideshare parity, and there are new blockers the July audits didn't catch.** The honest comparison:
 
-| Dimension | Rideshare (production) | Roam Dash (today) |
+| Dimension | Rideshare (production) | Roam Rush (today) |
 |---|---|---|
 | Native mobile app (Capacitor/Android/iOS) | Yes — full Capacitor stack, background GPS, native builds | **None of the three Dash apps have Capacitor at all.** Web-only. |
 | Driver/courier dispatch engine | Mature: geo-distance pooling, fairness rotation, wave escalation, reconciliation (`supabase/functions/matching`) | Courier dispatch is a **separate, simplified, distance-agnostic, single-shot** implementation with no scheduled re-dispatch |
@@ -292,7 +292,7 @@ This merges every open finding above into one execution order. Items already mar
 34. Is web-only (no native app) acceptable for dash-customer long-term, or does it eventually need Capacitor parity with rides-passenger? (Courier is a hard blocker either way — see P1 #10.)
 35. What should real merchant/courier payout cadence and disbursement method actually be (bank transfer via Connect, in-app wallet, cash-out threshold)? Blocks P0 #4 and P1 #14 from being scoped concretely.
 36. Is the pull-based courier dispatch model (vs. rides' push/matching-engine model) acceptable for launch, or does delivery need the same fairness/proximity engine? Blocks P2 #21.
-37. Does Roam Dash need i18n parity with rides-passenger for the Jamaica market at launch? (§2.2 item 5)
+37. Does Roam Rush need i18n parity with rides-passenger for the Jamaica market at launch? (§2.2 item 5)
 38. Is alcohol/age-restricted-item sale in scope for launch? If yes, the age-verification gate (customer-side DOB check, courier-side handoff photo) needs a real ID-verification vendor decision — currently deferred per an explicit code comment, which is fine only as long as restricted items stay out of scope.
 
 ---

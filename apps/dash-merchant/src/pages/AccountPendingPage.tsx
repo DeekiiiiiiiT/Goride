@@ -67,7 +67,7 @@ export default function AccountPendingPage({ onSignOut }: AccountPendingPageProp
         <header className="sticky top-0 z-50 mx-auto flex h-16 w-full max-w-full items-center justify-between border-b border-outline-variant bg-surface px-margin-mobile shadow-sm">
           <div className="flex items-center gap-2">
             <MaterialIcon name="store" filled className="text-primary" />
-            <span className="text-headline-md font-bold text-primary">Roam Dash Merchant</span>
+            <span className="text-headline-md font-bold text-primary">Roam Rush Merchant</span>
           </div>
           <button
             type="button"

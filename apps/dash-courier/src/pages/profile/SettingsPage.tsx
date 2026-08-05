@@ -121,7 +121,7 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
           <h2 className="text-xs font-semibold uppercase tracking-wider text-primary">About</h2>
           <div className="bg-surface rounded-xl shadow-soft overflow-hidden">
             {[
-              { label: 'About Roam Dash Courier', href: ROAM_LEGAL.privacyPolicyUrl },
+              { label: 'About Roam Rush Courier', href: ROAM_LEGAL.privacyPolicyUrl },
               { label: 'Terms of Service', href: ROAM_LEGAL.termsOfServiceUrl },
               { label: 'Privacy Policy', href: ROAM_LEGAL.privacyPolicyUrl },
             ].map((link, i, arr) => (
@@ -150,7 +150,7 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
           </a>
           <div className="text-center">
             <p className="text-[11px] text-muted">Version 2.4.1 (Build 842)</p>
-            <p className="text-[11px] text-muted mt-1">© 2024 Roam Dash Inc.</p>
+            <p className="text-[11px] text-muted mt-1">© 2024 Roam Rush Inc.</p>
           </div>
         </section>
       </main>

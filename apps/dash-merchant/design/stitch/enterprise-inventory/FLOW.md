@@ -1,6 +1,6 @@
 # Enterprise Inventory — Flow Map
 
-How owners manage multi-location stock, receiving, counts, and variance in the Roam Dash Partner app.
+How owners manage multi-location stock, receiving, counts, and variance in the Roam Rush Partner app.
 
 ## Owner swimlane
 

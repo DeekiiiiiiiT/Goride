@@ -4,7 +4,7 @@
  * Central matching engine for rider-driver dispatch serving multiple products:
  * - rides (roam-s.co, roamdriver.co)
  * - fleet (roamfleet.co) [future]
- * - dash (roamdash.co) [future]
+ * - dash (roamrush.app) [future]
  * - enterprise (roamenterprise.co) [future]
  *
  * Configured from Super Admin at roamdominion.co.

@@ -47,12 +47,12 @@ export const supabaseHaulApp = createRoamAuthClient(`sb-${projectId}-auth-haul`)
 export const supabaseHaulAdmin = createRoamAuthClient(`sb-${projectId}-auth-haul-admin`);
 
 /**
- * Roam Dash Courier app. Isolated from other Roam consumer sessions.
+ * Roam Rush Courier app. Isolated from other Roam consumer sessions.
  */
 export const supabaseCourierApp = createRoamAuthClient(`sb-${projectId}-auth-courier`);
 
 /**
- * Roam Dash Courier admin portal (`/admin`). Isolated from the courier app session.
+ * Roam Rush Courier admin portal (`/admin`). Isolated from the courier app session.
  */
 export const supabaseCourierAdmin = createRoamAuthClient(`sb-${projectId}-auth-courier-admin`);
 
@@ -62,17 +62,17 @@ export const supabaseCourierAdmin = createRoamAuthClient(`sb-${projectId}-auth-c
 export const supabaseRidesAdmin = createRoamAuthClient(`sb-${projectId}-auth-rides-admin`);
 
 /**
- * Roam Dash admin portal (`/admin`). Isolated from consumer sessions.
+ * Roam Rush admin portal (`/admin`). Isolated from consumer sessions.
  */
 export const supabaseDashAdmin = createRoamAuthClient(`sb-${projectId}-auth-dash-admin`);
 
 /**
- * Roam Dash customer app (`/`). Isolated from driver/courier sessions on the same host.
+ * Roam Rush customer app (`/`). Isolated from driver/courier sessions on the same host.
  */
 export const supabaseDashCustomer = createRoamAuthClient(`sb-${projectId}-auth-dash-customer`);
 
 /**
- * Roam Dash merchant partner app (`/`). Isolated from admin and driver sessions.
+ * Roam Rush merchant partner app (`/`). Isolated from admin and driver sessions.
  */
 export const supabaseDashPartner = createRoamAuthClient(`sb-${projectId}-auth-dash-partner`);
 

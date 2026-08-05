@@ -21,7 +21,7 @@ export function SplashPage({ onComplete }: SplashPageProps) {
       <main className="relative z-10 flex flex-1 flex-col items-center justify-center w-full max-w-[1200px] mx-auto px-4">
         <div className="flex flex-col items-center dash-subtle-pulse">
           <img
-            alt="Roam Dash"
+            alt="Roam Rush"
             className="w-64 md:w-80 object-contain mb-8"
             src="/images/logo.png"
           />

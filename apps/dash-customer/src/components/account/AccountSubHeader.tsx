@@ -11,7 +11,7 @@ export function AccountSubHeader() {
           <div className="w-10 h-10 rounded-full overflow-hidden bg-surface-container-high border border-outline-variant shrink-0">
             <img src={profile.avatarUrl || PROFILE_HEADER_AVATAR} alt="Profile" className="w-full h-full object-cover" />
           </div>
-          <h1 className="text-headline-sm font-bold text-primary tracking-tight">Roam Dash</h1>
+          <h1 className="text-headline-sm font-bold text-primary tracking-tight">Roam Rush</h1>
         </div>
         <button
           type="button"

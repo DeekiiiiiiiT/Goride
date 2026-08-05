@@ -1,4 +1,4 @@
--- Courier profiles and compliance tables for Roam Dash Courier admin
+-- Courier profiles and compliance tables for Roam Rush Courier admin
 
 CREATE TABLE IF NOT EXISTS delivery.courier_profiles (
   user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -145,7 +145,7 @@ CREATE TRIGGER update_courier_vehicles_updated_at
   BEFORE UPDATE ON delivery.courier_vehicles
   FOR EACH ROW EXECUTE FUNCTION delivery.set_updated_at();
 
-COMMENT ON TABLE delivery.courier_profiles IS 'Courier workforce profiles for Roam Dash delivery';
+COMMENT ON TABLE delivery.courier_profiles IS 'Courier workforce profiles for Roam Rush delivery';
 COMMENT ON TABLE delivery.courier_documents IS 'Compliance documents (license, insurance) for couriers';
 COMMENT ON TABLE delivery.courier_vehicles IS 'Registered delivery vehicles for couriers';
 COMMENT ON TABLE delivery.courier_audit_events IS 'Admin audit trail for courier lifecycle actions';

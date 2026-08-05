@@ -1,7 +1,7 @@
 {
-  "name": "Roam Dash Partner",
+  "name": "Roam Rush Partner",
   "short_name": "Roam Partner",
-  "description": "Manage orders, menus, and grow your delivery business on Roam Dash.",
+  "description": "Manage orders, menus, and grow your delivery business on Roam Rush.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#fff8f5",

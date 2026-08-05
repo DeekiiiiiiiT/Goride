@@ -22,7 +22,7 @@ export function DashAppHeader({
       >
         <MaterialIcon name="menu" className="text-primary text-2xl" />
       </button>
-      <h1 className="text-2xl font-bold text-primary tracking-tight">Roam Dash</h1>
+      <h1 className="text-2xl font-bold text-primary tracking-tight">Roam Rush</h1>
       <button
         type="button"
         aria-label="Account"

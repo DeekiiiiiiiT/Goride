@@ -66,7 +66,7 @@ export const VENUE_OPS_SMOKE = [
 ] as const;
 
 export const PARTNER_PRODUCTION_SMOKE = [
-  'partner.roamdash.co logged out → Welcome page',
+  'partner.roamrush.app logged out → Welcome page',
   'Logged in without merchant → 6-step onboarding wizard',
   'Complete wizard → AccountPendingPage with merchant row in DB',
   'Dashboard, Orders, Menu, Analytics, Account load (approved)',

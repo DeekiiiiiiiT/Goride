@@ -155,7 +155,7 @@ export function PermissionsPage({ onBack, onContinue }: PermissionsPageProps) {
   return (
     <div className="bg-background text-on-background min-h-full flex flex-col items-center">
       <div className="w-full max-w-[400px] min-h-full bg-background relative flex flex-col mx-auto">
-        <OnboardingHeader title="Roam Dash Courier" onBack={onBack} variant="centered" />
+        <OnboardingHeader title="Roam Rush Courier" onBack={onBack} variant="centered" />
 
         <div className="flex-1 flex flex-col px-[var(--spacing-edge)] py-6 overflow-y-auto pb-[100px]">
           <div className="mb-8">

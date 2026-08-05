@@ -103,11 +103,11 @@ export const PRODUCT_ROLE_META: Record<ProductAdminRole, { label: string; descri
   },
   dash_admin: {
     label: 'Dash Admin',
-    description: 'Full access to Roam Dash admin - merchants, orders, payouts',
+    description: 'Full access to Roam Rush admin - merchants, orders, payouts',
   },
   dash_ops: {
     label: 'Dash Operations',
-    description: 'Manage merchants and orders in Roam Dash',
+    description: 'Manage merchants and orders in Roam Rush',
   },
   rides_admin: {
     label: 'Rides Admin',

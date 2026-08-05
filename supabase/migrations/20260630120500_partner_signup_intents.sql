@@ -16,4 +16,4 @@ ALTER TABLE delivery.partner_signup_intents ENABLE ROW LEVEL SECURITY;
 GRANT ALL ON delivery.partner_signup_intents TO service_role;
 
 COMMENT ON TABLE delivery.partner_signup_intents IS
-  'Users who signed into partner.roamdash.co — used for admin unfinished-setup (excludes riders/drivers/customers).';
+  'Users who signed into partner.roamrush.app — used for admin unfinished-setup (excludes riders/drivers/customers).';

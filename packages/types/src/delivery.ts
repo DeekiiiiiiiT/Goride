@@ -1,5 +1,5 @@
 /**
- * Roam Dash Delivery Types
+ * Roam Rush Delivery Types
  * Types for the food delivery platform
  */
 

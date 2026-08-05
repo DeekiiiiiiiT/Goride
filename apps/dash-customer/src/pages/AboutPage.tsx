@@ -19,8 +19,8 @@ export default function AboutPage({ onNavigate }: Props) {
 
       <main className="max-w-[1200px] mx-auto px-4 py-8 flex flex-col items-center">
         <div className="flex flex-col items-center text-center mb-8">
-          <img src="/images/logo.png" alt="Roam Dash" className="w-32 h-auto object-contain mb-4" />
-          <h2 className="text-headline-lg-mobile font-bold text-primary mb-1">Roam Dash</h2>
+          <img src="/images/logo.png" alt="Roam Rush" className="w-32 h-auto object-contain mb-4" />
+          <h2 className="text-headline-lg-mobile font-bold text-primary mb-1">Roam Rush</h2>
           <p className="text-body-md text-on-surface-variant">Cravings. Delivered.</p>
           <p className="text-label-sm text-outline mt-3">Version {APP_VERSION}</p>
         </div>
@@ -52,14 +52,14 @@ export default function AboutPage({ onNavigate }: Props) {
           Your favorite restaurants, delivered across Jamaica with care.
         </p>
         <a
-          href="https://roamdash.co"
+          href="https://roamrush.app"
           target="_blank"
           rel="noopener noreferrer"
           className="text-label-md font-semibold text-primary mt-2 hover:opacity-80 transition-opacity"
         >
-          roamdash.co
+          roamrush.app
         </a>
-        <p className="text-label-sm text-outline mt-8">© {new Date().getFullYear()} Roam Dash</p>
+        <p className="text-label-sm text-outline mt-8">© {new Date().getFullYear()} Roam Rush</p>
       </main>
     </div>
   );

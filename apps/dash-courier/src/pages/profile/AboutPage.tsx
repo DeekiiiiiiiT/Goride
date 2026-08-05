@@ -17,7 +17,7 @@ export function AboutPage({ onBack, onOpenSettings }: AboutPageProps) {
           <div className="w-24 h-24 rounded-2xl bg-primary-container/20 flex items-center justify-center mb-4">
             <MaterialIcon name="local_shipping" className="text-primary text-5xl" filled />
           </div>
-          <h2 className="text-2xl font-bold text-primary mb-1">Roam Dash Courier</h2>
+          <h2 className="text-2xl font-bold text-primary mb-1">Roam Rush Courier</h2>
           <p className="text-sm text-muted">Deliver. Earn. On your schedule.</p>
           <p className="text-xs text-outline mt-3">Version {APP_VERSION}</p>
         </div>
@@ -60,14 +60,14 @@ export function AboutPage({ onBack, onOpenSettings }: AboutPageProps) {
           Helping couriers across Jamaica earn with flexible delivery routes.
         </p>
         <a
-          href="https://roamdash.co"
+          href="https://roamrush.app"
           target="_blank"
           rel="noopener noreferrer"
           className="text-sm font-semibold text-primary mt-2 hover:opacity-80 transition-opacity"
         >
-          roamdash.co
+          roamrush.app
         </a>
-        <p className="text-xs text-outline mt-8">© {new Date().getFullYear()} Roam Dash</p>
+        <p className="text-xs text-outline mt-8">© {new Date().getFullYear()} Roam Rush</p>
       </main>
     </div>
   );

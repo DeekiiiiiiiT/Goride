@@ -63,7 +63,7 @@ export default function OperationsHubTabletPairing({
         <div>
           <h2 className="text-title-md font-semibold text-on-background">Pair a new tablet</h2>
           <p className="mt-inset-xs text-body-sm text-on-surface-variant">
-            Scan from the Roam Dash Tablet App to connect a device to {storeName}.
+            Scan from the Roam Rush Tablet App to connect a device to {storeName}.
           </p>
         </div>
         <button

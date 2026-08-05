@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-03
 **Method:** Read-only comparison. Fleetbase's public repositories were shallow-cloned (`fleetbase/fleetbase` — Ember.js console, `fleetbase/core-api` — Laravel backend, `fleetbase/fleetops` — the fleet/transport-management extension) into a local temp folder and read directly, source-file by source-file — nothing here is inferred from marketing copy or READMEs alone. `apps/enterprise` and its dependencies (`supabase/functions/freight`, freight-related migrations, `apps/enterprise/src/fleet-bridge`) were re-read directly against current code rather than trusted from older docs. **No code was changed anywhere as part of this audit**, and nothing was cloned into or added to the Roam repository — the Fleetbase clones live in a throwaway temp folder outside this project.
-**Scope note (by request):** this comparison covers Fleetbase's **core platform + FleetOps extension only** — not Fleetbase's Storefront (marketplace/commerce), Ledger, or AI-copilot extensions, since those overlap with Roam Dash/other Roam products rather than Roam Enterprise.
+**Scope note (by request):** this comparison covers Fleetbase's **core platform + FleetOps extension only** — not Fleetbase's Storefront (marketplace/commerce), Ledger, or AI-copilot extensions, since those overlap with Roam Rush/other Roam products rather than Roam Enterprise.
 
 ---
 

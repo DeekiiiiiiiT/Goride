@@ -3,7 +3,7 @@ export const SERVICE_URLS = {
   driver: 'https://roamdriver.co',
   haul: 'https://roamhaul.co',
   fleet: 'https://roamfleet.co',
-  dash: 'https://roamdash.co',
+  dash: 'https://roamrush.app',
   privacy: '/privacy',
   terms: '/terms',
   cookies: '/cookies',
@@ -75,11 +75,11 @@ export const SERVICES: ServiceCard[] = [
   },
   {
     id: 'dash',
-    title: 'Roam Dash',
+    title: 'Roam Rush',
     description:
       'Hyper-local food and essential delivery optimized for the last-mile sprint.',
     cta: 'View vendors',
-    href: '/dash',
+    href: '/rush',
     icon: 'dash',
     variant: 'light',
     accent: 'dash-cyan',

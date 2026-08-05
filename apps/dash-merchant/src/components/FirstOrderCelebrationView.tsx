@@ -33,7 +33,7 @@ export default function FirstOrderCelebrationView({
           </div>
           <h2 className="mb-inset-xs text-headline-md font-bold text-primary">First order accepted!</h2>
           <p className="mb-inset-md text-body-sm text-on-surface-variant">
-            You&apos;re officially live on Roam Dash. Here are a few quick tips:
+            You&apos;re officially live on Roam Rush. Here are a few quick tips:
           </p>
           <ul className="mb-inset-md w-full space-y-inset-sm text-left">
             {SUCCESS_TIPS.map((tip) => (

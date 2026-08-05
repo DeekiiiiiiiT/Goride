@@ -87,7 +87,7 @@ export function CourierConsumerApp() {
   }, []);
 
   useEffect(() => {
-    document.title = 'Roam Dash Courier';
+    document.title = 'Roam Rush Courier';
   }, []);
 
   useEffect(() => {

@@ -134,7 +134,7 @@ export function CourierDetailPage() {
       title: 'Remove from Roam Courier?',
       description: (
         <>
-          Permanently removes this courier profile from Roam Dash Courier. Roam login and profiles
+          Permanently removes this courier profile from Roam Rush Courier. Roam login and profiles
           in Driver, Dash, or other apps are untouched.
         </>
       ),

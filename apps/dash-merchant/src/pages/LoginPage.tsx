@@ -163,7 +163,7 @@ export default function LoginPage({
         : 'Sign in with the email that received the team invite.'
       : isSignUp
         ? 'Complete registration to submit your application.'
-        : 'Sign in to manage your Roam Dash store.';
+        : 'Sign in to manage your Roam Rush store.';
 
   const submitLabel = isLoading || forgotLoading
     ? 'Please wait...'
@@ -194,7 +194,7 @@ export default function LoginPage({
       >
         <div className="mb-inset-lg flex h-24 w-24 items-center justify-center overflow-hidden rounded-full border border-outline-variant bg-surface shadow-sm">
           <img
-            alt="Roam Dash Partner Logo"
+            alt="Roam Rush Partner Logo"
             className="h-full w-full object-cover"
             src="/assets/logo.png"
           />
@@ -390,7 +390,7 @@ export default function LoginPage({
             </p>
           ) : (
             <p className="text-body-sm text-on-surface-variant">
-              New to Roam Dash?{' '}
+              New to Roam Rush?{' '}
               <button
                 type="button"
                 onClick={onApply ?? onBack}

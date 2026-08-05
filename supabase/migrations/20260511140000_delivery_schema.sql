@@ -1,4 +1,4 @@
--- Delivery schema for Roam Dash (food delivery platform)
+-- Delivery schema for Roam Rush (food delivery platform)
 -- Created: 2026-05-11
 
 CREATE SCHEMA IF NOT EXISTS delivery;
@@ -303,7 +303,7 @@ CREATE TRIGGER trigger_courier_availability_updated_at
   BEFORE UPDATE ON delivery.courier_availability
   FOR EACH ROW EXECUTE FUNCTION delivery.set_updated_at();
 
-COMMENT ON SCHEMA delivery IS 'Roam Dash - Food delivery platform schema';
+COMMENT ON SCHEMA delivery IS 'Roam Rush - Food delivery platform schema';
 COMMENT ON TABLE delivery.merchants IS 'Restaurants and stores that sell food on the platform';
 COMMENT ON TABLE delivery.menu_items IS 'Food items available for ordering';
 COMMENT ON TABLE delivery.orders IS 'Customer orders with full order lifecycle tracking';

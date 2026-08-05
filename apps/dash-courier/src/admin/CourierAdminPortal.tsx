@@ -102,7 +102,7 @@ function AdminLayoutShell({ session }: { session: Session }) {
                 <Bike className="w-4 h-4 text-white" />
               </div>
               <div>
-                <h1 className="font-semibold text-white text-sm">Roam Dash Courier</h1>
+                <h1 className="font-semibold text-white text-sm">Roam Rush Courier</h1>
                 <p className="text-[11px] text-slate-500">Admin Portal</p>
               </div>
             </div>

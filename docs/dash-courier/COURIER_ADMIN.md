@@ -1,6 +1,6 @@
 # Courier admin — user management (ops playbook)
 
-Super Admin → **User Management** (`/admin/users`) for courier accounts on courier.roamdash.co/admin.
+Super Admin → **User Management** (`/admin/users`) for courier accounts on courier.roamrush.app/admin.
 
 ## Metrics
 

@@ -65,7 +65,7 @@ export function CourierDocumentsPage({ onBack }: CourierDocumentsPageProps) {
 
       <main className="flex-1 overflow-y-auto px-[var(--spacing-edge)] py-6 flex flex-col gap-4 pb-8">
         <p className="text-sm text-muted mb-1">
-          Upload required documentation for Roam Dash. Keep these updated to avoid delivery interruptions.
+          Upload required documentation for Roam Rush. Keep these updated to avoid delivery interruptions.
         </p>
         {loading && <p className="text-sm text-muted">Loading documents…</p>}
         {DOC_DEFS.map((def) => {

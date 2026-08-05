@@ -17,7 +17,7 @@ const CONFIG: Record<
   gps: {
     icon: 'location_off',
     title: "Can't find your location",
-    description: 'Enable location services and allow Roam Dash to access your precise location.',
+    description: 'Enable location services and allow Roam Rush to access your precise location.',
     primaryLabel: 'Open Settings',
     secondaryLabel: 'Retry',
   },

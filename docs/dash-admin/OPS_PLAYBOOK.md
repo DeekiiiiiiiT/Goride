@@ -1,8 +1,8 @@
-# Roam Dash Admin — Operations Playbook
+# Roam Rush Admin — Operations Playbook
 
 ## Access
 
-- **Dash Admin Portal:** https://partner.roamdash.co/admin
+- **Dash Admin Portal:** https://partner.roamrush.app/admin
 - **Roles:** `dash_admin` (write), `dash_ops` (read), or platform roles
 - Provision via `supabase/scripts/provision_product_admin.sql` with `v_product_key := 'dash'`
 

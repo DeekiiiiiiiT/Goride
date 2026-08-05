@@ -63,10 +63,10 @@ export function CourierAdminLoginForm() {
           <div className="rides-admin-login__logo courier-admin-login__logo">
             <Bike size={32} strokeWidth={1.75} />
           </div>
-          <h1 className="rides-admin-login__title">Roam Dash Courier</h1>
+          <h1 className="rides-admin-login__title">Roam Rush Courier</h1>
           <p className="rides-admin-login__subtitle">Admin Portal</p>
           <p className="rides-admin-login__tagline">
-            Manage courier workforce, compliance, live presence, and delivery operations for Roam Dash.
+            Manage courier workforce, compliance, live presence, and delivery operations for Roam Rush.
           </p>
         </div>
       </aside>
@@ -79,7 +79,7 @@ export function CourierAdminLoginForm() {
             </div>
             <div>
               <h1 className="rides-admin-login__title" style={{ fontSize: '1.25rem' }}>
-                Roam Dash Courier
+                Roam Rush Courier
               </h1>
               <p className="rides-admin-login__subtitle" style={{ margin: 0 }}>
                 Admin Portal

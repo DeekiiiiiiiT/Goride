@@ -131,7 +131,7 @@ export const ROAM_FLEET_CHILDREN: NavChild[] = [
 export const ROAM_DASH_CHILDREN: NavChild[] = [
   { id: 'roam-dash-overview', label: 'Overview', icon: BarChart3 },
   { id: 'dash-merchants', label: 'Merchants', icon: Store },
-  { id: 'roam-dash-admin-link', label: 'Open Dash Admin →', icon: ExternalLink, href: 'https://roamdash.co/admin' },
+  { id: 'roam-dash-admin-link', label: 'Open Rush Admin →', icon: ExternalLink, href: 'https://roamrush.app/admin' },
 ];
 
 export const ROAM_RIDES_CHILDREN: NavChild[] = [
@@ -257,7 +257,7 @@ export const SECTION_META = {
   businessSegments: { label: 'Business Segments', icon: Layers },
   enterprise: { label: 'Roam Enterprise', icon: Building2 },
   fleet: { label: 'Roam Fleet', icon: Truck },
-  dash: { label: 'Roam Dash', icon: Utensils },
+  dash: { label: 'Roam Rush', icon: Utensils },
   rides: { label: 'Roam Rides', icon: Navigation },
   haul: { label: 'Roam Haul', icon: Truck },
   driver: { label: 'Roam Driver', icon: Car },

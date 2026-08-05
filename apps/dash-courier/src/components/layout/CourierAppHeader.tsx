@@ -28,7 +28,7 @@ export function CourierAppHeader({
       >
         <MaterialIcon name="menu" />
       </button>
-      <div className="text-xl font-bold text-primary">Roam Dash Courier</div>
+      <div className="text-xl font-bold text-primary">Roam Rush Courier</div>
 
       {isOnline ? (
         <div className="flex items-center gap-2 bg-surface-container-low px-2 py-1 rounded-full border border-outline-variant">

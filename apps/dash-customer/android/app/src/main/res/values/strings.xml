@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Roam Rush</string>
+    <string name="title_activity_main">Roam Rush</string>
+    <string name="package_name">co.roamenterprise.rush</string>
+    <string name="custom_url_scheme">co.roamenterprise.rush</string>
+</resources>
