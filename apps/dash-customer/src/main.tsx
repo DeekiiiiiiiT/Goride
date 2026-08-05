@@ -21,7 +21,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
       <App />
-      <Toaster position="top-center" richColors />
+      <Toaster position="top-center" richColors offset="max(12px, env(safe-area-inset-top))" />
     </QueryClientProvider>
   </React.StrictMode>
 );

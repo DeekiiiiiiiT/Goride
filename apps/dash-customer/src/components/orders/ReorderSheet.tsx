@@ -43,7 +43,7 @@ export function ReorderSheet({
         className="modal-overlay absolute inset-0 bg-inverse-surface/60 backdrop-blur-sm"
         onClick={onClose}
       />
-      <div className="modal-content relative z-10 flex max-h-[90vh] w-full flex-col overflow-hidden rounded-t-[24px] bg-surface-container-lowest shadow-[0px_10px_30px_rgba(0,0,0,0.08)] sm:max-w-md sm:rounded-[24px]">
+      <div className="modal-content relative z-10 flex max-h-[90dvh] w-full flex-col overflow-hidden rounded-t-[24px] bg-surface-container-lowest shadow-[0px_10px_30px_rgba(0,0,0,0.08)] sm:max-w-md sm:rounded-[24px] pb-safe safe-x">
         <div className="flex w-full justify-center pt-4 pb-2 sm:hidden">
           <div className="h-1.5 w-12 rounded-full bg-surface-variant" />
         </div>

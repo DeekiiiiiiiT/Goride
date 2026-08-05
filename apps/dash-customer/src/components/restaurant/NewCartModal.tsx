@@ -37,7 +37,7 @@ export function NewCartModal({ open, currentRestaurant, onConfirm, onCancel }: P
           </p>
         </div>
 
-        <div className="px-margin-mobile pb-inset-lg pt-4 flex flex-col gap-3">
+        <div className="px-margin-mobile pb-safe pt-4 flex flex-col gap-3">
           <button
             type="button"
             onClick={onConfirm}

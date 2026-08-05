@@ -25,7 +25,7 @@ export default function ConnectionErrorPage({
   };
 
   return (
-    <div className="bg-background min-h-screen flex flex-col items-center justify-between p-4 pb-6 antialiased">
+    <div className="bg-background min-h-dvh flex flex-col items-center justify-between p-4 pt-safe pb-safe antialiased">
       <div className="flex-1 w-full max-w-sm flex flex-col items-center justify-center text-center">
         <div className="w-48 h-48 mb-6 rounded-full overflow-hidden shadow-sm bg-surface-container flex items-center justify-center relative">
           <img

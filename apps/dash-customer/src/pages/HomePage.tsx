@@ -69,7 +69,7 @@ export default function HomePage({
 
   return (
     <PullToRefresh onRefresh={handleRefresh} className="min-h-full bg-surface">
-      <header className="sticky top-0 z-40 flex h-16 w-full items-center justify-between border-b border-outline-variant/30 bg-surface px-4 shadow-sm safe-t">
+      <header className="sticky top-0 z-40 flex min-h-16 w-full items-center justify-between border-b border-outline-variant/30 bg-surface px-4 shadow-sm safe-t">
         <button
           type="button"
           onClick={() => onNavigate('addresses')}

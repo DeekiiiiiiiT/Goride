@@ -12,7 +12,7 @@ type Props = {
 export function PreparingTrackingView({ order, onClose, onCancel, cancelPending }: Props) {
   return (
     <div className="app-fullscreen-screen safe-x safe-t bg-background flex flex-col">
-      <header className="bg-surface shadow-sm flex justify-between items-center safe-x h-16 shrink-0 z-40">
+      <header className="bg-surface shadow-sm flex justify-between items-center safe-x min-h-16 shrink-0 z-40">
         <button type="button" onClick={onClose} className="text-primary active:scale-95 transition-transform">
           <MaterialIcon name="close" />
         </button>

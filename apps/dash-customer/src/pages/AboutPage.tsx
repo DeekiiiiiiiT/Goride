@@ -7,10 +7,10 @@ type Props = {
 
 export default function AboutPage({ onNavigate }: Props) {
   return (
-    <div className="bg-background text-on-background min-h-screen pb-24">
-      <header className="w-full top-0 sticky bg-surface shadow-sm z-40">
-        <div className="flex items-center gap-4 px-4 py-2 w-full max-w-[1200px] mx-auto">
-          <button type="button" onClick={() => onNavigate('account')} aria-label="Go back">
+    <div className="bg-background text-on-background min-h-dvh pb-24">
+      <header className="w-full top-0 sticky bg-surface shadow-sm z-40 safe-t">
+        <div className="flex items-center gap-4 px-4 py-2 w-full max-w-[1200px] mx-auto min-h-14">
+          <button type="button" onClick={() => onNavigate('account')} aria-label="Go back" className="min-h-11 min-w-11 flex items-center justify-center">
             <MaterialIcon name="arrow_back" className="text-primary" />
           </button>
           <h1 className="text-headline-sm font-semibold text-primary">About</h1>

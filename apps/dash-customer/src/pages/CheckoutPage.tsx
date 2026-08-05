@@ -258,8 +258,8 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
   }
 
   return (
-    <div className="bg-background text-on-background antialiased min-h-screen pb-32">
-      <header className="fixed top-0 w-full z-50 flex justify-between items-center px-4 h-16 bg-surface shadow-sm">
+    <div className="bg-background text-on-background antialiased min-h-dvh pb-32">
+      <header className="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-2xl z-50 flex justify-between items-center px-4 min-h-16 pt-safe bg-surface shadow-sm safe-x">
         <button
           type="button"
           onClick={() => onNavigate('cart')}
@@ -271,7 +271,7 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
         <div className="w-10" />
       </header>
 
-      <main className="pt-20 pb-32 px-4 space-y-6 max-w-2xl mx-auto">
+      <main className="pb-32 px-4 space-y-6 max-w-2xl mx-auto pt-[calc(4rem+env(safe-area-inset-top,0px)+1rem)]">
         <section className="bg-surface-container-lowest rounded-xl p-4 shadow-[0px_4px_20px_rgba(0,0,0,0.04)]">
           <div className="flex justify-between items-start">
             <div className="flex gap-4 items-start">
@@ -498,7 +498,7 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
         </section>
       </main>
 
-      <div className="fixed bottom-0 w-full z-50 bg-surface px-4 py-4 pb-safe shadow-[0px_-4px_20px_rgba(0,0,0,0.04)]">
+      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-2xl z-50 bg-surface px-4 py-4 pb-safe shadow-[0px_-4px_20px_rgba(0,0,0,0.04)]">
         {accountSuspended && (
           <p className="text-sm text-error text-center mb-2 max-w-2xl mx-auto">
             Your account is suspended. Contact support — you cannot place orders.

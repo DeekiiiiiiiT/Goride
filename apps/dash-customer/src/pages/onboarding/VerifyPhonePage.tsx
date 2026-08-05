@@ -113,18 +113,18 @@ export function VerifyPhonePage({ onBack, onVerify, initialPhone }: VerifyPhoneP
 
   return (
     <div className="app-fullscreen-screen bg-surface text-on-surface antialiased selection:bg-primary-container selection:text-on-primary-container">
-      <header className="px-4 pt-6 pb-4 flex items-center z-10 relative max-w-[1200px] mx-auto w-full">
+      <header className="px-4 pt-safe pb-4 flex items-center z-10 relative max-w-[1200px] mx-auto w-full">
         <button
           type="button"
           aria-label="Go back"
           onClick={onBack}
-          className="w-10 h-10 -ml-2 rounded-full flex items-center justify-center text-on-surface hover:bg-surface-variant transition-colors active:scale-95"
+          className="min-h-11 min-w-11 -ml-2 rounded-full flex items-center justify-center text-on-surface hover:bg-surface-variant transition-colors active:scale-95"
         >
           <MaterialIcon name="arrow_back" />
         </button>
       </header>
 
-      <main className="flex-1 flex flex-col px-4 w-full max-w-[1200px] mx-auto relative z-10 pb-8 min-h-0">
+      <main className="flex-1 flex flex-col px-4 w-full max-w-[1200px] mx-auto relative z-10 pb-safe min-h-0">
         <div className="mt-6 mb-8 dash-fade-in-up">
           <h1 className="text-[28px] leading-[34px] md:text-[32px] md:leading-[40px] font-bold text-on-surface mb-2">
             Verify your phone

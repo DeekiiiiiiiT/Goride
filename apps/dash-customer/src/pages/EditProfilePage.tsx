@@ -48,9 +48,9 @@ export default function EditProfilePage({ onNavigate }: Props) {
   };
 
   return (
-    <div className="bg-surface text-on-surface min-h-screen flex flex-col">
-      <header className="bg-surface w-full top-0 sticky shadow-sm z-50">
-        <div className="flex items-center justify-between px-4 py-2 w-full max-w-[1200px] mx-auto h-16">
+    <div className="bg-surface text-on-surface min-h-dvh flex flex-col">
+      <header className="bg-surface w-full top-0 sticky shadow-sm z-50 safe-t">
+        <div className="flex items-center justify-between px-4 py-2 w-full max-w-[1200px] mx-auto min-h-16">
           <button
             type="button"
             aria-label="Go back"

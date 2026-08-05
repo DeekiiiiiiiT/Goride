@@ -48,7 +48,7 @@ export function BottomSheet({ open, onClose, children, className = '' }: Props) 
         onClick={onClose}
       />
       <div
-        className={`relative z-10 w-full max-w-md bg-surface rounded-t-3xl shadow-[0px_-10px_30px_rgba(0,0,0,0.08)] flex flex-col max-h-[90dvh] animate-slide-up safe-x ${className}`}
+        className={`relative z-10 w-full max-w-md bg-surface rounded-t-3xl shadow-[0px_-10px_30px_rgba(0,0,0,0.08)] flex flex-col max-h-[90dvh] animate-slide-up safe-x pb-safe ${className}`}
         style={{
           transform: dragY ? `translateY(${dragY}px)` : undefined,
           marginBottom: keyboardInset > 0 ? keyboardInset : undefined,

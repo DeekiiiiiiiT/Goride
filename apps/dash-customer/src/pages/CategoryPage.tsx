@@ -27,7 +27,7 @@ export default function CategoryPage({ categoryId, onNavigate, onBack }: Props) 
 
   return (
     <div className="pb-24 bg-background min-h-full">
-      <header className="sticky top-0 z-50 bg-surface shadow-sm flex items-center justify-between px-4 h-16">
+      <header className="sticky top-0 z-50 bg-surface shadow-sm flex items-center justify-between px-4 min-h-16 safe-t">
         <button
           type="button"
           aria-label="Go back"

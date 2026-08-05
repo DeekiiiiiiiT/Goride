@@ -120,9 +120,9 @@ export default function OrderDetailsPage({ orderId, onNavigate }: Props) {
   }
 
   return (
-    <div className="min-h-screen bg-surface pb-32 text-on-surface">
-      <header className="sticky top-0 z-50 w-full bg-surface shadow-sm">
-        <div className="mx-auto flex w-full max-w-[1200px] items-center justify-between px-4 py-2">
+    <div className="min-h-dvh bg-surface pb-32 text-on-surface">
+      <header className="sticky top-0 z-50 w-full bg-surface shadow-sm safe-t">
+        <div className="mx-auto flex w-full max-w-[1200px] items-center justify-between px-4 py-2 min-h-14">
           <button
             type="button"
             aria-label="Back"

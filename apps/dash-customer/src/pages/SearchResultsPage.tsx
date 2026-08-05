@@ -203,7 +203,7 @@ export default function SearchResultsPage({
 
     return (
       <PullToRefresh onRefresh={handleRefresh} className="flex min-h-full flex-col bg-background pb-24">
-        <section className="sticky top-0 z-50 border-b border-outline-variant/30 bg-surface px-4 py-3 shadow-sm">
+        <section className="sticky top-0 z-50 border-b border-outline-variant/30 bg-surface px-4 py-3 shadow-sm safe-t">
           <div className="flex items-center gap-3">
             <div className="relative flex h-10 flex-1 items-center rounded-full border border-outline-variant bg-surface-container-low px-3">
               <MaterialIcon name="search" className="mr-2 text-on-surface-variant" />

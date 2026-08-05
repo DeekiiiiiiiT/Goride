@@ -72,8 +72,8 @@ export default function AddAddressPage({ addressId, onNavigate }: Props) {
   };
 
   return (
-    <div className="bg-background text-on-background min-h-screen flex flex-col antialiased">
-      <header className="flex items-center justify-between px-4 py-2 w-full max-w-[1200px] mx-auto bg-surface shadow-sm sticky top-0 z-50">
+    <div className="bg-background text-on-background min-h-dvh flex flex-col antialiased">
+      <header className="flex items-center justify-between px-4 py-2 w-full max-w-[1200px] mx-auto bg-surface shadow-sm sticky top-0 z-50 safe-t min-h-14">
         <button
           type="button"
           aria-label="Go back"

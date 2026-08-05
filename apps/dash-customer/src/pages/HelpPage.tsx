@@ -10,10 +10,10 @@ export default function HelpPage({ onNavigate }: Props) {
   const [query, setQuery] = useState('');
 
   return (
-    <div className="font-body-md text-on-surface antialiased min-h-screen bg-[#FAFAFA]">
-      <header className="w-full top-0 sticky bg-surface shadow-sm z-40">
-        <div className="flex items-center gap-4 px-4 py-2 w-full max-w-[1200px] mx-auto">
-          <button type="button" onClick={() => onNavigate('account')} aria-label="Go back">
+    <div className="font-body-md text-on-surface antialiased min-h-dvh bg-[#FAFAFA]">
+      <header className="w-full top-0 sticky bg-surface shadow-sm z-40 safe-t">
+        <div className="flex items-center gap-4 px-4 py-2 w-full max-w-[1200px] mx-auto min-h-14">
+          <button type="button" onClick={() => onNavigate('account')} aria-label="Go back" className="min-h-11 min-w-11 flex items-center justify-center">
             <MaterialIcon name="arrow_back" className="text-primary" />
           </button>
           <h1 className="text-headline-sm font-semibold text-primary">Help</h1>

@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 /** Locks document scroll and enables immersive safe-area offsets for full-screen flows. */
 export function useImmersiveMode(active: boolean) {
   useEffect(() => {
-    if (!active) return;
+    if (!active) return undefined;
 
     document.documentElement.classList.add('app-immersive-mode');
     const prevOverflow = document.body.style.overflow;

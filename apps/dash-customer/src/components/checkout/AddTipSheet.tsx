@@ -49,7 +49,7 @@ export function AddTipSheet({ open, subtotal, initialTip, onClose, onConfirm }: 
   return (
     <div className="fixed inset-0 z-[80] flex items-end justify-center">
       <button type="button" aria-label="Close" className="absolute inset-0 bg-inverse-surface/40" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-md bg-surface-container-lowest rounded-t-3xl shadow-[0px_-10px_30px_rgba(0,0,0,0.08)] animate-slide-up">
+      <div className="relative z-10 w-full max-w-md bg-surface-container-lowest rounded-t-3xl shadow-[0px_-10px_30px_rgba(0,0,0,0.08)] animate-slide-up safe-x pb-safe">
         <div className="w-full flex justify-center pt-4 pb-2">
           <div className="w-12 h-1.5 bg-surface-dim rounded-full" />
         </div>

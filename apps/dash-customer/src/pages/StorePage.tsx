@@ -234,7 +234,7 @@ function GroceryStoreView({
 
   return (
     <div className="min-h-full bg-background pb-36">
-      <header className="sticky top-0 z-50 flex h-16 w-full items-center justify-between border-b border-outline-variant/30 bg-surface px-4 shadow-sm">
+      <header className="sticky top-0 z-50 flex min-h-16 w-full items-center justify-between border-b border-outline-variant/30 bg-surface px-4 shadow-sm safe-t">
         <div className="flex items-center gap-3">
           <button
             type="button"
@@ -383,7 +383,7 @@ function GroceryStoreView({
       </section>
 
       {showCart && (
-        <div className="fixed right-4 bottom-4 left-4 z-50 mx-auto max-w-screen-sm">
+        <div className="fixed right-4 left-4 z-50 mx-auto max-w-screen-sm bottom-[max(1rem,env(safe-area-inset-bottom,0px))]">
           <button
             type="button"
             onClick={() => onNavigate('cart')}

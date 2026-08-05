@@ -44,7 +44,7 @@ export default function PharmacyNoticeSheet({
         <div className="flex justify-center pt-3 pb-2">
           <div className="h-1 w-8 rounded-full bg-outline-variant" />
         </div>
-        <div className="px-6 pb-8 pt-2">
+        <div className="px-6 pb-safe pt-2">
           <div className="mb-6 flex flex-col items-center text-center">
             <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-secondary-container">
               <MaterialIcon name="health_and_safety" className="text-on-secondary-container" />

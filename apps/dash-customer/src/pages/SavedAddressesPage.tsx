@@ -92,8 +92,8 @@ export default function SavedAddressesPage({ onNavigate }: Props) {
 
   return (
     <div className="font-body-md text-on-surface antialiased flex flex-col min-h-screen bg-[#FAFAFA]">
-      <header className="w-full top-0 sticky bg-surface shadow-sm z-50">
-        <div className="flex items-center justify-between px-4 py-2 w-full max-w-[1200px] mx-auto h-16">
+      <header className="w-full top-0 sticky bg-surface shadow-sm z-50 safe-t">
+        <div className="flex items-center justify-between px-4 py-2 w-full max-w-[1200px] mx-auto min-h-16">
           <button
             type="button"
             aria-label="Go back"

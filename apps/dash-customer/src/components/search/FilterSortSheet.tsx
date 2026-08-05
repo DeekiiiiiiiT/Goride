@@ -75,7 +75,7 @@ export function FilterSortSheet({ open, onClose, onApply, resultCount = 124 }: F
   return (
     <div className="fixed inset-0 z-[60]">
       <button type="button" aria-label="Close filters" className="absolute inset-0 bg-on-surface/40" onClick={onClose} />
-      <div className="absolute bottom-0 left-0 right-0 bg-surface rounded-t-[24px] flex flex-col max-h-[85dvh] shadow-[0px_-10px_30px_rgba(0,0,0,0.1)]">
+      <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-surface rounded-t-[24px] flex flex-col max-h-[85dvh] shadow-[0px_-10px_30px_rgba(0,0,0,0.1)] safe-x">
         <div className="w-full flex justify-center pt-4 pb-2">
           <div className="w-12 h-1.5 bg-outline-variant rounded-full" />
         </div>

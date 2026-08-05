@@ -39,8 +39,8 @@ export default function RestaurantReviewsPage({ merchantId, onNavigate }: Props)
 
   return (
     <div className="bg-surface text-on-surface antialiased pb-28 min-h-screen">
-      <header className="sticky top-0 z-40 bg-surface shadow-sm">
-        <div className="flex items-center justify-between px-4 h-16 max-w-[1200px] mx-auto">
+      <header className="sticky top-0 z-40 bg-surface shadow-sm safe-t">
+        <div className="flex items-center justify-between px-4 min-h-16 max-w-[1200px] mx-auto">
           <button
             type="button"
             aria-label="Go back"

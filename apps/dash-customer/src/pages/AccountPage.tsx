@@ -40,24 +40,26 @@ export default function AccountPage({ session, onNavigate }: AccountPageProps) {
 
   return (
     <div className="pb-32 bg-background min-h-full">
-      <header className="w-full sticky z-40 bg-surface shadow-sm flex items-center justify-between px-4 py-2 max-w-[1200px] mx-auto">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full overflow-hidden shrink-0">
-            <img
-              src={session ? profile.avatarUrl : PROFILE_HEADER_AVATAR}
-              alt="Profile"
-              className="w-full h-full object-cover"
-            />
+      <header className="w-full sticky top-0 z-40 bg-surface shadow-sm safe-t">
+        <div className="flex items-center justify-between px-4 py-2 max-w-[1200px] mx-auto min-h-14">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full overflow-hidden shrink-0">
+              <img
+                src={session ? profile.avatarUrl : PROFILE_HEADER_AVATAR}
+                alt="Profile"
+                className="w-full h-full object-cover"
+              />
+            </div>
+            <h1 className="text-headline-lg-mobile font-bold text-primary">Roam Dash</h1>
           </div>
-          <h1 className="text-headline-lg-mobile font-bold text-primary">Roam Dash</h1>
+          <button
+            type="button"
+            onClick={() => onNavigate('notification-settings')}
+            className="min-h-11 min-w-11 rounded-full flex items-center justify-center text-primary"
+          >
+            <MaterialIcon name="notifications" />
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={() => onNavigate('notification-settings')}
-          className="w-10 h-10 rounded-full flex items-center justify-center text-primary"
-        >
-          <MaterialIcon name="notifications" />
-        </button>
       </header>
 
       <main className="max-w-[1200px] mx-auto px-4 pt-6 flex flex-col gap-6">

@@ -103,6 +103,12 @@ const IMMERSIVE_STACK_PAGES: StackPage[] = [
   'restaurant',
   'order-confirmation',
   'order-delivered',
+  'add-address',
+  'add-card',
+  'payment-methods',
+  'rate-order',
+  'report-issue',
+  'edit-profile',
 ];
 
 /** Customer ordering app (roamdash.co). Admin portal: partner.roamdash.co/admin */

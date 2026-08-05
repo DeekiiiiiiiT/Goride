@@ -29,8 +29,8 @@ export default function ReportIssuePage({ onNavigate }: Props) {
 
   return (
     <div className="text-on-surface antialiased bg-background pb-[100px] min-h-screen">
-      <header className="bg-surface w-full top-0 sticky shadow-sm z-40">
-        <div className="flex items-center justify-between px-4 py-2 w-full max-w-[600px] mx-auto h-16">
+      <header className="bg-surface w-full top-0 sticky shadow-sm z-40 safe-t">
+        <div className="flex items-center justify-between px-4 py-2 w-full max-w-[600px] mx-auto min-h-16">
           <div className="flex items-center gap-4">
             <button type="button" onClick={() => onNavigate('help')} aria-label="Go back" className="w-10 h-10 flex items-center justify-center rounded-full">
               <MaterialIcon name="arrow_back" />

@@ -13,7 +13,7 @@ export function CourierAssignedView({ order, onBack }: Props) {
 
   return (
     <div className="app-fullscreen-screen safe-x safe-t text-on-surface flex flex-col overflow-hidden">
-      <header className="absolute top-0 left-0 right-0 z-10 flex justify-between items-center px-4 h-16 bg-surface/80 backdrop-blur-md">
+      <header className="absolute top-0 left-0 right-0 z-10 flex justify-between items-center px-4 min-h-16 pt-safe bg-surface/80 backdrop-blur-md">
         <button type="button" onClick={onBack} className="p-2 -ml-2 rounded-full text-on-surface">
           <MaterialIcon name="arrow_back" />
         </button>
@@ -26,7 +26,7 @@ export function CourierAssignedView({ order, onBack }: Props) {
       <main className="flex-grow relative bg-surface-container w-full">
         <CourierTrackingMap order={order} className="absolute inset-0" preferCourier />
 
-        <div className="absolute bottom-0 left-0 right-0 bg-surface rounded-t-3xl shadow-[0px_-10px_40px_rgba(0,0,0,0.08)] px-4 pt-6 pb-8 max-w-[1200px] mx-auto w-full">
+        <div className="absolute bottom-0 left-0 right-0 bg-surface rounded-t-3xl shadow-[0px_-10px_40px_rgba(0,0,0,0.08)] px-4 pt-6 pb-safe max-w-[1200px] mx-auto w-full">
           <div className="w-12 h-1.5 bg-outline-variant rounded-full mx-auto mb-6 opacity-50" />
 
           <div className="text-center mb-6">

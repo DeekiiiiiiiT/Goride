@@ -158,7 +158,7 @@ export default function CartPage({ onNavigate, session }: Props) {
 
   if (items.length === 0) {
     return (
-      <div className="min-h-screen bg-surface pb-32">
+      <div className="min-h-dvh bg-surface pb-32">
         <EmptyState
           icon="shopping_bag"
           title="Your cart is empty"
@@ -171,9 +171,9 @@ export default function CartPage({ onNavigate, session }: Props) {
   }
 
   return (
-    <div className="bg-background text-on-background antialiased pb-32 min-h-screen">
-      <header className="bg-surface shadow-sm sticky top-0 z-50">
-        <div className="flex justify-between items-center px-4 h-16 max-w-[1200px] mx-auto">
+    <div className="bg-background text-on-background antialiased pb-32 min-h-dvh">
+      <header className="bg-surface shadow-sm sticky top-0 z-50 safe-t">
+        <div className="flex justify-between items-center px-4 min-h-16 max-w-[1200px] mx-auto">
           <button
             type="button"
             onClick={() => onNavigate('home')}
@@ -351,7 +351,7 @@ export default function CartPage({ onNavigate, session }: Props) {
         </section>
       </main>
 
-      <div className="fixed bottom-0 w-full z-50 bg-surface shadow-[0px_-10px_30px_rgba(0,0,0,0.08)] pb-safe pt-4 px-4 rounded-t-2xl">
+      <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[1200px] z-50 bg-surface shadow-[0px_-10px_30px_rgba(0,0,0,0.08)] pb-safe pt-4 px-4 rounded-t-2xl">
         <button
           type="button"
           onClick={handleCheckout}

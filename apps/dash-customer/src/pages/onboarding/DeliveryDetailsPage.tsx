@@ -44,7 +44,7 @@ export function DeliveryDetailsPage({ address, onBack, onSave, onOutOfZone }: De
 
   return (
     <div className="app-fullscreen-screen bg-surface text-on-surface antialiased">
-      <header className="flex items-center justify-between px-4 h-16 w-full max-w-[1200px] mx-auto bg-surface z-50 shrink-0">
+      <header className="flex items-center justify-between px-4 min-h-16 pt-safe w-full max-w-[1200px] mx-auto bg-surface z-50 shrink-0">
         <button
           type="button"
           aria-label="Go back"

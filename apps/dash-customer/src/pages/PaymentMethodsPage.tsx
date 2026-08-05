@@ -72,8 +72,8 @@ export default function PaymentMethodsPage({ returnTo = 'account', mode = 'manag
 
   return (
     <div className="bg-background text-on-background min-h-screen pb-24">
-      <header className="sticky top-0 z-40 bg-surface w-full shadow-sm">
-        <div className="flex items-center justify-between px-4 py-2 w-full max-w-[1200px] mx-auto h-16">
+      <header className="sticky top-0 z-40 bg-surface w-full shadow-sm safe-t">
+        <div className="flex items-center justify-between px-4 py-2 w-full max-w-[1200px] mx-auto min-h-16">
           <button type="button" onClick={handleBack} className="w-10 h-10 flex items-center justify-center rounded-full text-on-surface-variant">
             <MaterialIcon name="arrow_back" />
           </button>

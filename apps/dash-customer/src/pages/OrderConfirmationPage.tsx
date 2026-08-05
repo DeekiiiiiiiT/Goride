@@ -72,7 +72,7 @@ export default function OrderConfirmationPage({
   };
 
   return (
-    <div className="bg-background text-on-background antialiased min-h-screen flex flex-col items-center p-4 pb-24">
+    <div className="bg-background text-on-background antialiased min-h-dvh flex flex-col items-center p-4 pt-safe pb-safe">
       <main className="w-full max-w-md mx-auto flex flex-col items-center flex-grow pt-8">
         <div className="flex flex-col items-center text-center mb-8 w-full">
           <div className="order-success-anim w-24 h-24 rounded-full bg-surface-container-highest flex items-center justify-center mb-6 relative">

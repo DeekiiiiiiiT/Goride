@@ -13,7 +13,7 @@ export function DashAppHeader({
   showProfileImage = true,
 }: DashAppHeaderProps) {
   return (
-    <header className="bg-surface shadow-sm sticky top-0 flex justify-between items-center safe-x h-16 w-full z-40 safe-t btn-touch">
+    <header className="bg-surface shadow-sm sticky top-0 flex justify-between items-center safe-x min-h-16 w-full z-40 safe-t btn-touch">
       <button
         type="button"
         aria-label="Menu"

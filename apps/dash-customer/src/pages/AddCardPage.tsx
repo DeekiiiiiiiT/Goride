@@ -74,8 +74,8 @@ export default function AddCardPage({ returnTo = 'payment-methods', onNavigate }
   };
 
   return (
-    <div className="bg-background min-h-screen flex flex-col items-center">
-      <header className="fixed top-0 w-full z-50 flex justify-between items-center px-4 h-16 bg-surface shadow-sm">
+    <div className="bg-background min-h-dvh flex flex-col items-center">
+      <header className="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-lg z-50 flex justify-between items-center px-4 min-h-16 pt-safe bg-surface shadow-sm">
         <button
           type="button"
           onClick={() => onNavigate(returnTo)}
@@ -87,7 +87,7 @@ export default function AddCardPage({ returnTo = 'payment-methods', onNavigate }
         <div className="w-10" />
       </header>
 
-      <main className="w-full max-w-lg mt-24 px-4 flex-1 pb-28">
+      <main className="w-full max-w-lg mt-[calc(4rem+env(safe-area-inset-top,0px)+1.5rem)] px-4 flex-1 pb-28">
         <div className="bg-surface-container-lowest rounded-[24px] p-6 shadow-[0px_4px_20px_rgba(0,0,0,0.04)] mb-4">
           <MaterialIcon name="credit_card_off" className="text-4xl text-on-surface-variant mb-3" />
           <h2 className="text-headline-sm font-bold mb-2">Tokenized cards only</h2>

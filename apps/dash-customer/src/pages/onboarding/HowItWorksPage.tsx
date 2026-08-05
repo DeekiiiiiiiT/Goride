@@ -87,7 +87,7 @@ export function HowItWorksPage({ onComplete, onSkip }: HowItWorksPageProps) {
           </div>
         </div>
 
-        <div className="shrink-0 w-full px-4 pb-8 pt-2 bg-background">
+        <div className="shrink-0 w-full px-4 pb-safe pt-2 bg-background">
           <div className="flex justify-center gap-2 px-2 mb-6">
             {ONBOARDING_SLIDES.map((_, index) => (
               <button

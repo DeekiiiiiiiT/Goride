@@ -37,7 +37,7 @@ export default function SearchPage({
 
   return (
     <div className="bg-background min-h-full flex flex-col safe-t">
-      <header className="px-4 pt-6 pb-2 sticky top-0 z-40 bg-background/90 backdrop-blur-md">
+      <header className="px-4 pt-safe pb-2 sticky top-0 z-40 bg-background/90 backdrop-blur-md">
         <h1 className="text-2xl font-semibold text-on-surface mb-4">What are you craving?</h1>
         <div className="relative group">
           <MaterialIcon

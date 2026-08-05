@@ -64,7 +64,7 @@ export function DeliveryAddressPage({ onBack, onConfirm, onOutOfZone }: Delivery
   return (
     <div className="app-fullscreen-screen bg-surface-container-lowest text-on-surface antialiased">
       <main className="w-full max-w-md h-full flex flex-col relative bg-surface-container-lowest mx-auto pt-safe">
-        <header className="flex items-center justify-between px-4 h-16 w-full shrink-0 z-10">
+      <header className="flex items-center justify-between px-4 min-h-16 w-full shrink-0 z-10">
           <button
             type="button"
             onClick={onBack}
