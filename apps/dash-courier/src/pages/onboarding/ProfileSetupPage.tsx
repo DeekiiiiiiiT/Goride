@@ -3,6 +3,7 @@ import { OnboardingHeader } from '@/components/layout/OnboardingHeader';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { loadSignupDraft, saveSignupDraft } from '@/lib/signupDraft';
 import { syncCourierProfileFromDraft } from '@/lib/ensureCourierProfile';
+import { useVisualViewport } from '@/hooks/useVisualViewport';
 
 type ProfileSetupPageProps = {
   onBack: () => void;
@@ -16,6 +17,7 @@ export function ProfileSetupPage({ onBack, onContinue }: ProfileSetupPageProps) 
   const [phone, setPhone] = useState(
     draft.phone ? `${draft.countryCode} ${draft.phone}` : '+1 ',
   );
+  const keyboardOffset = useVisualViewport();
 
   const handleContinue = () => {
     saveSignupDraft({ fullName, displayName, phone });
@@ -23,8 +25,8 @@ export function ProfileSetupPage({ onBack, onContinue }: ProfileSetupPageProps) 
   };
 
   return (
-    <div className="bg-background text-on-background min-h-full flex flex-col">
-      <div className="w-full max-w-[480px] mx-auto bg-surface min-h-full flex flex-col relative shadow-lg border border-surface-variant/50">
+    <div className="bg-background text-on-background min-h-dvh flex flex-col">
+      <div className="w-full max-w-[480px] mx-auto bg-surface min-h-dvh flex flex-col relative shadow-lg border border-surface-variant/50">
         <OnboardingHeader title="Roam Dash Courier" onBack={onBack} variant="centered" />
 
         <div className="flex-1 px-[var(--spacing-edge)] pt-6 pb-[100px] overflow-y-auto flex flex-col">
@@ -107,7 +109,12 @@ export function ProfileSetupPage({ onBack, onContinue }: ProfileSetupPageProps) 
           </div>
         </div>
 
-        <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[480px] p-[var(--spacing-edge)] pb-safe bg-surface/90 backdrop-blur-md border-t border-surface-variant/50 z-50">
+        <div
+          className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[480px] p-[var(--spacing-edge)] bg-surface/90 backdrop-blur-md border-t border-surface-variant/50 z-50"
+          style={{
+            paddingBottom: `max(1rem, calc(env(safe-area-inset-bottom, 0px) + ${keyboardOffset}px))`,
+          }}
+        >
           <button
             type="button"
             onClick={handleContinue}

@@ -56,8 +56,8 @@ export function AccountPendingPage({
   }, []);
 
   return (
-    <div className="bg-background min-h-full flex flex-col items-center">
-      <header className="w-full max-w-md flex justify-between items-center px-[var(--spacing-edge)] h-14">
+    <div className="bg-background min-h-dvh flex flex-col items-center">
+      <header className="w-full max-w-md flex justify-between items-center px-[var(--spacing-edge)] min-h-14 pt-safe">
         <div className="flex items-center gap-2">
           <MaterialIcon name="local_shipping" className="text-[28px] text-primary" filled />
           <span className="text-xl font-semibold text-primary tracking-tight">Roam Dash</span>
@@ -65,13 +65,13 @@ export function AccountPendingPage({
         <button
           type="button"
           onClick={onLogOut}
-          className="text-on-surface-variant hover:text-primary transition-colors p-2 text-sm font-medium"
+          className="text-on-surface-variant hover:text-primary transition-colors min-h-11 px-2 text-sm font-medium"
         >
           Log out
         </button>
       </header>
 
-      <main className="flex-1 w-full max-w-md flex flex-col mt-8 px-[var(--spacing-edge)] pb-8">
+      <main className="flex-1 w-full max-w-md flex flex-col mt-8 px-[var(--spacing-edge)] pb-safe">
         <div className="w-full flex justify-center mb-8 courier-ambient-pulse">
           <img src={ILLUSTRATION} alt="" className="h-48 w-auto object-contain" />
         </div>
@@ -142,7 +142,7 @@ export function AccountPendingPage({
             type="button"
             onClick={() => void checkStatus()}
             disabled={checking}
-            className="text-sm font-medium text-primary underline underline-offset-2 disabled:opacity-50"
+            className="min-h-11 px-3 text-sm font-medium text-primary underline underline-offset-2 disabled:opacity-50"
           >
             {checking ? 'Checking status…' : 'Check status'}
           </button>

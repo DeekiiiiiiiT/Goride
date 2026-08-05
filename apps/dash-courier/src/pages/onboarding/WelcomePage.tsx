@@ -8,7 +8,7 @@ type WelcomePageProps = {
 
 export function WelcomePage({ onGetStarted, onSignIn }: WelcomePageProps) {
   return (
-    <div className="bg-background text-on-background antialiased h-full w-full overflow-hidden flex flex-col">
+    <div className="bg-background text-on-background antialiased min-h-dvh w-full overflow-hidden flex flex-col">
       <header className="w-full flex justify-center items-center pt-safe pt-6 px-[var(--spacing-edge)] h-20 shrink-0">
         <div className="flex items-center gap-2">
           <MaterialIcon name="moped" className="text-primary-container text-[32px]" filled />

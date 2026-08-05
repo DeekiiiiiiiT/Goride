@@ -74,19 +74,19 @@ export function VerifyAccountPage({ onBack, onVerify }: VerifyAccountPageProps) 
   };
 
   return (
-    <div className="bg-background text-on-background min-h-full flex flex-col font-sans">
-      <header className="flex items-center px-[var(--spacing-edge)] h-14 w-full pt-safe pt-4 shrink-0">
+    <div className="bg-background text-on-background min-h-dvh flex flex-col font-sans">
+      <header className="flex items-center px-[var(--spacing-edge)] min-h-14 w-full pt-safe shrink-0">
         <button
           type="button"
           onClick={onBack}
           aria-label="Go back"
-          className="p-2 -ml-2 rounded-full hover:bg-surface-container-high transition-colors active:scale-95 text-primary"
+          className="min-h-11 min-w-11 p-2 -ml-2 rounded-full hover:bg-surface-container-high transition-colors active:scale-95 text-primary"
         >
           <span className="material-symbols-outlined">arrow_back</span>
         </button>
       </header>
 
-      <main className="flex-1 flex flex-col px-[var(--spacing-edge)] pt-6 pb-8 max-w-md mx-auto w-full">
+      <main className="flex-1 flex flex-col px-[var(--spacing-edge)] pt-6 pb-safe max-w-md mx-auto w-full">
         <div className="mb-8">
           <h1 className="text-[28px] leading-9 font-bold tracking-tight text-on-surface mb-2">
             Verify your account
@@ -113,7 +113,7 @@ export function VerifyAccountPage({ onBack, onVerify }: VerifyAccountPageProps) 
               type="button"
               disabled={!canResend}
               onClick={() => void handleResend()}
-              className={`text-xs font-semibold uppercase tracking-wider transition-all ${
+              className={`min-h-11 px-3 text-xs font-semibold uppercase tracking-wider transition-all ${
                 canResend
                   ? 'text-primary cursor-pointer'
                   : 'text-muted opacity-50 cursor-not-allowed'

@@ -20,7 +20,7 @@ export function SplashPage({ onComplete }: SplashPageProps) {
   }, [onComplete]);
 
   return (
-    <div className="bg-background min-h-full w-full flex flex-col items-center justify-between overflow-hidden antialiased pt-safe pb-safe selection:bg-primary-container selection:text-on-primary-container">
+    <div className="bg-background min-h-dvh w-full flex flex-col items-center justify-between overflow-hidden antialiased pt-safe pb-safe selection:bg-primary-container selection:text-on-primary-container">
       <div className="absolute inset-0 pointer-events-none overflow-hidden flex items-center justify-center -z-10 opacity-30">
         <div className="w-[80vw] h-[80vw] md:w-[600px] md:h-[600px] bg-primary-container rounded-full blur-[80px] courier-ambient-pulse mix-blend-multiply opacity-20" />
       </div>

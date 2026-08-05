@@ -28,8 +28,8 @@ export function CustomerUnavailablePage({
   }, [secondsLeft]);
 
   return (
-    <div className="fixed inset-0 z-[80] bg-background flex flex-col pt-14 pb-16">
-      <header className="bg-surface shadow-sm flex justify-between items-center px-[var(--spacing-edge)] h-14 w-full z-50 fixed top-0 pt-safe">
+    <div className="fixed inset-0 z-[80] bg-background flex flex-col">
+      <header className="bg-surface shadow-sm flex justify-between items-center px-[var(--spacing-edge)] min-h-14 w-full z-50 fixed top-0 pt-safe">
         <button
           type="button"
           onClick={onClose}
@@ -45,7 +45,7 @@ export function CustomerUnavailablePage({
         </div>
       </header>
 
-      <main className="flex-1 flex flex-col px-[var(--spacing-edge)] pt-6 gap-6 overflow-y-auto">
+      <main className="flex-1 flex flex-col px-[var(--spacing-edge)] pt-[calc(3.5rem+env(safe-area-inset-top,0px)+1.5rem)] gap-6 overflow-y-auto pb-safe">
         <section className="flex flex-col items-center justify-center py-6 bg-surface rounded-xl shadow-soft border-l-4 border-warning">
           <MaterialIcon name="hourglass_empty" className="text-warning mb-2 text-5xl" />
           <h2 className="text-xl font-semibold text-on-surface mb-1">Waiting for customer...</h2>
@@ -80,7 +80,7 @@ export function CustomerUnavailablePage({
 
         <hr className="border-t border-surface-container-high -mx-[var(--spacing-edge)]" />
 
-        <section className="flex flex-col gap-2 pb-6">
+        <section className="flex flex-col gap-2 pb-safe">
           <h3 className="text-xs font-semibold uppercase tracking-wider text-muted mb-2">
             Resolution Options
           </h3>

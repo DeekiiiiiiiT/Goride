@@ -11,7 +11,7 @@ type OfflineModePageProps = {
 export function OfflineModePage({ delivery, onRetry, onProfileClick }: OfflineModePageProps) {
   return (
     <div className="fixed inset-0 z-[75] bg-background flex flex-col overflow-hidden select-none">
-      <div className="w-full bg-warning text-on-primary text-xs font-semibold uppercase tracking-wide py-2 px-[var(--spacing-edge)] flex items-center justify-center gap-1 shadow-md">
+      <div className="w-full bg-warning text-on-primary text-xs font-semibold uppercase tracking-wide py-2 px-[var(--spacing-edge)] pt-safe flex items-center justify-center gap-1 shadow-md">
         <MaterialIcon name="wifi_off" className="text-base" filled />
         <span>No internet connection</span>
       </div>

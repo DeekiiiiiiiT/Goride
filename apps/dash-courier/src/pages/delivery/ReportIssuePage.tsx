@@ -4,6 +4,7 @@ import type { ActiveDelivery } from '@/lib/mockActiveDelivery';
 import { ISSUE_CATEGORIES } from '@/lib/mockPromotions';
 import { uploadAndGetProofUrl } from '@/lib/courierFileUpload';
 import { toast } from '@/lib/toast';
+import { useVisualViewport } from '@/hooks/useVisualViewport';
 
 type ReportIssuePageProps = {
   delivery: ActiveDelivery;
@@ -23,6 +24,7 @@ export function ReportIssuePage({
   const [photoUrl, setPhotoUrl] = useState<string | undefined>();
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const keyboardOffset = useVisualViewport();
 
   return (
     <div className="fixed inset-0 z-[75] bg-background flex flex-col overflow-hidden">
@@ -41,7 +43,12 @@ export function ReportIssuePage({
         </div>
       </header>
 
-      <main className="flex-1 overflow-y-auto px-[var(--spacing-edge)] pt-4 pb-8 space-y-6">
+      <main
+        className="flex-1 overflow-y-auto px-[var(--spacing-edge)] pt-4 space-y-6"
+        style={{
+          paddingBottom: `max(2rem, calc(env(safe-area-inset-bottom, 0px) + 2rem + ${keyboardOffset}px))`,
+        }}
+      >
         <section className="bg-surface p-4 rounded-xl shadow-soft">
           <div className="flex items-start gap-4">
             <div className="bg-error-container text-on-error-container p-2 rounded-full mt-1 shrink-0">
@@ -146,7 +153,7 @@ export function ReportIssuePage({
             <button
               type="button"
               onClick={onRequestUnassign}
-              className="text-sm text-muted underline hover:text-on-surface transition-colors"
+              className="min-h-11 text-sm text-muted underline hover:text-on-surface transition-colors"
             >
               Unassign from delivery
             </button>

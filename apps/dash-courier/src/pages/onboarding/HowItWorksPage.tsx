@@ -77,7 +77,7 @@ export function HowItWorksPage({ onComplete, onSkip }: HowItWorksPageProps) {
         <button
           type="button"
           onClick={onSkip}
-          className="text-muted text-xs font-semibold tracking-wide hover:text-primary transition-colors py-2 px-4 rounded-full active:scale-95 duration-100"
+          className="text-muted text-xs font-semibold tracking-wide hover:text-primary transition-colors min-h-11 py-2 px-4 rounded-full active:scale-95 duration-100 flex items-center"
         >
           Skip
         </button>

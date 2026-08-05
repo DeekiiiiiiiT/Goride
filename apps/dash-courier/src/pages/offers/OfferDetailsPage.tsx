@@ -47,7 +47,7 @@ export function OfferDetailsPage({
       onTouchEnd={handleTouchEnd}
     >
       <div className="w-12 h-1 bg-surface-variant rounded-full mx-auto mt-2 shrink-0" />
-      <header className="fixed top-0 w-full z-50 bg-surface/90 backdrop-blur-md shadow-sm h-14 flex items-center px-[var(--spacing-edge)] justify-between shrink-0">
+      <header className="fixed top-0 w-full z-50 bg-surface/90 backdrop-blur-md shadow-sm min-h-14 pt-safe flex items-center px-[var(--spacing-edge)] justify-between shrink-0">
         <button
           type="button"
           onClick={onBack}

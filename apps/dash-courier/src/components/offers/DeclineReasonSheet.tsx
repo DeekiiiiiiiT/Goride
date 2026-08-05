@@ -37,7 +37,7 @@ export function DeclineReasonSheet({ open, onSkip, onSubmit }: DeclineReasonShee
       />
 
       <div
-        className="relative z-10 bg-surface w-full rounded-t-[24px] shadow-[0_-8px_24px_rgba(0,0,0,0.15)] flex flex-col"
+        className="relative z-10 bg-surface w-full rounded-t-[24px] shadow-[0_-8px_24px_rgba(0,0,0,0.15)] flex flex-col safe-x"
         style={{
           paddingBottom: `max(1rem, calc(env(safe-area-inset-bottom, 0px) + ${keyboardOffset}px))`,
         }}

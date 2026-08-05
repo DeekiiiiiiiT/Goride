@@ -103,6 +103,10 @@ select {
   padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
 }
 
+.mt-safe {
+  margin-top: max(0.75rem, env(safe-area-inset-top, 0px));
+}
+
 .input-touch {
   font-size: 1rem;
   min-height: 3rem;

@@ -191,7 +191,7 @@ export function PermissionsPage({ onBack, onContinue }: PermissionsPageProps) {
                         type="button"
                         onClick={() => void requestPermission(perm.id)}
                         disabled={isGranted || state === 'unsupported' || busy}
-                        className={`text-xs font-semibold uppercase tracking-wide px-4 py-2 rounded-full transition-colors active:scale-95 disabled:opacity-60 ${
+                        className={`text-xs font-semibold uppercase tracking-wide min-h-11 px-4 py-2 rounded-full transition-colors active:scale-95 disabled:opacity-60 ${
                           isGranted
                             ? 'bg-primary-container text-on-primary-container'
                             : 'text-primary-container bg-surface-container-high hover:bg-primary-container hover:text-on-primary-container'

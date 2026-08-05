@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import type { ActiveDelivery, DropoffMethod } from '@/lib/mockActiveDelivery';
 import { CUSTOMER_AVATAR } from '@/lib/mockActiveDelivery';
+import { useVisualViewport } from '@/hooks/useVisualViewport';
 
 type AtCustomerPageProps = {
   delivery: ActiveDelivery;
@@ -22,6 +23,7 @@ export function AtCustomerPage({
   const [note, setNote] = useState('');
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const keyboardOffset = useVisualViewport();
 
   const canComplete = method === 'hand-to-customer' || hasPhoto;
 
@@ -247,7 +249,7 @@ export function AtCustomerPage({
           <button
             type="button"
             onClick={onCustomerUnavailable}
-            className="text-xs font-semibold uppercase tracking-wide text-primary flex items-center justify-center gap-1"
+            className="min-h-11 text-xs font-semibold uppercase tracking-wide text-primary flex items-center justify-center gap-1"
           >
             <MaterialIcon name="help" className="text-base" />
             Customer not available?
@@ -255,7 +257,12 @@ export function AtCustomerPage({
         )}
       </main>
 
-      <div className="fixed bottom-0 left-0 w-full bg-surface/90 backdrop-blur-md shadow-[0_-8px_32px_rgba(0,0,0,0.08)] p-[var(--spacing-edge)] pb-safe z-50 rounded-t-[32px] border-t border-surface-variant">
+      <div
+        className="fixed bottom-0 left-0 w-full bg-surface/90 backdrop-blur-md shadow-[0_-8px_32px_rgba(0,0,0,0.08)] p-[var(--spacing-edge)] z-50 rounded-t-[32px] border-t border-surface-variant"
+        style={{
+          paddingBottom: `max(1rem, calc(env(safe-area-inset-bottom, 0px) + ${keyboardOffset}px))`,
+        }}
+      >
         <button
           type="button"
           onClick={() => onComplete(method, hasPhoto, photoUrl)}

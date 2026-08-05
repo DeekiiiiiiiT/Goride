@@ -68,7 +68,7 @@ export function AtStorePage({
 
   return (
     <div className="fixed inset-0 z-[60] flex flex-col overflow-hidden bg-background">
-      <nav className="fixed top-0 z-50 flex h-16 w-full items-center justify-between bg-surface/80 px-4 backdrop-blur-md">
+      <nav className="fixed top-0 z-50 flex min-h-16 pt-safe w-full items-center justify-between bg-surface/80 px-4 backdrop-blur-md">
         <button
           type="button"
           onClick={onClose}
@@ -85,7 +85,7 @@ export function AtStorePage({
         <div className="w-10" aria-hidden />
       </nav>
 
-      <main className="mx-auto w-full max-w-lg flex-1 overflow-y-auto px-4 pb-32 pt-20">
+      <main className="mx-auto w-full max-w-lg flex-1 overflow-y-auto px-4 pb-32 pt-[calc(4rem+env(safe-area-inset-top,0px)+1rem)]">
         <section className="mb-6">
           <div className="relative flex overflow-hidden rounded-xl border border-outline-variant bg-surface-container-lowest shadow-sm">
             <div className="w-2 shrink-0 bg-primary" />
@@ -180,7 +180,7 @@ export function AtStorePage({
           <button
             type="button"
             onClick={() => setWaitSheetOpen(true)}
-            className="mt-2 text-xs font-medium uppercase tracking-wider text-primary underline"
+            className="mt-2 min-h-11 px-2 text-xs font-medium uppercase tracking-wider text-primary underline"
           >
             Order not ready?
           </button>
@@ -222,7 +222,7 @@ export function AtStorePage({
         </section>
       </main>
 
-      <footer className="fixed bottom-0 z-50 w-full border-t border-outline-variant bg-surface px-4 pb-8 pt-4">
+      <footer className="fixed bottom-0 z-50 w-full border-t border-outline-variant bg-surface px-4 pb-safe pt-4">
         <div className="mx-auto max-w-lg">
           {canConfirm ? (
             <SlideToConfirm

@@ -43,7 +43,7 @@ export function OfferPushBanner({
               e.stopPropagation();
               onDismiss();
             }}
-            className="p-2 text-muted hover:text-on-surface shrink-0"
+            className="min-h-11 min-w-11 p-2 text-muted hover:text-on-surface shrink-0 flex items-center justify-center"
             aria-label="Dismiss"
           >
             <MaterialIcon name="close" className="text-lg" />

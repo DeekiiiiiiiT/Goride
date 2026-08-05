@@ -11,7 +11,7 @@ export function OrderCancelledPage({ onBackToDash }: OrderCancelledPageProps) {
 
   return (
     <div className="fixed inset-0 z-[80] bg-surface flex flex-col overflow-hidden">
-      <main className="flex-1 w-full flex flex-col justify-center items-center px-[var(--spacing-edge)] pb-8 pt-16">
+      <main className="flex-1 w-full flex flex-col justify-center items-center px-[var(--spacing-edge)] pt-safe pb-safe">
         <div
           className="w-32 h-32 rounded-full bg-error-container flex items-center justify-center mb-8 shadow-[0_8px_32px_rgba(186,26,26,0.15)] animate-pulse"
           style={{ animationDuration: '3s' }}

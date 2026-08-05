@@ -43,7 +43,7 @@ export function ConfirmHandoffPage({
           <button
             type="button"
             onClick={onCustomerUnavailable}
-            className="text-xs font-semibold uppercase tracking-wide text-primary flex items-center gap-1 active:opacity-70"
+            className="min-h-11 text-xs font-semibold uppercase tracking-wide text-primary flex items-center gap-1 active:opacity-70"
           >
             <MaterialIcon name="help" className="text-base" />
             Customer not available?

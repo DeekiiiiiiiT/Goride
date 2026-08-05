@@ -220,7 +220,7 @@ export function ShopAndPickPage({
             Call store
           </button>
         </div>
-        <div className="border-t border-outline-variant bg-surface px-4 pb-8 pt-4 shadow-[0_-8px_24px_rgba(0,0,0,0.05)]">
+        <div className="border-t border-outline-variant bg-surface px-4 pb-safe pt-4 shadow-[0_-8px_24px_rgba(0,0,0,0.05)]">
           {canCheckout ? (
             <SlideToConfirm
               label="Done shopping — proceed to checkout"

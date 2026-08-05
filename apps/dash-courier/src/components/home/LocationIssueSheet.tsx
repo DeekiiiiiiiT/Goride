@@ -26,7 +26,7 @@ export function LocationIssueSheet({ onOpenSettings, onRetry }: LocationIssueShe
         <div className="absolute inset-0 bg-gradient-to-t from-surface/80 to-transparent" />
       </div>
 
-      <div className="relative z-10 flex-1 flex flex-col items-center justify-end px-[var(--spacing-edge)] pb-8 pt-6 courier-map-bg-blur">
+      <div className="relative z-10 flex-1 flex flex-col items-center justify-end px-[var(--spacing-edge)] safe-x pb-safe pt-6 courier-map-bg-blur">
         <div className="w-full max-w-md bg-surface rounded-t-3xl rounded-b-xl shadow-[0_4px_40px_rgba(0,0,0,0.12)] flex flex-col p-6 border border-surface-variant">
           <div className="w-12 h-1.5 bg-surface-variant rounded-full mx-auto mb-6" />
 

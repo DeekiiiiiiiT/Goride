@@ -17,7 +17,7 @@ export function DeliveryCompletePage({ delivery, onBackToDash }: DeliveryComplet
 
   return (
     <div className="fixed inset-0 z-[90] bg-background flex flex-col overflow-hidden">
-      <main className="flex-1 flex flex-col items-center justify-center px-[var(--spacing-edge)] pt-8 pb-32 overflow-y-auto">
+      <main className="flex-1 flex flex-col items-center justify-center px-[var(--spacing-edge)] pt-8 pb-32 overflow-y-auto w-full max-w-md mx-auto">
         <div className="mb-6 courier-scale-in flex flex-col items-center">
           <div className="w-24 h-24 rounded-full bg-success/10 flex items-center justify-center mb-4 relative overflow-hidden">
             <div className="absolute inset-0 rounded-full bg-success/20 animate-ping" style={{ animationDuration: '2s' }} />

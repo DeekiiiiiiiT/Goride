@@ -86,8 +86,8 @@ export function LoginPage({ onBack, onSignIn, onSignUp }: LoginPageProps) {
   const displayError = authError || googleError;
 
   return (
-    <div className="bg-background text-on-background min-h-full flex flex-col antialiased">
-      <main className="flex-grow flex flex-col px-[var(--spacing-edge)] pt-8 pb-safe md:justify-center md:items-center">
+    <div className="bg-background text-on-background min-h-dvh flex flex-col antialiased">
+      <main className="flex-grow flex flex-col px-[var(--spacing-edge)] pt-safe pb-safe md:justify-center md:items-center">
         <div className="w-full max-w-md mx-auto bg-surface rounded-xl shadow-soft p-6 flex flex-col gap-6 relative overflow-hidden">
           <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-primary-container to-primary" />
 
@@ -95,7 +95,7 @@ export function LoginPage({ onBack, onSignIn, onSignUp }: LoginPageProps) {
             <button
               type="button"
               onClick={onBack}
-              className="self-start text-sm text-muted hover:text-on-surface mb-2 flex items-center gap-1"
+              className="self-start min-h-11 px-2 -ml-2 text-sm text-muted hover:text-on-surface mb-2 flex items-center gap-1"
             >
               <MaterialIcon name="arrow_back" className="text-lg" />
               Back
@@ -157,7 +157,7 @@ export function LoginPage({ onBack, onSignIn, onSignUp }: LoginPageProps) {
                 </label>
                 <button
                   type="button"
-                  className="text-xs font-semibold text-primary hover:text-on-primary-container transition-colors"
+                  className="min-h-11 px-2 text-xs font-semibold text-primary hover:text-on-primary-container transition-colors"
                   onClick={() => {
                     setForgotMode(true);
                     setAuthError(null);

@@ -171,7 +171,7 @@ export function DeliveryOfferPage({
         </div>
       </main>
 
-      <section className="fixed bottom-0 left-1/2 z-50 w-full max-w-[430px] -translate-x-1/2 border-t border-outline-variant/20 bg-white/80 p-4 backdrop-blur-md">
+      <section className="fixed bottom-0 left-1/2 z-50 w-full max-w-[430px] -translate-x-1/2 border-t border-outline-variant/20 bg-white/80 p-4 pb-safe backdrop-blur-md">
         <div className="flex h-14 gap-3">
           <button
             type="button"

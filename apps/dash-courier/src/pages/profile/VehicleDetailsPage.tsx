@@ -99,7 +99,7 @@ export function VehicleDetailsPage({ onBack, onEditVehicle }: VehicleDetailsPage
 
       {switchOpen && (
         <div className="fixed inset-0 z-[80] bg-black/40 flex items-end">
-          <div className="w-full bg-surface rounded-t-[24px] p-6 pb-safe space-y-3">
+          <div className="w-full bg-surface rounded-t-[24px] p-6 pb-safe safe-x space-y-3">
             <h3 className="text-xl font-semibold text-on-surface mb-2">Switch vehicle type</h3>
             {VEHICLE_TYPES.map((opt) => (
               <button
