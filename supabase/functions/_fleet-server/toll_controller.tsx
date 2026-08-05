@@ -6735,25 +6735,16 @@ function isSafeAutoApplyServer(c: RefundClassification, minConfidence: number): 
   return c.status === "cash_wash" && c.confidence >= minConfidence;
 }
 
-/** Confirmed trip links that consume a platform refund (not suggestion-only matchedTripId). */
+/** Trips already consuming a platform refund via a confirmed toll link (tripId). */
 function collectLinkedTripIds(tollTx: any[]): Set<string> {
   const ids = new Set<string>();
   for (const tx of tollTx || []) {
     if (!tx) continue;
+    // ONLY confirmed links. Do NOT use matchedTripId — suggestion / underpaid
+    // rows keep matchedTripId without tripId and must not hide Unlinked refunds.
     const tripId = tx.tripId ?? tx.metadata?.tripId ?? null;
-    const matchedTripId = tx.matchedTripId ?? tx.metadata?.matchedTripId ?? null;
-    const preUnlinkedTripId = tx.preUnlinkedTripId ?? tx.metadata?.preUnlinkedTripId ?? null;
-    const matchStatus = String(tx.matchStatus || tx.metadata?.matchStatus || "");
-    const reconciled =
-      tx.isReconciled === true ||
-      tx.status === "reconciled" ||
-      String(tx.status || "").toLowerCase() === "reconciled";
     if (tripId) ids.add(String(tripId));
-    // Period reset clears tripId but keeps matchedTripId + matchStatus=matched.
-    // That trip's refund is still reserved — do not queue it as Unlinked.
-    if (matchedTripId && (reconciled || matchStatus === "matched")) {
-      ids.add(String(matchedTripId));
-    }
+    const preUnlinkedTripId = tx.preUnlinkedTripId ?? tx.metadata?.preUnlinkedTripId ?? null;
     if (preUnlinkedTripId) ids.add(String(preUnlinkedTripId));
   }
   return ids;
@@ -6778,18 +6769,16 @@ function resolveLinkedTripForShortfall(
   tripById: Map<string, any>,
 ): any | null {
   if (!toll) return null;
-  const matchStatus = String(toll.matchStatus || toll.metadata?.matchStatus || "");
+  // Prefer confirmed tripId. matchedTripId only when this toll is already
+  // reconciled — nets shortfall for Apply scoring without hiding Unlinked trips.
+  let id: string | null = toll.tripId ? String(toll.tripId) : null;
+  if (!id && toll.metadata?.tripId) id = String(toll.metadata.tripId);
   const reconciled =
     toll.isReconciled === true ||
     toll.status === "reconciled" ||
     String(toll.status || "").toLowerCase() === "reconciled";
-  let id: string | null = toll.tripId ? String(toll.tripId) : null;
-  if (!id && toll.metadata?.tripId) id = String(toll.metadata.tripId);
-  // Period reset: tripId cleared, matchedTripId kept with matchStatus=matched.
   const matchedTripId = toll.matchedTripId ?? toll.metadata?.matchedTripId ?? null;
-  if (!id && matchedTripId && (reconciled || matchStatus === "matched")) {
-    id = String(matchedTripId);
-  }
+  if (!id && reconciled && matchedTripId) id = String(matchedTripId);
   if (!id && toll.preUnlinkedTripId) id = String(toll.preUnlinkedTripId);
   if (id && toll.unlinkedSourceTripId && id === String(toll.unlinkedSourceTripId)) {
     id = toll.preUnlinkedTripId ? String(toll.preUnlinkedTripId) : null;
