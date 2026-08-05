@@ -7479,6 +7479,7 @@ async function applyUnlinkedRefundToClaim(
     const tollAmount = live.expectedCost;
     const platformRefund = live.platformRefund;
     const initialShortfall = live.remaining;
+    const matchedTrip = resolveLinkedTripForShortfall(toll, tripByIdForShortfall);
     // Fully covered by its matched trip — reject BEFORE creating a claim, or a
     // stale suggestion strands an orphan Open claim on every failed attempt.
     if (initialShortfall <= 0.05) {
@@ -7530,6 +7531,22 @@ async function applyUnlinkedRefundToClaim(
       status: 409,
       error: "That toll was already handled in an earlier step (Personal Use, Deadhead, or Dispute). Pick an open underpaid shortfall instead.",
     };
+  }
+  // Stale Open claims can still look underpaid after Needs Review fully covered the toll.
+  if (claim.transactionId) {
+    const tollForLive = await loadTollForUnlinkedMatch(String(claim.transactionId));
+    const tripByIdLive = new Map<string, any>();
+    for (const t of trips || []) {
+      if (t?.id) tripByIdLive.set(String(t.id), t);
+    }
+    const liveOnClaim = await liveTollShortfallAfterMatch(tollForLive, tripByIdLive);
+    if (liveOnClaim.remaining <= UNLINKED_SHORTFALL_TOLERANCE) {
+      return {
+        ok: false,
+        status: 409,
+        error: "That toll is already fully covered by its matched trip refund — no shortfall remains. Refresh and pick an open underpaid shortfall instead.",
+      };
+    }
   }
   if (claim.unlinkedTripId && claim.unlinkedTripId !== tripId) {
     const left = remainingClaimShortfall(claim);
