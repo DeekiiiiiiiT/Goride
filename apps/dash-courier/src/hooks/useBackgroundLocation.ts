@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import { checkCourierPermission } from '@/lib/courierPermissions';
 import { toast } from '@/lib/toast';
 import { isCourierNativePlatform } from '@/capacitor-native';
 
@@ -79,7 +78,9 @@ export function useBackgroundLocation(enabled: boolean) {
         await startNativeWatch();
         return;
       }
-      const state = await checkCourierPermission('location');
+      // Web: always request so the browser permission prompt can appear.
+      const { requestCourierPermission } = await import('@/lib/courierPermissions');
+      const state = await requestCourierPermission('location');
       if (state === 'granted') startWebWatch();
       else onError();
     })();

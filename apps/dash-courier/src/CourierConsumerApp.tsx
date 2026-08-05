@@ -72,11 +72,18 @@ export function CourierConsumerApp() {
       setPhase('welcome');
       return;
     }
+    // Local "onboarding complete" is not enough — need an active courier_profiles row.
+    await ensureCourierProfile();
+    const synced = await syncOnboardingFromProfile();
+    if (synced) {
+      setPhase('app');
+      return;
+    }
     if (await isProfilePending()) {
       setPhase('account-pending');
       return;
     }
-    setPhase('app');
+    setPhase('account-pending');
   }, []);
 
   useEffect(() => {

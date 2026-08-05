@@ -52,15 +52,18 @@ export async function putCourierAvailability(input: {
   lat?: number;
   lng?: number;
   activeOrderId?: string | null;
-}): Promise<boolean> {
+}): Promise<{ ok: boolean; error?: string }> {
   const headers = await authHeaders();
-  if (!headers) return false;
+  if (!headers) return { ok: false, error: 'Not signed in' };
   const res = await fetch(`${BASE}/courier/availability`, {
     method: 'PUT',
     headers,
     body: JSON.stringify(input),
   });
-  return res.ok;
+  if (!res.ok) {
+    return { ok: false, error: await parseError(res) };
+  }
+  return { ok: true };
 }
 
 export async function fetchAvailableOrders(): Promise<AvailableOrder[]> {

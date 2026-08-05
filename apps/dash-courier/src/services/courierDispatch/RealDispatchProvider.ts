@@ -11,6 +11,8 @@ import {
   type AvailableOrder,
   type CourierOfferRow,
 } from '@/lib/courierApi';
+import { requestCourierPermission } from '@/lib/courierPermissions';
+import { toast } from '@/lib/toast';
 import { supabase } from '@/lib/supabase';
 import type {
   AcceptOfferResult,
@@ -80,13 +82,45 @@ export class RealDispatchProvider implements CourierDispatchService {
     void this.completeGoOnline();
   }
 
+  /** Browser/native: ask for GPS before availability write so the permission prompt actually appears. */
+  private async ensureGoOnlineLocation(): Promise<'granted' | 'denied' | 'unavailable'> {
+    const perm = await requestCourierPermission('location');
+    if (perm !== 'granted') return perm === 'denied' ? 'denied' : 'unavailable';
+
+    if (typeof navigator !== 'undefined' && navigator.geolocation) {
+      try {
+        const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, {
+            enableHighAccuracy: true,
+            timeout: 15000,
+            maximumAge: 5000,
+          });
+        });
+        this.setLastCoords(pos.coords.latitude, pos.coords.longitude);
+        return 'granted';
+      } catch {
+        // Permission granted but GPS timed out — still allow online; coords optional on API.
+        return 'granted';
+      }
+    }
+    return 'granted';
+  }
+
   private async completeGoOnline(): Promise<void> {
-    const ok = await putCourierAvailability({
+    const loc = await this.ensureGoOnlineLocation();
+    if (loc === 'denied') {
+      toast.error('Location required', 'Allow location access to go online and get delivery offers.');
+      this.setState({ mode: 'offline' });
+      return;
+    }
+
+    const result = await putCourierAvailability({
       isOnline: true,
       lat: this.lastCoords.lat,
       lng: this.lastCoords.lng,
     });
-    if (!ok) {
+    if (!result.ok) {
+      toast.error('Could not go online', result.error || 'Try again in a moment.');
       this.setState({ mode: 'offline' });
       return;
     }

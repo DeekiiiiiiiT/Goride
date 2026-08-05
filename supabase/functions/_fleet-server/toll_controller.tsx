@@ -1419,9 +1419,7 @@ async function buildUnifiedTollFinancialEventsList(): Promise<{
     if (ev) tollEvents.push(ev);
   }
 
-  const linkedTripIds = new Set(
-    mergedToll.filter((tx: any) => tx.tripId).map((tx: any) => String(tx.tripId)),
-  );
+  const linkedTripIds = collectLinkedTripIds(mergedToll);
   const tripEvents: TollFinancialEvent[] = [];
   for (const t of trips) {
     const tc = Number(t.tollCharges) || 0;
@@ -1621,11 +1619,7 @@ app.get(`${BASE}/summary`, async (c) => {
     );
 
     // Unclaimed refunds — trips with tollCharges but no linked toll tx
-    const linkedTripIds = new Set(
-      tollTx
-        .filter((tx: any) => tx.tripId)
-        .map((tx: any) => tx.tripId),
-    );
+    const linkedTripIds = collectLinkedTripIds(tollTx);
     // Unresolved refunds only (resolved cash_wash/phantom/expense_logged drop off).
     const unclaimedRefunds = trips.filter((t: any) => isUnresolvedRefund(t, linkedTripIds));
     // Resolved refunds (any non-pending resolution) — surfaced separately.
@@ -2209,12 +2203,8 @@ app.get(`${BASE}/unclaimed-refunds`, async (c) => {
     const tollTx = filterByDriver(loaded.tollTx, driverId);
     let trips = filterByDriver(loaded.trips, driverId);
 
-    // Build linkedTripIds — only toll-category transactions with a tripId
-    const linkedTripIds = new Set(
-      tollTx
-        .filter((tx: any) => tx.tripId)
-        .map((tx: any) => tx.tripId),
-    );
+    // Build linkedTripIds — confirmed trip links (active tripId + reconciled matches)
+    const linkedTripIds = collectLinkedTripIds(tollTx);
 
     // Candidates: trips with a toll refund, no linked toll tx, and not already
     // resolved (cash_wash/phantom/expense_logged drop off; pending stays).
@@ -6744,13 +6734,66 @@ function isSafeAutoApplyServer(c: RefundClassification, minConfidence: number): 
   return c.status === "cash_wash" && c.confidence >= minConfidence;
 }
 
+/** Confirmed trip links that consume a platform refund (not suggestion-only matchedTripId). */
+function collectLinkedTripIds(tollTx: any[]): Set<string> {
+  const ids = new Set<string>();
+  for (const tx of tollTx || []) {
+    if (!tx) continue;
+    if (tx.tripId) ids.add(String(tx.tripId));
+    // Period reset clears tripId but keeps a confirmed prior link — still not unlinked.
+    if (tx.isReconciled && tx.matchedTripId) ids.add(String(tx.matchedTripId));
+    if (tx.preUnlinkedTripId) ids.add(String(tx.preUnlinkedTripId));
+  }
+  return ids;
+}
+
 /** A trip is still "unlinked" only if it has no linked toll AND is unresolved/pending. */
 function isUnresolvedRefund(trip: any, linkedTripIds: Set<string>): boolean {
   if (!(trip.tollCharges && trip.tollCharges > 0)) return false;
-  if (linkedTripIds.has(trip.id)) return false;
+  if (linkedTripIds.has(String(trip.id))) return false;
   const res = trip.tollRefundResolution;
   if (res && res.status && res.status !== "pending") return false; // resolved → hidden
   return true;
+}
+
+/**
+ * Trip whose platform refund already nets against this toll (Needs Review match).
+ * Must match applyUnlinkedRefundToClaim — never treat the unlinked credit trip as
+ * this toll's own matched refund.
+ */
+function resolveLinkedTripForShortfall(
+  toll: any | null,
+  tripById: Map<string, any>,
+): any | null {
+  if (!toll) return null;
+  let id: string | null = toll.tripId ? String(toll.tripId) : null;
+  if (!id && toll.isReconciled && toll.matchedTripId) id = String(toll.matchedTripId);
+  if (!id && toll.preUnlinkedTripId) id = String(toll.preUnlinkedTripId);
+  if (id && toll.unlinkedSourceTripId && id === String(toll.unlinkedSourceTripId)) {
+    id = toll.preUnlinkedTripId ? String(toll.preUnlinkedTripId) : null;
+  }
+  return id ? tripById.get(id) || null : null;
+}
+
+/** Live shortfall after Needs Review match — same basis as the apply 409 guard. */
+async function liveTollShortfallAfterMatch(
+  toll: any | null,
+  tripById: Map<string, any>,
+  fallbackAmount = 0,
+): Promise<{ expectedCost: number; platformRefund: number; remaining: number }> {
+  const costBasis = toll
+    ? await resolveTollExpectedCost(toll)
+    : {
+        expectedCost: Math.abs(Number(fallbackAmount) || 0),
+        tagAmount: Math.abs(Number(fallbackAmount) || 0),
+        usedOfficialRate: false,
+        rateDrift: false,
+        officialAmount: null,
+      };
+  const matchedTrip = resolveLinkedTripForShortfall(toll, tripById);
+  const platformRefund = Math.abs(Number(matchedTrip?.tollCharges) || 0);
+  const remaining = computeChargeShortfall(costBasis.expectedCost, platformRefund, 0);
+  return { expectedCost: costBasis.expectedCost, platformRefund, remaining };
 }
 
 // ── Core: apply a resolution to a trip (shared by single + bulk) ─────────
@@ -6956,9 +6999,7 @@ app.get(`${BASE}/refund-suggestions`, async (c) => {
     const tollTx = filterByDriver(loaded.tollTx, driverId);
     let trips = filterByDriver(loaded.trips, driverId);
 
-    const linkedTripIds = new Set(
-      tollTx.filter((tx: any) => tx.tripId).map((tx: any) => tx.tripId),
-    );
+    const linkedTripIds = collectLinkedTripIds(tollTx);
     const unresolved = trips.filter((t: any) => isUnresolvedRefund(t, linkedTripIds));
     const plazas = await loadActivePlazaPoints();
 
@@ -7097,10 +7138,10 @@ function extractTollPlatform(
 }
 
 /** Ranked underpaid claims / tolls this unlinked trip refund could cover (Review picker). */
-function computeUnlinkedShortfallSuggestions(
+async function computeUnlinkedShortfallSuggestions(
   trip: any,
   ctx: UnlinkedShortfallContext,
-): any[] {
+): Promise<any[]> {
   const driverId = trip.driverId;
   const tripRefund = Math.abs(Number(trip.tollCharges) || 0);
   if (!driverId || tripRefund <= 0) return [];
@@ -7132,7 +7173,6 @@ function computeUnlinkedShortfallSuggestions(
       if (remainingClaimShortfall(claim) <= UNLINKED_SHORTFALL_TOLERANCE) continue;
     }
 
-    const remaining = remainingClaimShortfall(claim);
     const toll = resolveTollFromContext(ctx, claim.transactionId);
     // Skip if underlying toll was closed in Personal Use / Deadhead / dispute steps
     if (toll && !isEligibleUnlinkedShortfallToll(toll) && toll.matchTypeCode !== "AMOUNT_VARIANCE") {
@@ -7145,7 +7185,19 @@ function computeUnlinkedShortfallSuggestions(
         toll.resolution === "personal"
       ) continue;
     }
-    const tollAmount = Math.abs(Number(claim.expectedAmount ?? toll?.amount ?? claim.amount) || 0);
+    // Needs Review already fully covered → never recommend (stale Open claims used to).
+    const live = await liveTollShortfallAfterMatch(
+      toll,
+      ctx.tripById,
+      Number(claim.expectedAmount ?? claim.amount) || 0,
+    );
+    const claimRemaining = remainingClaimShortfall(claim);
+    const remaining = Math.min(claimRemaining, live.remaining);
+    if (remaining <= UNLINKED_SHORTFALL_TOLERANCE) continue;
+
+    const tollAmount = live.expectedCost > 0
+      ? live.expectedCost
+      : Math.abs(Number(claim.expectedAmount ?? toll?.amount ?? claim.amount) || 0);
     const claimDate = toll?.date || claim.date || claim.createdAt || trip.date;
     const confidence = scoreUnlinkedShortfallMatch({
       tripRefund,
@@ -7201,14 +7253,12 @@ function computeUnlinkedShortfallSuggestions(
       if (linkedClaim && isEligibleUnlinkedShortfallClaim(linkedClaim)) continue; // already pushed via claim loop
     }
 
-    const tollAmount = Math.abs(Number(toll.amount) || 0);
-    // Matched tolls already carry their trip's platform refund — suggest only
-    // the live remaining shortfall, never the raw toll amount (apply path
-    // recomputes this and would 409 on fully-covered rows).
-    const matchedTripForToll = toll.tripId ? ctx.tripById.get(String(toll.tripId)) : null;
-    const matchedPlatformRefund = Math.abs(Number(matchedTripForToll?.tollCharges) || 0);
-    const remainingTollShortfall = computeChargeShortfall(tollAmount, matchedPlatformRefund, 0);
-    if (remainingTollShortfall <= UNLINKED_SHORTFALL_TOLERANCE) continue;
+    // Same shortfall math as applyUnlinkedRefundToClaim — fully covered matched
+    // tolls must not appear (that 409 was the product of a stale suggestion).
+    const live = await liveTollShortfallAfterMatch(toll, ctx.tripById);
+    if (live.remaining <= UNLINKED_SHORTFALL_TOLERANCE) continue;
+    const tollAmount = live.expectedCost;
+    const remainingTollShortfall = live.remaining;
     const confidence = scoreUnlinkedShortfallMatch({
       tripRefund,
       tripDate: trip.date,
@@ -7399,7 +7449,7 @@ async function applyUnlinkedRefundToClaim(
   if (!trip) return { ok: false, status: 404, error: `Trip ${tripId} not found` };
 
   const { tollTx, trips } = await loadAllTollLedgerWithTrips();
-  const linkedTripIds = new Set(tollTx.filter((tx: any) => tx.tripId).map((tx: any) => tx.tripId));
+  const linkedTripIds = collectLinkedTripIds(tollTx);
   if (!opts?.skipTripResolution && !isUnresolvedRefund(trip, linkedTripIds)) {
     return { ok: false, status: 409, error: `Trip ${tripId} is not an unresolved unlinked refund` };
   }
@@ -7420,11 +7470,15 @@ async function applyUnlinkedRefundToClaim(
         error: "That toll was already handled in an earlier step (Personal Use, Deadhead, or Dispute). Pick an open underpaid shortfall instead.",
       };
     }
+    const tripByIdForShortfall = new Map<string, any>();
+    for (const t of trips || []) {
+      if (t?.id) tripByIdForShortfall.set(String(t.id), t);
+    }
+    const live = await liveTollShortfallAfterMatch(toll, tripByIdForShortfall);
     const costBasis = await resolveTollExpectedCost(toll);
-    const tollAmount = costBasis.expectedCost;
-    const matchedTrip = toll.tripId ? trips.find((t: any) => t?.id === toll.tripId) : null;
-    const platformRefund = Math.abs(Number(matchedTrip?.tollCharges) || 0);
-    const initialShortfall = computeChargeShortfall(tollAmount, platformRefund, 0);
+    const tollAmount = live.expectedCost;
+    const platformRefund = live.platformRefund;
+    const initialShortfall = live.remaining;
     // Fully covered by its matched trip — reject BEFORE creating a claim, or a
     // stale suggestion strands an orphan Open claim on every failed attempt.
     if (initialShortfall <= 0.05) {
@@ -7553,7 +7607,7 @@ async function applyUnlinkedRefundToClaim(
     const remainingCheck = remainingClaimShortfall(claim);
     if (hasMaterialExcessRefund(tripRefund, remainingCheck)) {
       const ctx = await loadUnlinkedShortfallContext(tollTx);
-      const ranked = computeUnlinkedShortfallSuggestions(trip, ctx);
+      const ranked = await computeUnlinkedShortfallSuggestions(trip, ctx);
       const siblings = ranked.filter(
         (r) => r.tollId !== resolvedTollId && (r.proposedShare ?? 0) > UNLINKED_SHORTFALL_TOLERANCE,
       );
@@ -7791,7 +7845,7 @@ async function applyUnlinkedRefundToTargets(
   if (targets.every((t) => !(typeof t.share === "number" && t.share > 0))) {
     const { tollTx } = await loadAllTollLedgerWithTrips();
     const ctx = await loadUnlinkedShortfallContext(tollTx);
-    const ranked = computeUnlinkedShortfallSuggestions(trip, ctx);
+    const ranked = await computeUnlinkedShortfallSuggestions(trip, ctx);
     const byKey = new Map(ranked.map((r) => [`${r.tollId}::${r.claimId ?? ""}`, r]));
     planned = targets.map((t) => {
       const row =
@@ -8156,7 +8210,7 @@ app.get(`${BASE}/unlinked-shortfall-suggestions`, async (c) => {
     let trips = filterByDriver(loaded.trips, driverId);
     // Period-scoped when wizard passes from/to — avoid scoring every historical unlinked trip.
     trips = await filterByDateRange(trips, from, to);
-    const linkedTripIds = new Set(tollTx.filter((tx: any) => tx.tripId).map((tx: any) => tx.tripId));
+    const linkedTripIds = collectLinkedTripIds(tollTx);
     const unresolved = trips.filter((t: any) => isUnresolvedRefund(t, linkedTripIds));
 
     const ctx = await loadUnlinkedShortfallContext(tollTx);
@@ -8165,7 +8219,7 @@ app.get(`${BASE}/unlinked-shortfall-suggestions`, async (c) => {
       // Same Mon–Sun week as the refund only — never promote next-week guesses.
       const ranked = filterSameWeekUnlinkedShortfalls(
         t.date,
-        computeUnlinkedShortfallSuggestions(t, ctx),
+        await computeUnlinkedShortfallSuggestions(t, ctx),
         fleetTz,
       );
       if (ranked.length > 0) suggestions[t.id] = ranked;
