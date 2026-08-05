@@ -6769,16 +6769,13 @@ function resolveLinkedTripForShortfall(
   tripById: Map<string, any>,
 ): any | null {
   if (!toll) return null;
-  // Prefer confirmed tripId. matchedTripId only when this toll is already
-  // reconciled — nets shortfall for Apply scoring without hiding Unlinked trips.
+  // Confirmed link first; otherwise the persisted match pointer (period reset
+  // clears tripId but keeps matchedTripId). Used ONLY to net shortfall — never
+  // to hide a trip from the Unlinked queue (see collectLinkedTripIds).
   let id: string | null = toll.tripId ? String(toll.tripId) : null;
   if (!id && toll.metadata?.tripId) id = String(toll.metadata.tripId);
-  const reconciled =
-    toll.isReconciled === true ||
-    toll.status === "reconciled" ||
-    String(toll.status || "").toLowerCase() === "reconciled";
   const matchedTripId = toll.matchedTripId ?? toll.metadata?.matchedTripId ?? null;
-  if (!id && reconciled && matchedTripId) id = String(matchedTripId);
+  if (!id && matchedTripId) id = String(matchedTripId);
   if (!id && toll.preUnlinkedTripId) id = String(toll.preUnlinkedTripId);
   if (id && toll.unlinkedSourceTripId && id === String(toll.unlinkedSourceTripId)) {
     id = toll.preUnlinkedTripId ? String(toll.preUnlinkedTripId) : null;
@@ -6813,7 +6810,7 @@ async function liveTollShortfallAfterMatch(
   const sourceTripId = matchedTrip?.id != null ? String(matchedTrip.id) : null;
   // #region agent log
   console.log(
-    `[UnlinkedShortfall] live toll=${tollId || "none"} tripId=${source?.tripId ?? "null"} matched=${sourceTripId ?? "null"} expected=${costBasis.expectedCost} platformRefund=${platformRefund} remaining=${remaining}`,
+    `[UnlinkedShortfall] live toll=${tollId || "none"} tripId=${source?.tripId ?? "null"} matchedTripId=${source?.matchedTripId ?? "null"} used=${sourceTripId ?? "null"} expected=${costBasis.expectedCost} platformRefund=${platformRefund} remaining=${remaining}`,
   );
   // #endregion
   return { expectedCost: costBasis.expectedCost, platformRefund, remaining, sourceTripId };
