@@ -2203,8 +2203,9 @@ app.get(`${BASE}/unclaimed-refunds`, async (c) => {
     const tollTx = filterByDriver(loaded.tollTx, driverId);
     let trips = filterByDriver(loaded.trips, driverId);
 
-    // Build linkedTripIds — confirmed trip links (active tripId + reconciled matches)
-    const linkedTripIds = collectLinkedTripIds(tollTx);
+    // Build linkedTripIds from raw ledger — merged tx shapes have dropped tripId
+    // in production reads, which leaked confirmed matches into Unlinked Refunds.
+    const linkedTripIds = collectLinkedTripIds(await getAllTollLedgerEntries());
 
     // Candidates: trips with a toll refund, no linked toll tx, and not already
     // resolved (cash_wash/phantom/expense_logged drop off; pending stays).
@@ -6739,10 +6740,15 @@ function collectLinkedTripIds(tollTx: any[]): Set<string> {
   const ids = new Set<string>();
   for (const tx of tollTx || []) {
     if (!tx) continue;
-    if (tx.tripId) ids.add(String(tx.tripId));
+    const tripId = tx.tripId ?? tx.metadata?.tripId ?? null;
+    const matchedTripId = tx.matchedTripId ?? tx.metadata?.matchedTripId ?? null;
+    const preUnlinkedTripId = tx.preUnlinkedTripId ?? tx.metadata?.preUnlinkedTripId ?? null;
+    if (tripId) ids.add(String(tripId));
     // Period reset clears tripId but keeps a confirmed prior link — still not unlinked.
-    if (tx.isReconciled && tx.matchedTripId) ids.add(String(tx.matchedTripId));
-    if (tx.preUnlinkedTripId) ids.add(String(tx.preUnlinkedTripId));
+    if ((tx.isReconciled || tx.status === "reconciled") && matchedTripId) {
+      ids.add(String(matchedTripId));
+    }
+    if (preUnlinkedTripId) ids.add(String(preUnlinkedTripId));
   }
   return ids;
 }
@@ -6769,10 +6775,16 @@ function resolveLinkedTripForShortfall(
   let id: string | null = toll.tripId ? String(toll.tripId) : null;
   if (!id && toll.isReconciled && toll.matchedTripId) id = String(toll.matchedTripId);
   if (!id && toll.preUnlinkedTripId) id = String(toll.preUnlinkedTripId);
+  // Merged tx shape sometimes only keeps match pointer under metadata.
+  if (!id && toll.metadata?.tripId) id = String(toll.metadata.tripId);
+  if (!id && toll.isReconciled && toll.metadata?.matchedTripId) {
+    id = String(toll.metadata.matchedTripId);
+  }
   if (id && toll.unlinkedSourceTripId && id === String(toll.unlinkedSourceTripId)) {
     id = toll.preUnlinkedTripId ? String(toll.preUnlinkedTripId) : null;
   }
-  return id ? tripById.get(id) || null : null;
+  if (!id) return null;
+  return tripById.get(id) || tripById.get(String(id)) || null;
 }
 
 /** Live shortfall after Needs Review match — same basis as the apply 409 guard. */
@@ -6780,9 +6792,14 @@ async function liveTollShortfallAfterMatch(
   toll: any | null,
   tripById: Map<string, any>,
   fallbackAmount = 0,
-): Promise<{ expectedCost: number; platformRefund: number; remaining: number }> {
-  const costBasis = toll
-    ? await resolveTollExpectedCost(toll)
+): Promise<{ expectedCost: number; platformRefund: number; remaining: number; sourceTripId: string | null }> {
+  // Always prefer raw toll_ledger row — apply path does this and merged shapes
+  // have been observed scoring full shortfall while apply 409s (covered).
+  const tollId = toll?.id != null ? String(toll.id) : "";
+  const raw = tollId ? await loadTollForUnlinkedMatch(tollId) : null;
+  const source = raw || toll;
+  const costBasis = source
+    ? await resolveTollExpectedCost(source)
     : {
         expectedCost: Math.abs(Number(fallbackAmount) || 0),
         tagAmount: Math.abs(Number(fallbackAmount) || 0),
@@ -6790,10 +6807,16 @@ async function liveTollShortfallAfterMatch(
         rateDrift: false,
         officialAmount: null,
       };
-  const matchedTrip = resolveLinkedTripForShortfall(toll, tripById);
+  const matchedTrip = resolveLinkedTripForShortfall(source, tripById);
   const platformRefund = Math.abs(Number(matchedTrip?.tollCharges) || 0);
   const remaining = computeChargeShortfall(costBasis.expectedCost, platformRefund, 0);
-  return { expectedCost: costBasis.expectedCost, platformRefund, remaining };
+  const sourceTripId = matchedTrip?.id != null ? String(matchedTrip.id) : null;
+  // #region agent log
+  console.log(
+    `[UnlinkedShortfall] live toll=${tollId || "none"} tripId=${source?.tripId ?? "null"} matched=${sourceTripId ?? "null"} expected=${costBasis.expectedCost} platformRefund=${platformRefund} remaining=${remaining}`,
+  );
+  // #endregion
+  return { expectedCost: costBasis.expectedCost, platformRefund, remaining, sourceTripId };
 }
 
 // ── Core: apply a resolution to a trip (shared by single + bulk) ─────────
@@ -7058,11 +7081,11 @@ async function loadUnlinkedShortfallContext(ledgerHint?: any[]): Promise<Unlinke
   ]);
   const tollById = new Map<string, any>();
   for (const toll of ledger) {
-    if (toll?.id) tollById.set(toll.id, toll);
+    if (toll?.id) tollById.set(String(toll.id), toll);
   }
   const tripById = new Map<string, any>();
   for (const t of trips || []) {
-    if (t?.id) tripById.set(t.id, t);
+    if (t?.id) tripById.set(String(t.id), t);
   }
   // Dispute-first legacy: hide tolls already linked to a dispute refund.
   // Correct settlement order (unlinked first) uses live remaining shortfall
@@ -8227,7 +8250,7 @@ app.get(`${BASE}/unlinked-shortfall-suggestions`, async (c) => {
     let trips = filterByDriver(loaded.trips, driverId);
     // Period-scoped when wizard passes from/to — avoid scoring every historical unlinked trip.
     trips = await filterByDateRange(trips, from, to);
-    const linkedTripIds = collectLinkedTripIds(tollTx);
+    const linkedTripIds = collectLinkedTripIds(await getAllTollLedgerEntries());
     const unresolved = trips.filter((t: any) => isUnresolvedRefund(t, linkedTripIds));
 
     const ctx = await loadUnlinkedShortfallContext(tollTx);

@@ -340,6 +340,80 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
           for (const [tripId, list] of Object.entries(rawShort)) {
             shortMap.set(tripId, list as UnlinkedShortfallSuggestion[]);
           }
+          // #region agent log
+          {
+            const portmoreId = '59a563aa-e91c-45b6-9e51-577aa13fbce8';
+            const steId = '6d6ac5e1-5b03-4f6b-ab86-2aa125aa353e';
+            const stwId = '8e4b4168-6423-4a8b-b078-51e4e84c25b2';
+            const linkedTripIds = new Set(
+              [...reconciled, ...reconciledAll]
+                .map((t) => t.tripId)
+                .filter(Boolean)
+                .map(String),
+            );
+            const entries = Object.entries(rawShort).map(([tripId, list]) => {
+              const rows = (list as UnlinkedShortfallSuggestion[]) || [];
+              return {
+                tripId,
+                count: rows.length,
+                tripShouldBeExcludedAsLinked: linkedTripIds.has(String(tripId)),
+                top: rows.slice(0, 3).map((r) => ({
+                  tollId: r.tollId,
+                  location: r.location,
+                  remainingShortfall: r.remainingShortfall,
+                  tollAmount: r.tollAmount,
+                  confidence: r.confidence,
+                  matchType: r.matchType,
+                  coversFully: r.coversFully,
+                })),
+              };
+            });
+            const portmoreHit = entries.some((e) =>
+              e.top.some(
+                (t) =>
+                  String(t.tollId) === portmoreId ||
+                  (String(t.location || '').toLowerCase().includes('portmore') &&
+                    Number(t.remainingShortfall) > 0.05),
+              ),
+            );
+            const reconSnap = [portmoreId, steId, stwId].map((id) => {
+              const row = [...reconciled, ...reconciledAll].find((t) => t.id === id);
+              return row
+                ? {
+                    id,
+                    tripId: row.tripId ?? null,
+                    isReconciled: row.isReconciled ?? null,
+                    amount: row.amount ?? null,
+                  }
+                : { id, missing: true };
+            });
+            fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-Debug-Session-Id': '6ca3b5',
+              },
+              body: JSON.stringify({
+                sessionId: '6ca3b5',
+                runId: 'post-fix',
+                hypothesisId: 'A',
+                location: 'useTollReconciliation.ts:shortfallSuggestions',
+                message: 'Unlinked shortfall suggestions from API',
+                data: {
+                  period: period
+                    ? { from: period.startDate, to: period.endDate }
+                    : null,
+                  unclaimedCount: refunds.length,
+                  suggestionTripCount: entries.length,
+                  portmoreStillSuggested: portmoreHit,
+                  reconSnap,
+                  entries,
+                },
+                timestamp: Date.now(),
+              }),
+            }).catch(() => {});
+          }
+          // #endregion
           setShortfallSuggestions(shortMap);
         }
       } catch (refErr) {
@@ -599,25 +673,98 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
       acknowledgedPlatformMismatch?: boolean;
     },
   ) => {
-    const result = await api.applyUnlinkedRefundToClaim({
-      tripId,
-      claimId: opts.claimId,
-      tollId: opts.tollId,
-      applyShare: opts.applyShare,
-      forceSingleTarget: opts.forceSingleTarget,
-      targets: opts.targets,
-      acknowledgedPlatformMismatch: opts.acknowledgedPlatformMismatch,
-      // UI requires Proceed anyway checkbox — enforce on server too.
-      rejectOnPlatformMismatch: true,
-    });
-    setUnclaimedRefunds(prev => prev.filter(t => t.id !== tripId));
-    setShortfallSuggestions(prev => {
-      const next = new Map(prev);
-      next.delete(tripId);
-      return next;
-    });
-    await fetchData();
-    return result;
+    // #region agent log
+    fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Debug-Session-Id': '6ca3b5',
+      },
+      body: JSON.stringify({
+        sessionId: '6ca3b5',
+        runId: 'pre-verify',
+        hypothesisId: 'B',
+        location: 'useTollReconciliation.ts:applyUnlinkedToClaim:start',
+        message: 'Apply unlinked clicked',
+        data: {
+          tripId,
+          claimId: opts.claimId ?? null,
+          tollId: opts.tollId ?? null,
+          applyShare: opts.applyShare ?? null,
+          suggested: (shortfallSuggestions.get(tripId) || []).slice(0, 3).map((r) => ({
+            tollId: r.tollId,
+            location: r.location,
+            remainingShortfall: r.remainingShortfall,
+            confidence: r.confidence,
+          })),
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
+    try {
+      const result = await api.applyUnlinkedRefundToClaim({
+        tripId,
+        claimId: opts.claimId,
+        tollId: opts.tollId,
+        applyShare: opts.applyShare,
+        forceSingleTarget: opts.forceSingleTarget,
+        targets: opts.targets,
+        acknowledgedPlatformMismatch: opts.acknowledgedPlatformMismatch,
+        // UI requires Proceed anyway checkbox — enforce on server too.
+        rejectOnPlatformMismatch: true,
+      });
+      // #region agent log
+      fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Debug-Session-Id': '6ca3b5',
+        },
+        body: JSON.stringify({
+          sessionId: '6ca3b5',
+          runId: 'pre-verify',
+          hypothesisId: 'B',
+          location: 'useTollReconciliation.ts:applyUnlinkedToClaim:ok',
+          message: 'Apply unlinked succeeded',
+          data: { tripId, tollId: opts.tollId ?? null },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
+      setUnclaimedRefunds(prev => prev.filter(t => t.id !== tripId));
+      setShortfallSuggestions(prev => {
+        const next = new Map(prev);
+        next.delete(tripId);
+        return next;
+      });
+      await fetchData();
+      return result;
+    } catch (err: any) {
+      // #region agent log
+      fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Debug-Session-Id': '6ca3b5',
+        },
+        body: JSON.stringify({
+          sessionId: '6ca3b5',
+          runId: 'pre-verify',
+          hypothesisId: 'B',
+          location: 'useTollReconciliation.ts:applyUnlinkedToClaim:error',
+          message: 'Apply unlinked failed',
+          data: {
+            tripId,
+            tollId: opts.tollId ?? null,
+            error: String(err?.message || err || ''),
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
+      throw err;
+    }
   };
 
   // Undo leftover resolutions (cash wash / phantom / etc.) — routes apply rows to full undo.
