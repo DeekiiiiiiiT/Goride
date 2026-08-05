@@ -142,6 +142,42 @@ export async function reverseFuelFinancialEventsAndRebuild(
   return { eventsReversed, periodsRebuilt, errors };
 }
 
+/** Canonical snapshot field is driverSpend; keep legacy aliases for old KV rows. */
+export function reportDriverSpendMajor(report: Record<string, any>): number {
+  return Math.abs(
+    Number(report.driverSpend) ||
+      Number(report.driverCashSpend) ||
+      Number(report.cashSpend) ||
+      0,
+  );
+}
+
+function roundCentsEqual(a: number, b: number): boolean {
+  return Math.round(Math.abs(a) * 100) === Math.round(Math.abs(b) * 100);
+}
+
+/** Sum active fuel event amounts (major units) by type for staleness checks. */
+function sumsFromActiveFuelEvents(active: any[]): {
+  deduction: number;
+  fleetShare: number;
+  driverSpend: number;
+  gasCard: number;
+} {
+  let deduction = 0;
+  let fleetShare = 0;
+  let driverSpend = 0;
+  let gasCard = 0;
+  for (const ev of active) {
+    const major = Math.abs(minorToMajor(Number(ev.amount_minor) || 0));
+    const et = String(ev.event_type || "");
+    if (et === "fuel_deduction") deduction += major;
+    else if (et === "fuel_fleet_share") fleetShare += major;
+    else if (et === "fuel_driver_spend") driverSpend += major;
+    else if (et === "fuel_gas_card_spend") gasCard += major;
+  }
+  return { deduction, fleetShare, driverSpend, gasCard };
+}
+
 /**
  * Post fuel close events from a finalized_report snapshot (finalize + heal).
  * Throws if any required post fails (caller may rollback KV).
@@ -149,6 +185,9 @@ export async function reverseFuelFinancialEventsAndRebuild(
  * After delete/reset, prior rows stay (append-only) but reversed_at frees the
  * active-source unique slot. Idempotency keys still need a generation suffix
  * because keys are globally unique forever. source_id stays the report id.
+ *
+ * Re-finalize: if active events exist but amounts differ from the snapshot
+ * (or Paid-by-Driver was never posted), reverse then post a new generation.
  */
 export async function postFuelFinalizedEventsFromReport(
   report: Record<string, any>,
@@ -160,18 +199,34 @@ export async function postFuelFinalizedEventsFromReport(
   const driverId = String(report.driverId);
   const deduction = Math.abs(Number(report.driverShare) || 0);
   const fleetShare = Math.abs(Number(report.companyShare) || 0);
-  const driverSpend = Math.abs(
-    Number(report.driverCashSpend) || Number(report.cashSpend) || 0,
-  );
+  const driverSpend = reportDriverSpendMajor(report);
   const gasCard = Math.abs(Number(report.gasCardSpend) || 0);
   const results: PostFinancialEventResult[] = [];
 
-  // Already closed on the ledger (unreversed) — refresh projection only.
   const active = await listActiveFuelEventsForWeek(driverId, weekKey);
   if (active.length > 0) {
-    const { rebuildDriverFinancialPeriod } = await import("./driver_financial_periods.ts");
-    await rebuildDriverFinancialPeriod(driverId, weekKey);
-    return { weekKey, driverId, results };
+    const curr = sumsFromActiveFuelEvents(active);
+    const amountsMatch =
+      roundCentsEqual(curr.deduction, deduction) &&
+      roundCentsEqual(curr.fleetShare, fleetShare) &&
+      roundCentsEqual(curr.driverSpend, driverSpend) &&
+      roundCentsEqual(curr.gasCard, gasCard);
+    if (amountsMatch) {
+      // Already closed with matching amounts — refresh Expenses projection only.
+      const { rebuildDriverFinancialPeriod } = await import("./driver_financial_periods.ts");
+      await rebuildDriverFinancialPeriod(driverId, weekKey);
+      return { weekKey, driverId, results };
+    }
+    // Stale / incomplete ledger (e.g. first finalize then more fills, or missing driverSpend) —
+    // reverse active fuel events then fall through to post the current snapshot.
+    const rev = await reverseFuelFinancialEventsForWeek(
+      driverId,
+      weekKey,
+      "fuel_re_finalize",
+    );
+    if (rev.errors.length > 0) {
+      throw new Error(`fuel ledger reverse: ${rev.errors.join("; ")}`);
+    }
   }
 
   // Next generation after prior closes (idempotency keys are never reused).

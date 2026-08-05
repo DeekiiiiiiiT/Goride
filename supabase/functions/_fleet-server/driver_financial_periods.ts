@@ -529,7 +529,13 @@ export async function rebuildDriverFinancialPeriod(
       if (!(start >= periodAnchor && start <= periodEnd)) continue;
       fuelDeduction = round2(fuelDeduction + Math.abs(Number(r.driverShare) || 0));
       fuelFleetShare = round2(fuelFleetShare + Math.abs(Number(r.companyShare) || 0));
-      fuelDriverSpend = round2(fuelDriverSpend + Math.abs(Number(r.driverCashSpend) || Number(r.cashSpend) || 0));
+      // Canonical snapshot field is driverSpend (legacy: driverCashSpend / cashSpend)
+      fuelDriverSpend = round2(
+        fuelDriverSpend +
+          Math.abs(
+            Number(r.driverSpend) || Number(r.driverCashSpend) || Number(r.cashSpend) || 0,
+          ),
+      );
       fuelGasCardSpend = round2(fuelGasCardSpend + Math.abs(Number(r.gasCardSpend) || 0));
       fuelFinalized = true;
     }

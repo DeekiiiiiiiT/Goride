@@ -40,7 +40,6 @@ import { stampOrg, getOrgId } from "./org_scope.ts";
 import {
   postFuelFinalizedEventsFromReport,
   reverseFuelFinancialEventsAndRebuild,
-  listActiveFuelEventsForWeek,
 } from "./fuel_financial_reset.ts";
 
 const app = new Hono();
@@ -1018,7 +1017,7 @@ app.post(`${BASE_PATH}/finalized-reports/reset-period`, requirePermission('trans
 
 /**
  * Heal Consumption Reconciliation ↔ Driver Fuel Expense drift:
- * - KV snapshot without active fuel events → re-post events + rebuild
+ * - KV snapshot → postFuelFinalizedEventsFromReport (posts if missing; reverse+reposts if amounts stale)
  * - Active fuel events without KV snapshot → reverse events + rebuild
  * Body: { dryRun?: boolean, weekStart?: string, driverId?: string }
  */
@@ -1080,23 +1079,11 @@ app.post(
         ),
       );
 
-      const toPost: any[] = [];
-      const toRebuild: Array<{ driverId: string; weekKey: string }> = [];
+      // Every snapshot goes through post — matches when fresh, reverse+reposts when stale,
+      // and fills missing fuel_driver_spend after the driverSpend field-name fix.
+      const toPost: any[] = [...snapshots];
       const toReverse: Array<{ driverId: string; weekKey: string }> = [];
 
-      for (const s of snapshots) {
-        const weekKey = String(s.weekStart).split("T")[0];
-        const driverId = String(s.driverId);
-        try {
-          const active = await listActiveFuelEventsForWeek(driverId, weekKey);
-          if (active.length === 0) toPost.push(s);
-          else toRebuild.push({ driverId, weekKey });
-        } catch {
-          const key = `${driverId}|${weekKey}`;
-          if (!eventKeys.has(key)) toPost.push(s);
-          else toRebuild.push({ driverId, weekKey });
-        }
-      }
       for (const key of eventKeys) {
         if (!snapKeys.has(key)) {
           const [driverId, weekKey] = key.split("|");
@@ -1108,10 +1095,8 @@ app.post(
         dryRun,
         snapshotsScanned: snapshots.length,
         wouldPost: toPost.length,
-        wouldRebuild: toRebuild.length,
         wouldReverse: toReverse.length,
         posted: 0,
-        rebuilt: 0,
         reversed: 0,
         periodsRebuilt: 0,
         errors: [] as string[],
@@ -1119,7 +1104,6 @@ app.post(
           driverId: s.driverId,
           weekStart: String(s.weekStart).split("T")[0],
         })),
-        sampleRebuild: toRebuild.slice(0, 10),
         sampleReverse: toReverse.slice(0, 10),
       };
 
@@ -1142,21 +1126,6 @@ app.post(
             `post ${s.driverId}/${s.weekStart}: ${e?.message || e}`,
           );
         }
-      }
-
-      // Snapshot + events exist but projection may be stale (e.g. Jan 12 Pending).
-      try {
-        const { rebuildPeriodsForAnchors } = await import("./driver_financial_periods.ts");
-        for (const { driverId, weekKey } of toRebuild) {
-          try {
-            report.periodsRebuilt += await rebuildPeriodsForAnchors(driverId, [weekKey]);
-            report.rebuilt++;
-          } catch (e: any) {
-            report.errors.push(`rebuild ${driverId}/${weekKey}: ${e?.message || e}`);
-          }
-        }
-      } catch (e: any) {
-        report.errors.push(`rebuild import: ${e?.message || e}`);
       }
 
       for (const { driverId, weekKey } of toReverse) {
