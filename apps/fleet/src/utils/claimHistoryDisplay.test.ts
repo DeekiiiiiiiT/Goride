@@ -175,6 +175,29 @@ describe('claimHistoryDisplay', () => {
     expect(getClaimCategoryLabel(claim, toll)).toBe('Underpaid');
   });
 
+  it('labels Toll_Refund Charge Driver as Underpaid even when toll.resolution is personal', () => {
+    const claim: Claim = {
+      id: 'c2b',
+      type: 'Toll_Refund',
+      status: 'Resolved',
+      driverId: 'd1',
+      amount: 10,
+      expectedAmount: 380,
+      paidAmount: 370,
+      subject: 'Toll Refund: Portmore',
+      message: '',
+      createdAt: '',
+      updatedAt: '',
+      resolutionReason: 'Charge Driver',
+    };
+    const toll = {
+      workflowStage: 'personal_use_resolved',
+      resolution: 'personal',
+      matchTypeCode: 'AMOUNT_VARIANCE',
+    } as FinancialTransaction;
+    expect(getClaimCategoryLabel(claim, toll)).toBe('Underpaid');
+  });
+
   it('labels personal resolve claims as Personal', () => {
     const claim: Claim = {
       id: 'c3',

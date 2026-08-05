@@ -146,7 +146,22 @@ export function getClaimCategoryLabel(
   if (claim.disputeRefundId) return 'Dispute';
 
   const subject = (claim.subject || '').toLowerCase();
-  const tollResolution = (toll?.metadata as { resolution?: string } | undefined)?.resolution;
+  const tollResolution =
+    (toll?.metadata as { resolution?: string } | undefined)?.resolution ||
+    (toll as { resolution?: string } | null | undefined)?.resolution;
+
+  // Underpaid / shortfall before Personal — Charge Driver sync often stamps
+  // toll.resolution=personal, which must not override a Toll_Refund claim.
+  if (
+    claim.unlinkedTripId ||
+    toll?.unlinkedSourceTripId ||
+    claim.type === 'Toll_Refund' ||
+    subject.includes('underpaid') ||
+    subject.includes('toll refund') ||
+    subject.includes('shortfall')
+  ) {
+    return 'Underpaid';
+  }
 
   if (subject.includes('personal') || tollResolution === 'personal') return 'Personal';
   if (subject.includes('deadhead')) return 'Deadhead';
@@ -158,16 +173,6 @@ export function getClaimCategoryLabel(
     return 'Business';
   }
   if (claim.resolutionReason === 'Write Off' || tollResolution === 'write_off') return 'Write Off';
-
-  if (claim.unlinkedTripId || toll?.unlinkedSourceTripId) return 'Underpaid';
-  if (
-    claim.type === 'Toll_Refund' ||
-    subject.includes('underpaid') ||
-    subject.includes('toll refund') ||
-    subject.includes('shortfall')
-  ) {
-    return 'Underpaid';
-  }
 
   const stage = toll?.workflowStage || '';
   if (stage.includes('deadhead')) return 'Deadhead';

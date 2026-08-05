@@ -6789,7 +6789,7 @@ async function liveTollShortfallAfterMatch(
   toll: any | null,
   tripById: Map<string, any>,
   fallbackAmount = 0,
-): Promise<{ expectedCost: number; platformRefund: number; remaining: number; sourceTripId: string | null }> {
+): Promise<{ expectedCost: number; platformRefund: number; remaining: number }> {
   // Always prefer raw toll_ledger row — apply path does this and merged shapes
   // have been observed scoring full shortfall while apply 409s (covered).
   const tollId = toll?.id != null ? String(toll.id) : "";
@@ -6807,13 +6807,7 @@ async function liveTollShortfallAfterMatch(
   const matchedTrip = resolveLinkedTripForShortfall(source, tripById);
   const platformRefund = Math.abs(Number(matchedTrip?.tollCharges) || 0);
   const remaining = computeChargeShortfall(costBasis.expectedCost, platformRefund, 0);
-  const sourceTripId = matchedTrip?.id != null ? String(matchedTrip.id) : null;
-  // #region agent log
-  console.log(
-    `[UnlinkedShortfall] live toll=${tollId || "none"} tripId=${source?.tripId ?? "null"} matchedTripId=${source?.matchedTripId ?? "null"} used=${sourceTripId ?? "null"} expected=${costBasis.expectedCost} platformRefund=${platformRefund} remaining=${remaining}`,
-  );
-  // #endregion
-  return { expectedCost: costBasis.expectedCost, platformRefund, remaining, sourceTripId };
+  return { expectedCost: costBasis.expectedCost, platformRefund, remaining };
 }
 
 // ── Core: apply a resolution to a trip (shared by single + bulk) ─────────
