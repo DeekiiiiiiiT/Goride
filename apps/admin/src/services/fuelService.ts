@@ -1,6 +1,6 @@
 import { projectId, publicAnonKey } from '../utils/supabase/info';
 import { supabase } from '../utils/supabase/client';
-import { FuelCard, FuelEntry, MileageAdjustment, FuelScenario } from '../types/fuel';
+import { FuelCard, FuelEntry, MileageAdjustment, FuelScenario, JaaProgram, JaaUnmatchedRow } from '../types/fuel';
 import { FinancialTransaction } from '../types/data';
 import { API_ENDPOINTS } from './apiConfig';
 import { settlementService } from './settlementService';
@@ -32,8 +32,9 @@ async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 
 
 export const fuelService = {
   // --- Fuel Cards ---
-  async getFuelCards(): Promise<FuelCard[]> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-cards`, {
+  async getFuelCards(organizationId?: string): Promise<FuelCard[]> {
+    const q = organizationId ? `?organizationId=${encodeURIComponent(organizationId)}` : '';
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-cards${q}`, {
       headers: await authHeaders(null),
     });
     if (!response.ok) throw new Error("Failed to fetch fuel cards");
@@ -46,7 +47,10 @@ export const fuelService = {
       headers: await authHeaders(),
       body: JSON.stringify(card)
     });
-    if (!response.ok) throw new Error("Failed to save fuel card");
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to save fuel card");
+    }
     const result = await response.json();
     return result.data || result;
   },
@@ -59,12 +63,85 @@ export const fuelService = {
     if (!response.ok) throw new Error("Failed to delete fuel card");
   },
 
+  // --- JAA Programs ---
+  async getJaaPrograms(): Promise<JaaProgram[]> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/jaa-programs`, {
+      headers: await authHeaders(null),
+    });
+    if (!response.ok) throw new Error("Failed to fetch JAA programs");
+    return response.json();
+  },
+
+  async saveJaaProgram(program: Partial<JaaProgram>): Promise<JaaProgram> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/jaa-programs`, {
+      method: 'POST',
+      headers: await authHeaders(),
+      body: JSON.stringify(program),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to save JAA program");
+    }
+    const result = await response.json();
+    return result.data || result;
+  },
+
+  async deleteJaaProgram(id: string): Promise<void> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/jaa-programs/${id}`, {
+      method: 'DELETE',
+      headers: await authHeaders(null),
+    });
+    if (!response.ok) throw new Error("Failed to delete JAA program");
+  },
+
+  async getJaaUnmatched(status: string = 'open'): Promise<JaaUnmatchedRow[]> {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fuel}/jaa-unmatched?status=${encodeURIComponent(status)}`,
+      { headers: await authHeaders(null) },
+    );
+    if (!response.ok) throw new Error("Failed to fetch unmatched rows");
+    return response.json();
+  },
+
+  async saveJaaUnmatched(rows: Partial<JaaUnmatchedRow>[]): Promise<JaaUnmatchedRow[]> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/jaa-unmatched`, {
+      method: 'POST',
+      headers: await authHeaders(),
+      body: JSON.stringify({ rows }),
+    });
+    if (!response.ok) throw new Error("Failed to save unmatched rows");
+    const result = await response.json();
+    return result.data || [];
+  },
+
+  async patchJaaUnmatched(id: string, patch: Partial<JaaUnmatchedRow>): Promise<JaaUnmatchedRow> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/jaa-unmatched/${id}`, {
+      method: 'PATCH',
+      headers: await authHeaders(),
+      body: JSON.stringify(patch),
+    });
+    if (!response.ok) throw new Error("Failed to update unmatched row");
+    const result = await response.json();
+    return result.data || result;
+  },
+
+  async backfillFuelOrg(defaultOrganizationId: string, dryRun = true) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/backfill-fuel-org`, {
+      method: 'POST',
+      headers: await authHeaders(),
+      body: JSON.stringify({ defaultOrganizationId, dryRun }),
+    });
+    if (!response.ok) throw new Error("Backfill failed");
+    return response.json();
+  },
+
   // --- Fuel Entries ---
-  async getFuelEntries(options?: { limit?: number, startDate?: string, endDate?: string }): Promise<FuelEntry[]> {
+  async getFuelEntries(options?: { limit?: number, startDate?: string, endDate?: string, organizationId?: string }): Promise<FuelEntry[]> {
     const query = new URLSearchParams();
     query.append("limit", (options?.limit || 2000).toString());
     if (options?.startDate) query.append("startDate", options.startDate);
     if (options?.endDate) query.append("endDate", options.endDate);
+    if (options?.organizationId) query.append("organizationId", options.organizationId);
 
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries?${query.toString()}`, {
       headers: await authHeaders(null),

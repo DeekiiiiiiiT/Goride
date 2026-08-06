@@ -16,6 +16,17 @@ export const CAPACITOR_WEBVIEW_ORIGINS = [
   "ionic://localhost",
 ] as const;
 
+/** Local Vite/Next ports (http://localhost:3000) — not the same string as http://localhost. */
+function isLoopbackBrowserOrigin(origin: string): boolean {
+  try {
+    const u = new URL(origin);
+    if (u.protocol !== "http:" && u.protocol !== "https:") return false;
+    return u.hostname === "localhost" || u.hostname === "127.0.0.1";
+  } catch {
+    return false;
+  }
+}
+
 export function buildCorsOriginFn(): (origin: string) => string | null {
   const rawEnv = Deno.env.get("CORS_ALLOWED_ORIGINS") ?? "";
   const envMode = (Deno.env.get("ENVIRONMENT") ?? Deno.env.get("DENO_ENV") ?? "").toLowerCase();
@@ -65,6 +76,8 @@ export function buildCorsOriginFn(): (origin: string) => string | null {
   return (origin: string): string | null => {
     if (!origin) return null;
     const lower = origin.toLowerCase();
+    // Local app servers always allowed so localhost:3000 can talk to prod edge functions
+    if (isLoopbackBrowserOrigin(lower)) return origin;
     if (allowSet.has(lower)) return origin;
     for (const a of allowSet) {
       if (lower.endsWith(`.${a.replace(/^https?:\/\//, "")}`)) return origin;

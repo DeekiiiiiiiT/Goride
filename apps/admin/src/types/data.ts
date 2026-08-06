@@ -455,13 +455,17 @@ export interface RentalContract {
   weeksRemaining?: number; // If total contract value known (placeholder)
 }
 
-// Phase 1: Fuel Management Types
+// Phase 1: Fuel Management Types (canonical shape lives in types/fuel.ts)
 export interface FuelCard {
     id: string;
     cardNumber: string; 
     provider: string;
-    status: 'Active' | 'Inactive';
+    status: 'Active' | 'Inactive' | 'Lost';
+    jaaCardType?: 'rental' | 'driver_tied';
     assignedVehicleId?: string;
+    assignedDriverId?: string;
+    expiryDate?: string;
+    notes?: string;
 }
 
 // 5. Organization Metrics (Phase 2 New)

@@ -1,6 +1,6 @@
 import { projectId } from '../utils/supabase/info';
 import { requireAuthHeaders } from '../utils/authHeaders';
-import { FuelCard, FuelEntry, MileageAdjustment, FuelScenario } from '../types/fuel';
+import { FuelCard, FuelEntry, MileageAdjustment, FuelScenario, JaaProgram } from '../types/fuel';
 import { FinancialTransaction } from '../types/data';
 import { API_ENDPOINTS } from './apiConfig';
 import { settlementService } from './settlementService';
@@ -38,7 +38,10 @@ export const fuelService = {
       headers: await requireAuthHeaders(),
       body: JSON.stringify(card)
     });
-    if (!response.ok) throw new Error("Failed to save fuel card");
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to save fuel card");
+    }
     const result = await response.json();
     return result.data || result;
   },
@@ -48,7 +51,32 @@ export const fuelService = {
       method: 'DELETE',
       headers: await requireAuthHeaders(null)
     });
-    if (!response.ok) throw new Error("Failed to delete fuel card");
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to delete fuel card");
+    }
+  },
+
+  async getJaaPrograms(): Promise<JaaProgram[]> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/jaa-programs`, {
+      headers: await requireAuthHeaders(null),
+    });
+    if (!response.ok) throw new Error("Failed to fetch JAA programs");
+    return response.json();
+  },
+
+  async saveJaaProgram(program: Partial<JaaProgram>): Promise<JaaProgram> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/jaa-programs`, {
+      method: 'POST',
+      headers: await requireAuthHeaders(),
+      body: JSON.stringify(program),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to save JAA program");
+    }
+    const result = await response.json();
+    return result.data || result;
   },
 
   // --- Fuel Entries ---

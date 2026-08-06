@@ -1,6 +1,6 @@
 ﻿import { Hono } from "npm:hono";
 import type { Context } from "npm:hono";
-import { requireAuth, requirePermission, requirePlatformStaff, type RbacUser } from "./rbac_middleware.ts";
+import { requireAuth, requirePermission, requirePlatformStaff, type RbacUser, PLATFORM_RESOLVED_ROLES } from "./rbac_middleware.ts";
 import { appendCanonicalFuelExpenseIfEligible } from "./canonical_from_ops.ts";
 import { deleteCanonicalLedgerBySource, canonicalEventExistsByIdemKey } from "./ledger_canonical.ts";
 import {
@@ -36,7 +36,7 @@ import {
   ensureFuelEntryForApprovedTx,
   healApprovedFuelEntriesMissingLog,
 } from "./fuel_posted_guarantee.ts";
-import { stampOrg, getOrgId } from "./org_scope.ts";
+import { stampOrg, getOrgId, filterByOrg, belongsToOrg } from "./org_scope.ts";
 import {
   postFuelFinalizedEventsFromReport,
   reverseFuelFinancialEventsAndRebuild,
@@ -46,6 +46,31 @@ const app = new Hono();
 
 // Auth gate: every route in this controller requires a valid user JWT (Wave 1B).
 app.use("*", requireAuth({ strict: true }));
+
+/** Platform staff may pass ?organizationId= / body.organizationId; fleet is always JWT-stamped. */
+function isPlatformCaller(c: Context): boolean {
+  const user = c.get("rbacUser") as RbacUser | undefined;
+  return !!(user && PLATFORM_RESOLVED_ROLES.has(user.resolvedRole));
+}
+
+function stampFuelRecord<T extends Record<string, unknown>>(record: T, c: Context): T {
+  const fleetStamped = stampOrg(record, c);
+  if (getOrgId(c)) return fleetStamped;
+  // Platform / no org: keep explicit organizationId from body when present
+  const explicit = record.organizationId;
+  if (typeof explicit === "string" && explicit.trim()) {
+    return { ...fleetStamped, organizationId: explicit.trim() } as T;
+  }
+  return fleetStamped;
+}
+
+/** After org-scope filter, platform can narrow to one customer via query. */
+function narrowPlatformOrg<T extends Record<string, unknown>>(records: T[], c: Context): T[] {
+  if (!isPlatformCaller(c)) return records;
+  const q = (c.req.query("organizationId") || "").trim();
+  if (!q) return records;
+  return records.filter((r) => String(r.organizationId || "") === q);
+}
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -79,28 +104,288 @@ app.post(`${BASE_PATH}/fuel/ensure-posted-entries`, requirePermission("fuel.view
 app.get(`${BASE_PATH}/fuel-cards`, async (c) => {
   try {
     const cards = await kv.getByPrefix("fuel_card:");
-    return c.json(cards || []);
+    const scoped = filterByOrg((cards || []) as Record<string, unknown>[], c, { endpoint: "/fuel-cards" });
+    return c.json(narrowPlatformOrg(scoped, c));
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }
 });
 
-app.post(`${BASE_PATH}/fuel-cards`, async (c) => {
+app.post(`${BASE_PATH}/fuel-cards`, requirePermission("fuel.create_entry"), async (c) => {
   try {
     const card = await c.req.json();
     if (!card.id) card.id = crypto.randomUUID();
-    await kv.set(`fuel_card:${card.id}`, card);
-    return c.json({ success: true, data: card });
+    const existing = await kv.get(`fuel_card:${card.id}`);
+
+    // Fleet may only soft-update assignment on Roam-managed cards (not create / change code)
+    if (existing && !isPlatformCaller(c)) {
+      if (!belongsToOrg(existing, c)) return c.json({ error: "Forbidden" }, 403);
+      const cc = String(existing.jaaCompanyCode || card.jaaCompanyCode || "").replace(/\D/g, "");
+      if (cc) {
+        const programs = (await kv.getByPrefix("jaa_program:")) || [];
+        const program = programs.find(
+          (p: any) => String(p.companyCode || "").replace(/\D/g, "") === cc,
+        );
+        if (program?.mode === "roam_managed") {
+          const updated = stampFuelRecord({
+            ...existing,
+            assignedVehicleId: card.assignedVehicleId,
+            assignedDriverId: card.assignedDriverId,
+            status: card.status || existing.status,
+            notes: card.notes ?? existing.notes,
+          } as Record<string, unknown>, c);
+          // Never let fleet change cardNumber / provider / jaa fields
+          (updated as any).cardNumber = existing.cardNumber;
+          (updated as any).provider = existing.provider;
+          (updated as any).jaaCompanyCode = existing.jaaCompanyCode;
+          (updated as any).jaaCardType = existing.jaaCardType;
+          (updated as any).organizationId = existing.organizationId;
+          await kv.set(`fuel_card:${existing.id}`, updated);
+          return c.json({ success: true, data: updated });
+        }
+      }
+    }
+
+    // Enforce JAA program ownership when company code is present
+    const companyCode = String(card.jaaCompanyCode || "").replace(/\D/g, "");
+    if (companyCode) {
+      const programs = (await kv.getByPrefix("jaa_program:")) || [];
+      const program = programs.find(
+        (p: any) => String(p.companyCode || "").replace(/\D/g, "") === companyCode,
+      );
+      if (!program) {
+        return c.json({ error: `Unknown JAA company code ${companyCode}. Register a program first.` }, 400);
+      }
+      if (program.mode === "roam_managed" && !isPlatformCaller(c)) {
+        return c.json({ error: "Roam-managed JAA cards can only be created by platform admin." }, 403);
+      }
+      if (program.mode === "self_serve") {
+        const orgId = getOrgId(c) || String(card.organizationId || "");
+        if (program.organizationId && orgId && program.organizationId !== orgId && !isPlatformCaller(c)) {
+          return c.json({ error: "Self-serve JAA cards must belong to the program's fleet org." }, 403);
+        }
+        if (isPlatformCaller(c) && card.organizationId && program.organizationId &&
+            card.organizationId !== program.organizationId) {
+          return c.json({ error: "Card org must match the self-serve program org." }, 400);
+        }
+      }
+      card.jaaCompanyCode = companyCode;
+    }
+
+    if (isPlatformCaller(c) && !card.organizationId && !existing?.organizationId) {
+      return c.json({ error: "organizationId is required when creating cards as platform admin." }, 400);
+    }
+    if (isPlatformCaller(c) && !card.organizationId && existing?.organizationId) {
+      card.organizationId = existing.organizationId;
+    }
+
+    const stamped = stampFuelRecord({ ...(existing || {}), ...card } as Record<string, unknown>, c);
+    await kv.set(`fuel_card:${stamped.id}`, stamped);
+    return c.json({ success: true, data: stamped });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }
 });
 
-app.delete(`${BASE_PATH}/fuel-cards/:id`, async (c) => {
+app.delete(`${BASE_PATH}/fuel-cards/:id`, requirePermission("fuel.delete_entry"), async (c) => {
   const id = c.req.param("id");
   try {
+    const existing = await kv.get(`fuel_card:${id}`);
+    if (!existing) return c.json({ error: "Not found" }, 404);
+    if (!belongsToOrg(existing, c)) return c.json({ error: "Forbidden" }, 403);
+
+    // Fleet cannot delete Roam-managed cards
+    if (!isPlatformCaller(c) && existing.jaaCompanyCode) {
+      const programs = (await kv.getByPrefix("jaa_program:")) || [];
+      const cc = String(existing.jaaCompanyCode).replace(/\D/g, "");
+      const program = programs.find(
+        (p: any) => String(p.companyCode || "").replace(/\D/g, "") === cc,
+      );
+      if (program?.mode === "roam_managed") {
+        return c.json({ error: "Roam-managed cards cannot be deleted from Fleet. Contact Roam admin." }, 403);
+      }
+    }
+
     await kv.del(`fuel_card:${id}`);
     return c.json({ success: true });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// --- JAA PROGRAMS (Roam-managed vs self-serve company codes) ---
+app.get(`${BASE_PATH}/jaa-programs`, async (c) => {
+  try {
+    const programs = (await kv.getByPrefix("jaa_program:")) || [];
+    if (isPlatformCaller(c)) return c.json(programs);
+    const orgId = getOrgId(c);
+    // Fleet sees: roam_managed (read-only catalog) + their own self_serve
+    const visible = programs.filter((p: any) =>
+      p.mode === "roam_managed" || (p.mode === "self_serve" && p.organizationId === orgId),
+    );
+    return c.json(visible);
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.post(`${BASE_PATH}/jaa-programs`, async (c) => {
+  try {
+    const body = await c.req.json();
+    const companyCode = String(body.companyCode || "").replace(/\D/g, "");
+    if (!companyCode) return c.json({ error: "companyCode is required" }, 400);
+    const mode = body.mode === "self_serve" ? "self_serve" : "roam_managed";
+
+    if (mode === "roam_managed" && !isPlatformCaller(c)) {
+      return c.json({ error: "Only platform admin can register Roam-managed JAA programs." }, 403);
+    }
+    if (mode === "self_serve" && !isPlatformCaller(c)) {
+      const orgId = getOrgId(c);
+      if (!orgId) return c.json({ error: "Organization required" }, 403);
+      body.organizationId = orgId;
+    }
+    if (mode === "self_serve" && !body.organizationId) {
+      return c.json({ error: "organizationId required for self_serve programs" }, 400);
+    }
+
+    const existing = (await kv.getByPrefix("jaa_program:")) || [];
+    const dup = existing.find(
+      (p: any) => String(p.companyCode || "").replace(/\D/g, "") === companyCode,
+    );
+    if (dup && dup.id !== body.id) {
+      return c.json({ error: `Company code ${companyCode} is already registered.` }, 409);
+    }
+
+    const program = {
+      id: body.id || dup?.id || crypto.randomUUID(),
+      companyCode,
+      displayName: String(body.displayName || "").trim() || companyCode,
+      mode,
+      organizationId: mode === "self_serve" ? body.organizationId : (body.organizationId || null),
+      updatedAt: new Date().toISOString(),
+      createdAt: dup?.createdAt || new Date().toISOString(),
+    };
+    await kv.set(`jaa_program:${program.id}`, program);
+    return c.json({ success: true, data: program });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.delete(`${BASE_PATH}/jaa-programs/:id`, requirePlatformStaff(), async (c) => {
+  const id = c.req.param("id");
+  try {
+    await kv.del(`jaa_program:${id}`);
+    return c.json({ success: true });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// --- JAA UNMATCHED STATEMENT ROWS (Admin queue) ---
+app.get(`${BASE_PATH}/jaa-unmatched`, requirePlatformStaff(), async (c) => {
+  try {
+    const status = (c.req.query("status") || "open").trim();
+    const rows = (await kv.getByPrefix("jaa_unmatched:")) || [];
+    const filtered = status === "all" ? rows : rows.filter((r: any) => (r.status || "open") === status);
+    filtered.sort((a: any, b: any) => String(b.transDate || "").localeCompare(String(a.transDate || "")));
+    return c.json(filtered);
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.post(`${BASE_PATH}/jaa-unmatched`, requirePlatformStaff(), async (c) => {
+  try {
+    const body = await c.req.json();
+    const rows = Array.isArray(body.rows) ? body.rows : [body];
+    const saved: any[] = [];
+    for (const raw of rows) {
+      const receiptNumber = String(raw.receiptNumber || raw.RECEIPT_NUMBER || "").trim();
+      const cardCode = String(raw.cardCode || raw.CARD_CODE || "").replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+      if (!receiptNumber && !cardCode) continue;
+
+      // Dedupe open rows by receipt number
+      const existing = (await kv.getByPrefix("jaa_unmatched:")) || [];
+      const prior = receiptNumber
+        ? existing.find((r: any) => r.receiptNumber === receiptNumber && (r.status || "open") === "open")
+        : null;
+      const row = {
+        id: prior?.id || crypto.randomUUID(),
+        cardCode,
+        companyCode: String(raw.companyCode || raw.COMPANY_CODE || "").replace(/\D/g, ""),
+        receiptNumber,
+        amount: Number(raw.amount ?? raw.AMOUNT) || 0,
+        liters: Number(raw.liters) || 0,
+        fuelAmount: Number(raw.fuelAmount) || 0,
+        transDate: raw.transDate || raw.date || "",
+        vendor: raw.vendor || raw.VENDOR_NAME || "",
+        fuelType: raw.fuelType || raw.FUEL_TYPE || "",
+        response: raw.response || raw.RESPONSE || "",
+        classification: raw.classification || "unknown",
+        status: "open",
+        updatedAt: new Date().toISOString(),
+        createdAt: prior?.createdAt || new Date().toISOString(),
+      };
+      await kv.set(`jaa_unmatched:${row.id}`, row);
+      saved.push(row);
+    }
+    return c.json({ success: true, data: saved, count: saved.length });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.patch(`${BASE_PATH}/jaa-unmatched/:id`, requirePlatformStaff(), async (c) => {
+  try {
+    const id = c.req.param("id");
+    const existing = await kv.get(`jaa_unmatched:${id}`);
+    if (!existing) return c.json({ error: "Not found" }, 404);
+    const body = await c.req.json();
+    const updated = {
+      ...existing,
+      status: body.status || existing.status,
+      resolvedCardId: body.resolvedCardId ?? existing.resolvedCardId,
+      resolvedOrganizationId: body.resolvedOrganizationId ?? existing.resolvedOrganizationId,
+      updatedAt: new Date().toISOString(),
+    };
+    await kv.set(`jaa_unmatched:${id}`, updated);
+    return c.json({ success: true, data: updated });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+/** One-time helper: stamp cards/entries missing organizationId onto a default org. */
+app.post(`${BASE_PATH}/admin/backfill-fuel-org`, requirePlatformStaff(), async (c) => {
+  try {
+    const { defaultOrganizationId, dryRun = true } = await c.req.json();
+    if (!defaultOrganizationId) return c.json({ error: "defaultOrganizationId required" }, 400);
+    const cards = (await kv.getByPrefix("fuel_card:")) || [];
+    const entries = (await kv.getByPrefix("fuel_entry:")) || [];
+    let cardsUpdated = 0;
+    let entriesUpdated = 0;
+    for (const card of cards) {
+      if (card.organizationId) continue;
+      cardsUpdated++;
+      if (!dryRun) {
+        await kv.set(`fuel_card:${card.id}`, { ...card, organizationId: defaultOrganizationId });
+      }
+    }
+    for (const entry of entries) {
+      if (entry.organizationId) continue;
+      entriesUpdated++;
+      if (!dryRun) {
+        await kv.set(`fuel_entry:${entry.id}`, { ...entry, organizationId: defaultOrganizationId });
+      }
+    }
+    return c.json({
+      success: true,
+      dryRun: !!dryRun,
+      cardsUpdated,
+      entriesUpdated,
+      defaultOrganizationId,
+    });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }
@@ -1389,6 +1674,7 @@ app.get(`${BASE_PATH}/fuel-entries`, async (c) => {
     const vehicleId = c.req.query("vehicleId");
     const startDate = c.req.query("startDate");
     const endDate = c.req.query("endDate");
+    const orgFilter = getOrgId(c) || (isPlatformCaller(c) ? (c.req.query("organizationId") || "").trim() : "");
 
     // Phase 8: Direct Supabase query with pagination for performance
     const customPrefix = c.req.query("prefix") || "fuel_entry";
@@ -1409,6 +1695,15 @@ app.get(`${BASE_PATH}/fuel-entries`, async (c) => {
         query = query.lte("value->>date", endDate);
     }
 
+    // Prefer DB-side org pred when scoped (legacy null still returned; filterByOrg cleans)
+    if (orgFilter && !isPlatformCaller(c)) {
+      query = query.or(
+        `value->>organizationId.eq.${orgFilter},value->>organizationId.is.null,value->>organizationId.eq.roam-default-org`,
+      );
+    } else if (orgFilter && isPlatformCaller(c)) {
+      query = query.eq("value->>organizationId", orgFilter);
+    }
+
     query = query.order("value->>date", { ascending: false })
                  .range(offset, offset + limit - 1);
 
@@ -1416,11 +1711,13 @@ app.get(`${BASE_PATH}/fuel-entries`, async (c) => {
     if (error) throw error;
 
     const entries = (data || []).map((d: any) => d.value);
+    const scoped = filterByOrg(entries as Record<string, unknown>[], c, { endpoint: "/fuel-entries" });
+    const narrowed = narrowPlatformOrg(scoped, c);
     
     // Add pagination headers
-    c.header("X-Total-Count", String(count || 0));
+    c.header("X-Total-Count", String(count || narrowed.length));
     
-    return c.json(entries);
+    return c.json(narrowed);
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }
@@ -2673,6 +2970,9 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
     const entry = await c.req.json();
     if (!entry.id) entry.id = crypto.randomUUID();
 
+    // Org ownership: fleet JWT stamp; platform keeps explicit organizationId
+    Object.assign(entry, stampFuelRecord(entry as Record<string, unknown>, c));
+
     // Persist top-level + metadata paymentSource; blank → RideShare_Cash
     {
       const paySrc = resolveFuelPaymentSource(
@@ -3256,6 +3556,8 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
         };
     }
 
+    // Re-stamp after mutations so platform/fleet org cannot be stripped mid-handler
+    Object.assign(entry, stampFuelRecord(entry as Record<string, unknown>, c));
     await kv.set(`fuel_entry:${entry.id}`, entry);
     if (isNewFuelEntry) {
       try {
@@ -3988,9 +4290,12 @@ app.get(`${BASE_PATH}/fuel-audit/fleet-stats`, async (c) => {
     }
 });
 
-app.delete(`${BASE_PATH}/fuel-entries/:id`, async (c) => {
+app.delete(`${BASE_PATH}/fuel-entries/:id`, requirePermission("fuel.delete_entry"), async (c) => {
   const id = c.req.param("id");
   try {
+    const existing = await kv.get(`fuel_entry:${id}`);
+    if (!existing) return c.json({ error: "Not found" }, 404);
+    if (!belongsToOrg(existing, c)) return c.json({ error: "Forbidden" }, 403);
     await kv.del(`fuel_entry:${id}`);
     try {
       await deleteCanonicalLedgerBySource("transaction", [id]);

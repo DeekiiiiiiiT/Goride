@@ -35,12 +35,18 @@ export function FuelCardList({ cards, drivers, onEdit, onDelete, getVehicleName,
     const [searchTerm, setSearchTerm] = useState('');
     const [viewCard, setViewCard] = useState<FuelCard | null>(null);
 
-    const filteredCards = cards.filter(card => 
-        card.cardNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        card.provider.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        getVehicleName(card.assignedVehicleId).toLowerCase().includes(searchTerm.toLowerCase()) ||
-        getDriverName(card.assignedDriverId).toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const q = searchTerm.toLowerCase();
+    const filteredCards = cards.filter((card) => {
+        const typeLabel =
+            card.jaaCardType === 'rental' ? 'rental' : card.jaaCardType === 'driver_tied' ? 'driver' : '';
+        return (
+            card.cardNumber.toLowerCase().includes(q) ||
+            card.provider.toLowerCase().includes(q) ||
+            typeLabel.includes(q) ||
+            getVehicleName(card.assignedVehicleId).toLowerCase().includes(q) ||
+            getDriverName(card.assignedDriverId).toLowerCase().includes(q)
+        );
+    });
 
     return (
         <div className="space-y-4">
@@ -62,6 +68,7 @@ export function FuelCardList({ cards, drivers, onEdit, onDelete, getVehicleName,
                         <TableRow>
                             <TableHead>Provider</TableHead>
                             <TableHead>Card Code (JAA)</TableHead>
+                            <TableHead>Type</TableHead>
                             <TableHead>Assigned To</TableHead>
                             <TableHead>Status</TableHead>
                             <TableHead>Expiry</TableHead>
@@ -71,7 +78,7 @@ export function FuelCardList({ cards, drivers, onEdit, onDelete, getVehicleName,
                     <TableBody>
                         {filteredCards.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={6} className="h-24 text-center text-slate-500">
+                                <TableCell colSpan={7} className="h-24 text-center text-slate-500">
                                     No cards found.
                                 </TableCell>
                             </TableRow>
@@ -87,6 +94,19 @@ export function FuelCardList({ cards, drivers, onEdit, onDelete, getVehicleName,
                                         </div>
                                     </TableCell>
                                     <TableCell className="font-mono">{card.cardNumber}</TableCell>
+                                    <TableCell>
+                                        {card.jaaCardType === 'rental' ? (
+                                            <Badge variant="outline" className="bg-amber-50 text-amber-800 border-amber-200">
+                                                Rental
+                                            </Badge>
+                                        ) : card.jaaCardType === 'driver_tied' ? (
+                                            <Badge variant="outline" className="bg-violet-50 text-violet-800 border-violet-200">
+                                                Driver
+                                            </Badge>
+                                        ) : (
+                                            <span className="text-slate-400 text-xs">—</span>
+                                        )}
+                                    </TableCell>
                                     <TableCell>
                                         {card.assignedVehicleId ? (
                                             <div className="flex items-center gap-1.5 text-sm">

@@ -2,12 +2,53 @@ import { LocationStatus } from './station';
 
 export type FuelType = 'Gasoline_87' | 'Gasoline_91' | 'Gasoline_93' | 'Diesel' | 'Electric' | 'Hybrid';
 
+/** JAA physical card style: rental (flexible) vs dedicated to a driver */
+export type JaaCardType = 'rental' | 'driver_tied';
+
+export type JaaProgramMode = 'roam_managed' | 'self_serve';
+
+export interface JaaProgram {
+  id: string;
+  companyCode: string;
+  displayName: string;
+  mode: JaaProgramMode;
+  organizationId?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export type JaaUnmatchedStatus = 'open' | 'resolved' | 'dismissed';
+
+export interface JaaUnmatchedRow {
+  id: string;
+  cardCode: string;
+  companyCode: string;
+  receiptNumber: string;
+  amount: number;
+  liters?: number;
+  fuelAmount?: number;
+  transDate?: string;
+  vendor?: string;
+  fuelType?: string;
+  response?: string;
+  classification?: string;
+  status: JaaUnmatchedStatus;
+  resolvedCardId?: string;
+  resolvedOrganizationId?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface FuelCard {
   id: string;
   /** JAA CARD_CODE (e.g. 00002920RN2783) — inventory master key for CSV match */
   cardNumber: string;
   provider: string; // e.g., 'Shell', 'FleetCor', 'Wex'
   status: 'Active' | 'Inactive' | 'Lost';
+  organizationId?: string;
+  jaaCompanyCode?: string;
+  /** JAA Advance only — rental cards can swap drivers; driver_tied stays with one driver */
+  jaaCardType?: JaaCardType;
   assignedVehicleId?: string;
   assignedDriverId?: string;
   expiryDate?: string;
@@ -21,6 +62,7 @@ export interface FuelEntry {
   cardId?: string;
   vehicleId?: string;
   driverId?: string;
+  organizationId?: string;
   
   amount: number; // Total Cost
   liters?: number; // Volume

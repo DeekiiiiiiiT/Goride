@@ -55,7 +55,7 @@ import { Checkbox } from '../components/ui/checkbox';
 import { Label } from '../components/ui/label';
 import { toast } from 'sonner@2.0.3';
 import { DateRange } from 'react-day-picker';
-import type { FuelCard, FuelEntry, FuelScenario, MileageAdjustment, FuelDispute, WeeklyFuelReport, FinalizedFuelReport } from '../types/fuel';
+import type { FuelCard, FuelEntry, FuelScenario, MileageAdjustment, FuelDispute, WeeklyFuelReport, FinalizedFuelReport, JaaProgram } from '../types/fuel';
 import type { FinancialTransaction } from '../types/data';
 import type { Trip } from '../types/data';
 import type { Vehicle } from '../types/vehicle';
@@ -167,8 +167,25 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
 
   // Fuel Card State
   const [cards, setCards] = useState<FuelCard[]>([]);
+  const [jaaPrograms, setJaaPrograms] = useState<JaaProgram[]>([]);
   const [isCardModalOpen, setIsCardModalOpen] = useState(false);
   const [editingCard, setEditingCard] = useState<FuelCard | null>(null);
+
+  const selfServePrograms = useMemo(
+    () => jaaPrograms.filter((p) => p.mode === 'self_serve'),
+    [jaaPrograms],
+  );
+
+  const isRoamManagedCard = useCallback(
+    (card: FuelCard | null | undefined) => {
+      if (!card?.jaaCompanyCode) return false;
+      const cc = String(card.jaaCompanyCode).replace(/\D/g, '');
+      return jaaPrograms.some(
+        (p) => p.mode === 'roam_managed' && String(p.companyCode).replace(/\D/g, '') === cc,
+      );
+    },
+    [jaaPrograms],
+  );
 
   // Fuel Log State
   const [logs, setLogs] = useState<FuelEntry[]>([]);
@@ -278,7 +295,7 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
 
           // Fetch all data in a single parallel batch for fastest load time.
           // None of these calls depend on each other's results.
-          const [vData, dData, scenariosData, cardsData, logsData, adjsData, disputesData, txData, finalizedData] = await Promise.all([
+          const [vData, dData, scenariosData, cardsData, logsData, adjsData, disputesData, txData, finalizedData, programsData] = await Promise.all([
               api.getVehicles().catch(() => []),
               api.getDrivers().catch(() => []),
               fuelService.getFuelScenarios().catch(() => []),
@@ -289,12 +306,14 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
               // Unscoped GET defaults to limit 100 on server; driver uses driverIds (limit 5000). Request enough rows for Review Queue / fuel reconciliation.
               api.getTransactions(undefined, { limit: 10000 }).catch(() => []),
               api.getFinalizedReports().catch(() => []),
+              fuelService.getJaaPrograms().catch(() => [] as JaaProgram[]),
           ]);
 
           setVehicles(vData);
           setDrivers(dData);
           setScenarios(scenariosData);
           setCards(cardsData);
+          setJaaPrograms(programsData);
           setLogs(logsData);
           setAdjustments(adjsData);
           setDisputes(disputesData);
@@ -338,22 +357,27 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
           }
           setIsCardModalOpen(false);
           setEditingCard(null);
-      } catch (e) {
+      } catch (e: any) {
           console.error(e);
-          toast.error("Failed to save fuel card");
+          toast.error(e?.message || "Failed to save fuel card");
       }
   }, [editingCard]);
 
   const handleDeleteCard = useCallback(async (id: string) => {
+      const card = cards.find((c) => c.id === id);
+      if (isRoamManagedCard(card)) {
+          toast.error("Roam-managed cards cannot be deleted here. Contact Roam admin.");
+          return;
+      }
       try {
           await fuelService.deleteFuelCard(id);
           setCards(prev => prev.filter(c => c.id !== id));
           toast.success("Fuel card deleted");
-      } catch (e) {
+      } catch (e: any) {
           console.error(e);
-          toast.error("Failed to delete fuel card");
+          toast.error(e?.message || "Failed to delete fuel card");
       }
-  }, []);
+  }, [cards, isRoamManagedCard]);
 
   // Log Handlers
   const handleSaveLog = async (entryOrEntries: FuelEntry | FuelEntry[]) => {
@@ -1080,9 +1104,20 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
       {activeTab === 'cards' && (
         <div className="space-y-4">
             <div className="flex justify-between items-center">
-                <div className="space-y-1">
+                <div className="space-y-1 text-sm text-slate-500">
+                  {selfServePrograms.length === 0
+                    ? 'Roam-managed JAA cards: assign drivers/vehicles only. Statement CSV is uploaded by Roam.'
+                    : 'Self-serve JAA: add your cards and upload your own Raw CSV in Imports.'}
                 </div>
-                <Button onClick={() => { setEditingCard(null); setIsCardModalOpen(true); }}>
+                <Button
+                  onClick={() => {
+                    if (selfServePrograms.length === 0) {
+                      toast.message('Ask Roam admin to issue JAA cards, or register a self-serve JAA program.');
+                    }
+                    setEditingCard(null);
+                    setIsCardModalOpen(true);
+                  }}
+                >
                     <Plus className="h-4 w-4 mr-2" />
                     Add Card
                 </Button>
@@ -1142,6 +1177,11 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
             initialData={editingCard}
             vehicles={vehicles}
             drivers={drivers}
+            selfServePrograms={selfServePrograms.map((p) => ({
+              companyCode: p.companyCode,
+              displayName: p.displayName,
+            }))}
+            lockIdentity={isRoamManagedCard(editingCard)}
       />
       )}
 

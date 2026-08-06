@@ -8336,108 +8336,8 @@ app.post("/make-server-37f42386/parse-document", async (c) => {
 
 
 
-app.get("/make-server-37f42386/fuel-cards", requireAuth(), async (c) => {
-  try {
-    const cards = await kv.getByPrefix("fuel_card:");
-    return c.json(filterByOrg(cards || [], c));
-  } catch (e: any) {
-    return c.json({ error: e.message }, 500);
-  }
-});
-
-app.post("/make-server-37f42386/fuel-cards", requireAuth(), requirePermission('fuel.create_entry'), async (c) => {
-  try {
-    const card = await c.req.json();
-    if (!card.id) {
-        card.id = crypto.randomUUID();
-    }
-    await kv.set(`fuel_card:${card.id}`, stampOrg(card, c));
-    return c.json({ success: true, data: card });
-  } catch (e: any) {
-    return c.json({ error: e.message }, 500);
-  }
-});
-
-app.delete("/make-server-37f42386/fuel-cards/:id", requireAuth(), requirePermission('fuel.delete_entry'), async (c) => {
-  const id = c.req.param("id");
-  try {
-    await kv.del(`fuel_card:${id}`);
-    return c.json({ success: true });
-  } catch (e: any) {
-    return c.json({ error: e.message }, 500);
-  }
-});
-
-// Fuel Entries (Logs) Endpoints
-// Fuel Entries (Logs) Endpoints - Optimized
-app.get("/make-server-37f42386/fuel-entries", requireAuth(), async (c) => {
-  try {
-    const limitParam = c.req.query("limit");
-    const offsetParam = c.req.query("offset");
-    const limit = limitParam ? parseInt(limitParam) : 100;
-    const offset = offsetParam ? parseInt(offsetParam) : 0;
-
-    const { data, error } = await supabase
-        .from("kv_store_37f42386")
-        .select("value")
-        .like("key", "fuel_entry:%")
-        .order("value->>date", { ascending: false })
-        .range(offset, offset + limit - 1);
-
-    if (error) throw error;
-    
-    // Phase 8.4: Large Data Stripping
-    const entries = (data || []).map((d: any) => {
-        const v = d.value || {};
-        if (v.metadata?.receiptBase64) delete v.metadata.receiptBase64;
-        return v;
-    });
-
-    return c.json(filterByOrg(entries, c));
-  } catch (e: any) {
-    return c.json({ error: e.message }, 500);
-  }
-});
-
-app.post(
-  "/make-server-37f42386/fuel-entries",
-  requireAuth(),
-  requirePermission('fuel.create_entry'),
-  requireCatalogMatched({
-    label: "POST /fuel-entries",
-    vehicleId: (_c, body) => {
-      if (!body || typeof body !== "object") return null;
-      const id = (body as { vehicleId?: unknown }).vehicleId;
-      return typeof id === "string" && id.trim() ? id.trim() : null;
-    },
-  }),
-  async (c) => {
-  try {
-    const entry = (c.get("__cachedRequestBody") as Record<string, unknown> | null) ?? (await c.req.json());
-    if (!entry.id) {
-        entry.id = crypto.randomUUID();
-    }
-    await kv.set(`fuel_entry:${entry.id}`, stampOrg(entry, c));
-    return c.json({ success: true, data: entry });
-  } catch (e: any) {
-    return c.json({ error: e.message }, 500);
-  }
-});
-
-app.delete("/make-server-37f42386/fuel-entries/:id", requireAuth(), requirePermission('fuel.delete_entry'), async (c) => {
-  const id = c.req.param("id");
-  try {
-    await kv.del(`fuel_entry:${id}`);
-    try {
-      await deleteCanonicalLedgerBySource("transaction", [id]);
-    } catch (ledgerErr: any) {
-      console.warn(`[DELETE /fuel-entries/:id] Ledger cleanup failed (non-fatal) entry=${id}:`, ledgerErr?.message);
-    }
-    return c.json({ success: true });
-  } catch (e: any) {
-    return c.json({ error: e.message }, 500);
-  }
-});
+// RETIRED: fuel-cards / fuel-entries CRUD lives in fuel_controller.tsx (mounted first).
+// Do not re-add shadowed handlers here — they never ran and confuse ownership reviews.
 
 // Mileage Adjustments Endpoints
 app.get("/make-server-37f42386/mileage-adjustments", requireAuth(), async (c) => {
@@ -13641,20 +13541,7 @@ app.delete("/make-server-37f42386/check-ins/:id", async (c) => {
   }
 });
 
-app.delete("/make-server-37f42386/fuel-entries/:id", requireAuth(), requirePermission('fuel.delete_entry'), async (c) => {
-    const id = c.req.param("id");
-    try {
-        await kv.del(`fuel_entry:${id}`);
-        try {
-          await deleteCanonicalLedgerBySource("transaction", [id]);
-        } catch (ledgerErr: any) {
-          console.warn(`[DELETE /fuel-entries/:id dup] Ledger cleanup failed (non-fatal) entry=${id}:`, ledgerErr?.message);
-        }
-        return c.json({ success: true });
-    } catch (e: any) {
-        return c.json({ error: e.message }, 500);
-    }
-});
+// RETIRED duplicate: DELETE /fuel-entries/:id — use fuel_controller.tsx
 
 // --- PERSISTENT ALERTS (Phase 1) ---
 

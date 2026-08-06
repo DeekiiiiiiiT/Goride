@@ -53,7 +53,7 @@ import { ReceiptUploader } from './expenses/ReceiptUploader';
 import { PumpNumbersConfirm } from './expenses/PumpNumbersConfirm';
 import { OdometerScanner } from './common/OdometerScanner';
 import { fuelService } from '../../services/fuelService';
-import { findActiveFuelCardForVehicle } from '../../utils/fuelCardMatch';
+import { findActiveFuelCardForSession } from '../../utils/fuelCardMatch';
 import type { FuelCard } from '../../types/fuel';
 
 interface ExpenseLoggerProps {
@@ -924,7 +924,17 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
           fuelService.getFuelCards().catch(() => [] as FuelCard[]),
         ]);
         const resolvedVehicleId = resolveVehicleIdForDriver(driverRecord, vehicles, user?.id);
-        setAssignedGasCard(findActiveFuelCardForVehicle(cards, resolvedVehicleId) || null);
+        const { driverId: canonicalDriverId } = resolveCanonicalDriverIdentity(
+          driverRecord,
+          { id: user?.id, name: user?.user_metadata?.name, email: user?.email },
+        );
+        // Vehicle first; rental / driver cards resolve via assignedDriverId
+        setAssignedGasCard(
+          findActiveFuelCardForSession(cards, {
+            vehicleId: resolvedVehicleId,
+            driverId: canonicalDriverId || driverRecord?.id || driverRecord?.driverId || user?.id,
+          }) || null,
+        );
       } catch (e) {
         console.warn('[DriverExpenses] Gas card lookup failed', e);
         setAssignedGasCard(null);

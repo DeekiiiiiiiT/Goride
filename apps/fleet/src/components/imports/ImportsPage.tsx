@@ -101,7 +101,7 @@ import * as XLSX from 'xlsx';
 import { fetchFullTollHistory, generateBackupCSV } from '../../utils/exportHelpers';
 import { useFleetTimezone } from '../../utils/timezoneDisplay';
 import { Trip, FieldDefinition, FieldType, ParsedRow, DriverMetrics, VehicleMetrics, OrganizationMetrics, ImportAuditState, DisputeRefund } from '../../types/data';
-import { FuelEntry, FuelCard } from '../../types/fuel';
+import { FuelEntry, FuelCard, JaaProgram } from '../../types/fuel';
 import { api } from '../../services/api';
 import { supabase } from '../../utils/supabase/client';
 import { fuelService } from '../../services/fuelService';
@@ -253,8 +253,28 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
 
   // Phase 3: Fuel Data
   const [fuelCards, setFuelCards] = useState<FuelCard[]>([]);
+  const [jaaPrograms, setJaaPrograms] = useState<JaaProgram[]>([]);
   const [processedFuelEntries, setProcessedFuelEntries] = useState<FuelEntry[]>([]);
   const [jaaMatchPairs, setJaaMatchPairs] = useState<FuelMatchPair[]>([]);
+
+  const selfServeCompanyCodes = useMemo(() => {
+    return new Set(
+      jaaPrograms
+        .filter((p) => p.mode === 'self_serve')
+        .map((p) => String(p.companyCode || '').replace(/\D/g, ''))
+        .filter(Boolean),
+    );
+  }, [jaaPrograms]);
+
+  const hasSelfServeJaa = selfServeCompanyCodes.size > 0;
+
+  const jaaImportOptions = useMemo(
+    () =>
+      hasSelfServeJaa
+        ? { allowedCompanyCodes: selfServeCompanyCodes, requireCardMatch: true as const }
+        : undefined,
+    [hasSelfServeJaa, selfServeCompanyCodes],
+  );
 
   // Phase 1: Time & Distance Data
   const [processedDriverTime, setProcessedDriverTime] = useState<DriverTimeDistance[]>([]);
@@ -309,12 +329,16 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
     }
   }, []);
 
-  // Load Fuel Cards
+  // Load Fuel Cards + JAA programs (self-serve gate)
   useEffect(() => {
       const loadFuelCards = async () => {
           try {
-              const cards = await fuelService.getFuelCards();
+              const [cards, programs] = await Promise.all([
+                fuelService.getFuelCards(),
+                fuelService.getJaaPrograms().catch(() => [] as JaaProgram[]),
+              ]);
               setFuelCards(cards);
+              setJaaPrograms(programs);
           } catch (e) {
               console.error("Failed to load fuel cards for matching", e);
               toast.warning('Could not load fuel cards — fuel matching may be incomplete.');
@@ -399,6 +423,14 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
         const isExcel = lower.endsWith('.xls') || lower.endsWith('.xlsx');
 
         const pushParsed = (fileData: FileData) => {
+            if (fileData.type === 'fuel_statement' && !hasSelfServeJaa) {
+                toast.error(
+                  `${fileData.name}: JAA uploads are only for self-serve fleets. Roam uploads your statement in Admin.`,
+                );
+                completed++;
+                if (completed === acceptedFiles.length) processQueue();
+                return;
+            }
             fileData.validationErrors = validateFile(fileData);
             fileData.reportDate = extractReportDate(fileData);
             newFiles.push(fileData);
@@ -477,7 +509,7 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
             }
         });
     });
-  }, [availableFields]);
+  }, [availableFields, hasSelfServeJaa]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -549,8 +581,22 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
   }, [selectedPlatform]);
 
   const handleMerge = () => {
+      const hasFuelStatement = uploadedFiles.some((f) => f.type === 'fuel_statement');
+      if (hasFuelStatement && !hasSelfServeJaa) {
+        toast.error(
+          'JAA statement upload is only for fleets with their own self-serve JAA account. Roam uploads your statement centrally.',
+        );
+        return;
+      }
       const knownFleetName = localStorage.getItem('roam_fleet_name') || undefined;
-      const result = mergeAndProcessData(uploadedFiles, availableFields, knownFleetName, fuelCards, fleetTimezone);
+      const result = mergeAndProcessData(
+        uploadedFiles,
+        availableFields,
+        knownFleetName,
+        fuelCards,
+        fleetTimezone,
+        jaaImportOptions,
+      );
       applyMergedImportResult(result);
       setStep('preview_merged');
   };
@@ -632,7 +678,14 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
         // 2. Get Local Trips (for the table view)
         // This also runs the robust "Bottom-Up" financial calculation we just fixed.
         const knownFleetName = localStorage.getItem('roam_fleet_name') || undefined;
-        const localResult = mergeAndProcessData(filteredFiles, availableFields, knownFleetName, fuelCards, fleetTimezone);
+        const localResult = mergeAndProcessData(
+          filteredFiles,
+          availableFields,
+          knownFleetName,
+          fuelCards,
+          fleetTimezone,
+          jaaImportOptions,
+        );
         const finalTrips = applyMergedImportResult(localResult);
 
         // Phase 1: Run AI Auditor

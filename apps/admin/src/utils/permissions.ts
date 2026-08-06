@@ -533,6 +533,7 @@ export const PAGE_PERMISSIONS: Record<string, DominionPageSensitivity> = {
   'dash-merchants': 'standard',
   'roam-driver-overview': 'standard',
   'roam-rides-overview': 'standard',
+  'fuel-jaa-cards': 'standard',
   'fuel-brain': 'standard',
   'fuel-prices': 'standard',
   'fuel-stations': 'standard',

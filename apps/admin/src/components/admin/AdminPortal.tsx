@@ -43,6 +43,7 @@ import { MatchingBrainPage } from './matching-brain/MatchingBrainPage';
 import { FuelBrainPage } from './fuel-brain/FuelBrainPage';
 import { FuelPricesPage } from './fuel-prices/FuelPricesPage';
 import { EvidenceBridgeAnalytics } from './fuel-evidence-bridge/EvidenceBridgeAnalytics';
+import { AdminJaaGasCardsPage } from './fuel/AdminJaaGasCardsPage';
 import { TollBrainPage } from './toll-brain/TollBrainPage';
 import { DriverUsersPage } from './product-users/DriverUsersPage';
 import { DriverUserDetailPage } from './product-users/DriverUserDetailPage';
@@ -225,6 +226,11 @@ export function AdminPortal() {
       {currentPage === 'matching-brain' && (
         <div className="rounded-xl border border-slate-200 bg-white overflow-hidden min-h-[560px] dark:border-slate-800 dark:bg-slate-900/40">
           <MatchingBrainPage />
+        </div>
+      )}
+      {currentPage === 'fuel-jaa-cards' && (
+        <div className="rounded-xl border border-slate-200 bg-white overflow-hidden min-h-[560px] dark:border-slate-800 dark:bg-slate-900/40">
+          <AdminJaaGasCardsPage />
         </div>
       )}
       {currentPage === 'fuel-brain' && (

@@ -31,3 +31,28 @@ export function findActiveFuelCardForVehicle(
     (c) => c.status === 'Active' && c.assignedVehicleId === vehicleId,
   );
 }
+
+/** Active card assigned to a Roam driver (rental / driver-tied cards). */
+export function findActiveFuelCardForDriver(
+  fuelCards: FuelCard[] | undefined,
+  driverId: string | undefined | null,
+): FuelCard | undefined {
+  if (!driverId || !fuelCards?.length) return undefined;
+  return fuelCards.find(
+    (c) => c.status === 'Active' && c.assignedDriverId === driverId,
+  );
+}
+
+/**
+ * Resolve the Active inventory card for a fueling session.
+ * Prefers vehicle assignment; falls back to driver (rental / driver-tied).
+ */
+export function findActiveFuelCardForSession(
+  fuelCards: FuelCard[] | undefined,
+  opts: { vehicleId?: string | null; driverId?: string | null },
+): FuelCard | undefined {
+  return (
+    findActiveFuelCardForVehicle(fuelCards, opts.vehicleId) ||
+    findActiveFuelCardForDriver(fuelCards, opts.driverId)
+  );
+}

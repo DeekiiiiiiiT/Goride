@@ -35,6 +35,7 @@ import {
   Layers,
   ShieldCheck,
   DollarSign,
+  CreditCard,
 } from 'lucide-react';
 
 export type NavChild = {
@@ -93,6 +94,7 @@ export const ROAM_ENTERPRISE_CHILDREN: NavChild[] = [
 ];
 
 export const FUEL_MANAGEMENT_CHILDREN: NavChild[] = [
+  { id: 'fuel-jaa-cards', label: 'JAA Gas Cards', icon: CreditCard },
   { id: 'fuel-brain', label: 'Fuel Brain', icon: Brain },
   { id: 'fuel-prices', label: 'Prices', icon: DollarSign },
   { id: 'fuel-stations', label: 'Station Database', icon: Database },
@@ -188,6 +190,7 @@ const SHARED_PLATFORM_PAGES = [
   'roam-haul-overview',
   'roam-dash-overview',
   'dash-merchants',
+  'fuel-jaa-cards',
   'fuel-brain',
   'fuel-prices',
   'fuel-stations',

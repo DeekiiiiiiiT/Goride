@@ -992,11 +992,19 @@ function processFuelData(
     rows: ParsedRow[],
     fuelCards: FuelCard[],
     existingReceiptNumbers: Set<string> = new Set(),
+    jaaOptions?: {
+        requireCardMatch?: boolean;
+        allowedCompanyCodes?: Set<string>;
+    },
 ): FuelEntry[] {
     // JAA Raw export path (CARD_CODE / TRANS_DATE / RESPONSE)
     const headerProbe = rows[0] ? Object.keys(rows[0]) : [];
     if (isJaaRawFuelCsv(headerProbe)) {
-        return processJaaRawFuelData(rows, fuelCards, existingReceiptNumbers).entries;
+        const result = processJaaRawFuelData(rows, fuelCards, existingReceiptNumbers, jaaOptions);
+        if (result.rejectedForeignCompany > 0) {
+            console.warn(`[JAA Import] Rejected ${result.rejectedForeignCompany} row(s) outside self-serve company codes`);
+        }
+        return result.entries;
     }
 
     const entries: FuelEntry[] = [];
@@ -1107,7 +1115,17 @@ function processFuelData(
     return entries;
 }
 
-export function mergeAndProcessData(files: FileData[], availableFields: FieldDefinition[], knownFleetName?: string, fuelCards: FuelCard[] = [], fleetTimezone: string = DEFAULT_FLEET_TIMEZONE): ProcessedBatch {
+export function mergeAndProcessData(
+    files: FileData[],
+    availableFields: FieldDefinition[],
+    knownFleetName?: string,
+    fuelCards: FuelCard[] = [],
+    fleetTimezone: string = DEFAULT_FLEET_TIMEZONE,
+    jaaImportOptions?: {
+        requireCardMatch?: boolean;
+        allowedCompanyCodes?: Set<string>;
+    },
+): ProcessedBatch {
     const tripMap = new Map<string, Partial<Trip>>();
     /** Trip UUIDs that appeared in Uber `trip_activity` / TRIP_ACTIVITY CSV (not payments-only).
      * Stored in lower-case for case-insensitive matching with `payments_transaction` Trip UUIDs.
@@ -1279,7 +1297,7 @@ export function mergeAndProcessData(files: FileData[], availableFields: FieldDef
         }
 
         if (file.type === 'fuel_statement') {
-             const entries = processFuelData(file.rows, fuelCards);
+             const entries = processFuelData(file.rows, fuelCards, new Set(), jaaImportOptions);
              fuelEntries.push(...entries);
              return;
         }
