@@ -18,13 +18,27 @@ export const ENABLE_PHONE_AUTH = false;
  * Capacitor serves the app at https://localhost — never use window.location.origin on native.
  */
 export function getDashCustomerAuthRedirectUrl(): string {
-  if (isNativeCapacitorPlatform()) {
-    return DASH_CUSTOMER_NATIVE_AUTH_CALLBACK;
+  const native = isNativeCapacitorPlatform();
+  const origin =
+    typeof window !== 'undefined' && window.location?.origin
+      ? window.location.origin
+      : null;
+  let redirectTo: string;
+  let branch: 'native' | 'origin' | 'production';
+  if (native) {
+    redirectTo = DASH_CUSTOMER_NATIVE_AUTH_CALLBACK;
+    branch = 'native';
+  } else if (origin) {
+    redirectTo = `${origin}/`;
+    branch = 'origin';
+  } else {
+    redirectTo = `${DASH_CUSTOMER_PRODUCTION_ORIGIN}/`;
+    branch = 'production';
   }
-  if (typeof window !== 'undefined' && window.location?.origin) {
-    return `${window.location.origin}/`;
-  }
-  return `${DASH_CUSTOMER_PRODUCTION_ORIGIN}/`;
+  // #region agent log
+  fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'be05d1'},body:JSON.stringify({sessionId:'be05d1',runId:'pre-fix',hypothesisId:'B',location:'dashCustomerAuth.ts:getDashCustomerAuthRedirectUrl',message:'computed auth redirect',data:{native,origin,branch,redirectTo},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
+  return redirectTo;
 }
 
 export function isDashCustomerAuthCallbackUrl(url: string): boolean {

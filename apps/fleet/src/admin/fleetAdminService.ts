@@ -1,5 +1,16 @@
 import { API_ENDPOINTS } from '../services/apiConfig';
 import { withProductLineHeaders } from '../config/productLine';
+import { supabaseAnonFunctionHeaders } from '@roam/api-client';
+
+/** Edge gateway needs apikey; Authorization must be the user JWT for product-admin routes. */
+function authHeaders(accessToken: string, extra?: Record<string, string>): Record<string, string> {
+  return withProductLineHeaders(
+    supabaseAnonFunctionHeaders({
+      Authorization: `Bearer ${accessToken}`,
+      ...extra,
+    }),
+  );
+}
 
 export type FleetAdminCustomer = {
   id: string;
@@ -20,10 +31,10 @@ export async function fetchFleetAdminCustomers(
 ): Promise<FleetAdminCustomer[]> {
   const qs = refresh ? '?refresh=true' : '';
   const res = await fetch(`${API_ENDPOINTS.admin}/fleet-admin/customers${qs}`, {
-    headers: withProductLineHeaders({ Authorization: `Bearer ${accessToken}` }),
+    headers: authHeaders(accessToken),
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  if (!res.ok) throw new Error(data.message || data.error || `HTTP ${res.status}`);
   return data.customers || [];
 }
 
@@ -33,10 +44,7 @@ export async function approveFleetCustomer(
 ): Promise<void> {
   const res = await fetch(`${API_ENDPOINTS.admin}/fleet-admin/customers/${userId}/approve`, {
     method: 'POST',
-    headers: withProductLineHeaders({
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    }),
+    headers: authHeaders(accessToken, { 'Content-Type': 'application/json' }),
     body: '{}',
   });
   const data = await res.json().catch(() => ({}));
@@ -54,10 +62,7 @@ export async function suspendFleetCustomer(
 ): Promise<{ success: boolean; status: string }> {
   const res = await fetch(`${API_ENDPOINTS.admin}/fleet-admin/customers/${userId}/suspend`, {
     method: 'POST',
-    headers: withProductLineHeaders({
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    }),
+    headers: authHeaders(accessToken, { 'Content-Type': 'application/json' }),
     body: JSON.stringify({ reason }),
   });
   const data = await res.json().catch(() => ({}));
@@ -71,10 +76,7 @@ export async function reactivateFleetCustomer(
 ): Promise<{ success: boolean; status: string }> {
   const res = await fetch(`${API_ENDPOINTS.admin}/fleet-admin/customers/${userId}/reactivate`, {
     method: 'POST',
-    headers: withProductLineHeaders({
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    }),
+    headers: authHeaders(accessToken, { 'Content-Type': 'application/json' }),
     body: '{}',
   });
   const data = await res.json().catch(() => ({}));
@@ -88,10 +90,7 @@ export async function signOutFleetCustomer(
 ): Promise<{ success: boolean }> {
   const res = await fetch(`${API_ENDPOINTS.admin}/fleet-admin/customers/${userId}/sign-out`, {
     method: 'POST',
-    headers: withProductLineHeaders({
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    }),
+    headers: authHeaders(accessToken, { 'Content-Type': 'application/json' }),
     body: '{}',
   });
   const data = await res.json().catch(() => ({}));
@@ -105,9 +104,7 @@ export async function deleteFleetCustomer(
 ): Promise<{ success: boolean; message: string }> {
   const res = await fetch(`${API_ENDPOINTS.admin}/fleet-admin/customers/${userId}`, {
     method: 'DELETE',
-    headers: withProductLineHeaders({
-      Authorization: `Bearer ${accessToken}`,
-    }),
+    headers: authHeaders(accessToken),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || data.message || `HTTP ${res.status}`);
@@ -169,7 +166,7 @@ export async function fetchFleetStorageOverview(
   accessToken: string,
 ): Promise<FleetStorageOverview> {
   const res = await fetch(`${API_ENDPOINTS.admin}/fleet-admin/storage/overview`, {
-    headers: withProductLineHeaders({ Authorization: `Bearer ${accessToken}` }),
+    headers: authHeaders(accessToken),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || data.message || `HTTP ${res.status}`);
@@ -183,10 +180,7 @@ export async function runFleetEvidenceCleanup(
 ): Promise<{ success: boolean; purged: number; wouldPurge?: number; kvPatched: number }> {
   const res = await fetch(`${API_ENDPOINTS.admin}/fleet-admin/storage/cleanup`, {
     method: 'POST',
-    headers: withProductLineHeaders({
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    }),
+    headers: authHeaders(accessToken, { 'Content-Type': 'application/json' }),
     body: JSON.stringify({ dryRun, orgId }),
   });
   const data = await res.json().catch(() => ({}));
@@ -200,10 +194,7 @@ export async function auditFleetLegacyStorage(
 ): Promise<FleetLegacyAuditResult> {
   const res = await fetch(`${API_ENDPOINTS.admin}/fleet-admin/storage/audit-legacy`, {
     method: 'POST',
-    headers: withProductLineHeaders({
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    }),
+    headers: authHeaders(accessToken, { 'Content-Type': 'application/json' }),
     body: JSON.stringify(orgId ? { orgId } : {}),
   });
   const data = await res.json().catch(() => ({}));
@@ -228,10 +219,7 @@ export async function purgeFleetLegacyStorage(
         : opts.orphanOnly !== false;
   const res = await fetch(`${API_ENDPOINTS.admin}/fleet-admin/storage/purge-legacy`, {
     method: 'POST',
-    headers: withProductLineHeaders({
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    }),
+    headers: authHeaders(accessToken, { 'Content-Type': 'application/json' }),
     body: JSON.stringify({
       confirm: true,
       orphanOnly,
@@ -313,7 +301,7 @@ export async function fetchFleetStorageByOrg(
   accessToken: string,
 ): Promise<FleetStorageByOrgResult> {
   const res = await fetch(`${API_ENDPOINTS.admin}/fleet-admin/storage/by-org`, {
-    headers: withProductLineHeaders({ Authorization: `Bearer ${accessToken}` }),
+    headers: authHeaders(accessToken),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || data.message || `HTTP ${res.status}`);
@@ -327,7 +315,7 @@ export async function fetchFleetStorageOrgDetail(
   const res = await fetch(
     `${API_ENDPOINTS.admin}/fleet-admin/storage/orgs/${encodeURIComponent(orgId)}`,
     {
-      headers: withProductLineHeaders({ Authorization: `Bearer ${accessToken}` }),
+      headers: authHeaders(accessToken),
     },
   );
   const data = await res.json().catch(() => ({}));
@@ -395,7 +383,7 @@ export async function fetchFleetMaintLedgerOverview(
   accessToken: string,
 ): Promise<FleetMaintLedgerOverview> {
   const res = await fetch(`${API_ENDPOINTS.admin}/fleet-admin/maintenance-ledger/overview`, {
-    headers: withProductLineHeaders({ Authorization: `Bearer ${accessToken}` }),
+    headers: authHeaders(accessToken),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || data.message || `HTTP ${res.status}`);
@@ -406,7 +394,7 @@ export async function fetchFleetMaintLedgerByOrg(
   accessToken: string,
 ): Promise<FleetMaintLedgerByOrg> {
   const res = await fetch(`${API_ENDPOINTS.admin}/fleet-admin/maintenance-ledger/by-org`, {
-    headers: withProductLineHeaders({ Authorization: `Bearer ${accessToken}` }),
+    headers: authHeaders(accessToken),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || data.message || `HTTP ${res.status}`);
@@ -420,7 +408,7 @@ export async function fetchFleetMaintLedgerOrgDetail(
   const res = await fetch(
     `${API_ENDPOINTS.admin}/fleet-admin/maintenance-ledger/orgs/${encodeURIComponent(orgId)}`,
     {
-      headers: withProductLineHeaders({ Authorization: `Bearer ${accessToken}` }),
+      headers: authHeaders(accessToken),
     },
   );
   const data = await res.json().catch(() => ({}));

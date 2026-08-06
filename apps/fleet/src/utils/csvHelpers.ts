@@ -1,6 +1,8 @@
 import { Trip, CsvMapping, ParsedRow, FieldDefinition, FieldType, DriverMetrics, VehicleMetrics, RentalContract, OrganizationMetrics, DisputeRefund } from '../types/data';
 import { FuelEntry, FuelCard } from '../types/fuel';
 import Papa from 'papaparse';
+import { findFuelCardByCode } from './fuelCardMatch';
+import { isJaaRawFuelCsv, processJaaRawFuelData } from './jaaRawFuelCsvParser';
 import {
     parseUberDriverStatementSsot,
     parseUberPaymentTransactionSsotLine,
@@ -351,13 +353,16 @@ export function detectFileType(headers: string[], fileName: string = ''): FileDa
     // 8. Rental Contracts
     if (has('TermUUID') || (has('OrganizationUUID') && has('Balance'))) return 'uber_rental_contract';
     
+    // 9a. JAA Raw export (CARD_CODE + TRANS_DATE)
+    if (isJaaRawFuelCsv(headers)) return 'fuel_statement';
+
     // 9. Fuel Statement (flat CSV or JAA Details flattened rows)
     if (
-        (has('Volume') || has('Liters') || has('Gallons') || has('Qty') || has('Quantity')) && 
-        (has('Amount') || has('Cost') || has('Total') || has('Price')) &&
+        (has('Volume') || has('Liters') || has('Gallons') || has('Qty') || has('Quantity') || has('DISPLAY_FUEL_QUANTITY')) && 
+        (has('Amount') || has('Cost') || has('Total') || has('Price') || has('DISPLAY_FUEL_AMOUNT')) &&
         (
-          has('Card Number') || has('Card #') || has('Pan') || has('Card ID') ||
-          has('Vehicle Plate') || has('License Plate') || has('Receipt Number')
+          has('Card Number') || has('Card #') || has('Pan') || has('Card ID') || has('CARD_CODE') ||
+          has('Vehicle Plate') || has('License Plate') || has('LICENSE_NUMBER') || has('Receipt Number') || has('RECEIPT_NUMBER')
         )
     ) return 'fuel_statement';
     
@@ -983,7 +988,17 @@ function calculateCalibrationDeduction(fleetStats: FleetStats, files: FileData[]
     return 0;
 }
 
-function processFuelData(rows: ParsedRow[], fuelCards: FuelCard[]): FuelEntry[] {
+function processFuelData(
+    rows: ParsedRow[],
+    fuelCards: FuelCard[],
+    existingReceiptNumbers: Set<string> = new Set(),
+): FuelEntry[] {
+    // JAA Raw export path (CARD_CODE / TRANS_DATE / RESPONSE)
+    const headerProbe = rows[0] ? Object.keys(rows[0]) : [];
+    if (isJaaRawFuelCsv(headerProbe)) {
+        return processJaaRawFuelData(rows, fuelCards, existingReceiptNumbers).entries;
+    }
+
     const entries: FuelEntry[] = [];
     
     rows.forEach(row => {
@@ -998,7 +1013,7 @@ function processFuelData(rows: ParsedRow[], fuelCards: FuelCard[]): FuelEntry[] 
         };
 
         // Date
-        const dateStr = getVal(['Date', 'Transaction Date', 'Time', 'Date/Time']);
+        const dateStr = getVal(['Date', 'Transaction Date', 'Time', 'Date/Time', 'TRANS_DATE']);
         if (!dateStr) return;
         
         let date: Date | null = null;
@@ -1014,13 +1029,13 @@ function processFuelData(rows: ParsedRow[], fuelCards: FuelCard[]): FuelEntry[] 
         if (!date) return;
 
         // Amount
-        const amountStr = getVal(['Amount', 'Total', 'Cost', 'Net Amount', 'Total Cost']);
+        const amountStr = getVal(['Amount', 'Total', 'Cost', 'Net Amount', 'Total Cost', 'AMOUNT', 'DISPLAY_FUEL_AMOUNT']);
         if (!amountStr) return;
         const amount = parseFloat(amountStr.replace(/[^0-9.-]/g, ''));
         if (isNaN(amount) || amount === 0) return;
 
         // Volume
-        const volStr = getVal(['Volume', 'Liters', 'Gallons', 'Qty', 'Quantity']);
+        const volStr = getVal(['Volume', 'Liters', 'Gallons', 'Qty', 'Quantity', 'DISPLAY_FUEL_QUANTITY']);
         const liters = volStr ? parseFloat(volStr.replace(/[^0-9.-]/g, '')) : undefined;
 
         // Price Unit — prefer statement PPL, else derive from amount ÷ liters
@@ -1030,31 +1045,29 @@ function processFuelData(rows: ParsedRow[], fuelCards: FuelCard[]): FuelEntry[] 
             pricePerLiter = Number((amount / liters).toFixed(2));
         }
 
-        // Card
-        const cardNumRaw = getVal(['Card Number', 'Card #', 'Pan', 'Card ID']);
-        const cardNum = cardNumRaw ? cardNumRaw.replace(/[^0-9]/g, '') : '';
+        // Card — CARD_CODE (alphanumeric) or classic PAN digits
+        const cardCodeRaw = getVal(['CARD_CODE', 'Card Code', 'Card Number', 'Card #', 'Pan', 'Card ID']);
+        const receiptNumber = getVal(['Receipt Number', 'Receipt #', 'Receipt', 'RECEIPT_NUMBER']);
+        if (receiptNumber) {
+            const rk = receiptNumber.toUpperCase();
+            if (existingReceiptNumbers.has(rk)) return;
+            existingReceiptNumbers.add(rk);
+        }
 
-        // Plate (JAA Details has plate, often no card PAN)
-        const plateRaw = getVal(['Vehicle Plate', 'License Plate', 'Plate', 'Lic#', 'Vehicle LIC#']);
+        // Plate stored as issuer noise only (not Roam identity)
+        const plateRaw = getVal(['Vehicle Plate', 'License Plate', 'Plate', 'Lic#', 'Vehicle LIC#', 'LICENSE_NUMBER']);
         const plate = plateRaw ? plateRaw.replace(/[^A-Za-z0-9]/g, '').toUpperCase() : '';
         
         // Location
-        const location = getVal(['Location', 'Site', 'Station', 'Merchant', 'Site Name']);
-        const receiptNumber = getVal(['Receipt Number', 'Receipt #', 'Receipt']);
-        const driverName = getVal(['Driver', 'Driver Name']);
-        const mileageStr = getVal(['Mileage', 'Odometer']);
+        const location = getVal(['Location', 'Site', 'Station', 'Merchant', 'Site Name', 'VENDOR_NAME']);
+        const driverName = getVal(['Driver', 'Driver Name', 'DRIVER_NAME']);
+        const mileageStr = getVal(['Mileage', 'Odometer', 'MILEAGE']);
         const mileage = mileageStr ? parseFloat(mileageStr.replace(/[^0-9.-]/g, '')) : undefined;
-        const description = getVal(['Description']);
-        const isJaa = Boolean(plate || (receiptNumber && String(receiptNumber).toUpperCase().startsWith('ZZ')));
+        const description = getVal(['Description', 'FUEL_TYPE']);
+        const isJaa = Boolean(plate || (receiptNumber && String(receiptNumber).toUpperCase().startsWith('ZZ')) || cardCodeRaw);
 
-        // Match Card
-        let matchedCard: FuelCard | undefined;
-        if (cardNum && fuelCards && fuelCards.length > 0) {
-            matchedCard = fuelCards.find(c => {
-                const cleanStored = c.cardNumber.replace(/[^0-9]/g, '');
-                return cleanStored.endsWith(cardNum) || cardNum.endsWith(cleanStored);
-            });
-        }
+        // Match Card via alphanumeric CARD_CODE
+        const matchedCard = findFuelCardByCode(fuelCards, cardCodeRaw);
 
         const entry: FuelEntry = {
             id: crypto.randomUUID(),
@@ -1063,22 +1076,27 @@ function processFuelData(rows: ParsedRow[], fuelCards: FuelCard[]): FuelEntry[] 
             liters,
             pricePerLiter,
             location,
-            odometer: mileage && mileage > 0 ? mileage : null,
+            // Never trust issuer mileage as Roam odometer
+            odometer: null,
             cardId: matchedCard?.id,
             vehicleId: matchedCard?.assignedVehicleId,
-            driverId: matchedCard?.assignedDriverId,
+            // Driver always from Roam match — never card assignment alone from import
+            driverId: undefined,
             type: 'Card_Transaction',
-            entryMode: mileage && mileage > 0 ? 'Anchor' : 'Floating',
+            entryMode: 'Floating',
             paymentSource: 'Gas_Card',
             entrySource: 'fuel-card',
             reconciliationStatus: 'Pending',
             metadata: {
                 importSource: isJaa ? 'jaa_statement_details' : 'fuel_statement',
                 jaaReceiptNumber: receiptNumber,
+                jaaCardCode: cardCodeRaw,
                 jaaDriverName: driverName,
                 jaaVehiclePlate: plate || undefined,
                 jaaFuelGrade: description,
-                mileage,
+                jaaMileage: mileage && mileage > 0 ? mileage : undefined,
+                countsInFuelSpend: true,
+                countsInFuelVolume: Boolean(liters && liters > 0),
             },
         };
 

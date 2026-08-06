@@ -121,13 +121,16 @@ export function FuelCardModal({ isOpen, onClose, onSave, initialData, vehicles =
                             </Select>
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="cardNumber">Card Number</Label>
+                            <Label htmlFor="cardNumber">Card Code (JAA)</Label>
                             <Input 
                                 id="cardNumber" 
-                                placeholder="xxxx-xxxx-xxxx-1234" 
+                                placeholder="00002920RN2783" 
                                 value={formData.cardNumber}
-                                onChange={(e) => setFormData(prev => ({ ...prev, cardNumber: e.target.value }))}
+                                onChange={(e) => setFormData(prev => ({ ...prev, cardNumber: e.target.value.trim() }))}
                             />
+                            <p className="text-[10px] text-slate-500">
+                                Exact CARD_CODE from the JAA statement — used to link every CSV transaction to this card.
+                            </p>
                         </div>
                     </div>
 

@@ -64,6 +64,17 @@ import { Download } from 'lucide-react';
 import { usePermissions } from '../../hooks/usePermissions';
 import { isEntryInInclusiveYmdRange, toEntryYmd } from '../../utils/fuelWeekPeriod';
 import { resolveFuelEntrySource } from '../../utils/fuelEntrySource';
+import { countsInGasCardSpend, isGasCardFuelEntry } from '../../utils/fuelPaidByDriver';
+
+/** Exclude fees, declines, and awaiting-statement $0 anchors from spend totals. */
+function countsInFuelLogSpend(entry: FuelEntry): boolean {
+  const meta = entry.metadata as Record<string, unknown> | undefined;
+  if (meta?.jaaRowKind === 'fee' || meta?.jaaRowKind === 'declined') return false;
+  if (meta?.awaitingCardStatement) return false;
+  if (meta?.countsInFuelSpend === false) return false;
+  if (isGasCardFuelEntry(entry)) return countsInGasCardSpend(entry);
+  return true;
+}
 
 interface FuelLogTableProps {
     entries: FuelEntry[];
@@ -287,8 +298,12 @@ export function FuelLogTable({
             adminCount: adminVolume,
             adminEditCount: adminEdits.length,
             anchorCount: anchorEntries.length,
-            totalSpend: auditScopeEntries.reduce((sum, e) => sum + (Number(e.amount) || 0), 0),
-            anchorTotalSpent: anchorEntries.reduce((sum, e) => sum + (Number(e.amount) || 0), 0),
+            totalSpend: auditScopeEntries
+                .filter(countsInFuelLogSpend)
+                .reduce((sum, e) => sum + (Number(e.amount) || 0), 0),
+            anchorTotalSpent: anchorEntries
+                .filter(countsInFuelLogSpend)
+                .reduce((sum, e) => sum + (Number(e.amount) || 0), 0),
             imbalancedCount: manualEntries.filter(e => ledgerIntegrity.get(e.id) !== 'Complete' && ledgerIntegrity.get(e.id) !== 'Pending').length,
             completedCycles: cycleScope.filter(c => c.status === 'Complete').length,
             anomalyCycles: cycleScope.filter(c => c.status === 'Anomaly').length,
@@ -374,7 +389,10 @@ export function FuelLogTable({
         switch (entry.type) {
             case 'Card_Transaction': return 'Gas Card';
             case 'Fuel_Manual_Entry':
-            case 'Manual_Entry': return 'Driver Cash';
+            case 'Manual_Entry':
+                // Gas Card Roam anchors use Manual_Entry + paymentSource Gas_Card
+                if (entry.paymentSource === 'Gas_Card') return 'Gas Card';
+                return 'Driver Cash';
             case 'Reimbursement': return 'Reimbursement';
             default: return entry.type?.replace(/_/g, ' ') || 'Unknown';
         }
@@ -798,7 +816,15 @@ export function FuelLogTable({
                                             );
                                         })()}
                                     </TableCell>
-                                    <TableCell className="font-bold text-xs">${(entry.amount ?? 0).toFixed(2)}</TableCell>
+                                    <TableCell className="font-bold text-xs">
+                                        {(entry.metadata as any)?.awaitingCardStatement
+                                          ? <span className="text-amber-600 font-medium">Awaiting</span>
+                                          : (entry.metadata as any)?.jaaRowKind === 'declined'
+                                            ? <span className="text-rose-600 font-medium">Declined</span>
+                                            : (entry.metadata as any)?.jaaRowKind === 'fee'
+                                              ? <span className="text-slate-500">${(entry.amount ?? 0).toFixed(2)} fee</span>
+                                              : `$${(entry.amount ?? 0).toFixed(2)}`}
+                                    </TableCell>
                                     <TableCell>
                                         <div className="flex justify-center">
                                             <Tooltip>

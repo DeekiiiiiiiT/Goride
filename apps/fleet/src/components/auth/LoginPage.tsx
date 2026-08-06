@@ -147,7 +147,14 @@ export function LoginPage() {
       // AuthContext will handle the state change and redirect
     } catch (err: any) {
       console.error('Login error:', err);
-      setError(err.message || 'Failed to sign in');
+      const msg = String(err?.message || '');
+      if (/failed to fetch|networkerror|load failed|aborted/i.test(msg)) {
+        setError(
+          'Cannot reach Roam servers (network). Check your connection, disable ad-block for roamfleet.co / supabase.co, then try again. If it keeps failing, use Forgot? to reset your password.',
+        );
+      } else {
+        setError(msg || 'Failed to sign in');
+      }
     } finally {
       setIsLoading(false);
     }

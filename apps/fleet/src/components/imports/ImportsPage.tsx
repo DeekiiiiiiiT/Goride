@@ -932,13 +932,42 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
               }
           }
 
-          // Phase 5: Save Fuel Entries + match JAA statement rows to driver gas-card logs
+              // Phase 5: Save Fuel Entries + match JAA statement rows to Roam Gas Card anchors
           if (processedFuelEntries.length > 0) {
               let entriesToSave = [...processedFuelEntries];
               try {
+                  const existingAll = await fuelService.getFuelEntries({ limit: 3000 });
+                  const existingReceipts = new Set(
+                    existingAll
+                      .map((e) => String((e.metadata as any)?.jaaReceiptNumber || '').toUpperCase())
+                      .filter(Boolean),
+                  );
+                  const beforeDedup = entriesToSave.length;
+                  entriesToSave = entriesToSave.filter((entry) => {
+                    const r = String((entry.metadata as any)?.jaaReceiptNumber || '').toUpperCase();
+                    if (!r) return true;
+                    if (existingReceipts.has(r)) return false;
+                    existingReceipts.add(r);
+                    return true;
+                  });
+                  if (beforeDedup > entriesToSave.length) {
+                    toast.info(`Skipped ${beforeDedup - entriesToSave.length} duplicate receipt(s)`);
+                  }
+
+                  // JAA Raw: vehicle only from Roam card assignment — never plate→driver from issuer noise
+                  entriesToSave = entriesToSave.map((entry) => {
+                      if ((entry.metadata as any)?.importSource === 'jaa_raw') {
+                        return { ...entry, driverId: undefined };
+                      }
+                      if (entry.vehicleId) return entry;
+                      return entry;
+                  });
+
+                  // Legacy non-raw statements: optional plate→vehicle only (never set driver from JAA plate identity)
                   const vehicles = await api.getVehicles().catch(() => []);
                   const normalizePlate = (p: string) => p.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
                   entriesToSave = entriesToSave.map((entry) => {
+                      if ((entry.metadata as any)?.importSource === 'jaa_raw') return entry;
                       if (entry.vehicleId) return entry;
                       const plate = String((entry.metadata as any)?.jaaVehiclePlate || '').trim();
                       if (!plate) return entry;
@@ -950,17 +979,17 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
                       return {
                           ...entry,
                           vehicleId: match.id,
-                          driverId: entry.driverId || match.assignedDriverId || match.currentDriverId,
+                          // Do not assign driver from plate resolution — Roam match owns driver
                       };
                   });
               } catch (plateErr) {
-                  console.warn('[Import] plate→vehicle resolve skipped', plateErr);
+                  console.warn('[Import] fuel pre-save normalize skipped', plateErr);
               }
 
               const saved = await Promise.all(entriesToSave.map((entry) => fuelService.createFuelEntry(entry)));
 
               try {
-                  const existing = await fuelService.getFuelEntries({ limit: 500 });
+                  const existing = await fuelService.getFuelEntries({ limit: 1000 });
                   const pairs = matchJaaStatementToDriverLogs(saved, existing);
                   const linked: FuelMatchPair[] = [];
                   for (const pair of pairs) {

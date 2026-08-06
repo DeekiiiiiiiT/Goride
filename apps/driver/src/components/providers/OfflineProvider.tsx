@@ -80,6 +80,39 @@ async function syncFuelExpense(action: Extract<OfflineAction, { type: 'SUBMIT_FU
   await offlineBlobStore.removeMany([payload.odometerBlobKey, payload.receiptBlobKey]);
 }
 
+async function syncGasCardAnchor(action: Extract<OfflineAction, { type: 'SUBMIT_GAS_CARD_ANCHOR' }>) {
+  const { payload } = action;
+  const entry = { ...payload.fuelEntry };
+  const entryId = String(entry.id || crypto.randomUUID());
+  entry.id = entryId;
+
+  if (payload.odometerBlobKey) {
+    const blob = await offlineBlobStore.get(payload.odometerBlobKey);
+    if (!blob) throw new Error('Offline odometer photo missing');
+    const file = new File(
+      [blob],
+      payload.odometerFileName || 'odometer.jpg',
+      { type: payload.odometerMimeType || blob.type || 'image/jpeg' },
+    );
+    const uploadRes = await uploadEvidenceFile(file, {
+      evidenceType: 'odometer_proof',
+      sourceType: 'fuel_entry',
+      sourceId: entryId,
+      retentionClass: 'ephemeral',
+      parentStatus: 'Pending',
+    });
+    entry.odometerImageUrl = uploadRes.url;
+    entry.metadata = {
+      ...(entry.metadata || {}),
+      odometerProofUrl: uploadRes.url,
+    };
+  }
+
+  const { fuelService } = await import('../../services/fuelService');
+  await fuelService.saveFuelEntry(entry as any);
+  await offlineBlobStore.removeMany([payload.odometerBlobKey]);
+}
+
 export function OfflineProvider({ children }: { children: React.ReactNode }) {
   const isOnline = useNetworkStatus();
   const { user } = useAuth();
@@ -180,6 +213,10 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
                   tripSuccess++;
               } else if (action.type === 'SUBMIT_FUEL_EXPENSE') {
                   await syncFuelExpense(action);
+                  processedIds.push(action.id);
+                  fuelSuccess++;
+              } else if (action.type === 'SUBMIT_GAS_CARD_ANCHOR') {
+                  await syncGasCardAnchor(action);
                   processedIds.push(action.id);
                   fuelSuccess++;
               }

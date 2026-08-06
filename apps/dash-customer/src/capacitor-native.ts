@@ -3,8 +3,15 @@ import { handleDashCustomerAuthCallbackUrl } from '@/lib/dashCustomerAuthCallbac
 import { isDashCustomerAuthCallbackUrl } from '@/lib/dashCustomerAuth';
 
 async function finishNativeAuthFromUrl(url: string): Promise<void> {
-  if (!isDashCustomerAuthCallbackUrl(url)) return;
+  const accepted = isDashCustomerAuthCallbackUrl(url);
+  // #region agent log
+  fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'be05d1'},body:JSON.stringify({sessionId:'be05d1',runId:'pre-fix',hypothesisId:'D',location:'capacitor-native.ts:finishNativeAuthFromUrl:entry',message:'deep link received',data:{accepted,urlScheme:url.split(':')[0]??null,urlHost:(()=>{try{return new URL(url.replace(/^([^:]+:\/\/)/,'https://')).host}catch{return null}})(),hasCode:url.includes('code='),hasAccessToken:url.includes('access_token')},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
+  if (!accepted) return;
   const handled = await handleDashCustomerAuthCallbackUrl(url);
+  // #region agent log
+  fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'be05d1'},body:JSON.stringify({sessionId:'be05d1',runId:'pre-fix',hypothesisId:'D',location:'capacitor-native.ts:finishNativeAuthFromUrl:done',message:'deep link session exchange result',data:{handled},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
   if (!handled) return;
   try {
     const { Browser } = await import('@capacitor/browser');

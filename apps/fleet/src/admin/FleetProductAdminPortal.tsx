@@ -180,6 +180,11 @@ export function FleetProductAdminPortal() {
       setCustomers(await fetchFleetAdminCustomers(session.access_token, true));
     } catch (e) {
       console.error(e);
+      const msg = e instanceof Error ? e.message : 'Failed to load customers';
+      toast.error(msg.includes('Forbidden') || msg.includes('admin role')
+        ? 'This account is not a Fleet platform admin. Use a platform_owner / fleet_admin login.'
+        : msg);
+      setCustomers([]);
     } finally {
       setCustomersLoading(false);
     }

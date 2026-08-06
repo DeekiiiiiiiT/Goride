@@ -52,6 +52,9 @@ import { derivePricePerLiter } from './expenses/FuelCashInputs';
 import { ReceiptUploader } from './expenses/ReceiptUploader';
 import { PumpNumbersConfirm } from './expenses/PumpNumbersConfirm';
 import { OdometerScanner } from './common/OdometerScanner';
+import { fuelService } from '../../services/fuelService';
+import { findActiveFuelCardForVehicle } from '../../utils/fuelCardMatch';
+import type { FuelCard } from '../../types/fuel';
 
 interface ExpenseLoggerProps {
   defaultOpen?: boolean;
@@ -139,6 +142,8 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
   const [isRetryingFuelGps, setIsRetryingFuelGps] = useState(false);
   const [fuelGpsSkipEnabled, setFuelGpsSkipEnabled] = useState(false);
   const fuelGpsLockGenRef = useRef(0);
+  const [assignedGasCard, setAssignedGasCard] = useState<FuelCard | null>(null);
+  const [gasCardLookupDone, setGasCardLookupDone] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -173,6 +178,8 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
     setIsRetryingFuelGps(false);
     setFuelGpsSkipEnabled(false);
     fuelGpsLockGenRef.current += 1;
+    setAssignedGasCard(null);
+    setGasCardLookupDone(false);
   };
 
   const fetchTransactions = async () => {
@@ -468,6 +475,98 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
       console.log('[DriverExpenses] Validation fail:', msg);
       setSubmitError(msg);
       toast.error(msg);
+      return;
+    }
+
+    const isGasCardFuel = category === 'Fuel' && fuelEntry.paymentMethod === 'gas_card';
+    if (isGasCardFuel) {
+      if (!fuelEntry.odometerReading || fuelEntry.odometerReading <= 0) {
+        const msg = "Odometer reading is required";
+        setSubmitError(msg);
+        toast.error(msg);
+        return;
+      }
+      if (!assignedGasCard) {
+        const msg = "No Active gas card assigned to this vehicle. Contact your fleet manager.";
+        setSubmitError(msg);
+        toast.error(msg);
+        return;
+      }
+
+      setIsSubmitting(true);
+      let submitTimedOut = false;
+      const submitDeadline = setTimeout(() => {
+        submitTimedOut = true;
+        setIsSubmitting(false);
+        const msg = 'Save timed out. Check your connection and try again.';
+        setSubmitError(msg);
+        toast.error(msg);
+      }, SUBMIT_DEADLINE_MS);
+      try {
+        const entryId = crypto.randomUUID();
+        let odometerProofUrl = '';
+        if (fuelEntry.odometerProof) {
+          const uploadRes = await uploadEvidenceFile(fuelEntry.odometerProof, {
+            evidenceType: 'odometer_proof',
+            sourceType: 'fuel_entry',
+            sourceId: entryId,
+            retentionClass: 'ephemeral',
+            parentStatus: 'Pending',
+          });
+          if (submitTimedOut) return;
+          odometerProofUrl = uploadRes.url;
+        }
+
+        const vehicles = await api.getVehicles().catch(() => []);
+        if (submitTimedOut) return;
+        const resolvedVehicleId = resolveVehicleIdForDriver(driverRecord, vehicles, user?.id);
+        const { driverId: canonicalDriverId } = resolveCanonicalDriverIdentity(
+          driverRecord,
+          { id: user?.id, name: user?.user_metadata?.name, email: user?.email },
+        );
+
+        await fuelService.saveFuelEntry({
+          id: entryId,
+          date: isValid(date) ? format(date, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
+          time: time ? `${time}:00` : format(new Date(), 'HH:mm:ss'),
+          cardId: assignedGasCard.id,
+          vehicleId: resolvedVehicleId,
+          driverId: canonicalDriverId || user?.id,
+          amount: 0,
+          odometer: fuelEntry.odometerReading,
+          odometerImageUrl: odometerProofUrl || undefined,
+          type: 'Manual_Entry',
+          entryMode: 'Anchor',
+          paymentSource: 'Gas_Card',
+          entrySource: 'driver-portal',
+          reconciliationStatus: 'Pending',
+          metadata: {
+            awaitingCardStatement: true,
+            odometerMethod: fuelEntry.odometerMethod,
+            odometerProofUrl: odometerProofUrl || undefined,
+            locationMetadata: fuelEntry.locationMetadata,
+            parentCompany: fuelEntry.parentCompany,
+            paymentSource: 'company_card',
+            countsInFuelSpend: false,
+            countsInFuelVolume: false,
+          },
+        } as any);
+
+        if (submitTimedOut) return;
+        toast.success('Gas Card odometer logged — waiting for JAA statement');
+        setViewState('list');
+        resetForm();
+        fetchTransactions();
+      } catch (err) {
+        if (submitTimedOut) return;
+        console.error('[DriverExpenses] Gas Card submit error:', err);
+        const errMsg = err instanceof Error ? err.message : String(err);
+        setSubmitError(errMsg);
+        toast.error(errMsg || 'Failed to save Gas Card log');
+      } finally {
+        clearTimeout(submitDeadline);
+        if (!submitTimedOut) setIsSubmitting(false);
+      }
       return;
     }
     
@@ -808,13 +907,34 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
     }
   };
 
-  const handleMethodSelect = (method: 'gas_card' | 'personal_cash' | 'rideshare_cash') => {
+  const handleMethodSelect = async (method: 'gas_card' | 'personal_cash' | 'rideshare_cash') => {
     setFuelEntry(prev => ({ ...prev, paymentMethod: method }));
     setFuelPumpStep('photo');
     setPumpFromOcr(false);
     setAmount('');
     setReceiptFile(null);
     setReceiptPreview(null);
+    setAssignedGasCard(null);
+    setGasCardLookupDone(false);
+
+    if (method === 'gas_card') {
+      try {
+        const [vehicles, cards] = await Promise.all([
+          api.getVehicles().catch(() => []),
+          fuelService.getFuelCards().catch(() => [] as FuelCard[]),
+        ]);
+        const resolvedVehicleId = resolveVehicleIdForDriver(driverRecord, vehicles, user?.id);
+        setAssignedGasCard(findActiveFuelCardForVehicle(cards, resolvedVehicleId) || null);
+      } catch (e) {
+        console.warn('[DriverExpenses] Gas card lookup failed', e);
+        setAssignedGasCard(null);
+      } finally {
+        setGasCardLookupDone(true);
+      }
+    } else {
+      setGasCardLookupDone(true);
+    }
+
     setViewState('entry_details');
   };
 
@@ -1131,21 +1251,10 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
                    odometer={fuelEntry.odometerReading || 0}
                    date={date}
                    time={time}
-                   isSubmitting={isSubmitting}
+                   isSubmitting={isSubmitting || (fuelEntry.paymentMethod === 'gas_card' && !gasCardLookupDone)}
                    onSubmit={handleSubmit}
-                   totalSpent={amount}
-                   onTotalSpentChange={setAmount}
-                   liters={fuelEntry.volume || ''}
-                   onLitersChange={(v) => setFuelEntry(prev => ({ ...prev, volume: v }))}
-                   pumpPreviewUrl={receiptPreview}
-                   isScanningPump={isScanning}
-                   onPumpFileSelect={handleFileChange}
-                   onPumpClear={handleRetakePumpPhoto}
-                   pumpFileName={receiptFile?.name}
-                   pumpStep={fuelPumpStep}
-                   pumpFromOcr={pumpFromOcr}
-                   onConfirmPumpNumbers={handleConfirmPumpNumbers}
-                   onRetakePumpPhoto={handleRetakePumpPhoto}
+                   cardLabel={assignedGasCard?.cardNumber}
+                   cardMissing={gasCardLookupDone && !assignedGasCard}
                 />
                 </div>
             ) : (

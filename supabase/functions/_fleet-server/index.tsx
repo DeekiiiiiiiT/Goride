@@ -15306,6 +15306,27 @@ app.post("/make-server-37f42386/admin/vehicle-catalog-gate/backfill", requireAut
 // ---------------------------------------------------------------------------
 
 /**
+ * Fleet customers = org owners (Fleet Owner), not drivers / staff invites.
+ * Role may live in user_metadata.role, app_metadata.role, or app_metadata.roles[].
+ */
+function isFleetCustomerOwnerUser(u: {
+  user_metadata?: Record<string, unknown>;
+  app_metadata?: Record<string, unknown>;
+}): boolean {
+  const userMeta = (u.user_metadata || {}) as Record<string, unknown>;
+  const appMeta = (u.app_metadata || {}) as Record<string, unknown>;
+  const roles: string[] = [];
+  if (typeof userMeta.role === "string" && userMeta.role.trim()) roles.push(userMeta.role.trim());
+  if (typeof appMeta.role === "string" && appMeta.role.trim()) roles.push(appMeta.role.trim());
+  if (Array.isArray(appMeta.roles)) {
+    for (const r of appMeta.roles) {
+      if (typeof r === "string" && r.trim()) roles.push(r.trim());
+    }
+  }
+  return roles.includes("admin") || roles.includes("fleet_owner");
+}
+
+/**
  * Fetch customers with 3-layer caching:
  * Layer 1: Memory cache (hot path - <5ms)
  * Layer 2: KV cache (warm path - ~50ms, 5min TTL)
@@ -15318,33 +15339,38 @@ async function fetchCustomersWithCache(productLineFilter?: ProductLine): Promise
   
   // Layer 1: Memory cache (hot path - <5ms)
   const memCached = memCache.customerCache.get(cacheKey);
-  if (memCached !== null) {
+  if (memCached !== null && Array.isArray(memCached) && memCached.length > 0) {
     console.log("[AdminCustomers] Served from memory cache");
     return memCached;
   }
   
-  // Layer 2: KV cache (warm path - ~50ms, 5min TTL)
+  // Layer 2: KV cache (warm path - ~50ms, 5min TTL) — never trust empty arrays (stale miss)
   const kvCached = await cache.getCache(cacheKey);
-  if (kvCached !== null) {
+  if (kvCached !== null && Array.isArray(kvCached) && kvCached.length > 0) {
     console.log("[AdminCustomers] Served from KV cache, warming memory");
     memCache.customerCache.set(cacheKey, kvCached, 2 * 60 * 1000); // 2min in memory
     return kvCached;
   }
   
-  // Layer 3: Auth API (cold path - ~500-2000ms)
+  // Layer 3: Auth API (cold path — paginate so owners are never dropped)
   console.log("[AdminCustomers] Cache miss, fetching from Auth API");
-  const { data, error } = await cache.withRetry(() => 
-    supabase.auth.admin.listUsers({ perPage: 1000 })
-  );
-  
-  if (error) throw new Error(`Auth API error: ${error.message}`);
-  
-  // Filter to fleet managers (role === 'admin') — check user + app metadata
-  let customers = (data?.users || [])
-    .filter((u: any) => {
-      const role = u.user_metadata?.role || u.app_metadata?.role;
-      return role === "admin";
-    });
+  const allUsers: any[] = [];
+  let page = 1;
+  const perPage = 200;
+  for (;;) {
+    const { data, error } = await cache.withRetry(() =>
+      supabase.auth.admin.listUsers({ page, perPage }),
+    );
+    if (error) throw new Error(`Auth API error: ${error.message}`);
+    const batch = data?.users || [];
+    allUsers.push(...batch);
+    if (batch.length < perPage) break;
+    page += 1;
+    if (page > 50) break; // safety cap
+  }
+
+  // Fleet Owners / org admins only (not drivers sitting on the same org)
+  let customers = allUsers.filter((u: any) => isFleetCustomerOwnerUser(u));
 
   if (productLineFilter) {
     customers = customers.filter((u: any) => {
@@ -15356,9 +15382,12 @@ async function fetchCustomersWithCache(productLineFilter?: ProductLine): Promise
   customers = customers.map((u: any) => ({
       id: u.id,
       email: u.email || "",
-      name: u.user_metadata?.name || "",
+      name: u.user_metadata?.name || u.user_metadata?.full_name || "",
       businessType: u.user_metadata?.businessType || "rideshare",
-      productLine: inferProductLineFromUser(u.user_metadata),
+      productLine: inferProductLineFromUser({
+        ...(u.app_metadata || {}),
+        ...(u.user_metadata || {}),
+      }),
       accountStatus: u.user_metadata?.accountStatus || null,
       createdAt: u.created_at || null,
       lastSignIn: u.last_sign_in_at || null,
@@ -15370,9 +15399,11 @@ async function fetchCustomersWithCache(productLineFilter?: ProductLine): Promise
       isSuspended: !!u.banned_until && new Date(u.banned_until) > new Date(),
     }));
   
-  // Store in both caches
-  await cache.setCache(cacheKey, customers, 5 * 60); // 5min in KV
-  memCache.customerCache.set(cacheKey, customers, 2 * 60 * 1000); // 2min in memory
+  // Store in both caches (skip caching empty — avoids sticky blank UI after transient auth blips)
+  if (customers.length > 0) {
+    await cache.setCache(cacheKey, customers, 5 * 60); // 5min in KV
+    memCache.customerCache.set(cacheKey, customers, 2 * 60 * 1000); // 2min in memory
+  }
   
   console.log(`[AdminCustomers] Cached ${customers.length} customers`);
   return customers;

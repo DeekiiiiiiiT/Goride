@@ -7,7 +7,7 @@ import { API_ENDPOINTS } from './apiConfig';
 import { requireAuthHeaders } from '../utils/authHeaders';
 import { pickScenarioForDriverMembership, resolveActiveFuelPolicyForDriverWeek } from '../utils/fuelPolicyVersion';
 import { reportWeekYmdBounds, toEntryYmd } from '../utils/fuelWeekPeriod';
-import { isGasCardFuelEntry } from '../utils/fuelPaidByDriver';
+import { countsInGasCardSpend, isGasCardFuelEntry } from '../utils/fuelPaidByDriver';
 import {
   isCashStyleFuelPaymentSource,
   normalizeFuelPaymentSourceEnum,
@@ -210,6 +210,10 @@ export const settlementService = {
             let payoutDeduction: Partial<FinancialTransaction> | null = null;
             
             if (isGasCardFuelEntry(entryForSettle as FuelEntry)) {
+                // Skip fees, declines, and $0 awaiting-statement anchors — no driver money move
+                if (!countsInGasCardSpend(entryForSettle as FuelEntry)) {
+                    return;
+                }
                 // Case A: Company Paid (Gas Card) — deduct driver share only
                 if (split.driver > 0.01) {
                     payoutDeduction = {

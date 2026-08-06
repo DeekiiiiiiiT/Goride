@@ -18,8 +18,9 @@ import {
     DropdownMenuSeparator, 
     DropdownMenuTrigger 
 } from "../ui/dropdown-menu";
-import { Search, MoreHorizontal, Pencil, Trash2, CreditCard, User, Car } from "lucide-react";
+import { Search, MoreHorizontal, Pencil, Trash2, CreditCard, User, Car, Eye } from "lucide-react";
 import { FuelCard } from '../../types/fuel';
+import { FuelCardTransactionsSheet } from './FuelCardTransactionsSheet';
 
 interface FuelCardListProps {
     cards: FuelCard[];
@@ -32,6 +33,7 @@ interface FuelCardListProps {
 
 export function FuelCardList({ cards, drivers, onEdit, onDelete, getVehicleName, getDriverName }: FuelCardListProps) {
     const [searchTerm, setSearchTerm] = useState('');
+    const [viewCard, setViewCard] = useState<FuelCard | null>(null);
 
     const filteredCards = cards.filter(card => 
         card.cardNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -59,7 +61,7 @@ export function FuelCardList({ cards, drivers, onEdit, onDelete, getVehicleName,
                     <TableHeader>
                         <TableRow>
                             <TableHead>Provider</TableHead>
-                            <TableHead>Card Number</TableHead>
+                            <TableHead>Card Code (JAA)</TableHead>
                             <TableHead>Assigned To</TableHead>
                             <TableHead>Status</TableHead>
                             <TableHead>Expiry</TableHead>
@@ -126,6 +128,16 @@ export function FuelCardList({ cards, drivers, onEdit, onDelete, getVehicleName,
                                         {card.expiryDate ? new Date(card.expiryDate).toLocaleDateString() : 'No expiration'}
                                     </TableCell>
                                     <TableCell className="text-right">
+                                        <div className="flex items-center justify-end gap-1">
+                                            <Button
+                                                variant="ghost"
+                                                className="h-8 w-8 p-0"
+                                                title="View transactions"
+                                                onClick={() => setViewCard(card)}
+                                            >
+                                                <Eye className="h-4 w-4 text-slate-600" />
+                                                <span className="sr-only">View transactions</span>
+                                            </Button>
                                         <DropdownMenu>
                                             <DropdownMenuTrigger asChild>
                                                 <Button variant="ghost" className="h-8 w-8 p-0">
@@ -135,6 +147,9 @@ export function FuelCardList({ cards, drivers, onEdit, onDelete, getVehicleName,
                                             </DropdownMenuTrigger>
                                             <DropdownMenuContent align="end">
                                                 <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                                <DropdownMenuItem onClick={() => setViewCard(card)}>
+                                                    <Eye className="mr-2 h-4 w-4" /> View transactions
+                                                </DropdownMenuItem>
                                                 <DropdownMenuItem onClick={() => onEdit(card)}>
                                                     <Pencil className="mr-2 h-4 w-4" /> Edit Details
                                                 </DropdownMenuItem>
@@ -144,6 +159,7 @@ export function FuelCardList({ cards, drivers, onEdit, onDelete, getVehicleName,
                                                 </DropdownMenuItem>
                                             </DropdownMenuContent>
                                         </DropdownMenu>
+                                        </div>
                                     </TableCell>
                                 </TableRow>
                             ))
@@ -151,6 +167,14 @@ export function FuelCardList({ cards, drivers, onEdit, onDelete, getVehicleName,
                     </TableBody>
                 </Table>
             </div>
+
+            <FuelCardTransactionsSheet
+                card={viewCard}
+                open={!!viewCard}
+                onOpenChange={(open) => { if (!open) setViewCard(null); }}
+                getDriverName={getDriverName}
+                getVehicleName={getVehicleName}
+            />
         </div>
     );
 }

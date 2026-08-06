@@ -35,6 +35,17 @@ export function isGasCardFuelEntry(entry: FuelEntry): boolean {
   return false;
 }
 
+/** Approved JAA fuel spend only — excludes fees, declines, and $0 awaiting-statement anchors. */
+export function countsInGasCardSpend(entry: FuelEntry): boolean {
+  if (!isGasCardFuelEntry(entry)) return false;
+  const meta = entry.metadata as Record<string, unknown> | undefined;
+  if (meta?.jaaRowKind === 'fee' || meta?.jaaRowKind === 'declined') return false;
+  if (meta?.countsInFuelSpend === false) return false;
+  if (meta?.awaitingCardStatement) return false;
+  const amt = Number(entry.amount) || 0;
+  return amt > 0;
+}
+
 /**
  * True when resolveFuelFillDriver attributes this fill to the report's driver
  * (or Unassigned sentinel). Does not use weaker primary-vehicle-only checks.
@@ -118,7 +129,7 @@ export function sumGasCardSpendForReport(
 ): number {
   const attribution: DriverWeekAttributionContext = ctx || { vehicles };
   return entriesBelongingToDriverWeekReport(entries, report, attribution)
-    .filter(isGasCardFuelEntry)
+    .filter(countsInGasCardSpend)
     .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
 }
 

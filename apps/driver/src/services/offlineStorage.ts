@@ -49,6 +49,9 @@ export const offlineStorage = {
         item.payload.receiptBlobKey,
       ]);
     }
+    if (item?.type === 'SUBMIT_GAS_CARD_ANCHOR') {
+      void offlineBlobStore.removeMany([item.payload.odometerBlobKey]);
+    }
   },
 
   saveQueue: (queue: OfflineAction[]) => {
@@ -65,6 +68,9 @@ export const offlineStorage = {
           item.payload.odometerBlobKey,
           item.payload.receiptBlobKey,
         ]);
+      }
+      if (item.type === 'SUBMIT_GAS_CARD_ANCHOR') {
+        void offlineBlobStore.removeMany([item.payload.odometerBlobKey]);
       }
     }
     localStorage.removeItem(STORAGE_KEY);

@@ -4,7 +4,8 @@ export type FuelType = 'Gasoline_87' | 'Gasoline_91' | 'Gasoline_93' | 'Diesel' 
 
 export interface FuelCard {
   id: string;
-  cardNumber: string; // Last 4 or full visible number
+  /** JAA CARD_CODE (e.g. 00002920RN2783) — inventory master key for CSV match */
+  cardNumber: string;
   provider: string; // e.g., 'Shell', 'FleetCor', 'Wex'
   status: 'Active' | 'Inactive' | 'Lost';
   assignedVehicleId?: string;
