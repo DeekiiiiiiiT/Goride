@@ -1,4 +1,5 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
+import * as Sentry from '@sentry/react';
 import { AlertTriangle, RefreshCcw, ShieldAlert } from 'lucide-react';
 import { Button } from './button';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
@@ -29,7 +30,14 @@ export class ErrorBoundary extends Component<Props, State> {
 
   public async componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error(`Uncaught error in ${this.props.name || 'ErrorBoundary'}:`, error, errorInfo);
-    
+
+    // Dual-report: Sentry (product monitoring) + existing forensic audit trail.
+    Sentry.withScope((scope) => {
+      if (this.props.name) scope.setTag('boundary', this.props.name);
+      if (this.props.userId) scope.setUser({ id: this.props.userId });
+      Sentry.captureReactException(error, errorInfo);
+    });
+
     // Phase 8.2: Log error to forensic audit trail
     // ANON ALLOWLIST: crash telemetry must succeed even when the session is broken/absent (e.g. auth failures), so anon is intentional.
     try {

@@ -1,4 +1,7 @@
+import './instrument';
+
 import { createRoot } from 'react-dom/client';
+import * as Sentry from '@sentry/react';
 import { initPortalTheme } from './hooks/usePortalTheme';
 import './index.css';
 
@@ -9,8 +12,13 @@ const rootEl = document.getElementById('root')!;
 try {
   // Dynamic import so a missing VITE_SUPABASE_* config shows a message instead of a blank page
   const { default: App } = await import('./App');
-  createRoot(rootEl).render(<App />);
+  createRoot(rootEl).render(
+    <Sentry.ErrorBoundary fallback={<p>Something went wrong. Please refresh the page.</p>}>
+      <App />
+    </Sentry.ErrorBoundary>,
+  );
 } catch (err) {
+  Sentry.captureException(err);
   const message = err instanceof Error ? err.message : String(err);
   console.error('[Admin boot]', err);
   rootEl.innerHTML = `

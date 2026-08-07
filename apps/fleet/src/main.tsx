@@ -1,7 +1,12 @@
+import './instrument';
 
-  import { createRoot } from "react-dom/client";
-  import App from "./App.tsx";
-  import "./index.css";
+import { createRoot } from 'react-dom/client';
+import * as Sentry from '@sentry/react';
+import App from './App.tsx';
+import './index.css';
 
-  createRoot(document.getElementById("root")!).render(<App />);
-  
+createRoot(document.getElementById('root')!).render(
+  <Sentry.ErrorBoundary fallback={<p>Something went wrong. Please refresh the page.</p>}>
+    <App />
+  </Sentry.ErrorBoundary>,
+);

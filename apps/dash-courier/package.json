@@ -32,6 +32,7 @@
     "@roam/types": "workspace:*",
     "@roam/ui": "workspace:*",
     "@roam/vertical-config": "workspace:*",
+    "@sentry/react": "^10.69.0",
     "@supabase/supabase-js": "^2",
     "@tanstack/react-query": "*",
     "@types/leaflet": "^1.9.21",
