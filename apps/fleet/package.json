@@ -50,6 +50,7 @@
     "@roam/toll-ui": "workspace:*",
     "@roam/types": "workspace:*",
     "@roam/ui": "workspace:*",
+    "@sentry/react": "^10.69.0",
     "@supabase/supabase-js": "^2",
     "@tanstack/react-query": "*",
     "class-variance-authority": "^0.7.1",
