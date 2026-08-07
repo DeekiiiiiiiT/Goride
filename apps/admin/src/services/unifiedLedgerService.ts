@@ -38,6 +38,8 @@ export type UnifiedLedgerReconciliationResponse = {
   islands: IslandReconciliation[];
   anomaly_count: number;
   healthy: boolean;
+  excluded_from_green?: string[];
+  green_definition?: string;
 };
 
 function edgeHeaders(accessToken: string): HeadersInit {
@@ -85,6 +87,30 @@ export async function fetchUnifiedLedgerReconciliation(
   accessToken: string,
 ): Promise<UnifiedLedgerReconciliationResponse> {
   const res = await fetch(`${base}/reconciliation`, { headers: edgeHeaders(accessToken) });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export type SoakStatusResponse = {
+  checked_at?: string;
+  soak_started_at?: string | null;
+  soak_hours_elapsed?: number;
+  soak_passed_48h?: boolean;
+  money_islands_green?: boolean;
+  money_anomaly_count?: number;
+  self_ref_entry_count?: number;
+  go_for_phase_b?: boolean;
+  outcome_note?: string;
+  islands?: IslandReconciliation[];
+  instructions?: Record<string, unknown>;
+  fallback?: boolean;
+  message?: string;
+};
+
+export async function fetchLedgerSoakStatus(
+  accessToken: string,
+): Promise<SoakStatusResponse> {
+  const res = await fetch(`${base}/soak-status`, { headers: edgeHeaders(accessToken) });
   if (!res.ok) throw new Error(await parseError(res));
   return res.json();
 }

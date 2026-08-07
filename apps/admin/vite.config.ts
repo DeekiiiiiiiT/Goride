@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { roamSupabaseDevProxy } from '@roam/api-client/viteDevProxy';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const adminSrc = path.resolve(__dirname, 'src');
@@ -31,7 +32,7 @@ export default defineConfig({
   define: {
     'import.meta.env.VITE_PRODUCT_LINE': JSON.stringify('enterprise'),
   },
-  plugins: [resolveFleetVersionedPackages(fleetSrc), react(), tailwindcss()],
+  plugins: [roamSupabaseDevProxy(), resolveFleetVersionedPackages(fleetSrc), react(), tailwindcss()],
   resolve: {
     extensions: ['.js', '.jsx', '.ts', '.tsx', '.json'],
     alias: [

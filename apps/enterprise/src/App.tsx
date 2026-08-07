@@ -1,7 +1,6 @@
 import { lazy, Suspense } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { PwaProvider } from '@fleet/components/pwa/PwaProvider';
-import { PwaLifecycleHost } from '@fleet/components/pwa/PwaLifecycleHost';
 import { StandaloneHomeToLoginRedirect } from '@/app/pwa/StandaloneHomeToLoginRedirect';
 
 import { AccessibilityPage } from '@/pages/AccessibilityPage';
@@ -165,7 +164,6 @@ function Fall() {
 export default function App() {
   return (
     <PwaProvider>
-      <PwaLifecycleHost />
       <BrowserRouter>
       <StandaloneHomeToLoginRedirect />
       <Routes>

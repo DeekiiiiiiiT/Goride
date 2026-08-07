@@ -4033,6 +4033,55 @@ app.get("/make-server-37f42386/ledger", requireAuth({ requireOrg: true }), async
       const filteredTotal = entries.length;
       const paged = entries.slice(offset, offset + limit);
 
+      try {
+        const { shadowCompareAsync } = await import("../_shared/unifiedLedger/shadowRead.ts");
+        shadowCompareAsync({
+          island: "kv_ledger_event",
+          legacyCount: filteredTotal,
+          sampleKeys: paged.map((e: { id?: string }) => String(e?.id ?? "")).filter(Boolean).slice(0, 20),
+        });
+      } catch { /* shadow best-effort */ }
+
+      // Phase C: optional primary read from unified (DTO mapped to KV-like shape)
+      try {
+        const { isLedgerReadUnifiedFleetEnabled } = await import("../_shared/unifiedLedger/flags.ts");
+        if (isLedgerReadUnifiedFleetEnabled()) {
+          const { listUnifiedLedgerEntries } = await import("../_shared/unifiedLedger/queries.ts");
+          const { entries: uEntries, total: uTotal } = await listUnifiedLedgerEntries({
+            products: ["roam_driver", "roam_fleet"],
+            sourceSystem: "kv_ledger_event",
+            from: startDate ? `${startDate}T00:00:00.000Z` : undefined,
+            to: endDate ? `${endDate}T23:59:59.999Z` : undefined,
+            limit,
+            offset,
+          });
+          const mapped = uEntries.map((e) => ({
+            id: e.id,
+            eventType: e.entry_type,
+            netAmount: Number(e.amount_minor ?? 0) / 100,
+            currency: e.currency ?? "JMD",
+            date: String(e.effective_at ?? "").slice(0, 10),
+            sourceType: e.reference_type,
+            sourceId: e.reference_id,
+            organizationId: e.organization_id,
+            metadata: e.metadata,
+            direction: "inflow",
+            eventKind: "canonical",
+            schemaVersion: 1,
+          }));
+          return c.json({
+            data: mapped,
+            total: uTotal,
+            page: Math.floor(offset / limit) + 1,
+            limit,
+            hasMore: (offset + limit) < uTotal,
+            meta: { source: "ledger.entries" as const },
+          });
+        }
+      } catch (feErr) {
+        console.error("[Ledger GET] unified read failed, falling back to KV:", feErr);
+      }
+
       return c.json({
         data: paged,
         total: filteredTotal,
@@ -4054,6 +4103,55 @@ app.get("/make-server-37f42386/ledger", requireAuth({ requireOrg: true }), async
       if (typeof e.description === 'string') e.description = e.description.replace(/GoRide/g, 'Roam');
     });
     const total = entries.length || count || 0;
+
+    try {
+      const { shadowCompareAsync } = await import("../_shared/unifiedLedger/shadowRead.ts");
+      shadowCompareAsync({
+        island: "kv_ledger_event",
+        legacyCount: Number(count ?? total),
+        sampleKeys: entries.map((e: { id?: string }) => String(e?.id ?? "")).filter(Boolean).slice(0, 20),
+      });
+    } catch { /* shadow best-effort */ }
+
+    // Phase C: optional primary read from unified (non-amount-filter path)
+    try {
+      const { isLedgerReadUnifiedFleetEnabled } = await import("../_shared/unifiedLedger/flags.ts");
+      if (isLedgerReadUnifiedFleetEnabled()) {
+        const { listUnifiedLedgerEntries } = await import("../_shared/unifiedLedger/queries.ts");
+        const { entries: uEntries, total: uTotal } = await listUnifiedLedgerEntries({
+          products: ["roam_driver", "roam_fleet"],
+          sourceSystem: "kv_ledger_event",
+          from: startDate ? `${startDate}T00:00:00.000Z` : undefined,
+          to: endDate ? `${endDate}T23:59:59.999Z` : undefined,
+          limit,
+          offset,
+        });
+        const mapped = uEntries.map((e) => ({
+          id: e.id,
+          eventType: e.entry_type,
+          netAmount: Number(e.amount_minor ?? 0) / 100,
+          currency: e.currency ?? "JMD",
+          date: String(e.effective_at ?? "").slice(0, 10),
+          sourceType: e.reference_type,
+          sourceId: e.reference_id,
+          organizationId: e.organization_id,
+          metadata: e.metadata,
+          direction: "inflow",
+          eventKind: "canonical",
+          schemaVersion: 1,
+        }));
+        return c.json({
+          data: mapped,
+          total: uTotal,
+          page: Math.floor(offset / limit) + 1,
+          limit,
+          hasMore: (offset + limit) < uTotal,
+          meta: { source: "ledger.entries" as const },
+        });
+      }
+    } catch (feErr) {
+      console.error("[Ledger GET] unified read failed, falling back to KV:", feErr);
+    }
 
     return c.json({
       data: entries,

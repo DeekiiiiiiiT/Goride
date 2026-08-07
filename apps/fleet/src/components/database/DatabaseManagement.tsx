@@ -1,6 +1,7 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Car, Package, Navigation, Truck, Ship, ChevronRight, Settings2, Users, Loader2 } from 'lucide-react';
+import { Car, ChevronRight, Settings2, Users, Loader2 } from 'lucide-react';
+import { BIZ_ICON } from '@roam/admin-core/customers/businessTypeUi';
 import { API_ENDPOINTS } from '../../services/apiConfig';
 import { useAuth } from '../auth/AuthContext';
 import { BusinessType } from '../../types/data';
@@ -9,14 +10,6 @@ import { BUSINESS_TYPES } from '../../utils/businessTypes';
 interface DatabaseManagementProps {
   onNavigate: (page: string, data?: any) => void;
 }
-
-const BUSINESS_TYPE_ICONS: Record<BusinessType, React.ElementType> = {
-  rideshare: Car,
-  delivery: Package,
-  taxi: Navigation,
-  trucking: Truck,
-  shipping: Ship,
-};
 
 interface Customer {
   id: string;
@@ -77,7 +70,8 @@ export function DatabaseManagement({ onNavigate }: DatabaseManagementProps) {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {customersByType.map(bt => {
-            const Icon = BUSINESS_TYPE_ICONS[bt.key];
+            // Shared map stays in sync with BUSINESS_TYPES (incl. freight_forwarding)
+            const Icon = BIZ_ICON[bt.key] ?? Car;
             const hasCustomers = bt.customers.length > 0;
             
             return (

@@ -9,16 +9,42 @@ initPortalTheme();
 
 const rootEl = document.getElementById('root')!;
 
+/** Vite can briefly fail first-paint dynamic imports during HMR / restart. */
+async function importApp(retries = 3): Promise<typeof import('./App')> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      return await import('./App');
+    } catch (err) {
+      lastErr = err;
+      await new Promise((r) => setTimeout(r, 200 * (attempt + 1)));
+    }
+  }
+  throw lastErr;
+}
+
+function isLocalViteModuleFetchError(err: unknown): boolean {
+  if (!(err instanceof TypeError)) return false;
+  const msg = err.message;
+  return (
+    /Failed to fetch dynamically imported module/i.test(msg) &&
+    /localhost|127\.0\.0\.1/i.test(msg)
+  );
+}
+
 try {
   // Dynamic import so a missing VITE_SUPABASE_* config shows a message instead of a blank page
-  const { default: App } = await import('./App');
+  const { default: App } = await importApp();
   createRoot(rootEl).render(
     <Sentry.ErrorBoundary fallback={<p>Something went wrong. Please refresh the page.</p>}>
       <App />
     </Sentry.ErrorBoundary>,
   );
 } catch (err) {
-  Sentry.captureException(err);
+  // Local Vite blips are not product bugs — only report real boot failures.
+  if (!isLocalViteModuleFetchError(err)) {
+    Sentry.captureException(err);
+  }
   const message = err instanceof Error ? err.message : String(err);
   console.error('[Admin boot]', err);
   rootEl.innerHTML = `

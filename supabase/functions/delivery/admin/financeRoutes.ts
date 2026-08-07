@@ -4,6 +4,7 @@
 import { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { requireProductAdmin, type ProductAdminUser } from "../../_shared/productAdmin.ts";
+import { dualWriteDashPayment } from "../../_shared/unifiedLedger/dualWriteDash.ts";
 import { requireDashWrite } from "./dashPermissions.ts";
 import { getDb } from "./merchantAdminShared.ts";
 
@@ -36,7 +37,28 @@ export function registerFinanceAdminRoutes(app: Hono) {
     if (status) query = query.eq("status", status);
     const { data, error, count } = await query.range(offset, offset + limit - 1);
     if (error) return c.json({ error: error.message }, 500);
-    return c.json({ payouts: data ?? [], total: count ?? 0, page, limit });
+    try {
+      const { shadowCompareAsync } = await import("../../_shared/unifiedLedger/shadowRead.ts");
+      const { isLedgerReadUnifiedDashEnabled } = await import("../../_shared/unifiedLedger/flags.ts");
+      shadowCompareAsync({
+        island: "dash_payments",
+        legacyCount: count ?? data?.length ?? 0,
+        sampleKeys: (data ?? []).map((r: { id?: string }) => String(r.id ?? "")).filter(Boolean).slice(0, 20),
+      });
+      if (isLedgerReadUnifiedDashEnabled()) {
+        const { listUnifiedLedgerEntries } = await import("../../_shared/unifiedLedger/queries.ts");
+        const { entries, total } = await listUnifiedLedgerEntries({
+          products: ["roam_dash", "roam_partner", "roam_courier"],
+          sourceSystem: "dash_payments",
+          limit,
+          offset,
+        });
+        return c.json({ payouts: entries, total, page, limit, source: "ledger.entries" });
+      }
+    } catch (shErr) {
+      console.error("[dash finance] shadow/unified read:", shErr);
+    }
+    return c.json({ payouts: data ?? [], total: count ?? 0, page, limit, source: "payments.merchant_payouts" });
   });
 
   admin.get("/payouts/:id", async (c) => {
@@ -72,6 +94,18 @@ export function registerFinanceAdminRoutes(app: Hono) {
       notes: body.notes ?? body.reference ?? null,
     }).select().single();
     if (error) return c.json({ error: error.message }, 500);
+    try {
+      await dualWriteDashPayment({
+        transactionId: String(data.id),
+        orderId: String(data.id),
+        merchantId,
+        amount: Number(data.net_amount ?? amountNum - feeNum),
+        currency: String(data.currency ?? "JMD"),
+        kind: "merchant_payout",
+      });
+    } catch (dwErr) {
+      console.error("[dash finance] merchant_payout dual-write failed:", dwErr);
+    }
     return c.json({ payout: data }, 201);
   });
 
@@ -86,6 +120,22 @@ export function registerFinanceAdminRoutes(app: Hono) {
       .update({ status: "held", notes: reason })
       .eq("id", c.req.param("id")).select().single();
     if (error) return c.json({ error: error.message }, 500);
+    // Reverse unified mirror so held payouts do not leave phantom partner credits.
+    try {
+      const amt = Number(data?.net_amount ?? data?.amount ?? 0);
+      if (amt > 0 && data?.merchant_id) {
+        await dualWriteDashPayment({
+          transactionId: `${data.id}:hold`,
+          orderId: String(data.id),
+          merchantId: String(data.merchant_id),
+          amount: amt,
+          currency: String(data.currency ?? "JMD"),
+          kind: "merchant_payout_reversal",
+        });
+      }
+    } catch (dwErr) {
+      console.error("[dash finance] merchant_payout hold reverse dual-write failed:", dwErr);
+    }
     return c.json({ payout: data });
   });
 

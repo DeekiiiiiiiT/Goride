@@ -1,6 +1,6 @@
-import { projectId } from './supabaseInfo';
+import { getSupabaseFunctionsBaseUrl } from './functionsBaseUrl';
 
-const BASE_URL = `https://${projectId}.supabase.co/functions/v1`;
+const BASE_URL = getSupabaseFunctionsBaseUrl();
 
 /**
  * API Endpoints for all Roam services.

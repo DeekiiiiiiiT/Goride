@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { isLedgerDualWriteEnabled } from "./flags.ts";
+import { isLedgerDualWriteIslandEnabled } from "./flags.ts";
 import { ledgerPostEntry } from "./postEntry.ts";
+import { logDualWriteMetric } from "./metrics.ts";
 
 export type RidesJournalLineDualWrite = {
   rideId: string | null;
@@ -20,12 +21,9 @@ export type RidesJournalLineDualWrite = {
 function resolveRidesProduct(debitKey: string, creditKey: string): "roam_rides" | "roam_driver" {
   const isRiderInvolved = debitKey.includes(":rider") || creditKey.includes(":rider");
   const isDriverInvolved = debitKey.includes(":driver") || creditKey.includes(":driver");
-  
-  // If rider is involved, it's a passenger-side transaction
+
   if (isRiderInvolved) return "roam_rides";
-  // If only driver (no rider), it's driver earnings
   if (isDriverInvolved) return "roam_driver";
-  // Default to roam_rides for platform-only transactions
   return "roam_rides";
 }
 
@@ -35,7 +33,26 @@ export async function dualWriteRidesJournalLine(
   tables: { journal: string },
   line: RidesJournalLineDualWrite,
 ): Promise<void> {
-  if (!isLedgerDualWriteEnabled()) return;
+  if (!isLedgerDualWriteIslandEnabled("rides_payment_journal")) {
+    logDualWriteMetric({
+      source_system: "rides_payment_journal",
+      status: "skipped",
+      reason: "flag_off",
+      entry_type: line.entryType,
+    });
+    return;
+  }
+
+  if (Math.abs(line.amountMinor) <= 0) {
+    logDualWriteMetric({
+      source_system: "rides_payment_journal",
+      status: "skipped",
+      reason: "zero_amount",
+      entry_type: line.entryType,
+      amount_minor: line.amountMinor,
+    });
+    return;
+  }
 
   let sourceId = line.journalEntryId;
   if (!sourceId) {
@@ -51,24 +68,52 @@ export async function dualWriteRidesJournalLine(
   }
 
   const product = resolveRidesProduct(line.debitAccountKey, line.creditAccountKey);
+  const amountMinor = Math.abs(line.amountMinor);
 
-  await ledgerPostEntry({
-    idempotencyKey: `rides_payment_journal:${sourceId}`,
-    entryType: line.entryType,
-    debitAccountKey: line.debitAccountKey,
-    creditAccountKey: line.creditAccountKey,
-    amountMinor: line.amountMinor,
-    currency: line.currency,
-    requestHash: line.requestHash,
-    product,
-    referenceType: line.rideId ? "ride" : null,
-    referenceId: line.rideId,
-    metadata: line.metadata ?? {},
-    createdByUserId: line.createdByUserId ?? null,
-    sourceSystem: "rides_payment_journal",
-    sourceId: String(sourceId),
-    sourceIdempotencyKey: line.rowIdempotencyKey,
-  });
+  try {
+    const result = await ledgerPostEntry({
+      idempotencyKey: `rides_payment_journal:${sourceId}`,
+      entryType: line.entryType,
+      debitAccountKey: line.debitAccountKey,
+      creditAccountKey: line.creditAccountKey,
+      amountMinor,
+      currency: line.currency,
+      requestHash: line.requestHash,
+      product,
+      referenceType: line.rideId ? "ride" : null,
+      referenceId: line.rideId,
+      metadata: line.metadata ?? {},
+      createdByUserId: line.createdByUserId ?? null,
+      sourceSystem: "rides_payment_journal",
+      sourceId: String(sourceId),
+      sourceIdempotencyKey: line.rowIdempotencyKey,
+    });
+
+    logDualWriteMetric({
+      source_system: "rides_payment_journal",
+      status: result.inserted || result.skipped || result.conflict ? "ok" : "fail",
+      reason: result.conflict
+        ? "conflict"
+        : result.skipped
+        ? "idempotent_skip"
+        : result.inserted
+        ? "inserted"
+        : "unknown",
+      source_id: String(sourceId),
+      entry_type: line.entryType,
+      amount_minor: amountMinor,
+    });
+  } catch (e) {
+    logDualWriteMetric({
+      source_system: "rides_payment_journal",
+      status: "fail",
+      reason: e instanceof Error ? e.message : String(e),
+      source_id: sourceId ? String(sourceId) : null,
+      entry_type: line.entryType,
+      amount_minor: amountMinor,
+    });
+    throw e;
+  }
 }
 
 export type LedgerLineDualWrite = {
@@ -80,13 +125,13 @@ export type LedgerLineDualWrite = {
   currency?: string;
 };
 
-/** 
- * @deprecated Removed to fix double-counting. 
+/**
+ * @deprecated Removed to fix double-counting.
  * Cash settlement journal entries already record these amounts.
  * Kept for reference but not called from production code.
  */
 export async function dualWriteRideLedgerLine(line: LedgerLineDualWrite): Promise<void> {
-  if (!isLedgerDualWriteEnabled()) return;
+  if (!isLedgerDualWriteIslandEnabled("rides_ledger_lines")) return;
   const amount = Math.abs(line.paidToYouMinor);
   if (amount <= 0) return;
 
@@ -103,7 +148,7 @@ export async function dualWriteRideLedgerLine(line: LedgerLineDualWrite): Promis
     creditAccountKey: isCredit ? driverKey : "platform:clearing",
     amountMinor: amount,
     currency: line.currency ?? "JMD",
-    product: "roam_driver",  // Driver earnings
+    product: "roam_driver",
     referenceType: "ride",
     referenceId: line.rideId,
     metadata: { line_kind: line.lineKind, reporting_only: true },

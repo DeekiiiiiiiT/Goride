@@ -20,5 +20,7 @@ if (dsn) {
     replaysSessionSampleRate: 0.1,
     replaysOnErrorSampleRate: 1.0,
     enableLogs: true,
+    // Local Vite HMR/restarts — not product regressions (prod chunk URLs still report).
+    ignoreErrors: [/Failed to fetch dynamically imported module:.*(?:localhost|127\.0\.0\.1)/i],
   });
 }

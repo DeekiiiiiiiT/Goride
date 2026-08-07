@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import path from 'path';
+import { roamSupabaseDevProxy } from '@roam/api-client/viteDevProxy';
 
 const productLine = process.env.VITE_PRODUCT_LINE || 'fleet';
 const isEnterprise = productLine === 'enterprise';
@@ -17,6 +18,7 @@ export default defineConfig({
     'import.meta.env.VITE_PRODUCT_LINE': JSON.stringify(productLine),
   },
   plugins: [
+    roamSupabaseDevProxy(),
     react(),
     tailwindcss(),
     VitePWA({

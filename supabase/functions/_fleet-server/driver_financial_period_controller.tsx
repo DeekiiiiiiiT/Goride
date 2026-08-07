@@ -189,6 +189,13 @@ app.get(`${BASE}/health`, requirePermission('transactions.view'), async (c) => {
       // Peer KV sources are read-only compatibility only — SQL periods are SSOT for tabs.
       peerKvRetiredAsMoneySource: true,
     };
+    try {
+      const { shadowCompareAsync } = await import("../_shared/unifiedLedger/shadowRead.ts");
+      shadowCompareAsync({
+        island: "financial_event",
+        legacyCount: events || 0,
+      });
+    } catch { /* shadow best-effort */ }
     return c.json({
       success: true,
       health: {

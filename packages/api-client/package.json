@@ -9,5 +9,11 @@
   },
   "dependencies": {
     "@roam/types": "workspace:*"
+  },
+  "peerDependencies": {
+    "vite": ">=5"
+  },
+  "peerDependenciesMeta": {
+    "vite": { "optional": true }
   }
 }
