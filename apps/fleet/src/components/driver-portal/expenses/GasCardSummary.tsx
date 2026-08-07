@@ -35,7 +35,7 @@ export function GasCardSummary({
         </div>
         <h3 className="text-lg font-semibold text-slate-900">Gas Card Fill</h3>
         <p className="text-sm text-slate-500 max-w-xs">
-           Scan confirmed. Amount and liters come from the JAA card statement later.
+           Scan confirmed. Amount and liters come from the Roam Fuels statement later.
         </p>
       </div>
 
@@ -76,7 +76,7 @@ export function GasCardSummary({
 
       {cardMissing ? (
         <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
-          Ask your fleet manager to assign an Active JAA card to this vehicle in Card Inventory before logging a Gas Card fill.
+          Ask your fleet manager to assign an Active Roam Fuels card to this vehicle in Card Inventory before logging a Gas Card fill.
         </div>
       ) : (
         <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">

@@ -54,42 +54,79 @@ export function parseJaaTransDate(raw: string | undefined): { date: string; time
   return null;
 }
 
-export function classifyJaaRawRow(row: ParsedRow): JaaRowKind {
-  const response = (getVal(row, ['RESPONSE', 'Response', 'Status']) || '').toUpperCase();
-  const vendor = (getVal(row, ['VENDOR_NAME', 'Vendor', 'Merchant']) || '').toUpperCase();
-  const fuelType = (getVal(row, ['FUEL_TYPE', 'Fuel Type']) || '').toUpperCase();
-  const qty = parseAmount(getVal(row, ['DISPLAY_FUEL_QUANTITY', 'Fuel Quantity', 'Quantity']));
-  const fuelAmt = parseAmount(getVal(row, ['DISPLAY_FUEL_AMOUNT', 'Fuel Amount']));
+export function isIssuerFeeVendor(vendorRaw: string | undefined | null): boolean {
+  const v = String(vendorRaw || '').toUpperCase();
+  if (!v.trim()) return false;
+  return (
+    v.includes('SERVICE FEE') ||
+    v.includes('CARD FEE') ||
+    v.includes('CARD SERVICE') ||
+    v.includes('REGISTRATION FEE') ||
+    /^CARD\b.*\bFEE\b/.test(v)
+  );
+}
 
-  if (
+export function isDeclinedJaaResponse(responseRaw: string | undefined | null): boolean {
+  const response = String(responseRaw || '').toUpperCase();
+  if (!response.trim()) return false;
+  return (
     response.includes('INVALID') ||
     response.includes('DECLIN') ||
     response.includes('DENIED') ||
-    response.includes('REJECT')
-  ) {
+    response.includes('REJECT') ||
+    response.includes('LIMIT EXCEEDED') ||
+    // COMPANY LIMIT EXCEEDED, CREDIT LIMIT EXCEEDED, etc.
+    (response.includes('EXCEEDED') && !response.startsWith('APPR'))
+  );
+}
+
+/** Split overloaded JAA VENDOR_NAME into Roam Station vs Description. */
+export function resolveJaaStationDescription(
+  kind: JaaRowKind,
+  vendorRaw: string | undefined | null,
+): { station?: string; description?: string; vendorRaw?: string } {
+  const vendor = String(vendorRaw || '').trim() || undefined;
+  if (!vendor) return {};
+  if (kind === 'fee' || isIssuerFeeVendor(vendor)) {
+    return { description: vendor, vendorRaw: vendor };
+  }
+  return { station: vendor, vendorRaw: vendor };
+}
+
+export function classifyJaaRawRow(row: ParsedRow): JaaRowKind {
+  const response = (getVal(row, ['RESPONSE', 'Response', 'Status']) || '').toUpperCase();
+  const vendor = getVal(row, ['VENDOR_NAME', 'Vendor', 'Merchant']) || '';
+  const fuelType = (getVal(row, ['FUEL_TYPE', 'Fuel Type']) || '').toUpperCase();
+  const qty = parseAmount(getVal(row, ['DISPLAY_FUEL_QUANTITY', 'Fuel Quantity', 'Quantity']));
+  const fuelAmt = parseAmount(getVal(row, ['DISPLAY_FUEL_AMOUNT', 'Fuel Amount']));
+  const hasFuel = qty > 0 || fuelAmt > 0;
+  const feeVendor = isIssuerFeeVendor(vendor);
+
+  // 1) Declined / blocked pump attempts (incl. COMPANY LIMIT EXCEEDED)
+  if (isDeclinedJaaResponse(response)) {
     return 'declined';
   }
 
-  if (
-    vendor.includes('SERVICE FEE') ||
-    vendor.includes('CARD FEE') ||
-    vendor.includes('CARD SERVICE') ||
-    fuelType === '(NONE)' ||
-    fuelType === 'NONE' ||
-    ((!(qty > 0) && !(fuelAmt > 0)) && !response.startsWith('APPR'))
-  ) {
-    // Fees often show APPROVAL with zero fuel qty
-    if (!(qty > 0) && !(fuelAmt > 0)) return 'fee';
+  // 2) Issuer fees (CARD SERVICE FEE / REGISTRATION FEE / (None) zero-fuel APPROVALs)
+  if (feeVendor && !hasFuel) {
+    return 'fee';
   }
-
-  if (!(qty > 0) && !(fuelAmt > 0) && !response.startsWith('APPR')) {
+  if ((fuelType === '(NONE)' || fuelType === 'NONE') && !hasFuel && !feeVendor) {
+    // Zero-fuel + (None) without a station-style vendor → fee (typical issuer billing)
+    return 'fee';
+  }
+  if ((fuelType === '(NONE)' || fuelType === 'NONE') && !hasFuel && feeVendor) {
     return 'fee';
   }
 
-  // Approved / near-limit fuel with volume or fuel amount
-  if (qty > 0 || fuelAmt > 0 || response.startsWith('APPR')) {
-    if (!(qty > 0) && !(fuelAmt > 0)) return 'fee';
+  // 3) Real fuel (includes APPR-NEAR COMPANY CREDIT LIMIT)
+  if (hasFuel) {
     return 'approved_fuel';
+  }
+
+  // 4) Non-fee merchant + amount but no fuel → failed attempt at a station
+  if (!feeVendor && vendor.trim()) {
+    return 'declined';
   }
 
   return 'fee';
@@ -212,6 +249,7 @@ export function processJaaRawFuelData(
 
     const spendAmount = Math.abs(amountRaw);
     const isApprovedFuel = kind === 'approved_fuel';
+    const { station, description, vendorRaw } = resolveJaaStationDescription(kind, vendor);
 
     const entry: FuelEntry = {
       id: crypto.randomUUID(),
@@ -223,7 +261,8 @@ export function processJaaRawFuelData(
         isApprovedFuel && liters > 0
           ? Number((spendAmount / liters).toFixed(2))
           : undefined,
-      location: vendor,
+      // Station only — never fee labels
+      location: station,
       // Roam odometer truth only — never JAA mileage
       odometer: null,
       cardId: matchedCard?.id,
@@ -246,7 +285,10 @@ export function processJaaRawFuelData(
         jaaResponse: response,
         jaaFuelType: fuelType,
         jaaFuelAmount: !isNaN(fuelAmount) ? fuelAmount : undefined,
-        // Noise for display/debug only — not security
+        jaaStation: station,
+        jaaDescription: description,
+        jaaVendorRaw: vendorRaw,
+        // Noise for display/debug only — not security / not Assigned
         jaaDriverName,
         jaaVehiclePlate: jaaPlate,
         jaaMileage: !isNaN(jaaMileage) && jaaMileage > 0 ? jaaMileage : undefined,

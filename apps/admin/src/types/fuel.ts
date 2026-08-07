@@ -33,10 +33,37 @@ export interface JaaUnmatchedRow {
   response?: string;
   classification?: string;
   status: JaaUnmatchedStatus;
+  /** Links row to a JAA CSV upload batch for rollback */
+  importId?: string;
   resolvedCardId?: string;
   resolvedOrganizationId?: string;
   createdAt?: string;
   updatedAt?: string;
+}
+
+/** Admin-tracked JAA Raw CSV upload (rollback unit). Cards are never deleted with an import. */
+export interface JaaCsvImport {
+  id: string;
+  fileName: string;
+  uploadedAt: string;
+  createdAt?: string;
+  updatedAt?: string;
+  parsedRows: number;
+  savedEntries: number;
+  unmatchedCount: number;
+  skippedDuplicates?: number;
+  failedSaves?: number;
+  status?: string;
+  summary?: string | null;
+}
+
+export interface JaaCsvImportsResponse {
+  imports: JaaCsvImport[];
+  untracked: {
+    entryCount: number;
+    unmatchedCount: number;
+    hasData: boolean;
+  };
 }
 
 export interface FuelCard {

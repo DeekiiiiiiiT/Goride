@@ -92,8 +92,7 @@ import {
   jaaFuelLinesToParsedRows,
 } from '../../utils/jaaStatementDetailsParser';
 import {
-  matchJaaStatementToDriverLogs,
-  applyFuelMatchLinks,
+  buildJaaMatchUpdates,
   type FuelMatchPair,
 } from '../../utils/jaaFuelStatementMatcher';
 import { JaaFuelMatchReview } from '../fuel/JaaFuelMatchReview';
@@ -1043,20 +1042,13 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
 
               try {
                   const existing = await fuelService.getFuelEntries({ limit: 1000 });
-                  const pairs = matchJaaStatementToDriverLogs(saved, existing);
-                  const linked: FuelMatchPair[] = [];
-                  for (const pair of pairs) {
-                      if (pair.status === 'matched' || pair.status === 'amount_mismatch') {
-                          const { statement, driver } = applyFuelMatchLinks(pair);
-                          if (statement) await fuelService.saveFuelEntry(statement);
-                          if (driver) await fuelService.saveFuelEntry(driver);
-                      }
-                      linked.push(pair);
+                  const { pairs, updates, summary } = buildJaaMatchUpdates(saved, existing);
+                  for (const entry of updates) {
+                      await fuelService.saveFuelEntry(entry);
                   }
-                  setJaaMatchPairs(linked);
-                  const matchedCount = linked.filter((p) => p.status === 'matched').length;
-                  if (matchedCount > 0) {
-                      toast.success(`Matched ${matchedCount} JAA fill(s) to driver logs`);
+                  setJaaMatchPairs(pairs as FuelMatchPair[]);
+                  if (summary.matched > 0) {
+                      toast.success(`Matched ${summary.matched} JAA fill(s) to driver logs`);
                   }
               } catch (matchErr) {
                   console.warn('[Import] JAA match step failed', matchErr);

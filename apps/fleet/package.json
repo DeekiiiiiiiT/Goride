@@ -46,6 +46,7 @@
     "@roam/auth-client": "workspace:*",
     "@roam/business-config": "workspace:*",
     "@roam/platform-settings": "workspace:*",
+    "@roam/roam-shared": "workspace:*",
     "@roam/toll-ui": "workspace:*",
     "@roam/types": "workspace:*",
     "@roam/ui": "workspace:*",

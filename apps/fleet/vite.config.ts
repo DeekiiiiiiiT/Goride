@@ -157,8 +157,17 @@ export default defineConfig({
       '@radix-ui/react-alert-dialog@1.1.6': '@radix-ui/react-alert-dialog',
       '@radix-ui/react-accordion@1.2.3': '@radix-ui/react-accordion',
       '@jsr/supabase__supabase-js@2.49.8': '@jsr/supabase__supabase-js',
+      '@roam/roam-shared': path.resolve(__dirname, '../../packages/roam-shared/src/index.ts'),
+      '@roam/roam-shared/fuel': path.resolve(
+        __dirname,
+        '../../packages/roam-shared/src/fuel/jaaFuelStatementMatcher.ts',
+      ),
       '@': path.resolve(__dirname, './src'),
     },
+  },
+  optimizeDeps: {
+    include: [],
+    exclude: ['@roam/roam-shared'],
   },
   build: {
     target: 'esnext',
@@ -170,6 +179,9 @@ export default defineConfig({
     host: 'localhost',
     strictPort: true,
     open: true,
+    fs: {
+      allow: [path.resolve(__dirname, '../..')],
+    },
   },
   test: {
     environment: 'node',

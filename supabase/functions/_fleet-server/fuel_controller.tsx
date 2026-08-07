@@ -324,6 +324,7 @@ app.post(`${BASE_PATH}/jaa-unmatched`, requirePlatformStaff(), async (c) => {
         response: raw.response || raw.RESPONSE || "",
         classification: raw.classification || "unknown",
         status: "open",
+        importId: raw.importId || prior?.importId || undefined,
         updatedAt: new Date().toISOString(),
         createdAt: prior?.createdAt || new Date().toISOString(),
       };
@@ -352,6 +353,259 @@ app.patch(`${BASE_PATH}/jaa-unmatched/:id`, requirePlatformStaff(), async (c) =>
     await kv.set(`jaa_unmatched:${id}`, updated);
     return c.json({ success: true, data: updated });
   } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+/** Remove fuel_entry rows + ledger links matching a predicate (platform admin). */
+async function purgeFuelEntriesWhere(
+  predicate: (entry: any) => boolean,
+): Promise<{ deletedEntryIds: string[]; count: number }> {
+  const entries = (await kv.getByPrefix("fuel_entry:")) || [];
+  const deletedEntryIds: string[] = [];
+  for (const entry of entries) {
+    if (!entry?.id || !predicate(entry)) continue;
+    await kv.del(`fuel_entry:${entry.id}`);
+    deletedEntryIds.push(String(entry.id));
+  }
+  if (deletedEntryIds.length) {
+    try {
+      await deleteCanonicalLedgerBySource("transaction", deletedEntryIds);
+    } catch (le: any) {
+      console.warn(`[jaa-csv-imports] ledger cleanup non-fatal:`, le?.message);
+    }
+  }
+  return { deletedEntryIds, count: deletedEntryIds.length };
+}
+
+async function purgeUnmatchedWhere(predicate: (row: any) => boolean): Promise<number> {
+  const rows = (await kv.getByPrefix("jaa_unmatched:")) || [];
+  let count = 0;
+  for (const row of rows) {
+    if (!row?.id || !predicate(row)) continue;
+    await kv.del(`jaa_unmatched:${row.id}`);
+    count++;
+  }
+  return count;
+}
+
+// --- JAA CSV IMPORT BATCHES (track uploads for rollback) ---
+app.get(`${BASE_PATH}/jaa-csv-imports`, requirePlatformStaff(), async (c) => {
+  try {
+    const imports = (await kv.getByPrefix("jaa_csv_import:")) || [];
+    imports.sort((a: any, b: any) =>
+      String(b.uploadedAt || b.createdAt || "").localeCompare(String(a.uploadedAt || a.createdAt || "")),
+    );
+
+    // Surface orphan JAA statement data (pre-tracking uploads)
+    const entries = (await kv.getByPrefix("fuel_entry:")) || [];
+    const unmatched = (await kv.getByPrefix("jaa_unmatched:")) || [];
+    const orphanEntries = entries.filter(
+      (e: any) =>
+        e?.metadata?.importSource === "jaa_raw" && !e?.metadata?.jaaImportId,
+    ).length;
+    const orphanUnmatched = unmatched.filter((r: any) => !r?.importId).length;
+
+    return c.json({
+      imports,
+      untracked: {
+        entryCount: orphanEntries,
+        unmatchedCount: orphanUnmatched,
+        hasData: orphanEntries > 0 || orphanUnmatched > 0,
+      },
+    });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.post(`${BASE_PATH}/jaa-csv-imports`, requirePlatformStaff(), async (c) => {
+  try {
+    const body = await c.req.json();
+    const id = String(body.id || crypto.randomUUID());
+    const now = new Date().toISOString();
+    const existing = await kv.get(`jaa_csv_import:${id}`);
+    const record = {
+      id,
+      fileName: String(body.fileName || existing?.fileName || "upload.csv"),
+      uploadedAt: existing?.uploadedAt || body.uploadedAt || now,
+      createdAt: existing?.createdAt || now,
+      updatedAt: now,
+      parsedRows: Number(body.parsedRows ?? existing?.parsedRows) || 0,
+      savedEntries: Number(body.savedEntries ?? existing?.savedEntries) || 0,
+      unmatchedCount: Number(body.unmatchedCount ?? existing?.unmatchedCount) || 0,
+      skippedDuplicates: Number(body.skippedDuplicates ?? existing?.skippedDuplicates) || 0,
+      failedSaves: Number(body.failedSaves ?? existing?.failedSaves) || 0,
+      status: body.status || existing?.status || "completed",
+      summary: body.summary ?? existing?.summary ?? null,
+    };
+    await kv.set(`jaa_csv_import:${id}`, record);
+    return c.json({ success: true, data: record });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+/** Wipe JAA statement rows that pre-date import tracking (cards kept). */
+app.delete(`${BASE_PATH}/jaa-csv-imports/untracked`, requirePlatformStaff(), async (c) => {
+  try {
+    const { count: entriesDeleted } = await purgeFuelEntriesWhere(
+      (e) => e?.metadata?.importSource === "jaa_raw" && !e?.metadata?.jaaImportId,
+    );
+    const unmatchedDeleted = await purgeUnmatchedWhere((r) => !r?.importId);
+    return c.json({
+      success: true,
+      entriesDeleted,
+      unmatchedDeleted,
+      cardsKept: true,
+    });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.delete(`${BASE_PATH}/jaa-csv-imports/:id`, requirePlatformStaff(), async (c) => {
+  try {
+    const id = c.req.param("id");
+    if (id === "untracked") {
+      // Handled by dedicated route; keep for safety if router order differs
+      return c.json({ error: "Use /jaa-csv-imports/untracked" }, 400);
+    }
+    const existing = await kv.get(`jaa_csv_import:${id}`);
+    if (!existing) return c.json({ error: "Import not found" }, 404);
+
+    const { count: entriesDeleted } = await purgeFuelEntriesWhere(
+      (e) => String(e?.metadata?.jaaImportId || "") === id,
+    );
+    const unmatchedDeleted = await purgeUnmatchedWhere(
+      (r) => String(r?.importId || "") === id,
+    );
+    await kv.del(`jaa_csv_import:${id}`);
+
+    return c.json({
+      success: true,
+      importId: id,
+      entriesDeleted,
+      unmatchedDeleted,
+      cardsKept: true,
+    });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+/**
+ * Recover JAA statement rows that were incorrectly gate-held as `transaction:*`
+ * (no GPS) into proper `fuel_entry:*` records, deduped by receipt number.
+ */
+app.post(`${BASE_PATH}/admin/jaa-promote-gateheld`, requirePlatformStaff(), async (c) => {
+  try {
+    const transactions = (await kv.getByPrefix("transaction:")) || [];
+    const held = transactions.filter(
+      (tx: any) =>
+        tx?.metadata?.importSource === "jaa_raw" &&
+        (tx.metadata?.stationGateHold === true || tx.metadata?.stationGateHold === "true"),
+    );
+    if (!held.length) {
+      return c.json({ success: true, promoted: 0, deletedDupes: 0, message: "Nothing to promote" });
+    }
+
+    const cards = (await kv.getByPrefix("fuel_card:")) || [];
+    const existingEntries = (await kv.getByPrefix("fuel_entry:")) || [];
+    const existingReceipts = new Set(
+      existingEntries
+        .map((e: any) => String(e?.metadata?.jaaReceiptNumber || "").toUpperCase())
+        .filter(Boolean),
+    );
+    const byReceipt = new Map<string, any>();
+    for (const tx of held) {
+      const receipt = String(tx.metadata?.jaaReceiptNumber || "").trim().toUpperCase();
+      if (!receipt) continue;
+      const prev = byReceipt.get(receipt);
+      // Prefer rows tagged with an import batch id
+      if (!prev || (!prev.metadata?.jaaImportId && tx.metadata?.jaaImportId)) {
+        byReceipt.set(receipt, tx);
+      }
+    }
+
+    let promoted = 0;
+    for (const tx of byReceipt.values()) {
+      const cardCode = String(tx.metadata?.jaaCardCode || "");
+      const card = cards.find((c: any) => {
+        const a = String(c.cardNumber || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+        const b = cardCode.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+        return a && b && (a === b || a.endsWith(b) || b.endsWith(a));
+      });
+      const liters = Number(tx.quantity ?? tx.metadata?.fuelVolume) || undefined;
+      const amount = Math.abs(Number(tx.amount) || 0);
+      const kind = String(tx.metadata?.jaaRowKind || "");
+      const isApprovedFuel = kind === "approved_fuel";
+      const vendor =
+        String(tx.metadata?.stationLocation || tx.metadata?.originalVendor || tx.vendor || "").trim() ||
+        undefined;
+      const receipt = String(tx.metadata?.jaaReceiptNumber || "").toUpperCase();
+
+      if (receipt && existingReceipts.has(receipt)) continue;
+      const existingEntry = await kv.get(`fuel_entry:${tx.id}`);
+      if (existingEntry) continue;
+
+      const entry: Record<string, unknown> = {
+        id: tx.id,
+        date: String(tx.date || "").slice(0, 10),
+        time: tx.time || undefined,
+        amount,
+        liters: isApprovedFuel && liters && liters > 0 ? liters : undefined,
+        pricePerLiter:
+          isApprovedFuel && liters && liters > 0
+            ? Number((amount / liters).toFixed(2))
+            : tx.metadata?.pricePerLiter,
+        location: vendor,
+        odometer: null,
+        cardId: card?.id,
+        vehicleId: card?.assignedVehicleId,
+        driverId: card?.assignedDriverId,
+        organizationId: card?.organizationId,
+        type: "Card_Transaction",
+        entryMode: "Floating",
+        paymentSource: "Gas_Card",
+        entrySource: "fuel-card",
+        reconciliationStatus: isApprovedFuel ? "Pending" : "Archived",
+        metadata: {
+          ...tx.metadata,
+          stationGateHold: false,
+          locationStatus: "statement_vendor",
+          verificationMethod: "jaa_issuer_statement",
+          promotedFromGateHold: true,
+          countsInFuelSpend: isApprovedFuel,
+          countsInFuelVolume: isApprovedFuel && !!liters && liters > 0,
+        },
+      };
+
+      await kv.set(`fuel_entry:${entry.id}`, entry);
+      if (receipt) existingReceipts.add(receipt);
+      promoted++;
+    }
+
+    let deletedDupes = 0;
+    const learntIds = new Set<string>();
+    for (const tx of held) {
+      if (tx.metadata?.learntLocationId) learntIds.add(String(tx.metadata.learntLocationId));
+      await kv.del(`transaction:${tx.id}`);
+      deletedDupes++;
+    }
+    for (const lid of learntIds) {
+      await kv.del(`learnt_location:${lid}`);
+    }
+
+    return c.json({
+      success: true,
+      promoted,
+      deletedDupes,
+      uniqueReceipts: byReceipt.size,
+      learntCleared: learntIds.size,
+    });
+  } catch (e: any) {
+    console.error("[jaa-promote-gateheld]", e);
     return c.json({ error: e.message }, 500);
   }
 });
@@ -3268,6 +3522,29 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
     // If the user explicitly selected a verified station in the modal dropdown,
     // honor that selection and skip automatic GPS matching / gate-hold entirely.
     let skipGpsMatching = false;
+    // Issuer statement rows (JAA Raw CSV) have no GPS — must land as fuel_entry, not Learnt/gate-hold.
+    const metaImportSource = String(entry.metadata?.importSource || "");
+    const isJaaIssuerStatement =
+      metaImportSource === "jaa_raw" ||
+      !!(entry.metadata?.jaaImportId) ||
+      !!(entry.metadata?.jaaReceiptNumber && entry.type === "Card_Transaction" && entry.entrySource === "fuel-card");
+    if (isJaaIssuerStatement) {
+      skipGpsMatching = true;
+      entry.metadata = {
+        ...(entry.metadata || {}),
+        locationStatus: entry.metadata?.locationStatus || "statement_vendor",
+        verificationMethod: entry.metadata?.verificationMethod || "jaa_issuer_statement",
+        stationGateHold: false,
+      };
+      if (!entry.location && (entry.vendor || entry.metadata?.originalVendor)) {
+        entry.location = entry.vendor || entry.metadata.originalVendor;
+      }
+      // Prefer VENDOR_NAME from statement when gate path previously stripped it
+      const vendorFromMeta = String(entry.metadata?.stationLocation || entry.location || "").trim();
+      if (vendorFromMeta && (!entry.location || entry.location === "Unknown")) {
+        entry.location = vendorFromMeta;
+      }
+    }
     if (entry.matchedStationId) {
         const manualStation = await kv.get(`station:${entry.matchedStationId}`);
         if (manualStation && manualStation.status === 'verified') {

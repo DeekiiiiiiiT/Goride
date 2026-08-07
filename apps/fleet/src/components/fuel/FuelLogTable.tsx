@@ -65,6 +65,7 @@ import { usePermissions } from '../../hooks/usePermissions';
 import { isEntryInInclusiveYmdRange, toEntryYmd } from '../../utils/fuelWeekPeriod';
 import { resolveFuelEntrySource } from '../../utils/fuelEntrySource';
 import { countsInGasCardSpend, isGasCardFuelEntry } from '../../utils/fuelPaidByDriver';
+import { isJaaStatementLedgerRow } from '../../utils/jaaFuelStatementMatcher';
 
 /** Exclude fees, declines, and awaiting-statement $0 anchors from spend totals. */
 function countsInFuelLogSpend(entry: FuelEntry): boolean {
@@ -211,6 +212,8 @@ export function FuelLogTable({
     };
 
     const filteredEntries = entries.filter(entry => {
+        // Statement ledger belongs on Card Inventory — never Transaction Logs
+        if (isJaaStatementLedgerRow(entry)) return false;
         if (filterType !== 'all') {
             if (filterType === 'Fuel_Manual_Entry') {
                 if (!isManualEntry(entry)) return false;
@@ -274,6 +277,7 @@ export function FuelLogTable({
 
     const stats = useMemo(() => {
         const auditScopeEntries = entries.filter(entry => {
+            if (isJaaStatementLedgerRow(entry)) return false;
             if (!dateRange?.from && !dateRange?.to) return true;
             const startYmd = dateRange.from ? toEntryYmd(dateRange.from) : '0000-01-01';
             const endYmd = dateRange.to ? toEntryYmd(dateRange.to) : (dateRange.from ? toEntryYmd(dateRange.from) : '9999-12-31');
@@ -1121,19 +1125,29 @@ export function FuelLogTable({
                             {/* Content */}
                             <div className="p-5 space-y-5 max-h-[65vh] overflow-y-auto">
                                 {/* Key Metrics Row */}
-                                <div className="grid grid-cols-3 gap-3">
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                                     <div className="bg-emerald-50 rounded-lg p-3 text-center border border-emerald-100">
                                         <p className="text-[10px] text-emerald-600 font-semibold uppercase tracking-wider">Amount</p>
                                         <p className="text-lg font-bold text-emerald-700">${(entry.amount ?? 0).toFixed(2)}</p>
                                     </div>
                                     <div className="bg-blue-50 rounded-lg p-3 text-center border border-blue-100">
                                         <p className="text-[10px] text-blue-600 font-semibold uppercase tracking-wider">Volume</p>
-                                        <p className="text-lg font-bold text-blue-700">{entry.liters?.toFixed(1) || '0'} L</p>
+                                        <p className="text-lg font-bold text-blue-700">{entry.liters?.toFixed(2) || '0'} L</p>
                                         <p className="text-[9px] text-blue-500">{fillPct.toFixed(0)}% of tank</p>
                                     </div>
                                     <div className="bg-violet-50 rounded-lg p-3 text-center border border-violet-100">
                                         <p className="text-[10px] text-violet-600 font-semibold uppercase tracking-wider">Price/L</p>
-                                        <p className="text-lg font-bold text-violet-700">${(entry.pricePerLiter || (entry.amount && entry.liters ? entry.amount / entry.liters : 0)).toFixed(3)}</p>
+                                        <p className="text-lg font-bold text-violet-700">${(entry.pricePerLiter || (entry.amount && entry.liters ? entry.amount / entry.liters : 0)).toFixed(2)}</p>
+                                    </div>
+                                    <div className="bg-amber-50 rounded-lg p-3 text-center border border-amber-100">
+                                        <p className="text-[10px] text-amber-700 font-semibold uppercase tracking-wider">Fuel type</p>
+                                        <p className="text-sm font-bold text-amber-900 leading-tight break-words">
+                                          {String(
+                                            entry.fuelType ||
+                                              (entry.metadata as any)?.jaaFuelType ||
+                                              '—',
+                                          )}
+                                        </p>
                                     </div>
                                 </div>
 

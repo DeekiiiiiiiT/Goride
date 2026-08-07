@@ -18,30 +18,46 @@ import {
     DropdownMenuSeparator, 
     DropdownMenuTrigger 
 } from "../ui/dropdown-menu";
-import { Search, MoreHorizontal, Pencil, Trash2, CreditCard, User, Car, Eye } from "lucide-react";
+import { Search, MoreHorizontal, Pencil, Trash2, CreditCard, User, Car, Eye, UserPlus } from "lucide-react";
 import { FuelCard } from '../../types/fuel';
 import { FuelCardTransactionsSheet } from './FuelCardTransactionsSheet';
+import { getCustomerFacingFuelProvider, ROAM_FUEL_PROVIDER_LABEL } from '../../utils/fuelCardDisplay';
 
 interface FuelCardListProps {
     cards: FuelCard[];
     drivers: any[];
     onEdit: (card: FuelCard) => void;
+    /** Roam-managed cards only — opens assign-driver flow */
+    onAssignDriver: (card: FuelCard) => void;
     onDelete: (cardId: string) => void;
+    isRoamManaged: (card: FuelCard) => boolean;
     getVehicleName: (id?: string) => string;
     getDriverName: (id?: string) => string;
 }
 
-export function FuelCardList({ cards, drivers, onEdit, onDelete, getVehicleName, getDriverName }: FuelCardListProps) {
+export function FuelCardList({
+    cards,
+    drivers,
+    onEdit,
+    onAssignDriver,
+    onDelete,
+    isRoamManaged,
+    getVehicleName,
+    getDriverName,
+}: FuelCardListProps) {
     const [searchTerm, setSearchTerm] = useState('');
     const [viewCard, setViewCard] = useState<FuelCard | null>(null);
 
     const q = searchTerm.toLowerCase();
     const filteredCards = cards.filter((card) => {
+        const roamManaged = isRoamManaged(card);
+        const displayProvider = getCustomerFacingFuelProvider(card, roamManaged).toLowerCase();
         const typeLabel =
             card.jaaCardType === 'rental' ? 'rental' : card.jaaCardType === 'driver_tied' ? 'driver' : '';
         return (
             card.cardNumber.toLowerCase().includes(q) ||
-            card.provider.toLowerCase().includes(q) ||
+            displayProvider.includes(q) ||
+            (roamManaged && ROAM_FUEL_PROVIDER_LABEL.toLowerCase().includes(q)) ||
             typeLabel.includes(q) ||
             getVehicleName(card.assignedVehicleId).toLowerCase().includes(q) ||
             getDriverName(card.assignedDriverId).toLowerCase().includes(q)
@@ -67,46 +83,33 @@ export function FuelCardList({ cards, drivers, onEdit, onDelete, getVehicleName,
                     <TableHeader>
                         <TableRow>
                             <TableHead>Provider</TableHead>
-                            <TableHead>Card Code (JAA)</TableHead>
-                            <TableHead>Type</TableHead>
+                            <TableHead>Card Code</TableHead>
                             <TableHead>Assigned To</TableHead>
                             <TableHead>Status</TableHead>
-                            <TableHead>Expiry</TableHead>
                             <TableHead className="text-right">Actions</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         {filteredCards.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={7} className="h-24 text-center text-slate-500">
+                                <TableCell colSpan={5} className="h-24 text-center text-slate-500">
                                     No cards found.
                                 </TableCell>
                             </TableRow>
                         ) : (
-                            filteredCards.map((card) => (
+                            filteredCards.map((card) => {
+                                const roamManaged = isRoamManaged(card);
+                                return (
                                 <TableRow key={card.id}>
                                     <TableCell className="font-medium">
                                         <div className="flex items-center gap-2">
                                             <div className="h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-600">
                                                 <CreditCard className="h-4 w-4" />
                                             </div>
-                                            {card.provider}
+                                            {getCustomerFacingFuelProvider(card, roamManaged)}
                                         </div>
                                     </TableCell>
                                     <TableCell className="font-mono">{card.cardNumber}</TableCell>
-                                    <TableCell>
-                                        {card.jaaCardType === 'rental' ? (
-                                            <Badge variant="outline" className="bg-amber-50 text-amber-800 border-amber-200">
-                                                Rental
-                                            </Badge>
-                                        ) : card.jaaCardType === 'driver_tied' ? (
-                                            <Badge variant="outline" className="bg-violet-50 text-violet-800 border-violet-200">
-                                                Driver
-                                            </Badge>
-                                        ) : (
-                                            <span className="text-slate-400 text-xs">—</span>
-                                        )}
-                                    </TableCell>
                                     <TableCell>
                                         {card.assignedVehicleId ? (
                                             <div className="flex items-center gap-1.5 text-sm">
@@ -144,9 +147,6 @@ export function FuelCardList({ cards, drivers, onEdit, onDelete, getVehicleName,
                                             })()}
                                         </div>
                                     </TableCell>
-                                    <TableCell>
-                                        {card.expiryDate ? new Date(card.expiryDate).toLocaleDateString() : 'No expiration'}
-                                    </TableCell>
                                     <TableCell className="text-right">
                                         <div className="flex items-center justify-end gap-1">
                                             <Button
@@ -170,19 +170,28 @@ export function FuelCardList({ cards, drivers, onEdit, onDelete, getVehicleName,
                                                 <DropdownMenuItem onClick={() => setViewCard(card)}>
                                                     <Eye className="mr-2 h-4 w-4" /> View transactions
                                                 </DropdownMenuItem>
-                                                <DropdownMenuItem onClick={() => onEdit(card)}>
-                                                    <Pencil className="mr-2 h-4 w-4" /> Edit Details
-                                                </DropdownMenuItem>
-                                                <DropdownMenuSeparator />
-                                                <DropdownMenuItem className="text-rose-600" onClick={() => onDelete(card.id)}>
-                                                    <Trash2 className="mr-2 h-4 w-4" /> Delete Card
-                                                </DropdownMenuItem>
+                                                {roamManaged ? (
+                                                    <DropdownMenuItem onClick={() => onAssignDriver(card)}>
+                                                        <UserPlus className="mr-2 h-4 w-4" /> Assign Driver
+                                                    </DropdownMenuItem>
+                                                ) : (
+                                                    <>
+                                                        <DropdownMenuItem onClick={() => onEdit(card)}>
+                                                            <Pencil className="mr-2 h-4 w-4" /> Edit Details
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuSeparator />
+                                                        <DropdownMenuItem className="text-rose-600" onClick={() => onDelete(card.id)}>
+                                                            <Trash2 className="mr-2 h-4 w-4" /> Delete Card
+                                                        </DropdownMenuItem>
+                                                    </>
+                                                )}
                                             </DropdownMenuContent>
                                         </DropdownMenu>
                                         </div>
                                     </TableCell>
                                 </TableRow>
-                            ))
+                                );
+                            })
                         )}
                     </TableBody>
                 </Table>
@@ -194,6 +203,7 @@ export function FuelCardList({ cards, drivers, onEdit, onDelete, getVehicleName,
                 onOpenChange={(open) => { if (!open) setViewCard(null); }}
                 getDriverName={getDriverName}
                 getVehicleName={getVehicleName}
+                isRoamManaged={viewCard ? isRoamManaged(viewCard) : false}
             />
         </div>
     );

@@ -5,6 +5,7 @@ import { Button } from '../components/ui/button';
 import { Plus, RefreshCw, History, Loader2, Flag } from 'lucide-react';
 import { FuelCardList } from '../components/fuel/FuelCardList';
 import { FuelCardModal } from '../components/fuel/FuelCardModal';
+import { FuelCardAssignModal } from '../components/fuel/FuelCardAssignModal';
 import { FuelLogModal } from '../components/fuel/FuelLogModal';
 import { FuelLogTable } from '../components/fuel/FuelLogTable';
 import { FuelConfiguration } from '../components/fuel/FuelConfiguration';
@@ -170,6 +171,7 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
   const [jaaPrograms, setJaaPrograms] = useState<JaaProgram[]>([]);
   const [isCardModalOpen, setIsCardModalOpen] = useState(false);
   const [editingCard, setEditingCard] = useState<FuelCard | null>(null);
+  const [assigningCard, setAssigningCard] = useState<FuelCard | null>(null);
 
   const selfServePrograms = useMemo(
     () => jaaPrograms.filter((p) => p.mode === 'self_serve'),
@@ -348,20 +350,22 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
   const handleSaveCard = useCallback(async (card: FuelCard) => {
       try {
           const savedCard = await fuelService.saveFuelCard(card);
-          if (editingCard) {
+          const exists = cards.some((c) => c.id === savedCard.id);
+          if (exists || editingCard || assigningCard) {
               setCards(prev => prev.map(c => c.id === savedCard.id ? savedCard : c));
-              toast.success("Fuel card updated");
+              toast.success(assigningCard ? "Driver assignment saved" : "Fuel card updated");
           } else {
               setCards(prev => [...prev, savedCard]);
               toast.success("Fuel card added");
           }
           setIsCardModalOpen(false);
           setEditingCard(null);
+          setAssigningCard(null);
       } catch (e: any) {
           console.error(e);
           toast.error(e?.message || "Failed to save fuel card");
       }
-  }, [editingCard]);
+  }, [editingCard, assigningCard, cards]);
 
   const handleDeleteCard = useCallback(async (id: string) => {
       const card = cards.find((c) => c.id === id);
@@ -1106,13 +1110,13 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
             <div className="flex justify-between items-center">
                 <div className="space-y-1 text-sm text-slate-500">
                   {selfServePrograms.length === 0
-                    ? 'Roam-managed JAA cards: assign drivers/vehicles only. Statement CSV is uploaded by Roam.'
-                    : 'Self-serve JAA: add your cards and upload your own Raw CSV in Imports.'}
+                    ? 'Roam Fuels cards: assign drivers/vehicles only. Statement CSV is uploaded by Roam.'
+                    : 'Self-serve fuel cards: add your cards and upload your own statement CSV in Imports.'}
                 </div>
                 <Button
                   onClick={() => {
                     if (selfServePrograms.length === 0) {
-                      toast.message('Ask Roam admin to issue JAA cards, or register a self-serve JAA program.');
+                      toast.message('Ask Roam admin to issue Roam Fuels cards, or register a self-serve fuel program.');
                     }
                     setEditingCard(null);
                     setIsCardModalOpen(true);
@@ -1127,7 +1131,9 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
                 cards={cards}
                 drivers={drivers}
                 onEdit={(card) => { setEditingCard(card); setIsCardModalOpen(true); }}
+                onAssignDriver={(card) => setAssigningCard(card)}
                 onDelete={handleDeleteCard}
+                isRoamManaged={isRoamManagedCard}
                 getVehicleName={getVehicleName}
                 getDriverName={getDriverName}
             />
@@ -1181,8 +1187,19 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
               companyCode: p.companyCode,
               displayName: p.displayName,
             }))}
-            lockIdentity={isRoamManagedCard(editingCard)}
+            lockIdentity={false}
       />
+      )}
+
+      {assigningCard && (
+        <FuelCardAssignModal
+          isOpen={!!assigningCard}
+          onClose={() => setAssigningCard(null)}
+          onSave={handleSaveCard}
+          card={assigningCard}
+          drivers={drivers}
+          vehicles={vehicles}
+        />
       )}
 
       {isLogModalOpen && (
@@ -1194,6 +1211,7 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
             vehicles={vehicles}
             drivers={drivers}
             cards={cards}
+            isRoamManagedCard={isRoamManagedCard}
       />
       )}
 

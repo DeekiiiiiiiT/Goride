@@ -37,6 +37,11 @@ export default defineConfig({
     alias: [
       { find: '@', replacement: adminSrc },
       { find: '@roam/toll-ui', replacement: path.resolve(repoRoot, 'packages/toll-ui/src/index.ts') },
+      { find: '@roam/roam-shared', replacement: path.resolve(repoRoot, 'packages/roam-shared/src/index.ts') },
+      {
+        find: '@roam/roam-shared/fuel',
+        replacement: path.resolve(repoRoot, 'packages/roam-shared/src/fuel/jaaFuelStatementMatcher.ts'),
+      },
       { find: '@roam/types/tollCrossings', replacement: path.resolve(repoRoot, 'packages/types/src/tollCrossings.ts') },
       { find: '@roam/types/rides', replacement: path.resolve(repoRoot, 'packages/types/src/rides.ts') },
       /** Reuse fleet Super-Admin–equivalent screens without duplicating code */

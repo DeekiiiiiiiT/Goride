@@ -1067,6 +1067,9 @@ importers:
       '@roam/platform-settings':
         specifier: workspace:*
         version: link:../../packages/platform-settings
+      '@roam/roam-shared':
+        specifier: workspace:*
+        version: link:../../packages/roam-shared
       '@roam/toll-ui':
         specifier: workspace:*
         version: link:../../packages/toll-ui
@@ -1580,6 +1583,10 @@ importers:
       react-dom:
         specifier: ^18.0.0
         version: 18.3.1(react@18.3.1)
+    devDependencies:
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(lightningcss@1.30.1)(terser@5.49.0)
 
   packages/toll-ui:
     dependencies:

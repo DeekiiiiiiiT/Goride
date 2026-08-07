@@ -553,7 +553,7 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
         } as any);
 
         if (submitTimedOut) return;
-        toast.success('Gas Card odometer logged — waiting for JAA statement');
+        toast.success('Gas Card odometer logged — waiting for Roam Fuels statement');
         setViewState('list');
         resetForm();
         fetchTransactions();

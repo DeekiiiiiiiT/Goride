@@ -6,7 +6,11 @@
   "types": "src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./ErrorBoundary": "./src/ErrorBoundary.tsx"
+    "./ErrorBoundary": "./src/ErrorBoundary.tsx",
+    "./fuel": "./src/fuel/jaaFuelStatementMatcher.ts"
+  },
+  "scripts": {
+    "test": "vitest run"
   },
   "peerDependencies": {
     "react": "^18.0.0",
@@ -15,5 +19,8 @@
   "dependencies": {
     "@roam/api-client": "workspace:*",
     "lucide-react": "^0.487.0"
+  },
+  "devDependencies": {
+    "vitest": "^3.2.4"
   }
 }

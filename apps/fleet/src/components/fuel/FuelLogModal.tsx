@@ -13,6 +13,7 @@ import { Plus, X, History, Loader2, MapPin, Building2, Fuel } from 'lucide-react
 import { toast } from "sonner@2.0.3";
 import { fuelService } from '../../services/fuelService';
 import { useQuery } from '@tanstack/react-query';
+import { formatCustomerFacingFuelCardLabel } from '../../utils/fuelCardDisplay';
 
 const PAYMENT_SOURCE_MAP: Record<string, string> = {
     'driver_cash': 'Personal',
@@ -48,9 +49,19 @@ interface FuelLogModalProps {
     vehicles: any[];
     drivers: any[];
     cards: FuelCard[];
+    isRoamManagedCard?: (card: FuelCard) => boolean;
 }
 
-export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, drivers, cards }: FuelLogModalProps) {
+export function FuelLogModal({
+    isOpen,
+    onClose,
+    onSave,
+    initialData,
+    vehicles,
+    drivers,
+    cards,
+    isRoamManagedCard,
+}: FuelLogModalProps) {
     // Phase 5: Use React Query for parent companies caching
     const { data: parentCompaniesData = [] } = useQuery({
         queryKey: ['parentCompanies'],
@@ -542,7 +553,9 @@ export function FuelLogModal({ isOpen, onClose, onSave, initialData, vehicles, d
                                         <SelectTrigger><SelectValue placeholder="Select Fuel Card" /></SelectTrigger>
                                         <SelectContent>
                                             {cards.filter(c => c.status === 'Active').map(c => (
-                                                <SelectItem key={c.id} value={c.id}>{c.provider} - {c.cardNumber}</SelectItem>
+                                                <SelectItem key={c.id} value={c.id}>
+                                                    {formatCustomerFacingFuelCardLabel(c, !!isRoamManagedCard?.(c))}
+                                                </SelectItem>
                                             ))}
                                         </SelectContent>
                                     </Select>

@@ -1,6 +1,6 @@
 import { projectId, publicAnonKey } from '../utils/supabase/info';
 import { supabase } from '../utils/supabase/client';
-import { FuelCard, FuelEntry, MileageAdjustment, FuelScenario, JaaProgram, JaaUnmatchedRow } from '../types/fuel';
+import { FuelCard, FuelEntry, MileageAdjustment, FuelScenario, JaaProgram, JaaUnmatchedRow, JaaCsvImport, JaaCsvImportsResponse } from '../types/fuel';
 import { FinancialTransaction } from '../types/data';
 import { API_ENDPOINTS } from './apiConfig';
 import { settlementService } from './settlementService';
@@ -125,6 +125,67 @@ export const fuelService = {
     return result.data || result;
   },
 
+  async getJaaCsvImports(): Promise<JaaCsvImportsResponse> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/jaa-csv-imports`, {
+      headers: await authHeaders(null),
+    });
+    if (!response.ok) throw new Error("Failed to fetch CSV imports");
+    return response.json();
+  },
+
+  async saveJaaCsvImport(record: Partial<JaaCsvImport>): Promise<JaaCsvImport> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/jaa-csv-imports`, {
+      method: 'POST',
+      headers: await authHeaders(),
+      body: JSON.stringify(record),
+    });
+    if (!response.ok) throw new Error("Failed to save CSV import record");
+    const result = await response.json();
+    return result.data || result;
+  },
+
+  async deleteJaaCsvImport(id: string): Promise<{ entriesDeleted: number; unmatchedDeleted: number }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/jaa-csv-imports/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      headers: await authHeaders(null),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to delete CSV import");
+    }
+    return response.json();
+  },
+
+  async deleteUntrackedJaaCsvData(): Promise<{ entriesDeleted: number; unmatchedDeleted: number }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/jaa-csv-imports/untracked`, {
+      method: 'DELETE',
+      headers: await authHeaders(null),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to wipe untracked import data");
+    }
+    return response.json();
+  },
+
+  /** Promote gate-held JAA statement transactions into real fuel entries. */
+  async promoteJaaGateHeld(): Promise<{
+    promoted: number;
+    deletedDupes: number;
+    uniqueReceipts?: number;
+  }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/jaa-promote-gateheld`, {
+      method: 'POST',
+      headers: await authHeaders(),
+      body: JSON.stringify({}),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to promote gate-held JAA rows");
+    }
+    return response.json();
+  },
+
   async backfillFuelOrg(defaultOrganizationId: string, dryRun = true) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/admin/backfill-fuel-org`, {
       method: 'POST',
@@ -158,10 +219,7 @@ export const fuelService = {
 
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
-      },
+      headers: await authHeaders(),
       body: JSON.stringify(entry)
     });
     if (!response.ok) {
@@ -174,6 +232,17 @@ export const fuelService = {
     // If the server gate-held the entry (no GPS + no manual station override),
     // return the original entry with gateHeld flag so the UI can handle it
     if (result.gateHeld) {
+      // JAA / issuer statements must never silently "succeed" as Learnt holds
+      if (
+        (entry.metadata as any)?.importSource === 'jaa_raw' ||
+        (entry.metadata as any)?.jaaImportId ||
+        entry.entrySource === 'fuel-card'
+      ) {
+        throw new Error(
+          result.message ||
+            'Statement row was blocked by station GPS gate — deploy/fix required (issuer imports must skip gate).',
+        );
+      }
       return { ...entry, gateHeld: true, learntLocationId: result.learntLocationId } as FuelEntry;
     }
     return result.data || result;
@@ -182,7 +251,7 @@ export const fuelService = {
   async deleteFuelEntry(id: string): Promise<void> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries/${id}`, {
       method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await authHeaders(null),
     });
     if (!response.ok) throw new Error("Failed to delete fuel entry");
   },
