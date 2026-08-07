@@ -7,7 +7,7 @@ import type { PeriodPreset } from '../components/business-finance/types';
 import { resolvePeriod, previousPeriod } from '../components/business-finance/periodRange';
 import {
   pctDelta,
-  filterEntriesInPeriod,
+  filterOpsEntriesInPeriod,
   buildVehicleFuelStats,
   buildDailyConsumption,
   buildWeeklyEfficiencyTrend,
@@ -19,6 +19,8 @@ import {
   sparklineFromEntries,
   fleetTargetKmL,
   resolveEntryFuelType,
+  fuelOpsSpendAmount,
+  fuelOpsLiters,
   type VehicleFuelStats,
   type DailyConsumptionPoint,
   type WeeklyEfficiencyPoint,
@@ -26,6 +28,7 @@ import {
   type PricePoint,
   type FlaggedEvent,
 } from '../utils/fuelAnalyticsAggregates';
+import { filterFuelOpsLogEntries } from '../utils/fuelOpsEligibility';
 
 export type FuelAnalyticsKpis = {
   totalCost: number;
@@ -119,7 +122,7 @@ export function useFuelAnalytics() {
 
   const applyFilters = useCallback(
     (list: typeof rawEntries) => {
-      return list.filter((e) => {
+      return filterFuelOpsLogEntries(list).filter((e) => {
         if (fuelTypeFilter !== 'all') {
           const ft = resolveEntryFuelType(e, e.vehicleId ? vehicleMap.get(e.vehicleId) : null);
           if (ft !== fuelTypeFilter) return false;
@@ -135,11 +138,11 @@ export function useFuelAnalytics() {
   );
 
   const periodEntries = useMemo(
-    () => applyFilters(filterEntriesInPeriod(rawEntries, period)),
+    () => applyFilters(filterOpsEntriesInPeriod(rawEntries, period)),
     [rawEntries, period, applyFilters],
   );
   const priorEntries = useMemo(
-    () => applyFilters(filterEntriesInPeriod(rawEntries, prior)),
+    () => applyFilters(filterOpsEntriesInPeriod(rawEntries, prior)),
     [rawEntries, prior, applyFilters],
   );
 
@@ -153,10 +156,10 @@ export function useFuelAnalytics() {
   );
 
   const kpis: FuelAnalyticsKpis = useMemo(() => {
-    const totalCost = periodEntries.reduce((s, e) => s + (Number(e.amount) || 0), 0);
-    const priorCost = priorEntries.reduce((s, e) => s + (Number(e.amount) || 0), 0);
-    const totalLiters = periodEntries.reduce((s, e) => s + (Number(e.liters) || 0), 0);
-    const priorLiters = priorEntries.reduce((s, e) => s + (Number(e.liters) || 0), 0);
+    const totalCost = periodEntries.reduce((s, e) => s + fuelOpsSpendAmount(e), 0);
+    const priorCost = priorEntries.reduce((s, e) => s + fuelOpsSpendAmount(e), 0);
+    const totalLiters = periodEntries.reduce((s, e) => s + fuelOpsLiters(e), 0);
+    const priorLiters = priorEntries.reduce((s, e) => s + fuelOpsLiters(e), 0);
 
     const totalDist = vehicleStats.reduce((s, r) => s + r.distanceKm, 0);
     const priorDist = priorStats.reduce((s, r) => s + r.distanceKm, 0);
@@ -197,15 +200,15 @@ export function useFuelAnalytics() {
       refuelDelta: refuelCount - priorRefuels,
       potentialLoss,
       potentialLossDeltaPct: pctDelta(potentialLoss, priorLoss),
-      costSpark: sparklineFromEntries(periodEntries, period, (e) => Number(e.amount) || 0),
-      litersSpark: sparklineFromEntries(periodEntries, period, (e) => Number(e.liters) || 0),
+      costSpark: sparklineFromEntries(periodEntries, period, fuelOpsSpendAmount),
+      litersSpark: sparklineFromEntries(periodEntries, period, fuelOpsLiters),
       efficiencySpark,
       costPerKmSpark,
       refuelSpark: sparklineFromEntries(periodEntries, period, () => 1),
       lossSpark: sparklineFromEntries(
         periodEntries.filter((e) => (e.isFlagged || e.metadata?.integrityStatus === 'critical')),
         period,
-        (e) => Number(e.amount) || 0,
+        fuelOpsSpendAmount,
       ),
     };
   }, [periodEntries, priorEntries, vehicleStats, priorStats, period]);
@@ -317,8 +320,8 @@ export function useFuelAnalytics() {
           entryDateTime(e),
           v?.licensePlate || e.vehicleId || '',
           resolveEntryFuelType(e, v),
-          (Number(e.liters) || 0).toFixed(2),
-          (Number(e.amount) || 0).toFixed(2),
+          fuelOpsLiters(e).toFixed(2),
+          fuelOpsSpendAmount(e).toFixed(2),
           e.odometer != null ? String(e.odometer) : '',
           e.location || '',
         ]

@@ -21,6 +21,11 @@ import { Vehicle } from '../../types/vehicle';
 import { format, subMonths, isAfter, startOfMonth, endOfMonth, eachMonthOfInterval } from 'date-fns';
 import { TrendingUp, TrendingDown, Activity, AlertTriangle, Droplets, Zap, ShieldCheck, Users } from 'lucide-react';
 import { cn } from "../ui/utils";
+import {
+    filterFuelOpsLogEntries,
+    fuelOpsLiters,
+    fuelOpsSpendAmount,
+} from '../../utils/fuelOpsEligibility';
 
 interface FuelPerformanceAnalyticsProps {
     entries: FuelEntry[];
@@ -29,6 +34,8 @@ interface FuelPerformanceAnalyticsProps {
 }
 
 export function FuelPerformanceAnalytics({ entries, vehicles, drivers }: FuelPerformanceAnalyticsProps) {
+    const opsEntries = useMemo(() => filterFuelOpsLogEntries(entries), [entries]);
+
     // 1. Prepare Long-term Trend Data (Last 6 Months)
     const trendData = useMemo(() => {
         const sixMonthsAgo = subMonths(new Date(), 6);
@@ -40,13 +47,13 @@ export function FuelPerformanceAnalytics({ entries, vehicles, drivers }: FuelPer
         return months.map(month => {
             const monthStart = startOfMonth(month);
             const monthEnd = endOfMonth(month);
-            const monthEntries = entries.filter(e => {
+            const monthEntries = opsEntries.filter(e => {
                 const d = new Date(e.date);
                 return d >= monthStart && d <= monthEnd;
             });
 
-            const totalCost = monthEntries.reduce((sum, e) => sum + e.amount, 0);
-            const totalLiters = monthEntries.reduce((sum, e) => sum + (e.liters || 0), 0);
+            const totalCost = monthEntries.reduce((sum, e) => sum + fuelOpsSpendAmount(e), 0);
+            const totalLiters = monthEntries.reduce((sum, e) => sum + fuelOpsLiters(e), 0);
             const anomalies = monthEntries.filter(e => e.metadata?.integrityStatus === 'critical').length;
             const avgPrice = totalLiters > 0 ? totalCost / totalLiters : 0;
 
@@ -58,18 +65,18 @@ export function FuelPerformanceAnalytics({ entries, vehicles, drivers }: FuelPer
                 avgPrice: Number(avgPrice.toFixed(2))
             };
         });
-    }, [entries]);
+    }, [opsEntries]);
 
     // 2. Efficiency by Vehicle
     const vehiclePerformance = useMemo(() => {
         return vehicles.map(v => {
-            const vEntries = entries.filter(e => e.vehicleId === v.id);
-            const totalLiters = vEntries.reduce((sum, e) => sum + (e.liters || 0), 0);
+            const vEntries = opsEntries.filter(e => e.vehicleId === v.id);
+            const totalLiters = vEntries.reduce((sum, e) => sum + fuelOpsLiters(e), 0);
             
             // In a real scenario, we'd sum distances from trips or use last-to-first odo
             // For this view, we'll estimate or use the last 30 days distance if available.
             // Simplified: We'll show Liter Intensity as a proxy for efficiency if distance isn't reliable
-            const totalCost = vEntries.reduce((sum, e) => sum + e.amount, 0);
+            const totalCost = vEntries.reduce((sum, e) => sum + fuelOpsSpendAmount(e), 0);
             const flagCount = vEntries.filter(e => e.metadata?.integrityStatus === 'critical').length;
 
             return {
@@ -81,11 +88,11 @@ export function FuelPerformanceAnalytics({ entries, vehicles, drivers }: FuelPer
                 health: v.metrics?.healthScore || 100
             };
         }).sort((a, b) => b.totalLiters - a.totalLiters).slice(0, 5);
-    }, [entries, vehicles]);
+    }, [opsEntries, vehicles]);
 
     const totalStats = useMemo(() => {
-        const critical = entries.filter(e => e.metadata?.integrityStatus === 'critical').length;
-        const total = entries.length;
+        const critical = opsEntries.filter(e => e.metadata?.integrityStatus === 'critical').length;
+        const total = opsEntries.length;
         const integrityRate = total > 0 ? ((total - critical) / total) * 100 : 100;
 
         return {
@@ -93,13 +100,13 @@ export function FuelPerformanceAnalytics({ entries, vehicles, drivers }: FuelPer
             criticalEntries: critical,
             integrityRate: Number(integrityRate.toFixed(1))
         };
-    }, [entries]);
+    }, [opsEntries]);
 
     // 3. Fuel Spend by Driver
     const driverPerformance = useMemo(() => {
         const driverMap: Record<string, { name: string; totalLiters: number; totalCost: number; flags: number }> = {};
 
-        entries.forEach(e => {
+        opsEntries.forEach(e => {
             const dId = e.driverId || 'unknown';
             if (!driverMap[dId]) {
                 const driverRecord = Array.isArray(drivers) ? drivers.find((d: any) => d.id === dId) : null;
@@ -110,8 +117,8 @@ export function FuelPerformanceAnalytics({ entries, vehicles, drivers }: FuelPer
                     flags: 0,
                 };
             }
-            driverMap[dId].totalLiters += e.liters || 0;
-            driverMap[dId].totalCost += e.amount;
+            driverMap[dId].totalLiters += fuelOpsLiters(e);
+            driverMap[dId].totalCost += fuelOpsSpendAmount(e);
             if (e.metadata?.integrityStatus === 'critical') {
                 driverMap[dId].flags += 1;
             }
@@ -120,7 +127,7 @@ export function FuelPerformanceAnalytics({ entries, vehicles, drivers }: FuelPer
         return Object.values(driverMap)
             .sort((a, b) => b.totalCost - a.totalCost)
             .slice(0, 5);
-    }, [entries, drivers]);
+    }, [opsEntries, drivers]);
 
     return (
         <div className="space-y-6">

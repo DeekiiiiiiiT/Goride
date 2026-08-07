@@ -64,18 +64,8 @@ import { Download } from 'lucide-react';
 import { usePermissions } from '../../hooks/usePermissions';
 import { isEntryInInclusiveYmdRange, toEntryYmd } from '../../utils/fuelWeekPeriod';
 import { resolveFuelEntrySource } from '../../utils/fuelEntrySource';
-import { countsInGasCardSpend, isGasCardFuelEntry } from '../../utils/fuelPaidByDriver';
 import { isJaaStatementLedgerRow } from '../../utils/jaaFuelStatementMatcher';
-
-/** Exclude fees, declines, and awaiting-statement $0 anchors from spend totals. */
-function countsInFuelLogSpend(entry: FuelEntry): boolean {
-  const meta = entry.metadata as Record<string, unknown> | undefined;
-  if (meta?.jaaRowKind === 'fee' || meta?.jaaRowKind === 'declined') return false;
-  if (meta?.awaitingCardStatement) return false;
-  if (meta?.countsInFuelSpend === false) return false;
-  if (isGasCardFuelEntry(entry)) return countsInGasCardSpend(entry);
-  return true;
-}
+import { countsInFuelLogSpend } from '../../utils/fuelOpsEligibility';
 
 interface FuelLogTableProps {
     entries: FuelEntry[];
@@ -258,6 +248,7 @@ export function FuelLogTable({
     });
 
     const ledgerIntegrity = useMemo(() => {
+        // Wallet credits post only at weekly Finalize — debit-only is normal until then (and for gas-card).
         const integrityMap = new Map<string, 'Complete' | 'Partial' | 'Orphaned' | 'Pending'>();
         entries.forEach(entry => {
             if (!isManualEntry(entry)) return;
@@ -269,7 +260,8 @@ export function FuelLogTable({
             const hasDebit = related.some(t => t.amount < 0);
             const hasCredit = related.some(t => t.amount > 0);
             if (hasDebit && hasCredit) integrityMap.set(entry.id, 'Complete');
-            else if (hasDebit || hasCredit) integrityMap.set(entry.id, 'Partial');
+            else if (hasDebit) integrityMap.set(entry.id, 'Pending'); // awaiting Finalize / gas-card — not imbalanced
+            else if (hasCredit) integrityMap.set(entry.id, 'Partial');
             else integrityMap.set(entry.id, 'Orphaned');
         });
         return integrityMap;
@@ -1064,7 +1056,14 @@ export function FuelLogTable({
                                                         <TableCell className="py-2 text-xs font-mono">{tx.odometer?.toLocaleString() || '-'}</TableCell>
                                                         <TableCell className="py-2 text-right">
                                                             {!tx.isCarryover && can('fuel.edit_entry') && (
-                                                                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => onEdit(tx)}>
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    className="h-6 w-6"
+                                                                    disabled={!!(tx.isLocked || tx.status === 'Finalized')}
+                                                                    title={tx.isLocked || tx.status === 'Finalized' ? 'Locked seal — edit disabled' : 'Edit log'}
+                                                                    onClick={() => onEdit(tx)}
+                                                                >
                                                                     <Pencil className="h-3 w-3" />
                                                                 </Button>
                                                             )}
@@ -1267,7 +1266,14 @@ export function FuelLogTable({
                             {/* Footer */}
                             <div className="border-t border-slate-100 p-4 flex justify-between items-center bg-slate-50/50">
                                 {can('fuel.edit_entry') && (
-                                <Button variant="outline" size="sm" className="text-xs gap-1.5" onClick={() => { setViewingEntry(null); onEdit(entry); }}>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="text-xs gap-1.5"
+                                    disabled={!!(entry.isLocked || entry.status === 'Finalized')}
+                                    title={entry.isLocked || entry.status === 'Finalized' ? 'Locked seal — edit disabled' : undefined}
+                                    onClick={() => { setViewingEntry(null); onEdit(entry); }}
+                                >
                                     <Pencil className="h-3 w-3" /> Edit This Log
                                 </Button>
                                 )}
