@@ -21,6 +21,13 @@ export interface FuelEntryLike {
   metadata?: Record<string, unknown> | null;
 }
 
+/** Inventory card fields used to hydrate statement identity before match. */
+export interface FuelCardLike {
+  id: string;
+  assignedVehicleId?: string | null;
+  assignedDriverId?: string | null;
+}
+
 export type FuelMatchStatus =
   | 'matched'
   | 'unmatched_statement'
@@ -48,14 +55,42 @@ function metaOf(e: FuelEntryLike): Record<string, unknown> {
   return (e.metadata || {}) as Record<string, unknown>;
 }
 
+function normId(id?: string | null): string {
+  return String(id || '')
+    .trim()
+    .replace(/[^a-zA-Z0-9]/g, '')
+    .toUpperCase();
+}
+
 /** True for JAA/CSV statement ledger rows (Card Inventory), not driver Logs. */
 export function isJaaStatementLedgerRow(entry: FuelEntryLike): boolean {
   const m = metaOf(entry);
   const importSource = String(m.importSource || '');
   if (STATEMENT_IMPORT_SOURCES.has(importSource)) return true;
-  // Statement-classified rows without driver-portal provenance
   if (m.jaaRowKind != null && entry.entrySource !== 'driver-portal') return true;
   return false;
+}
+
+/**
+ * Fill missing statement vehicle/driver from card inventory assignment.
+ * Legacy pump logs often lack cardId; assigned vehicle is the bridge.
+ */
+export function hydrateStatementsFromCards<T extends FuelEntryLike>(
+  statements: T[],
+  cards: FuelCardLike[] | undefined,
+): T[] {
+  if (!cards?.length) return statements;
+  const byId = new Map(cards.map((c) => [c.id, c]));
+  return statements.map((s) => {
+    if (!s.cardId) return s;
+    const card = byId.get(s.cardId);
+    if (!card) return s;
+    return {
+      ...s,
+      vehicleId: s.vehicleId || card.assignedVehicleId || undefined,
+      driverId: s.driverId || card.assignedDriverId || undefined,
+    } as T;
+  });
 }
 
 function dayMs(iso: string, time?: string): number {
@@ -79,7 +114,6 @@ function isApprovedStatementFuel(e: FuelEntryLike): boolean {
   );
 }
 
-/** Roam Gas Card odometer anchors (awaiting JAA money). */
 function isRoamGasCardAnchor(e: FuelEntryLike): boolean {
   if (metaOf(e).awaitingCardStatement) return true;
   if (e.paymentSource !== 'Gas_Card') return false;
@@ -96,19 +130,28 @@ function isGasCardDriverLog(e: FuelEntryLike): boolean {
   return ps === 'company_card' || ps === 'gas_card';
 }
 
+function vehicleIdsMatch(a?: string, b?: string): boolean {
+  const na = normId(a);
+  const nb = normId(b);
+  if (!na || !nb) return false;
+  return na === nb || na.endsWith(nb) || nb.endsWith(na);
+}
+
 /**
  * Match imported JAA statement rows to Roam Gas Card anchors.
- * Security keys: Roam cardId + Roam vehicleId + time window.
- * Never scores on JAA DRIVER_NAME / LICENSE_NUMBER / MILEAGE.
+ * Optional cards: hydrate statement vehicle/driver from inventory assignment.
  */
 export function matchJaaStatementToDriverLogs<T extends FuelEntryLike>(
   statementEntries: T[],
   driverCandidates: T[],
+  cards?: FuelCardLike[],
 ): FuelMatchPair<T>[] {
-  const statements = statementEntries.filter(isApprovedStatementFuel).filter((s) => {
-    const kind = metaOf(s).jaaRowKind;
-    return kind !== 'fee' && kind !== 'declined';
-  });
+  const statements = hydrateStatementsFromCards(statementEntries, cards)
+    .filter(isApprovedStatementFuel)
+    .filter((s) => {
+      const kind = metaOf(s).jaaRowKind;
+      return kind !== 'fee' && kind !== 'declined';
+    });
   const drivers = driverCandidates
     .filter(isGasCardDriverLog)
     .filter((d) => !metaOf(d).jaaMatchedStatementId);
@@ -142,13 +185,17 @@ export function matchJaaStatementToDriverLogs<T extends FuelEntryLike>(
         } else if (stmt.cardId && d.cardId && stmt.cardId !== d.cardId) {
           score -= 40;
           notes.push('card mismatch');
+        } else if (stmt.cardId && !d.cardId && vehicleIdsMatch(stmt.vehicleId, d.vehicleId)) {
+          // Legacy pump log: no cardId, but vehicle owns this inventory card
+          score += 45;
+          notes.push('card via assigned vehicle');
         }
 
-        if (stmt.vehicleId && d.vehicleId && stmt.vehicleId === d.vehicleId) {
+        if (vehicleIdsMatch(stmt.vehicleId, d.vehicleId)) {
           score += 35;
         } else if (d.vehicleId && !stmt.vehicleId) {
           if (stmt.cardId && d.cardId && stmt.cardId === d.cardId) score += 10;
-        } else if (stmt.vehicleId && d.vehicleId && stmt.vehicleId !== d.vehicleId) {
+        } else if (stmt.vehicleId && d.vehicleId && !vehicleIdsMatch(stmt.vehicleId, d.vehicleId)) {
           score -= 25;
           notes.push('vehicle mismatch');
         }
@@ -250,7 +297,6 @@ export function applyFuelMatchLinks<T extends FuelEntryLike>(
     amount: stmt.amount,
     liters: stmt.liters ?? drv.liters,
     pricePerLiter: stmtPpl ?? drv.pricePerLiter,
-    // Roam verified station wins — never overwrite with JAA VENDOR_NAME
     location: drv.location || stmt.location,
     cardId: stmt.cardId || drv.cardId,
     vehicleId: drv.vehicleId || stmt.vehicleId,
@@ -268,6 +314,10 @@ export function applyFuelMatchLinks<T extends FuelEntryLike>(
     },
   } as T;
 
+  if (stmtMeta.jaaFuelType && !(driver as FuelEntryLike & { fuelType?: string }).fuelType) {
+    (driver as FuelEntryLike & { fuelType?: string }).fuelType = String(stmtMeta.jaaFuelType);
+  }
+
   return { statement, driver };
 }
 
@@ -282,14 +332,14 @@ export type JaaMatchApplySummary = {
 export function buildJaaMatchUpdates<T extends FuelEntryLike>(
   statementEntries: T[],
   allEntries: T[],
+  cards?: FuelCardLike[],
 ): { pairs: FuelMatchPair<T>[]; updates: T[]; summary: JaaMatchApplySummary } {
-  const pairs = matchJaaStatementToDriverLogs(statementEntries, allEntries);
+  const pairs = matchJaaStatementToDriverLogs(statementEntries, allEntries, cards);
   const updates: T[] = [];
   const seen = new Set<string>();
 
   for (const pair of pairs) {
     if (pair.status !== 'matched' && pair.status !== 'amount_mismatch') continue;
-    // Skip already-linked no-ops when apply would re-save identical links
     if (pair.notes === 'Already linked') continue;
     const { statement, driver } = applyFuelMatchLinks(pair);
     if (statement && !seen.has(statement.id)) {

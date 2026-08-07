@@ -432,12 +432,15 @@ export function AdminJaaGasCardsPage() {
 
   /** Enrich driver Gas Card logs from unlinked statement ledger rows. */
   const runJaaGasCardMatch = async (statementScope?: FuelEntry[]) => {
-    const all = await fuelService.getFuelEntries({ limit: 5000 });
+    const [all, inventory] = await Promise.all([
+      fuelService.getFuelEntries({ limit: 5000 }),
+      fuelService.getFuelCards().catch(() => [] as FuelCard[]),
+    ]);
     const statements =
       statementScope && statementScope.length
         ? statementScope.filter(isJaaStatementLedgerRow)
         : all.filter(isJaaStatementLedgerRow);
-    const { updates, summary } = buildJaaMatchUpdates(statements, all);
+    const { updates, summary } = buildJaaMatchUpdates(statements, all, inventory);
     for (const entry of updates) {
       await fuelService.saveFuelEntry(entry as FuelEntry);
     }

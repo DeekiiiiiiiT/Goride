@@ -60,23 +60,47 @@ function meta(entry: FuelEntry): Record<string, unknown> {
 function rowKindBadge(entry: FuelEntry) {
   const m = meta(entry);
   const kind = String(m.jaaRowKind || '');
-  if (kind === 'fee') return <Badge variant="outline" className="bg-slate-50 text-slate-600">Fee</Badge>;
-  if (kind === 'declined') {
-    return <Badge variant="outline" className="bg-rose-50 text-rose-700 border-rose-200">Declined</Badge>;
+  const isMatched = Boolean(m.jaaMatchedDriverEntryId || m.jaaMatchedStatementId);
+
+  let kindBadge: React.ReactNode;
+  if (kind === 'fee') {
+    kindBadge = <Badge variant="outline" className="bg-slate-50 text-slate-600">Fee</Badge>;
+  } else if (kind === 'declined') {
+    kindBadge = (
+      <Badge variant="outline" className="bg-rose-50 text-rose-700 border-rose-200">Declined</Badge>
+    );
+  } else if (m.awaitingCardStatement) {
+    kindBadge = (
+      <Badge variant="outline" className="bg-amber-50 text-amber-800 border-amber-200">
+        Awaiting statement
+      </Badge>
+    );
+  } else if (kind === 'approved_fuel') {
+    kindBadge = (
+      <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">Fuel</Badge>
+    );
+  } else if (entry.type === 'Card_Transaction') {
+    kindBadge = (
+      <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">Statement</Badge>
+    );
+  } else {
+    kindBadge = <Badge variant="outline">Roam log</Badge>;
   }
-  if (m.awaitingCardStatement) {
-    return <Badge variant="outline" className="bg-amber-50 text-amber-800 border-amber-200">Awaiting statement</Badge>;
-  }
-  if (kind === 'approved_fuel') {
-    return <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">Fuel</Badge>;
-  }
-  if (m.jaaMatchedDriverEntryId || m.jaaMatchedStatementId) {
-    return <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">Matched</Badge>;
-  }
-  if (entry.type === 'Card_Transaction') {
-    return <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">Statement</Badge>;
-  }
-  return <Badge variant="outline">Roam log</Badge>;
+
+  if (!isMatched) return kindBadge;
+
+  return (
+    <div className="flex flex-col gap-1 items-start">
+      {kindBadge}
+      <Badge
+        variant="outline"
+        className="bg-sky-50 text-sky-800 border-sky-200"
+        title="Linked to a driver Gas Card log"
+      >
+        Matched
+      </Badge>
+    </div>
+  );
 }
 
 export function FuelCardTransactionsSheet({

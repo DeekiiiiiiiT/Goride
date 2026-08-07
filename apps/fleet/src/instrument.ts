@@ -17,7 +17,10 @@ if (dsn) {
     ],
     // 100% in early setup; drop to 0.1–0.2 once traffic grows in production.
     tracesSampleRate: import.meta.env.PROD ? 0.2 : 1.0,
-    tracePropagationTargets: ['localhost', /^https:\/\/[a-z0-9-]+\.supabase\.co/i],
+    // Do NOT include supabase.co — Sentry would inject sentry-trace/baggage on
+    // cross-origin API calls and Supabase CORS rejects those → "Failed to fetch"
+    // (looks like an empty fleet / wiped data). Same-origin only.
+    tracePropagationTargets: ['localhost', /^\//],
     replaysSessionSampleRate: 0.1,
     replaysOnErrorSampleRate: 1.0,
     enableLogs: true,

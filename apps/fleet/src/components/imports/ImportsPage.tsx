@@ -1041,8 +1041,11 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
               const saved = await Promise.all(entriesToSave.map((entry) => fuelService.createFuelEntry(entry)));
 
               try {
-                  const existing = await fuelService.getFuelEntries({ limit: 1000 });
-                  const { pairs, updates, summary } = buildJaaMatchUpdates(saved, existing);
+                  const [existing, inventory] = await Promise.all([
+                      fuelService.getFuelEntries({ limit: 1000 }),
+                      fuelService.getFuelCards().catch(() => []),
+                  ]);
+                  const { pairs, updates, summary } = buildJaaMatchUpdates(saved, existing, inventory);
                   for (const entry of updates) {
                       await fuelService.saveFuelEntry(entry);
                   }
