@@ -18,7 +18,7 @@ import {
     DropdownMenuSeparator, 
     DropdownMenuTrigger 
 } from "../ui/dropdown-menu";
-import { Search, MoreHorizontal, Pencil, Trash2, CreditCard, User, Car, Eye, UserPlus, Loader2 } from "lucide-react";
+import { Search, MoreHorizontal, Pencil, Trash2, CreditCard, User, Eye, UserPlus, Loader2 } from "lucide-react";
 import { FuelCard } from '../../types/fuel';
 import { FuelCardTransactionsSheet } from './FuelCardTransactionsSheet';
 import { getCustomerFacingFuelProvider, ROAM_FUEL_PROVIDER_LABEL } from '../../utils/fuelCardDisplay';
@@ -132,12 +132,7 @@ export function FuelCardList({
                                     </TableCell>
                                     <TableCell className="font-mono">{card.cardNumber}</TableCell>
                                     <TableCell>
-                                        {card.assignedVehicleId ? (
-                                            <div className="flex items-center gap-1.5 text-sm">
-                                                <Car className="h-3.5 w-3.5 text-slate-400" />
-                                                <span>{getVehicleName(card.assignedVehicleId)}</span>
-                                            </div>
-                                        ) : card.assignedDriverId ? (
+                                        {card.assignedDriverId ? (
                                             <div className="flex items-center gap-1.5 text-sm">
                                                 <User className="h-3.5 w-3.5 text-slate-400" />
                                                 <span>{getDriverName(card.assignedDriverId)}</span>

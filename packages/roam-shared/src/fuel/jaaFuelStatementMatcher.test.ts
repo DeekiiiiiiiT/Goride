@@ -4,6 +4,7 @@ import {
   applyFuelMatchLinks,
   isJaaStatementLedgerRow,
   buildJaaMatchUpdates,
+  hydrateStatementsFromCards,
   type FuelEntryLike,
 } from './jaaFuelStatementMatcher';
 
@@ -188,5 +189,48 @@ describe('matchJaaStatementToDriverLogs', () => {
     expect(updates.some((u) => u.id === 'stmt-1' && u.metadata?.jaaMatchedDriverEntryId === 'drv-1')).toBe(
       true,
     );
+  });
+});
+
+describe('hydrateStatementsFromCards', () => {
+  it('attributes blank driver from card history at statement time after handoff', () => {
+    const statements = [
+      entry({
+        id: 's-mon',
+        date: '2026-07-02',
+        time: '12:00:00',
+        cardId: 'card-1',
+        driverId: undefined,
+        entrySource: 'fuel-card',
+        metadata: { importSource: 'jaa_raw' },
+      }),
+      entry({
+        id: 's-fri',
+        date: '2026-07-05',
+        time: '12:00:00',
+        cardId: 'card-1',
+        driverId: undefined,
+        entrySource: 'fuel-card',
+        metadata: { importSource: 'jaa_raw' },
+      }),
+    ];
+    const cards = [
+      {
+        id: 'card-1',
+        assignedDriverId: 'b',
+        assignedVehicleId: 'v1',
+        assignmentHistory: [
+          {
+            driverId: 'a',
+            assignedAt: '2026-07-01T00:00:00.000Z',
+            unassignedAt: '2026-07-04T00:00:00.000Z',
+          },
+          { driverId: 'b', assignedAt: '2026-07-04T00:00:00.000Z' },
+        ],
+      },
+    ];
+    const hydrated = hydrateStatementsFromCards(statements, cards);
+    expect(hydrated.find((s) => s.id === 's-mon')?.driverId).toBe('a');
+    expect(hydrated.find((s) => s.id === 's-fri')?.driverId).toBe('b');
   });
 });

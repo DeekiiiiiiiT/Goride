@@ -40,6 +40,7 @@ import { api } from '../services/api';
 import { FinalizedReportsTab } from '../components/fuel/FinalizedReportsTab';
 import { FuelBulkFinalizeDialog } from '../components/fuel/reconciliation/FuelBulkFinalizeDialog';
 import { deriveFuelReconciliationPeriods } from '../utils/fuelPeriodStatus';
+import { mergeFuelCardWithAssignmentHistory } from '../utils/mergeFuelCardWithAssignmentHistory';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Badge } from '../components/ui/badge';
 import {
@@ -374,7 +375,12 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
   // Card Handlers
   const handleSaveCard = useCallback(async (card: FuelCard) => {
       try {
-          const savedCard = await fuelService.saveFuelCard(card);
+          const previous = cards.find((c) => c.id === card.id) || editingCard || assigningCard || null;
+          const withHistory = mergeFuelCardWithAssignmentHistory(previous, card, {
+            drivers: drivers as any,
+            vehicles: vehicles as any,
+          });
+          const savedCard = await fuelService.saveFuelCard(withHistory);
           const exists = cards.some((c) => c.id === savedCard.id);
           if (exists || editingCard || assigningCard) {
               setCards(prev => prev.map(c => c.id === savedCard.id ? savedCard : c));
@@ -390,7 +396,7 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
           console.error(e);
           toast.error(e?.message || "Failed to save fuel card");
       }
-  }, [editingCard, assigningCard, cards]);
+  }, [editingCard, assigningCard, cards, drivers, vehicles]);
 
   const handleDeleteCard = useCallback(async (id: string) => {
       const card = cards.find((c) => c.id === id);
@@ -1135,14 +1141,11 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
             <div className="flex justify-between items-center">
                 <div className="space-y-1 text-sm text-slate-500">
                   {selfServePrograms.length === 0
-                    ? 'Roam Fuels cards: assign drivers/vehicles only. Statement CSV is uploaded by Roam.'
+                    ? 'Statement CSV for Roam Fuels cards is uploaded by Roam.'
                     : 'Self-serve fuel cards: add your cards and upload your own statement CSV in Imports.'}
                 </div>
                 <Button
                   onClick={() => {
-                    if (selfServePrograms.length === 0) {
-                      toast.message('Ask Roam admin to issue Roam Fuels cards, or register a self-serve fuel program.');
-                    }
                     setEditingCard(null);
                     setIsCardModalOpen(true);
                   }}

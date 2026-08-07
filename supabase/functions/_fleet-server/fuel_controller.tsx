@@ -127,10 +127,13 @@ app.post(`${BASE_PATH}/fuel-cards`, requirePermission("fuel.create_entry"), asyn
           (p: any) => String(p.companyCode || "").replace(/\D/g, "") === cc,
         );
         if (program?.mode === "roam_managed") {
+          const { resolveAssignmentHistoryOnSave } = await import("./fuel_card_assignment.ts");
+          const assignmentHistory = resolveAssignmentHistoryOnSave(existing as any, card as any);
           const updated = stampFuelRecord({
             ...existing,
             assignedVehicleId: card.assignedVehicleId,
             assignedDriverId: card.assignedDriverId,
+            assignmentHistory,
             status: card.status || existing.status,
             notes: card.notes ?? existing.notes,
           } as Record<string, unknown>, c);
@@ -180,6 +183,25 @@ app.post(`${BASE_PATH}/fuel-cards`, requirePermission("fuel.create_entry"), asyn
     }
 
     const stamped = stampFuelRecord({ ...(existing || {}), ...card } as Record<string, unknown>, c);
+    // Ensure assignmentHistory stays coherent on full upserts (platform / self-serve)
+    if (
+      existing &&
+      (String((existing as any).assignedDriverId || "") !== String(card.assignedDriverId || "") ||
+        !(card as any).assignmentHistory?.length)
+    ) {
+      const { resolveAssignmentHistoryOnSave } = await import("./fuel_card_assignment.ts");
+      (stamped as any).assignmentHistory = resolveAssignmentHistoryOnSave(existing as any, {
+        assignedDriverId: (stamped as any).assignedDriverId,
+        assignmentHistory: (card as any).assignmentHistory,
+      });
+    } else if (!existing && (stamped as any).assignedDriverId && !(stamped as any).assignmentHistory?.length) {
+      const { applyFuelCardAssignmentChangeServer } = await import("./fuel_card_assignment.ts");
+      (stamped as any).assignmentHistory = applyFuelCardAssignmentChangeServer(
+        { assignedDriverId: undefined, assignmentHistory: [] },
+        (stamped as any).assignedDriverId,
+        "Unknown",
+      );
+    }
     await kv.set(`fuel_card:${stamped.id}`, stamped);
     return c.json({ success: true, data: stamped });
   } catch (e: any) {

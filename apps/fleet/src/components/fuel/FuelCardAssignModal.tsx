@@ -1,12 +1,14 @@
 /**
  * Slim assignment dialog for Roam-managed JAA cards (no identity edits).
+ * Card → driver only; vehicle comes from driver↔vehicle assignment elsewhere.
  */
 import React, { useEffect, useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '../ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../ui/dialog';
 import { Button } from '../ui/button';
 import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import type { FuelCard } from '../../types/fuel';
+import { mergeFuelCardWithAssignmentHistory } from '../../utils/mergeFuelCardWithAssignmentHistory';
 
 interface ModalDriver {
   id: string;
@@ -18,6 +20,7 @@ interface ModalVehicle {
   licensePlate: string;
   make: string;
   model: string;
+  currentDriverId?: string;
 }
 
 interface FuelCardAssignModalProps {
@@ -26,6 +29,7 @@ interface FuelCardAssignModalProps {
   onSave: (card: FuelCard) => void;
   card: FuelCard;
   drivers?: ModalDriver[];
+  /** Used only for handoff vehicle snapshot from driver's current car */
   vehicles?: ModalVehicle[];
 }
 
@@ -38,27 +42,26 @@ export function FuelCardAssignModal({
   vehicles = [],
 }: FuelCardAssignModalProps) {
   const [driverId, setDriverId] = useState('unassigned');
-  const [vehicleId, setVehicleId] = useState('unassigned');
 
   useEffect(() => {
     if (!isOpen) return;
     setDriverId(card.assignedDriverId || 'unassigned');
-    setVehicleId(card.assignedVehicleId || 'unassigned');
   }, [card, isOpen]);
 
   const handleSave = () => {
-    const isRental = card.jaaCardType === 'rental';
-    let nextDriver = driverId === 'unassigned' ? undefined : driverId;
-    let nextVehicle = vehicleId === 'unassigned' ? undefined : vehicleId;
-    // Rental: prefer one assignee so the card can float with the person
-    if (isRental && nextDriver && nextVehicle) {
-      nextVehicle = undefined;
-    }
-    onSave({
+    const nextDriver = driverId === 'unassigned' ? undefined : driverId;
+    const draft: FuelCard = {
       ...card,
       assignedDriverId: nextDriver,
-      assignedVehicleId: nextVehicle,
-    });
+      // Card inventory assigns people only — clear any legacy vehicle pointer
+      assignedVehicleId: undefined,
+    };
+    onSave(
+      mergeFuelCardWithAssignmentHistory(card, draft, {
+        drivers,
+        vehicles,
+      }),
+    );
     onClose();
   };
 
@@ -67,24 +70,12 @@ export function FuelCardAssignModal({
       <DialogContent className="sm:max-w-[420px]">
         <DialogHeader>
           <DialogTitle>Assign Driver</DialogTitle>
-          <DialogDescription>
-            Roam Fuels card <span className="font-mono text-slate-700">{card.cardNumber}</span>
-            {card.jaaCardType === 'rental' ? ' (rental — reassign anytime).' : '.'}
-          </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4 py-2">
           <div className="space-y-2">
             <Label>Driver</Label>
-            <Select
-              value={driverId}
-              onValueChange={(val) => {
-                setDriverId(val);
-                if (card.jaaCardType === 'rental' && val !== 'unassigned') {
-                  setVehicleId('unassigned');
-                }
-              }}
-            >
+            <Select value={driverId} onValueChange={setDriverId}>
               <SelectTrigger>
                 <SelectValue placeholder="Select driver" />
               </SelectTrigger>
@@ -95,34 +86,6 @@ export function FuelCardAssignModal({
                 ))}
               </SelectContent>
             </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Vehicle (optional)</Label>
-            <Select
-              value={vehicleId}
-              onValueChange={(val) => {
-                setVehicleId(val);
-                if (card.jaaCardType === 'rental' && val !== 'unassigned') {
-                  setDriverId('unassigned');
-                }
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select vehicle" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="unassigned">Unassigned</SelectItem>
-                {vehicles.map((v) => (
-                  <SelectItem key={v.id} value={v.id}>
-                    {v.licensePlate} ({v.make})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-[10px] text-slate-500">
-              Prefer driver for rental cards. Use vehicle only if the card stays with that car.
-            </p>
           </div>
         </div>
 

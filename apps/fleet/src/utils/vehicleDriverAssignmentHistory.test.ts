@@ -3,6 +3,7 @@ import {
   applyDriverAssignmentChange,
   buildDriverAssignmentWindows,
   driverIdAtVehicleTime,
+  vehicleIdForDriverAtTime,
 } from './vehicleDriverAssignmentHistory';
 
 describe('vehicleDriverAssignmentHistory', () => {
@@ -42,5 +43,34 @@ describe('vehicleDriverAssignmentHistory', () => {
     expect(
       driverIdAtVehicleTime({ currentDriverId: 'x', driverAssignmentHistory: [] }, Date.now()),
     ).toBe('x');
+  });
+
+  it('vehicleIdForDriverAtTime follows driver across cars mid-week', () => {
+    const vehicles = [
+      {
+        id: 'v1',
+        currentDriverId: 'other',
+        driverAssignmentHistory: [
+          {
+            driverId: 'd1',
+            driverName: 'D1',
+            assignedAt: '2026-07-01T00:00:00.000Z',
+            unassignedAt: '2026-07-03T00:00:00.000Z',
+          },
+        ],
+      },
+      {
+        id: 'v2',
+        currentDriverId: 'd1',
+        driverAssignmentHistory: [
+          { driverId: 'd1', driverName: 'D1', assignedAt: '2026-07-03T00:00:00.000Z' },
+        ],
+      },
+    ];
+    const tue = new Date('2026-07-02T12:00:00.000Z').getTime();
+    const thu = new Date('2026-07-04T12:00:00.000Z').getTime();
+    expect(vehicleIdForDriverAtTime(vehicles, 'd1', tue)).toBe('v1');
+    expect(vehicleIdForDriverAtTime(vehicles, 'd1', thu)).toBe('v2');
+    expect(vehicleIdForDriverAtTime(vehicles, 'd1', thu, 'v2')).toBe('v2');
   });
 });

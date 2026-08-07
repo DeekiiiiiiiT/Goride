@@ -1,3 +1,5 @@
+import { driverIdAtCardTime } from './fuelCardAssignmentHistory';
+
 /** Minimal structural shape so Admin/Fleet keep their local FuelEntry types. */
 export interface FuelEntryLike {
   id: string;
@@ -26,6 +28,15 @@ export interface FuelCardLike {
   id: string;
   assignedVehicleId?: string | null;
   assignedDriverId?: string | null;
+  assignmentHistory?: Array<{
+    driverId: string;
+    driverName?: string;
+    assignedAt: string;
+    unassignedAt?: string;
+    assignedBy?: string;
+    vehicleIdAtAssign?: string;
+    vehicleLabelAtAssign?: string;
+  }>;
 }
 
 export type FuelMatchStatus =
@@ -73,7 +84,8 @@ export function isJaaStatementLedgerRow(entry: FuelEntryLike): boolean {
 
 /**
  * Fill missing statement vehicle/driver from card inventory assignment.
- * Legacy pump logs often lack cardId; assigned vehicle is the bridge.
+ * Driver uses card history at statement time (not live assignee).
+ * Legacy pump logs often lack cardId; assigned vehicle is a weak fallback bridge.
  */
 export function hydrateStatementsFromCards<T extends FuelEntryLike>(
   statements: T[],
@@ -85,10 +97,12 @@ export function hydrateStatementsFromCards<T extends FuelEntryLike>(
     if (!s.cardId) return s;
     const card = byId.get(s.cardId);
     if (!card) return s;
+    const atMs = dayMs(s.date, s.time);
+    const holder = driverIdAtCardTime(card, atMs);
     return {
       ...s,
       vehicleId: s.vehicleId || card.assignedVehicleId || undefined,
-      driverId: s.driverId || card.assignedDriverId || undefined,
+      driverId: s.driverId || holder || undefined,
     } as T;
   });
 }
