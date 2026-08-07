@@ -1,5 +1,8 @@
+import './instrument';
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import * as Sentry from '@sentry/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter } from 'react-router-dom';
 import { Toaster } from 'sonner';
@@ -23,17 +26,19 @@ const queryClient = new QueryClient({
 
 const root = (
   <React.StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <ThemeProvider>
-          <LocaleProvider>
-            <NativeNavigationBridge />
-            <App />
-            <Toaster position="top-center" richColors />
-          </LocaleProvider>
-        </ThemeProvider>
-      </BrowserRouter>
-    </QueryClientProvider>
+    <Sentry.ErrorBoundary fallback={<p>Something went wrong. Please refresh the page.</p>}>
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <ThemeProvider>
+            <LocaleProvider>
+              <NativeNavigationBridge />
+              <App />
+              <Toaster position="top-center" richColors />
+            </LocaleProvider>
+          </ThemeProvider>
+        </BrowserRouter>
+      </QueryClientProvider>
+    </Sentry.ErrorBoundary>
   </React.StrictMode>
 );
 

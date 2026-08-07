@@ -3,7 +3,6 @@
 interface ImportMetaEnv {
   readonly VITE_SENTRY_DSN?: string;
   readonly VITE_APP_VERSION?: string;
-  readonly VITE_ROAM_FLEET_SIGNUP_URL?: string;
 }
 
 interface ImportMeta {
