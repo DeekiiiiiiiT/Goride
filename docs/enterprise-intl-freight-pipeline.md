@@ -2,21 +2,25 @@
 
 ## Scope
 
-Ops-managed mailbox freight (no customer portal). SMS status updates. Pickup **and** door delivery. Mixed fleets: org fleet, client-owned vehicles, 3PL. Domestic freight auto-dispatch (org drivers) is live on the Dispatch Board; full Roam Driver marketplace supply and mailbox-batch auto-dispatch are later. Monetization wall deferred. Customs = broker CSV + manual board (not live ASYCUDA).
+Ops-managed mailbox freight (no customer portal). SMS status updates. Pickup **and** door delivery. Mixed fleets: org fleet, client-owned vehicles, 3PL. Domestic freight auto-dispatch (org drivers) is live on the Dispatch Board; full Roam Driver marketplace supply and mailbox-batch auto-dispatch are later. Monetization wall deferred.
+
+**Cargo manifesto:** generated at the US warehouse / consolidator (item list), compiled and sealed by the courier in Roam, then submitted toward Jamaica Customs as an electronic file (CSV today). Customs does **not** create the manifesto — they receive, hold, or clear it. Live ASYCUDA / Port Community System API and a US warehouse staff portal are future work.
 
 ## Smoke path
 
-1. **Seed facilities** — Suites page → “Seed Miami + Kingston facilities”.
-2. **Create client** (+ optional rate card for domestic; not required for mailbox).
-3. **Create suite** — phone for SMS, default pickup or door, default fleet type.
-4. **Pre-alert** — Packages → ops pre-alert with courier tracking #.
-5. **Miami Scan** — scan tracking # (or unknown + suite) → weight/dims → `received_miami`.
-6. **Manifest** — open → add Miami packages → **Seal** → Download customs CSV → Mark shipped → Arrived JA.
-7. **Customs board** — mark Cleared (or Hold then Cleared).
-8. **Hub Station** — inbound scan → sort (pickup or door).
-9. **Fulfillment**
-   - Pickup: Mark collected.
-   - Door: select packages → assignee type (org / client fleet / 3PL) → Create batch → Load / Delivered (or client `/pod/:token` link).
+1. **Facilities** — US Intake Warehouse (catalog pick) + Jamaica Hub (+ optional Branch / Pickup).
+2. **Suites** — import or create mailbox customers (suite codes).
+3. **Optional pre-alert / Receive** — packages in Miami (`received_miami`) if compiling by hand.
+4. **Manifests — Upload cargo list** — US warehouse CSV → open cargo manifesto with lines  
+   _(alt)_ **Compile from Receive** — empty manifesto + add Miami-received packages.
+5. **Seal cargo manifesto** — locks lines; packages → `manifested`.
+6. **Download & mark submitted for Customs** — electronic CSV for broker / ASYCUDA filing; customs case → `submitted`.
+7. **Mark shipped → Arrived Jamaica**.
+8. **Customs board** — Hold or Cleared / Released (mirror of agency review).
+9. **Hub Station** — inbound scan → sort (pickup or door).
+10. **Fulfillment**
+    - Pickup: Mark collected.
+    - Door: select packages → assignee type (org / client fleet / 3PL) → Create batch → Load / Delivered (or client `/pod/:token` link).
 
 ## Apply migration
 

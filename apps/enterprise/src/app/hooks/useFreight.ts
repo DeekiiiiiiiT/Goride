@@ -314,6 +314,44 @@ export function useCreateManifest() {
   });
 }
 
+export function useUpdateManifest() {
+  const organizationId = useFreightOrgId();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: unknown }) =>
+      freightService.updateManifest(id, body, organizationId),
+    onSuccess: (_data, vars) => {
+      void qc.invalidateQueries({ queryKey: ['freight', 'manifests'] });
+      void qc.invalidateQueries({ queryKey: ['freight', 'manifest', organizationId, vars.id] });
+    },
+  });
+}
+
+export function useDeleteManifest() {
+  const organizationId = useFreightOrgId();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => freightService.deleteManifest(id, organizationId),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['freight', 'manifests'] });
+      void qc.invalidateQueries({ queryKey: ['freight', 'packages'] });
+    },
+  });
+}
+
+export function useImportWarehouseManifest() {
+  const organizationId = useFreightOrgId();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Parameters<typeof freightService.importWarehouseManifest>[0]) =>
+      freightService.importWarehouseManifest(body, organizationId),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['freight', 'manifests'] });
+      void qc.invalidateQueries({ queryKey: ['freight', 'packages'] });
+    },
+  });
+}
+
 export function useCustomsCases() {
   const { organizationId, session } = useAuth();
   return useQuery({

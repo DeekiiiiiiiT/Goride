@@ -286,6 +286,55 @@ export const freightService = {
       organizationId,
     }),
 
+  updateManifest: (id: string, body: unknown, organizationId?: string | null) =>
+    freightFetch<{ manifest: Record<string, unknown> }>(`/manifests/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+      organizationId,
+    }),
+
+  deleteManifest: (id: string, organizationId?: string | null) =>
+    freightFetch<{ ok: boolean; manifestNumber?: string }>(`/manifests/${id}`, {
+      method: 'DELETE',
+      organizationId,
+    }),
+
+  importWarehouseManifest: (
+    body: {
+      carrierName?: string | null;
+      shipmentType?: 'air' | 'sea';
+      originFacilityId?: string | null;
+      destinationFacilityId?: string | null;
+      awbOrBl?: string | null;
+      rows: Array<{
+        suiteCode: string;
+        contactName?: string | null;
+        trn?: string | null;
+        courierTrackingNumber: string;
+        description?: string | null;
+        weightLbs?: number | null;
+        lengthIn?: number | null;
+        widthIn?: number | null;
+        heightIn?: number | null;
+        declaredValueUsd?: number | null;
+        invoiceFileName?: string | null;
+      }>;
+    },
+    organizationId?: string | null,
+  ) =>
+    freightFetch<{
+      manifestId: string;
+      manifestNumber: string;
+      added: number;
+      createdPackages: number;
+      linkedExisting: number;
+      warnings: string[];
+    }>('/manifests/import-warehouse', {
+      method: 'POST',
+      body: JSON.stringify(body),
+      organizationId,
+    }),
+
   addManifestPackages: (
     id: string,
     packageIds: string[],
@@ -322,6 +371,28 @@ export const freightService = {
       csv: string;
       invoicePaths: string[];
     }>(`/manifests/${id}/customs-export`, { organizationId }),
+
+  submitManifestCustoms: (
+    id: string,
+    body?: {
+      brokerRef?: string | null;
+      awbOrBl?: string | null;
+      flightOrVoyage?: string | null;
+      estimatedArrival?: string | null;
+    },
+    organizationId?: string | null,
+  ) =>
+    freightFetch<{
+      manifestNumber: string;
+      csv: string;
+      invoicePaths: string[];
+      customsCase: Record<string, unknown>;
+      message: string;
+    }>(`/manifests/${id}/submit-customs`, {
+      method: 'POST',
+      body: JSON.stringify(body ?? {}),
+      organizationId,
+    }),
 
   listCustomsCases: (organizationId?: string | null) =>
     freightFetch<{ customsCases: Record<string, unknown>[] }>('/customs-cases', {
