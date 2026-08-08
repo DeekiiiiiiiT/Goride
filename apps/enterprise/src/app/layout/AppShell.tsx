@@ -49,6 +49,7 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Mailbox & Intake',
     icon: Package,
     children: [
+      { to: '/app/facilities', label: 'Facilities', icon: Building2, module: 'freight_suites' },
       { to: '/app/suites', label: 'Suites', icon: Tags, module: 'freight_suites' },
       { to: '/app/packages', label: 'Packages', icon: Package, module: 'freight_mailbox_packages' },
       { to: '/app/miami-scan', label: 'Receive', icon: ClipboardList, module: 'freight_miami_scan' },

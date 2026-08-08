@@ -11,6 +11,7 @@ import {
 import { resolveFuelPaymentSource } from "./fuel_payment_source.ts";
 import { syncLinkedExpenseTransaction } from "./fuel_transaction_sync.ts";
 import * as fuelLogic from "./fuel_logic.ts";
+import { auditLogic } from "./audit_logic.ts";
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -351,13 +352,6 @@ export async function ensureFuelEntryForApprovedTx(
   if (!matchedStation && fuelEntry.matchedStationId) {
     matchedStation = await kv.get(`station:${fuelEntry.matchedStationId}`);
   }
-  const confidence = fuelLogic.calculateConfidenceScore(fuelEntry, matchedStation);
-  fuelEntry.metadata = {
-    ...fuelEntry.metadata,
-    auditConfidenceScore: confidence.score,
-    auditConfidenceBreakdown: confidence.breakdown,
-    isHighlyTrusted: confidence.isHighlyTrusted,
-  };
 
   // Capacity cycle spine: stamp cycleId + capacity-close flags (driver Full Tank ignored)
   try {
@@ -419,6 +413,32 @@ export async function ensureFuelEntryForApprovedTx(
       delete fuelEntry.metadata.isHardAnchor;
       delete fuelEntry.metadata.isFullTank;
     }
+  }
+
+  // Verified station match → forensic seal (parity with GPS POST / manual override paths)
+  const stationVerified = matchedStation?.status === "verified";
+  if (stationVerified) {
+    fuelEntry.signature = await auditLogic.generateRecordHash(fuelEntry);
+    fuelEntry.signedAt = new Date().toISOString();
+  }
+
+  // Score after cycle stamp + optional signature so crypto/physical breakdown is accurate
+  const confidence = fuelLogic.calculateConfidenceScore(fuelEntry, matchedStation);
+  fuelEntry.metadata = {
+    ...fuelEntry.metadata,
+    auditConfidenceScore: confidence.score,
+    auditConfidenceBreakdown: confidence.breakdown,
+    isHighlyTrusted: confidence.isHighlyTrusted,
+  };
+
+  if (stationVerified && confidence.isHighlyTrusted && !fuelEntry.isLocked) {
+    fuelEntry.isLocked = true;
+    fuelEntry.lockedAt = new Date().toISOString();
+    fuelEntry.auditStatus = "Auto-Locked";
+    fuelEntry.signature = await auditLogic.generateRecordHash(fuelEntry);
+    console.log(
+      `[ensureFuelEntryForApprovedTx] Auto-locked ${fuelEntry.id} (score ${confidence.score})`,
+    );
   }
 
   const toSave = opts.stamp ? opts.stamp(fuelEntry) : fuelEntry;

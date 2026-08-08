@@ -148,9 +148,10 @@ export function registerPipelineRoutes(app: FreightApp) {
   // Facilities
   // -------------------------------------------------------------------------
   const facilityBody = z.object({
-    name: z.string().min(1).max(200),
-    code: z.string().min(1).max(40),
+    name: z.string().min(1).max(200).optional(),
+    code: z.string().min(1).max(40).optional(),
     facilityType: z.enum(["miami_warehouse", "ja_hub", "branch"]),
+    intakeCatalogId: z.string().uuid().optional().nullable(),
     addressLine: z.string().max(500).optional().nullable(),
     city: z.string().max(120).optional().nullable(),
     countryCode: z.string().length(2).optional(),
@@ -158,6 +159,21 @@ export function registerPipelineRoutes(app: FreightApp) {
     lng: z.number().optional().nullable(),
     timezone: z.string().max(64).optional(),
     status: z.enum(["active", "inactive"]).optional(),
+  });
+
+  /** Active Florida master lease holders for Enterprise Facilities picker. */
+  app.get("/intake-warehouses", async (c) => {
+    const user = await requireUser(c);
+    if (user instanceof Response) return user;
+    const { data, error } = await serviceClient()
+      .from("intake_warehouse_catalog")
+      .select(
+        "id, name, code, address_line, city, state, postal_code, country_code, timezone, status",
+      )
+      .eq("status", "active")
+      .order("name");
+    if (error) return c.json({ error: error.message }, 500);
+    return c.json({ warehouses: data ?? [] });
   });
 
   app.get("/facilities", async (c) => {
@@ -181,26 +197,183 @@ export function registerPipelineRoutes(app: FreightApp) {
     const parsed = facilityBody.safeParse(await c.req.json());
     if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
     const b = parsed.data;
+
+    if (b.facilityType === "miami_warehouse") {
+      if (!b.intakeCatalogId) {
+        return c.json(
+          { error: "US intake warehouse must be selected from the master lease holder catalog" },
+          400,
+        );
+      }
+      const { data: catalog, error: catErr } = await serviceClient()
+        .from("intake_warehouse_catalog")
+        .select("*")
+        .eq("id", b.intakeCatalogId)
+        .eq("status", "active")
+        .maybeSingle();
+      if (catErr) return c.json({ error: catErr.message }, 500);
+      if (!catalog) return c.json({ error: "Intake warehouse not found or inactive" }, 404);
+
+      const orgCode =
+        (b.code?.toUpperCase().trim()) ||
+        `${String(catalog.code).slice(0, 24)}-INTAKE`;
+
+      const { data, error } = await freightDb()
+        .from("facilities")
+        .insert({
+          organization_id: user.organizationId,
+          name: b.name?.trim() || String(catalog.name),
+          code: orgCode,
+          facility_type: "miami_warehouse",
+          intake_catalog_id: catalog.id,
+          address_line: String(catalog.address_line),
+          city: `${String(catalog.city)}, ${String(catalog.state)} ${String(catalog.postal_code)}`.trim(),
+          country_code: String(catalog.country_code || "US"),
+          lat: b.lat ?? null,
+          lng: b.lng ?? null,
+          timezone: String(catalog.timezone || "America/New_York"),
+          status: b.status ?? "active",
+        })
+        .select("*")
+        .single();
+      if (error) return c.json({ error: error.message }, 500);
+      return c.json({ facility: data }, 201);
+    }
+
+    const name = b.name?.trim();
+    const code = b.code?.toUpperCase().trim();
+    if (!name || !code) {
+      return c.json({ error: "name and code are required for hub/branch facilities" }, 400);
+    }
+
     const { data, error } = await freightDb()
       .from("facilities")
       .insert({
         organization_id: user.organizationId,
-        name: b.name,
-        code: b.code.toUpperCase(),
+        name,
+        code,
         facility_type: b.facilityType,
         address_line: b.addressLine || null,
         city: b.city || null,
-        country_code: b.countryCode ?? (b.facilityType === "miami_warehouse" ? "US" : "JM"),
+        country_code: b.countryCode ?? "JM",
         lat: b.lat ?? null,
         lng: b.lng ?? null,
-        timezone: b.timezone ??
-          (b.facilityType === "miami_warehouse" ? "America/New_York" : "America/Jamaica"),
+        timezone: b.timezone ?? "America/Jamaica",
         status: b.status ?? "active",
       })
       .select("*")
       .single();
     if (error) return c.json({ error: error.message }, 500);
     return c.json({ facility: data }, 201);
+  });
+
+  app.patch("/facilities/:id", async (c) => {
+    const user = await requireUser(c);
+    if (user instanceof Response) return user;
+    const id = c.req.param("id");
+    const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+
+    const { data: existing, error: loadErr } = await freightDb()
+      .from("facilities")
+      .select("*")
+      .eq("id", id)
+      .eq("organization_id", user.organizationId)
+      .maybeSingle();
+    if (loadErr) return c.json({ error: loadErr.message }, 500);
+    if (!existing) return c.json({ error: "Facility not found" }, 404);
+
+    const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+
+    if (body.name != null) {
+      const name = String(body.name).trim();
+      if (!name) return c.json({ error: "name cannot be empty" }, 400);
+      patch.name = name;
+    }
+    if (body.code != null) {
+      const code = String(body.code).trim().toUpperCase();
+      if (!code) return c.json({ error: "code cannot be empty" }, 400);
+      patch.code = code;
+    }
+    if (body.status === "active" || body.status === "inactive") patch.status = body.status;
+    if (body.lat !== undefined) patch.lat = body.lat;
+    if (body.lng !== undefined) patch.lng = body.lng;
+    if (body.timezone != null) patch.timezone = String(body.timezone).trim();
+
+    if (existing.facility_type === "miami_warehouse") {
+      const nextCatalogId =
+        body.intakeCatalogId != null
+          ? String(body.intakeCatalogId)
+          : existing.intake_catalog_id
+            ? String(existing.intake_catalog_id)
+            : null;
+      if (body.intakeCatalogId != null || !existing.intake_catalog_id) {
+        if (!nextCatalogId) {
+          return c.json({ error: "US intake warehouse requires a master lease holder" }, 400);
+        }
+        const { data: catalog, error: catErr } = await serviceClient()
+          .from("intake_warehouse_catalog")
+          .select("*")
+          .eq("id", nextCatalogId)
+          .eq("status", "active")
+          .maybeSingle();
+        if (catErr) return c.json({ error: catErr.message }, 500);
+        if (!catalog) return c.json({ error: "Intake warehouse not found or inactive" }, 404);
+        patch.intake_catalog_id = catalog.id;
+        patch.address_line = String(catalog.address_line);
+        patch.city = `${String(catalog.city)}, ${String(catalog.state)} ${String(catalog.postal_code)}`.trim();
+        patch.country_code = String(catalog.country_code || "US");
+        patch.timezone = String(catalog.timezone || "America/New_York");
+        if (body.name == null && body.intakeCatalogId != null) {
+          patch.name = String(catalog.name);
+        }
+      }
+    } else {
+      if (body.addressLine !== undefined || body.address_line !== undefined) {
+        const v = body.addressLine ?? body.address_line;
+        patch.address_line = v == null || v === "" ? null : String(v);
+      }
+      if (body.city !== undefined) {
+        patch.city = body.city == null || body.city === "" ? null : String(body.city);
+      }
+      if (body.countryCode != null || body.country_code != null) {
+        patch.country_code = String(body.countryCode ?? body.country_code)
+          .trim()
+          .toUpperCase()
+          .slice(0, 2);
+      }
+    }
+
+    const { data, error } = await freightDb()
+      .from("facilities")
+      .update(patch)
+      .eq("id", id)
+      .eq("organization_id", user.organizationId)
+      .select("*")
+      .single();
+    if (error) return c.json({ error: error.message }, 500);
+    return c.json({ facility: data });
+  });
+
+  app.delete("/facilities/:id", async (c) => {
+    const user = await requireUser(c);
+    if (user instanceof Response) return user;
+    const id = c.req.param("id");
+    const { data: existing, error: loadErr } = await freightDb()
+      .from("facilities")
+      .select("id")
+      .eq("id", id)
+      .eq("organization_id", user.organizationId)
+      .maybeSingle();
+    if (loadErr) return c.json({ error: loadErr.message }, 500);
+    if (!existing) return c.json({ error: "Facility not found" }, 404);
+
+    const { error } = await freightDb()
+      .from("facilities")
+      .delete()
+      .eq("id", id)
+      .eq("organization_id", user.organizationId);
+    if (error) return c.json({ error: error.message }, 500);
+    return c.json({ ok: true });
   });
 
   app.post("/facilities/seed-defaults", async (c) => {
@@ -321,6 +494,83 @@ export function registerPipelineRoutes(app: FreightApp) {
       .single();
     if (error) return c.json({ error: error.message }, 500);
     return c.json({ suite: data }, 201);
+  });
+
+  /** Bulk CSV import — upsert by (organization_id, suite_code). */
+  const suiteImportBody = z.object({
+    rows: z
+      .array(
+        z.object({
+          suiteCode: z.string().min(2).max(40),
+          contactName: z.string().max(200).optional().nullable(),
+          contactPhone: z.string().max(50).optional().nullable(),
+          contactEmail: z.string().email().optional().nullable().or(z.literal("")),
+          trn: z.string().max(40).optional().nullable(),
+          defaultFulfillmentMode: fulfillmentMode.optional(),
+          defaultAssigneeType: assigneeType.optional(),
+          deliveryAddress: z.string().max(500).optional().nullable(),
+        }),
+      )
+      .min(1)
+      .max(500),
+  });
+
+  app.post("/suites/import", async (c) => {
+    const user = await requireUser(c);
+    if (user instanceof Response) return user;
+    const parsed = suiteImportBody.safeParse(await c.req.json());
+    if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
+
+    const now = new Date().toISOString();
+    const payloads = parsed.data.rows.map((b) => ({
+      organization_id: user.organizationId,
+      suite_code: b.suiteCode.toUpperCase().trim(),
+      contact_name: b.contactName || null,
+      contact_phone: b.contactPhone || null,
+      contact_email: b.contactEmail || null,
+      trn: b.trn || null,
+      default_fulfillment_mode: b.defaultFulfillmentMode ?? "pickup",
+      default_assignee_type: b.defaultAssigneeType ?? "org_fleet",
+      delivery_address: b.deliveryAddress || null,
+      status: "active",
+      updated_at: now,
+    }));
+
+    // Dedupe within payload (last wins) so upsert batch is valid
+    const byCode = new Map<string, (typeof payloads)[number]>();
+    for (const p of payloads) byCode.set(p.suite_code, p);
+    const unique = [...byCode.values()];
+
+    const existingCodes = new Set<string>();
+    {
+      const codes = unique.map((p) => p.suite_code);
+      const { data: existing } = await freightDb()
+        .from("suites")
+        .select("suite_code")
+        .eq("organization_id", user.organizationId)
+        .in("suite_code", codes);
+      for (const e of existing ?? []) existingCodes.add(String(e.suite_code));
+    }
+
+    const { data, error } = await freightDb()
+      .from("suites")
+      .upsert(unique, { onConflict: "organization_id,suite_code" })
+      .select("id, suite_code");
+    if (error) return c.json({ error: error.message }, 500);
+
+    let created = 0;
+    let updated = 0;
+    for (const row of data ?? []) {
+      if (existingCodes.has(String(row.suite_code))) updated++;
+      else created++;
+    }
+
+    return c.json({
+      created,
+      updated,
+      total: (data ?? []).length,
+      suites: data ?? [],
+    });
   });
 
   app.patch("/suites/:id", async (c) => {

@@ -161,6 +161,11 @@ export const freightService = {
       { organizationId },
     ),
 
+  listIntakeWarehouses: (organizationId?: string | null) =>
+    freightFetch<{ warehouses: Record<string, unknown>[] }>('/intake-warehouses', {
+      organizationId,
+    }),
+
   createFacility: (body: unknown, organizationId?: string | null) =>
     freightFetch<{ facility: Record<string, unknown> }>('/facilities', {
       method: 'POST',
@@ -168,9 +173,16 @@ export const freightService = {
       organizationId,
     }),
 
-  seedFacilities: (organizationId?: string | null) =>
-    freightFetch<{ facilities: Record<string, unknown>[] }>('/facilities/seed-defaults', {
-      method: 'POST',
+  updateFacility: (id: string, body: unknown, organizationId?: string | null) =>
+    freightFetch<{ facility: Record<string, unknown> }>(`/facilities/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+      organizationId,
+    }),
+
+  deleteFacility: (id: string, organizationId?: string | null) =>
+    freightFetch<{ ok: boolean }>(`/facilities/${id}`, {
+      method: 'DELETE',
       organizationId,
     }),
 
@@ -181,6 +193,30 @@ export const freightService = {
     freightFetch<{ suite: Record<string, unknown> }>('/suites', {
       method: 'POST',
       body: JSON.stringify(body),
+      organizationId,
+    }),
+
+  importSuites: (
+    rows: Array<{
+      suiteCode: string;
+      contactName?: string | null;
+      contactPhone?: string | null;
+      contactEmail?: string | null;
+      trn?: string | null;
+      defaultFulfillmentMode?: string;
+      defaultAssigneeType?: string;
+      deliveryAddress?: string | null;
+    }>,
+    organizationId?: string | null,
+  ) =>
+    freightFetch<{
+      created: number;
+      updated: number;
+      total: number;
+      suites: Record<string, unknown>[];
+    }>('/suites/import', {
+      method: 'POST',
+      body: JSON.stringify({ rows }),
       organizationId,
     }),
 

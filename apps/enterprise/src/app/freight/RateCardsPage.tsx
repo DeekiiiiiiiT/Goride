@@ -27,7 +27,8 @@ export function RateCardsPage() {
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setFormError(null);
-    const fd = new FormData(e.currentTarget);
+    const form = e.currentTarget;
+    const fd = new FormData(form);
     const amountMinor = dollarsToMinor(String(fd.get('amount') || 0));
     let rules: Record<string, unknown> = {};
 
@@ -81,7 +82,7 @@ export function RateCardsPage() {
       } else {
         await create.mutateAsync(body);
       }
-      e.currentTarget.reset();
+      form.reset();
       setStrategy('flat');
     } catch (err) {
       setFormError((err as Error).message);

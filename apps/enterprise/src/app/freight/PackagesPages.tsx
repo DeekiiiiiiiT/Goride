@@ -13,7 +13,8 @@ export function PackagesListPage() {
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setFormError(null);
-    const fd = new FormData(e.currentTarget);
+    const form = e.currentTarget;
+    const fd = new FormData(form);
     try {
       await create.mutateAsync({
         suiteId: (fd.get('suiteId') as string) || null,
@@ -23,7 +24,7 @@ export function PackagesListPage() {
           ? Math.round(Number(fd.get('declaredValueUsd')) * 100)
           : null,
       });
-      e.currentTarget.reset();
+      form.reset();
     } catch (err) {
       setFormError((err as Error).message);
     }

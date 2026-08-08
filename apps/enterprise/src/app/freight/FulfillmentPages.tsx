@@ -425,7 +425,8 @@ export function ClientFleetPage() {
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setFormError(null);
-    const fd = new FormData(e.currentTarget);
+    const form = e.currentTarget;
+    const fd = new FormData(form);
     try {
       await create.mutateAsync({
         clientId: fd.get('clientId'),
@@ -434,7 +435,7 @@ export function ClientFleetPage() {
         vehiclePlate: fd.get('vehiclePlate') || null,
         vehicleLabel: fd.get('vehicleLabel') || null,
       });
-      e.currentTarget.reset();
+      form.reset();
     } catch (err) {
       setFormError((err as Error).message);
     }

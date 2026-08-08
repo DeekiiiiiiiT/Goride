@@ -10,6 +10,10 @@ import {
 } from '@/app/hooks/useFreight';
 import { freightService } from '@/app/services/freightService';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  CUSTOMS_MANIFEST_CSV_SAMPLE,
+  downloadCustomsManifestSampleCsv,
+} from '@/app/freight/manifestCustomsCsvSample';
 
 export function ManifestsListPage() {
   const { data, isLoading, error } = useManifests();
@@ -21,7 +25,8 @@ export function ManifestsListPage() {
   async function onCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setErr(null);
-    const fd = new FormData(e.currentTarget);
+    const form = e.currentTarget;
+    const fd = new FormData(form);
     try {
       await create.mutateAsync({
         carrierName: fd.get('carrierName') || null,
@@ -30,7 +35,7 @@ export function ManifestsListPage() {
         destinationFacilityId: (fd.get('destinationFacilityId') as string) || null,
         awbOrBl: fd.get('awbOrBl') || null,
       });
-      e.currentTarget.reset();
+      form.reset();
     } catch (ex) {
       setErr((ex as Error).message);
     }
@@ -40,9 +45,33 @@ export function ManifestsListPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold">Manifests</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Air/sea consolidation — seal, export broker CSV, ship to Jamaica.
+        <p className="mt-1 max-w-2xl text-sm text-slate-500">
+          Built in Roam at the US intake warehouse after packages are received and sealed — then
+          downloaded as the customs CSV for Jamaica (ASYCUDA / broker). Not uploaded from an outside
+          system.
         </p>
+      </div>
+
+      <div className="rounded-xl border border-slate-200 bg-white p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-slate-900">Customs CSV format</h2>
+            <p className="mt-1 text-xs text-slate-500">
+              After seal, each manifesto exports this column layout for customs submission. Sample
+              rows use example BShip'D-style data.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={downloadCustomsManifestSampleCsv}
+            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50"
+          >
+            Download sample CSV
+          </button>
+        </div>
+        <pre className="mt-3 overflow-x-auto rounded-lg bg-slate-50 px-3 py-2 text-[11px] leading-relaxed text-slate-700">
+          {CUSTOMS_MANIFEST_CSV_SAMPLE.trim()}
+        </pre>
       </div>
 
       {isLoading && <p className="text-sm text-slate-500">Loading…</p>}
@@ -70,6 +99,9 @@ export function ManifestsListPage() {
 
       <form onSubmit={onCreate} className="space-y-3 rounded-xl border border-slate-200 bg-white p-6">
         <h2 className="text-sm font-semibold">Open new manifest</h2>
+        <p className="text-xs text-slate-500">
+          Start empty → add Miami-received packages → seal → download customs CSV.
+        </p>
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block text-sm">
             Carrier
@@ -83,7 +115,7 @@ export function ManifestsListPage() {
             </select>
           </label>
           <label className="block text-sm">
-            Origin
+            Origin (US intake)
             <select name="originFacilityId" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2">
               <option value="">—</option>
               {(miami.data?.facilities ?? []).map((f) => (
@@ -92,7 +124,7 @@ export function ManifestsListPage() {
             </select>
           </label>
           <label className="block text-sm">
-            Destination hub
+            Destination (Jamaica hub)
             <select name="destinationFacilityId" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2">
               <option value="">—</option>
               {(hub.data?.facilities ?? []).map((f) => (
@@ -191,7 +223,7 @@ export function ManifestDetailPage() {
         )}
         {(status === 'arrived_ja' || status === 'sealed' || status === 'shipped') && (
           <button type="button" onClick={() => void downloadCsv()} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">
-            Download customs CSV
+            Download customs CSV (ASYCUDA)
           </button>
         )}
       </div>

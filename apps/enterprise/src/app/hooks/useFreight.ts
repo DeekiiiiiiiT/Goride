@@ -157,11 +157,39 @@ export function useFacilities(type?: string) {
   });
 }
 
-export function useSeedFacilities() {
+export function useIntakeWarehouses() {
+  const { organizationId, session } = useAuth();
+  return useQuery({
+    queryKey: ['freight', 'intake-warehouses', organizationId],
+    queryFn: () => freightService.listIntakeWarehouses(organizationId),
+    enabled: Boolean(session),
+  });
+}
+
+export function useCreateFacility() {
   const organizationId = useFreightOrgId();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () => freightService.seedFacilities(organizationId),
+    mutationFn: (body: unknown) => freightService.createFacility(body, organizationId),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['freight', 'facilities'] }),
+  });
+}
+
+export function useUpdateFacility() {
+  const organizationId = useFreightOrgId();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: unknown }) =>
+      freightService.updateFacility(id, body, organizationId),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['freight', 'facilities'] }),
+  });
+}
+
+export function useDeleteFacility() {
+  const organizationId = useFreightOrgId();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => freightService.deleteFacility(id, organizationId),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['freight', 'facilities'] }),
   });
 }
@@ -180,6 +208,26 @@ export function useCreateSuite() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: unknown) => freightService.createSuite(body, organizationId),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['freight', 'suites'] }),
+  });
+}
+
+export function useImportSuites() {
+  const organizationId = useFreightOrgId();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (
+      rows: Array<{
+        suiteCode: string;
+        contactName?: string | null;
+        contactPhone?: string | null;
+        contactEmail?: string | null;
+        trn?: string | null;
+        defaultFulfillmentMode?: string;
+        defaultAssigneeType?: string;
+        deliveryAddress?: string | null;
+      }>,
+    ) => freightService.importSuites(rows, organizationId),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['freight', 'suites'] }),
   });
 }

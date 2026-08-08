@@ -185,6 +185,7 @@ import { registerPendingVehicleCatalogRoutes } from "./pending_vehicle_catalog_r
 import { registerPartSourcingRoutes } from "./part_sourcing_routes.ts";
 import { registerExpenseHubRoutes } from "./expense_hub_routes.ts";
 import { registerPlatformVendorRoutes } from "./platform_vendor_routes.ts";
+import { registerIntakeWarehouseRoutes } from "./intake_warehouse_routes.ts";
 import { registerUberFleetRoutes } from "./uber_fleet_routes.ts";
 import {
   provisionFleetOwner,
@@ -449,6 +450,7 @@ registerFleetAdminStorageRoutes(app, supabase, kv);
 registerFleetAdminMaintenanceLedgerRoutes(app, supabase, kv);
 registerPendingVehicleCatalogRoutes(app, supabase);
 registerPartSourcingRoutes(app, supabase);
+registerIntakeWarehouseRoutes(app, supabase);
 registerUberFleetRoutes(app);
 registerExpenseHubRoutes(app);
 

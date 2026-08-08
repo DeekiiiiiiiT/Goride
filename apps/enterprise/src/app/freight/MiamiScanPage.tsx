@@ -1,10 +1,10 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
-import { useFacilities, useScanPackage, useSeedFacilities, useSuites } from '@/app/hooks/useFreight';
+import { Link } from 'react-router-dom';
+import { useFacilities, useScanPackage, useSuites } from '@/app/hooks/useFreight';
 
 export function MiamiScanPage() {
   const facilities = useFacilities('miami_warehouse');
   const suites = useSuites();
-  const seed = useSeedFacilities();
   const scan = useScanPackage();
   const [facilityId, setFacilityId] = useState('');
   const [lastResult, setLastResult] = useState<string | null>(null);
@@ -24,10 +24,11 @@ export function MiamiScanPage() {
     e.preventDefault();
     setError(null);
     if (!facilityId) {
-      setError('Select or seed a Miami warehouse facility first.');
+      setError('Add a US intake warehouse under Facilities first.');
       return;
     }
-    const fd = new FormData(e.currentTarget);
+    const form = e.currentTarget;
+    const fd = new FormData(form);
     const barcode = String(fd.get('barcode') || '').trim();
     if (!barcode) return;
     try {
@@ -51,32 +52,37 @@ export function MiamiScanPage() {
       setLastResult(
         `${res.createdUnknown ? 'NEW unknown · ' : ''}${res.duplicate ? 'DUP · ' : ''}${tracking} → ${String(res.package?.status)}`,
       );
-      e.currentTarget.querySelector<HTMLInputElement>('[name=barcode]')!.value = '';
+      if (barcodeRef.current) barcodeRef.current.value = '';
+      else {
+        const input = form.querySelector<HTMLInputElement>('[name=barcode]');
+        if (input) input.value = '';
+      }
       barcodeRef.current?.focus();
     } catch (err) {
       setError((err as Error).message);
     }
   }
 
+  const intakeList = facilities.data?.facilities ?? [];
+
   return (
     <div className="mx-auto max-w-xl space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">Warehouse receive</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            Scan courier barcode — match pre-alert or create unknown with suite.
-          </p>
-        </div>
-        {!(facilities.data?.facilities ?? []).length && (
-          <button
-            type="button"
-            onClick={() => void seed.mutateAsync()}
-            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
-          >
-            Seed facilities
-          </button>
-        )}
+      <div>
+        <h1 className="text-2xl font-semibold">Warehouse receive</h1>
+        <p className="mt-1 text-sm text-slate-500">
+          Scan courier barcode — match pre-alert or create unknown with suite.
+        </p>
       </div>
+
+      {!intakeList.length && (
+        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          No US intake warehouse yet.{' '}
+          <Link to="/app/facilities" className="font-semibold underline">
+            Add one under Facilities
+          </Link>{' '}
+          before receiving packages.
+        </p>
+      )}
 
       <form onSubmit={onSubmit} className="space-y-4 rounded-xl border-2 border-amber-200 bg-white p-6 shadow-sm">
         <label className="block text-sm font-medium">
@@ -87,7 +93,7 @@ export function MiamiScanPage() {
             className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
           >
             <option value="">Select…</option>
-            {(facilities.data?.facilities ?? []).map((f) => (
+            {intakeList.map((f) => (
               <option key={String(f.id)} value={String(f.id)}>
                 {String(f.name)}
               </option>
@@ -158,7 +164,7 @@ export function MiamiScanPage() {
 
         <button
           type="submit"
-          disabled={scan.isPending}
+          disabled={scan.isPending || !intakeList.length}
           className="w-full rounded-lg bg-amber-500 py-3 text-sm font-semibold text-slate-950 hover:bg-amber-400 disabled:opacity-60"
         >
           {scan.isPending ? 'Scanning…' : 'Receive package'}

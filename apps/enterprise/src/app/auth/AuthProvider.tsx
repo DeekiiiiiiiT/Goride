@@ -73,6 +73,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let mounted = true;
+
+    async function resolveOwnedEnterpriseOrg(userId: string) {
+      const { data: owned } = await supabaseEnterpriseApp
+        .from('organizations')
+        .select('id')
+        .eq('owner_id', userId)
+        .eq('product_line', 'enterprise')
+        .limit(1)
+        .maybeSingle();
+      if (mounted && owned?.id) setOrganizationId(owned.id);
+    }
+
     (async () => {
       try {
         const { data } = await supabaseEnterpriseApp.auth.getSession();
@@ -81,14 +93,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Resolve enterprise org when JWT lacks organizationId
         const u = data.session?.user;
         if (u && !deriveOrgId(u)) {
-          const { data: owned } = await supabaseEnterpriseApp
-            .from('organizations')
-            .select('id')
-            .eq('owner_id', u.id)
-            .eq('product_line', 'enterprise')
-            .limit(1)
-            .maybeSingle();
-          if (mounted && owned?.id) setOrganizationId(owned.id);
+          await resolveOwnedEnterpriseOrg(u.id);
         }
       } finally {
         if (mounted) setLoading(false);
@@ -98,6 +103,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: sub } = supabaseEnterpriseApp.auth.onAuthStateChange((_event, next) => {
       applySession(next);
       setLoading(false);
+      // Keep owned-org resolution after TOKEN_REFRESHED / INITIAL_SESSION wipe JWT-only apply
+      if (next?.user && !deriveOrgId(next.user)) {
+        void resolveOwnedEnterpriseOrg(next.user.id);
+      }
     });
 
     return () => {

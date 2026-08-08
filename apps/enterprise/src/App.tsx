@@ -47,6 +47,9 @@ const ClientsPage = lazy(() =>
 const RateCardsPage = lazy(() =>
   import('@/app/freight/RateCardsPage').then((m) => ({ default: m.RateCardsPage })),
 );
+const FacilitiesPage = lazy(() =>
+  import('@/app/freight/FacilitiesPage').then((m) => ({ default: m.FacilitiesPage })),
+);
 const SuitesPage = lazy(() =>
   import('@/app/freight/SuitesPage').then((m) => ({ default: m.SuitesPage })),
 );
@@ -314,6 +317,16 @@ export default function App() {
             }
           />
           <Route
+            path="facilities"
+            element={
+              <Gated module="freight_suites">
+                <Suspense fallback={<Fall />}>
+                  <FacilitiesPage />
+                </Suspense>
+              </Gated>
+            }
+          />
+          <Route
             path="suites"
             element={
               <Gated module="freight_suites">
@@ -343,8 +356,8 @@ export default function App() {
               </Gated>
             }
           />
-          <Route path="warehouse" element={<Navigate to="/app/miami-scan" replace />} />
-          <Route path="mailbox" element={<Navigate to="/app/packages" replace />} />
+          <Route path="warehouse" element={<Navigate to="/app/facilities" replace />} />
+          <Route path="mailbox" element={<Navigate to="/app/facilities" replace />} />
           <Route path="last-mile" element={<Navigate to="/app/fulfillment" replace />} />
           <Route path="setup" element={<Navigate to="/app/shipments" replace />} />
           <Route path="fleet-ops" element={<Navigate to="/app/fuel/logs" replace />} />

@@ -1963,12 +1963,17 @@ app.get(`${BASE_PATH}/fuel-entries`, async (c) => {
         query = query.eq("value->>vehicleId", vehicleId);
     }
 
+    // Dates may be YMD ("2026-08-02") or ISO ("2026-08-02T09:07:00"). Plain
+    // lte(endYmd) drops same-day ISO timestamps — use exclusive next-day upper bound.
     if (startDate) {
-        query = query.gte("value->>date", startDate);
+        query = query.gte("value->>date", String(startDate).slice(0, 10));
     }
-    
     if (endDate) {
-        query = query.lte("value->>date", endDate);
+        const endYmd = String(endDate).slice(0, 10);
+        const [y, m, d] = endYmd.split("-").map(Number);
+        const next = new Date(y, (m || 1) - 1, (d || 1) + 1);
+        const nextYmd = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}-${String(next.getDate()).padStart(2, "0")}`;
+        query = query.lt("value->>date", nextYmd);
     }
 
     // Prefer DB-side org pred when scoped (legacy null still returned; filterByOrg cleans)
@@ -5368,6 +5373,7 @@ app.post(`${BASE_PATH}/admin/verify-record-forensics`, requirePlatformStaff(), a
 
 /**
  * Phase 2: Re-sign fuel entries from legacy bare SHA-256 onto HMAC-SHA256.
+ * Also seals unsigned entries already at a verified station (AUTO_AI gap heal).
  * dryRun:true (default) counts mismatches; dryRun:false writes new signatures.
  */
 app.post(`${BASE_PATH}/admin/backfill-hmac-signatures`, requirePlatformStaff(), async (c) => {
@@ -5375,8 +5381,9 @@ app.post(`${BASE_PATH}/admin/backfill-hmac-signatures`, requirePlatformStaff(), 
         const body = await c.req.json().catch(() => ({}));
         const dryRun = body.dryRun !== false; // default true — safe
         const limit = Math.min(Number(body.limit) || 5000, 20000);
+        const signUnsignedVerified = body.signUnsignedVerified !== false; // default true
 
-        console.log(`[HmacBackfill] Starting ${dryRun ? "DRY RUN" : "LIVE"} (limit=${limit})`);
+        console.log(`[HmacBackfill] Starting ${dryRun ? "DRY RUN" : "LIVE"} (limit=${limit}, signUnsignedVerified=${signUnsignedVerified})`);
 
         const { data, error } = await supabase
             .from("kv_store_37f42386")
@@ -5388,9 +5395,11 @@ app.post(`${BASE_PATH}/admin/backfill-hmac-signatures`, requirePlatformStaff(), 
 
         const rows = data || [];
         const sampleNeedsResign: string[] = [];
+        const sampleUnsignedSigned: string[] = [];
         let examined = 0;
         let alreadyHmac = 0;
         let unsigned = 0;
+        let unsignedSigned = 0;
         let needsResign = 0;
         let updated = 0;
         let errors: string[] = [];
@@ -5399,10 +5408,51 @@ app.post(`${BASE_PATH}/admin/backfill-hmac-signatures`, requirePlatformStaff(), 
             examined++;
             const entry = row.value as any;
             if (!entry || typeof entry !== "object") continue;
+
+            // Heal: verified-station fills that never got a forensic seal (portal AUTO_AI path)
             if (!entry.signature) {
                 unsigned++;
+                const stationId = entry.matchedStationId || entry.metadata?.matchedStationId;
+                const locVerified = entry.metadata?.locationStatus === "verified";
+                if (!signUnsignedVerified || !stationId || !locVerified) continue;
+
+                if (sampleUnsignedSigned.length < 20) {
+                    sampleUnsignedSigned.push(String(entry.id || row.key));
+                }
+                if (!dryRun) {
+                    try {
+                        let station = null;
+                        try {
+                            station = await kv.get(`station:${stationId}`);
+                        } catch { /* score without station */ }
+                        entry.signature = await auditLogic.generateRecordHash(entry);
+                        entry.signedAt = new Date().toISOString();
+                        const confidence = fuelLogic.calculateConfidenceScore(entry, station);
+                        entry.metadata = {
+                            ...(entry.metadata || {}),
+                            auditConfidenceScore: confidence.score,
+                            auditConfidenceBreakdown: confidence.breakdown,
+                            isHighlyTrusted: confidence.isHighlyTrusted,
+                            hmacUnsignedSealedAt: entry.signedAt,
+                        };
+                        if (confidence.isHighlyTrusted && station?.status === "verified" && !entry.isLocked) {
+                            entry.isLocked = true;
+                            entry.lockedAt = entry.signedAt;
+                            entry.auditStatus = "Auto-Locked";
+                            entry.signature = await auditLogic.generateRecordHash(entry);
+                        }
+                        await kv.set(row.key, entry);
+                        unsignedSigned++;
+                        updated++;
+                    } catch (writeErr: any) {
+                        errors.push(`${entry.id || row.key}: unsigned seal failed — ${writeErr.message}`);
+                    }
+                } else {
+                    unsignedSigned++;
+                }
                 continue;
             }
+
             let matches = false;
             try {
                 matches = await auditLogic.verifyRecordIntegrity(entry, entry.signature);
@@ -5439,14 +5489,16 @@ app.post(`${BASE_PATH}/admin/backfill-hmac-signatures`, requirePlatformStaff(), 
             dryRun,
             examined,
             unsigned,
+            unsignedSigned: dryRun ? unsignedSigned : unsignedSigned,
             alreadyHmac,
             needsResign,
             updated: dryRun ? 0 : updated,
             sampleNeedsResign,
+            sampleUnsignedSigned,
             errors: errors.slice(0, 25),
             message: dryRun
-                ? `Dry run: ${needsResign} of ${examined} fuel entries need HMAC re-sign. Set dryRun:false to apply.`
-                : `Live: re-signed ${updated} of ${needsResign} entries needing HMAC.`,
+                ? `Dry run: ${needsResign} legacy re-sign + ${unsignedSigned} unsigned verified seals of ${examined}. Set dryRun:false to apply.`
+                : `Live: updated ${updated} (legacy re-sign ${needsResign}, unsigned verified sealed ${unsignedSigned}).`,
         });
     } catch (e: any) {
         return c.json({ error: e.message }, 500);
