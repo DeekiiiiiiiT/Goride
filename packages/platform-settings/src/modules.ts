@@ -90,8 +90,8 @@ export const ENTERPRISE_MODULE_CATALOG: readonly ModuleCatalogEntry[] = [
   },
   {
     key: 'freight_miami_scan',
-    label: 'Warehouse Receive',
-    description: 'Miami warehouse intake scanning station.',
+    label: 'Receive',
+    description: 'Warehouse intake scanning station (any origin country).',
     group: 'freight',
   },
   {
@@ -140,6 +140,30 @@ export const ENTERPRISE_MODULE_CATALOG: readonly ModuleCatalogEntry[] = [
     key: 'freight_ops_inbox',
     label: 'Ops Inbox',
     description: 'In-app alerts for matching failures, exceptions, and stale GPS.',
+    group: 'freight',
+  },
+  {
+    key: 'freight_pipeline_command',
+    label: 'Pipeline Command',
+    description: 'Intl mailbox funnel dashboard, lanes, and duty outstanding.',
+    group: 'freight',
+  },
+  {
+    key: 'freight_invoice_audit',
+    label: 'Invoice Audit',
+    description: 'Clerk worklist to verify package invoices before seal.',
+    group: 'freight',
+  },
+  {
+    key: 'freight_hs_tariffs',
+    label: 'HS Tariffs',
+    description: 'CARICOM CET tariff catalog for the landed-cost engine.',
+    group: 'freight',
+  },
+  {
+    key: 'freight_billing',
+    label: 'Consolidated Billing',
+    description: 'Dual-ledger customer invoices (courier vs government fees).',
     group: 'freight',
   },
   {

@@ -18,6 +18,8 @@ import {
   loadPodSessionByToken,
 } from "./podService.ts";
 import { uploadOrgFile } from "./orgFiles.ts";
+import { evaluateManifestReadiness } from "./manifestReadiness.ts";
+import { normalizeTrn, validateTrn } from "./validateTrn.ts";
 
 type FreightApp = Hono;
 
@@ -151,7 +153,7 @@ export function registerPipelineRoutes(app: FreightApp) {
   const facilityBody = z.object({
     name: z.string().min(1).max(200).optional(),
     code: z.string().min(1).max(40).optional(),
-    facilityType: z.enum(["miami_warehouse", "ja_hub", "branch"]),
+    facilityType: z.enum(["warehouse", "ja_hub", "branch"]),
     intakeCatalogId: z.string().uuid().optional().nullable(),
     addressLine: z.string().max(500).optional().nullable(),
     city: z.string().max(120).optional().nullable(),
@@ -162,7 +164,7 @@ export function registerPipelineRoutes(app: FreightApp) {
     status: z.enum(["active", "inactive"]).optional(),
   });
 
-  /** Active Florida master lease holders for Enterprise Facilities picker. */
+  /** Active master warehouses for Enterprise Facilities picker (any country). */
   app.get("/intake-warehouses", async (c) => {
     const user = await requireUser(c);
     if (user instanceof Response) return user;
@@ -199,10 +201,10 @@ export function registerPipelineRoutes(app: FreightApp) {
     if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
     const b = parsed.data;
 
-    if (b.facilityType === "miami_warehouse") {
+    if (b.facilityType === "warehouse") {
       if (!b.intakeCatalogId) {
         return c.json(
-          { error: "US intake warehouse must be selected from the master lease holder catalog" },
+          { error: "Warehouse must be selected from the Dominion master catalog" },
           400,
         );
       }
@@ -225,7 +227,7 @@ export function registerPipelineRoutes(app: FreightApp) {
           organization_id: user.organizationId,
           name: b.name?.trim() || String(catalog.name),
           code: orgCode,
-          facility_type: "miami_warehouse",
+          facility_type: "warehouse",
           intake_catalog_id: catalog.id,
           address_line: String(catalog.address_line),
           city: `${String(catalog.city)}, ${String(catalog.state)} ${String(catalog.postal_code)}`.trim(),
@@ -300,7 +302,7 @@ export function registerPipelineRoutes(app: FreightApp) {
     if (body.lng !== undefined) patch.lng = body.lng;
     if (body.timezone != null) patch.timezone = String(body.timezone).trim();
 
-    if (existing.facility_type === "miami_warehouse") {
+    if (existing.facility_type === "warehouse") {
       const nextCatalogId =
         body.intakeCatalogId != null
           ? String(body.intakeCatalogId)
@@ -309,7 +311,7 @@ export function registerPipelineRoutes(app: FreightApp) {
             : null;
       if (body.intakeCatalogId != null || !existing.intake_catalog_id) {
         if (!nextCatalogId) {
-          return c.json({ error: "US intake warehouse requires a master lease holder" }, 400);
+          return c.json({ error: "Warehouse requires a Dominion catalog selection" }, 400);
         }
         const { data: catalog, error: catErr } = await serviceClient()
           .from("intake_warehouse_catalog")
@@ -384,7 +386,7 @@ export function registerPipelineRoutes(app: FreightApp) {
       {
         name: "Miami Warehouse",
         code: "MIA-WH",
-        facility_type: "miami_warehouse",
+        facility_type: "warehouse",
         city: "Miami",
         country_code: "US",
         timezone: "America/New_York",
@@ -473,6 +475,11 @@ export function registerPipelineRoutes(app: FreightApp) {
       suiteCode = `JA-${String((count ?? 0) + 1001).padStart(4, "0")}`;
     }
 
+    const trnCheck = b.trn ? validateTrn(b.trn) : { valid: false, normalized: "" };
+    if (b.trn && !trnCheck.valid) {
+      return c.json({ error: trnCheck.error || "Invalid TRN" }, 400);
+    }
+
     const { data, error } = await freightDb()
       .from("suites")
       .insert({
@@ -482,7 +489,8 @@ export function registerPipelineRoutes(app: FreightApp) {
         contact_name: b.contactName || null,
         contact_phone: b.contactPhone || null,
         contact_email: b.contactEmail || null,
-        trn: b.trn || null,
+        trn: trnCheck.normalized || null,
+        trn_valid: Boolean(trnCheck.valid && trnCheck.normalized),
         default_fulfillment_mode: b.defaultFulfillmentMode ?? "pickup",
         default_assignee_type: b.defaultAssigneeType ?? "org_fleet",
         default_pickup_facility_id: b.defaultPickupFacilityId || null,
@@ -523,19 +531,23 @@ export function registerPipelineRoutes(app: FreightApp) {
     if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
 
     const now = new Date().toISOString();
-    const payloads = parsed.data.rows.map((b) => ({
-      organization_id: user.organizationId,
-      suite_code: b.suiteCode.toUpperCase().trim(),
-      contact_name: b.contactName || null,
-      contact_phone: b.contactPhone || null,
-      contact_email: b.contactEmail || null,
-      trn: b.trn || null,
-      default_fulfillment_mode: b.defaultFulfillmentMode ?? "pickup",
-      default_assignee_type: b.defaultAssigneeType ?? "org_fleet",
-      delivery_address: b.deliveryAddress || null,
-      status: "active",
-      updated_at: now,
-    }));
+    const payloads = parsed.data.rows.map((b) => {
+      const trnCheck = b.trn ? validateTrn(b.trn) : { valid: false, normalized: "" };
+      return {
+        organization_id: user.organizationId,
+        suite_code: b.suiteCode.toUpperCase().trim(),
+        contact_name: b.contactName || null,
+        contact_phone: b.contactPhone || null,
+        contact_email: b.contactEmail || null,
+        trn: trnCheck.normalized || null,
+        trn_valid: Boolean(trnCheck.valid),
+        default_fulfillment_mode: b.defaultFulfillmentMode ?? "pickup",
+        default_assignee_type: b.defaultAssigneeType ?? "org_fleet",
+        delivery_address: b.deliveryAddress || null,
+        status: "active",
+        updated_at: now,
+      };
+    });
 
     // Dedupe within payload (last wins) so upsert batch is valid
     const byCode = new Map<string, (typeof payloads)[number]>();
@@ -587,7 +599,16 @@ export function registerPipelineRoutes(app: FreightApp) {
         ...(b.contactName !== undefined ? { contact_name: b.contactName } : {}),
         ...(b.contactPhone !== undefined ? { contact_phone: b.contactPhone } : {}),
         ...(b.contactEmail !== undefined ? { contact_email: b.contactEmail || null } : {}),
-        ...(b.trn !== undefined ? { trn: b.trn } : {}),
+        ...(b.trn !== undefined
+          ? (() => {
+              if (!b.trn) return { trn: null, trn_valid: false };
+              const check = validateTrn(b.trn);
+              return {
+                trn: check.valid ? check.normalized : normalizeTrn(b.trn),
+                trn_valid: check.valid,
+              };
+            })()
+          : {}),
         ...(b.defaultFulfillmentMode !== undefined
           ? { default_fulfillment_mode: b.defaultFulfillmentMode }
           : {}),
@@ -855,6 +876,7 @@ export function registerPipelineRoutes(app: FreightApp) {
     description: z.string().max(500).optional().nullable(),
     declaredValueUsdMinor: z.number().int().nonnegative().optional().nullable(),
     note: z.string().max(2000).optional().nullable(),
+    binLocation: z.string().max(80).optional().nullable(),
   });
 
   app.post("/scans", async (c) => {
@@ -900,7 +922,7 @@ export function registerPipelineRoutes(app: FreightApp) {
 
     let createdUnknown = false;
 
-    if (!pkg && facility.facility_type === "miami_warehouse") {
+    if (!pkg && facility.facility_type === "warehouse") {
       let suiteId: string | null = null;
       let clientId: string | null = null;
       let fulfillmentModeVal: string | null = "pickup";
@@ -937,8 +959,13 @@ export function registerPipelineRoutes(app: FreightApp) {
           client_id: clientId,
           courier_tracking_number: b.barcode.trim(),
           description: b.description || "Unknown pre-alert — invoice needed",
-          status: "received_miami",
+          status: "received_at_warehouse",
           weight_lbs: b.weightLbs ?? null,
+          weight_kg:
+            b.weightLbs != null
+              ? Math.round(Number(b.weightLbs) * 0.45359237 * 1000) / 1000
+              : null,
+          bin_location: b.binLocation ?? null,
           length_in: b.lengthIn ?? null,
           width_in: b.widthIn ?? null,
           height_in: b.heightIn ?? null,
@@ -1009,14 +1036,14 @@ export function registerPipelineRoutes(app: FreightApp) {
     }
 
     // Miami receive
-    if (facility.facility_type === "miami_warehouse") {
+    if (facility.facility_type === "warehouse") {
       if (!createdUnknown && pkg.status === "expected") {
-        if (!canTransitionPackage(pkg.status, "received_miami")) {
-          return c.json({ error: `Illegal transition ${pkg.status} → received_miami` }, 409);
+        if (!canTransitionPackage(pkg.status, "received_at_warehouse")) {
+          return c.json({ error: `Illegal transition ${pkg.status} → received_at_warehouse` }, 409);
         }
-      } else if (!createdUnknown && pkg.status !== "received_miami") {
+      } else if (!createdUnknown && pkg.status !== "received_at_warehouse") {
         // re-scan while already received — update weights only
-      } else if (!createdUnknown && pkg.status === "received_miami") {
+      } else if (!createdUnknown && pkg.status === "received_at_warehouse") {
         // ok
       } else if (!createdUnknown) {
         return c.json({ error: `Package already past Miami (${pkg.status})` }, 409);
@@ -1025,9 +1052,14 @@ export function registerPipelineRoutes(app: FreightApp) {
       const { data: updated, error } = await freightDb()
         .from("packages")
         .update({
-          status: "received_miami",
+          status: "received_at_warehouse",
           current_facility_id: facility.id,
           weight_lbs: b.weightLbs ?? pkg.weight_lbs,
+          weight_kg:
+            b.weightLbs != null
+              ? Math.round(Number(b.weightLbs) * 0.45359237 * 1000) / 1000
+              : pkg.weight_kg,
+          bin_location: b.binLocation ?? pkg.bin_location,
           length_in: b.lengthIn ?? pkg.length_in,
           width_in: b.widthIn ?? pkg.width_in,
           height_in: b.heightIn ?? pkg.height_in,
@@ -1044,7 +1076,7 @@ export function registerPipelineRoutes(app: FreightApp) {
       const scan = await appendScan({
         orgId: user.organizationId,
         packageId: pkg.id,
-        eventType: "received_miami",
+        eventType: "received_at_warehouse",
         actorUserId: user.id,
         facilityId: facility.id,
         barcode: b.barcode,
@@ -1054,7 +1086,7 @@ export function registerPipelineRoutes(app: FreightApp) {
       });
 
       if (!scan.duplicate) {
-        await maybeNotifyPackage(pkg, "received_miami");
+        await maybeNotifyPackage(pkg, "received_at_warehouse");
       }
 
       return c.json({
@@ -1433,13 +1465,13 @@ export function registerPipelineRoutes(app: FreightApp) {
     let linkedExisting = 0;
     const blockedStatuses = new Set([
       "manifested",
-      "in_transit_to_ja",
-      "arrived_ja",
+      "in_transit_intl",
       "customs_hold",
-      "cleared",
-      "at_hub",
+      "customs_cleared",
+      "received_hub",
+      "ready_for_fulfillment",
       "out_for_delivery",
-      "ready_for_pickup",
+      "awaiting_pickup",
       "delivered",
       "collected",
     ]);
@@ -1479,7 +1511,7 @@ export function registerPipelineRoutes(app: FreightApp) {
             height_in: row.heightIn ?? pkg.height_in,
             declared_value_usd_minor: valueMinor ?? pkg.declared_value_usd_minor,
             invoice_file_name: row.invoiceFileName ?? pkg.invoice_file_name,
-            status: "received_miami",
+            status: "received_at_warehouse",
             current_facility_id: b.originFacilityId || pkg.current_facility_id,
             fulfillment_mode: pkg.fulfillment_mode || suite.default_fulfillment_mode,
             preferred_assignee_type: pkg.preferred_assignee_type || suite.default_assignee_type,
@@ -1507,7 +1539,7 @@ export function registerPipelineRoutes(app: FreightApp) {
             client_id: suite.client_id,
             courier_tracking_number: tracking,
             description: row.description || null,
-            status: "received_miami",
+            status: "received_at_warehouse",
             weight_lbs: row.weightLbs ?? null,
             length_in: row.lengthIn ?? null,
             width_in: row.widthIn ?? null,
@@ -1534,7 +1566,7 @@ export function registerPipelineRoutes(app: FreightApp) {
         await appendScan({
           orgId: user.organizationId,
           packageId: created.id,
-          eventType: "received_miami",
+          eventType: "received_at_warehouse",
           facilityId: b.originFacilityId || null,
           actorUserId: user.id,
           note: "Imported from warehouse manifesto CSV",
@@ -1619,7 +1651,7 @@ export function registerPipelineRoutes(app: FreightApp) {
         .eq("id", packageId)
         .eq("organization_id", user.organizationId)
         .maybeSingle();
-      if (!pkg || pkg.status !== "received_miami") continue;
+      if (!pkg || pkg.status !== "received_at_warehouse") continue;
 
       const { data: row, error } = await freightDb()
         .from("manifest_packages")
@@ -1665,10 +1697,24 @@ export function registerPipelineRoutes(app: FreightApp) {
 
     const { data: lines } = await freightDb()
       .from("manifest_packages")
-      .select("package_id")
+      .select("package_id, packages(*, suites(suite_code, trn, trn_valid, contact_name))")
       .eq("manifest_id", id);
     if (!lines?.length) {
       return c.json({ error: "Add packages before sealing" }, 400);
+    }
+
+    const readiness = evaluateManifestReadiness(
+      lines.map((l) => (l.packages ?? {}) as Parameters<typeof evaluateManifestReadiness>[0][number]),
+    );
+    if (!readiness.canSeal) {
+      return c.json(
+        {
+          error: "validation_failed",
+          message: "Resolve TRN, invoice, and weight blockers before sealing",
+          ...readiness,
+        },
+        400,
+      );
     }
 
     const now = new Date().toISOString();

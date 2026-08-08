@@ -1,5 +1,5 @@
 /**
- * Dominion CRUD for public.intake_warehouse_catalog (Florida master lease holders).
+ * Dominion CRUD for public.intake_warehouse_catalog (master warehouses, any country).
  */
 import type { Context } from "npm:hono";
 import type { Hono } from "npm:hono";
@@ -52,11 +52,19 @@ export function registerIntakeWarehouseRoutes(app: Hono, supabase: SupabaseLike)
     const code = slugCode(String(body.code || name));
     const addressLine = String(body.addressLine || body.address_line || "").trim();
     const city = String(body.city || "").trim();
-    const state = String(body.state || "FL").trim().toUpperCase().slice(0, 2);
+    const state = String(body.state || "").trim().slice(0, 80);
     const postalCode = String(body.postalCode || body.postal_code || "").trim();
-    if (!name || !code || !addressLine || !city || !postalCode) {
+    const countryCode = String(body.countryCode || body.country_code || "")
+      .trim()
+      .toUpperCase()
+      .slice(0, 2);
+    const timezone = String(body.timezone || "").trim();
+    if (!name || !code || !addressLine || !city || !postalCode || !countryCode || !timezone) {
       return c.json(
-        { error: "name, code, addressLine, city, and postalCode are required" },
+        {
+          error:
+            "name, code, addressLine, city, postalCode, countryCode, and timezone are required",
+        },
         400,
       );
     }
@@ -65,13 +73,10 @@ export function registerIntakeWarehouseRoutes(app: Hono, supabase: SupabaseLike)
       code,
       address_line: addressLine,
       city,
-      state: state || "FL",
+      state,
       postal_code: postalCode,
-      country_code: String(body.countryCode || body.country_code || "US")
-        .trim()
-        .toUpperCase()
-        .slice(0, 2) || "US",
-      timezone: String(body.timezone || "America/New_York").trim() || "America/New_York",
+      country_code: countryCode,
+      timezone,
       status: body.status === "inactive" ? "inactive" : "active",
       updated_at: new Date().toISOString(),
     };
@@ -96,7 +101,7 @@ export function registerIntakeWarehouseRoutes(app: Hono, supabase: SupabaseLike)
       patch.address_line = String(body.addressLine ?? body.address_line).trim();
     }
     if (body.city != null) patch.city = String(body.city).trim();
-    if (body.state != null) patch.state = String(body.state).trim().toUpperCase().slice(0, 2);
+    if (body.state != null) patch.state = String(body.state).trim().slice(0, 80);
     if (body.postalCode != null || body.postal_code != null) {
       patch.postal_code = String(body.postalCode ?? body.postal_code).trim();
     }

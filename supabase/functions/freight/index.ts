@@ -14,6 +14,7 @@ import {
 import { ledgerPostEntry } from "../_shared/unifiedLedger/postEntry.ts";
 import { SHIPMENT_TRANSITIONS } from "./transitions.ts";
 import { registerPipelineRoutes } from "./pipeline.ts";
+import { registerCourierOsRoutes } from "./courierOsRoutes.ts";
 import { syncJobFromShipment } from "../logistics/syncFromShipment.ts";
 import { computeRateCardAmountMinor } from "./rateBill.ts";
 import { assertInsideServiceZones } from "./serviceZoneGate.ts";
@@ -104,6 +105,7 @@ async function appendTracking(
 app.get("/health", (c) => c.json({ ok: true, service: "freight" }));
 
 registerPipelineRoutes(app);
+registerCourierOsRoutes(app);
 
 // ---------------------------------------------------------------------------
 // Carriers

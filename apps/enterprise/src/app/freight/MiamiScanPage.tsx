@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useFacilities, useScanPackage, useSuites } from '@/app/hooks/useFreight';
 
 export function MiamiScanPage() {
-  const facilities = useFacilities('miami_warehouse');
+  const facilities = useFacilities('warehouse');
   const suites = useSuites();
   const scan = useScanPackage();
   const [facilityId, setFacilityId] = useState('');
@@ -24,7 +24,7 @@ export function MiamiScanPage() {
     e.preventDefault();
     setError(null);
     if (!facilityId) {
-      setError('Add a US intake warehouse under Facilities first.');
+      setError('Add a warehouse under Facilities first.');
       return;
     }
     const form = e.currentTarget;
@@ -46,7 +46,7 @@ export function MiamiScanPage() {
             ? Math.round(Number(fd.get('declaredValueUsd')) * 100)
             : null,
         },
-        idempotencyKey: `miami:${facilityId}:${barcode}:${Date.now()}`,
+        idempotencyKey: `receive:${facilityId}:${barcode}:${Date.now()}`,
       });
       const tracking = String(res.package?.courier_tracking_number || res.package?.id);
       setLastResult(
@@ -68,7 +68,7 @@ export function MiamiScanPage() {
   return (
     <div className="mx-auto max-w-xl space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">Warehouse receive</h1>
+        <h1 className="text-2xl font-semibold">Receive</h1>
         <p className="mt-1 text-sm text-slate-500">
           Scan courier barcode — match pre-alert or create unknown with suite.
         </p>
@@ -76,7 +76,7 @@ export function MiamiScanPage() {
 
       {!intakeList.length && (
         <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          No US intake warehouse yet.{' '}
+          No warehouse yet.{' '}
           <Link to="/app/facilities" className="font-semibold underline">
             Add one under Facilities
           </Link>{' '}

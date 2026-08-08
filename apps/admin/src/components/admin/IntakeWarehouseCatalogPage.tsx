@@ -1,4 +1,4 @@
-import React, { FormEvent, useCallback, useEffect, useState } from 'react';
+import React, { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight, Loader2, Plus, Warehouse } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import { API_ENDPOINTS } from '../../services/apiConfig';
@@ -23,16 +23,32 @@ type DraftFields = {
   city: string;
   state: string;
   postalCode: string;
+  countryCode: string;
+  timezone: string;
   status: 'active' | 'inactive';
 };
+
+const TIMEZONE_OPTIONS = [
+  'America/New_York',
+  'America/Chicago',
+  'America/Denver',
+  'America/Los_Angeles',
+  'America/Jamaica',
+  'Asia/Shanghai',
+  'Asia/Hong_Kong',
+  'Europe/London',
+  'UTC',
+] as const;
 
 const emptyDraft = (): DraftFields => ({
   name: '',
   code: '',
   addressLine: '',
   city: '',
-  state: 'FL',
+  state: '',
   postalCode: '',
+  countryCode: 'US',
+  timezone: 'America/New_York',
   status: 'active',
 });
 
@@ -42,19 +58,22 @@ function toDraft(w: IntakeWarehouse): DraftFields {
     code: w.code,
     addressLine: w.address_line,
     city: w.city,
-    state: w.state,
+    state: w.state || '',
     postalCode: w.postal_code,
+    countryCode: w.country_code || 'US',
+    timezone: w.timezone || 'America/New_York',
     status: w.status,
   };
 }
 
-/** Dominion: master Florida lease holders only — Enterprise orgs pick these as US intake. */
+/** Dominion master warehouses (any country) — Enterprise orgs only pick from this list. */
 export function IntakeWarehouseCatalogPage() {
   const { session } = useAuth();
   const token = session?.access_token;
   const [rows, setRows] = useState<IntakeWarehouse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [countryFilter, setCountryFilter] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, DraftFields>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
@@ -93,8 +112,32 @@ export function IntakeWarehouseCatalogPage() {
     void load();
   }, [load]);
 
+  const countries = useMemo(() => {
+    const set = new Set(rows.map((r) => (r.country_code || '').toUpperCase()).filter(Boolean));
+    return Array.from(set).sort();
+  }, [rows]);
+
+  const filtered = useMemo(() => {
+    if (!countryFilter) return rows;
+    return rows.filter((r) => (r.country_code || '').toUpperCase() === countryFilter);
+  }, [rows, countryFilter]);
+
   function patchDraft(id: string, patch: Partial<DraftFields>) {
     setDrafts((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }));
+  }
+
+  function bodyFromDraft(d: DraftFields) {
+    return {
+      name: d.name,
+      code: d.code,
+      addressLine: d.addressLine,
+      city: d.city,
+      state: d.state,
+      postalCode: d.postalCode,
+      countryCode: d.countryCode,
+      timezone: d.timezone,
+      status: d.status,
+    };
   }
 
   async function saveWarehouse(id: string) {
@@ -107,15 +150,7 @@ export function IntakeWarehouseCatalogPage() {
       const res = await fetch(`${API_ENDPOINTS.admin}/admin/intake-warehouses/${id}`, {
         method: 'PATCH',
         headers: headers(),
-        body: JSON.stringify({
-          name: d.name,
-          code: d.code,
-          addressLine: d.addressLine,
-          city: d.city,
-          state: d.state,
-          postalCode: d.postalCode,
-          status: d.status,
-        }),
+        body: JSON.stringify(bodyFromDraft(d)),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.error || res.statusText);
@@ -136,15 +171,7 @@ export function IntakeWarehouseCatalogPage() {
       const res = await fetch(`${API_ENDPOINTS.admin}/admin/intake-warehouses`, {
         method: 'POST',
         headers: headers(),
-        body: JSON.stringify({
-          name: createForm.name,
-          code: createForm.code,
-          addressLine: createForm.addressLine,
-          city: createForm.city,
-          state: createForm.state,
-          postalCode: createForm.postalCode,
-          status: createForm.status,
-        }),
+        body: JSON.stringify(bodyFromDraft(createForm)),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.error || res.statusText);
@@ -160,17 +187,94 @@ export function IntakeWarehouseCatalogPage() {
     }
   }
 
+  function GeoFields({
+    value,
+    onChange,
+  }: {
+    value: DraftFields;
+    onChange: (patch: Partial<DraftFields>) => void;
+  }) {
+    return (
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <label className="block text-sm sm:col-span-2 lg:col-span-1">
+          Country (ISO)
+          <input
+            required
+            maxLength={2}
+            value={value.countryCode}
+            onChange={(e) => onChange({ countryCode: e.target.value.toUpperCase() })}
+            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 uppercase"
+            placeholder="US, CN, JM…"
+          />
+        </label>
+        <label className="block text-sm">
+          Timezone
+          <select
+            required
+            value={value.timezone}
+            onChange={(e) => onChange({ timezone: e.target.value })}
+            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+          >
+            {TIMEZONE_OPTIONS.map((tz) => (
+              <option key={tz} value={tz}>
+                {tz}
+              </option>
+            ))}
+            {!TIMEZONE_OPTIONS.includes(value.timezone as (typeof TIMEZONE_OPTIONS)[number]) &&
+              value.timezone && <option value={value.timezone}>{value.timezone}</option>}
+          </select>
+        </label>
+        <label className="block text-sm sm:col-span-2 lg:col-span-3">
+          Street
+          <input
+            required
+            value={value.addressLine}
+            onChange={(e) => onChange({ addressLine: e.target.value })}
+            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+          />
+        </label>
+        <label className="block text-sm">
+          City
+          <input
+            required
+            value={value.city}
+            onChange={(e) => onChange({ city: e.target.value })}
+            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+          />
+        </label>
+        <label className="block text-sm">
+          Region / state
+          <input
+            value={value.state}
+            onChange={(e) => onChange({ state: e.target.value })}
+            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+            placeholder="FL, Guangdong…"
+          />
+        </label>
+        <label className="block text-sm">
+          Postal code
+          <input
+            required
+            value={value.postalCode}
+            onChange={(e) => onChange({ postalCode: e.target.value })}
+            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+          />
+        </label>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-slate-900 flex items-center gap-2">
             <Warehouse className="h-6 w-6 text-slate-500" />
-            US Intake Warehouses
+            Warehouses
           </h1>
           <p className="mt-1 text-sm text-slate-500 max-w-2xl">
-            Master Florida lease holders only. Enterprise customers (e.g. BShip'D) pick one or more of
-            these terminals when they set up US intake in their own account.
+            Master terminals in any country (US, China, and more). Enterprise customers pick from
+            this list when they set up warehouse intake — they cannot add their own.
           </p>
         </div>
         <button
@@ -182,8 +286,26 @@ export function IntakeWarehouseCatalogPage() {
           className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800"
         >
           <Plus className="h-4 w-4" />
-          Add lease holder
+          Add warehouse
         </button>
+      </div>
+
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="block text-sm text-slate-600">
+          Country
+          <select
+            value={countryFilter}
+            onChange={(e) => setCountryFilter(e.target.value)}
+            className="mt-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+          >
+            <option value="">All countries</option>
+            {countries.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
       {error && (
@@ -197,8 +319,8 @@ export function IntakeWarehouseCatalogPage() {
           onSubmit={createWarehouse}
           className="space-y-3 rounded-xl border border-slate-200 bg-white p-4"
         >
-          <h2 className="text-sm font-semibold text-slate-900">New lease holder</h2>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <h2 className="text-sm font-semibold text-slate-900">New warehouse</h2>
+          <div className="grid gap-3 sm:grid-cols-2">
             <label className="block text-sm">
               Name
               <input
@@ -219,53 +341,18 @@ export function IntakeWarehouseCatalogPage() {
                 placeholder="COMPLETE_SOURCING"
               />
             </label>
-            <label className="block text-sm sm:col-span-2 lg:col-span-1">
-              Street
-              <input
-                required
-                value={createForm.addressLine}
-                onChange={(e) => setCreateForm((f) => ({ ...f, addressLine: e.target.value }))}
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-              />
-            </label>
-            <label className="block text-sm">
-              City
-              <input
-                required
-                value={createForm.city}
-                onChange={(e) => setCreateForm((f) => ({ ...f, city: e.target.value }))}
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-              />
-            </label>
-            <label className="block text-sm">
-              State
-              <input
-                required
-                maxLength={2}
-                value={createForm.state}
-                onChange={(e) =>
-                  setCreateForm((f) => ({ ...f, state: e.target.value.toUpperCase() }))
-                }
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 uppercase"
-              />
-            </label>
-            <label className="block text-sm">
-              ZIP
-              <input
-                required
-                value={createForm.postalCode}
-                onChange={(e) => setCreateForm((f) => ({ ...f, postalCode: e.target.value }))}
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-              />
-            </label>
           </div>
+          <GeoFields
+            value={createForm}
+            onChange={(patch) => setCreateForm((f) => ({ ...f, ...patch }))}
+          />
           <div className="flex gap-2">
             <button
               type="submit"
               disabled={savingId === 'new'}
               className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
             >
-              {savingId === 'new' ? 'Creating…' : 'Create lease holder'}
+              {savingId === 'new' ? 'Creating…' : 'Create warehouse'}
             </button>
             <button
               type="button"
@@ -291,13 +378,14 @@ export function IntakeWarehouseCatalogPage() {
             <thead className="border-b border-slate-100 bg-slate-50 text-xs uppercase text-slate-500">
               <tr>
                 <th className="w-8 px-3 py-2" />
-                <th className="px-4 py-2">Lease holder</th>
+                <th className="px-4 py-2">Warehouse</th>
+                <th className="px-4 py-2">Country</th>
                 <th className="px-4 py-2">Address</th>
                 <th className="px-4 py-2">Status</th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((w) => {
+              {filtered.map((w) => {
                 const open = expandedId === w.id;
                 const d = drafts[w.id] || toDraft(w);
                 return (
@@ -317,10 +405,13 @@ export function IntakeWarehouseCatalogPage() {
                         <p className="font-medium text-slate-900">{w.name}</p>
                         <p className="font-mono text-[11px] text-slate-400">{w.code}</p>
                       </td>
+                      <td className="px-4 py-3 font-medium text-slate-700">
+                        {(w.country_code || '—').toUpperCase()}
+                      </td>
                       <td className="px-4 py-3 text-slate-600">
                         {w.address_line}
                         <br />
-                        {w.city}, {w.state} {w.postal_code}
+                        {[w.city, w.state, w.postal_code].filter(Boolean).join(', ')}
                       </td>
                       <td className="px-4 py-3">
                         <span
@@ -336,10 +427,10 @@ export function IntakeWarehouseCatalogPage() {
                     </tr>
                     {open && (
                       <tr className="border-b border-slate-100 bg-slate-50/60">
-                        <td colSpan={4} className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
+                        <td colSpan={5} className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
                           <div className="max-w-3xl space-y-3 rounded-lg border border-slate-200 bg-white p-4">
                             <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                              Edit lease holder
+                              Edit warehouse
                             </h3>
                             <div className="grid gap-2 sm:grid-cols-2">
                               <label className="block text-sm sm:col-span-2">
@@ -373,57 +464,18 @@ export function IntakeWarehouseCatalogPage() {
                                   <option value="inactive">Inactive</option>
                                 </select>
                               </label>
-                              <label className="block text-sm sm:col-span-2">
-                                Street
-                                <input
-                                  value={d.addressLine}
-                                  onChange={(e) =>
-                                    patchDraft(w.id, { addressLine: e.target.value })
-                                  }
-                                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-                                />
-                              </label>
-                              <label className="block text-sm">
-                                City
-                                <input
-                                  value={d.city}
-                                  onChange={(e) => patchDraft(w.id, { city: e.target.value })}
-                                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-                                />
-                              </label>
-                              <div className="grid grid-cols-2 gap-2">
-                                <label className="block text-sm">
-                                  State
-                                  <input
-                                    maxLength={2}
-                                    value={d.state}
-                                    onChange={(e) =>
-                                      patchDraft(w.id, {
-                                        state: e.target.value.toUpperCase(),
-                                      })
-                                    }
-                                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 uppercase"
-                                  />
-                                </label>
-                                <label className="block text-sm">
-                                  ZIP
-                                  <input
-                                    value={d.postalCode}
-                                    onChange={(e) =>
-                                      patchDraft(w.id, { postalCode: e.target.value })
-                                    }
-                                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-                                  />
-                                </label>
-                              </div>
                             </div>
+                            <GeoFields
+                              value={d}
+                              onChange={(patch) => patchDraft(w.id, patch)}
+                            />
                             <button
                               type="button"
                               disabled={savingId === w.id}
                               onClick={() => void saveWarehouse(w.id)}
                               className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
                             >
-                              {savingId === w.id ? 'Saving…' : 'Save lease holder'}
+                              {savingId === w.id ? 'Saving…' : 'Save warehouse'}
                             </button>
                           </div>
                         </td>
@@ -432,10 +484,12 @@ export function IntakeWarehouseCatalogPage() {
                   </React.Fragment>
                 );
               })}
-              {!rows.length && (
+              {!filtered.length && (
                 <tr>
-                  <td colSpan={4} className="px-4 py-10 text-center text-slate-500">
-                    No lease holders yet.
+                  <td colSpan={5} className="px-4 py-10 text-center text-slate-500">
+                    {rows.length
+                      ? 'No warehouses for this country filter.'
+                      : 'No warehouses yet.'}
                   </td>
                 </tr>
               )}

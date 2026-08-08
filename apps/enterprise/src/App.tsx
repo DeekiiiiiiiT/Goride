@@ -74,6 +74,30 @@ const ManifestDetailPage = lazy(() =>
 const CustomsBoardPage = lazy(() =>
   import('@/app/freight/CustomsBoardPage').then((m) => ({ default: m.CustomsBoardPage })),
 );
+const PipelineCommandPage = lazy(() =>
+  import('@/app/freight/os').then((m) => ({ default: m.PipelineCommandPage })),
+);
+const WarehouseReceiveStationPage = lazy(() =>
+  import('@/app/freight/os').then((m) => ({ default: m.WarehouseReceiveStationPage })),
+);
+const PackageDutyDetailPage = lazy(() =>
+  import('@/app/freight/os').then((m) => ({ default: m.PackageDutyDetailPage })),
+);
+const InvoiceAuditQueuePage = lazy(() =>
+  import('@/app/freight/os').then((m) => ({ default: m.InvoiceAuditQueuePage })),
+);
+const HsTariffCatalogPage = lazy(() =>
+  import('@/app/freight/os').then((m) => ({ default: m.HsTariffCatalogPage })),
+);
+const ManifestGatekeeperPage = lazy(() =>
+  import('@/app/freight/os').then((m) => ({ default: m.ManifestGatekeeperPage })),
+);
+const ClearanceBoardPage = lazy(() =>
+  import('@/app/freight/os').then((m) => ({ default: m.ClearanceBoardPage })),
+);
+const ConsolidatedBillingPage = lazy(() =>
+  import('@/app/freight/os').then((m) => ({ default: m.ConsolidatedBillingPage })),
+);
 const HubStationPage = lazy(() =>
   import('@/app/freight/HubStationPage').then((m) => ({ default: m.HubStationPage })),
 );
@@ -366,7 +390,7 @@ export default function App() {
           <Route path="fleet-ops" element={<Navigate to="/app/fuel/logs" replace />} />
           <Route path="system" element={<Navigate to="/app/settings" replace />} />
           <Route
-            path="miami-scan"
+            path="receive"
             element={
               <Gated module="freight_miami_scan">
                 <Suspense fallback={<Fall />}>
@@ -375,6 +399,7 @@ export default function App() {
               </Gated>
             }
           />
+          <Route path="miami-scan" element={<Navigate to="/app/receive" replace />} />
           <Route
             path="manifests"
             element={
@@ -391,6 +416,86 @@ export default function App() {
               <Gated module="freight_manifests">
                 <Suspense fallback={<Fall />}>
                   <ManifestDetailPage />
+                </Suspense>
+              </Gated>
+            }
+          />
+          <Route
+            path="pipeline"
+            element={
+              <Gated module="freight_pipeline_command">
+                <Suspense fallback={<Fall />}>
+                  <PipelineCommandPage />
+                </Suspense>
+              </Gated>
+            }
+          />
+          <Route
+            path="receive-station"
+            element={
+              <Gated module="freight_miami_scan">
+                <Suspense fallback={<Fall />}>
+                  <WarehouseReceiveStationPage />
+                </Suspense>
+              </Gated>
+            }
+          />
+          <Route
+            path="package-duty"
+            element={
+              <Gated module="freight_mailbox_packages">
+                <Suspense fallback={<Fall />}>
+                  <PackageDutyDetailPage />
+                </Suspense>
+              </Gated>
+            }
+          />
+          <Route
+            path="invoice-audit"
+            element={
+              <Gated module="freight_invoice_audit">
+                <Suspense fallback={<Fall />}>
+                  <InvoiceAuditQueuePage />
+                </Suspense>
+              </Gated>
+            }
+          />
+          <Route
+            path="hs-tariffs"
+            element={
+              <Gated module="freight_hs_tariffs">
+                <Suspense fallback={<Fall />}>
+                  <HsTariffCatalogPage />
+                </Suspense>
+              </Gated>
+            }
+          />
+          <Route
+            path="manifest-builder"
+            element={
+              <Gated module="freight_manifests">
+                <Suspense fallback={<Fall />}>
+                  <ManifestGatekeeperPage />
+                </Suspense>
+              </Gated>
+            }
+          />
+          <Route
+            path="billing"
+            element={
+              <Gated module="freight_billing">
+                <Suspense fallback={<Fall />}>
+                  <ConsolidatedBillingPage />
+                </Suspense>
+              </Gated>
+            }
+          />
+          <Route
+            path="clearance"
+            element={
+              <Gated module="freight_customs_board">
+                <Suspense fallback={<Fall />}>
+                  <ClearanceBoardPage />
                 </Suspense>
               </Gated>
             }

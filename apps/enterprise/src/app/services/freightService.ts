@@ -572,4 +572,114 @@ export const freightService = {
       method: 'DELETE',
       organizationId,
     }),
+
+  // --- Courier OS (duty / readiness / JCA / billing) ---
+  pipelineCommand: (organizationId?: string | null) =>
+    freightFetch<{ counts: Record<string, number>; dutyOutstandingJmdMinor: number }>(
+      '/pipeline/command',
+      { organizationId },
+    ),
+
+  listHsTariffs: (organizationId?: string | null) =>
+    freightFetch<{ tariffs: Record<string, unknown>[] }>('/hs-tariffs', {
+      organizationId,
+    }),
+
+  createHsTariff: (body: unknown, organizationId?: string | null) =>
+    freightFetch<{ tariff: Record<string, unknown> }>('/hs-tariffs', {
+      method: 'POST',
+      body: JSON.stringify(body),
+      organizationId,
+    }),
+
+  updateHsTariff: (id: string, body: unknown, organizationId?: string | null) =>
+    freightFetch<{ tariff: Record<string, unknown> }>(`/hs-tariffs/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+      organizationId,
+    }),
+
+  invoiceAuditQueue: (tab: string, organizationId?: string | null) =>
+    freightFetch<{ packages: Record<string, unknown>[] }>(
+      `/packages/invoice-audit?tab=${encodeURIComponent(tab)}`,
+      { organizationId },
+    ),
+
+  verifyInvoice: (id: string, note?: string, organizationId?: string | null) =>
+    freightFetch<{ package: Record<string, unknown> }>(`/packages/${id}/verify-invoice`, {
+      method: 'POST',
+      body: JSON.stringify({ note }),
+      organizationId,
+    }),
+
+  computeDuty: (id: string, organizationId?: string | null) =>
+    freightFetch<{ duty: Record<string, unknown>; result: Record<string, unknown> }>(
+      `/packages/${id}/compute-duty`,
+      { method: 'POST', organizationId },
+    ),
+
+  getPackageDuty: (id: string, organizationId?: string | null) =>
+    freightFetch<{ duty: Record<string, unknown> | null }>(`/packages/${id}/duty`, {
+      organizationId,
+    }),
+
+  manifestReadiness: (id: string, organizationId?: string | null) =>
+    freightFetch<{
+      blockers: Array<{ packageId: string; tracking: string; code: string; message: string }>;
+      readyCount: number;
+      total: number;
+      canSeal: boolean;
+    }>(`/manifests/${id}/readiness`, { organizationId }),
+
+  generateAwbolds: (id: string, organizationId?: string | null) =>
+    freightFetch<{ filing: Record<string, unknown>; xml: string; checksum: string }>(
+      `/manifests/${id}/awbolds`,
+      { method: 'POST', organizationId },
+    ),
+
+  submitJca: (id: string, organizationId?: string | null) =>
+    freightFetch<{
+      filing: Record<string, unknown>;
+      result: { status: string; jcaRef: string | null; error: string | null };
+    }>(`/manifests/${id}/submit-jca`, { method: 'POST', organizationId }),
+
+  listFilings: (id: string, organizationId?: string | null) =>
+    freightFetch<{ filings: Record<string, unknown>[] }>(`/manifests/${id}/filings`, {
+      organizationId,
+    }),
+
+  listClearanceEvents: (channel?: string, organizationId?: string | null) =>
+    freightFetch<{ events: Record<string, unknown>[] }>(
+      `/clearance-events${channel ? `?channel=${encodeURIComponent(channel)}` : ''}`,
+      { organizationId },
+    ),
+
+  postClearanceEvent: (body: unknown, organizationId?: string | null) =>
+    freightFetch<{ event: Record<string, unknown>; packageStatus: string }>(
+      '/clearance-events',
+      {
+        method: 'POST',
+        body: JSON.stringify(body),
+        organizationId,
+      },
+    ),
+
+  createConsolidatedInvoice: (body: unknown, organizationId?: string | null) =>
+    freightFetch<{ invoice: Record<string, unknown>; lines: Record<string, unknown>[] }>(
+      '/billing/invoices',
+      { method: 'POST', body: JSON.stringify(body), organizationId },
+    ),
+
+  getConsolidatedInvoice: (id: string, organizationId?: string | null) =>
+    freightFetch<{ invoice: Record<string, unknown>; lines: Record<string, unknown>[] }>(
+      `/billing/invoices/${id}`,
+      { organizationId },
+    ),
+
+  validateTrn: (trn: string, organizationId?: string | null) =>
+    freightFetch<{ valid: boolean; normalized: string; error?: string }>('/trn/validate', {
+      method: 'POST',
+      body: JSON.stringify({ trn }),
+      organizationId,
+    }),
 };

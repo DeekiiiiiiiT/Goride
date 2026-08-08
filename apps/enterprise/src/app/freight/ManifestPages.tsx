@@ -26,17 +26,17 @@ type ManifestRow = Record<string, unknown>;
 
 const FIELD_TIPS = {
   carrier:
-    'The airline or shipping line that moves the cargo (example: Amerijet). Not the US warehouse, and not Jamaica Customs.',
+    'The airline or shipping line that moves the cargo (example: Amerijet). Not the origin warehouse, and not Jamaica Customs.',
   shipmentType:
     'How the cargo travels: Air = plane, Sea = ship. Pick Air for air carriers like Amerijet.',
   origin:
-    'Your Florida US intake warehouse — where packages were received before this shipment left for Jamaica.',
+    'Your origin warehouse — where packages were received before this shipment left for Jamaica.',
   destination:
     'Your main Jamaica hub where cargo will be scanned after Customs clears it.',
   awb:
     'The carrier’s official shipment number. AWB = air waybill (plane). BL = bill of lading (ship). Optional if you do not have it yet — add it later when you submit to Customs.',
   csvFile:
-    'Spreadsheet from the US warehouse listing every package on this flight/shipment (tracking, suite/mailbox, weight, value). Download the template if you need the column layout.',
+    'Spreadsheet from the origin warehouse listing every package on this flight/shipment (tracking, suite/mailbox, weight, value). Download the template if you need the column layout.',
   brokerRef:
     'Optional reference your customs broker gave you. Leave blank if you do not have one yet.',
   flightOrVoyage:
@@ -211,7 +211,7 @@ function ManifestMetaFields({
         )}
       </div>
       <div>
-        <FieldLabel tip={FIELD_TIPS.origin}>Origin (US intake)</FieldLabel>
+        <FieldLabel tip={FIELD_TIPS.origin}>Origin warehouse</FieldLabel>
         {controlled ? (
           <select
             value={originFacilityId}
@@ -594,7 +594,7 @@ function EditManifestForm({
 
 export function ManifestsListPage() {
   const { data, isLoading, error } = useManifests();
-  const miami = useFacilities('miami_warehouse');
+  const miami = useFacilities('warehouse');
   const hub = useFacilities('ja_hub');
   const remove = useDeleteManifest();
   const [overlay, setOverlay] = useState<OverlayMode>(null);
@@ -716,7 +716,7 @@ export function ManifestsListPage() {
       {overlay === 'upload' && (
         <Overlay
           title="Upload warehouse cargo list"
-          subtitle="CSV from the US intake warehouse / consolidator. You will seal and submit to Customs here."
+          subtitle="CSV from the origin warehouse / consolidator. You will seal and submit to Customs here."
           onClose={() => setOverlay(null)}
         >
           <UploadManifestForm
@@ -729,8 +729,8 @@ export function ManifestsListPage() {
 
       {overlay === 'manual' && (
         <Overlay
-          title="Compile from Miami Receive"
-          subtitle="Empty cargo manifesto — add packages already received in Miami, then seal and submit to Customs."
+          title="Compile from Receive"
+          subtitle="Empty cargo manifesto — add packages already received at the warehouse, then seal and submit to Customs."
           onClose={() => setOverlay(null)}
         >
           <ManualManifestForm
@@ -804,7 +804,7 @@ export function ManifestDetailPage() {
   const orgId = useFreightOrgId();
   const qc = useQueryClient();
   const { data, isLoading, error } = useManifest(id);
-  const miamiPkgs = usePackages('received_miami');
+  const miamiPkgs = usePackages('received_at_warehouse');
   const [selected, setSelected] = useState<string[]>([]);
   const [msg, setMsg] = useState<string | null>(null);
   const [submitOpen, setSubmitOpen] = useState(false);
@@ -955,7 +955,7 @@ export function ManifestDetailPage() {
 
       {status === 'open' && (
         <section className="rounded-xl border border-slate-200 bg-white p-4">
-          <h2 className="text-sm font-semibold">Add Miami-received packages</h2>
+          <h2 className="text-sm font-semibold">Add warehouse-received packages</h2>
           <ul className="mt-3 max-h-48 space-y-1 overflow-auto text-sm">
             {(miamiPkgs.data?.packages ?? []).map((p) => (
               <li key={String(p.id)}>

@@ -68,7 +68,7 @@ function num(raw: string | undefined): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-/** Template BShip'D receives from US intake / warehouse WMS. */
+/** Template from origin warehouse / consolidator WMS. */
 export const WAREHOUSE_MANIFEST_CSV_TEMPLATE = `suite_code,contact_name,trn,courier_tracking_number,description,weight_lbs,length_in,width_in,height_in,declared_value_usd,invoice_file_name
 BSHPD10859,Sadiki Thomas,123456789,1Z999AA10123456784,Nike shoes size 10,4.5,14,10,6,89.99,invoice-bshpd10859.pdf
 BSHPD10860,Keisha Brown,,9400111899562537875981,"Electronics (phone case, charger)",2.1,10,8,4,45.00,invoice-bshpd10860.pdf

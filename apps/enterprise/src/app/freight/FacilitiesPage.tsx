@@ -9,12 +9,12 @@ import {
 } from '@/app/hooks/useFreight';
 
 const TYPE_LABEL: Record<string, string> = {
-  miami_warehouse: 'Warehouse intake',
+  warehouse: 'Warehouse',
   ja_hub: 'Customs',
   branch: 'Courier location',
 };
 
-type FacilityType = 'miami_warehouse' | 'ja_hub' | 'branch';
+type FacilityType = 'warehouse' | 'ja_hub' | 'branch';
 
 const TABS: {
   id: FacilityType;
@@ -25,13 +25,13 @@ const TABS: {
   saveLabel: string;
 }[] = [
   {
-    id: 'miami_warehouse',
-    label: 'Warehouse intake',
-    addButton: 'Add warehouse intake',
-    empty: 'No US intake warehouse yet — use Add warehouse intake above.',
+    id: 'warehouse',
+    label: 'Warehouse',
+    addButton: 'Add warehouse',
+    empty: 'No warehouse yet — pick one from the Dominion list above.',
     addHint:
-      'Florida terminal used on the Receive screen. Add more than one if you use multiple US terminals.',
-    saveLabel: 'Save warehouse intake',
+      'Origin warehouse used on Receive. Pick from the Dominion master list (US, China, or other). Add more than one if you use multiple terminals.',
+    saveLabel: 'Save warehouse',
   },
   {
     id: 'ja_hub',
@@ -63,7 +63,7 @@ type FormState = {
 type FacilityRow = Record<string, unknown>;
 
 function emptyForm(type: FacilityType): FormState {
-  if (type === 'miami_warehouse') {
+  if (type === 'warehouse') {
     return { name: '', code: '', addressLine: '', city: '', countryCode: 'US' };
   }
   if (type === 'ja_hub') {
@@ -91,7 +91,7 @@ function rowToForm(row: FacilityRow): FormState {
     code: String(row.code || ''),
     addressLine: String(row.address_line || ''),
     city: String(row.city || ''),
-    countryCode: String(row.country_code || (type === 'miami_warehouse' ? 'US' : 'JM')),
+    countryCode: String(row.country_code || (type === 'warehouse' ? 'US' : 'JM')),
   };
 }
 
@@ -116,11 +116,11 @@ function FacilityFields({
   selectedCatalog?: FacilityRow;
   requireIdentity: boolean;
 }) {
-  if (facilityType === 'miami_warehouse') {
+  if (facilityType === 'warehouse') {
     return (
       <>
         <label className="block text-sm sm:col-span-2">
-          Master lease holder
+          Warehouse (Dominion list)
           <select
             required
             value={catalogId}
@@ -129,11 +129,12 @@ function FacilityFields({
             disabled={catalogLoading}
           >
             <option value="">
-              {catalogLoading ? 'Loading terminals…' : 'Select Florida terminal…'}
+              {catalogLoading ? 'Loading warehouses…' : 'Select warehouse…'}
             </option>
             {warehouses.map((w) => (
               <option key={String(w.id)} value={String(w.id)}>
-                {String(w.name)} — {String(w.city)}, {String(w.state)}
+                {String(w.country_code || '??')} · {String(w.name)} — {String(w.city)}
+                {w.state ? `, ${String(w.state)}` : ''}
               </option>
             ))}
           </select>
@@ -144,8 +145,11 @@ function FacilityFields({
             <p>
               {String(selectedCatalog.address_line)}
               <br />
-              {String(selectedCatalog.city)}, {String(selectedCatalog.state)}{' '}
-              {String(selectedCatalog.postal_code)}
+              {[selectedCatalog.city, selectedCatalog.state, selectedCatalog.postal_code]
+                .filter(Boolean)
+                .map(String)
+                .join(', ')}{' '}
+              · {String(selectedCatalog.country_code || '')}
             </p>
             <p className="mt-2 text-xs text-slate-500">
               Your customers ship to this terminal; packages are sorted by suite code (e.g.
@@ -236,7 +240,7 @@ function FacilityFields({
 
 /**
  * Warehouse / hub / branch setup — Day-1 before Suites or Receive.
- * US intake must pick a Dominion master lease holder (catalog-only).
+ * Origin warehouses must pick a Dominion catalog entry (catalog-only).
  */
 export function FacilitiesPage() {
   const { data, isLoading, error } = useFacilities();
@@ -245,15 +249,15 @@ export function FacilitiesPage() {
   const update = useUpdateFacility();
   const remove = useDeleteFacility();
 
-  const [viewType, setViewType] = useState<FacilityType>('miami_warehouse');
+  const [viewType, setViewType] = useState<FacilityType>('warehouse');
   const [addType, setAddType] = useState<FacilityType | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [catalogId, setCatalogId] = useState('');
-  const [form, setForm] = useState<FormState>(() => emptyForm('miami_warehouse'));
+  const [form, setForm] = useState<FormState>(() => emptyForm('warehouse'));
 
   const [editRow, setEditRow] = useState<FacilityRow | null>(null);
   const [editCatalogId, setEditCatalogId] = useState('');
-  const [editForm, setEditForm] = useState<FormState>(() => emptyForm('miami_warehouse'));
+  const [editForm, setEditForm] = useState<FormState>(() => emptyForm('warehouse'));
   const [editError, setEditError] = useState<string | null>(null);
   const [deleteRow, setDeleteRow] = useState<FacilityRow | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -267,8 +271,6 @@ export function FacilitiesPage() {
   const editSelectedCatalog = warehouses.find((w) => String(w.id) === editCatalogId);
   const saving = create.isPending || update.isPending || remove.isPending;
 
-  const hasIntake = rows.some((f) => String(f.facility_type) === 'miami_warehouse');
-  const hasHub = rows.some((f) => String(f.facility_type) === 'ja_hub');
   const activeTab = TABS.find((t) => t.id === viewType) || TABS[0];
   const addTab = addType ? TABS.find((t) => t.id === addType) : null;
   const filteredRows = useMemo(
@@ -325,14 +327,14 @@ export function FacilitiesPage() {
     state: FormState,
     selectedCatalogId: string,
   ): Promise<{ ok: true; body: Record<string, unknown> } | { ok: false; error: string }> {
-    if (type === 'miami_warehouse') {
+    if (type === 'warehouse') {
       if (!selectedCatalogId) {
-        return { ok: false, error: 'Select a master lease holder (US intake terminal).' };
+        return { ok: false, error: 'Select a warehouse from the Dominion list.' };
       }
       return {
         ok: true,
         body: {
-          facilityType: 'miami_warehouse',
+          facilityType: 'warehouse',
           intakeCatalogId: selectedCatalogId,
           code: state.code.trim() || undefined,
           name: state.name.trim() || undefined,
@@ -427,22 +429,6 @@ export function FacilitiesPage() {
           </button>
         ))}
       </div>
-
-      {(!hasIntake || !hasHub) && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          {!hasIntake ? (
-            <p>
-              <span className="font-semibold">Next:</span> tap Add warehouse intake and select your
-              US master lease holder (e.g. Complete Sourcing USA in Hallandale).
-            </p>
-          ) : (
-            <p>
-              <span className="font-semibold">Next:</span> tap Add Customs and set your Jamaica hub
-              so cargo can be scanned after clearance.
-            </p>
-          )}
-        </div>
-      )}
 
       {isLoading && <p className="text-sm text-slate-500">Loading…</p>}
       {error && (
@@ -579,7 +565,7 @@ export function FacilitiesPage() {
                   requireIdentity={false}
                 />
               </div>
-              {catalog.error && addType === 'miami_warehouse' && (
+              {catalog.error && addType === 'warehouse' && (
                 <p className="text-sm text-red-600">{(catalog.error as Error).message}</p>
               )}
               {formError && (
