@@ -55,6 +55,8 @@ Optional JCA live submit secrets (otherwise stub):
 - `JCA_ASYCUDA_ENDPOINT`
 - `JCA_ASYCUDA_API_KEY` (if required by broker/EDI)
 
+Product checklist (owners / brokers / go-live): Notion — **JCA / ASYCUDA live credentials checklist** (Feature Specs).
+
 ## New OS screens (Enterprise)
 
 | Route | Module | Purpose |
