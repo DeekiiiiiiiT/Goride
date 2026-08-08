@@ -10,11 +10,17 @@ export function WarehouseReceiveStationPage() {
   const [weightLbs, setWeightLbs] = useState('');
   const [bin, setBin] = useState('');
   const [facilityId, setFacilityId] = useState('');
+  const [suiteCode, setSuiteCode] = useState('');
   const [toast, setToast] = useState<string | null>(null);
 
   const facilities = useQuery({
     queryKey: ['freight', 'facilities', organizationId, 'warehouse'],
     queryFn: () => freightService.listFacilities(organizationId, 'warehouse'),
+    enabled: Boolean(session),
+  });
+  const suites = useQuery({
+    queryKey: ['freight', 'suites', organizationId],
+    queryFn: () => freightService.listSuites(organizationId),
     enabled: Boolean(session),
   });
 
@@ -23,12 +29,18 @@ export function WarehouseReceiveStationPage() {
     if (first && !facilityId) setFacilityId(String(first.id));
   }, [facilities.data, facilityId]);
 
+  useEffect(() => {
+    const first = suites.data?.suites?.[0];
+    if (first && !suiteCode) setSuiteCode(String(first.suite_code ?? ''));
+  }, [suites.data, suiteCode]);
+
   const scan = useMutation({
     mutationFn: () =>
       freightService.scan(
         {
           barcode: barcode.trim(),
           facilityId,
+          suiteCode: suiteCode || null,
           weightLbs: weightLbs ? Number(weightLbs) : null,
           binLocation: bin || null,
         },
@@ -41,6 +53,7 @@ export function WarehouseReceiveStationPage() {
       );
       setBarcode('');
       setWeightLbs('');
+      setBin('');
       window.setTimeout(() => setToast(null), 2800);
     },
   });
@@ -62,19 +75,36 @@ export function WarehouseReceiveStationPage() {
         </div>
       ) : null}
 
-      <div className="rounded-xl border border-slate-200 bg-white p-4">
-        <label className="text-xs font-medium text-slate-500">Warehouse</label>
-        <select
-          value={facilityId}
-          onChange={(e) => setFacilityId(e.target.value)}
-          className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-        >
-          {(facilities.data?.facilities ?? []).map((f) => (
-            <option key={String(f.id)} value={String(f.id)}>
-              {String(f.name)} ({String(f.code)})
-            </option>
-          ))}
-        </select>
+      <div className="grid gap-4 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-2">
+        <div>
+          <label className="text-xs font-medium text-slate-500">Warehouse</label>
+          <select
+            value={facilityId}
+            onChange={(e) => setFacilityId(e.target.value)}
+            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          >
+            {(facilities.data?.facilities ?? []).map((f) => (
+              <option key={String(f.id)} value={String(f.id)}>
+                {String(f.name)} ({String(f.code)})
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="text-xs font-medium text-slate-500">Suite</label>
+          <select
+            value={suiteCode}
+            onChange={(e) => setSuiteCode(e.target.value)}
+            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-sm"
+          >
+            <option value="">— Required for unknown scan —</option>
+            {(suites.data?.suites ?? []).map((s) => (
+              <option key={String(s.id)} value={String(s.suite_code)}>
+                {String(s.suite_code)} · {String(s.contact_name || '')}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -86,7 +116,7 @@ export function WarehouseReceiveStationPage() {
           value={barcode}
           onChange={(e) => setBarcode(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && barcode && facilityId) scan.mutate();
+            if (e.key === 'Enter' && barcode && facilityId && suiteCode) scan.mutate();
           }}
           className="mt-2 w-full rounded-xl border-2 border-amber-400 bg-slate-50 px-4 py-5 text-center font-mono text-2xl font-semibold tracking-wide text-slate-900 outline-none focus:border-amber-500 focus:ring-4 focus:ring-amber-100"
           placeholder="Scan or type tracking #"
@@ -122,7 +152,7 @@ export function WarehouseReceiveStationPage() {
 
         <button
           type="button"
-          disabled={!barcode || !facilityId || scan.isPending}
+          disabled={!barcode || !facilityId || !suiteCode || scan.isPending}
           onClick={() => scan.mutate()}
           className="mt-6 w-full rounded-xl bg-amber-500 py-4 text-base font-bold text-slate-950 hover:bg-amber-400 disabled:opacity-50"
         >

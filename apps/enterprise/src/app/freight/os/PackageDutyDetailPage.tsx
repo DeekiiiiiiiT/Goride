@@ -55,6 +55,15 @@ export function PackageDutyDetailPage() {
     },
   });
 
+  const uploadInvoice = useMutation({
+    mutationFn: (file: File) =>
+      freightService.uploadPackageInvoice(packageId, file, organizationId),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['freight', 'package', organizationId, packageId] });
+      void qc.invalidateQueries({ queryKey: ['freight', 'invoice-audit'] });
+    },
+  });
+
   const compute = useMutation({
     mutationFn: () => freightService.computeDuty(packageId, organizationId),
     onSuccess: () => {
@@ -67,6 +76,7 @@ export function PackageDutyDetailPage() {
     | { suite_code?: string; contact_name?: string; trn?: string; trn_valid?: boolean }
     | undefined;
   const duty = dutyQ.data?.duty ?? compute.data?.duty ?? null;
+  const hasInvoice = Boolean(pkg?.invoice_storage_path || pkg?.invoice_file_name);
 
   const dutyView = useMemo(() => {
     if (!duty) return null;
@@ -162,20 +172,45 @@ export function PackageDutyDetailPage() {
           </section>
 
           <section className="rounded-xl border border-slate-200 bg-white p-5">
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-sm font-semibold text-slate-900">Invoice audit</h2>
-              <button
-                type="button"
-                disabled={verify.isPending || Boolean(pkg.invoice_verified_at)}
-                onClick={() => verify.mutate()}
-                className="rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-semibold text-slate-950 disabled:opacity-50"
-              >
-                {pkg.invoice_verified_at ? 'Verified' : 'Verify invoice'}
-              </button>
+              <div className="flex flex-wrap gap-2">
+                <label className="cursor-pointer rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold hover:bg-slate-50">
+                  {uploadInvoice.isPending ? 'Uploading…' : hasInvoice ? 'Replace file' : 'Upload invoice'}
+                  <input
+                    type="file"
+                    accept="application/pdf,image/*"
+                    className="sr-only"
+                    disabled={uploadInvoice.isPending || !packageId}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      e.target.value = '';
+                      if (file) uploadInvoice.mutate(file);
+                    }}
+                  />
+                </label>
+                <button
+                  type="button"
+                  disabled={
+                    verify.isPending ||
+                    Boolean(pkg.invoice_verified_at) ||
+                    !hasInvoice
+                  }
+                  onClick={() => verify.mutate()}
+                  className="rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-semibold text-slate-950 disabled:opacity-50"
+                >
+                  {pkg.invoice_verified_at ? 'Verified' : 'Verify invoice'}
+                </button>
+              </div>
             </div>
             <p className="mt-3 font-mono text-sm text-slate-700">
               {String(pkg.invoice_file_name || pkg.invoice_storage_path || 'No invoice on file')}
             </p>
+            {!hasInvoice && (
+              <p className="mt-1 text-xs text-amber-800">
+                Upload a PDF or photo before seal / verify.
+              </p>
+            )}
             <label className="mt-3 flex items-center gap-2 text-sm text-slate-700">
               <input type="checkbox" checked={Boolean(pkg.invoice_verified_at)} readOnly className="rounded" />
               Verified against physical package
@@ -187,8 +222,10 @@ export function PackageDutyDetailPage() {
               value={note}
               onChange={(e) => setNote(e.target.value)}
             />
-            {verify.error && (
-              <p className="mt-2 text-xs text-red-700">{(verify.error as Error).message}</p>
+            {(verify.error || uploadInvoice.error) && (
+              <p className="mt-2 text-xs text-red-700">
+                {((verify.error || uploadInvoice.error) as Error).message}
+              </p>
             )}
           </section>
 

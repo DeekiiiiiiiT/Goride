@@ -104,8 +104,10 @@ async function appendTracking(
 // ---------------------------------------------------------------------------
 app.get("/health", (c) => c.json({ ok: true, service: "freight" }));
 
-registerPipelineRoutes(app);
+// Courier OS routes first so static paths like /packages/invoice-audit
+// are not swallowed by /packages/:id from the pipeline router.
 registerCourierOsRoutes(app);
+registerPipelineRoutes(app);
 
 // ---------------------------------------------------------------------------
 // Carriers

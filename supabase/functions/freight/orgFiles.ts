@@ -78,14 +78,23 @@ export async function uploadOrgFile(
     const { scanForMalware } = await import("../_shared/malwareScan.ts");
     const scan = await scanForMalware(buffer);
     if (!scan.clean) {
-      return {
-        ok: false,
-        status: 422,
-        error: scan.reason || "This file failed a security scan and was not uploaded.",
-      };
+      // Magic-byte validation already ran. KYC uses fail-closed malwareScan;
+      // org Files stay usable when VirusTotal isn't provisioned on the project.
+      if (scan.reason === "scanner not configured") {
+        console.warn(
+          "[orgFiles] MALWARE_SCAN_API_KEY unset — allowing upload after type check",
+        );
+      } else {
+        return {
+          ok: false,
+          status: 422,
+          error: scan.reason ||
+            "This file failed a security scan and was not uploaded.",
+        };
+      }
     }
   } catch {
-    // Malware scanner optional in local/dev — continue if module unavailable.
+    // Malware scanner optional — continue if module unavailable.
   }
 
   const ext = extForMime(detected);

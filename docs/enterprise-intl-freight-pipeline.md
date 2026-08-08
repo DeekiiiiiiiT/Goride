@@ -31,6 +31,18 @@ Ops-managed mailbox freight (no customer portal). SMS status updates. Pickup **a
 9. **Hub Station** — inbound scan → sort (pickup or door).
 10. **Fulfillment** — pickup collected or door batch / POD.
 
+## Smoke result (2026-08-08)
+
+**Passed** on GoRide / Bootstrap Freight Co: `SMOKE-TRK-001` → `MF-20260808-5734` → clearance green → Kingston Hub `received_hub`.
+
+### Known gaps
+| Gap | Impact | Status |
+|-----|--------|--------|
+| Invoice file on package | Seal blocked without commercial invoice | **Upload wired** on Invoice Audit + Package Duty (PDF/image → org Files) |
+| JCA live credentials | Submit records stub filing until `JCA_ASYCUDA_*` env set | Ops / EDI follow-up |
+| Declared USD value | Must be set before seal | Capture on receive / package duty |
+| Full `db push` | Other local-only migrations out of sync | Courier OS applied via targeted migration |
+
 ## Apply migration
 
 ```bash

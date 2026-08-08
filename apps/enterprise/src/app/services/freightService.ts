@@ -605,6 +605,31 @@ export const freightService = {
       { organizationId },
     ),
 
+  /** Multipart commercial invoice → org Files + package invoice fields. */
+  uploadPackageInvoice: async (
+    packageId: string,
+    file: File,
+    organizationId?: string | null,
+  ) => {
+    const headers = await authHeaders(organizationId, { json: false });
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('fileName', file.name);
+    const res = await fetch(`${API_ENDPOINTS.freight}/packages/${packageId}/invoice`, {
+      method: 'POST',
+      headers,
+      body: fd,
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(typeof json.error === 'string' ? json.error : res.statusText);
+    }
+    return json as {
+      package: Record<string, unknown>;
+      file: Record<string, unknown>;
+    };
+  },
+
   verifyInvoice: (id: string, note?: string, organizationId?: string | null) =>
     freightFetch<{ package: Record<string, unknown> }>(`/packages/${id}/verify-invoice`, {
       method: 'POST',

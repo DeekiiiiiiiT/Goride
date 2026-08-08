@@ -88,11 +88,13 @@ export function PipelineCommandPage() {
               {lane.label}
             </p>
             <p className="mt-1 text-2xl font-semibold tabular-nums">
-              {lane.id === 'green'
-                ? (counts.customs_cleared ?? lane.count)
-                : lane.id === 'yellow' || lane.id === 'red'
-                  ? (counts.customs_hold ?? lane.count)
-                  : lane.count}
+              {q.data
+                ? lane.id === 'green'
+                  ? (counts.customs_cleared ?? 0)
+                  : lane.id === 'yellow' || lane.id === 'red'
+                    ? (counts.customs_hold ?? 0)
+                    : 0
+                : lane.count}
             </p>
           </div>
         ))}

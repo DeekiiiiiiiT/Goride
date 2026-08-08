@@ -22,6 +22,15 @@ export function InvoiceAuditQueuePage() {
       void qc.invalidateQueries({ queryKey: ['freight', 'invoice-audit'] });
     },
   });
+  const upload = useMutation({
+    mutationFn: ({ id, file }: { id: string; file: File }) =>
+      freightService.uploadPackageInvoice(id, file, organizationId),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['freight', 'invoice-audit'] });
+      void qc.invalidateQueries({ queryKey: ['freight', 'package'] });
+      setTab('mismatch');
+    },
+  });
 
   const rows = useMemo(() => q.data?.packages ?? [], [q.data]);
 
@@ -30,7 +39,7 @@ export function InvoiceAuditQueuePage() {
       <div>
         <h1 className="text-2xl font-semibold text-slate-900">Invoice Audit</h1>
         <p className="mt-1 text-sm text-slate-500">
-          Verify invoices before packages can seal on a flight
+          Upload and verify invoices before packages can seal on a flight
         </p>
       </div>
 
@@ -61,6 +70,11 @@ export function InvoiceAuditQueuePage() {
       {q.error && (
         <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
           {(q.error as Error).message}
+        </p>
+      )}
+      {(verify.error || upload.error) && (
+        <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {((verify.error || upload.error) as Error).message}
         </p>
       )}
 
@@ -94,14 +108,30 @@ export function InvoiceAuditQueuePage() {
                       {row.weight_lbs != null ? `${row.weight_lbs} lb` : '—'}
                     </td>
                     <td className="px-4 py-2.5">
-                      <div className="flex flex-wrap gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <Link
                           to={`/app/package-duty?id=${id}`}
                           className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-medium hover:bg-slate-50"
                         >
                           Open
                         </Link>
-                        {tab !== 'ready' ? (
+                        {(tab === 'missing' || tab === 'mismatch') && (
+                          <label className="cursor-pointer rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-medium hover:bg-slate-50">
+                            {upload.isPending ? 'Uploading…' : 'Upload PDF/image'}
+                            <input
+                              type="file"
+                              accept="application/pdf,image/*"
+                              className="sr-only"
+                              disabled={upload.isPending}
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                e.target.value = '';
+                                if (file) upload.mutate({ id, file });
+                              }}
+                            />
+                          </label>
+                        )}
+                        {tab === 'mismatch' ? (
                           <button
                             type="button"
                             disabled={verify.isPending}

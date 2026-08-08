@@ -17,6 +17,7 @@ import {
 } from "./dualLedgerBilling.ts";
 import { isValidJamaicaTrn, normalizeTrn, validateTrn } from "./validateTrn.ts";
 import { notifyPackageContact } from "./notifyPackage.ts";
+import { uploadOrgFile } from "./orgFiles.ts";
 
 type FreightApp = Hono;
 
@@ -188,6 +189,55 @@ export function registerCourierOsRoutes(app: FreightApp) {
     return c.json({ packages: filtered });
   });
 
+  /** Multipart invoice attach — uploads org Files + stamps package invoice fields. */
+  app.post("/packages/:id/invoice", async (c) => {
+    const user = await requireUser(c);
+    if (user instanceof Response) return user;
+    const id = c.req.param("id");
+    const { data: existing } = await freightDb()
+      .from("packages")
+      .select("id")
+      .eq("id", id)
+      .eq("organization_id", user.organizationId)
+      .maybeSingle();
+    if (!existing) return c.json({ error: "Not found" }, 404);
+
+    const form = await c.req.parseBody();
+    const file = form.file;
+    if (!(file instanceof File)) {
+      return c.json({ error: "file is required" }, 400);
+    }
+
+    const upload = await uploadOrgFile({
+      organizationId: user.organizationId,
+      file,
+      kind: "invoice",
+      sourceType: "package",
+      sourceId: id,
+      uploadedBy: user.id,
+      fileName: form.fileName ? String(form.fileName) : null,
+    });
+    if (!upload.ok) return c.json({ error: upload.error }, upload.status);
+
+    const now = new Date().toISOString();
+    const { data: pkg, error } = await freightDb()
+      .from("packages")
+      .update({
+        invoice_storage_path: upload.file.storage_path,
+        invoice_file_name: upload.file.file_name,
+        // New file invalidates prior clerk verification
+        invoice_verified_at: null,
+        invoice_verified_by: null,
+        updated_at: now,
+      })
+      .eq("id", id)
+      .eq("organization_id", user.organizationId)
+      .select("*")
+      .maybeSingle();
+    if (error) return c.json({ error: error.message }, 500);
+    return c.json({ package: pkg, file: upload.file });
+  });
+
   app.post("/packages/:id/verify-invoice", async (c) => {
     const user = await requireUser(c);
     if (user instanceof Response) return user;
@@ -195,6 +245,21 @@ export function registerCourierOsRoutes(app: FreightApp) {
       .object({ note: z.string().max(1000).optional().nullable() })
       .safeParse(await c.req.json().catch(() => ({})));
     if (!body.success) return c.json({ error: body.error.flatten() }, 400);
+
+    const { data: current } = await freightDb()
+      .from("packages")
+      .select("id, invoice_storage_path, invoice_file_name")
+      .eq("id", c.req.param("id"))
+      .eq("organization_id", user.organizationId)
+      .maybeSingle();
+    if (!current) return c.json({ error: "Not found" }, 404);
+    if (!current.invoice_storage_path && !current.invoice_file_name) {
+      return c.json(
+        { error: "Upload a commercial invoice before verifying" },
+        400,
+      );
+    }
+
     const now = new Date().toISOString();
     const { data: pkg, error } = await freightDb()
       .from("packages")
