@@ -40,7 +40,7 @@ Ops-managed mailbox freight (no customer portal). SMS status updates. Pickup **a
 |-----|--------|--------|
 | Invoice file on package | Seal blocked without commercial invoice | **Upload wired** on Invoice Audit + Package Duty (PDF/image → org Files) |
 | JCA live credentials | Submit records stub filing until `JCA_ASYCUDA_*` env set | Ops / EDI follow-up |
-| Declared USD value | Must be set before seal | Capture on receive / package duty |
+| Declared USD value | Must be set before seal | Capture on Receive Station + Package Duty |
 | Full `db push` | Other local-only migrations out of sync | Courier OS applied via targeted migration |
 
 ## Apply migration

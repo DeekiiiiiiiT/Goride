@@ -8,6 +8,7 @@ export function WarehouseReceiveStationPage() {
   const { organizationId, session } = useAuth();
   const [barcode, setBarcode] = useState('');
   const [weightLbs, setWeightLbs] = useState('');
+  const [declaredUsd, setDeclaredUsd] = useState('');
   const [bin, setBin] = useState('');
   const [facilityId, setFacilityId] = useState('');
   const [suiteCode, setSuiteCode] = useState('');
@@ -34,6 +35,12 @@ export function WarehouseReceiveStationPage() {
     if (first && !suiteCode) setSuiteCode(String(first.suite_code ?? ''));
   }, [suites.data, suiteCode]);
 
+  const declaredUsdNum = declaredUsd.trim() === '' ? null : Number(declaredUsd);
+  const declaredValueUsdMinor =
+    declaredUsdNum != null && Number.isFinite(declaredUsdNum) && declaredUsdNum >= 0
+      ? Math.round(declaredUsdNum * 100)
+      : null;
+
   const scan = useMutation({
     mutationFn: () =>
       freightService.scan(
@@ -42,6 +49,7 @@ export function WarehouseReceiveStationPage() {
           facilityId,
           suiteCode: suiteCode || null,
           weightLbs: weightLbs ? Number(weightLbs) : null,
+          declaredValueUsdMinor,
           binLocation: bin || null,
         },
         organizationId,
@@ -53,6 +61,7 @@ export function WarehouseReceiveStationPage() {
       );
       setBarcode('');
       setWeightLbs('');
+      setDeclaredUsd('');
       setBin('');
       window.setTimeout(() => setToast(null), 2800);
     },
@@ -65,7 +74,7 @@ export function WarehouseReceiveStationPage() {
       <div>
         <h1 className="text-2xl font-semibold text-slate-900">Receive Station</h1>
         <p className="mt-1 text-sm text-slate-500">
-          Scan barcode → confirm suite → capture weight &amp; bin
+          Scan barcode → confirm suite → capture weight, declared value &amp; bin
         </p>
       </div>
 
@@ -124,15 +133,27 @@ export function WarehouseReceiveStationPage() {
       </div>
 
       <div className="rounded-xl border border-slate-200 bg-white p-6">
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-3">
           <div>
             <label className="text-xs font-medium text-slate-500">Weight (lbs)</label>
             <input
               value={weightLbs}
               onChange={(e) => setWeightLbs(e.target.value)}
+              inputMode="decimal"
               className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-3 text-lg tabular-nums"
             />
             <p className="mt-1 text-xs text-slate-500">{kg.toFixed(3)} kg</p>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-slate-500">Declared value (US$)</label>
+            <input
+              value={declaredUsd}
+              onChange={(e) => setDeclaredUsd(e.target.value)}
+              inputMode="decimal"
+              placeholder="0.00"
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-3 text-lg tabular-nums"
+            />
+            <p className="mt-1 text-xs text-slate-500">Needed before seal</p>
           </div>
           <div>
             <label className="text-xs font-medium text-slate-500">Bin / rack</label>
