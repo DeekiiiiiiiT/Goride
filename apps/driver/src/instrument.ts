@@ -15,10 +15,11 @@ if (dsn) {
         blockAllMedia: true,
       }),
     ],
-    tracesSampleRate: import.meta.env.PROD ? 0.2 : 1.0,
-    // Do NOT include supabase.co � Sentry injects sentry-trace/baggage on those
-    // cross-origin calls and Supabase CORS rejects them ? "Failed to fetch".
+        tracesSampleRate: import.meta.env.PROD ? 0.2 : 1.0,
+    // Do NOT include supabase.co — Sentry injects sentry-trace/baggage on those
+    // cross-origin calls and Supabase CORS rejects them → "Failed to fetch".
     tracePropagationTargets: ['localhost', /^\//],
+
     replaysSessionSampleRate: 0.1,
     replaysOnErrorSampleRate: 1.0,
     enableLogs: true,
