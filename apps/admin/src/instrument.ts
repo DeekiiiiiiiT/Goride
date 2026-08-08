@@ -2,6 +2,13 @@ import * as Sentry from '@sentry/react';
 
 const dsn = import.meta.env.VITE_SENTRY_DSN;
 
+/** Dev-only Vite HMR / dual-React blips — not product regressions. */
+const localDevNoise = [
+  /Failed to fetch dynamically imported module:.*(?:localhost|127\.0\.0\.1)/i,
+  /Cannot read properties of null \(reading 'useState'\)/,
+  /Invalid hook call/,
+];
+
 // Init before app code loads. No-op when DSN is missing.
 if (dsn) {
   Sentry.init({
@@ -23,7 +30,6 @@ if (dsn) {
     replaysSessionSampleRate: 0.1,
     replaysOnErrorSampleRate: 1.0,
     enableLogs: true,
-    // Local Vite HMR/restarts — not product regressions (prod chunk URLs still report).
-    ignoreErrors: [/Failed to fetch dynamically imported module:.*(?:localhost|127\.0\.0\.1)/i],
+    ignoreErrors: import.meta.env.DEV ? localDevNoise : [],
   });
 }

@@ -2,6 +2,7 @@ import { defineConfig, normalizePath, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import path from 'path';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'url';
 import { roamSupabaseDevProxy } from '@roam/api-client/viteDevProxy';
 
@@ -9,6 +10,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const adminSrc = path.resolve(__dirname, 'src');
 const fleetSrc = path.resolve(__dirname, '../fleet/src');
 const repoRoot = path.resolve(__dirname, '../..');
+// Force one React — admin pulls fleet UI source; nested copies break hooks (useState of null).
+const require = createRequire(import.meta.url);
+const reactRoot = path.dirname(require.resolve('react/package.json'));
+const reactDomRoot = path.dirname(require.resolve('react-dom/package.json'));
 
 /** Fleet UI was generated with `pkg@semver` import specifiers; resolve to real packages in admin. */
 function resolveFleetVersionedPackages(fleetSrcRoot: string): Plugin {
@@ -35,7 +40,10 @@ export default defineConfig({
   plugins: [roamSupabaseDevProxy(), resolveFleetVersionedPackages(fleetSrc), react(), tailwindcss()],
   resolve: {
     extensions: ['.js', '.jsx', '.ts', '.tsx', '.json'],
+    dedupe: ['react', 'react-dom'],
     alias: [
+      { find: 'react', replacement: reactRoot },
+      { find: 'react-dom', replacement: reactDomRoot },
       { find: '@', replacement: adminSrc },
       { find: '@roam/toll-ui', replacement: path.resolve(repoRoot, 'packages/toll-ui/src/index.ts') },
       { find: '@roam/roam-shared', replacement: path.resolve(repoRoot, 'packages/roam-shared/src/index.ts') },
@@ -58,6 +66,9 @@ export default defineConfig({
         replacement: normalizePath(path.resolve(adminSrc, 'components/auth/AuthContext.tsx')),
       },
     ],
+  },
+  optimizeDeps: {
+    include: ['react', 'react-dom', 'react/jsx-runtime'],
   },
   build: {
     target: 'esnext',

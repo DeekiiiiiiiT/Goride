@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import path from 'path';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'url';
 import { roamSupabaseDevProxy } from '@roam/api-client/viteDevProxy';
 
@@ -10,6 +11,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fleetSrc = path.resolve(__dirname, '../fleet/src');
 const bridgeShims = path.resolve(__dirname, 'src/fleet-bridge/shims');
 const fleetRoot = path.resolve(__dirname, '../fleet');
+// Force one React — enterprise aliases fleet source; nested copies break hooks.
+const require = createRequire(import.meta.url);
+const reactRoot = path.dirname(require.resolve('react/package.json'));
+const reactDomRoot = path.dirname(require.resolve('react-dom/package.json'));
 
 /** Fleet still imports versioned package IDs from the Figma Make era. */
 const fleetVersionAliases: Record<string, string> = {
@@ -157,7 +162,10 @@ export default defineConfig({
   ],
   resolve: {
     extensions: ['.js', '.jsx', '.ts', '.tsx', '.json'],
+    dedupe: ['react', 'react-dom'],
     alias: [
+      { find: 'react', replacement: reactRoot },
+      { find: 'react-dom', replacement: reactDomRoot },
       ...Object.entries(fleetVersionAliases).map(([find, replacement]) => ({
         find,
         replacement,
@@ -189,6 +197,9 @@ export default defineConfig({
         replacement: path.resolve(bridgeShims, 'FeatureFlagContext.tsx'),
       },
     ],
+  },
+  optimizeDeps: {
+    include: ['react', 'react-dom', 'react/jsx-runtime'],
   },
 
   define: {

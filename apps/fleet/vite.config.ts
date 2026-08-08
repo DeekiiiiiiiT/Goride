@@ -3,7 +3,13 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import path from 'path';
+import { createRequire } from 'node:module';
 import { roamSupabaseDevProxy } from '@roam/api-client/viteDevProxy';
+
+// Force one React instance — nested app/node_modules copies break hooks (useState of null).
+const require = createRequire(import.meta.url);
+const reactRoot = path.dirname(require.resolve('react/package.json'));
+const reactDomRoot = path.dirname(require.resolve('react-dom/package.json'));
 
 const productLine = process.env.VITE_PRODUCT_LINE || 'fleet';
 const isEnterprise = productLine === 'enterprise';
@@ -117,7 +123,10 @@ export default defineConfig({
   ],
   resolve: {
     extensions: ['.js', '.jsx', '.ts', '.tsx', '.json'],
+    dedupe: ['react', 'react-dom'],
     alias: {
+      react: reactRoot,
+      'react-dom': reactDomRoot,
       'vaul@1.1.2': 'vaul',
       'sonner@2.0.3': 'sonner',
       'react-resizable-panels@2.1.7': 'react-resizable-panels',
@@ -168,7 +177,7 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    include: [],
+    include: ['react', 'react-dom', 'react/jsx-runtime'],
     exclude: ['@roam/roam-shared'],
   },
   build: {

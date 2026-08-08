@@ -366,12 +366,17 @@ export function registerCourierOsRoutes(app: FreightApp) {
     const lines = await loadManifestPackages(user.organizationId, id);
     const packages = lines.map((l) => l.package as Parameters<typeof evaluateManifestReadiness>[0][number]);
     const readiness = evaluateManifestReadiness(packages);
+    // Open manifests must be seal-ready. Already sealed / in transit / arrived may still
+    // export AWBOLDS even if historical package rows fail today's readiness checks.
     if (!readiness.canSeal && manifest.status === "open") {
-      return c.json({ error: "validation_failed", ...readiness }, 400);
-    }
-    if (readiness.blockers.length && ["sealed", "shipped", "arrived_ja"].includes(manifest.status)) {
-      // Still allow export for sealed if historical data incomplete — but prefer blockers
-      return c.json({ error: "validation_failed", ...readiness }, 400);
+      return c.json(
+        {
+          error: "validation_failed",
+          message: "Resolve TRN, invoice, and weight blockers before AWBOLDS export",
+          ...readiness,
+        },
+        400,
+      );
     }
 
     const xml = buildAwboldsXml({

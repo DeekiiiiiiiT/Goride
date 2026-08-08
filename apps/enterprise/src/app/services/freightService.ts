@@ -33,9 +33,16 @@ async function freightFetch<T>(
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
     // Prefer human message over machine codes like validation_failed
+    const blockers = Array.isArray(json.blockers)
+      ? (json.blockers as Array<{ tracking?: string; message?: string }>)
+          .slice(0, 3)
+          .map((b) => `${b.tracking || 'package'}: ${b.message || 'blocked'}`)
+          .join('; ')
+      : '';
     const detail =
       (typeof json.message === 'string' && json.message) ||
       (typeof json.msg === 'string' && json.msg) ||
+      (blockers ? `Validation failed — ${blockers}` : null) ||
       (typeof json.error === 'string' && json.error) ||
       json.error?.formErrors?.[0] ||
       (typeof json === 'object' && json.error ? JSON.stringify(json.error) : null) ||
