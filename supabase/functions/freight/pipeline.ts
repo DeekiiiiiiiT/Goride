@@ -17,6 +17,7 @@ import {
   issuePodToken,
   loadPodSessionByToken,
 } from "./podService.ts";
+import { uploadOrgFile } from "./orgFiles.ts";
 
 type FreightApp = Hono;
 
@@ -2510,6 +2511,31 @@ export function registerPipelineRoutes(app: FreightApp) {
       status: session.batch.status,
       stops: session.stops,
     });
+  });
+
+  /** Token-gated POD photo upload → org Files (no enterprise auth). */
+  app.post("/public/pod/:token/upload", async (c) => {
+    const token = c.req.param("token");
+    const session = await loadPodSessionByToken(token);
+    if (!session.ok) return c.json({ error: session.error }, session.status);
+
+    const form = await c.req.parseBody();
+    const file = form.file;
+    if (!(file instanceof File)) {
+      return c.json({ error: "file is required" }, 400);
+    }
+    const packageId = form.packageId ? String(form.packageId) : null;
+
+    const result = await uploadOrgFile({
+      organizationId: session.batch.organization_id,
+      file,
+      kind: "pod",
+      sourceType: packageId ? "package" : "delivery_batch",
+      sourceId: packageId || session.batch.id,
+      uploadedBy: null,
+    });
+    if (!result.ok) return c.json({ error: result.error }, result.status);
+    return c.json({ file: result.file }, 201);
   });
 
   app.post("/public/pod/:token/deliver", async (c) => {

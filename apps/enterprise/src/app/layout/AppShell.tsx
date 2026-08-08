@@ -23,6 +23,7 @@ import {
   Wrench,
   BarChart3,
   Database,
+  FolderOpen,
   Route,
 } from 'lucide-react';
 import type { ModuleKey } from '@roam/platform-settings';
@@ -166,6 +167,7 @@ const NAV_ITEMS: NavItem[] = [
     icon: Settings,
     children: [
       { to: '/app/team', label: 'Team', icon: Users, module: 'teamManagement' },
+      { to: '/app/files', label: 'Files', icon: FolderOpen, module: 'dataCenter' },
       { to: '/app/settings', label: 'Settings', icon: Settings },
     ],
   },

@@ -2,15 +2,6 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { freightService } from '@/app/services/freightService';
 
-async function fileToDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ''));
-    reader.onerror = () => reject(new Error('Could not read photo'));
-    reader.readAsDataURL(file);
-  });
-}
-
 /** Public client-fleet POD capture — no login. */
 export function PodCapturePage() {
   const { token } = useParams();
@@ -44,7 +35,11 @@ export function PodCapturePage() {
     setBusy(packageId);
     try {
       const file = photos[packageId];
-      const podPhotoPath = file ? await fileToDataUrl(file) : null;
+      let podPhotoPath: string | null = null;
+      if (file) {
+        const uploaded = await freightService.publicPodUpload(token, file, packageId);
+        podPhotoPath = String(uploaded.file.storage_path || '');
+      }
       await freightService.publicPodDeliver(token, {
         packageId,
         podNote: notes[packageId]?.trim() || 'Confirmed via POD link',

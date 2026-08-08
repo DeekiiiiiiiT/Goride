@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Upload, PenLine, Pencil, Trash2, X } from 'lucide-react';
+import { Upload, PenLine, Pencil, Trash2, X, CircleHelp } from 'lucide-react';
 import {
   useCreateManifest,
   useDeleteManifest,
@@ -23,6 +23,65 @@ import {
 type FacilityOpt = { id: string; name: string };
 type OverlayMode = 'upload' | 'manual' | null;
 type ManifestRow = Record<string, unknown>;
+
+const FIELD_TIPS = {
+  carrier:
+    'The airline or shipping line that moves the cargo (example: Amerijet). Not the US warehouse, and not Jamaica Customs.',
+  shipmentType:
+    'How the cargo travels: Air = plane, Sea = ship. Pick Air for air carriers like Amerijet.',
+  origin:
+    'Your Florida US intake warehouse — where packages were received before this shipment left for Jamaica.',
+  destination:
+    'Your main Jamaica hub where cargo will be scanned after Customs clears it.',
+  awb:
+    'The carrier’s official shipment number. AWB = air waybill (plane). BL = bill of lading (ship). Optional if you do not have it yet — add it later when you submit to Customs.',
+  csvFile:
+    'Spreadsheet from the US warehouse listing every package on this flight/shipment (tracking, suite/mailbox, weight, value). Download the template if you need the column layout.',
+  brokerRef:
+    'Optional reference your customs broker gave you. Leave blank if you do not have one yet.',
+  flightOrVoyage:
+    'Optional flight number or vessel name the cargo is riding on (example: M8 123). Helps match the physical plane or ship.',
+} as const;
+
+/** Plain tip for new staff — hover or focus the (?). */
+function FieldTip({ text }: { text: string }) {
+  return (
+    <span className="relative ml-1 inline-flex align-middle">
+      <button
+        type="button"
+        className="group rounded-full text-slate-400 hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
+        aria-label={text}
+      >
+        <CircleHelp className="h-3.5 w-3.5" aria-hidden />
+        <span
+          role="tooltip"
+          className="pointer-events-none absolute bottom-full left-1/2 z-[60] mb-1.5 w-56 -translate-x-1/2 rounded-lg bg-slate-900 px-2.5 py-2 text-left text-[11px] font-normal leading-snug text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+        >
+          {text}
+        </span>
+      </button>
+    </span>
+  );
+}
+
+function FieldLabel({
+  children,
+  tip,
+  className = 'block text-sm',
+}: {
+  children: ReactNode;
+  tip: string;
+  className?: string;
+}) {
+  return (
+    <label className={className}>
+      <span className="inline-flex items-center font-medium text-slate-800">
+        {children}
+        <FieldTip text={tip} />
+      </span>
+    </label>
+  );
+}
 
 function Overlay({
   title,
@@ -73,6 +132,158 @@ function Overlay({
           </button>
         </div>
         <div className="overflow-y-auto px-5 py-4">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function ManifestMetaFields({
+  carrierName,
+  setCarrierName,
+  shipmentType,
+  setShipmentType,
+  originFacilityId,
+  setOriginFacilityId,
+  destinationFacilityId,
+  setDestinationFacilityId,
+  awbOrBl,
+  setAwbOrBl,
+  miamiFacilities,
+  hubFacilities,
+  namedInputs,
+}: {
+  carrierName?: string;
+  setCarrierName?: (v: string) => void;
+  shipmentType?: 'air' | 'sea';
+  setShipmentType?: (v: 'air' | 'sea') => void;
+  originFacilityId?: string;
+  setOriginFacilityId?: (v: string) => void;
+  destinationFacilityId?: string;
+  setDestinationFacilityId?: (v: string) => void;
+  awbOrBl?: string;
+  setAwbOrBl?: (v: string) => void;
+  miamiFacilities: FacilityOpt[];
+  hubFacilities: FacilityOpt[];
+  /** Use native name= fields (uncontrolled) for Manual form */
+  namedInputs?: boolean;
+}) {
+  const controlled = !namedInputs;
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      <div>
+        <FieldLabel tip={FIELD_TIPS.carrier}>Carrier</FieldLabel>
+        {controlled ? (
+          <input
+            value={carrierName}
+            onChange={(e) => setCarrierName?.(e.target.value)}
+            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            placeholder="Amerijet"
+          />
+        ) : (
+          <input
+            name="carrierName"
+            defaultValue="Amerijet"
+            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            placeholder="Amerijet"
+          />
+        )}
+      </div>
+      <div>
+        <FieldLabel tip={FIELD_TIPS.shipmentType}>Type</FieldLabel>
+        {controlled ? (
+          <select
+            value={shipmentType}
+            onChange={(e) => setShipmentType?.(e.target.value as 'air' | 'sea')}
+            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          >
+            <option value="air">Air</option>
+            <option value="sea">Sea</option>
+          </select>
+        ) : (
+          <select
+            name="shipmentType"
+            defaultValue="air"
+            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          >
+            <option value="air">Air</option>
+            <option value="sea">Sea</option>
+          </select>
+        )}
+      </div>
+      <div>
+        <FieldLabel tip={FIELD_TIPS.origin}>Origin (US intake)</FieldLabel>
+        {controlled ? (
+          <select
+            value={originFacilityId}
+            onChange={(e) => setOriginFacilityId?.(e.target.value)}
+            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          >
+            <option value="">—</option>
+            {miamiFacilities.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.name}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <select
+            name="originFacilityId"
+            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          >
+            <option value="">—</option>
+            {miamiFacilities.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.name}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
+      <div>
+        <FieldLabel tip={FIELD_TIPS.destination}>Destination (Jamaica hub)</FieldLabel>
+        {controlled ? (
+          <select
+            value={destinationFacilityId}
+            onChange={(e) => setDestinationFacilityId?.(e.target.value)}
+            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          >
+            <option value="">—</option>
+            {hubFacilities.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.name}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <select
+            name="destinationFacilityId"
+            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          >
+            <option value="">—</option>
+            {hubFacilities.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.name}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
+      <div className="sm:col-span-2">
+        <FieldLabel tip={FIELD_TIPS.awb}>AWB / BL (optional)</FieldLabel>
+        {controlled ? (
+          <input
+            value={awbOrBl}
+            onChange={(e) => setAwbOrBl?.(e.target.value)}
+            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            placeholder="Leave blank if you do not have it yet"
+          />
+        ) : (
+          <input
+            name="awbOrBl"
+            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            placeholder="Leave blank if you do not have it yet"
+          />
+        )}
       </div>
     </div>
   );
@@ -148,7 +359,7 @@ function UploadManifestForm({
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
+      <div className="flex items-center justify-end gap-1">
         <button
           type="button"
           onClick={downloadWarehouseManifestTemplate}
@@ -156,75 +367,34 @@ function UploadManifestForm({
         >
           Download template
         </button>
+        <FieldTip text={FIELD_TIPS.csvFile} />
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="block text-sm">
-          Carrier
-          <input
-            value={carrierName}
-            onChange={(e) => setCarrierName(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-          />
-        </label>
-        <label className="block text-sm">
-          Type
-          <select
-            value={shipmentType}
-            onChange={(e) => setShipmentType(e.target.value as 'air' | 'sea')}
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-          >
-            <option value="air">Air</option>
-            <option value="sea">Sea</option>
-          </select>
-        </label>
-        <label className="block text-sm">
-          Origin (US intake)
-          <select
-            value={originFacilityId}
-            onChange={(e) => setOriginFacilityId(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-          >
-            <option value="">—</option>
-            {miamiFacilities.map((f) => (
-              <option key={f.id} value={f.id}>
-                {f.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="block text-sm">
-          Destination (Jamaica hub)
-          <select
-            value={destinationFacilityId}
-            onChange={(e) => setDestinationFacilityId(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-          >
-            <option value="">—</option>
-            {hubFacilities.map((f) => (
-              <option key={f.id} value={f.id}>
-                {f.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="block text-sm sm:col-span-2">
-          AWB / BL (optional)
-          <input
-            value={awbOrBl}
-            onChange={(e) => setAwbOrBl(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-          />
-        </label>
-      </div>
-
-      <input
-        ref={fileRef}
-        type="file"
-        accept=".csv,text/csv"
-        className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-medium file:text-slate-800 hover:file:bg-slate-200"
-        onChange={(e) => void onFile(e.target.files?.[0] ?? null)}
+      <ManifestMetaFields
+        carrierName={carrierName}
+        setCarrierName={setCarrierName}
+        shipmentType={shipmentType}
+        setShipmentType={setShipmentType}
+        originFacilityId={originFacilityId}
+        setOriginFacilityId={setOriginFacilityId}
+        destinationFacilityId={destinationFacilityId}
+        setDestinationFacilityId={setDestinationFacilityId}
+        awbOrBl={awbOrBl}
+        setAwbOrBl={setAwbOrBl}
+        miamiFacilities={miamiFacilities}
+        hubFacilities={hubFacilities}
       />
+
+      <div>
+        <FieldLabel tip={FIELD_TIPS.csvFile}>Warehouse cargo list (CSV file)</FieldLabel>
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".csv,text/csv"
+          className="mt-1 block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-medium file:text-slate-800 hover:file:bg-slate-200"
+          onChange={(e) => void onFile(e.target.files?.[0] ?? null)}
+        />
+      </div>
       {fileName && <p className="text-xs text-slate-500">{fileName}</p>}
 
       {parseErrors.length > 0 && (
@@ -306,56 +476,11 @@ function ManualManifestForm({
 
   return (
     <form onSubmit={onCreate} className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="block text-sm">
-          Carrier
-          <input
-            name="carrierName"
-            defaultValue="Amerijet"
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-          />
-        </label>
-        <label className="block text-sm">
-          Type
-          <select
-            name="shipmentType"
-            defaultValue="air"
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-          >
-            <option value="air">Air</option>
-            <option value="sea">Sea</option>
-          </select>
-        </label>
-        <label className="block text-sm">
-          Origin (US intake)
-          <select name="originFacilityId" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2">
-            <option value="">—</option>
-            {miamiFacilities.map((f) => (
-              <option key={f.id} value={f.id}>
-                {f.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="block text-sm">
-          Destination (Jamaica hub)
-          <select
-            name="destinationFacilityId"
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-          >
-            <option value="">—</option>
-            {hubFacilities.map((f) => (
-              <option key={f.id} value={f.id}>
-                {f.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="block text-sm sm:col-span-2">
-          AWB / BL
-          <input name="awbOrBl" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
-        </label>
-      </div>
+      <ManifestMetaFields
+        namedInputs
+        miamiFacilities={miamiFacilities}
+        hubFacilities={hubFacilities}
+      />
       {err && (
         <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
           {err}
@@ -428,65 +553,20 @@ function EditManifestForm({
 
   return (
     <form onSubmit={onSave} className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="block text-sm">
-          Carrier
-          <input
-            value={carrierName}
-            onChange={(e) => setCarrierName(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-          />
-        </label>
-        <label className="block text-sm">
-          Type
-          <select
-            value={shipmentType}
-            onChange={(e) => setShipmentType(e.target.value as 'air' | 'sea')}
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-          >
-            <option value="air">Air</option>
-            <option value="sea">Sea</option>
-          </select>
-        </label>
-        <label className="block text-sm">
-          Origin (US intake)
-          <select
-            value={originFacilityId}
-            onChange={(e) => setOriginFacilityId(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-          >
-            <option value="">—</option>
-            {miamiFacilities.map((f) => (
-              <option key={f.id} value={f.id}>
-                {f.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="block text-sm">
-          Destination (Jamaica hub)
-          <select
-            value={destinationFacilityId}
-            onChange={(e) => setDestinationFacilityId(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-          >
-            <option value="">—</option>
-            {hubFacilities.map((f) => (
-              <option key={f.id} value={f.id}>
-                {f.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="block text-sm sm:col-span-2">
-          AWB / BL
-          <input
-            value={awbOrBl}
-            onChange={(e) => setAwbOrBl(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-          />
-        </label>
-      </div>
+      <ManifestMetaFields
+        carrierName={carrierName}
+        setCarrierName={setCarrierName}
+        shipmentType={shipmentType}
+        setShipmentType={setShipmentType}
+        originFacilityId={originFacilityId}
+        setOriginFacilityId={setOriginFacilityId}
+        destinationFacilityId={destinationFacilityId}
+        setDestinationFacilityId={setDestinationFacilityId}
+        awbOrBl={awbOrBl}
+        setAwbOrBl={setAwbOrBl}
+        miamiFacilities={miamiFacilities}
+        hubFacilities={hubFacilities}
+      />
       {err && (
         <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
           {err}
@@ -913,31 +993,33 @@ export function ManifestDetailPage() {
           onClose={() => setSubmitOpen(false)}
         >
           <div className="space-y-3">
-            <label className="block text-sm">
-              AWB / BL (optional)
+            <div>
+              <FieldLabel tip={FIELD_TIPS.awb}>AWB / BL (optional)</FieldLabel>
               <input
                 value={awbOrBl}
                 onChange={(e) => setAwbOrBl(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                placeholder="Leave blank if you do not have it yet"
               />
-            </label>
-            <label className="block text-sm">
-              Flight / voyage (optional)
+            </div>
+            <div>
+              <FieldLabel tip={FIELD_TIPS.flightOrVoyage}>Flight / voyage (optional)</FieldLabel>
               <input
                 value={flightOrVoyage}
                 onChange={(e) => setFlightOrVoyage(e.target.value)}
                 placeholder="e.g. M8 123 / vessel name"
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
               />
-            </label>
-            <label className="block text-sm">
-              Broker reference (optional)
+            </div>
+            <div>
+              <FieldLabel tip={FIELD_TIPS.brokerRef}>Broker reference (optional)</FieldLabel>
               <input
                 value={brokerRef}
                 onChange={(e) => setBrokerRef(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                placeholder="Only if your broker already gave you one"
               />
-            </label>
+            </div>
             {submitErr && (
               <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
                 {submitErr}

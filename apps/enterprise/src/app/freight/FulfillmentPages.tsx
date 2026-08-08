@@ -281,12 +281,17 @@ export function DeliveryBatchDetailPage() {
     try {
       let podPhotoPath: string | null = null;
       if (podPhoto) {
-        podPhotoPath = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(String(reader.result || ''));
-          reader.onerror = () => reject(new Error('Could not read photo'));
-          reader.readAsDataURL(podPhoto);
-        });
+        const uploaded = await freightService.uploadOrgFile(
+          podPhoto,
+          {
+            kind: 'pod',
+            sourceType: 'package',
+            sourceId: packageId,
+            fileName: podPhoto.name,
+          },
+          orgId,
+        );
+        podPhotoPath = String(uploaded.file.storage_path || '');
       }
       await freightService.deliverBatchStop(
         id,
@@ -301,6 +306,7 @@ export function DeliveryBatchDetailPage() {
       setPodPhoto(null);
       await refresh();
       void qc.invalidateQueries({ queryKey: ['freight', 'packages'] });
+      void qc.invalidateQueries({ queryKey: ['freight', 'org-files'] });
     } catch (e) {
       setError((e as Error).message);
     } finally {

@@ -53,6 +53,9 @@ const FacilitiesPage = lazy(() =>
 const SuitesPage = lazy(() =>
   import('@/app/freight/SuitesPage').then((m) => ({ default: m.SuitesPage })),
 );
+const FilesPage = lazy(() =>
+  import('@/app/files/FilesPage').then((m) => ({ default: m.FilesPage })),
+);
 const PackagesListPage = lazy(() =>
   import('@/app/freight/PackagesPages').then((m) => ({ default: m.PackagesListPage })),
 );
@@ -635,6 +638,16 @@ export default function App() {
               <Gated module="teamManagement">
                 <Suspense fallback={<Fall />}>
                   <BridgedUserManagementPage />
+                </Suspense>
+              </Gated>
+            }
+          />
+          <Route
+            path="files"
+            element={
+              <Gated module="dataCenter">
+                <Suspense fallback={<Fall />}>
+                  <FilesPage />
                 </Suspense>
               </Gated>
             }

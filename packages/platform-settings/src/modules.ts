@@ -166,7 +166,12 @@ export const ENTERPRISE_MODULE_CATALOG: readonly ModuleCatalogEntry[] = [
   { key: 'vehicles', label: 'Vehicles', description: 'Vehicle roster, maintenance, and analytics.', group: 'ops' },
   { key: 'fleetEquipment', label: 'Fleet Equipment', description: 'Inventory and asset management.', group: 'ops' },
   { key: 'trips', label: 'Trips', description: 'Trip logs and activity.', group: 'ops' },
-  { key: 'dataCenter', label: 'Data Center', description: 'Imports and data ingestion.', group: 'ops' },
+  {
+    key: 'dataCenter',
+    label: 'Data Center',
+    description: 'Imports, data ingestion, and uploaded files library.',
+    group: 'ops',
+  },
   { key: 'reports', label: 'Reports', description: 'Operational and financial reports.', group: 'ops' },
   { key: 'businessFinance', label: 'Business Finance', description: 'P&L, expenses, and settlements.', group: 'money' },
   { key: 'claimableLoss', label: 'Claims', description: 'Cargo and underpaid claims.', group: 'money' },

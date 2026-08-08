@@ -396,3 +396,21 @@ export function useDeliveryBatches() {
     enabled: Boolean(session),
   });
 }
+
+export function useOrgFiles(params?: { kind?: string; q?: string }) {
+  const { organizationId, session } = useAuth();
+  return useQuery({
+    queryKey: ['freight', 'org-files', organizationId, params?.kind ?? '', params?.q ?? ''],
+    queryFn: () => freightService.listOrgFiles(organizationId, params),
+    enabled: Boolean(session),
+  });
+}
+
+export function useDeleteOrgFile() {
+  const organizationId = useFreightOrgId();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => freightService.deleteOrgFile(id, organizationId),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['freight', 'org-files'] }),
+  });
+}

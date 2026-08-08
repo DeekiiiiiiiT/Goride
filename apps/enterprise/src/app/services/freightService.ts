@@ -1,17 +1,23 @@
 import { API_ENDPOINTS, getProductLineHeaders, publicAnonKey } from '@roam/api-client';
 import { supabaseEnterpriseApp } from '@roam/auth-client';
 
-async function authHeaders(organizationId?: string | null): Promise<HeadersInit> {
+async function authHeaders(
+  organizationId?: string | null,
+  opts?: { json?: boolean },
+): Promise<HeadersInit> {
   const { data } = await supabaseEnterpriseApp.auth.getSession();
   const token = data.session?.access_token;
   if (!token) throw new Error('Not authenticated');
-  return {
+  const headers: Record<string, string> = {
     Authorization: `Bearer ${token}`,
     apikey: publicAnonKey,
-    'Content-Type': 'application/json',
     ...getProductLineHeaders(),
     ...(organizationId ? { 'X-Roam-Organization-Id': organizationId } : {}),
   };
+  if (opts?.json !== false) {
+    headers['Content-Type'] = 'application/json';
+  }
+  return headers;
 }
 
 async function freightFetch<T>(
@@ -491,5 +497,79 @@ export const freightService = {
     publicFetch<{ stop: Record<string, unknown> }>(`/public/pod/${token}/deliver`, {
       method: 'POST',
       body: JSON.stringify(body),
+    }),
+
+  /** Auth multipart upload into org Files library. */
+  uploadOrgFile: async (
+    file: File,
+    meta: {
+      kind: string;
+      sourceType?: string;
+      sourceId?: string;
+      fileName?: string;
+    },
+    organizationId?: string | null,
+  ) => {
+    const headers = await authHeaders(organizationId, { json: false });
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('kind', meta.kind);
+    if (meta.sourceType) fd.append('sourceType', meta.sourceType);
+    if (meta.sourceId) fd.append('sourceId', meta.sourceId);
+    if (meta.fileName) fd.append('fileName', meta.fileName);
+    const res = await fetch(`${API_ENDPOINTS.freight}/files/upload`, {
+      method: 'POST',
+      headers,
+      body: fd,
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(typeof json.error === 'string' ? json.error : res.statusText);
+    }
+    return json as { file: Record<string, unknown> };
+  },
+
+  /** Public POD link multipart upload (token-gated). */
+  publicPodUpload: async (token: string, file: File, packageId?: string) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    if (packageId) fd.append('packageId', packageId);
+    const res = await fetch(`${API_ENDPOINTS.freight}/public/pod/${token}/upload`, {
+      method: 'POST',
+      headers: { apikey: publicAnonKey },
+      body: fd,
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(typeof json.error === 'string' ? json.error : res.statusText);
+    }
+    return json as { file: Record<string, unknown> };
+  },
+
+  listOrgFiles: (
+    organizationId?: string | null,
+    params?: { kind?: string; q?: string; from?: string; to?: string },
+  ) => {
+    const sp = new URLSearchParams();
+    if (params?.kind) sp.set('kind', params.kind);
+    if (params?.q) sp.set('q', params.q);
+    if (params?.from) sp.set('from', params.from);
+    if (params?.to) sp.set('to', params.to);
+    const qs = sp.toString();
+    return freightFetch<{ files: Record<string, unknown>[]; canDelete: boolean }>(
+      `/files${qs ? `?${qs}` : ''}`,
+      { organizationId },
+    );
+  },
+
+  orgFileUrl: (id: string, organizationId?: string | null) =>
+    freightFetch<{ url: string; file: Record<string, unknown> }>(`/files/${id}/url`, {
+      organizationId,
+    }),
+
+  deleteOrgFile: (id: string, organizationId?: string | null) =>
+    freightFetch<{ ok: boolean }>(`/files/${id}`, {
+      method: 'DELETE',
+      organizationId,
     }),
 };
