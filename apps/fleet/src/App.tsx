@@ -61,7 +61,6 @@ import { AuthRecoveryGate } from '@roam/auth-client';
 // Soft path rules shared with apps/fleet/middleware.js (Vercel Edge cookie gate).
 import { requiresSessionGate } from './middleware/sessionGate';
 import { PwaProvider } from './components/pwa/PwaProvider';
-import { PwaLifecycleHost } from './components/pwa/PwaLifecycleHost';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -589,7 +588,6 @@ export default function App() {
 
   return (
     <PwaProvider>
-      <PwaLifecycleHost />
       <AuthRecoveryGate
         title="Reset password"
         subtitle={isAdmin ? 'Roam Fleet Admin' : IS_ENTERPRISE_PRODUCT ? 'Roam Enterprise' : 'Roam Fleet'}

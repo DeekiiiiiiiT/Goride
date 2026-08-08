@@ -4,9 +4,10 @@
  */
 
 export type PackageNotifyTemplate =
-  | "received_miami"
+  | "received_at_warehouse"
   | "manifested"
   | "customs_cleared"
+  | "customs_hold"
   | "ready_pickup"
   | "out_for_delivery"
   | "delivered"
@@ -20,12 +21,14 @@ function buildMessage(
   const suite = payload.suite_code ? String(payload.suite_code) : "your suite";
   const tracking = payload.tracking ? String(payload.tracking) : "a package";
   switch (template) {
-    case "received_miami":
-      return `Roam Freight: We received ${tracking} for ${suite} at our Miami warehouse.`;
+    case "received_at_warehouse":
+      return `Roam Freight: We received ${tracking} for ${suite} at our warehouse.`;
     case "manifested":
       return `Roam Freight: ${tracking} (${suite}) is on the next shipment to Jamaica.`;
     case "customs_cleared":
       return `Roam Freight: ${tracking} (${suite}) cleared Jamaican customs.`;
+    case "customs_hold":
+      return `Roam Freight: ${tracking} (${suite}) is held for customs review. We'll update you shortly.`;
     case "ready_pickup": {
       const branch = payload.branch ? String(payload.branch) : "our branch";
       return `Roam Freight: ${tracking} (${suite}) is ready for pickup at ${branch}.`;

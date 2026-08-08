@@ -1,12 +1,17 @@
 /**
  * Attribute a fuel fill to a driver for shared-car weeks.
- * Order: explicit entry.driverId → gas card → trip proximity → assignment history → currentDriverId → unassigned.
+ * Order: explicit entry.driverId → gas card history at fill time → trip proximity → vehicle assignment history → currentDriverId → unassigned.
  */
 
+import { driverIdAtCardTime } from '@roam/roam-shared';
 import { UNASSIGNED_FUEL_DRIVER_ID } from '../types/fuel';
 import type { FuelCard, FuelEntry } from '../types/fuel';
 import type { Trip } from '../types/data';
-import { driverIdAtVehicleTime, type VehicleWithDriverHistory } from './vehicleDriverAssignmentHistory';
+import {
+  driverIdAtVehicleTime,
+  vehicleIdForDriverAtTime,
+  type VehicleWithDriverHistory,
+} from './vehicleDriverAssignmentHistory';
 
 export type FillDriverSource =
   | 'explicit'
@@ -82,8 +87,9 @@ export function resolveFuelFillDriver(params: {
 
   if (entry.cardId) {
     const card = fuelCards.find((c) => c.id === entry.cardId);
-    if (card?.assignedDriverId) {
-      return { driverId: card.assignedDriverId, source: 'gas_card', confidence: 'high' };
+    const holder = card ? driverIdAtCardTime(card, atMs) : undefined;
+    if (holder) {
+      return { driverId: holder, source: 'gas_card', confidence: 'high' };
     }
   }
 
@@ -118,7 +124,7 @@ export function resolveFuelFillDriver(params: {
   };
 }
 
-/** Stamp resolved driverId onto entries missing one (non-mutating copy). */
+/** Stamp resolved driverId (and blank vehicleId) onto entries missing them. */
 export function stampAttributedDriverIds(
   entries: FuelEntry[],
   vehicles: Array<VehicleWithDriverHistory & { id: string }>,
@@ -126,9 +132,20 @@ export function stampAttributedDriverIds(
   trips: Trip[] = [],
 ): FuelEntry[] {
   return entries.map((e) => {
-    if (e.driverId) return e;
-    const { driverId } = resolveFuelFillDriver({ entry: e, vehicles, fuelCards, trips });
-    if (driverId === UNASSIGNED_FUEL_DRIVER_ID) return e;
-    return { ...e, driverId };
+    const atMs = fillAtMs(e);
+    let driverId = e.driverId;
+    let next = e;
+    if (!driverId) {
+      const resolved = resolveFuelFillDriver({ entry: e, vehicles, fuelCards, trips });
+      if (resolved.driverId !== UNASSIGNED_FUEL_DRIVER_ID) {
+        driverId = resolved.driverId;
+        next = { ...next, driverId };
+      }
+    }
+    if (!next.vehicleId && driverId) {
+      const vid = vehicleIdForDriverAtTime(vehicles, driverId, atMs);
+      if (vid) next = { ...next, vehicleId: vid };
+    }
+    return next;
   });
 }

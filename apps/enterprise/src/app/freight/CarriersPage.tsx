@@ -16,7 +16,8 @@ export function CarriersPage() {
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setFormError(null);
-    const fd = new FormData(e.currentTarget);
+    const form = e.currentTarget;
+    const fd = new FormData(form);
     try {
       await create.mutateAsync({
         name: String(fd.get('name') || ''),
@@ -24,7 +25,7 @@ export function CarriersPage() {
         contactName: String(fd.get('contactName') || '') || null,
         contactPhone: String(fd.get('contactPhone') || '') || null,
       });
-      e.currentTarget.reset();
+      form.reset();
     } catch (err) {
       setFormError((err as Error).message);
     }

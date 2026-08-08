@@ -14,11 +14,39 @@ import {
 import { ledgerPostEntry } from "../_shared/unifiedLedger/postEntry.ts";
 import { SHIPMENT_TRANSITIONS } from "./transitions.ts";
 import { registerPipelineRoutes } from "./pipeline.ts";
+import { registerCourierOsRoutes } from "./courierOsRoutes.ts";
 import { syncJobFromShipment } from "../logistics/syncFromShipment.ts";
 import { computeRateCardAmountMinor } from "./rateBill.ts";
 import { assertInsideServiceZones } from "./serviceZoneGate.ts";
+import { resolveEnterpriseSeatRole } from "../_shared/enterpriseSeat.ts";
+import {
+  ORG_FILE_KINDS,
+  deleteOrgFile,
+  getOrgFile,
+  listOrgFiles,
+  registerOrgFile,
+  signedOrgFileUrl,
+  uploadOrgFile,
+  type OrgFileKind,
+} from "./orgFiles.ts";
 
 const app = new Hono().basePath("/freight");
+
+function canDeleteOrgFiles(user: EnterpriseAccessUser): boolean {
+  if (user.isPlatformRole) return true;
+  return resolveEnterpriseSeatRole(user.role) === "enterprise_owner";
+}
+
+async function userCanDeleteOrgFiles(user: EnterpriseAccessUser): Promise<boolean> {
+  if (canDeleteOrgFiles(user)) return true;
+  if (!user.organizationId) return false;
+  const { data: org } = await serviceClient()
+    .from("organizations")
+    .select("owner_id")
+    .eq("id", user.organizationId)
+    .maybeSingle();
+  return org?.owner_id === user.id;
+}
 
 applyCors(app, {
   allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
@@ -76,6 +104,9 @@ async function appendTracking(
 // ---------------------------------------------------------------------------
 app.get("/health", (c) => c.json({ ok: true, service: "freight" }));
 
+// Courier OS routes first so static paths like /packages/invoice-audit
+// are not swallowed by /packages/:id from the pipeline router.
+registerCourierOsRoutes(app);
 registerPipelineRoutes(app);
 
 // ---------------------------------------------------------------------------
@@ -763,11 +794,12 @@ app.post("/shipments/:id/documents", async (c) => {
   const parsed = documentBody.safeParse(await c.req.json());
   if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
   const b = parsed.data;
+  const shipmentId = c.req.param("id");
   const { data, error } = await freightDb()
     .from("documents")
     .insert({
       organization_id: user.organizationId,
-      shipment_id: c.req.param("id"),
+      shipment_id: shipmentId,
       leg_id: b.legId || null,
       kind: b.kind,
       storage_path: b.storagePath,
@@ -777,7 +809,102 @@ app.post("/shipments/:id/documents", async (c) => {
     .select("*")
     .single();
   if (error) return c.json({ error: error.message }, 500);
+
+  // Dual-write into org Files catalog (map legacy document kinds → org_files kinds)
+  const orgKind: OrgFileKind =
+    b.kind === "bol" || b.kind === "pod" || b.kind === "invoice" ? b.kind : "other";
+  await registerOrgFile({
+    organizationId: user.organizationId,
+    storagePath: b.storagePath,
+    fileName: b.fileName,
+    contentType: b.contentType,
+    kind: orgKind,
+    sourceType: "shipment",
+    sourceId: shipmentId,
+    uploadedBy: user.id,
+  });
+
   return c.json({ document: data }, 201);
+});
+
+// ---------------------------------------------------------------------------
+// Org Files library
+// ---------------------------------------------------------------------------
+app.get("/files", async (c) => {
+  const user = await requireUser(c);
+  if (user instanceof Response) return user;
+  const seat = requireSeatPermission(user, "ops.fleet.read");
+  if (seat instanceof Response) return seat;
+
+  const result = await listOrgFiles({
+    organizationId: user.organizationId,
+    kind: c.req.query("kind"),
+    q: c.req.query("q"),
+    from: c.req.query("from"),
+    to: c.req.query("to"),
+  });
+  if (result.error) return c.json({ error: result.error }, 500);
+  return c.json({
+    files: result.files,
+    canDelete: await userCanDeleteOrgFiles(user),
+  });
+});
+
+app.get("/files/:id/url", async (c) => {
+  const user = await requireUser(c);
+  if (user instanceof Response) return user;
+  const seat = requireSeatPermission(user, "ops.fleet.read");
+  if (seat instanceof Response) return seat;
+
+  const file = await getOrgFile(user.organizationId, c.req.param("id"));
+  if (!file) return c.json({ error: "File not found" }, 404);
+  const signed = await signedOrgFileUrl(file);
+  if ("error" in signed) return c.json({ error: signed.error }, 500);
+  return c.json({ url: signed.url, file });
+});
+
+app.post("/files/upload", async (c) => {
+  const user = await requireUser(c);
+  if (user instanceof Response) return user;
+  const seat = requireSeatPermission(user, "ops.fleet.read");
+  if (seat instanceof Response) return seat;
+
+  const form = await c.req.parseBody();
+  const file = form.file;
+  if (!(file instanceof File)) {
+    return c.json({ error: "file is required" }, 400);
+  }
+  const kindRaw = String(form.kind || "other");
+  if (!(ORG_FILE_KINDS as readonly string[]).includes(kindRaw)) {
+    return c.json({ error: "Invalid kind" }, 400);
+  }
+  const sourceType = form.sourceType ? String(form.sourceType) : null;
+  const sourceId = form.sourceId ? String(form.sourceId) : null;
+  const fileName = form.fileName ? String(form.fileName) : null;
+
+  const result = await uploadOrgFile({
+    organizationId: user.organizationId,
+    file,
+    kind: kindRaw as OrgFileKind,
+    sourceType,
+    sourceId,
+    uploadedBy: user.id,
+    fileName,
+  });
+  if (!result.ok) return c.json({ error: result.error }, result.status);
+  return c.json({ file: result.file }, 201);
+});
+
+app.delete("/files/:id", async (c) => {
+  const user = await requireUser(c);
+  if (user instanceof Response) return user;
+  if (!(await userCanDeleteOrgFiles(user))) {
+    return c.json({ error: "Only organization owners can delete files" }, 403);
+  }
+
+  const result = await deleteOrgFile(user.organizationId, c.req.param("id"));
+  if (!result.ok) return c.json({ error: result.error }, result.status);
+  return c.json({ ok: true });
 });
 
 export default app;

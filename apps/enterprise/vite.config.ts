@@ -4,6 +4,7 @@ import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { roamSupabaseDevProxy } from '@roam/api-client/viteDevProxy';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fleetSrc = path.resolve(__dirname, '../fleet/src');
@@ -60,6 +61,7 @@ const fleetVersionAliases: Record<string, string> = {
 
 export default defineConfig({
   plugins: [
+    roamSupabaseDevProxy(),
     react(),
     tailwindcss(),
     VitePWA({

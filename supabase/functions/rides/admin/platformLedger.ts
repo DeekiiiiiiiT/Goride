@@ -11,8 +11,11 @@ import {
 } from "../../_shared/platformLedgerQueries.ts";
 import { getDriverWallets } from "../../_shared/paymentAccounts.ts";
 import { isCashSettlementV2Enabled } from "../cashSettlement/flags.ts";
-import { isLedgerReadUnifiedEnabled } from "../../_shared/unifiedLedger/flags.ts";
+import {
+  isLedgerReadUnifiedRidesEnabled,
+} from "../../_shared/unifiedLedger/flags.ts";
 import { listUnifiedLedgerEntries } from "../../_shared/unifiedLedger/queries.ts";
+import { shadowCompareAsync } from "../../_shared/unifiedLedger/shadowRead.ts";
 
 function ridesSvc() {
   return createClient(
@@ -20,6 +23,21 @@ function ridesSvc() {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
     { db: { schema: "rides" } },
   );
+}
+
+function mapUnifiedToLines(entries: Record<string, unknown>[]) {
+  return entries.map((e) => ({
+    id: e.id,
+    entry_type: e.entry_type,
+    amount_minor: e.amount_minor,
+    currency: e.currency,
+    effective_at: e.effective_at,
+    product: e.product,
+    reference_type: e.reference_type,
+    reference_id: e.reference_id,
+    metadata: e.metadata,
+    source: "ledger.entries",
+  }));
 }
 
 export function registerPlatformLedgerAdminRoutes(admin: Hono) {
@@ -38,16 +56,22 @@ export function registerPlatformLedgerAdminRoutes(admin: Hono) {
     const to = c.req.query("to")?.trim() || undefined;
     const grain = c.req.query("grain")?.trim() === "line" ? "line" as const : "trip" as const;
 
-    if (isLedgerReadUnifiedEnabled() && grain === "line") {
+    // Phase C: per-product flag only. Global LEDGER_READ_UNIFIED is Dominion feed, not Rides cutover.
+    const readUnified = isLedgerReadUnifiedRidesEnabled() && grain === "line";
+
+    if (readUnified) {
+      // Writers post roam_rides / roam_driver — never the deprecated alias "rides".
       const { entries, total } = await listUnifiedLedgerEntries({
-        product: "rides",
+        products: ["roam_rides", "roam_driver"],
+        sourceSystem: "rides_payment_journal",
+        driverId: driverUserId,
         from,
         to,
         limit,
         offset: (page - 1) * limit,
       });
       return c.json({
-        lines: entries,
+        lines: mapUnifiedToLines(entries),
         total,
         page,
         limit,
@@ -74,6 +98,15 @@ export function registerPlatformLedgerAdminRoutes(admin: Hono) {
       if ("error" in lineResult) {
         return c.json({ error: "list_failed", message: lineResult.error }, 500);
       }
+      shadowCompareAsync({
+        island: "rides_payment_journal",
+        legacyCount: Number((lineResult as { total?: number }).total ?? 0),
+        sampleKeys: ((lineResult as { lines?: Array<{ id?: string }> }).lines ?? [])
+          .map((l) => String(l.id ?? ""))
+          .filter(Boolean)
+          .slice(0, 20),
+        window: { from, to },
+      });
       return c.json(lineResult);
     }
 

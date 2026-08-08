@@ -6,10 +6,12 @@ import {
   fetchUnifiedLedgerReconciliation,
   fetchAmountReconciliation,
   fetchBalanceChecks,
+  fetchLedgerSoakStatus,
   type IslandReconciliation,
   type UnifiedLedgerEntry,
   type AmountReconciliation,
   type BalanceCheck,
+  type SoakStatusResponse,
 } from '../../services/unifiedLedgerService';
 
 type Props = {
@@ -43,9 +45,12 @@ export function UnifiedLedgerFeed({ onBack }: Props) {
   const [islands, setIslands] = useState<IslandReconciliation[]>([]);
   const [reconHealthy, setReconHealthy] = useState<boolean | null>(null);
   const [reconError, setReconError] = useState<string | null>(null);
+  const [greenDefinition, setGreenDefinition] = useState<string | null>(null);
+  const EXCLUDED_FROM_GREEN = new Set(['rides_ledger_lines']);
   const [amounts, setAmounts] = useState<AmountReconciliation[]>([]);
   const [balances, setBalances] = useState<BalanceCheck[]>([]);
   const [allBalanced, setAllBalanced] = useState<boolean | null>(null);
+  const [soak, setSoak] = useState<SoakStatusResponse | null>(null);
 
   const loadFeed = useCallback(async () => {
     if (!token) return;
@@ -73,16 +78,19 @@ export function UnifiedLedgerFeed({ onBack }: Props) {
     if (!token) return;
     setReconError(null);
     try {
-      const [islandData, amountData, balanceData] = await Promise.all([
+      const [islandData, amountData, balanceData, soakData] = await Promise.all([
         fetchUnifiedLedgerReconciliation(token),
-        fetchAmountReconciliation(token).catch(() => ({ amounts: [] })),
-        fetchBalanceChecks(token).catch(() => ({ balances: [], all_balanced: true })),
+        fetchAmountReconciliation(token),
+        fetchBalanceChecks(token),
+        fetchLedgerSoakStatus(token).catch(() => null),
       ]);
       setIslands(islandData.islands);
       setReconHealthy(islandData.healthy);
+      setGreenDefinition(islandData.green_definition ?? null);
       setAmounts(amountData.amounts);
       setBalances(balanceData.balances);
       setAllBalanced(balanceData.all_balanced);
+      setSoak(soakData);
     } catch (e) {
       setReconError(e instanceof Error ? e.message : 'Reconciliation failed');
       setIslands([]);
@@ -133,14 +141,68 @@ export function UnifiedLedgerFeed({ onBack }: Props) {
         <code className="text-xs bg-slate-100 dark:bg-slate-800 px-1 rounded">LEDGER_READ_UNIFIED=1</code>;{' '}
         dual-write requires{' '}
         <code className="text-xs bg-slate-100 dark:bg-slate-800 px-1 rounded">LEDGER_DUAL_WRITE_ENABLED=1</code>.
+        Shadow compare:{' '}
+        <code className="text-xs bg-slate-100 dark:bg-slate-800 px-1 rounded">LEDGER_SHADOW_READ=1</code>.
       </p>
+
+      {soak && (
+        <section className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50 p-4">
+          <div className="flex items-center gap-2 mb-2">
+            {soak.go_for_phase_b ? (
+              <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+            ) : (
+              <AlertTriangle className="w-5 h-5 text-amber-500" />
+            )}
+            <h3 className="font-medium text-slate-900 dark:text-white">Phase 0 — 48h dual-write soak</h3>
+          </div>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">
+            Watch Edge logs for <code className="text-xs">unified_dual_write</code> fails on rides,
+            fleet, toll-brain, payments, delivery for a full 48h. Re-check this screen at start / mid / end.
+          </p>
+          <ul className="text-sm space-y-1 text-slate-700 dark:text-slate-300">
+            <li>Money islands green: {soak.money_islands_green ? 'Yes' : 'No'}</li>
+            <li>Money anomalies: {soak.money_anomaly_count ?? '—'}</li>
+            <li>Self-ref entries: {soak.self_ref_entry_count ?? '—'}</li>
+            <li>
+              Soak started:{' '}
+              {soak.soak_started_at ? formatWhen(String(soak.soak_started_at)) : '—'}
+            </li>
+            <li>Hours elapsed: {soak.soak_hours_elapsed ?? 0}</li>
+            <li>
+              48h soak passed:{' '}
+              {soak.soak_passed_48h ? 'Yes' : 'No (clock running)'}
+            </li>
+            <li>
+              Go for Phase B:{' '}
+              {soak.go_for_phase_b ? 'Yes (after 48h quiet logs)' : 'No — fix recon first'}
+            </li>
+            {soak.outcome_note && (
+              <li className="text-xs text-slate-500 pt-1">{soak.outcome_note}</li>
+            )}
+          </ul>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-3">
+            Keep product read flags OFF (`LEDGER_READ_UNIFIED_RIDES|FLEET|TOLL|DASH`) until
+            island-by-island shadow sign-off after the 48h soak.
+          </p>
+        </section>
+      )}
 
       <section className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50 p-4">
         <div className="flex items-center gap-2 mb-3">
           {reconHealthy === true && <CheckCircle2 className="w-5 h-5 text-emerald-500" />}
           {reconHealthy === false && <AlertTriangle className="w-5 h-5 text-amber-500" />}
           <h3 className="font-medium text-slate-900 dark:text-white">Island reconciliation</h3>
+          {reconHealthy === true && (
+            <span className="text-xs text-emerald-600 dark:text-emerald-400">Phase A green</span>
+          )}
+          {reconHealthy === false && (
+            <span className="text-xs text-amber-600 dark:text-amber-400">Money islands not green yet</span>
+          )}
         </div>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
+          {greenDefinition ??
+            'Phase A green = money islands at delta 0 (financial_event, kv_ledger_event, kv_toll_ledger, rides_payment_journal, dash_payments). Neutrals/zeros excluded. rides_ledger_lines is reporting-only and does not block green. Next: 48h dual-write soak, then Phase B shadow reads.'}
+        </p>
         {reconError && (
           <p className="text-sm text-red-600 dark:text-red-400 mb-2">{reconError}</p>
         )}
@@ -151,23 +213,35 @@ export function UnifiedLedgerFeed({ onBack }: Props) {
                 <th className="py-2 pr-4">Source system</th>
                 <th className="py-2 pr-4">Unified receipts</th>
                 <th className="py-2 pr-4">Legacy count</th>
-                <th className="py-2">Delta</th>
+                <th className="py-2 pr-4">Delta</th>
+                <th className="py-2">Status</th>
               </tr>
             </thead>
             <tbody>
-              {islands.map((row) => (
-                <tr key={row.source_system} className="border-b border-slate-100 dark:border-slate-800">
-                  <td className="py-2 pr-4 font-mono text-xs">{row.source_system}</td>
-                  <td className="py-2 pr-4">{row.unified_count}</td>
-                  <td className="py-2 pr-4">{row.legacy_count}</td>
-                  <td className={`py-2 ${row.delta !== 0 ? 'text-amber-600 font-medium' : ''}`}>
-                    {row.delta}
-                  </td>
-                </tr>
-              ))}
+              {islands.map((row) => {
+                const excluded = EXCLUDED_FROM_GREEN.has(row.source_system);
+                const deltaBlocks = row.delta !== 0 && !excluded;
+                return (
+                  <tr key={row.source_system} className="border-b border-slate-100 dark:border-slate-800">
+                    <td className="py-2 pr-4 font-mono text-xs">{row.source_system}</td>
+                    <td className="py-2 pr-4">{row.unified_count}</td>
+                    <td className="py-2 pr-4">{row.legacy_count}</td>
+                    <td className={`py-2 pr-4 ${deltaBlocks ? 'text-amber-600 font-medium' : ''}`}>
+                      {row.delta}
+                    </td>
+                    <td className="py-2 text-xs">
+                      {excluded
+                        ? 'Expected (reporting-only)'
+                        : row.delta === 0
+                        ? 'Green'
+                        : 'Needs backfill / investigate'}
+                    </td>
+                  </tr>
+                );
+              })}
               {islands.length === 0 && !reconError && (
                 <tr>
-                  <td colSpan={4} className="py-4 text-slate-500">No reconciliation data yet.</td>
+                  <td colSpan={5} className="py-4 text-slate-500">No reconciliation data yet.</td>
                 </tr>
               )}
             </tbody>

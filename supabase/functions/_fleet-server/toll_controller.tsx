@@ -2716,16 +2716,25 @@ async function saveTollLedgerEntry(entry: TollLedgerRecord, c?: Context): Promis
     }
   }
 
-  await kv.set(`${TOLL_LEDGER_PREFIX}${entry.id}`, entry);
-  console.log(`[TollLedgerStorage] Saved toll_ledger:${entry.id}`);
+  // Phase D: LEDGER_LEGACY_WRITE_KV_TOLL_LEDGER=0 skips island KV; unified still posts.
+  const { isLedgerLegacyMoneyWriteEnabled } = await import("../_shared/unifiedLedger/flags.ts");
+  const writeLegacy = isLedgerLegacyMoneyWriteEnabled("kv_toll_ledger");
+  if (writeLegacy) {
+    await kv.set(`${TOLL_LEDGER_PREFIX}${entry.id}`, entry);
+    console.log(`[TollLedgerStorage] Saved toll_ledger:${entry.id}`);
+  } else {
+    console.log(`[TollLedgerStorage] legacy write off — unified-only toll_ledger:${entry.id}`);
+  }
 
   // Business Finance P&L — usage/refund only (top_up deliberately excluded).
   // Failures must not block the operational write; variance flags catch lag.
-  try {
-    const stubCtx = { get: () => undefined } as unknown as Context;
-    await appendCanonicalTollIfEligible(entry, c ?? stubCtx);
-  } catch (e) {
-    console.error("[TollLedgerStorage] canonical toll append failed:", e);
+  if (writeLegacy) {
+    try {
+      const stubCtx = { get: () => undefined } as unknown as Context;
+      await appendCanonicalTollIfEligible(entry, c ?? stubCtx);
+    } catch (e) {
+      console.error("[TollLedgerStorage] canonical toll append failed:", e);
+    }
   }
 
   try {
@@ -3387,9 +3396,67 @@ async function getAllTollLedgerEntries(): Promise<TollLedgerRecord[]> {
  * Query toll ledger entries with filters.
  */
 async function queryTollLedgerEntries(filters: TollLedgerFilters): Promise<TollLedgerRecord[]> {
+  // Phase C: optional primary read from unified for toll money screens.
+  try {
+    const { isLedgerReadUnifiedTollEnabled } = await import("../_shared/unifiedLedger/flags.ts");
+    if (isLedgerReadUnifiedTollEnabled()) {
+      const { listUnifiedLedgerEntries } = await import("../_shared/unifiedLedger/queries.ts");
+      const { entries } = await listUnifiedLedgerEntries({
+        products: ["roam_fleet", "roam_driver"],
+        sourceSystem: "kv_toll_ledger",
+        limit: 5000,
+        offset: 0,
+      });
+      return entries.map((e) => {
+        const meta = (e.metadata ?? {}) as Record<string, unknown>;
+        const amtMajor = Number(e.amount_minor ?? 0) / 100;
+        const typ = String(meta.toll_type ?? "usage") as TollType;
+        const now = new Date().toISOString();
+        return {
+          id: String(e.reference_id ?? e.id),
+          createdAt: now,
+          updatedAt: now,
+          vehicleId: meta.vehicle_id != null ? String(meta.vehicle_id) : null,
+          vehiclePlate: null,
+          driverId: meta.driver_id != null ? String(meta.driver_id) : null,
+          driverName: null,
+          tollTagId: null,
+          tagNumber: null,
+          plaza: null,
+          highway: null,
+          location: null,
+          date: String(e.effective_at ?? "").slice(0, 10),
+          time: null,
+          type: typ,
+          amount: typ === "usage" ? -Math.abs(amtMajor) : Math.abs(amtMajor),
+          paymentMethod: "tag_balance",
+          status: "resolved",
+          resolution: null,
+          isReconciled: true,
+          tripId: null,
+          matchConfidence: null,
+          matchedAt: null,
+          matchedBy: null,
+          batchId: null,
+          batchName: null,
+          importedAt: null,
+          sourceFile: null,
+          receiptUrl: null,
+          referenceNumber: null,
+          description: null,
+          notes: null,
+          auditTrail: [],
+          metadata: { ...(meta as Record<string, unknown>), source: "ledger.entries" },
+        } as TollLedgerRecord;
+      });
+    }
+  } catch (e) {
+    console.error("[TollLedger] unified read failed, falling back to KV:", e);
+  }
+
   const all = await getAllTollLedgerEntries();
 
-  return all.filter((entry) => {
+  const filtered = all.filter((entry) => {
     // Vehicle filter
     if (filters.vehicleId && entry.vehicleId !== filters.vehicleId) return false;
 
@@ -3444,6 +3511,17 @@ async function queryTollLedgerEntries(filters: TollLedgerFilters): Promise<TollL
 
     return true;
   });
+
+  try {
+    const { shadowCompareAsync } = await import("../_shared/unifiedLedger/shadowRead.ts");
+    shadowCompareAsync({
+      island: "kv_toll_ledger",
+      legacyCount: filtered.length,
+      sampleKeys: filtered.map((e) => String(e.id ?? "")).filter(Boolean).slice(0, 20),
+    });
+  } catch { /* shadow best-effort */ }
+
+  return filtered;
 }
 
 /**

@@ -2,6 +2,10 @@ import { useCustomsCases, useFreightOrgId } from '@/app/hooks/useFreight';
 import { freightService } from '@/app/services/freightService';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
+/**
+ * Ops mirror of Jamaica Customs review on courier-submitted cargo files.
+ * Customs does not create the manifesto — they receive / hold / clear it.
+ */
 export function CustomsBoardPage() {
   const { data, isLoading, error } = useCustomsCases();
   const orgId = useFreightOrgId();
@@ -17,12 +21,16 @@ export function CustomsBoardPage() {
     },
   });
 
+  const cases = data?.customsCases ?? [];
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold">Customs board</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Mirror your broker&apos;s ASYCUDA progress — not a live customs API.
+        <p className="mt-1 max-w-2xl text-sm text-slate-500">
+          Mirror Jamaica Customs inspection of cargo files your team submitted from Manifests.
+          Customs does not create the manifesto — they receive, hold, or clear it. Not a live
+          ASYCUDA connection.
         </p>
       </div>
 
@@ -34,30 +42,19 @@ export function CustomsBoardPage() {
       )}
 
       <div className="space-y-3">
-        {(data?.customsCases ?? []).map((c) => {
+        {cases.map((c) => {
           const m = c.manifests as { manifest_number?: string; status?: string } | null;
           return (
             <div key={String(c.id)} className="rounded-xl border border-slate-200 bg-white p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <p className="font-medium">{m?.manifest_number || 'Manifest'}</p>
+                  <p className="font-medium">{m?.manifest_number || 'Cargo manifesto'}</p>
                   <p className="text-sm text-slate-500">
-                    Case {String(c.status)} · channel {String(c.channel || '—')} · broker {String(c.broker_ref || '—')}
+                    Case {String(c.status)} · channel {String(c.channel || '—')} · broker{' '}
+                    {String(c.broker_ref || '—')}
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    className="rounded-lg border border-slate-300 px-2 py-1.5 text-xs"
-                    onClick={() =>
-                      void update.mutateAsync({
-                        id: String(c.id),
-                        body: { status: 'submitted', brokerRef: c.broker_ref || 'BROKER-REF' },
-                      })
-                    }
-                  >
-                    Submitted
-                  </button>
                   <button
                     type="button"
                     className="rounded-lg border border-amber-300 bg-amber-50 px-2 py-1.5 text-xs"
@@ -82,6 +79,18 @@ export function CustomsBoardPage() {
                   >
                     Cleared
                   </button>
+                  <button
+                    type="button"
+                    className="rounded-lg border border-slate-300 px-2 py-1.5 text-xs"
+                    onClick={() =>
+                      void update.mutateAsync({
+                        id: String(c.id),
+                        body: { status: 'released', channel: 'green' },
+                      })
+                    }
+                  >
+                    Released
+                  </button>
                 </div>
               </div>
               {c.hold_reason ? (
@@ -90,8 +99,11 @@ export function CustomsBoardPage() {
             </div>
           );
         })}
-        {!isLoading && !(data?.customsCases ?? []).length && (
-          <p className="text-sm text-slate-500">No customs cases — seal a manifest first.</p>
+        {!isLoading && !cases.length && (
+          <p className="text-sm text-slate-500">
+            No customs cases yet — seal a cargo manifesto and use “Download & mark submitted for
+            Customs” on Manifests.
+          </p>
         )}
       </div>
     </div>

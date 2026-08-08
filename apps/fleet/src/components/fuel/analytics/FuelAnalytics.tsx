@@ -16,13 +16,9 @@ export function FuelAnalytics({ onNavigate }: { onNavigate?: (page: string) => v
     loading,
     hasData,
     period,
-    preset,
     setPreset,
-    customStart,
-    customEnd,
     setCustomStart,
     setCustomEnd,
-    clearPeriod,
     fuelTypeFilter,
     setFuelTypeFilter,
     fuelTypeOptions,
@@ -98,13 +94,9 @@ export function FuelAnalytics({ onNavigate }: { onNavigate?: (page: string) => v
 
       <FuelAnalyticsToolbar
         period={period}
-        preset={preset}
         onPreset={setPreset}
-        customStart={customStart}
-        customEnd={customEnd}
         onCustomStart={setCustomStart}
         onCustomEnd={setCustomEnd}
-        onClear={clearPeriod}
         fuelTypeFilter={fuelTypeFilter}
         onFuelType={setFuelTypeFilter}
         fuelTypeOptions={fuelTypeOptions}

@@ -12,6 +12,12 @@ import type { FuelEntry } from '../types/fuel';
 import type { Vehicle } from '../types/vehicle';
 import type { BusinessFinancePeriod } from '../components/business-finance/types';
 import { inPeriod, ymd } from '../components/business-finance/periodRange';
+import {
+  filterFuelOpsLogEntries,
+  fuelOpsLiters,
+  fuelOpsSpendAmount,
+  isFuelOpsLogEntry,
+} from './fuelOpsEligibility';
 
 export const EFFICIENCY_ALERT_KML = 10;
 export const EFFICIENCY_CRASH_PCT = 20;
@@ -30,6 +36,14 @@ export function filterEntriesInPeriod(
   period: BusinessFinancePeriod,
 ): FuelEntry[] {
   return entries.filter((e) => inPeriod(entryDateYmd(e), period));
+}
+
+/** Period scope using ops fills only (no JAA statement ledger double-count). */
+export function filterOpsEntriesInPeriod(
+  entries: FuelEntry[],
+  period: BusinessFinancePeriod,
+): FuelEntry[] {
+  return filterFuelOpsLogEntries(filterEntriesInPeriod(entries, period));
 }
 
 export function normalizeFuelTypeLabel(raw?: string | null): string {
@@ -55,12 +69,11 @@ export function isAnomalyEntry(e: FuelEntry): boolean {
   const status = e.metadata?.integrityStatus || e.reconciliationStatus || e.auditStatus;
   if (status === 'critical' || status === 'Flagged') return true;
   const reason = String(e.metadata?.anomalyReason || '');
+  // Do not match warning phrases like "High Fuel Velocity" / "High Transaction Frequency"
   return (
     reason.includes('Overfill') ||
-    reason.includes('High Fuel') ||
     reason.includes('Leakage') ||
-    reason.includes('Odometer Gap') ||
-    reason.includes('Frequency')
+    reason.includes('Odometer Gap')
   );
 }
 
@@ -84,13 +97,13 @@ function vehicleLabel(v: Vehicle | undefined, id: string): string {
   return v.licensePlate || v.name || id.slice(0, 8);
 }
 
-/** Per-vehicle odo span + spend for a set of entries. */
+/** Per-vehicle odo span + spend for a set of entries (ops fills; spend excludes fees/declines). */
 export function buildVehicleFuelStats(
   entries: FuelEntry[],
   vehicles: Vehicle[],
 ): VehicleFuelStats[] {
   const byVehicle = new Map<string, FuelEntry[]>();
-  entries.forEach((e) => {
+  filterFuelOpsLogEntries(entries).forEach((e) => {
     if (!e.vehicleId) return;
     if (!byVehicle.has(e.vehicleId)) byVehicle.set(e.vehicleId, []);
     byVehicle.get(e.vehicleId)!.push(e);
@@ -106,11 +119,11 @@ export function buildVehicleFuelStats(
       return (Number(a.odometer) || 0) - (Number(b.odometer) || 0);
     });
 
-    const totalCost = sorted.reduce((s, e) => s + (Number(e.amount) || 0), 0);
-    const totalLiters = sorted.reduce((s, e) => s + (Number(e.liters) || 0), 0);
+    const totalCost = sorted.reduce((s, e) => s + fuelOpsSpendAmount(e), 0);
+    const totalLiters = sorted.reduce((s, e) => s + fuelOpsLiters(e), 0);
     const anomalyCost = sorted
       .filter(isAnomalyEntry)
-      .reduce((s, e) => s + (Number(e.amount) || 0), 0);
+      .reduce((s, e) => s + fuelOpsSpendAmount(e), 0);
 
     const odoVals = sorted
       .map((e) => Number(e.odometer) || 0)
@@ -175,17 +188,18 @@ export function buildDailyConsumption(
   const byDay = new Map<string, { liters: number; cost: number }>();
   days.forEach((d) => byDay.set(ymd(d), { liters: 0, cost: 0 }));
 
-  entries.forEach((e) => {
+  const ops = filterFuelOpsLogEntries(entries);
+  ops.forEach((e) => {
     const key = entryDateYmd(e);
     const bucket = byDay.get(key);
     if (!bucket) return;
-    bucket.liters += Number(e.liters) || 0;
-    bucket.cost += Number(e.amount) || 0;
+    bucket.liters += fuelOpsLiters(e);
+    bucket.cost += fuelOpsSpendAmount(e);
   });
 
   // Distance proxy: odo deltas attributed to the later fill's day
   const byVehicle = new Map<string, FuelEntry[]>();
-  entries.forEach((e) => {
+  ops.forEach((e) => {
     if (!e.vehicleId || !(Number(e.odometer) > 0)) return;
     if (!byVehicle.has(e.vehicleId)) byVehicle.set(e.vehicleId, []);
     byVehicle.get(e.vehicleId)!.push(e);
@@ -368,9 +382,10 @@ export function buildFuelComposition(
   const vehicleMap = new Map(vehicles.map((v) => [v.id, v]));
   const totals = new Map<string, number>();
   let sum = 0;
-  entries.forEach((e) => {
+  filterFuelOpsLogEntries(entries).forEach((e) => {
     const label = resolveEntryFuelType(e, e.vehicleId ? vehicleMap.get(e.vehicleId) : null);
-    const cost = Number(e.amount) || 0;
+    const cost = fuelOpsSpendAmount(e);
+    if (cost <= 0) return;
     totals.set(label, (totals.get(label) || 0) + cost);
     sum += cost;
   });
@@ -407,14 +422,15 @@ export function buildPriceSeries(
 
   return days.map((d) => {
     const key = ymd(d);
-    const dayEntries = entries.filter((e) => entryDateYmd(e) === key);
+    const dayEntries = filterFuelOpsLogEntries(entries).filter(
+      (e) => entryDateYmd(e) === key && fuelOpsSpendAmount(e) > 0,
+    );
     let weighted = 0;
     let liters = 0;
     dayEntries.forEach((e) => {
-      const L = Number(e.liters) || 0;
-      const p =
-        Number(e.pricePerLiter) ||
-        (L > 0 ? (Number(e.amount) || 0) / L : 0);
+      const L = fuelOpsLiters(e);
+      const spend = fuelOpsSpendAmount(e);
+      const p = Number(e.pricePerLiter) || (L > 0 ? spend / L : 0);
       if (L > 0 && p > 0) {
         weighted += p * L;
         liters += L;
@@ -444,7 +460,7 @@ export function buildFlaggedEvents(
   limit = 8,
 ): FlaggedEvent[] {
   const vehicleMap = new Map(vehicles.map((v) => [v.id, v]));
-  return entries
+  return filterFuelOpsLogEntries(entries)
     .filter(isAnomalyEntry)
     .sort((a, b) => entryDateYmd(b).localeCompare(entryDateYmd(a)))
     .slice(0, limit)
@@ -453,8 +469,8 @@ export function buildFlaggedEvents(
       const plate = e.vehicleId
         ? vehicleLabel(vehicleMap.get(e.vehicleId), e.vehicleId)
         : 'Unknown';
-      const liters = Number(e.liters) || 0;
-      const cost = Number(e.amount) || 0;
+      const liters = fuelOpsLiters(e);
+      const cost = fuelOpsSpendAmount(e);
       const severity: FlaggedEvent['severity'] =
         e.metadata?.integrityStatus === 'critical' || reason.includes('Overfill') || reason.includes('Leakage')
           ? 'critical'
@@ -529,13 +545,16 @@ export function sparklineFromEntries(
     return [];
   }
   const slice = days.length > 14 ? days.slice(-14) : days;
+  const ops = filterFuelOpsLogEntries(entries);
   return slice.map((d) => {
     const key = ymd(d);
-    return entries
+    return ops
       .filter((e) => entryDateYmd(e) === key)
       .reduce((s, e) => s + valueFn(e), 0);
   });
 }
+
+export { isFuelOpsLogEntry, fuelOpsSpendAmount, fuelOpsLiters };
 
 /** Fleet target km/L from vehicle city efficiency (L/100km → km/L) when available. */
 export function fleetTargetKmL(vehicles: Vehicle[]): number {

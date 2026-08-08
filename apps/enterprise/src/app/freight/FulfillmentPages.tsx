@@ -281,12 +281,17 @@ export function DeliveryBatchDetailPage() {
     try {
       let podPhotoPath: string | null = null;
       if (podPhoto) {
-        podPhotoPath = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(String(reader.result || ''));
-          reader.onerror = () => reject(new Error('Could not read photo'));
-          reader.readAsDataURL(podPhoto);
-        });
+        const uploaded = await freightService.uploadOrgFile(
+          podPhoto,
+          {
+            kind: 'pod',
+            sourceType: 'package',
+            sourceId: packageId,
+            fileName: podPhoto.name,
+          },
+          orgId,
+        );
+        podPhotoPath = String(uploaded.file.storage_path || '');
       }
       await freightService.deliverBatchStop(
         id,
@@ -301,6 +306,7 @@ export function DeliveryBatchDetailPage() {
       setPodPhoto(null);
       await refresh();
       void qc.invalidateQueries({ queryKey: ['freight', 'packages'] });
+      void qc.invalidateQueries({ queryKey: ['freight', 'org-files'] });
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -425,7 +431,8 @@ export function ClientFleetPage() {
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setFormError(null);
-    const fd = new FormData(e.currentTarget);
+    const form = e.currentTarget;
+    const fd = new FormData(form);
     try {
       await create.mutateAsync({
         clientId: fd.get('clientId'),
@@ -434,7 +441,7 @@ export function ClientFleetPage() {
         vehiclePlate: fd.get('vehiclePlate') || null,
         vehicleLabel: fd.get('vehicleLabel') || null,
       });
-      e.currentTarget.reset();
+      form.reset();
     } catch (err) {
       setFormError((err as Error).message);
     }

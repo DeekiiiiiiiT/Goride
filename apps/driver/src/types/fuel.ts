@@ -17,6 +17,17 @@ export interface JaaProgram {
   updatedAt?: string;
 }
 
+/** Card ↔ driver assignment window (handoff vehicle is audit snapshot only). */
+export interface FuelCardAssignmentHistoryEntry {
+  driverId: string;
+  driverName?: string;
+  assignedAt: string;
+  unassignedAt?: string;
+  assignedBy?: string;
+  vehicleIdAtAssign?: string;
+  vehicleLabelAtAssign?: string;
+}
+
 export interface FuelCard {
   id: string;
   /** JAA CARD_CODE (e.g. 00002920RN2783) — inventory master key for CSV match */
@@ -29,6 +40,8 @@ export interface FuelCard {
   jaaCardType?: JaaCardType;
   assignedVehicleId?: string;
   assignedDriverId?: string;
+  /** Who held the card when — for mid-week handoff attribution */
+  assignmentHistory?: FuelCardAssignmentHistoryEntry[];
   expiryDate?: string;
   notes?: string;
 }

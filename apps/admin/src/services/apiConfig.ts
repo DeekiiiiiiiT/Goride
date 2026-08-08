@@ -1,6 +1,6 @@
-import { projectId } from '../utils/supabase/info';
+import { getSupabaseFunctionsBaseUrl } from '@roam/api-client';
 
-const BASE_URL = `https://${projectId}.supabase.co/functions/v1`;
+const BASE_URL = getSupabaseFunctionsBaseUrl();
 
 export const API_ENDPOINTS = {
   fleet: `${BASE_URL}/make-server-37f42386`,

@@ -5,7 +5,15 @@ import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { Checkbox } from "../ui/checkbox";
+import { RadioGroup, RadioGroupItem } from "../ui/radio-group";
 import { FuelCard, JaaCardType } from '../../types/fuel';
+import { mergeFuelCardWithAssignmentHistory } from '../../utils/mergeFuelCardWithAssignmentHistory';
+import {
+    buildJaaCardCode,
+    hintJaaTypeFromReg,
+    normalizeFuelCardCode,
+    splitJaaCardCode,
+} from '../../utils/fuelCardMatch';
 
 // Minimal interfaces if full types aren't available yet or to decouple
 interface ModalDriver {
@@ -18,6 +26,7 @@ interface ModalVehicle {
     licensePlate: string;
     make: string;
     model: string;
+    currentDriverId?: string;
 }
 
 interface FuelCardModalProps {
@@ -32,6 +41,8 @@ interface FuelCardModalProps {
     /** Roam-managed card: only assignment/status editable */
     lockIdentity?: boolean;
 }
+
+type JaaEntryMode = 'statement' | 'physical';
 
 const PROVIDERS = [
     'Jamaica Automobile Association (JAA) Advance',
@@ -67,9 +78,14 @@ export function FuelCardModal({
     });
     const [noExpiration, setNoExpiration] = useState(false);
     const [validationError, setValidationError] = useState<string | null>(null);
+    // JAA: paste full CARD_CODE vs company # + Reg# from the plastic
+    const [jaaEntryMode, setJaaEntryMode] = useState<JaaEntryMode>('physical');
+    const [jaaCompanyNumber, setJaaCompanyNumber] = useState('');
+    const [jaaRegNumber, setJaaRegNumber] = useState('');
 
     const isJaa = isJaaFuelProvider(formData.provider);
     const defaultSelfServeCode = selfServePrograms[0]?.companyCode;
+    const composedPhysicalCode = buildJaaCardCode(jaaCompanyNumber, jaaRegNumber);
 
     useEffect(() => {
         if (!isOpen) return; // Guard: don't reset state when modal is closed
@@ -84,6 +100,11 @@ export function FuelCardModal({
                 assignedVehicleId: initialData.assignedVehicleId || 'unassigned',
                 assignedDriverId: initialData.assignedDriverId || 'unassigned',
             });
+            // Edit: default to statement so existing CARD_CODE stays visible as-is
+            setJaaEntryMode('statement');
+            const split = splitJaaCardCode(initialData.cardNumber, initialData.jaaCompanyCode || defaultSelfServeCode);
+            setJaaCompanyNumber(split.companyNumber);
+            setJaaRegNumber(split.regNumber);
         } else {
             setNoExpiration(false);
             setFormData({
@@ -96,29 +117,64 @@ export function FuelCardModal({
                 assignedVehicleId: 'unassigned',
                 assignedDriverId: 'unassigned',
             });
+            setJaaEntryMode('physical');
+            setJaaCompanyNumber(String(defaultSelfServeCode || '').replace(/\D/g, ''));
+            setJaaRegNumber('');
         }
         setValidationError(null);
-    }, [initialData, isOpen]);
+    }, [initialData, isOpen, defaultSelfServeCode]);
 
     const handleProviderChange = (val: string) => {
         const jaa = isJaaFuelProvider(val);
-        if (jaa && selfServePrograms.length === 0 && !lockIdentity) {
-            setValidationError('Your fleet has no self-serve JAA program. Roam-managed cards are issued by Roam admin.');
-        } else {
-            setValidationError(null);
-        }
+        setValidationError(null);
         setFormData((prev) => ({
             ...prev,
             provider: val,
             jaaCardType: jaa ? (prev.jaaCardType || 'rental') : undefined,
             jaaCompanyCode: jaa ? (prev.jaaCompanyCode || defaultSelfServeCode) : undefined,
         }));
+        if (jaa && !jaaCompanyNumber) {
+            setJaaCompanyNumber(String(defaultSelfServeCode || '').replace(/\D/g, ''));
+        }
+    };
+
+    const applyPhysicalFields = (company: string, reg: string) => {
+        const companyDigits = company.replace(/\D/g, '');
+        const regNorm = normalizeFuelCardCode(reg);
+        setJaaCompanyNumber(companyDigits);
+        setJaaRegNumber(regNorm);
+        const code = buildJaaCardCode(companyDigits, regNorm);
+        const hint = regNorm ? hintJaaTypeFromReg(regNorm) : undefined;
+        setFormData((prev) => ({
+            ...prev,
+            cardNumber: code,
+            jaaCompanyCode: companyDigits || prev.jaaCompanyCode,
+            jaaCardType: hint || prev.jaaCardType,
+        }));
+    };
+
+    const resolveCardNumber = (): string => {
+        if (isJaa && !lockIdentity && jaaEntryMode === 'physical') {
+            return composedPhysicalCode;
+        }
+        return normalizeFuelCardCode(formData.cardNumber) || String(formData.cardNumber || '').trim();
     };
 
     const handleSave = () => {
-        if (!formData.provider || !formData.cardNumber) {
-            setValidationError('Provider and card code are required.');
+        const cardNumber = resolveCardNumber();
+        if (!formData.provider || !cardNumber) {
+            setValidationError(
+                isJaa && jaaEntryMode === 'physical'
+                    ? 'Provider, company number, and Reg# are required.'
+                    : 'Provider and card code are required.',
+            );
             return;
+        }
+        if (isJaaFuelProvider(formData.provider) && jaaEntryMode === 'physical' && !lockIdentity) {
+            if (!jaaCompanyNumber.replace(/\D/g, '') || !normalizeFuelCardCode(jaaRegNumber)) {
+                setValidationError('Enter company number (bottom of card) and Reg#.');
+                return;
+            }
         }
         if (isJaaFuelProvider(formData.provider) && !formData.jaaCardType) {
             setValidationError('Select whether this is a Rental or Driver card.');
@@ -128,41 +184,52 @@ export function FuelCardModal({
             setValidationError('Cannot create JAA cards without a self-serve program. Contact Roam.');
             return;
         }
-        if (isJaaFuelProvider(formData.provider) && !formData.jaaCompanyCode && !lockIdentity) {
+
+        const companyFromPhysical = jaaCompanyNumber.replace(/\D/g, '');
+        const jaaCompanyCode =
+            isJaaFuelProvider(formData.provider)
+                ? (
+                    (!lockIdentity && jaaEntryMode === 'physical' && companyFromPhysical) ||
+                    String(formData.jaaCompanyCode || '').replace(/\D/g, '') ||
+                    undefined
+                )
+                : undefined;
+
+        if (isJaaFuelProvider(formData.provider) && !jaaCompanyCode && !lockIdentity) {
             setValidationError('Select your JAA company code.');
             return;
         }
-        // Driver-tied JAA cards should have a driver (vehicle optional but encouraged)
-        if (formData.jaaCardType === 'driver_tied' && formData.assignedDriverId === 'unassigned' && formData.assignedVehicleId === 'unassigned') {
-            setValidationError('Driver cards should be assigned to a driver (or vehicle).');
-            return;
-        }
 
-        const card: FuelCard = {
+        const draft: FuelCard = {
             id: initialData?.id || crypto.randomUUID(),
             provider: formData.provider!,
-            cardNumber: formData.cardNumber!,
+            cardNumber,
             status: formData.status as 'Active' | 'Inactive' | 'Lost',
             jaaCardType: isJaaFuelProvider(formData.provider) ? (formData.jaaCardType as JaaCardType) : undefined,
-            jaaCompanyCode: isJaaFuelProvider(formData.provider)
-                ? String(formData.jaaCompanyCode || '').replace(/\D/g, '') || undefined
-                : undefined,
+            jaaCompanyCode,
             expiryDate: noExpiration ? undefined : formData.expiryDate || undefined,
-            assignedVehicleId: formData.assignedVehicleId === 'unassigned' ? undefined : formData.assignedVehicleId,
-            assignedDriverId: formData.assignedDriverId === 'unassigned' ? undefined : formData.assignedDriverId,
+            // Assignment happens via Assign Driver after create — not on this form
+            assignedVehicleId: undefined,
+            assignedDriverId: undefined,
             organizationId: initialData?.organizationId,
+            assignmentHistory: initialData?.assignmentHistory,
+            notes: initialData?.notes,
         };
 
-        onSave(card);
+        // Preserve existing driver when editing identity/status fields
+        if (initialData) {
+            draft.assignedDriverId = initialData.assignedDriverId;
+            draft.assignedVehicleId = undefined;
+        }
+
+        onSave(
+            mergeFuelCardWithAssignmentHistory(initialData || null, draft, {
+                drivers,
+                vehicles,
+            }),
+        );
         onClose();
     };
-
-    const assignmentHint =
-        formData.jaaCardType === 'rental'
-            ? 'Rental cards are flexible — reassign the driver or vehicle anytime without replacing the card.'
-            : formData.jaaCardType === 'driver_tied'
-              ? 'Driver cards stay with one driver. Assign a driver (vehicle optional if they switch cars often).'
-              : 'Assigning to a vehicle is preferred for clearer expense tracking. Assign to a driver only if they switch vehicles often.';
 
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -170,7 +237,7 @@ export function FuelCardModal({
                 <DialogHeader>
                     <DialogTitle>{initialData ? 'Edit Fuel Card' : 'Add New Fuel Card'}</DialogTitle>
                     <DialogDescription>
-                        Enter the card details and assignment information.
+                        Enter the card details.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -180,40 +247,141 @@ export function FuelCardModal({
                             Roam-managed card — you can change assignment and status only. Card code is fixed.
                         </p>
                     )}
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                        <Label htmlFor="provider">Provider</Label>
+                        <Select
+                            value={formData.provider}
+                            onValueChange={handleProviderChange}
+                            disabled={lockIdentity}
+                        >
+                            <SelectTrigger id="provider">
+                                <SelectValue placeholder="Select Provider" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {PROVIDERS.map(p => (
+                                    <SelectItem key={p} value={p}>{p}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    {!isJaa && (
                         <div className="space-y-2">
-                            <Label htmlFor="provider">Provider</Label>
-                            <Select 
-                                value={formData.provider} 
-                                onValueChange={handleProviderChange}
-                                disabled={lockIdentity}
-                            >
-                                <SelectTrigger id="provider">
-                                    <SelectValue placeholder="Select Provider" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {PROVIDERS.map(p => (
-                                        <SelectItem key={p} value={p}>{p}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="cardNumber">{isJaa ? 'Card Code (JAA)' : 'Card Number'}</Label>
-                            <Input 
-                                id="cardNumber" 
-                                placeholder={isJaa ? '00002920RN2783' : 'xxxx-xxxx-xxxx-1234'} 
+                            <Label htmlFor="cardNumber">Card Number</Label>
+                            <Input
+                                id="cardNumber"
+                                placeholder="xxxx-xxxx-xxxx-1234"
                                 value={formData.cardNumber}
                                 disabled={lockIdentity}
                                 onChange={(e) => setFormData(prev => ({ ...prev, cardNumber: e.target.value.trim() }))}
                             />
-                            {isJaa && (
-                                <p className="text-[10px] text-slate-500">
-                                    Exact CARD_CODE from the JAA statement (company # + Reg#).
-                                </p>
+                        </div>
+                    )}
+
+                    {isJaa && (
+                        <div className="space-y-3">
+                            {!lockIdentity && (
+                                <div className="space-y-2">
+                                    <Label>Card code source</Label>
+                                    <RadioGroup
+                                        value={jaaEntryMode}
+                                        onValueChange={(val) => {
+                                            const mode = val as JaaEntryMode;
+                                            setJaaEntryMode(mode);
+                                            setValidationError(null);
+                                            if (mode === 'physical') {
+                                                const split = splitJaaCardCode(
+                                                    formData.cardNumber,
+                                                    formData.jaaCompanyCode || defaultSelfServeCode,
+                                                );
+                                                applyPhysicalFields(
+                                                    split.companyNumber || String(defaultSelfServeCode || ''),
+                                                    split.regNumber,
+                                                );
+                                            }
+                                        }}
+                                        className="grid gap-2"
+                                    >
+                                        <label className="flex items-center gap-2 text-sm cursor-pointer">
+                                            <RadioGroupItem value="physical" id="jaa-entry-physical" />
+                                            From physical card
+                                        </label>
+                                        <label className="flex items-center gap-2 text-sm cursor-pointer">
+                                            <RadioGroupItem value="statement" id="jaa-entry-statement" />
+                                            From statement (full CARD_CODE)
+                                        </label>
+                                    </RadioGroup>
+                                </div>
+                            )}
+
+                            {(lockIdentity || jaaEntryMode === 'statement') && (
+                                <div className="space-y-2">
+                                    <Label htmlFor="cardNumber">Card Code (JAA)</Label>
+                                    <Input
+                                        id="cardNumber"
+                                        placeholder="00002920RN2783"
+                                        value={formData.cardNumber}
+                                        disabled={lockIdentity}
+                                        onChange={(e) => {
+                                            const next = normalizeFuelCardCode(e.target.value);
+                                            setFormData((prev) => ({
+                                                ...prev,
+                                                cardNumber: next,
+                                                jaaCardType: next
+                                                    ? hintJaaTypeFromReg(splitJaaCardCode(next, prev.jaaCompanyCode).regNumber)
+                                                    : prev.jaaCardType,
+                                            }));
+                                        }}
+                                    />
+                                    <p className="text-[10px] text-slate-500">
+                                        Exact CARD_CODE from the JAA statement (company # + Reg#).
+                                    </p>
+                                </div>
+                            )}
+
+                            {!lockIdentity && jaaEntryMode === 'physical' && (
+                                <div className="space-y-3">
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="space-y-2">
+                                            <Label htmlFor="jaaCompanyNumber">Company number</Label>
+                                            <Input
+                                                id="jaaCompanyNumber"
+                                                placeholder="00002920"
+                                                inputMode="numeric"
+                                                value={jaaCompanyNumber}
+                                                onChange={(e) =>
+                                                    applyPhysicalFields(e.target.value, jaaRegNumber)
+                                                }
+                                            />
+                                            <p className="text-[10px] text-slate-500">
+                                                Bottom of the plastic card
+                                            </p>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="jaaRegNumber">Reg #</Label>
+                                            <Input
+                                                id="jaaRegNumber"
+                                                placeholder="RN2783 or 5179KZ"
+                                                value={jaaRegNumber}
+                                                onChange={(e) =>
+                                                    applyPhysicalFields(jaaCompanyNumber, e.target.value)
+                                                }
+                                            />
+                                            <p className="text-[10px] text-slate-500">
+                                                Rental code or plate on the card
+                                            </p>
+                                        </div>
+                                    </div>
+                                    {composedPhysicalCode && (
+                                        <p className="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-md px-2 py-1.5">
+                                            Card code saved as{' '}
+                                            <span className="font-mono font-medium">{composedPhysicalCode}</span>
+                                        </p>
+                                    )}
+                                </div>
                             )}
                         </div>
-                    </div>
+                    )}
 
                     {isJaa && (
                         <div className="space-y-2">
@@ -237,7 +405,7 @@ export function FuelCardModal({
                                     </SelectItem>
                                 </SelectContent>
                             </Select>
-                            {selfServePrograms.length > 1 && !lockIdentity && (
+                            {selfServePrograms.length > 1 && !lockIdentity && jaaEntryMode === 'statement' && (
                                 <>
                                     <Label htmlFor="jaaCompanyCode">Your JAA company code</Label>
                                     <Select
@@ -268,8 +436,8 @@ export function FuelCardModal({
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
                             <Label htmlFor="status">Status</Label>
-                            <Select 
-                                value={formData.status} 
+                            <Select
+                                value={formData.status}
                                 onValueChange={(val) => setFormData(prev => ({ ...prev, status: val as any }))}
                             >
                                 <SelectTrigger id="status">
@@ -303,66 +471,6 @@ export function FuelCardModal({
                                 No expiration
                             </label>
                         </div>
-                    </div>
-
-                    <div className="space-y-2">
-                        <Label>
-                            Assignment{' '}
-                            {formData.jaaCardType === 'driver_tied' ? '(required)' : '(Optional)'}
-                        </Label>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-1">
-                                <span className="text-xs text-slate-500">Vehicle</span>
-                                <Select 
-                                    value={formData.assignedVehicleId} 
-                                    onValueChange={(val) => setFormData(prev => ({
-                                        ...prev,
-                                        assignedVehicleId: val,
-                                        // Driver-tied: keep driver when changing vehicle; rental: vehicle clears driver (vehicle preferred)
-                                        assignedDriverId: formData.jaaCardType === 'rental' && val !== 'unassigned'
-                                            ? 'unassigned'
-                                            : prev.assignedDriverId,
-                                    }))}
-                                >
-                                    <SelectTrigger className="text-xs h-9">
-                                        <SelectValue placeholder="Assign Vehicle" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="unassigned">Unassigned</SelectItem>
-                                        {vehicles.map(v => (
-                                            <SelectItem key={v.id} value={v.id}>{v.licensePlate} ({v.make})</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            <div className="space-y-1">
-                                <span className="text-xs text-slate-500">Driver</span>
-                                <Select 
-                                    value={formData.assignedDriverId} 
-                                    onValueChange={(val) => setFormData(prev => ({
-                                        ...prev,
-                                        assignedDriverId: val,
-                                        // Rental: assigning driver clears vehicle so card can float with the person
-                                        assignedVehicleId: formData.jaaCardType === 'rental' && val !== 'unassigned'
-                                            ? 'unassigned'
-                                            : formData.jaaCardType === 'driver_tied'
-                                              ? prev.assignedVehicleId
-                                              : (val !== 'unassigned' ? 'unassigned' : prev.assignedVehicleId),
-                                    }))}
-                                >
-                                    <SelectTrigger className="text-xs h-9">
-                                        <SelectValue placeholder="Assign Driver" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="unassigned">Unassigned</SelectItem>
-                                        {drivers.map(d => (
-                                            <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                        </div>
-                        <p className="text-[10px] text-slate-500 mt-1">{assignmentHint}</p>
                     </div>
 
                     {validationError && (

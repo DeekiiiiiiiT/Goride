@@ -7,43 +7,22 @@ export type IslandReconciliation = {
   delta: number;
 };
 
-/** Phase 15: per-island count reconciliation (legacy source_receipts vs optional legacy counts). */
-export async function reconcileLedgerIslands(
-  legacyCounts?: Partial<Record<string, number>>,
-): Promise<IslandReconciliation[]> {
+/** Phase 15: per-island count reconciliation (legacy stores vs unified receipts). */
+export async function reconcileLedgerIslands(): Promise<IslandReconciliation[]> {
   const client = unifiedLedgerClient();
-  const systems = [
-    "rides_payment_journal",
-    "kv_ledger_event",
-    "kv_toll_ledger",
-    "dash_payments",
-    "rides_ledger_lines",
-  ];
+  const { data, error } = await client.rpc("ledger_reconcile_islands");
 
-  const results: IslandReconciliation[] = [];
-
-  for (const system of systems) {
-    const { count, error } = await client
-      .from("ledger_source_receipts")
-      .select("id", { count: "exact", head: true })
-      .eq("source_system", system);
-
-    if (error) {
-      console.error(`[reconcile] ${system}:`, error.message);
-      continue;
-    }
-
-    const unified = count ?? 0;
-    const legacy = legacyCounts?.[system] ?? 0;
-    results.push({
-      source_system: system,
-      legacy_count: legacy,
-      unified_count: unified,
-      delta: unified - legacy,
-    });
+  if (error) {
+    console.error("[reconcile] islands RPC failed:", error.message);
+    throw new Error(`ledger_reconcile_islands failed: ${error.message}`);
   }
 
-  return results;
+  return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+    source_system: String(row.source_system ?? ""),
+    legacy_count: Number(row.legacy_count ?? 0),
+    unified_count: Number(row.unified_count ?? 0),
+    delta: Number(row.delta ?? 0),
+  }));
 }
 
 export type AmountReconciliation = {
@@ -64,17 +43,20 @@ export type BalanceCheck = {
 /** Phase 6 (Enterprise): Deep amount reconciliation per source system. */
 export async function reconcileAmountsBySource(): Promise<AmountReconciliation[]> {
   const client = unifiedLedgerClient();
-  
-  // Aggregate amounts by source_system using direct query via RPC
+
   const { data, error } = await client.rpc("ledger_reconcile_amounts");
-  
+
   if (error) {
     console.error("[reconcile] amounts by source:", error.message);
-    // Fallback to manual aggregation
     return await manualAmountReconciliation(client);
   }
-  
-  return (data ?? []) as AmountReconciliation[];
+
+  return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+    source_system: String(row.source_system ?? ""),
+    entry_count: Number(row.entry_count ?? 0),
+    total_amount_minor: Number(row.total_amount_minor ?? 0),
+    currency: String(row.currency ?? "JMD"),
+  }));
 }
 
 async function manualAmountReconciliation(
@@ -82,19 +64,26 @@ async function manualAmountReconciliation(
 ): Promise<AmountReconciliation[]> {
   const systems = [
     "rides_payment_journal",
-    "kv_ledger_event", 
+    "kv_ledger_event",
     "kv_toll_ledger",
     "dash_payments",
+    "financial_event",
+    "rides_ledger_lines",
   ];
-  
+
   const results: AmountReconciliation[] = [];
-  
+
   for (const system of systems) {
-    const { data } = await client
+    const { data, error } = await client
       .from("ledger_source_receipts")
-      .select("entry_id")
+      .select("ledger_entry_id")
       .eq("source_system", system);
-    
+
+    if (error) {
+      console.error(`[reconcile] amounts ${system}:`, error.message);
+      throw new Error(`ledger_source_receipts ${system}: ${error.message}`);
+    }
+
     if (!data || data.length === 0) {
       results.push({
         source_system: system,
@@ -104,19 +93,24 @@ async function manualAmountReconciliation(
       });
       continue;
     }
-    
-    const entryIds = data.map((r: { entry_id: string }) => r.entry_id);
-    
-    const { data: entries } = await client
+
+    const entryIds = data.map((r: { ledger_entry_id: string }) => r.ledger_entry_id);
+
+    const { data: entries, error: entriesError } = await client
       .from("ledger_entries")
       .select("amount_minor, currency")
-      .in("id", entryIds.slice(0, 1000)); // Limit for performance
-    
+      .in("id", entryIds.slice(0, 1000));
+
+    if (entriesError) {
+      console.error(`[reconcile] entry amounts ${system}:`, entriesError.message);
+      throw new Error(`ledger_entries ${system}: ${entriesError.message}`);
+    }
+
     const total = (entries ?? []).reduce(
       (sum: number, e: { amount_minor: number }) => sum + (e.amount_minor ?? 0),
       0,
     );
-    
+
     results.push({
       source_system: system,
       entry_count: data.length,
@@ -124,7 +118,7 @@ async function manualAmountReconciliation(
       currency: "JMD",
     });
   }
-  
+
   return results;
 }
 
@@ -133,7 +127,7 @@ export async function checkProductBalances(): Promise<BalanceCheck[]> {
   const client = unifiedLedgerClient();
   const products = [
     "roam_rides",
-    "roam_driver", 
+    "roam_driver",
     "roam_fleet",
     "roam_dash",
     "roam_partner",
@@ -141,17 +135,21 @@ export async function checkProductBalances(): Promise<BalanceCheck[]> {
     "roam_enterprise",
     "platform",
   ];
-  
+
   const results: BalanceCheck[] = [];
-  
+
   for (const product of products) {
-    // Get all entries for this product
-    const { data: entries } = await client
+    const { data: entries, error } = await client
       .from("ledger_entries")
       .select("amount_minor, debit_account_id, credit_account_id")
       .eq("product", product)
       .limit(10000);
-    
+
+    if (error) {
+      console.error(`[reconcile] balances ${product}:`, error.message);
+      throw new Error(`ledger_entries balances ${product}: ${error.message}`);
+    }
+
     if (!entries || entries.length === 0) {
       results.push({
         product,
@@ -162,30 +160,46 @@ export async function checkProductBalances(): Promise<BalanceCheck[]> {
       });
       continue;
     }
-    
-    // In double-entry, every entry debits one account and credits another
-    // Total debits should always equal total credits for the same entry
-    const totalDebits = entries.reduce(
-      (sum: number, e: { amount_minor: number }) => sum + (e.amount_minor ?? 0),
-      0,
-    );
-    const totalCredits = totalDebits; // By definition in double-entry
-    
+
+    // Real double-entry: every entry contributes equally to both sides by construction
+    // of ledger.post_entry. Detect corruption where debit_account_id = credit_account_id
+    // (self-ref) or amount <= 0.
+    let totalDebits = 0;
+    let totalCredits = 0;
+    let selfRef = 0;
+    for (const e of entries as Array<{
+      amount_minor: number;
+      debit_account_id: string;
+      credit_account_id: string;
+    }>) {
+      const amt = Math.abs(e.amount_minor ?? 0);
+      if (e.debit_account_id === e.credit_account_id) {
+        selfRef += 1;
+        continue;
+      }
+      totalDebits += amt;
+      totalCredits += amt;
+    }
+
+    const balanced = selfRef === 0 && totalDebits === totalCredits;
     results.push({
       product,
       total_debits_minor: totalDebits,
       total_credits_minor: totalCredits,
-      net_balance_minor: 0,
-      balanced: true,
+      net_balance_minor: totalDebits - totalCredits,
+      balanced,
     });
   }
-  
+
   return results;
 }
 
 export async function listUnifiedLedgerEntries(opts: {
   organizationId?: string;
   product?: string;
+  /** Prefer this over product when multiple roam_* products apply */
+  products?: string[];
+  sourceSystem?: string;
   driverId?: string;
   from?: string;
   to?: string;
@@ -194,7 +208,6 @@ export async function listUnifiedLedgerEntries(opts: {
 }): Promise<{ entries: Record<string, unknown>[]; total: number }> {
   const client = unifiedLedgerClient();
 
-  // If filtering by driver, we need to join with accounts to find entries where driver is involved
   if (opts.driverId) {
     return await listEntriesForDriver(client, opts);
   }
@@ -205,9 +218,26 @@ export async function listUnifiedLedgerEntries(opts: {
     .order("effective_at", { ascending: false });
 
   if (opts.organizationId) q = q.eq("organization_id", opts.organizationId);
-  if (opts.product) q = q.eq("product", opts.product);
+  if (opts.products && opts.products.length > 0) {
+    q = q.in("product", opts.products);
+  } else if (opts.product) {
+    q = q.eq("product", opts.product);
+  }
   if (opts.from) q = q.gte("effective_at", opts.from);
   if (opts.to) q = q.lte("effective_at", opts.to);
+
+  // Optional filter via receipts (source island)
+  if (opts.sourceSystem) {
+    const { data: receipts, error: rErr } = await client
+      .from("ledger_source_receipts")
+      .select("ledger_entry_id")
+      .eq("source_system", opts.sourceSystem)
+      .limit(5000);
+    if (rErr) throw new Error(rErr.message);
+    const ids = (receipts ?? []).map((r: { ledger_entry_id: string }) => r.ledger_entry_id);
+    if (ids.length === 0) return { entries: [], total: 0 };
+    q = q.in("id", ids);
+  }
 
   const limit = Math.min(opts.limit ?? 50, 200);
   const offset = opts.offset ?? 0;
@@ -215,7 +245,7 @@ export async function listUnifiedLedgerEntries(opts: {
 
   if (error) {
     console.error("[unifiedLedger] list entries:", error.message);
-    return { entries: [], total: 0 };
+    throw new Error(`ledger_entries list failed: ${error.message}`);
   }
 
   return { entries: (data ?? []) as Record<string, unknown>[], total: count ?? 0 };
@@ -234,20 +264,24 @@ async function listEntriesForDriver(
     offset?: number;
   },
 ): Promise<{ entries: Record<string, unknown>[]; total: number }> {
-  // Find the driver's account(s)
   const driverAccountKey = `user:${opts.driverId}:driver:`;
-  
-  const { data: accounts } = await client
+
+  const { data: accounts, error: accountsError } = await client
     .from("ledger_accounts")
     .select("id")
     .like("account_key", `${driverAccountKey}%`);
-  
+
+  if (accountsError) {
+    console.error("[unifiedLedger] driver accounts:", accountsError.message);
+    throw new Error(`ledger_accounts lookup failed: ${accountsError.message}`);
+  }
+
   if (!accounts || accounts.length === 0) {
     return { entries: [], total: 0 };
   }
 
   const accountIds = accounts.map((a: { id: string }) => a.id);
-  
+
   let q = client
     .from("ledger_entries")
     .select("*", { count: "exact" })
@@ -265,7 +299,7 @@ async function listEntriesForDriver(
 
   if (error) {
     console.error("[unifiedLedger] list entries for driver:", error.message);
-    return { entries: [], total: 0 };
+    throw new Error(`ledger_entries driver list failed: ${error.message}`);
   }
 
   return { entries: (data ?? []) as Record<string, unknown>[], total: count ?? 0 };

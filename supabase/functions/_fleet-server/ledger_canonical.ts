@@ -475,7 +475,13 @@ export async function appendCanonicalLedgerEvents(
       };
 
       const stamped = stampOrg(record, c);
-      await kv.set(`ledger_event:${id}`, stamped);
+
+      const { isLedgerLegacyMoneyWriteEnabled } = await import("../_shared/unifiedLedger/flags.ts");
+      if (isLedgerLegacyMoneyWriteEnabled("kv_ledger_event")) {
+        await kv.set(`ledger_event:${id}`, stamped);
+      } else {
+        console.log(`[CanonicalLedger] legacy write off — unified-only ledger_event:${id}`);
+      }
 
       inserted++;
       details.push({ index: i, idempotencyKey: idem, id });

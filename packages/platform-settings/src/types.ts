@@ -51,6 +51,10 @@ export interface EnterpriseEnabledModules {
   freight_dispatch: boolean;
   freight_service_zones: boolean;
   freight_ops_inbox: boolean;
+  freight_pipeline_command: boolean;
+  freight_invoice_audit: boolean;
+  freight_hs_tariffs: boolean;
+  freight_billing: boolean;
   /** Reserved grocery vertical SKUs — off by default; no Enterprise UI yet. */
   grocery_catalog: boolean;
   grocery_orders: boolean;

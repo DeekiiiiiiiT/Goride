@@ -1,6 +1,6 @@
 import React from 'react';
 import { Download, RefreshCw, X } from 'lucide-react';
-import { usePwa } from './PwaProvider';
+import { usePwa } from './pwaContext';
 
 /** Inline styles: Enterprise Tailwind may not include Fleet-only utilities; never hide the CTA. */
 const updateBtnStyle: React.CSSProperties = {

@@ -1,9 +1,9 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
-import { useFacilities, useHubSort, useScanPackage, useSeedFacilities } from '@/app/hooks/useFreight';
+import { Link } from 'react-router-dom';
+import { useFacilities, useHubSort, useScanPackage } from '@/app/hooks/useFreight';
 
 export function HubStationPage() {
   const hubs = useFacilities('ja_hub');
-  const seed = useSeedFacilities();
   const scan = useScanPackage();
   const sort = useHubSort();
   const [facilityId, setFacilityId] = useState('');
@@ -24,7 +24,8 @@ export function HubStationPage() {
       setError('Select a Jamaica hub facility.');
       return;
     }
-    const fd = new FormData(e.currentTarget);
+    const form = e.currentTarget;
+    const fd = new FormData(form);
     const barcode = String(fd.get('barcode') || '').trim();
     try {
       const res = await scan.mutateAsync({
@@ -33,7 +34,11 @@ export function HubStationPage() {
       });
       setLastPkgId(String(res.package.id));
       setMsg(`Inbound: ${String(res.package.courier_tracking_number || res.package.id)} → ${String(res.package.status)}`);
-      e.currentTarget.querySelector<HTMLInputElement>('[name=barcode]')!.value = '';
+      if (barcodeRef.current) barcodeRef.current.value = '';
+      else {
+        const input = form.querySelector<HTMLInputElement>('[name=barcode]');
+        if (input) input.value = '';
+      }
       barcodeRef.current?.focus();
     } catch (err) {
       setError((err as Error).message);
@@ -58,19 +63,24 @@ export function HubStationPage() {
     }
   }
 
+  const hubList = hubs.data?.facilities ?? [];
+
   return (
     <div className="mx-auto max-w-xl space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">Jamaica Hub Station</h1>
-          <p className="mt-1 text-sm text-slate-500">Inbound scan → sort to pickup or door delivery.</p>
-        </div>
-        {!(hubs.data?.facilities ?? []).length && (
-          <button type="button" onClick={() => void seed.mutateAsync()} className="rounded-lg border px-3 py-2 text-sm">
-            Seed facilities
-          </button>
-        )}
+      <div>
+        <h1 className="text-2xl font-semibold">Jamaica Hub Station</h1>
+        <p className="mt-1 text-sm text-slate-500">Inbound scan → sort to pickup or door delivery.</p>
       </div>
+
+      {!hubList.length && (
+        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          No Jamaica hub yet.{' '}
+          <Link to="/app/facilities" className="font-semibold underline">
+            Add one under Facilities
+          </Link>
+          .
+        </p>
+      )}
 
       <label className="block text-sm">
         Hub facility
@@ -80,7 +90,7 @@ export function HubStationPage() {
           className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
         >
           <option value="">Select…</option>
-          {(hubs.data?.facilities ?? []).map((f) => (
+          {hubList.map((f) => (
             <option key={String(f.id)} value={String(f.id)}>{String(f.name)}</option>
           ))}
         </select>

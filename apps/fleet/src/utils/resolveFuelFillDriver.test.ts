@@ -37,6 +37,33 @@ describe('resolveFuelFillDriver', () => {
     expect(r.driverId).toBe('card-d');
   });
 
+  it('uses card history at fill time after mid-week reassignment', () => {
+    const r = resolveFuelFillDriver({
+      entry: { cardId: 'c1', date: '2026-07-02', time: '12:00:00' },
+      vehicles,
+      fuelCards: [
+        {
+          id: 'c1',
+          cardNumber: '1234',
+          provider: 'Shell',
+          status: 'Active',
+          assignedDriverId: 'b',
+          assignmentHistory: [
+            {
+              driverId: 'a',
+              driverName: 'A',
+              assignedAt: '2026-07-01T00:00:00.000Z',
+              unassignedAt: '2026-07-04T00:00:00.000Z',
+            },
+            { driverId: 'b', driverName: 'B', assignedAt: '2026-07-04T00:00:00.000Z' },
+          ],
+        },
+      ],
+    });
+    expect(r.source).toBe('gas_card');
+    expect(r.driverId).toBe('a');
+  });
+
   it('uses trip proximity before history', () => {
     const r = resolveFuelFillDriver({
       entry: { vehicleId: 'v1', date: '2026-07-02', time: '14:00:00' },

@@ -1,18 +1,24 @@
-import { FormEvent, useState } from 'react';
-import { useCreateSuite, useFacilities, useFreightClients, useSeedFacilities, useSuites } from '@/app/hooks/useFreight';
+import { FormEvent, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { useCreateSuite, useFacilities, useFreightClients, useSuites } from '@/app/hooks/useFreight';
+import { SuiteCsvImportPanel } from '@/app/freight/SuiteCsvImportPanel';
 
 export function SuitesPage() {
   const { data, isLoading, error } = useSuites();
   const clients = useFreightClients();
   const facilities = useFacilities('branch');
+  const branchFacilities = useMemo(
+    () => facilities.data?.facilities ?? [],
+    [facilities.data?.facilities],
+  );
   const create = useCreateSuite();
-  const seed = useSeedFacilities();
   const [formError, setFormError] = useState<string | null>(null);
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setFormError(null);
-    const fd = new FormData(e.currentTarget);
+    const form = e.currentTarget;
+    const fd = new FormData(form);
     try {
       await create.mutateAsync({
         clientId: (fd.get('clientId') as string) || null,
@@ -26,7 +32,7 @@ export function SuitesPage() {
         defaultPickupFacilityId: (fd.get('defaultPickupFacilityId') as string) || null,
         deliveryAddress: fd.get('deliveryAddress') || null,
       });
-      e.currentTarget.reset();
+      form.reset();
     } catch (err) {
       setFormError((err as Error).message);
     }
@@ -34,20 +40,16 @@ export function SuitesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">Suites</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            US mailbox codes (e.g. JA-1042) for end customers. Ops-managed — no customer portal.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => void seed.mutateAsync()}
-          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50"
-        >
-          {seed.isPending ? 'Seeding…' : 'Seed Miami + Kingston facilities'}
-        </button>
+      <div>
+        <h1 className="text-2xl font-semibold">Suites</h1>
+        <p className="mt-1 text-sm text-slate-500">
+          US mailbox codes (e.g. BSHPD10859) for end customers. Ops-managed — no customer portal.
+          Set up{' '}
+          <Link to="/app/facilities" className="font-medium text-amber-800 underline-offset-2 hover:underline">
+            Facilities
+          </Link>{' '}
+          before receiving packages.
+        </p>
       </div>
 
       {isLoading && <p className="text-sm text-slate-500">Loading…</p>}
@@ -81,13 +83,15 @@ export function SuitesPage() {
             {!isLoading && !(data?.suites ?? []).length && (
               <tr>
                 <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
-                  No suites yet — create one below.
+                  No suites yet — import a CSV or create one below.
                 </td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
+
+      <SuiteCsvImportPanel />
 
       <form onSubmit={onSubmit} className="space-y-3 rounded-xl border border-slate-200 bg-white p-6">
         <h2 className="text-sm font-semibold">New suite</h2>
@@ -143,7 +147,7 @@ export function SuitesPage() {
             Pickup branch
             <select name="defaultPickupFacilityId" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2">
               <option value="">— Optional —</option>
-              {(facilities.data?.facilities ?? []).map((f) => (
+              {branchFacilities.map((f) => (
                 <option key={String(f.id)} value={String(f.id)}>
                   {String(f.name)}
                 </option>

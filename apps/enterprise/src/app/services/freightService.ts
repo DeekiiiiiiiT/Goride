@@ -1,17 +1,23 @@
 import { API_ENDPOINTS, getProductLineHeaders, publicAnonKey } from '@roam/api-client';
 import { supabaseEnterpriseApp } from '@roam/auth-client';
 
-async function authHeaders(organizationId?: string | null): Promise<HeadersInit> {
+async function authHeaders(
+  organizationId?: string | null,
+  opts?: { json?: boolean },
+): Promise<HeadersInit> {
   const { data } = await supabaseEnterpriseApp.auth.getSession();
   const token = data.session?.access_token;
   if (!token) throw new Error('Not authenticated');
-  return {
+  const headers: Record<string, string> = {
     Authorization: `Bearer ${token}`,
     apikey: publicAnonKey,
-    'Content-Type': 'application/json',
     ...getProductLineHeaders(),
     ...(organizationId ? { 'X-Roam-Organization-Id': organizationId } : {}),
   };
+  if (opts?.json !== false) {
+    headers['Content-Type'] = 'application/json';
+  }
+  return headers;
 }
 
 async function freightFetch<T>(
@@ -26,15 +32,15 @@ async function freightFetch<T>(
   });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
+    // Prefer human message over machine codes like validation_failed
     const detail =
-      typeof json.error === 'string'
-        ? json.error
-        : json.error?.formErrors?.[0] ||
-          json.message ||
-          json.msg ||
-          (typeof json === 'object' && json.error ? JSON.stringify(json.error) : null) ||
-          res.statusText ||
-          'Request failed';
+      (typeof json.message === 'string' && json.message) ||
+      (typeof json.msg === 'string' && json.msg) ||
+      (typeof json.error === 'string' && json.error) ||
+      json.error?.formErrors?.[0] ||
+      (typeof json === 'object' && json.error ? JSON.stringify(json.error) : null) ||
+      res.statusText ||
+      'Request failed';
     throw new Error(`${res.status}: ${detail}`);
   }
   return json as T;
@@ -161,6 +167,11 @@ export const freightService = {
       { organizationId },
     ),
 
+  listIntakeWarehouses: (organizationId?: string | null) =>
+    freightFetch<{ warehouses: Record<string, unknown>[] }>('/intake-warehouses', {
+      organizationId,
+    }),
+
   createFacility: (body: unknown, organizationId?: string | null) =>
     freightFetch<{ facility: Record<string, unknown> }>('/facilities', {
       method: 'POST',
@@ -168,9 +179,16 @@ export const freightService = {
       organizationId,
     }),
 
-  seedFacilities: (organizationId?: string | null) =>
-    freightFetch<{ facilities: Record<string, unknown>[] }>('/facilities/seed-defaults', {
-      method: 'POST',
+  updateFacility: (id: string, body: unknown, organizationId?: string | null) =>
+    freightFetch<{ facility: Record<string, unknown> }>(`/facilities/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+      organizationId,
+    }),
+
+  deleteFacility: (id: string, organizationId?: string | null) =>
+    freightFetch<{ ok: boolean }>(`/facilities/${id}`, {
+      method: 'DELETE',
       organizationId,
     }),
 
@@ -181,6 +199,30 @@ export const freightService = {
     freightFetch<{ suite: Record<string, unknown> }>('/suites', {
       method: 'POST',
       body: JSON.stringify(body),
+      organizationId,
+    }),
+
+  importSuites: (
+    rows: Array<{
+      suiteCode: string;
+      contactName?: string | null;
+      contactPhone?: string | null;
+      contactEmail?: string | null;
+      trn?: string | null;
+      defaultFulfillmentMode?: string;
+      defaultAssigneeType?: string;
+      deliveryAddress?: string | null;
+    }>,
+    organizationId?: string | null,
+  ) =>
+    freightFetch<{
+      created: number;
+      updated: number;
+      total: number;
+      suites: Record<string, unknown>[];
+    }>('/suites/import', {
+      method: 'POST',
+      body: JSON.stringify({ rows }),
       organizationId,
     }),
 
@@ -250,6 +292,55 @@ export const freightService = {
       organizationId,
     }),
 
+  updateManifest: (id: string, body: unknown, organizationId?: string | null) =>
+    freightFetch<{ manifest: Record<string, unknown> }>(`/manifests/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+      organizationId,
+    }),
+
+  deleteManifest: (id: string, organizationId?: string | null) =>
+    freightFetch<{ ok: boolean; manifestNumber?: string }>(`/manifests/${id}`, {
+      method: 'DELETE',
+      organizationId,
+    }),
+
+  importWarehouseManifest: (
+    body: {
+      carrierName?: string | null;
+      shipmentType?: 'air' | 'sea';
+      originFacilityId?: string | null;
+      destinationFacilityId?: string | null;
+      awbOrBl?: string | null;
+      rows: Array<{
+        suiteCode: string;
+        contactName?: string | null;
+        trn?: string | null;
+        courierTrackingNumber: string;
+        description?: string | null;
+        weightLbs?: number | null;
+        lengthIn?: number | null;
+        widthIn?: number | null;
+        heightIn?: number | null;
+        declaredValueUsd?: number | null;
+        invoiceFileName?: string | null;
+      }>;
+    },
+    organizationId?: string | null,
+  ) =>
+    freightFetch<{
+      manifestId: string;
+      manifestNumber: string;
+      added: number;
+      createdPackages: number;
+      linkedExisting: number;
+      warnings: string[];
+    }>('/manifests/import-warehouse', {
+      method: 'POST',
+      body: JSON.stringify(body),
+      organizationId,
+    }),
+
   addManifestPackages: (
     id: string,
     packageIds: string[],
@@ -286,6 +377,28 @@ export const freightService = {
       csv: string;
       invoicePaths: string[];
     }>(`/manifests/${id}/customs-export`, { organizationId }),
+
+  submitManifestCustoms: (
+    id: string,
+    body?: {
+      brokerRef?: string | null;
+      awbOrBl?: string | null;
+      flightOrVoyage?: string | null;
+      estimatedArrival?: string | null;
+    },
+    organizationId?: string | null,
+  ) =>
+    freightFetch<{
+      manifestNumber: string;
+      csv: string;
+      invoicePaths: string[];
+      customsCase: Record<string, unknown>;
+      message: string;
+    }>(`/manifests/${id}/submit-customs`, {
+      method: 'POST',
+      body: JSON.stringify(body ?? {}),
+      organizationId,
+    }),
 
   listCustomsCases: (organizationId?: string | null) =>
     freightFetch<{ customsCases: Record<string, unknown>[] }>('/customs-cases', {
@@ -384,5 +497,214 @@ export const freightService = {
     publicFetch<{ stop: Record<string, unknown> }>(`/public/pod/${token}/deliver`, {
       method: 'POST',
       body: JSON.stringify(body),
+    }),
+
+  /** Auth multipart upload into org Files library. */
+  uploadOrgFile: async (
+    file: File,
+    meta: {
+      kind: string;
+      sourceType?: string;
+      sourceId?: string;
+      fileName?: string;
+    },
+    organizationId?: string | null,
+  ) => {
+    const headers = await authHeaders(organizationId, { json: false });
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('kind', meta.kind);
+    if (meta.sourceType) fd.append('sourceType', meta.sourceType);
+    if (meta.sourceId) fd.append('sourceId', meta.sourceId);
+    if (meta.fileName) fd.append('fileName', meta.fileName);
+    const res = await fetch(`${API_ENDPOINTS.freight}/files/upload`, {
+      method: 'POST',
+      headers,
+      body: fd,
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(typeof json.error === 'string' ? json.error : res.statusText);
+    }
+    return json as { file: Record<string, unknown> };
+  },
+
+  /** Public POD link multipart upload (token-gated). */
+  publicPodUpload: async (token: string, file: File, packageId?: string) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    if (packageId) fd.append('packageId', packageId);
+    const res = await fetch(`${API_ENDPOINTS.freight}/public/pod/${token}/upload`, {
+      method: 'POST',
+      headers: { apikey: publicAnonKey },
+      body: fd,
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(typeof json.error === 'string' ? json.error : res.statusText);
+    }
+    return json as { file: Record<string, unknown> };
+  },
+
+  listOrgFiles: (
+    organizationId?: string | null,
+    params?: { kind?: string; q?: string; from?: string; to?: string },
+  ) => {
+    const sp = new URLSearchParams();
+    if (params?.kind) sp.set('kind', params.kind);
+    if (params?.q) sp.set('q', params.q);
+    if (params?.from) sp.set('from', params.from);
+    if (params?.to) sp.set('to', params.to);
+    const qs = sp.toString();
+    return freightFetch<{ files: Record<string, unknown>[]; canDelete: boolean }>(
+      `/files${qs ? `?${qs}` : ''}`,
+      { organizationId },
+    );
+  },
+
+  orgFileUrl: (id: string, organizationId?: string | null) =>
+    freightFetch<{ url: string; file: Record<string, unknown> }>(`/files/${id}/url`, {
+      organizationId,
+    }),
+
+  deleteOrgFile: (id: string, organizationId?: string | null) =>
+    freightFetch<{ ok: boolean }>(`/files/${id}`, {
+      method: 'DELETE',
+      organizationId,
+    }),
+
+  // --- Courier OS (duty / readiness / JCA / billing) ---
+  pipelineCommand: (organizationId?: string | null) =>
+    freightFetch<{ counts: Record<string, number>; dutyOutstandingJmdMinor: number }>(
+      '/pipeline/command',
+      { organizationId },
+    ),
+
+  listHsTariffs: (organizationId?: string | null) =>
+    freightFetch<{ tariffs: Record<string, unknown>[] }>('/hs-tariffs', {
+      organizationId,
+    }),
+
+  createHsTariff: (body: unknown, organizationId?: string | null) =>
+    freightFetch<{ tariff: Record<string, unknown> }>('/hs-tariffs', {
+      method: 'POST',
+      body: JSON.stringify(body),
+      organizationId,
+    }),
+
+  updateHsTariff: (id: string, body: unknown, organizationId?: string | null) =>
+    freightFetch<{ tariff: Record<string, unknown> }>(`/hs-tariffs/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+      organizationId,
+    }),
+
+  invoiceAuditQueue: (tab: string, organizationId?: string | null) =>
+    freightFetch<{ packages: Record<string, unknown>[] }>(
+      `/packages/invoice-audit?tab=${encodeURIComponent(tab)}`,
+      { organizationId },
+    ),
+
+  /** Multipart commercial invoice → org Files + package invoice fields. */
+  uploadPackageInvoice: async (
+    packageId: string,
+    file: File,
+    organizationId?: string | null,
+  ) => {
+    const headers = await authHeaders(organizationId, { json: false });
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('fileName', file.name);
+    const res = await fetch(`${API_ENDPOINTS.freight}/packages/${packageId}/invoice`, {
+      method: 'POST',
+      headers,
+      body: fd,
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(typeof json.error === 'string' ? json.error : res.statusText);
+    }
+    return json as {
+      package: Record<string, unknown>;
+      file: Record<string, unknown>;
+    };
+  },
+
+  verifyInvoice: (id: string, note?: string, organizationId?: string | null) =>
+    freightFetch<{ package: Record<string, unknown> }>(`/packages/${id}/verify-invoice`, {
+      method: 'POST',
+      body: JSON.stringify({ note }),
+      organizationId,
+    }),
+
+  computeDuty: (id: string, organizationId?: string | null) =>
+    freightFetch<{ duty: Record<string, unknown>; result: Record<string, unknown> }>(
+      `/packages/${id}/compute-duty`,
+      { method: 'POST', organizationId },
+    ),
+
+  getPackageDuty: (id: string, organizationId?: string | null) =>
+    freightFetch<{ duty: Record<string, unknown> | null }>(`/packages/${id}/duty`, {
+      organizationId,
+    }),
+
+  manifestReadiness: (id: string, organizationId?: string | null) =>
+    freightFetch<{
+      blockers: Array<{ packageId: string; tracking: string; code: string; message: string }>;
+      readyCount: number;
+      total: number;
+      canSeal: boolean;
+    }>(`/manifests/${id}/readiness`, { organizationId }),
+
+  generateAwbolds: (id: string, organizationId?: string | null) =>
+    freightFetch<{ filing: Record<string, unknown>; xml: string; checksum: string }>(
+      `/manifests/${id}/awbolds`,
+      { method: 'POST', organizationId },
+    ),
+
+  submitJca: (id: string, organizationId?: string | null) =>
+    freightFetch<{
+      filing: Record<string, unknown>;
+      result: { status: string; jcaRef: string | null; error: string | null };
+    }>(`/manifests/${id}/submit-jca`, { method: 'POST', organizationId }),
+
+  listFilings: (id: string, organizationId?: string | null) =>
+    freightFetch<{ filings: Record<string, unknown>[] }>(`/manifests/${id}/filings`, {
+      organizationId,
+    }),
+
+  listClearanceEvents: (channel?: string, organizationId?: string | null) =>
+    freightFetch<{ events: Record<string, unknown>[] }>(
+      `/clearance-events${channel ? `?channel=${encodeURIComponent(channel)}` : ''}`,
+      { organizationId },
+    ),
+
+  postClearanceEvent: (body: unknown, organizationId?: string | null) =>
+    freightFetch<{ event: Record<string, unknown>; packageStatus: string }>(
+      '/clearance-events',
+      {
+        method: 'POST',
+        body: JSON.stringify(body),
+        organizationId,
+      },
+    ),
+
+  createConsolidatedInvoice: (body: unknown, organizationId?: string | null) =>
+    freightFetch<{ invoice: Record<string, unknown>; lines: Record<string, unknown>[] }>(
+      '/billing/invoices',
+      { method: 'POST', body: JSON.stringify(body), organizationId },
+    ),
+
+  getConsolidatedInvoice: (id: string, organizationId?: string | null) =>
+    freightFetch<{ invoice: Record<string, unknown>; lines: Record<string, unknown>[] }>(
+      `/billing/invoices/${id}`,
+      { organizationId },
+    ),
+
+  validateTrn: (trn: string, organizationId?: string | null) =>
+    freightFetch<{ valid: boolean; normalized: string; error?: string }>('/trn/validate', {
+      method: 'POST',
+      body: JSON.stringify({ trn }),
+      organizationId,
     }),
 };

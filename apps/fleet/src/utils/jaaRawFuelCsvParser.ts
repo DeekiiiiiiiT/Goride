@@ -6,6 +6,7 @@
 
 import type { FuelCard, FuelEntry } from '../types/fuel';
 import { findFuelCardByCode } from './fuelCardMatch';
+import { driverIdAtCardTime } from '@roam/roam-shared';
 
 export type JaaRowKind = 'approved_fuel' | 'fee' | 'declined';
 
@@ -268,7 +269,15 @@ export function processJaaRawFuelData(
       cardId: matchedCard?.id,
       // Vehicle from Roam card assignment only — never JAA plate
       vehicleId: matchedCard?.assignedVehicleId,
-      driverId: matchedCard?.assignedDriverId,
+      // Holder at statement time (not live assignee after mid-week handoff)
+      driverId: matchedCard
+        ? driverIdAtCardTime(
+            matchedCard,
+            new Date(
+              `${parsed.date}T${parsed.time && /^\d{1,2}:\d{2}/.test(parsed.time) ? parsed.time : '12:00:00'}`,
+            ).getTime(),
+          )
+        : undefined,
       // Fan-out to the fleet that owns the inventory card
       ...(matchedCard?.organizationId ? { organizationId: matchedCard.organizationId } as any : {}),
       type: 'Card_Transaction',

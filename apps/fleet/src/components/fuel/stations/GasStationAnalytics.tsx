@@ -30,6 +30,7 @@ import { Loader2, Filter, X } from 'lucide-react';
 import { DateRange } from "react-day-picker";
 import { DatePickerWithRange } from "../../ui/date-range-picker";
 import { isWithinInterval, startOfDay, endOfDay } from 'date-fns';
+import { filterFuelOpsLogEntries } from '../../../utils/fuelOpsEligibility';
 
 interface GasStationAnalyticsProps {
   logs: FuelEntry[];
@@ -178,7 +179,10 @@ export function GasStationAnalytics({ logs, loading = false, onRequestRefresh }:
     };
   }, [loading, isDataSyncing, masterStations]);
 
-  const context = useMemo(() => buildContext(logs), [buildContext, logs]);
+  const context = useMemo(
+    () => buildContext(filterFuelOpsLogEntries(logs)),
+    [buildContext, logs],
+  );
 
   const purchaseDataLogs = useMemo(() => {
     const rLogs = context.resolvedLogs || [];

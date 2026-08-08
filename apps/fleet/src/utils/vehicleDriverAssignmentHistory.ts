@@ -71,3 +71,31 @@ export function driverIdAtVehicleTime(
   }
   return vehicle.currentDriverId || undefined;
 }
+
+/**
+ * Vehicle that driver had at atMs (from each vehicle's driverAssignmentHistory).
+ * Prefer preferVehicleId when that car also shows the driver in window / current.
+ */
+export function vehicleIdForDriverAtTime(
+  vehicles: Array<VehicleWithDriverHistory & { id: string }>,
+  driverId: string | undefined | null,
+  atMs: number,
+  preferVehicleId?: string,
+): string | undefined {
+  if (!driverId) return undefined;
+
+  if (preferVehicleId) {
+    const preferred = vehicles.find((v) => v.id === preferVehicleId);
+    if (preferred && driverIdAtVehicleTime(preferred, atMs) === driverId) {
+      return preferVehicleId;
+    }
+  }
+
+  for (const v of vehicles) {
+    if (driverIdAtVehicleTime(v, atMs) === driverId) return v.id;
+  }
+
+  // Current assignment fallback when history windows miss
+  const current = vehicles.find((v) => v.currentDriverId === driverId);
+  return current?.id;
+}

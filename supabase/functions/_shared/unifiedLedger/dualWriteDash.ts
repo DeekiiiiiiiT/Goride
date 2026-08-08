@@ -1,5 +1,6 @@
-import { isLedgerDualWriteEnabled } from "./flags.ts";
+import { isLedgerDualWriteIslandEnabled } from "./flags.ts";
 import { ledgerPostEntry, majorToMinor } from "./postEntry.ts";
+import { logDualWriteMetric } from "./metrics.ts";
 import type { DashCaptureSplit } from "../dashMoneySplit.ts";
 
 export type DashTransactionDualWrite = {
@@ -9,7 +10,7 @@ export type DashTransactionDualWrite = {
   courierId?: string | null;
   amount: number;
   currency?: string;
-  kind: "order_capture" | "order_refund" | "merchant_payout" | "courier_payout";
+  kind: "order_capture" | "order_refund" | "merchant_payout" | "merchant_payout_reversal" | "courier_payout";
   /** Model A split — when set on order_capture, posts platform / courier / merchant lines. */
   split?: DashCaptureSplit | null;
 };
@@ -22,6 +23,7 @@ function resolveDashProduct(kind: DashTransactionDualWrite["kind"]):
     case "order_refund":
       return "roam_dash";
     case "merchant_payout":
+    case "merchant_payout_reversal":
       return "roam_partner";
     case "courier_payout":
       return "roam_courier";
@@ -32,8 +34,43 @@ function resolveDashProduct(kind: DashTransactionDualWrite["kind"]):
 
 /** Phase 10: mirror Dash payments row into ledger.entries. */
 export async function dualWriteDashPayment(row: DashTransactionDualWrite): Promise<void> {
-  if (!isLedgerDualWriteEnabled()) return;
+  if (!isLedgerDualWriteIslandEnabled("dash_payments")) {
+    logDualWriteMetric({
+      source_system: "dash_payments",
+      status: "skipped",
+      reason: "flag_off",
+      source_id: row.transactionId,
+      entry_type: row.kind,
+    });
+    return;
+  }
 
+  try {
+    const outcome = await dualWriteDashPaymentInner(row);
+    if (outcome === "ok") {
+      logDualWriteMetric({
+        source_system: "dash_payments",
+        status: "ok",
+        reason: "posted",
+        source_id: row.transactionId,
+        entry_type: row.kind,
+      });
+    }
+  } catch (e) {
+    logDualWriteMetric({
+      source_system: "dash_payments",
+      status: "fail",
+      reason: e instanceof Error ? e.message : String(e),
+      source_id: row.transactionId,
+      entry_type: row.kind,
+    });
+    throw e;
+  }
+}
+
+async function dualWriteDashPaymentInner(
+  row: DashTransactionDualWrite,
+): Promise<"ok" | "skipped"> {
   const currency = row.currency ?? "JMD";
   const product = resolveDashProduct(row.kind);
 
@@ -100,11 +137,21 @@ export async function dualWriteDashPayment(row: DashTransactionDualWrite): Promi
         sourceId: row.transactionId,
       });
     }
-    return;
+    return "ok";
   }
 
   const amountMinor = majorToMinor(Math.abs(row.amount));
-  if (amountMinor <= 0) return;
+  if (amountMinor <= 0) {
+    logDualWriteMetric({
+      source_system: "dash_payments",
+      status: "skipped",
+      reason: "zero_amount",
+      source_id: row.transactionId,
+      entry_type: row.kind,
+      amount_minor: amountMinor,
+    });
+    return "skipped";
+  }
 
   let debitKey = "platform:clearing";
   let creditKey = "platform:receivable";
@@ -121,12 +168,15 @@ export async function dualWriteDashPayment(row: DashTransactionDualWrite): Promi
   } else if (row.kind === "merchant_payout" && row.merchantId) {
     debitKey = `merchant:${row.merchantId}:receivable`;
     creditKey = "platform:clearing";
+  } else if (row.kind === "merchant_payout_reversal" && row.merchantId) {
+    debitKey = "platform:clearing";
+    creditKey = `merchant:${row.merchantId}:receivable`;
   } else if (row.kind === "courier_payout" && row.courierId) {
-    debitKey = "platform:clearing";
-    creditKey = `courier:${row.courierId}:payable`;
+    debitKey = `courier:${row.courierId}:payable`;
+    creditKey = "platform:clearing";
   } else if (row.kind === "courier_payout") {
-    debitKey = "platform:clearing";
-    creditKey = "platform:receivable";
+    debitKey = "platform:receivable";
+    creditKey = "platform:clearing";
   }
 
   await ledgerPostEntry({
@@ -137,10 +187,12 @@ export async function dualWriteDashPayment(row: DashTransactionDualWrite): Promi
     amountMinor,
     currency,
     product,
-    referenceType: "order",
+    referenceType: row.kind.includes("payout") ? "payout" : "order",
     referenceId: row.orderId,
     metadata: { merchant_id: row.merchantId, courier_id: row.courierId, kind: row.kind },
     sourceSystem: "dash_payments",
     sourceId: row.transactionId,
   });
+  return "ok";
 }
+

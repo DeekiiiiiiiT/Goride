@@ -3,6 +3,7 @@
  */
 import type { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { dualWriteDashPayment } from "../_shared/unifiedLedger/dualWriteDash.ts";
 
 type Sb = ReturnType<typeof createClient>;
 
@@ -703,6 +704,18 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
         if (raced) return c.json({ payout: raced, idempotent: true });
       }
       return c.json({ error: payoutError.message }, 500);
+    }
+    try {
+      await dualWriteDashPayment({
+        transactionId: String(payout.id),
+        orderId: String(payout.id),
+        courierId: auth.userId,
+        amount: Number(payout.amount ?? amount),
+        currency: String(payout.currency ?? "JMD"),
+        kind: "courier_payout",
+      });
+    } catch (dwErr) {
+      console.error("[courier payout] unified dual-write failed:", dwErr);
     }
     return c.json({ payout });
   });

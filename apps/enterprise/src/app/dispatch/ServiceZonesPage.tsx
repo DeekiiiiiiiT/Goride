@@ -21,7 +21,8 @@ export function ServiceZonesPage() {
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setFormError(null);
-    const fd = new FormData(e.currentTarget);
+    const form = e.currentTarget;
+    const fd = new FormData(form);
     const geojson = pointsToPolygonGeoJson(points);
     if (!geojson) {
       setFormError('Draw a zone on the map (at least 3 corners)');
@@ -34,7 +35,7 @@ export function ServiceZonesPage() {
         geojson,
         active: true,
       });
-      e.currentTarget.reset();
+      form.reset();
       setPoints([]);
     } catch (err) {
       setFormError((err as Error).message);

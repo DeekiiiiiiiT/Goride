@@ -310,6 +310,24 @@ app.post("/v1/internal/record-crossing", async (c) => {
           key: `toll_bridge:crossing:${data.id}`,
           value: { ledgerId, bridgedAt: now, source: "toll_brain_live" },
         });
+        try {
+          const { dualWriteTollLedgerKv } = await import("../_shared/unifiedLedger/dualWriteToll.ts");
+          await dualWriteTollLedgerKv({
+            id: ledgerId,
+            type: "usage",
+            amount: -Math.abs(amountMajor),
+            currency: row.currency || "JMD",
+            driverId: body.driverId || null,
+            vehicleId: body.vehicleId || null,
+            date: now.split("T")[0],
+          });
+        } catch (dwErr) {
+          logLine({
+            event: "toll_brain_unified_dual_write_failed",
+            error: dwErr instanceof Error ? dwErr.message : String(dwErr),
+            ledgerId,
+          });
+        }
       }
     } else if (error) {
       logLine({ event: "record_crossing_failed", error: error.message });

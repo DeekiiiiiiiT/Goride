@@ -1,10 +1,11 @@
+/// <reference lib="deno.ns" />
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { canTransitionPackage, PACKAGE_TRANSITIONS } from "./packageTransitions.ts";
 
 Deno.test("package happy path miami to collected", () => {
   const path = [
     "expected",
-    "received_miami",
+    "received_at_warehouse",
     "manifested",
     "in_transit_intl",
     "customs_cleared",

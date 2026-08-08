@@ -18,13 +18,17 @@ import {
     DropdownMenuSeparator, 
     DropdownMenuTrigger 
 } from "../ui/dropdown-menu";
-import { Search, MoreHorizontal, Pencil, Trash2, CreditCard, User, Car, Eye, UserPlus } from "lucide-react";
+import { Search, MoreHorizontal, Pencil, Trash2, CreditCard, User, Eye, UserPlus, Loader2 } from "lucide-react";
 import { FuelCard } from '../../types/fuel';
 import { FuelCardTransactionsSheet } from './FuelCardTransactionsSheet';
 import { getCustomerFacingFuelProvider, ROAM_FUEL_PROVIDER_LABEL } from '../../utils/fuelCardDisplay';
 
 interface FuelCardListProps {
     cards: FuelCard[];
+    /** True while first card inventory fetch is in flight */
+    loading?: boolean;
+    /** Shown when card fetch failed — not the same as empty inventory */
+    loadError?: string | null;
     drivers: any[];
     onEdit: (card: FuelCard) => void;
     /** Roam-managed cards only — opens assign-driver flow */
@@ -37,6 +41,8 @@ interface FuelCardListProps {
 
 export function FuelCardList({
     cards,
+    loading = false,
+    loadError = null,
     drivers,
     onEdit,
     onAssignDriver,
@@ -90,7 +96,22 @@ export function FuelCardList({
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {filteredCards.length === 0 ? (
+                        {loading ? (
+                            <TableRow>
+                                <TableCell colSpan={5} className="h-24 text-center text-slate-500">
+                                    <span className="inline-flex items-center gap-2">
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                        Loading cards…
+                                    </span>
+                                </TableCell>
+                            </TableRow>
+                        ) : loadError ? (
+                            <TableRow>
+                                <TableCell colSpan={5} className="h-24 text-center text-rose-600">
+                                    Couldn’t load cards: {loadError}. Click Refresh Data and try again.
+                                </TableCell>
+                            </TableRow>
+                        ) : filteredCards.length === 0 ? (
                             <TableRow>
                                 <TableCell colSpan={5} className="h-24 text-center text-slate-500">
                                     No cards found.
@@ -111,12 +132,7 @@ export function FuelCardList({
                                     </TableCell>
                                     <TableCell className="font-mono">{card.cardNumber}</TableCell>
                                     <TableCell>
-                                        {card.assignedVehicleId ? (
-                                            <div className="flex items-center gap-1.5 text-sm">
-                                                <Car className="h-3.5 w-3.5 text-slate-400" />
-                                                <span>{getVehicleName(card.assignedVehicleId)}</span>
-                                            </div>
-                                        ) : card.assignedDriverId ? (
+                                        {card.assignedDriverId ? (
                                             <div className="flex items-center gap-1.5 text-sm">
                                                 <User className="h-3.5 w-3.5 text-slate-400" />
                                                 <span>{getDriverName(card.assignedDriverId)}</span>

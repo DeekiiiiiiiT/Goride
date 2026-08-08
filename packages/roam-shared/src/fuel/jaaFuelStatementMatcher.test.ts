@@ -4,6 +4,7 @@ import {
   applyFuelMatchLinks,
   isJaaStatementLedgerRow,
   buildJaaMatchUpdates,
+  hydrateStatementsFromCards,
   type FuelEntryLike,
 } from './jaaFuelStatementMatcher';
 
@@ -23,6 +24,7 @@ function entry(partial: Partial<FuelEntryLike>): FuelEntryLike {
     entrySource: partial.entrySource,
     metadata: partial.metadata,
     odometer: partial.odometer ?? null,
+    time: partial.time,
   };
 }
 
@@ -154,5 +156,81 @@ describe('matchJaaStatementToDriverLogs', () => {
     expect(linked.driver?.liters).toBe(10);
     expect(linked.driver?.metadata?.awaitingCardStatement).toBe(false);
     expect(linked.driver?.metadata?.jaaReceiptNumber).toBe('R1');
+  });
+
+  it('matches legacy pump log via card assigned vehicle when driver has no cardId', () => {
+    const statement = entry({
+      id: 'stmt-1',
+      amount: 4500,
+      liters: 19.57,
+      cardId: 'card-1',
+      date: '2026-08-05',
+      time: '20:24:00',
+      entrySource: 'fuel-card',
+      metadata: { importSource: 'jaa_raw', jaaRowKind: 'approved_fuel', jaaReceiptNumber: 'R1' },
+    });
+    const driver = entry({
+      id: 'drv-1',
+      amount: 4500,
+      liters: 19.56,
+      cardId: undefined,
+      vehicleId: '5179KZ',
+      date: '2026-08-05T20:25:00',
+      entrySource: 'driver-portal',
+      paymentSource: 'Gas_Card',
+      location: 'Jampet Service Station',
+    });
+    const cards = [{ id: 'card-1', assignedVehicleId: '5179KZ' }];
+    const { updates, summary } = buildJaaMatchUpdates([statement], [driver, statement], cards);
+    expect(summary.matched).toBe(1);
+    expect(updates.some((u) => u.id === 'drv-1' && u.metadata?.jaaMatchedStatementId === 'stmt-1')).toBe(
+      true,
+    );
+    expect(updates.some((u) => u.id === 'stmt-1' && u.metadata?.jaaMatchedDriverEntryId === 'drv-1')).toBe(
+      true,
+    );
+  });
+});
+
+describe('hydrateStatementsFromCards', () => {
+  it('attributes blank driver from card history at statement time after handoff', () => {
+    const statements = [
+      entry({
+        id: 's-mon',
+        date: '2026-07-02',
+        time: '12:00:00',
+        cardId: 'card-1',
+        driverId: undefined,
+        entrySource: 'fuel-card',
+        metadata: { importSource: 'jaa_raw' },
+      }),
+      entry({
+        id: 's-fri',
+        date: '2026-07-05',
+        time: '12:00:00',
+        cardId: 'card-1',
+        driverId: undefined,
+        entrySource: 'fuel-card',
+        metadata: { importSource: 'jaa_raw' },
+      }),
+    ];
+    const cards = [
+      {
+        id: 'card-1',
+        assignedDriverId: 'b',
+        assignedVehicleId: 'v1',
+        assignmentHistory: [
+          {
+            driverId: 'a',
+            assignedAt: '2026-07-01T00:00:00.000Z',
+            unassignedAt: '2026-07-04T00:00:00.000Z',
+          },
+          { driverId: 'b', assignedAt: '2026-07-04T00:00:00.000Z' },
+        ],
+      },
+    ];
+    const hydrated = hydrateStatementsFromCards(statements, cards);
+    expect(hydrated.find((s) => s.id === 's-mon')?.driverId).toBe('a');
+    expect(hydrated.find((s) => s.id === 's-fri')?.driverId).toBe('b');
   });
 });

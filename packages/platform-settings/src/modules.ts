@@ -90,8 +90,8 @@ export const ENTERPRISE_MODULE_CATALOG: readonly ModuleCatalogEntry[] = [
   },
   {
     key: 'freight_miami_scan',
-    label: 'Warehouse Receive',
-    description: 'Miami warehouse intake scanning station.',
+    label: 'Receive',
+    description: 'Warehouse intake scanning station (any origin country).',
     group: 'freight',
   },
   {
@@ -143,6 +143,30 @@ export const ENTERPRISE_MODULE_CATALOG: readonly ModuleCatalogEntry[] = [
     group: 'freight',
   },
   {
+    key: 'freight_pipeline_command',
+    label: 'Pipeline Command',
+    description: 'Intl mailbox funnel dashboard, lanes, and duty outstanding.',
+    group: 'freight',
+  },
+  {
+    key: 'freight_invoice_audit',
+    label: 'Invoice Audit',
+    description: 'Clerk worklist to verify package invoices before seal.',
+    group: 'freight',
+  },
+  {
+    key: 'freight_hs_tariffs',
+    label: 'HS Tariffs',
+    description: 'CARICOM CET tariff catalog for the landed-cost engine.',
+    group: 'freight',
+  },
+  {
+    key: 'freight_billing',
+    label: 'Consolidated Billing',
+    description: 'Dual-ledger customer invoices (courier vs government fees).',
+    group: 'freight',
+  },
+  {
     key: 'grocery_catalog',
     label: 'Grocery Catalog',
     description: 'Reserved — supermarket catalog (not enabled).',
@@ -166,7 +190,12 @@ export const ENTERPRISE_MODULE_CATALOG: readonly ModuleCatalogEntry[] = [
   { key: 'vehicles', label: 'Vehicles', description: 'Vehicle roster, maintenance, and analytics.', group: 'ops' },
   { key: 'fleetEquipment', label: 'Fleet Equipment', description: 'Inventory and asset management.', group: 'ops' },
   { key: 'trips', label: 'Trips', description: 'Trip logs and activity.', group: 'ops' },
-  { key: 'dataCenter', label: 'Data Center', description: 'Imports and data ingestion.', group: 'ops' },
+  {
+    key: 'dataCenter',
+    label: 'Data Center',
+    description: 'Imports, data ingestion, and uploaded files library.',
+    group: 'ops',
+  },
   { key: 'reports', label: 'Reports', description: 'Operational and financial reports.', group: 'ops' },
   { key: 'businessFinance', label: 'Business Finance', description: 'P&L, expenses, and settlements.', group: 'money' },
   { key: 'claimableLoss', label: 'Claims', description: 'Cargo and underpaid claims.', group: 'money' },

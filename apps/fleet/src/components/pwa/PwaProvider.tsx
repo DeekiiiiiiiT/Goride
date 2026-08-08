@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRegisterSW } from 'virtual:pwa-register/react';
 import {
   getPwaAppName,
@@ -6,6 +6,10 @@ import {
   type BeforeInstallPromptEvent,
 } from '../../pwa/pwaMeta';
 import { IS_ENTERPRISE_PRODUCT } from '../../config/productLine';
+import { PwaContext, type PwaContextValue } from './pwaContext';
+import { PwaLifecycleHost } from './PwaLifecycleHost';
+
+export { usePwa } from './pwaContext';
 
 const DISMISS_INSTALL_KEY = IS_ENTERPRISE_PRODUCT
   ? 'roam-enterprise-pwa-install-dismissed'
@@ -26,23 +30,6 @@ function markInstallDismissed(): void {
     /* ignore */
   }
 }
-
-type PwaContextValue = {
-  appName: string;
-  standalone: boolean;
-  /** Show floating install banner (not dismissed). */
-  canInstall: boolean;
-  /** Browser can prompt install (Settings / login CTA). */
-  canInstallAnytime: boolean;
-  installing: boolean;
-  promptInstall: () => Promise<boolean>;
-  dismissInstall: () => void;
-  needRefresh: boolean;
-  applyUpdate: () => void;
-  dismissUpdate: () => void;
-};
-
-const PwaContext = createContext<PwaContextValue | null>(null);
 
 export function PwaProvider({ children }: { children: React.ReactNode }) {
   const appName = getPwaAppName();
@@ -177,13 +164,11 @@ export function PwaProvider({ children }: { children: React.ReactNode }) {
     ],
   );
 
-  return <PwaContext.Provider value={value}>{children}</PwaContext.Provider>;
-}
-
-export function usePwa(): PwaContextValue {
-  const ctx = useContext(PwaContext);
-  if (!ctx) {
-    throw new Error('usePwa must be used within PwaProvider');
-  }
-  return ctx;
+  // Host lives inside the provider so install/update chrome cannot mount outside context.
+  return (
+    <PwaContext.Provider value={value}>
+      <PwaLifecycleHost />
+      {children}
+    </PwaContext.Provider>
+  );
 }

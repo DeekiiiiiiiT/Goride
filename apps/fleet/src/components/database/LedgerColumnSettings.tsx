@@ -3,10 +3,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft,
   Car,
-  Package,
-  Navigation,
-  Truck,
-  Ship,
   HardDrive,
   Table2,
   Fuel,
@@ -21,6 +17,7 @@ import {
   AlertCircle,
   ChevronRight,
 } from 'lucide-react';
+import { BIZ_ICON } from '@roam/admin-core/customers/businessTypeUi';
 import { API_ENDPOINTS } from '../../services/apiConfig';
 import { useAuth } from '../auth/AuthContext';
 import { BusinessType } from '../../types/data';
@@ -50,14 +47,6 @@ interface LedgerConfig {
   enabledLedgers: LedgerType[];
   columns: Record<LedgerType, ColumnConfig[]>;
 }
-
-const BUSINESS_TYPE_ICONS: Record<BusinessType, React.ElementType> = {
-  rideshare: Car,
-  delivery: Package,
-  taxi: Navigation,
-  trucking: Truck,
-  shipping: Ship,
-};
 
 const LEDGER_INFO: { id: LedgerType; label: string; icon: React.ElementType }[] = [
   { id: 'main', label: 'Main Ledger', icon: HardDrive },
@@ -315,7 +304,7 @@ export function LedgerColumnSettings({ onBack }: LedgerColumnSettingsProps) {
     setHasChanges(true);
   };
 
-  const Icon = BUSINESS_TYPE_ICONS[selectedBusinessType];
+  const Icon = BIZ_ICON[selectedBusinessType] ?? Car;
 
   return (
     <div className="space-y-6">
@@ -356,7 +345,7 @@ export function LedgerColumnSettings({ onBack }: LedgerColumnSettingsProps) {
         <p className="text-sm font-medium text-slate-700 mb-3">Business Type</p>
         <div className="flex flex-wrap gap-2">
           {BUSINESS_TYPES.map(bt => {
-            const BtIcon = BUSINESS_TYPE_ICONS[bt.key];
+            const BtIcon = BIZ_ICON[bt.key] ?? Car;
             const isSelected = selectedBusinessType === bt.key;
             return (
               <button

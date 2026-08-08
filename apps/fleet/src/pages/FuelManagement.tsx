@@ -40,6 +40,7 @@ import { api } from '../services/api';
 import { FinalizedReportsTab } from '../components/fuel/FinalizedReportsTab';
 import { FuelBulkFinalizeDialog } from '../components/fuel/reconciliation/FuelBulkFinalizeDialog';
 import { deriveFuelReconciliationPeriods } from '../utils/fuelPeriodStatus';
+import { mergeFuelCardWithAssignmentHistory } from '../utils/mergeFuelCardWithAssignmentHistory';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { Badge } from '../components/ui/badge';
 import {
@@ -168,6 +169,8 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
 
   // Fuel Card State
   const [cards, setCards] = useState<FuelCard[]>([]);
+  const [cardsLoading, setCardsLoading] = useState(true);
+  const [cardsLoadError, setCardsLoadError] = useState<string | null>(null);
   const [jaaPrograms, setJaaPrograms] = useState<JaaProgram[]>([]);
   const [isCardModalOpen, setIsCardModalOpen] = useState(false);
   const [editingCard, setEditingCard] = useState<FuelCard | null>(null);
@@ -292,30 +295,52 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
   const loadData = useCallback(async (silent = false) => {
       if (!silent) setIsRefreshing(true);
       try {
-          // Heal Approved fuel txs missing fuel_entry before loading Logs (Posted guarantee)
-          await fuelService.ensurePostedEntries(40).catch(() => ({ healed: 0, blocked: 0 }));
+          // Heal in background — must not block Card Inventory / first paint
+          void fuelService.ensurePostedEntries(40).catch(() => ({ healed: 0, blocked: 0 }));
 
-          // Fetch all data in a single parallel batch for fastest load time.
-          // None of these calls depend on each other's results.
-          const [vData, dData, scenariosData, cardsData, logsData, adjsData, disputesData, txData, finalizedData, programsData] = await Promise.all([
-              api.getVehicles().catch(() => []),
-              api.getDrivers().catch(() => []),
-              fuelService.getFuelScenarios().catch(() => []),
-              fuelService.getFuelCards().catch(() => []),
-              fuelService.getFuelEntries().catch(() => []),
-              fuelService.getMileageAdjustments().catch(() => []),
-              FuelDisputeService.getAllDisputes().catch(() => []),
-              // Unscoped GET defaults to limit 100 on server; driver uses driverIds (limit 5000). Request enough rows for Review Queue / fuel reconciliation.
-              api.getTransactions(undefined, { limit: 10000 }).catch(() => []),
-              api.getFinalizedReports().catch(() => []),
-              fuelService.getJaaPrograms().catch(() => [] as JaaProgram[]),
-          ]);
+          // Start all fetches immediately; paint cards (and names) as soon as those resolve.
+          const vehiclesP = api.getVehicles().catch(() => []);
+          const driversP = api.getDrivers().catch(() => []);
+          const scenariosP = fuelService.getFuelScenarios().catch(() => []);
+          const cardsP = fuelService.getFuelCards().then(
+              (data) => data,
+              (err) => {
+                  console.error('[FuelManagement] getFuelCards failed', err);
+                  throw err;
+              },
+          );
+          const logsP = fuelService.getFuelEntries().catch(() => []);
+          const adjsP = fuelService.getMileageAdjustments().catch(() => []);
+          const disputesP = FuelDisputeService.getAllDisputes().catch(() => []);
+          const txP = api.getTransactions(undefined, { limit: 10000 }).catch(() => []);
+          const finalizedP = api.getFinalizedReports().catch(() => []);
+          const programsP = fuelService.getJaaPrograms().catch(() => [] as JaaProgram[]);
 
-          setVehicles(vData);
-          setDrivers(dData);
+          // Card Inventory only needs cards (+ drivers/vehicles for Assigned To)
+          try {
+              const [vData, dData, cardsData, programsData] = await Promise.all([
+                  vehiclesP,
+                  driversP,
+                  cardsP,
+                  programsP,
+              ]);
+              setVehicles(vData);
+              setDrivers(dData);
+              setCards(cardsData);
+              setJaaPrograms(programsData);
+              setCardsLoadError(null);
+              setCardsLoading(false);
+          } catch (cardErr: any) {
+              console.error('[FuelManagement] Card inventory load failed', cardErr);
+              setCardsLoadError(cardErr?.message || 'Failed to load cards');
+              setCardsLoading(false);
+              // Keep previous cards if any — never pretend the inventory was empty
+          }
+
+          const [scenariosData, logsData, adjsData, disputesData, txData, finalizedData] =
+              await Promise.all([scenariosP, logsP, adjsP, disputesP, txP, finalizedP]);
+
           setScenarios(scenariosData);
-          setCards(cardsData);
-          setJaaPrograms(programsData);
           setLogs(logsData);
           setAdjustments(adjsData);
           setDisputes(disputesData);
@@ -327,6 +352,7 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
       } catch (e) {
           console.error("Failed to load fuel management data", e);
           toast.error("Failed to load initial data");
+          setCardsLoading(false);
       } finally {
           setIsRefreshing(false);
       }
@@ -349,7 +375,12 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
   // Card Handlers
   const handleSaveCard = useCallback(async (card: FuelCard) => {
       try {
-          const savedCard = await fuelService.saveFuelCard(card);
+          const previous = cards.find((c) => c.id === card.id) || editingCard || assigningCard || null;
+          const withHistory = mergeFuelCardWithAssignmentHistory(previous, card, {
+            drivers: drivers as any,
+            vehicles: vehicles as any,
+          });
+          const savedCard = await fuelService.saveFuelCard(withHistory);
           const exists = cards.some((c) => c.id === savedCard.id);
           if (exists || editingCard || assigningCard) {
               setCards(prev => prev.map(c => c.id === savedCard.id ? savedCard : c));
@@ -365,7 +396,7 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
           console.error(e);
           toast.error(e?.message || "Failed to save fuel card");
       }
-  }, [editingCard, assigningCard, cards]);
+  }, [editingCard, assigningCard, cards, drivers, vehicles]);
 
   const handleDeleteCard = useCallback(async (id: string) => {
       const card = cards.find((c) => c.id === id);
@@ -1110,14 +1141,11 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
             <div className="flex justify-between items-center">
                 <div className="space-y-1 text-sm text-slate-500">
                   {selfServePrograms.length === 0
-                    ? 'Roam Fuels cards: assign drivers/vehicles only. Statement CSV is uploaded by Roam.'
+                    ? 'Statement CSV for Roam Fuels cards is uploaded by Roam.'
                     : 'Self-serve fuel cards: add your cards and upload your own statement CSV in Imports.'}
                 </div>
                 <Button
                   onClick={() => {
-                    if (selfServePrograms.length === 0) {
-                      toast.message('Ask Roam admin to issue Roam Fuels cards, or register a self-serve fuel program.');
-                    }
                     setEditingCard(null);
                     setIsCardModalOpen(true);
                   }}
@@ -1129,6 +1157,8 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
             
             <FuelCardList 
                 cards={cards}
+                loading={cardsLoading}
+                loadError={cardsLoadError}
                 drivers={drivers}
                 onEdit={(card) => { setEditingCard(card); setIsCardModalOpen(true); }}
                 onAssignDriver={(card) => setAssigningCard(card)}

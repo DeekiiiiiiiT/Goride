@@ -2,10 +2,13 @@
  * Fleet edge — unified ledger dual-write (mirrors supabase/functions/_shared/unifiedLedger).
  */
 import { createClient } from "jsr:@supabase/supabase-js@2.49.8";
+import { dualWriteTollLedgerKv } from "../_shared/unifiedLedger/dualWriteToll.ts";
+import { logDualWriteMetric } from "../_shared/unifiedLedger/metrics.ts";
 
-function dualWriteEnabled(): boolean {
-  const v = Deno.env.get("LEDGER_DUAL_WRITE_ENABLED");
-  return v === "1" || v === "true" || v === "yes";
+import { isLedgerDualWriteIslandEnabled } from "../_shared/unifiedLedger/flags.ts";
+
+function dualWriteEnabled(island = "kv_ledger_event"): boolean {
+  return isLedgerDualWriteIslandEnabled(island);
 }
 
 function sb() {
@@ -19,9 +22,13 @@ function majorToMinor(amount: number): number {
   return Math.round(Math.abs(Number(amount)) * 100);
 }
 
-async function postEntry(params: Record<string, unknown>): Promise<void> {
+async function postEntry(params: Record<string, unknown>): Promise<{ ok: boolean; error?: string }> {
   const { error } = await sb().rpc("ledger_post_entry", params);
-  if (error) console.error("[fleet unifiedLedger]", error.message);
+  if (error) {
+    console.error("[fleet unifiedLedger]", error.message);
+    return { ok: false, error: error.message };
+  }
+  return { ok: true };
 }
 
 export async function fleetDualWriteCanonicalEvent(event: {
@@ -38,9 +45,39 @@ export async function fleetDualWriteCanonicalEvent(event: {
   date?: string;
   metadata?: Record<string, unknown>;
 }): Promise<void> {
-  if (!dualWriteEnabled() || event.direction === "neutral") return;
+  if (!dualWriteEnabled()) {
+    logDualWriteMetric({
+      source_system: "kv_ledger_event",
+      status: "skipped",
+      reason: "flag_off",
+      source_id: event.id,
+      entry_type: event.eventType,
+    });
+    return;
+  }
+  if (event.direction === "neutral") {
+    logDualWriteMetric({
+      source_system: "kv_ledger_event",
+      status: "skipped",
+      reason: "neutral",
+      source_id: event.id,
+      entry_type: event.eventType,
+    });
+    return;
+  }
+
   const amountMinor = majorToMinor(event.netAmount);
-  if (amountMinor <= 0) return;
+  if (amountMinor <= 0) {
+    logDualWriteMetric({
+      source_system: "kv_ledger_event",
+      status: "skipped",
+      reason: "zero_amount",
+      source_id: event.id,
+      entry_type: event.eventType,
+      amount_minor: amountMinor,
+    });
+    return;
+  }
 
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const hasValidDriverId = uuidRe.test(event.driverId);
@@ -48,15 +85,30 @@ export async function fleetDualWriteCanonicalEvent(event: {
     ? `user:${event.driverId}:driver:digital`
     : (event.organizationId ? `org:${event.organizationId}:fleet` : "platform:clearing");
   const inflow = event.direction === "inflow";
+  const debitKey = inflow ? "platform:clearing" : driverKey;
+  const creditKey = inflow ? driverKey : "platform:clearing";
+
+  // Same failure mode as toll missing-org: debit=credit is a no-op that pollutes recon.
+  if (debitKey === creditKey) {
+    logDualWriteMetric({
+      source_system: "kv_ledger_event",
+      status: "skipped",
+      reason: "self_ref_accounts",
+      source_id: event.id,
+      entry_type: event.eventType,
+      amount_minor: amountMinor,
+    });
+    return;
+  }
 
   // Product: roam_driver for driver earnings, roam_fleet for org-level
   const product = hasValidDriverId ? "roam_driver" : "roam_fleet";
 
-  await postEntry({
+  const posted = await postEntry({
     p_idempotency_key: `kv_ledger_event:${event.idempotencyKey}`,
     p_entry_type: event.eventType,
-    p_debit_account_key: inflow ? "platform:clearing" : driverKey,
-    p_credit_account_key: inflow ? driverKey : "platform:clearing",
+    p_debit_account_key: debitKey,
+    p_credit_account_key: creditKey,
     p_amount_minor: amountMinor,
     p_currency: event.currency ?? "JMD",
     p_product: product,
@@ -68,6 +120,15 @@ export async function fleetDualWriteCanonicalEvent(event: {
     p_source_system: "kv_ledger_event",
     p_source_id: event.id,
     p_source_idempotency_key: event.idempotencyKey,
+  });
+
+  logDualWriteMetric({
+    source_system: "kv_ledger_event",
+    status: posted.ok ? "ok" : "fail",
+    reason: posted.ok ? "posted" : posted.error,
+    source_id: event.id,
+    entry_type: event.eventType,
+    amount_minor: amountMinor,
   });
 }
 
@@ -81,33 +142,5 @@ export async function fleetDualWriteToll(entry: {
   vehicleId?: string | null;
   date?: string;
 }): Promise<void> {
-  if (!dualWriteEnabled()) return;
-  const amountMinor = majorToMinor(entry.amount);
-  if (amountMinor <= 0) return;
-
-  const fleetKey = entry.organizationId
-    ? `org:${entry.organizationId}:fleet`
-    : "platform:clearing";
-  const isUsage = entry.type === "usage" || entry.amount < 0;
-
-  await postEntry({
-    p_idempotency_key: `kv_toll_ledger:${entry.id}`,
-    p_entry_type: `toll_${entry.type}`,
-    p_debit_account_key: isUsage ? fleetKey : "platform:clearing",
-    p_credit_account_key: isUsage ? "platform:clearing" : fleetKey,
-    p_amount_minor: amountMinor,
-    p_currency: entry.currency ?? "JMD",
-    p_product: "roam_fleet",  // Fleet operations (Fleet Plus feature)
-    p_organization_id: entry.organizationId ?? null,
-    p_effective_at: entry.date ? `${entry.date}T12:00:00.000Z` : new Date().toISOString(),
-    p_reference_type: "toll",
-    p_reference_id: entry.id,
-    p_metadata: {
-      driver_id: entry.driverId,
-      vehicle_id: entry.vehicleId,
-      toll_type: entry.type,
-    },
-    p_source_system: "kv_toll_ledger",
-    p_source_id: entry.id,
-  });
+  await dualWriteTollLedgerKv(entry);
 }

@@ -1,6 +1,7 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, ChevronRight, Mail, Calendar, Loader2, Car, Package, Navigation, Truck, Ship } from 'lucide-react';
+import { ArrowLeft, ChevronRight, Mail, Calendar, Loader2, Car } from 'lucide-react';
+import { BIZ_ICON } from '@roam/admin-core/customers/businessTypeUi';
 import { API_ENDPOINTS } from '../../services/apiConfig';
 import { useAuth } from '../auth/AuthContext';
 import { BusinessType } from '../../types/data';
@@ -11,14 +12,6 @@ interface BusinessTypeCustomersProps {
   onNavigate: (page: string, data?: any) => void;
   onBack: () => void;
 }
-
-const BUSINESS_TYPE_ICONS: Record<BusinessType, React.ElementType> = {
-  rideshare: Car,
-  delivery: Package,
-  taxi: Navigation,
-  trucking: Truck,
-  shipping: Ship,
-};
 
 interface Customer {
   id: string;
@@ -50,7 +43,7 @@ export function BusinessTypeCustomers({ businessType, onNavigate, onBack }: Busi
 
   const customers = allCustomers.filter(c => c.businessType === businessType);
   const businessTypeInfo = BUSINESS_TYPES.find(bt => bt.key === businessType);
-  const Icon = BUSINESS_TYPE_ICONS[businessType];
+  const Icon = BIZ_ICON[businessType] ?? Car;
 
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return 'Never';

@@ -16,6 +16,11 @@ import { TabLoadingSkeleton } from '../ui/TabLoadingSkeleton';
 import { toast } from "sonner@2.0.3";
 import { DateRange } from "react-day-picker";
 import { DatePickerWithRange } from "../ui/date-range-picker";
+import {
+    filterFuelOpsLogEntries,
+    fuelOpsLiters,
+    fuelOpsSpendAmount,
+} from '../../utils/fuelOpsEligibility';
 
 interface ReportsPageProps {
     entries: FuelEntry[];
@@ -106,8 +111,8 @@ export function ReportsPage({ entries, vehicles, drivers, isRefreshing }: Report
             const vehicle = escapeCSV(vehiclesMap[entry.vehicleId || ''] || entry.vehicleId || '-');
             const driver = escapeCSV(driversMap[entry.driverId || ''] || entry.driverId || '-');
             const location = escapeCSV(entry.location || '-');
-            const volume = entry.liters?.toFixed(2) || '0';
-            const amount = entry.amount.toFixed(2);
+            const volume = fuelOpsLiters(entry).toFixed(2);
+            const amount = fuelOpsSpendAmount(entry).toFixed(2);
             const status = entry.metadata?.integrityStatus === 'critical'
                 ? 'Critical Anomaly'
                 : entry.metadata?.integrityStatus === 'warning'
@@ -159,14 +164,14 @@ export function ReportsPage({ entries, vehicles, drivers, isRefreshing }: Report
     const handleGenerate = async () => {
         setIsGenerating(true);
         try {
-            // Recalculate based on current entries
-            let filtered = [...entries];
+            // Ops fills only — exclude JAA statement ledger (Card Inventory)
+            let filtered = filterFuelOpsLogEntries(entries);
 
             if (reportType === 'weekly') {
                 if (date) {
                     const start = startOfWeek(date, { weekStartsOn: 1 });
                     const end = endOfWeek(date, { weekStartsOn: 1 });
-                    filtered = entries.filter(e => {
+                    filtered = filtered.filter(e => {
                          const d = new Date(e.date);
                          return d >= start && d <= end;
                     });
@@ -179,14 +184,11 @@ export function ReportsPage({ entries, vehicles, drivers, isRefreshing }: Report
                 }
                 const start = startOfDay(dateRange.from);
                 const end = endOfDay(dateRange.to || dateRange.from);
-                filtered = entries.filter(e => {
+                filtered = filtered.filter(e => {
                     const d = new Date(e.date);
                     return d >= start && d <= end;
                 });
             } else if (reportType === 'vehicle') {
-                // Start with all entries
-                filtered = [...entries];
-
                 // Filter by vehicle if a specific one is selected
                 if (selectedVehicleId !== 'all') {
                     filtered = filtered.filter(e => e.vehicleId === selectedVehicleId);
@@ -202,9 +204,6 @@ export function ReportsPage({ entries, vehicles, drivers, isRefreshing }: Report
                     });
                 }
             } else if (reportType === 'driver') {
-                // Start with all entries
-                filtered = [...entries];
-
                 // Filter by driver if a specific one is selected
                 if (selectedDriverId !== 'all') {
                     filtered = filtered.filter(e => e.driverId === selectedDriverId);
@@ -221,9 +220,9 @@ export function ReportsPage({ entries, vehicles, drivers, isRefreshing }: Report
                 }
             }
 
-            // Calculate summary
-            const totalCost = filtered.reduce((sum, e) => sum + e.amount, 0);
-            const totalLiters = filtered.reduce((sum, e) => sum + (e.liters || 0), 0);
+            // Match Transaction Logs / Fuel Analytics spend & volume rules
+            const totalCost = filtered.reduce((sum, e) => sum + fuelOpsSpendAmount(e), 0);
+            const totalLiters = filtered.reduce((sum, e) => sum + fuelOpsLiters(e), 0);
             const count = filtered.length;
             const avgPrice = totalLiters > 0 ? totalCost / totalLiters : 0;
             
@@ -437,8 +436,8 @@ export function ReportsPage({ entries, vehicles, drivers, isRefreshing }: Report
                                                     <TableCell>{vehiclesMap[entry.vehicleId || ''] || entry.vehicleId || '-'}</TableCell>
                                                     <TableCell>{driversMap[entry.driverId || ''] || entry.driverId || '-'}</TableCell>
                                                     <TableCell className="max-w-[200px] truncate" title={entry.location}>{entry.location || '-'}</TableCell>
-                                                    <TableCell className="text-right">{entry.liters?.toFixed(2) || '-'}</TableCell>
-                                                    <TableCell className="text-right">${entry.amount.toFixed(2)}</TableCell>
+                                                    <TableCell className="text-right">{fuelOpsLiters(entry).toFixed(2) || '-'}</TableCell>
+                                                    <TableCell className="text-right">${fuelOpsSpendAmount(entry).toFixed(2)}</TableCell>
                                                     <TableCell>
                                                         {entry.metadata?.integrityStatus === 'critical' ? (
                                                             <Badge variant="destructive">Critical Anomaly</Badge>
