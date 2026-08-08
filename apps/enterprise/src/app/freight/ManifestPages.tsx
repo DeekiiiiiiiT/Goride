@@ -13,7 +13,8 @@ import {
   useUpdateManifest,
 } from '@/app/hooks/useFreight';
 import { freightService } from '@/app/services/freightService';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '@/app/auth/AuthProvider';
 import {
   downloadWarehouseManifestTemplate,
   parseWarehouseManifestCsv,
@@ -802,6 +803,7 @@ export function ManifestsListPage() {
 export function ManifestDetailPage() {
   const { id } = useParams();
   const orgId = useFreightOrgId();
+  const { session } = useAuth();
   const qc = useQueryClient();
   const { data, isLoading, error } = useManifest(id);
   const miamiPkgs = usePackages('received_at_warehouse');
@@ -814,17 +816,28 @@ export function ManifestDetailPage() {
   const [flightOrVoyage, setFlightOrVoyage] = useState('');
   const [awbOrBl, setAwbOrBl] = useState('');
 
+  // Pre-check seal blockers so we don't treat expected 400s as crashes
+  const readiness = useQuery({
+    queryKey: ['freight', 'readiness', orgId, id],
+    queryFn: () => freightService.manifestReadiness(id!, orgId),
+    enabled: Boolean(session && id),
+  });
+
   const addPkgs = useMutation({
     mutationFn: () => freightService.addManifestPackages(id!, selected, orgId),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['freight', 'manifest', orgId, id] });
       void qc.invalidateQueries({ queryKey: ['freight', 'packages'] });
+      void qc.invalidateQueries({ queryKey: ['freight', 'readiness', orgId, id] });
       setSelected([]);
     },
   });
   const seal = useMutation({
     mutationFn: () => freightService.sealManifest(id!, orgId),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['freight', 'manifest', orgId, id] }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['freight', 'manifest', orgId, id] });
+      void qc.invalidateQueries({ queryKey: ['freight', 'readiness', orgId, id] });
+    },
   });
   const transition = useMutation({
     mutationFn: (status: string) => freightService.transitionManifest(id!, status, undefined, orgId),
@@ -833,6 +846,8 @@ export function ManifestDetailPage() {
       void qc.invalidateQueries({ queryKey: ['freight', 'packages'] });
     },
   });
+  const actionError =
+    (seal.error || transition.error || addPkgs.error) as Error | null;
 
   async function submitForCustoms() {
     if (!id) return;
@@ -874,6 +889,8 @@ export function ManifestDetailPage() {
   const status = String(m.status);
   const customsCase = data.customsCase as Record<string, unknown> | null | undefined;
   const customsStatus = customsCase ? String(customsCase.status || '') : '';
+  const canSeal = readiness.data?.canSeal === true;
+  const blockers = readiness.data?.blockers ?? [];
 
   return (
     <div className="space-y-6">
@@ -892,10 +909,11 @@ export function ManifestDetailPage() {
         {status === 'open' && (
           <button
             type="button"
-            onClick={() => void seal.mutateAsync()}
-            className="rounded-lg bg-amber-500 px-3 py-2 text-sm font-semibold text-slate-950"
+            disabled={!canSeal || seal.isPending}
+            onClick={() => seal.mutate()}
+            className="rounded-lg bg-amber-500 px-3 py-2 text-sm font-semibold text-slate-950 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500"
           >
-            Seal cargo manifesto
+            {seal.isPending ? 'Sealing…' : 'Seal cargo manifesto'}
           </button>
         )}
         {(status === 'sealed' || status === 'shipped' || status === 'arrived_ja') && (
@@ -916,8 +934,9 @@ export function ManifestDetailPage() {
         {status === 'sealed' && (
           <button
             type="button"
-            onClick={() => void transition.mutateAsync('shipped')}
-            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+            disabled={transition.isPending}
+            onClick={() => transition.mutate('shipped')}
+            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm disabled:opacity-60"
           >
             Mark shipped
           </button>
@@ -925,13 +944,39 @@ export function ManifestDetailPage() {
         {status === 'shipped' && (
           <button
             type="button"
-            onClick={() => void transition.mutateAsync('arrived_ja')}
-            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+            disabled={transition.isPending}
+            onClick={() => transition.mutate('arrived_ja')}
+            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm disabled:opacity-60"
           >
             Arrived Jamaica
           </button>
         )}
       </div>
+      {status === 'open' && blockers.length > 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          <p className="font-semibold">
+            Resolve {blockers.length} package issue{blockers.length === 1 ? '' : 's'} before sealing
+          </p>
+          <ul className="mt-2 max-h-36 space-y-1 overflow-auto text-xs">
+            {blockers.slice(0, 8).map((b) => (
+              <li key={`${b.packageId}-${b.code}`}>
+                <span className="font-mono">{b.tracking}</span> — {b.message}
+              </li>
+            ))}
+          </ul>
+          <Link
+            to="/app/manifest-builder"
+            className="mt-2 inline-block text-xs font-semibold text-amber-900 underline"
+          >
+            Open Manifest Builder
+          </Link>
+        </div>
+      )}
+      {actionError && (
+        <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {actionError.message}
+        </p>
+      )}
       {msg && <p className="text-sm text-emerald-800">{msg}</p>}
 
       <section className="rounded-xl border border-slate-200 bg-white p-4">
@@ -978,7 +1023,7 @@ export function ManifestDetailPage() {
           <button
             type="button"
             disabled={!selected.length || addPkgs.isPending}
-            onClick={() => void addPkgs.mutateAsync()}
+            onClick={() => addPkgs.mutate()}
             className="mt-3 rounded-lg bg-amber-500 px-3 py-2 text-sm font-semibold text-slate-950 disabled:opacity-60"
           >
             Add selected

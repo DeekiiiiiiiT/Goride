@@ -32,15 +32,15 @@ async function freightFetch<T>(
   });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
+    // Prefer human message over machine codes like validation_failed
     const detail =
-      typeof json.error === 'string'
-        ? json.error
-        : json.error?.formErrors?.[0] ||
-          json.message ||
-          json.msg ||
-          (typeof json === 'object' && json.error ? JSON.stringify(json.error) : null) ||
-          res.statusText ||
-          'Request failed';
+      (typeof json.message === 'string' && json.message) ||
+      (typeof json.msg === 'string' && json.msg) ||
+      (typeof json.error === 'string' && json.error) ||
+      json.error?.formErrors?.[0] ||
+      (typeof json === 'object' && json.error ? JSON.stringify(json.error) : null) ||
+      res.statusText ||
+      'Request failed';
     throw new Error(`${res.status}: ${detail}`);
   }
   return json as T;
