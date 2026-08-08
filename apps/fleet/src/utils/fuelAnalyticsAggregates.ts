@@ -69,12 +69,11 @@ export function isAnomalyEntry(e: FuelEntry): boolean {
   const status = e.metadata?.integrityStatus || e.reconciliationStatus || e.auditStatus;
   if (status === 'critical' || status === 'Flagged') return true;
   const reason = String(e.metadata?.anomalyReason || '');
+  // Do not match warning phrases like "High Fuel Velocity" / "High Transaction Frequency"
   return (
     reason.includes('Overfill') ||
-    reason.includes('High Fuel') ||
     reason.includes('Leakage') ||
-    reason.includes('Odometer Gap') ||
-    reason.includes('Frequency')
+    reason.includes('Odometer Gap')
   );
 }
 

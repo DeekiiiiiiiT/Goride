@@ -86,6 +86,18 @@ describe('fuelAnalyticsAggregates', () => {
       ),
     ).toBe(true);
     expect(isAnomalyEntry(entry({ id: 'y' }))).toBe(false);
+    // Velocity / frequency warnings are not Potential Loss
+    expect(
+      isAnomalyEntry(
+        entry({
+          id: 'z',
+          metadata: {
+            anomalyReason: ' High Transaction Frequency; High Fuel Velocity ($/km);',
+            integrityStatus: 'warning',
+          },
+        }),
+      ),
+    ).toBe(false);
   });
 
   it('excludes JAA statement ledger from spend (no fee/decline/duplicate)', () => {

@@ -75,14 +75,20 @@ export function useFuelAnalytics() {
   const fetchStart = useMemo(() => {
     const d = new Date(period.startYmd + 'T12:00:00');
     d.setDate(d.getDate() - 56);
-    return d.toISOString().slice(0, 10);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   }, [period.startYmd]);
 
+  // Inclusive end bound for ISO timestamps in KV (YYYY-MM-DDT… must not be cut at midnight)
+  const fetchEndInclusive = useMemo(
+    () => `${period.endYmd}T23:59:59.999`,
+    [period.endYmd],
+  );
+
   const { data: rawEntries = [], isLoading: entriesLoading, refetch: refetchEntries } = useQuery({
-    queryKey: ['fuelAnalyticsEntries', fetchStart, period.endYmd],
+    queryKey: ['fuelAnalyticsEntries', fetchStart, fetchEndInclusive],
     queryFn: () =>
       fuelService
-        .getFuelEntries({ limit: 5000, startDate: fetchStart, endDate: period.endYmd })
+        .getFuelEntries({ limit: 5000, startDate: fetchStart, endDate: fetchEndInclusive })
         .catch(() => []),
     staleTime: 2 * 60 * 1000,
     refetchOnWindowFocus: false,
