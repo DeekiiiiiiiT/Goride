@@ -8,7 +8,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { API_ENDPOINTS } from '@roam/api-client';
+import { API_ENDPOINTS, publicAnonKey } from '@roam/api-client';
 import {
   allModulesOff,
   isModuleEnabled as checkModule,
@@ -48,9 +48,11 @@ export function ModuleAccessProvider({ children }: { children: ReactNode }) {
     }
     setLoading(true);
     try {
+      // Edge Functions require anon apikey alongside the user JWT
       const res = await fetch(`${API_ENDPOINTS.admin}/enterprise/me/modules`, {
         headers: {
           Authorization: `Bearer ${token}`,
+          apikey: publicAnonKey,
           'X-Roam-Product-Line': 'enterprise',
         },
       });
