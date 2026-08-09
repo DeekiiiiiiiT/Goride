@@ -1,20 +1,27 @@
 import { useEffect, useState } from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { freightService } from '@/app/services/freightService';
+import { DOC_ROLE } from '@/app/freight/os/packageDuty/docRoles';
 
 /** Gun-friendly Warehouse Receive Station — wired to /scans. */
-export function WarehouseReceiveStationPage() {
+export function WarehouseReceiveStationPage({ embedded = false }: { embedded?: boolean }) {
   const { organizationId, session } = useAuth();
+  const qc = useQueryClient();
   const [barcode, setBarcode] = useState('');
   const [weightLbs, setWeightLbs] = useState('');
+  const [lengthIn, setLengthIn] = useState('');
+  const [widthIn, setWidthIn] = useState('');
+  const [heightIn, setHeightIn] = useState('');
   const [declaredUsd, setDeclaredUsd] = useState('');
   const [bin, setBin] = useState('');
   const [facilityId, setFacilityId] = useState('');
   const [suiteCode, setSuiteCode] = useState('');
+  const [suiteScan, setSuiteScan] = useState('');
   const [invoiceRequired, setInvoiceRequired] = useState(false);
   const [warehouseSlip, setWarehouseSlip] = useState<File | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [toastTone, setToastTone] = useState<'ok' | 'match'>('ok');
 
   const facilities = useQuery({
     queryKey: ['freight', 'facilities', organizationId, 'warehouse'],
@@ -32,16 +39,39 @@ export function WarehouseReceiveStationPage() {
     if (first && !facilityId) setFacilityId(String(first.id));
   }, [facilities.data, facilityId]);
 
-  useEffect(() => {
-    const first = suites.data?.suites?.[0];
-    if (first && !suiteCode) setSuiteCode(String(first.suite_code ?? ''));
-  }, [suites.data, suiteCode]);
+  // Group warehouses by country for multi-origin floor pickers
+  const warehousesByCountry = (
+    (facilities.data?.facilities ?? []) as Record<string, unknown>[]
+  ).reduce<Record<string, Record<string, unknown>[]>>((acc, f) => {
+    const cc = String(f.country_code || '??').toUpperCase();
+    if (!acc[cc]) acc[cc] = [];
+    acc[cc].push(f);
+    return acc;
+  }, {});
 
   const declaredUsdNum = declaredUsd.trim() === '' ? null : Number(declaredUsd);
   const declaredValueUsdMinor =
     declaredUsdNum != null && Number.isFinite(declaredUsdNum) && declaredUsdNum >= 0
       ? Math.round(declaredUsdNum * 100)
       : null;
+
+  function applySuiteScan(raw: string) {
+    const code = raw
+      .trim()
+      .replace(/^SUITE[:\s-]+/i, '')
+      .toUpperCase();
+    if (!code) return;
+    const match = (suites.data?.suites ?? []).find(
+      (s) => String(s.suite_code ?? '').toUpperCase() === code,
+    );
+    if (match) {
+      setSuiteCode(String(match.suite_code));
+      setSuiteScan('');
+    } else {
+      setSuiteCode(code);
+      setSuiteScan('');
+    }
+  }
 
   const scan = useMutation({
     mutationFn: async () => {
@@ -51,6 +81,9 @@ export function WarehouseReceiveStationPage() {
           facilityId,
           suiteCode: suiteCode || null,
           weightLbs: weightLbs ? Number(weightLbs) : null,
+          lengthIn: lengthIn ? Number(lengthIn) : null,
+          widthIn: widthIn ? Number(widthIn) : null,
+          heightIn: heightIn ? Number(heightIn) : null,
           declaredValueUsdMinor,
           binLocation: bin || null,
           invoiceRequiredFromCustomer: invoiceRequired,
@@ -70,18 +103,43 @@ export function WarehouseReceiveStationPage() {
       return res;
     },
     onSuccess: (res) => {
-      setToast(
-        `Received ${String(res.package?.courier_tracking_number ?? barcode)} · status ${String(res.package?.status ?? '')}${
-          invoiceRequired ? ' · invoice required from customer' : ''
-        }`,
-      );
+      const tracking = String(res.package?.courier_tracking_number ?? barcode);
+      if (res.matchedPreAlert) {
+        setToastTone('match');
+        const pkgSuiteCode = (res.package as { suites?: { suite_code?: string } } | null)
+          ?.suites?.suite_code;
+        const matchedSuite = String(pkgSuiteCode || suiteCode || '—');
+        setToast(`Matched pre-alert ${tracking} · suite ${matchedSuite} · received`);
+      } else if (res.createdUnknown) {
+        setToastTone('ok');
+        setToast(
+          `Received new ${tracking} · status ${String(res.package?.status ?? '')}${
+            invoiceRequired ? ' · invoice required from customer' : ''
+          }`,
+        );
+      } else {
+        setToastTone('ok');
+        setToast(
+          `Received ${tracking} · status ${String(res.package?.status ?? '')}${
+            invoiceRequired ? ' · invoice required from customer' : ''
+          }`,
+        );
+      }
+      // Prefer suite from matched package when known
+      const pkgSuite = (res.package as { suites?: { suite_code?: string } } | null)?.suites
+        ?.suite_code;
+      if (pkgSuite) setSuiteCode(String(pkgSuite));
       setBarcode('');
       setWeightLbs('');
+      setLengthIn('');
+      setWidthIn('');
+      setHeightIn('');
       setDeclaredUsd('');
       setBin('');
       setInvoiceRequired(false);
       setWarehouseSlip(null);
-      window.setTimeout(() => setToast(null), 2800);
+      void qc.invalidateQueries({ queryKey: ['freight', 'packages'] });
+      window.setTimeout(() => setToast(null), 3200);
     },
   });
 
@@ -89,15 +147,27 @@ export function WarehouseReceiveStationPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-slate-900">Receive Station</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Scan barcode → confirm suite → capture weight, declared value &amp; bin
+      {!embedded ? (
+        <div>
+          <h1 className="text-2xl font-semibold text-slate-900">Receive Station</h1>
+          <p className="mt-1 text-sm text-slate-500">
+            Scan barcode → confirm suite → capture weight, dimensions, declared value &amp; bin
+          </p>
+        </div>
+      ) : (
+        <p className="text-sm text-slate-500">
+          Scan barcode → confirm suite → capture weight, dimensions, declared value &amp; bin
         </p>
-      </div>
+      )}
 
       {toast ? (
-        <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm font-medium text-green-800">
+        <div
+          className={
+            toastTone === 'match'
+              ? 'rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm font-medium text-sky-900'
+              : 'rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm font-medium text-green-800'
+          }
+        >
           {toast}
         </div>
       ) : null}
@@ -110,11 +180,17 @@ export function WarehouseReceiveStationPage() {
             onChange={(e) => setFacilityId(e.target.value)}
             className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
           >
-            {(facilities.data?.facilities ?? []).map((f) => (
-              <option key={String(f.id)} value={String(f.id)}>
-                {String(f.name)} ({String(f.code)})
-              </option>
-            ))}
+            {Object.entries(warehousesByCountry)
+              .sort(([a], [b]) => a.localeCompare(b))
+              .map(([cc, list]) => (
+                <optgroup key={cc} label={cc}>
+                  {list.map((f) => (
+                    <option key={String(f.id)} value={String(f.id)}>
+                      {String(f.name)} ({String(f.code)})
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
           </select>
         </div>
         <div>
@@ -131,6 +207,21 @@ export function WarehouseReceiveStationPage() {
               </option>
             ))}
           </select>
+          <input
+            value={suiteScan}
+            onChange={(e) => setSuiteScan(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                applySuiteScan(suiteScan);
+              }
+            }}
+            onBlur={() => {
+              if (suiteScan.trim()) applySuiteScan(suiteScan);
+            }}
+            className="mt-2 w-full rounded-lg border border-dashed border-slate-300 px-3 py-2 font-mono text-xs"
+            placeholder="Scan suite QR / type suite code…"
+          />
         </div>
       </div>
 
@@ -183,6 +274,36 @@ export function WarehouseReceiveStationPage() {
           </div>
         </div>
 
+        <div className="mt-4 grid grid-cols-3 gap-3">
+          <div>
+            <label className="text-xs font-medium text-slate-500">L (in)</label>
+            <input
+              value={lengthIn}
+              onChange={(e) => setLengthIn(e.target.value)}
+              inputMode="decimal"
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 tabular-nums"
+            />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-slate-500">W (in)</label>
+            <input
+              value={widthIn}
+              onChange={(e) => setWidthIn(e.target.value)}
+              inputMode="decimal"
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 tabular-nums"
+            />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-slate-500">H (in)</label>
+            <input
+              value={heightIn}
+              onChange={(e) => setHeightIn(e.target.value)}
+              inputMode="decimal"
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 tabular-nums"
+            />
+          </div>
+        </div>
+
         <div className="mt-5 space-y-3 rounded-lg border border-slate-100 bg-slate-50 px-4 py-3">
           <label className="flex items-start gap-2 text-sm text-slate-800">
             <input
@@ -192,15 +313,19 @@ export function WarehouseReceiveStationPage() {
               onChange={(e) => setInvoiceRequired(e.target.checked)}
             />
             <span>
-              <span className="font-medium">Invoice required from customer</span>
+              <span className="font-medium">
+                {DOC_ROLE.customer_invoice.shortLabel} required (soft hold)
+              </span>
               <span className="mt-0.5 block text-xs text-slate-500">
-                No usable packing slip with the box — tell courier ops to request the invoice.
+                Soft hold only — warehouse can clear anytime. Does not block receive.
+                Seal later needs customer invoice verify or unobtainable (packing slip never
+                blocks seal).
               </span>
             </span>
           </label>
           <div>
             <label className="text-xs font-medium text-slate-500">
-              Warehouse packing slip (optional)
+              {DOC_ROLE.warehouse_slip.label} (optional — does not block seal)
             </label>
             <input
               type="file"

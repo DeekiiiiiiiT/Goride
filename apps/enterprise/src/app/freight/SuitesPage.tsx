@@ -1,10 +1,23 @@
 import { FormEvent, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { Upload, UserPlus, X, Check } from 'lucide-react';
+import { Upload, UserPlus, X, Check, Copy } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { useCreateSuite, useFacilities, useFreightClients, useSuites } from '@/app/hooks/useFreight';
 import { SuiteCsvImportPanel } from '@/app/freight/SuiteCsvImportPanel';
 
 type OverlayMode = 'import' | 'import-success' | 'create' | null;
+
+function buildSuiteAddress(
+  suiteCode: string,
+  warehouse?: Record<string, unknown> | null,
+): string {
+  const lines = [
+    String(warehouse?.address_line || 'US Warehouse (set address on Facilities)'),
+    [warehouse?.city, warehouse?.country_code].filter(Boolean).join(', ') || 'United States',
+    `Suite ${suiteCode}`,
+  ];
+  return lines.filter(Boolean).join('\n');
+}
 
 function SuitesOverlay({
   title,
@@ -68,17 +81,31 @@ export function SuitesPage() {
   const { data, isLoading, error } = useSuites();
   const clients = useFreightClients();
   const allFacilities = useFacilities();
+  const warehouses = useFacilities('warehouse');
   const facilities = useFacilities('branch');
   const branchFacilities = useMemo(
     () => facilities.data?.facilities ?? [],
     [facilities.data?.facilities],
   );
+  const defaultWarehouse = warehouses.data?.facilities?.[0] ?? null;
   const needsFacilitiesSetup =
     !allFacilities.isLoading && (allFacilities.data?.facilities?.length ?? 0) === 0;
   const create = useCreateSuite();
   const [formError, setFormError] = useState<string | null>(null);
   const [overlay, setOverlay] = useState<OverlayMode>(null);
   const [importSuccessMsg, setImportSuccessMsg] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  async function copyAddress(suiteCode: string, id: string) {
+    const text = buildSuiteAddress(suiteCode, defaultWarehouse);
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedId(id);
+      window.setTimeout(() => setCopiedId(null), 2000);
+    } catch {
+      /* ignore */
+    }
+  }
 
   // Auto-dismiss CSV import success overlay
   useEffect(() => {
@@ -121,8 +148,8 @@ export function SuitesPage() {
         <div>
           <h1 className="text-2xl font-semibold">Suites</h1>
           <p className="mt-1 max-w-xl text-sm text-slate-500">
-            This is your customer list. Each row is a mailbox customer (a “suite”) with their own
-            mailbox code. Add people here before you receive their packages.
+            Customer mailbox list. Give each customer the virtual US address + Suite code (or QR)
+            for Amazon / Shein — warehouse matches by suite, no label OCR.
           </p>
         </div>
         <div className="flex gap-2">
@@ -181,20 +208,39 @@ export function SuitesPage() {
               <th className="px-4 py-2">Suite</th>
               <th className="px-4 py-2">Contact</th>
               <th className="px-4 py-2">Phone</th>
-              <th className="px-4 py-2">Fulfillment</th>
-              <th className="px-4 py-2">Fleet default</th>
+              <th className="px-4 py-2">US shipping address</th>
+              <th className="px-4 py-2">QR</th>
             </tr>
           </thead>
           <tbody>
-            {(data?.suites ?? []).map((s) => (
-              <tr key={String(s.id)} className="border-b border-slate-50">
-                <td className="px-4 py-2 font-medium">{String(s.suite_code)}</td>
-                <td className="px-4 py-2">{String(s.contact_name || '—')}</td>
-                <td className="px-4 py-2">{String(s.contact_phone || '—')}</td>
-                <td className="px-4 py-2">{String(s.default_fulfillment_mode).replace(/_/g, ' ')}</td>
-                <td className="px-4 py-2">{String(s.default_assignee_type).replace(/_/g, ' ')}</td>
-              </tr>
-            ))}
+            {(data?.suites ?? []).map((s) => {
+              const code = String(s.suite_code);
+              const addr = buildSuiteAddress(code, defaultWarehouse);
+              return (
+                <tr key={String(s.id)} className="border-b border-slate-50 align-top">
+                  <td className="px-4 py-3 font-mono font-medium">{code}</td>
+                  <td className="px-4 py-3">{String(s.contact_name || '—')}</td>
+                  <td className="px-4 py-3">{String(s.contact_phone || '—')}</td>
+                  <td className="px-4 py-3">
+                    <pre className="whitespace-pre-wrap font-sans text-xs text-slate-700">{addr}</pre>
+                    <button
+                      type="button"
+                      onClick={() => copyAddress(code, String(s.id))}
+                      className="mt-2 inline-flex items-center gap-1 rounded border border-slate-200 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                    >
+                      <Copy className="h-3 w-3" />
+                      {copiedId === String(s.id) ? 'Copied' : 'Copy address'}
+                    </button>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="rounded-lg border border-slate-100 bg-white p-2">
+                      <QRCodeSVG value={`SUITE:${code}`} size={72} level="M" includeMargin={false} />
+                    </div>
+                    <p className="mt-1 text-[10px] text-slate-400">Scan at receive</p>
+                  </td>
+                </tr>
+              );
+            })}
             {!isLoading && !(data?.suites ?? []).length && (
               <tr>
                 <td colSpan={5} className="px-4 py-8 text-center text-slate-500">

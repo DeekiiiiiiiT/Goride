@@ -1,17 +1,21 @@
 import { Link } from 'react-router-dom';
 import { useFreightShipments } from '@/app/hooks/useFreight';
 
-export function ShipmentsListPage() {
+export function ShipmentsListPage({ embedded = false }: { embedded?: boolean }) {
   const { data, isLoading, error } = useFreightShipments();
   const rows = data?.shipments ?? [];
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">Shipments</h1>
-          <p className="mt-1 text-sm text-slate-500">Track bookings, legs, and delivery status.</p>
-        </div>
+        {!embedded ? (
+          <div>
+            <h1 className="text-2xl font-semibold">Shipments</h1>
+            <p className="mt-1 text-sm text-slate-500">Track bookings, legs, and delivery status.</p>
+          </div>
+        ) : (
+          <p className="text-sm text-slate-500">Track bookings, legs, and delivery status.</p>
+        )}
         <Link
           to="/app/shipments/new"
           className="rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-semibold text-slate-950 hover:bg-amber-400"

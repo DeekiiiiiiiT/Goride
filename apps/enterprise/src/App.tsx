@@ -20,6 +20,11 @@ import { HomePage } from '@/pages/HomePage';
 import { RidesPage } from '@/pages/RidesPage';
 import { SafetyPage } from '@/pages/SafetyPage';
 import { Gated } from '@/app/modules/Gated';
+import {
+  PackageDutyDetailPage,
+  PackagesListPage,
+  PackagesWorkspacePage,
+} from '@/app/freight/packageLazyPages';
 
 const LoginEntry = lazy(() => import('@/app/entries/LoginEntry'));
 const ResetPasswordEntry = lazy(() => import('@/app/entries/ResetPasswordEntry'));
@@ -29,9 +34,6 @@ const WarehouseEntry = lazy(() => import('@/app/entries/WarehouseEntry'));
 
 const DashboardPage = lazy(() =>
   import('@/app/freight/DashboardPage').then((m) => ({ default: m.DashboardPage })),
-);
-const ShipmentsListPage = lazy(() =>
-  import('@/app/freight/ShipmentsListPage').then((m) => ({ default: m.ShipmentsListPage })),
 );
 const NewShipmentPage = lazy(() =>
   import('@/app/freight/NewShipmentPage').then((m) => ({ default: m.NewShipmentPage })),
@@ -57,14 +59,8 @@ const SuitesPage = lazy(() =>
 const FilesPage = lazy(() =>
   import('@/app/files/FilesPage').then((m) => ({ default: m.FilesPage })),
 );
-const PackagesListPage = lazy(() =>
-  import('@/app/freight/PackagesPages').then((m) => ({ default: m.PackagesListPage })),
-);
-const PackageDetailPage = lazy(() =>
-  import('@/app/freight/PackagesPages').then((m) => ({ default: m.PackageDetailPage })),
-);
-const MiamiScanPage = lazy(() =>
-  import('@/app/freight/MiamiScanPage').then((m) => ({ default: m.MiamiScanPage })),
+const ReceiveWorkspacePage = lazy(() =>
+  import('@/app/freight/os').then((m) => ({ default: m.ReceiveWorkspacePage })),
 );
 const ManifestsListPage = lazy(() =>
   import('@/app/freight/ManifestPages').then((m) => ({ default: m.ManifestsListPage })),
@@ -72,11 +68,8 @@ const ManifestsListPage = lazy(() =>
 const ManifestDetailPage = lazy(() =>
   import('@/app/freight/ManifestPages').then((m) => ({ default: m.ManifestDetailPage })),
 );
-const CustomsBoardPage = lazy(() =>
-  import('@/app/freight/CustomsBoardPage').then((m) => ({ default: m.CustomsBoardPage })),
-);
-const PipelineCommandPage = lazy(() =>
-  import('@/app/freight/os').then((m) => ({ default: m.PipelineCommandPage })),
+const CustomsWorkspacePage = lazy(() =>
+  import('@/app/freight/CustomsBoardPage').then((m) => ({ default: m.CustomsWorkspacePage })),
 );
 const WarehouseReceiveStationPage = lazy(() =>
   import('@/app/freight/os').then((m) => ({ default: m.WarehouseReceiveStationPage })),
@@ -89,26 +82,14 @@ const WarehouseFacilitiesPage = lazy(() =>
     default: () => <m.FacilitiesPage warehouseOnly />,
   })),
 );
-const PackageDutyDetailPage = lazy(() =>
-  import('@/app/freight/os').then((m) => ({ default: m.PackageDutyDetailPage })),
-);
-const InvoiceAuditQueuePage = lazy(() =>
-  import('@/app/freight/os').then((m) => ({ default: m.InvoiceAuditQueuePage })),
-);
 const HsTariffCatalogPage = lazy(() =>
   import('@/app/freight/os').then((m) => ({ default: m.HsTariffCatalogPage })),
-);
-const ManifestGatekeeperPage = lazy(() =>
-  import('@/app/freight/os').then((m) => ({ default: m.ManifestGatekeeperPage })),
-);
-const ClearanceBoardPage = lazy(() =>
-  import('@/app/freight/os').then((m) => ({ default: m.ClearanceBoardPage })),
 );
 const ConsolidatedBillingPage = lazy(() =>
   import('@/app/freight/os').then((m) => ({ default: m.ConsolidatedBillingPage })),
 );
-const HubStationPage = lazy(() =>
-  import('@/app/freight/HubStationPage').then((m) => ({ default: m.HubStationPage })),
+const HubWorkspacePage = lazy(() =>
+  import('@/app/freight/HubStationPage').then((m) => ({ default: m.HubWorkspacePage })),
 );
 const FulfillmentDeskPage = lazy(() =>
   import('@/app/freight/FulfillmentPages').then((m) => ({ default: m.FulfillmentDeskPage })),
@@ -124,8 +105,10 @@ const ClientFleetPage = lazy(() =>
 const PodCapturePage = lazy(() =>
   import('@/app/freight/PodCapturePage').then((m) => ({ default: m.PodCapturePage })),
 );
-const DispatchBoardPage = lazy(() =>
-  import('@/app/dispatch/DispatchBoardPage').then((m) => ({ default: m.DispatchBoardPage })),
+const DomesticWorkspacePage = lazy(() =>
+  import('@/app/dispatch/DomesticWorkspacePage').then((m) => ({
+    default: m.DomesticWorkspacePage,
+  })),
 );
 const ServiceZonesPage = lazy(() =>
   import('@/app/dispatch/ServiceZonesPage').then((m) => ({ default: m.ServiceZonesPage })),
@@ -274,23 +257,11 @@ export default function App() {
           />
           <Route
             path="shipments"
-            element={
-              <Gated module="freight_shipments">
-                <Suspense fallback={<Fall />}>
-                  <ShipmentsListPage />
-                </Suspense>
-              </Gated>
-            }
+            element={<Navigate to="/app/domestic" replace />}
           />
           <Route
             path="dispatch"
-            element={
-              <Gated module="freight_dispatch">
-                <Suspense fallback={<Fall />}>
-                  <DispatchBoardPage />
-                </Suspense>
-              </Gated>
-            }
+            element={<Navigate to="/app/domestic?tab=dispatch" replace />}
           />
           <Route
             path="service-zones"
@@ -377,17 +348,21 @@ export default function App() {
             element={
               <Gated module="freight_mailbox_packages">
                 <Suspense fallback={<Fall />}>
-                  <PackagesListPage />
+                  <PackagesWorkspacePage />
                 </Suspense>
               </Gated>
             }
+          />
+          <Route
+            path="pre-alerts"
+            element={<Navigate to="/app/packages?tab=expected" replace />}
           />
           <Route
             path="packages/:id"
             element={
               <Gated module="freight_mailbox_packages">
                 <Suspense fallback={<Fall />}>
-                  <PackageDetailPage />
+                  <PackageDutyDetailPage />
                 </Suspense>
               </Gated>
             }
@@ -395,7 +370,16 @@ export default function App() {
           <Route path="warehouse" element={<Navigate to="/app/facilities" replace />} />
           <Route path="mailbox" element={<Navigate to="/app/facilities" replace />} />
           <Route path="last-mile" element={<Navigate to="/app/fulfillment" replace />} />
-          <Route path="setup" element={<Navigate to="/app/shipments" replace />} />
+          <Route path="setup" element={<Navigate to="/app/facilities" replace />} />
+          <Route path="jamaica" element={<Navigate to="/app/customs" replace />} />
+          <Route
+            path="domestic"
+            element={
+              <Suspense fallback={<Fall />}>
+                <DomesticWorkspacePage />
+              </Suspense>
+            }
+          />
           <Route path="fleet-ops" element={<Navigate to="/app/fuel/logs" replace />} />
           <Route path="system" element={<Navigate to="/app/settings" replace />} />
           <Route
@@ -403,7 +387,7 @@ export default function App() {
             element={
               <Gated module="freight_miami_scan">
                 <Suspense fallback={<Fall />}>
-                  <MiamiScanPage />
+                  <ReceiveWorkspacePage />
                 </Suspense>
               </Gated>
             }
@@ -429,25 +413,10 @@ export default function App() {
               </Gated>
             }
           />
-          <Route
-            path="pipeline"
-            element={
-              <Gated module="freight_pipeline_command">
-                <Suspense fallback={<Fall />}>
-                  <PipelineCommandPage />
-                </Suspense>
-              </Gated>
-            }
-          />
+          <Route path="pipeline" element={<Navigate to="/app" replace />} />
           <Route
             path="receive-station"
-            element={
-              <Gated module="freight_miami_scan">
-                <Suspense fallback={<Fall />}>
-                  <WarehouseReceiveStationPage />
-                </Suspense>
-              </Gated>
-            }
+            element={<Navigate to="/app/receive?tab=station" replace />}
           />
           <Route
             path="package-duty"
@@ -461,13 +430,7 @@ export default function App() {
           />
           <Route
             path="invoice-audit"
-            element={
-              <Gated module="freight_invoice_audit">
-                <Suspense fallback={<Fall />}>
-                  <InvoiceAuditQueuePage />
-                </Suspense>
-              </Gated>
-            }
+            element={<Navigate to="/app/packages?tab=needs-invoice" replace />}
           />
           <Route
             path="hs-tariffs"
@@ -481,13 +444,7 @@ export default function App() {
           />
           <Route
             path="manifest-builder"
-            element={
-              <Gated module="freight_manifests">
-                <Suspense fallback={<Fall />}>
-                  <ManifestGatekeeperPage />
-                </Suspense>
-              </Gated>
-            }
+            element={<Navigate to="/app/manifests" replace />}
           />
           <Route
             path="billing"
@@ -501,20 +458,14 @@ export default function App() {
           />
           <Route
             path="clearance"
-            element={
-              <Gated module="freight_customs_board">
-                <Suspense fallback={<Fall />}>
-                  <ClearanceBoardPage />
-                </Suspense>
-              </Gated>
-            }
+            element={<Navigate to="/app/customs?tab=lanes" replace />}
           />
           <Route
             path="customs"
             element={
               <Gated module="freight_customs_board">
                 <Suspense fallback={<Fall />}>
-                  <CustomsBoardPage />
+                  <CustomsWorkspacePage />
                 </Suspense>
               </Gated>
             }
@@ -524,7 +475,7 @@ export default function App() {
             element={
               <Gated module="freight_hub_station">
                 <Suspense fallback={<Fall />}>
-                  <HubStationPage />
+                  <HubWorkspacePage />
                 </Suspense>
               </Gated>
             }

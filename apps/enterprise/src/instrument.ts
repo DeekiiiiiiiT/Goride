@@ -8,6 +8,8 @@ const localDevNoise = [
   /Cannot read properties of null \(reading 'useState'\)/,
   /Invalid hook call/,
   /BridgedUserManagementPage is not defined/,
+  /WarehouseInboundPage is not defined/,
+  /hasInvoice is not defined/,
   /useAuth must be used within AuthProvider/,
 ];
 

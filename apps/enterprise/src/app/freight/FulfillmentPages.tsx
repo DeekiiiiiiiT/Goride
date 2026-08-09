@@ -163,7 +163,15 @@ export function FulfillmentDeskPage() {
           </label>
           {assigneeType === 'client_fleet' && (
             <label className="block text-sm">
-              Client driver
+              <span className="flex items-center justify-between gap-2">
+                Client driver
+                <Link
+                  to="/app/client-fleet"
+                  className="text-xs font-medium text-amber-800 underline"
+                >
+                  Manage client drivers
+                </Link>
+              </span>
               <select
                 value={clientAssetId}
                 onChange={(e) => setClientAssetId(e.target.value)}

@@ -1,0 +1,105 @@
+<mxfile host="app.diagrams.net" agent="Roam" version="22.1.0" type="device">
+  <diagram id="owner-intake" name="Owner US Intake — no Warehouse seat">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1100" pageHeight="2500" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="title" value="&lt;b&gt;Scenario 4 — No Warehouse seat (Courier owner does US intake)&lt;/b&gt;&lt;br&gt;Everything stays in the Courier app. Use US Intake (thin backup) instead of /warehouse.&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;Amber = Courier app only (/app) · Blue note = Warehouse app not used in this scenario&lt;/font&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="780" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="legend_c" value="COURIER APP&#xa;/app — all steps" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEF3C7;strokeColor=#D97706;fontStyle=1;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="860" y="30" width="160" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="skip" value="WAREHOUSE APP NOT USED&#xa;No /warehouse login for this run" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E0F2FE;strokeColor=#0284C7;fontStyle=1;fontSize=11;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="860" y="100" width="180" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="start" value="START&#xa;Owner / courier ops receives at US facility&#xa;Tracking: MY-SMOKE-001" style="ellipse;whiteSpace=wrap;html=1;fillColor=#DCFCE7;strokeColor=#16A34A;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="340" y="120" width="280" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c1" value="&lt;b&gt;COURIER APP&lt;/b&gt;&lt;br&gt;US Intake → Receive Station&lt;br&gt;(not Warehouse Inbound)&lt;br&gt;&lt;br&gt;1. Choose facility + suite&lt;br&gt;2. Tracking MY-SMOKE-001&lt;br&gt;3. Weight, bin, declared USD&lt;br&gt;4. If slip came with box → upload packing slip (if screen offers)&lt;br&gt;5. If no slip → flag invoice required when available&lt;br&gt;6. Submit inbound" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacingLeft=10;fillColor=#FEF3C7;strokeColor=#D97706;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="300" y="240" width="360" height="190" as="geometry" />
+        </mxCell>
+
+        <mxCell id="note1" value="Same physical work as Warehouse Receive — different menu:&#xa;Courier → US Intake → Receive Station&#xa;Optional: US Intake → Open Warehouse app (only if that seat is allowed)." style="shape=note;whiteSpace=wrap;html=1;fillColor=#FFF7ED;strokeColor=#FB923C;align=left;spacingLeft=8;fontSize=11;size=14;" vertex="1" parent="1">
+          <mxGeometry x="720" y="260" width="260" height="120" as="geometry" />
+        </mxCell>
+
+        <mxCell id="branch" value="Paperwork&#xa;with the box?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FEF9C3;strokeColor=#CA8A04;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="370" y="470" width="220" height="100" as="geometry" />
+        </mxCell>
+
+        <mxCell id="path_slip" value="Yes → treat like Scenario 1 paperwork&#xa;(still need customer invoice for seal)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DCFCE7;strokeColor=#16A34A;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="80" y="490" width="240" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="path_noslip" value="No → treat like Scenario 2 / 3&#xa;(chase customer or unobtainable)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEE2E2;strokeColor=#DC2626;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="640" y="490" width="250" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c2" value="&lt;b&gt;COURIER APP&lt;/b&gt;&lt;br&gt;Mailbox → Invoice Audit&lt;br&gt;&lt;br&gt;Upload + verify &lt;b&gt;customer invoice&lt;/b&gt;&#xa;OR mark unobtainable if never arrives&#xa;(same rules as other scenarios)" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacingLeft=10;fillColor=#FEF3C7;strokeColor=#D97706;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="300" y="620" width="360" height="120" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c3" value="&lt;b&gt;COURIER APP&lt;/b&gt;&lt;br&gt;Optional: HS Tariffs / Package Duty / Billing" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacingLeft=10;fillColor=#FEF3C7;strokeColor=#D97706;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="300" y="780" width="360" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c4" value="&lt;b&gt;COURIER APP&lt;/b&gt;&lt;br&gt;Manifests → seal → AWBOLDS → JCA stub&lt;br&gt;Shipped → Arrived Jamaica" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacingLeft=10;fillColor=#FEF3C7;strokeColor=#D97706;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="300" y="890" width="360" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="c5" value="&lt;b&gt;COURIER APP&lt;/b&gt;&lt;br&gt;Clearance Board → Clear&lt;br&gt;Hub Station → sort / ready&lt;br&gt;Last Mile → Fulfillment → Mark collected" style="rounded=1;whiteSpace=wrap;html=1;align=left;spacingLeft=10;fillColor=#FEF3C7;strokeColor=#D97706;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="300" y="1020" width="360" height="100" as="geometry" />
+        </mxCell>
+
+        <mxCell id="end" value="DONE&#xa;All in Courier app — no Warehouse seat handoff" style="ellipse;whiteSpace=wrap;html=1;fillColor=#DCFCE7;strokeColor=#16A34A;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="340" y="1160" width="280" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;" edge="1" parent="1" source="start" target="c1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;" edge="1" parent="1" source="c1" target="branch">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" value="Yes" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;fontStyle=1;" edge="1" parent="1" source="branch" target="path_slip">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" value="No" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;fontStyle=1;" edge="1" parent="1" source="branch" target="path_noslip">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;dashed=1;" edge="1" parent="1" source="path_slip" target="c2">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="200" y="680" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;dashed=1;" edge="1" parent="1" source="path_noslip" target="c2">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="765" y="680" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;" edge="1" parent="1" source="c2" target="c3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;" edge="1" parent="1" source="c3" target="c4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;" edge="1" parent="1" source="c4" target="c5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e10" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeWidth=2;" edge="1" parent="1" source="c5" target="end">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

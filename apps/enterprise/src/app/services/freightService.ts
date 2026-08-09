@@ -236,11 +236,46 @@ export const freightService = {
       organizationId,
     }),
 
-  listPackages: (organizationId?: string | null, status?: string) =>
+  listPackages: (
+    organizationId?: string | null,
+    status?: string,
+    opts?: { intendedFacilityId?: string },
+  ) => {
+    const qs = new URLSearchParams();
+    if (status) qs.set('status', status);
+    if (opts?.intendedFacilityId) qs.set('intendedFacilityId', opts.intendedFacilityId);
+    const q = qs.toString();
+    return freightFetch<{ packages: Record<string, unknown>[] }>(
+      `/packages${q ? `?${q}` : ''}`,
+      { organizationId },
+    );
+  },
+
+  listPreAlerts: (
+    organizationId?: string | null,
+    opts?: { intendedFacilityId?: string },
+  ) =>
     freightFetch<{ packages: Record<string, unknown>[] }>(
-      `/packages${status ? `?status=${encodeURIComponent(status)}` : ''}`,
+      (() => {
+        const qs = new URLSearchParams({ status: 'expected' });
+        if (opts?.intendedFacilityId) qs.set('intendedFacilityId', opts.intendedFacilityId);
+        return `/packages?${qs.toString()}`;
+      })(),
       { organizationId },
     ),
+
+  exportPreAlertsCsv: (
+    organizationId?: string | null,
+    opts?: { intendedFacilityId?: string },
+  ) => {
+    const qs = new URLSearchParams();
+    if (opts?.intendedFacilityId) qs.set('intendedFacilityId', opts.intendedFacilityId);
+    const q = qs.toString();
+    return freightFetch<{ csv: string; count: number }>(
+      `/packages/pre-alerts/export${q ? `?${q}` : ''}`,
+      { organizationId },
+    );
+  },
 
   getPackage: (id: string, organizationId?: string | null) =>
     freightFetch<{
@@ -268,6 +303,7 @@ export const freightService = {
       scanEvent: Record<string, unknown>;
       createdUnknown?: boolean;
       duplicate?: boolean;
+      matchedPreAlert?: boolean;
     }>('/scans', {
       method: 'POST',
       body: JSON.stringify(body),
@@ -585,10 +621,23 @@ export const freightService = {
 
   // --- Courier OS (duty / readiness / JCA / billing) ---
   pipelineCommand: (organizationId?: string | null) =>
-    freightFetch<{ counts: Record<string, number>; dutyOutstandingJmdMinor: number }>(
-      '/pipeline/command',
-      { organizationId },
-    ),
+    freightFetch<{
+      counts: Record<string, number>;
+      dutyOutstandingJmdMinor: number;
+      oldestDutyAt?: string | null;
+      oldestByStatus?: Record<string, string | null>;
+      needsYou?: Array<{
+        key: string;
+        label: string;
+        count: number;
+        oldestAt: string | null;
+        ageHours: number | null;
+        href: string;
+        actionLabel: string;
+      }>;
+    }>('/pipeline/command', {
+      organizationId,
+    }),
 
   listHsTariffs: (organizationId?: string | null) =>
     freightFetch<{ tariffs: Record<string, unknown>[] }>('/hs-tariffs', {
@@ -721,6 +770,12 @@ export const freightService = {
     freightFetch<{ invoice: Record<string, unknown>; lines: Record<string, unknown>[] }>(
       '/billing/invoices',
       { method: 'POST', body: JSON.stringify(body), organizationId },
+    ),
+
+  listConsolidatedInvoices: (packageId?: string | null, organizationId?: string | null) =>
+    freightFetch<{ invoices: Record<string, unknown>[] }>(
+      `/billing/invoices${packageId ? `?packageId=${encodeURIComponent(packageId)}` : ''}`,
+      { organizationId },
     ),
 
   getConsolidatedInvoice: (id: string, organizationId?: string | null) =>

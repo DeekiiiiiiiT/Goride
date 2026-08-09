@@ -65,7 +65,7 @@ export function OpsInboxDrawer({ open, onClose }: Props) {
             {alerts.map((a) => {
               const unread = !a.read_at;
               const href = a.job_id
-                ? `/app/dispatch?job=${String(a.job_id)}`
+                ? `/app/domestic?tab=dispatch&job=${String(a.job_id)}`
                 : a.shipment_id
                   ? `/app/shipments/${String(a.shipment_id)}`
                   : null;

@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { freightService } from '@/app/services/freightService';
@@ -10,8 +11,12 @@ function usd(n: unknown) {
 /** Dual-ledger consolidated billing — generate from package. */
 export function ConsolidatedBillingPage() {
   const { organizationId, session } = useAuth();
-  const [packageId, setPackageId] = useState('');
+  const [params, setParams] = useSearchParams();
+  const urlPackageId = params.get('packageId') || '';
+  const wantAutogenerate = params.get('autogenerate') === '1';
+  const [packageId, setPackageId] = useState(urlPackageId);
   const [invoiceId, setInvoiceId] = useState('');
+  const autoRan = useRef(false);
 
   const packages = useQuery({
     queryKey: ['freight', 'packages', organizationId, 'billing'],
@@ -19,11 +24,19 @@ export function ConsolidatedBillingPage() {
     enabled: Boolean(session),
   });
 
+  // URL wins when present; otherwise first package in list
   useEffect(() => {
-    if (!packageId && packages.data?.packages?.[0]) {
-      setPackageId(String(packages.data.packages[0].id));
+    if (urlPackageId && urlPackageId !== packageId) {
+      setPackageId(urlPackageId);
+      setInvoiceId('');
+      return;
     }
-  }, [packages.data, packageId]);
+    if (!packageId && packages.data?.packages?.[0]) {
+      const id = String(packages.data.packages[0].id);
+      setPackageId(id);
+      setParams({ packageId: id }, { replace: true });
+    }
+  }, [urlPackageId, packages.data, packageId, setParams]);
 
   const create = useMutation({
     mutationFn: () =>
@@ -32,6 +45,17 @@ export function ConsolidatedBillingPage() {
       setInvoiceId(String(res.invoice.id));
     },
   });
+
+  // One-shot autogenerate from package workspace deep link
+  useEffect(() => {
+    if (!wantAutogenerate || !packageId || autoRan.current) return;
+    if (create.isPending || create.isSuccess || invoiceId) return;
+    autoRan.current = true;
+    create.mutate();
+    // Strip autogenerate so refresh doesn't double-create
+    setParams({ packageId }, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot; mutate identity is stable
+  }, [wantAutogenerate, packageId, create.isPending, create.isSuccess, invoiceId, setParams]);
 
   const existing = useQuery({
     queryKey: ['freight', 'billing-invoice', organizationId, invoiceId],
@@ -55,6 +79,13 @@ export function ConsolidatedBillingPage() {
   const courierTotal = usd(invoice?.courier_total_usd_minor);
   const govTotal = usd(invoice?.government_total_usd_minor);
   const grand = usd(invoice?.grand_total_usd_minor);
+
+  function selectPackage(next: string) {
+    setPackageId(next);
+    setInvoiceId('');
+    autoRan.current = false;
+    setParams(next ? { packageId: next } : {}, { replace: true });
+  }
 
   function printInvoice() {
     window.print();
@@ -82,7 +113,7 @@ export function ConsolidatedBillingPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Consolidated Billing</h1>
+          <h1 className="text-2xl font-semibold text-slate-900">Billing</h1>
           <p className="mt-1 text-sm text-slate-500">
             Split courier fees from government pass-through
           </p>
@@ -112,10 +143,7 @@ export function ConsolidatedBillingPage() {
           <label className="text-xs font-medium text-slate-500">Package</label>
           <select
             value={packageId}
-            onChange={(e) => {
-              setPackageId(e.target.value);
-              setInvoiceId('');
-            }}
+            onChange={(e) => selectPackage(e.target.value)}
             className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
           >
             {(packages.data?.packages ?? []).map((p) => (
@@ -131,7 +159,7 @@ export function ConsolidatedBillingPage() {
           onClick={() => create.mutate()}
           className="rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-semibold text-slate-950 disabled:opacity-50"
         >
-          Generate invoice
+          {create.isPending ? 'Generating…' : 'Generate invoice'}
         </button>
       </div>
 

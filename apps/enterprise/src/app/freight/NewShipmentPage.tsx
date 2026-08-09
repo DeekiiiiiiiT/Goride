@@ -81,7 +81,7 @@ export function NewShipmentPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div>
-        <Link to="/app/shipments" className="text-sm text-slate-500 hover:underline">
+        <Link to="/app/domestic" className="text-sm text-slate-500 hover:underline">
           ← Shipments
         </Link>
         <h1 className="mt-2 text-2xl font-semibold">New shipment</h1>

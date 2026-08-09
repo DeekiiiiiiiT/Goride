@@ -36,7 +36,7 @@ export function ShipmentDetailPage() {
   return (
     <div className="space-y-6">
       <div>
-        <Link to="/app/shipments" className="text-sm text-slate-500 hover:underline">
+        <Link to="/app/domestic" className="text-sm text-slate-500 hover:underline">
           ← Shipments
         </Link>
         <div className="mt-2 flex flex-wrap items-start justify-between gap-3">

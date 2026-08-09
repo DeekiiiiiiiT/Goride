@@ -278,7 +278,15 @@ export function FacilitiesPage({ warehouseOnly = false }: { warehouseOnly?: bool
     [warehouseOnly],
   );
   const filteredRows = useMemo(
-    () => rows.filter((f) => String(f.facility_type) === viewType),
+    () =>
+      rows
+        .filter((f) => String(f.facility_type) === viewType)
+        .slice()
+        .sort((a, b) => {
+          const cc = String(a.country_code || '').localeCompare(String(b.country_code || ''));
+          if (cc !== 0) return cc;
+          return String(a.name || '').localeCompare(String(b.name || ''));
+        }),
     [rows, viewType],
   );
 
@@ -480,6 +488,7 @@ export function FacilitiesPage({ warehouseOnly = false }: { warehouseOnly?: bool
               <tr>
                 <th className="px-4 py-2">Name</th>
                 <th className="px-4 py-2">Code</th>
+                <th className="px-4 py-2">Country</th>
                 <th className="px-4 py-2">City</th>
                 <th className="px-4 py-2">Address</th>
                 <th className="px-4 py-2 text-right">Actions</th>
@@ -490,6 +499,9 @@ export function FacilitiesPage({ warehouseOnly = false }: { warehouseOnly?: bool
                 <tr key={String(f.id)} className="border-b border-slate-50">
                   <td className="px-4 py-2 font-medium">{String(f.name)}</td>
                   <td className="px-4 py-2 font-mono text-xs">{String(f.code)}</td>
+                  <td className="px-4 py-2 font-mono text-xs uppercase">
+                    {String(f.country_code || '—')}
+                  </td>
                   <td className="px-4 py-2">{String(f.city || '—')}</td>
                   <td className="px-4 py-2 text-slate-600">{String(f.address_line || '—')}</td>
                   <td className="px-4 py-2">
@@ -516,7 +528,7 @@ export function FacilitiesPage({ warehouseOnly = false }: { warehouseOnly?: bool
               ))}
               {!isLoading && !filteredRows.length && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
+                  <td colSpan={6} className="px-4 py-8 text-center text-slate-500">
                     {activeTab.empty}
                   </td>
                 </tr>

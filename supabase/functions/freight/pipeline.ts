@@ -731,12 +731,15 @@ export function registerPipelineRoutes(app: FreightApp) {
     notes: z.string().max(4000).optional().nullable(),
     invoiceStoragePath: z.string().optional().nullable(),
     invoiceFileName: z.string().optional().nullable(),
+    intendedFacilityId: z.string().uuid().optional().nullable(),
+    retailer: z.string().max(120).optional().nullable(),
   });
 
   app.get("/packages", async (c) => {
     const user = await requireUser(c);
     if (user instanceof Response) return user;
     const status = c.req.query("status");
+    const intendedFacilityId = c.req.query("intendedFacilityId");
     let q = freightDb()
       .from("packages")
       .select("*")
@@ -744,6 +747,11 @@ export function registerPipelineRoutes(app: FreightApp) {
       .order("created_at", { ascending: false })
       .limit(300);
     if (status) q = q.eq("status", status);
+    if (intendedFacilityId === "external") {
+      q = q.is("intended_facility_id", null);
+    } else if (intendedFacilityId) {
+      q = q.eq("intended_facility_id", intendedFacilityId);
+    }
     const { data, error } = await q;
     if (error) return c.json({ error: error.message }, 500);
 
@@ -870,6 +878,8 @@ export function registerPipelineRoutes(app: FreightApp) {
         delivery_lat: deliveryLat,
         delivery_lng: deliveryLng,
         notes: b.notes || null,
+        intended_facility_id: b.intendedFacilityId || null,
+        retailer: b.retailer?.trim() || null,
       })
       .select("*")
       .single();
@@ -927,6 +937,10 @@ export function registerPipelineRoutes(app: FreightApp) {
         ...(b.courierTrackingNumber !== undefined
           ? { courier_tracking_number: b.courierTrackingNumber?.trim() || null }
           : {}),
+        ...(b.intendedFacilityId !== undefined
+          ? { intended_facility_id: b.intendedFacilityId || null }
+          : {}),
+        ...(b.retailer !== undefined ? { retailer: b.retailer?.trim() || null } : {}),
         updated_at: new Date().toISOString(),
       })
       .eq("id", c.req.param("id"))
@@ -1172,11 +1186,22 @@ export function registerPipelineRoutes(app: FreightApp) {
         await maybeNotifyPackage(pkg, "received_at_warehouse");
       }
 
+      let suiteInfo: { suite_code?: string; contact_name?: string } | null = null;
+      if (pkg.suite_id) {
+        const { data: s } = await freightDb()
+          .from("suites")
+          .select("suite_code, contact_name")
+          .eq("id", pkg.suite_id)
+          .maybeSingle();
+        suiteInfo = s;
+      }
+
       return c.json({
-        package: pkg,
+        package: { ...pkg, suites: suiteInfo },
         scanEvent: scan.event,
         createdUnknown,
         duplicate: scan.duplicate,
+        matchedPreAlert: !createdUnknown && !scan.duplicate,
       });
     }
 

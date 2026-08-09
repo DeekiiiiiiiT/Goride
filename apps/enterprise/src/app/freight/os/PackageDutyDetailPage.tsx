@@ -1,467 +1,343 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useSearchParams } from 'react-router-dom';
-import { useAuth } from '@/app/auth/AuthProvider';
-import { freightService } from '@/app/services/freightService';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import {
+  PackageDutyChrome,
+  PackageSummaryPanel,
+} from '@/app/freight/os/packageDuty/PackageDutyChrome';
+import { InvoiceComparePanel } from '@/app/freight/os/packageDuty/InvoiceComparePanel';
+import { DutyPanel } from '@/app/freight/os/packageDuty/DutyPanel';
+import { CustodyTimelinePanel } from '@/app/freight/os/packageDuty/CustodyTimelinePanel';
+import { PackageMissionRibbon } from '@/app/freight/os/packageDuty/PackageMissionRibbon';
+import { usePackageDutyDetail } from '@/app/freight/os/packageDuty/usePackageDutyDetail';
+import {
+  derivePackageMission,
+  type PackageMissionStageId,
+} from '@/app/freight/os/packageMissionStages';
 
-function minorToUsd(n: unknown) {
-  return Number(n ?? 0) / 100;
+function StageAccordion({
+  id,
+  title,
+  summary,
+  done,
+  open,
+  onToggle,
+  children,
+}: {
+  id: string;
+  title: string;
+  summary: string;
+  done: boolean;
+  open: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+      <button
+        type="button"
+        id={`stage-${id}`}
+        aria-expanded={open}
+        onClick={onToggle}
+        className="flex w-full items-start justify-between gap-3 px-4 py-3 text-left hover:bg-slate-50"
+      >
+        <div className="min-w-0">
+          <p className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+            <span
+              className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${
+                done
+                  ? 'bg-emerald-100 text-emerald-800'
+                  : open
+                    ? 'bg-amber-500 text-slate-950'
+                    : 'bg-slate-100 text-slate-500'
+              }`}
+            >
+              {done ? '✓' : open ? '•' : ''}
+            </span>
+            {title}
+          </p>
+          <p className="mt-0.5 pl-7 text-xs text-slate-500">{summary}</p>
+        </div>
+        <span className="shrink-0 text-xs font-medium text-slate-400">{open ? 'Hide' : 'Show'}</span>
+      </button>
+      {open ? <div className="border-t border-slate-100 px-4 py-4">{children}</div> : null}
+    </section>
+  );
 }
 
-/** Package Detail — custody, invoice verify, landed-cost duty. */
+/** Package Detail — mission-control: sticky ribbon + staged checklist. */
 export function PackageDutyDetailPage() {
-  const { organizationId, session } = useAuth();
-  const qc = useQueryClient();
+  const navigate = useNavigate();
+  const { id: routeId } = useParams();
   const [params, setParams] = useSearchParams();
-  const [packageId, setPackageId] = useState(params.get('id') || '');
-  const [note, setNote] = useState('');
-  const [unobtainableNote, setUnobtainableNote] = useState('');
+  const initialId = routeId || params.get('id') || '';
+  const [packageId, setPackageId] = useState(initialId);
+  const [openStage, setOpenStage] = useState<PackageMissionStageId | 'timeline' | null>(null);
 
-  const packages = useQuery({
-    queryKey: ['freight', 'packages', organizationId, 'duty-picker'],
-    queryFn: () => freightService.listPackages(organizationId),
-    enabled: Boolean(session),
-  });
+  const d = usePackageDutyDetail(packageId);
 
   useEffect(() => {
+    const fromRoute = routeId || null;
     const fromUrl = params.get('id');
-    if (fromUrl && fromUrl !== packageId) setPackageId(fromUrl);
-  }, [params, packageId]);
+    const next = fromRoute || fromUrl;
+    if (next && next !== packageId) setPackageId(next);
+  }, [routeId, params, packageId]);
 
   useEffect(() => {
-    if (!packageId && packages.data?.packages?.[0]) {
-      const id = String(packages.data.packages[0].id);
+    if (!packageId && d.packages.data?.packages?.[0]) {
+      const id = String(d.packages.data.packages[0].id);
       setPackageId(id);
-      setParams({ id }, { replace: true });
+      if (routeId) {
+        navigate(`/app/packages/${id}`, { replace: true });
+      } else {
+        setParams({ id }, { replace: true });
+      }
     }
-  }, [packages.data, packageId, setParams]);
+  }, [d.packages.data, packageId, setParams, routeId, navigate]);
 
-  const detail = useQuery({
-    queryKey: ['freight', 'package', organizationId, packageId],
-    queryFn: () => freightService.getPackage(packageId, organizationId),
-    enabled: Boolean(session && packageId),
-  });
-
-  const dutyQ = useQuery({
-    queryKey: ['freight', 'duty', organizationId, packageId],
-    queryFn: () => freightService.getPackageDuty(packageId, organizationId),
-    enabled: Boolean(session && packageId),
-  });
-
-  const verify = useMutation({
-    mutationFn: () => freightService.verifyInvoice(packageId, note || undefined, organizationId),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['freight', 'package', organizationId, packageId] });
-      void qc.invalidateQueries({ queryKey: ['freight', 'invoice-audit'] });
-    },
-  });
-
-  const uploadInvoice = useMutation({
-    mutationFn: ({ file, slot }: { file: File; slot: 'warehouse' | 'customer' }) =>
-      freightService.uploadPackageInvoice(packageId, file, organizationId, slot),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['freight', 'package', organizationId, packageId] });
-      void qc.invalidateQueries({ queryKey: ['freight', 'invoice-audit'] });
-    },
-  });
-
-  const invoiceFlags = useMutation({
-    mutationFn: (body: {
-      invoiceRequiredFromCustomer?: boolean;
-      invoiceUnobtainable?: boolean;
-      unobtainableNote?: string | null;
-    }) => freightService.setInvoiceFlags(packageId, body, organizationId),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['freight', 'package', organizationId, packageId] });
-      void qc.invalidateQueries({ queryKey: ['freight', 'invoice-audit'] });
-    },
-  });
-
-  const compute = useMutation({
-    mutationFn: () => freightService.computeDuty(packageId, organizationId),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['freight', 'duty', organizationId, packageId] });
-    },
-  });
-
-  const pkg = detail.data?.package;
-  const suite = pkg?.suites as
-    | { suite_code?: string; contact_name?: string; trn?: string; trn_valid?: boolean }
-    | undefined;
-  const duty = dutyQ.data?.duty ?? compute.data?.duty ?? null;
-  const hasCustomerInvoice = Boolean(pkg?.invoice_storage_path || pkg?.invoice_file_name);
-  const hasWarehouseSlip = Boolean(
-    pkg?.warehouse_invoice_storage_path || pkg?.warehouse_invoice_file_name,
+  const mission = useMemo(
+    () =>
+      derivePackageMission(
+        d.pkg,
+        d.duty as Record<string, unknown> | null,
+        d.scanEvents,
+        d.invoices,
+      ),
+    [d.pkg, d.duty, d.scanEvents, d.invoices],
   );
-  const requiredFromCustomer = Boolean(pkg?.invoice_required_from_customer);
-  const unobtainable = Boolean(pkg?.invoice_unobtainable_at);
 
-  const dutyView = useMemo(() => {
-    if (!duty) return null;
-    return {
-      aboveThreshold: Boolean(duty.above_threshold),
-      cifUsd: minorToUsd(duty.cif_usd_minor),
-      importDutyUsd: minorToUsd(duty.import_duty_usd_minor),
-      scfUsd: minorToUsd(duty.scf_usd_minor),
-      envUsd: minorToUsd(duty.env_usd_minor),
-      gctUsd: minorToUsd(duty.gct_usd_minor),
-      stampJmd: Number(duty.stamp_jmd_minor ?? 0) / 100,
-      cafJmd: Number(duty.caf_jmd_minor ?? 0) / 100,
-      totalDutyUsd: minorToUsd(duty.total_duty_usd_minor),
-    };
-  }, [duty]);
+  useEffect(() => {
+    if (packageId) setOpenStage(mission.currentStageId);
+  }, [packageId, mission.currentStageId]);
+
+  function selectPackage(next: string) {
+    setPackageId(next);
+    if (routeId) {
+      navigate(`/app/packages/${next}`, { replace: true });
+    } else {
+      setParams({ id: next });
+    }
+  }
+
+  function toggleStage(id: PackageMissionStageId | 'timeline') {
+    setOpenStage((prev) => (prev === id ? null : id));
+  }
+
+  const issuedInvoice = d.invoices[0];
+  const status = String(d.pkg?.status ?? '');
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <label className="text-xs font-medium text-slate-500">Package</label>
-          <select
-            value={packageId}
-            onChange={(e) => {
-              setPackageId(e.target.value);
-              setParams({ id: e.target.value });
-            }}
-            className="mt-1 w-full max-w-xl rounded-lg border border-slate-300 px-3 py-2 font-mono text-sm"
-          >
-            {(packages.data?.packages ?? []).map((p) => (
-              <option key={String(p.id)} value={String(p.id)}>
-                {String(p.courier_tracking_number ?? p.id)} · {String(p.status)}
-              </option>
-            ))}
-          </select>
-        </div>
-        {pkg && (
-          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase text-slate-700">
-            {String(pkg.status).replace(/_/g, ' ')}
-          </span>
-        )}
-      </div>
+    <div className="space-y-4">
+      <PackageDutyChrome
+        packageId={packageId}
+        pkgOptions={d.packages.data?.packages ?? []}
+        pkg={d.pkg}
+        onSelect={selectPackage}
+      />
 
       {!packageId && (
         <p className="text-sm text-slate-500">No packages yet — receive or create one first.</p>
       )}
 
-      {detail.error && (
+      {d.detail.error && (
         <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-          {(detail.error as Error).message}
+          {(d.detail.error as Error).message}
         </p>
       )}
 
-      {pkg && (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <section className="rounded-xl border border-slate-200 bg-white p-5">
-            <h2 className="text-sm font-semibold text-slate-900">Package</h2>
-            <dl className="mt-3 grid grid-cols-2 gap-3 text-sm">
-              <div>
-                <dt className="text-slate-500">Suite</dt>
-                <dd className="font-medium">{suite?.suite_code ?? '—'}</dd>
-              </div>
-              <div>
-                <dt className="text-slate-500">Contact</dt>
-                <dd className="font-medium">{suite?.contact_name ?? '—'}</dd>
-              </div>
-              <div>
-                <dt className="text-slate-500">TRN</dt>
-                <dd className="font-mono">
-                  {suite?.trn ?? '—'}{' '}
-                  {suite?.trn_valid === false && (
-                    <span className="text-xs font-sans text-red-600">invalid</span>
-                  )}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-slate-500">Weight</dt>
-                <dd className="tabular-nums">
-                  {pkg.weight_lbs != null ? `${pkg.weight_lbs} lb` : '—'}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-slate-500">Declared</dt>
-                <dd className="tabular-nums">
-                  US${minorToUsd(pkg.declared_value_usd_minor).toFixed(2)}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-slate-500">Bin</dt>
-                <dd className="font-mono">{String(pkg.bin_location ?? '—')}</dd>
-              </div>
-            </dl>
-          </section>
+      {d.pkg && (
+        <>
+          <PackageMissionRibbon
+            trackingLabel={String(
+              d.pkg.courier_tracking_number || d.pkg.id || packageId,
+            ).slice(0, 40)}
+            statusLabel={status.replace(/_/g, ' ')}
+            mission={mission}
+          />
 
-          <section className="rounded-xl border border-slate-200 bg-white p-5 lg:col-span-2">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-sm font-semibold text-slate-900">Invoice compare</h2>
-              <div className="flex flex-wrap gap-2">
-                {requiredFromCustomer && (
-                  <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-amber-900 ring-1 ring-amber-200">
-                    Required from customer
-                  </span>
-                )}
-                {unobtainable && (
-                  <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-700 ring-1 ring-slate-200">
-                    Could not obtain
-                  </span>
-                )}
-                {pkg.invoice_verified_at && (
-                  <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-emerald-800 ring-1 ring-emerald-200">
-                    Verified
-                  </span>
-                )}
-              </div>
-            </div>
-
-            <div className="mt-4 grid gap-4 md:grid-cols-2">
-              <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Warehouse packing slip
-                  </h3>
-                  <label className="cursor-pointer rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold hover:bg-slate-50">
-                    {uploadInvoice.isPending ? 'Uploading…' : hasWarehouseSlip ? 'Replace' : 'Upload'}
-                    <input
-                      type="file"
-                      accept="application/pdf,image/*"
-                      className="sr-only"
-                      disabled={uploadInvoice.isPending || !packageId}
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        e.target.value = '';
-                        if (file) uploadInvoice.mutate({ file, slot: 'warehouse' });
-                      }}
-                    />
-                  </label>
-                </div>
-                <p className="mt-2 font-mono text-sm text-slate-800">
-                  {String(
-                    pkg.warehouse_invoice_file_name ||
-                      pkg.warehouse_invoice_storage_path ||
-                      'None on file',
-                  )}
+          <div className="space-y-2">
+            <StageAccordion
+              id="receive"
+              title="Receive"
+              summary={mission.stages[0].summary}
+              done={mission.stages[0].done}
+              open={openStage === 'receive'}
+              onToggle={() => toggleStage('receive')}
+            >
+              <PackageSummaryPanel pkg={d.pkg} suite={d.suite} />
+              {!mission.stages[0].done && (
+                <p className="mt-3 text-sm text-slate-600">
+                  Still expected — receive at{' '}
+                  <Link to="/app/receive" className="font-medium text-amber-800 underline">
+                    US Intake
+                  </Link>{' '}
+                  to advance this stage.
                 </p>
-                <p className="mt-1 text-xs text-slate-500">What came with the box at US intake</p>
-              </div>
+              )}
+            </StageAccordion>
 
-              <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Customer invoice
-                  </h3>
-                  <label className="cursor-pointer rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold hover:bg-slate-50">
-                    {uploadInvoice.isPending
-                      ? 'Uploading…'
-                      : hasCustomerInvoice
-                        ? 'Replace'
-                        : 'Upload'}
-                    <input
-                      type="file"
-                      accept="application/pdf,image/*"
-                      className="sr-only"
-                      disabled={uploadInvoice.isPending || !packageId}
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        e.target.value = '';
-                        if (file) uploadInvoice.mutate({ file, slot: 'customer' });
-                      }}
-                    />
-                  </label>
-                </div>
-                <p className="mt-2 font-mono text-sm text-slate-800">
-                  {String(pkg.invoice_file_name || pkg.invoice_storage_path || 'None on file')}
-                </p>
-                <p className="mt-1 text-xs text-slate-500">
-                  What the customer sent (value check — seal gate)
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-4 flex flex-wrap gap-2">
-              <button
-                type="button"
-                disabled={invoiceFlags.isPending}
-                onClick={() =>
-                  invoiceFlags.mutate({
-                    invoiceRequiredFromCustomer: !requiredFromCustomer,
+            <StageAccordion
+              id="invoice"
+              title="Invoice"
+              summary={mission.stages[1].summary}
+              done={mission.stages[1].done}
+              open={openStage === 'invoice'}
+              onToggle={() => toggleStage('invoice')}
+            >
+              <InvoiceComparePanel
+                packageId={packageId}
+                pkg={d.pkg}
+                hasCustomerInvoice={d.hasCustomerInvoice}
+                hasWarehouseSlip={d.hasWarehouseSlip}
+                requiredFromCustomer={d.requiredFromCustomer}
+                unobtainable={d.unobtainable}
+                note={d.note}
+                setNote={d.setNote}
+                unobtainableNote={d.unobtainableNote}
+                setUnobtainableNote={d.setUnobtainableNote}
+                parseReading={d.parseReading}
+                invoiceSuggestion={d.invoiceSuggestion}
+                setInvoiceSuggestion={d.setInvoiceSuggestion}
+                uploadPending={d.uploadInvoice.isPending}
+                verifyPending={d.verify.isPending}
+                flagsPending={d.invoiceFlags.isPending}
+                applyPending={d.applyInvoiceFill.isPending}
+                applyError={d.applyInvoiceFill.error as Error | null}
+                verifyError={d.verify.error as Error | null}
+                uploadError={d.uploadInvoice.error as Error | null}
+                flagsError={d.invoiceFlags.error as Error | null}
+                onUpload={(file, slot) => void d.handleInvoiceUpload(file, slot)}
+                onApplyFill={d.applyParsedInvoiceFields}
+                onVerify={() => d.verify.mutate()}
+                onToggleRequired={() =>
+                  d.invoiceFlags.mutate({
+                    invoiceRequiredFromCustomer: !d.requiredFromCustomer,
                   })
                 }
-                className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold hover:bg-slate-50 disabled:opacity-50"
-              >
-                {requiredFromCustomer ? 'Clear “required from customer”' : 'Mark invoice required'}
-              </button>
-              <button
-                type="button"
-                disabled={
-                  verify.isPending ||
-                  Boolean(pkg.invoice_verified_at) ||
-                  !hasCustomerInvoice
+                onMarkUnobtainable={() =>
+                  d.invoiceFlags.mutate({
+                    invoiceUnobtainable: true,
+                    unobtainableNote: d.unobtainableNote || null,
+                  })
                 }
-                onClick={() => verify.mutate()}
-                className="rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-semibold text-slate-950 disabled:opacity-50"
-              >
-                {pkg.invoice_verified_at ? 'Verified' : 'Verify invoice'}
-              </button>
-            </div>
-
-            <label className="mt-3 flex items-center gap-2 text-sm text-slate-700">
-              <input
-                type="checkbox"
-                checked={Boolean(pkg.invoice_verified_at)}
-                readOnly
-                className="rounded"
+                onClearUnobtainable={() =>
+                  d.invoiceFlags.mutate({ invoiceUnobtainable: false })
+                }
               />
-              Verified against physical package
-            </label>
-            <textarea
-              className="mt-3 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-              rows={2}
-              placeholder="Mismatch notes…"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-            />
+            </StageAccordion>
 
-            <div className="mt-4 rounded-lg border border-dashed border-slate-300 px-3 py-3">
-              <p className="text-xs font-medium text-slate-600">
-                Could not get a customer invoice?
-              </p>
-              <textarea
-                className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                rows={2}
-                placeholder="Note (e.g. customer unreachable)…"
-                value={unobtainableNote}
-                onChange={(e) => setUnobtainableNote(e.target.value)}
-                disabled={unobtainable}
+            <StageAccordion
+              id="duty"
+              title="Duty"
+              summary={mission.stages[2].summary}
+              done={mission.stages[2].done}
+              open={openStage === 'duty'}
+              onToggle={() => toggleStage('duty')}
+            >
+              <DutyPanel
+                dutyView={d.dutyView}
+                computePending={d.compute.isPending}
+                computeError={d.compute.error as Error | null}
+                onRecalculate={() => d.compute.mutate()}
               />
-              <div className="mt-2 flex flex-wrap gap-2">
-                {!unobtainable ? (
-                  <button
-                    type="button"
-                    disabled={invoiceFlags.isPending}
-                    onClick={() =>
-                      invoiceFlags.mutate({
-                        invoiceUnobtainable: true,
-                        unobtainableNote: unobtainableNote || null,
-                      })
-                    }
-                    className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold hover:bg-slate-50 disabled:opacity-50"
-                  >
-                    Mark could not obtain
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    disabled={invoiceFlags.isPending}
-                    onClick={() => invoiceFlags.mutate({ invoiceUnobtainable: false })}
-                    className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold hover:bg-slate-50 disabled:opacity-50"
-                  >
-                    Clear unobtainable
-                  </button>
-                )}
-              </div>
-              {unobtainable && pkg.invoice_unobtainable_note != null && (
-                <p className="mt-2 text-xs text-slate-500">
-                  Note: {String(pkg.invoice_unobtainable_note)}
-                </p>
-              )}
-            </div>
+            </StageAccordion>
 
-            {(verify.error || uploadInvoice.error || invoiceFlags.error) && (
-              <p className="mt-2 text-xs text-red-700">
-                {(
-                  (verify.error || uploadInvoice.error || invoiceFlags.error) as Error
-                ).message}
-              </p>
-            )}
-          </section>
-
-          <section className="rounded-xl border border-slate-200 bg-white p-5 lg:col-span-2">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-sm font-semibold text-slate-900">Landed cost / duty</h2>
-              <button
-                type="button"
-                disabled={compute.isPending || !packageId}
-                onClick={() => compute.mutate()}
-                className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
-              >
-                Recalculate duty
-              </button>
-            </div>
-            {compute.error && (
-              <p className="mt-2 text-xs text-red-700">{(compute.error as Error).message}</p>
-            )}
-            {!dutyView ? (
-              <p className="mt-3 text-sm text-slate-500">
-                No duty snapshot yet — recalculate after invoice + value are set.
-              </p>
-            ) : (
-              <>
-                {dutyView.aboveThreshold ? (
-                  <p className="mt-2 text-xs text-amber-800">
-                    CIF above US$100 tax-free threshold
+            <StageAccordion
+              id="bill"
+              title="Bill"
+              summary={mission.stages[3].summary}
+              done={mission.stages[3].done}
+              open={openStage === 'bill'}
+              onToggle={() => toggleStage('bill')}
+            >
+              {issuedInvoice ? (
+                <div className="space-y-2 text-sm">
+                  <p className="text-slate-700">
+                    Consolidated invoice{' '}
+                    <span className="font-mono font-semibold">
+                      {String(issuedInvoice.invoice_number ?? issuedInvoice.id)}
+                    </span>{' '}
+                    · {String(issuedInvoice.status ?? 'issued')}
                   </p>
-                ) : (
-                  <p className="mt-2 text-xs text-green-700">
-                    CIF ≤ US$100 — primary import taxes waived
-                  </p>
-                )}
-                <div className="mt-3 overflow-x-auto">
-                  <table className="min-w-full text-sm">
-                    <tbody>
-                      {(
-                        [
-                          ['CIF', dutyView.cifUsd],
-                          ['Import Duty', dutyView.importDutyUsd],
-                          ['SCF 0.3%', dutyView.scfUsd],
-                          ['ENV 0.5%', dutyView.envUsd],
-                          ['GCT 15%', dutyView.gctUsd],
-                          ['Stamp (J$)', dutyView.stampJmd],
-                          ['CAF (J$)', dutyView.cafJmd],
-                        ] as const
-                      ).map(([label, val]) => (
-                        <tr key={label} className="border-t border-slate-100">
-                          <td className="py-2 text-slate-600">{label}</td>
-                          <td className="py-2 text-right font-mono tabular-nums">
-                            {label.includes('J$')
-                              ? `J$${val.toFixed(0)}`
-                              : `US$${val.toFixed(2)}`}
-                          </td>
-                        </tr>
-                      ))}
-                      <tr className="border-t-2 border-slate-200 font-semibold">
-                        <td className="py-2">Total duty (USD equiv.)</td>
-                        <td className="py-2 text-right font-mono">
-                          US${dutyView.totalDutyUsd.toFixed(2)}
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
+                  <Link
+                    to={`/app/billing?packageId=${encodeURIComponent(packageId)}`}
+                    className="inline-flex rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold hover:bg-slate-50"
+                  >
+                    Open in Billing
+                  </Link>
                 </div>
-              </>
-            )}
-          </section>
-
-          <section className="rounded-xl border border-slate-200 bg-white p-5 lg:col-span-2">
-            <h2 className="text-sm font-semibold text-slate-900">Custody timeline</h2>
-            <ol className="mt-4 space-y-3">
-              {(detail.data?.scanEvents ?? []).length === 0 ? (
-                <li className="text-sm text-slate-500">No scan events yet</li>
               ) : (
-                (detail.data?.scanEvents ?? []).map((ev) => (
-                  <li key={String(ev.id)} className="flex gap-3 text-sm">
-                    <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-amber-500" />
-                    <div>
-                      <p className="font-medium text-slate-900">
-                        {String(ev.event_type || ev.note || 'Scan')}
-                      </p>
-                      <p className="font-mono text-xs text-slate-500">
-                        {String(ev.occurred_at || '')}
-                      </p>
-                    </div>
-                  </li>
-                ))
+                <div className="space-y-2 text-sm">
+                  <p className="text-slate-600">
+                    No consolidated invoice yet. Generate from duty + courier fees.
+                  </p>
+                  <Link
+                    to={`/app/billing?packageId=${encodeURIComponent(packageId)}&autogenerate=1`}
+                    className="inline-flex rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-semibold text-slate-950 hover:bg-amber-400"
+                  >
+                    Generate invoice
+                  </Link>
+                </div>
               )}
-            </ol>
-          </section>
-        </div>
+            </StageAccordion>
+
+            <StageAccordion
+              id="clear"
+              title="Clear"
+              summary={mission.stages[4].summary}
+              done={mission.stages[4].done}
+              open={openStage === 'clear'}
+              onToggle={() => toggleStage('clear')}
+            >
+              <p className="text-sm text-slate-600">
+                Status: <span className="font-medium">{status.replace(/_/g, ' ') || '—'}</span>
+              </p>
+              <Link
+                to="/app/customs?tab=lanes"
+                className="mt-3 inline-flex rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-semibold text-slate-950 hover:bg-amber-400"
+              >
+                Open Customs lanes
+              </Link>
+            </StageAccordion>
+
+            <StageAccordion
+              id="deliver"
+              title="Deliver"
+              summary={mission.stages[5].summary}
+              done={mission.stages[5].done}
+              open={openStage === 'deliver'}
+              onToggle={() => toggleStage('deliver')}
+            >
+              <p className="text-sm text-slate-600">
+                Status: <span className="font-medium">{status.replace(/_/g, ' ') || '—'}</span>
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Link
+                  to="/app/hub"
+                  className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold hover:bg-slate-50"
+                >
+                  Hub station
+                </Link>
+                <Link
+                  to="/app/fulfillment"
+                  className="rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-semibold text-slate-950 hover:bg-amber-400"
+                >
+                  Last mile
+                </Link>
+              </div>
+            </StageAccordion>
+
+            <StageAccordion
+              id="timeline"
+              title="Timeline"
+              summary="Custody scan history"
+              done={d.scanEvents.length > 0}
+              open={openStage === 'timeline'}
+              onToggle={() => toggleStage('timeline')}
+            >
+              <CustodyTimelinePanel scanEvents={d.scanEvents} />
+            </StageAccordion>
+          </div>
+        </>
       )}
     </div>
   );

@@ -9,6 +9,7 @@ import {
   CreditCard,
   ClipboardList,
   FileText,
+  Flag,
   Fuel,
   LayoutDashboard,
   LineChart,
@@ -17,6 +18,7 @@ import {
   Package,
   Settings,
   Ship,
+  SlidersHorizontal,
   Tags,
   Truck,
   Users,
@@ -50,92 +52,36 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Mailbox',
     icon: Package,
     children: [
-      {
-        to: '/app/pipeline',
-        label: 'Pipeline Command',
-        icon: LayoutDashboard,
-        module: 'freight_pipeline_command',
-      },
-      { to: '/app/facilities', label: 'Facilities', icon: Building2, module: 'freight_suites' },
-      { to: '/app/suites', label: 'Suites', icon: Tags, module: 'freight_suites' },
       { to: '/app/packages', label: 'Packages', icon: Package, module: 'freight_mailbox_packages' },
-      {
-        to: '/app/package-duty',
-        label: 'Package Duty',
-        icon: FileText,
-        module: 'freight_mailbox_packages',
-      },
-      {
-        to: '/app/invoice-audit',
-        label: 'Invoice Audit',
-        icon: ClipboardList,
-        module: 'freight_invoice_audit',
-      },
       { to: '/app/manifests', label: 'Manifests', icon: Boxes, module: 'freight_manifests' },
       {
-        to: '/app/manifest-builder',
-        label: 'Manifest Builder',
-        icon: Boxes,
-        module: 'freight_manifests',
-      },
-      {
-        to: '/app/hs-tariffs',
-        label: 'HS Tariffs',
-        icon: Tags,
-        module: 'freight_hs_tariffs',
-      },
-      {
         to: '/app/billing',
-        label: 'Consolidated Billing',
+        label: 'Billing',
         icon: CreditCard,
         module: 'freight_billing',
       },
     ],
   },
   {
-    to: '/app/us-intake',
+    to: '/app/receive',
     label: 'US Intake',
     icon: ClipboardList,
-    children: [
-      { to: '/app/receive', label: 'Receive', icon: ClipboardList, module: 'freight_miami_scan' },
-      {
-        to: '/app/receive-station',
-        label: 'Receive Station',
-        icon: ClipboardList,
-        module: 'freight_miami_scan',
-      },
-      { to: '/warehouse', label: 'Open Warehouse app', icon: Building2, module: 'freight_miami_scan' },
-    ],
+    module: 'freight_miami_scan',
   },
-  { to: '/app/customs', label: 'Customs', icon: FileText, module: 'freight_customs_board' },
   {
-    to: '/app/clearance',
-    label: 'Clearance Board',
-    icon: FileText,
-    module: 'freight_customs_board',
-  },
-  { to: '/app/hub', label: 'Hub Station', icon: MapPin, module: 'freight_hub_station' },
-  {
-    to: '/app/last-mile',
-    label: 'Last Mile',
-    icon: Route,
+    to: '/app/jamaica',
+    label: 'Jamaica',
+    icon: Flag,
     children: [
-      { to: '/app/fulfillment', label: 'Fulfillment', icon: Route, module: 'freight_fulfillment' },
-      { to: '/app/client-fleet', label: 'Client Fleet', icon: Car, module: 'freight_client_fleet' },
+      { to: '/app/customs', label: 'Customs', icon: FileText, module: 'freight_customs_board' },
+      { to: '/app/hub', label: 'Hub', icon: MapPin, module: 'freight_hub_station' },
+      { to: '/app/fulfillment', label: 'Last Mile', icon: Route, module: 'freight_fulfillment' },
     ],
   },
   {
-    to: '/app/setup',
-    label: 'Domestic & Setup',
+    to: '/app/domestic',
+    label: 'Domestic',
     icon: Ship,
-    children: [
-      { to: '/app/dispatch', label: 'Dispatch Board', icon: LayoutDashboard, module: 'freight_dispatch' },
-      { to: '/app/service-zones', label: 'Service Zones', icon: MapPin, module: 'freight_service_zones' },
-      { to: '/app/shipments', label: 'Shipments', icon: Ship, module: 'freight_shipments' },
-      { to: '/app/carriers', label: 'Carriers', icon: Truck, module: 'freight_carriers' },
-      { to: '/app/clients', label: 'Clients', icon: Users, module: 'freight_clients' },
-      { to: '/app/rate-cards', label: 'Rate Cards', icon: FileText, module: 'freight_rate_cards' },
-    ],
   },
   {
     to: '/app/fleet-ops',
@@ -218,6 +164,21 @@ const NAV_ITEMS: NavItem[] = [
   },
   { to: '/app/finance', label: 'Business Finance', icon: Building2, module: 'businessFinance' },
   {
+    to: '/app/setup',
+    label: 'Setup',
+    icon: SlidersHorizontal,
+    children: [
+      { to: '/app/facilities', label: 'Facilities', icon: Building2, module: 'freight_suites' },
+      { to: '/app/suites', label: 'Suites', icon: Tags, module: 'freight_suites' },
+      { to: '/app/hs-tariffs', label: 'HS Tariffs', icon: Tags, module: 'freight_hs_tariffs' },
+      { to: '/app/service-zones', label: 'Service Zones', icon: MapPin, module: 'freight_service_zones' },
+      { to: '/app/carriers', label: 'Carriers', icon: Truck, module: 'freight_carriers' },
+      { to: '/app/clients', label: 'Clients', icon: Users, module: 'freight_clients' },
+      { to: '/app/client-fleet', label: 'Client Fleet', icon: Car, module: 'freight_client_fleet' },
+      { to: '/app/rate-cards', label: 'Rate Cards', icon: FileText, module: 'freight_rate_cards' },
+    ],
+  },
+  {
     to: '/app/system',
     label: 'System',
     icon: Settings,
@@ -249,6 +210,13 @@ function isNavItemVisible(
   canAccessModule: (key: string) => boolean,
 ): boolean {
   if (isAlwaysVisibleNav(item)) return true;
+  // Domestic workspace spans freight_shipments + freight_dispatch
+  if (item.to === '/app/domestic') {
+    return (
+      (isModuleEnabled('freight_shipments') && canAccessModule('freight_shipments')) ||
+      (isModuleEnabled('freight_dispatch') && canAccessModule('freight_dispatch'))
+    );
+  }
   const mod = item.module ?? inheritedModule;
   if (item.children?.length) {
     return item.children.some((c) =>

@@ -1,12 +1,66 @@
+import { useSearchParams } from 'react-router-dom';
 import { useCustomsCases, useFreightOrgId } from '@/app/hooks/useFreight';
 import { freightService } from '@/app/services/freightService';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { ClearanceBoardPage } from '@/app/freight/os/ClearanceBoardPage';
+
+type CustomsTab = 'files' | 'lanes';
+
+function parseTab(raw: string | null): CustomsTab {
+  return raw === 'lanes' ? 'lanes' : 'files';
+}
+
+/** Tabbed hub: Cargo files | Package lanes. */
+export function CustomsWorkspacePage() {
+  const [params, setParams] = useSearchParams();
+  const tab = parseTab(params.get('tab'));
+
+  function setTab(next: CustomsTab) {
+    setParams(next === 'files' ? {} : { tab: next }, { replace: true });
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-semibold">Customs</h1>
+        <p className="mt-1 text-sm text-slate-500">
+          Jamaica customs — cargo files first, then package lanes.
+        </p>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {(
+          [
+            { id: 'files' as const, label: 'Cargo files' },
+            { id: 'lanes' as const, label: 'Package lanes' },
+          ] as const
+        ).map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setTab(t.id)}
+            className={`rounded-lg px-3 py-2 text-sm font-medium ${
+              tab === t.id
+                ? 'bg-amber-50 text-amber-900 ring-1 ring-amber-200'
+                : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'files' && <CustomsBoardPage embedded />}
+      {tab === 'lanes' && <ClearanceBoardPage embedded />}
+    </div>
+  );
+}
 
 /**
  * Ops mirror of Jamaica Customs review on courier-submitted cargo files.
  * Customs does not create the manifesto — they receive / hold / clear it.
  */
-export function CustomsBoardPage() {
+export function CustomsBoardPage({ embedded = false }: { embedded?: boolean }) {
   const { data, isLoading, error } = useCustomsCases();
   const orgId = useFreightOrgId();
   const qc = useQueryClient();
@@ -25,14 +79,22 @@ export function CustomsBoardPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Customs board</h1>
-        <p className="mt-1 max-w-2xl text-sm text-slate-500">
+      {!embedded ? (
+        <div>
+          <h1 className="text-2xl font-semibold">Customs board</h1>
+          <p className="mt-1 max-w-2xl text-sm text-slate-500">
+            Mirror Jamaica Customs inspection of cargo files your team submitted from Manifests.
+            Customs does not create the manifesto — they receive, hold, or clear it. Not a live
+            ASYCUDA connection.
+          </p>
+        </div>
+      ) : (
+        <p className="max-w-2xl text-sm text-slate-500">
           Mirror Jamaica Customs inspection of cargo files your team submitted from Manifests.
           Customs does not create the manifesto — they receive, hold, or clear it. Not a live
           ASYCUDA connection.
         </p>
-      </div>
+      )}
 
       {isLoading && <p className="text-sm text-slate-500">Loading…</p>}
       {error && (

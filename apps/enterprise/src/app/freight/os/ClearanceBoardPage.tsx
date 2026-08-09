@@ -4,7 +4,7 @@ import { useAuth } from '@/app/auth/AuthProvider';
 import { freightService } from '@/app/services/freightService';
 
 /** Customs & Clearance Board — lane cards + clearance events. */
-export function ClearanceBoardPage() {
+export function ClearanceBoardPage({ embedded = false }: { embedded?: boolean }) {
   const { organizationId, session } = useAuth();
   const qc = useQueryClient();
   const [scan, setScan] = useState('');
@@ -158,12 +158,18 @@ export function ClearanceBoardPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-slate-900">Customs &amp; Clearance</h1>
-        <p className="mt-1 text-sm text-slate-500">
+      {!embedded ? (
+        <div>
+          <h1 className="text-2xl font-semibold text-slate-900">Customs &amp; Clearance</h1>
+          <p className="mt-1 text-sm text-slate-500">
+            Lane board · de-consolidation scan · filing status
+          </p>
+        </div>
+      ) : (
+        <p className="text-sm text-slate-500">
           Lane board · de-consolidation scan · filing status
         </p>
-      </div>
+      )}
 
       <div className="rounded-xl border border-slate-200 bg-white p-4">
         <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">

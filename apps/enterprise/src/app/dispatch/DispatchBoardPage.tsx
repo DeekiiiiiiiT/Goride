@@ -28,7 +28,7 @@ function statusBadgeClass(status: string) {
   return 'bg-slate-100 text-slate-700';
 }
 
-export function DispatchBoardPage() {
+export function DispatchBoardPage({ embedded = false }: { embedded?: boolean }) {
   const { modulesError, refresh } = useModuleAccess();
   const { data, isLoading, error, refetch, isFetching } = useLogisticsJobs();
   const carriers = useFreightCarriers(false);
@@ -121,12 +121,18 @@ export function DispatchBoardPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">Dispatch Board</h1>
-          <p className="mt-1 text-sm text-slate-500">
+        {!embedded ? (
+          <div>
+            <h1 className="text-2xl font-semibold">Dispatch Board</h1>
+            <p className="mt-1 text-sm text-slate-500">
+              Domestic freight jobs — assign org fleet, client fleet, or 3PL.
+            </p>
+          </div>
+        ) : (
+          <p className="text-sm text-slate-500">
             Domestic freight jobs — assign org fleet, client fleet, or 3PL.
           </p>
-        </div>
+        )}
         <button
           type="button"
           onClick={() => void refetch()}

@@ -75,22 +75,202 @@ export function registerCourierOsRoutes(app: FreightApp) {
     if (user instanceof Response) return user;
     const { data: pkgs } = await freightDb()
       .from("packages")
-      .select("status")
+      .select(
+        "status, created_at, updated_at, invoice_required_from_customer, invoice_storage_path, invoice_file_name, invoice_verified_at, invoice_unobtainable_at",
+      )
       .eq("organization_id", user.organizationId);
+
+    const nowMs = Date.now();
     const counts: Record<string, number> = {};
-    for (const p of pkgs ?? []) {
-      const s = String(p.status);
+    const oldestByStatus: Record<string, string | null> = {};
+
+    type PkgRow = {
+      status?: string | null;
+      created_at?: string | null;
+      updated_at?: string | null;
+      invoice_required_from_customer?: boolean | null;
+      invoice_storage_path?: string | null;
+      invoice_file_name?: string | null;
+      invoice_verified_at?: string | null;
+      invoice_unobtainable_at?: string | null;
+    };
+
+    const byStatus: Record<string, PkgRow[]> = {};
+    for (const p of (pkgs ?? []) as PkgRow[]) {
+      const s = String(p.status ?? "");
       counts[s] = (counts[s] ?? 0) + 1;
+      if (!byStatus[s]) byStatus[s] = [];
+      byStatus[s].push(p);
+      const created = p.created_at || null;
+      if (created) {
+        const prev = oldestByStatus[s];
+        if (!prev || created < prev) oldestByStatus[s] = created;
+      } else if (oldestByStatus[s] === undefined) {
+        oldestByStatus[s] = null;
+      }
     }
+
+    const ageHoursFrom = (iso: string | null): number | null => {
+      if (!iso) return null;
+      const t = Date.parse(iso);
+      if (!Number.isFinite(t)) return null;
+      return Math.max(0, Math.round(((nowMs - t) / 3_600_000) * 10) / 10);
+    };
+
+    const oldestAmong = (rows: PkgRow[], useUpdated = false): string | null => {
+      let oldest: string | null = null;
+      for (const r of rows) {
+        const iso = useUpdated
+          ? r.updated_at || r.created_at || null
+          : r.created_at || r.updated_at || null;
+        if (!iso) continue;
+        if (!oldest || iso < oldest) oldest = iso;
+      }
+      return oldest;
+    };
+
+    // Invoice audit spirit: required + missing + mismatch (unverified), not unobtainable/ready
+    const invoiceEligibleStatuses = new Set([
+      "expected",
+      "received_at_warehouse",
+      "exception",
+    ]);
+    const needsInvoiceRows = ((pkgs ?? []) as PkgRow[]).filter((p) => {
+      if (!invoiceEligibleStatuses.has(String(p.status ?? ""))) return false;
+      const hasCustomer = Boolean(p.invoice_storage_path || p.invoice_file_name);
+      const unobtainable = Boolean(p.invoice_unobtainable_at);
+      const required = Boolean(p.invoice_required_from_customer);
+      const verified = Boolean(p.invoice_verified_at);
+      if (verified || unobtainable) return false;
+      // required (flagged, no file) | missing (no file) | mismatch (has file, not verified)
+      if (required && !hasCustomer) return true;
+      if (!hasCustomer && !required) return true;
+      if (hasCustomer) return true;
+      return false;
+    });
+
     const { data: dutyRows } = await freightDb()
       .from("package_duty")
-      .select("total_duty_jmd_minor")
+      .select("total_duty_jmd_minor, created_at, package_id")
       .eq("organization_id", user.organizationId);
     const dutyOutstandingJmdMinor = (dutyRows ?? []).reduce(
       (a, r) => a + Number(r.total_duty_jmd_minor ?? 0),
       0,
     );
-    return c.json({ counts, dutyOutstandingJmdMinor });
+    let oldestDutyAt: string | null = null;
+    for (const r of dutyRows ?? []) {
+      if (Number(r.total_duty_jmd_minor ?? 0) <= 0) continue;
+      const iso = (r as { created_at?: string | null }).created_at || null;
+      if (!iso) continue;
+      if (!oldestDutyAt || iso < oldestDutyAt) oldestDutyAt = iso;
+    }
+
+    type NeedsYouItem = {
+      key: string;
+      label: string;
+      count: number;
+      oldestAt: string | null;
+      ageHours: number | null;
+      href: string;
+      actionLabel: string;
+    };
+
+    const candidates: NeedsYouItem[] = [];
+
+    const pushStatusNeed = (
+      key: string,
+      label: string,
+      status: string,
+      href: string,
+      actionLabel: string,
+    ) => {
+      const rows = byStatus[status] ?? [];
+      const count = rows.length;
+      if (count === 0) return;
+      const oldestAt = oldestAmong(rows);
+      candidates.push({
+        key,
+        label,
+        count,
+        oldestAt,
+        ageHours: ageHoursFrom(oldestAt),
+        href,
+        actionLabel,
+      });
+    };
+
+    if (needsInvoiceRows.length > 0) {
+      const oldestAt = oldestAmong(needsInvoiceRows, true);
+      candidates.push({
+        key: "needs_invoice",
+        label: "Needs invoice",
+        count: needsInvoiceRows.length,
+        oldestAt,
+        ageHours: ageHoursFrom(oldestAt),
+        href: "/app/packages?tab=needs-invoice",
+        actionLabel: "Open invoice queue",
+      });
+    }
+
+    pushStatusNeed(
+      "expected",
+      "Expected",
+      "expected",
+      "/app/packages?tab=expected",
+      "Review pre-alerts",
+    );
+    pushStatusNeed(
+      "customs_hold",
+      "Customs hold",
+      "customs_hold",
+      "/app/customs?tab=lanes",
+      "Work customs hold",
+    );
+
+    if (dutyOutstandingJmdMinor > 0) {
+      candidates.push({
+        key: "duty",
+        label: "Duty outstanding",
+        count: (dutyRows ?? []).filter((r) => Number(r.total_duty_jmd_minor ?? 0) > 0)
+          .length || 1,
+        oldestAt: oldestDutyAt,
+        ageHours: ageHoursFrom(oldestDutyAt),
+        href: "/app/billing",
+        actionLabel: "Review duty billing",
+      });
+    }
+
+    pushStatusNeed(
+      "received_hub",
+      "At hub",
+      "received_hub",
+      "/app/hub",
+      "Mark ready on hub",
+    );
+    pushStatusNeed(
+      "ready_for_fulfillment",
+      "Ready for fulfillment",
+      "ready_for_fulfillment",
+      "/app/fulfillment",
+      "Assign last mile",
+    );
+    pushStatusNeed(
+      "exception",
+      "Exception",
+      "exception",
+      "/app/packages",
+      "Resolve exceptions",
+    );
+
+    const needsYou = candidates.slice(0, 6);
+
+    return c.json({
+      counts,
+      dutyOutstandingJmdMinor,
+      oldestDutyAt,
+      oldestByStatus,
+      needsYou,
+    });
   });
 
   // ---- HS tariffs ----
@@ -166,6 +346,83 @@ export function registerCourierOsRoutes(app: FreightApp) {
   });
 
   // ---- Invoice audit queue ----
+  app.get("/packages/pre-alerts/export", async (c) => {
+    const user = await requireUser(c);
+    if (user instanceof Response) return user;
+    const intendedFacilityId = c.req.query("intendedFacilityId");
+    let q = freightDb()
+      .from("packages")
+      .select(
+        "courier_tracking_number, retailer, description, declared_value_usd_minor, weight_lbs, length_in, width_in, height_in, invoice_storage_path, invoice_file_name, intended_facility_id, suites(suite_code, contact_name, contact_phone)",
+      )
+      .eq("organization_id", user.organizationId)
+      .eq("status", "expected")
+      .order("created_at", { ascending: false })
+      .limit(1000);
+    if (intendedFacilityId === "external") {
+      q = q.is("intended_facility_id", null);
+    } else if (intendedFacilityId) {
+      q = q.eq("intended_facility_id", intendedFacilityId);
+    }
+    const { data, error } = await q;
+    if (error) return c.json({ error: error.message }, 500);
+
+    const header = [
+      "tracking",
+      "suite_code",
+      "contact_name",
+      "contact_phone",
+      "retailer",
+      "description",
+      "declared_value_usd",
+      "weight_lbs",
+      "length_in",
+      "width_in",
+      "height_in",
+      "invoice_on_file",
+    ];
+    const esc = (s: string) => {
+      if (s.includes(",") || s.includes('"') || s.includes("\n")) {
+        return `"${s.replace(/"/g, '""')}"`;
+      }
+      return s;
+    };
+    const lines = [header.join(",")];
+    for (const row of data ?? []) {
+      const suite = (row.suites ?? {}) as {
+        suite_code?: string;
+        contact_name?: string;
+        contact_phone?: string;
+      };
+      const declared =
+        row.declared_value_usd_minor != null
+          ? (Number(row.declared_value_usd_minor) / 100).toFixed(2)
+          : "";
+      lines.push(
+        [
+          esc(String(row.courier_tracking_number ?? "")),
+          esc(String(suite.suite_code ?? "")),
+          esc(String(suite.contact_name ?? "")),
+          esc(String(suite.contact_phone ?? "")),
+          esc(String(row.retailer ?? "")),
+          esc(String(row.description ?? "")),
+          esc(declared),
+          esc(row.weight_lbs != null ? String(row.weight_lbs) : ""),
+          esc(row.length_in != null ? String(row.length_in) : ""),
+          esc(row.width_in != null ? String(row.width_in) : ""),
+          esc(row.height_in != null ? String(row.height_in) : ""),
+          esc(
+            row.invoice_storage_path || row.invoice_file_name ? "yes" : "no",
+          ),
+        ].join(","),
+      );
+    }
+    return c.json({
+      csv: lines.join("\n") + "\n",
+      count: (data ?? []).length,
+    });
+  });
+
   app.get("/packages/invoice-audit", async (c) => {
     const user = await requireUser(c);
     if (user instanceof Response) return user;
@@ -680,6 +937,22 @@ export function registerCourierOsRoutes(app: FreightApp) {
   });
 
   // ---- Dual-ledger billing ----
+  app.get("/billing/invoices", async (c) => {
+    const user = await requireUser(c);
+    if (user instanceof Response) return user;
+    const packageId = c.req.query("packageId");
+    let q = freightDb()
+      .from("consolidated_invoices")
+      .select("*")
+      .eq("organization_id", user.organizationId)
+      .order("issued_at", { ascending: false })
+      .limit(50);
+    if (packageId) q = q.eq("package_id", packageId);
+    const { data, error } = await q;
+    if (error) return c.json({ error: error.message }, 500);
+    return c.json({ invoices: data ?? [] });
+  });
+
   app.post("/billing/invoices", async (c) => {
     const user = await requireUser(c);
     if (user instanceof Response) return user;
