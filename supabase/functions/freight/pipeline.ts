@@ -515,6 +515,10 @@ export function registerPipelineRoutes(app: FreightApp) {
           contactPhone: z.string().max(50).optional().nullable(),
           contactEmail: z.string().email().optional().nullable().or(z.literal("")),
           trn: z.string().max(40).optional().nullable(),
+          /** Optional client label — matched to freight.clients.name (case-insensitive). */
+          clientName: z.string().max(200).optional().nullable(),
+          /** Optional branch label — matched to facilities.name or facilities.code. */
+          pickupBranch: z.string().max(200).optional().nullable(),
           defaultFulfillmentMode: fulfillmentMode.optional(),
           defaultAssigneeType: assigneeType.optional(),
           deliveryAddress: z.string().max(500).optional().nullable(),
@@ -530,12 +534,81 @@ export function registerPipelineRoutes(app: FreightApp) {
     const parsed = suiteImportBody.safeParse(await c.req.json());
     if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
 
+    const warnings: string[] = [];
     const now = new Date().toISOString();
+
+    // Resolve optional client / branch labels once per distinct value
+    const clientNameKeys = [
+      ...new Set(
+        parsed.data.rows
+          .map((r) => (r.clientName || "").trim())
+          .filter(Boolean)
+          .map((n) => n.toLowerCase()),
+      ),
+    ];
+    const branchKeys = [
+      ...new Set(
+        parsed.data.rows
+          .map((r) => (r.pickupBranch || "").trim())
+          .filter(Boolean)
+          .map((n) => n.toLowerCase()),
+      ),
+    ];
+
+    const clientByName = new Map<string, string>();
+    if (clientNameKeys.length) {
+      const { data: clients } = await freightDb()
+        .from("clients")
+        .select("id, name")
+        .eq("organization_id", user.organizationId);
+      for (const cl of clients ?? []) {
+        clientByName.set(String(cl.name).trim().toLowerCase(), String(cl.id));
+      }
+    }
+
+    const facilityByKey = new Map<string, string>();
+    if (branchKeys.length) {
+      const { data: facilities } = await freightDb()
+        .from("facilities")
+        .select("id, name, code, facility_type")
+        .eq("organization_id", user.organizationId);
+      for (const f of facilities ?? []) {
+        const id = String(f.id);
+        facilityByKey.set(String(f.name).trim().toLowerCase(), id);
+        if (f.code) facilityByKey.set(String(f.code).trim().toLowerCase(), id);
+      }
+    }
+
     const payloads = parsed.data.rows.map((b) => {
       const trnCheck = b.trn ? validateTrn(b.trn) : { valid: false, normalized: "" };
+      const suiteCode = b.suiteCode.toUpperCase().trim();
+
+      let clientId: string | null = null;
+      const clientLabel = (b.clientName || "").trim();
+      if (clientLabel) {
+        clientId = clientByName.get(clientLabel.toLowerCase()) ?? null;
+        if (!clientId) {
+          warnings.push(
+            `${suiteCode}: client "${clientLabel}" not found — suite saved without client link.`,
+          );
+        }
+      }
+
+      let pickupFacilityId: string | null = null;
+      const branchLabel = (b.pickupBranch || "").trim();
+      if (branchLabel) {
+        pickupFacilityId = facilityByKey.get(branchLabel.toLowerCase()) ?? null;
+        if (!pickupFacilityId) {
+          warnings.push(
+            `${suiteCode}: pickup branch "${branchLabel}" not found — suite saved without branch.`,
+          );
+        }
+      }
+
       return {
         organization_id: user.organizationId,
-        suite_code: b.suiteCode.toUpperCase().trim(),
+        client_id: clientId,
+        suite_code: suiteCode,
         contact_name: b.contactName || null,
         contact_phone: b.contactPhone || null,
         contact_email: b.contactEmail || null,
@@ -543,6 +616,7 @@ export function registerPipelineRoutes(app: FreightApp) {
         trn_valid: Boolean(trnCheck.valid),
         default_fulfillment_mode: b.defaultFulfillmentMode ?? "pickup",
         default_assignee_type: b.defaultAssigneeType ?? "org_fleet",
+        default_pickup_facility_id: pickupFacilityId,
         delivery_address: b.deliveryAddress || null,
         status: "active",
         updated_at: now,
@@ -583,6 +657,7 @@ export function registerPipelineRoutes(app: FreightApp) {
       updated,
       total: (data ?? []).length,
       suites: data ?? [],
+      warnings,
     });
   });
 
@@ -877,11 +952,14 @@ export function registerPipelineRoutes(app: FreightApp) {
     declaredValueUsdMinor: z.number().int().nonnegative().optional().nullable(),
     note: z.string().max(2000).optional().nullable(),
     binLocation: z.string().max(80).optional().nullable(),
+    invoiceRequiredFromCustomer: z.boolean().optional(),
   });
 
   app.post("/scans", async (c) => {
     const user = await requireUser(c);
     if (user instanceof Response) return user;
+    const seatGate = requireSeatPermission(user, "freight.mailbox.write");
+    if (seatGate instanceof Response) return seatGate;
     const parsed = scanBody.safeParse(await c.req.json());
     if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
     const b = parsed.data;
@@ -978,6 +1056,7 @@ export function registerPipelineRoutes(app: FreightApp) {
           delivery_lat: deliveryLat,
           delivery_lng: deliveryLng,
           notes: b.note || null,
+          invoice_required_from_customer: Boolean(b.invoiceRequiredFromCustomer),
         })
         .select("*")
         .single();
@@ -1065,6 +1144,10 @@ export function registerPipelineRoutes(app: FreightApp) {
           height_in: b.heightIn ?? pkg.height_in,
           description: b.description || pkg.description,
           declared_value_usd_minor: b.declaredValueUsdMinor ?? pkg.declared_value_usd_minor,
+          invoice_required_from_customer:
+            typeof b.invoiceRequiredFromCustomer === "boolean"
+              ? b.invoiceRequiredFromCustomer
+              : pkg.invoice_required_from_customer,
           updated_at: new Date().toISOString(),
         })
         .eq("id", pkg.id)

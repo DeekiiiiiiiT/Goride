@@ -7,6 +7,8 @@ const localDevNoise = [
   /Failed to fetch dynamically imported module:.*(?:localhost|127\.0\.0\.1)/i,
   /Cannot read properties of null \(reading 'useState'\)/,
   /Invalid hook call/,
+  /BridgedUserManagementPage is not defined/,
+  /useAuth must be used within AuthProvider/,
 ];
 
 // Init before app code loads. No-op when DSN is missing.

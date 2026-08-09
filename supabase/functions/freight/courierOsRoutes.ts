@@ -170,26 +170,37 @@ export function registerCourierOsRoutes(app: FreightApp) {
     const user = await requireUser(c);
     if (user instanceof Response) return user;
     const tab = c.req.query("tab") || "missing";
-    let q = freightDb()
+    const { data, error } = await freightDb()
       .from("packages")
-      .select("id, courier_tracking_number, declared_value_usd_minor, weight_lbs, invoice_storage_path, invoice_file_name, invoice_verified_at, status, suites(suite_code)")
+      .select(
+        "id, courier_tracking_number, declared_value_usd_minor, weight_lbs, invoice_storage_path, invoice_file_name, invoice_verified_at, warehouse_invoice_storage_path, warehouse_invoice_file_name, invoice_required_from_customer, invoice_unobtainable_at, invoice_unobtainable_note, status, suites(suite_code)",
+      )
       .eq("organization_id", user.organizationId)
       .in("status", ["expected", "received_at_warehouse", "exception"])
       .order("updated_at", { ascending: false })
       .limit(200);
-    const { data, error } = await q;
     if (error) return c.json({ error: error.message }, 500);
     const filtered = (data ?? []).filter((p) => {
-      const hasInv = Boolean(p.invoice_storage_path || p.invoice_file_name);
-      if (tab === "missing") return !hasInv;
-      if (tab === "ready") return hasInv && Boolean(p.invoice_verified_at);
-      // mismatch / unverified
-      return hasInv && !p.invoice_verified_at;
+      const hasCustomer = Boolean(p.invoice_storage_path || p.invoice_file_name);
+      const unobtainable = Boolean(p.invoice_unobtainable_at);
+      const required = Boolean(p.invoice_required_from_customer);
+      if (tab === "required") {
+        return required && !hasCustomer && !unobtainable && !p.invoice_verified_at;
+      }
+      if (tab === "unobtainable") return unobtainable && !p.invoice_verified_at;
+      if (tab === "missing") {
+        return !hasCustomer && !unobtainable && !required;
+      }
+      if (tab === "ready") {
+        return Boolean(p.invoice_verified_at) || unobtainable;
+      }
+      // mismatch / unverified — has customer file, not verified, not unobtainable
+      return hasCustomer && !p.invoice_verified_at && !unobtainable;
     });
     return c.json({ packages: filtered });
   });
 
-  /** Multipart invoice attach — uploads org Files + stamps package invoice fields. */
+  /** Multipart invoice attach — slot=warehouse|customer (default customer). */
   app.post("/packages/:id/invoice", async (c) => {
     const user = await requireUser(c);
     if (user instanceof Response) return user;
@@ -207,6 +218,8 @@ export function registerCourierOsRoutes(app: FreightApp) {
     if (!(file instanceof File)) {
       return c.json({ error: "file is required" }, 400);
     }
+    const slotRaw = String(form.slot || "customer").toLowerCase();
+    const slot = slotRaw === "warehouse" ? "warehouse" : "customer";
 
     const upload = await uploadOrgFile({
       organizationId: user.organizationId,
@@ -220,22 +233,86 @@ export function registerCourierOsRoutes(app: FreightApp) {
     if (!upload.ok) return c.json({ error: upload.error }, upload.status);
 
     const now = new Date().toISOString();
+    const patch =
+      slot === "warehouse"
+        ? {
+            warehouse_invoice_storage_path: upload.file.storage_path,
+            warehouse_invoice_file_name: upload.file.file_name,
+            updated_at: now,
+          }
+        : {
+            invoice_storage_path: upload.file.storage_path,
+            invoice_file_name: upload.file.file_name,
+            // New customer file invalidates prior verification / unobtainable
+            invoice_verified_at: null,
+            invoice_verified_by: null,
+            invoice_unobtainable_at: null,
+            invoice_unobtainable_by: null,
+            invoice_unobtainable_note: null,
+            invoice_required_from_customer: false,
+            updated_at: now,
+          };
+
     const { data: pkg, error } = await freightDb()
       .from("packages")
-      .update({
-        invoice_storage_path: upload.file.storage_path,
-        invoice_file_name: upload.file.file_name,
-        // New file invalidates prior clerk verification
-        invoice_verified_at: null,
-        invoice_verified_by: null,
-        updated_at: now,
-      })
+      .update(patch)
       .eq("id", id)
       .eq("organization_id", user.organizationId)
       .select("*")
       .maybeSingle();
     if (error) return c.json({ error: error.message }, 500);
-    return c.json({ package: pkg, file: upload.file });
+    return c.json({ package: pkg, file: upload.file, slot });
+  });
+
+  /** Warehouse / courier invoice workflow flags. */
+  app.post("/packages/:id/invoice-flags", async (c) => {
+    const user = await requireUser(c);
+    if (user instanceof Response) return user;
+    const body = z
+      .object({
+        invoiceRequiredFromCustomer: z.boolean().optional(),
+        invoiceUnobtainable: z.boolean().optional(),
+        unobtainableNote: z.string().max(1000).optional().nullable(),
+      })
+      .safeParse(await c.req.json().catch(() => ({})));
+    if (!body.success) return c.json({ error: body.error.flatten() }, 400);
+
+    const id = c.req.param("id");
+    const { data: current } = await freightDb()
+      .from("packages")
+      .select("id")
+      .eq("id", id)
+      .eq("organization_id", user.organizationId)
+      .maybeSingle();
+    if (!current) return c.json({ error: "Not found" }, 404);
+
+    const now = new Date().toISOString();
+    const patch: Record<string, unknown> = { updated_at: now };
+    if (typeof body.data.invoiceRequiredFromCustomer === "boolean") {
+      patch.invoice_required_from_customer = body.data.invoiceRequiredFromCustomer;
+    }
+    if (typeof body.data.invoiceUnobtainable === "boolean") {
+      if (body.data.invoiceUnobtainable) {
+        patch.invoice_unobtainable_at = now;
+        patch.invoice_unobtainable_by = user.id;
+        patch.invoice_unobtainable_note = body.data.unobtainableNote ?? null;
+        patch.invoice_required_from_customer = false;
+      } else {
+        patch.invoice_unobtainable_at = null;
+        patch.invoice_unobtainable_by = null;
+        patch.invoice_unobtainable_note = null;
+      }
+    }
+
+    const { data: pkg, error } = await freightDb()
+      .from("packages")
+      .update(patch)
+      .eq("id", id)
+      .eq("organization_id", user.organizationId)
+      .select("*")
+      .maybeSingle();
+    if (error) return c.json({ error: error.message }, 500);
+    return c.json({ package: pkg });
   });
 
   app.post("/packages/:id/verify-invoice", async (c) => {
@@ -255,7 +332,7 @@ export function registerCourierOsRoutes(app: FreightApp) {
     if (!current) return c.json({ error: "Not found" }, 404);
     if (!current.invoice_storage_path && !current.invoice_file_name) {
       return c.json(
-        { error: "Upload a commercial invoice before verifying" },
+        { error: "Upload a customer commercial invoice before verifying" },
         400,
       );
     }
@@ -266,6 +343,10 @@ export function registerCourierOsRoutes(app: FreightApp) {
       .update({
         invoice_verified_at: now,
         invoice_verified_by: user.id,
+        invoice_unobtainable_at: null,
+        invoice_unobtainable_by: null,
+        invoice_unobtainable_note: null,
+        invoice_required_from_customer: false,
         notes: body.data.note ?? undefined,
         updated_at: now,
       })

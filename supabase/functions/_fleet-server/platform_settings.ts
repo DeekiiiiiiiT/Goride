@@ -73,6 +73,7 @@ function fleetBusinessTypes(rideshareOnly: boolean): Record<string, boolean> {
       trucking: false,
       shipping: false,
       freight_forwarding: false,
+      warehouse: false,
     };
   }
   return {
@@ -82,6 +83,7 @@ function fleetBusinessTypes(rideshareOnly: boolean): Record<string, boolean> {
     trucking: true,
     shipping: true,
     freight_forwarding: true,
+    warehouse: false,
   };
 }
 

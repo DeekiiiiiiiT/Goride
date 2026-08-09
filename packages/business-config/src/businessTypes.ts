@@ -12,6 +12,7 @@ export const BUSINESS_TYPE_KEYS = [
   'trucking',
   'shipping',
   'freight_forwarding',
+  'warehouse',
 ] as const satisfies readonly BusinessType[];
 
 export const BUSINESS_TYPES = [
@@ -47,18 +48,38 @@ export const BUSINESS_TYPES = [
   },
   {
     key: 'freight_forwarding' as BusinessType,
-    label: 'Freight Forwarding',
-    description: 'Multi-leg freight ops, own fleet and 3PL carriers',
+    label: 'Freight Forwarding (Courier)',
+    description: 'Mailbox courier / JA freight — customer-facing ops',
     icon: 'Boxes',
+  },
+  {
+    key: 'warehouse' as BusinessType,
+    label: 'Intake Warehouse',
+    description: 'US/origin receive floor — scan, bin, packing slip handoff',
+    icon: 'Package',
   },
 ] as const;
 
-/** Business types shown/toggleable on the Enterprise product line. */
+/** Business types shown/toggleable on the Enterprise product line (self-serve). */
 export const ENTERPRISE_BUSINESS_TYPES: BusinessType[] = [
   'freight_forwarding',
   'trucking',
   'shipping',
   'delivery',
+];
+
+/**
+ * Enterprise verticals provisioned by invite / Dominion only (not open signup).
+ * Warehouse is sold later; until then only invited partner orgs.
+ */
+export const INVITATION_ONLY_ENTERPRISE_BUSINESS_TYPES: BusinessType[] = [
+  'warehouse',
+];
+
+/** Full Enterprise catalog including invitation-only verticals (Dominion). */
+export const ENTERPRISE_ALL_BUSINESS_TYPES: BusinessType[] = [
+  ...ENTERPRISE_BUSINESS_TYPES,
+  ...INVITATION_ONLY_ENTERPRISE_BUSINESS_TYPES,
 ];
 
 /** Business types excluded from Enterprise Dominion toggles. */
@@ -80,13 +101,26 @@ export function isValidBusinessType(value: unknown): value is BusinessType {
 
 export function businessTypesForSegment(
   segment: 'fleet' | 'enterprise',
+  opts?: { includeInvitationOnly?: boolean },
 ): typeof BUSINESS_TYPES[number][] {
   if (segment === 'enterprise') {
-    return BUSINESS_TYPES.filter((bt) =>
-      ENTERPRISE_BUSINESS_TYPES.includes(bt.key),
-    );
+    const allowed = opts?.includeInvitationOnly
+      ? ENTERPRISE_ALL_BUSINESS_TYPES
+      : ENTERPRISE_BUSINESS_TYPES;
+    return BUSINESS_TYPES.filter((bt) => allowed.includes(bt.key));
   }
   return [...BUSINESS_TYPES];
+}
+
+export function isInvitationOnlyEnterpriseBusinessType(
+  value: unknown,
+): boolean {
+  return (
+    typeof value === 'string' &&
+    (INVITATION_ONLY_ENTERPRISE_BUSINESS_TYPES as readonly string[]).includes(
+      value,
+    )
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -101,6 +135,7 @@ export const SIDEBAR_VISIBILITY: Record<string, BusinessType[]> = {
     'trucking',
     'shipping',
     'freight_forwarding',
+    'warehouse',
   ],
   imports: [
     'rideshare',
@@ -165,6 +200,7 @@ export const SIDEBAR_VISIBILITY: Record<string, BusinessType[]> = {
     'trucking',
     'shipping',
     'freight_forwarding',
+    'warehouse',
   ],
   'earnings-policy': ['rideshare'],
   'tier-config': ['rideshare'],

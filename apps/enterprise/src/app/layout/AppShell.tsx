@@ -47,7 +47,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/app', label: 'Dashboard', icon: LayoutDashboard, end: true },
   {
     to: '/app/mailbox',
-    label: 'Mailbox & Intake',
+    label: 'Mailbox',
     icon: Package,
     children: [
       {
@@ -64,13 +64,6 @@ const NAV_ITEMS: NavItem[] = [
         label: 'Package Duty',
         icon: FileText,
         module: 'freight_mailbox_packages',
-      },
-      { to: '/app/receive', label: 'Receive', icon: ClipboardList, module: 'freight_miami_scan' },
-      {
-        to: '/app/receive-station',
-        label: 'Receive Station',
-        icon: ClipboardList,
-        module: 'freight_miami_scan',
       },
       {
         to: '/app/invoice-audit',
@@ -97,6 +90,21 @@ const NAV_ITEMS: NavItem[] = [
         icon: CreditCard,
         module: 'freight_billing',
       },
+    ],
+  },
+  {
+    to: '/app/us-intake',
+    label: 'US Intake',
+    icon: ClipboardList,
+    children: [
+      { to: '/app/receive', label: 'Receive', icon: ClipboardList, module: 'freight_miami_scan' },
+      {
+        to: '/app/receive-station',
+        label: 'Receive Station',
+        icon: ClipboardList,
+        module: 'freight_miami_scan',
+      },
+      { to: '/warehouse', label: 'Open Warehouse app', icon: Building2, module: 'freight_miami_scan' },
     ],
   },
   { to: '/app/customs', label: 'Customs', icon: FileText, module: 'freight_customs_board' },
@@ -221,16 +229,35 @@ const NAV_ITEMS: NavItem[] = [
   },
 ];
 
-function useVisibleChildren(children: NavItem[] | undefined) {
+function useVisibleChildren(children: NavItem[] | undefined, inheritedModule?: ModuleKey) {
   const { isModuleEnabled } = useModuleAccess();
   const { canAccessModule } = useSeatAccess();
-  const ok = (mod?: ModuleKey) => !mod || (isModuleEnabled(mod) && canAccessModule(mod));
-  return (children ?? []).filter((c) => {
-    if (c.children?.length) {
-      return c.children.some((gc) => ok(gc.module)) || ok(c.module);
-    }
-    return ok(c.module);
-  });
+  return (children ?? []).filter((c) =>
+    isNavItemVisible(c, inheritedModule, isModuleEnabled, canAccessModule),
+  );
+}
+
+/** Always-on destinations (authenticated shell). */
+function isAlwaysVisibleNav(item: NavItem): boolean {
+  return item.to === '/app' || item.to === '/app/settings';
+}
+
+function isNavItemVisible(
+  item: NavItem,
+  inheritedModule: ModuleKey | undefined,
+  isModuleEnabled: (key: ModuleKey) => boolean,
+  canAccessModule: (key: string) => boolean,
+): boolean {
+  if (isAlwaysVisibleNav(item)) return true;
+  const mod = item.module ?? inheritedModule;
+  if (item.children?.length) {
+    return item.children.some((c) =>
+      isNavItemVisible(c, mod, isModuleEnabled, canAccessModule),
+    );
+  }
+  // Leaf with no module and no ancestor module → hide (closes Fleet Ops HMR leak)
+  if (!mod) return false;
+  return isModuleEnabled(mod) && canAccessModule(mod);
 }
 
 function pathMatches(pathname: string, to: string, end?: boolean) {
@@ -296,7 +323,7 @@ function FlyoutRow({
   onNavigate: () => void;
 }) {
   const location = useLocation();
-  const nested = useVisibleChildren(item.children);
+  const nested = useVisibleChildren(item.children, item.module);
   const menuId = useId();
   const rowRef = useRef<HTMLDivElement>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -404,7 +431,7 @@ function FlyoutRow({
 
 function NavItemLink({ item }: { item: NavItem }) {
   const location = useLocation();
-  const visibleChildren = useVisibleChildren(item.children);
+  const visibleChildren = useVisibleChildren(item.children, item.module);
   const menuId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -528,16 +555,7 @@ function isTopLevelVisible(
   isModuleEnabled: (key: ModuleKey) => boolean,
   canAccessModule: (key: string) => boolean,
 ): boolean {
-  const ok = (mod?: ModuleKey) => !mod || (isModuleEnabled(mod) && canAccessModule(mod));
-  if (item.children?.length) {
-    return item.children.some((c) => {
-      if (c.children?.length) {
-        return c.children.some((gc) => ok(gc.module)) || ok(c.module);
-      }
-      return ok(c.module);
-    });
-  }
-  return ok(item.module);
+  return isNavItemVisible(item, undefined, isModuleEnabled, canAccessModule);
 }
 
 export function AppShell() {
@@ -562,7 +580,7 @@ export function AppShell() {
           <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-600">
             Roam Enterprise
           </p>
-          <p className="mt-1 text-sm font-semibold">Operations</p>
+          <p className="mt-1 text-sm font-semibold">Courier</p>
         </div>
         <nav className="flex-1 space-y-0.5 overflow-y-auto p-3">
           {loading ? (

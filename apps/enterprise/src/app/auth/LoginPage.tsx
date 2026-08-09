@@ -1,15 +1,17 @@
 import { FormEvent, useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { InstallAppButton } from '@fleet/components/pwa/PwaLifecycleHost';
+import { jwtPrimaryRole, supabaseEnterpriseApp } from '@roam/auth-client';
 import { useAuth } from '@/app/auth/AuthProvider';
+import { resolveEnterpriseHomePath } from '@/app/verticals/enterpriseHome';
 
 const GENERIC_AUTH_ERROR = 'Invalid email or password';
 
 export function LoginPage() {
-  const { session, signIn, loading } = useAuth();
+  const { session, user, signIn, loading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const from = (location.state as { from?: string; authError?: string } | null)?.from || '/app';
+  const requestedFrom = (location.state as { from?: string; authError?: string } | null)?.from;
   const stateError = (location.state as { authError?: string } | null)?.authError;
 
   const [email, setEmail] = useState('');
@@ -17,8 +19,16 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(stateError ?? null);
   const [submitting, setSubmitting] = useState(false);
 
+  const sessionHome = session
+    ? resolveEnterpriseHomePath(jwtPrimaryRole(user) || null)
+    : '/app';
+  const defaultHome =
+    requestedFrom?.startsWith('/warehouse') || requestedFrom?.startsWith('/app')
+      ? requestedFrom
+      : sessionHome;
+
   if (!loading && session) {
-    return <Navigate to={from} replace />;
+    return <Navigate to={defaultHome} replace />;
   }
 
   async function onSubmit(e: FormEvent) {
@@ -31,7 +41,14 @@ export function LoginPage() {
       setError(GENERIC_AUTH_ERROR);
       return;
     }
-    navigate(from, { replace: true });
+    const { data } = await supabaseEnterpriseApp.auth.getSession();
+    const role = data.session?.user ? jwtPrimaryRole(data.session.user) : null;
+    const home = resolveEnterpriseHomePath(role);
+    const dest =
+      requestedFrom?.startsWith('/warehouse') || requestedFrom?.startsWith('/app')
+        ? requestedFrom
+        : home;
+    navigate(dest, { replace: true });
   }
 
   return (
@@ -42,10 +59,10 @@ export function LoginPage() {
         </p>
         <h1 className="mt-2 text-2xl font-semibold text-white">Sign in</h1>
         <p className="mt-1 text-sm text-slate-400">
-          Back-office for freight forwarding and logistics ops.
+          Courier ops and warehouse intake for Enterprise logistics.
         </p>
 
-        <form onSubmit={onSubmit} className="mt-8 space-y-4">
+        <form onSubmit={(e) => void onSubmit(e)} className="mt-8 space-y-4">
           <label className="block text-sm text-slate-300">
             Email
             <input

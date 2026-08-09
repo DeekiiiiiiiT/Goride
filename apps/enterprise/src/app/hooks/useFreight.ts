@@ -223,6 +223,8 @@ export function useImportSuites() {
         contactPhone?: string | null;
         contactEmail?: string | null;
         trn?: string | null;
+        clientName?: string | null;
+        pickupBranch?: string | null;
         defaultFulfillmentMode?: string;
         defaultAssigneeType?: string;
         deliveryAddress?: string | null;

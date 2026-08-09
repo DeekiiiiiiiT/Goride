@@ -10,7 +10,7 @@ Ops-managed mailbox freight (no customer portal). SMS status updates. Pickup **a
 
 1. **Suites** — mailbox customers with Jamaica TRN (9-digit validation + `trn_valid` flag).
 2. **Receive Station** (`/app/receive-station`) — gun/scale scan → weight + bin → `received_at_warehouse`.
-3. **Invoice Audit** — verify commercial invoices before seal.
+3. **Invoice Audit** — dual files: warehouse packing slip + customer invoice; “required from customer” / “could not obtain”; verify before seal (unobtainable also unlocks seal).
 4. **HS Tariffs + Duty** — CET catalog; Landed Cost Duty Engine (CIF → duty/SCF/ENV/GCT/stamp/CAF; US$100 threshold).
 5. **Consolidated Billing** — dual-ledger invoice (courier revenue vs government pass-through).
 6. **Manifest Builder / Gatekeeper** — seal blocked when TRN, verified invoice, or weight missing.

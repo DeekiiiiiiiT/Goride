@@ -7,7 +7,15 @@ import {
 } from '@/app/freight/suiteCsvImport';
 
 /** Suites page CSV import — preview then upsert via /suites/import. */
-export function SuiteCsvImportPanel() {
+export function SuiteCsvImportPanel({
+  embedded,
+  onSuccess,
+}: {
+  /** When true, omit outer card chrome (parent overlay already provides it). */
+  embedded?: boolean;
+  /** Fired after a successful import (parent can swap to a success screen). */
+  onSuccess?: (message: string) => void;
+} = {}) {
   const importMut = useImportSuites();
   const fileRef = useRef<HTMLInputElement>(null);
   const [fileName, setFileName] = useState<string | null>(null);
@@ -53,19 +61,25 @@ export function SuiteCsvImportPanel() {
           contactPhone: r.contactPhone,
           contactEmail: r.contactEmail,
           trn: r.trn,
+          clientName: r.clientName,
+          pickupBranch: r.pickupBranch,
           defaultFulfillmentMode: r.defaultFulfillmentMode,
           defaultAssigneeType: r.defaultAssigneeType,
           deliveryAddress: r.deliveryAddress,
         })),
       );
-      setResultMsg({
-        tone: 'ok',
-        text: `Imported ${res.total} suite(s): ${res.created} new, ${res.updated} updated.`,
-      });
+      const message =
+        `Imported ${res.total} suite(s): ${res.created} new, ${res.updated} updated.` +
+        (res.warnings?.length ? ` Notes: ${res.warnings.slice(0, 3).join(' ')}` : '');
       setPreview([]);
       setParseErrors([]);
       setFileName(null);
       if (fileRef.current) fileRef.current.value = '';
+      if (onSuccess) {
+        onSuccess(message);
+        return;
+      }
+      setResultMsg({ tone: 'ok', text: message });
     } catch (err) {
       setResultMsg({
         tone: 'err',
@@ -75,19 +89,22 @@ export function SuiteCsvImportPanel() {
   }
 
   return (
-    <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-6">
+    <div className={embedded ? 'space-y-3' : 'space-y-3 rounded-xl border border-slate-200 bg-white p-6'}>
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-semibold">Import customers (CSV)</h2>
-          <p className="mt-1 text-xs text-slate-500">
-            Upload mailbox codes from your freight site (e.g. BSHPD10859). Re-import updates
-            matching suite codes.
-          </p>
-        </div>
+        {!embedded && (
+          <div>
+            <h2 className="text-sm font-semibold">Import customers (CSV)</h2>
+            <p className="mt-1 text-xs text-slate-500">
+              Upload mailbox codes from your freight site. Re-import updates matching suite codes.
+            </p>
+          </div>
+        )}
         <button
           type="button"
           onClick={downloadTemplate}
-          className="text-xs font-medium text-amber-800 underline-offset-2 hover:underline"
+          className={`text-xs font-medium text-amber-800 underline-offset-2 hover:underline ${
+            embedded ? 'ml-auto' : ''
+          }`}
         >
           Download template
         </button>

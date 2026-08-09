@@ -15,18 +15,29 @@ Fleet managers are tagged `productLine: fleet` and `businessType: rideshare`.
 
 | Domain | Audience | Surfaces |
 |--------|----------|----------|
-| [roamenterprise.co](https://roamenterprise.co) | Delivery, trucking, shipping, freight-forwarding orgs | Marketing (public) + `/login` + `/app/*` tenant back-office + `/admin` product ops |
+| [roamenterprise.co](https://roamenterprise.co) | Multi-vertical B2B orgs | Marketing (public) + `/login` + vertical app shells + `/admin` product ops |
 | [roamdominion.co](https://roamdominion.co) | Platform Super Admin | Dominion segment `enterprise` |
 
 **Architecture (locked 2026-07-31):** Enterprise is its **own authenticated app** inside `apps/enterprise` (Path B). It is **not** a second deploy of `apps/fleet`. Shared packages (`@roam/ui`, `@roam/auth-client`, `@roam/admin-core`, etc.) are reused; Fleet’s app shell is not.
 
 Enterprise orgs are tagged `productLine: enterprise` with business types from `@roam/business-config` (default vertical: `freight_forwarding`). Rideshare/taxi are excluded from Enterprise signup toggles.
 
-### Locked v1 scope (Freight Forwarding)
+### Verticals on the same domain (2026-08)
+
+| Path | Vertical | Buyer | Scope |
+|------|----------|--------|--------|
+| `/app/*` | **Courier** (`freight_forwarding`) | Paying customer | Suites, invoice audit, manifests, customs, hub, last mile, thin **US Intake** |
+| `/warehouse/*` | **Warehouse** (`warehouse`) | Invitation-only partner / same-org floor seats | Inbound queue, Receive Station, warehouse facilities |
+
+Warehouse Intake seats (`enterprise_warehouse`) land on `/warehouse`. Courier roles land on `/app`. Same freight backend (`freight` edge + `freight.packages`).
+
+**Deferred (Phase 2):** multi-org `warehouse_courier_links` when a third-party warehouse serves a different courier company. Today handoff is same-organization.
+
+### Locked v1 scope (Freight Forwarding / Courier)
 
 - Back-office desktop only (no customer self-serve portal in intl pipeline)
 - Own fleet + 3PL carriers modeled from day one
-- Domestic Jamaica shipments **and** international mailbox pipeline (Miami → customs broker pack → JA hub → pickup/door)
+- Domestic Jamaica shipments **and** international mailbox pipeline (US intake → customs pack → JA hub → pickup/door)
 - Mixed last-mile fleets: Roam marketplace, org fleet, client-owned, 3PL
 - Customs: broker CSV export + manual status board (no live ASYCUDA API)
 - Monetization / payment wall deferred

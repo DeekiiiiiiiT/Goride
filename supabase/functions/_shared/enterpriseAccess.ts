@@ -6,9 +6,11 @@ import { getJwtRoles, jwtPrimaryRole } from "./authEdge.ts";
 import { PLATFORM_ROLES } from "./productAdmin.ts";
 import {
   enterpriseSeatHasPermission,
+  parseSectionOverrides,
   resolveEnterpriseSeatRole,
   seatForbiddenResponse,
   type EnterpriseSeatPermission,
+  type EnterpriseSectionOverrides,
 } from "./enterpriseSeat.ts";
 
 export type EnterpriseAccessUser = {
@@ -17,6 +19,7 @@ export type EnterpriseAccessUser = {
   role: string;
   organizationId: string;
   isPlatformRole: boolean;
+  sectionOverrides: EnterpriseSectionOverrides;
 };
 
 function authClient(authHeader: string) {
@@ -45,6 +48,7 @@ const ORG_SEAT_ROLES = new Set([
   "enterprise_owner",
   "enterprise_dispatcher",
   "enterprise_customs",
+  "enterprise_warehouse",
   "enterprise_finance",
   "enterprise_viewer",
 ]);
@@ -122,6 +126,9 @@ export async function requireEnterpriseAccess(c: {
     role: primaryRole,
     organizationId,
     isPlatformRole: isPlatform,
+    sectionOverrides: parseSectionOverrides(
+      user.app_metadata?.sectionOverrides ?? user.user_metadata?.sectionOverrides,
+    ),
   };
 }
 
@@ -132,6 +139,6 @@ export function requireSeatPermission(
 ): true | Response {
   if (user.isPlatformRole) return true;
   const seat = resolveEnterpriseSeatRole(user.role);
-  if (enterpriseSeatHasPermission(seat, permission)) return true;
+  if (enterpriseSeatHasPermission(seat, permission, user.sectionOverrides)) return true;
   return seatForbiddenResponse(`Missing permission: ${permission}`);
 }

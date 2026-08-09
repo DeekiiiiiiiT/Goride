@@ -1,5 +1,4 @@
 import {
-  createContext,
   useCallback,
   useContext,
   useEffect,
@@ -9,20 +8,7 @@ import {
 } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import { jwtPrimaryRole, supabaseEnterpriseApp } from '@roam/auth-client';
-
-type AuthContextValue = {
-  session: Session | null;
-  user: User | null;
-  role: string | null;
-  organizationId: string | null;
-  productLine: string | null;
-  loading: boolean;
-  signIn: (email: string, password: string) => Promise<{ error: string | null }>;
-  signOut: () => Promise<void>;
-  refreshSession: () => Promise<void>;
-};
-
-const AuthContext = createContext<AuthContextValue | null>(null);
+import { AuthContext } from '@/app/auth/authContext';
 
 function deriveOrgId(u: User): string | null {
   const appMeta = u.app_metadata || {};
@@ -134,6 +120,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     if (!line) {
+      const orgId =
+        (data.user.app_metadata?.organizationId as string | undefined) ||
+        (data.user.user_metadata?.organizationId as string | undefined);
+
+      if (orgId) {
+        const { data: memberOrg } = await supabaseEnterpriseApp
+          .from('organizations')
+          .select('id, product_line')
+          .eq('id', orgId)
+          .eq('product_line', 'enterprise')
+          .maybeSingle();
+        if (memberOrg) {
+          return { error: null };
+        }
+      }
+
       const { data: owned } = await supabaseEnterpriseApp
         .from('organizations')
         .select('id, product_line')

@@ -216,6 +216,8 @@ export const freightService = {
       contactPhone?: string | null;
       contactEmail?: string | null;
       trn?: string | null;
+      clientName?: string | null;
+      pickupBranch?: string | null;
       defaultFulfillmentMode?: string;
       defaultAssigneeType?: string;
       deliveryAddress?: string | null;
@@ -227,6 +229,7 @@ export const freightService = {
       updated: number;
       total: number;
       suites: Record<string, unknown>[];
+      warnings?: string[];
     }>('/suites/import', {
       method: 'POST',
       body: JSON.stringify({ rows }),
@@ -617,11 +620,13 @@ export const freightService = {
     packageId: string,
     file: File,
     organizationId?: string | null,
+    slot: 'warehouse' | 'customer' = 'customer',
   ) => {
     const headers = await authHeaders(organizationId, { json: false });
     const fd = new FormData();
     fd.append('file', file);
     fd.append('fileName', file.name);
+    fd.append('slot', slot);
     const res = await fetch(`${API_ENDPOINTS.freight}/packages/${packageId}/invoice`, {
       method: 'POST',
       headers,
@@ -634,8 +639,24 @@ export const freightService = {
     return json as {
       package: Record<string, unknown>;
       file: Record<string, unknown>;
+      slot: string;
     };
   },
+
+  setInvoiceFlags: (
+    id: string,
+    body: {
+      invoiceRequiredFromCustomer?: boolean;
+      invoiceUnobtainable?: boolean;
+      unobtainableNote?: string | null;
+    },
+    organizationId?: string | null,
+  ) =>
+    freightFetch<{ package: Record<string, unknown> }>(`/packages/${id}/invoice-flags`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+      organizationId,
+    }),
 
   verifyInvoice: (id: string, note?: string, organizationId?: string | null) =>
     freightFetch<{ package: Record<string, unknown> }>(`/packages/${id}/verify-invoice`, {

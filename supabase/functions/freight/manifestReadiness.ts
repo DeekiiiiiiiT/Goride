@@ -9,6 +9,7 @@ export type ReadinessPackage = {
   invoice_storage_path?: string | null;
   invoice_file_name?: string | null;
   invoice_verified_at?: string | null;
+  invoice_unobtainable_at?: string | null;
   suites?: {
     suite_code?: string | null;
     trn?: string | null;
@@ -35,6 +36,12 @@ function hasWeight(p: ReadinessPackage): boolean {
   return (Number.isFinite(lbs) && lbs > 0) || (Number.isFinite(kg) && kg > 0);
 }
 
+function invoiceGateOk(p: ReadinessPackage): boolean {
+  if (p.invoice_unobtainable_at) return true;
+  const hasCustomer = Boolean(p.invoice_storage_path || p.invoice_file_name);
+  return hasCustomer && Boolean(p.invoice_verified_at);
+}
+
 export function evaluatePackageReadiness(p: ReadinessPackage): ReadinessBlocker[] {
   const tracking = p.courier_tracking_number || p.id.slice(0, 8);
   const blockers: ReadinessBlocker[] = [];
@@ -57,20 +64,23 @@ export function evaluatePackageReadiness(p: ReadinessPackage): ReadinessBlocker[
     });
   }
 
-  if (!p.invoice_storage_path && !p.invoice_file_name) {
-    blockers.push({
-      packageId: p.id,
-      tracking,
-      code: "missing_invoice",
-      message: "Commercial invoice file is missing",
-    });
-  } else if (!p.invoice_verified_at) {
-    blockers.push({
-      packageId: p.id,
-      tracking,
-      code: "invoice_unverified",
-      message: "Invoice not verified by clerk",
-    });
+  if (!invoiceGateOk(p)) {
+    const hasCustomer = Boolean(p.invoice_storage_path || p.invoice_file_name);
+    if (!hasCustomer) {
+      blockers.push({
+        packageId: p.id,
+        tracking,
+        code: "missing_invoice",
+        message: "Customer commercial invoice missing (or mark could not obtain)",
+      });
+    } else {
+      blockers.push({
+        packageId: p.id,
+        tracking,
+        code: "invoice_unverified",
+        message: "Invoice not verified by clerk",
+      });
+    }
   }
 
   if (!hasWeight(p)) {

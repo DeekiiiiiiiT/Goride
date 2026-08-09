@@ -200,6 +200,17 @@ export function resolveRole(raw: string | null | undefined): Role {
     case 'admin':      return 'fleet_owner';
     case 'manager':    return 'fleet_manager';
     case 'viewer':     return 'fleet_viewer';
+    // Enterprise customer seats → nearest fleet RBAC for /team/* gates
+    case 'enterprise_owner':
+      return 'fleet_owner';
+    case 'enterprise_dispatcher':
+    case 'enterprise_customs':
+    case 'enterprise_warehouse':
+      return 'fleet_manager';
+    case 'enterprise_finance':
+      return 'fleet_accountant';
+    case 'enterprise_viewer':
+      return 'fleet_viewer';
   }
   if (VALID_ROLES.has(raw)) return raw as Role;
   return 'fleet_viewer';

@@ -9,6 +9,8 @@ export type SuiteImportRow = {
   contactPhone: string | null;
   contactEmail: string | null;
   trn: string | null;
+  clientName: string | null;
+  pickupBranch: string | null;
   defaultFulfillmentMode: 'pickup' | 'door_delivery';
   defaultAssigneeType: 'org_fleet' | 'roam_marketplace' | 'client_fleet' | 'third_party';
   deliveryAddress: string | null;
@@ -38,6 +40,12 @@ const HEADER_ALIASES: Record<string, keyof Omit<SuiteImportRow, 'line'>> = {
   contact_email: 'contactEmail',
   email: 'contactEmail',
   trn: 'trn',
+  client: 'clientName',
+  client_name: 'clientName',
+  pickup_branch: 'pickupBranch',
+  pickup_facility: 'pickupBranch',
+  branch: 'pickupBranch',
+  default_pickup_facility: 'pickupBranch',
   default_fulfillment_mode: 'defaultFulfillmentMode',
   fulfillment: 'defaultFulfillmentMode',
   fulfillment_mode: 'defaultFulfillmentMode',
@@ -127,10 +135,10 @@ function pickAssignee(
   return 'org_fleet';
 }
 
-/** Template matching the sample freight-customers CSV. */
-export const SUITE_CSV_TEMPLATE = `suite_code,contact_name,contact_phone,contact_email,default_fulfillment_mode,delivery_address
-BSHPD10859,sadiki Thomas,8763242553,sadiki.thomas@example.com,pickup,
-BSHPD10860,Keisha Brown,8765550101,keisha.brown@example.com,pickup,
+/** Full column set matching Add customer form (client + branch matched by name/code on import). */
+export const SUITE_CSV_TEMPLATE = `suite_code,client_name,contact_name,contact_phone,contact_email,trn,default_fulfillment_mode,default_assignee_type,pickup_branch,delivery_address
+JA-1001,,Jane Doe,8765550100,jane.doe@example.com,123456789,pickup,org_fleet,,
+JA-1002,,John Doe,8765550101,john.doe@example.com,,pickup,org_fleet,,
 `;
 
 export function parseSuiteCsv(text: string): SuiteCsvParseResult {
@@ -202,6 +210,8 @@ export function parseSuiteCsv(text: string): SuiteCsvParseResult {
       contactPhone: get('contactPhone') || null,
       contactEmail: emailRaw || null,
       trn: get('trn') || null,
+      clientName: get('clientName') || null,
+      pickupBranch: get('pickupBranch') || null,
       defaultFulfillmentMode: pickFulfillment(get('defaultFulfillmentMode')),
       defaultAssigneeType: pickAssignee(get('defaultAssigneeType')),
       deliveryAddress: get('deliveryAddress') || null,

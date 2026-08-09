@@ -1,5 +1,6 @@
 export { PipelineCommandPage } from './PipelineCommandPage';
 export { WarehouseReceiveStationPage } from './WarehouseReceiveStationPage';
+export { WarehouseInboundPage } from './WarehouseInboundPage';
 export { PackageDutyDetailPage } from './PackageDutyDetailPage';
 export { InvoiceAuditQueuePage } from './InvoiceAuditQueuePage';
 export { HsTariffCatalogPage } from './HsTariffCatalogPage';

@@ -333,7 +333,8 @@ export type BusinessType =
   | 'taxi'
   | 'trucking'
   | 'shipping'
-  | 'freight_forwarding';
+  | 'freight_forwarding'
+  | 'warehouse';
 
 export interface FleetConfig {
   fleetName: string;

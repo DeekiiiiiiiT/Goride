@@ -12,6 +12,8 @@ export function WarehouseReceiveStationPage() {
   const [bin, setBin] = useState('');
   const [facilityId, setFacilityId] = useState('');
   const [suiteCode, setSuiteCode] = useState('');
+  const [invoiceRequired, setInvoiceRequired] = useState(false);
+  const [warehouseSlip, setWarehouseSlip] = useState<File | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
   const facilities = useQuery({
@@ -42,8 +44,8 @@ export function WarehouseReceiveStationPage() {
       : null;
 
   const scan = useMutation({
-    mutationFn: () =>
-      freightService.scan(
+    mutationFn: async () => {
+      const res = await freightService.scan(
         {
           barcode: barcode.trim(),
           facilityId,
@@ -51,18 +53,34 @@ export function WarehouseReceiveStationPage() {
           weightLbs: weightLbs ? Number(weightLbs) : null,
           declaredValueUsdMinor,
           binLocation: bin || null,
+          invoiceRequiredFromCustomer: invoiceRequired,
         },
         organizationId,
         `receive-station:${barcode.trim()}:${Date.now()}`,
-      ),
+      );
+      const pkgId = String(res.package?.id ?? '');
+      if (pkgId && warehouseSlip) {
+        await freightService.uploadPackageInvoice(
+          pkgId,
+          warehouseSlip,
+          organizationId,
+          'warehouse',
+        );
+      }
+      return res;
+    },
     onSuccess: (res) => {
       setToast(
-        `Received ${String(res.package?.courier_tracking_number ?? barcode)} · status ${String(res.package?.status ?? '')}`,
+        `Received ${String(res.package?.courier_tracking_number ?? barcode)} · status ${String(res.package?.status ?? '')}${
+          invoiceRequired ? ' · invoice required from customer' : ''
+        }`,
       );
       setBarcode('');
       setWeightLbs('');
       setDeclaredUsd('');
       setBin('');
+      setInvoiceRequired(false);
+      setWarehouseSlip(null);
       window.setTimeout(() => setToast(null), 2800);
     },
   });
@@ -162,6 +180,37 @@ export function WarehouseReceiveStationPage() {
               onChange={(e) => setBin(e.target.value)}
               className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-3 font-mono"
             />
+          </div>
+        </div>
+
+        <div className="mt-5 space-y-3 rounded-lg border border-slate-100 bg-slate-50 px-4 py-3">
+          <label className="flex items-start gap-2 text-sm text-slate-800">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={invoiceRequired}
+              onChange={(e) => setInvoiceRequired(e.target.checked)}
+            />
+            <span>
+              <span className="font-medium">Invoice required from customer</span>
+              <span className="mt-0.5 block text-xs text-slate-500">
+                No usable packing slip with the box — tell courier ops to request the invoice.
+              </span>
+            </span>
+          </label>
+          <div>
+            <label className="text-xs font-medium text-slate-500">
+              Warehouse packing slip (optional)
+            </label>
+            <input
+              type="file"
+              accept="application/pdf,image/*"
+              className="mt-1 block w-full text-sm text-slate-600"
+              onChange={(e) => setWarehouseSlip(e.target.files?.[0] ?? null)}
+            />
+            {warehouseSlip && (
+              <p className="mt-1 text-xs text-slate-500">{warehouseSlip.name}</p>
+            )}
           </div>
         </div>
 

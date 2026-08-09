@@ -2,19 +2,17 @@ import { ProductProviders } from '@/app/ProductProviders';
 import { RequireAuth, WrongProductLineGate } from '@/app/auth/RequireAuth';
 import { ModuleAccessProvider } from '@/app/modules/ModuleAccessProvider';
 import { SeatAccessProvider } from '@/app/seats/SeatAccessProvider';
-import { AppShell } from '@/app/layout/AppShell';
-import { RedirectWarehouseSeatFromCourier } from '@/app/verticals/RedirectWarehouseSeatFromCourier';
+import { WarehouseShell } from '@/app/layout/WarehouseShell';
 
-export default function AppEntry() {
+/** Invitation / seat-gated Warehouse vertical at /warehouse. */
+export default function WarehouseEntry() {
   return (
     <ProductProviders>
       <RequireAuth>
         <WrongProductLineGate>
           <ModuleAccessProvider>
             <SeatAccessProvider>
-              <RedirectWarehouseSeatFromCourier>
-                <AppShell />
-              </RedirectWarehouseSeatFromCourier>
+              <WarehouseShell />
             </SeatAccessProvider>
           </ModuleAccessProvider>
         </WrongProductLineGate>

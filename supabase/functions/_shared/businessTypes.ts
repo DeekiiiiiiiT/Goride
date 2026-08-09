@@ -9,15 +9,22 @@ export const ALL_BUSINESS_TYPES = [
   "trucking",
   "shipping",
   "freight_forwarding",
+  "warehouse",
 ] as const;
 
 export type BusinessTypeKey = (typeof ALL_BUSINESS_TYPES)[number];
 
+/** Self-serve Enterprise verticals (open signup / customer toggles). */
 export const ENTERPRISE_BUSINESS_TYPES: BusinessTypeKey[] = [
   "freight_forwarding",
   "trucking",
   "shipping",
   "delivery",
+];
+
+/** Dominition / invite-only — not open self-serve. */
+export const INVITATION_ONLY_ENTERPRISE_BUSINESS_TYPES: BusinessTypeKey[] = [
+  "warehouse",
 ];
 
 export function isKnownBusinessType(value: string): value is BusinessTypeKey {

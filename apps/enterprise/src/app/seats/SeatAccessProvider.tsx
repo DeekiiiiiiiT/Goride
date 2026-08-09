@@ -6,17 +6,20 @@ import {
   type ReactNode,
 } from 'react';
 import {
-  MODULE_SEAT_PERMISSION,
   enterpriseSeatHasPermission,
   getEnterpriseSeatPermissions,
+  parseSectionOverrides,
   resolveEnterpriseSeatRole,
+  seatCanAccessModule,
   type EnterpriseSeatPermission,
   type EnterpriseSeatRole,
+  type EnterpriseSectionOverrides,
 } from '@roam/auth-client';
 import { useAuth } from '@/app/auth/AuthProvider';
 
 type SeatAccessValue = {
   seatRole: EnterpriseSeatRole;
+  sectionOverrides: EnterpriseSectionOverrides;
   can: (permission: EnterpriseSeatPermission) => boolean;
   canAccessModule: (moduleKey: string) => boolean;
   permissions: readonly EnterpriseSeatPermission[];
@@ -25,28 +28,34 @@ type SeatAccessValue = {
 const SeatAccessContext = createContext<SeatAccessValue | null>(null);
 
 export function SeatAccessProvider({ children }: { children: ReactNode }) {
-  const { role } = useAuth();
+  const { role, user } = useAuth();
   const seatRole = useMemo(() => resolveEnterpriseSeatRole(role), [role]);
-  const permissions = useMemo(() => getEnterpriseSeatPermissions(seatRole), [seatRole]);
+  const sectionOverrides = useMemo(
+    () =>
+      parseSectionOverrides(
+        user?.app_metadata?.sectionOverrides ?? user?.user_metadata?.sectionOverrides,
+      ),
+    [user],
+  );
+  const permissions = useMemo(
+    () => getEnterpriseSeatPermissions(seatRole, sectionOverrides),
+    [seatRole, sectionOverrides],
+  );
 
   const can = useCallback(
     (permission: EnterpriseSeatPermission) =>
-      enterpriseSeatHasPermission(seatRole, permission),
-    [seatRole],
+      enterpriseSeatHasPermission(seatRole, permission, sectionOverrides),
+    [seatRole, sectionOverrides],
   );
 
   const canAccessModule = useCallback(
-    (moduleKey: string) => {
-      const need = MODULE_SEAT_PERMISSION[moduleKey];
-      if (!need) return true;
-      return enterpriseSeatHasPermission(seatRole, need);
-    },
-    [seatRole],
+    (moduleKey: string) => seatCanAccessModule(seatRole, moduleKey, sectionOverrides),
+    [seatRole, sectionOverrides],
   );
 
   const value = useMemo(
-    () => ({ seatRole, can, canAccessModule, permissions }),
-    [seatRole, can, canAccessModule, permissions],
+    () => ({ seatRole, sectionOverrides, can, canAccessModule, permissions }),
+    [seatRole, sectionOverrides, can, canAccessModule, permissions],
   );
 
   return (

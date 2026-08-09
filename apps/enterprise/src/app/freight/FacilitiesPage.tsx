@@ -242,7 +242,7 @@ function FacilityFields({
  * Warehouse / hub / branch setup — Day-1 before Suites or Receive.
  * Origin warehouses must pick a Dominion catalog entry (catalog-only).
  */
-export function FacilitiesPage() {
+export function FacilitiesPage({ warehouseOnly = false }: { warehouseOnly?: boolean }) {
   const { data, isLoading, error } = useFacilities();
   const catalog = useIntakeWarehouses();
   const create = useCreateFacility();
@@ -273,6 +273,10 @@ export function FacilitiesPage() {
 
   const activeTab = TABS.find((t) => t.id === viewType) || TABS[0];
   const addTab = addType ? TABS.find((t) => t.id === addType) : null;
+  const visibleTabs = useMemo(
+    () => (warehouseOnly ? TABS.filter((t) => t.id === 'warehouse') : TABS),
+    [warehouseOnly],
+  );
   const filteredRows = useMemo(
     () => rows.filter((f) => String(f.facility_type) === viewType),
     [rows, viewType],
@@ -417,7 +421,7 @@ export function FacilitiesPage() {
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">
-        {TABS.map((tab) => (
+        {visibleTabs.map((tab) => (
           <button
             key={tab.id}
             type="button"
@@ -439,7 +443,7 @@ export function FacilitiesPage() {
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
         <div className="flex border-b border-slate-200">
-          {TABS.map((tab) => {
+          {visibleTabs.map((tab) => {
             const active = viewType === tab.id;
             const count = rows.filter((r) => String(r.facility_type) === tab.id).length;
             return (

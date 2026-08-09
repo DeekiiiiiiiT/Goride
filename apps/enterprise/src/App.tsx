@@ -25,6 +25,7 @@ const LoginEntry = lazy(() => import('@/app/entries/LoginEntry'));
 const ResetPasswordEntry = lazy(() => import('@/app/entries/ResetPasswordEntry'));
 const AdminEntry = lazy(() => import('@/app/entries/AdminEntry'));
 const AppEntry = lazy(() => import('@/app/entries/AppEntry'));
+const WarehouseEntry = lazy(() => import('@/app/entries/WarehouseEntry'));
 
 const DashboardPage = lazy(() =>
   import('@/app/freight/DashboardPage').then((m) => ({ default: m.DashboardPage })),
@@ -79,6 +80,14 @@ const PipelineCommandPage = lazy(() =>
 );
 const WarehouseReceiveStationPage = lazy(() =>
   import('@/app/freight/os').then((m) => ({ default: m.WarehouseReceiveStationPage })),
+);
+const WarehouseInboundPage = lazy(() =>
+  import('@/app/freight/os').then((m) => ({ default: m.WarehouseInboundPage })),
+);
+const WarehouseFacilitiesPage = lazy(() =>
+  import('@/app/freight/FacilitiesPage').then((m) => ({
+    default: () => <m.FacilitiesPage warehouseOnly />,
+  })),
 );
 const PackageDutyDetailPage = lazy(() =>
   import('@/app/freight/os').then((m) => ({ default: m.PackageDutyDetailPage })),
@@ -176,11 +185,11 @@ const BridgedBusinessFinancePage = lazy(() =>
 const BridgedClaimsPage = lazy(() =>
   import('@/fleet-bridge/pages').then((m) => ({ default: m.BridgedClaimsPage })),
 );
-const BridgedUserManagementPage = lazy(() =>
-  import('@/fleet-bridge/pages').then((m) => ({ default: m.BridgedUserManagementPage })),
-);
 const BridgedSettingsPage = lazy(() =>
   import('@/fleet-bridge/pages').then((m) => ({ default: m.BridgedSettingsPage })),
+);
+const EnterpriseTeamPage = lazy(() =>
+  import('@/app/team/EnterpriseTeamPage').then((m) => ({ default: m.EnterpriseTeamPage })),
 );
 
 function Fall() {
@@ -742,7 +751,7 @@ export default function App() {
             element={
               <Gated module="teamManagement">
                 <Suspense fallback={<Fall />}>
-                  <BridgedUserManagementPage />
+                  <EnterpriseTeamPage />
                 </Suspense>
               </Gated>
             }
@@ -763,6 +772,54 @@ export default function App() {
               <Suspense fallback={<Fall />}>
                 <BridgedSettingsPage />
               </Suspense>
+            }
+          />
+        </Route>
+
+        <Route
+          path="/warehouse"
+          element={
+            <Suspense fallback={<Fall />}>
+              <WarehouseEntry />
+            </Suspense>
+          }
+        >
+          <Route
+            index
+            element={
+              <Suspense fallback={<Fall />}>
+                <WarehouseInboundPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="receive"
+            element={
+              <Gated module="freight_miami_scan">
+                <Suspense fallback={<Fall />}>
+                  <WarehouseReceiveStationPage />
+                </Suspense>
+              </Gated>
+            }
+          />
+          <Route
+            path="facilities"
+            element={
+              <Gated module="freight_suites">
+                <Suspense fallback={<Fall />}>
+                  <WarehouseFacilitiesPage />
+                </Suspense>
+              </Gated>
+            }
+          />
+          <Route
+            path="packages"
+            element={
+              <Gated module="freight_mailbox_packages">
+                <Suspense fallback={<Fall />}>
+                  <PackagesListPage />
+                </Suspense>
+              </Gated>
             }
           />
         </Route>

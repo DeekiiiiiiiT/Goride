@@ -68,6 +68,12 @@ import {
 } from "./platform_settings.ts";
 import { requireProductAdmin } from "./product_admin_guard.ts";
 import {
+  effectiveSectionAccess,
+  parseSectionOverrides,
+  resolveEnterpriseSeatRole,
+  type EnterpriseSectionOverrides,
+} from "../_shared/enterpriseSeat.ts";
+import {
   appendCanonicalLedgerEvents,
   deleteAllCanonicalLedgerBySourceType,
   deleteCanonicalLedgerBySource,
@@ -11559,13 +11565,49 @@ const TEAM_ROLES = [
   'fleet_viewer',
   'enterprise_dispatcher',
   'enterprise_customs',
+  'enterprise_warehouse',
   'enterprise_finance',
   'enterprise_viewer',
 ] as const;
 
+function authMetaOrgId(u: { app_metadata?: Record<string, unknown>; user_metadata?: Record<string, unknown> }): string | undefined {
+  const app = u.app_metadata?.organizationId;
+  const user = u.user_metadata?.organizationId;
+  if (typeof app === 'string' && app.trim()) return app.trim();
+  if (typeof user === 'string' && user.trim()) return user.trim();
+  return undefined;
+}
+
+function authMetaRole(u: { app_metadata?: Record<string, unknown>; user_metadata?: Record<string, unknown> }): string {
+  const app = u.app_metadata?.role;
+  const user = u.user_metadata?.role;
+  if (typeof app === 'string' && app.trim()) return app.trim();
+  if (typeof user === 'string' && user.trim()) return user.trim();
+  return '';
+}
+
+/** JWT org, or owned org from X-Roam-Organization-Id (Enterprise owners often lack JWT org). */
+async function resolveTeamOrgId(c: Context, rbacUser: any): Promise<string | null> {
+  const fromJwt = getOrgId(c);
+  if (fromJwt) return fromJwt;
+  const headerOrg = c.req.header("X-Roam-Organization-Id")?.trim();
+  if (!headerOrg || !rbacUser?.userId) return null;
+  const { data: org } = await supabase
+    .from("organizations")
+    .select("id, owner_id")
+    .eq("id", headerOrg)
+    .maybeSingle();
+  if (org && String(org.owner_id) === String(rbacUser.userId)) {
+    return headerOrg;
+  }
+  return null;
+}
+
 app.post("/make-server-37f42386/team/invite", requireAuth(), requirePermission('users.invite'), async (c) => {
   try {
-    const { email, name, role } = await c.req.json();
+    const body = await c.req.json();
+    const { email, name, role } = body;
+    const sectionOverrides = parseSectionOverrides(body.sectionOverrides);
 
     if (!email || !name) {
       return c.json({ error: "Email and name are required" }, 400);
@@ -11575,7 +11617,10 @@ app.post("/make-server-37f42386/team/invite", requireAuth(), requirePermission('
     }
 
     const rbacUser = c.get('rbacUser') as any;
-    const orgId = getOrgId(c);
+    const orgId = await resolveTeamOrgId(c, rbacUser);
+    if (!orgId) {
+      return c.json({ error: "Organization context required" }, 400);
+    }
     const inviterUserId = rbacUser?.userId || null;
 
     // Generate a random temporary password (12 chars)
@@ -11584,26 +11629,93 @@ app.post("/make-server-37f42386/team/invite", requireAuth(), requirePermission('
       .join('')
       .slice(0, 12);
 
+    const inviteMeta = {
+      name,
+      role,
+      organizationId: orgId || undefined,
+      productLine: 'enterprise',
+      invitedBy: inviterUserId || undefined,
+      invitedAt: new Date().toISOString(),
+      sectionOverrides,
+    };
+
+    const appMetaInvite = {
+      role,
+      organizationId: orgId || undefined,
+      productLine: 'enterprise',
+      invitedBy: inviterUserId || undefined,
+      invitedAt: inviteMeta.invitedAt,
+      sectionOverrides,
+    };
+
+    // Write org/role to both app_metadata (JWT source of truth) and user_metadata (list UI fallback)
     const { data, error } = await supabase.auth.admin.createUser({
       email,
       password: tempPassword,
-      user_metadata: {
-        name,
-      },
-      app_metadata: {
-        role,
-        organizationId: orgId || undefined,
-        invitedBy: inviterUserId || undefined,
-        invitedAt: new Date().toISOString(),
-      },
+      user_metadata: inviteMeta,
+      app_metadata: appMetaInvite,
       email_confirm: true,
     });
 
     if (error) {
-      if (error.message?.includes('already been registered') || error.message?.includes('already exists')) {
-        return c.json({ error: "An account with this email already exists" }, 409);
+      const isDuplicate =
+        error.message?.includes('already been registered') ||
+        error.message?.includes('already exists');
+      if (!isDuplicate) throw error;
+
+      // Shared Auth across Roam products — adopt passenger/fleet-less logins into this Enterprise org
+      const { data: listData, error: listErr } = await supabase.auth.admin.listUsers({
+        perPage: 1000,
+      });
+      if (listErr) throw listErr;
+      const existing = (listData?.users || []).find(
+        (u: { email?: string }) => u.email?.toLowerCase() === String(email).toLowerCase(),
+      );
+      if (!existing) {
+        return c.json({
+          error: "An account with this email already exists, but it could not be located for invite.",
+        }, 409);
       }
-      throw error;
+
+      const existingOrg = authMetaOrgId(existing);
+      const existingRole = authMetaRole(existing);
+      const platformRoles = ['superadmin', 'platform_owner', 'platform_support', 'platform_analyst'];
+      if (platformRoles.includes(existingRole)) {
+        return c.json({ error: "This email belongs to a platform account and cannot be invited." }, 409);
+      }
+      if (existingOrg && existingOrg !== orgId) {
+        return c.json({
+          error: "This email is already linked to another company on Roam. Use a different work email.",
+        }, 409);
+      }
+      if (existingOrg === orgId && TEAM_ROLES.includes(existingRole as typeof TEAM_ROLES[number])) {
+        return c.json({
+          error: "This person is already on your team. Change their role from the list below.",
+        }, 409);
+      }
+
+      const { data: updated, error: updateErr } = await supabase.auth.admin.updateUserById(
+        existing.id,
+        {
+          password: tempPassword,
+          user_metadata: { ...(existing.user_metadata || {}), ...inviteMeta },
+          app_metadata: { ...(existing.app_metadata || {}), ...appMetaInvite },
+          email_confirm: true,
+        },
+      );
+      if (updateErr) throw updateErr;
+
+      console.log(
+        `[Team] Adopted existing auth user ${email} as ${role} into org ${orgId} by ${inviterUserId}`,
+      );
+
+      return c.json({
+        success: true,
+        adopted: true,
+        userId: updated.user.id,
+        temporaryPassword: tempPassword,
+        message: `Added ${name} as ${role} (existing Roam login linked). Share the temporary password with them securely.`,
+      });
     }
 
     console.log(`[Team] Invited ${email} as ${role} into org ${orgId} by ${inviterUserId}`);
@@ -11624,49 +11736,70 @@ app.post("/make-server-37f42386/team/invite", requireAuth(), requirePermission('
 app.get("/make-server-37f42386/team/members", requireAuth(), async (c) => {
   try {
     const rbacUser = c.get('rbacUser') as any;
-    const orgId = getOrgId(c);
+    const orgId = await resolveTeamOrgId(c, rbacUser);
     const { data: { users }, error } = await supabase.auth.admin.listUsers({ perPage: 1000 });
     if (error) throw error;
 
-    // Determine who we should show based on context
-    const orgUsers = (users || []).filter((u: any) => {
-      const uOrgId = u.user_metadata?.organizationId;
-      const uRole = u.user_metadata?.role || '';
-      
-      // Always hide platform-level users from anyone who isn't a platform role themselves
-      const platformRoles = ['superadmin', 'platform_owner', 'platform_support', 'platform_analyst'];
-      const isPlatformUser = platformRoles.includes(uRole);
-      const isRequestersPlatform = platformRoles.includes(rbacUser?.resolvedRole);
+    const platformRoles = ['superadmin', 'platform_owner', 'platform_support', 'platform_analyst'];
+    const isRequestersPlatform = platformRoles.includes(rbacUser?.resolvedRole) ||
+      platformRoles.includes(rbacUser?.rawRole);
 
-      // If requester is NOT a platform user, they can NEVER see platform users
+    // Org owner may only live on organizations.owner_id (not as a "seat" with organizationId)
+    let ownerId: string | null = null;
+    if (orgId) {
+      const { data: org } = await supabase
+        .from("organizations")
+        .select("owner_id")
+        .eq("id", orgId)
+        .maybeSingle();
+      ownerId = org?.owner_id ? String(org.owner_id) : null;
+    }
+
+    const orgUsers = (users || []).filter((u: any) => {
+      const uOrgId = authMetaOrgId(u);
+      const uRole = authMetaRole(u);
+      const isPlatformUser = platformRoles.includes(uRole);
+
       if (isPlatformUser && !isRequestersPlatform) return false;
 
-      // If we have an orgId (legit customer session), only show users in that org
       if (orgId) {
-        return uOrgId === orgId || u.id === orgId;
+        if (uOrgId === orgId) return true;
+        if (ownerId && u.id === ownerId) return true;
+        return false;
       }
 
-      // If no orgId (anon passthrough or something else), and NOT a platform user, 
-      // they should see NOTHING (or at most themselves if they were a user, but anon is not).
       if (rbacUser?.userId === '_anon_passthrough') return false;
-
-      // Platform users with no orgId (seeing everyone)
       if (isRequestersPlatform) return true;
-
       return false;
     });
 
-    const members = orgUsers.map((u: any) => ({
-      id: u.id,
-      name: u.user_metadata?.name || 'Unknown',
-      email: u.email || '',
-      role: u.user_metadata?.role || 'fleet_viewer',
-      status: 'active',
-      lastActive: u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleDateString() : 'Never',
-      invitedBy: u.user_metadata?.invitedBy || null,
-      invitedAt: u.user_metadata?.invitedAt || null,
-      isOwner: u.id === orgId,
-    }));
+    const members = orgUsers.map((u: any) => {
+      const rawRole = authMetaRole(u) || 'enterprise_viewer';
+      const isOwner = Boolean(ownerId && u.id === ownerId);
+      let role = rawRole;
+      if (isOwner && (role === 'admin' || role === 'fleet_owner' || !role)) {
+        role = 'enterprise_owner';
+      }
+      const seatRole = resolveEnterpriseSeatRole(isOwner ? 'enterprise_owner' : role);
+      const sectionOverrides = parseSectionOverrides(
+        u.app_metadata?.sectionOverrides ?? u.user_metadata?.sectionOverrides,
+      );
+      const effectiveSections = effectiveSectionAccess(seatRole, sectionOverrides);
+      return {
+        id: u.id,
+        name: u.user_metadata?.name || u.email || 'Unknown',
+        email: u.email || '',
+        role,
+        status: 'active',
+        lastActive: u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleDateString() : 'Never',
+        invitedBy: u.app_metadata?.invitedBy || u.user_metadata?.invitedBy || null,
+        invitedAt: u.app_metadata?.invitedAt || u.user_metadata?.invitedAt || null,
+        isOwner,
+        sectionOverrides,
+        effectiveSections,
+        accessCustomized: Object.keys(sectionOverrides).length > 0,
+      };
+    });
 
     return c.json(members);
   } catch (e: any) {
@@ -11675,15 +11808,21 @@ app.get("/make-server-37f42386/team/members", requireAuth(), async (c) => {
   }
 });
 
-// Step 9.3: PUT /team/members/:id/role — Update team member's role
+// Step 9.3: PUT /team/members/:id/role — Update team member role + section overrides
 app.put("/make-server-37f42386/team/members/:id/role", requireAuth(), requirePermission('users.edit_role'), async (c) => {
   try {
     const targetId = c.req.param("id");
-    const { role: newRole } = await c.req.json();
-    const orgId = getOrgId(c);
+    const body = await c.req.json();
+    const { role: newRole } = body;
+    const hasOverridesField = Object.prototype.hasOwnProperty.call(body, 'sectionOverrides');
+    const sectionOverrides: EnterpriseSectionOverrides = hasOverridesField
+      ? parseSectionOverrides(body.sectionOverrides)
+      : {};
+    const rbacUser = c.get('rbacUser') as any;
+    const orgId = await resolveTeamOrgId(c, rbacUser);
 
-    if (!['fleet_manager', 'fleet_accountant', 'fleet_viewer', 'driver', 'enterprise_dispatcher', 'enterprise_customs', 'enterprise_finance', 'enterprise_viewer'].includes(newRole)) {
-      return c.json({ error: "Invalid role. Cannot promote to fleet_owner." }, 400);
+    if (!TEAM_ROLES.includes(newRole)) {
+      return c.json({ error: "Invalid role. Cannot promote to owner." }, 400);
     }
 
     const { data: { user: targetUser }, error: fetchErr } = await supabase.auth.admin.getUserById(targetId);
@@ -11692,14 +11831,13 @@ app.put("/make-server-37f42386/team/members/:id/role", requireAuth(), requirePer
     }
 
     // CRITICAL: Never allow role changes on platform-level users from any customer portal
-    const currentRole = targetUser.user_metadata?.role || '';
+    const currentRole = authMetaRole(targetUser);
     const protectedPlatformRoles = ['superadmin', 'platform_owner', 'platform_support', 'platform_analyst'];
     if (protectedPlatformRoles.includes(currentRole)) {
       return c.json({ error: "This user cannot be modified" }, 403);
     }
 
-    // Protect users without an organizationId — they don't belong to this customer
-    const targetOrgId = targetUser.user_metadata?.organizationId;
+    const targetOrgId = authMetaOrgId(targetUser);
     if (!targetOrgId) {
       return c.json({ error: "This user does not belong to your organization" }, 403);
     }
@@ -11708,17 +11846,40 @@ app.put("/make-server-37f42386/team/members/:id/role", requireAuth(), requirePer
       return c.json({ error: "Cannot modify users from another organization" }, 403);
     }
 
-    if (targetUser.user_metadata?.role === 'admin' || targetId === orgId) {
-      return c.json({ error: "Cannot change the fleet owner's role" }, 403);
+    if (currentRole === 'admin' || currentRole === 'fleet_owner' || currentRole === 'enterprise_owner') {
+      return c.json({ error: "Cannot change the organization owner's role" }, 403);
     }
 
+    if (orgId) {
+      const { data: org } = await supabase.from("organizations").select("owner_id").eq("id", orgId).maybeSingle();
+      if (org?.owner_id && targetId === String(org.owner_id)) {
+        return c.json({ error: "Cannot change the organization owner's role" }, 403);
+      }
+    }
+
+    // When sectionOverrides is sent, replace stored overrides (even if {}); omit field → keep existing
+    const nextAppMeta = {
+      ...targetUser.app_metadata,
+      role: newRole,
+      ...(hasOverridesField ? { sectionOverrides } : {}),
+    };
+    const nextUserMeta = {
+      ...targetUser.user_metadata,
+      role: newRole,
+      ...(hasOverridesField ? { sectionOverrides } : {}),
+    };
+
     const { error } = await supabase.auth.admin.updateUserById(targetId, {
-      user_metadata: { ...targetUser.user_metadata, role: newRole },
+      user_metadata: nextUserMeta,
+      app_metadata: nextAppMeta,
     });
     if (error) throw error;
 
-    console.log(`[Team] Role updated: ${targetId} → ${newRole} by org ${orgId}`);
-    return c.json({ success: true, message: `Role updated to ${newRole}` });
+    console.log(`[Team] Access updated: ${targetId} → ${newRole} by org ${orgId}`);
+    return c.json({
+      success: true,
+      message: `Access updated. Teammate may need to sign out and back in to refresh their menu.`,
+    });
   } catch (e: any) {
     console.error("[Team Role Update] Error:", e);
     return c.json({ error: e.message }, 500);
@@ -11729,7 +11890,8 @@ app.put("/make-server-37f42386/team/members/:id/role", requireAuth(), requirePer
 app.delete("/make-server-37f42386/team/members/:id", requireAuth(), requirePermission('users.remove'), async (c) => {
   try {
     const targetId = c.req.param("id");
-    const orgId = getOrgId(c);
+    const rbacUser = c.get('rbacUser') as any;
+    const orgId = await resolveTeamOrgId(c, rbacUser);
 
     const { data: { user: targetUser }, error: fetchErr } = await supabase.auth.admin.getUserById(targetId);
     if (fetchErr || !targetUser) {
@@ -11737,14 +11899,20 @@ app.delete("/make-server-37f42386/team/members/:id", requireAuth(), requirePermi
     }
 
     // CRITICAL: Never allow deletion of platform-level users from any customer portal
-    const targetRole = targetUser.user_metadata?.role || '';
+    const targetRole = authMetaRole(targetUser);
     const protectedPlatformRoles = ['superadmin', 'platform_owner', 'platform_support', 'platform_analyst'];
     if (protectedPlatformRoles.includes(targetRole)) {
       return c.json({ error: "This user cannot be removed" }, 403);
     }
 
-    // Protect any user that has NO organizationId — they don't belong to this customer
-    const targetOrgId = targetUser.user_metadata?.organizationId;
+    const targetOrgId = authMetaOrgId(targetUser);
+    if (orgId) {
+      const { data: org } = await supabase.from("organizations").select("owner_id").eq("id", orgId).maybeSingle();
+      if (org?.owner_id && targetId === String(org.owner_id)) {
+        return c.json({ error: "Cannot remove the organization owner" }, 403);
+      }
+    }
+
     if (!targetOrgId) {
       return c.json({ error: "This user does not belong to your organization" }, 403);
     }
@@ -11753,8 +11921,8 @@ app.delete("/make-server-37f42386/team/members/:id", requireAuth(), requirePermi
       return c.json({ error: "Cannot remove users from another organization" }, 403);
     }
 
-    if (targetUser.user_metadata?.role === 'admin' || targetId === orgId) {
-      return c.json({ error: "Cannot remove the fleet owner" }, 403);
+    if (targetRole === 'admin' || targetRole === 'fleet_owner' || targetRole === 'enterprise_owner') {
+      return c.json({ error: "Cannot remove the organization owner" }, 403);
     }
 
     const { error } = await supabase.auth.admin.deleteUser(targetId);

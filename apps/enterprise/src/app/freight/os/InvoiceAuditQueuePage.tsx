@@ -4,11 +4,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { freightService } from '@/app/services/freightService';
 
-type Tab = 'missing' | 'mismatch' | 'ready';
+type Tab = 'required' | 'missing' | 'mismatch' | 'unobtainable' | 'ready';
 
-/** Invoice Audit Queue — wired to /packages/invoice-audit. */
+/** Invoice Audit Queue — dual invoice workflow. */
 export function InvoiceAuditQueuePage() {
-  const [tab, setTab] = useState<Tab>('missing');
+  const [tab, setTab] = useState<Tab>('required');
   const { organizationId, session } = useAuth();
   const qc = useQueryClient();
   const q = useQuery({
@@ -23,12 +23,37 @@ export function InvoiceAuditQueuePage() {
     },
   });
   const upload = useMutation({
-    mutationFn: ({ id, file }: { id: string; file: File }) =>
-      freightService.uploadPackageInvoice(id, file, organizationId),
-    onSuccess: () => {
+    mutationFn: ({
+      id,
+      file,
+      slot,
+    }: {
+      id: string;
+      file: File;
+      slot: 'warehouse' | 'customer';
+    }) => freightService.uploadPackageInvoice(id, file, organizationId, slot),
+    onSuccess: (_data, vars) => {
       void qc.invalidateQueries({ queryKey: ['freight', 'invoice-audit'] });
       void qc.invalidateQueries({ queryKey: ['freight', 'package'] });
-      setTab('mismatch');
+      if (vars.slot === 'customer') setTab('mismatch');
+    },
+  });
+  const flags = useMutation({
+    mutationFn: ({
+      id,
+      invoiceUnobtainable,
+    }: {
+      id: string;
+      invoiceUnobtainable: boolean;
+    }) =>
+      freightService.setInvoiceFlags(
+        id,
+        { invoiceUnobtainable, unobtainableNote: 'Could not obtain from customer' },
+        organizationId,
+      ),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['freight', 'invoice-audit'] });
+      setTab('unobtainable');
     },
   });
 
@@ -39,15 +64,17 @@ export function InvoiceAuditQueuePage() {
       <div>
         <h1 className="text-2xl font-semibold text-slate-900">Invoice Audit</h1>
         <p className="mt-1 text-sm text-slate-500">
-          Upload and verify invoices before packages can seal on a flight
+          Compare warehouse packing slip with the customer invoice before seal
         </p>
       </div>
 
       <div className="flex flex-wrap gap-2">
         {(
           [
-            ['missing', 'Awaiting Invoice'],
+            ['required', 'Required from customer'],
+            ['missing', 'Awaiting invoice'],
             ['mismatch', 'Unverified'],
+            ['unobtainable', 'Could not obtain'],
             ['ready', 'Ready'],
           ] as const
         ).map(([id, label]) => (
@@ -72,9 +99,9 @@ export function InvoiceAuditQueuePage() {
           {(q.error as Error).message}
         </p>
       )}
-      {(verify.error || upload.error) && (
+      {(verify.error || upload.error || flags.error) && (
         <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-          {((verify.error || upload.error) as Error).message}
+          {((verify.error || upload.error || flags.error) as Error).message}
         </p>
       )}
 
@@ -87,8 +114,9 @@ export function InvoiceAuditQueuePage() {
               <tr>
                 <th className="px-4 py-2">Tracking</th>
                 <th className="px-4 py-2">Suite</th>
+                <th className="px-4 py-2">Warehouse slip</th>
+                <th className="px-4 py-2">Customer invoice</th>
                 <th className="px-4 py-2">Declared USD</th>
-                <th className="px-4 py-2">Weight</th>
                 <th className="px-4 py-2">Actions</th>
               </tr>
             </thead>
@@ -97,39 +125,56 @@ export function InvoiceAuditQueuePage() {
                 const id = String(row.id);
                 const suite = row.suites as { suite_code?: string } | null;
                 const declared = Number(row.declared_value_usd_minor ?? 0) / 100;
+                const wh = String(row.warehouse_invoice_file_name || '');
+                const cust = String(row.invoice_file_name || '');
                 return (
                   <tr key={id} className="border-t border-slate-100">
                     <td className="px-4 py-2.5 font-mono text-xs">
                       {String(row.courier_tracking_number ?? '—')}
                     </td>
                     <td className="px-4 py-2.5">{suite?.suite_code ?? '—'}</td>
-                    <td className="px-4 py-2.5 tabular-nums">${declared.toFixed(2)}</td>
-                    <td className="px-4 py-2.5 tabular-nums">
-                      {row.weight_lbs != null ? `${row.weight_lbs} lb` : '—'}
+                    <td className="max-w-[8rem] truncate px-4 py-2.5 font-mono text-xs text-slate-600">
+                      {wh || '—'}
                     </td>
+                    <td className="max-w-[8rem] truncate px-4 py-2.5 font-mono text-xs text-slate-600">
+                      {cust || '—'}
+                    </td>
+                    <td className="px-4 py-2.5 tabular-nums">${declared.toFixed(2)}</td>
                     <td className="px-4 py-2.5">
                       <div className="flex flex-wrap items-center gap-2">
                         <Link
                           to={`/app/package-duty?id=${id}`}
                           className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-medium hover:bg-slate-50"
                         >
-                          Open
+                          Compare
                         </Link>
-                        {(tab === 'missing' || tab === 'mismatch') && (
-                          <label className="cursor-pointer rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-medium hover:bg-slate-50">
-                            {upload.isPending ? 'Uploading…' : 'Upload PDF/image'}
-                            <input
-                              type="file"
-                              accept="application/pdf,image/*"
-                              className="sr-only"
-                              disabled={upload.isPending}
-                              onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                e.target.value = '';
-                                if (file) upload.mutate({ id, file });
-                              }}
-                            />
-                          </label>
+                        {(tab === 'required' || tab === 'missing' || tab === 'mismatch') && (
+                          <>
+                            <label className="cursor-pointer rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-medium hover:bg-slate-50">
+                              Customer file
+                              <input
+                                type="file"
+                                accept="application/pdf,image/*"
+                                className="sr-only"
+                                disabled={upload.isPending}
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  e.target.value = '';
+                                  if (file) upload.mutate({ id, file, slot: 'customer' });
+                                }}
+                              />
+                            </label>
+                            <button
+                              type="button"
+                              disabled={flags.isPending}
+                              onClick={() =>
+                                flags.mutate({ id, invoiceUnobtainable: true })
+                              }
+                              className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-medium hover:bg-slate-50"
+                            >
+                              Could not obtain
+                            </button>
+                          </>
                         )}
                         {tab === 'mismatch' ? (
                           <button
