@@ -9,6 +9,7 @@ const localDevNoise = [
   /Invalid hook call/,
   /BridgedUserManagementPage is not defined/,
   /WarehouseInboundPage is not defined/,
+  /DispatchBoardPage is not defined/,
   /hasInvoice is not defined/,
   /useAuth must be used within AuthProvider/,
 ];

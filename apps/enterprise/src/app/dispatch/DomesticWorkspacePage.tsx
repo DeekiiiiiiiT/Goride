@@ -1,14 +1,23 @@
-import { useEffect } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { DispatchBoardPage } from '@/app/dispatch/DispatchBoardPage';
-import { ShipmentsListPage } from '@/app/freight/ShipmentsListPage';
 import { useModuleAccess } from '@/app/modules/ModuleAccessProvider';
 import { useSeatAccess } from '@/app/seats/SeatAccessProvider';
+
+const ShipmentsListPage = lazy(() =>
+  import('@/app/freight/ShipmentsListPage').then((m) => ({ default: m.ShipmentsListPage })),
+);
+const DispatchBoardPage = lazy(() =>
+  import('@/app/dispatch/DispatchBoardPage').then((m) => ({ default: m.DispatchBoardPage })),
+);
 
 type DomesticTab = 'shipments' | 'dispatch';
 
 function parseTab(raw: string | null): DomesticTab {
   return raw === 'dispatch' ? 'dispatch' : 'shipments';
+}
+
+function TabFall() {
+  return <p className="text-sm text-slate-500">Loading…</p>;
 }
 
 /** Tabbed hub: Shipments | Dispatch — each tab module-gated. */
@@ -92,8 +101,10 @@ export function DomesticWorkspacePage() {
         </div>
       )}
 
-      {tab === 'shipments' && canShipments && <ShipmentsListPage embedded />}
-      {tab === 'dispatch' && canDispatch && <DispatchBoardPage embedded />}
+      <Suspense fallback={<TabFall />}>
+        {tab === 'shipments' && canShipments && <ShipmentsListPage embedded />}
+        {tab === 'dispatch' && canDispatch && <DispatchBoardPage embedded />}
+      </Suspense>
     </div>
   );
 }
