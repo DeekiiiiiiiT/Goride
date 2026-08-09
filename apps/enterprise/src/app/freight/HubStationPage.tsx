@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useRef, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   useFacilities,
@@ -10,6 +10,12 @@ import {
   resolveHubFacility,
   writeHubFacility,
 } from '@/app/freight/os/hubFacilityStorage';
+import {
+  ScanBarcodeField,
+  ScanDetailsDisclosure,
+  ScanFlashTone,
+  ScanStatusFlash,
+} from '@/app/freight/os/scan';
 
 type HubTab = 'floor' | 'station';
 
@@ -358,10 +364,14 @@ export function HubStationPage({
   const scan = useScanPackage();
   const sort = useHubSort();
   const [localFacilityId, setLocalFacilityId] = useState('');
+  const [barcode, setBarcode] = useState('');
   const [lastPkgId, setLastPkgId] = useState<string | null>(null);
-  const [msg, setMsg] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [sortZone, setSortZone] = useState('');
+  const [fulfillmentMode, setFulfillmentMode] = useState('');
+  const [flash, setFlash] = useState<string | null>(null);
+  const [flashTone, setFlashTone] = useState<ScanFlashTone>('ok');
   const barcodeRef = useRef<HTMLInputElement>(null);
+  const clearFlash = useCallback(() => setFlash(null), []);
 
   const controlled = facilityIdProp !== undefined;
   const facilityId = controlled ? facilityIdProp : localFacilityId;
@@ -382,67 +392,63 @@ export function HubStationPage({
     writeHubFacility(next);
   }
 
-  async function onInbound(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setError(null);
+  async function submitInbound() {
+    if (!barcode.trim() || scan.isPending) return;
     if (!facilityId) {
-      setError('Select a Jamaica hub facility.');
+      setFlashTone('error');
+      setFlash('Select a Jamaica hub facility.');
       return;
     }
-    const form = e.currentTarget;
-    const fd = new FormData(form);
-    const barcode = String(fd.get('barcode') || '').trim();
     try {
+      const code = barcode.trim();
       const res = await scan.mutateAsync({
-        body: { barcode, facilityId },
-        idempotencyKey: `hub:${facilityId}:${barcode}:${Date.now()}`,
+        body: { barcode: code, facilityId },
+        idempotencyKey: `hub:${facilityId}:${code}:${Date.now()}`,
       });
       setLastPkgId(String(res.package.id));
-      setMsg(
+      setFlashTone('ok');
+      setFlash(
         `Inbound: ${String(res.package.courier_tracking_number || res.package.id)} → ${String(res.package.status)}`,
       );
-      if (barcodeRef.current) barcodeRef.current.value = '';
-      else {
-        const input = form.querySelector<HTMLInputElement>('[name=barcode]');
-        if (input) input.value = '';
-      }
+      setBarcode('');
       barcodeRef.current?.focus();
     } catch (err) {
-      setError((err as Error).message);
+      setFlashTone('error');
+      setFlash((err as Error).message);
     }
   }
 
-  async function onSort(e: FormEvent<HTMLFormElement>) {
+  async function submitSort(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!lastPkgId || !facilityId) return;
-    setError(null);
-    const fd = new FormData(e.currentTarget);
     try {
       const res = await sort.mutateAsync({
         packageId: lastPkgId,
         facilityId,
-        sortZone: fd.get('sortZone') || null,
-        fulfillmentMode: fd.get('fulfillmentMode') || null,
+        sortZone: sortZone.trim() || null,
+        fulfillmentMode: fulfillmentMode || null,
       });
-      setMsg(`Sorted: ${String(res.package.status)} zone ${String(res.package.sort_zone || '—')}`);
+      setFlashTone('ok');
+      setFlash(`Sorted: ${String(res.package.status)} zone ${String(res.package.sort_zone || '—')}`);
+      setSortZone('');
+      setFulfillmentMode('');
     } catch (err) {
-      setError((err as Error).message);
+      setFlashTone('error');
+      setFlash((err as Error).message);
     }
   }
 
   return (
-    <div className="mx-auto max-w-xl space-y-6">
+    <div className="mx-auto max-w-xl space-y-4">
       {!embedded ? (
         <div>
           <h1 className="text-2xl font-semibold">Jamaica Hub Station</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Inbound scan → sort to pickup or door delivery.
+            Scan inbound. Sort stays one tap away.
           </p>
         </div>
       ) : (
-        <p className="text-sm text-slate-500">
-          Inbound scan → sort to pickup or door delivery.
-        </p>
+        <p className="text-sm text-slate-500">Scan inbound. Sort stays one tap away.</p>
       )}
 
       {!embedded && !hubList.length && (
@@ -474,68 +480,67 @@ export function HubStationPage({
       )}
 
       {controlled && facilityId ? (
-        <p className="text-xs text-slate-500">
-          Scanning into the hub selected above.
-        </p>
+        <p className="text-xs text-slate-500">Scanning into the hub selected above.</p>
       ) : null}
 
-      <form onSubmit={onInbound} className="space-y-3 rounded-xl border border-slate-200 bg-white p-6">
-        <h2 className="text-sm font-semibold">1. Inbound scan</h2>
-        <input
-          ref={barcodeRef}
-          name="barcode"
-          required
-          autoFocus
-          placeholder="Package barcode"
-          className="w-full rounded-lg border border-slate-300 px-3 py-3 font-mono"
-        />
-        <button
-          type="submit"
-          disabled={scan.isPending}
-          className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950"
-        >
-          Scan inbound
-        </button>
-      </form>
+      <ScanStatusFlash message={flash} tone={flashTone} onClear={clearFlash} />
 
-      <form onSubmit={onSort} className="space-y-3 rounded-xl border border-slate-200 bg-white p-6">
-        <h2 className="text-sm font-semibold">2. Sort last scanned package</h2>
-        <p className="text-xs text-slate-500">Package: {lastPkgId || '— scan first —'}</p>
-        <label className="block text-sm">
-          Sort zone
-          <input
-            name="sortZone"
-            placeholder="KIN-A / MOBAY"
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-          />
-        </label>
-        <label className="block text-sm">
-          Fulfillment override
-          <select name="fulfillmentMode" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2">
-            <option value="">Use suite default</option>
-            <option value="pickup">Branch pickup</option>
-            <option value="door_delivery">Door delivery</option>
-          </select>
-        </label>
-        <button
-          type="submit"
-          disabled={!lastPkgId || sort.isPending}
-          className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950 disabled:opacity-60"
-        >
-          Mark ready
-        </button>
-      </form>
+      <ScanBarcodeField
+        ref={barcodeRef}
+        value={barcode}
+        onChange={setBarcode}
+        onSubmit={() => void submitInbound()}
+        disabled={scan.isPending || !facilityId}
+        placeholder="Package barcode"
+      />
 
-      {msg && (
-        <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
-          {msg}
-        </p>
-      )}
-      {error && (
-        <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-          {error}
-        </p>
-      )}
+      <button
+        type="button"
+        disabled={!barcode.trim() || !facilityId || scan.isPending}
+        onClick={() => void submitInbound()}
+        className="w-full rounded-xl bg-amber-500 py-4 text-base font-bold text-slate-950 hover:bg-amber-400 disabled:opacity-50"
+      >
+        {scan.isPending ? 'Scanning…' : 'Scan inbound'}
+      </button>
+
+      <ScanDetailsDisclosure
+        summary="Sort last package"
+        hint="zone + fulfillment mode"
+      >
+        <form onSubmit={(e) => void submitSort(e)} className="space-y-3">
+          <p className="text-xs text-slate-500">
+            Package: {lastPkgId || '— scan first —'}
+          </p>
+          <label className="block text-sm">
+            Sort zone
+            <input
+              value={sortZone}
+              onChange={(e) => setSortZone(e.target.value)}
+              placeholder="KIN-A / MOBAY"
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+            />
+          </label>
+          <label className="block text-sm">
+            Fulfillment override
+            <select
+              value={fulfillmentMode}
+              onChange={(e) => setFulfillmentMode(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+            >
+              <option value="">Use suite default</option>
+              <option value="pickup">Branch pickup</option>
+              <option value="door_delivery">Door delivery</option>
+            </select>
+          </label>
+          <button
+            type="submit"
+            disabled={!lastPkgId || sort.isPending}
+            className="w-full rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-semibold text-slate-950 disabled:opacity-60"
+          >
+            {sort.isPending ? 'Saving…' : 'Mark ready'}
+          </button>
+        </form>
+      </ScanDetailsDisclosure>
     </div>
   );
 }

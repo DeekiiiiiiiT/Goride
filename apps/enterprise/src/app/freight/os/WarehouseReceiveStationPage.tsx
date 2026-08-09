@@ -1,13 +1,20 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { freightService } from '@/app/services/freightService';
 import { DOC_ROLE } from '@/app/freight/os/packageDuty/docRoles';
+import {
+  ScanBarcodeField,
+  ScanDetailsDisclosure,
+  ScanFlashTone,
+  ScanStatusFlash,
+} from '@/app/freight/os/scan';
 
 /** Gun-friendly Warehouse Receive Station — wired to /scans. */
 export function WarehouseReceiveStationPage({ embedded = false }: { embedded?: boolean }) {
   const { organizationId, session } = useAuth();
   const qc = useQueryClient();
+  const barcodeRef = useRef<HTMLInputElement>(null);
   const [barcode, setBarcode] = useState('');
   const [weightLbs, setWeightLbs] = useState('');
   const [lengthIn, setLengthIn] = useState('');
@@ -20,8 +27,10 @@ export function WarehouseReceiveStationPage({ embedded = false }: { embedded?: b
   const [suiteScan, setSuiteScan] = useState('');
   const [invoiceRequired, setInvoiceRequired] = useState(false);
   const [warehouseSlip, setWarehouseSlip] = useState<File | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
-  const [toastTone, setToastTone] = useState<'ok' | 'match'>('ok');
+  const [flash, setFlash] = useState<string | null>(null);
+  const [flashTone, setFlashTone] = useState<ScanFlashTone>('ok');
+
+  const clearFlash = useCallback(() => setFlash(null), []);
 
   const facilities = useQuery({
     queryKey: ['freight', 'facilities', organizationId, 'warehouse'],
@@ -39,7 +48,6 @@ export function WarehouseReceiveStationPage({ embedded = false }: { embedded?: b
     if (first && !facilityId) setFacilityId(String(first.id));
   }, [facilities.data, facilityId]);
 
-  // Group warehouses by country for multi-origin floor pickers
   const warehousesByCountry = (
     (facilities.data?.facilities ?? []) as Record<string, unknown>[]
   ).reduce<Record<string, Record<string, unknown>[]>>((acc, f) => {
@@ -105,27 +113,26 @@ export function WarehouseReceiveStationPage({ embedded = false }: { embedded?: b
     onSuccess: (res) => {
       const tracking = String(res.package?.courier_tracking_number ?? barcode);
       if (res.matchedPreAlert) {
-        setToastTone('match');
+        setFlashTone('match');
         const pkgSuiteCode = (res.package as { suites?: { suite_code?: string } } | null)
           ?.suites?.suite_code;
         const matchedSuite = String(pkgSuiteCode || suiteCode || '—');
-        setToast(`Matched pre-alert ${tracking} · suite ${matchedSuite} · received`);
+        setFlash(`Matched pre-alert ${tracking} · suite ${matchedSuite} · received`);
       } else if (res.createdUnknown) {
-        setToastTone('ok');
-        setToast(
+        setFlashTone('ok');
+        setFlash(
           `Received new ${tracking} · status ${String(res.package?.status ?? '')}${
             invoiceRequired ? ' · invoice required from customer' : ''
           }`,
         );
       } else {
-        setToastTone('ok');
-        setToast(
+        setFlashTone('ok');
+        setFlash(
           `Received ${tracking} · status ${String(res.package?.status ?? '')}${
             invoiceRequired ? ' · invoice required from customer' : ''
           }`,
         );
       }
-      // Prefer suite from matched package when known
       const pkgSuite = (res.package as { suites?: { suite_code?: string } } | null)?.suites
         ?.suite_code;
       if (pkgSuite) setSuiteCode(String(pkgSuite));
@@ -139,40 +146,49 @@ export function WarehouseReceiveStationPage({ embedded = false }: { embedded?: b
       setInvoiceRequired(false);
       setWarehouseSlip(null);
       void qc.invalidateQueries({ queryKey: ['freight', 'packages'] });
-      window.setTimeout(() => setToast(null), 3200);
+      barcodeRef.current?.focus();
+    },
+    onError: (err) => {
+      setFlashTone('error');
+      setFlash((err as Error).message);
     },
   });
+
+  function submitScan() {
+    if (!barcode.trim() || scan.isPending) return;
+    if (!facilityId) {
+      setFlashTone('error');
+      setFlash('Select a warehouse.');
+      return;
+    }
+    if (!suiteCode) {
+      setFlashTone('error');
+      setFlash('Select or scan a suite (required for unknown scans).');
+      return;
+    }
+    scan.mutate();
+  }
 
   const kg = (Number(weightLbs) || 0) * 0.453592;
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <div className="mx-auto max-w-3xl space-y-4">
       {!embedded ? (
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">Receive Station</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Scan barcode → confirm suite → capture weight, dimensions, declared value &amp; bin
+            Scan barcode → confirm suite. Desk fields stay one tap away.
           </p>
         </div>
       ) : (
         <p className="text-sm text-slate-500">
-          Scan barcode → confirm suite → capture weight, dimensions, declared value &amp; bin
+          Scan barcode → confirm suite. Desk fields stay one tap away.
         </p>
       )}
 
-      {toast ? (
-        <div
-          className={
-            toastTone === 'match'
-              ? 'rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm font-medium text-sky-900'
-              : 'rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm font-medium text-green-800'
-          }
-        >
-          {toast}
-        </div>
-      ) : null}
+      <ScanStatusFlash message={flash} tone={flashTone} onClear={clearFlash} />
 
-      <div className="grid gap-4 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-2">
+      <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-2">
         <div>
           <label className="text-xs font-medium text-slate-500">Warehouse</label>
           <select
@@ -225,23 +241,24 @@ export function WarehouseReceiveStationPage({ embedded = false }: { embedded?: b
         </div>
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
-          Scan tracking barcode
-        </label>
-        <input
-          autoFocus
-          value={barcode}
-          onChange={(e) => setBarcode(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && barcode && facilityId && suiteCode) scan.mutate();
-          }}
-          className="mt-2 w-full rounded-xl border-2 border-amber-400 bg-slate-50 px-4 py-5 text-center font-mono text-2xl font-semibold tracking-wide text-slate-900 outline-none focus:border-amber-500 focus:ring-4 focus:ring-amber-100"
-          placeholder="Scan or type tracking #"
-        />
-      </div>
+      <ScanBarcodeField
+        ref={barcodeRef}
+        value={barcode}
+        onChange={setBarcode}
+        onSubmit={submitScan}
+        disabled={scan.isPending}
+      />
 
-      <div className="rounded-xl border border-slate-200 bg-white p-6">
+      <button
+        type="button"
+        disabled={!barcode || !facilityId || !suiteCode || scan.isPending}
+        onClick={submitScan}
+        className="w-full rounded-xl bg-amber-500 py-4 text-base font-bold text-slate-950 hover:bg-amber-400 disabled:opacity-50"
+      >
+        {scan.isPending ? 'Receiving…' : 'Confirm receipt'}
+      </button>
+
+      <ScanDetailsDisclosure hint="weight, dims, bin, invoice flags">
         <div className="grid gap-4 sm:grid-cols-3">
           <div>
             <label className="text-xs font-medium text-slate-500">Weight (lbs)</label>
@@ -338,22 +355,7 @@ export function WarehouseReceiveStationPage({ embedded = false }: { embedded?: b
             )}
           </div>
         </div>
-
-        {scan.error && (
-          <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-            {(scan.error as Error).message}
-          </p>
-        )}
-
-        <button
-          type="button"
-          disabled={!barcode || !facilityId || !suiteCode || scan.isPending}
-          onClick={() => scan.mutate()}
-          className="mt-6 w-full rounded-xl bg-amber-500 py-4 text-base font-bold text-slate-950 hover:bg-amber-400 disabled:opacity-50"
-        >
-          Confirm receipt
-        </button>
-      </div>
+      </ScanDetailsDisclosure>
     </div>
   );
 }

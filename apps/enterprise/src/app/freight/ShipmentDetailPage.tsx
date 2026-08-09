@@ -4,6 +4,7 @@ import {
   useFreightShipment,
   useTransitionShipment,
 } from '@/app/hooks/useFreight';
+import { formatOpsWhen, formatOpsWhenTitle } from '@/app/freight/formatRelativeAge';
 
 const NEXT: Record<string, string[]> = {
   draft: ['booked', 'cancelled'],
@@ -127,8 +128,15 @@ export function ShipmentDetailPage() {
                 {String(ev.status)}
                 {ev.note ? ` — ${String(ev.note)}` : ''}
               </span>
-              <span className="shrink-0 text-slate-500">
-                {new Date(String(ev.occurred_at)).toLocaleString()}
+              <span
+                className="shrink-0 text-slate-500"
+                title={formatOpsWhenTitle(
+                  ev.occurred_at != null ? String(ev.occurred_at) : null,
+                )}
+              >
+                {formatOpsWhen(
+                  ev.occurred_at != null ? String(ev.occurred_at) : null,
+                ) ?? '—'}
               </span>
             </li>
           ))}

@@ -9,6 +9,13 @@ import {
 } from '@/app/hooks/useLogistics';
 import { JobLiveMap } from '@/app/dispatch/JobLiveMap';
 import { useModuleAccess } from '@/app/modules/ModuleAccessProvider';
+import {
+  AssignDefaults,
+  LAST_DISPATCH_ASSIGN_KEY,
+  OpsWizard,
+  readLastJob,
+  writeLastJob,
+} from '@/app/freight/os/wizard';
 
 const COLUMNS: { key: string; label: string; statuses: string[] }[] = [
   { key: 'unassigned', label: 'Unassigned', statuses: ['unassigned'] },
@@ -17,6 +24,8 @@ const COLUMNS: { key: string; label: string; statuses: string[] }[] = [
   { key: 'in_progress', label: 'In progress', statuses: ['in_progress'] },
   { key: 'done', label: 'Done', statuses: ['completed', 'cancelled', 'exception'] },
 ];
+
+type AssigneeType = 'org_fleet' | 'client_fleet' | 'third_party' | 'roam_marketplace';
 
 function statusBadgeClass(status: string) {
   if (status === 'exception') return 'bg-red-100 text-red-800';
@@ -36,14 +45,19 @@ export function DispatchBoardPage({ embedded = false }: { embedded?: boolean }) 
   const assign = useAssignLogisticsJob();
   const transition = useTransitionLogisticsJob();
   const [searchParams] = useSearchParams();
+  const lastAssign = useMemo(
+    () => readLastJob<AssignDefaults>(LAST_DISPATCH_ASSIGN_KEY),
+    [],
+  );
 
   const [filter, setFilter] = useState<string>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [assigneeType, setAssigneeType] = useState<
-    'org_fleet' | 'client_fleet' | 'third_party' | 'roam_marketplace'
-  >('org_fleet');
-  const [carrierId, setCarrierId] = useState('');
-  const [assetId, setAssetId] = useState('');
+  const [assignStep, setAssignStep] = useState(0);
+  const [assigneeType, setAssigneeType] = useState<AssigneeType>(
+    (lastAssign.assigneeType as AssigneeType) || 'org_fleet',
+  );
+  const [carrierId, setCarrierId] = useState(lastAssign.thirdPartyCarrierId ?? '');
+  const [assetId, setAssetId] = useState(lastAssign.clientFleetAssetId ?? '');
   const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -71,8 +85,30 @@ export function DispatchBoardPage({ embedded = false }: { embedded?: boolean }) 
     (String(selected.status) === 'assigned' || String(selected.status) === 'in_progress');
   const live = useLogisticsJobLive(selected ? String(selected.id) : undefined, showLive);
 
+  function loadAssignDefaults() {
+    const saved = readLastJob<AssignDefaults>(LAST_DISPATCH_ASSIGN_KEY);
+    setAssigneeType((saved.assigneeType as AssigneeType) || 'org_fleet');
+    setCarrierId(saved.thirdPartyCarrierId ?? '');
+    setAssetId(saved.clientFleetAssetId ?? '');
+    setAssignStep(0);
+  }
+
+  function canContinueAssign(): boolean {
+    setActionError(null);
+    if (assigneeType === 'client_fleet' && !assetId) {
+      setActionError('Pick a client driver.');
+      return false;
+    }
+    if (assigneeType === 'third_party' && !carrierId) {
+      setActionError('Pick a 3PL carrier.');
+      return false;
+    }
+    return true;
+  }
+
   async function onAssign() {
     if (!selected) return;
+    if (!canContinueAssign()) return;
     setActionError(null);
     try {
       await assign.mutateAsync({
@@ -81,7 +117,13 @@ export function DispatchBoardPage({ embedded = false }: { embedded?: boolean }) 
         thirdPartyCarrierId: assigneeType === 'third_party' ? carrierId || null : null,
         clientFleetAssetId: assigneeType === 'client_fleet' ? assetId || null : null,
       });
+      writeLastJob(LAST_DISPATCH_ASSIGN_KEY, {
+        assigneeType,
+        clientFleetAssetId: assetId || undefined,
+        thirdPartyCarrierId: carrierId || undefined,
+      } satisfies AssignDefaults);
       setSelectedId(null);
+      setAssignStep(0);
     } catch (e) {
       setActionError((e as Error).message);
     }
@@ -117,6 +159,17 @@ export function DispatchBoardPage({ embedded = false }: { embedded?: boolean }) 
       setActionError((e as Error).message);
     }
   }
+
+  const assigneeSummary =
+    assigneeType === 'client_fleet'
+      ? (clientFleet.data?.assets ?? []).find((a) => String(a.id) === assetId)?.driver_name ??
+        'Client driver'
+      : assigneeType === 'third_party'
+        ? (carriers.data?.carriers ?? []).find((c) => String(c.id) === carrierId)?.name ??
+          '3PL'
+        : assigneeType === 'roam_marketplace'
+          ? 'Auto-dispatch'
+          : 'Org fleet';
 
   return (
     <div className="space-y-6">
@@ -196,7 +249,7 @@ export function DispatchBoardPage({ embedded = false }: { embedded?: boolean }) 
         </div>
       )}
 
-        {jobs.length > 0 && (
+      {jobs.length > 0 && (
         <div className="grid gap-4 xl:grid-cols-5">
           {COLUMNS.map((col) => (
             <section
@@ -219,9 +272,7 @@ export function DispatchBoardPage({ embedded = false }: { embedded?: boolean }) 
                       onClick={() => {
                         setSelectedId(String(job.id));
                         setActionError(null);
-                        setAssigneeType('org_fleet');
-                        setCarrierId('');
-                        setAssetId('');
+                        loadAssignDefaults();
                       }}
                       className={`w-full rounded-lg border bg-white px-3 py-2.5 text-left text-sm shadow-sm transition hover:border-amber-300 ${
                         selectedId === String(job.id)
@@ -301,7 +352,10 @@ export function DispatchBoardPage({ embedded = false }: { embedded?: boolean }) 
             <div className="mt-4 border-t border-slate-100 pt-4">
               {live.isError ? (
                 <p className="text-sm text-slate-500">
-                  Live map unavailable{(live.error as Error)?.message ? `: ${(live.error as Error).message}` : ''}
+                  Live map unavailable
+                  {(live.error as Error)?.message
+                    ? `: ${(live.error as Error).message}`
+                    : ''}
                 </p>
               ) : (
                 <JobLiveMap
@@ -339,9 +393,9 @@ export function DispatchBoardPage({ embedded = false }: { embedded?: boolean }) 
           {(selected.status === 'unassigned' ||
             selected.status === 'assigned' ||
             selected.status === 'matching') && (
-            <div className="mt-4 grid gap-3 border-t border-slate-100 pt-4 sm:grid-cols-2">
+            <div className="mt-4 border-t border-slate-100 pt-4">
               {selected.status === 'matching' ? (
-                <div className="sm:col-span-2 space-y-2">
+                <div className="space-y-2">
                   <p className="text-sm text-slate-600">
                     Offering this job to online org drivers. Wave{' '}
                     {String(selected.matching_wave ?? 0)}.
@@ -354,95 +408,137 @@ export function DispatchBoardPage({ embedded = false }: { embedded?: boolean }) 
                   >
                     Cancel matching
                   </button>
+                  {actionError ? (
+                    <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                      {actionError}
+                    </p>
+                  ) : null}
                 </div>
               ) : (
-                <>
-              <label className="block text-sm">
-                Assignee type
-                <select
-                  value={assigneeType}
-                  onChange={(e) =>
-                    setAssigneeType(
-                      e.target.value as
-                        | 'org_fleet'
-                        | 'client_fleet'
-                        | 'third_party'
-                        | 'roam_marketplace',
-                    )
-                  }
-                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-                >
-                  <option value="org_fleet">Org fleet (manual)</option>
-                  <option value="roam_marketplace">Auto-dispatch (org drivers)</option>
-                  <option value="client_fleet">Client fleet</option>
-                  <option value="third_party">3PL</option>
-                </select>
-              </label>
-              {assigneeType === 'third_party' && (
-                <label className="block text-sm">
-                  Carrier
-                  <select
-                    value={carrierId}
-                    onChange={(e) => setCarrierId(e.target.value)}
-                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+                <div className="space-y-4">
+                  <OpsWizard
+                    steps={['Who', 'Confirm']}
+                    stepIndex={assignStep}
+                    error={actionError}
+                    onBack={() => {
+                      setActionError(null);
+                      setAssignStep(0);
+                    }}
+                    onContinue={() => {
+                      if (!canContinueAssign()) return;
+                      setAssignStep(1);
+                    }}
+                    confirmSlot={
+                      <button
+                        type="button"
+                        disabled={assign.isPending}
+                        onClick={() => void onAssign()}
+                        className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-amber-400 disabled:opacity-60"
+                      >
+                        {assign.isPending ? 'Assigning…' : 'Assign'}
+                      </button>
+                    }
                   >
-                    <option value="">Select…</option>
-                    {(carriers.data?.carriers ?? []).map((c) => (
-                      <option key={String(c.id)} value={String(c.id)}>
-                        {String(c.name)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              )}
-              {assigneeType === 'client_fleet' && (
-                <label className="block text-sm">
-                  Client driver
-                  <select
-                    value={assetId}
-                    onChange={(e) => setAssetId(e.target.value)}
-                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-                  >
-                    <option value="">Select…</option>
-                    {(clientFleet.data?.assets ?? []).map((a) => (
-                      <option key={String(a.id)} value={String(a.id)}>
-                        {String(a.driver_name)} ({String(a.vehicle_plate || '—')})
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              )}
-              <div className="flex flex-wrap items-end gap-2 sm:col-span-2">
-                <button
-                  type="button"
-                  disabled={assign.isPending}
-                  onClick={() => void onAssign()}
-                  className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-amber-400 disabled:opacity-60"
-                >
-                  {assign.isPending ? 'Assigning…' : 'Assign'}
-                </button>
-                {selected.status === 'assigned' && (
-                  <>
-                    <button
-                      type="button"
-                      disabled={transition.isPending}
-                      onClick={() => void onStart()}
-                      className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium"
-                    >
-                      Mark in progress
-                    </button>
-                    <button
-                      type="button"
-                      disabled={transition.isPending}
-                      onClick={() => void onUnassign()}
-                      className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600"
-                    >
-                      Unassign
-                    </button>
-                  </>
-                )}
-              </div>
-                </>
+                    {assignStep === 0 && (
+                      <div className="space-y-4">
+                        <p className="text-sm font-medium text-slate-800">Who takes this job?</p>
+                        <label className="block text-sm">
+                          Assignee type
+                          <select
+                            value={assigneeType}
+                            onChange={(e) => setAssigneeType(e.target.value as AssigneeType)}
+                            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+                          >
+                            <option value="org_fleet">Org fleet (manual)</option>
+                            <option value="roam_marketplace">Auto-dispatch (org drivers)</option>
+                            <option value="client_fleet">Client fleet</option>
+                            <option value="third_party">3PL</option>
+                          </select>
+                        </label>
+                        {assigneeType === 'third_party' && (
+                          <label className="block text-sm">
+                            Carrier
+                            <select
+                              value={carrierId}
+                              onChange={(e) => setCarrierId(e.target.value)}
+                              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+                            >
+                              <option value="">Select…</option>
+                              {(carriers.data?.carriers ?? []).map((c) => (
+                                <option key={String(c.id)} value={String(c.id)}>
+                                  {String(c.name)}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        )}
+                        {assigneeType === 'client_fleet' && (
+                          <label className="block text-sm">
+                            Client driver
+                            <select
+                              value={assetId}
+                              onChange={(e) => setAssetId(e.target.value)}
+                              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+                            >
+                              <option value="">Select…</option>
+                              {(clientFleet.data?.assets ?? []).map((a) => (
+                                <option key={String(a.id)} value={String(a.id)}>
+                                  {String(a.driver_name)} ({String(a.vehicle_plate || '—')})
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        )}
+                      </div>
+                    )}
+                    {assignStep === 1 && (
+                      <div className="space-y-2 text-sm">
+                        <p className="font-medium text-slate-800">Confirm assign</p>
+                        <dl className="space-y-2 rounded-lg bg-slate-50 px-3 py-3 text-slate-700">
+                          <div className="flex justify-between gap-3">
+                            <dt className="text-slate-500">Job</dt>
+                            <dd className="text-right">
+                              {String(selected.reference_code || selected.id)}
+                            </dd>
+                          </div>
+                          <div className="flex justify-between gap-3">
+                            <dt className="text-slate-500">Route</dt>
+                            <dd className="text-right">
+                              {String(selected.pickup_label)} → {String(selected.dropoff_label)}
+                            </dd>
+                          </div>
+                          <div className="flex justify-between gap-3">
+                            <dt className="text-slate-500">Assignee</dt>
+                            <dd className="text-right">
+                              {assigneeType.replace(/_/g, ' ')} · {String(assigneeSummary)}
+                            </dd>
+                          </div>
+                        </dl>
+                      </div>
+                    )}
+                  </OpsWizard>
+
+                  {selected.status === 'assigned' && (
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        disabled={transition.isPending}
+                        onClick={() => void onStart()}
+                        className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium"
+                      >
+                        Mark in progress
+                      </button>
+                      <button
+                        type="button"
+                        disabled={transition.isPending}
+                        onClick={() => void onUnassign()}
+                        className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600"
+                      >
+                        Unassign
+                      </button>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           )}
@@ -458,12 +554,6 @@ export function DispatchBoardPage({ embedded = false }: { embedded?: boolean }) 
                 Mark completed
               </button>
             </div>
-          )}
-
-          {actionError && (
-            <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-              {actionError}
-            </p>
           )}
         </div>
       )}
