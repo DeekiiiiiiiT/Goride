@@ -3,6 +3,7 @@ import {
   matchJaaStatementToDriverLogs,
   applyFuelMatchLinks,
   isJaaStatementLedgerRow,
+  collectJaaStatementReceiptNumbers,
   type FuelEntryLike,
 } from './jaaFuelStatementMatcher';
 
@@ -54,5 +55,20 @@ describe('jaaFuelStatementMatcher (fleet re-export)', () => {
 
   it('isJaaStatementLedgerRow flags jaa_raw', () => {
     expect(isJaaStatementLedgerRow(entry({ metadata: { importSource: 'jaa_raw' } }))).toBe(true);
+  });
+
+  it('collectJaaStatementReceiptNumbers ignores driver-only receipts', () => {
+    const set = collectJaaStatementReceiptNumbers([
+      entry({
+        entrySource: 'driver-portal',
+        metadata: { jaaReceiptNumber: 'ZZ0028966858' },
+      }),
+      entry({
+        entrySource: 'fuel-card',
+        metadata: { importSource: 'jaa_raw', jaaReceiptNumber: 'FEE1' },
+      }),
+    ]);
+    expect(set.has('ZZ0028966858')).toBe(false);
+    expect(set.has('FEE1')).toBe(true);
   });
 });

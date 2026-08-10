@@ -175,7 +175,7 @@ export function AdminJaaCsvImportWizard({
             {' · '}
             {preview.parsedRows} rows parsed
             {preview.skippedDuplicates
-              ? ` · ${preview.skippedDuplicates} duplicate(s) skipped`
+              ? ` · ${preview.skippedDuplicates} duplicate statement receipt(s) skipped`
               : ''}
             {' · '}
             nothing is saved until you submit.

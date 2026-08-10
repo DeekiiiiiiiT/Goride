@@ -4,6 +4,7 @@ export {
   applyFuelMatchLinks,
   buildJaaMatchUpdates,
   isJaaStatementLedgerRow,
+  collectJaaStatementReceiptNumbers,
   type FuelEntryLike,
   type FuelMatchPair,
   type FuelMatchStatus,

@@ -39,6 +39,7 @@ import {
 import { findFuelCardByCode, normalizeFuelCardCode } from '../../../utils/fuelCardMatch';
 import {
   buildJaaMatchUpdates,
+  collectJaaStatementReceiptNumbers,
   isJaaStatementLedgerRow,
 } from '../../../../../../packages/roam-shared/src/fuel/jaaFuelStatementMatcher';
 
@@ -301,11 +302,9 @@ export function AdminJaaGasCardsPage() {
 
       const inventory = await fuelService.getFuelCards();
       const existing = await fuelService.getFuelEntries({ limit: 5000 });
-      const receiptSet = new Set(
-        existing
-          .map((e) => String((e.metadata as any)?.jaaReceiptNumber || '').toUpperCase())
-          .filter(Boolean),
-      );
+      // Only statement ledger receipts block re-import — matched driver logs keep
+      // jaaReceiptNumber but must not hide Card Inventory rows after CSV delete.
+      const receiptSet = collectJaaStatementReceiptNumbers(existing);
 
       const result = processJaaRawFuelData(rows, inventory, receiptSet, {
         requireCardMatch: true,
@@ -496,11 +495,7 @@ export function AdminJaaGasCardsPage() {
       }
       const inventory = await fuelService.getFuelCards();
       const existing = await fuelService.getFuelEntries({ limit: 5000 });
-      const receiptSet = new Set(
-        existing
-          .map((e) => String((e.metadata as any)?.jaaReceiptNumber || '').toUpperCase())
-          .filter(Boolean),
-      );
+      const receiptSet = collectJaaStatementReceiptNumbers(existing);
 
       const syntheticRows: ParsedRow[] = open.map((r) => ({
         CARD_CODE: r.cardCode,

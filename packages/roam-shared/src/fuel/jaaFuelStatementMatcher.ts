@@ -83,6 +83,25 @@ export function isJaaStatementLedgerRow(entry: FuelEntryLike): boolean {
 }
 
 /**
+ * Receipt numbers already present on statement ledger rows.
+ * Driver Gas Card logs may carry `jaaReceiptNumber` after matching — those must
+ * NOT block re-importing a deleted statement CSV (Card Inventory is statement-only).
+ */
+export function collectJaaStatementReceiptNumbers(
+  entries: FuelEntryLike[],
+): Set<string> {
+  const out = new Set<string>();
+  for (const e of entries) {
+    if (!isJaaStatementLedgerRow(e)) continue;
+    const r = String(metaOf(e).jaaReceiptNumber || '')
+      .trim()
+      .toUpperCase();
+    if (r) out.add(r);
+  }
+  return out;
+}
+
+/**
  * Fill missing statement vehicle/driver from card inventory assignment.
  * Driver uses card history at statement time (not live assignee).
  * Legacy pump logs often lack cardId; assigned vehicle is a weak fallback bridge.

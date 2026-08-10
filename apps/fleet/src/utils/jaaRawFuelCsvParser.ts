@@ -141,7 +141,9 @@ export function isJaaRawFuelCsv(headers: string[]): boolean {
 
 /**
  * Map JAA Raw CSV rows → fuel entries.
- * @param existingReceiptNumbers — skip duplicates (RECEIPT_NUMBER)
+ * @param existingReceiptNumbers — skip duplicates by RECEIPT_NUMBER.
+ *   Pass statement-ledger receipts only (`collectJaaStatementReceiptNumbers`).
+ *   Driver logs that carry a matched receipt must not block CSV re-import.
  * @param options.requireCardMatch — when true (platform fan-out), unmatched CARD_CODEs go to unmatchedRows
  * @param options.allowedCompanyCodes — when set (self-serve), reject rows outside these codes
  */

@@ -93,6 +93,7 @@ import {
 } from '../../utils/jaaStatementDetailsParser';
 import {
   buildJaaMatchUpdates,
+  collectJaaStatementReceiptNumbers,
   type FuelMatchPair,
 } from '../../utils/jaaFuelStatementMatcher';
 import { JaaFuelMatchReview } from '../fuel/JaaFuelMatchReview';
@@ -992,11 +993,8 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
               let entriesToSave = [...processedFuelEntries];
               try {
                   const existingAll = await fuelService.getFuelEntries({ limit: 3000 });
-                  const existingReceipts = new Set(
-                    existingAll
-                      .map((e) => String((e.metadata as any)?.jaaReceiptNumber || '').toUpperCase())
-                      .filter(Boolean),
-                  );
+                  // Statement receipts only — driver logs with matched jaaReceiptNumber must not block re-import
+                  const existingReceipts = collectJaaStatementReceiptNumbers(existingAll);
                   const beforeDedup = entriesToSave.length;
                   entriesToSave = entriesToSave.filter((entry) => {
                     const r = String((entry.metadata as any)?.jaaReceiptNumber || '').toUpperCase();

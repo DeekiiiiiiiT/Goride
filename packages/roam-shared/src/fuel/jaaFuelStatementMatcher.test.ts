@@ -3,6 +3,7 @@ import {
   matchJaaStatementToDriverLogs,
   applyFuelMatchLinks,
   isJaaStatementLedgerRow,
+  collectJaaStatementReceiptNumbers,
   buildJaaMatchUpdates,
   hydrateStatementsFromCards,
   type FuelEntryLike,
@@ -41,6 +42,41 @@ describe('isJaaStatementLedgerRow', () => {
         entry({ entrySource: 'driver-portal', paymentSource: 'Gas_Card', metadata: {} }),
       ),
     ).toBe(false);
+  });
+});
+
+describe('collectJaaStatementReceiptNumbers', () => {
+  it('includes statement receipts and ignores matched driver logs', () => {
+    const statement = entry({
+      entrySource: 'fuel-card',
+      metadata: { importSource: 'jaa_raw', jaaReceiptNumber: 'ZZ0028966858' },
+    });
+    const driverMatched = entry({
+      entrySource: 'driver-portal',
+      paymentSource: 'Gas_Card',
+      metadata: {
+        jaaReceiptNumber: 'ZZ0028966858',
+        jaaMatchedStatementId: 'old-stmt',
+        source: 'Fuel Log',
+      },
+    });
+    const otherStatement = entry({
+      entrySource: 'fuel-card',
+      metadata: { importSource: 'jaa_raw', jaaReceiptNumber: 'ZZOTHER' },
+    });
+
+    const set = collectJaaStatementReceiptNumbers([statement, driverMatched, otherStatement]);
+    expect(set.has('ZZ0028966858')).toBe(true);
+    expect(set.has('ZZOTHER')).toBe(true);
+    expect(set.size).toBe(2);
+  });
+
+  it('returns empty when only driver logs carry receipts', () => {
+    const driverOnly = entry({
+      entrySource: 'driver-portal',
+      metadata: { jaaReceiptNumber: 'ZZ0028966858' },
+    });
+    expect(collectJaaStatementReceiptNumbers([driverOnly]).size).toBe(0);
   });
 });
 
