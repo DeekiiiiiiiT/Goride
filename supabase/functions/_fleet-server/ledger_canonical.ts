@@ -34,6 +34,8 @@ const VALID_CANONICAL_EVENT_TYPES = new Set([
   "payout_bank",
   "toll_support_adjustment",
   "dispute_refund",
+  /** One row per Uber payments_transaction.csv line (transaction-grain SSOT). */
+  "payment_line",
   "wallet_credit",
   "fuel_reimbursement",
   "toll_reconciled",

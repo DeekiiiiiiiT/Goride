@@ -948,8 +948,11 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
                       canonSkipped += r.skipped;
                       canonFailed += r.failed;
                       if (r.failed > 0) {
+                          const firstErr = r.details?.find((d) => d.error)?.error;
                           toast.warning(
-                              `Some canonical ledger events failed (${r.failed} in one batch).`,
+                              firstErr
+                                  ? `Some canonical ledger events failed (${r.failed}): ${firstErr}`
+                                  : `Some canonical ledger events failed (${r.failed} in one batch).`,
                           );
                       }
                   }
