@@ -1,15 +1,19 @@
-import { FormEvent, useState } from 'react';
-import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { FormEvent, useEffect, useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { InstallAppButton } from '@fleet/components/pwa/PwaLifecycleHost';
 import { jwtPrimaryRole, supabaseEnterpriseApp } from '@roam/auth-client';
 import { useAuth } from '@/app/auth/AuthProvider';
+import {
+  getProductDoor,
+  navigateDoorHref,
+  resolvePostLoginHref,
+} from '@/app/productDoor';
 import { resolveEnterpriseHomePath } from '@/app/verticals/enterpriseHome';
 
 const GENERIC_AUTH_ERROR = 'Invalid email or password';
 
 export function LoginPage() {
   const { session, user, signIn, loading, businessType, subscribedProducts, role } = useAuth();
-  const navigate = useNavigate();
   const location = useLocation();
   const requestedFrom = (location.state as { from?: string; authError?: string } | null)?.from;
   const stateError = (location.state as { authError?: string } | null)?.authError;
@@ -19,21 +23,25 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(stateError ?? null);
   const [submitting, setSubmitting] = useState(false);
 
-  const sessionHome = session
-    ? resolveEnterpriseHomePath({
-        rawRole: role || jwtPrimaryRole(user) || null,
-        businessType,
-        subscribedProducts,
-      })
-    : '/app';
-  const defaultHome =
-    requestedFrom?.startsWith('/warehouse') || requestedFrom?.startsWith('/app')
-      ? requestedFrom
-      : sessionHome;
+  const door = getProductDoor();
+  const doorLabel =
+    door === 'warehouse' ? 'Warehouse' : door === 'courier' ? 'Courier' : 'Enterprise';
 
-  if (!loading && session) {
-    return <Navigate to={defaultHome} replace />;
-  }
+  useEffect(() => {
+    if (loading || !session) return;
+    const homePath = resolveEnterpriseHomePath({
+      rawRole: role || jwtPrimaryRole(user) || null,
+      businessType,
+      subscribedProducts,
+    });
+    const href = resolvePostLoginHref({
+      businessType,
+      subscribedProducts,
+      homePath,
+      requestedFrom,
+    });
+    navigateDoorHref(href);
+  }, [loading, session, role, user, businessType, subscribedProducts, requestedFrom]);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -63,28 +71,55 @@ export function LoginPage() {
       products = Array.isArray(org?.subscribed_products)
         ? (org!.subscribed_products as string[])
         : [];
+    } else {
+      // Owned org fallback
+      const { data: owned } = await supabaseEnterpriseApp
+        .from('organizations')
+        .select('business_type, subscribed_products')
+        .eq('owner_id', data.session?.user?.id ?? '')
+        .eq('product_line', 'enterprise')
+        .limit(1)
+        .maybeSingle();
+      bt = (owned?.business_type as string) || null;
+      products = Array.isArray(owned?.subscribed_products)
+        ? (owned!.subscribed_products as string[])
+        : [];
     }
-    const home = resolveEnterpriseHomePath({
+    const homePath = resolveEnterpriseHomePath({
       rawRole: nextRole,
       businessType: bt,
       subscribedProducts: products,
     });
-    const dest =
-      requestedFrom?.startsWith('/warehouse') || requestedFrom?.startsWith('/app')
-        ? requestedFrom
-        : home;
-    navigate(dest, { replace: true });
+    const href = resolvePostLoginHref({
+      businessType: bt,
+      subscribedProducts: products,
+      homePath,
+      requestedFrom,
+    });
+    navigateDoorHref(href);
+  }
+
+  if (!loading && session) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-950 text-sm text-slate-400">
+        Opening {doorLabel}…
+      </div>
+    );
   }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4">
       <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-8 shadow-xl">
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-400">
-          Roam Enterprise
+          Roam {doorLabel}
         </p>
         <h1 className="mt-2 text-2xl font-semibold text-white">Sign in</h1>
         <p className="mt-1 text-sm text-slate-400">
-          Courier ops and warehouse intake for Enterprise logistics.
+          {door === 'warehouse'
+            ? 'Warehouse intake — receive floor for linked couriers.'
+            : door === 'courier'
+              ? 'Courier ops — packages, manifests, customs, last mile.'
+              : 'Courier and Warehouse products for Enterprise logistics.'}
         </p>
 
         <form onSubmit={(e) => void onSubmit(e)} className="mt-8 space-y-4">

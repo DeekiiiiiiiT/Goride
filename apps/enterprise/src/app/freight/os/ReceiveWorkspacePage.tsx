@@ -2,6 +2,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { WarehouseInboundPage } from '@/app/freight/os/WarehouseInboundPage';
 import { WarehouseReceiveStationPage } from '@/app/freight/os/WarehouseReceiveStationPage';
 import { useWarehouseCourierLinks } from '@/app/hooks/useWarehouseCourierLinks';
+import { urlForDoor } from '@/app/productDoor';
 
 type IntakeTab = 'inbound' | 'station';
 
@@ -20,6 +21,7 @@ export function ReceiveWorkspacePage() {
   const activeWarehouses = (linksQ.data?.links ?? []).filter(
     (l) => l.status === 'active',
   );
+  const warehouseAppHref = urlForDoor('warehouse', '/warehouse');
 
   function setTab(next: IntakeTab) {
     setParams(next === 'inbound' ? {} : { tab: next }, { replace: true });
@@ -32,7 +34,7 @@ export function ReceiveWorkspacePage() {
           <h1 className="text-2xl font-semibold text-slate-900">US Intake</h1>
           <p className="mt-1 text-sm text-slate-500">
             Receive into a warehouse you&apos;re connected to (in-house or partner). Floor staff
-            can also work in the Warehouse product.
+            work in the Warehouse product door.
           </p>
           <p className="mt-1 text-xs text-slate-500">
             Active warehouse links: {activeWarehouses.length}
@@ -54,12 +56,12 @@ export function ReceiveWorkspacePage() {
           >
             Connect warehouses
           </Link>
-          <Link
-            to="/warehouse"
+          <a
+            href={warehouseAppHref}
             className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium hover:bg-slate-50"
           >
             Open Warehouse app
-          </Link>
+          </a>
         </div>
       </div>
 

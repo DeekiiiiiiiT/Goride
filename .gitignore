@@ -10,6 +10,10 @@ dist
 .env.staging
 !.env.example
 
+# Local smoke credentials (never commit)
+docs/products/.local-*-creds.txt
+docs/products/.local-*-creds.md
+
 # Capacitor / Android (driver)
 apps/driver/android/.gradle/
 apps/driver/android/app/build/

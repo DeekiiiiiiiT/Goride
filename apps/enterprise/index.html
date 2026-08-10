@@ -7,17 +7,39 @@
     <meta name="theme-color" content="#030213" />
     <meta
       name="description"
-      content="Roam Enterprise — rideshare, logistics, food delivery, and fleet management in one mobility ecosystem."
+      content="Roam Enterprise — Courier and Warehouse products for logistics operators."
     />
     <meta name="application-name" content="Roam Enterprise" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Roam Enterprise" />
     <meta name="mobile-web-app-capable" content="yes" />
+    <link id="pwa-manifest" rel="manifest" href="/manifests/courier.webmanifest" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
     <title>Roam Enterprise</title>
+    <script>
+      (function () {
+        var host = (location.hostname || '').toLowerCase();
+        var door = 'courier';
+        if (host === 'warehouse.localhost' || host.indexOf('warehouse.') === 0 || host === 'warehouse') {
+          door = 'warehouse';
+        }
+        var href =
+          door === 'warehouse'
+            ? '/manifests/warehouse.webmanifest'
+            : '/manifests/courier.webmanifest';
+        var link = document.getElementById('pwa-manifest');
+        if (link) link.setAttribute('href', href);
+        var title = door === 'warehouse' ? 'Roam Warehouse' : host.indexOf('courier.') === 0 || host === 'courier.localhost' || host === 'courier' ? 'Roam Courier' : 'Roam Enterprise';
+        document.title = title;
+        var appMeta = document.querySelector('meta[name="application-name"]');
+        if (appMeta) appMeta.setAttribute('content', title);
+        var appleTitle = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+        if (appleTitle) appleTitle.setAttribute('content', title);
+      })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

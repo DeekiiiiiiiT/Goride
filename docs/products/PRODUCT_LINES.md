@@ -24,16 +24,19 @@ Enterprise orgs are tagged `productLine: enterprise` with business types from `@
 
 ### Products on the same domain (Warehouse & Courier)
 
-Sibling products under `productLine: enterprise` (see [`WAREHOUSE_COURIER_MODEL.md`](./WAREHOUSE_COURIER_MODEL.md)):
+Sibling products under `productLine: enterprise` (see [`WAREHOUSE_COURIER_MODEL.md`](./WAREHOUSE_COURIER_MODEL.md) and [`ENTERPRISE_PRODUCT_DOORS.md`](./ENTERPRISE_PRODUCT_DOORS.md)):
 
-| Path | Product | Buyer (`business_type`) | Scope |
-|------|---------|-------------------------|--------|
-| `/app/*` | **Courier** | `freight_forwarding` (and other courier verticals) | Suites, invoices, manifests, customs, hub, last mile, domestic, **Connect a warehouse** |
-| `/warehouse/*` | **Warehouse** | `warehouse` (invite / Dominion; open later) | Inbound, Receive Station, facilities, courier links, floor packages |
+| Door host | Product | Buyer (`business_type`) | Lands on |
+|-----------|---------|-------------------------|----------|
+| `courier.roamenterprise.co` | **Courier** | `freight_forwarding` (+ courier verticals) | `/app` |
+| `warehouse.roamenterprise.co` | **Warehouse** | `warehouse` | `/warehouse` |
+| `roamenterprise.co` (apex) | Marketing | — | public site; `/login` routes to the right door |
 
-Routing: warehouse companies and `enterprise_warehouse` seats land on `/warehouse`; courier seats land on `/app`.
+Local: `courier.localhost:3003` / `warehouse.localhost:3003`.
 
 **Connection model:** many-to-many `freight.warehouse_courier_links`. Packages carry `owner_org_id` (courier) + `operating_warehouse_org_id` (warehouse). In-house floors use a self-link (`warehouse_org_id = courier_org_id`).
+
+Paths `/app` and `/warehouse` remain inside the SPA; **permanent installs** are per door hostname (two PWAs).
 
 ### Locked v1 scope (Freight Forwarding / Courier)
 

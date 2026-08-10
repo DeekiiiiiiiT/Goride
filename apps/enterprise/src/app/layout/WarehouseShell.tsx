@@ -1,4 +1,4 @@
-import { Link, NavLink, Navigate, Outlet } from 'react-router-dom';
+import { NavLink, Outlet } from 'react-router-dom';
 import {
   Building2,
   ClipboardList,
@@ -9,7 +9,9 @@ import {
   Package,
   Users,
 } from 'lucide-react';
+import { useEffect } from 'react';
 import { useAuth } from '@/app/auth/AuthProvider';
+import { navigateDoorHref, urlForDoor } from '@/app/productDoor';
 import { useSeatAccess } from '@/app/seats/SeatAccessProvider';
 import {
   canAccessCourierVertical,
@@ -31,13 +33,23 @@ export function WarehouseShell() {
   const { user, role, signOut, businessType, subscribedProducts } = useAuth();
   const { seatRole } = useSeatAccess();
 
-  if (
-    !canAccessWarehouseVertical(seatRole, {
-      businessType,
-      subscribedProducts,
-    })
-  ) {
-    return <Navigate to="/app" replace />;
+  const canWarehouse = canAccessWarehouseVertical(seatRole, {
+    businessType,
+    subscribedProducts,
+  });
+
+  useEffect(() => {
+    if (!canWarehouse) {
+      navigateDoorHref(urlForDoor('courier', '/app'));
+    }
+  }, [canWarehouse]);
+
+  if (!canWarehouse) {
+    return (
+      <div className="flex min-h-screen items-center justify-center text-sm text-slate-500">
+        Opening Courier…
+      </div>
+    );
   }
 
   const showCourierLink = canAccessCourierVertical(seatRole, {
@@ -50,6 +62,8 @@ export function WarehouseShell() {
     (user?.user_metadata?.name as string | undefined) ||
     user?.email ||
     'Warehouse user';
+
+  const courierHref = urlForDoor('courier', '/app');
 
   return (
     <div className="flex min-h-screen bg-slate-50 text-slate-900">
@@ -84,12 +98,12 @@ export function WarehouseShell() {
           <p className="truncate text-sm font-medium text-slate-900">{displayName}</p>
           <p className="truncate text-xs text-slate-500">{role || 'member'}</p>
           {showCourierLink && (
-            <Link
-              to="/app"
+            <a
+              href={courierHref}
               className="mt-2 block text-xs font-semibold text-amber-800 underline-offset-2 hover:underline"
             >
               Open Courier app
-            </Link>
+            </a>
           )}
           <button
             type="button"

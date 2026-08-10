@@ -80,13 +80,16 @@ export default defineConfig({
         'icons/icon-192.png',
         'icons/icon-512.png',
         'icons/icon-maskable-512.png',
+        'manifests/courier.webmanifest',
+        'manifests/warehouse.webmanifest',
       ],
+      // Fallback manifest (apex). Door hosts inject courier/warehouse via index.html.
       manifest: {
         id: '/?product=enterprise',
         name: 'Roam Enterprise',
         short_name: 'Enterprise',
         description:
-          'Roam Enterprise — freight forwarding, logistics, and multi-industry operations dashboard.',
+          'Roam Enterprise — Courier and Warehouse logistics products.',
         theme_color: '#030213',
         background_color: '#030213',
         display: 'standalone',
@@ -209,9 +212,11 @@ export default defineConfig({
   },
   server: {
     port: 3003,
-    host: 'localhost',
+    // Door hosts: http://courier.localhost:3003 and http://warehouse.localhost:3003
+    host: true,
     strictPort: true,
-    open: true,
+    open: false,
+    allowedHosts: ['.localhost', 'localhost'],
     fs: {
       allow: [path.resolve(__dirname, '../..')],
     },

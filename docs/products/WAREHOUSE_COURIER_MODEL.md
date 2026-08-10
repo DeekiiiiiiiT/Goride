@@ -4,14 +4,23 @@
 
 ## Products
 
-Roam Enterprise is one platform. Under it:
+Roam Enterprise is one platform with **two product doors** (separate hostnames = separate PWAs). See [`ENTERPRISE_PRODUCT_DOORS.md`](./ENTERPRISE_PRODUCT_DOORS.md).
 
-| Product | Path | Buyer | Owns |
-|---------|------|-------|------|
-| **Courier** | `/app/*` | Freight / mailbox businesses (`business_type: freight_forwarding`) | Customers, suites, packages (goods), manifests, customs, hub, last mile, domestic |
-| **Warehouse** | `/warehouse/*` | Intake warehouse businesses (`business_type: warehouse`) | Buildings, floor staff, physical custody while boxes sit on the floor |
+| Product | Door host | Path | Buyer | Owns |
+|---------|-----------|------|-------|------|
+| **Courier** | `courier.roamenterprise.co` | `/app/*` | Freight / mailbox (`freight_forwarding`) | Customers, suites, packages (goods), manifests, customs, hub, last mile, domestic |
+| **Warehouse** | `warehouse.roamenterprise.co` | `/warehouse/*` | Intake warehouse (`warehouse`) | Buildings, floor staff, physical custody while boxes sit on the floor |
 
 They are **siblings**, not a seat split inside one company. They connect when a courier needs a receive floor.
+
+### Smoke logins (local)
+
+| Door | URL | Test user |
+|------|-----|-----------|
+| Courier | http://courier.localhost:3003/login | `freight.bootstrap+20260731232909@roamenterprise.test` (your existing password) |
+| Warehouse | http://warehouse.localhost:3003/login | `warehouse.smoke@roamenterprise.test` — password in gitignored `docs/products/.local-warehouse-smoke-creds.txt` |
+
+Orgs are pre-linked via `warehouse_courier_links` (active).
 
 ## Dual package ownership
 

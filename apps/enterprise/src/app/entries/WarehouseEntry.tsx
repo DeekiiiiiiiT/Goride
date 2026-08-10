@@ -3,8 +3,9 @@ import { RequireAuth, WrongProductLineGate } from '@/app/auth/RequireAuth';
 import { ModuleAccessProvider } from '@/app/modules/ModuleAccessProvider';
 import { SeatAccessProvider } from '@/app/seats/SeatAccessProvider';
 import { WarehouseShell } from '@/app/layout/WarehouseShell';
+import { WrongDoorGuard } from '@/app/verticals/WrongDoorGuard';
 
-/** Invitation / seat-gated Warehouse vertical at /warehouse. */
+/** Warehouse product door entry (`warehouse.*` or path /warehouse on apex/preview). */
 export default function WarehouseEntry() {
   return (
     <ProductProviders>
@@ -12,7 +13,9 @@ export default function WarehouseEntry() {
         <WrongProductLineGate>
           <ModuleAccessProvider>
             <SeatAccessProvider>
-              <WarehouseShell />
+              <WrongDoorGuard door="warehouse">
+                <WarehouseShell />
+              </WrongDoorGuard>
             </SeatAccessProvider>
           </ModuleAccessProvider>
         </WrongProductLineGate>

@@ -2,9 +2,29 @@
 
 import { IS_ENTERPRISE_PRODUCT } from '../config/productLine';
 
+function enterpriseDoorAppName(): string {
+  if (typeof window === 'undefined') return 'Roam Enterprise';
+  const host = window.location.hostname.toLowerCase();
+  if (
+    host === 'warehouse.localhost' ||
+    host.startsWith('warehouse.') ||
+    host === 'warehouse'
+  ) {
+    return 'Roam Warehouse';
+  }
+  if (
+    host === 'courier.localhost' ||
+    host.startsWith('courier.') ||
+    host === 'courier'
+  ) {
+    return 'Roam Courier';
+  }
+  return 'Roam Enterprise';
+}
+
 /** Product display name for install / update copy. */
 export function getPwaAppName(): string {
-  return IS_ENTERPRISE_PRODUCT ? 'Roam Enterprise' : 'Roam Fleet';
+  return IS_ENTERPRISE_PRODUCT ? enterpriseDoorAppName() : 'Roam Fleet';
 }
 
 /** True when launched from an installed desktop/PWA window. */
@@ -12,7 +32,9 @@ export function isStandaloneDisplay(): boolean {
   if (typeof window === 'undefined') return false;
   const mq = window.matchMedia('(display-mode: standalone)').matches;
   // iOS Safari legacy
-  const iosStandalone = 'standalone' in navigator && Boolean((navigator as Navigator & { standalone?: boolean }).standalone);
+  const iosStandalone =
+    'standalone' in navigator &&
+    Boolean((navigator as Navigator & { standalone?: boolean }).standalone);
   return mq || iosStandalone;
 }
 
