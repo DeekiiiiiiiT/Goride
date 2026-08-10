@@ -29,8 +29,10 @@
           host === 'courier.localhost' ||
           host.indexOf('courier.') === 0 ||
           host === 'courier';
+        var isOpsDoor = isWarehouse || isCourier;
         var link = document.getElementById('pwa-manifest');
-        if (isWarehouse || isCourier) {
+
+        if (isOpsDoor) {
           if (link) {
             link.setAttribute(
               'href',
@@ -45,10 +47,28 @@
           mobileCapable.setAttribute('name', 'mobile-web-app-capable');
           mobileCapable.setAttribute('content', 'yes');
           document.head.appendChild(mobileCapable);
-        } else if (link) {
-          // Apex marketing: never installable
-          link.parentNode && link.parentNode.removeChild(link);
+        } else {
+          // Apex marketing: tear out any PWA installability BEFORE React boots.
+          if (link && link.parentNode) link.parentNode.removeChild(link);
+          document.querySelectorAll('link[rel="manifest"]').forEach(function (el) {
+            el.parentNode && el.parentNode.removeChild(el);
+          });
+          if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations().then(function (regs) {
+              regs.forEach(function (reg) {
+                reg.unregister();
+              });
+            });
+          }
+          if (window.caches && caches.keys) {
+            caches.keys().then(function (keys) {
+              keys.forEach(function (key) {
+                caches.delete(key);
+              });
+            });
+          }
         }
+
         var title = isWarehouse
           ? 'Roam Freight Forwarding'
           : isCourier

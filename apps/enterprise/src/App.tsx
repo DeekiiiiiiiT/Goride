@@ -1,6 +1,8 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, type ReactNode } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { PwaProvider } from '@fleet/components/pwa/PwaProvider';
+import { NoPwaProvider } from '@fleet/components/pwa/NoPwaProvider';
+import { isEnterpriseOpsDoorHost } from '@fleet/pwa/pwaMeta';
 import { StandaloneHomeToLoginRedirect } from '@/app/pwa/StandaloneHomeToLoginRedirect';
 
 import { AccessibilityPage } from '@/pages/AccessibilityPage';
@@ -202,9 +204,16 @@ function Fall() {
 }
 
 export default function App() {
-  return (
-    <PwaProvider>
-      <BrowserRouter>
+  // Apex marketing must never mount SW registration / install / update chrome.
+  const wrap = (node: ReactNode) =>
+    isEnterpriseOpsDoorHost() ? (
+      <PwaProvider>{node}</PwaProvider>
+    ) : (
+      <NoPwaProvider>{node}</NoPwaProvider>
+    );
+
+  return wrap(
+    <BrowserRouter>
       <StandaloneHomeToLoginRedirect />
       <Routes>
         <Route path="/" element={<HomePage />} />
@@ -838,7 +847,6 @@ export default function App() {
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-      </BrowserRouter>
-    </PwaProvider>
+      </BrowserRouter>,
   );
 }
