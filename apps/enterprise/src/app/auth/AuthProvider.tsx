@@ -30,6 +30,17 @@ function deriveProductLine(u: User): string | null {
   );
 }
 
+/** Interim door hint from JWT until organizations row loads (avoids courier default race). */
+function deriveJwtBusinessType(u: User): string | null {
+  const appMeta = u.app_metadata || {};
+  const userMeta = u.user_metadata || {};
+  return (
+    (appMeta.businessType as string | undefined) ||
+    (userMeta.businessType as string | undefined) ||
+    null
+  );
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
@@ -47,6 +58,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setRole(jwtPrimaryRole(next.user) || null);
       setOrganizationId(deriveOrgId(next.user));
       setProductLine(deriveProductLine(next.user));
+      // Prefer JWT until org fetch finishes — never leave door routing with empty profile after SIGNED_IN
+      setBusinessType(deriveJwtBusinessType(next.user));
+      setSubscribedProducts([]);
     } else {
       setRole(null);
       setOrganizationId(null);
@@ -98,6 +112,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
+    async function hydrateOrgProfile(u: User) {
+      const orgId = deriveOrgId(u);
+      if (orgId) {
+        await loadOrgProfile(orgId);
+      } else {
+        await resolveOwnedEnterpriseOrg(u.id);
+      }
+    }
+
     (async () => {
       try {
         const { data } = await supabaseEnterpriseApp.auth.getSession();
@@ -105,29 +128,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         const u = data.session?.user;
         if (u) {
-          const orgId = deriveOrgId(u);
-          if (orgId) {
-            await loadOrgProfile(orgId);
-          } else {
-            await resolveOwnedEnterpriseOrg(u.id);
-          }
+          await hydrateOrgProfile(u);
         }
       } finally {
         if (mounted) setLoading(false);
       }
     })();
 
-    const { data: sub } = supabaseEnterpriseApp.auth.onAuthStateChange((_event, next) => {
-      applySession(next);
-      setLoading(false);
-      if (next?.user) {
-        const orgId = deriveOrgId(next.user);
-        if (orgId) {
-          void loadOrgProfile(orgId);
-        } else {
-          void resolveOwnedEnterpriseOrg(next.user.id);
+    const { data: sub } = supabaseEnterpriseApp.auth.onAuthStateChange((event, next) => {
+      void (async () => {
+        // Token refresh: keep current org profile; don't flip loading (avoids door bounce flashes).
+        if (event === 'TOKEN_REFRESHED') {
+          applySession(next);
+          if (next?.user) {
+            const orgId = deriveOrgId(next.user);
+            if (orgId) void loadOrgProfile(orgId);
+          }
+          return;
         }
-      }
+
+        applySession(next);
+        if (!next?.user) {
+          if (mounted) setLoading(false);
+          return;
+        }
+
+        // SIGNED_IN / INITIAL_SESSION / etc.: block UI until org door fields are known.
+        if (mounted) setLoading(true);
+        try {
+          await hydrateOrgProfile(next.user);
+        } finally {
+          if (mounted) setLoading(false);
+        }
+      })();
     });
 
     return () => {

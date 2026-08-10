@@ -105,6 +105,7 @@ export function resolvePostLoginHref(input: {
 }): string {
   const current = getProductDoor();
   const preferred = preferredDoorForUser(input);
+  const preferredHome = homePathForDoor(preferred);
 
   if (
     input.requestedFrom &&
@@ -113,8 +114,10 @@ export function resolvePostLoginHref(input: {
     const fromDoor: 'courier' | 'warehouse' = input.requestedFrom.startsWith('/warehouse')
       ? 'warehouse'
       : 'courier';
-    if (preferred !== fromDoor && current === 'apex') {
-      return urlForDoor(preferred, homePathForDoor(preferred));
+    // Never honor a path on the wrong product for this account
+    if (preferred !== fromDoor) {
+      if (current === preferred) return preferredHome;
+      return urlForDoor(preferred, preferredHome);
     }
     if (current === fromDoor) {
       return input.requestedFrom;
@@ -126,12 +129,12 @@ export function resolvePostLoginHref(input: {
   }
 
   if (current === preferred) {
-    return homePathForDoor(preferred);
+    return preferredHome;
   }
   if (current === 'apex') {
-    return urlForDoor(preferred, homePathForDoor(preferred));
+    return urlForDoor(preferred, preferredHome);
   }
-  return urlForDoor(preferred, homePathForDoor(preferred));
+  return urlForDoor(preferred, preferredHome);
 }
 
 /** Hard navigation when target is another origin; relative assign otherwise. */

@@ -72,10 +72,12 @@ async function main() {
       app_metadata: {
         productLine: 'enterprise',
         role: 'enterprise_owner',
+        businessType: 'warehouse',
       },
       user_metadata: {
         productLine: 'enterprise',
         full_name: 'Warehouse Smoke Owner',
+        businessType: 'warehouse',
       },
     });
     if (error) throw new Error(`createUser: ${error.message}`);
@@ -88,6 +90,12 @@ async function main() {
         ...user.app_metadata,
         productLine: 'enterprise',
         role: 'enterprise_owner',
+        businessType: 'warehouse',
+      },
+      user_metadata: {
+        ...user.user_metadata,
+        productLine: 'enterprise',
+        businessType: 'warehouse',
       },
     });
     if (error) throw new Error(`updateUser: ${error.message}`);

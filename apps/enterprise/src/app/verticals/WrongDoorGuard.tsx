@@ -3,6 +3,7 @@ import { useAuth } from '@/app/auth/AuthProvider';
 import { useSeatAccess } from '@/app/seats/SeatAccessProvider';
 import {
   getProductDoor,
+  homePathForDoor,
   navigateDoorHref,
   preferredDoorForUser,
   urlForDoor,
@@ -24,6 +25,7 @@ export function WrongDoorGuard({
   const { seatRole } = useSeatAccess();
 
   useEffect(() => {
+    // Org profile must be loaded — empty businessType defaults to courier and falsely bounces warehouse users.
     if (authLoading) return;
     const current = getProductDoor();
     if (current !== door) return;
@@ -39,7 +41,7 @@ export function WrongDoorGuard({
       homePath,
     });
     if (preferred !== door) {
-      navigateDoorHref(urlForDoor(preferred, homePath));
+      navigateDoorHref(urlForDoor(preferred, homePathForDoor(preferred)));
     }
   }, [authLoading, businessType, subscribedProducts, seatRole, role, door]);
 

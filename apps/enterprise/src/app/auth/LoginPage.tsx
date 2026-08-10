@@ -28,6 +28,7 @@ export function LoginPage() {
     door === 'warehouse' ? 'Warehouse' : door === 'courier' ? 'Courier' : 'Enterprise';
 
   useEffect(() => {
+    // Wait for AuthProvider org hydrate — premature redirect treats warehouse as courier.
     if (loading || !session) return;
     const homePath = resolveEnterpriseHomePath({
       rawRole: role || jwtPrimaryRole(user) || null,
