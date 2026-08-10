@@ -32,7 +32,7 @@
             : '/manifests/courier.webmanifest';
         var link = document.getElementById('pwa-manifest');
         if (link) link.setAttribute('href', href);
-        var title = door === 'warehouse' ? 'Roam Warehouse' : host.indexOf('courier.') === 0 || host === 'courier.localhost' || host === 'courier' ? 'Roam Courier' : 'Roam Enterprise';
+        var title = door === 'warehouse' ? 'Roam Freight Forwarding' : host.indexOf('courier.') === 0 || host === 'courier.localhost' || host === 'courier' ? 'Roam Courier' : 'Roam Enterprise';
         document.title = title;
         var appMeta = document.querySelector('meta[name="application-name"]');
         if (appMeta) appMeta.setAttribute('content', title);
@@ -43,7 +43,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&family=Manrope:wght@600;700;800&family=Work+Sans:wght@400;500;600&display=swap"
       rel="stylesheet"
     />
   </head>

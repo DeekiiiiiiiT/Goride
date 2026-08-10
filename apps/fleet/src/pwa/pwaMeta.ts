@@ -10,7 +10,7 @@ function enterpriseDoorAppName(): string {
     host.startsWith('warehouse.') ||
     host === 'warehouse'
   ) {
-    return 'Roam Warehouse';
+    return 'Roam Freight Forwarding';
   }
   if (
     host === 'courier.localhost' ||

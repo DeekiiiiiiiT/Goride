@@ -17,6 +17,11 @@ import { FleetPage } from '@/pages/FleetPage';
 import { HaulPage } from '@/pages/HaulPage';
 import { HelpPage } from '@/pages/HelpPage';
 import { HomePage } from '@/pages/HomePage';
+import {
+  DoorConnectPage,
+  DoorHowItWorksPage,
+  DoorPartnersPage,
+} from '@/doors/DoorStoryRoutes';
 import { RidesPage } from '@/pages/RidesPage';
 import { SafetyPage } from '@/pages/SafetyPage';
 import { Gated } from '@/app/modules/Gated';
@@ -203,6 +208,9 @@ export default function App() {
       <StandaloneHomeToLoginRedirect />
       <Routes>
         <Route path="/" element={<HomePage />} />
+        <Route path="/how-it-works" element={<DoorHowItWorksPage />} />
+        <Route path="/connect" element={<DoorConnectPage />} />
+        <Route path="/partners" element={<DoorPartnersPage />} />
         <Route path="/rides" element={<RidesPage />} />
         <Route path="/driver" element={<DriverPage />} />
         <Route path="/haul" element={<HaulPage />} />

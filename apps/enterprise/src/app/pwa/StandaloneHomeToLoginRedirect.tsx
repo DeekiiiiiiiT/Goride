@@ -1,21 +1,8 @@
-import { useEffect } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
-import { isStandaloneDisplay } from '@fleet/pwa/pwaMeta';
-
 /**
- * Installed Enterprise PWA used to open start_url `/` (marketing).
- * Send standalone launches on the marketing home to the sign-in screen.
- * Browser tabs on `/` keep the public marketing site.
+ * Installed Enterprise PWAs now open start_url `/` (door landing).
+ * Browser and standalone both get the marketing/product home first; sign-in is opt-in.
+ * Kept as a no-op mount so older imports do not break if referenced elsewhere.
  */
 export function StandaloneHomeToLoginRedirect() {
-  const location = useLocation();
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    if (location.pathname !== '/') return;
-    if (!isStandaloneDisplay()) return;
-    navigate('/login', { replace: true });
-  }, [location.pathname, navigate]);
-
   return null;
 }
