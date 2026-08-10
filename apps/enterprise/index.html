@@ -10,10 +10,9 @@
       content="Roam Enterprise — Courier and Warehouse products for logistics operators."
     />
     <meta name="application-name" content="Roam Enterprise" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Roam Enterprise" />
-    <meta name="mobile-web-app-capable" content="yes" />
+    <!-- Manifest / installability only attached on courier.* and warehouse.* doors -->
     <link id="pwa-manifest" rel="manifest" href="/manifests/courier.webmanifest" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
@@ -22,17 +21,39 @@
     <script>
       (function () {
         var host = (location.hostname || '').toLowerCase();
-        var door = 'courier';
-        if (host === 'warehouse.localhost' || host.indexOf('warehouse.') === 0 || host === 'warehouse') {
-          door = 'warehouse';
-        }
-        var href =
-          door === 'warehouse'
-            ? '/manifests/warehouse.webmanifest'
-            : '/manifests/courier.webmanifest';
+        var isWarehouse =
+          host === 'warehouse.localhost' ||
+          host.indexOf('warehouse.') === 0 ||
+          host === 'warehouse';
+        var isCourier =
+          host === 'courier.localhost' ||
+          host.indexOf('courier.') === 0 ||
+          host === 'courier';
         var link = document.getElementById('pwa-manifest');
-        if (link) link.setAttribute('href', href);
-        var title = door === 'warehouse' ? 'Roam Freight Forwarding' : host.indexOf('courier.') === 0 || host === 'courier.localhost' || host === 'courier' ? 'Roam Courier' : 'Roam Enterprise';
+        if (isWarehouse || isCourier) {
+          if (link) {
+            link.setAttribute(
+              'href',
+              isWarehouse ? '/manifests/warehouse.webmanifest' : '/manifests/courier.webmanifest',
+            );
+          }
+          var capable = document.createElement('meta');
+          capable.setAttribute('name', 'apple-mobile-web-app-capable');
+          capable.setAttribute('content', 'yes');
+          document.head.appendChild(capable);
+          var mobileCapable = document.createElement('meta');
+          mobileCapable.setAttribute('name', 'mobile-web-app-capable');
+          mobileCapable.setAttribute('content', 'yes');
+          document.head.appendChild(mobileCapable);
+        } else if (link) {
+          // Apex marketing: never installable
+          link.parentNode && link.parentNode.removeChild(link);
+        }
+        var title = isWarehouse
+          ? 'Roam Freight Forwarding'
+          : isCourier
+            ? 'Roam Courier'
+            : 'Roam Enterprise';
         document.title = title;
         var appMeta = document.querySelector('meta[name="application-name"]');
         if (appMeta) appMeta.setAttribute('content', title);

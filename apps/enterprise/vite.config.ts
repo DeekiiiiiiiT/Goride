@@ -83,42 +83,9 @@ export default defineConfig({
         'manifests/courier.webmanifest',
         'manifests/warehouse.webmanifest',
       ],
-      // Fallback manifest (apex). Door hosts inject courier/warehouse via index.html.
-      manifest: {
-        id: '/?product=enterprise',
-        name: 'Roam Enterprise',
-        short_name: 'Enterprise',
-        description:
-          'Roam Enterprise — Courier and Warehouse logistics products.',
-        theme_color: '#030213',
-        background_color: '#030213',
-        display: 'standalone',
-        orientation: 'any',
-        start_url: '/login',
-        scope: '/',
-        lang: 'en',
-        categories: ['business', 'productivity'],
-        icons: [
-          {
-            src: '/icons/icon-192.png',
-            sizes: '192x192',
-            type: 'image/png',
-            purpose: 'any',
-          },
-          {
-            src: '/icons/icon-512.png',
-            sizes: '512x512',
-            type: 'image/png',
-            purpose: 'any',
-          },
-          {
-            src: '/icons/icon-maskable-512.png',
-            sizes: '512x512',
-            type: 'image/png',
-            purpose: 'maskable',
-          },
-        ],
-      },
+      // Door hosts provide their own static manifests via index.html.
+      // Apex marketing must not ship an installable web app manifest.
+      manifest: false,
       workbox: {
         maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
         globPatterns: ['**/*.{js,css,ico,png,svg,woff2,webmanifest,html}'],

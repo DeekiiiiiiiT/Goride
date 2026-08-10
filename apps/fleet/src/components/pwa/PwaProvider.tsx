@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRegisterSW } from 'virtual:pwa-register/react';
 import {
   getPwaAppName,
+  isPwaInstallAllowed,
   isStandaloneDisplay,
   type BeforeInstallPromptEvent,
 } from '../../pwa/pwaMeta';
@@ -33,6 +34,7 @@ function markInstallDismissed(): void {
 
 export function PwaProvider({ children }: { children: React.ReactNode }) {
   const appName = getPwaAppName();
+  const installAllowed = isPwaInstallAllowed();
   const [installEvent, setInstallEvent] = useState<BeforeInstallPromptEvent | null>(null);
   const [canInstallPrompt, setCanInstallPrompt] = useState(false);
   const [installing, setInstalling] = useState(false);
@@ -43,7 +45,13 @@ export function PwaProvider({ children }: { children: React.ReactNode }) {
     needRefresh: [needRefresh, setNeedRefresh],
     updateServiceWorker,
   } = useRegisterSW({
+    // Marketing apex must not register an installable service worker.
+    immediate: installAllowed,
     onRegisteredSW(swUrl, registration) {
+      if (!installAllowed) {
+        if (registration) void registration.unregister();
+        return;
+      }
       if (registration) {
         const intervalMs = 60 * 60 * 1000;
         window.setInterval(() => {
@@ -55,9 +63,26 @@ export function PwaProvider({ children }: { children: React.ReactNode }) {
       }
     },
     onRegisterError(error) {
+      if (!installAllowed) return;
       console.error('[pwa] SW registration failed', error);
     },
   });
+
+  useEffect(() => {
+    if (installAllowed) return;
+    // Strip any leftover installability signals on apex marketing.
+    document.querySelectorAll('link[rel="manifest"]').forEach((el) => el.remove());
+    document
+      .querySelectorAll(
+        'meta[name="apple-mobile-web-app-capable"], meta[name="mobile-web-app-capable"]',
+      )
+      .forEach((el) => el.remove());
+    if ('serviceWorker' in navigator) {
+      void navigator.serviceWorker.getRegistrations().then((regs) => {
+        for (const reg of regs) void reg.unregister();
+      });
+    }
+  }, [installAllowed]);
 
   useEffect(() => {
     // Sync document title for enterprise builds (index.html defaults to Roam Fleet).
@@ -69,7 +94,7 @@ export function PwaProvider({ children }: { children: React.ReactNode }) {
   }, [appName]);
 
   useEffect(() => {
-    if (standalone) return;
+    if (standalone || !installAllowed) return;
 
     const onBeforeInstall = (e: Event) => {
       e.preventDefault();
@@ -88,10 +113,10 @@ export function PwaProvider({ children }: { children: React.ReactNode }) {
       window.removeEventListener('beforeinstallprompt', onBeforeInstall);
       window.removeEventListener('appinstalled', onInstalled);
     };
-  }, [standalone]);
+  }, [standalone, installAllowed]);
 
   const promptInstall = useCallback(async () => {
-    if (!installEvent) return false;
+    if (!installAllowed || !installEvent) return false;
     setInstalling(true);
     try {
       await installEvent.prompt();
@@ -105,7 +130,7 @@ export function PwaProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setInstalling(false);
     }
-  }, [installEvent]);
+  }, [installEvent, installAllowed]);
 
   const dismissInstall = useCallback(() => {
     markInstallDismissed();
@@ -118,7 +143,7 @@ export function PwaProvider({ children }: { children: React.ReactNode }) {
 
   // Enterprise only: recover installs where the Update CTA was invisible / dismissed.
   useEffect(() => {
-    if (!IS_ENTERPRISE_PRODUCT || !needRefresh) return;
+    if (!installAllowed || !IS_ENTERPRISE_PRODUCT || !needRefresh) return;
     const apply = () => {
       void updateServiceWorker(true);
     };
@@ -131,7 +156,7 @@ export function PwaProvider({ children }: { children: React.ReactNode }) {
       window.clearTimeout(t);
       document.removeEventListener('visibilitychange', onVisible);
     };
-  }, [needRefresh, updateServiceWorker]);
+  }, [needRefresh, updateServiceWorker, installAllowed]);
 
   const dismissUpdate = useCallback(() => {
     setNeedRefresh(false);
@@ -141,18 +166,19 @@ export function PwaProvider({ children }: { children: React.ReactNode }) {
     () => ({
       appName,
       standalone,
-      canInstall: canInstallPrompt && !standalone && !dismissed,
-      canInstallAnytime: canInstallPrompt && !standalone,
+      canInstall: installAllowed && canInstallPrompt && !standalone && !dismissed,
+      canInstallAnytime: installAllowed && canInstallPrompt && !standalone,
       installing,
       promptInstall,
       dismissInstall,
-      needRefresh,
+      needRefresh: installAllowed && needRefresh,
       applyUpdate,
       dismissUpdate,
     }),
     [
       appName,
       standalone,
+      installAllowed,
       canInstallPrompt,
       dismissed,
       installing,

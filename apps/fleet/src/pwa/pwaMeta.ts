@@ -22,6 +22,30 @@ function enterpriseDoorAppName(): string {
   return 'Roam Enterprise';
 }
 
+/**
+ * Enterprise product doors that may install as PWAs.
+ * Apex marketing (roamenterprise.co) is never installable.
+ */
+export function isEnterpriseOpsDoorHost(
+  hostname = typeof window !== 'undefined' ? window.location.hostname : '',
+): boolean {
+  const host = hostname.toLowerCase();
+  return (
+    host === 'courier.localhost' ||
+    host.startsWith('courier.') ||
+    host === 'courier' ||
+    host === 'warehouse.localhost' ||
+    host.startsWith('warehouse.') ||
+    host === 'warehouse'
+  );
+}
+
+/** Whether this build/host may show install UI / register as an installable PWA. */
+export function isPwaInstallAllowed(): boolean {
+  if (!IS_ENTERPRISE_PRODUCT) return true;
+  return isEnterpriseOpsDoorHost();
+}
+
 /** Product display name for install / update copy. */
 export function getPwaAppName(): string {
   return IS_ENTERPRISE_PRODUCT ? enterpriseDoorAppName() : 'Roam Fleet';
