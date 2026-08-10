@@ -7,6 +7,8 @@ export type AuthContextValue = {
   role: string | null;
   organizationId: string | null;
   productLine: string | null;
+  businessType: string | null;
+  subscribedProducts: string[];
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;

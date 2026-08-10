@@ -55,6 +55,12 @@ export interface EnterpriseEnabledModules {
   freight_invoice_audit: boolean;
   freight_hs_tariffs: boolean;
   freight_billing: boolean;
+  /** Warehouse product — receive floor, partnerships, storage ledger. */
+  warehouse_inbound: boolean;
+  warehouse_receive: boolean;
+  warehouse_partner_links: boolean;
+  warehouse_storage_billing: boolean;
+  warehouse_bins: boolean;
   /** Reserved grocery vertical SKUs — off by default; no Enterprise UI yet. */
   grocery_catalog: boolean;
   grocery_orders: boolean;

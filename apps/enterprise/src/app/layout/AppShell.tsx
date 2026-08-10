@@ -27,6 +27,7 @@ import {
   Database,
   FolderOpen,
   Route,
+  Link2,
 } from 'lucide-react';
 import type { ModuleKey } from '@roam/platform-settings';
 import { useAuth } from '@/app/auth/AuthProvider';
@@ -169,6 +170,12 @@ const NAV_ITEMS: NavItem[] = [
     icon: SlidersHorizontal,
     children: [
       { to: '/app/facilities', label: 'Facilities', icon: Building2, module: 'freight_suites' },
+      {
+        to: '/app/connect-warehouses',
+        label: 'Connect warehouses',
+        icon: Link2,
+        module: 'warehouse_partner_links',
+      },
       { to: '/app/suites', label: 'Suites', icon: Tags, module: 'freight_suites' },
       { to: '/app/hs-tariffs', label: 'HS Tariffs', icon: Tags, module: 'freight_hs_tariffs' },
       { to: '/app/service-zones', label: 'Service Zones', icon: MapPin, module: 'freight_service_zones' },

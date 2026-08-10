@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/app/auth/AuthProvider';
-import { usePackage, usePackages, usePipelineDashboard } from '@/app/hooks/useFreight';
+import { usePackage, usePipelineDashboard } from '@/app/hooks/useFreight';
+import { useWarehouseCourierLinks } from '@/app/hooks/useWarehouseCourierLinks';
 import { useModuleAccess } from '@/app/modules/ModuleAccessProvider';
 import { useSeatAccess } from '@/app/seats/SeatAccessProvider';
 import { freightService } from '@/app/services/freightService';
@@ -143,38 +144,73 @@ export function PackagesWorkspacePage() {
 /** All-packages table (hub panel or warehouse list). */
 export function AllPackagesPanel({
   onCreatePreAlert,
+  warehouseMode = false,
 }: {
   onCreatePreAlert?: () => void;
+  warehouseMode?: boolean;
 }) {
+  const { organizationId, session } = useAuth();
   const dash = usePipelineDashboard();
-  const { data, isLoading, error } = usePackages();
+  const linksQ = useWarehouseCourierLinks();
+
+  const packagesQ = useQuery({
+    queryKey: [
+      'freight',
+      'packages',
+      organizationId,
+      warehouseMode ? 'warehouse-floor' : 'all',
+    ],
+    queryFn: () =>
+      freightService.listPackages(
+        organizationId,
+        undefined,
+        warehouseMode ? { scope: 'warehouse' } : undefined,
+      ),
+    enabled: Boolean(session),
+  });
+
+  const courierNames = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const link of linksQ.data?.links ?? []) {
+      const courierId = String(link.courier_org_id ?? link.courier_org?.id ?? '');
+      if (!courierId) continue;
+      map[courierId] = link.is_self
+        ? 'In-house'
+        : String(link.courier_org?.name || 'Courier');
+    }
+    return map;
+  }, [linksQ.data?.links]);
+
   const counts = dash.data?.counts ?? {};
-  const packages = data?.packages ?? [];
+  const packages = packagesQ.data?.packages ?? [];
+  const { isLoading, error } = packagesQ;
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-5">
-        {Object.entries(counts)
-          .slice(0, 10)
-          .map(([status, n]) => {
-            const quiet = Number(n) === 0;
-            return (
-              <div
-                key={status}
-                className={`rounded-xl border px-3 py-2 ${
-                  quiet
-                    ? 'border-slate-100 bg-slate-50/80 opacity-50'
-                    : 'border-slate-200 bg-white'
-                }`}
-              >
-                <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500">
-                  {status.replace(/_/g, ' ')}
-                </p>
-                <p className="text-lg font-semibold tabular-nums">{n}</p>
-              </div>
-            );
-          })}
-      </div>
+      {!warehouseMode ? (
+        <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-5">
+          {Object.entries(counts)
+            .slice(0, 10)
+            .map(([status, n]) => {
+              const quiet = Number(n) === 0;
+              return (
+                <div
+                  key={status}
+                  className={`rounded-xl border px-3 py-2 ${
+                    quiet
+                      ? 'border-slate-100 bg-slate-50/80 opacity-50'
+                      : 'border-slate-200 bg-white'
+                  }`}
+                >
+                  <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500">
+                    {status.replace(/_/g, ' ')}
+                  </p>
+                  <p className="text-lg font-semibold tabular-nums">{n}</p>
+                </div>
+              );
+            })}
+        </div>
+      ) : null}
 
       {isLoading && <p className="text-sm text-slate-500">Loading…</p>}
       {error && (
@@ -187,9 +223,18 @@ export function AllPackagesPanel({
         <div className="rounded-xl border border-dashed border-slate-300 bg-white px-6 py-12 text-center">
           <p className="text-sm font-medium text-slate-800">No packages yet</p>
           <p className="mt-1 text-sm text-slate-500">
-            Create a pre-alert so inbound parcels show up before they arrive.
+            {warehouseMode
+              ? 'Scan at Receive Station to put packages on the floor.'
+              : 'Create a pre-alert so inbound parcels show up before they arrive.'}
           </p>
-          {onCreatePreAlert ? (
+          {warehouseMode ? (
+            <Link
+              to="/warehouse/receive"
+              className="mt-4 inline-block rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-amber-400"
+            >
+              Open Receive Station
+            </Link>
+          ) : onCreatePreAlert ? (
             <button
               type="button"
               onClick={onCreatePreAlert}
@@ -212,6 +257,7 @@ export function AllPackagesPanel({
             <thead className="border-b border-slate-100 bg-slate-50 text-xs uppercase text-slate-500">
               <tr>
                 <th className="px-4 py-2">Tracking</th>
+                {warehouseMode ? <th className="px-4 py-2">Courier</th> : null}
                 <th className="px-4 py-2">Suite</th>
                 <th className="px-4 py-2">Status</th>
                 <th className="px-4 py-2">Weight</th>
@@ -220,16 +266,26 @@ export function AllPackagesPanel({
             <tbody>
               {packages.map((p) => {
                 const suite = p.suites as { suite_code?: string } | null;
+                const ownerId = String(p.owner_org_id ?? p.organization_id ?? '');
                 return (
                   <tr key={String(p.id)} className="border-b border-slate-50 hover:bg-slate-50">
                     <td className="px-4 py-2">
-                      <Link
-                        to={`/app/packages/${p.id}`}
-                        className="font-medium text-amber-800 underline"
-                      >
-                        {String(p.courier_tracking_number || p.id).slice(0, 24)}
-                      </Link>
+                      {warehouseMode ? (
+                        <span className="font-mono text-xs">
+                          {String(p.courier_tracking_number || p.id).slice(0, 24)}
+                        </span>
+                      ) : (
+                        <Link
+                          to={`/app/packages/${p.id}`}
+                          className="font-medium text-amber-800 underline"
+                        >
+                          {String(p.courier_tracking_number || p.id).slice(0, 24)}
+                        </Link>
+                      )}
                     </td>
+                    {warehouseMode ? (
+                      <td className="px-4 py-2">{courierNames[ownerId] ?? '—'}</td>
+                    ) : null}
                     <td className="px-4 py-2">{suite?.suite_code || '—'}</td>
                     <td className="px-4 py-2">{String(p.status).replace(/_/g, ' ')}</td>
                     <td className="px-4 py-2">
@@ -247,16 +303,33 @@ export function AllPackagesPanel({
 }
 
 /** Warehouse list — panel + simple title (no hub tabs). */
-export function PackagesListPage() {
+export function PackagesListPage({ warehouseMode }: { warehouseMode?: boolean } = {}) {
+  const location = useLocation();
+  const isWarehouse = warehouseMode ?? location.pathname.startsWith('/warehouse');
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Packages</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          International mailbox parcels — pre-alert through delivery.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold">
+            {isWarehouse ? 'Floor packages' : 'Packages'}
+          </h1>
+          <p className="mt-1 text-sm text-slate-500">
+            {isWarehouse
+              ? 'Packages on this warehouse floor, tagged by courier.'
+              : 'International mailbox parcels — pre-alert through delivery.'}
+          </p>
+        </div>
+        {isWarehouse ? (
+          <Link
+            to="/warehouse/receive"
+            className="rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-semibold text-slate-950 hover:bg-amber-400"
+          >
+            Open Receive Station
+          </Link>
+        ) : null}
       </div>
-      <AllPackagesPanel />
+      <AllPackagesPanel warehouseMode={isWarehouse} />
     </div>
   );
 }

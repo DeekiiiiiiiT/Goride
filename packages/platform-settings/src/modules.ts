@@ -13,7 +13,7 @@ export type ModuleCatalogEntry = {
   key: ModuleKey;
   label: string;
   description: string;
-  group: 'freight' | 'grocery' | 'ops' | 'money' | 'people' | 'optional';
+  group: 'freight' | 'warehouse' | 'grocery' | 'ops' | 'money' | 'people' | 'optional';
 };
 
 /** Legacy camelCase keys → freight_* (dual-read until stored JSON is migrated). */
@@ -165,6 +165,36 @@ export const ENTERPRISE_MODULE_CATALOG: readonly ModuleCatalogEntry[] = [
     label: 'Consolidated Billing',
     description: 'Dual-ledger customer invoices (courier vs government fees).',
     group: 'freight',
+  },
+  {
+    key: 'warehouse_inbound',
+    label: 'Warehouse Inbound',
+    description: 'Warehouse product — expected + on-floor queue.',
+    group: 'warehouse',
+  },
+  {
+    key: 'warehouse_receive',
+    label: 'Warehouse Receive',
+    description: 'Warehouse product — scan station / gun receive.',
+    group: 'warehouse',
+  },
+  {
+    key: 'warehouse_partner_links',
+    label: 'Warehouse Partners',
+    description: 'Connect Courier ↔ Warehouse organizations.',
+    group: 'warehouse',
+  },
+  {
+    key: 'warehouse_storage_billing',
+    label: 'Warehouse Storage Billing',
+    description: 'Charge couriers per receive / storage day (scaffold).',
+    group: 'warehouse',
+  },
+  {
+    key: 'warehouse_bins',
+    label: 'Warehouse Bins',
+    description: 'Bin / putaway locations at warehouse facilities.',
+    group: 'warehouse',
   },
   {
     key: 'grocery_catalog',

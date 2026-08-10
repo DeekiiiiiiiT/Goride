@@ -423,8 +423,9 @@ export function FacilitiesPage({ warehouseOnly = false }: { warehouseOnly?: bool
       <div>
         <h1 className="text-2xl font-semibold">Facilities</h1>
         <p className="mt-1 text-sm text-slate-500">
-          Set up Warehouse intake, Customs (Jamaica hub), and Courier locations. Required before
-          Receive or Hub Station.
+          {warehouseOnly
+            ? 'Buildings this warehouse company operates. Pick from the Dominion intake catalog.'
+            : 'Set up Warehouse intake, Customs (Jamaica hub), and Courier locations. Required before Receive or Hub Station.'}
         </p>
       </div>
 

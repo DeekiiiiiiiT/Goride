@@ -2,13 +2,17 @@ import { Link, NavLink, Navigate, Outlet } from 'react-router-dom';
 import {
   Building2,
   ClipboardList,
+  CreditCard,
   LayoutDashboard,
+  Link2,
   LogOut,
   Package,
+  Users,
 } from 'lucide-react';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useSeatAccess } from '@/app/seats/SeatAccessProvider';
 import {
+  canAccessCourierVertical,
   canAccessWarehouseVertical,
 } from '@/app/verticals/enterpriseHome';
 
@@ -17,16 +21,29 @@ const NAV = [
   { to: '/warehouse/receive', label: 'Receive Station', icon: ClipboardList },
   { to: '/warehouse/facilities', label: 'Facilities', icon: Building2 },
   { to: '/warehouse/packages', label: 'Packages', icon: Package },
+  { to: '/warehouse/partners', label: 'Courier partners', icon: Link2 },
+  { to: '/warehouse/billing', label: 'Storage billing', icon: CreditCard },
+  { to: '/warehouse/team', label: 'Team', icon: Users },
 ] as const;
 
-/** Thin Warehouse vertical shell — receive + handoff only. */
+/** Warehouse product shell — floors, partners, storage. */
 export function WarehouseShell() {
-  const { user, role, signOut } = useAuth();
+  const { user, role, signOut, businessType, subscribedProducts } = useAuth();
   const { seatRole } = useSeatAccess();
 
-  if (!canAccessWarehouseVertical(seatRole)) {
+  if (
+    !canAccessWarehouseVertical(seatRole, {
+      businessType,
+      subscribedProducts,
+    })
+  ) {
     return <Navigate to="/app" replace />;
   }
+
+  const showCourierLink = canAccessCourierVertical(seatRole, {
+    businessType,
+    subscribedProducts,
+  });
 
   const displayName =
     (user?.user_metadata?.full_name as string | undefined) ||
@@ -42,7 +59,7 @@ export function WarehouseShell() {
             Roam Enterprise
           </p>
           <p className="mt-1 text-sm font-semibold">Warehouse</p>
-          <p className="mt-0.5 text-xs text-slate-500">Intake &amp; handoff</p>
+          <p className="mt-0.5 text-xs text-slate-500">Receive product</p>
         </div>
         <nav className="flex-1 space-y-0.5 p-3">
           {NAV.map((item) => (
@@ -66,7 +83,7 @@ export function WarehouseShell() {
         <div className="border-t border-slate-200 p-4">
           <p className="truncate text-sm font-medium text-slate-900">{displayName}</p>
           <p className="truncate text-xs text-slate-500">{role || 'member'}</p>
-          {seatRole !== 'enterprise_warehouse' && (
+          {showCourierLink && (
             <Link
               to="/app"
               className="mt-2 block text-xs font-semibold text-amber-800 underline-offset-2 hover:underline"
@@ -84,10 +101,8 @@ export function WarehouseShell() {
           </button>
         </div>
       </aside>
-      <main className="min-w-0 flex-1 overflow-auto">
-        <div className="mx-auto max-w-5xl p-6 md:p-8">
-          <Outlet />
-        </div>
+      <main className="min-w-0 flex-1 p-6">
+        <Outlet />
       </main>
     </div>
   );

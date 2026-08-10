@@ -1,6 +1,7 @@
 import { Link, useSearchParams } from 'react-router-dom';
 import { WarehouseInboundPage } from '@/app/freight/os/WarehouseInboundPage';
 import { WarehouseReceiveStationPage } from '@/app/freight/os/WarehouseReceiveStationPage';
+import { useWarehouseCourierLinks } from '@/app/hooks/useWarehouseCourierLinks';
 
 type IntakeTab = 'inbound' | 'station';
 
@@ -8,10 +9,17 @@ function parseTab(raw: string | null): IntakeTab {
   return raw === 'station' ? 'station' : 'inbound';
 }
 
-/** Tabbed hub: Inbound queue | Receive station. */
+/**
+ * Courier US Intake — receive into a linked (or in-house) warehouse floor.
+ * Same scan engine as Warehouse product; partnership context lives in Connect warehouses.
+ */
 export function ReceiveWorkspacePage() {
   const [params, setParams] = useSearchParams();
   const tab = parseTab(params.get('tab'));
+  const linksQ = useWarehouseCourierLinks();
+  const activeWarehouses = (linksQ.data?.links ?? []).filter(
+    (l) => l.status === 'active',
+  );
 
   function setTab(next: IntakeTab) {
     setParams(next === 'inbound' ? {} : { tab: next }, { replace: true });
@@ -23,15 +31,36 @@ export function ReceiveWorkspacePage() {
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">US Intake</h1>
           <p className="mt-1 text-sm text-slate-500">
-            See what&apos;s inbound, then scan it in at the receive station.
+            Receive into a warehouse you&apos;re connected to (in-house or partner). Floor staff
+            can also work in the Warehouse product.
+          </p>
+          <p className="mt-1 text-xs text-slate-500">
+            Active warehouse links: {activeWarehouses.length}
+            {activeWarehouses.length === 0 && (
+              <>
+                {' '}
+                —{' '}
+                <Link to="/app/connect-warehouses" className="font-medium text-amber-800 underline">
+                  Connect a warehouse
+                </Link>
+              </>
+            )}
           </p>
         </div>
-        <Link
-          to="/warehouse"
-          className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium hover:bg-slate-50"
-        >
-          Open Warehouse app
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            to="/app/connect-warehouses"
+            className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium hover:bg-slate-50"
+          >
+            Connect warehouses
+          </Link>
+          <Link
+            to="/warehouse"
+            className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium hover:bg-slate-50"
+          >
+            Open Warehouse app
+          </Link>
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-2">

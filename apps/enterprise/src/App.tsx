@@ -82,6 +82,19 @@ const WarehouseFacilitiesPage = lazy(() =>
     default: () => <m.FacilitiesPage warehouseOnly />,
   })),
 );
+const ConnectWarehousesPage = lazy(() =>
+  import('@/app/freight/PartnerLinksPage').then((m) => ({ default: m.ConnectWarehousesPage })),
+);
+const WarehouseCourierPartnersPage = lazy(() =>
+  import('@/app/freight/PartnerLinksPage').then((m) => ({
+    default: m.WarehouseCourierPartnersPage,
+  })),
+);
+const WarehouseBillingStatementPage = lazy(() =>
+  import('@/app/freight/WarehouseBillingStatementPage').then((m) => ({
+    default: m.WarehouseBillingStatementPage,
+  })),
+);
 const HsTariffCatalogPage = lazy(() =>
   import('@/app/freight/os').then((m) => ({ default: m.HsTariffCatalogPage })),
 );
@@ -329,6 +342,16 @@ export default function App() {
               <Gated module="freight_suites">
                 <Suspense fallback={<Fall />}>
                   <FacilitiesPage />
+                </Suspense>
+              </Gated>
+            }
+          />
+          <Route
+            path="connect-warehouses"
+            element={
+              <Gated module="warehouse_partner_links">
+                <Suspense fallback={<Fall />}>
+                  <ConnectWarehousesPage />
                 </Suspense>
               </Gated>
             }
@@ -769,6 +792,36 @@ export default function App() {
               <Gated module="freight_mailbox_packages">
                 <Suspense fallback={<Fall />}>
                   <PackagesListPage />
+                </Suspense>
+              </Gated>
+            }
+          />
+          <Route
+            path="partners"
+            element={
+              <Gated module="warehouse_partner_links">
+                <Suspense fallback={<Fall />}>
+                  <WarehouseCourierPartnersPage />
+                </Suspense>
+              </Gated>
+            }
+          />
+          <Route
+            path="billing"
+            element={
+              <Gated module="warehouse_storage_billing">
+                <Suspense fallback={<Fall />}>
+                  <WarehouseBillingStatementPage />
+                </Suspense>
+              </Gated>
+            }
+          />
+          <Route
+            path="team"
+            element={
+              <Gated module="teamManagement">
+                <Suspense fallback={<Fall />}>
+                  <EnterpriseTeamPage />
                 </Suspense>
               </Gated>
             }

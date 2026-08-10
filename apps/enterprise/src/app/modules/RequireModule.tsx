@@ -1,5 +1,5 @@
 import type { ModuleKey } from '@roam/platform-settings';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useModuleAccess } from '@/app/modules/ModuleAccessProvider';
 import { useSeatAccess } from '@/app/seats/SeatAccessProvider';
 
@@ -12,6 +12,7 @@ export function RequireModule({
 }) {
   const { isModuleEnabled, loading, modulesError, refresh } = useModuleAccess();
   const { canAccessModule } = useSeatAccess();
+  const location = useLocation();
 
   if (loading) {
     return (
@@ -37,7 +38,8 @@ export function RequireModule({
         </div>
       );
     }
-    return <Navigate to="/app" replace />;
+    const home = location.pathname.startsWith('/warehouse') ? '/warehouse' : '/app';
+    return <Navigate to={home} replace />;
   }
 
   return <>{children}</>;

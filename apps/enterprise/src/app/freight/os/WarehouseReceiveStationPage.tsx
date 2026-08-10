@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/app/auth/AuthProvider';
+import { useWarehouseCourierLinks } from '@/app/hooks/useWarehouseCourierLinks';
 import { freightService } from '@/app/services/freightService';
 import { DOC_ROLE } from '@/app/freight/os/packageDuty/docRoles';
 import {
@@ -25,12 +26,20 @@ export function WarehouseReceiveStationPage({ embedded = false }: { embedded?: b
   const [facilityId, setFacilityId] = useState('');
   const [suiteCode, setSuiteCode] = useState('');
   const [suiteScan, setSuiteScan] = useState('');
+  const [ownerOrgId, setOwnerOrgId] = useState('');
   const [invoiceRequired, setInvoiceRequired] = useState(false);
   const [warehouseSlip, setWarehouseSlip] = useState<File | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
   const [flashTone, setFlashTone] = useState<ScanFlashTone>('ok');
 
   const clearFlash = useCallback(() => setFlash(null), []);
+  const linksQ = useWarehouseCourierLinks();
+
+  const activeCourierLinks = useMemo(
+    () => (linksQ.data?.links ?? []).filter((l) => String(l.status) === 'active'),
+    [linksQ.data?.links],
+  );
+  const showOwnerSelector = activeCourierLinks.length > 1;
 
   const facilities = useQuery({
     queryKey: ['freight', 'facilities', organizationId, 'warehouse'],
@@ -47,6 +56,27 @@ export function WarehouseReceiveStationPage({ embedded = false }: { embedded?: b
     const first = facilities.data?.facilities?.[0];
     if (first && !facilityId) setFacilityId(String(first.id));
   }, [facilities.data, facilityId]);
+
+  // Default owner to this org (in-house) when links load
+  useEffect(() => {
+    if (ownerOrgId || !organizationId) return;
+    const selfLink = activeCourierLinks.find((l) => l.is_self);
+    if (selfLink) {
+      setOwnerOrgId(String(selfLink.courier_org_id ?? organizationId));
+      return;
+    }
+    if (activeCourierLinks.length === 1) {
+      setOwnerOrgId(
+        String(
+          activeCourierLinks[0].courier_org_id ??
+            activeCourierLinks[0].courier_org?.id ??
+            organizationId,
+        ),
+      );
+      return;
+    }
+    setOwnerOrgId(organizationId);
+  }, [activeCourierLinks, organizationId, ownerOrgId]);
 
   const warehousesByCountry = (
     (facilities.data?.facilities ?? []) as Record<string, unknown>[]
@@ -95,6 +125,7 @@ export function WarehouseReceiveStationPage({ embedded = false }: { embedded?: b
           declaredValueUsdMinor,
           binLocation: bin || null,
           invoiceRequiredFromCustomer: invoiceRequired,
+          ...(ownerOrgId ? { ownerOrgId } : {}),
         },
         organizationId,
         `receive-station:${barcode.trim()}:${Date.now()}`,
@@ -188,7 +219,11 @@ export function WarehouseReceiveStationPage({ embedded = false }: { embedded?: b
 
       <ScanStatusFlash message={flash} tone={flashTone} onClear={clearFlash} />
 
-      <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-2">
+      <div
+        className={`grid gap-3 rounded-xl border border-slate-200 bg-white p-4 ${
+          showOwnerSelector ? 'sm:grid-cols-3' : 'sm:grid-cols-2'
+        }`}
+      >
         <div>
           <label className="text-xs font-medium text-slate-500">Warehouse</label>
           <select
@@ -209,6 +244,28 @@ export function WarehouseReceiveStationPage({ embedded = false }: { embedded?: b
               ))}
           </select>
         </div>
+        {showOwnerSelector ? (
+          <div>
+            <label className="text-xs font-medium text-slate-500">Courier / owner</label>
+            <select
+              value={ownerOrgId}
+              onChange={(e) => setOwnerOrgId(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            >
+              {activeCourierLinks.map((link) => {
+                const id = String(link.courier_org_id ?? link.courier_org?.id ?? '');
+                const label = link.is_self
+                  ? 'In-house'
+                  : String(link.courier_org?.name || 'Courier');
+                return (
+                  <option key={String(link.id)} value={id}>
+                    {label}
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+        ) : null}
         <div>
           <label className="text-xs font-medium text-slate-500">Suite</label>
           <select
@@ -279,7 +336,7 @@ export function WarehouseReceiveStationPage({ embedded = false }: { embedded?: b
               placeholder="0.00"
               className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-3 text-lg tabular-nums"
             />
-            <p className="mt-1 text-xs text-slate-500">Needed before seal</p>
+            <p className="mt-1 text-xs text-slate-500">Declared value</p>
           </div>
           <div>
             <label className="text-xs font-medium text-slate-500">Bin / rack</label>
@@ -334,15 +391,14 @@ export function WarehouseReceiveStationPage({ embedded = false }: { embedded?: b
                 {DOC_ROLE.customer_invoice.shortLabel} required (soft hold)
               </span>
               <span className="mt-0.5 block text-xs text-slate-500">
-                Soft hold only — warehouse can clear anytime. Does not block receive.
-                Seal later needs customer invoice verify or unobtainable (packing slip never
-                blocks seal).
+                Flag tells the courier to chase the customer invoice. Warehouse can clear
+                anytime — does not block receive.
               </span>
             </span>
           </label>
           <div>
             <label className="text-xs font-medium text-slate-500">
-              {DOC_ROLE.warehouse_slip.label} (optional — does not block seal)
+              {DOC_ROLE.warehouse_slip.label} (optional reference)
             </label>
             <input
               type="file"

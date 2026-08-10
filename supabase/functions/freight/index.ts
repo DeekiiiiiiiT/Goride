@@ -15,6 +15,7 @@ import { ledgerPostEntry } from "../_shared/unifiedLedger/postEntry.ts";
 import { SHIPMENT_TRANSITIONS } from "./transitions.ts";
 import { registerPipelineRoutes } from "./pipeline.ts";
 import { registerCourierOsRoutes } from "./courierOsRoutes.ts";
+import { registerWarehouseCourierRoutes } from "./warehouseCourierRoutes.ts";
 import { syncJobFromShipment } from "../logistics/syncFromShipment.ts";
 import { computeRateCardAmountMinor } from "./rateBill.ts";
 import { assertInsideServiceZones } from "./serviceZoneGate.ts";
@@ -107,6 +108,7 @@ app.get("/health", (c) => c.json({ ok: true, service: "freight" }));
 // Courier OS routes first so static paths like /packages/invoice-audit
 // are not swallowed by /packages/:id from the pipeline router.
 registerCourierOsRoutes(app);
+registerWarehouseCourierRoutes(app);
 registerPipelineRoutes(app);
 
 // ---------------------------------------------------------------------------

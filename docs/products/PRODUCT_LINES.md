@@ -22,16 +22,18 @@ Fleet managers are tagged `productLine: fleet` and `businessType: rideshare`.
 
 Enterprise orgs are tagged `productLine: enterprise` with business types from `@roam/business-config` (default vertical: `freight_forwarding`). Rideshare/taxi are excluded from Enterprise signup toggles.
 
-### Verticals on the same domain (2026-08)
+### Products on the same domain (Warehouse & Courier)
 
-| Path | Vertical | Buyer | Scope |
-|------|----------|--------|--------|
-| `/app/*` | **Courier** (`freight_forwarding`) | Paying customer | Suites, invoice audit, manifests, customs, hub, last mile, thin **US Intake** |
-| `/warehouse/*` | **Warehouse** (`warehouse`) | Invitation-only partner / same-org floor seats | Inbound queue, Receive Station, warehouse facilities |
+Sibling products under `productLine: enterprise` (see [`WAREHOUSE_COURIER_MODEL.md`](./WAREHOUSE_COURIER_MODEL.md)):
 
-Warehouse Intake seats (`enterprise_warehouse`) land on `/warehouse`. Courier roles land on `/app`. Same freight backend (`freight` edge + `freight.packages`).
+| Path | Product | Buyer (`business_type`) | Scope |
+|------|---------|-------------------------|--------|
+| `/app/*` | **Courier** | `freight_forwarding` (and other courier verticals) | Suites, invoices, manifests, customs, hub, last mile, domestic, **Connect a warehouse** |
+| `/warehouse/*` | **Warehouse** | `warehouse` (invite / Dominion; open later) | Inbound, Receive Station, facilities, courier links, floor packages |
 
-**Deferred (Phase 2):** multi-org `warehouse_courier_links` when a third-party warehouse serves a different courier company. Today handoff is same-organization.
+Routing: warehouse companies and `enterprise_warehouse` seats land on `/warehouse`; courier seats land on `/app`.
+
+**Connection model:** many-to-many `freight.warehouse_courier_links`. Packages carry `owner_org_id` (courier) + `operating_warehouse_org_id` (warehouse). In-house floors use a self-link (`warehouse_org_id = courier_org_id`).
 
 ### Locked v1 scope (Freight Forwarding / Courier)
 

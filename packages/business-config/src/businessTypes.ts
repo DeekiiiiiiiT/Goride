@@ -55,7 +55,8 @@ export const BUSINESS_TYPES = [
   {
     key: 'warehouse' as BusinessType,
     label: 'Intake Warehouse',
-    description: 'US/origin receive floor — scan, bin, packing slip handoff',
+    description:
+      'Standalone Warehouse product — US/origin receive floor that connects to Courier companies',
     icon: 'Package',
   },
 ] as const;

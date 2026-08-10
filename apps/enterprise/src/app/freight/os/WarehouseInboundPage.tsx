@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/app/auth/AuthProvider';
+import { useWarehouseCourierLinks } from '@/app/hooks/useWarehouseCourierLinks';
 import { freightService } from '@/app/services/freightService';
 import { DOC_ROLE } from '@/app/freight/os/packageDuty/docRoles';
 
@@ -17,6 +18,8 @@ function PackageTable({
   rows,
   empty,
   showFloorActions,
+  showCourier,
+  courierNames,
   onToggleInvoice,
   onUploadSlip,
   busyId,
@@ -24,6 +27,8 @@ function PackageTable({
   rows: Record<string, unknown>[];
   empty: string;
   showFloorActions?: boolean;
+  showCourier?: boolean;
+  courierNames?: Record<string, string>;
   onToggleInvoice?: (id: string, next: boolean) => void;
   onUploadSlip?: (id: string, file: File) => void;
   busyId?: string | null;
@@ -37,6 +42,7 @@ function PackageTable({
       <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
         <tr>
           <th className="px-4 py-2">Tracking</th>
+          {showCourier ? <th className="px-4 py-2">Courier</th> : null}
           <th className="px-4 py-2">Retailer</th>
           <th className="px-4 py-2">Status</th>
           <th className="px-4 py-2">Customer invoice</th>
@@ -50,6 +56,7 @@ function PackageTable({
         {rows.map((p) => {
           const id = String(p.id);
           const awaiting = awaitingInvoice(p);
+          const ownerId = String(p.owner_org_id ?? p.organization_id ?? '');
           const dims =
             p.length_in != null || p.width_in != null || p.height_in != null
               ? `${p.length_in ?? '—'}×${p.width_in ?? '—'}×${p.height_in ?? '—'}`
@@ -59,6 +66,11 @@ function PackageTable({
               <td className="px-4 py-2.5 font-mono text-xs">
                 {String(p.courier_tracking_number ?? p.id)}
               </td>
+              {showCourier ? (
+                <td className="px-4 py-2.5 text-slate-700">
+                  {courierNames?.[ownerId] ?? '—'}
+                </td>
+              ) : null}
               <td className="px-4 py-2.5 text-slate-700">{String(p.retailer || '—')}</td>
               <td className="px-4 py-2.5 text-slate-700">
                 {String(p.status ?? '').replace(/_/g, ' ')}
@@ -66,7 +78,7 @@ function PackageTable({
               <td className="px-4 py-2.5">
                 {awaiting ? (
                   <span className="rounded-md bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-900">
-                    Soft hold · awaiting customer invoice
+                    Flagged for customer invoice
                   </span>
                 ) : p.invoice_required_from_customer ? (
                   <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
@@ -120,11 +132,37 @@ function PackageTable({
   );
 }
 
-/** Warehouse inbound queue — expected pre-alerts + on-floor packages. */
-export function WarehouseInboundPage({ embedded = false }: { embedded?: boolean }) {
+/** Warehouse inbound queue — expected inbound + packages on the floor. */
+export function WarehouseInboundPage({
+  embedded = false,
+  showCourier,
+}: {
+  embedded?: boolean;
+  showCourier?: boolean;
+}) {
   const { organizationId, session } = useAuth();
   const qc = useQueryClient();
   const [facilityFilter, setFacilityFilter] = useState('');
+  const [ownerOrgFilter, setOwnerOrgFilter] = useState('');
+  const linksQ = useWarehouseCourierLinks();
+  const showCourierCol = showCourier ?? !embedded;
+
+  const activeCourierLinks = useMemo(
+    () => (linksQ.data?.links ?? []).filter((l) => String(l.status) === 'active'),
+    [linksQ.data?.links],
+  );
+
+  const courierNames = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const link of linksQ.data?.links ?? []) {
+      const courierId = String(link.courier_org_id ?? link.courier_org?.id ?? '');
+      if (!courierId) continue;
+      map[courierId] = link.is_self
+        ? 'In-house'
+        : String(link.courier_org?.name || 'Courier');
+    }
+    return map;
+  }, [linksQ.data?.links]);
 
   const facilities = useQuery({
     queryKey: ['freight', 'facilities', organizationId, 'warehouse'],
@@ -133,8 +171,19 @@ export function WarehouseInboundPage({ embedded = false }: { embedded?: boolean 
   });
 
   const q = useQuery({
-    queryKey: ['freight', 'packages', organizationId, 'warehouse-inbound'],
-    queryFn: () => freightService.listPackages(organizationId),
+    queryKey: [
+      'freight',
+      'packages',
+      organizationId,
+      'warehouse-inbound',
+      embedded ? 'embedded' : 'warehouse',
+      ownerOrgFilter || 'all',
+    ],
+    queryFn: () =>
+      freightService.listPackages(organizationId, undefined, {
+        ...(embedded ? {} : { scope: 'warehouse' as const }),
+        ...(ownerOrgFilter ? { ownerOrgId: ownerOrgFilter } : {}),
+      }),
     enabled: Boolean(session),
   });
 
@@ -204,7 +253,7 @@ export function WarehouseInboundPage({ embedded = false }: { embedded?: boolean 
           <div>
             <h1 className="text-2xl font-semibold text-slate-900">Inbound</h1>
             <p className="mt-1 text-sm text-slate-500">
-              Expected pre-alerts from Courier + packages on the warehouse floor.
+              Expected inbound + packages on the floor
             </p>
           </div>
           <Link
@@ -216,30 +265,55 @@ export function WarehouseInboundPage({ embedded = false }: { embedded?: boolean 
         </div>
       ) : (
         <p className="text-sm text-slate-500">
-          Expected pre-alerts from Courier + packages on the warehouse floor.
+          Expected inbound + packages on the floor
         </p>
       )}
 
-      <div className="max-w-sm">
-        <label className="text-xs font-medium text-slate-500">Warehouse filter</label>
-        <select
-          value={facilityFilter}
-          onChange={(e) => setFacilityFilter(e.target.value)}
-          className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-        >
-          <option value="">All warehouses</option>
-          {Object.entries(warehousesByCountry)
-            .sort(([a], [b]) => a.localeCompare(b))
-            .map(([cc, list]) => (
-              <optgroup key={cc} label={cc}>
-                {list.map((f) => (
-                  <option key={String(f.id)} value={String(f.id)}>
-                    {String(f.name)} ({String(f.code)})
+      <div className="flex flex-wrap gap-4">
+        <div className="min-w-[12rem] max-w-sm flex-1">
+          <label className="text-xs font-medium text-slate-500">Warehouse filter</label>
+          <select
+            value={facilityFilter}
+            onChange={(e) => setFacilityFilter(e.target.value)}
+            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          >
+            <option value="">All warehouses</option>
+            {Object.entries(warehousesByCountry)
+              .sort(([a], [b]) => a.localeCompare(b))
+              .map(([cc, list]) => (
+                <optgroup key={cc} label={cc}>
+                  {list.map((f) => (
+                    <option key={String(f.id)} value={String(f.id)}>
+                      {String(f.name)} ({String(f.code)})
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+          </select>
+        </div>
+        {activeCourierLinks.length > 0 ? (
+          <div className="min-w-[12rem] max-w-sm flex-1">
+            <label className="text-xs font-medium text-slate-500">Courier / owner</label>
+            <select
+              value={ownerOrgFilter}
+              onChange={(e) => setOwnerOrgFilter(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            >
+              <option value="">All couriers</option>
+              {activeCourierLinks.map((link) => {
+                const id = String(link.courier_org_id ?? link.courier_org?.id ?? '');
+                const label = link.is_self
+                  ? 'In-house'
+                  : String(link.courier_org?.name || 'Courier');
+                return (
+                  <option key={String(link.id)} value={id}>
+                    {label}
                   </option>
-                ))}
-              </optgroup>
-            ))}
-        </select>
+                );
+              })}
+            </select>
+          </div>
+        ) : null}
       </div>
 
       {q.isLoading && <p className="text-sm text-slate-500">Loading…</p>}
@@ -259,11 +333,13 @@ export function WarehouseInboundPage({ embedded = false }: { embedded?: boolean 
           <h2 className="text-sm font-semibold text-slate-800">
             Expected (incoming) · {expectedFiltered.length}
           </h2>
-          <p className="text-xs text-slate-500">Pre-alerts Courier assigned to this warehouse</p>
+          <p className="text-xs text-slate-500">Pre-alerts assigned to this warehouse</p>
         </div>
         <PackageTable
           rows={expectedFiltered}
-          empty="No expected pre-alerts. Courier creates them under Packages → Expected."
+          empty="No expected packages yet."
+          showCourier={showCourierCol}
+          courierNames={courierNames}
         />
       </section>
 
@@ -280,6 +356,8 @@ export function WarehouseInboundPage({ embedded = false }: { embedded?: boolean 
           rows={onFloorFiltered}
           empty="No packages on the floor yet. Scan at Receive Station."
           showFloorActions
+          showCourier={showCourierCol}
+          courierNames={courierNames}
           busyId={busyId}
           onToggleInvoice={(id, next) => flagMut.mutate({ id, next })}
           onUploadSlip={(id, file) => slipMut.mutate({ id, file })}
@@ -288,4 +366,3 @@ export function WarehouseInboundPage({ embedded = false }: { embedded?: boolean 
     </div>
   );
 }
-

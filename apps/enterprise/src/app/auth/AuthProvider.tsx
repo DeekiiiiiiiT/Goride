@@ -36,6 +36,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [role, setRole] = useState<string | null>(null);
   const [organizationId, setOrganizationId] = useState<string | null>(null);
   const [productLine, setProductLine] = useState<string | null>(null);
+  const [businessType, setBusinessType] = useState<string | null>(null);
+  const [subscribedProducts, setSubscribedProducts] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
   const applySession = useCallback((next: Session | null) => {
@@ -49,13 +51,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setRole(null);
       setOrganizationId(null);
       setProductLine(null);
+      setBusinessType(null);
+      setSubscribedProducts([]);
     }
+  }, []);
+
+  const loadOrgProfile = useCallback(async (orgId: string) => {
+    const { data } = await supabaseEnterpriseApp
+      .from('organizations')
+      .select('id, business_type, subscribed_products')
+      .eq('id', orgId)
+      .maybeSingle();
+    if (!data) return;
+    setBusinessType((data.business_type as string) || null);
+    const products = Array.isArray(data.subscribed_products)
+      ? (data.subscribed_products as string[])
+      : [];
+    setSubscribedProducts(products);
   }, []);
 
   const refreshSession = useCallback(async () => {
     const { data } = await supabaseEnterpriseApp.auth.getSession();
     applySession(data.session);
-  }, [applySession]);
+    const orgId = data.session?.user ? deriveOrgId(data.session.user) : null;
+    if (orgId) await loadOrgProfile(orgId);
+  }, [applySession, loadOrgProfile]);
 
   useEffect(() => {
     let mounted = true;
@@ -63,12 +83,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async function resolveOwnedEnterpriseOrg(userId: string) {
       const { data: owned } = await supabaseEnterpriseApp
         .from('organizations')
-        .select('id')
+        .select('id, business_type, subscribed_products')
         .eq('owner_id', userId)
         .eq('product_line', 'enterprise')
         .limit(1)
         .maybeSingle();
-      if (mounted && owned?.id) setOrganizationId(owned.id);
+      if (mounted && owned?.id) {
+        setOrganizationId(owned.id);
+        setBusinessType((owned.business_type as string) || null);
+        const products = Array.isArray(owned.subscribed_products)
+          ? (owned.subscribed_products as string[])
+          : [];
+        setSubscribedProducts(products);
+      }
     }
 
     (async () => {
@@ -76,10 +103,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const { data } = await supabaseEnterpriseApp.auth.getSession();
         if (mounted) applySession(data.session);
 
-        // Resolve enterprise org when JWT lacks organizationId
         const u = data.session?.user;
-        if (u && !deriveOrgId(u)) {
-          await resolveOwnedEnterpriseOrg(u.id);
+        if (u) {
+          const orgId = deriveOrgId(u);
+          if (orgId) {
+            await loadOrgProfile(orgId);
+          } else {
+            await resolveOwnedEnterpriseOrg(u.id);
+          }
         }
       } finally {
         if (mounted) setLoading(false);
@@ -89,9 +120,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: sub } = supabaseEnterpriseApp.auth.onAuthStateChange((_event, next) => {
       applySession(next);
       setLoading(false);
-      // Keep owned-org resolution after TOKEN_REFRESHED / INITIAL_SESSION wipe JWT-only apply
-      if (next?.user && !deriveOrgId(next.user)) {
-        void resolveOwnedEnterpriseOrg(next.user.id);
+      if (next?.user) {
+        const orgId = deriveOrgId(next.user);
+        if (orgId) {
+          void loadOrgProfile(orgId);
+        } else {
+          void resolveOwnedEnterpriseOrg(next.user.id);
+        }
       }
     });
 
@@ -99,7 +134,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       mounted = false;
       sub.subscription.unsubscribe();
     };
-  }, [applySession]);
+  }, [applySession, loadOrgProfile]);
 
   const signIn = useCallback(async (email: string, password: string) => {
     const GENERIC = 'Invalid email or password';
@@ -164,6 +199,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       role,
       organizationId,
       productLine,
+      businessType,
+      subscribedProducts,
       loading,
       signIn,
       signOut,
@@ -175,6 +212,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       role,
       organizationId,
       productLine,
+      businessType,
+      subscribedProducts,
       loading,
       signIn,
       signOut,

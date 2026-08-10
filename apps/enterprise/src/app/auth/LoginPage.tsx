@@ -8,7 +8,7 @@ import { resolveEnterpriseHomePath } from '@/app/verticals/enterpriseHome';
 const GENERIC_AUTH_ERROR = 'Invalid email or password';
 
 export function LoginPage() {
-  const { session, user, signIn, loading } = useAuth();
+  const { session, user, signIn, loading, businessType, subscribedProducts, role } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const requestedFrom = (location.state as { from?: string; authError?: string } | null)?.from;
@@ -20,7 +20,11 @@ export function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
 
   const sessionHome = session
-    ? resolveEnterpriseHomePath(jwtPrimaryRole(user) || null)
+    ? resolveEnterpriseHomePath({
+        rawRole: role || jwtPrimaryRole(user) || null,
+        businessType,
+        subscribedProducts,
+      })
     : '/app';
   const defaultHome =
     requestedFrom?.startsWith('/warehouse') || requestedFrom?.startsWith('/app')
@@ -42,8 +46,29 @@ export function LoginPage() {
       return;
     }
     const { data } = await supabaseEnterpriseApp.auth.getSession();
-    const role = data.session?.user ? jwtPrimaryRole(data.session.user) : null;
-    const home = resolveEnterpriseHomePath(role);
+    const nextRole = data.session?.user ? jwtPrimaryRole(data.session.user) : null;
+    const orgId =
+      (data.session?.user?.app_metadata?.organizationId as string | undefined) ||
+      (data.session?.user?.user_metadata?.organizationId as string | undefined) ||
+      null;
+    let bt: string | null = null;
+    let products: string[] = [];
+    if (orgId) {
+      const { data: org } = await supabaseEnterpriseApp
+        .from('organizations')
+        .select('business_type, subscribed_products')
+        .eq('id', orgId)
+        .maybeSingle();
+      bt = (org?.business_type as string) || null;
+      products = Array.isArray(org?.subscribed_products)
+        ? (org!.subscribed_products as string[])
+        : [];
+    }
+    const home = resolveEnterpriseHomePath({
+      rawRole: nextRole,
+      businessType: bt,
+      subscribedProducts: products,
+    });
     const dest =
       requestedFrom?.startsWith('/warehouse') || requestedFrom?.startsWith('/app')
         ? requestedFrom

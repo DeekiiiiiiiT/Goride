@@ -10,6 +10,10 @@ import {
   serviceClient,
   type EnterpriseAccessUser,
 } from "../_shared/enterpriseAccess.ts";
+import {
+  hasActiveLink,
+  linkedCourierOrgIds,
+} from "../_shared/warehouseCourierAccess.ts";
 import { canTransitionPackage } from "./packageTransitions.ts";
 import { notifyPackageContact } from "./notifyPackage.ts";
 import {
@@ -740,12 +744,25 @@ export function registerPipelineRoutes(app: FreightApp) {
     if (user instanceof Response) return user;
     const status = c.req.query("status");
     const intendedFacilityId = c.req.query("intendedFacilityId");
+    const ownerOrgId = c.req.query("ownerOrgId");
+    const scope = c.req.query("scope"); // owner | warehouse | all
     let q = freightDb()
       .from("packages")
       .select("*")
-      .eq("organization_id", user.organizationId)
       .order("created_at", { ascending: false })
       .limit(300);
+
+    if (scope === "warehouse") {
+      q = q.eq("operating_warehouse_org_id", user.organizationId);
+    } else if (scope === "owner") {
+      q = q.eq("owner_org_id", user.organizationId);
+    } else {
+      // Dual ownership: owner OR operating warehouse (covers in-house)
+      q = q.or(
+        `owner_org_id.eq.${user.organizationId},operating_warehouse_org_id.eq.${user.organizationId},organization_id.eq.${user.organizationId}`,
+      );
+    }
+    if (ownerOrgId) q = q.eq("owner_org_id", ownerOrgId);
     if (status) q = q.eq("status", status);
     if (intendedFacilityId === "external") {
       q = q.is("intended_facility_id", null);
@@ -859,6 +876,8 @@ export function registerPipelineRoutes(app: FreightApp) {
       .from("packages")
       .insert({
         organization_id: user.organizationId,
+        owner_org_id: user.organizationId,
+        operating_warehouse_org_id: null,
         suite_id: b.suiteId || null,
         client_id: clientId,
         courier_tracking_number: b.courierTrackingNumber?.trim() || null,
@@ -967,6 +986,8 @@ export function registerPipelineRoutes(app: FreightApp) {
     note: z.string().max(2000).optional().nullable(),
     binLocation: z.string().max(80).optional().nullable(),
     invoiceRequiredFromCustomer: z.boolean().optional(),
+    /** Courier that owns the goods (required for unknown scans at a 3rd-party warehouse). */
+    ownerOrgId: z.string().uuid().optional().nullable(),
   });
 
   app.post("/scans", async (c) => {
@@ -989,11 +1010,14 @@ export function registerPipelineRoutes(app: FreightApp) {
       .maybeSingle();
     if (!facility) return c.json({ error: "Facility not found" }, 404);
 
+    const operatingWarehouseOrgId = user.organizationId;
+    const courierIds = await linkedCourierOrgIds(operatingWarehouseOrgId);
+
     const { data: existingScan } = await freightDb()
       .from("package_scan_events")
       .select("*, packages(*)")
-      .eq("organization_id", user.organizationId)
       .eq("idempotency_key", idem)
+      .in("organization_id", courierIds)
       .maybeSingle();
     if (existingScan) {
       return c.json({
@@ -1007,14 +1031,38 @@ export function registerPipelineRoutes(app: FreightApp) {
       await freightDb()
         .from("packages")
         .select("*")
-        .eq("organization_id", user.organizationId)
         .eq("courier_tracking_number", b.barcode.trim())
+        .in("owner_org_id", courierIds)
         .maybeSingle()
     ).data;
+
+    // Fallback for rows not yet backfilled with owner_org_id
+    if (!pkg) {
+      pkg = (
+        await freightDb()
+          .from("packages")
+          .select("*")
+          .eq("courier_tracking_number", b.barcode.trim())
+          .in("organization_id", courierIds)
+          .maybeSingle()
+      ).data;
+    }
 
     let createdUnknown = false;
 
     if (!pkg && facility.facility_type === "warehouse") {
+      const ownerOrgId = b.ownerOrgId || user.organizationId;
+      if (!courierIds.includes(ownerOrgId)) {
+        return c.json(
+          { error: "No active link with that courier. Connect warehouses first." },
+          403,
+        );
+      }
+      const okLink = await hasActiveLink(operatingWarehouseOrgId, ownerOrgId);
+      if (!okLink) {
+        return c.json({ error: "Warehouse↔courier link is not active" }, 403);
+      }
+
       let suiteId: string | null = null;
       let clientId: string | null = null;
       let fulfillmentModeVal: string | null = "pickup";
@@ -1028,7 +1076,7 @@ export function registerPipelineRoutes(app: FreightApp) {
         const { data: suite } = await freightDb()
           .from("suites")
           .select("*")
-          .eq("organization_id", user.organizationId)
+          .eq("organization_id", ownerOrgId)
           .ilike("suite_code", b.suiteCode.trim())
           .maybeSingle();
         if (suite) {
@@ -1046,7 +1094,9 @@ export function registerPipelineRoutes(app: FreightApp) {
       const { data: created, error } = await freightDb()
         .from("packages")
         .insert({
-          organization_id: user.organizationId,
+          organization_id: ownerOrgId,
+          owner_org_id: ownerOrgId,
+          operating_warehouse_org_id: operatingWarehouseOrgId,
           suite_id: suiteId,
           client_id: clientId,
           courier_tracking_number: b.barcode.trim(),
@@ -1077,6 +1127,16 @@ export function registerPipelineRoutes(app: FreightApp) {
       if (error) return c.json({ error: error.message }, 500);
       pkg = created;
       createdUnknown = true;
+
+      // Scaffold storage ledger line on receive
+      await freightDb().from("warehouse_storage_ledger").insert({
+        warehouse_org_id: operatingWarehouseOrgId,
+        courier_org_id: ownerOrgId,
+        package_id: pkg.id,
+        event_type: "receive",
+        quantity: 1,
+        unit_amount_minor: 0,
+      });
     }
 
     if (!pkg) {
@@ -1115,7 +1175,7 @@ export function registerPipelineRoutes(app: FreightApp) {
         if (error) return c.json({ error: error.message }, 500);
         pkg = updated;
         const scan = await appendScan({
-          orgId: user.organizationId,
+          orgId: pkg.owner_org_id || pkg.organization_id || user.organizationId,
           packageId: pkg.id,
           eventType: "hub_inbound",
           actorUserId: user.id,
@@ -1128,7 +1188,7 @@ export function registerPipelineRoutes(app: FreightApp) {
       }
     }
 
-    // Miami receive
+    // Miami / warehouse receive
     if (facility.facility_type === "warehouse") {
       if (!createdUnknown && pkg.status === "expected") {
         if (!canTransitionPackage(pkg.status, "received_at_warehouse")) {
@@ -1147,6 +1207,7 @@ export function registerPipelineRoutes(app: FreightApp) {
         .update({
           status: "received_at_warehouse",
           current_facility_id: facility.id,
+          operating_warehouse_org_id: operatingWarehouseOrgId,
           weight_lbs: b.weightLbs ?? pkg.weight_lbs,
           weight_kg:
             b.weightLbs != null
@@ -1171,7 +1232,7 @@ export function registerPipelineRoutes(app: FreightApp) {
       pkg = updated;
 
       const scan = await appendScan({
-        orgId: user.organizationId,
+        orgId: pkg.owner_org_id || pkg.organization_id || user.organizationId,
         packageId: pkg.id,
         eventType: "received_at_warehouse",
         actorUserId: user.id,
@@ -1179,7 +1240,7 @@ export function registerPipelineRoutes(app: FreightApp) {
         barcode: b.barcode,
         note: b.note || (createdUnknown ? "Unknown pre-alert created on scan" : null),
         idempotencyKey: idem,
-        metadata: { createdUnknown },
+        metadata: { createdUnknown, operatingWarehouseOrgId },
       });
 
       if (!scan.duplicate) {
