@@ -1,24 +1,19 @@
-# Fleet KV → Postgres — PERMANENT CUTOVER + KV RETIRED
+# Fleet KV → Postgres — PERMANENT CUTOVER (native SQL)
 
 Fleet business domains read and write `fleet.*` tables only.
 
-- `FLEET_READ_TABLE_*` → always on
-- `FLEET_TABLE_WRITE_*` → always on
-- `LEGACY_KV_WRITE_*` → always off
+## Native read layer (2026-08-11 production hardening)
 
-Ephemeral KV remains for locks, ratelimits, dashboard cache keys, offset markers, dedup keys, etc.
-
-## Status (2026-08-11)
-
-1. Gap backfill completed for domains that were table-behind (import meta/insights, banking, vendors, equipment, checkins, etc.).
-2. Alias-prefix domains (`expense_vendor` ⊆ `platform_vendor`, `expense_category` ⊆ `platform_expense_category`) are unique-entity-parity correct even when raw KV key counts were higher.
-3. **KV retirement completed:** 5,526 mapped keys backed up to `fleet_kv_backup:{domain}:{originalKey}` then deleted from live prefixes.
-4. Post-retire verification: original prefixes empty; `fleet.drivers` / `vehicles` / `trips` / `transactions` counts intact; live `/drivers`, `/vehicles`, `/trips` still 200.
+- Hot paths (`/batches`, `/fuel-entries`, `/trips`, `/claims`, `/payment-ledger-lines`,
+  `/dashboard/*`) use `queryFleet` / `listByBatch` / `countBy` with real SQL filters.
+- Legacy chained builders use `fromKvStore()` in `fleet_sql_bridge.ts` (SQL pushdown —
+  **not** full-prefix memory load). The old `fleet_kv_query_compat` Proxy wrap is gone.
+- `maintenance_log:` migrated to `fleet.maintenance_logs`.
 
 ## Ops
 
-Backfill (idempotent): `POST /admin/migrate-fleet-all-from-kv`  
-Parity: `GET /admin/parity` (expects `kvCount=0`, `tableCount` = live rows after retire)  
-Retire (already done): `POST /admin/retire-fleet-kv-prefix` with `{ domain, confirm: "RETIRE_KV_<DOMAIN>" }`
-
-Factory reset: wipe `FACTORY_RESET_FLEET_TABLES` + remaining active `FACTORY_RESET_PREFIXES` (including `fleet_kv_backup:`).
+- Route map: [FLEET_DOMAIN_ROUTE_MAP.md](./FLEET_DOMAIN_ROUTE_MAP.md)
+- Snapshot: [FLEET_NATIVE_CUTOVER_SNAPSHOT.md](./FLEET_NATIVE_CUTOVER_SNAPSHOT.md)
+- Parity: `GET /admin/parity`
+- Factory reset: wipe `FACTORY_RESET_FLEET_TABLES` + remaining `FACTORY_RESET_PREFIXES`
+- **Do not delete `fleet_kv_backup:*` until an off-box copy is confirmed**

@@ -5,6 +5,7 @@
 import type { Context } from "npm:hono";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import * as kv from "./kv_store.tsx";
+import { fromKvStore } from "./fleet_sql_bridge.ts";
 import { requireAuth, requirePermission, assertPlatformStaffResponse } from "./rbac_middleware.ts";
 import { filterByOrg, getOrgId } from "./org_scope.ts";
 import {
@@ -1010,8 +1011,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
       const denied = assertVehicleCatalogPlatformAccess(c);
       if (denied) return denied;
       try {
-        const { data: rows, error } = await supabase
-          .from("kv_store_37f42386")
+        const { data: rows, error } = await fromKvStore()
           .select("key, value")
           .like("key", "maintenance_log:%");
         if (error) throw error;
@@ -1887,8 +1887,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         const orgId = getOrgId(c);
         if (!orgId) return c.json({ error: "Organization required" }, 400);
 
-        const { data: kvRows, error: kvErr } = await supabase
-          .from("kv_store_37f42386")
+        const { data: kvRows, error: kvErr } = await fromKvStore()
           .select("value")
           .like("key", "vehicle:%");
         if (kvErr) throw kvErr;
@@ -1988,8 +1987,7 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
         const orgId = getOrgId(c);
         if (!orgId) return c.json({ error: "Organization required" }, 400);
 
-        const { data: kvRows } = await supabase
-          .from("kv_store_37f42386")
+        const { data: kvRows } = await fromKvStore()
           .select("value")
           .like("key", "vehicle:%");
         const vehicles = filterByOrg(

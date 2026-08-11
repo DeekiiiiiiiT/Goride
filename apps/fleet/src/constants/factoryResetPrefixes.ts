@@ -5,7 +5,6 @@
  */
 export const FACTORY_RESET_PREFIXES = [
   // Not migrated into fleet.* (or still ephemeral / alias caches)
-  'maintenance_log:',
   'organization_metric:',
   // Money ledger KV leftovers (SSOT is ledger.entries — wipe if any remain)
   'ledger_event:',
@@ -60,6 +59,7 @@ export const FACTORY_RESET_FLEET_TABLES = [
   'preferences',
   'integrations',
   'ledger_config',
+  'maintenance_logs',
 ] as const;
 
 export type FactoryResetPrefix = (typeof FACTORY_RESET_PREFIXES)[number];

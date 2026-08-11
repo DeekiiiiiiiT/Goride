@@ -52,7 +52,7 @@ export type FuelAnalyticsKpis = {
 };
 
 export function useFuelAnalytics() {
-  const [preset, setPreset] = useState<PeriodPreset>('this_week');
+  const [preset, setPreset] = useState<PeriodPreset>('last_90_days');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
   const [fuelTypeFilter, setFuelTypeFilter] = useState<string>('all');
@@ -68,7 +68,7 @@ export function useFuelAnalytics() {
   const clearPeriod = useCallback(() => {
     setCustomStart('');
     setCustomEnd('');
-    setPreset('this_week');
+    setPreset('last_90_days');
   }, []);
 
   // Wider fetch window for weekly trend / heatmap (8 weeks back)

@@ -8,10 +8,12 @@ CREATE TABLE kv_store_37f42386 (
 
 import { createClient } from "jsr:@supabase/supabase-js@2.49.8";
 
-const client = () => createClient(
-  Deno.env.get("SUPABASE_URL"),
-  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"),
-);
+/** Raw client — ephemeral KV keys only; mapped domains use readMappedKvKey / dual-write. */
+const client = () =>
+  createClient(
+    Deno.env.get("SUPABASE_URL"),
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"),
+  );
 
 /** PostgREST default max rows is 1000 — must page or trips/fuel silently truncate. */
 const KV_PAGE_SIZE = 1000;

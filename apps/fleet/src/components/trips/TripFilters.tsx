@@ -130,7 +130,7 @@ export function TripFilters({ filters, onFilterChange, drivers, vehicles }: Trip
       status: 'all',
       driverId: 'all',
       vehicleId: 'all',
-      dateRange: 'today',
+      dateRange: 'all',
       dateStart: '',
       dateEnd: '',
       minEarnings: '',

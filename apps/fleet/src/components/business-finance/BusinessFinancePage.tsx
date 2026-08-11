@@ -35,9 +35,9 @@ export function BusinessFinancePage({
   expensesInitialVehicleId,
 }: Props) {
   const [tab, setTab] = useState<BusinessFinanceTab>(initialTab);
-  const [preset, setPreset] = useState<PeriodPreset>('this_week');
+  const [preset, setPreset] = useState<PeriodPreset>('last_90_days');
   /** Last complete non-custom preset — used while custom From/To are incomplete */
-  const [anchorPreset, setAnchorPreset] = useState<PeriodPreset>('this_week');
+  const [anchorPreset, setAnchorPreset] = useState<PeriodPreset>('last_90_days');
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
   const [bannerDismissed, setBannerDismissed] = useState(false);
@@ -125,7 +125,7 @@ export function BusinessFinancePage({
           setPreset('custom');
         }}
         onClear={() => {
-          setPresetSafe('this_week');
+          setPresetSafe('last_90_days');
         }}
       />
 

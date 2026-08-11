@@ -28,14 +28,8 @@
  * hooks (MOI-3/MOI-4) are wired to it, both gated behind `matchOnIngestEnabled`.
  */
 
-import { createClient } from "npm:@supabase/supabase-js@2";
+import { fromKvStore } from "./fleet_sql_bridge.ts";
 
-const supabase = createClient(
-  Deno.env.get("SUPABASE_URL")!,
-  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-);
-
-const KV_TABLE = "kv_store_37f42386";
 const PAGE_SIZE = 1000;
 
 /**
@@ -74,8 +68,7 @@ export async function findTripsInDateRange(
   opts?: { vehicleId?: string },
 ): Promise<any[]> {
   const rows = await paginateAll((from, to) => {
-    let q = supabase
-      .from(KV_TABLE)
+    let q = fromKvStore()
       .select("value")
       .like("key", "trip:%")
       .gte("value->>date", startDate)
@@ -97,8 +90,7 @@ export async function findTollsInDateRange(
   opts?: { driverId?: string; vehicleId?: string; matchStatuses?: string[] },
 ): Promise<any[]> {
   const rows = await paginateAll((from, to) => {
-    let q = supabase
-      .from(KV_TABLE)
+    let q = fromKvStore()
       .select("value")
       .like("key", "toll_ledger:%")
       .gte("value->>date", startDate)
@@ -120,8 +112,7 @@ export async function findTollsInDateRange(
  */
 export async function findTollsByMatchedTripId(tripId: string): Promise<any[]> {
   const rows = await paginateAll((from, to) =>
-    supabase
-      .from(KV_TABLE)
+    fromKvStore()
       .select("value")
       .like("key", "toll_ledger:%")
       .eq("value->>matchedTripId", tripId)

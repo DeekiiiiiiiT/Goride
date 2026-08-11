@@ -1,4 +1,4 @@
-﻿import { Hono } from "npm:hono";
+import { Hono } from "npm:hono";
 import type { Context } from "npm:hono";
 import { requireAuth, requirePermission, requirePlatformStaff, type RbacUser, PLATFORM_RESOLVED_ROLES } from "./rbac_middleware.ts";
 import { appendCanonicalFuelExpenseIfEligible } from "./canonical_from_ops.ts";
@@ -12,6 +12,7 @@ import {
   blendedDriverShareRatio,
 } from "./fuel_pnl_offset.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { fromKvStore } from "./fleet_sql_bridge.ts";
 import * as kv from "./kv_store.tsx";
 import * as cache from "./cache.ts";
 import * as memCache from "./memory_cache.ts";
@@ -695,8 +696,7 @@ app.get(`${BASE_PATH}/finalized-reports`, async (c) => {
         let offset = 0;
         const pageSize = 1000;
         for (;;) {
-          const { data, error } = await supabase
-            .from("kv_store_37f42386")
+          const { data, error } = await fromKvStore()
             .select("value")
             .like("key", "finalized_report:%")
             .eq(filterCol, filterVal)
@@ -763,7 +763,7 @@ app.post(`${BASE_PATH}/finalized-reports`, async (c) => {
           /* ignore */
         }
       }
-      // Unified financial ledger + Expenses projection — must succeed or roll back KV.
+      // Unified financial ledger + Expenses projection � must succeed or roll back KV.
       try {
         await postFuelFinalizedEventsFromReport(stamped);
       } catch (finErr: any) {
@@ -778,9 +778,9 @@ app.post(`${BASE_PATH}/finalized-reports`, async (c) => {
         continue;
       }
 
-      // Canonical P&L offsets — driver-share portion of each fill (always on).
+      // Canonical P&L offsets � driver-share portion of each fill (always on).
       try {
-        // Prefer stubs from client snapshot — never scan all fuel_entry:* on Finalize.
+        // Prefer stubs from client snapshot � never scan all fuel_entry:* on Finalize.
         const stubs = Array.isArray(report?.metadata?.settledEntries)
           ? (report.metadata.settledEntries as Array<Record<string, unknown>>)
           : [];
@@ -794,10 +794,10 @@ app.post(`${BASE_PATH}/finalized-reports`, async (c) => {
             vehicleId: s.vehicleId ? String(s.vehicleId) : report.vehicleId ? String(report.vehicleId) : undefined,
           }));
 
-        // Legacy snapshots without stubs: skip (no full scan) — re-finalize to sync.
+        // Legacy snapshots without stubs: skip (no full scan) � re-finalize to sync.
         if (weekEntries.length === 0) {
           console.warn(
-            `[FinalizedReports] fuel P&L offset skipped for ${report.driverId}/${weekKey} — no settledEntries stubs (re-finalize to sync)`,
+            `[FinalizedReports] fuel P&L offset skipped for ${report.driverId}/${weekKey} � no settledEntries stubs (re-finalize to sync)`,
           );
         } else {
           const stats = await syncFuelPnlOffsetsForFinalizedReport(report, weekEntries, c);
@@ -836,7 +836,7 @@ function parseFuelReportId(reportId: string): { identityId: string; weekKey: str
   return { identityId: reportId.slice(0, idx), weekKey };
 }
 
-/** One-time: copy vehicle-keyed snapshots → driver-keyed when driverId is present. */
+/** One-time: copy vehicle-keyed snapshots ? driver-keyed when driverId is present. */
 app.post(`${BASE_PATH}/finalized-reports/migrate-driver-keys`, async (c) => {
   try {
     const body = await c.req.json().catch(() => ({}));
@@ -1314,7 +1314,7 @@ app.delete(`${BASE_PATH}/finalized-reports/:weekStart/:identityId`, async (c) =>
 });
 
 /**
- * Period reset for Consumption Reconciliation — works even when finalized_report
+ * Period reset for Consumption Reconciliation � works even when finalized_report
  * snapshots are missing but fuel logs were already posted (Verified).
  * Body: { weekStart: "YYYY-MM-DD" } (Monday period id).
  * Reverses ALL fuel credit/deduction legs for the week (Approve + Finalize eras).
@@ -1577,9 +1577,9 @@ app.post(`${BASE_PATH}/finalized-reports/reset-period`, requirePermission('trans
 });
 
 /**
- * Heal Consumption Reconciliation ↔ Driver Fuel Expense drift:
- * - KV snapshot → postFuelFinalizedEventsFromReport (posts if missing; reverse+reposts if amounts stale)
- * - Active fuel events without KV snapshot → reverse events + rebuild
+ * Heal Consumption Reconciliation ? Driver Fuel Expense drift:
+ * - KV snapshot ? postFuelFinalizedEventsFromReport (posts if missing; reverse+reposts if amounts stale)
+ * - Active fuel events without KV snapshot ? reverse events + rebuild
  * Body: { dryRun?: boolean, weekStart?: string, driverId?: string }
  */
 app.post(
@@ -1640,7 +1640,7 @@ app.post(
         ),
       );
 
-      // Every snapshot goes through post — matches when fresh, reverse+reposts when stale,
+      // Every snapshot goes through post � matches when fresh, reverse+reposts when stale,
       // and fills missing fuel_driver_spend after the driverSpend field-name fix.
       const toPost: any[] = [...snapshots];
       const toReverse: Array<{ driverId: string; weekKey: string }> = [];
@@ -1716,7 +1716,7 @@ app.post(
   },
 );
 
-// ─── Fuel Reconciliation settings (P&L offset flag) ───────────────────────
+// --- Fuel Reconciliation settings (P&L offset flag) -----------------------
 app.get(`${BASE_PATH}/fuel-reconciliation/settings`, async (c) => {
   try {
     const settings = await getFuelReconciliationSettings();
@@ -1765,13 +1765,13 @@ app.get(`${BASE_PATH}/fuel-reconciliation/periods-health`, async (c) => {
     }
 
     // Unresolved leakage: finalized reports with misc > 0 still flagged, or
-    // weeks with spend but no finalize — approximate via snapshot misc + pending fills
+    // weeks with spend but no finalize � approximate via snapshot misc + pending fills
     for (const s of snapshots) {
       const misc = Math.abs(Number(s?.miscellaneousCost) || 0);
       if (misc > 0.005) unresolvedLeakageVehicleWeeks++;
     }
 
-    // Pending fills (not finalized) with amount — owner still needs to Finalize
+    // Pending fills (not finalized) with amount � owner still needs to Finalize
     for (const entry of allEntries) {
       if (!entry?.id) continue;
       const status = entry.reconciliationStatus;
@@ -1884,7 +1884,7 @@ app.get(`${BASE_PATH}/fuel-pnl-offset-backfill/status`, async (c) => {
       message:
         candidates.length > 0
           ? `${candidates.length} historical fill(s) totaling ${totalAmount} would be offset (driver share). POST /fuel-pnl-offset-backfill/backfill (dryRun defaults true) to apply.`
-          : "Nothing to backfill — every finalized driver-share already has an offset.",
+          : "Nothing to backfill � every finalized driver-share already has an offset.",
     });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
@@ -1942,62 +1942,43 @@ app.post(`${BASE_PATH}/fuel-pnl-offset-backfill/backfill`, async (c) => {
   }
 });
 
-// --- SCALABILITY & PERFORMANCE (Phase 8) ---
+// --- SCALABILITY & PERFORMANCE (Phase 8) � native fleet_fuel_entries ---
 app.get(`${BASE_PATH}/fuel-entries`, async (c) => {
   try {
-    const limit = parseInt(c.req.query("limit") || "2000"); // Increased default limit to prevent missing logs
+    const { queryFleet } = await import("./repos/baseRepo.ts");
+    const limit = parseInt(c.req.query("limit") || "2000");
     const offset = parseInt(c.req.query("offset") || "0");
     const vehicleId = c.req.query("vehicleId");
     const startDate = c.req.query("startDate");
     const endDate = c.req.query("endDate");
     const orgFilter = getOrgId(c) || (isPlatformCaller(c) ? (c.req.query("organizationId") || "").trim() : "");
 
-    // Phase 8: Direct Supabase query with pagination for performance
     const customPrefix = c.req.query("prefix") || "fuel_entry";
-    let query = supabase
-        .from("kv_store_37f42386")
-        .select("value", { count: 'exact' })
-        .like("key", `${customPrefix}:%`);
-
-    if (vehicleId) {
-        query = query.eq("value->>vehicleId", vehicleId);
-    }
-
-    // Dates may be YMD ("2026-08-02") or ISO ("2026-08-02T09:07:00"). Plain
-    // lte(endYmd) drops same-day ISO timestamps — use exclusive next-day upper bound.
-    if (startDate) {
-        query = query.gte("value->>date", String(startDate).slice(0, 10));
-    }
-    if (endDate) {
-        const endYmd = String(endDate).slice(0, 10);
-        const [y, m, d] = endYmd.split("-").map(Number);
-        const next = new Date(y, (m || 1) - 1, (d || 1) + 1);
-        const nextYmd = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}-${String(next.getDate()).padStart(2, "0")}`;
-        query = query.lt("value->>date", nextYmd);
-    }
-
-    // Prefer DB-side org pred when scoped (legacy null still returned; filterByOrg cleans)
+    const filters: import("./repos/baseRepo.ts").FleetQueryFilter[] = [];
+    if (vehicleId) filters.push({ op: "eq", col: "vehicle_id", value: vehicleId });
     if (orgFilter && !isPlatformCaller(c)) {
-      query = query.or(
-        `value->>organizationId.eq.${orgFilter},value->>organizationId.is.null,value->>organizationId.eq.roam-default-org`,
-      );
+      filters.push({ op: "orOrg", orgId: orgFilter });
     } else if (orgFilter && isPlatformCaller(c)) {
-      query = query.eq("value->>organizationId", orgFilter);
+      filters.push({ op: "eq", col: "organization_id", value: orgFilter });
     }
 
-    query = query.order("value->>date", { ascending: false })
-                 .range(offset, offset + limit - 1);
+    const res = await queryFleet("fuel_entries", {
+      legacyPrefix: customPrefix.endsWith(":") ? customPrefix : `${customPrefix}:`,
+      dateFrom: startDate ? String(startDate).slice(0, 10) : undefined,
+      dateTo: endDate ? String(endDate).slice(0, 10) : undefined,
+      filters,
+      order: { col: "date", ascending: false },
+      limit,
+      offset,
+      count: true,
+    });
+    if (res.error) throw res.error;
 
-    const { data, count, error } = await query;
-    if (error) throw error;
-
-    const entries = (data || []).map((d: any) => d.value);
-    const scoped = filterByOrg(entries as Record<string, unknown>[], c, { endpoint: "/fuel-entries" });
+    const entries = res.data as Record<string, unknown>[];
+    const scoped = filterByOrg(entries, c, { endpoint: "/fuel-entries" });
     const narrowed = narrowPlatformOrg(scoped, c);
-    
-    // Add pagination headers
-    c.header("X-Total-Count", String(count || narrowed.length));
-    
+
+    c.header("X-Total-Count", String(res.count ?? narrowed.length));
     return c.json(narrowed);
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
@@ -2067,8 +2048,7 @@ app.post(`${BASE_PATH}/admin/purge-synthetic`, async (c) => {
         console.log("[Purge] Removing all synthetic test data...");
         
         // Use direct Supabase delete with JSON filtering for performance
-        const { count, error } = await supabase
-            .from("kv_store_37f42386")
+        const { count, error } = await fromKvStore()
             .delete({ count: 'exact' })
             .like("key", "fuel_entry:%")
             .eq("value->metadata->>isSynthetic", "true");
@@ -2110,18 +2090,18 @@ app.patch(`${BASE_PATH}/transactions/:id/lock`, async (c) => {
 async function releaseHeldTransaction(learnt: any, resolvedStationId: string, stationName: string) {
     const txId = learnt.transactionId;
     if (!txId) {
-        console.log(`[StationGate-Release] Learnt ${learnt.id} has no transactionId â€” nothing to release.`);
+        console.log(`[StationGate-Release] Learnt ${learnt.id} has no transactionId — nothing to release.`);
         return 0;
     }
 
     const tx = await kv.get(`transaction:${txId}`);
     if (!tx) {
-        console.log(`[StationGate-Release] Transaction ${txId} not found â€” may have been deleted.`);
+        console.log(`[StationGate-Release] Transaction ${txId} not found — may have been deleted.`);
         return 0;
     }
 
     if (!tx.metadata?.stationGateHold) {
-        console.log(`[StationGate-Release] Transaction ${txId} is not gate-held â€” skipping.`);
+        console.log(`[StationGate-Release] Transaction ${txId} is not gate-held — skipping.`);
         return 0;
     }
 
@@ -2161,7 +2141,7 @@ async function releaseHeldTransaction(learnt: any, resolvedStationId: string, st
             ...tx.metadata,
             decisionReason: 'BLOCKED_NO_VEHICLE',
             needsLogReview: true,
-            logReviewReason: 'Station verified but vehicle not assigned — cannot post fuel log.',
+            logReviewReason: 'Station verified but vehicle not assigned � cannot post fuel log.',
             stationGateHold: false,
         };
         await kv.set(`transaction:${tx.id}`, tx);
@@ -2178,7 +2158,7 @@ async function releaseHeldTransaction(learnt: any, resolvedStationId: string, st
         tx.metadata = { ...tx.metadata, evidenceDeleteAfter: deleteAfter };
     }
     await kv.set(`transaction:${tx.id}`, tx);
-    console.log(`[StationGate-Release] Transaction ${txId} released → fuel_entry ${result.fuelEntry?.id}, station ${stationName} (${resolvedStationId}).`);
+    console.log(`[StationGate-Release] Transaction ${txId} released ? fuel_entry ${result.fuelEntry?.id}, station ${stationName} (${resolvedStationId}).`);
     return 1;
 }
 
@@ -2243,7 +2223,7 @@ async function ensureLearntForGateHeldTx(
                 timestamp: new Date().toISOString(),
                 transactionId: tx.id,
                 status: "learnt",
-                gateReason: meta.gateReason || "No GPS coordinates â€” station gate held",
+                gateReason: meta.gateReason || "No GPS coordinates — station gate held",
             };
             await kv.set(`learnt_location:${learntId}`, learnt);
             return { learnt, learntId };
@@ -2266,7 +2246,7 @@ async function ensureLearntForGateHeldTx(
 
     if (!coords) {
         return {
-            error: "No learnt staging row and no GPS on this transaction â€” use Delete Permanently or resolve from Learnt (STAGING).",
+            error: "No learnt staging row and no GPS on this transaction — use Delete Permanently or resolve from Learnt (STAGING).",
         };
     }
 
@@ -2353,15 +2333,14 @@ async function ensureFuelEntryLinkedToTransaction(tx: any, station: any): Promis
         existing = await kv.get(`fuel_entry:${linkedId}`);
         if (existing?.transactionId && existing.transactionId !== tx.id) {
             console.warn(
-                `[BulkAssign-FuelEntry] metadata.fuelEntryId ${linkedId} mismatched transactionId â€” searching by transactionId`
+                `[BulkAssign-FuelEntry] metadata.fuelEntryId ${linkedId} mismatched transactionId — searching by transactionId`
             );
             existing = null;
         }
     }
 
     if (!existing) {
-        const { data: rows } = await supabase
-            .from("kv_store_37f42386")
+        const { data: rows } = await fromKvStore()
             .select("value")
             .like("key", "fuel_entry:%")
             .eq("value->>transactionId", tx.id)
@@ -2535,13 +2514,13 @@ function extractEntryGpsAccuracyMeters(entry: any): number {
 
 /**
  * Normalize a Plus Code for comparison.
- * Strips whitespace, uppercases, and removes compound locality (e.g., "X36X+5W Portmore" â†’ "X36X+5W").
+ * Strips whitespace, uppercases, and removes compound locality (e.g., "X36X+5W Portmore" → "X36X+5W").
  * Returns only the code portion.
  */
 function normalizePlusCode(code: string | null | undefined): string {
     if (!code || typeof code !== 'string') return '';
     const trimmed = code.trim().toUpperCase();
-    // Extract just the code part (before any space â€” compound codes have "CODE LOCALITY")
+    // Extract just the code part (before any space — compound codes have "CODE LOCALITY")
     const parts = trimmed.split(/\s+/);
     return parts[0] || '';
 }
@@ -2563,7 +2542,7 @@ function plusCodesMatch(codeA: string, codeB: string): boolean {
     const a = normalizePlusCode(codeA).replace('+', '');
     const b = normalizePlusCode(codeB).replace('+', '');
     if (!a || !b) return false;
-    // Exact match only â€” no parent-child prefix matching
+    // Exact match only — no parent-child prefix matching
     return a === b;
 }
 
@@ -2571,8 +2550,8 @@ function plusCodesMatch(codeA: string, codeB: string): boolean {
  * Duplicate Station Detection
  * 
  * Two-pass detection:
- *   Pass 1 â€” Plus Code exact match only (definitive spatial identity)
- *   Pass 2 â€” Geofence overlap check (GPS proximity using station's configured radius)
+ *   Pass 1 — Plus Code exact match only (definitive spatial identity)
+ *   Pass 2 — Geofence overlap check (GPS proximity using station's configured radius)
  * 
  * Used by:
  *   - GET /stations/check-duplicate (real-time frontend check)
@@ -2594,10 +2573,9 @@ async function findDuplicateStation(
     category?: string,
     statusFilter: 'verified' | 'unverified' | 'all' = 'all'
 ): Promise<{ station: any; matchType: 'pluscode' | 'geofence'; distance: number } | null> {
-    // Fetch with keys for robust exclusion — value.id may be stale/missing,
+    // Fetch with keys for robust exclusion � value.id may be stale/missing,
     // so we self-heal .id from the KV key to guarantee the exclude check works.
-    const { data: rawStations } = await supabase
-        .from("kv_store_37f42386")
+    const { data: rawStations } = await fromKvStore()
         .select("key, value")
         .like("key", "station:%");
     const allStations: any[] = (rawStations || []).map(row => {
@@ -2634,7 +2612,7 @@ async function findDuplicateStation(
                 const dist = (station.location?.lat && station.location?.lng)
                     ? calculateDistance(lat, lng, station.location.lat, station.location.lng)
                     : 0;
-                console.log(`[Duplicate Check] Plus Code EXACT match: "${normalizedInput}" === "${stationCode}" → station "${station.name}", distance: ${Math.round(dist)}m`);
+                console.log(`[Duplicate Check] Plus Code EXACT match: "${normalizedInput}" === "${stationCode}" ? station "${station.name}", distance: ${Math.round(dist)}m`);
                 return { station, matchType: 'pluscode', distance: Math.round(dist) };
             }
         }
@@ -2778,7 +2756,7 @@ app.post(`${BASE_PATH}/stations/promote-learnt`, async (c) => {
             // Merge into existing station as an alias
             const station = await kv.get(`station:${targetStationId}`);
             if (!station) return c.json({ error: "Target station not found" }, 404);
-            // GOD list only — never merge live stops into CSV Unverified shelf
+            // GOD list only � never merge live stops into CSV Unverified shelf
             if (station.status !== 'verified') {
                 return c.json({ error: "Cannot merge into Unverified CSV reference. Delete the CSV row and create a Verified station from your location, or merge into an existing Verified GOD station." }, 400);
             }
@@ -2802,7 +2780,7 @@ app.post(`${BASE_PATH}/stations/promote-learnt`, async (c) => {
             // Release any gate-held transactions tied to this learnt location
             const releasedCount = await releaseHeldTransaction(learnt, resolvedStationId, station.name);
             await kv.del(`learnt_location:${learntId}`);
-            console.log(`[Promote-Learnt] Merged learnt ${learntId} â†’ station ${resolvedStationId}, linked ${linkedCount} fuel entries, released ${releasedCount} held transactions.`);
+            console.log(`[Promote-Learnt] Merged learnt ${learntId} → station ${resolvedStationId}, linked ${linkedCount} fuel entries, released ${releasedCount} held transactions.`);
             
             return c.json({ success: true, message: "Merged successfully", data: station, linkedEntries: linkedCount, releasedTransactions: releasedCount });
         } else if (action === 'create') {
@@ -2820,7 +2798,7 @@ app.post(`${BASE_PATH}/stations/promote-learnt`, async (c) => {
                 if (dupeResult) {
                     // Auto-merge into the existing station instead of creating a duplicate
                     const existingStation = dupeResult.station;
-                    console.log(`[Promote-Learnt] Duplicate detected â€” auto-merging learnt ${learntId} into existing station ${existingStation.id} (${existingStation.name}). Match type: ${dupeResult.matchType}, distance: ${dupeResult.distance}m`);
+                    console.log(`[Promote-Learnt] Duplicate detected — auto-merging learnt ${learntId} into existing station ${existingStation.id} (${existingStation.name}). Match type: ${dupeResult.matchType}, distance: ${dupeResult.distance}m`);
 
                     const autoAlias = {
                         id: crypto.randomUUID(),
@@ -2838,7 +2816,7 @@ app.post(`${BASE_PATH}/stations/promote-learnt`, async (c) => {
                     const linkedCount = await linkOrphanEntriesToStation(learnt, existingStation.id, existingStation.name);
                     const releasedCount = await releaseHeldTransaction(learnt, existingStation.id, existingStation.name);
                     await kv.del(`learnt_location:${learntId}`);
-                    console.log(`[Promote-Learnt] Auto-merge complete: learnt ${learntId} â†’ station ${existingStation.id}, linked ${linkedCount} fuel entries, released ${releasedCount} held transactions.`);
+                    console.log(`[Promote-Learnt] Auto-merge complete: learnt ${learntId} → station ${existingStation.id}, linked ${linkedCount} fuel entries, released ${releasedCount} held transactions.`);
 
                     return c.json({
                         success: true,
@@ -2853,7 +2831,7 @@ app.post(`${BASE_PATH}/stations/promote-learnt`, async (c) => {
                 }
             }
 
-            // No duplicate — proceed with normal station creation from operator form (GOD list)
+            // No duplicate � proceed with normal station creation from operator form (GOD list)
             const newStationId = crypto.randomUUID();
             const { _overrideDuplicate, ...cleanStationData } = stationData || {};
             const newStation = {
@@ -2905,7 +2883,7 @@ app.post(`${BASE_PATH}/stations/promote-learnt`, async (c) => {
  * Two-pass approach:
  *   1) Direct link: the learnt location's sourceEntryId (the original transaction that created it)
  *   2) Spatial sweep: any other fuel entries without a matchedStationId whose GPS falls within
- *      a 300m radius â€” catches repeat visits that occurred before promotion
+ *      a 300m radius — catches repeat visits that occurred before promotion
  * 
  * Each linked entry gets its matchedStationId set, metadata updated, and a fresh SHA-256 signature.
  */
@@ -2934,11 +2912,11 @@ async function linkOrphanEntriesToStation(
             await kv.set(`fuel_entry:${entry.id}`, entry);
             linkedIds.add(entry.id);
             linkedCount++;
-            console.log(`[Link] Direct-linked source entry ${entry.id} â†’ station ${stationId}`);
+            console.log(`[Link] Direct-linked source entry ${entry.id} → station ${stationId}`);
         }
     }
 
-    // Pass 2: Spatial sweep â€” find nearby orphaned entries without a station link
+    // Pass 2: Spatial sweep — find nearby orphaned entries without a station link
     const stationLat = learnt.location?.lat;
     const stationLng = learnt.location?.lng;
     if (stationLat && stationLng) {
@@ -2968,7 +2946,7 @@ async function linkOrphanEntriesToStation(
                 await kv.set(`fuel_entry:${entry.id}`, entry);
                 linkedIds.add(entry.id);
                 linkedCount++;
-                console.log(`[Link] Spatial-swept entry ${entry.id} (${Math.round(dist)}m) â†’ station ${stationId}`);
+                console.log(`[Link] Spatial-swept entry ${entry.id} (${Math.round(dist)}m) → station ${stationId}`);
             }
         }
     }
@@ -2976,7 +2954,7 @@ async function linkOrphanEntriesToStation(
     return linkedCount;
 }
 
-/** Evidence Inbox â€” merge gate-held transaction into a station (same behavior as promote-learnt merge). */
+/** Evidence Inbox — merge gate-held transaction into a station (same behavior as promote-learnt merge). */
 app.post(`${BASE_PATH}/admin/evidence-inbox/merge-to-station`, async (c) => {
     try {
         const { transactionId, targetStationId } = await c.req.json();
@@ -3025,7 +3003,7 @@ app.post(`${BASE_PATH}/admin/evidence-inbox/merge-to-station`, async (c) => {
         await kv.del(`learnt_location:${learntId}`);
 
         console.log(
-            `[EvidenceInbox] Merged gate-held tx ${transactionId} â†’ station ${station.id}, linked ${linkedCount}, released ${releasedCount}`,
+            `[EvidenceInbox] Merged gate-held tx ${transactionId} → station ${station.id}, linked ${linkedCount}, released ${releasedCount}`,
         );
 
         return c.json({
@@ -3061,7 +3039,7 @@ app.post(`${BASE_PATH}/admin/evidence-inbox/ensure-learnt`, async (c) => {
     }
 });
 
-/** Evidence Inbox â€” delete gate-held transaction directly (works with or without GPS / learnt staging). */
+/** Evidence Inbox — delete gate-held transaction directly (works with or without GPS / learnt staging). */
 app.delete(`${BASE_PATH}/admin/evidence-inbox/gate-held/:transactionId`, async (c) => {
     try {
         const transactionId = c.req.param("transactionId");
@@ -3148,7 +3126,7 @@ async function cleanupResolvedLearntLocations(
                             entry.signature = await auditLogic.generateRecordHash(entry);
                             entry.signedAt = new Date().toISOString();
                             await kv.set(`fuel_entry:${entry.id}`, entry);
-                            console.log(`[Auto-Cleanup] Linked orphan entry ${entry.id} â†’ station ${station.id} (${station.name})`);
+                            console.log(`[Auto-Cleanup] Linked orphan entry ${entry.id} → station ${station.id} (${station.name})`);
                         }
                     }
                     break;
@@ -3175,7 +3153,7 @@ async function cleanupResolvedLearntLocations(
 
         if (resolved) {
             // Release any gate-held transactions tied to this learnt location.
-            // This is the critical step that was previously missing â€” without it,
+            // This is the critical step that was previously missing — without it,
             // fuel entries submitted via DriverExpenses or FuelLogForm (no-GPS path)
             // that were gate-held would never get their fuel_entry created when the
             // admin adds a station manually instead of using the Learnt tab's Promote button.
@@ -3183,15 +3161,15 @@ async function cleanupResolvedLearntLocations(
                 try {
                     const releasedCount = await releaseHeldTransaction(loc, resolvedStationId, resolvedStationName);
                     if (releasedCount > 0) {
-                        console.log(`[Auto-Cleanup] Released ${releasedCount} gate-held transaction(s) for learnt "${loc.name || loc.id}" â†’ station "${resolvedStationName}"`);
+                        console.log(`[Auto-Cleanup] Released ${releasedCount} gate-held transaction(s) for learnt "${loc.name || loc.id}" → station "${resolvedStationName}"`);
                     }
                     const linkedCount = await linkOrphanEntriesToStation(loc, resolvedStationId, resolvedStationName);
                     if (linkedCount > 0) {
-                        console.log(`[Auto-Cleanup] Linked ${linkedCount} orphan fuel entry/entries for learnt "${loc.name || loc.id}" â†’ station "${resolvedStationName}"`);
+                        console.log(`[Auto-Cleanup] Linked ${linkedCount} orphan fuel entry/entries for learnt "${loc.name || loc.id}" → station "${resolvedStationName}"`);
                     }
                 } catch (releaseErr) {
                     console.error(`[Auto-Cleanup] Error releasing held transactions for learnt ${loc.id}:`, releaseErr);
-                    // Don't block cleanup â€” the learnt location should still be removed
+                    // Don't block cleanup — the learnt location should still be removed
                 }
             }
 
@@ -3202,7 +3180,7 @@ async function cleanupResolvedLearntLocations(
                 resolvedBy,
                 stationName: resolvedStationName
             });
-            console.log(`[Auto-Cleanup] Removed resolved learnt location "${loc.name || loc.id}" â€” ${resolvedBy} â†’ "${resolvedStationName}"`);
+            console.log(`[Auto-Cleanup] Removed resolved learnt location "${loc.name || loc.id}" — ${resolvedBy} → "${resolvedStationName}"`);
         }
     }
 
@@ -3213,22 +3191,26 @@ async function cleanupResolvedLearntLocations(
     return { cleaned: details.length, details };
 }
 
-// 4. Integrity Gap Metrics — platform staff only; cross-org intentional (Dominion)
+// 4. Integrity Gap Metrics � platform staff only; cross-org intentional (Dominion)
 app.get(`${BASE_PATH}/analytics/integrity-metrics`, requirePlatformStaff(), async (c) => {
     try {
-        // Run queries in parallel for speed
-        const [entriesResult, verifiedResult, stationsResult] = await Promise.all([
-            supabase.from("kv_store_37f42386").select("value->amount").like("key", "fuel_entry:%"),
-            supabase.from("kv_store_37f42386").select("value->amount").like("key", "fuel_entry:%").eq("value->metadata->>locationStatus", "verified"),
-            supabase.from("kv_store_37f42386").select("*", { count: 'exact', head: true }).like("key", "station:%").eq("value->>status", "verified")
+        const { queryFleet, countBy } = await import("./repos/baseRepo.ts");
+        const [entriesRes, stationsVerified] = await Promise.all([
+            queryFleet("fuel_entries", { limit: 5000, order: { col: "date", ascending: false } }),
+            countBy("stations", { eq: { status: "verified" } }).catch(() => 0),
         ]);
-        
-        const allAmounts = (entriesResult.data || []);
-        const verifiedAmounts = (verifiedResult.data || []);
-        
-        const totalSpend = allAmounts.reduce((sum: number, e: any) => sum + (Number(e.amount) || 0), 0);
-        const verifiedSpend = verifiedAmounts.reduce((sum: number, e: any) => sum + (Number(e.amount) || 0), 0);
-        
+        if (entriesRes.error) throw entriesRes.error;
+        const entries = entriesRes.data as Array<Record<string, unknown>>;
+        const allAmounts = entries.map((e) => Number(e.amount) || 0);
+        const verifiedAmounts = entries
+          .filter((e) => {
+            const meta = (e.metadata && typeof e.metadata === "object") ? e.metadata as Record<string, unknown> : {};
+            return String(meta.locationStatus || "") === "verified";
+          })
+          .map((e) => Number(e.amount) || 0);
+
+        const totalSpend = allAmounts.reduce((sum, n) => sum + n, 0);
+        const verifiedSpend = verifiedAmounts.reduce((sum, n) => sum + n, 0);
         const unverifiedSpend = totalSpend - verifiedSpend;
         const integrityGapPercentage = totalSpend > 0 ? (unverifiedSpend / totalSpend) * 100 : 0;
 
@@ -3239,7 +3221,7 @@ app.get(`${BASE_PATH}/analytics/integrity-metrics`, requirePlatformStaff(), asyn
             integrityGapPercentage,
             verifiedCount: verifiedAmounts.length,
             unverifiedCount: allAmounts.length - verifiedAmounts.length,
-            masterStationCount: stationsResult.count || 0
+            masterStationCount: stationsVerified || 0
         });
     } catch (e: any) {
         return c.json({ error: e.message }, 500);
@@ -3254,7 +3236,7 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
     // Org ownership: fleet JWT stamp; platform keeps explicit organizationId
     Object.assign(entry, stampFuelRecord(entry as Record<string, unknown>, c));
 
-    // Persist top-level + metadata paymentSource; blank → RideShare_Cash
+    // Persist top-level + metadata paymentSource; blank ? RideShare_Cash
     {
       const paySrc = resolveFuelPaymentSource(
         entry.paymentSource || entry.metadata?.paymentSource ||
@@ -3317,7 +3299,7 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
         const vehicle = await kv.get(`vehicle:${entry.vehicleId}`);
         if (vehicle) {
             const { tankCapacity, baselineEfficiencyL100km, rangeMin } = fuelLogic.getVehicleBaselines(vehicle);
-            // Convert L/100km â†’ km/L for all downstream comparisons
+            // Convert L/100km → km/L for all downstream comparisons
             const profileKmPerLiter = baselineEfficiencyL100km > 0 ? (100 / baselineEfficiencyL100km) : 0;
 
             // Phase 23: compute rolling average efficiency for this vehicle as of this entry's date
@@ -3356,7 +3338,7 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
             const totalVolumeInCycle = Number((runningCumulative + volumeAtEntry).toFixed(4));
             const distanceSinceAnchor = (entry.odometer && lastAnchorOdo) ? (entry.odometer - lastAnchorOdo) : 0;
             
-            // Step 2.2–2.3: Capacity full close + SPLIT via shared classifyAnchor (98%)
+            // Step 2.2�2.3: Capacity full close + SPLIT via shared classifyAnchor (98%)
             const anchor = fuelLogic.classifyAnchor({
                 prevCumulative,
                 volume: volumeAtEntry,
@@ -3385,8 +3367,7 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
             // Optimized: use targeted Supabase queries instead of loading ALL entries
             const recentTimeWindow = new Date(new Date(entry.date).getTime() - (4 * 60 * 60 * 1000)).toISOString();
             
-            const { count: recentTxCountRaw } = await supabase
-                .from("kv_store_37f42386")
+            const { count: recentTxCountRaw } = await fromKvStore()
                 .select("*", { count: 'exact', head: true })
                 .like("key", "fuel_entry:%")
                 .eq("value->>vehicleId", entry.vehicleId)
@@ -3394,7 +3375,7 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
                 .neq("value->>id", entry.id);
             const recentTxCount = recentTxCountRaw || 0;
 
-            // Step 5.1: Odometer sequence — previous fill BEFORE this entry's timestamp
+            // Step 5.1: Odometer sequence � previous fill BEFORE this entry's timestamp
             const prevEntry = await fuelLogic.getPreviousFuelEntry(
                 entry.vehicleId,
                 entry.date,
@@ -3552,7 +3533,7 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
     // If the user explicitly selected a verified station in the modal dropdown,
     // honor that selection and skip automatic GPS matching / gate-hold entirely.
     let skipGpsMatching = false;
-    // Issuer statement rows (JAA Raw CSV) have no GPS — must land as fuel_entry, not Learnt/gate-hold.
+    // Issuer statement rows (JAA Raw CSV) have no GPS � must land as fuel_entry, not Learnt/gate-hold.
     const metaImportSource = String(entry.metadata?.importSource || "");
     const isJaaIssuerStatement =
       metaImportSource === "jaa_raw" ||
@@ -3713,7 +3694,7 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
                     vehicleId: entry.vehicleId
                 };
                 await kv.set(`learnt_location:${learntId}`, learntLocation);
-                console.log(`[SmartGeoMatch] No match for entry ${entry.id} â€” created Learnt Location: ${learntId}`);
+                console.log(`[SmartGeoMatch] No match for entry ${entry.id} — created Learnt Location: ${learntId}`);
             }
 
             entry.metadata = {
@@ -3726,7 +3707,7 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
     } else if (!skipGpsMatching) {
         // --- NO GPS COORDINATES: STATION GATE HOLD ---
         // Core rule: ALL fuel logs that don't match a verified gas station MUST go
-        // to the Learnt tab regardless of payment method â€” no exceptions.
+        // to the Learnt tab regardless of payment method — no exceptions.
         // Entries with no GPS cannot be matched, so they MUST be gate-held.
         // NOTE: Skipped when admin has manually overridden with a verified station.
         const learntId = crypto.randomUUID();
@@ -3740,7 +3721,7 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
             driverId: entry.driverId,
             vehicleId: entry.vehicleId,
             transactionId: entry.id,
-            gateReason: 'No GPS coordinates provided â€” cannot verify station',
+            gateReason: 'No GPS coordinates provided — cannot verify station',
         };
         await kv.set(`learnt_location:${learntId}`, learntLocation);
 
@@ -3763,7 +3744,7 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
                 stationGateHold: true,
                 locationStatus: 'unknown',
                 verificationMethod: 'none',
-                gateReason: 'No GPS coordinates â€” station gate held',
+                gateReason: 'No GPS coordinates — station gate held',
                 learntLocationId: learntId,
                 pricePerLiter: entry.pricePerLiter || 0,
                 fuelVolume: entry.liters || 0,
@@ -3773,7 +3754,7 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
         };
         await kv.set(`transaction:${entry.id}`, heldTransaction);
 
-        console.log(`[StationGate-NoGPS] Entry ${entry.id} has no GPS â€” gate-held as transaction, Learnt Location ${learntId} created.`);
+        console.log(`[StationGate-NoGPS] Entry ${entry.id} has no GPS — gate-held as transaction, Learnt Location ${learntId} created.`);
         return c.json({ 
             success: true, 
             gateHeld: true, 
@@ -3886,7 +3867,7 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
 
     // --- PHASE 8: BACKFILL INTEGRITY JOB (Optimized) ---
     app.post(`${BASE_PATH}/admin/backfill-fuel-integrity`, async (c) => {
-        // Stub retired — real cycle/capacity re-score is recalculate-all
+        // Stub retired � real cycle/capacity re-score is recalculate-all
         return c.json({
             success: false,
             error: "backfill-fuel-integrity is retired. Use POST /admin/fuel-audit/recalculate-all (optional body: { vehicleId: '5179KZ' }).",
@@ -3925,7 +3906,7 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
                 } else if (entry.type === 'Card_Transaction') {
                     inferredEnum = 'Gas_Card';
                 } else {
-                    // Ambiguous → RideShare_Cash (business trip cash), not Personal
+                    // Ambiguous ? RideShare_Cash (business trip cash), not Personal
                     inferredEnum = 'RideShare_Cash';
                 }
 
@@ -3961,7 +3942,7 @@ app.post(`${BASE_PATH}/admin/reconcile-ledger-orphans`, async (c) => {
             return c.json({ success: true, message: "No fuel entries found to reconcile." });
         }
 
-        // 1. Identify Orphans â€” widened filter to catch ALL unresolved entries
+        // 1. Identify Orphans — widened filter to catch ALL unresolved entries
         // An entry needs reconciliation if ANY of these are true:
         const validStationIds = new Set((allStations || []).map((s: any) => s.id));
         const orphans = allEntries.filter(e => {
@@ -3975,7 +3956,7 @@ app.post(`${BASE_PATH}/admin/reconcile-ledger-orphans`, async (c) => {
             if (e.location && typeof e.location === 'string' && e.location.toLowerCase().includes('unknown')) return true;
             // e) Linked to a deleted station
             if (e.matchedStationId && !validStationIds.has(e.matchedStationId)) return true;
-            // f) Has review_required status â€” station may have been verified since save
+            // f) Has review_required status — station may have been verified since save
             if (e.metadata?.locationStatus === 'review_required') return true;
             return false;
         });
@@ -4009,7 +3990,7 @@ app.post(`${BASE_PATH}/admin/reconcile-ledger-orphans`, async (c) => {
                 // Normalize: ensure top-level lat/lng exist for future lookups
                 if (!entry.lat) { entry.lat = entryLat; entry.lng = entryLng; }
                 
-                // Update Entry â€” fix vendor, location display, and all metadata
+                // Update Entry — fix vendor, location display, and all metadata
                 entry.matchedStationId = matchedStation.id;
                 entry.vendor = matchedStation.name;
                 // Also update the location field if it contains "Unknown"
@@ -4076,7 +4057,7 @@ app.post(`${BASE_PATH}/admin/reconcile-ledger-orphans`, async (c) => {
                     lastReconciledAt: new Date().toISOString()
                 };
                 
-                // Do NOT auto-promote â€” station status must be changed by admin only.
+                // Do NOT auto-promote — station status must be changed by admin only.
                 // Unverified stations stay unverified regardless of how many entries match.
 
                 await kv.set(`station:${stationId}`, station);
@@ -4100,7 +4081,7 @@ app.post(`${BASE_PATH}/admin/reconcile-ledger-orphans`, async (c) => {
     }
 });
 
-// --- SPATIAL REVIEW QUEUE (ambiguous GPS â€” multiple verified stations nearby) ---
+// --- SPATIAL REVIEW QUEUE (ambiguous GPS — multiple verified stations nearby) ---
 app.get(`${BASE_PATH}/admin/spatial-review-queue`, async (c) => {
     try {
         const [fuelRaw, txRaw] = await Promise.all([
@@ -4327,7 +4308,7 @@ app.post(`${BASE_PATH}/admin/bulk-assign-station`, async (c) => {
 
         console.log(`[BulkAssign] Target station: ${station.name} (${stationId}), assigning ${entryIds.length} entries`);
 
-        // Step 5: Process entries â€” fetch, stamp, re-sign, persist
+        // Step 5: Process entries — fetch, stamp, re-sign, persist
         let updatedCount = 0;
         let skippedNotFound = 0;
         let skippedAlreadyAssigned = 0;
@@ -4356,7 +4337,7 @@ app.post(`${BASE_PATH}/admin/bulk-assign-station`, async (c) => {
                 }
             }
 
-            // 5b. Idempotency â€” skip if already assigned to this exact station
+            // 5b. Idempotency — skip if already assigned to this exact station
             if (entry.matchedStationId === stationId || entry.metadata?.matchedStationId === stationId) {
                 skippedAlreadyAssigned++;
                 continue;
@@ -4458,8 +4439,7 @@ app.get(`${BASE_PATH}/stations/:id/proof-of-work`, async (c) => {
         const station = await kv.get(`station:${stationId}`);
 
         // Primary: fetch entries explicitly linked via matchedStationId (targeted query)
-        const { data: linkedData } = await supabase
-            .from("kv_store_37f42386")
+        const { data: linkedData } = await fromKvStore()
             .select("value")
             .like("key", "fuel_entry:%")
             .eq("value->>matchedStationId", stationId);
@@ -4479,8 +4459,7 @@ app.get(`${BASE_PATH}/stations/:id/proof-of-work`, async (c) => {
             }
 
             // Only fetch entries that are NOT already linked to any station
-            const { data: unlinkedData } = await supabase
-                .from("kv_store_37f42386")
+            const { data: unlinkedData } = await fromKvStore()
                 .select("value")
                 .like("key", "fuel_entry:%")
                 .is("value->>matchedStationId", null);
@@ -4519,15 +4498,13 @@ app.get(`${BASE_PATH}/fuel-audit/summary`, async (c) => {
         // Optimized: use targeted Supabase query when filtering by vehicle
         let entries;
         if (vehicleId) {
-            const { data } = await supabase
-                .from("kv_store_37f42386")
+            const { data } = await fromKvStore()
                 .select("value")
                 .like("key", "fuel_entry:%")
                 .eq("value->>vehicleId", vehicleId);
             entries = (data || []).map((d: any) => d.value);
         } else {
-            const { data } = await supabase
-                .from("kv_store_37f42386")
+            const { data } = await fromKvStore()
                 .select("value")
                 .like("key", "fuel_entry:%");
             entries = (data || []).map((d: any) => d.value);
@@ -4544,8 +4521,8 @@ app.get(`${BASE_PATH}/fuel-audit/fleet-stats`, async (c) => {
     try {
         // Load entries and vehicles in parallel via Supabase for better performance
         const [entriesResult, vehiclesResult] = await Promise.all([
-            supabase.from("kv_store_37f42386").select("value").like("key", "fuel_entry:%"),
-            supabase.from("kv_store_37f42386").select("value").like("key", "vehicle:%")
+            fromKvStore().select("value").like("key", "fuel_entry:%"),
+            fromKvStore().select("value").like("key", "vehicle:%")
         ]);
         
         const allEntries = (entriesResult.data || []).map((d: any) => d.value);
@@ -4680,7 +4657,7 @@ app.get(`${BASE_PATH}/stations/check-duplicate`, async (c) => {
 // --- DEMOTE STATION & CASCADE ---
 // Admin-only: Demotes a verified station back to unverified, unlinks all fuel entries
 // that referenced it, and creates a learnt location so the entries flow back into the
-// admin's normal Learnt â†’ Verify workflow.
+// admin's normal Learnt → Verify workflow.
 app.post(`${BASE_PATH}/stations/demote`, async (c) => {
     try {
         const { stationId } = await c.req.json();
@@ -4707,7 +4684,7 @@ app.post(`${BASE_PATH}/stations/demote`, async (c) => {
         const linkedEntries = allEntries.filter((e: any) => e.matchedStationId === stationId);
         console.log(`[Demote] Found ${linkedEntries.length} fuel entries linked to this station`);
 
-        // 4. Unlink each entry â€” clear the station link but preserve history in metadata
+        // 4. Unlink each entry — clear the station link but preserve history in metadata
         let unlinkedCount = 0;
         const entryIds: string[] = [];
         for (const entry of linkedEntries) {
@@ -4722,7 +4699,7 @@ app.post(`${BASE_PATH}/stations/demote`, async (c) => {
                 verificationMethod: 'demoted_cascade',
                 demotedAt: new Date().toISOString(),
             };
-            // Clear the link so Sync Orphans and the Learnt â†’ Verify flow can re-process
+            // Clear the link so Sync Orphans and the Learnt → Verify flow can re-process
             entry.matchedStationId = null;
             entry.vendor = null;
 
@@ -4785,7 +4762,7 @@ app.post(`${BASE_PATH}/stations`, async (c) => {
             // For UPDATES: prevents the station from matching itself.
             // For CREATES: no existing record has this ID yet, so the exclusion is a harmless no-op.
             // (Previous approach used kv.get to check existence first, but that lookup could fail
-            //  if the stored value's .id didn't match the key suffix â€” causing self-match 409s.)
+            //  if the stored value's .id didn't match the key suffix — causing self-match 409s.)
             const excludeId = station.id;
 
             const stationLat = station.location?.lat ?? 0;
@@ -4802,7 +4779,7 @@ app.post(`${BASE_PATH}/stations`, async (c) => {
                 );
 
                 if (dupeResult) {
-                    // --- Secondary self-match guard (Layers 2aâ€“2d) ---
+                    // --- Secondary self-match guard (Layers 2a–2d) ---
                     // Defense-in-depth: if the matched station is actually the station being
                     // updated but has a stale/missing .id in its KV value, the ID-based
                     // exclusion in findDuplicateStation wouldn't have caught it.
@@ -4899,9 +4876,9 @@ app.post(`${BASE_PATH}/stations`, async (c) => {
                         // --- Layer 3: ownRecord is null (KV key mismatch) ---
                         // The station's KV key may use a different ID than the value's .id.
                         // Compare the INCOMING station directly with the dupe result.
-                        console.log(`[POST /stations] Layer 3: ownRecord null for key "station:${station.id}" â€” comparing incoming data with dupe result`);
+                        console.log(`[POST /stations] Layer 3: ownRecord null for key "station:${station.id}" — comparing incoming data with dupe result`);
                         
-                        // 3a: Same name (case-insensitive) â€” strong identity signal when combined with spatial match
+                        // 3a: Same name (case-insensitive) — strong identity signal when combined with spatial match
                         const inName = (station.name || '').toLowerCase().trim();
                         const duName = (dupeResult.station.name || '').toLowerCase().trim();
                         if (inName && duName && inName === duName) {
@@ -4935,10 +4912,10 @@ app.post(`${BASE_PATH}/stations`, async (c) => {
                     }
 
                     if (isSelfMatch) {
-                        // This is the station being updated matching itself â€” not a real duplicate.
+                        // This is the station being updated matching itself — not a real duplicate.
                         // Fix the stale .id on the KV value so this doesn't recur.
                         if (ownRecord && ownRecord.id !== station.id) {
-                            console.warn(`[POST /stations] Patching stale .id on station KV value: "${ownRecord.id}" â†’ "${station.id}"`);
+                            console.warn(`[POST /stations] Patching stale .id on station KV value: "${ownRecord.id}" → "${station.id}"`);
                             ownRecord.id = station.id;
                             await kv.set(`station:${station.id}`, ownRecord);
                         }
@@ -4953,7 +4930,7 @@ app.post(`${BASE_PATH}/stations`, async (c) => {
                         // for the same real-world station (orphaned duplicate). Delete the orphan
                         // so future updates don't hit the same false positive.
                         if (ownRecord && dupeResult.station.id && dupeResult.station.id !== station.id) {
-                            console.warn(`[POST /stations] Cleaning orphaned duplicate KV entry: "station:${dupeResult.station.id}" ("${dupeResult.station.name}") â€” same station as "${station.name}" (${station.id})`);
+                            console.warn(`[POST /stations] Cleaning orphaned duplicate KV entry: "station:${dupeResult.station.id}" ("${dupeResult.station.name}") — same station as "${station.name}" (${station.id})`);
                             await kv.del(`station:${dupeResult.station.id}`);
                         }
                         console.log(`[POST /stations] Self-match escaped ID exclusion for "${station.name}" (${station.id}). Proceeding with update.`);
@@ -4980,9 +4957,9 @@ app.post(`${BASE_PATH}/stations`, async (c) => {
                 }
             }
         } else {
-            // Clean the override flag before persisting â€” it's a control flag, not station data
+            // Clean the override flag before persisting — it's a control flag, not station data
             // Phase 9.5: Enhanced audit logging for override decisions
-            console.log(`[POST /stations] OVERRIDE AUDIT â€” Duplicate check bypassed. Station: "${station.name}", Plus Code: ${station.plusCode || 'none'}, coords: (${station.location?.lat?.toFixed(6)}, ${station.location?.lng?.toFixed(6)}), category: ${station.category || 'unset'}, timestamp: ${new Date().toISOString()}`);
+            console.log(`[POST /stations] OVERRIDE AUDIT — Duplicate check bypassed. Station: "${station.name}", Plus Code: ${station.plusCode || 'none'}, coords: (${station.location?.lat?.toFixed(6)}, ${station.location?.lng?.toFixed(6)}), category: ${station.category || 'unset'}, timestamp: ${new Date().toISOString()}`);
             delete station._overrideDuplicate;
             delete station._overrideReason;
         }
@@ -4993,7 +4970,7 @@ app.post(`${BASE_PATH}/stations`, async (c) => {
 
         await kv.set(`station:${station.id}`, station);
 
-        // Phase 8.4: Optimistic locking â€” post-save re-check for race conditions.
+        // Phase 8.4: Optimistic locking — post-save re-check for race conditions.
         // Skip if the user explicitly overrode the duplicate check.
         // Another request may have created a station at the same Plus Code between
         // our pre-save check and the kv.set above.
@@ -5006,7 +4983,7 @@ app.post(`${BASE_PATH}/stations`, async (c) => {
                 station.id, // exclude self
                 station.category, 'verified');
             if (postSaveDupe) {
-                // Race condition detected â€” roll back the just-saved station
+                // Race condition detected — roll back the just-saved station
                 await kv.del(`station:${station.id}`);
                 console.log(`[POST /stations] Race condition: "${station.name}" conflicts with "${postSaveDupe.station.name}" (saved concurrently). Rolled back.`);
                 return c.json({
@@ -5022,7 +4999,7 @@ app.post(`${BASE_PATH}/stations`, async (c) => {
                         matchType: postSaveDupe.matchType,
                         geofenceRadius: postSaveDupe.station.geofenceRadius || 150,
                     },
-                    message: `Race condition: Another station was created at this location moments ago â€” "${postSaveDupe.station.name}". Your station was not saved.`,
+                    message: `Race condition: Another station was created at this location moments ago — "${postSaveDupe.station.name}". Your station was not saved.`,
                 }, 409);
             }
         }
@@ -5043,7 +5020,7 @@ app.post(`${BASE_PATH}/stations`, async (c) => {
     }
 });
 
-// Phase 9.6: Duplicate audit report â€” scan all stations for Plus Code / geofence collisions
+// Phase 9.6: Duplicate audit report — scan all stations for Plus Code / geofence collisions
 app.get(`${BASE_PATH}/stations/duplicate-audit`, async (c) => {
     try {
         const allStations: any[] = (await kv.getByPrefix("station:")) || [];
@@ -5162,7 +5139,7 @@ app.post(`${BASE_PATH}/geo/geocode`, async (c) => {
     }
 });
 
-// --- REVERSE GEOCODING (Plus Code â†’ Address resolution) ---
+// --- REVERSE GEOCODING (Plus Code → Address resolution) ---
 app.post(`${BASE_PATH}/geo/reverse-geocode`, async (c) => {
     try {
         const { lat, lng } = await c.req.json();
@@ -5193,7 +5170,7 @@ app.post(`${BASE_PATH}/geo/reverse-geocode`, async (c) => {
         const looksLikePlusCode = (addr: string) => /^[23456789CFGHJMPQRVWX]{2,8}\+[23456789CFGHJMPQRVWX]+/i.test(addr.trim());
 
         // Google returns results ordered from most-specific to least-specific.
-        // Find the FIRST result whose formatted_address is NOT a Plus Code â€” this is
+        // Find the FIRST result whose formatted_address is NOT a Plus Code — this is
         // the most accurate human-readable address (e.g. "Lot 1 Cookson Pen, Portmore, ...").
         //
         // We use formatted_address directly rather than constructing from street_number + route
@@ -5238,7 +5215,7 @@ app.post(`${BASE_PATH}/geo/reverse-geocode`, async (c) => {
         parish = parish.replace(/\s+Parish$/i, '');
 
         // Derive street address by stripping city/parish/country/postal from formatted_address.
-        // "Lot 1 Cookson Pen, Portmore, St. Catherine Parish, Jamaica" â†’ "Lot 1 Cookson Pen"
+        // "Lot 1 Cookson Pen, Portmore, St. Catherine Parish, Jamaica" → "Lot 1 Cookson Pen"
         const addressSegments = primaryFormatted.split(',').map((s: string) => s.trim());
         // Include both stripped parish ("St. Catherine") and original Google form ("St. Catherine Parish")
         // so that either variant in the formatted_address gets removed from the street address.
@@ -5270,7 +5247,7 @@ app.post(`${BASE_PATH}/geo/reverse-geocode`, async (c) => {
 // --- PHASE 9: ENTERPRISE GOVERNANCE & STRESS TESTING ---
 
 /**
- * Step 9.3: Evidence Bridge Stress Test (simulation only — not a real pipeline).
+ * Step 9.3: Evidence Bridge Stress Test (simulation only � not a real pipeline).
  * Platform staff only. Dominion UI removes the pressure-test CTA; endpoint retained for ops.
  */
 app.post(`${BASE_PATH}/admin/stress-test-evidence-bridge`, requirePlatformStaff(), async (c) => {
@@ -5313,7 +5290,7 @@ app.post(`${BASE_PATH}/admin/stress-test-evidence-bridge`, requirePlatformStaff(
                 metadata: { isStressTest: true, iteration: i }
             };
 
-            // In-memory simulation only — does not write to ledger or run signing/detection
+            // In-memory simulation only � does not write to ledger or run signing/detection
             results.push(testEntry);
         }
 
@@ -5330,7 +5307,7 @@ app.post(`${BASE_PATH}/admin/stress-test-evidence-bridge`, requirePlatformStaff(
 });
 
 /**
- * Step 9.2: Forensic Integrity Verification — platform staff only (cross-org intentional).
+ * Step 9.2: Forensic Integrity Verification � platform staff only (cross-org intentional).
  */
 app.post(`${BASE_PATH}/admin/verify-record-forensics`, requirePlatformStaff(), async (c) => {
     try {
@@ -5382,14 +5359,13 @@ app.post(`${BASE_PATH}/admin/verify-record-forensics`, requirePlatformStaff(), a
 app.post(`${BASE_PATH}/admin/backfill-hmac-signatures`, requirePlatformStaff(), async (c) => {
     try {
         const body = await c.req.json().catch(() => ({}));
-        const dryRun = body.dryRun !== false; // default true — safe
+        const dryRun = body.dryRun !== false; // default true � safe
         const limit = Math.min(Number(body.limit) || 5000, 20000);
         const signUnsignedVerified = body.signUnsignedVerified !== false; // default true
 
         console.log(`[HmacBackfill] Starting ${dryRun ? "DRY RUN" : "LIVE"} (limit=${limit}, signUnsignedVerified=${signUnsignedVerified})`);
 
-        const { data, error } = await supabase
-            .from("kv_store_37f42386")
+        const { data, error } = await fromKvStore()
             .select("key, value")
             .like("key", "fuel_entry:%")
             .limit(limit);
@@ -5448,7 +5424,7 @@ app.post(`${BASE_PATH}/admin/backfill-hmac-signatures`, requirePlatformStaff(), 
                         unsignedSigned++;
                         updated++;
                     } catch (writeErr: any) {
-                        errors.push(`${entry.id || row.key}: unsigned seal failed — ${writeErr.message}`);
+                        errors.push(`${entry.id || row.key}: unsigned seal failed � ${writeErr.message}`);
                     }
                 } else {
                     unsignedSigned++;
@@ -5460,7 +5436,7 @@ app.post(`${BASE_PATH}/admin/backfill-hmac-signatures`, requirePlatformStaff(), 
             try {
                 matches = await auditLogic.verifyRecordIntegrity(entry, entry.signature);
             } catch (verifyErr: any) {
-                errors.push(`${entry.id || row.key}: verify failed — ${verifyErr.message}`);
+                errors.push(`${entry.id || row.key}: verify failed � ${verifyErr.message}`);
                 continue;
             }
             if (matches) {
@@ -5482,7 +5458,7 @@ app.post(`${BASE_PATH}/admin/backfill-hmac-signatures`, requirePlatformStaff(), 
                     await kv.set(row.key, entry);
                     updated++;
                 } catch (writeErr: any) {
-                    errors.push(`${entry.id || row.key}: write failed — ${writeErr.message}`);
+                    errors.push(`${entry.id || row.key}: write failed � ${writeErr.message}`);
                 }
             }
         }
@@ -5697,7 +5673,7 @@ app.post(`${BASE_PATH}/learnt-locations/promote`, async (c) => {
         const learnt = await kv.get(`learnt_location:${id}`);
         if (!learnt) return c.json({ error: "Learnt location not found" }, 404);
 
-        // CSV Unverified shelf is reference-only — never promote/copy CSV into GOD.
+        // CSV Unverified shelf is reference-only � never promote/copy CSV into GOD.
         // Only auto-merge against Verified GOD stations; otherwise create fresh from operator details.
         let promotedStation;
         {
@@ -5710,7 +5686,7 @@ app.post(`${BASE_PATH}/learnt-locations/promote`, async (c) => {
             if (dupeResult) {
                 // Auto-merge into the existing station instead of creating a duplicate
                 const existingStation = dupeResult.station;
-                console.log(`[Promote] Phase 8 duplicate guard â€” auto-merging learnt ${id} into existing station ${existingStation.id} (${existingStation.name}). Match type: ${dupeResult.matchType}, distance: ${dupeResult.distance}m`);
+                console.log(`[Promote] Phase 8 duplicate guard — auto-merging learnt ${id} into existing station ${existingStation.id} (${existingStation.name}). Match type: ${dupeResult.matchType}, distance: ${dupeResult.distance}m`);
 
                 const autoAlias = {
                     id: crypto.randomUUID(),
@@ -5727,7 +5703,7 @@ app.post(`${BASE_PATH}/learnt-locations/promote`, async (c) => {
 
                 const linkedCount = await linkOrphanEntriesToStation(learnt, existingStation.id, existingStation.name);
                 const releasedCount = await releaseHeldTransaction(learnt, existingStation.id, existingStation.name);
-                console.log(`[Promote] Phase 8 auto-merge complete: learnt ${id} â†’ station ${existingStation.id}, linked ${linkedCount} fuel entries, released ${releasedCount} held transactions.`);
+                console.log(`[Promote] Phase 8 auto-merge complete: learnt ${id} → station ${existingStation.id}, linked ${linkedCount} fuel entries, released ${releasedCount} held transactions.`);
 
                 return c.json({
                     success: true,
@@ -5740,7 +5716,7 @@ app.post(`${BASE_PATH}/learnt-locations/promote`, async (c) => {
                 });
             }
 
-            // No duplicate â€” create a brand new verified station
+            // No duplicate — create a brand new verified station
             promotedStation = {
                 ...stationDetails,
                 id: crypto.randomUUID(),
@@ -5752,7 +5728,7 @@ app.post(`${BASE_PATH}/learnt-locations/promote`, async (c) => {
                 createdAt: new Date().toISOString()
             };
             await kv.set(`station:${promotedStation.id}`, promotedStation);
-            console.log(`[Promote] Learnt location ${id} had no unverified match â€” created new Verified station ${promotedStation.id}.`);
+            console.log(`[Promote] Learnt location ${id} had no unverified match — created new Verified station ${promotedStation.id}.`);
         }
 
         await kv.del(`learnt_location:${id}`);
@@ -5768,7 +5744,7 @@ app.post(`${BASE_PATH}/learnt-locations/promote`, async (c) => {
             };
             await kv.set(`station:${promotedStation.id}`, promotedStation);
         }
-        console.log(`[Promote] Learnt ${id} â†’ station ${promotedStation.id}, linked ${linkedCount} fuel entries, released ${releasedCount} held transactions.`);
+        console.log(`[Promote] Learnt ${id} → station ${promotedStation.id}, linked ${linkedCount} fuel entries, released ${releasedCount} held transactions.`);
 
         return c.json({ success: true, data: promotedStation, matchedExisting: false, linkedEntries: linkedCount, releasedTransactions: releasedCount });
     } catch (e: any) {
@@ -5799,7 +5775,7 @@ app.post(`${BASE_PATH}/learnt-locations/:id/reject`, async (c) => {
     }
 });
 
-// DELETE learnt location â€” full purge (no anomaly copy), also deletes linked held transaction
+// DELETE learnt location — full purge (no anomaly copy), also deletes linked held transaction
 app.delete(`${BASE_PATH}/learnt-locations/:id`, async (c) => {
     try {
         const id = c.req.param("id");
@@ -5838,16 +5814,16 @@ app.delete(`${BASE_PATH}/learnt-locations/:id`, async (c) => {
 app.post(`${BASE_PATH}/learnt-locations/merge`, async (c) => {
     try {
         const { id, targetStationId, updateMasterPin = false } = await c.req.json();
-        console.log(`[Merge] Phase 8.2 audit â€” Merge request: learnt ${id} â†’ station ${targetStationId}, updateMasterPin: ${updateMasterPin}`);
+        console.log(`[Merge] Phase 8.2 audit — Merge request: learnt ${id} → station ${targetStationId}, updateMasterPin: ${updateMasterPin}`);
         const learnt = await kv.get(`learnt_location:${id}`);
         if (!learnt) return c.json({ error: "Learnt location not found" }, 404);
 
         const station = await kv.get(`station:${targetStationId}`);
         if (!station) return c.json({ error: "Target station not found" }, 404);
 
-        console.log(`[Merge] Phase 8.2 audit â€” Merging "${learnt.name || 'Unknown'}" (${learnt.location?.lat?.toFixed(6)}, ${learnt.location?.lng?.toFixed(6)}) into "${station.name}" (status: ${station.status}, plusCode: ${station.plusCode || 'none'})`);
+        console.log(`[Merge] Phase 8.2 audit — Merging "${learnt.name || 'Unknown'}" (${learnt.location?.lat?.toFixed(6)}, ${learnt.location?.lng?.toFixed(6)}) into "${station.name}" (status: ${station.status}, plusCode: ${station.plusCode || 'none'})`);
 
-        // GOD list only — never merge into / promote CSV Unverified shelf
+        // GOD list only � never merge into / promote CSV Unverified shelf
         if (station.status !== 'verified') {
             return c.json({
                 error: "Cannot merge into Unverified CSV reference. Delete the CSV row and verify a new GOD station from your location, or merge into an existing Verified station.",
@@ -5890,7 +5866,7 @@ app.post(`${BASE_PATH}/learnt-locations/merge`, async (c) => {
             };
             await kv.set(`station:${targetStationId}`, station);
         }
-        console.log(`[Merge] Learnt ${id} â†’ station ${targetStationId}, linked ${linkedCount} fuel entries.`);
+        console.log(`[Merge] Learnt ${id} → station ${targetStationId}, linked ${linkedCount} fuel entries.`);
 
         return c.json({ success: true, promoted: false, masterPinUpdated: updateMasterPin, linkedEntries: linkedCount });
     } catch (e: any) {
@@ -5955,8 +5931,8 @@ app.get(`${BASE_PATH}/fuel-audit/deadhead/fleet`, async (c) => {
     const periodStart = c.req.query("periodStart") || undefined;
     const periodEnd = c.req.query("periodEnd") || undefined;
 
-    // MUST use paginated kv.getByPrefix — raw .select().like truncates at 1000 rows
-    // (fleet has 2000+ trips; missing trips → tripKm=0 → industry fallback over-deadheads).
+    // MUST use paginated kv.getByPrefix � raw .select().like truncates at 1000 rows
+    // (fleet has 2000+ trips; missing trips ? tripKm=0 ? industry fallback over-deadheads).
     const [allEntries, vehicles, allTrips, brainPolicy] = await Promise.all([
       kv.getByPrefix("fuel_entry:"),
       kv.getByPrefix("vehicle:"),
@@ -6046,7 +6022,7 @@ app.get(`${BASE_PATH}/fuel-audit/deadhead/fleet`, async (c) => {
     const elapsed = Date.now() - startTime;
     const zeroTripWithOdo = vehicleResults.filter((vr) => (vr.totalOdometerKm || 0) > 0 && (vr.tripKm || 0) === 0).length;
     console.log(
-      `[deadhead/fleet] Completed in ${elapsed}ms — ${vehicleResults.length} vehicles, ${allEntries.length} entries, ${allTrips.length} trips` +
+      `[deadhead/fleet] Completed in ${elapsed}ms � ${vehicleResults.length} vehicles, ${allEntries.length} entries, ${allTrips.length} trips` +
         (zeroTripWithOdo ? ` | WARN ${zeroTripWithOdo} vehicle(s) odo>0 but tripKm=0` : ""),
     );
 
@@ -6072,7 +6048,7 @@ app.get(`${BASE_PATH}/fuel-audit/deadhead/:vehicleId`, async (c) => {
     const periodStart = c.req.query("periodStart") || undefined;
     const periodEnd = c.req.query("periodEnd") || undefined;
 
-    // Paginated KV load — same trap as fleet route (raw like → 1000-row truncate).
+    // Paginated KV load � same trap as fleet route (raw like ? 1000-row truncate).
     const [allEntries, allTrips, vehicle, brainPolicy] = await Promise.all([
       kv.getByPrefix("fuel_entry:"),
       kv.getByPrefix("trip:"),
@@ -6101,7 +6077,7 @@ app.get(`${BASE_PATH}/fuel-audit/deadhead/:vehicleId`, async (c) => {
     if ((filteredEntries.length >= 2) && filteredTrips.length === 0) {
       console.log(
         `[deadhead/${vehicleId}] WARN odo anchors present but 0 trips in range ` +
-          `(loaded ${allTrips.length} trips total) — period ${periodStart}..${periodEnd}`,
+          `(loaded ${allTrips.length} trips total) � period ${periodStart}..${periodEnd}`,
       );
     }
 

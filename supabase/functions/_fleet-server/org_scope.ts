@@ -90,7 +90,50 @@ export function stampOrg<T extends Record<string, unknown>>(
   c: Context,
 ): T {
   const orgId = getOrgId(c);
-  if (!orgId) return record; // anon passthrough or platform role — don't stamp
+  if (!orgId) {
+    // Platform roles intentionally skip stamping; warn when a fleet user lacks org
+    const user = c.get("rbacUser") as RbacUser | undefined;
+    if (user && !PLATFORM_ROLES.has(user.resolvedRole)) {
+      console.warn(
+        `[stampOrg] Called without orgId for non-platform user userId=${user.userId} role=${user.resolvedRole}`,
+      );
+    }
+    return record; // anon passthrough or platform role — don't stamp
+  }
+  return { ...record, organizationId: orgId };
+}
+
+/**
+ * Post-stamp sanity check: log error if organizationId is still missing.
+ * Does not throw — callers decide whether to abort.
+ */
+export function assertStampedOrg(
+  record: Record<string, unknown>,
+  contextLabel: string,
+): void {
+  const org = record.organizationId;
+  if (org == null || org === "") {
+    console.error(
+      `[assertStampedOrg] Record lacks organizationId after stamp (${contextLabel})`,
+    );
+  }
+}
+
+/**
+ * Stamp org on write paths that must always have an org context.
+ * Throws if getOrgId(c) is null (platform/anon must not use this helper).
+ */
+export function stampOrgRequired<T extends Record<string, unknown>>(
+  record: T,
+  c: Context,
+): T {
+  const orgId = getOrgId(c);
+  if (!orgId) {
+    const user = c.get("rbacUser") as RbacUser | undefined;
+    throw new Error(
+      `[stampOrgRequired] organizationId required but missing (userId=${user?.userId ?? "unknown"} role=${user?.resolvedRole ?? "unknown"})`,
+    );
+  }
   return { ...record, organizationId: orgId };
 }
 

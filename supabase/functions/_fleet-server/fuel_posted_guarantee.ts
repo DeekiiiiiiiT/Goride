@@ -3,7 +3,7 @@
  * Shared by auto-approve, admin approve, station release, and heal-on-refresh.
  */
 import * as kv from "./kv_store.tsx";
-import { createClient } from "npm:@supabase/supabase-js@2";
+import { fromKvStore } from "./fleet_sql_bridge.ts";
 import {
   enrichRecordWithDriverVehicle,
   resolveDriverVehicleAssignment,
@@ -12,11 +12,6 @@ import { resolveFuelPaymentSource } from "./fuel_payment_source.ts";
 import { syncLinkedExpenseTransaction } from "./fuel_transaction_sync.ts";
 import * as fuelLogic from "./fuel_logic.ts";
 import { auditLogic } from "./audit_logic.ts";
-
-const supabase = createClient(
-  Deno.env.get("SUPABASE_URL")!,
-  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-);
 
 export type FuelDecisionReason =
   | "AUTO_AI_STATION"
@@ -65,8 +60,7 @@ export async function resolveCanonicalVehicleForFuel(
   // Plate-like hint (e.g. 5179KZ) — find unique vehicle by plate
   if (hint && !isLikelyUuid(hint)) {
     const plateNorm = hint.replace(/\s+/g, "").toUpperCase();
-    const { data } = await supabase
-      .from("kv_store_37f42386")
+    const { data } = await fromKvStore()
       .select("key, value")
       .like("key", "vehicle:%")
       .limit(500);
@@ -118,15 +112,13 @@ export async function resolveCanonicalVehicleForFuel(
 }
 
 async function findFuelEntryByTransactionId(txId: string): Promise<any | null> {
-  const { data } = await supabase
-    .from("kv_store_37f42386")
+  const { data } = await fromKvStore()
     .select("value")
     .like("key", "fuel_entry:%")
     .eq("value->>transactionId", txId)
     .limit(1);
   if (data?.[0]?.value) return data[0].value;
-  const { data: data2 } = await supabase
-    .from("kv_store_37f42386")
+  const { data: data2 } = await fromKvStore()
     .select("value")
     .like("key", "fuel_entry:%")
     .eq("value->metadata->>originalTransactionId", txId)
@@ -467,8 +459,7 @@ export async function healApprovedFuelEntriesMissingLog(
   limit = 50,
   stamp?: (record: any) => any,
 ): Promise<{ healed: number; blocked: number }> {
-  const { data } = await supabase
-    .from("kv_store_37f42386")
+  const { data } = await fromKvStore()
     .select("key, value")
     .like("key", "transaction:%")
     .eq("value->>status", "Approved")

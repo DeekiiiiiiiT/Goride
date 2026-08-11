@@ -2,19 +2,17 @@
  * Generic KV→fleet.* migrate + parity admin routes for all domains.
  */
 import type { Context, Hono } from "npm:hono";
-import { createClient } from "jsr:@supabase/supabase-js@2.49.8";
 import { FLEET_DOMAINS } from "./fleet_domains.ts";
 import { fleetDb, countTable, fleetTable } from "./repos/baseRepo.ts";
 import type { FleetDomain } from "./fleet_table_flags.ts";
 import { requireAuth, requirePermission } from "./rbac_middleware.ts";
+import { getRawServiceClient } from "./service_client.ts";
 
 type RouteApp = Hono;
 
+/** Must hit real KV for migrate/parity/retire — never the fleet-read compat shim. */
 function publicKvClient() {
-  return createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-  );
+  return getRawServiceClient();
 }
 
 async function loadKvPrefix(prefix: string): Promise<{ key: string; value: Record<string, unknown> }[]> {

@@ -56,7 +56,7 @@ export function TripLogsPage() {
     status: 'all',
     driverId: 'all',
     vehicleId: 'all',
-    dateRange: 'today', // Default to Today
+    dateRange: 'all',
     dateStart: '',
     dateEnd: '',
     minEarnings: '',

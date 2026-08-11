@@ -1,17 +1,12 @@
 /**
  * Keep driver expense transactions and fuel_entry ledger rows in sync.
  */
-import { createClient } from "npm:@supabase/supabase-js@2";
 import * as kv from "./kv_store.tsx";
+import { fromKvStore } from "./fleet_sql_bridge.ts";
 import {
   enrichRecordWithDriverVehicle,
   expandDriverIdVariants,
 } from "./driver_vehicle_assignment.ts";
-
-const supabase = createClient(
-  Deno.env.get("SUPABASE_URL")!,
-  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-);
 
 function orgMatches(
   record: Record<string, unknown>,
@@ -154,8 +149,7 @@ export async function backfillMissingVehicleOnDriverFuelRecords(
 
   const driverOr = variants.map((id) => `value->>driverId.eq.${id}`).join(",");
 
-  const { data: fuelRows } = await supabase
-    .from("kv_store_37f42386")
+  const { data: fuelRows } = await fromKvStore()
     .select("key, value")
     .like("key", "fuel_entry:%")
     .or(driverOr);
@@ -170,8 +164,7 @@ export async function backfillMissingVehicleOnDriverFuelRecords(
     await syncLinkedExpenseTransaction(entry);
   }
 
-  const { data: txRows } = await supabase
-    .from("kv_store_37f42386")
+  const { data: txRows } = await fromKvStore()
     .select("key, value")
     .like("key", "transaction:%")
     .or(driverOr);

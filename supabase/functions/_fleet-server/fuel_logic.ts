@@ -1,10 +1,5 @@
 import * as kv from "./kv_store.tsx";
-import { createClient } from "npm:@supabase/supabase-js@2";
-
-const supabase = createClient(
-  Deno.env.get("SUPABASE_URL")!,
-  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-);
+import { fromKvStore } from "./fleet_sql_bridge.ts";
 
 /**
  * Full rideshare trip km — MUST match apps/fleet/src/utils/tripRideshareKm.ts
@@ -834,8 +829,7 @@ export async function getLastAnchor(
   vehicleId: string,
   opts?: { asOfDate?: string; excludeId?: string },
 ) {
-  let query = supabase
-    .from("kv_store_37f42386")
+  let query = fromKvStore()
     .select("value")
     .like("key", "fuel_entry:%")
     .eq("value->>vehicleId", vehicleId)
@@ -867,8 +861,7 @@ export async function getPreviousFuelEntry(
   asOfDate: string,
   excludeId?: string,
 ) {
-  let query = supabase
-    .from("kv_store_37f42386")
+  let query = fromKvStore()
     .select("value")
     .like("key", "fuel_entry:%")
     .eq("value->>vehicleId", vehicleId)
@@ -894,8 +887,7 @@ export async function getEntriesSinceLastAnchor(
   anchorDate: string | null,
   opts?: { asOfDate?: string; excludeId?: string },
 ) {
-  let query = supabase
-    .from("kv_store_37f42386")
+  let query = fromKvStore()
     .select("value")
     .like("key", "fuel_entry:%")
     .eq("value->>vehicleId", vehicleId);
@@ -1540,8 +1532,7 @@ async function _queryWindowedEntries(
     const startStr = windowStart.toISOString().split('T')[0];
     const endStr = refDate.toISOString().split('T')[0];
 
-    const { data, error } = await supabase
-        .from("kv_store_37f42386")
+    const { data, error } = await fromKvStore()
         .select("value")
         .like("key", "fuel_entry:%")
         .eq("value->>vehicleId", vehicleId)

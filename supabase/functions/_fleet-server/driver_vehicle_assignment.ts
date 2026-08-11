@@ -4,13 +4,8 @@
  * Source of truth: vehicle.currentDriverId (fleet assignment UI).
  * driver.assignedVehicleId is a mirrored cache updated on vehicle save.
  */
-import { createClient } from "npm:@supabase/supabase-js@2";
 import * as kv from "./kv_store.tsx";
-
-const supabase = createClient(
-  Deno.env.get("SUPABASE_URL")!,
-  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-);
+import { fromKvStore } from "./fleet_sql_bridge.ts";
 
 export type VehicleAssignmentSource =
   | "payload"
@@ -164,8 +159,7 @@ export async function resolveDriverVehicleAssignment(
       .map((id) => `value->>currentDriverId.eq.${id}`)
       .join(",");
 
-    const { data, error } = await supabase
-      .from("kv_store_37f42386")
+    const { data, error } = await fromKvStore()
       .select("value")
       .like("key", "vehicle:%")
       .or(orFilter);

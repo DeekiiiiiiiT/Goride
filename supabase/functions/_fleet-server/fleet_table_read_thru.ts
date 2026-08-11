@@ -1,14 +1,13 @@
 /**
  * Fleet table read-through for KV-shaped access (permanent cutover).
+ * Prefer filtered queryFleet for large domains — listAll is a last resort.
  */
 import { FLEET_DOMAINS } from "./fleet_domains.ts";
 import { isFleetReadTableEnabled } from "./fleet_table_flags.ts";
 import {
   getByLegacyKvId,
-  listAll,
-  rowToKvValue,
-  fleetDb,
-  fleetTable,
+  queryFleet,
+  iterateFleet,
 } from "./repos/baseRepo.ts";
 import { resolveDomain } from "./fleet_domains.ts";
 
@@ -17,7 +16,6 @@ export async function readMappedKvKey(key: string): Promise<any | undefined> {
   if (!def || !isFleetReadTableEnabled(def.domain)) return undefined;
   try {
     const row = await getByLegacyKvId(def.domain, key);
-    // Distinguish "not mapped" (undefined) vs "mapped missing" (null)
     return row;
   } catch (e) {
     console.error("[fleetReadThru] get", key, e);
@@ -41,6 +39,7 @@ export async function readMappedKvKeys(keys: string[]): Promise<Map<string, any>
 /**
  * Returns null if prefix is not a mapped fleet domain (caller should hit KV).
  * Returns array (possibly empty) for mapped domains.
+ * Uses paged iterate — never a single unbounded PostgREST response.
  */
 export async function readMappedKvPrefix(prefix: string): Promise<any[] | null> {
   const domainDef = FLEET_DOMAINS.find((d) =>
@@ -49,32 +48,47 @@ export async function readMappedKvPrefix(prefix: string): Promise<any[] | null> 
   if (!domainDef || !isFleetReadTableEnabled(domainDef.domain)) return null;
 
   try {
-    // Exact single-prefix domain load
-    if (domainDef.prefixes.length === 1 && (prefix === domainDef.prefixes[0] || domainDef.prefixes[0].startsWith(prefix))) {
-      return await listAll(domainDef.domain);
-    }
-
-    // Multi-prefix or partial: filter legacy_kv_id by caller's prefix
     const matchPrefix =
       domainDef.prefixes.find((p) => p === prefix) ??
       domainDef.prefixes.find((p) => p.startsWith(prefix)) ??
       prefix;
 
-    const PAGE = 1000;
-    const out: any[] = [];
-    let from = 0;
-    for (;;) {
-      const { data, error } = await fleetDb()
-        .from(fleetTable(domainDef.table))
-        .select("*")
-        .like("legacy_kv_id", `${matchPrefix}%`)
-        .order("legacy_kv_id", { ascending: true })
-        .range(from, from + PAGE - 1);
-      if (error) throw new Error(error.message);
-      const rows = data || [];
-      for (const r of rows) out.push(rowToKvValue(r as Record<string, unknown>));
-      if (rows.length < PAGE) break;
-      from += PAGE;
+    // Exact domain prefix → page whole table
+    const exact =
+      domainDef.prefixes.length === 1 &&
+      (prefix === domainDef.prefixes[0] || domainDef.prefixes[0].startsWith(prefix));
+
+    if (exact) {
+      const out: any[] = [];
+      for await (const row of iterateFleet(domainDef.domain, {
+        order: { col: "legacy_kv_id", ascending: true },
+      })) {
+        out.push(row);
+      }
+      return out;
+    }
+
+    // Partial / multi-prefix: filter legacy_kv_id in SQL with pagination
+    const res = await queryFleet(domainDef.domain, {
+      legacyPrefix: matchPrefix,
+      order: { col: "legacy_kv_id", ascending: true },
+      limit: 50000,
+      offset: 0,
+    });
+    // queryFleet caps at 5000 per call — page remaining
+    const out = [...(res.data as any[])];
+    let offset = out.length;
+    while (out.length >= 5000 && out.length % 5000 === 0) {
+      const more = await queryFleet(domainDef.domain, {
+        legacyPrefix: matchPrefix,
+        order: { col: "legacy_kv_id", ascending: true },
+        limit: 5000,
+        offset,
+      });
+      if (more.error || more.data.length === 0) break;
+      out.push(...(more.data as any[]));
+      offset += more.data.length;
+      if (more.data.length < 5000) break;
     }
     return out;
   } catch (e) {

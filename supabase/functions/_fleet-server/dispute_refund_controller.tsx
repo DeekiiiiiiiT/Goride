@@ -22,6 +22,7 @@ import { Hono } from "npm:hono";
 import * as kv from "./kv_store.tsx";
 import { requireAuth, requirePermission, type RbacUser } from "./rbac_middleware.ts";
 import { getServiceClient } from "./service_client.ts";
+import { fromKvStore } from "./fleet_sql_bridge.ts";
 import { isTollCategory } from "./toll_category_flags.ts";
 import { getFleetTimezone, hasTzSuffix } from "./timezone_helper.tsx";
 import { upsertClaim, deleteClaim, findExistingClaimIdForToll } from "./claim_service.ts";
@@ -936,8 +937,7 @@ app.get(`${BASE}`, async (c) => {
       let offset = 0;
       const pageSize = 1000;
       for (;;) {
-        const { data, error } = await supabase
-          .from("kv_store_37f42386")
+        const { data, error } = await fromKvStore()
           .select("value")
           .like("key", "dispute-refund:%")
           .in("value->>driverId", ids)

@@ -1,17 +1,12 @@
 import { Hono } from "npm:hono";
-import { createClient } from "npm:@supabase/supabase-js@2";
 import * as kv from "./kv_store.tsx";
+import { fromKvStore } from "./fleet_sql_bridge.ts";
 import { requireAuth, requirePermission, type RbacUser } from "./rbac_middleware.ts";
 
 const syncApp = new Hono();
 
 // Auth gate: every route in this controller requires a valid user JWT (Wave 1B).
 syncApp.use("*", requireAuth({ strict: true }));
-
-const supabase = createClient(
-  Deno.env.get("SUPABASE_URL")!,
-  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-);
 
 // State Locking Mechanism: Prevent concurrent audits
 syncApp.post("/make-server-37f42386/sync/lock", async (c) => {
@@ -106,8 +101,7 @@ syncApp.post("/make-server-37f42386/sync/preferences", async (c) => {
 syncApp.get("/make-server-37f42386/sync/audit-trail", async (c) => {
     try {
         // Fetch all active locks to show who is doing what
-        const { data: lockData } = await supabase
-            .from("kv_store_37f42386")
+        const { data: lockData } = await fromKvStore()
             .select("value")
             .like("key", "lock:%");
             

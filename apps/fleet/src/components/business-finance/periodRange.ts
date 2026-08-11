@@ -37,6 +37,15 @@ export function resolvePeriod(
     const day = ymd(startOfDay(now));
     return { preset: 'today', startYmd: day, endYmd: day };
   }
+  // Inclusive 90-day window: today and the prior 89 calendar days
+  if (preset === 'last_90_days') {
+    const end = startOfDay(now);
+    return {
+      preset: 'last_90_days',
+      startYmd: ymd(subDays(end, 89)),
+      endYmd: ymd(end),
+    };
+  }
   // Incomplete custom: keep last non-custom preset for the query (UI shows hint)
   if (preset === 'this_month') {
     return {
@@ -88,7 +97,7 @@ export function previousPeriod(period: BusinessFinancePeriod): BusinessFinancePe
       endYmd: ymd(endOfWeek(prior, weekOpts)),
     };
   }
-  // Custom: same-length window ending the day before start
+  // last_90_days / custom: same-length window ending the day before start
   const prevEnd = subDays(start, 1);
   const prevStart = subDays(prevEnd, days);
   return {

@@ -17,6 +17,7 @@
 
 import * as kv from "./kv_store.tsx";
 import * as memCache from "./memory_cache.ts";
+import { fromKvStore } from "./fleet_sql_bridge.ts";
 
 export interface FeatureFlagValue {
   enabled: boolean;
@@ -223,19 +224,10 @@ export async function disableFlagForOrg(
  */
 export async function getAllFeatureFlags(): Promise<Record<string, FeatureFlagValue>> {
   try {
-    const allFlags = await kv.getByPrefix(FLAG_PREFIX);
     const result: Record<string, FeatureFlagValue> = {};
 
-    // getByPrefix returns values, we need to reconstruct the map
-    // This is a limitation - let's query differently
-    const { createClient } = await import("npm:@supabase/supabase-js@2");
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
-
-    const { data, error } = await supabase
-      .from("kv_store_37f42386")
+    // getByPrefix returns values only — query keys via fromKvStore for the map
+    const { data, error } = await fromKvStore()
       .select("key, value")
       .like("key", `${FLAG_PREFIX}%`);
 
@@ -306,14 +298,7 @@ export async function getFeatureFlagStats(flagName: string): Promise<FeatureFlag
  */
 export async function getAllFeatureFlagStats(): Promise<Record<string, FeatureFlagStats>> {
   try {
-    const { createClient } = await import("npm:@supabase/supabase-js@2");
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
-
-    const { data, error } = await supabase
-      .from("kv_store_37f42386")
+    const { data, error } = await fromKvStore()
       .select("key, value")
       .like("key", `${STATS_PREFIX}%`);
 

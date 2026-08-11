@@ -43,6 +43,11 @@ export async function dualWriteFleetKvUpsert(key: string, value: unknown): Promi
       await logMetric(def.domain, "skip", "map_null", key);
       return;
     }
+    if (row.organization_id == null || row.organization_id === "") {
+      console.warn(
+        `[fleetDualWrite] mapRow produced null organization_id for key=${key} domain=${def.domain}`,
+      );
+    }
     const { error } = await fleetClient().from(tableName(def.table)).upsert(row, { onConflict: "id" });
     if (error) {
       console.error(`[fleetDualWrite] upsert ${def.domain} ${key}:`, error.message);

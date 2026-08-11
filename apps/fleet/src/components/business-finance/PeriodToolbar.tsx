@@ -9,6 +9,7 @@ import type { PeriodPreset, BusinessFinancePeriod } from './types';
 import { formatPeriodLabel, ymd } from './periodRange';
 
 const PRESETS: Array<{ id: PeriodPreset; label: string }> = [
+  { id: 'last_90_days', label: 'Last 90 days' },
   { id: 'this_week', label: 'This week' },
   { id: 'last_week', label: 'Last week' },
   { id: 'this_month', label: 'This month' },

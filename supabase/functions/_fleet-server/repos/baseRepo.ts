@@ -1,8 +1,9 @@
 /**
  * Thin repository helpers for fleet.* tables (via public.fleet_* views for PostgREST).
+ * Native SQL filters/pagination — never load an entire domain into memory.
  */
 import { getServiceClient } from "../service_client.ts";
-import { FLEET_DOMAINS, type FleetDomainDef } from "../fleet_domains.ts";
+import { FLEET_DOMAINS, type FleetDomainDef, resolveDomain } from "../fleet_domains.ts";
 import type { FleetDomain } from "../fleet_table_flags.ts";
 import { isFleetReadTableEnabled } from "../fleet_table_flags.ts";
 
@@ -31,18 +32,310 @@ export function rowToKvValue(row: Record<string, unknown>): Record<string, unkno
   return payload;
 }
 
+/** Map legacy PostgREST `value->>field` / camelCase names onto real fleet columns. */
+const COLUMN_ALIASES: Record<string, string> = {
+  organizationId: "organization_id",
+  organization_id: "organization_id",
+  "value->>organizationId": "organization_id",
+  driverId: "driver_id",
+  driver_id: "driver_id",
+  "value->>driverId": "driver_id",
+  vehicleId: "vehicle_id",
+  vehicle_id: "vehicle_id",
+  "value->>vehicleId": "vehicle_id",
+  batchId: "batch_id",
+  batch_id: "batch_id",
+  "value->>batchId": "batch_id",
+  tripId: "trip_id",
+  trip_id: "trip_id",
+  "value->>tripId": "trip_id",
+  date: "date",
+  "value->>date": "date",
+  status: "status",
+  "value->>status": "status",
+  platform: "platform",
+  "value->>platform": "platform",
+  type: "type",
+  "value->>type": "type",
+  category: "category",
+  "value->>category": "category",
+  uploadDate: "upload_date",
+  "value->>uploadDate": "upload_date",
+  cardId: "card_id",
+  "value->>cardId": "card_id",
+  tollTagId: "toll_tag_id",
+  "value->>tollTagId": "toll_tag_id",
+  plazaId: "plaza_id",
+  "value->>plazaId": "plaza_id",
+  idempotencyKey: "idempotency_key",
+  "value->>idempotencyKey": "idempotency_key",
+  reportingAt: "reporting_at",
+  "value->>reportingAt": "reporting_at",
+  incurredDate: "incurred_date",
+  "value->>incurredDate": "incurred_date",
+  paymentDate: "payment_date",
+  "value->>paymentDate": "payment_date",
+  readingDate: "reading_date",
+  "value->>readingDate": "reading_date",
+  documentId: "document_id",
+  "value->>documentId": "document_id",
+  vendorId: "vendor_id",
+  "value->>vendorId": "vendor_id",
+  licensePlate: "license_plate",
+  "value->>licensePlate": "license_plate",
+  legacy_kv_id: "legacy_kv_id",
+  key: "legacy_kv_id",
+};
+
+export function resolveFleetColumn(col: string): string | null {
+  if (COLUMN_ALIASES[col]) return COLUMN_ALIASES[col];
+  // bare snake_case columns already on tables
+  if (/^[a-z][a-z0-9_]*$/.test(col)) return col;
+  return null;
+}
+
+export type FleetQueryFilter =
+  | { op: "eq" | "neq" | "gte" | "gt" | "lte" | "lt"; col: string; value: unknown }
+  | { op: "in"; col: string; value: unknown[] }
+  | { op: "like"; col: string; value: string }
+  | { op: "is"; col: string; value: null }
+  | { op: "orOrg"; orgId: string }; // organization_id = org OR null OR roam-default-org
+
+export type FleetQueryOpts = {
+  org?: string | null;
+  dateFrom?: string | null;
+  dateTo?: string | null; // inclusive YMD — converts to lt(nextDay)
+  filters?: FleetQueryFilter[];
+  eq?: Record<string, unknown>;
+  in?: Record<string, unknown[]>;
+  order?: { col: string; ascending?: boolean };
+  limit?: number;
+  offset?: number;
+  /** When true, return exact count (and optionally head-only). */
+  count?: boolean;
+  head?: boolean;
+  /** Return { key, value } rows instead of bare values. */
+  withKeys?: boolean;
+  /** Filter legacy_kv_id by this prefix (defaults to domain's first prefix). */
+  legacyPrefix?: string;
+};
+
+export type FleetQueryResult = {
+  data: Array<Record<string, unknown> | { key: string; value: Record<string, unknown> }>;
+  count: number | null;
+  error: Error | null;
+};
+
+function nextYmd(ymd: string): string {
+  const [y, m, d] = ymd.slice(0, 10).split("-").map(Number);
+  const next = new Date(y, (m || 1) - 1, (d || 1) + 1);
+  return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}-${String(
+    next.getDate(),
+  ).padStart(2, "0")}`;
+}
+
+function applyFilter(q: any, f: FleetQueryFilter): any {
+  if (f.op === "orOrg") {
+    return q.or(
+      `organization_id.eq.${f.orgId},organization_id.is.null,organization_id.eq.roam-default-org`,
+    );
+  }
+  const col = resolveFleetColumn(f.col) ?? f.col;
+  switch (f.op) {
+    case "eq":
+      return q.eq(col, f.value);
+    case "neq":
+      return q.neq(col, f.value);
+    case "gte":
+      return q.gte(col, f.value);
+    case "gt":
+      return q.gt(col, f.value);
+    case "lte":
+      return q.lte(col, f.value);
+    case "lt":
+      return q.lt(col, f.value);
+    case "in":
+      return q.in(col, f.value);
+    case "like":
+      return q.like(col, f.value);
+    case "is":
+      return q.is(col, f.value);
+    default:
+      return q;
+  }
+}
+
+/**
+ * Native filtered/paginated query against a fleet domain table.
+ * Prefer this over any full-prefix load + JS filter.
+ */
+export async function queryFleet(
+  domain: FleetDomain,
+  opts: FleetQueryOpts = {},
+): Promise<FleetQueryResult> {
+  try {
+    const def = getDomainDef(domain);
+    const selectOpts = opts.count
+      ? ({ count: "exact", head: !!opts.head } as const)
+      : opts.head
+        ? ({ count: "exact", head: true } as const)
+        : undefined;
+    let q = fleetDb().from(fleetTable(def.table)).select("*", selectOpts);
+
+    if (opts.legacyPrefix) {
+      q = q.like("legacy_kv_id", `${opts.legacyPrefix}%`);
+    }
+    if (opts.org) {
+      q = q.eq("organization_id", opts.org);
+    }
+    if (opts.dateFrom) {
+      q = q.gte("date", String(opts.dateFrom).slice(0, 10));
+    }
+    if (opts.dateTo) {
+      q = q.lt("date", nextYmd(String(opts.dateTo).slice(0, 10)));
+    }
+    if (opts.eq) {
+      for (const [col, value] of Object.entries(opts.eq)) {
+        const resolved = resolveFleetColumn(col) ?? col;
+        q = q.eq(resolved, value);
+      }
+    }
+    if (opts.in) {
+      for (const [col, value] of Object.entries(opts.in)) {
+        const resolved = resolveFleetColumn(col) ?? col;
+        q = q.in(resolved, value);
+      }
+    }
+    if (opts.filters?.length) {
+      for (const f of opts.filters) q = applyFilter(q, f);
+    }
+
+    const orderCol = opts.order
+      ? resolveFleetColumn(opts.order.col) ?? opts.order.col
+      : "updated_at";
+    const ascending = opts.order?.ascending === true;
+    q = q.order(orderCol, { ascending });
+
+    if (opts.offset != null || opts.limit != null) {
+      const from = opts.offset ?? 0;
+      const to = from + (opts.limit ?? 1000) - 1;
+      q = q.range(from, to);
+    } else if (!opts.head) {
+      // Safety cap — never silently pull unbounded tables into memory
+      q = q.limit(5000);
+    }
+
+    const { data, error, count } = await q;
+    if (error) return { data: [], count: null, error: new Error(error.message) };
+
+    if (opts.head) {
+      return { data: [], count: count ?? 0, error: null };
+    }
+
+    const rows = (data || []) as Record<string, unknown>[];
+    if (opts.withKeys) {
+      return {
+        data: rows.map((r) => ({
+          key: String(r.legacy_kv_id || `${def.prefixes[0]}${r.id}`),
+          value: rowToKvValue(r),
+        })),
+        count: count ?? null,
+        error: null,
+      };
+    }
+    return {
+      data: rows.map((r) => rowToKvValue(r)),
+      count: count ?? null,
+      error: null,
+    };
+  } catch (e) {
+    return {
+      data: [],
+      count: null,
+      error: e instanceof Error ? e : new Error(String(e)),
+    };
+  }
+}
+
+/** All rows for a batch_id (paged under the hood, returns KV values). */
+export async function listByBatch(
+  domain: FleetDomain,
+  batchId: string,
+  opts?: { withKeys?: boolean; limit?: number },
+): Promise<Array<Record<string, unknown> | { key: string; value: Record<string, unknown> }>> {
+  const PAGE = 1000;
+  const out: Array<Record<string, unknown> | { key: string; value: Record<string, unknown> }> = [];
+  let offset = 0;
+  const max = opts?.limit ?? 50000;
+  while (offset < max) {
+    const res = await queryFleet(domain, {
+      eq: { batch_id: batchId },
+      order: { col: "legacy_kv_id", ascending: true },
+      limit: Math.min(PAGE, max - offset),
+      offset,
+      withKeys: opts?.withKeys,
+    });
+    if (res.error) throw res.error;
+    out.push(...res.data);
+    if (res.data.length < PAGE) break;
+    offset += PAGE;
+  }
+  return out;
+}
+
+/** Exact count with optional filters (head-only). */
+export async function countBy(
+  domain: FleetDomain,
+  opts: Omit<FleetQueryOpts, "head" | "count" | "limit" | "offset" | "withKeys"> = {},
+): Promise<number> {
+  const res = await queryFleet(domain, { ...opts, head: true, count: true, limit: 1 });
+  if (res.error) throw res.error;
+  return res.count ?? 0;
+}
+
+/**
+ * Page through matching rows without loading unbound memory in callers that must stream.
+ * Yields KV-shaped values (or {key,value} when withKeys).
+ */
+export async function* iterateFleet(
+  domain: FleetDomain,
+  opts: Omit<FleetQueryOpts, "limit" | "offset" | "head"> = {},
+): AsyncGenerator<Record<string, unknown> | { key: string; value: Record<string, unknown> }> {
+  const PAGE = 1000;
+  let offset = 0;
+  for (;;) {
+    const res = await queryFleet(domain, { ...opts, limit: PAGE, offset });
+    if (res.error) throw res.error;
+    for (const row of res.data) yield row;
+    if (res.data.length < PAGE) break;
+    offset += PAGE;
+  }
+}
+
+/** Resolve domain from a KV prefix like `trip:` / `fuel_entry:`. */
+export function domainForPrefix(prefix: string): FleetDomainDef | null {
+  const exact = FLEET_DOMAINS.find((d) => d.prefixes.some((p) => p === prefix || p === `${prefix}`));
+  if (exact) return exact;
+  const withColon = prefix.endsWith(":") ? prefix : `${prefix}:`;
+  return (
+    FLEET_DOMAINS.find((d) => d.prefixes.some((p) => p === withColon)) ||
+    FLEET_DOMAINS.find((d) => d.prefixes.some((p) => withColon.startsWith(p) || p.startsWith(withColon))) ||
+    null
+  );
+}
+
 export async function listByOrg(
   domain: FleetDomain,
   organizationId: string | null | undefined,
   opts?: { limit?: number },
 ): Promise<Record<string, unknown>[]> {
-  const def = getDomainDef(domain);
-  let q = fleetDb().from(fleetTable(def.table)).select("*").order("updated_at", { ascending: false });
-  if (organizationId) q = q.eq("organization_id", organizationId);
-  if (opts?.limit) q = q.limit(opts.limit);
-  const { data, error } = await q;
-  if (error) throw new Error(error.message);
-  return (data || []).map((r) => rowToKvValue(r as Record<string, unknown>));
+  const res = await queryFleet(domain, {
+    org: organizationId || undefined,
+    order: { col: "updated_at", ascending: false },
+    limit: opts?.limit ?? 5000,
+  });
+  if (res.error) throw res.error;
+  return res.data as Record<string, unknown>[];
 }
 
 export async function getById(
@@ -57,12 +350,7 @@ export async function getById(
 }
 
 export async function countTable(domain: FleetDomain, organizationId?: string | null): Promise<number> {
-  const def = getDomainDef(domain);
-  let q = fleetDb().from(fleetTable(def.table)).select("*", { count: "exact", head: true });
-  if (organizationId) q = q.eq("organization_id", organizationId);
-  const { count, error } = await q;
-  if (error) throw new Error(error.message);
-  return count ?? 0;
+  return countBy(domain, organizationId ? { org: organizationId } : {});
 }
 
 export async function getByLegacyKvId(
@@ -77,34 +365,26 @@ export async function getByLegacyKvId(
     .maybeSingle();
   if (error) throw new Error(error.message);
   if (!data) {
-    // Fallback: id = suffix after first colon
     const id = legacyKvId.includes(":") ? legacyKvId.slice(legacyKvId.indexOf(":") + 1) : legacyKvId;
     return getById(domain, id);
   }
   return rowToKvValue(data as Record<string, unknown>);
 }
 
-/** Page through an entire fleet table as KV-shaped values. */
+/** Page through an entire fleet table as KV-shaped values. Prefer filtered helpers. */
 export async function listAll(domain: FleetDomain): Promise<Record<string, unknown>[]> {
-  const def = getDomainDef(domain);
-  const PAGE = 1000;
   const out: Record<string, unknown>[] = [];
-  let from = 0;
-  for (;;) {
-    const { data, error } = await fleetDb()
-      .from(fleetTable(def.table))
-      .select("*")
-      .order("legacy_kv_id", { ascending: true })
-      .range(from, from + PAGE - 1);
-    if (error) throw new Error(error.message);
-    const rows = data || [];
-    for (const r of rows) out.push(rowToKvValue(r as Record<string, unknown>));
-    if (rows.length < PAGE) break;
-    from += PAGE;
+  for await (const row of iterateFleet(domain, { order: { col: "legacy_kv_id", ascending: true } })) {
+    out.push(row as Record<string, unknown>);
   }
   return out;
 }
 
 export function shouldReadTable(domain: FleetDomain): boolean {
   return isFleetReadTableEnabled(domain);
+}
+
+/** Convenience: domain from a concrete key. */
+export function domainForKey(key: string): FleetDomainDef | null {
+  return resolveDomain(key);
 }

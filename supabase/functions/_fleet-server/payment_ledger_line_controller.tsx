@@ -169,6 +169,7 @@ app.get(`${BASE}/driver-quality-snapshots`, requirePermission('transactions.view
 
 app.get(`${BASE}`, requirePermission('transactions.view'), async (c) => {
   try {
+    const { queryFleet } = await import("./repos/baseRepo.ts");
     const tripId = c.req.query("tripId")?.trim().toLowerCase();
     const batchId = c.req.query("batchId")?.trim();
     const driverId = c.req.query("driverId")?.trim().toLowerCase();
@@ -181,23 +182,20 @@ app.get(`${BASE}`, requirePermission('transactions.view'), async (c) => {
       return c.json({ data: roamLines, total: roamLines.length, source: "postgres" });
     }
 
-    const rows = await kv.getByPrefix("payment_ledger_line:");
-    const all = Array.isArray(rows) ? rows : [];
+    const filters: import("./repos/baseRepo.ts").FleetQueryFilter[] = [];
+    if (tripId) filters.push({ op: "eq", col: "trip_id", value: tripId });
+    if (batchId) filters.push({ op: "eq", col: "batch_id", value: batchId });
+    if (driverId) filters.push({ op: "eq", col: "driver_id", value: driverId });
+    if (from) filters.push({ op: "gte", col: "reporting_at", value: from });
+    if (to) filters.push({ op: "lte", col: "reporting_at", value: to });
 
-    let filtered = all.filter((line: Record<string, unknown>) => {
-      if (tripId && String(line.tripId || "").toLowerCase() !== tripId) return false;
-      if (batchId && String(line.batchId || "") !== batchId) return false;
-      if (driverId && String(line.driverId || "").toLowerCase() !== driverId) return false;
-      if (from) {
-        const d = String(line.reportingAt || line.date || "").slice(0, 10);
-        if (d && d < from) return false;
-      }
-      if (to) {
-        const d = String(line.reportingAt || line.date || "").slice(0, 10);
-        if (d && d > to) return false;
-      }
-      return true;
+    const res = await queryFleet("payment_ledger_lines", {
+      filters,
+      order: { col: "reporting_at", ascending: false },
+      limit: 5000,
     });
+    if (res.error) throw res.error;
+    let filtered = res.data as Record<string, unknown>[];
 
     if (tripId && filtered.length === 0) {
       const roamLines = await loadRoamLinesByTripId(tripId);
@@ -206,13 +204,7 @@ app.get(`${BASE}`, requirePermission('transactions.view'), async (c) => {
       }
     }
 
-    filtered.sort((a: Record<string, unknown>, b: Record<string, unknown>) => {
-      const da = String(a.reportingAt || "");
-      const db = String(b.reportingAt || "");
-      return db.localeCompare(da);
-    });
-
-    return c.json({ data: filtered, total: filtered.length, source: "kv" });
+    return c.json({ data: filtered, total: filtered.length, source: "fleet" });
   } catch (e) {
     return safeErrorResponse(c, e, "PaymentLedgerLine.list");
   }

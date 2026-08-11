@@ -5,24 +5,22 @@
 import type { Context } from "npm:hono";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { filterByOrg, getOrgId } from "./org_scope.ts";
+import { fromKvStore } from "./fleet_sql_bridge.ts";
 import {
   canonicalOdometerFromMaps,
   parseNum,
   type OdometerSupplementMaps,
 } from "../../../apps/fleet/src/utils/canonicalOdometerMath.ts";
 
-const KV_TABLE = "kv_store_37f42386";
-
 export type { OdometerSupplementMaps };
 export { canonicalOdometerFromMaps };
 
 async function maxManualOdometerForVehicle(
-  supabase: SupabaseClient,
+  _supabase: SupabaseClient,
   vehicleId: string,
   c: Context,
 ): Promise<number> {
-  const { data, error } = await supabase
-    .from(KV_TABLE)
+  const { data, error } = await fromKvStore()
     .select("value")
     .like("key", `odometer_reading:${vehicleId}:`);
   if (error) throw error;
@@ -39,12 +37,11 @@ async function maxManualOdometerForVehicle(
 }
 
 async function maxFuelOdometerForVehicle(
-  supabase: SupabaseClient,
+  _supabase: SupabaseClient,
   vehicleId: string,
   c: Context,
 ): Promise<number> {
-  let query = supabase
-    .from(KV_TABLE)
+  let query = fromKvStore()
     .select("value")
     .like("key", "fuel_entry:%")
     .eq("value->>vehicleId", vehicleId);
@@ -81,12 +78,12 @@ export async function canonicalOdometerForVehicle(
 }
 
 export async function loadOdometerSupplementMaps(
-  supabase: SupabaseClient,
+  _supabase: SupabaseClient,
   c: Context,
 ): Promise<OdometerSupplementMaps> {
   const orgId = getOrgId(c);
-  let readingsQ = supabase.from(KV_TABLE).select("key, value").like("key", "odometer_reading:%");
-  let fuelQ = supabase.from(KV_TABLE).select("value").like("key", "fuel_entry:%");
+  let readingsQ = fromKvStore().select("key, value").like("key", "odometer_reading:%");
+  let fuelQ = fromKvStore().select("value").like("key", "fuel_entry:%");
   if (orgId) {
     readingsQ = readingsQ.eq("value->>organizationId", orgId);
     fuelQ = fuelQ.eq("value->>organizationId", orgId);

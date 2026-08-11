@@ -19,8 +19,8 @@ export function ExpenseHubPage({
   initialVehicleId,
   initialSubview,
 }: Props) {
-  const [preset, setPreset] = React.useState<PeriodPreset>('this_week');
-  const [anchorPreset, setAnchorPreset] = React.useState<PeriodPreset>('this_week');
+  const [preset, setPreset] = React.useState<PeriodPreset>('last_90_days');
+  const [anchorPreset, setAnchorPreset] = React.useState<PeriodPreset>('last_90_days');
   const [customStart, setCustomStart] = React.useState('');
   const [customEnd, setCustomEnd] = React.useState('');
 
@@ -101,7 +101,7 @@ export function ExpenseHubPage({
           setCustomEnd(value);
           setPreset('custom');
         }}
-        onClear={() => setPresetSafe('this_week')}
+        onClear={() => setPresetSafe('last_90_days')}
       />
 
       {isLoading ? (

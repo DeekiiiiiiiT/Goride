@@ -478,6 +478,25 @@ export const FLEET_DOMAINS: FleetDomainDef[] = [
     prefixes: ["ledger_config:"],
     mapRow: (key, v) => base(key, v, "ledger_config:", {}),
   },
+  {
+    domain: "maintenance_logs",
+    table: "maintenance_logs",
+    prefixes: ["maintenance_log:"],
+    mapRow: (key, v) => {
+      // key: maintenance_log:{plate|vehicleId}:{id}
+      const id = idFrom(key, v, "maintenance_log:");
+      const plateFromKey = key.startsWith("maintenance_log:")
+        ? key.slice("maintenance_log:".length).split(":")[0] || null
+        : null;
+      return base(key, v, "maintenance_log:", {
+        vehicle_id: str(v.vehicleId),
+        license_plate: str(v.licensePlate) ?? str(v.plate) ?? plateFromKey,
+        service_date: dateOnly(v.date) ?? dateOnly(v.serviceDate),
+        odometer: num(v.odometer) ?? num(v.odo),
+        cost: num(v.cost) ?? num(v.amount),
+      });
+    },
+  },
 ];
 
 export function resolveDomain(key: string): FleetDomainDef | null {

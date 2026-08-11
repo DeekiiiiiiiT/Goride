@@ -20,6 +20,7 @@ import { Hono, type Context } from "npm:hono";
 import * as kv from "./kv_store.tsx";
 import { requireAuth, requirePermission, type RbacUser } from "./rbac_middleware.ts";
 import { getServiceClient } from "./service_client.ts";
+import { fromKvStore } from "./fleet_sql_bridge.ts";
 import { checkRateLimit, recordFailedAttempt, getClientIp } from "./rate_limiter.ts";
 import { isTollCategory } from "./toll_category_flags.ts";
 import { classifyOrphanToll } from "./orphanTollClassifier.ts";
@@ -1157,8 +1158,7 @@ async function loadAllByPrefix(prefix: string): Promise<any[]> {
   let offset = 0;
 
   while (true) {
-    const { data, error } = await supabase
-      .from("kv_store_37f42386")
+    const { data, error } = await fromKvStore()
       .select("key, value")
       .like("key", `${prefix}%`)
       .order("key", { ascending: true })
@@ -4809,8 +4809,7 @@ async function loadTollPnlOffsetMarkerRows(): Promise<Array<{ key: string; value
   const rows: Array<{ key: string; value: any }> = [];
   let offset = 0;
   while (true) {
-    const { data, error } = await supabase
-      .from("kv_store_37f42386")
+    const { data, error } = await fromKvStore()
       .select("key, value")
       .like("key", "toll_pnl_offset_marker:%")
       .order("key", { ascending: true })

@@ -41,7 +41,8 @@ export type FleetDomain =
   | "organization_settings"
   | "preferences"
   | "integrations"
-  | "ledger_config";
+  | "ledger_config"
+  | "maintenance_logs";
 
 /** Always write fleet.* tables. */
 export function isFleetTableWriteEnabled(_domain: FleetDomain): boolean {

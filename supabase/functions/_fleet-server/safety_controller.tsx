@@ -1,17 +1,12 @@
 import { Hono } from "npm:hono";
-import { createClient } from "npm:@supabase/supabase-js@2";
 import * as kv from "./kv_store.tsx";
+import { fromKvStore } from "./fleet_sql_bridge.ts";
 import { requireAuth, requirePermission, type RbacUser } from "./rbac_middleware.ts";
 
 const safetyApp = new Hono();
 
 // Auth gate: every route in this controller requires a valid user JWT (Wave 1B).
 safetyApp.use("*", requireAuth({ strict: true }));
-
-const supabase = createClient(
-  Deno.env.get("SUPABASE_URL")!,
-  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-);
 
 // Phase 5: Rolling 30-Day Efficiency Baseline
 safetyApp.get("/make-server-37f42386/fleet/efficiency-baseline", requirePermission('transactions.view'), async (c) => {
@@ -21,8 +16,7 @@ safetyApp.get("/make-server-37f42386/fleet/efficiency-baseline", requirePermissi
     const thirtyDaysAgoISO = thirtyDaysAgo.toISOString().split('T')[0];
 
     // 1. Fetch Fuel Transactions for last 30 days
-    const { data: fuelData } = await supabase
-      .from("kv_store_37f42386")
+    const { data: fuelData } = await fromKvStore()
       .select("value")
       .like("key", "transaction:%")
       .gte("value->>date", thirtyDaysAgoISO);
@@ -30,8 +24,7 @@ safetyApp.get("/make-server-37f42386/fleet/efficiency-baseline", requirePermissi
     const fuelTxs = (fuelData || []).map(d => d.value).filter(t => t.category === 'Fuel' || t.category === 'Fuel Reimbursement');
 
     // 2. Fetch Trip Logs for last 30 days
-    const { data: tripData } = await supabase
-      .from("kv_store_37f42386")
+    const { data: tripData } = await fromKvStore()
       .select("value")
       .like("key", "trip:%")
       .gte("value->>date", thirtyDaysAgoISO);
@@ -104,8 +97,7 @@ safetyApp.get("/make-server-37f42386/safety/fatigue-analysis", requirePermission
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
     const sevenDaysAgoISO = sevenDaysAgo.toISOString().split('T')[0];
 
-    let query = supabase
-      .from("kv_store_37f42386")
+    let query = fromKvStore()
       .select("value")
       .like("key", "trip:%")
       .gte("value->>date", sevenDaysAgoISO);

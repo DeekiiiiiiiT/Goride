@@ -5,13 +5,15 @@
  * Usage:
  *   import { getServiceClient } from "./service_client.ts";
  *   const client = getServiceClient();
+ *
+ * KV mapped domains: use fromKvStore() / kv.* — not client.from("kv_store_*").
  */
 import { createClient, type SupabaseClient } from "jsr:@supabase/supabase-js@2.49.8";
 
 let _cachedClient: SupabaseClient | null = null;
 
 /**
- * Returns a cached service-role Supabase client.
+ * Returns a cached service-role Supabase client (raw — no KV wrap).
  * Creates one on first call; reuses it thereafter.
  */
 export function getServiceClient(): SupabaseClient {
@@ -26,6 +28,11 @@ export function getServiceClient(): SupabaseClient {
     _cachedClient = createClient(url, key);
   }
   return _cachedClient;
+}
+
+/** Alias for migrate/parity/retire — same raw client (real KV only). */
+export function getRawServiceClient(): SupabaseClient {
+  return getServiceClient();
 }
 
 /**
