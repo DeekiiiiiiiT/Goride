@@ -5438,7 +5438,7 @@ app.get("/make-server-37f42386/diagnostic/unresolvable-driver-map", requireAuth(
   return c.json({ error: "Retired: unresolvable-driver-map scanned ledger_event KV.", retired: true }, 410);
 });
 
-async function fetchAllLedgerEventValuesForDriversasync function fetchAllLedgerEventValuesForDrivers(driverIds: string[], c: any): Promise<any[]> {
+async function fetchAllLedgerEventValuesForDrivers(driverIds: string[], c: any): Promise<any[]> {
   if (!driverIds.length) return [];
   const { listAllUnifiedCanonicalEvents } = await import("../_shared/unifiedLedger/queries.ts");
   const seen = new Set<string>();
