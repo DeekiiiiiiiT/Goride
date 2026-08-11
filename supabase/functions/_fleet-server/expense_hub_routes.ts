@@ -318,10 +318,6 @@ export function registerExpenseHubRoutes(app: {
       // Operational + one-off ledger (fuel / toll / maintenance / operating_expense).
       // Prefer ledger SSOT over re-reading Hub docs (avoids double-count after post).
       try {
-        const supabase = createClient(
-          Deno.env.get("SUPABASE_URL")!,
-          Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-        );
         const eventTypes = [
           "fuel_expense",
           "fuel_charge_offset",
@@ -331,64 +327,54 @@ export function registerExpenseHubRoutes(app: {
           "maintenance",
           "operating_expense",
         ];
-        const typeOr = eventTypes.map((t) => `value->>eventType.eq.${t}`).join(",");
-        let offset = 0;
-        const pageSize = 500;
-        for (let page = 0; page < 40; page++) {
-          const { data, error } = await supabase
-            .from("kv_store_37f42386")
-            .select("key, value")
-            .like("key", "ledger_event:%")
-            .or(typeOr)
-            .gte("value->>date", start)
-            .lte("value->>date", end)
-            .order("value->>date", { ascending: true })
-            .range(offset, offset + pageSize - 1);
-          if (error) throw error;
-          const rows = filterByOrg(
-            (data || []).map((d: { key: string; value: Record<string, unknown> }) => ({
-              key: d.key,
-              ...(d.value || {}),
-            })),
-            c,
-          ) as Array<Record<string, unknown>>;
-          for (const e of rows) {
-            const t = String(e.eventType || "");
-            const dateYmd = String(e.date || "").slice(0, 10);
-            const amt = Number(e.netAmount ?? e.grossAmount ?? e.amount ?? 0);
-            if (!dateYmd || !Number.isFinite(amt) || amt === 0) continue;
-            let kind: PointSpendEvent["kind"] = "other";
-            let category = "Other";
-            let signed = amt;
-            if (t === "fuel_expense") {
-              kind = "fuel";
-              category = "Fuel";
-            } else if (t === "fuel_charge_offset") {
-              kind = "fuel";
-              category = "Fuel";
-              if (String(e.direction || "") === "inflow") signed = -amt;
-            } else if (t === "toll_charge") {
-              kind = "toll";
-              category = "Toll";
-            } else if (t === "toll_refund") {
-              kind = "toll";
-              category = "Toll";
-              signed = -amt;
-            } else if (t === "toll_charge_offset") {
-              kind = "toll";
-              category = "Toll";
-              if (String(e.direction || "") === "inflow") signed = -amt;
-            } else if (t === "maintenance") {
-              kind = "maintenance";
-              category = "Maintenance";
-            } else if (t === "operating_expense") {
-              kind = "operating";
-              category = String(e.category || "Other");
-            }
-            pointEvents.push({ dateYmd, category, amount: signed, kind });
+
+        let rows: Array<Record<string, unknown>> = [];
+        {
+          const { listAllUnifiedCanonicalEvents } = await import("../_shared/unifiedLedger/queries.ts");
+          const unified = await listAllUnifiedCanonicalEvents({
+            products: ["roam_driver", "roam_fleet"],
+            entryTypes: eventTypes,
+            from: `${start}T00:00:00.000Z`,
+            to: `${end}T23:59:59.999Z`,
+            maxRows: 50_000,
+          });
+          rows = filterByOrg(unified, c) as Array<Record<string, unknown>>;
+        }
+
+        for (const e of rows) {
+          const t = String(e.eventType || "");
+          const dateYmd = String(e.date || "").slice(0, 10);
+          const amt = Number(e.netAmount ?? e.grossAmount ?? e.amount ?? 0);
+          if (!dateYmd || !Number.isFinite(amt) || amt === 0) continue;
+          let kind: PointSpendEvent["kind"] = "other";
+          let category = "Other";
+          let signed = amt;
+          if (t === "fuel_expense") {
+            kind = "fuel";
+            category = "Fuel";
+          } else if (t === "fuel_charge_offset") {
+            kind = "fuel";
+            category = "Fuel";
+            if (String(e.direction || "") === "inflow") signed = -Math.abs(amt);
+          } else if (t === "toll_charge") {
+            kind = "toll";
+            category = "Toll";
+          } else if (t === "toll_refund") {
+            kind = "toll";
+            category = "Toll";
+            signed = -Math.abs(amt);
+          } else if (t === "toll_charge_offset") {
+            kind = "toll";
+            category = "Toll";
+            if (String(e.direction || "") === "inflow") signed = -Math.abs(amt);
+          } else if (t === "maintenance") {
+            kind = "maintenance";
+            category = "Maintenance";
+          } else if (t === "operating_expense") {
+            kind = "operating";
+            category = String(e.category || "Other");
           }
-          if (!data || data.length < pageSize) break;
-          offset += pageSize;
+          pointEvents.push({ dateYmd, category, amount: signed, kind });
         }
       } catch (err) {
         console.error("[expense-hub/spend-breakdown] ledger query failed", err);

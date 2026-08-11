@@ -59,6 +59,15 @@ Money KV hard-retired into `ledger.kv_money_backup_20260811`. Rides payment jour
 `ledger.financial_events` remain operational. New money still posts to `ledger.entries` via
 `shouldPostUnifiedLedger()` even with global dual-write OFF.
 
+**Business Finance follow-up (2026-08-11):** BF-linked readers (canonical-events,
+statement-summary, InDrive wallet, expense-hub spend-breakdown, driver period rebuild
+fare/tip/payout_cash load, toll missing-canonical health) now read **`ledger.entries`**
+directly with **no KV fallback**. Canonical metadata (`platform`, `driverId`,
+`direction`, …) was backfilled from `ledger.kv_money_backup_20260811` via
+`20260811150000_backfill_ledger_entry_canonical_metadata.sql`. Keep
+`LEDGER_READ_UNIFIED_FLEET=1` ON in production for remaining non-BF fleet routes that
+still gate on the flag (e.g. generic `GET /ledger`).
+
 | Flag | Production |
 |---|---|
 | `LEDGER_READ_UNIFIED_*=1` | ON — product money screens read unified |

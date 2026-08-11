@@ -4055,35 +4055,51 @@ app.get("/make-server-37f42386/ledger", requireAuth({ requireOrg: true }), async
       try {
         const { isLedgerReadUnifiedFleetEnabled } = await import("../_shared/unifiedLedger/flags.ts");
         if (isLedgerReadUnifiedFleetEnabled()) {
-          const { listUnifiedLedgerEntries } = await import("../_shared/unifiedLedger/queries.ts");
-          const { entries: uEntries, total: uTotal } = await listUnifiedLedgerEntries({
+          const {
+            listUnifiedLedgerEntries,
+            mapUnifiedEntryToCanonicalEvent,
+            listAllUnifiedCanonicalEvents,
+            filterCanonicalEventsByPlatform,
+          } = await import("../_shared/unifiedLedger/queries.ts");
+          const types = eventTypesParam
+            ? String(eventTypesParam).split(",").map((s) => s.trim()).filter(Boolean)
+            : eventType
+              ? [eventType]
+              : undefined;
+          const primaryDriver = driverId || (driverIdsParam ? String(driverIdsParam).split(",")[0]?.trim() : undefined);
+
+          let mapped = await listAllUnifiedCanonicalEvents({
             products: ["roam_driver", "roam_fleet"],
-            sourceSystem: "kv_ledger_event",
+            entryTypes: types,
+            driverId: primaryDriver,
             from: startDate ? `${startDate}T00:00:00.000Z` : undefined,
             to: endDate ? `${endDate}T23:59:59.999Z` : undefined,
-            limit,
-            offset,
+            maxRows: 25_000,
           });
-          const mapped = uEntries.map((e) => ({
-            id: e.id,
-            eventType: e.entry_type,
-            netAmount: Number(e.amount_minor ?? 0) / 100,
-            currency: e.currency ?? "JMD",
-            date: String(e.effective_at ?? "").slice(0, 10),
-            sourceType: e.reference_type,
-            sourceId: e.reference_id,
-            organizationId: e.organization_id,
-            metadata: e.metadata,
-            direction: "inflow",
-            eventKind: "canonical",
-            schemaVersion: 1,
-          }));
+          if (platform) {
+            mapped = filterCanonicalEventsByPlatform(mapped, platform);
+          }
+          if (direction) {
+            mapped = mapped.filter((e) => String(e.direction || "") === direction);
+          }
+          mapped = filterByOrg(mapped, c);
+          mapped.forEach((e: any) => {
+            if (e.platform === "GoRide") e.platform = "Roam";
+          });
+          if (minAmount !== undefined) {
+            mapped = mapped.filter((e: any) => Math.abs(Number(e.netAmount) || 0) >= minAmount!);
+          }
+          if (maxAmount !== undefined) {
+            mapped = mapped.filter((e: any) => Math.abs(Number(e.netAmount) || 0) <= maxAmount!);
+          }
+          const filteredTotal = mapped.length;
+          const pageRows = mapped.slice(offset, offset + limit);
           return c.json({
-            data: mapped,
-            total: uTotal,
+            data: pageRows,
+            total: filteredTotal,
             page: Math.floor(offset / limit) + 1,
             limit,
-            hasMore: (offset + limit) < uTotal,
+            hasMore: offset + limit < filteredTotal,
             meta: { source: "ledger.entries" as const },
           });
         }
@@ -4126,35 +4142,38 @@ app.get("/make-server-37f42386/ledger", requireAuth({ requireOrg: true }), async
     try {
       const { isLedgerReadUnifiedFleetEnabled } = await import("../_shared/unifiedLedger/flags.ts");
       if (isLedgerReadUnifiedFleetEnabled()) {
-        const { listUnifiedLedgerEntries } = await import("../_shared/unifiedLedger/queries.ts");
-        const { entries: uEntries, total: uTotal } = await listUnifiedLedgerEntries({
+        const {
+          listAllUnifiedCanonicalEvents,
+          filterCanonicalEventsByPlatform,
+        } = await import("../_shared/unifiedLedger/queries.ts");
+        const types = eventTypesParam
+          ? String(eventTypesParam).split(",").map((s) => s.trim()).filter(Boolean)
+          : eventType
+            ? [eventType]
+            : undefined;
+        const primaryDriver = driverId || (driverIdsParam ? String(driverIdsParam).split(",")[0]?.trim() : undefined);
+        let mapped = await listAllUnifiedCanonicalEvents({
           products: ["roam_driver", "roam_fleet"],
-          sourceSystem: "kv_ledger_event",
+          entryTypes: types,
+          driverId: primaryDriver,
           from: startDate ? `${startDate}T00:00:00.000Z` : undefined,
           to: endDate ? `${endDate}T23:59:59.999Z` : undefined,
-          limit,
-          offset,
+          maxRows: Math.min(Math.max(offset + limit, 500), 50_000),
         });
-        const mapped = uEntries.map((e) => ({
-          id: e.id,
-          eventType: e.entry_type,
-          netAmount: Number(e.amount_minor ?? 0) / 100,
-          currency: e.currency ?? "JMD",
-          date: String(e.effective_at ?? "").slice(0, 10),
-          sourceType: e.reference_type,
-          sourceId: e.reference_id,
-          organizationId: e.organization_id,
-          metadata: e.metadata,
-          direction: "inflow",
-          eventKind: "canonical",
-          schemaVersion: 1,
-        }));
+        if (platform) mapped = filterCanonicalEventsByPlatform(mapped, platform);
+        if (direction) mapped = mapped.filter((e) => String(e.direction || "") === direction);
+        mapped = filterByOrg(mapped, c);
+        mapped.forEach((e: any) => {
+          if (e.platform === "GoRide") e.platform = "Roam";
+        });
+        const uTotal = mapped.length;
+        const pageRows = mapped.slice(offset, offset + limit);
         return c.json({
-          data: mapped,
+          data: pageRows,
           total: uTotal,
           page: Math.floor(offset / limit) + 1,
           limit,
-          hasMore: (offset + limit) < uTotal,
+          hasMore: offset + limit < uTotal,
           meta: { source: "ledger.entries" as const },
         });
       }
@@ -4745,8 +4764,8 @@ function applyStatementSummaryDriverFilter<
 }
 
 // ─── GET /ledger/statement-summary — Universal Statement Summary per platform ──
-// All platforms (Uber, Roam, InDrive) now use unified logic: fare_earning, tip, promotion, toll_charge events
-// Uber also uses payout_cash/payout_bank for actual cash/bank totals from org import
+// All platforms (Uber, Roam, InDrive): fare_earning, tip, promotion, toll_* from ledger.entries.
+// Uber also uses payout_cash/payout_bank for actual cash/bank totals from org import.
 app.get("/make-server-37f42386/ledger/statement-summary", requireAuth(), async (c) => {
   try {
     const platform = c.req.query("platform"); // Uber, Roam, InDrive, or 'all'
@@ -4763,110 +4782,65 @@ app.get("/make-server-37f42386/ledger/statement-summary", requireAuth(), async (
         ? await expandStatementSummaryDriverIds(driverIdParam)
         : [];
 
-    const orgId = getOrgId(c);
-    const platforms = platform === 'all' || !platform 
-      ? ['Uber', 'Roam', 'InDrive'] 
-      : [platform];
+    const platforms =
+      platform === "all" || !platform ? ["Uber", "Roam", "InDrive"] : [platform];
+
+    const {
+      listAllUnifiedCanonicalEvents,
+      filterCanonicalEventsByPlatform,
+      dedupeOrgBankCanonicalEvents,
+    } = await import("../_shared/unifiedLedger/queries.ts");
+
+    const statementTypes = [
+      "fare_earning",
+      "tip",
+      "promotion",
+      "toll_charge",
+      "toll_refund",
+      "toll_support_adjustment",
+      "prior_period_adjustment",
+      "payout_cash",
+      "payout_bank",
+      "statement_line",
+    ];
+    const all = dedupeOrgBankCanonicalEvents(
+      await listAllUnifiedCanonicalEvents({
+        products: ["roam_driver", "roam_fleet"],
+        entryTypes: statementTypes,
+        maxRows: 100_000,
+      }),
+    );
+    const scoped = filterByOrg(all, c).filter((e) => {
+      if (driverIdVariants.length === 0) return true;
+      const did = String(e.driverId || "");
+      return driverIdVariants.some((v) => v === did || v.toLowerCase() === did.toLowerCase());
+    });
 
     const summaries: any[] = [];
-
     for (const plat of platforms) {
-      // Unified platform filter
-      const platformFilter = plat === 'Roam' 
-        ? 'value->>platform.eq.Roam,value->>platform.eq.GoRide'
-        : `value->>platform.eq.${plat}`;
-
-      // Query fare_earning, tip, promotion, toll_*, prior_period_adjustment for all platforms.
-      // Uber: split trip-dated rows vs statement/payout/promotion rows. The latter used to use
-      // `date` = org periodStart (before trip dates), so a calendar-week filter dropped promotions.
-      // Import events still carry periodStart/periodEnd — second query includes period overlap with [startDate,endDate].
-      const eventTypesNonUber =
-        'value->>eventType.eq.fare_earning,value->>eventType.eq.tip,value->>eventType.eq.promotion,value->>eventType.eq.toll_charge,value->>eventType.eq.toll_refund,value->>eventType.eq.toll_support_adjustment,value->>eventType.eq.prior_period_adjustment';
-      const uberTripEventTypes =
-        'value->>eventType.eq.fare_earning,value->>eventType.eq.tip,value->>eventType.eq.toll_charge,value->>eventType.eq.toll_refund,value->>eventType.eq.toll_support_adjustment,value->>eventType.eq.prior_period_adjustment';
-      const uberImportEventTypes =
-        'value->>eventType.eq.promotion,value->>eventType.eq.payout_cash,value->>eventType.eq.payout_bank,value->>eventType.eq.statement_line';
-
-      let data: { value: unknown }[] | null = null;
-      let error: { message: string } | null = null;
-
-      if (plat === 'Uber') {
-        const buildBase = (eventTypes: string) => {
-          let q = supabase
-            .from("kv_store_37f42386")
-            .select("value")
-            .like("key", CANONICAL_LEDGER_KEY_LIKE)
-            .or(eventTypes)
-            .or(platformFilter);
-          // Match `filterByOrg` + trips/search: include legacy rows with no organizationId. A strict `.eq(org)`
-          // alone drops idempotent `import_batch` promotion rows first inserted without stampOrg, while newer
-          // `fare_earning` rows (new idempotency keys) have orgId — promotions then sum to $0.
-          if (orgId) {
-            q = q.or(`value->>organizationId.eq.${orgId},value->>organizationId.is.null`);
-          }
-          q = applyStatementSummaryDriverFilter(q, driverIdVariants);
-          return q;
-        };
-
-        const qTrip = buildBase(uberTripEventTypes)
-          .gte("value->>date", startDate)
-          .lte("value->>date", endDate)
-          .limit(10000);
-        const dateOrPeriodOverlap = `and(value->>date.gte.${startDate},value->>date.lte.${endDate}),and(value->>periodStart.lte.${endDate},value->>periodEnd.gte.${startDate})`;
-        const qImport = buildBase(uberImportEventTypes).or(dateOrPeriodOverlap).limit(10000);
-
-        const [rTrip, rImport] = await Promise.all([qTrip, qImport]);
-        error = rTrip.error || rImport.error;
-        if (error) throw error;
-
-        const merged = new Map<string, unknown>();
-        for (const row of [...(rTrip.data || []), ...(rImport.data || [])]) {
-          const v = (row as { value?: Record<string, unknown> }).value;
-          if (!v || typeof v !== "object") continue;
-          const id =
-            typeof v.idempotencyKey === "string" && v.idempotencyKey
-              ? v.idempotencyKey
-              : typeof v.id === "string"
-                ? v.id
-                : "";
-          const sig =
-            id ||
-            `${String(v.eventType)}|${String(v.date)}|${String(v.driverId)}|${String(v.netAmount)}`;
-          if (!merged.has(sig)) merged.set(sig, v);
+      const raw = filterCanonicalEventsByPlatform(scoped, plat);
+      const uberImportTypes = new Set(["promotion", "payout_cash", "payout_bank", "statement_line"]);
+      const entries = raw.filter((e: any) => {
+        const t = String(e.eventType || "");
+        const d = String(e.date || "").slice(0, 10);
+        const ps = String(e.periodStart || "").slice(0, 10);
+        const pe = String(e.periodEnd || "").slice(0, 10);
+        const inDate = !!(d && d >= startDate && d <= endDate);
+        if (plat === "Uber" && uberImportTypes.has(t)) {
+          const periodOverlap = !!(ps && pe && ps <= endDate && pe >= startDate);
+          return inDate || periodOverlap;
         }
-        data = [...merged.values()].map((value) => ({ value }));
-      } else {
-        let query = supabase
-          .from("kv_store_37f42386")
-          .select("value")
-          .like("key", CANONICAL_LEDGER_KEY_LIKE)
-          .or(eventTypesNonUber)
-          .or(platformFilter)
-          .gte("value->>date", startDate)
-          .lte("value->>date", endDate);
+        return inDate;
+      });
 
-        if (orgId) {
-          query = query.or(`value->>organizationId.eq.${orgId},value->>organizationId.is.null`);
-        }
-        query = applyStatementSummaryDriverFilter(query, driverIdVariants);
-
-        const res = await query.limit(10000);
-        data = res.data;
-        error = res.error;
-        if (error) throw error;
-      }
-
-      // Filter to only the requested platform
-      const entries = filterByOrg((data || []).map((d: any) => d.value).filter(Boolean), c)
-        .filter((e: any) => {
-          const ePlat = e.platform === 'GoRide' ? 'Roam' : e.platform;
-          return ePlat === plat;
-        });
-
-      let netFare = 0, promotions = 0, tips = 0;
-      let tolls = 0, tollAdjustments = 0;
+      let netFare = 0,
+        promotions = 0,
+        tips = 0;
+      let tolls = 0,
+        tollAdjustments = 0;
       let periodAdjustments = 0;
-      let cashCollected = 0, bankTransfer = 0;
+      let cashCollected = 0,
+        bankTransfer = 0;
       let tripCount = 0;
       let hasPayoutEvents = false;
 
@@ -4875,74 +4849,60 @@ app.get("/make-server-37f42386/ledger/statement-summary", requireAuth(), async (
         const mag = Math.abs(net);
 
         switch (e.eventType) {
-          case 'fare_earning':
+          case "fare_earning":
             netFare += net;
             tripCount++;
-            if (e.paymentMethod === 'Cash') {
-              const cashAmt = e.metadata?.cashCollected != null 
-                ? Number(e.metadata.cashCollected) 
-                : mag;
+            if (e.paymentMethod === "Cash") {
+              const cashAmt =
+                e.metadata?.cashCollected != null ? Number(e.metadata.cashCollected) : mag;
               cashCollected += cashAmt;
             }
             break;
-          case 'tip':
+          case "tip":
             tips += net;
             break;
-          case 'promotion':
+          case "promotion":
             promotions += net;
             break;
-          case 'toll_charge':
+          case "toll_charge":
             tolls += mag;
             break;
-          case 'toll_refund':
+          case "toll_refund":
             tollAdjustments += mag;
             break;
-          case 'toll_support_adjustment':
-            // Toll support adjustments reduce toll expense (credits)
+          case "toll_support_adjustment":
             tollAdjustments += mag;
             break;
-          case 'prior_period_adjustment':
-            // Adjustments from previous periods (can be positive or negative)
+          case "prior_period_adjustment":
             periodAdjustments += net;
             break;
-          case 'payout_cash':
-            // Uber: use actual payout_cash for cash collected
+          case "payout_cash":
             cashCollected = mag;
             hasPayoutEvents = true;
             break;
-          case 'payout_bank':
-            // Uber: use actual payout_bank for bank transfer
+          case "payout_bank":
             bankTransfer = mag;
             hasPayoutEvents = true;
             break;
-          case 'statement_line':
-            // REFUNDS_TOLL (org CSV) — Roam/InDrive: add as toll-side credit. Uber: skip here; that line
-            // often equals full "Refunds & Expenses" while trip toll_charge already sums the toll bucket,
-            // and toll_support_adjustment carries dispute/support credits (import preview splits the same way).
-            if (e.metadata?.lineCode === 'REFUNDS_TOLL' && plat !== 'Uber') {
+          case "statement_line":
+            if (e.metadata?.lineCode === "REFUNDS_TOLL" && plat !== "Uber") {
               tollAdjustments += mag;
             }
             break;
         }
       }
 
-      // Uber: fare_earning = CSV fare components (includes promotions in the fare bucket). Promotions are
-      // import_batch rows from payments_driver. Net Fare = Σ fare_earning − Σ promotion.
-      // Other platforms: Net Fare = Σ fare_earning (promotions only if present as separate events).
-      const computedNetFare =
-        plat === 'Uber' ? netFare - promotions : netFare;
+      const computedNetFare = plat === "Uber" ? netFare - promotions : netFare;
       const totalEarnings = computedNetFare + promotions + tips;
-      
-      // For platforms without payout events, compute bank transfer
       if (!hasPayoutEvents) {
         bankTransfer = Math.max(0, totalEarnings - tolls - cashCollected);
       }
 
-      const summary = {
+      summaries.push({
         platform: plat,
         periodStart: startDate,
         periodEnd: endDate,
-        sourceType: 'computed',
+        sourceType: "computed",
         netFare: Number(computedNetFare.toFixed(2)),
         promotions: Number(promotions.toFixed(2)),
         tips: Number(tips.toFixed(2)),
@@ -4955,9 +4915,7 @@ app.get("/make-server-37f42386/ledger/statement-summary", requireAuth(), async (
         bankTransfer: Number(bankTransfer.toFixed(2)),
         totalPayout: Number((cashCollected + bankTransfer).toFixed(2)),
         tripCount,
-      };
-
-      summaries.push(summary);
+      });
     }
 
     return c.json({
@@ -4965,10 +4923,11 @@ app.get("/make-server-37f42386/ledger/statement-summary", requireAuth(), async (
       summaries,
       periodStart: startDate,
       periodEnd: endDate,
+      meta: { source: "ledger.entries" as const },
     });
   } catch (e: any) {
-    console.error(`[Statement Summary] Error: ${e.message}`);
-    return c.json({ error: `Statement summary failed: ${e.message}` }, 500);
+    console.error("[Statement Summary] Error: " + (e.message || e));
+    return c.json({ error: "Statement summary failed: " + (e.message || e) }, 500);
   }
 });
 
@@ -5390,7 +5349,7 @@ app.get("/make-server-37f42386/ledger/diagnostic-trip-ledger-gap", requireAuth()
 
 // ─── GET /ledger/driver-indrive-wallet — Period loads, fees, lifetime loads ──
 // Query: driverId, startDate, endDate (YYYY-MM-DD). Same multi-ID driver resolution as driver-overview.
-// Loads + fees both from canonical `ledger_event:*` (wallet_credit / InDrive platform_fee|fare gap).
+// Loads + fees from unified ledger.entries when LEDGER_READ_UNIFIED_FLEET=1 (else legacy ledger_event:*).
 // estimatedBalance = lifetimeLoads − lifetimeInDriveFees (fleet estimate only).
 // Read access: transactions.view. transaction:* "InDrive Wallet Credit" is write-path only.
 app.get(
@@ -5419,42 +5378,28 @@ app.get(
       console.warn(`[IndriveWallet] Could not look up driver ${driverId}:`, lookupErr);
     }
 
-    const driverIdOrFilter =
-      allDriverIds.length === 1
-        ? null
-        : allDriverIds.map((id) => `value->>driverId.eq.${id}`).join(",");
+    let ledgerVals: Record<string, unknown>[] = [];
+    let source: "ledger.entries" = "ledger.entries";
 
-    const orgId = getOrgId(c);
+    {
+      const { listAllUnifiedCanonicalEvents } = await import("../_shared/unifiedLedger/queries.ts");
+      // Primary Roam UUID is what dual-write account keys use.
+      const unified = await listAllUnifiedCanonicalEvents({
+        driverId,
+        products: ["roam_driver", "roam_fleet"],
+        maxRows: 50_000,
+      });
+      // Also include alias-id matches that may live in metadata.driverId only.
+      const aliasSet = new Set(allDriverIds.map((id) => String(id).toLowerCase()));
+      ledgerVals = filterByOrg(
+        unified.filter((e) => {
+          const did = String(e.driverId || "").toLowerCase();
+          return !did || aliasSet.has(did) || did === String(driverId).toLowerCase();
+        }),
+        c,
+      );
+    }
 
-    const PAGE = 1000;
-    const MAX_ROWS = 50000;
-    const paginatedFetch = async (buildQuery: () => any): Promise<any[]> => {
-      let all: any[] = [];
-      let offset = 0;
-      while (offset < MAX_ROWS) {
-        const { data, error } = await buildQuery().range(offset, offset + PAGE - 1);
-        if (error) throw error;
-        const page = data || [];
-        all = all.concat(page);
-        if (page.length < PAGE) break;
-        offset += PAGE;
-      }
-      return all;
-    };
-
-    const ledgerBaseQuery = () => {
-      // Driver-scoped fetch; filterByOrg keeps null-org legacy wallet_credit rows.
-      // Do not chain .or(org) + .or(drivers) — PostgREST overwrites the or= param.
-      let q = supabase.from("kv_store_37f42386").select("value").like("key", CANONICAL_LEDGER_KEY_LIKE);
-      if (driverIdOrFilter) q = q.or(driverIdOrFilter);
-      else q = q.eq("value->>driverId", driverId);
-      return q;
-    };
-
-    const ledgerVals = filterByOrg(
-      (await paginatedFetch(() => ledgerBaseQuery())).map((r: any) => r.value).filter(Boolean),
-      c,
-    );
     const { periodLoads, lifetimeLoads } = computeIndriveWalletLoadsFromLedgerEntries(
       ledgerVals,
       startDate,
@@ -5474,12 +5419,12 @@ app.get(
     };
 
     console.log(
-      `[IndriveWallet] source=canonical driverId=${driverId} range=${startDate}..${endDate} periodLoads=${data.periodLoads} periodFees=${data.periodFees} lifetimeLoads=${data.lifetimeLoads} estimatedBalance=${data.estimatedBalance} ledgerVals=${ledgerVals.length} ${Date.now() - t0}ms`,
+      `[IndriveWallet] source=${source} driverId=${driverId} range=${startDate}..${endDate} periodLoads=${data.periodLoads} periodFees=${data.periodFees} lifetimeLoads=${data.lifetimeLoads} estimatedBalance=${data.estimatedBalance} ledgerVals=${ledgerVals.length} ${Date.now() - t0}ms`,
     );
 
     return c.json({
       success: true,
-      meta: { source: "canonical", durationMs: Date.now() - t0 },
+      meta: { source, durationMs: Date.now() - t0 },
       data,
     });
   } catch (e: any) {
@@ -5489,7 +5434,7 @@ app.get(
 });
 
 // ─── GET /ledger/indrive-wallet/fleet — Fleet-wide wallet summaries (replaces Wallet Center N+1) ──
-// Query: startDate, endDate (YYYY-MM-DD). Canonical wallet_credit + InDrive fees in one org scan.
+// Query: startDate, endDate (YYYY-MM-DD). Unified wallet_credit + InDrive fees when flag ON.
 app.get(
   "/make-server-37f42386/ledger/indrive-wallet/fleet",
   requireAuth(),
@@ -5528,18 +5473,18 @@ app.get(
     const driversRaw = (driverRows || []).map((r: any) => r.value).filter(Boolean);
     const drivers = await filterByOrgSafe(driversRaw, c, { endpoint: "/ledger/indrive-wallet/fleet" });
 
-    const ledgerRows = await paginatedFetch(() => {
-      let q = supabase.from("kv_store_37f42386").select("value").like("key", CANONICAL_LEDGER_KEY_LIKE);
-      // Include null-org legacy wallet_credit / fee rows; filterByOrg keeps them for this org.
-      if (orgId) {
-        q = q.or(`value->>organizationId.eq.${orgId},value->>organizationId.is.null`);
-      }
-      return q;
-    });
-    const ledgerVals = filterByOrg(
-      (ledgerRows || []).map((r: any) => r.value).filter(Boolean),
-      c,
-    );
+    let ledgerVals: Record<string, unknown>[] = [];
+    let source: "ledger.entries" = "ledger.entries";
+
+    {
+      const { listAllUnifiedCanonicalEvents } = await import("../_shared/unifiedLedger/queries.ts");
+      const unified = await listAllUnifiedCanonicalEvents({
+        products: ["roam_driver", "roam_fleet"],
+        // Lifetime wallet/fee math needs full history (not just the request window).
+        maxRows: 100_000,
+      });
+      ledgerVals = filterByOrg(unified, c);
+    }
 
     const driverIdRecords = (drivers || [])
       .map((d: any) => ({
@@ -5557,12 +5502,12 @@ app.get(
     );
 
     console.log(
-      `[IndriveWalletFleet] source=canonical range=${startDate}..${endDate} drivers=${driverSummaries.length} short=${totals.shortDriverCount} periodLoads=${totals.periodLoads} ledgerVals=${ledgerVals.length} ${Date.now() - t0}ms`,
+      `[IndriveWalletFleet] source=${source} range=${startDate}..${endDate} drivers=${driverSummaries.length} short=${totals.shortDriverCount} periodLoads=${totals.periodLoads} ledgerVals=${ledgerVals.length} ${Date.now() - t0}ms`,
     );
 
     return c.json({
       success: true,
-      meta: { source: "canonical", durationMs: Date.now() - t0 },
+      meta: { source, durationMs: Date.now() - t0 },
       totals,
       drivers: driverSummaries,
     });
@@ -5617,7 +5562,7 @@ app.post(
 );
 
 // ─── GET /ledger/canonical-events — List canonical events (org-scoped) ────────────────
-// Phase E: money KV retired — primary read is ledger.entries when LEDGER_READ_UNIFIED_FLEET=1.
+// BF SSOT: ledger.entries (Phase E retired live ledger_event:* KV — no KV fallback).
 app.get("/make-server-37f42386/ledger/canonical-events", requireAuth(), async (c) => {
   try {
     const driverId = c.req.query("driverId");
@@ -5636,103 +5581,36 @@ app.get("/make-server-37f42386/ledger/canonical-events", requireAuth(), async (c
           .filter(Boolean)
       : [];
 
-    // Unified ledger is SSOT after Phase E hard-retire of ledger_event:* KV.
-    try {
-      const { isLedgerReadUnifiedFleetEnabled } = await import("../_shared/unifiedLedger/flags.ts");
-      if (isLedgerReadUnifiedFleetEnabled()) {
-        const {
-          listUnifiedLedgerEntries,
-          mapUnifiedEntryToCanonicalEvent,
-          dedupeOrgBankCanonicalEvents,
-        } = await import("../_shared/unifiedLedger/queries.ts");
+    const {
+      listAllUnifiedCanonicalEvents,
+      dedupeOrgBankCanonicalEvents,
+    } = await import("../_shared/unifiedLedger/queries.ts");
 
-        // Multi-id driver filter still needs KV-shaped expansion; take first id for account lookup.
-        const primaryDriverId = driverId
-          ? String(driverId)
-              .split(",")
-              .map((s) => s.trim())
-              .filter(Boolean)[0]
-          : undefined;
+    const primaryDriverId = driverId
+      ? String(driverId)
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)[0]
+      : undefined;
 
-        const { entries: uEntries, total: uTotal } = await listUnifiedLedgerEntries({
-          products: ["roam_driver", "roam_fleet"],
-          entryTypes: eventTypes.length > 0 ? eventTypes : undefined,
-          driverId: primaryDriverId,
-          from: startDate ? `${startDate}T00:00:00.000Z` : undefined,
-          to: endDate ? `${endDate}T23:59:59.999Z` : undefined,
-          // Fetch a wider page then dedupe org bank wires so Expected is not doubled.
-          limit: Math.min(limit + 50, 500),
-          offset,
-        });
-        const mapped = dedupeOrgBankCanonicalEvents(
-          uEntries.map((e) => mapUnifiedEntryToCanonicalEvent(e)),
-        ).slice(0, limit);
-        const filtered = filterByOrg(mapped, c);
-        return c.json({
-          data: filtered,
-          page: Math.floor(offset / limit) + 1,
-          limit,
-          hasMore: offset + limit < uTotal,
-          meta: { source: "ledger.entries" as const },
-        });
-      }
-    } catch (feErr) {
-      console.error("[CanonicalLedger GET] unified read failed, falling back to KV:", feErr);
-    }
-
-    let query = supabase
-      .from("kv_store_37f42386")
-      .select("key, value")
-      .like("key", "ledger_event:%");
-
-    if (driverId) {
-      const ids = String(driverId)
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
-      if (ids.length === 1) {
-        const only = ids[0];
-        const lc = only.toLowerCase();
-        if (lc !== only) {
-          query = query.or(`value->>driverId.eq.${only},value->>driverId.eq.${lc}`);
-        } else {
-          query = query.eq("value->>driverId", only);
-        }
-      } else if (ids.length > 1) {
-        const expanded = new Set<string>();
-        for (const id of ids) {
-          expanded.add(id);
-          expanded.add(id.toLowerCase());
-        }
-        query = query.or([...expanded].map((id) => `value->>driverId.eq.${id}`).join(","));
-      }
-    }
-    if (eventTypes.length === 1) {
-      query = query.eq("value->>eventType", eventTypes[0]);
-    } else if (eventTypes.length > 1) {
-      query = query.or(eventTypes.map((t) => `value->>eventType.eq.${t}`).join(","));
-    }
-    if (startDate) query = query.gte("value->>date", startDate);
-    if (endDate) query = query.lte("value->>date", endDate);
-
-    query = query
-      .order("value->>date", { ascending: false })
-      .range(offset, offset + limit - 1);
-
-    const { data, error } = await query;
-    if (error) throw error;
-
-    const rows = (data || []).map((d: any) => ({
-      key: d.key,
-      ...(d.value || {}),
-    }));
-    const filtered = filterByOrg(rows, c);
+    const all = dedupeOrgBankCanonicalEvents(
+      await listAllUnifiedCanonicalEvents({
+        products: ["roam_driver", "roam_fleet"],
+        entryTypes: eventTypes.length > 0 ? eventTypes : undefined,
+        driverId: primaryDriverId,
+        from: startDate ? `${startDate}T00:00:00.000Z` : undefined,
+        to: endDate ? `${endDate}T23:59:59.999Z` : undefined,
+        maxRows: Math.min(Math.max(offset + limit + 200, 1000), 50_000),
+      }),
+    );
+    const filtered = filterByOrg(all, c);
+    const pageRows = filtered.slice(offset, offset + limit);
     return c.json({
-      data: filtered,
+      data: pageRows,
       page: Math.floor(offset / limit) + 1,
       limit,
-      hasMore: (data || []).length === limit,
-      meta: { source: "kv" as const },
+      hasMore: offset + limit < filtered.length,
+      meta: { source: "ledger.entries" as const },
     });
   } catch (e: any) {
     console.log(`[CanonicalLedger GET] Error: ${e.message}`);

@@ -176,30 +176,28 @@ async function resolveDriverAliasIds(driverId: string): Promise<string[]> {
   return Array.from(ids);
 }
 
-/** Paginate ledger_event:* for driver alias IDs (fare/tip/payout_cash). */
+/** Load fare/tip/payout_cash for driver alias IDs from unified ledger.entries (BF SSOT). */
 async function loadLedgerEventsForDriverIds(driverIds: string[]): Promise<any[]> {
   if (!driverIds.length) return [];
-  const PAGE = 1000;
-  const MAX_ROWS = 40000;
-  const all: any[] = [];
-  let offset = 0;
-  const orFilter =
-    driverIds.length === 1 ? null : driverIds.map((id) => `value->>driverId.eq.${id}`).join(",");
-  while (offset < MAX_ROWS) {
-    let q = sb().from("kv_store_37f42386").select("value").like("key", "ledger_event:%");
-    if (orFilter) q = q.or(orFilter);
-    else q = q.eq("value->>driverId", driverIds[0]);
-    const { data, error } = await q.range(offset, offset + PAGE - 1);
-    if (error) {
-      console.error("[DriverFinancialPeriods] ledger_event load:", error.message);
-      break;
+  const { listAllUnifiedCanonicalEvents } = await import("../_shared/unifiedLedger/queries.ts");
+  const aliasSet = new Set(driverIds.map((id) => String(id)));
+  const merged = new Map<string, Record<string, unknown>>();
+  // Dual-write may key accounts by Roam or platform external UUID — resolve each alias.
+  for (const id of driverIds) {
+    const chunk = await listAllUnifiedCanonicalEvents({
+      driverId: id,
+      products: ["roam_driver", "roam_fleet"],
+      entryTypes: ["fare_earning", "tip", "payout_cash", "promotion", "prior_period_adjustment"],
+      maxRows: 40_000,
+    });
+    for (const e of chunk) {
+      const did = String(e.driverId || "");
+      if (did && !aliasSet.has(did) && did !== String(id)) continue;
+      const key = String(e.id || (String(e.eventType) + "|" + String(e.date) + "|" + String(e.driverId) + "|" + String(e.netAmount)));
+      merged.set(key, e);
     }
-    const page = data || [];
-    all.push(...page.map((d: any) => d.value).filter(Boolean));
-    if (page.length < PAGE) break;
-    offset += PAGE;
   }
-  return all;
+  return [...merged.values()];
 }
 
 async function loadRebuildContext(driverId: string): Promise<RebuildContext> {

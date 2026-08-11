@@ -9,14 +9,15 @@ for the two areas already covered in depth.
 
 ## The mechanism, in one paragraph
 
-Business Finance (`fetchBusinessFinanceBundle.ts`) reads exactly one feed:
-canonical `ledger_event:*` records, fetched with no event-type filter for the
-whole period, then netted by domain-specific pure functions
+Business Finance (`fetchBusinessFinanceBundle.ts`) reads its money feed through
+`GET /ledger/canonical-events`, which is now backed by **`ledger.entries`**
+(unified double-entry), not live `ledger_event:*` KV. Events are mapped to the
+same DTO shape BF already nets via
 (`tollFleetLossNetting.ts`, `fuelFleetLossNetting.ts`) into the P&L, Expenses,
-and Cash & Bank tabs. **If a dollar never becomes a `ledger_event:*` row, it
-does not exist to Business Finance — no matter how real, approved, or paid it
-is elsewhere in the app.** Only a short allow-list of write sites currently
-produce those rows: trip imports (fares/tips/platform fees), Toll
+and Cash & Bank tabs. **If a dollar never lands in `ledger.entries` (via
+dual-write / post_entry), it does not exist to Business Finance — no matter how
+real, approved, or paid it is elsewhere in the app.** Only a short allow-list of
+write sites currently produce those rows: trip imports (fares/tips/platform fees), Toll
 Reconciliation, Fuel entries + Consumption Reconciliation finalize, and
 InDrive wallet top-ups. Everything below is graded against that one rule.
 

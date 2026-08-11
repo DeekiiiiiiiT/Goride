@@ -90,8 +90,76 @@ async function sha256Hex(text: string): Promise<string> {
 /** Fetch a canonical ledger event by its idempotencyKey, or null if none exists. */
 export async function getCanonicalEventByIdemKey(idempotencyKey: string): Promise<Record<string, unknown> | null> {
   const pointer = (await kv.get(`ledger_event_idem:${await sha256Hex(idempotencyKey)}`)) as { id?: string } | null;
-  if (!pointer?.id) return null;
-  return (await kv.get(`ledger_event:${pointer.id}`)) as Record<string, unknown> | null;
+  if (pointer?.id) {
+    const body = (await kv.get(`ledger_event:${pointer.id}`)) as Record<string, unknown> | null;
+    if (body) return body;
+  }
+
+  // Phase E: money KV may be empty — resolve via unified ledger dual-write keys.
+  try {
+    const { isLedgerReadUnifiedFleetEnabled } = await import("../_shared/unifiedLedger/flags.ts");
+    if (isLedgerReadUnifiedFleetEnabled()) {
+      const client = supabaseKv();
+      const unifiedKey = `kv_ledger_event:${idempotencyKey}`;
+      const { data: byIdem } = await client
+        .from("ledger_entries")
+        .select("id, entry_type, amount_minor, currency, effective_at, organization_id, metadata, reference_type, reference_id")
+        .eq("idempotency_key", unifiedKey)
+        .limit(1);
+      if (byIdem?.[0]) {
+        const e = byIdem[0] as Record<string, unknown>;
+        const meta = (e.metadata && typeof e.metadata === "object" ? e.metadata : {}) as Record<string, unknown>;
+        return {
+          id: e.id,
+          eventType: e.entry_type,
+          netAmount: Number(e.amount_minor ?? 0) / 100,
+          date: String(e.effective_at ?? "").slice(0, 10),
+          organizationId: e.organization_id,
+          sourceType: e.reference_type,
+          sourceId: e.reference_id,
+          metadata: meta,
+          driverId: meta.driverId,
+          platform: meta.platform,
+          direction: meta.direction || "inflow",
+          idempotencyKey,
+        };
+      }
+      const { data: byReceipt } = await client
+        .from("ledger_source_receipts")
+        .select("ledger_entry_id")
+        .eq("source_system", "kv_ledger_event")
+        .eq("source_idempotency_key", idempotencyKey)
+        .limit(1);
+      if (byReceipt?.[0]?.ledger_entry_id) {
+        const { data: entr } = await client
+          .from("ledger_entries")
+          .select("id, entry_type, amount_minor, currency, effective_at, organization_id, metadata, reference_type, reference_id")
+          .eq("id", byReceipt[0].ledger_entry_id)
+          .limit(1);
+        if (entr?.[0]) {
+          const e = entr[0] as Record<string, unknown>;
+          const meta = (e.metadata && typeof e.metadata === "object" ? e.metadata : {}) as Record<string, unknown>;
+          return {
+            id: e.id,
+            eventType: e.entry_type,
+            netAmount: Number(e.amount_minor ?? 0) / 100,
+            date: String(e.effective_at ?? "").slice(0, 10),
+            organizationId: e.organization_id,
+            sourceType: e.reference_type,
+            sourceId: e.reference_id,
+            metadata: meta,
+            driverId: meta.driverId,
+            platform: meta.platform,
+            direction: meta.direction || "inflow",
+            idempotencyKey,
+          };
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("[canonical] unified idem lookup failed:", err);
+  }
+  return null;
 }
 
 /**

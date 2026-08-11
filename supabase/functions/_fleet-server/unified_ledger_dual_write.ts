@@ -104,6 +104,31 @@ export async function fleetDualWriteCanonicalEvent(event: {
   // Product: roam_driver for driver earnings, roam_fleet for org-level
   const product = hasValidDriverId ? "roam_driver" : "roam_fleet";
 
+  // Stamp top-level canonical fields into metadata so unified reads keep platform/driver/direction.
+  const mergedMeta: Record<string, unknown> = {
+    ...(event.metadata ?? {}),
+  };
+  if (event.driverId) mergedMeta.driverId = event.driverId;
+  if ((event as { platform?: string }).platform) {
+    mergedMeta.platform = (event as { platform?: string }).platform;
+  }
+  if (event.direction) mergedMeta.direction = event.direction;
+  if ((event as { paymentMethod?: string }).paymentMethod) {
+    mergedMeta.paymentMethod = (event as { paymentMethod?: string }).paymentMethod;
+  }
+  if ((event as { periodStart?: string }).periodStart) {
+    mergedMeta.periodStart = (event as { periodStart?: string }).periodStart;
+  }
+  if ((event as { periodEnd?: string }).periodEnd) {
+    mergedMeta.periodEnd = (event as { periodEnd?: string }).periodEnd;
+  }
+  if ((event as { grossAmount?: number }).grossAmount != null) {
+    mergedMeta.grossAmount = (event as { grossAmount?: number }).grossAmount;
+  }
+  if ((event as { category?: string }).category) {
+    mergedMeta.category = (event as { category?: string }).category;
+  }
+
   const posted = await postEntry({
     p_idempotency_key: `kv_ledger_event:${event.idempotencyKey}`,
     p_entry_type: event.eventType,
@@ -116,7 +141,7 @@ export async function fleetDualWriteCanonicalEvent(event: {
     p_effective_at: event.date ? `${event.date}T12:00:00.000Z` : new Date().toISOString(),
     p_reference_type: event.sourceType,
     p_reference_id: event.sourceId,
-    p_metadata: event.metadata ?? {},
+    p_metadata: mergedMeta,
     p_source_system: "kv_ledger_event",
     p_source_id: event.id,
     p_source_idempotency_key: event.idempotencyKey,

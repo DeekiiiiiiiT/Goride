@@ -327,22 +327,55 @@ async function listEntriesForDriver(
 /** Map unified ledger.entries row → legacy canonical ledger_event DTO (Bank Deposits / Settlement). */
 export function mapUnifiedEntryToCanonicalEvent(
   e: Record<string, unknown>,
+  opts?: { debitAccountKey?: string; creditAccountKey?: string },
 ): Record<string, unknown> {
   const meta =
     e.metadata && typeof e.metadata === "object" && !Array.isArray(e.metadata)
-      ? (e.metadata as Record<string, unknown>)
+      ? { ...(e.metadata as Record<string, unknown>) }
       : {};
   const date = String(e.effective_at ?? "").slice(0, 10);
+
+  const driverFromAccounts =
+    parseDriverIdFromAccountKey(opts?.creditAccountKey) ||
+    parseDriverIdFromAccountKey(opts?.debitAccountKey) ||
+    undefined;
+
   const driverId =
-    typeof meta.driverId === "string" && meta.driverId
-      ? meta.driverId
-      : typeof e.driver_id === "string"
-        ? e.driver_id
-        : undefined;
+    (typeof meta.driverId === "string" && meta.driverId) ||
+    (typeof e.driver_id === "string" && e.driver_id) ||
+    driverFromAccounts ||
+    undefined;
+
+  const directionRaw = String(meta.direction || "").toLowerCase();
+  let direction: "inflow" | "outflow" | "neutral" =
+    directionRaw === "outflow" || directionRaw === "inflow" || directionRaw === "neutral"
+      ? (directionRaw as "inflow" | "outflow" | "neutral")
+      : "inflow";
+  // Infer direction from GL legs when metadata missing: driver credit = inflow.
+  if (!meta.direction && opts?.creditAccountKey && opts?.debitAccountKey) {
+    const creditDriver = parseDriverIdFromAccountKey(opts.creditAccountKey);
+    const debitDriver = parseDriverIdFromAccountKey(opts.debitAccountKey);
+    if (creditDriver && !debitDriver) direction = "inflow";
+    else if (debitDriver && !creditDriver) direction = "outflow";
+  }
+
+  const platform =
+    (typeof meta.platform === "string" && meta.platform) ||
+    (typeof e.platform === "string" && e.platform) ||
+    undefined;
+  const paymentMethod =
+    (typeof meta.paymentMethod === "string" && meta.paymentMethod) || undefined;
+  const grossAmount =
+    meta.grossAmount != null && Number.isFinite(Number(meta.grossAmount))
+      ? Number(meta.grossAmount)
+      : undefined;
+  const category = typeof meta.category === "string" ? meta.category : undefined;
+
   return {
     id: e.id,
     eventType: e.entry_type,
     netAmount: Number(e.amount_minor ?? 0) / 100,
+    grossAmount,
     currency: e.currency ?? "JMD",
     date,
     eventAt: e.effective_at,
@@ -353,11 +386,84 @@ export function mapUnifiedEntryToCanonicalEvent(
     sourceId: e.reference_id,
     organizationId: e.organization_id,
     driverId,
+    platform,
+    paymentMethod,
+    category,
     metadata: meta,
-    direction: "inflow",
+    direction,
     eventKind: "canonical",
     schemaVersion: 1,
   };
+}
+
+export function parseDriverIdFromAccountKey(accountKey: string | undefined | null): string | null {
+  if (!accountKey) return null;
+  const m = String(accountKey).match(/^user:([^:]+):driver(?::|$)/i);
+  return m?.[1] || null;
+}
+
+/**
+ * Page through unified ledger.entries and map to canonical event DTOs.
+ * Enriches driverId/direction from account keys when metadata is thin.
+ */
+export async function listAllUnifiedCanonicalEvents(opts: {
+  organizationId?: string;
+  products?: string[];
+  entryTypes?: string[];
+  driverId?: string;
+  from?: string;
+  to?: string;
+  /** Hard cap on rows scanned (default 50_000). */
+  maxRows?: number;
+}): Promise<Record<string, unknown>[]> {
+  const client = unifiedLedgerClient();
+  const pageSize = 500;
+  const maxRows = opts.maxRows ?? 50_000;
+  const out: Record<string, unknown>[] = [];
+  const accountKeyById = new Map<string, string>();
+
+  for (let offset = 0; offset < maxRows; offset += pageSize) {
+    const { entries, total } = await listUnifiedLedgerEntries({
+      organizationId: opts.organizationId,
+      products: opts.products ?? ["roam_driver", "roam_fleet"],
+      entryTypes: opts.entryTypes,
+      driverId: opts.driverId,
+      from: opts.from,
+      to: opts.to,
+      limit: pageSize,
+      offset,
+    });
+    if (entries.length === 0) break;
+
+    const needIds = new Set<string>();
+    for (const e of entries) {
+      const d = String(e.debit_account_id || "");
+      const c = String(e.credit_account_id || "");
+      if (d && !accountKeyById.has(d)) needIds.add(d);
+      if (c && !accountKeyById.has(c)) needIds.add(c);
+    }
+    if (needIds.size > 0) {
+      const { data: accts } = await client
+        .from("ledger_accounts")
+        .select("id, account_key")
+        .in("id", [...needIds]);
+      for (const a of accts || []) {
+        accountKeyById.set(String((a as { id: string }).id), String((a as { account_key: string }).account_key));
+      }
+    }
+
+    for (const e of entries) {
+      out.push(
+        mapUnifiedEntryToCanonicalEvent(e, {
+          debitAccountKey: accountKeyById.get(String(e.debit_account_id || "")),
+          creditAccountKey: accountKeyById.get(String(e.credit_account_id || "")),
+        }),
+      );
+    }
+    if (entries.length < pageSize || out.length >= total) break;
+  }
+
+  return out;
 }
 
 /**
@@ -399,4 +505,20 @@ export function dedupeOrgBankCanonicalEvents(
 
   out.push(...orgBest.values());
   return out;
+}
+
+/** Filter mapped canonical events by platform label (Uber/Roam/InDrive; GoRide→Roam). */
+export function filterCanonicalEventsByPlatform(
+  rows: Record<string, unknown>[],
+  platform: string,
+): Record<string, unknown>[] {
+  const want = String(platform || "").toLowerCase();
+  return rows.filter((e) => {
+    const raw = e.platform === "GoRide" ? "Roam" : e.platform;
+    const p = String(raw || "").toLowerCase();
+    if (want === "roam") return p === "roam" || p === "goride";
+    if (want === "indrive") return p.includes("indrive") || p.includes("in_drive");
+    if (want === "uber") return p.includes("uber");
+    return p === want;
+  });
 }

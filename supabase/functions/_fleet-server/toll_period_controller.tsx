@@ -290,29 +290,12 @@ function zeroFinancials(): PeriodFinancials {
 
 /** Load canonical events that drive Business Finance P&L Tolls / Net Toll Loss. */
 async function loadTollFleetLossLedgerEvents(): Promise<Record<string, unknown>[]> {
-  const supabase = getServiceClient();
-  const PAGE = 1000;
-  const out: Record<string, unknown>[] = [];
-  let offset = 0;
-  const typeOr = ["toll_charge", "toll_refund", "toll_charge_offset"]
-    .map((t) => `value->>eventType.eq.${t}`)
-    .join(",");
-  while (true) {
-    const { data, error } = await supabase
-      .from("kv_store_37f42386")
-      .select("value")
-      .like("key", "ledger_event:%")
-      .or(typeOr)
-      .range(offset, offset + PAGE - 1);
-    if (error) throw error;
-    const page = data || [];
-    for (const row of page) {
-      if (row?.value && typeof row.value === "object") out.push(row.value as Record<string, unknown>);
-    }
-    if (page.length < PAGE) break;
-    offset += PAGE;
-  }
-  return out;
+  const { listAllUnifiedCanonicalEvents } = await import("../_shared/unifiedLedger/queries.ts");
+  return await listAllUnifiedCanonicalEvents({
+    products: ["roam_driver", "roam_fleet"],
+    entryTypes: ["toll_charge", "toll_refund", "toll_charge_offset"],
+    maxRows: 100_000,
+  });
 }
 
 // ─── GET /toll-reconciliation/periods ───────────────────────────────────
