@@ -1,62 +1,21 @@
 /**
  * Single source of truth for Factory Reset KV prefixes.
- * When adding a new data type that uses kv.set(`prefix:…`), add it here.
- * Domains moved to fleet.* tables should keep prefixes until LEGACY_KV_WRITE_<DOMAIN>=0
- * and retire-fleet-kv-prefix has run; then remove the prefix and wipe the table instead.
+ * Fleet business domains were retired from KV (2026-08-11) → wipe FACTORY_RESET_FLEET_TABLES.
+ * Keep only still-active KV prefixes + strangler backups here.
  */
 export const FACTORY_RESET_PREFIXES = [
-  'trip:',
-  'batch:',
-  'driver:',
-  'driver_metric:',
-  'vehicle:',
-  'vehicle_metric:',
-  'transaction:',
-  'fuel_entry:',
-  'fuel_card:',
-  'station:',
-  'learnt_location:',
-  'unverified_vendor:',
-  'toll_tag:',
-  'toll_plaza:',
-  'toll_ledger:',
-  'claim:',
-  'equipment:',
-  'inventory:',
+  // Not migrated into fleet.* (or still ephemeral / alias caches)
   'maintenance_log:',
-  'odometer_reading:',
-  'checkin:',
   'organization_metric:',
-  'organization_settings:',
+  // Money ledger KV leftovers (SSOT is ledger.entries — wipe if any remain)
   'ledger_event:',
   'ledger_event_idem:',
-  // Uber payment-line imports
-  'payment_ledger_line:',
+  // Dedup / dispute helpers still on KV by design
   'payment_ledger_line-dedup:',
-  'driver_period_snapshot:',
-  'import_metadata:',
-  'import_insights:',
-  // Dispute refunds
   'dispute-refund:',
   'dispute-refund-dedup:',
-  // Expense Hub
   'expense_audit:',
-  'fixed_expense:',
-  'expense_doc:',
-  'expense_payment:',
-  'expense_journal:',
-  'expense_rule_group:',
-  'expense_rule_assignment:',
-  'platform_vendor:',
-  'platform_expense_category:',
-  // Banking / policy / config
-  'fleet_bank_statement:',
-  'fleet_bank_confirm:',
-  'earnings_policy:',
-  'preferences:',
-  'integration:',
-  'ledger_config:',
-  // Strangler backups
+  // Strangler backups from retire-fleet-kv-prefix
   'fleet_kv_backup:',
 ] as const;
 
