@@ -10,6 +10,8 @@ import {
   ArrowUpRight,
   Ban,
   Banknote,
+  ChevronDown,
+  ChevronRight,
   Download,
   Loader2,
   Plus,
@@ -482,6 +484,23 @@ export function DriverSettlementsPage({
     setSelected(new Set());
   }, [deskTab, deskMode, weekFrom, weekTo, search]);
 
+  const findFreshCollectRow = (driverId: string, periodAnchor: string): PeriodRow | undefined => {
+    const owes = qc.getQueryData<{ rows: PeriodRow[] }>([
+      'driverOwesPeriods',
+      weekFrom,
+      weekTo,
+      minAmount,
+    ]);
+    const held = qc.getQueryData<{ rows: PeriodRow[] }>([
+      'cashHeldPeriods',
+      weekFrom,
+      weekTo,
+      minAmount,
+    ]);
+    const match = (r: PeriodRow) => r.driverId === driverId && r.periodAnchor === periodAnchor;
+    return (owes?.rows || []).find(match) || (held?.rows || []).find(match);
+  };
+
   const openLogCashForDriver = (driverId: string, driverName: string, row?: PeriodRow) => {
     const openWeeks = collectOutstanding.filter((r) => r.driverId === driverId);
     const target = row || openWeeks[0];
@@ -600,6 +619,10 @@ export function DriverSettlementsPage({
     workPeriodStart?: string;
     workPeriodEnd?: string;
   }) => {
+    const weekStart = String(
+      payment.workPeriodStart || collectModal.workPeriodStart || '',
+    ).slice(0, 10);
+    const beforeAmt = collectModal.maxAmount;
     const newTx = buildCashCollectionTx(
       {
         ...payment,
@@ -612,6 +635,26 @@ export function DriverSettlementsPage({
       { driverId: collectModal.driverId, driverName: collectModal.driverName },
     );
     await api.saveTransaction(newTx);
+    // Edge cash-sync updates returned/settlement only; refetch Outstanding for 1:1 display
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: ['driverOwesPeriods'] }),
+      qc.invalidateQueries({ queryKey: ['cashHeldPeriods'] }),
+      qc.invalidateQueries({ queryKey: ['driverSettlementsTransactions'] }),
+    ]);
+    await Promise.all([
+      qc.refetchQueries({ queryKey: ['driverOwesPeriods'] }),
+      qc.refetchQueries({ queryKey: ['cashHeldPeriods'] }),
+      qc.refetchQueries({ queryKey: ['driverSettlementsTransactions'] }),
+    ]);
+    if (payment.transactionType === 'payment' && weekStart) {
+      const fresh = findFreshCollectRow(collectModal.driverId, weekStart);
+      const afterAmt = fresh ? collectAmount(fresh) : Math.max(0, beforeAmt - Math.abs(payment.amount));
+      const reduced = Math.round((beforeAmt - afterAmt) * 100) / 100;
+      toast.success(
+        `Collected ${MONEY(payment.amount)} · owed ${MONEY(beforeAmt)} → ${MONEY(afterAmt)} (changed by ${MONEY(reduced)})`,
+        { duration: 7000 },
+      );
+    }
     refreshAll();
   };
 
@@ -1445,6 +1488,32 @@ function PendingTable({
   );
 }
 
+function groupDoneTxsByPeriod(rows: FinancialTransaction[]): Array<{
+  key: string;
+  label: string;
+  total: number;
+  rows: FinancialTransaction[];
+}> {
+  const map = new Map<
+    string,
+    { key: string; label: string; total: number; rows: FinancialTransaction[] }
+  >();
+  for (const tx of rows) {
+    const start = ymdKey(tx.metadata?.workPeriodStart);
+    const end = ymdKey(tx.metadata?.workPeriodEnd || start);
+    const key = start || '_none';
+    const label = start ? weekLabel(start, end || start) : 'Untagged week';
+    let g = map.get(key);
+    if (!g) {
+      g = { key, label, total: 0, rows: [] };
+      map.set(key, g);
+    }
+    g.rows.push(tx);
+    g.total += Math.abs(Number(tx.amount) || 0);
+  }
+  return [...map.values()].sort((a, b) => b.key.localeCompare(a.key));
+}
+
 function DonePayTable({
   rows,
   onOpenDriver,
@@ -1454,13 +1523,27 @@ function DonePayTable({
   onOpenDriver?: (id: string) => void;
   onReverse: (tx: FinancialTransaction) => void;
 }) {
+  const groups = useMemo(() => groupDoneTxsByPeriod(rows), [rows]);
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+
+  const toggle = (key: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
   return (
     <div className="rounded-lg border border-slate-200 overflow-hidden bg-white">
       <Table>
         <TableHeader>
           <TableRow className="bg-slate-50">
-            <TableHead>Driver</TableHead>
+            <TableHead className="w-10" />
             <TableHead>Settlement Week</TableHead>
+            <TableHead>Driver</TableHead>
+            <TableHead>Date</TableHead>
             <TableHead>Method</TableHead>
             <TableHead className="text-right">Paid to driver</TableHead>
             <TableHead>Status</TableHead>
@@ -1468,61 +1551,96 @@ function DonePayTable({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {rows.length === 0 ? (
+          {groups.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={6} className="h-24 text-center text-slate-500">
+              <TableCell colSpan={8} className="h-24 text-center text-slate-500">
                 No paid settlement payouts in this range.
               </TableCell>
             </TableRow>
           ) : (
-            rows.map((tx) => (
-              <TableRow key={tx.id}>
-                <TableCell>
-                  <button
-                    type="button"
-                    className="text-left font-medium text-slate-900 hover:text-indigo-600"
-                    onClick={() => tx.driverId && onOpenDriver?.(tx.driverId)}
+            groups.map((g) => {
+              const open = expanded.has(g.key);
+              return (
+                <React.Fragment key={g.key}>
+                  <TableRow
+                    className="bg-slate-50/80 hover:bg-slate-100 cursor-pointer"
+                    onClick={() => toggle(g.key)}
                   >
-                    {tx.driverName || tx.driverId}
-                  </button>
-                </TableCell>
-                <TableCell className="text-sm text-slate-600">
-                  {tx.metadata?.workPeriodStart
-                    ? weekLabel(
-                        String(tx.metadata.workPeriodStart).slice(0, 10),
-                        String(tx.metadata.workPeriodEnd || tx.metadata.workPeriodStart).slice(0, 10),
-                      )
-                    : '—'}
-                </TableCell>
-                <TableCell className="text-sm text-slate-600">
-                  {tx.paymentMethod || 'Cash'}
-                  {tx.description ? (
-                    <span className="block text-[11px] text-slate-400 truncate max-w-[180px]">
-                      {tx.description}
-                    </span>
-                  ) : null}
-                </TableCell>
-                <TableCell className="text-right tabular-nums font-semibold text-emerald-800">
-                  {MONEY(tx.amount)}
-                </TableCell>
-                <TableCell>
-                  <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200">Paid</Badge>
-                </TableCell>
-                <TableCell>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="h-8 text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
-                    title="Undo payout"
-                    onClick={() => onReverse(tx)}
-                  >
-                    <Trash2 className="h-3.5 w-3.5 mr-1" />
-                    Undo
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))
+                    <TableCell className="w-10 pr-0">
+                      {open ? (
+                        <ChevronDown className="h-4 w-4 text-slate-500" />
+                      ) : (
+                        <ChevronRight className="h-4 w-4 text-slate-500" />
+                      )}
+                    </TableCell>
+                    <TableCell className="font-medium text-slate-900">{g.label}</TableCell>
+                    <TableCell className="text-sm text-slate-500" colSpan={3}>
+                      {g.rows.length} payout{g.rows.length !== 1 ? 's' : ''}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums font-semibold text-emerald-800">
+                      {MONEY(g.total)}
+                    </TableCell>
+                    <TableCell />
+                    <TableCell />
+                  </TableRow>
+                  {open
+                    ? g.rows.map((tx) => (
+                        <TableRow key={tx.id} className="bg-white">
+                          <TableCell />
+                          <TableCell />
+                          <TableCell>
+                            <button
+                              type="button"
+                              className="text-left font-medium text-slate-900 hover:text-indigo-600"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (tx.driverId) onOpenDriver?.(tx.driverId);
+                              }}
+                            >
+                              {tx.driverName || tx.driverId}
+                            </button>
+                          </TableCell>
+                          <TableCell className="text-sm text-slate-500">
+                            {String(tx.date || '').slice(0, 10) || '—'}
+                          </TableCell>
+                          <TableCell className="text-sm text-slate-600">
+                            {tx.paymentMethod || 'Cash'}
+                            {tx.description ? (
+                              <span className="block text-[11px] text-slate-400 truncate max-w-[180px]">
+                                {tx.description}
+                              </span>
+                            ) : null}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums font-semibold text-emerald-800">
+                            {MONEY(tx.amount)}
+                          </TableCell>
+                          <TableCell>
+                            <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200">
+                              Paid
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-8 text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
+                              title="Undo payout"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onReverse(tx);
+                              }}
+                            >
+                              <Trash2 className="h-3.5 w-3.5 mr-1" />
+                              Undo
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    : null}
+                </React.Fragment>
+              );
+            })
           )}
         </TableBody>
       </Table>
@@ -1539,68 +1657,112 @@ function DoneCollectTable({
   onOpenDriver?: (id: string) => void;
   onReverse: (tx: FinancialTransaction) => void;
 }) {
+  const groups = useMemo(() => groupDoneTxsByPeriod(rows), [rows]);
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+
+  const toggle = (key: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
   return (
     <div className="rounded-lg border border-slate-200 overflow-hidden bg-white">
       <Table>
         <TableHeader>
           <TableRow className="bg-slate-50">
+            <TableHead className="w-10" />
+            <TableHead>Settlement Week</TableHead>
             <TableHead>Driver</TableHead>
             <TableHead>Date</TableHead>
-            <TableHead>Settlement Week</TableHead>
             <TableHead>Method</TableHead>
             <TableHead className="text-right">Cash returned</TableHead>
             <TableHead className="w-[100px]"></TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {rows.length === 0 ? (
+          {groups.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={6} className="h-24 text-center text-slate-500">
+              <TableCell colSpan={7} className="h-24 text-center text-slate-500">
                 No cleared collections in this range.
               </TableCell>
             </TableRow>
           ) : (
-            rows.map((tx) => (
-              <TableRow key={tx.id}>
-                <TableCell>
-                  <button
-                    type="button"
-                    className="text-left font-medium text-slate-900 hover:text-indigo-600"
-                    onClick={() => tx.driverId && onOpenDriver?.(tx.driverId)}
+            groups.map((g) => {
+              const open = expanded.has(g.key);
+              return (
+                <React.Fragment key={g.key}>
+                  <TableRow
+                    className="bg-slate-50/80 hover:bg-slate-100 cursor-pointer"
+                    onClick={() => toggle(g.key)}
                   >
-                    {tx.driverName || tx.driverId}
-                  </button>
-                </TableCell>
-                <TableCell className="text-sm text-slate-600">
-                  {String(tx.date || '').slice(0, 10)}
-                </TableCell>
-                <TableCell className="text-sm text-slate-600">
-                  {tx.metadata?.workPeriodStart
-                    ? weekLabel(
-                        String(tx.metadata.workPeriodStart).slice(0, 10),
-                        String(tx.metadata.workPeriodEnd || tx.metadata.workPeriodStart).slice(0, 10),
-                      )
-                    : '—'}
-                </TableCell>
-                <TableCell>{tx.paymentMethod || 'Cash'}</TableCell>
-                <TableCell className="text-right tabular-nums font-semibold text-emerald-700">
-                  {MONEY(tx.amount)}
-                </TableCell>
-                <TableCell>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="h-8 text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
-                    title="Undo cash payment"
-                    onClick={() => onReverse(tx)}
-                  >
-                    <Trash2 className="h-3.5 w-3.5 mr-1" />
-                    Undo
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))
+                    <TableCell className="w-10 pr-0">
+                      {open ? (
+                        <ChevronDown className="h-4 w-4 text-slate-500" />
+                      ) : (
+                        <ChevronRight className="h-4 w-4 text-slate-500" />
+                      )}
+                    </TableCell>
+                    <TableCell className="font-medium text-slate-900">{g.label}</TableCell>
+                    <TableCell className="text-sm text-slate-500" colSpan={3}>
+                      {g.rows.length} payment{g.rows.length !== 1 ? 's' : ''}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums font-semibold text-emerald-700">
+                      {MONEY(g.total)}
+                    </TableCell>
+                    <TableCell />
+                  </TableRow>
+                  {open
+                    ? g.rows.map((tx) => (
+                        <TableRow key={tx.id} className="bg-white">
+                          <TableCell />
+                          <TableCell />
+                          <TableCell>
+                            <button
+                              type="button"
+                              className="text-left font-medium text-slate-900 hover:text-indigo-600"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (tx.driverId) onOpenDriver?.(tx.driverId);
+                              }}
+                            >
+                              {tx.driverName || tx.driverId}
+                            </button>
+                          </TableCell>
+                          <TableCell className="text-sm text-slate-600">
+                            {String(tx.date || '').slice(0, 10)}
+                          </TableCell>
+                          <TableCell className="text-sm text-slate-600">
+                            {tx.paymentMethod || 'Cash'}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums font-semibold text-emerald-700">
+                            {MONEY(tx.amount)}
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-8 text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
+                              title="Undo cash payment"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onReverse(tx);
+                              }}
+                            >
+                              <Trash2 className="h-3.5 w-3.5 mr-1" />
+                              Undo
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    : null}
+                </React.Fragment>
+              );
+            })
           )}
         </TableBody>
       </Table>

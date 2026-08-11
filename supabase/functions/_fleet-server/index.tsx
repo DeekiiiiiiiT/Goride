@@ -3280,9 +3280,8 @@ function cashTxWeekAnchors(tx: unknown): { driverId: string; anchors: string[] }
 }
 
 /**
- * Rebuild driver_financial_periods for weeks touched by a cash payment write.
- * Without this, projected cash_returned / cash_still_held never move after Log Cash.
- * Covers create, edit (old + new week on retag), and status changes. Non-fatal.
+ * After Log Cash / Reverse / Write-off: patch cash fields only on existing weeks.
+ * Full rebuild here was rewriting passenger cash / fuel and making Driver owes jump.
  */
 async function rebuildFinancialPeriodsForCashTx(next: unknown, previous: unknown): Promise<void> {
   try {
@@ -3295,15 +3294,17 @@ async function rebuildFinancialPeriodsForCashTx(next: unknown, previous: unknown
       targets.set(info.driverId, set);
     }
     if (targets.size === 0) return;
-    const { rebuildPeriodsForAnchors } = await import("./driver_financial_periods.ts");
+    const { syncPeriodCashFromTransactions } = await import("./driver_financial_periods.ts");
     for (const [driverId, anchors] of targets) {
-      await rebuildPeriodsForAnchors(driverId, [...anchors]);
-      console.log(
-        `[transactions] Rebuilt financial periods for driver ${driverId}: ${[...anchors].join(", ")}`,
-      );
+      for (const anchor of anchors) {
+        const mode = await syncPeriodCashFromTransactions(driverId, anchor);
+        console.log(
+          `[transactions] Cash-synced financial period driver=${driverId} week=${anchor} mode=${mode}`,
+        );
+      }
     }
   } catch (e: any) {
-    console.warn("[transactions] financial period rebuild failed (non-fatal):", e?.message || e);
+    console.warn("[transactions] financial period cash sync failed (non-fatal):", e?.message || e);
   }
 }
 

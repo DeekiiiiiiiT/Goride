@@ -1087,6 +1087,94 @@ export async function rebuildPeriodsForAnchors(
   return n;
 }
 
+/**
+ * Log Cash / Reverse / Write-off path: update ONLY cash returned / write-off / settlement paid
+ * on an existing period row. Do NOT recompute passenger cash, fuel, tolls, or share.
+ * Full rebuild was rewriting those inputs and making Driver owes jump on every collect action.
+ */
+export async function syncPeriodCashFromTransactions(
+  driverId: string,
+  periodAnchor: string,
+): Promise<"synced" | "rebuilt"> {
+  if (!driverId || !/^\d{4}-\d{2}-\d{2}$/.test(periodAnchor)) {
+    throw new Error("driverId and periodAnchor (yyyy-MM-dd) required");
+  }
+
+  const { data: existing, error } = await sb()
+    .from("driver_financial_periods")
+    .select(
+      "id, period_end, cash_collected, driver_share, fuel_deduction, fuel_fleet_share, toll_cash_spend, toll_charged_to_driver, fuel_finalized, settlement_status",
+    )
+    .eq("driver_id", driverId)
+    .eq("period_anchor", periodAnchor)
+    .maybeSingle();
+  if (error) {
+    console.error("[DriverFinancialPeriods] cash sync load:", error.message);
+    throw new Error(error.message);
+  }
+  if (!existing) {
+    await rebuildDriverFinancialPeriod(driverId, periodAnchor);
+    return "rebuilt";
+  }
+
+  const allTx = await kv.getByPrefix("transaction:");
+  const driverTxAll = (allTx || []).filter(
+    (t: any) => String(t?.driverId || "") === driverId,
+  );
+  const periodEnd = String(existing.period_end || periodAnchor).slice(0, 10);
+  const cashBase = computeWeekCashBase({
+    periodAnchor,
+    periodEnd,
+    trips: [],
+    transactions: driverTxAll,
+    uberPayoutCash: 0,
+  });
+  const cashReturned = cashBase.cashReturned;
+  const cashWrittenOff = cashBase.cashWrittenOff;
+  const settlementPaidRaw = cashBase.settlementPaid;
+
+  const settled = computePeriodSettlement({
+    driverShare: Number(existing.driver_share) || 0,
+    fuelDeduction: Number(existing.fuel_deduction) || 0,
+    baseCashOwed: Number(existing.cash_collected) || 0,
+    baseCashPaid: cashReturned,
+    tollCashWash: Number(existing.toll_cash_spend) || 0,
+    tollPersonal: Math.max(0, Number(existing.toll_charged_to_driver) || 0),
+    fuelCredits: Number(existing.fuel_fleet_share) || 0,
+    cashWrittenOff,
+    settlementPaid: settlementPaidRaw,
+  });
+
+  const fuelFinalized = !!existing.fuel_finalized;
+  let settlementStatus = String(existing.settlement_status || "pending");
+  if (fuelFinalized) {
+    if (Math.abs(settled.settlement) < 1) settlementStatus = "settled";
+    else if (settled.settlement > 0) settlementStatus = "company_owes";
+    else settlementStatus = "driver_owes";
+  }
+
+  const now = new Date().toISOString();
+  const { error: updErr } = await sb()
+    .from("driver_financial_periods")
+    .update({
+      cash_returned: round2(cashReturned),
+      cash_written_off: round2(cashWrittenOff),
+      settlement_paid: round2(settled.settlementPaid),
+      cash_still_held: round2(settled.adjCashBalance),
+      settlement_amount: round2(settled.settlement),
+      payout_net: round2(settled.netPayout),
+      settlement_status: settlementStatus,
+      updated_at: now,
+    })
+    .eq("driver_id", driverId)
+    .eq("period_anchor", periodAnchor);
+  if (updErr) {
+    console.error("[DriverFinancialPeriods] cash sync update:", updErr.message);
+    throw new Error(updErr.message);
+  }
+  return "synced";
+}
+
 export type CompanyOwesPeriodRow = {
   driverId: string;
   periodAnchor: string;
