@@ -1,10 +1,11 @@
 // cache-bust: force recompile — 2026-02-10
 import React from 'react';
 import { Button } from '@roam/ui';
-import { CreditCard, Car, Wallet } from 'lucide-react';
+import { CreditCard, Wallet } from 'lucide-react';
 import { Label } from '@roam/ui';
 
 interface PaymentMethodSelectorProps {
+  /** personal_cash kept in type for older callers; UI no longer offers it. */
   onSelect: (method: 'gas_card' | 'personal_cash' | 'rideshare_cash') => void;
   onCancel: () => void;
   /** Fleet drivers can log company gas card; independents cannot. */
@@ -34,27 +35,16 @@ export function PaymentMethodSelector({
           </Button>
         )}
 
-        <Button
-          variant="outline"
-          className="h-24 flex flex-col items-center justify-center gap-2 border-2 hover:border-emerald-500 hover:bg-emerald-50 group transition-all"
-          onClick={() => onSelect('personal_cash')}
-        >
-          <Wallet className="h-6 w-6 text-emerald-500 group-hover:scale-110 transition-transform" />
-          <div className="text-center">
-            <p className="font-bold">Personal Cash</p>
-            <p className="text-[10px] text-slate-500">I paid with my own cash or card</p>
-          </div>
-        </Button>
-
+        {/* Driver label "Cash"; still selects rideshare_cash for fleet books */}
         <Button
           variant="outline"
           className="h-24 flex flex-col items-center justify-center gap-2 border-2 hover:border-amber-500 hover:bg-amber-50 group transition-all"
           onClick={() => onSelect('rideshare_cash')}
         >
-          <Car className="h-6 w-6 text-amber-500 group-hover:scale-110 transition-transform" />
+          <Wallet className="h-6 w-6 text-amber-500 group-hover:scale-110 transition-transform" />
           <div className="text-center">
-            <p className="font-bold">RideShare Cash</p>
-            <p className="text-[10px] text-slate-500">I used cash collected from customers / fares</p>
+            <p className="font-bold">Cash</p>
+            <p className="text-[10px] text-slate-500">I paid with cash from fares</p>
           </div>
         </Button>
       </div>
