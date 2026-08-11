@@ -41,7 +41,8 @@ export function isLedgerReadUnifiedRidesEnabled(): boolean {
 }
 
 export function isLedgerReadUnifiedFleetEnabled(): boolean {
-  return envTruthy("LEDGER_READ_UNIFIED_FLEET");
+  // Permanent cutover: fleet money reads are ledger.entries-only.
+  return true;
 }
 
 export function isLedgerReadUnifiedTollEnabled(): boolean {
@@ -58,6 +59,8 @@ export function isLedgerReadUnifiedDashEnabled(): boolean {
  * that island’s read cutover is proven.
  */
 export function isLedgerLegacyMoneyWriteEnabled(island: string): boolean {
+  // Money ledger_event KV retired — never write island money rows.
+  if (island === "kv_ledger_event") return false;
   const key = `LEDGER_LEGACY_WRITE_${island.toUpperCase()}`;
   const v = Deno.env.get(key);
   if (v === undefined || v === "") return true;

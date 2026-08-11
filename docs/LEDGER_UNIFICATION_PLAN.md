@@ -64,9 +64,18 @@ statement-summary, InDrive wallet, expense-hub spend-breakdown, driver period re
 fare/tip/payout_cash load, toll missing-canonical health) now read **`ledger.entries`**
 directly with **no KV fallback**. Canonical metadata (`platform`, `driverId`,
 `direction`, …) was backfilled from `ledger.kv_money_backup_20260811` via
-`20260811150000_backfill_ledger_entry_canonical_metadata.sql`. Keep
-`LEDGER_READ_UNIFIED_FLEET=1` ON in production for remaining non-BF fleet routes that
-still gate on the flag (e.g. generic `GET /ledger`).
+`20260811150000_backfill_ledger_entry_canonical_metadata.sql`.
+
+**Whole-app money ledger retirement (2026-08-11):** Remaining fleet readers
+(`/ledger`, `/ledger/summary`, `/ledger/count`, `/ledger/driver-overview`,
+`/ledger/driver-earnings-history`, `/ledger/fleet-summary`, `/ledger/drivers-summary`,
+batch-audit, trip-gap diagnostic) now read **`ledger.entries` only**. Writes via
+`appendCanonicalLedgerEvents` post only to unified (no `ledger_event*` / idem KV).
+Deletes target `ledger.entries` via `ledger_delete_entries`. KV-only ops tools
+(orphan audit/cleanup, strip-uber, repair-driver-ids, unresolvable-driver-map)
+return **410**. `isLedgerReadUnifiedFleetEnabled()` is permanently ON;
+`isLedgerLegacyMoneyWriteEnabled("kv_ledger_event")` is permanently OFF.
+`toll_ledger:*` remains as the operational toll store.
 
 | Flag | Production |
 |---|---|

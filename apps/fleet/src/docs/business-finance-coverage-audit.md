@@ -35,9 +35,10 @@ InDrive wallet top-ups. Everything below is graded against that one rule.
   `payout_cash`/`driver_payout`, driver-financial-period cash figures feed
   Cash & Bank and Driver Balances.
 
-> **Status update (2026-07-21):** A remediation program is now underway. See
-> [business-finance-recognition-policy.md](business-finance-recognition-policy.md)
-> for the accounting contract governing the fixes below.
+> **Status update (2026-08-11):** Old money KV (`ledger_event:*` /
+> `ledger_event_idem:*`) is fully retired app-wide. All fleet money reads/writes/deletes
+> use `ledger.entries`. Backup retained in `ledger.kv_money_backup_20260811`.
+> `toll_ledger:*` remains as the operational toll store only.
 >
 > **Implementation update (2026-07-21):** Fixed Expenses, generic posted
 > transactions, posted Maintenance spend, and Budgets vs Actual are now wired.

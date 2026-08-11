@@ -43,6 +43,12 @@ export async function fleetDualWriteCanonicalEvent(event: {
   sourceId: string;
   organizationId?: string | null;
   date?: string;
+  platform?: string;
+  paymentMethod?: string;
+  periodStart?: string;
+  periodEnd?: string;
+  grossAmount?: number;
+  category?: string;
   metadata?: Record<string, unknown>;
 }): Promise<void> {
   if (!dualWriteEnabled()) {
@@ -109,25 +115,13 @@ export async function fleetDualWriteCanonicalEvent(event: {
     ...(event.metadata ?? {}),
   };
   if (event.driverId) mergedMeta.driverId = event.driverId;
-  if ((event as { platform?: string }).platform) {
-    mergedMeta.platform = (event as { platform?: string }).platform;
-  }
+  if (event.platform) mergedMeta.platform = event.platform;
   if (event.direction) mergedMeta.direction = event.direction;
-  if ((event as { paymentMethod?: string }).paymentMethod) {
-    mergedMeta.paymentMethod = (event as { paymentMethod?: string }).paymentMethod;
-  }
-  if ((event as { periodStart?: string }).periodStart) {
-    mergedMeta.periodStart = (event as { periodStart?: string }).periodStart;
-  }
-  if ((event as { periodEnd?: string }).periodEnd) {
-    mergedMeta.periodEnd = (event as { periodEnd?: string }).periodEnd;
-  }
-  if ((event as { grossAmount?: number }).grossAmount != null) {
-    mergedMeta.grossAmount = (event as { grossAmount?: number }).grossAmount;
-  }
-  if ((event as { category?: string }).category) {
-    mergedMeta.category = (event as { category?: string }).category;
-  }
+  if (event.paymentMethod) mergedMeta.paymentMethod = event.paymentMethod;
+  if (event.periodStart) mergedMeta.periodStart = event.periodStart;
+  if (event.periodEnd) mergedMeta.periodEnd = event.periodEnd;
+  if (event.grossAmount != null) mergedMeta.grossAmount = event.grossAmount;
+  if (event.category) mergedMeta.category = event.category;
 
   const posted = await postEntry({
     p_idempotency_key: `kv_ledger_event:${event.idempotencyKey}`,

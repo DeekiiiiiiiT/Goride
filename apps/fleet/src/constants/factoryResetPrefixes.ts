@@ -1,6 +1,8 @@
 /**
  * Single source of truth for Factory Reset KV prefixes.
  * When adding a new data type that uses kv.set(`prefix:…`), add it here.
+ * Domains moved to fleet.* tables should keep prefixes until LEGACY_KV_WRITE_<DOMAIN>=0
+ * and retire-fleet-kv-prefix has run; then remove the prefix and wipe the table instead.
  */
 export const FACTORY_RESET_PREFIXES = [
   'trip:',
@@ -14,6 +16,7 @@ export const FACTORY_RESET_PREFIXES = [
   'fuel_card:',
   'station:',
   'learnt_location:',
+  'unverified_vendor:',
   'toll_tag:',
   'toll_plaza:',
   'toll_ledger:',
@@ -24,12 +27,15 @@ export const FACTORY_RESET_PREFIXES = [
   'odometer_reading:',
   'checkin:',
   'organization_metric:',
+  'organization_settings:',
   'ledger_event:',
   'ledger_event_idem:',
   // Uber payment-line imports
   'payment_ledger_line:',
   'payment_ledger_line-dedup:',
   'driver_period_snapshot:',
+  'import_metadata:',
+  'import_insights:',
   // Dispute refunds
   'dispute-refund:',
   'dispute-refund-dedup:',
@@ -39,8 +45,63 @@ export const FACTORY_RESET_PREFIXES = [
   'expense_doc:',
   'expense_payment:',
   'expense_journal:',
-  // Org settings
-  'organization_settings:',
+  'expense_rule_group:',
+  'expense_rule_assignment:',
+  'platform_vendor:',
+  'platform_expense_category:',
+  // Banking / policy / config
+  'fleet_bank_statement:',
+  'fleet_bank_confirm:',
+  'earnings_policy:',
+  'preferences:',
+  'integration:',
+  'ledger_config:',
+  // Strangler backups
+  'fleet_kv_backup:',
+] as const;
+
+/** Tables to TRUNCATE when factory-resetting after a domain has retired KV. */
+export const FACTORY_RESET_FLEET_TABLES = [
+  'drivers',
+  'vehicles',
+  'driver_metrics',
+  'vehicle_metrics',
+  'trips',
+  'import_batches',
+  'import_metadata',
+  'import_insights',
+  'payment_ledger_lines',
+  'driver_period_snapshots',
+  'toll_ledger',
+  'toll_tags',
+  'toll_plazas',
+  'fuel_entries',
+  'fuel_cards',
+  'stations',
+  'fuel_adjustments',
+  'fuel_disputes',
+  'expense_documents',
+  'expense_payments',
+  'transactions',
+  'fixed_expenses',
+  'expense_rule_groups',
+  'expense_rule_assignments',
+  'expense_journal',
+  'bank_statements',
+  'bank_confirmations',
+  'platform_vendors',
+  'expense_categories',
+  'claims',
+  'earnings_policies',
+  'equipment',
+  'inventory',
+  'checkins',
+  'odometer_readings',
+  'organization_settings',
+  'preferences',
+  'integrations',
+  'ledger_config',
 ] as const;
 
 export type FactoryResetPrefix = (typeof FACTORY_RESET_PREFIXES)[number];
+export type FactoryResetFleetTable = (typeof FACTORY_RESET_FLEET_TABLES)[number];

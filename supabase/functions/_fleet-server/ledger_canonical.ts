@@ -1,10 +1,9 @@
 /**
- * Phase 2 — Canonical ledger events (KV prefix `ledger_event:`).
- * Idempotency index: `ledger_event_idem:{sha256(idempotencyKey)}` → `{ id }`.
+ * Canonical money events — SSOT is ledger.entries (via fleetDualWriteCanonicalEvent).
+ * Idempotency resolves against ledger.entries / source_receipts (KV money store retired).
  */
 import type { Context } from "npm:hono";
 import { createClient } from "jsr:@supabase/supabase-js@2.49.8";
-import * as kv from "./kv_store.tsx";
 import { stampOrg } from "./org_scope.ts";
 
 export const CANONICAL_SCHEMA_VERSION = 1;
@@ -89,72 +88,29 @@ async function sha256Hex(text: string): Promise<string> {
 
 /** Fetch a canonical ledger event by its idempotencyKey, or null if none exists. */
 export async function getCanonicalEventByIdemKey(idempotencyKey: string): Promise<Record<string, unknown> | null> {
-  const pointer = (await kv.get(`ledger_event_idem:${await sha256Hex(idempotencyKey)}`)) as { id?: string } | null;
-  if (pointer?.id) {
-    const body = (await kv.get(`ledger_event:${pointer.id}`)) as Record<string, unknown> | null;
-    if (body) return body;
-  }
-
-  // Phase E: money KV may be empty — resolve via unified ledger dual-write keys.
   try {
-    const { isLedgerReadUnifiedFleetEnabled } = await import("../_shared/unifiedLedger/flags.ts");
-    if (isLedgerReadUnifiedFleetEnabled()) {
-      const client = supabaseKv();
-      const unifiedKey = `kv_ledger_event:${idempotencyKey}`;
-      const { data: byIdem } = await client
+    const client = supabaseKv();
+    const unifiedKey = `kv_ledger_event:${idempotencyKey}`;
+    const { data: byIdem } = await client
+      .from("ledger_entries")
+      .select("id, entry_type, amount_minor, currency, effective_at, organization_id, metadata, reference_type, reference_id, created_at")
+      .eq("idempotency_key", unifiedKey)
+      .limit(1);
+    if (byIdem?.[0]) return mapEntryRowToCanonical(byIdem[0] as Record<string, unknown>, idempotencyKey);
+
+    const { data: byReceipt } = await client
+      .from("ledger_source_receipts")
+      .select("ledger_entry_id")
+      .eq("source_system", "kv_ledger_event")
+      .eq("source_idempotency_key", idempotencyKey)
+      .limit(1);
+    if (byReceipt?.[0]?.ledger_entry_id) {
+      const { data: entr } = await client
         .from("ledger_entries")
-        .select("id, entry_type, amount_minor, currency, effective_at, organization_id, metadata, reference_type, reference_id")
-        .eq("idempotency_key", unifiedKey)
+        .select("id, entry_type, amount_minor, currency, effective_at, organization_id, metadata, reference_type, reference_id, created_at")
+        .eq("id", byReceipt[0].ledger_entry_id)
         .limit(1);
-      if (byIdem?.[0]) {
-        const e = byIdem[0] as Record<string, unknown>;
-        const meta = (e.metadata && typeof e.metadata === "object" ? e.metadata : {}) as Record<string, unknown>;
-        return {
-          id: e.id,
-          eventType: e.entry_type,
-          netAmount: Number(e.amount_minor ?? 0) / 100,
-          date: String(e.effective_at ?? "").slice(0, 10),
-          organizationId: e.organization_id,
-          sourceType: e.reference_type,
-          sourceId: e.reference_id,
-          metadata: meta,
-          driverId: meta.driverId,
-          platform: meta.platform,
-          direction: meta.direction || "inflow",
-          idempotencyKey,
-        };
-      }
-      const { data: byReceipt } = await client
-        .from("ledger_source_receipts")
-        .select("ledger_entry_id")
-        .eq("source_system", "kv_ledger_event")
-        .eq("source_idempotency_key", idempotencyKey)
-        .limit(1);
-      if (byReceipt?.[0]?.ledger_entry_id) {
-        const { data: entr } = await client
-          .from("ledger_entries")
-          .select("id, entry_type, amount_minor, currency, effective_at, organization_id, metadata, reference_type, reference_id")
-          .eq("id", byReceipt[0].ledger_entry_id)
-          .limit(1);
-        if (entr?.[0]) {
-          const e = entr[0] as Record<string, unknown>;
-          const meta = (e.metadata && typeof e.metadata === "object" ? e.metadata : {}) as Record<string, unknown>;
-          return {
-            id: e.id,
-            eventType: e.entry_type,
-            netAmount: Number(e.amount_minor ?? 0) / 100,
-            date: String(e.effective_at ?? "").slice(0, 10),
-            organizationId: e.organization_id,
-            sourceType: e.reference_type,
-            sourceId: e.reference_id,
-            metadata: meta,
-            driverId: meta.driverId,
-            platform: meta.platform,
-            direction: meta.direction || "inflow",
-            idempotencyKey,
-          };
-        }
-      }
+      if (entr?.[0]) return mapEntryRowToCanonical(entr[0] as Record<string, unknown>, idempotencyKey);
     }
   } catch (err) {
     console.warn("[canonical] unified idem lookup failed:", err);
@@ -162,14 +118,36 @@ export async function getCanonicalEventByIdemKey(idempotencyKey: string): Promis
   return null;
 }
 
+function mapEntryRowToCanonical(e: Record<string, unknown>, idempotencyKey: string): Record<string, unknown> {
+  const meta = (e.metadata && typeof e.metadata === "object" ? e.metadata : {}) as Record<string, unknown>;
+  return {
+    id: e.id,
+    eventType: e.entry_type,
+    netAmount: Number(e.amount_minor ?? 0) / 100,
+    grossAmount: meta.grossAmount != null ? Number(meta.grossAmount) : Number(e.amount_minor ?? 0) / 100,
+    date: String(e.effective_at ?? "").slice(0, 10),
+    createdAt: e.created_at,
+    organizationId: e.organization_id,
+    sourceType: e.reference_type,
+    sourceId: e.reference_id,
+    metadata: meta,
+    driverId: meta.driverId,
+    platform: meta.platform,
+    paymentMethod: meta.paymentMethod,
+    periodStart: meta.periodStart,
+    periodEnd: meta.periodEnd,
+    category: meta.category,
+    batchId: meta.batchId,
+    description: meta.description,
+    direction: meta.direction || "inflow",
+    idempotencyKey,
+    eventKind: CANONICAL_EVENT_KIND,
+    schemaVersion: CANONICAL_SCHEMA_VERSION,
+  };
+}
+
 /**
  * Does a canonical ledger event with this exact idempotencyKey already exist?
- * Used by toll_pnl_offset.ts to refuse emitting a compensating event for a
- * charge that was never actually written to the ledger in the first place
- * (e.g. trip-level `toll_charge` events only exist for Uber trips — a
- * cash_wash/phantom resolution on a Cash/Roam/InDrive trip has nothing to
- * offset, and emitting one anyway inflates "recovered" with no matching
- * "gross").
  */
 export async function canonicalEventExistsByIdemKey(idempotencyKey: string): Promise<boolean> {
   return (await getCanonicalEventByIdemKey(idempotencyKey)) !== null;
@@ -182,30 +160,33 @@ function supabaseKv() {
   );
 }
 
-const LEDGER_DELETE_PAGE = 1000;
-const SOURCE_ID_IN_CHUNK = 80;
-
-/** Delete idempotency keys for distinct idempotencyKey strings (same hash as append). */
-async function deleteIdemKeysForKeys(idempotencyKeys: string[]): Promise<number> {
-  let n = 0;
-  const seen = new Set<string>();
-  for (const idem of idempotencyKeys) {
-    const k = String(idem).trim();
-    if (!k || seen.has(k)) continue;
-    seen.add(k);
-    try {
-      const idemKvKey = `ledger_event_idem:${await sha256Hex(k)}`;
-      await kv.del(idemKvKey);
-      n++;
-    } catch {
-      /* non-fatal */
-    }
+async function deleteUnifiedEntries(opts: {
+  referenceType?: string;
+  referenceIds?: string[];
+  batchId?: string;
+  fromYmd?: string;
+}): Promise<{ deleted: number; idemDeleted: number }> {
+  const client = supabaseKv();
+  const { data, error } = await client.rpc("ledger_delete_entries", {
+    p_reference_type: opts.referenceType ?? null,
+    p_reference_ids: opts.referenceIds?.length ? opts.referenceIds : null,
+    p_batch_id: opts.batchId ?? null,
+    p_from_ymd: opts.fromYmd ?? null,
+    p_source_system: "kv_ledger_event",
+  });
+  if (error) {
+    console.error("[CanonicalLedger] ledger_delete_entries failed:", error.message);
+    throw new Error(error.message);
   }
-  return n;
+  const deleted = Number((data as { deleted?: number } | null)?.deleted ?? 0);
+  console.log(
+    `[CanonicalLedger] deleteUnifiedEntries deleted=${deleted} ref=${opts.referenceType || ""} batch=${opts.batchId || ""} from=${opts.fromYmd || ""}`,
+  );
+  return { deleted, idemDeleted: 0 };
 }
 
 /**
- * Remove canonical `ledger_event:*` rows matching sourceType + sourceId, and their idempotency index keys.
+ * Remove unified ledger.entries matching sourceType + sourceId.
  */
 export async function deleteCanonicalLedgerBySource(
   sourceType: string,
@@ -215,70 +196,11 @@ export async function deleteCanonicalLedgerBySource(
   if (!ids.length || !VALID_SOURCE_TYPES.has(sourceType)) {
     return { deleted: 0, idemDeleted: 0 };
   }
-
-  const sb = supabaseKv();
-  const allRows: { key: string; value: Record<string, unknown> }[] = [];
-
-  for (let i = 0; i < ids.length; i += SOURCE_ID_IN_CHUNK) {
-    const chunk = ids.slice(i, i + SOURCE_ID_IN_CHUNK);
-    let offset = 0;
-    while (offset < 500_000) {
-      const { data, error } = await sb
-        .from("kv_store_37f42386")
-        .select("key, value")
-        .like("key", "ledger_event:%")
-        .eq("value->>sourceType", sourceType)
-        .in("value->>sourceId", chunk)
-        .range(offset, offset + LEDGER_DELETE_PAGE - 1);
-      if (error) throw error;
-      const page = (data || []) as { key: string; value: Record<string, unknown> }[];
-      allRows.push(...page);
-      if (page.length < LEDGER_DELETE_PAGE) break;
-      offset += LEDGER_DELETE_PAGE;
-    }
-  }
-
-  if (allRows.length === 0) return { deleted: 0, idemDeleted: 0 };
-
-  const idemKeys: string[] = [];
-  for (const row of allRows) {
-    const v = row.value;
-    const idem = typeof v?.idempotencyKey === "string" ? String(v.idempotencyKey).trim() : "";
-    if (idem) idemKeys.push(idem);
-  }
-
-  const keys = allRows.map((r) => r.key);
-  for (let i = 0; i < keys.length; i += 100) {
-    await kv.mdel(keys.slice(i, i + 100));
-  }
-  const idemDeleted = await deleteIdemKeysForKeys(idemKeys);
-
-  // Twin-store cleanup: receipts must not outlive deleted island money rows.
-  try {
-    const { deleteUnifiedSourceReceipts } = await import("../_shared/unifiedLedger/deleteSourceReceipts.ts");
-    const sourceIds = allRows.map((r) => {
-      const v = r.value;
-      return typeof v?.id === "string" && v.id.trim() ? String(v.id) : r.key.replace(/^ledger_event:/, "");
-    });
-    await deleteUnifiedSourceReceipts({
-      sourceSystem: "kv_ledger_event",
-      sourceIds,
-      sourceIdempotencyKeys: idemKeys,
-    });
-  } catch (e) {
-    console.error("[CanonicalLedger] unified receipt cleanup failed:", e);
-  }
-
-  console.log(
-    `[CanonicalLedger] deleteCanonicalLedgerBySource type=${sourceType} ids=${ids.length} deleted=${keys.length} idem=${idemDeleted}`,
-  );
-  return { deleted: keys.length, idemDeleted };
+  return await deleteUnifiedEntries({ referenceType: sourceType, referenceIds: ids });
 }
 
 /**
- * Remove canonical rows for source ids on/after a date. Used when deleting a
- * recurring rule: incurred history stays in the books, future scheduled
- * occurrences are removed.
+ * Remove unified rows for source ids on/after a date.
  */
 export async function deleteCanonicalLedgerBySourceFromDate(
   sourceType: string,
@@ -293,101 +215,59 @@ export async function deleteCanonicalLedgerBySourceFromDate(
   ) {
     return { deleted: 0, idemDeleted: 0 };
   }
-
-  const sb = supabaseKv();
-  const allRows: { key: string; value: Record<string, unknown> }[] = [];
-  for (let i = 0; i < ids.length; i += SOURCE_ID_IN_CHUNK) {
-    const chunk = ids.slice(i, i + SOURCE_ID_IN_CHUNK);
-    let offset = 0;
-    while (offset < 500_000) {
-      const { data, error } = await sb
-        .from("kv_store_37f42386")
-        .select("key, value")
-        .like("key", "ledger_event:%")
-        .eq("value->>sourceType", sourceType)
-        .in("value->>sourceId", chunk)
-        .gte("value->>date", fromYmd)
-        .range(offset, offset + LEDGER_DELETE_PAGE - 1);
-      if (error) throw error;
-      const page = (data || []) as { key: string; value: Record<string, unknown> }[];
-      allRows.push(...page);
-      if (page.length < LEDGER_DELETE_PAGE) break;
-      offset += LEDGER_DELETE_PAGE;
-    }
-  }
-  if (!allRows.length) return { deleted: 0, idemDeleted: 0 };
-
-  const idemKeys = allRows
-    .map((row) => String(row.value?.idempotencyKey ?? "").trim())
-    .filter(Boolean);
-  const keys = allRows.map((row) => row.key);
-  for (let i = 0; i < keys.length; i += 100) {
-    await kv.mdel(keys.slice(i, i + 100));
-  }
-  const idemDeleted = await deleteIdemKeysForKeys(idemKeys);
-
-  try {
-    const { deleteUnifiedSourceReceipts } = await import("../_shared/unifiedLedger/deleteSourceReceipts.ts");
-    const sourceIds = allRows.map((r) => {
-      const v = r.value;
-      return typeof v?.id === "string" && v.id.trim() ? String(v.id) : r.key.replace(/^ledger_event:/, "");
-    });
-    await deleteUnifiedSourceReceipts({
-      sourceSystem: "kv_ledger_event",
-      sourceIds,
-      sourceIdempotencyKeys: idemKeys,
-    });
-  } catch (e) {
-    console.error("[CanonicalLedger] unified receipt cleanup (fromDate) failed:", e);
-  }
-
-  console.log(
-    `[CanonicalLedger] deleteCanonicalLedgerBySourceFromDate type=${sourceType} ids=${ids.length} from=${fromYmd} deleted=${keys.length} idem=${idemDeleted}`,
-  );
-  return { deleted: keys.length, idemDeleted };
+  return await deleteUnifiedEntries({ referenceType: sourceType, referenceIds: ids, fromYmd });
 }
 
-/** Delete every canonical ledger row with the given sourceType (e.g. all trip fares when wiping trips). */
+/** Delete every unified ledger row with the given sourceType. */
 export async function deleteAllCanonicalLedgerBySourceType(
   sourceType: string,
 ): Promise<{ deleted: number; idemDeleted: number }> {
   if (!VALID_SOURCE_TYPES.has(sourceType)) {
     return { deleted: 0, idemDeleted: 0 };
   }
-
-  const sb = supabaseKv();
+  // Page reference_ids then delete — avoids unbounded single RPC for huge fleets.
+  const client = supabaseKv();
   let totalDeleted = 0;
-  let totalIdem = 0;
-
   while (true) {
-    const { data, error } = await sb
-      .from("kv_store_37f42386")
-      .select("key, value")
-      .like("key", "ledger_event:%")
-      .eq("value->>sourceType", sourceType)
-      .range(0, LEDGER_DELETE_PAGE - 1);
+    const { data, error } = await client
+      .from("ledger_entries")
+      .select("reference_id")
+      .eq("reference_type", sourceType)
+      .not("reference_id", "is", null)
+      .limit(500);
     if (error) throw error;
-    const page = (data || []) as { key: string; value: Record<string, unknown> }[];
-    if (page.length === 0) break;
-
-    const idemKeys: string[] = [];
-    for (const row of page) {
-      const v = row.value;
-      const idem = typeof v?.idempotencyKey === "string" ? String(v.idempotencyKey).trim() : "";
-      if (idem) idemKeys.push(idem);
-    }
-    const keys = page.map((r) => r.key);
-    for (let i = 0; i < keys.length; i += 100) {
-      await kv.mdel(keys.slice(i, i + 100));
-    }
-    totalDeleted += keys.length;
-    totalIdem += await deleteIdemKeysForKeys(idemKeys);
+    const page = (data || []) as { reference_id: string }[];
+    if (!page.length) break;
+    const ids = [...new Set(page.map((r) => String(r.reference_id || "").trim()).filter(Boolean))];
+    if (!ids.length) break;
+    const res = await deleteUnifiedEntries({ referenceType: sourceType, referenceIds: ids });
+    totalDeleted += res.deleted;
+    if (res.deleted === 0) break;
   }
+  console.log(`[CanonicalLedger] deleteAllCanonicalLedgerBySourceType type=${sourceType} deleted=${totalDeleted}`);
+  return { deleted: totalDeleted, idemDeleted: 0 };
+}
 
-  console.log(
-    `[CanonicalLedger] deleteAllCanonicalLedgerBySourceType type=${sourceType} deleted=${totalDeleted} idem=${totalIdem}`,
-  );
-  return { deleted: totalDeleted, idemDeleted: totalIdem };
+/** Delete unified entries stamped with a given import batchId. */
+export async function deleteCanonicalLedgerByBatchId(
+  batchId: string,
+): Promise<{ deleted: number; idemDeleted: number }> {
+  const id = String(batchId || "").trim();
+  if (!id) return { deleted: 0, idemDeleted: 0 };
+  return await deleteUnifiedEntries({ batchId: id });
+}
+
+/** Count unified entries for a batch (delete-preview). */
+export async function countCanonicalLedgerByBatchId(batchId: string): Promise<number> {
+  const id = String(batchId || "").trim();
+  if (!id) return 0;
+  const client = supabaseKv();
+  const { data, error } = await client.rpc("ledger_count_entries_by_batch", { p_batch_id: id });
+  if (error) {
+    console.error("[CanonicalLedger] count by batch failed:", error.message);
+    return 0;
+  }
+  return Number(data ?? 0);
 }
 
 function validateOne(raw: unknown, index: number): { ok: true; value: Record<string, unknown> } | { ok: false; error: string } {
@@ -494,7 +374,7 @@ export type AppendCanonicalLedgerResult = {
 };
 
 /**
- * Idempotent append. Each event must include a unique idempotencyKey per logical fact.
+ * Idempotent append — writes only to ledger.entries (unified SSOT).
  */
 export async function appendCanonicalLedgerEvents(
   rawEvents: unknown[],
@@ -528,62 +408,20 @@ export async function appendCanonicalLedgerEvents(
 
     const base = v.value;
     const idem = String(base.idempotencyKey);
-    const idemHash = await sha256Hex(idem);
-    const idemKvKey = `ledger_event_idem:${idemHash}`;
 
     try {
-      // Deterministic id from idempotency key — concurrent appends converge on one event
-      // instead of racing get→set with two random UUIDs (P1 audit race fix).
+      const idemHash = await sha256Hex(idem);
       const id =
         typeof base.id === "string" && (base.id as string).trim()
           ? (base.id as string).trim()
           : idemHash.slice(0, 8) + "-" + idemHash.slice(8, 12) + "-4" + idemHash.slice(13, 16) +
             "-a" + idemHash.slice(17, 20) + "-" + idemHash.slice(20, 32);
 
-      const existing = await kv.get(idemKvKey);
-      if (existing && typeof existing === "object" && existing !== null && typeof (existing as any).id === "string") {
+      const existing = await getCanonicalEventByIdemKey(idem);
+      if (existing) {
         skipped++;
-        details.push({ index: i, idempotencyKey: idem, id: (existing as any).id, skipped: true });
-        // Heal: prior island delete may have left (or missed) unified receipts.
-        try {
-          const { fleetDualWriteCanonicalEvent } = await import("./unified_ledger_dual_write.ts");
-          const body = (await kv.get(`ledger_event:${(existing as any).id}`)) as Record<string, unknown> | null;
-          const src = body ?? (base as Record<string, unknown>);
-          await fleetDualWriteCanonicalEvent({
-            id: String((existing as any).id),
-            idempotencyKey: idem,
-            eventType: String(src.eventType ?? base.eventType),
-            direction: String(src.direction ?? base.direction),
-            netAmount: Number(src.netAmount ?? base.netAmount),
-            currency: String(src.currency ?? base.currency ?? "JMD"),
-            driverId: String(src.driverId ?? base.driverId),
-            sourceType: String(src.sourceType ?? base.sourceType),
-            sourceId: String(src.sourceId ?? base.sourceId),
-            organizationId: typeof src.organizationId === "string" ? src.organizationId : null,
-            date: String(src.date ?? base.date),
-            metadata: (src.metadata as Record<string, unknown>) ?? {},
-          });
-        } catch (healErr) {
-          console.error("[CanonicalLedger] dual-write heal on skip failed:", healErr);
-        }
+        details.push({ index: i, idempotencyKey: idem, id: String(existing.id || id), skipped: true });
         continue;
-      }
-
-      // Claim idempotency slot first (PK on key). Concurrent loser will conflict on re-read.
-      const claimClient = supabaseKv();
-      const { error: claimErr } = await claimClient.from("kv_store_37f42386").insert({
-        key: idemKvKey,
-        value: { id, idempotencyKey: idem },
-      });
-      if (claimErr) {
-        // Unique violation → another writer won; treat as skip
-        const existingAfter = await kv.get(idemKvKey);
-        if (existingAfter && typeof existingAfter === "object" && (existingAfter as any).id) {
-          skipped++;
-          details.push({ index: i, idempotencyKey: idem, id: (existingAfter as any).id, skipped: true });
-          continue;
-        }
-        throw new Error(claimErr.message);
       }
 
       const createdAt =
@@ -600,42 +438,55 @@ export async function appendCanonicalLedgerEvents(
       };
 
       const stamped = stampOrg(record, c);
+      const orgId = typeof (stamped as { organizationId?: string }).organizationId === "string"
+        ? (stamped as { organizationId: string }).organizationId
+        : null;
 
-      const { isLedgerLegacyMoneyWriteEnabled } = await import("../_shared/unifiedLedger/flags.ts");
-      if (isLedgerLegacyMoneyWriteEnabled("kv_ledger_event")) {
-        await kv.set(`ledger_event:${id}`, stamped);
-      } else {
-        console.log(`[CanonicalLedger] legacy write off — unified-only ledger_event:${id}`);
-      }
+      const metaBase =
+        base.metadata && typeof base.metadata === "object" && !Array.isArray(base.metadata)
+          ? { ...(base.metadata as Record<string, unknown>) }
+          : {};
+      // Stamp top-level fields into metadata for unified readers.
+      if (base.batchId) metaBase.batchId = base.batchId;
+      if (base.description) metaBase.description = base.description;
+      if (base.vehicleId) metaBase.vehicleId = base.vehicleId;
+      if (base.isReconciled === true || base.isReconciled === false) metaBase.isReconciled = base.isReconciled;
+      if (base.platform) metaBase.platform = base.platform;
+      if (base.paymentMethod) metaBase.paymentMethod = base.paymentMethod;
+      if (base.periodStart) metaBase.periodStart = base.periodStart;
+      if (base.periodEnd) metaBase.periodEnd = base.periodEnd;
+      if (base.grossAmount != null) metaBase.grossAmount = base.grossAmount;
+      if (base.category) metaBase.category = base.category;
+      if (base.driverId) metaBase.driverId = base.driverId;
+      if (base.direction) metaBase.direction = base.direction;
+
+      const { fleetDualWriteCanonicalEvent } = await import("./unified_ledger_dual_write.ts");
+      await fleetDualWriteCanonicalEvent({
+        id,
+        idempotencyKey: idem,
+        eventType: String(base.eventType),
+        direction: String(base.direction),
+        netAmount: Number(base.netAmount),
+        currency: String(base.currency ?? "JMD"),
+        driverId: String(base.driverId),
+        sourceType: String(base.sourceType),
+        sourceId: String(base.sourceId),
+        organizationId: orgId,
+        date: String(base.date),
+        platform: typeof base.platform === "string" ? base.platform : undefined,
+        paymentMethod: typeof base.paymentMethod === "string" ? base.paymentMethod : undefined,
+        periodStart: typeof base.periodStart === "string" ? base.periodStart : undefined,
+        periodEnd: typeof base.periodEnd === "string" ? base.periodEnd : undefined,
+        grossAmount: Number.isFinite(Number(base.grossAmount)) ? Number(base.grossAmount) : undefined,
+        category: typeof base.category === "string" ? base.category : undefined,
+        metadata: metaBase,
+      });
 
       inserted++;
       details.push({ index: i, idempotencyKey: idem, id });
       console.log(
-        `[CanonicalLedger] inserted id=${id} type=${base.eventType} idem=${idem.slice(0, 40)}…`,
+        `[CanonicalLedger] inserted(unified) id=${id} type=${base.eventType} idem=${idem.slice(0, 40)}…`,
       );
-
-      try {
-        const { fleetDualWriteCanonicalEvent } = await import("./unified_ledger_dual_write.ts");
-        const orgId = typeof (stamped as { organizationId?: string }).organizationId === "string"
-          ? (stamped as { organizationId: string }).organizationId
-          : null;
-        await fleetDualWriteCanonicalEvent({
-          id,
-          idempotencyKey: idem,
-          eventType: String(base.eventType),
-          direction: String(base.direction),
-          netAmount: Number(base.netAmount),
-          currency: String(base.currency ?? "JMD"),
-          driverId: String(base.driverId),
-          sourceType: String(base.sourceType),
-          sourceId: String(base.sourceId),
-          organizationId: orgId,
-          date: String(base.date),
-          metadata: (base.metadata as Record<string, unknown>) ?? {},
-        });
-      } catch (dwErr) {
-        console.error("[CanonicalLedger] unified dual-write failed:", dwErr);
-      }
     } catch (err: any) {
       failed++;
       details.push({ index: i, idempotencyKey: idem, error: err?.message || String(err) });
@@ -646,3 +497,4 @@ export async function appendCanonicalLedgerEvents(
   const success = failed === 0;
   return { success, inserted, skipped, failed, details };
 }
+

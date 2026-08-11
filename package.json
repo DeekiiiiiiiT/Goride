@@ -4,6 +4,7 @@
   "packageManager": "pnpm@11.1.0",
   "scripts": {
     "test:e2e:toll": "node scripts/e2e/toll-reconciliation-smoke.mjs",
+    "test:smoke:fleet-kv-postgres": "node scripts/fleet-kv-postgres-smoke.js",
     "dev": "pnpm --filter @roam/fleet dev",
     "dev:enterprise": "pnpm --filter @roam/enterprise dev",
     "build:enterprise": "pnpm --filter @roam/enterprise build",

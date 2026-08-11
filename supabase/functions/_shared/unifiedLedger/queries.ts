@@ -370,12 +370,26 @@ export function mapUnifiedEntryToCanonicalEvent(
       ? Number(meta.grossAmount)
       : undefined;
   const category = typeof meta.category === "string" ? meta.category : undefined;
+  const batchId =
+    (typeof meta.batchId === "string" && meta.batchId) ||
+    (typeof e.batch_id === "string" && e.batch_id) ||
+    undefined;
+  const description =
+    (typeof meta.description === "string" && meta.description) ||
+    (typeof e.description === "string" && e.description) ||
+    undefined;
+  const vehicleId =
+    (typeof meta.vehicleId === "string" && meta.vehicleId) || undefined;
+  const isReconciled =
+    meta.isReconciled === true ||
+    meta.isReconciled === "true" ||
+    e.is_reconciled === true;
 
   return {
     id: e.id,
     eventType: e.entry_type,
     netAmount: Number(e.amount_minor ?? 0) / 100,
-    grossAmount,
+    grossAmount: grossAmount ?? Math.abs(Number(e.amount_minor ?? 0) / 100),
     currency: e.currency ?? "JMD",
     date,
     eventAt: e.effective_at,
@@ -389,6 +403,10 @@ export function mapUnifiedEntryToCanonicalEvent(
     platform,
     paymentMethod,
     category,
+    batchId,
+    description,
+    vehicleId,
+    isReconciled,
     metadata: meta,
     direction,
     eventKind: "canonical",
