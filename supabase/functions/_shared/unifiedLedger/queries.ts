@@ -199,6 +199,8 @@ export async function listUnifiedLedgerEntries(opts: {
   product?: string;
   /** Prefer this over product when multiple roam_* products apply */
   products?: string[];
+  /** Filter by ledger.entries.entry_type (maps from canonical eventType). */
+  entryTypes?: string[];
   sourceSystem?: string;
   driverId?: string;
   from?: string;
@@ -223,6 +225,11 @@ export async function listUnifiedLedgerEntries(opts: {
   } else if (opts.product) {
     q = q.eq("product", opts.product);
   }
+  if (opts.entryTypes && opts.entryTypes.length === 1) {
+    q = q.eq("entry_type", opts.entryTypes[0]);
+  } else if (opts.entryTypes && opts.entryTypes.length > 1) {
+    q = q.in("entry_type", opts.entryTypes);
+  }
   if (opts.from) q = q.gte("effective_at", opts.from);
   if (opts.to) q = q.lte("effective_at", opts.to);
 
@@ -239,7 +246,8 @@ export async function listUnifiedLedgerEntries(opts: {
     q = q.in("id", ids);
   }
 
-  const limit = Math.min(opts.limit ?? 50, 200);
+  // Bank Deposits / Settlement page at 500; keep a hard cap for safety.
+  const limit = Math.min(opts.limit ?? 50, 500);
   const offset = opts.offset ?? 0;
   const { data, error, count } = await q.range(offset, offset + limit - 1);
 
@@ -258,6 +266,8 @@ async function listEntriesForDriver(
     driverId: string;
     organizationId?: string;
     product?: string;
+    products?: string[];
+    entryTypes?: string[];
     from?: string;
     to?: string;
     limit?: number;
@@ -289,11 +299,20 @@ async function listEntriesForDriver(
     .order("effective_at", { ascending: false });
 
   if (opts.organizationId) q = q.eq("organization_id", opts.organizationId);
-  if (opts.product) q = q.eq("product", opts.product);
+  if (opts.products && opts.products.length > 0) {
+    q = q.in("product", opts.products);
+  } else if (opts.product) {
+    q = q.eq("product", opts.product);
+  }
+  if (opts.entryTypes && opts.entryTypes.length === 1) {
+    q = q.eq("entry_type", opts.entryTypes[0]);
+  } else if (opts.entryTypes && opts.entryTypes.length > 1) {
+    q = q.in("entry_type", opts.entryTypes);
+  }
   if (opts.from) q = q.gte("effective_at", opts.from);
   if (opts.to) q = q.lte("effective_at", opts.to);
 
-  const limit = Math.min(opts.limit ?? 50, 200);
+  const limit = Math.min(opts.limit ?? 50, 500);
   const offset = opts.offset ?? 0;
   const { data, error, count } = await q.range(offset, offset + limit - 1);
 
@@ -303,4 +322,81 @@ async function listEntriesForDriver(
   }
 
   return { entries: (data ?? []) as Record<string, unknown>[], total: count ?? 0 };
+}
+
+/** Map unified ledger.entries row → legacy canonical ledger_event DTO (Bank Deposits / Settlement). */
+export function mapUnifiedEntryToCanonicalEvent(
+  e: Record<string, unknown>,
+): Record<string, unknown> {
+  const meta =
+    e.metadata && typeof e.metadata === "object" && !Array.isArray(e.metadata)
+      ? (e.metadata as Record<string, unknown>)
+      : {};
+  const date = String(e.effective_at ?? "").slice(0, 10);
+  const driverId =
+    typeof meta.driverId === "string" && meta.driverId
+      ? meta.driverId
+      : typeof e.driver_id === "string"
+        ? e.driver_id
+        : undefined;
+  return {
+    id: e.id,
+    eventType: e.entry_type,
+    netAmount: Number(e.amount_minor ?? 0) / 100,
+    currency: e.currency ?? "JMD",
+    date,
+    eventAt: e.effective_at,
+    createdAt: e.created_at,
+    periodStart: meta.periodStart ?? undefined,
+    periodEnd: meta.periodEnd ?? undefined,
+    sourceType: e.reference_type,
+    sourceId: e.reference_id,
+    organizationId: e.organization_id,
+    driverId,
+    metadata: meta,
+    direction: "inflow",
+    eventKind: "canonical",
+    schemaVersion: 1,
+  };
+}
+
+/**
+ * Org bank deposits can exist twice after re-import dual-writes (same Uber week/amount).
+ * Keep the newest createdAt for each orgUuid+date+amount key.
+ */
+export function dedupeOrgBankCanonicalEvents(
+  rows: Record<string, unknown>[],
+): Record<string, unknown>[] {
+  const out: Record<string, unknown>[] = [];
+  const orgBest = new Map<string, Record<string, unknown>>();
+
+  for (const row of rows) {
+    const meta =
+      row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
+        ? (row.metadata as Record<string, unknown>)
+        : {};
+    const isOrg =
+      meta.recipient === "org" ||
+      meta.source === "payments_organization" ||
+      meta.bankRole === "org_deposit";
+    if (!isOrg || String(row.eventType || "") !== "payout_bank") {
+      out.push(row);
+      continue;
+    }
+    const orgUuid = String(meta.organizationUuid || row.organizationId || "");
+    const date = String(row.date || "").slice(0, 10);
+    const amt = Math.round(Math.abs(Number(row.netAmount) || 0) * 100);
+    const key = `${orgUuid}|${date}|${amt}`;
+    const prev = orgBest.get(key);
+    if (!prev) {
+      orgBest.set(key, row);
+      continue;
+    }
+    const prevCreated = String(prev.createdAt || "");
+    const nextCreated = String(row.createdAt || "");
+    if (nextCreated >= prevCreated) orgBest.set(key, row);
+  }
+
+  out.push(...orgBest.values());
+  return out;
 }

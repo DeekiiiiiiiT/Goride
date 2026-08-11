@@ -5617,6 +5617,7 @@ app.post(
 );
 
 // ─── GET /ledger/canonical-events — List canonical events (org-scoped) ────────────────
+// Phase E: money KV retired — primary read is ledger.entries when LEDGER_READ_UNIFIED_FLEET=1.
 app.get("/make-server-37f42386/ledger/canonical-events", requireAuth(), async (c) => {
   try {
     const driverId = c.req.query("driverId");
@@ -5628,6 +5629,56 @@ app.get("/make-server-37f42386/ledger/canonical-events", requireAuth(), async (c
     const offsetParam = c.req.query("offset");
     const limit = Math.min(Math.max(limitParam ? parseInt(limitParam, 10) : 50, 1), 500);
     const offset = Math.max(offsetParam ? parseInt(offsetParam, 10) : 0, 0);
+    const eventTypes = eventTypesParam
+      ? String(eventTypesParam)
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : [];
+
+    // Unified ledger is SSOT after Phase E hard-retire of ledger_event:* KV.
+    try {
+      const { isLedgerReadUnifiedFleetEnabled } = await import("../_shared/unifiedLedger/flags.ts");
+      if (isLedgerReadUnifiedFleetEnabled()) {
+        const {
+          listUnifiedLedgerEntries,
+          mapUnifiedEntryToCanonicalEvent,
+          dedupeOrgBankCanonicalEvents,
+        } = await import("../_shared/unifiedLedger/queries.ts");
+
+        // Multi-id driver filter still needs KV-shaped expansion; take first id for account lookup.
+        const primaryDriverId = driverId
+          ? String(driverId)
+              .split(",")
+              .map((s) => s.trim())
+              .filter(Boolean)[0]
+          : undefined;
+
+        const { entries: uEntries, total: uTotal } = await listUnifiedLedgerEntries({
+          products: ["roam_driver", "roam_fleet"],
+          entryTypes: eventTypes.length > 0 ? eventTypes : undefined,
+          driverId: primaryDriverId,
+          from: startDate ? `${startDate}T00:00:00.000Z` : undefined,
+          to: endDate ? `${endDate}T23:59:59.999Z` : undefined,
+          // Fetch a wider page then dedupe org bank wires so Expected is not doubled.
+          limit: Math.min(limit + 50, 500),
+          offset,
+        });
+        const mapped = dedupeOrgBankCanonicalEvents(
+          uEntries.map((e) => mapUnifiedEntryToCanonicalEvent(e)),
+        ).slice(0, limit);
+        const filtered = filterByOrg(mapped, c);
+        return c.json({
+          data: filtered,
+          page: Math.floor(offset / limit) + 1,
+          limit,
+          hasMore: offset + limit < uTotal,
+          meta: { source: "ledger.entries" as const },
+        });
+      }
+    } catch (feErr) {
+      console.error("[CanonicalLedger GET] unified read failed, falling back to KV:", feErr);
+    }
 
     let query = supabase
       .from("kv_store_37f42386")
@@ -5656,16 +5707,10 @@ app.get("/make-server-37f42386/ledger/canonical-events", requireAuth(), async (c
         query = query.or([...expanded].map((id) => `value->>driverId.eq.${id}`).join(","));
       }
     }
-    if (eventTypesParam) {
-      const types = String(eventTypesParam)
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
-      if (types.length === 1) {
-        query = query.eq("value->>eventType", types[0]);
-      } else if (types.length > 1) {
-        query = query.or(types.map((t) => `value->>eventType.eq.${t}`).join(","));
-      }
+    if (eventTypes.length === 1) {
+      query = query.eq("value->>eventType", eventTypes[0]);
+    } else if (eventTypes.length > 1) {
+      query = query.or(eventTypes.map((t) => `value->>eventType.eq.${t}`).join(","));
     }
     if (startDate) query = query.gte("value->>date", startDate);
     if (endDate) query = query.lte("value->>date", endDate);
@@ -5687,6 +5732,7 @@ app.get("/make-server-37f42386/ledger/canonical-events", requireAuth(), async (c
       page: Math.floor(offset / limit) + 1,
       limit,
       hasMore: (data || []).length === limit,
+      meta: { source: "kv" as const },
     });
   } catch (e: any) {
     console.log(`[CanonicalLedger GET] Error: ${e.message}`);
