@@ -67,6 +67,34 @@ import { resolveFuelEntrySource } from '../../utils/fuelEntrySource';
 import { isJaaStatementLedgerRow } from '../../utils/jaaFuelStatementMatcher';
 import { countsInFuelLogSpend } from '../../utils/fuelOpsEligibility';
 
+/** Sort/display timestamp: live ISO `date` or admin `date` + `time`. */
+function fuelEntrySortMs(e: { date?: string; time?: string | null }): number {
+    const dateRaw = String(e.date || '');
+    const timeRaw = String(e.time || '').trim();
+    if (dateRaw.includes('T')) {
+        const m = dateRaw.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+        if (m) {
+            return new Date(
+                Number(m[1]), Number(m[2]) - 1, Number(m[3]),
+                Number(m[4]), Number(m[5]), Number(m[6] || 0),
+            ).getTime();
+        }
+        const t = new Date(dateRaw).getTime();
+        return Number.isNaN(t) ? 0 : t;
+    }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateRaw)) {
+        const [y, mo, d] = dateRaw.split('-').map(Number);
+        const tm = timeRaw.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+        const hh = tm ? Number(tm[1]) : 0;
+        const mm = tm ? Number(tm[2]) : 0;
+        const ss = tm ? Number(tm[3] || 0) : 0;
+        return new Date(y, mo - 1, d, hh, mm, ss).getTime();
+    }
+    if (!dateRaw) return 0;
+    const t = new Date(dateRaw).getTime();
+    return Number.isNaN(t) ? 0 : t;
+}
+
 interface FuelLogTableProps {
     entries: FuelEntry[];
     transactions: FinancialTransaction[];
@@ -228,15 +256,9 @@ export function FuelLogTable({
             entry.vendor?.toLowerCase().includes(searchTerm.toLowerCase())
         );
     }).sort((a, b) => {
-        // Normalize dates: date-only strings parse as UTC, date+time as local — force both to local
-        const normDate = (raw: string): number => {
-            if (!raw) return 0;
-            if (!raw.includes('T')) return new Date(`${raw}T00:00:00`).getTime();
-            return new Date(raw).getTime();
-        };
-        const diff = normDate(b.date) - normDate(a.date);
+        // Newest fill first — use combined date+time (not date-only midnight)
+        const diff = fuelEntrySortMs(b) - fuelEntrySortMs(a);
         if (diff !== 0) return diff;
-        // Same date — higher odometer = later in the day → should appear first (descending)
         return ((b.odometer as number) || 0) - ((a.odometer as number) || 0);
     });
 
@@ -318,7 +340,7 @@ export function FuelLogTable({
         };
         for (const vid of Object.keys(byVehicle)) {
             byVehicle[vid].sort((a, b) => {
-                const dc = (a.date || '').localeCompare(b.date || '');
+                const dc = fuelEntrySortMs(a) - fuelEntrySortMs(b);
                 if (dc !== 0) return dc;
                 return ((a.odometer as number) || 0) - ((b.odometer as number) || 0);
             });
@@ -404,7 +426,44 @@ export function FuelLogTable({
             const [y, m, d] = dateString.split('-').map(Number);
             return new Date(y, m - 1, d).toLocaleDateString();
         }
+        // ISO datetime (YYYY-MM-DDTHH:mm:ss) — show calendar day in local time
+        if (dateString.includes('T')) {
+            const day = dateString.slice(0, 10);
+            if (/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+                const [y, m, d] = day.split('-').map(Number);
+                return new Date(y, m - 1, d).toLocaleDateString();
+            }
+        }
         return new Date(dateString).toLocaleDateString();
+    };
+
+    /**
+     * Time for any fuel log:
+     * - Admin anchors: separate `time` (HH:mm:ss)
+     * - Live/portal reimbursements: embedded in `date` as ISO `YYYY-MM-DDTHH:mm:ss`
+     */
+    const formatEntryTime = (entry: { date?: string; time?: string | null }) => {
+        const fromTimeField = (timeRaw?: string | null) => {
+            if (!timeRaw) return null;
+            const m = String(timeRaw).trim().match(/^(\d{1,2}):(\d{2})/);
+            if (!m) return null;
+            const h = Number(m[1]);
+            const min = Number(m[2]);
+            if (Number.isNaN(h) || h > 23 || Number.isNaN(min)) return null;
+            const d = new Date();
+            d.setHours(h, min, 0, 0);
+            return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true });
+        };
+
+        const viaField = fromTimeField(entry.time);
+        if (viaField) return viaField;
+
+        const dateRaw = String(entry.date || '');
+        const iso = dateRaw.match(/T(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+        if (iso) {
+            return fromTimeField(`${iso[1]}:${iso[2]}`);
+        }
+        return null;
     };
 
     return (
@@ -620,6 +679,7 @@ export function FuelLogTable({
                                 const confidenceScore = entry.metadata?.auditConfidenceScore;
                                 const isHighlyTrusted = entry.metadata?.isHighlyTrusted || (confidenceScore !== undefined && confidenceScore >= 90);
                                 const isLocked = entry.isLocked || entry.status === 'Finalized';
+                                const entryTimeLabel = formatEntryTime(entry);
 
                                 return (
                                 <TableRow
@@ -632,6 +692,11 @@ export function FuelLogTable({
                                     <TableCell>
                                         <div className="flex flex-col gap-0.5">
                                             <span>{formatDate(entry.date)}</span>
+                                            {entryTimeLabel && (
+                                                <span className="text-[10px] text-slate-500 font-medium tabular-nums">
+                                                    {entryTimeLabel}
+                                                </span>
+                                            )}
                                             {resolveEntrySource(entry) !== 'driver-portal' && (() => {
                                                 const src = entrySourceLabel(resolveEntrySource(entry));
                                                 return (
@@ -1097,7 +1162,7 @@ export function FuelLogTable({
                                         </div>
                                         <div>
                                             <h3 className="font-bold text-base">Fuel Log Details</h3>
-                                            <p className="text-slate-300 text-xs">{formatDate(entry.date)}{entry.time ? ` at ${entry.time}` : ''}</p>
+                                            <p className="text-slate-300 text-xs">{formatDate(entry.date)}{formatEntryTime(entry) ? ` at ${formatEntryTime(entry)}` : ''}</p>
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-2">
