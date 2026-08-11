@@ -1798,59 +1798,45 @@ async function fetchDashboardDataWithCache(): Promise<any> {
     fleetTz,
   ).toISOString();
 
-  // Run all queries in parallel inside the server (each wrapped in withRetry for transient TLS/connection errors)
-  const [tripStatsResult, activeDriverResult, tripsResult, driverMetricsResult, vehicleMetricsResult] = await Promise.all([
-    // 1) Dashboard stats — candidate trips for today (filtered below)
-    cache.withRetry(() => supabase
-      .from("kv_store_37f42386")
-      .select("value->amount, value->driverId, value->status, value->date, value->requestTime")
-      .like("key", "trip:%")
-      .or(`value->>date.gte.${windowStartISO},value->>requestTime.gte.${windowStartISO}`)
-      .or(`value->>date.lte.${todayEndISO},value->>requestTime.lte.${todayEndISO}`)
-    ),
-
-    // 2) Active driver count
-    cache.withRetry(() => supabase
-      .from("kv_store_37f42386")
-      .select("*", { count: 'exact', head: true })
-      .like("key", "driver:%")
-      .eq("value->>status", "active")
-    ),
-
-    // 3) Full trip list (capped at 200, with retry)
+  // Run all queries in parallel inside the server (fleet tables after KV cutover)
+  const [tripStatsRows, activeDrivers, tripsPage, driverMetricsPage, vehicleMetricsPage] = await Promise.all([
     cache.withRetry(async () => {
-      const result = await supabase
-        .from("kv_store_37f42386")
-        .select("value")
-        .like("key", "trip:%")
-        .order("value->>date", { ascending: false })
-        .range(0, 199);
-      if (result.error) throw result.error;
-      return result.data || [];
+      const all = await kv.getByPrefix("trip:");
+      return all.filter((t: any) => {
+        const day = String(t?.date || t?.requestTime || "");
+        return day >= windowStartISO.slice(0, 10) || day >= windowStartISO ||
+          String(t?.requestTime || "") >= windowStartISO;
+      }).map((t: any) => ({
+        amount: t?.amount,
+        driverId: t?.driverId,
+        status: t?.status,
+        date: t?.date,
+        requestTime: t?.requestTime,
+      }));
     }),
-
-    // 4) Driver metrics
-    cache.withRetry(() => supabase
-      .from("kv_store_37f42386")
-      .select("value")
-      .like("key", "driver_metric:%")
-      .range(0, 99)
-    ),
-
-    // 5) Vehicle metrics
-    cache.withRetry(() => supabase
-      .from("kv_store_37f42386")
-      .select("value")
-      .like("key", "vehicle_metric:%")
-      .range(0, 99)
-    ),
+    cache.withRetry(async () => {
+      const drivers = await kv.getByPrefix("driver:");
+      return drivers.filter((d: any) => String(d?.status || "").toLowerCase() === "active");
+    }),
+    cache.withRetry(async () => {
+      const all = await kv.getByPrefix("trip:");
+      return [...all]
+        .sort((a: any, b: any) => String(b?.date || "").localeCompare(String(a?.date || "")))
+        .slice(0, 200)
+        .map((value) => ({ value }));
+    }),
+    cache.withRetry(async () => {
+      const all = await kv.getByPrefix("driver_metric:");
+      return all.slice(0, 100).map((value) => ({ value }));
+    }),
+    cache.withRetry(async () => {
+      const all = await kv.getByPrefix("vehicle_metric:");
+      return all.slice(0, 100).map((value) => ({ value }));
+    }),
   ]);
 
   // ── Build stats ──
-  if (tripStatsResult.error) throw tripStatsResult.error;
-  if (activeDriverResult.error) throw activeDriverResult.error;
-
-  const todayTrips = tripStatsResult.data || [];
+  const todayTrips = tripStatsRows || [];
   let revenueToday = 0;
   let tripsTodayCount = 0;
   const activeDriverIds = new Set<string>();
@@ -1865,7 +1851,7 @@ async function fetchDashboardDataWithCache(): Promise<any> {
     tripsTodayCount += 1;
     activeDriverIds.add(driverId);
   });
-  const activeDriverCount = activeDriverResult.count || 0;
+  const activeDriverCount = (activeDrivers || []).length;
   const finalActiveDrivers = activeDriverCount;
   const efficiency = finalActiveDrivers > 0 ? Math.round((activeDriverIds.size / finalActiveDrivers) * 100) : 0;
 
@@ -1878,10 +1864,12 @@ async function fetchDashboardDataWithCache(): Promise<any> {
   };
 
   // ── Build trips ──
-  const tripsRaw = Array.isArray(tripsResult) ? tripsResult : (tripsResult as any)?.data || [];
+  const tripsRaw = tripsPage || [];
   const trips = tripsRaw.map((d: any) => {
     const val = d.value || d;
     const { route, stops, ...lightweight } = val;
+    void route;
+    void stops;
     const sanitized: Record<string, any> = {};
     for (const [k, v2] of Object.entries(lightweight)) {
       sanitized[k] = typeof v2 === 'string' ? v2.replace(/[\x00-\x1F\x7F]/g, ' ') : v2;
@@ -1894,15 +1882,13 @@ async function fetchDashboardDataWithCache(): Promise<any> {
   });
 
   // ── Build driver metrics ──
-  if (driverMetricsResult.error) throw driverMetricsResult.error;
   const BANNED_UUID = "73dfc14d-3798-4a00-8d86-b2a3eb632f54";
-  const driverMetrics = (driverMetricsResult.data || [])
+  const driverMetrics = (driverMetricsPage || [])
     .map((d: any) => d.value)
-    .filter((m: any) => m.driverId !== BANNED_UUID && m.id !== BANNED_UUID);
+    .filter((m: any) => m && m.driverId !== BANNED_UUID && m.id !== BANNED_UUID);
 
   // ── Build vehicle metrics ──
-  if (vehicleMetricsResult.error) throw vehicleMetricsResult.error;
-  const vehicleMetrics = (vehicleMetricsResult.data || []).map((d: any) => d.value);
+  const vehicleMetrics = (vehicleMetricsPage || []).map((d: any) => d.value).filter(Boolean);
 
   // Build final result
   const result = { stats, trips, driverMetrics, vehicleMetrics };
@@ -1960,32 +1946,25 @@ app.get("/make-server-37f42386/dashboard/stats", requireAuth(), async (c) => {
   try {
     const fleetTz = await getFleetTimezone();
     const todayLocal = toFleetCalendarDay(new Date(), fleetTz);
-    const todayEndISO = naiveToUtc(`${todayLocal}T23:59:59.999`, fleetTz).toISOString();
-    const windowStartISO = naiveToUtc(
-      `${fleetCalendarDay(new Date(Date.now() - 36 * 3600_000).toISOString(), fleetTz) || todayLocal}T00:00:00`,
-      fleetTz,
-    ).toISOString();
 
-    const { data: tripData, error: tripError } = await supabase
-        .from("kv_store_37f42386")
-        .select("value->amount, value->driverId, value->status, value->date, value->requestTime, value->organizationId")
-        .like("key", "trip:%")
-        .or(`value->>date.gte.${windowStartISO},value->>requestTime.gte.${windowStartISO}`)
-        .or(`value->>date.lte.${todayEndISO},value->>requestTime.lte.${todayEndISO}`);
+    const [allTrips, allDrivers] = await Promise.all([
+      kv.getByPrefix("trip:"),
+      kv.getByPrefix("driver:"),
+    ]);
+    const tripData = allTrips.map((t: any) => ({
+      amount: t?.amount,
+      driverId: t?.driverId,
+      status: t?.status,
+      date: t?.date,
+      requestTime: t?.requestTime,
+      organizationId: t?.organizationId,
+    }));
+    const driverData = allDrivers
+      .filter((d: any) => String(d?.status || "").toLowerCase() === "active")
+      .map((value: any) => ({ value }));
 
-    if (tripError) throw tripError;
-
-    // Active drivers — fetch values so filterByOrg can scope (head count is cross-tenant)
-    const { data: driverData, error: driverError } = await supabase
-        .from("kv_store_37f42386")
-        .select("value")
-        .like("key", "driver:%")
-        .eq("value->>status", "active");
-
-    if (driverError) throw driverError;
-    
     // Note: When selecting JSON fields directly (value->field), PostgREST returns them as flat keys
-    const trips = filterByOrg((tripData || []) as Record<string, unknown>[], c, { endpoint: "/dashboard/stats" });
+    const trips = filterByOrg(tripData as Record<string, unknown>[], c, { endpoint: "/dashboard/stats" });
     const activeDriversScoped = filterByOrg(
       (driverData || []).map((d: any) => d.value).filter(Boolean) as Record<string, unknown>[],
       c,
@@ -3114,6 +3093,18 @@ app.get("/make-server-37f42386/transactions", requireAuth({ requireOrg: true }),
     const limit = limitParam
         ? parseInt(limitParam)
         : (isDriverScoped ? 5000 : 100);
+
+    const { shouldReadTable, listByOrg } = await import("./repos/baseRepo.ts");
+    if (shouldReadTable("transactions")) {
+      const orgId = getOrgId(c);
+      let rows = await listByOrg("transactions", orgId, { limit: offset + limit + (isDriverScoped ? 0 : 0) });
+      if (isDriverScoped) {
+        rows = rows.filter((t) => idsToFilter.has(String((t as any).driverId || "")));
+      }
+      const page = rows.slice(offset, offset + limit);
+      const scoped = await filterByOrgSafe(page, c, { endpoint: '/transactions' });
+      return c.json(scoped);
+    }
 
     let query = supabase
         .from("kv_store_37f42386")

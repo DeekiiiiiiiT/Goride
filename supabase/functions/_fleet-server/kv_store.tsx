@@ -4,7 +4,7 @@ CREATE TABLE kv_store_37f42386 (
   value JSONB NOT NULL
 );
 */
-// Fleet strangler: set/mset/del/mdel dual-write into fleet.* when mapped (see fleet_table_dual_write.ts).
+// Permanent fleet cutover: mapped domains read/write fleet.* tables; KV left for ephemeral keys only.
 
 import { createClient } from "jsr:@supabase/supabase-js@2.49.8";
 
@@ -21,7 +21,8 @@ async function afterUpsert(key: string, value: any): Promise<void> {
     const { dualWriteFleetKvUpsert } = await import("./fleet_table_dual_write.ts");
     await dualWriteFleetKvUpsert(key, value);
   } catch (e) {
-    console.error("[kv] fleet dual-write upsert failed:", key, e);
+    console.error("[kv] fleet table upsert failed:", key, e);
+    throw e instanceof Error ? e : new Error(String(e));
   }
 }
 
@@ -30,7 +31,8 @@ async function afterDelete(key: string): Promise<void> {
     const { dualWriteFleetKvDelete } = await import("./fleet_table_dual_write.ts");
     await dualWriteFleetKvDelete(key);
   } catch (e) {
-    console.error("[kv] fleet dual-write delete failed:", key, e);
+    console.error("[kv] fleet table delete failed:", key, e);
+    throw e instanceof Error ? e : new Error(String(e));
   }
 }
 
@@ -43,7 +45,7 @@ async function allowLegacyWrite(key: string): Promise<boolean> {
   }
 }
 
-// Set stores a key-value pair in the database.
+// Set stores a key-value pair (fleet table for mapped domains; KV for ephemeral).
 export const set = async (key: string, value: any): Promise<void> => {
   const writeKv = await allowLegacyWrite(key);
   if (writeKv) {
@@ -59,9 +61,16 @@ export const set = async (key: string, value: any): Promise<void> => {
   await afterUpsert(key, value);
 };
 
-// Get retrieves a key-value pair from the database.
+// Get retrieves a key-value pair (fleet table first for mapped domains).
 export const get = async (key: string): Promise<any> => {
-  const supabase = client()
+  try {
+    const { readMappedKvKey } = await import("./fleet_table_read_thru.ts");
+    const mapped = await readMappedKvKey(key);
+    if (mapped !== undefined) return mapped;
+  } catch (e) {
+    console.error("[kv] fleet read-thru get failed:", key, e);
+  }
+  const supabase = client();
   const { data, error } = await supabase.from("kv_store_37f42386").select("value").eq("key", key).maybeSingle();
   if (error) {
     throw new Error(error.message);
@@ -69,7 +78,7 @@ export const get = async (key: string): Promise<any> => {
   return data?.value;
 };
 
-// Delete deletes a key-value pair in the database.
+// Delete deletes a key-value pair.
 export const del = async (key: string): Promise<void> => {
   const writeKv = await allowLegacyWrite(key);
   if (writeKv) {
@@ -82,7 +91,7 @@ export const del = async (key: string): Promise<void> => {
   await afterDelete(key);
 };
 
-// Sets multiple key-value pairs in the database.
+// Sets multiple key-value pairs.
 export const mset = async (keys: string[], values: any[]): Promise<void> => {
   const pairs: { key: string; value: any }[] = [];
   for (let i = 0; i < keys.length; i++) {
@@ -100,20 +109,30 @@ export const mset = async (keys: string[], values: any[]): Promise<void> => {
   await Promise.all(keys.map((k, i) => afterUpsert(k, values[i])));
 };
 
-// Gets multiple key-value pairs in the database.
-// Results are returned in the same order as `keys` (Postgres IN does not guarantee order).
+// Gets multiple key-value pairs (same order as keys).
 export const mget = async (keys: string[]): Promise<any[]> => {
   if (keys.length === 0) return [];
-  const supabase = client()
-  const { data, error } = await supabase.from("kv_store_37f42386").select("key, value").in("key", keys);
-  if (error) {
-    throw new Error(error.message);
+  let mapped = new Map<string, any>();
+  try {
+    const { readMappedKvKeys } = await import("./fleet_table_read_thru.ts");
+    mapped = await readMappedKvKeys(keys);
+  } catch (e) {
+    console.error("[kv] fleet read-thru mget failed:", e);
   }
-  const byKey = new Map((data ?? []).map((row) => [row.key, row.value]));
+  const missing = keys.filter((k) => !mapped.has(k));
+  const byKey = new Map(mapped);
+  if (missing.length > 0) {
+    const supabase = client();
+    const { data, error } = await supabase.from("kv_store_37f42386").select("key, value").in("key", missing);
+    if (error) {
+      throw new Error(error.message);
+    }
+    for (const row of data ?? []) byKey.set(row.key, row.value);
+  }
   return keys.map((k) => byKey.get(k) ?? null);
 };
 
-// Deletes multiple key-value pairs in the database.
+// Deletes multiple key-value pairs.
 export const mdel = async (keys: string[]): Promise<void> => {
   const toDelete: string[] = [];
   for (const k of keys) {
@@ -130,10 +149,16 @@ export const mdel = async (keys: string[]): Promise<void> => {
 };
 
 /**
- * Search for key-value pairs by prefix.
- * Pages through all matches — never return a silent 1000-row slice.
+ * Search by prefix — fleet tables for mapped domains; KV for ephemeral prefixes.
  */
 export const getByPrefix = async (prefix: string): Promise<any[]> => {
+  try {
+    const { readMappedKvPrefix } = await import("./fleet_table_read_thru.ts");
+    const mapped = await readMappedKvPrefix(prefix);
+    if (mapped !== null) return mapped;
+  } catch (e) {
+    console.error("[kv] fleet read-thru prefix failed:", prefix, e);
+  }
   const supabase = client();
   const out: any[] = [];
   let from = 0;

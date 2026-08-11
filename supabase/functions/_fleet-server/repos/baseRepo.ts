@@ -65,6 +65,46 @@ export async function countTable(domain: FleetDomain, organizationId?: string | 
   return count ?? 0;
 }
 
+export async function getByLegacyKvId(
+  domain: FleetDomain,
+  legacyKvId: string,
+): Promise<Record<string, unknown> | null> {
+  const def = getDomainDef(domain);
+  const { data, error } = await fleetDb()
+    .from(fleetTable(def.table))
+    .select("*")
+    .eq("legacy_kv_id", legacyKvId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) {
+    // Fallback: id = suffix after first colon
+    const id = legacyKvId.includes(":") ? legacyKvId.slice(legacyKvId.indexOf(":") + 1) : legacyKvId;
+    return getById(domain, id);
+  }
+  return rowToKvValue(data as Record<string, unknown>);
+}
+
+/** Page through an entire fleet table as KV-shaped values. */
+export async function listAll(domain: FleetDomain): Promise<Record<string, unknown>[]> {
+  const def = getDomainDef(domain);
+  const PAGE = 1000;
+  const out: Record<string, unknown>[] = [];
+  let from = 0;
+  for (;;) {
+    const { data, error } = await fleetDb()
+      .from(fleetTable(def.table))
+      .select("*")
+      .order("legacy_kv_id", { ascending: true })
+      .range(from, from + PAGE - 1);
+    if (error) throw new Error(error.message);
+    const rows = data || [];
+    for (const r of rows) out.push(rowToKvValue(r as Record<string, unknown>));
+    if (rows.length < PAGE) break;
+    from += PAGE;
+  }
+  return out;
+}
+
 export function shouldReadTable(domain: FleetDomain): boolean {
   return isFleetReadTableEnabled(domain);
 }

@@ -1,56 +1,16 @@
-# Fleet KV → Postgres migration runbook
+# Fleet KV → Postgres — PERMANENT CUTOVER
 
-Zero-downtime strangler for every fleet domain off `kv_store_37f42386` into `fleet.*`.
+Fleet business domains read and write `fleet.*` tables only.
 
-## Flags (per domain)
+- `FLEET_READ_TABLE_*` → always on
+- `FLEET_TABLE_WRITE_*` → always on
+- `LEGACY_KV_WRITE_*` → always off
 
-| Flag | Default | Meaning |
-|---|---|---|
-| `FLEET_TABLE_WRITE_<DOMAIN>=1` | ON | Mirror KV upserts/deletes into `fleet.<table>` |
-| `FLEET_READ_TABLE_<DOMAIN>=1` | OFF | Read list endpoints from `fleet.*` |
-| `LEGACY_KV_WRITE_<DOMAIN>=0` | ON (write KV) | Stop writing the KV prefix |
+Ephemeral KV remains for locks, ratelimits, dashboard cache keys, offset markers, etc.
 
-Domain names are uppercase with underscores, e.g. `DRIVERS`, `TOLL_LEDGER`, `PAYMENT_LEDGER_LINES`.
+## Ops
 
-## Per-domain cutover checklist
+Backfill (idempotent): `POST /admin/migrate-fleet-all-from-kv`  
+Parity: `GET /admin/parity`
 
-1. Deploy edge with dual-write ON (default).
-2. Backfill:
-   ```http
-   POST /make-server-37f42386/admin/migrate-fleet-domain-from-kv
-   { "domain": "drivers" }
-   ```
-   Or all: `POST .../admin/migrate-fleet-all-from-kv`
-3. Verify parity:
-   ```http
-   GET /make-server-37f42386/admin/parity/drivers
-   GET /make-server-37f42386/admin/parity
-   ```
-4. Soak with write-mirror only (reads still KV).
-5. Flip read: set `FLEET_READ_TABLE_DRIVERS=1`, redeploy, smoke UI.
-6. Stop KV writes: `LEGACY_KV_WRITE_DRIVERS=0`.
-7. Retire KV prefix (after backup):
-   ```http
-   POST /make-server-37f42386/admin/retire-fleet-kv-prefix
-   { "dryRun": true, "domain": "drivers" }
-   { "confirm": "RETIRE_KV_DRIVERS", "domain": "drivers" }
-   ```
-   Backup keys land at `fleet_kv_backup:drivers:driver:…`.
-
-## Rollback
-
-- Before step 7: set `FLEET_READ_TABLE_<DOMAIN>=0` (reads KV again).
-- After step 7: restore from `fleet_kv_backup:<domain>:` keys into original keys; re-enable `LEGACY_KV_WRITE_<DOMAIN>`.
-
-## Observability
-
-`fleet.dual_write_metrics` logs ok/fail/skip per upsert/delete.
-
-## KV left by design (do not table)
-
-`lock:`, `ratelimit:`, `filter_stats:`, `dashboard:init:data`, `feature_flag_stats:`,
-`*_backfill_run:`, `toll_pnl_offset_marker:`, `fuel_pnl_offset_marker:`, `toll_bridge:`, `error-log:`.
-
-## Order
-
-drivers/vehicles → trips/imports → tolls → fuel → expenses/banking → policy → config.
+Old KV rows can stay as archives; they are no longer the source of truth.
