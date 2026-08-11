@@ -4,7 +4,7 @@ import { Card, CardContent } from '@roam/ui';
 import { CheckCircle2, Clock, CreditCard, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 
-/** Legacy type kept for cash pump steps elsewhere; Gas Card no longer uses pump. */
+/** Cash fuel flows use this step type elsewhere; Gas Card never uses pump steps. */
 export type FuelPumpStep = 'photo' | 'confirm' | 'submit';
 
 interface GasCardSummaryProps {
@@ -18,6 +18,10 @@ interface GasCardSummaryProps {
   cardMissing?: boolean;
 }
 
+/**
+ * Gas Card = odometer proof only.
+ * Amount / liters come from the Roam Fuels CSV match in Roam Dominion later.
+ */
 export function GasCardSummary({
   odometer,
   date,
@@ -35,7 +39,7 @@ export function GasCardSummary({
         </div>
         <h3 className="text-lg font-semibold text-slate-900">Gas Card Fill</h3>
         <p className="text-sm text-slate-500 max-w-xs">
-           Scan confirmed. Amount and liters come from the Roam Fuels statement later.
+           Odometer confirmed. No pump photo — sale amount and liters come from the Roam Fuels statement.
         </p>
       </div>
 
@@ -80,7 +84,7 @@ export function GasCardSummary({
         </div>
       ) : (
         <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
-          No pump photo needed. Use your card PIN at the station — Roam records who fueled and the odometer proof.
+          Use your card PIN at the station. Submit this log — admin will match the statement CSV later.
         </div>
       )}
 

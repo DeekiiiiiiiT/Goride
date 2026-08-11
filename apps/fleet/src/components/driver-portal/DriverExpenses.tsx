@@ -68,6 +68,7 @@ type ViewState =
   | 'fuel_gps_locking'
   | 'fuel_gps_retry'
   | 'method_select'
+  | 'gas_card_details' // Gas Card only — never shares cash/pump entry_details
   | 'entry_details'
   | 'toll_scan'
   | 'toll_review';
@@ -479,11 +480,22 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
     }
 
     const isGasCardFuel = category === 'Fuel' && fuelEntry.paymentMethod === 'gas_card';
+    // ——— Gas Card: odometer-only Roam anchor (no pump / no reimbursement tx) ———
     if (isGasCardFuel) {
+      if (viewState !== 'gas_card_details') {
+        setViewState('gas_card_details');
+      }
       if (!fuelEntry.odometerReading || fuelEntry.odometerReading <= 0) {
         const msg = "Odometer reading is required";
         setSubmitError(msg);
         toast.error(msg);
+        return;
+      }
+      if (!fuelEntry.odometerProof && fuelEntry.odometerMethod !== 'manual_override') {
+        const msg = "Odometer photo is required for Gas Card fills";
+        setSubmitError(msg);
+        toast.error(msg);
+        setViewState('odometer_scan');
         return;
       }
       if (!assignedGasCard) {
@@ -578,7 +590,16 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
         return;
     }
 
+    // Cash fuel only — Gas Card never reaches here
     if (category === 'Fuel') {
+        const pm = fuelEntry.paymentMethod;
+        if (pm !== 'personal_cash' && pm !== 'rideshare_cash') {
+             setViewState('method_select');
+             const msg = "Select how you paid for fuel";
+             setSubmitError(msg);
+             toast.error(msg);
+             return;
+        }
         if (!receiptFile) {
              const msg = "Pump display photo is required";
              console.log('[DriverExpenses] Validation fail:', msg);
@@ -909,7 +930,6 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
 
   const handleMethodSelect = async (method: 'gas_card' | 'personal_cash' | 'rideshare_cash') => {
     setFuelEntry(prev => ({ ...prev, paymentMethod: method }));
-    setFuelPumpStep('photo');
     setPumpFromOcr(false);
     setAmount('');
     setReceiptFile(null);
@@ -917,7 +937,10 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
     setAssignedGasCard(null);
     setGasCardLookupDone(false);
 
+    // Gas Card never enters cash/pump UI — dedicated screen + odometer-only submit.
     if (method === 'gas_card') {
+      setFuelPumpStep('photo');
+      setViewState('gas_card_details');
       try {
         const [vehicles, cards] = await Promise.all([
           api.getVehicles().catch(() => []),
@@ -941,10 +964,11 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
       } finally {
         setGasCardLookupDone(true);
       }
-    } else {
-      setGasCardLookupDone(true);
+      return;
     }
 
+    setFuelPumpStep('photo');
+    setGasCardLookupDone(true);
     setViewState('entry_details');
   };
 
@@ -983,6 +1007,7 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
         break;
       case 'fuel_gps_retry': setViewState('odometer_scan'); break;
       case 'method_select': setViewState('odometer_scan'); break;
+      case 'gas_card_details': setViewState('method_select'); break;
       case 'toll_scan': setViewState('category_select'); break;
       case 'toll_review': 
         // Clear scanned data so they can re-scan
@@ -1111,6 +1136,7 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
                 {viewState === 'fuel_gps_locking' && "Lock location"}
                 {viewState === 'fuel_gps_retry' && "Lock location"}
                 {viewState === 'method_select' && "Payment Method"}
+                {viewState === 'gas_card_details' && "Gas Card Fill"}
                 {viewState === 'entry_details' && (category === 'Fuel' ? "Fuel Details" : "Expense Details")}
                 {viewState === 'toll_scan' && "Scan Toll Receipt"}
                 {viewState === 'toll_review' && "Review Toll Details"}
@@ -1251,23 +1277,24 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
             <PaymentMethodSelector onSelect={handleMethodSelect} onCancel={goBack} />
           )}
 
+          {viewState === 'gas_card_details' && (
+            <div>
+              {fuelNoGpsManualVerifyNotice && (
+                <div className="px-6 pt-6 pb-0">{fuelNoGpsManualVerifyNotice}</div>
+              )}
+              <GasCardSummary
+                odometer={fuelEntry.odometerReading || 0}
+                date={date}
+                time={time}
+                isSubmitting={isSubmitting || !gasCardLookupDone}
+                onSubmit={handleSubmit}
+                cardLabel={assignedGasCard?.cardNumber}
+                cardMissing={gasCardLookupDone && !assignedGasCard}
+              />
+            </div>
+          )}
+
           {viewState === 'entry_details' && (
-            category === 'Fuel' && fuelEntry.paymentMethod === 'gas_card' ? (
-                <div>
-                  {fuelNoGpsManualVerifyNotice && (
-                    <div className="px-6 pt-6 pb-0">{fuelNoGpsManualVerifyNotice}</div>
-                  )}
-                  <GasCardSummary 
-                   odometer={fuelEntry.odometerReading || 0}
-                   date={date}
-                   time={time}
-                   isSubmitting={isSubmitting || (fuelEntry.paymentMethod === 'gas_card' && !gasCardLookupDone)}
-                   onSubmit={handleSubmit}
-                   cardLabel={assignedGasCard?.cardNumber}
-                   cardMissing={gasCardLookupDone && !assignedGasCard}
-                />
-                </div>
-            ) : (
             <form onSubmit={handleSubmit} className="p-6 space-y-6" id="expense-form" ref={formRef} noValidate>
               {category !== 'Fuel' && <EvidenceRetentionNotice />}
               <div className="space-y-4">
@@ -1403,7 +1430,6 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
                 )}
               </div>
             </form>
-            )
           )}
 
           {viewState === 'toll_scan' && (

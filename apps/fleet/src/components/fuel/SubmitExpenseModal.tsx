@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Textarea } from "../ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
-import { Upload, X, Loader2, MapPin, Plus, Trash2, ListFilter, FileText, Copy, AlertTriangle, Clock, Sparkles, Wand2, Building2, Camera } from 'lucide-react';
+import { Upload, X, Loader2, MapPin, Plus, Trash2, ListFilter, FileText, Copy, AlertTriangle, Clock, Sparkles, Wand2, Building2, Camera, CreditCard } from 'lucide-react';
 import { toast } from "sonner@2.0.3";
 import { api } from '../../services/api';
 import { uploadEvidenceFile } from '../../services/uploadEvidence';
@@ -19,6 +19,8 @@ import { cn } from "../ui/utils";
 import { fuelService } from '../../services/fuelService';
 import { StationProfile } from '../../types/station';
 import { useQuery } from '@tanstack/react-query';
+import type { FuelCard } from '../../types/fuel';
+import { findActiveFuelCardForSession } from '../../utils/fuelCardMatch';
 
 interface SubmitExpenseModalProps {
     isOpen: boolean;
@@ -44,6 +46,10 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
     const [activeTab, setActiveTab] = useState("single");
     const [isUploading, setIsUploading] = useState(false);
     const [isUploadingOdoPhoto, setIsUploadingOdoPhoto] = useState(false);
+    /** Inventory cards — resolve Active gas card like live driver fueling */
+    const [fuelCards, setFuelCards] = useState<FuelCard[]>([]);
+    const [assignedGasCard, setAssignedGasCard] = useState<FuelCard | null>(null);
+    const [gasCardLookupDone, setGasCardLookupDone] = useState(false);
     
     // AI Review Workflow (Phase 2 Step 2.3)
     const [aiReviewData, setAiReviewData] = useState<{ index: number, result: AIReceiptResult, image: string } | null>(null);
@@ -58,11 +64,15 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
         let cancelled = false;
         setStationsLoading(true);
         // Phase 5: Only fetch stations, parent companies come from React Query cache
-        fuelService.getStations()
-            .then((allStations: StationProfile[]) => {
+        Promise.all([
+            fuelService.getStations(),
+            fuelService.getFuelCards().catch(() => [] as FuelCard[]),
+        ])
+            .then(([allStations, cards]) => {
                 if (cancelled) return;
-                const verified = allStations.filter((s: StationProfile) => s.status === 'verified');
+                const verified = (allStations as StationProfile[]).filter((s) => s.status === 'verified');
                 setVerifiedStations(verified);
+                setFuelCards(cards || []);
                 
                 // Phase 5: Use cached parent companies from React Query
                 const companyNames = (parentCompaniesData || [])
@@ -76,6 +86,7 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
                 if (!cancelled) {
                     setVerifiedStations([]);
                     setParentCompanies([]);
+                    setFuelCards([]);
                 }
             })
             .finally(() => {
@@ -105,12 +116,31 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
         return `${year}-${month}-${day}`;
     };
 
+
     const [commonData, setCommonData] = useState({
         driverId: '',
         vehicleId: '',
         date: '',
         paymentSource: 'driver_cash',
     });
+
+    const isGasCard = commonData.paymentSource === 'company_card';
+
+    // Resolve Active inventory card (vehicle first, then driver) — matches live Gas Card path
+    useEffect(() => {
+        if (!isOpen || !isGasCard) {
+            setAssignedGasCard(null);
+            setGasCardLookupDone(!isGasCard);
+            return;
+        }
+        const card =
+            findActiveFuelCardForSession(fuelCards, {
+                vehicleId: commonData.vehicleId,
+                driverId: commonData.driverId,
+            }) || null;
+        setAssignedGasCard(card);
+        setGasCardLookupDone(true);
+    }, [isOpen, isGasCard, fuelCards, commonData.vehicleId, commonData.driverId]);
 
     const [entries, setEntries] = useState<any[]>([{
         id: crypto.randomUUID(),
@@ -447,6 +477,104 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
             return;
         }
 
+        // ——— Gas Card: match live driver flow (odometer + station + card; CSV supplies money) ———
+        if (commonData.paymentSource === 'company_card') {
+            if (!gasCardLookupDone) {
+                toast.error("Looking up assigned gas card…");
+                return;
+            }
+            if (!assignedGasCard) {
+                toast.error("No Active gas card assigned to this vehicle/driver in Card Inventory");
+                return;
+            }
+
+            const gasEntries = entries.filter((e) => e.odometer && parseFloat(e.odometer) > 0);
+            if (gasEntries.length === 0) {
+                toast.error("Odometer reading is required");
+                return;
+            }
+
+            for (const entry of gasEntries) {
+                if (!entry.odometerImageUrl && !entry.pendingOdometerFile) {
+                    toast.error("Odometer photo is required for Gas Card fills");
+                    return;
+                }
+                if (!entry.matchedStationId) {
+                    toast.error("Select a verified station from the Dominion list");
+                    return;
+                }
+            }
+
+            setIsSubmitting(true);
+            try {
+                const driver = drivers.find((d) => d.id === commonData.driverId);
+                for (let i = 0; i < gasEntries.length; i++) {
+                    const entry = gasEntries[i];
+                    const isLast = i === gasEntries.length - 1;
+                    let odometerImageUrl = entry.odometerImageUrl || '';
+                    if (entry.pendingOdometerFile) {
+                        const { url } = await uploadEvidenceFile(entry.pendingOdometerFile, {
+                            evidenceType: 'odometer_proof',
+                            sourceType: 'fuel_entry',
+                            sourceId: entry.id,
+                            retentionClass: 'ephemeral',
+                            parentStatus: 'Pending',
+                        });
+                        odometerImageUrl = url;
+                    }
+
+                    const stationLabel =
+                        verifiedStations.find((s) => s.id === entry.matchedStationId)?.name ||
+                        entry.stationLocation ||
+                        entry.stationName ||
+                        undefined;
+
+                    const fuelEntry = {
+                        id: entry.id,
+                        date: commonData.date || getLocalDateString(),
+                        time: entry.time
+                            ? (entry.time.length === 5 ? `${entry.time}:00` : entry.time)
+                            : undefined,
+                        cardId: assignedGasCard.id,
+                        vehicleId: commonData.vehicleId,
+                        driverId: commonData.driverId,
+                        amount: 0,
+                        odometer: parseFloat(entry.odometer),
+                        odometerImageUrl: odometerImageUrl || undefined,
+                        location: stationLabel,
+                        matchedStationId: entry.matchedStationId,
+                        type: 'Manual_Entry' as const,
+                        entryMode: 'Anchor' as const,
+                        paymentSource: 'Gas_Card' as const,
+                        entrySource: 'admin-manual' as const,
+                        reconciliationStatus: 'Pending' as const,
+                        metadata: {
+                            awaitingCardStatement: true,
+                            paymentSource: 'company_card',
+                            odometerMethod: odometerImageUrl ? 'Admin Photo Upload' : 'Direct Entry',
+                            odometerProofUrl: odometerImageUrl || undefined,
+                            matchedStationId: entry.matchedStationId,
+                            stationLocation: entry.stationLocation,
+                            driverName: driver?.name,
+                            countsInFuelSpend: false,
+                            countsInFuelVolume: false,
+                            source: 'Manual',
+                            isManual: true,
+                        },
+                    };
+
+                    await onSave({ _saveAsGasCardAnchor: true, fuelEntry }, isLast);
+                }
+                toast.success("Gas Card odometer logged — waiting for Roam Fuels statement");
+                onClose();
+            } catch (error) {
+                toast.error("Submission failed");
+            } finally {
+                setIsSubmitting(false);
+            }
+            return;
+        }
+
         const validEntries = entries.filter(e => e.amount && parseFloat(e.amount) > 0);
         if (validEntries.length === 0) {
             toast.error("Enter at least one valid amount");
@@ -572,7 +700,7 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
                         )}
                     </div>
                 </DialogHeader>
-                {!initialData && !aiReviewData && <EvidenceRetentionNotice className="mt-2" />}
+                {!initialData && !aiReviewData && !isGasCard && <EvidenceRetentionNotice className="mt-2" />}
 
                 {aiReviewData ? (
                     <AIExtractionReview 
@@ -628,7 +756,7 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
                                         <SelectItem value="company_card">
                                             <div>
                                                 <span className="font-medium">Gas Card</span>
-                                                <p className="text-[10px] text-slate-400 leading-tight">Used the company-issued fuel card</p>
+                                                <p className="text-[10px] text-slate-400 leading-tight">Odometer + verified station — money comes from Roam Fuels CSV</p>
                                             </div>
                                         </SelectItem>
                                         <SelectItem value="petty_cash">
@@ -639,6 +767,31 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
                                         </SelectItem>
                                     </SelectContent>
                                 </Select>
+                                {isGasCard && (
+                                    <div className={cn(
+                                        "mt-2 rounded-md border px-3 py-2 text-xs flex items-start gap-2",
+                                        gasCardLookupDone && !assignedGasCard
+                                            ? "border-rose-200 bg-rose-50 text-rose-800"
+                                            : "border-blue-200 bg-blue-50 text-blue-900"
+                                    )}>
+                                        <CreditCard className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                                        <div>
+                                            {!gasCardLookupDone ? (
+                                                <span>Looking up Card Inventory…</span>
+                                            ) : assignedGasCard ? (
+                                                <>
+                                                    <span className="font-medium">Assigned card: </span>
+                                                    <span className="font-mono">{assignedGasCard.cardNumber}</span>
+                                                    <p className="text-[10px] mt-0.5 opacity-80">
+                                                        No amount/receipt — CSV match fills money later.
+                                                    </p>
+                                                </>
+                                            ) : (
+                                                <span>No Active card on this vehicle/driver. Assign one in Card Inventory first.</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
 
@@ -646,6 +799,7 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
                             {activeTab === 'single' ? (
                                 <SingleForm 
                                     entry={entries[0]} 
+                                    isGasCard={isGasCard}
                                     brands={uniqueBrands}
                                     getStationsForBrand={getStationsForBrand}
                                     stationsLoading={stationsLoading}
@@ -668,6 +822,7 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
                             ) : (
                                 <BulkTable 
                                     entries={entries} 
+                                    isGasCard={isGasCard}
                                     brands={uniqueBrands}
                                     getStationsForBrand={getStationsForBrand}
                                     stationsLoading={stationsLoading}
@@ -699,9 +854,9 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
                 {!aiReviewData && (
                     <DialogFooter className="bg-slate-50 -mx-6 -mb-6 p-6 border-t mt-2 rounded-b-lg">
                         <Button variant="ghost" onClick={onClose}>Cancel</Button>
-                        <Button className="bg-indigo-600 hover:bg-indigo-700" onClick={handleSubmit} disabled={isSubmitting}>
+                        <Button className="bg-indigo-600 hover:bg-indigo-700" onClick={handleSubmit} disabled={isSubmitting || (isGasCard && (!gasCardLookupDone || !assignedGasCard))}>
                             {isSubmitting ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : null}
-                            {initialData ? 'Update' : 'Submit'}
+                            {initialData ? 'Update' : (isGasCard ? 'Submit Odometer Log' : 'Submit')}
                         </Button>
                     </DialogFooter>
                 )}
@@ -710,13 +865,14 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
     );
 }
 
-function SingleForm({ entry, brands, getStationsForBrand, stationsLoading, onUpdate, onBrandChange, onVerifiedStationSelect, onAmountChange, onPriceChange, onLocationChange, onSelectAddress, onFileUpload, onOdometerPhotoUpload, onAIVerify, isUploading, isUploadingOdoPhoto, isVerifying, suggestions, showSuggestions }: any) {
+function SingleForm({ entry, isGasCard, brands, getStationsForBrand, stationsLoading, onUpdate, onBrandChange, onVerifiedStationSelect, onAmountChange, onPriceChange, onLocationChange, onSelectAddress, onFileUpload, onOdometerPhotoUpload, onAIVerify, isUploading, isUploadingOdoPhoto, isVerifying, suggestions, showSuggestions }: any) {
     // Get verified stations for the currently selected brand
     const matchingStations: StationProfile[] = entry.stationName ? getStationsForBrand(entry.stationName) : [];
     const hasVerifiedStations = matchingStations.length > 0;
 
     return (
         <div className="space-y-4">
+            {!isGasCard && (
             <div className="grid grid-cols-3 gap-4">
                 <div className="space-y-2">
                     <Label>Amount ($) *</Label>
@@ -731,13 +887,14 @@ function SingleForm({ entry, brands, getStationsForBrand, stationsLoading, onUpd
                     <Input value={entry.liters} readOnly className="bg-slate-50" />
                 </div>
             </div>
+            )}
             <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                     <Label>Time</Label>
                     <Input type="time" value={entry.time} onChange={(e) => onUpdate({ time: e.target.value })} />
                 </div>
                 <div className="space-y-2">
-                    <div className="flex justify-between items-center"><Label>Odometer</Label><Button variant="link" size="sm" className="h-auto p-0 text-[10px]" onClick={onAIVerify} disabled={isVerifying}>AI Verify</Button></div>
+                    <div className="flex justify-between items-center"><Label>Odometer {isGasCard ? '*' : ''}</Label><Button variant="link" size="sm" className="h-auto p-0 text-[10px]" onClick={onAIVerify} disabled={isVerifying}>AI Verify</Button></div>
                     <div className="relative">
                         <Input type="number" value={entry.odometer} onChange={(e) => onUpdate({ odometer: e.target.value })} className={entry.isFlagged ? "border-amber-300 bg-amber-50" : ""} />
                         {entry.isFlagged && <AlertTriangle className="absolute right-2 top-2.5 h-4 w-4 text-amber-500" />}
@@ -748,7 +905,7 @@ function SingleForm({ entry, brands, getStationsForBrand, stationsLoading, onUpd
             {/* Station Brand + Verified Location Cascade */}
             <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                    <Label>Station</Label>
+                    <Label>Station{isGasCard ? ' *' : ''}</Label>
                     <Select value={entry.stationName} onValueChange={(val) => onBrandChange(val)}>
                         <SelectTrigger><SelectValue placeholder="Select Brand" /></SelectTrigger>
                         <SelectContent>
@@ -764,15 +921,17 @@ function SingleForm({ entry, brands, getStationsForBrand, stationsLoading, onUpd
                                     </span>
                                 </SelectItem>
                             ))}
+                            {!isGasCard && (
                             <SelectItem value="__other_brand__">
                                 <span className="text-slate-500 italic">Other / Unlisted</span>
                             </SelectItem>
+                            )}
                         </SelectContent>
                     </Select>
                 </div>
                 <div className="space-y-2">
                     <div className="flex items-center gap-2">
-                        <Label>Location</Label>
+                        <Label>Location{isGasCard ? ' *' : ''}</Label>
                         {entry.matchedStationId && (
                             <span className="text-[9px] font-medium text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-0 rounded-full flex items-center gap-0.5">
                                 <MapPin className="w-2.5 h-2.5" /> Verified
@@ -804,9 +963,11 @@ function SingleForm({ entry, brands, getStationsForBrand, stationsLoading, onUpd
                                         </span>
                                     </SelectItem>
                                 ))}
+                                {!isGasCard && (
                                 <SelectItem value="__custom__">
                                     <span className="text-slate-500 italic text-xs">Type address manually...</span>
                                 </SelectItem>
+                                )}
                             </SelectContent>
                         </Select>
                     ) : (
@@ -816,11 +977,15 @@ function SingleForm({ entry, brands, getStationsForBrand, stationsLoading, onUpd
                                 value={entry.stationLocation} 
                                 onChange={(e) => onLocationChange(e.target.value)} 
                                 placeholder={entry.stationName ? "Type address or location" : "Select a station first"}
+                                disabled={isGasCard}
                             />
-                            {showSuggestions && suggestions.length > 0 && (
+                            {showSuggestions && suggestions.length > 0 && !isGasCard && (
                                 <div className="absolute z-50 w-full mt-1 bg-white border rounded shadow-lg max-h-40 overflow-auto">
                                     {suggestions.map((s: any, i: number) => <button key={i} className="w-full text-left p-2 text-xs hover:bg-slate-100 truncate" onClick={() => onSelectAddress(s)}>{s.display_name}</button>)}
                                 </div>
+                            )}
+                            {isGasCard && !hasVerifiedStations && entry.stationName && (
+                                <p className="text-[10px] text-amber-700 mt-1">No verified stations for this brand in Dominion.</p>
                             )}
                         </div>
                     )}
@@ -834,7 +999,7 @@ function SingleForm({ entry, brands, getStationsForBrand, stationsLoading, onUpd
                     )}
 
                     {/* If user chose "Type address manually" after seeing verified stations */}
-                    {hasVerifiedStations && !entry.matchedStationId && (
+                    {hasVerifiedStations && !entry.matchedStationId && !isGasCard && (
                         <div className="relative mt-1">
                             <Input 
                                 value={entry.stationLocation} 
@@ -852,8 +1017,9 @@ function SingleForm({ entry, brands, getStationsForBrand, stationsLoading, onUpd
                 </div>
             </div>
 
-            {/* Receipt & Odometer Photo — side by side */}
-            <div className="grid grid-cols-2 gap-4">
+            {/* Receipt (cash only) & Odometer Photo */}
+            <div className={cn("grid gap-4", isGasCard ? "grid-cols-1" : "grid-cols-2")}>
+                {!isGasCard && (
                 <div className="space-y-2">
                     <Label className="flex items-center gap-1.5"><Upload className="h-3 w-3 text-slate-400" /> Receipt</Label>
                     <div className="flex items-center gap-4">
@@ -867,11 +1033,12 @@ function SingleForm({ entry, brands, getStationsForBrand, stationsLoading, onUpd
                         )}
                     </div>
                 </div>
+                )}
                 <div className="space-y-2">
-                    <Label className="flex items-center gap-1.5"><Camera className="h-3 w-3 text-slate-400" /> Odometer Photo</Label>
+                    <Label className="flex items-center gap-1.5"><Camera className="h-3 w-3 text-slate-400" /> Odometer Photo{isGasCard ? ' *' : ''}</Label>
                     <div className="flex items-center gap-4">
                         {entry.odometerImageUrl ? (
-                            <div className="relative h-20 w-full border rounded group"><img src={entry.odometerImageUrl} className="h-full w-full object-contain" /><Button size="icon" variant="destructive" className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100" onClick={() => onUpdate({ odometerImageUrl: '' })}><X className="h-3 w-3" /></Button></div>
+                            <div className="relative h-20 w-full border rounded group"><img src={entry.odometerImageUrl} className="h-full w-full object-contain" /><Button size="icon" variant="destructive" className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100" onClick={() => onUpdate({ odometerImageUrl: '', pendingOdometerFile: undefined })}><X className="h-3 w-3" /></Button></div>
                         ) : (
                             <label className="flex flex-col items-center justify-center w-full h-20 border-2 border-dashed rounded cursor-pointer hover:bg-blue-50 border-blue-200">
                                 {isUploadingOdoPhoto ? <Loader2 className="animate-spin" /> : <><Camera className="h-5 w-5 text-blue-400" /><span className="text-[10px] text-blue-500">Upload Odometer</span></>}
@@ -885,14 +1052,22 @@ function SingleForm({ entry, brands, getStationsForBrand, stationsLoading, onUpd
     );
 }
 
-function BulkTable({ entries, brands, getStationsForBrand, stationsLoading, onUpdate, onBrandChange, onVerifiedStationSelect, onAdd, onRemove, onDuplicate, onAmountChange, onPriceChange, onLocationChange, onSelectAddress, onFileUpload, onOdometerPhotoUpload, onAIVerify, onKeyDown, isUploading, isVerifying, suggestions, showSuggestions, activeLocationIndex }: any) {
+function BulkTable({ entries, isGasCard, brands, getStationsForBrand, stationsLoading, onUpdate, onBrandChange, onVerifiedStationSelect, onAdd, onRemove, onDuplicate, onAmountChange, onPriceChange, onLocationChange, onSelectAddress, onFileUpload, onOdometerPhotoUpload, onAIVerify, onKeyDown, isUploading, isVerifying, suggestions, showSuggestions, activeLocationIndex }: any) {
     return (
         <div className="border rounded-lg bg-white overflow-hidden">
             <div className="bg-slate-50 p-2 flex justify-between items-center"><span className="text-xs font-bold uppercase text-slate-500">Items</span><Button size="sm" variant="outline" className="h-7 text-[10px]" onClick={onAdd}><Plus className="h-3 w-3 mr-1" />Add</Button></div>
             <div className="overflow-x-auto">
                 <table className="w-full text-[11px]">
                     <thead className="bg-slate-50 border-b">
-                        <tr><th className="p-2 text-left">Time</th><th className="p-2 text-left">Amount</th><th className="p-2 text-left">Price</th><th className="p-2 text-left">Vol</th><th className="p-2 text-left">Station</th><th className="p-2 text-left">Odo</th><th className="p-2"></th></tr>
+                        <tr>
+                            <th className="p-2 text-left">Time</th>
+                            {!isGasCard && <th className="p-2 text-left">Amount</th>}
+                            {!isGasCard && <th className="p-2 text-left">Price</th>}
+                            {!isGasCard && <th className="p-2 text-left">Vol</th>}
+                            <th className="p-2 text-left">Station</th>
+                            <th className="p-2 text-left">Odo</th>
+                            <th className="p-2"></th>
+                        </tr>
                     </thead>
                     <tbody className="divide-y">
                         {entries.map((e: any, i: number) => {
@@ -901,9 +1076,9 @@ function BulkTable({ entries, brands, getStationsForBrand, stationsLoading, onUp
                             return (
                                 <tr key={e.id} className="hover:bg-slate-50">
                                     <td className="p-1"><Input className="h-7 text-[10px] px-1 w-16" type="time" value={e.time} onChange={(evt) => onUpdate(i, { time: evt.target.value })} /></td>
-                                    <td className="p-1"><Input className="h-7 text-[10px] px-1 w-16" type="number" value={e.amount} onChange={(evt) => onAmountChange(i, evt.target.value)} /></td>
-                                    <td className="p-1"><Input className="h-7 text-[10px] px-1 w-16" type="number" value={e.pricePerLiter} onChange={(evt) => onPriceChange(i, evt.target.value)} /></td>
-                                    <td className="p-1 text-slate-400">{e.liters || '--'}</td>
+                                    {!isGasCard && <td className="p-1"><Input className="h-7 text-[10px] px-1 w-16" type="number" value={e.amount} onChange={(evt) => onAmountChange(i, evt.target.value)} /></td>}
+                                    {!isGasCard && <td className="p-1"><Input className="h-7 text-[10px] px-1 w-16" type="number" value={e.pricePerLiter} onChange={(evt) => onPriceChange(i, evt.target.value)} /></td>}
+                                    {!isGasCard && <td className="p-1 text-slate-400">{e.liters || '--'}</td>}
                                     <td className="p-1">
                                         <div className="space-y-1">
                                             <Select value={e.stationName} onValueChange={(v) => onBrandChange(i, v)}>
@@ -921,13 +1096,13 @@ function BulkTable({ entries, brands, getStationsForBrand, stationsLoading, onUp
                                                     <SelectTrigger className="h-7 text-[10px]"><SelectValue placeholder="Select location" /></SelectTrigger>
                                                     <SelectContent>
                                                         {matchingStations.map((s: StationProfile) => <SelectItem key={s.id} value={s.id}>{s.name}{s.city ? ` — ${s.city}` : ''}</SelectItem>)}
-                                                        <SelectItem value="__custom__"><span className="italic text-slate-400">Manual...</span></SelectItem>
+                                                        {!isGasCard && <SelectItem value="__custom__"><span className="italic text-slate-400">Manual...</span></SelectItem>}
                                                     </SelectContent>
                                                 </Select>
                                             ) : (
                                                 <div className="relative">
-                                                    <Input className="h-7 text-[10px]" placeholder="Address" value={e.stationLocation} onChange={(evt) => onLocationChange(i, evt.target.value)} />
-                                                    {showSuggestions && activeLocationIndex === i && suggestions.length > 0 && (
+                                                    <Input className="h-7 text-[10px]" placeholder="Address" value={e.stationLocation} onChange={(evt) => onLocationChange(i, evt.target.value)} disabled={isGasCard} />
+                                                    {showSuggestions && activeLocationIndex === i && suggestions.length > 0 && !isGasCard && (
                                                         <div className="absolute z-50 w-48 mt-1 bg-white border rounded shadow-lg max-h-32 overflow-auto">
                                                             {suggestions.map((s: any, idx: number) => <button key={idx} className="w-full text-left p-1 text-[10px] hover:bg-slate-100 truncate" onClick={() => onSelectAddress(i, s)}>{s.display_name}</button>)}
                                                         </div>
@@ -942,7 +1117,11 @@ function BulkTable({ entries, brands, getStationsForBrand, stationsLoading, onUp
                                             <button className="absolute -top-3 right-0 text-[8px] text-blue-600 hover:underline" onClick={() => onAIVerify(i)}>Verify</button>
                                         </div>
                                     </td>
-                                    <td className="p-1"><div className="flex gap-1"><label className="cursor-pointer p-1 text-slate-400 hover:text-indigo-600" title="Upload Receipt"><input type="file" className="hidden" accept="image/*" onChange={(evt) => onFileUpload(i, evt)} /><Upload className="h-3 w-3" /></label><label className="cursor-pointer p-1 text-blue-400 hover:text-blue-600" title="Upload Odometer Photo"><input type="file" className="hidden" accept="image/*" onChange={(evt) => onOdometerPhotoUpload(i, evt)} /><Camera className="h-3 w-3" /></label><Button variant="ghost" size="icon" className="h-6 w-6 text-slate-400 hover:text-red-500" onClick={() => onRemove(i)}><Trash2 className="h-3 w-3" /></Button></div></td>
+                                    <td className="p-1"><div className="flex gap-1">
+                                        {!isGasCard && <label className="cursor-pointer p-1 text-slate-400 hover:text-indigo-600" title="Upload Receipt"><input type="file" className="hidden" accept="image/*" onChange={(evt) => onFileUpload(i, evt)} /><Upload className="h-3 w-3" /></label>}
+                                        <label className="cursor-pointer p-1 text-blue-400 hover:text-blue-600" title="Upload Odometer Photo"><input type="file" className="hidden" accept="image/*" onChange={(evt) => onOdometerPhotoUpload(i, evt)} /><Camera className="h-3 w-3" /></label>
+                                        <Button variant="ghost" size="icon" className="h-6 w-6 text-slate-400 hover:text-red-500" onClick={() => onRemove(i)}><Trash2 className="h-3 w-3" /></Button>
+                                    </div></td>
                                 </tr>
                             );
                         })}

@@ -652,6 +652,14 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
     const handleSaveExpense = async (transactionData: any, shouldRefresh = true) => {
         setIsSyncing(true);
         try {
+            // Gas Card manual = odometer/station anchor (same as live driver) — no reimbursement TX
+            if (transactionData?._saveAsGasCardAnchor && transactionData.fuelEntry) {
+                const saved = await fuelService.saveFuelEntry(transactionData.fuelEntry);
+                setLogs((prev) => [saved, ...prev.filter((l) => l.id !== saved.id)]);
+                if (shouldRefresh) await loadData(true);
+                return;
+            }
+
             const savedTx = await api.saveTransaction(transactionData);
             
             // If admin saves as 'Approved' immediately, process settlement
