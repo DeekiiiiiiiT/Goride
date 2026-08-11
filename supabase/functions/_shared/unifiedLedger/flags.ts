@@ -64,6 +64,27 @@ export function isLedgerLegacyMoneyWriteEnabled(island: string): boolean {
   return v === "1" || v === "true" || v === "yes";
 }
 
+/**
+ * Whether to post into ledger.entries for this island.
+ * - Dual-write flag ON → post (classic mirror)
+ * - Legacy write OFF → post (Phase D sole SSOT path for KV islands)
+ * - Product primary-read ON → keep posting so flipped UIs stay current
+ */
+export function shouldPostUnifiedLedger(island: string): boolean {
+  if (isLedgerDualWriteIslandEnabled(island)) return true;
+  if (!isLedgerLegacyMoneyWriteEnabled(island)) return true;
+  if (island === "rides_payment_journal" && isLedgerReadUnifiedRidesEnabled()) return true;
+  if (island === "dash_payments" && isLedgerReadUnifiedDashEnabled()) return true;
+  if (
+    (island === "kv_ledger_event" || island === "financial_event" || island === "rides_ledger_lines") &&
+    isLedgerReadUnifiedFleetEnabled()
+  ) {
+    return true;
+  }
+  if (island === "kv_toll_ledger" && isLedgerReadUnifiedTollEnabled()) return true;
+  return false;
+}
+
 /** Phase D: Dominion marks retiring islands instead of failing green. */
 export function isLedgerPhaseDReconMode(): boolean {
   return envTruthy("LEDGER_PHASE_D_RECON");

@@ -1,4 +1,4 @@
-import { isLedgerDualWriteIslandEnabled } from "./flags.ts";
+import { shouldPostUnifiedLedger } from "./flags.ts";
 import { ledgerPostEntry, majorToMinor } from "./postEntry.ts";
 import { logDualWriteMetric } from "./metrics.ts";
 
@@ -15,7 +15,7 @@ export async function dualWriteTollLedgerKv(entry: {
   vehicleId?: string | null;
   date?: string;
 }): Promise<void> {
-  if (!isLedgerDualWriteIslandEnabled("kv_toll_ledger")) {
+  if (!shouldPostUnifiedLedger("kv_toll_ledger")) {
     logDualWriteMetric({
       source_system: "kv_toll_ledger",
       status: "skipped",

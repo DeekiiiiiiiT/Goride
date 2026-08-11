@@ -5,10 +5,10 @@ import { createClient } from "jsr:@supabase/supabase-js@2.49.8";
 import { dualWriteTollLedgerKv } from "../_shared/unifiedLedger/dualWriteToll.ts";
 import { logDualWriteMetric } from "../_shared/unifiedLedger/metrics.ts";
 
-import { isLedgerDualWriteIslandEnabled } from "../_shared/unifiedLedger/flags.ts";
+import { shouldPostUnifiedLedger } from "../_shared/unifiedLedger/flags.ts";
 
 function dualWriteEnabled(island = "kv_ledger_event"): boolean {
-  return isLedgerDualWriteIslandEnabled(island);
+  return shouldPostUnifiedLedger(island);
 }
 
 function sb() {

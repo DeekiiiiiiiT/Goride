@@ -34,11 +34,11 @@ explicit sign-off required before any decommission step executes.
 | 9 | Dual-write: toll ledger | Complete |
 | 10 | Dual-write: Dash payments | Complete |
 | 11 | De-dup `TripLedgerPage` | Complete |
-| 12 | Per-island read cutover | Scaffold ready — `LEDGER_READ_UNIFIED_RIDES\|FLEET\|TOLL\|DASH` OFF until soak + shadow sign-off |
+| 12 | Per-island read cutover | **Done 2026-08-11** — all `LEDGER_READ_UNIFIED_*` ON |
 | 13 | Portal views + org-scoping decision | Complete |
 | 14 | Dominion unified feed | Complete |
-| 15 | Reconciliation/anomaly detection | Complete (Dash legacy count + soak clock + Phase D retired islands) |
-| 16 | Decommission (per island) | Ready (gated) — backup/hard-delete scripts; confirm env required; not executed |
+| 15 | Reconciliation/anomaly detection | Complete |
+| 16 | Decommission (per island) | **Done 2026-08-11** — KV money backed up + hard-retired; journal/FE SQL remain operational |
 | 17 | Scaling/archival (future, non-blocking) | Deferred |
 
 Decision records for the two owner-decision gates (Phase 2 ✅, Phase 13 ✅) live in
@@ -54,25 +54,22 @@ Org scoping Option 1 (RLS) locked in [`0004`](./adr/0004-org-scoping-for-ledger-
 
 ## Production cutover flags
 
-**Status (2026-08-07):** Dual-write + Dominion feed ON. Product primary-read flags **OFF**.
-48h soak clock started (see Dominion Unified Ledger → Phase 0 panel / `ledger_soak_status()`).
+**Status (2026-08-11):** Phase C–E complete for money KV. Product reads ON. Legacy KV money writers OFF.
+Money KV hard-retired into `ledger.kv_money_backup_20260811`. Rides payment journal +
+`ledger.financial_events` remain operational. New money still posts to `ledger.entries` via
+`shouldPostUnifiedLedger()` even with global dual-write OFF.
 
-| Flag | Effect |
+| Flag | Production |
 |---|---|
-| `LEDGER_DUAL_WRITE_ENABLED=1` | Mirror new money movement into `ledger.*` (Phases 7–10) |
-| `LEDGER_DUAL_WRITE_<ISLAND>=0` | Phase D per-island dual-write kill (default ON when global on) |
-| `LEDGER_LEGACY_WRITE_<ISLAND>=0` | Phase D stop appending to KV/island money stores |
-| `LEDGER_READ_UNIFIED=1` | Dominion unified feed (not product cutover) |
-| `LEDGER_READ_UNIFIED_RIDES\|FLEET\|TOLL\|DASH=1` | Phase C primary product reads from `ledger.entries` |
-| `LEDGER_SHADOW_READ=1` | Phase B shadow compare (no UX change) |
-| `LEDGER_PHASE_D_RECON=1` + `LEDGER_RETIRED_ISLANDS=` | Mark retiring islands in Dominion recon |
+| `LEDGER_READ_UNIFIED_*=1` | ON — product money screens read unified |
+| `LEDGER_LEGACY_WRITE_KV_*=0` | No new `ledger_event:*` / `toll_ledger:*` |
+| `LEDGER_DUAL_WRITE_ENABLED=0` | Global mirror off; unified still posts when reads ON / legacy off |
+| `LEDGER_PHASE_D_RECON=1` | Dominion retired-island mode |
+| `LEDGER_RETIRED_ISLANDS=…` | KV + journal + dash + FE |
 
-Dual-write is safe while product read flags stay off. Phase 16 hard delete stays gated
-(`LEDGER_HARD_RETIRE_CONFIRM` + `--execute`) until soak → shadow → read flip → write-stop
-sign-off. Disaster rollback after E: restore backup + re-enable legacy flags.
+**Disaster rollback:** restore `ledger.kv_money_backup_20260811` → `kv_store_37f42386`,
+re-enable legacy/dual-write flags, turn product read flags off.
 
-**Deploy:** Edge `rides`, `make-server-37f42386`, `toll-brain`, `payments`, `delivery`;
-Dominion admin UI for Unified Ledger / soak panel.
 
 ## Key artifacts (Phases 6–15)
 

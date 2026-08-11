@@ -1338,19 +1338,42 @@ async function loadMergedTollTxArray(): Promise<any[]> {
     }
   }
   let legacyAdded = 0;
+  let linkBackfilled = 0;
   for (const tx of rawTx || []) {
     if (!tx || typeof tx !== "object") continue;
     if (!isTollCategory(tx.category)) continue;
     const id = tx.id;
     if (id == null || id === "") continue;
     const sid = String(id);
-    if (byId.has(sid)) continue;
-    byId.set(sid, tx);
-    legacyAdded++;
+    const existing = byId.get(sid);
+    if (!existing) {
+      byId.set(sid, tx);
+      legacyAdded++;
+      continue;
+    }
+    // Ledger wins on identity, but keep confirmed trip links from the legacy
+    // twin when the ledger row was saved without them. Otherwise Unlinked
+    // Refunds can list a trip that Apply correctly rejects as already linked.
+    const legacyTripId = tx.tripId ?? tx.metadata?.tripId ?? null;
+    if (legacyTripId && !existing.tripId && !existing.metadata?.tripId) {
+      existing.tripId = String(legacyTripId);
+      existing.metadata = { ...(existing.metadata || {}), tripId: String(legacyTripId) };
+      linkBackfilled++;
+    }
+    const legacyPre = tx.preUnlinkedTripId ?? tx.metadata?.preUnlinkedTripId ?? null;
+    if (legacyPre && !existing.preUnlinkedTripId && !existing.metadata?.preUnlinkedTripId) {
+      existing.preUnlinkedTripId = String(legacyPre);
+      existing.metadata = {
+        ...(existing.metadata || {}),
+        preUnlinkedTripId: String(legacyPre),
+      };
+      linkBackfilled++;
+    }
   }
-  if (legacyAdded > 0) {
+  if (legacyAdded > 0 || linkBackfilled > 0) {
     console.log(
-      `[TollMerge] Merged ${legacyAdded} toll transaction(s) from transaction:* not in toll_ledger`,
+      `[TollMerge] Merged ${legacyAdded} toll transaction(s) from transaction:* not in toll_ledger` +
+        (linkBackfilled > 0 ? `; backfilled ${linkBackfilled} legacy trip link(s)` : ""),
     );
   }
   return Array.from(byId.values());
@@ -2203,9 +2226,9 @@ app.get(`${BASE}/unclaimed-refunds`, async (c) => {
     const tollTx = filterByDriver(loaded.tollTx, driverId);
     let trips = filterByDriver(loaded.trips, driverId);
 
-    // Build linkedTripIds from raw ledger — merged tx shapes have dropped tripId
-    // in production reads, which leaked confirmed matches into Unlinked Refunds.
-    const linkedTripIds = collectLinkedTripIds(await getAllTollLedgerEntries());
+    // Same merge used by Apply — ledger-only missed legacy transaction:* links
+    // and left already-matched trips visible in Unlinked Refunds (then 409 on apply).
+    const linkedTripIds = collectLinkedTripIds(tollTx);
 
     // Candidates: trips with a toll refund, no linked toll tx, and not already
     // resolved (cash_wash/phantom/expense_logged drop off; pending stays).
@@ -2814,10 +2837,72 @@ async function saveTollLedgerEntry(entry: TollLedgerRecord, c?: Context): Promis
 
 /**
  * Get a single toll ledger entry by ID.
+ * Phase D/E: after KV money rows stop / hard-retire, hydrate from unified ledger.
  */
 async function getTollLedgerEntry(id: string): Promise<TollLedgerRecord | null> {
   const entry = await kv.get(`${TOLL_LEDGER_PREFIX}${id}`);
-  return entry as TollLedgerRecord | null;
+  if (entry) return entry as TollLedgerRecord | null;
+
+  try {
+    const { unifiedLedgerClient } = await import("../_shared/unifiedLedger/postEntry.ts");
+    const client = unifiedLedgerClient();
+    const { data: receipt } = await client
+      .from("ledger_source_receipts")
+      .select("ledger_entry_id")
+      .eq("source_system", "kv_toll_ledger")
+      .eq("source_id", id)
+      .maybeSingle();
+    if (!receipt?.ledger_entry_id) return null;
+    const { data: e } = await client
+      .from("ledger_entries")
+      .select("id, entry_type, amount_minor, currency, effective_at, organization_id, metadata, reference_id")
+      .eq("id", receipt.ledger_entry_id)
+      .maybeSingle();
+    if (!e) return null;
+    const meta = (e.metadata ?? {}) as Record<string, unknown>;
+    const typ = String(meta.toll_type ?? "usage") as TollType;
+    const amtMajor = Number(e.amount_minor ?? 0) / 100;
+    const now = new Date().toISOString();
+    return {
+      id,
+      createdAt: now,
+      updatedAt: now,
+      vehicleId: meta.vehicle_id != null ? String(meta.vehicle_id) : null,
+      vehiclePlate: null,
+      driverId: meta.driver_id != null ? String(meta.driver_id) : null,
+      driverName: null,
+      tollTagId: null,
+      tagNumber: null,
+      plaza: null,
+      highway: null,
+      location: null,
+      date: String(e.effective_at ?? "").slice(0, 10),
+      time: null,
+      type: typ,
+      amount: typ === "usage" ? -Math.abs(amtMajor) : Math.abs(amtMajor),
+      paymentMethod: "tag_balance",
+      status: "resolved",
+      resolution: null,
+      isReconciled: true,
+      tripId: null,
+      matchConfidence: null,
+      matchedAt: null,
+      matchedBy: null,
+      batchId: null,
+      batchName: null,
+      importedAt: null,
+      sourceFile: null,
+      receiptUrl: null,
+      referenceNumber: null,
+      description: null,
+      notes: null,
+      auditTrail: [],
+      metadata: { ...meta, source: "ledger.entries" },
+    };
+  } catch (err) {
+    console.error("[TollLedgerStorage] unified hydrate failed:", err);
+    return null;
+  }
 }
 
 /**
@@ -8319,7 +8404,8 @@ app.get(`${BASE}/unlinked-shortfall-suggestions`, async (c) => {
     let trips = filterByDriver(loaded.trips, driverId);
     // Period-scoped when wizard passes from/to — avoid scoring every historical unlinked trip.
     trips = await filterByDateRange(trips, from, to);
-    const linkedTripIds = collectLinkedTripIds(await getAllTollLedgerEntries());
+    // Must match /unclaimed-refunds + Apply (merged tollTx, not ledger-only).
+    const linkedTripIds = collectLinkedTripIds(tollTx);
     const unresolved = trips.filter((t: any) => isUnresolvedRefund(t, linkedTripIds));
 
     const ctx = await loadUnlinkedShortfallContext(tollTx);
@@ -9258,6 +9344,7 @@ export {
 export {
   applyRefundResolution,
   isUnresolvedRefund,
+  collectLinkedTripIds,
   loadAllTollLedgerWithTrips,
   getRefundAutomationSettings,
   buildUnresolvedRefundSuggestionStatuses,

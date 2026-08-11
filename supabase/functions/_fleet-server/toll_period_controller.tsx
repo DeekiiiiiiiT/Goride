@@ -38,6 +38,7 @@ import { computeTollFleetLossForPeriod } from "../../../apps/fleet/src/utils/tol
 import {
   loadAllTollLedgerWithTrips,
   isUnresolvedRefund,
+  collectLinkedTripIds,
   loadDisputeRefundRecords,
   filterByDriver,
   loadAllByPrefix,
@@ -348,9 +349,8 @@ app.get(`${BASE}/periods`, requirePermission('toll.view'), async (c) => {
       if (tx?.id && tx?.date) tollDateById.set(String(tx.id), tx.date);
     }
 
-    const linkedTripIds = new Set(
-      scopedTollTx.filter((tx: any) => tx.tripId).map((tx: any) => String(tx.tripId)),
-    );
+    // Same link set as /unclaimed-refunds + Apply (tripId + preUnlinkedTripId).
+    const linkedTripIds = collectLinkedTripIds(scopedTollTx);
     const unclaimedRefundTrips = scopedTrips.filter((t: any) => isUnresolvedRefund(t, linkedTripIds));
 
     const claimedTransactionIds = new Set(

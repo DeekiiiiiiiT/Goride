@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { isLedgerDualWriteIslandEnabled } from "./flags.ts";
+import { shouldPostUnifiedLedger } from "./flags.ts";
 import { ledgerPostEntry } from "./postEntry.ts";
 import { logDualWriteMetric } from "./metrics.ts";
 
@@ -33,7 +33,7 @@ export async function dualWriteRidesJournalLine(
   tables: { journal: string },
   line: RidesJournalLineDualWrite,
 ): Promise<void> {
-  if (!isLedgerDualWriteIslandEnabled("rides_payment_journal")) {
+  if (!shouldPostUnifiedLedger("rides_payment_journal")) {
     logDualWriteMetric({
       source_system: "rides_payment_journal",
       status: "skipped",
@@ -131,7 +131,7 @@ export type LedgerLineDualWrite = {
  * Kept for reference but not called from production code.
  */
 export async function dualWriteRideLedgerLine(line: LedgerLineDualWrite): Promise<void> {
-  if (!isLedgerDualWriteIslandEnabled("rides_ledger_lines")) return;
+  if (!shouldPostUnifiedLedger("rides_ledger_lines")) return;
   const amount = Math.abs(line.paidToYouMinor);
   if (amount <= 0) return;
 

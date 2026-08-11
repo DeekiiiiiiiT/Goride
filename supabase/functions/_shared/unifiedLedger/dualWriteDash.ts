@@ -1,4 +1,4 @@
-import { isLedgerDualWriteIslandEnabled } from "./flags.ts";
+import { shouldPostUnifiedLedger } from "./flags.ts";
 import { ledgerPostEntry, majorToMinor } from "./postEntry.ts";
 import { logDualWriteMetric } from "./metrics.ts";
 import type { DashCaptureSplit } from "../dashMoneySplit.ts";
@@ -34,7 +34,7 @@ function resolveDashProduct(kind: DashTransactionDualWrite["kind"]):
 
 /** Phase 10: mirror Dash payments row into ledger.entries. */
 export async function dualWriteDashPayment(row: DashTransactionDualWrite): Promise<void> {
-  if (!isLedgerDualWriteIslandEnabled("dash_payments")) {
+  if (!shouldPostUnifiedLedger("dash_payments")) {
     logDualWriteMetric({
       source_system: "dash_payments",
       status: "skipped",
