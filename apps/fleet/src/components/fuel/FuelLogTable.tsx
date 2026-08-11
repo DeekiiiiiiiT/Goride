@@ -78,10 +78,6 @@ interface FuelLogTableProps {
     getDriverName: (id?: string) => string;
     dateRange?: DateRange;
     onDateRangeChange?: (range: DateRange | undefined) => void;
-    /** When true, Logs week differs from statement week used by Recon. */
-    statementWeekDiverged?: boolean;
-    statementWeekLabel?: string;
-    onResetToStatementWeek?: () => void;
 }
 
 export function FuelLogTable({ 
@@ -95,9 +91,6 @@ export function FuelLogTable({
     getDriverName,
     dateRange,
     onDateRangeChange,
-    statementWeekDiverged,
-    statementWeekLabel,
-    onResetToStatementWeek,
 }: FuelLogTableProps) {
     const { can } = usePermissions();
     const [searchTerm, setSearchTerm] = useState('');
@@ -307,15 +300,22 @@ export function FuelLogTable({
         };
     }, [entries, validAnchorIds, dateRange, ledgerIntegrity, allCycles]);
 
-    // Build per-vehicle timeline to compute previous odometer for each entry
+    // Build per-vehicle timeline to compute previous odometer for each entry.
+    // Skip JAA statement ledger rows (fees/declines/statement-only) — they have no
+    // odo and must not blank out Δ Prev for real portal/admin fills.
     const prevOdometerMap = useMemo(() => {
         const map = new Map<string, { prevOdo: number | null; prevDate: string | null }>();
         const byVehicle: Record<string, FuelEntry[]> = {};
         for (const e of entries) {
+            if (isJaaStatementLedgerRow(e)) continue;
             const vid = e.vehicleId || 'unknown';
             if (!byVehicle[vid]) byVehicle[vid] = [];
             byVehicle[vid].push(e);
         }
+        const validOdo = (e: FuelEntry): number | null => {
+            const n = Number(e.odometer);
+            return Number.isFinite(n) && n > 0 ? n : null;
+        };
         for (const vid of Object.keys(byVehicle)) {
             byVehicle[vid].sort((a, b) => {
                 const dc = (a.date || '').localeCompare(b.date || '');
@@ -324,14 +324,17 @@ export function FuelLogTable({
             });
             for (let i = 0; i < byVehicle[vid].length; i++) {
                 const entry = byVehicle[vid][i];
-                if (i > 0) {
-                    map.set(entry.id, {
-                        prevOdo: byVehicle[vid][i - 1].odometer ?? null,
-                        prevDate: byVehicle[vid][i - 1].date ?? null,
-                    });
-                } else {
-                    map.set(entry.id, { prevOdo: null, prevDate: null });
+                let prevOdo: number | null = null;
+                let prevDate: string | null = null;
+                for (let j = i - 1; j >= 0; j--) {
+                    const o = validOdo(byVehicle[vid][j]);
+                    if (o != null) {
+                        prevOdo = o;
+                        prevDate = byVehicle[vid][j].date ?? null;
+                        break;
+                    }
                 }
+                map.set(entry.id, { prevOdo, prevDate });
             }
         }
         return map;
@@ -406,19 +409,6 @@ export function FuelLogTable({
 
     return (
         <div className="space-y-4">
-            {statementWeekDiverged && (
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                <p>
-                  Logs week differs from the statement week used by Consumption Reconciliation
-                  {statementWeekLabel ? ` (${statementWeekLabel})` : ''}. Totals will not match until weeks align.
-                </p>
-                {onResetToStatementWeek && (
-                  <Button type="button" variant="outline" size="sm" className="shrink-0 border-amber-300 bg-white" onClick={onResetToStatementWeek}>
-                    Reset to statement week
-                  </Button>
-                )}
-              </div>
-            )}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-2">
                 <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm flex items-center gap-4">
                     <div className="h-10 w-10 bg-blue-50 rounded-full flex items-center justify-center shrink-0">

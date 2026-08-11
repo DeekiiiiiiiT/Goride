@@ -120,19 +120,23 @@ export function buildCanonicalTripFareEventsFromTrip(trip: Record<string, unknow
   let grossAmount = fareGross;
 
   if (isUber) {
-    // Uber: fare_earning = CSV fare breakdown (uberFareComponents). Promotions are embedded in that total.
-    // Driver-statement promotions ($ payments_driver) are posted as a single import_batch promotion event,
-    // not split per trip — Statement Summary derives Net Fare as Σ fare_earning − Σ promotion.
+    // Period Earnings SSOT matches Driver Detail trip rollup: trip.amount = fare + tips.
+    // Prefer amount − tips for fare_earning (tips posted as a separate tip event).
+    // Fall back to uberFareComponents only when amount is missing/zero.
+    const tips = coerceAmount(trip.uberTips);
     const uberFare = coerceAmount(trip.uberFareComponents);
     const priorAdj = coerceAmount(trip.uberPriorPeriodAdjustment);
+    const tripAmount = coerceAmount(trip.amount);
 
-    if (uberFare > 0) {
+    if (tripAmount > 0) {
+      fareGross = Math.max(0, Number((tripAmount - tips).toFixed(2)));
+      netAmount = fareGross;
+      grossAmount = fareGross;
+    } else if (uberFare > 0) {
       fareGross = uberFare;
       netAmount = uberFare;
       grossAmount = uberFare;
     } else {
-      // uberFareComponents is 0: derive from trip.amount minus tips and prior-period (separate ledger events)
-      const tips = coerceAmount(trip.uberTips);
       fareGross = Math.max(0, fareGross - tips - priorAdj);
       netAmount = fareGross;
       grossAmount = fareGross;
@@ -382,9 +386,9 @@ export async function appendCanonicalTripFaresIfEligibleWithStats(
   let skipped = 0;
   let failed = 0;
   const batch: Record<string, unknown>[] = [];
+  // Always project trip → fare_earning/tip/prior/toll. Uber payment_line rows are raw grain only
+  // (import_batch) and must not suppress trip fares — otherwise Period Earnings / PA lose Uber.
   for (const trip of trips) {
-    const platform = String(trip.platform || '').trim();
-    if (trip.usesPaymentLineSsot === true && platform === 'Uber') continue;
     batch.push(...buildCanonicalTripFareEventsFromTrip(trip));
   }
   if (batch.length === 0) return { inserted, skipped, failed };

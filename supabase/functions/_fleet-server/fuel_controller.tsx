@@ -3324,12 +3324,19 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
             const rollingAvg = await fuelLogic.calculateRollingEfficiency(entry.vehicleId, entry.date);
             const effectiveBaseline = rollingAvg?.avgKmPerLiter || 0;
 
-            // 2. Fetch recent entries to calculate cycle state using Step 1.3 Helper
-            const lastAnchor = await fuelLogic.getLastAnchor(entry.vehicleId);
+            // 2. Fetch cycle state as-of this entry (historical edits must not see later fills)
+            const lastAnchor = await fuelLogic.getLastAnchor(entry.vehicleId, {
+                asOfDate: entry.date,
+                excludeId: entry.id,
+            });
             const lastAnchorOdo = Number(lastAnchor?.odometer) || 0;
             const lastAnchorDate = lastAnchor?.date || null;
             
-            const cycleEntries = await fuelLogic.getEntriesSinceLastAnchor(entry.vehicleId, lastAnchorDate);
+            const cycleEntries = await fuelLogic.getEntriesSinceLastAnchor(
+                entry.vehicleId,
+                lastAnchorDate,
+                { asOfDate: entry.date, excludeId: entry.id },
+            );
             
             // Step 2.1: Accumulation Logic (with carryover support)
             let carryoverFromLastAnchor = 0;
@@ -3387,16 +3394,12 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
                 .neq("value->>id", entry.id);
             const recentTxCount = recentTxCountRaw || 0;
 
-            // Step 5.1: Odometer Sequence Audit - fetch only the most recent entry for this vehicle
-            const { data: prevEntryData } = await supabase
-                .from("kv_store_37f42386")
-                .select("value")
-                .like("key", "fuel_entry:%")
-                .eq("value->>vehicleId", entry.vehicleId)
-                .neq("value->>id", entry.id)
-                .order("value->>date", { ascending: false })
-                .limit(1);
-            const prevEntry = prevEntryData?.[0]?.value || null;
+            // Step 5.1: Odometer sequence — previous fill BEFORE this entry's timestamp
+            const prevEntry = await fuelLogic.getPreviousFuelEntry(
+                entry.vehicleId,
+                entry.date,
+                entry.id,
+            );
             const odoAudit = fuelLogic.auditOdometerSequence({
                 currentOdo: Number(entry.odometer),
                 prevOdo: Number(prevEntry?.odometer || 0),

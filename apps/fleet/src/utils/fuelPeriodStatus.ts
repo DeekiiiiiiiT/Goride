@@ -17,6 +17,7 @@ import {
   isYmdInFuelWeek,
   type PeriodWeekOption,
 } from './fuelWeekPeriod';
+import { fuelOpsSpendAmount } from './fuelOpsEligibility';
 
 export type FuelPeriodStatus = 'outstanding' | 'completed';
 
@@ -161,7 +162,7 @@ export function deriveFuelReconciliationPeriods(input: DeriveFuelPeriodsInput): 
       const vEntries = weekEntries.filter((e) => e.vehicleId === vehicle.id);
       const totalSpend =
         liveReport?.totalGasCardCost ??
-        vEntries.reduce((s, e) => s + (e.amount || 0), 0);
+        vEntries.reduce((s, e) => s + fuelOpsSpendAmount(e), 0);
       const pendingCount =
         liveReport?.pendingCount ??
         vEntries.filter((e) => e.reconciliationStatus === 'Pending').length;

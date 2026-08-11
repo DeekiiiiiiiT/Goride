@@ -1183,16 +1183,6 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
                 getDriverName={getDriverName}
                 dateRange={logDateRange}
                 onDateRangeChange={setLogDateRange}
-                statementWeekDiverged={logCustomOverride}
-                statementWeekLabel={
-                  activeFuelWeek?.from && activeFuelWeek?.to
-                    ? `${format(activeFuelWeek.from, 'MMM d')} – ${format(activeFuelWeek.to, 'MMM d, yyyy')}`
-                    : undefined
-                }
-                onResetToStatementWeek={() => {
-                  setLogCustomOverride(false);
-                  setLogDateRangeOverride(undefined);
-                }}
             />
         </div>
       )}

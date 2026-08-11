@@ -250,7 +250,7 @@ describe('aggregateCanonicalEventsToLedgerDriverOverview', () => {
     expect(data.platformStats.Roam.cashCollected).toBe(200);
   });
 
-  it('includes toll_support_adjustment in earnings and disputeRefunds', () => {
+  it('keeps toll_support_adjustment on disputeRefunds only (not Period Earnings)', () => {
     const period = [
       {
         eventType: 'toll_support_adjustment',
@@ -260,9 +260,64 @@ describe('aggregateCanonicalEventsToLedgerDriverOverview', () => {
         date: '2026-03-06',
         platform: 'Uber',
       },
+      {
+        eventType: 'fare_earning',
+        driverId: driver,
+        netAmount: 100,
+        grossAmount: 100,
+        direction: 'inflow',
+        date: '2026-03-06',
+        platform: 'Uber',
+      },
     ];
     const data = aggregateCanonicalEventsToLedgerDriverOverview(period, [], [], undefined) as any;
-    expect(data.period.earnings).toBe(12);
+    expect(data.period.earnings).toBe(100);
     expect(data.period.disputeRefunds).toBe(12);
+    expect(data.platformStats.Uber.earnings).toBe(100);
+  });
+
+  it('ignores import_batch prior_period and trip-native Uber promotion (trip amount SSOT)', () => {
+    const period = [
+      {
+        eventType: 'fare_earning',
+        driverId: driver,
+        netAmount: 900,
+        grossAmount: 900,
+        direction: 'inflow',
+        date: '2026-03-06',
+        platform: 'Uber',
+        sourceType: 'trip',
+      },
+      {
+        eventType: 'tip',
+        driverId: driver,
+        netAmount: 100,
+        direction: 'inflow',
+        date: '2026-03-06',
+        platform: 'Uber',
+        sourceType: 'trip',
+      },
+      {
+        eventType: 'prior_period_adjustment',
+        driverId: driver,
+        netAmount: 100,
+        direction: 'inflow',
+        date: '2026-03-06',
+        platform: 'Uber',
+        sourceType: 'import_batch',
+      },
+      {
+        eventType: 'promotion',
+        driverId: driver,
+        netAmount: 50,
+        direction: 'inflow',
+        date: '2026-03-06',
+        platform: 'Uber',
+        sourceType: 'import_batch',
+      },
+    ];
+    const data = aggregateCanonicalEventsToLedgerDriverOverview(period, [], [], undefined) as any;
+    expect(data.period.earnings).toBe(1000);
+    expect(data.platformStats.Uber.earnings).toBe(1000);
   });
 });

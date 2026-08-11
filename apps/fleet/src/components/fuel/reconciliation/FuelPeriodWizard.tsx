@@ -31,6 +31,7 @@ import {
 import { buildFuelStepCounts, type FuelReconciliationPeriod } from '../../../utils/fuelPeriodStatus';
 import { isEntryInInclusiveYmdRange, reportWeekYmdBounds, isSameFuelStatement } from '../../../utils/fuelWeekPeriod';
 import { sumPaidByDriverForReport } from '../../../utils/fuelPaidByDriver';
+import { fuelOpsSpendAmount } from '../../../utils/fuelOpsEligibility';
 
 /**
  * Period wizard shell — NOT the production recon entry point.
@@ -219,7 +220,7 @@ function FuelPeriodWizardInner({
         : 0;
       return {
         vehicleId: vehicle.id,
-        totalSpend: report?.totalGasCardCost ?? vEntries.reduce((s, e) => s + e.amount, 0),
+        totalSpend: report?.totalGasCardCost ?? vEntries.reduce((s, e) => s + fuelOpsSpendAmount(e), 0),
         companyShare: report?.companyShare ?? 0,
         driverShare: report?.driverShare ?? 0,
         misc: report?.miscellaneousCost ?? 0,

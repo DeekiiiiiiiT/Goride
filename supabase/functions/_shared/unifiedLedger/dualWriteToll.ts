@@ -102,6 +102,48 @@ export async function dualWriteTollLedgerKv(entry: {
       entry_type: `toll_${entry.type}`,
       amount_minor: amountMinor,
     });
+
+    // Root-cause guard: silent RPC soft-fail left island rows without receipts (soak delta −12).
+    if (!(result.inserted || result.skipped || result.conflict)) {
+      const retry = await ledgerPostEntry({
+        idempotencyKey: `kv_toll_ledger:${entry.id}`,
+        entryType: `toll_${entry.type}`,
+        debitAccountKey: debitKey,
+        creditAccountKey: creditKey,
+        amountMinor,
+        currency: entry.currency ?? "JMD",
+        product,
+        organizationId: entry.organizationId ?? null,
+        effectiveAt: entry.date ? `${entry.date}T12:00:00.000Z` : new Date().toISOString(),
+        referenceType: "toll",
+        referenceId: entry.id,
+        metadata: {
+          driver_id: entry.driverId,
+          vehicle_id: entry.vehicleId,
+          toll_type: entry.type,
+        },
+        sourceSystem: "kv_toll_ledger",
+        sourceId: entry.id,
+        sourceIdempotencyKey: entry.id,
+      });
+      logDualWriteMetric({
+        source_system: "kv_toll_ledger",
+        status: retry.inserted || retry.skipped || retry.conflict ? "ok" : "fail",
+        reason: retry.conflict
+          ? "conflict_retry"
+          : retry.skipped
+          ? "idempotent_skip_retry"
+          : retry.inserted
+          ? "inserted_retry"
+          : "unknown_retry",
+        source_id: entry.id,
+        entry_type: `toll_${entry.type}`,
+        amount_minor: amountMinor,
+      });
+      if (!(retry.inserted || retry.skipped || retry.conflict)) {
+        throw new Error(`kv_toll_ledger dual-write soft-fail for ${entry.id}`);
+      }
+    }
   } catch (e) {
     logDualWriteMetric({
       source_system: "kv_toll_ledger",

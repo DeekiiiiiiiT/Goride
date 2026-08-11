@@ -183,7 +183,7 @@ export function ReconciliationTable({
         };
     }, [weekStart, drivers]);
 
-    // Same Gross Revenue as Driver Earnings History (ledger fare_earning) for PA quota %
+    // Same period.earnings as Driver Detail (ledgerMoneyAggregate / driver-overview) for PA quota %
     const paMayBeActive = useMemo(() => {
         if (personalAllowanceConfig.enabled) return true;
         return earningsPolicies.some((p) => p.personalAllowance?.enabled || p.versions?.some((v) => v.personalAllowance?.enabled));
@@ -213,17 +213,15 @@ export function ReconciliationTable({
             await Promise.all(
                 ids.map(async (driverId) => {
                     try {
-                        const result = await api.getLedgerEarningsHistory({
+                        // Same period.earnings SSOT as Driver Detail / ledgerMoneyAggregate
+                        const overview = await api.getLedgerDriverOverview({
                             driverId,
-                            periodType: 'weekly',
                             startDate,
                             endDate,
                         });
-                        const row = (result.data || []).find(
-                            (x: any) => String(x.periodStart || '').slice(0, 10) === startDate,
-                        );
-                        if (row && Number.isFinite(Number(row.grossRevenue))) {
-                            map.set(driverId, Number(row.grossRevenue));
+                        const earnings = Number(overview?.period?.earnings);
+                        if (Number.isFinite(earnings)) {
+                            map.set(driverId, earnings);
                         }
                     } catch {
                         /* leave missing — PA falls back to trip gross */

@@ -26,6 +26,8 @@ interface PeriodRow {
   periodStart: Date;
   periodEnd: Date;
   grossRevenue: number;
+  /** Matches Driver Detail Period Earnings / PA (driver-overview period.earnings). */
+  periodEarnings: number;
   driverShare: number;
   fleetShare: number;
   expenses: number;
@@ -95,6 +97,10 @@ export function DriverEarningsHistory({ driverId, trips, transactions }: DriverE
             periodStart: new Date(row.periodStart + 'T00:00:00'),
             periodEnd: new Date(row.periodEnd + 'T23:59:59'),
             grossRevenue: row.grossRevenue,
+            periodEarnings:
+              row.periodEarnings != null && Number.isFinite(Number(row.periodEarnings))
+                ? Number(row.periodEarnings)
+                : Number(row.grossRevenue) || 0,
             driverShare: row.driverShare,
             fleetShare: row.fleetShare,
             expenses: row.expenses,
@@ -221,6 +227,7 @@ export function DriverEarningsHistory({ driverId, trips, transactions }: DriverE
             ? format(row.periodStart, 'dd/MM/yyyy')
             : format(row.periodStart, 'MMMM yyyy'),
         'Trip Count': row.tripCount,
+        'Period Earnings': row.periodEarnings.toFixed(2),
         'Ledger Gross Revenue': row.grossRevenue.toFixed(2),
         'Tier Name': row.tier.name,
         'Tier Share %': row.tier.sharePercentage + '%',
@@ -388,7 +395,7 @@ export function DriverEarningsHistory({ driverId, trips, transactions }: DriverE
               <div className="flex items-center gap-2">
                 <Target className={`h-4 w-4 ${isViewingSelected ? 'text-indigo-500' : 'text-slate-500'}`} />
                 <span className="text-sm font-medium text-slate-700">
-                  {barLabel}: ${displayRow.grossRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  {barLabel}: ${displayRow.periodEarnings.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                   {' / '}
                   ${displayRow.quotaTarget.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                   {displayRow.quotaPercent !== null && (
@@ -447,7 +454,8 @@ export function DriverEarningsHistory({ driverId, trips, transactions }: DriverE
               <TableRow>
                 <TableHead>{periodColumnLabel}</TableHead>
                 <TableHead className="text-right">Trips</TableHead>
-                <TableHead className="text-right">Ledger Gross</TableHead>
+                <TableHead className="text-right">Period Earnings</TableHead>
+                <TableHead className="text-right text-slate-400">Fare Gross</TableHead>
                 <TableHead className="text-right">Driver Share</TableHead>
                 <TableHead className="text-right">Fleet Share</TableHead>
                 <TableHead className="text-center">Tier</TableHead>
@@ -478,8 +486,13 @@ export function DriverEarningsHistory({ driverId, trips, transactions }: DriverE
                     {row.tripCount > 0 ? row.tripCount : <span className="text-slate-300">—</span>}
                   </TableCell>
 
-                  {/* Ledger Gross — distinct from Overview Period Earnings */}
-                  <TableCell className="text-right text-slate-600">
+                  {/* Period Earnings — same SSOT as Driver Detail / PA */}
+                  <TableCell className="text-right text-slate-700 font-medium tabular-nums">
+                    ${row.periodEarnings.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </TableCell>
+
+                  {/* Fare gross — base for driver/fleet share tiers */}
+                  <TableCell className="text-right text-slate-400 tabular-nums text-xs">
                     ${row.grossRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                   </TableCell>
 

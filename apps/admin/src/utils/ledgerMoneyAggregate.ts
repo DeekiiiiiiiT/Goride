@@ -17,6 +17,7 @@ export type CanonicalMoneyEvent = {
   metadata?: Record<string, unknown>;
   periodStart?: string;
   periodEnd?: string;
+  sourceType?: string;
 };
 
 function normPlatform(p: string | undefined): string {
@@ -48,6 +49,7 @@ function asMoneyEvent(raw: unknown): CanonicalMoneyEvent | null {
       : undefined,
     periodStart: typeof e.periodStart === "string" ? e.periodStart : undefined,
     periodEnd: typeof e.periodEnd === "string" ? e.periodEnd : undefined,
+    sourceType: typeof e.sourceType === "string" ? e.sourceType : undefined,
   };
 }
 
@@ -376,12 +378,22 @@ function accumulateWindow(events: CanonicalMoneyEvent[], platformsParam?: string
       if (plat === "Uber" && !uberHasStatement) a.pUberTips += net;
       addDaily(e.date.slice(0, 10), plat, net);
     } else if (et === "prior_period_adjustment") {
+      // Trip-projected prior only. Import payment-grain "prior" often duplicates tip / fare adjust.
+      if (e.sourceType === "import_batch") {
+        continue;
+      }
       a.pEarnings += net;
       ensurePlat(plat);
       a.pPlatformStats[plat].earnings += net;
       if (plat === "Uber") a.pUberPrior += net;
       addDaily(e.date.slice(0, 10), plat, net);
     } else if (et === "promotion") {
+      // Statement-mode promotions are already in uberUseStatementForFare above.
+      // Trip-native Uber Overview uses trip.amount (fare_earning + tip); payments_driver
+      // promotion rows would double-count when trips already include bonus dollars.
+      if (plat === "Uber" && !uberHasStatement) {
+        continue;
+      }
       a.pEarnings += net;
       ensurePlat(plat);
       a.pPlatformStats[plat].earnings += net;
@@ -404,11 +416,8 @@ function accumulateWindow(events: CanonicalMoneyEvent[], platformsParam?: string
     } else if (et === "cancelled_trip_loss") {
       a.pCancelledCount += 1;
     } else if (et === "toll_support_adjustment" || et === "dispute_refund") {
-      a.pEarnings += net;
+      // Dispute / toll-support recoveries belong on Toll Refunded only — never Period Earnings.
       a.pDisputeRefunds += Math.abs(net);
-      ensurePlat(plat);
-      a.pPlatformStats[plat].earnings += net;
-      addDaily(e.date.slice(0, 10), plat, net);
     } else if (et === "statement_adjustment") {
       a.pEarnings += net;
       ensurePlat(plat);

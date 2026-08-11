@@ -2277,10 +2277,9 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       for (const [platform, stats] of Object.entries(metrics.platformStats)) {
         platformStats[platform] = { ...stats };
       }
-      // Override financial fields from ledger (except Uber — use trip rows for period, same calendar logic as Roam/InDrive).
+      // Override financial fields from ledger for every platform (Uber included — trip ops stay for distance/ratings).
       for (const [rawPlat, stats] of Object.entries(ledgerOverview.platformStats)) {
         const platform = normalizePlatform(rawPlat);
-        if (platform === 'Uber') continue;
         if (!platformStats[platform]) {
           platformStats[platform] = { earnings: 0, trips: 0, completed: 0, distance: 0, ratingSum: 0, ratingCount: 0, tolls: 0, cashCollected: 0 };
         }
@@ -2343,15 +2342,8 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         }
       }
 
-      /** When canonical/ledger only has Uber (or partial platforms), `period.earnings` is not the sum of the rows we show — trip-backed platforms stay in the breakdown. Sum merged rows for headline. */
-      const sumMergedEarnings = (() => {
-        let t = 0;
-        for (const [name, s] of Object.entries(platformStats)) {
-          if (name === 'Dispute Recoveries') continue;
-          t += Number((s as any)?.earnings) || 0;
-        }
-        return t;
-      })();
+      /** Headline = ledger period.earnings (= fare/tip SSOT; disputes stay on Toll card only). */
+      const displayPeriodEarnings = Number(ledgerOverview.period.earnings) || 0;
       const sumMergedCash = (() => {
         let t = 0;
         for (const [name, s] of Object.entries(platformStats)) {
@@ -2361,8 +2353,6 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         return t;
       })();
 
-      // Headline = sum of per-platform rows we show (trip-date Uber + ledger others), not raw ledger period.earnings.
-      const displayPeriodEarnings = sumMergedEarnings;
       const displayCashCollected = sumMergedCash;
       const prevEarningsNum = Number(ledgerOverview.prevPeriod.earnings) || 0;
       const trendPercentMerged =

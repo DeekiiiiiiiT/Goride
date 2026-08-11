@@ -1,12 +1,15 @@
 import { FuelEntry, FuelCycle } from '../types/fuel';
 import { Vehicle } from '../types/vehicle';
 import { classifyAnchor, isStableCycleId, resolveTankCapacity } from './fuelAnchorLogic';
+import { isJaaStatementLedgerRow } from './jaaFuelStatementMatcher';
 
 /**
  * Groups fuel entries into tank cycles.
  * Prefers persisted server metadata (isCapacityClose / isSoftAnchor / volumeContributed).
  * Capacity close = full-tank cycle with spillover. Driver Full Tank is ignored.
  * Falls back to local classifyAnchor (98%) only when metadata is missing (legacy rows).
+ * Card statement ledger rows (jaa_raw fees/declines/statement fills) never participate —
+ * they have no trustworthy odometer and must not reset anchors to 0.
  * See docs/fuel-brain-spine.md.
  */
 export function calculateFuelCycles(entries: FuelEntry[], vehicles: Vehicle[] = []): FuelCycle[] {
@@ -18,6 +21,8 @@ export function calculateFuelCycles(entries: FuelEntry[], vehicles: Vehicle[] = 
     const vehicleGroups = new Map<string, FuelEntry[]>();
     entries.forEach(entry => {
         if (!entry.vehicleId) return;
+        // Statement ledger belongs on Card Inventory — never Full Tanks cycle math
+        if (isJaaStatementLedgerRow(entry)) return;
         if (!vehicleGroups.has(entry.vehicleId)) {
             vehicleGroups.set(entry.vehicleId, []);
         }
@@ -113,10 +118,12 @@ export function calculateFuelCycles(entries: FuelEntry[], vehicles: Vehicle[] = 
             }
 
             const isCycleEnd = isHard || isSoft;
+            const entryOdo = Number(entry.odometer);
+            const hasValidOdo = Number.isFinite(entryOdo) && entryOdo > 0;
 
             if (isCycleEnd) {
                 if (lastAnchorOdometer !== undefined) {
-                    const distance = (entry.odometer || 0) - lastAnchorOdometer;
+                    const distance = hasValidOdo ? entryOdo - lastAnchorOdometer : 0;
 
                     if (distance > 0) {
                         const cycleTransactions = [
@@ -172,7 +179,7 @@ export function calculateFuelCycles(entries: FuelEntry[], vehicles: Vehicle[] = 
                             resetType,
                             trustTier,
                             startOdometer: lastAnchorOdometer,
-                            endOdometer: entry.odometer || 0,
+                            endOdometer: entryOdo,
                             startingPercentage,
                             isCapped,
                             excessVolume: excessVolume > 0 ? excessVolume : undefined,
@@ -192,16 +199,22 @@ export function calculateFuelCycles(entries: FuelEntry[], vehicles: Vehicle[] = 
                     } else {
                         currentCycleEntries.push({ ...entry, volumeContributed: entryVolume });
                     }
-                } else {
-                    lastAnchorOdometer = entry.odometer || 0;
+                } else if (hasValidOdo) {
+                    lastAnchorOdometer = entryOdo;
                     lastAnchorDate = entry.date;
                     currentCycleEntries = [];
                     carryoverVolume = 0;
                     startingPercentage = 0;
+                } else {
+                    // Capacity-close with no odo cannot open/advance the anchor chain
+                    currentCycleEntries.push({ ...entry, volumeContributed: entryVolume });
                 }
 
-                lastAnchorOdometer = entry.odometer || 0;
-                lastAnchorDate = entry.date;
+                // Never stamp lastAnchor from a null/zero odo (would inflate next cycle distance)
+                if (hasValidOdo) {
+                    lastAnchorOdometer = entryOdo;
+                    lastAnchorDate = entry.date;
+                }
             } else {
                 const contrib =
                     typeof meta.volumeContributed === 'number' ? meta.volumeContributed : entryVolume;

@@ -179,7 +179,7 @@ describe('aggregateCanonicalEventsToLedgerDriverOverview', () => {
     expect(data.platformStats.Roam.cashCollected).toBe(200);
   });
 
-  it('includes toll_support_adjustment in earnings and disputeRefunds', () => {
+  it('keeps toll_support_adjustment on disputeRefunds only (not Period Earnings)', () => {
     const period = [
       {
         eventType: 'toll_support_adjustment',
@@ -189,9 +189,19 @@ describe('aggregateCanonicalEventsToLedgerDriverOverview', () => {
         date: '2026-03-06',
         platform: 'Uber',
       },
+      {
+        eventType: 'fare_earning',
+        driverId: driver,
+        netAmount: 100,
+        grossAmount: 100,
+        direction: 'inflow',
+        date: '2026-03-06',
+        platform: 'Uber',
+      },
     ];
     const data = aggregateCanonicalEventsToLedgerDriverOverview(period, [], [], undefined) as any;
-    expect(data.period.earnings).toBe(12);
+    expect(data.period.earnings).toBe(100);
     expect(data.period.disputeRefunds).toBe(12);
+    expect(data.platformStats.Uber.earnings).toBe(100);
   });
 });

@@ -2448,7 +2448,7 @@ app.post(
     // Store using mset
     await kv.mset(keys, processedTrips.map((t: any) => stampWriteOrg(t)));
 
-    // Canonical money events (`ledger_event:*`) for non-Uber trips (Roam / InDrive manual, etc.)
+    // Canonical money events (`ledger_event:*`) from trips (Uber / Roam / InDrive).
     try {
       const tripIdsForLedger = processedTrips.map((t: any) => String(t?.id || "").trim()).filter(Boolean);
       if (tripIdsForLedger.length > 0) {
@@ -6084,7 +6084,7 @@ app.post("/make-server-37f42386/ledger/repair-driver", requireAuth(), async (c) 
 
 // ─── POST /ledger/ensure-from-trip-ids — Idempotent canonical ledger backfill for a list of trip UUIDs ─────────
 // Used after CSV / fleet import so drivers do not need manual "Repair Now" for missing fare_earning rows.
-// Writes to canonical ledger_event:* only (non-Uber trips).
+// Writes to canonical ledger_event:* for all platforms (Uber included — trip fare SSOT).
 // Auth: none (matches POST /trips / fleet/sync — anon import key).
 app.post("/make-server-37f42386/ledger/ensure-from-trip-ids", async (c) => {
     const startMs = Date.now();
@@ -6680,6 +6680,10 @@ app.get("/make-server-37f42386/ledger/driver-earnings-history", requireAuth(), a
         const g = Number.isFinite(e.grossAmount) ? Number(e.grossAmount) : Math.abs(Number(e.netAmount) || 0);
         return s + g;
       }, 0);
+      // Same money rollup as Driver Detail / Personal Allowance (tips, promo, prior, etc.)
+      const periodOverview = aggregateCanonicalEventsToLedgerDriverOverview(periodEntries, [], []);
+      const periodEarnings =
+        Number((periodOverview as any)?.period?.earnings) || 0;
       const tripCount = periodFares.length;
       const ledgerEventCount = periodEntries.length;
 
@@ -6742,12 +6746,14 @@ app.get("/make-server-37f42386/ledger/driver-earnings-history", requireAuth(), a
         }
       }
 
-      const qPercent = (quotaTargetEH !== null && quotaTargetEH > 0) ? (grossRevenue / quotaTargetEH) * 100 : null;
+      const qPercent = (quotaTargetEH !== null && quotaTargetEH > 0) ? (periodEarnings / quotaTargetEH) * 100 : null;
 
       return {
         periodStart: bucket.startDate,
         periodEnd: bucket.endDate,
         grossRevenue: Math.round(grossRevenue * 100) / 100,
+        /** Matches driver-overview period.earnings (PA + Period Earnings card SSOT). */
+        periodEarnings: Math.round(periodEarnings * 100) / 100,
         driverShare: Math.round(driverShare * 100) / 100,
         fleetShare: Math.round(fleetShare * 100) / 100,
         expenses: Math.round(expenses * 100) / 100,
@@ -6778,6 +6784,7 @@ app.get("/make-server-37f42386/ledger/driver-earnings-history", requireAuth(), a
       if (r.tripCount > 0 || r.transactionCount > 0) return true;
       if ((r.ledgerEventCount || 0) > 0) return true;
       if (Math.abs(r.grossRevenue || 0) > 1e-6) return true;
+      if (Math.abs(r.periodEarnings || 0) > 1e-6) return true;
       if (Math.abs(r.tips || 0) > 1e-6) return true;
       if (Math.abs(r.payouts || 0) > 1e-6) return true;
       if (Math.abs(r.tolls || 0) > 1e-6) return true;
@@ -7408,7 +7415,7 @@ app.post("/make-server-37f42386/ledger/canonical-backfill", requireAuth(), requi
       generic_transactions: { scanned: 0, eligible: 0, appended: 0, skipped: 0, errors: 0 },
     };
 
-    // 1. Trips → fare_earning (non-Uber only; Uber comes from CSV imports)
+    // 1. Trips → fare_earning for all platforms (Uber included; payment_line is raw grain only)
     if (allowedTypes.has('trips')) {
       console.log('[CanonicalBackfill] Processing trips...');
       const allTrips = await kv.getByPrefix('trip:');
@@ -9020,6 +9027,28 @@ app.delete("/make-server-37f42386/batches/:id", requireAuth(), requirePermission
           await kv.mdel(keys.slice(i, i + 100));
         }
         deletedCanonicalLedger = keys.length;
+        try {
+          const { deleteUnifiedSourceReceipts } = await import(
+            "../_shared/unifiedLedger/deleteSourceReceipts.ts"
+          );
+          const sourceIds = leRows.map((row: { key: string; value: any }) => {
+            const v = row.value as Record<string, unknown> | null;
+            return typeof v?.id === "string" && v.id.trim()
+              ? String(v.id)
+              : String(row.key).replace(/^ledger_event:/, "");
+          });
+          const idemKeys = [...idemSeen];
+          await deleteUnifiedSourceReceipts({
+            sourceSystem: "kv_ledger_event",
+            sourceIds,
+            sourceIdempotencyKeys: idemKeys,
+          });
+        } catch (receiptErr: any) {
+          console.warn(
+            "[Batch delete] unified receipt cleanup failed (non-fatal):",
+            receiptErr?.message,
+          );
+        }
       }
       console.log(
         `[Batch delete] Removed ${deletedCanonicalLedger} ledger_event rows, ${deletedCanonicalIdem} idempotency keys (canonical)`,

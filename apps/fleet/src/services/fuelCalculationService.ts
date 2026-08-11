@@ -29,6 +29,11 @@ import {
 import type { PersonalAllowanceTierConfig, QuotaConfig } from '../types/data';
 import { calculateFuelCycles } from '../utils/fuelCycleEngine';
 import { FLEET_CYCLE_HEALTH, FLEET_USE_FUEL_BRAIN } from '../utils/fuelBrainFlags';
+import {
+  filterFuelOpsLogEntries,
+  fuelOpsLiters,
+  fuelOpsSpendAmount,
+} from '../utils/fuelOpsEligibility';
 
 /** Soft-cycle efficiency band vs week observed km/L before Amber (cycle-health mode). */
 const SOFT_CYCLE_EFFICIENCY_BAND = 0.30;
@@ -40,7 +45,7 @@ export type PersonalAllowanceReconContext = {
   quotaConfig?: QuotaConfig | null;
   /** Key driverId → bonus km for this week */
   bonusByDriverId?: Map<string, number>;
-  /** Earnings History Gross Revenue for this week (driverId → JMD). Preferred over trip sum. */
+  /** Period earnings SSOT (driver-overview `period.earnings`) for this week. Prefer over trip sum for PA. */
   ledgerGrossByDriverId?: Map<string, number>;
   /** All week trips for driver earnings fallback when ledger gross missing */
   driverWeekTrips?: Trip[];
@@ -220,10 +225,12 @@ export const FuelCalculationService = {
         // Helper to get rule for a specific category
         const fuelRule = activeScenario?.rules.find(r => r.category === 'Fuel');
 
-        // 2. Filter data for this vehicle and week (YMD — ISO timestamps normalize via toEntryYmd)
-        const vehicleEntries = fuelEntries.filter(e => 
-            e.vehicleId === vehicle.id && 
-            isEntryInInclusiveYmdRange(e.date, startStr, endStr)
+        // 2. Ops fills only for recon spend/liters/cycles — Card Inventory owns JAA statement ledger
+        const vehicleEntries = filterFuelOpsLogEntries(
+            fuelEntries.filter(e =>
+                e.vehicleId === vehicle.id &&
+                isEntryInInclusiveYmdRange(e.date, startStr, endStr)
+            ),
         );
 
         // Phase 3: Calculate Pending Count
@@ -240,9 +247,9 @@ export const FuelCalculationService = {
             isEntryInInclusiveYmdRange(a.date, startStr, endStr)
         );
 
-        // 3. Aggregate Costs
-        const totalGasCardCost = vehicleEntries.reduce((sum, e) => sum + (e.amount || 0), 0);
-        const totalLiters = vehicleEntries.reduce((sum, e) => sum + (e.liters || 0), 0);
+        // 3. Aggregate Costs (same eligibility as Transaction Logs Total Spend)
+        const totalGasCardCost = vehicleEntries.reduce((sum, e) => sum + fuelOpsSpendAmount(e), 0);
+        const totalLiters = vehicleEntries.reduce((sum, e) => sum + fuelOpsLiters(e), 0);
 
         // 3b. Compute observed efficiency (km/L) from fuel entries with odometer readings
         const entriesWithOdo = vehicleEntries
@@ -348,7 +355,7 @@ export const FuelCalculationService = {
             const earnTrips = paCtx.driverWeekTrips ?? vehicleTrips;
             const driverIdForBonus = options?.driverId ?? vehicle.currentDriverId ?? '';
             const ledgerGross = paCtx.ledgerGrossByDriverId?.get(driverIdForBonus);
-            // Prefer Earnings History ledger Gross; trip sum only if ledger missing
+            // Prefer ledger period.earnings (same as Driver Detail); trip sum only if ledger missing
             const earningsJmd =
               ledgerGross != null && Number.isFinite(ledgerGross)
                 ? Number(ledgerGross)
@@ -666,7 +673,9 @@ export const FuelCalculationService = {
             let primaryId = vehicleIds[0];
             let maxSpend = -1;
             for (const vid of vehicleIds) {
-                const spend = entries.filter((e) => e.vehicleId === vid).reduce((s, e) => s + (e.amount || 0), 0);
+                const spend = entries
+                    .filter((e) => e.vehicleId === vid)
+                    .reduce((s, e) => s + fuelOpsSpendAmount(e), 0);
                 if (spend > maxSpend) {
                     maxSpend = spend;
                     primaryId = vid;

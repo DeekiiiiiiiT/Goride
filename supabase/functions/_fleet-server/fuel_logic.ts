@@ -826,17 +826,29 @@ function derivePeriodBound(
 
 /**
  * Step 1.3: Audit Trail Query Helpers
- * Fetches the most recent anchor (Hard or Soft) for a vehicle.
+ * Fetches the most recent capacity-close / soft / full-tank anchor for a vehicle.
+ * Pass `asOfDate` when processing a historical edit so anchors AFTER that fill
+ * are not treated as "previous" (avoids false Odometer Regression).
  */
-export async function getLastAnchor(vehicleId: string) {
-  const { data, error } = await supabase
+export async function getLastAnchor(
+  vehicleId: string,
+  opts?: { asOfDate?: string; excludeId?: string },
+) {
+  let query = supabase
     .from("kv_store_37f42386")
     .select("value")
     .like("key", "fuel_entry:%")
     .eq("value->>vehicleId", vehicleId)
-    .or("value->metadata->>isSoftAnchor.eq.true,value->metadata->>isAnchor.eq.true,value->metadata->>isFullTank.eq.true")
-    .order("value->>date", { ascending: false })
-    .limit(1);
+    .or("value->metadata->>isSoftAnchor.eq.true,value->metadata->>isAnchor.eq.true,value->metadata->>isFullTank.eq.true,value->metadata->>isCapacityClose.eq.true");
+
+  if (opts?.asOfDate) {
+    query = query.lt("value->>date", opts.asOfDate);
+  }
+  if (opts?.excludeId) {
+    query = query.neq("value->>id", opts.excludeId);
+  }
+
+  const { data, error } = await query.order("value->>date", { ascending: false }).limit(1);
 
   if (error) {
     console.error("[getLastAnchor] Error:", error);
@@ -847,9 +859,41 @@ export async function getLastAnchor(vehicleId: string) {
 }
 
 /**
- * Fetches all entries since the last anchor date.
+ * Most recent fuel entry chronologically before `asOfDate` for this vehicle.
+ * Used for odometer sequence audit — must not use fills that happened later.
  */
-export async function getEntriesSinceLastAnchor(vehicleId: string, anchorDate: string | null) {
+export async function getPreviousFuelEntry(
+  vehicleId: string,
+  asOfDate: string,
+  excludeId?: string,
+) {
+  let query = supabase
+    .from("kv_store_37f42386")
+    .select("value")
+    .like("key", "fuel_entry:%")
+    .eq("value->>vehicleId", vehicleId)
+    .lt("value->>date", asOfDate);
+
+  if (excludeId) {
+    query = query.neq("value->>id", excludeId);
+  }
+
+  const { data, error } = await query.order("value->>date", { ascending: false }).limit(1);
+  if (error) {
+    console.error("[getPreviousFuelEntry] Error:", error);
+    return null;
+  }
+  return data?.[0]?.value || null;
+}
+
+/**
+ * Fetches entries after the last anchor (exclusive) up to optional asOfDate (exclusive).
+ */
+export async function getEntriesSinceLastAnchor(
+  vehicleId: string,
+  anchorDate: string | null,
+  opts?: { asOfDate?: string; excludeId?: string },
+) {
   let query = supabase
     .from("kv_store_37f42386")
     .select("value")
@@ -858,6 +902,12 @@ export async function getEntriesSinceLastAnchor(vehicleId: string, anchorDate: s
 
   if (anchorDate) {
     query = query.gt("value->>date", anchorDate);
+  }
+  if (opts?.asOfDate) {
+    query = query.lt("value->>date", opts.asOfDate);
+  }
+  if (opts?.excludeId) {
+    query = query.neq("value->>id", opts.excludeId);
   }
 
   const { data, error } = await query.order("value->>date", { ascending: true });

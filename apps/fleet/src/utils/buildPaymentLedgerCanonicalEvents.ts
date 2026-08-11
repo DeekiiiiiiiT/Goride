@@ -1,21 +1,24 @@
 import type { CanonicalLedgerEventInput } from '../types/ledgerCanonical';
 import type { PaymentLedgerLine } from '@roam/types/paymentLedgerLine';
-import { isUberTripFareAdjustOrderDescription } from './uberTripFareAdjustOrder';
 
 function toYmd(iso: string): string {
   if (!iso) return new Date().toISOString().slice(0, 10);
   return iso.slice(0, 10);
 }
 
+/**
+ * Payment CSV grain stays on `payment_line` so trip-projected fare_earning/tip/prior
+ * remain the money SSOT for driver-overview / PA. Only org payout / support toll lines
+ * keep promoted types (not duplicated by buildCanonicalTripFareEventsFromTrip).
+ */
 function mapDescriptionToEventType(line: PaymentLedgerLine): string {
   const d = line.description.toLowerCase();
   if (d.includes('so.payout')) return 'payout_bank';
-  if (isUberTripFareAdjustOrderDescription(line.description)) return 'prior_period_adjustment';
   if (d.startsWith('support adjustment')) return 'toll_support_adjustment';
-  if (line.lineKind === 'tip' || line.fareBreakdown.tip > 0) return 'tip';
   if (line.lineKind === 'toll_refund' || Math.abs(line.fareBreakdown.tollRefund) > 0) {
     return 'toll_support_adjustment';
   }
+  // Tip / prior / fare completed orders → payment_line (raw). Trip rows hold fare SSOT.
   return 'payment_line';
 }
 

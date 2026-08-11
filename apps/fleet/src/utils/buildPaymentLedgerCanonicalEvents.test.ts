@@ -68,4 +68,36 @@ describe('buildPaymentLedgerCanonicalEvents', () => {
     const events = buildPaymentLedgerCanonicalEvents([line], 'batch-1');
     expect(events.some((e) => e.eventType === 'payout_bank')).toBe(true);
   });
+
+  it('keeps tip lines as payment_line so trip tip events stay SSOT', () => {
+    const line: PaymentLedgerLine = {
+      id: 'tx-tip',
+      platform: 'Uber',
+      tripId: 'trip-b',
+      driverId: 'driver-1',
+      description: 'tip order',
+      reportingAt: '2026-03-16T12:15:57.000Z',
+      paidToYou: 50,
+      earningsGross: 50,
+      cashCollected: 0,
+      bankTransferred: 0,
+      fareBreakdown: {
+        base: 0,
+        surge: 0,
+        waitPickup: 0,
+        timeAtStop: 0,
+        cancellation: 0,
+        taxes: 0,
+        tip: 50,
+        tollRefund: 0,
+      },
+      sourceType: 'uber_import',
+      lineKind: 'tip',
+      idempotencyKey: 'uber_tx:tx-tip',
+    };
+
+    const events = buildPaymentLedgerCanonicalEvents([line], 'batch-1');
+    expect(events).toHaveLength(1);
+    expect(events[0].eventType).toBe('payment_line');
+  });
 });

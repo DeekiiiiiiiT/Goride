@@ -360,12 +360,16 @@ export async function ensureFuelEntryForApprovedTx(
       (fuelEntry.vehicleId ? await kv.get(`vehicle:${fuelEntry.vehicleId}`) : null);
     const tankCapacity = fuelLogic.resolveTankCapacity(vehicle);
     const lastAnchor = fuelEntry.vehicleId
-      ? await fuelLogic.getLastAnchor(fuelEntry.vehicleId)
+      ? await fuelLogic.getLastAnchor(fuelEntry.vehicleId, {
+          asOfDate: fuelEntry.date,
+          excludeId: fuelEntry.id,
+        })
       : null;
     const cycleEntries = fuelEntry.vehicleId
       ? await fuelLogic.getEntriesSinceLastAnchor(
           fuelEntry.vehicleId,
           lastAnchor?.date || null,
+          { asOfDate: fuelEntry.date, excludeId: fuelEntry.id },
         )
       : [];
 

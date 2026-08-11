@@ -132,3 +132,131 @@ describe('getCategoryCoverageSplit', () => {
     expect(FuelCalculationService.getCategoryCoverageSplit('deadhead', 100, withOwnOverride).company).toBeCloseTo(10, 10);
   });
 });
+
+describe('recon Total Spend ignores Card Inventory statement ledger', () => {
+  const weekStart = new Date('2026-08-03T00:00:00');
+  const weekEnd = new Date('2026-08-09T23:59:59');
+  const vehicle = {
+    id: '5179KZ',
+    licensePlate: '5179KZ',
+    currentDriverId: 'kenny',
+    fuelSettings: { efficiencyCity: 10 },
+  } as any;
+  const policy = {
+    id: 'def',
+    name: 'Standard',
+    isDefault: true,
+    rules: [
+      {
+        id: 'r1',
+        category: 'Fuel',
+        coverageType: 'Percentage',
+        coverageValue: 0,
+        rideShareCoverage: 80,
+        companyUsageCoverage: 100,
+        deadheadCoverage: 50,
+        personalCoverage: 0,
+        miscCoverage: 50,
+      },
+    ],
+    versions: [
+      {
+        id: 'v1',
+        effectiveFrom: '2000-01-03',
+        rules: [
+          {
+            id: 'r1',
+            category: 'Fuel',
+            coverageType: 'Percentage',
+            coverageValue: 0,
+            rideShareCoverage: 80,
+            companyUsageCoverage: 100,
+            deadheadCoverage: 50,
+            personalCoverage: 0,
+            miscCoverage: 50,
+          },
+        ],
+        driverIds: ['kenny'],
+        createdAt: 'x',
+      },
+    ],
+  } as any;
+
+  it('excludes fee + declined + matched jaa_raw statement from totalGasCardCost', () => {
+    const entries: FuelEntry[] = [
+      {
+        id: 'portal-1',
+        date: '2026-08-05T20:25:00',
+        vehicleId: '5179KZ',
+        driverId: 'kenny',
+        amount: 4500,
+        liters: 19.565,
+        odometer: 175238,
+        paymentSource: 'Gas_Card',
+        entrySource: 'driver-portal',
+        type: 'Card_Transaction',
+      } as FuelEntry,
+      {
+        id: 'portal-2',
+        date: '2026-08-04T05:33:00',
+        vehicleId: '5179KZ',
+        driverId: 'kenny',
+        amount: 1500,
+        liters: 6.79,
+        odometer: 174624,
+        paymentSource: 'RideShare_Cash',
+        entrySource: 'driver-portal',
+        type: 'Manual_Entry',
+      } as FuelEntry,
+      {
+        id: 'stmt-approved',
+        date: '2026-08-05',
+        vehicleId: '5179KZ',
+        driverId: 'kenny',
+        amount: 4500,
+        liters: 19.57,
+        paymentSource: 'Gas_Card',
+        entrySource: 'fuel-card',
+        type: 'Card_Transaction',
+        metadata: { importSource: 'jaa_raw', jaaRowKind: 'approved_fuel' },
+      } as FuelEntry,
+      {
+        id: 'stmt-declined',
+        date: '2026-08-05',
+        vehicleId: '5179KZ',
+        driverId: 'kenny',
+        amount: 4500,
+        paymentSource: 'Gas_Card',
+        entrySource: 'fuel-card',
+        type: 'Card_Transaction',
+        metadata: { importSource: 'jaa_raw', jaaRowKind: 'declined', countsInFuelSpend: false },
+      } as FuelEntry,
+      {
+        id: 'stmt-fee',
+        date: '2026-08-04',
+        vehicleId: '5179KZ',
+        driverId: 'kenny',
+        amount: 404.8,
+        paymentSource: 'Gas_Card',
+        entrySource: 'fuel-card',
+        type: 'Card_Transaction',
+        metadata: { importSource: 'jaa_raw', jaaRowKind: 'fee', countsInFuelSpend: false },
+      } as FuelEntry,
+    ];
+
+    const reports = FuelCalculationService.generateDriverFleetReport(
+      [vehicle],
+      [{ id: 'kenny', fuelScenarioId: 'def', name: 'Kenny' }],
+      weekStart,
+      weekEnd,
+      [],
+      entries,
+      [],
+      [policy],
+    );
+
+    const r = reports.find((x) => x.driverId === 'kenny');
+    // Ops fills only: 4500 + 1500 — not 4500+1500+4500+4500+404.8
+    expect(r?.totalGasCardCost).toBe(6000);
+  });
+});

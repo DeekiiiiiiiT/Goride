@@ -184,6 +184,23 @@ export async function deleteCanonicalLedgerBySource(
     await kv.mdel(keys.slice(i, i + 100));
   }
   const idemDeleted = await deleteIdemKeysForKeys(idemKeys);
+
+  // Twin-store cleanup: receipts must not outlive deleted island money rows.
+  try {
+    const { deleteUnifiedSourceReceipts } = await import("../_shared/unifiedLedger/deleteSourceReceipts.ts");
+    const sourceIds = allRows.map((r) => {
+      const v = r.value;
+      return typeof v?.id === "string" && v.id.trim() ? String(v.id) : r.key.replace(/^ledger_event:/, "");
+    });
+    await deleteUnifiedSourceReceipts({
+      sourceSystem: "kv_ledger_event",
+      sourceIds,
+      sourceIdempotencyKeys: idemKeys,
+    });
+  } catch (e) {
+    console.error("[CanonicalLedger] unified receipt cleanup failed:", e);
+  }
+
   console.log(
     `[CanonicalLedger] deleteCanonicalLedgerBySource type=${sourceType} ids=${ids.length} deleted=${keys.length} idem=${idemDeleted}`,
   );
@@ -240,6 +257,22 @@ export async function deleteCanonicalLedgerBySourceFromDate(
     await kv.mdel(keys.slice(i, i + 100));
   }
   const idemDeleted = await deleteIdemKeysForKeys(idemKeys);
+
+  try {
+    const { deleteUnifiedSourceReceipts } = await import("../_shared/unifiedLedger/deleteSourceReceipts.ts");
+    const sourceIds = allRows.map((r) => {
+      const v = r.value;
+      return typeof v?.id === "string" && v.id.trim() ? String(v.id) : r.key.replace(/^ledger_event:/, "");
+    });
+    await deleteUnifiedSourceReceipts({
+      sourceSystem: "kv_ledger_event",
+      sourceIds,
+      sourceIdempotencyKeys: idemKeys,
+    });
+  } catch (e) {
+    console.error("[CanonicalLedger] unified receipt cleanup (fromDate) failed:", e);
+  }
+
   console.log(
     `[CanonicalLedger] deleteCanonicalLedgerBySourceFromDate type=${sourceType} ids=${ids.length} from=${fromYmd} deleted=${keys.length} idem=${idemDeleted}`,
   );
@@ -443,6 +476,28 @@ export async function appendCanonicalLedgerEvents(
       if (existing && typeof existing === "object" && existing !== null && typeof (existing as any).id === "string") {
         skipped++;
         details.push({ index: i, idempotencyKey: idem, id: (existing as any).id, skipped: true });
+        // Heal: prior island delete may have left (or missed) unified receipts.
+        try {
+          const { fleetDualWriteCanonicalEvent } = await import("./unified_ledger_dual_write.ts");
+          const body = (await kv.get(`ledger_event:${(existing as any).id}`)) as Record<string, unknown> | null;
+          const src = body ?? (base as Record<string, unknown>);
+          await fleetDualWriteCanonicalEvent({
+            id: String((existing as any).id),
+            idempotencyKey: idem,
+            eventType: String(src.eventType ?? base.eventType),
+            direction: String(src.direction ?? base.direction),
+            netAmount: Number(src.netAmount ?? base.netAmount),
+            currency: String(src.currency ?? base.currency ?? "JMD"),
+            driverId: String(src.driverId ?? base.driverId),
+            sourceType: String(src.sourceType ?? base.sourceType),
+            sourceId: String(src.sourceId ?? base.sourceId),
+            organizationId: typeof src.organizationId === "string" ? src.organizationId : null,
+            date: String(src.date ?? base.date),
+            metadata: (src.metadata as Record<string, unknown>) ?? {},
+          });
+        } catch (healErr) {
+          console.error("[CanonicalLedger] dual-write heal on skip failed:", healErr);
+        }
         continue;
       }
 
