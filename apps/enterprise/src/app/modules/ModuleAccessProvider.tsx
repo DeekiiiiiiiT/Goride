@@ -35,9 +35,12 @@ export function ModuleAccessProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [modulesError, setModulesError] = useState<string | null>(null);
   const lastKnownRef = useRef<Record<string, boolean> | null>(null);
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
+  const userId = session?.user?.id ?? null;
 
   const refresh = useCallback(async () => {
-    const token = session?.access_token;
+    const token = sessionRef.current?.access_token;
     if (!token) {
       const off = allModulesOff();
       setEffectiveModules(off);
@@ -46,7 +49,9 @@ export function ModuleAccessProvider({ children }: { children: ReactNode }) {
       setLoading(false);
       return;
     }
-    setLoading(true);
+    // Keep last-known modules visible during token/tab refresh — don't unmount open forms.
+    const initial = !lastKnownRef.current;
+    if (initial) setLoading(true);
     try {
       // Edge Functions require anon apikey alongside the user JWT
       const res = await fetch(`${API_ENDPOINTS.admin}/enterprise/me/modules`, {
@@ -87,11 +92,12 @@ export function ModuleAccessProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, [session?.access_token]);
+  }, []);
 
+  // Re-fetch when the signed-in user changes — not on every access_token rotation.
   useEffect(() => {
     void refresh();
-  }, [refresh]);
+  }, [refresh, userId]);
 
   const isModuleEnabled = useCallback(
     (key: ModuleKey | string) => checkModule(effectiveModules, key),

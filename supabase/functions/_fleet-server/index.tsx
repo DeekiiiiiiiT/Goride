@@ -6,7 +6,7 @@ import { logger } from "npm:hono/logger";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { fromKvStore } from "./fleet_sql_bridge.ts";
 import { fleetSelect } from "./fleet_select.ts";
-import { countBy, listByBatch, queryFleet } from "./repos/baseRepo.ts";
+import { countBy, listByBatch, queryFleet, fleetDb, fleetTable, rowToKvValue } from "./repos/baseRepo.ts";
 import { buildCorsOriginFn } from "../_shared/corsAllowlist.ts";
 import { assertRequiredEnv } from "./env_boot.ts";
 import OpenAI from "npm:openai";
@@ -139,6 +139,18 @@ import {
   syncDriverRecordFromVehicleAssignment,
   applyDriverAssignmentChangeOnVehicle,
 } from "./driver_vehicle_assignment.ts";
+import {
+  projectOdometerReading,
+  projectFromCheckIn,
+  projectFromFuelEntry,
+  projectFromMaintenanceLog,
+  getCurrentOdometer,
+  listOdometerLedger,
+  voidOdometerReading,
+  backfillOdometerLedger,
+  odometerLedgerHealth,
+  refreshVehicleOdometerCache,
+} from "./odometer_ledger.ts";
 import { syncLinkedExpenseTransaction } from "./fuel_transaction_sync.ts";
 import { resolveFuelPaymentSource } from "./fuel_payment_source.ts";
 import { ensureFuelEntryForApprovedTx } from "./fuel_posted_guarantee.ts";
@@ -2084,18 +2096,16 @@ app.post("/make-server-37f42386/trips/search", requireAuth({ requireOrg: true })
         query = query.eq("value->>vehicleId", vehicleId);
     }
 
-    if (tripType === 'manual') {
-        query = query.eq("value->>isManual", true);
-    } else if (tripType === 'platform') {
-        query = query.not("value->>isManual", "eq", "true");
+    if (tripType === 'manual' || tripType === 'platform') {
+        // isManual is payload-only (no fleet.trips column) — filter after unwrap below
     }
 
+    // Calendar-day filters on fleet.trips.date (indexed). Prefer YYYY-MM-DD from clients.
     if (startDate) {
-        query = query.or(`value->>date.gte.${startDate},value->>requestTime.gte.${startDate}`);
+        query = query.gte("value->>date", String(startDate).slice(0, 10));
     }
-    
     if (endDate) {
-        query = query.or(`value->>date.lte.${endDate},value->>requestTime.lte.${endDate}`);
+        query = query.lte("value->>date", String(endDate).slice(0, 10));
     }
 
     // Order by date desc (Note: textual comparison works for ISO dates)
@@ -2104,7 +2114,11 @@ app.post("/make-server-37f42386/trips/search", requireAuth({ requireOrg: true })
     const from = offset || 0;
     // Cap at 1000 per request (PostgREST max row limit)
     const effectiveLimit = Math.min(limit || 50, 1000);
-    const to = from + effectiveLimit - 1;
+    // Over-fetch when tripType needs payload filter so page stays full after in-memory filter
+    const fetchLimit = (tripType === 'manual' || tripType === 'platform')
+      ? Math.min(effectiveLimit * 3, 1000)
+      : effectiveLimit;
+    const to = from + fetchLimit - 1;
     
     query = query.range(from, to);
 
@@ -2117,13 +2131,20 @@ app.post("/make-server-37f42386/trips/search", requireAuth({ requireOrg: true })
 
     // Phase 8.4: Large Data Stripping
     // Remove heavy fields (route, stops) from search results to prevent "Connection Closed" errors
-    const trips = (data || []).map((d: any) => {
+    let trips = (data || []).map((d: any) => {
         const v = d.value || {};
         const { route, stops, ...lightweight } = v;
         // Normalize legacy "GoRide" → "Roam" for display
         if (lightweight.platform === 'GoRide') lightweight.platform = 'Roam';
         return lightweight;
     });
+
+    if (tripType === 'manual') {
+      trips = trips.filter((t: any) => t?.isManual === true || t?.isManual === 'true');
+    } else if (tripType === 'platform') {
+      trips = trips.filter((t: any) => !(t?.isManual === true || t?.isManual === 'true'));
+    }
+    trips = trips.slice(0, effectiveLimit);
 
     return c.json({
         data: trips,
@@ -2157,111 +2178,131 @@ app.post("/make-server-37f42386/trips/stats", requireAuth({ requireOrg: true }),
     if (useStrict && !effectiveOrgId) {
         return c.json({
             totalTrips: 0, completed: 0, cancelled: 0,
-            totalEarnings: 0, totalCashCollected: 0, avgEarnings: 0, totalDuration: 0
+            totalEarnings: 0, totalCashCollected: 0, avgEarnings: 0, avgDuration: 0
         });
     }
 
     // 1. Check Cache (include orgId in cache key for isolation)
-    // We use the entire filter object to generate a unique key
+    // v2: post-cutover stats that page past PostgREST 1000-row cap + correct value unwrap
     const version = await cache.getCacheVersion("stats");
-    const cacheKey = await cache.generateKey(`stats:${version}:org:${effectiveOrgId || 'none'}:strict:${useStrict}`, filters);
+    const cacheKey = await cache.generateKey(`stats:v2:${version}:org:${effectiveOrgId || 'none'}:strict:${useStrict}`, filters);
     const cachedStats = await cache.getCache(cacheKey);
 
     if (cachedStats) {
         c.header("X-Cache", "HIT");
         return c.json(cachedStats);
     }
-    
-    // Query specific fields to avoid loading heavy route data
-    // Include indriveNetIncome & platform so we can use true profit for InDrive trips
-    let query = fromKvStore()
-        .select("value->status, value->amount, value->cashCollected, value->duration, value->platform, value->indriveNetIncome")
-        .like("key", "trip:%");
 
-    // Apply organization filter
-    if (effectiveOrgId) {
-        if (useStrict) {
-            // STRICT MODE: Only trips with matching organizationId
-            query = query.eq("value->>organizationId", effectiveOrgId);
-        } else {
-            // LEGACY MODE: Include trips without organizationId
-            query = query.or(`value->>organizationId.eq.${effectiveOrgId},value->>organizationId.is.null`);
+    const buildStatsQuery = (pageOffset: number, pageLimit: number) => {
+      // Select full value — arrow projections are not reshaped by the SQL bridge
+      let query = fromKvStore()
+          .select("value")
+          .like("key", "trip:%");
+
+      if (effectiveOrgId) {
+          if (useStrict) {
+              query = query.eq("value->>organizationId", effectiveOrgId);
+          } else {
+              query = query.or(`value->>organizationId.eq.${effectiveOrgId},value->>organizationId.is.null`);
+          }
+      }
+
+      if (driverId) {
+          query = query.eq("value->>driverId", driverId);
+      }
+
+      if (anchorPeriodId) {
+          query = query.eq("value->>anchorPeriodId", anchorPeriodId);
+      }
+
+      let pageStart = startDate;
+      let pageEnd = endDate;
+      if (status === 'Processing') {
+          query = query.or(`value->>status.eq.Processing,value->>status.eq.In Progress,value->>status.eq.In_Progress,value->>status.eq.started`);
+          pageStart = undefined;
+          pageEnd = undefined;
+      } else if (status) {
+          query = query.eq("value->>status", status);
+      }
+
+      if (platform) {
+          if (platform === 'Roam') {
+              query = query.or('value->>platform.eq.Roam,value->>platform.eq.GoRide');
+          } else {
+              query = query.eq("value->>platform", platform);
+          }
+      }
+
+      if (vehicleId) {
+          query = query.eq("value->>vehicleId", vehicleId);
+      }
+
+      // isManual lives in payload_json only — apply after fetch when needed
+      if (pageStart) {
+          query = query.gte("value->>date", String(pageStart).slice(0, 10));
+      }
+      if (pageEnd) {
+          query = query.lte("value->>date", String(pageEnd).slice(0, 10));
+      }
+
+      return query.range(pageOffset, pageOffset + pageLimit - 1);
+    };
+
+    // Page past PostgREST max_rows (1000) — never treat a single page as the full set
+    const PAGE = 1000;
+    const MAX_ROWS = 100_000;
+    let offset = 0;
+    let totalTrips = 0;
+    let completed = 0;
+    let cancelled = 0;
+    let totalEarnings = 0;
+    let totalCashCollected = 0;
+    let durationSum = 0;
+    let durationCount = 0;
+
+    const matchesTripType = (t: any) => {
+      if (tripType === 'manual') return t?.isManual === true || t?.isManual === 'true';
+      if (tripType === 'platform') return !(t?.isManual === true || t?.isManual === 'true');
+      return true;
+    };
+
+    for (;;) {
+      const { data, error } = await buildStatsQuery(offset, PAGE);
+      if (error) {
+          console.error("Stats query error:", error);
+          throw error;
+      }
+      const page = (data || []).map((d: any) => d?.value ?? d);
+      if (page.length === 0) break;
+
+      for (const t of page) {
+        if (!matchesTripType(t)) continue;
+        totalTrips += 1;
+        if (t.status === 'Completed') completed += 1;
+        else if (t.status === 'Cancelled') cancelled += 1;
+
+        const effectiveEarnings = (t.platform === 'InDrive' && t.indriveNetIncome != null)
+          ? Number(t.indriveNetIncome)
+          : (Number(t.amount) || 0);
+        totalEarnings += effectiveEarnings;
+        totalCashCollected += Number(t.cashCollected) || 0;
+
+        if (t.duration && Number(t.duration) > 0) {
+          durationSum += Number(t.duration);
+          durationCount += 1;
         }
+      }
+
+      if (page.length < PAGE) break;
+      offset += PAGE;
+      if (offset >= MAX_ROWS) {
+        console.warn(`[trips/stats] hit MAX_ROWS=${MAX_ROWS}; stats may be truncated`);
+        break;
+      }
     }
 
-    if (driverId) {
-        query = query.eq("value->>driverId", driverId);
-    }
-
-    if (anchorPeriodId) {
-        query = query.eq("value->>anchorPeriodId", anchorPeriodId);
-    }
-    
-    if (status === 'Processing') {
-        // Handle variations of "In Progress" status and relax date constraints for active trips
-        query = query.or(`value->>status.eq.Processing,value->>status.eq.In Progress,value->>status.eq.In_Progress,value->>status.eq.started`);
-        
-        // Clear date filters for active trips to ensure they appear regardless of start time
-        startDate = undefined;
-        endDate = undefined;
-    } else if (status) {
-        query = query.eq("value->>status", status);
-    }
-
-    if (platform) {
-        // Alias: "Roam" was formerly "GoRide" — query both to include pre-rebrand trips
-        if (platform === 'Roam') {
-            query = query.or('value->>platform.eq.Roam,value->>platform.eq.GoRide');
-        } else {
-            query = query.eq("value->>platform", platform);
-        }
-    }
-
-    if (vehicleId) {
-        query = query.eq("value->>vehicleId", vehicleId);
-    }
-
-    if (tripType === 'manual') {
-        query = query.eq("value->>isManual", true);
-    } else if (tripType === 'platform') {
-        query = query.not("value->>isManual", "eq", "true");
-    }
-
-    if (startDate) {
-        query = query.or(`value->>date.gte.${startDate},value->>requestTime.gte.${startDate}`);
-    }
-    
-    if (endDate) {
-        query = query.or(`value->>date.lte.${endDate},value->>requestTime.lte.${endDate}`);
-    }
-
-    // No limit or offset - we need all matching records to calculate stats
-    const { data, error } = await query;
-
-    if (error) {
-        console.error("Stats query error:", error);
-        throw error;
-    }
-
-    const trips = data || [];
-
-    const totalTrips = trips.length;
-    const completed = trips.filter((t: any) => t.status === 'Completed').length;
-    const cancelled = trips.filter((t: any) => t.status === 'Cancelled').length;
-    
-    // For InDrive trips with fee data, use true profit (net income) instead of full fare
-    const totalEarnings = trips.reduce((sum: number, t: any) => {
-      const effectiveEarnings = (t.platform === 'InDrive' && t.indriveNetIncome != null)
-        ? Number(t.indriveNetIncome)
-        : (Number(t.amount) || 0);
-      return sum + effectiveEarnings;
-    }, 0);
-    const totalCashCollected = trips.reduce((sum: number, t: any) => sum + (Number(t.cashCollected) || 0), 0);
     const avgEarnings = completed > 0 ? totalEarnings / completed : 0;
-    
-    const tripsWithDuration = trips.filter((t: any) => t.duration && t.duration > 0);
-    const totalDuration = tripsWithDuration.reduce((sum: number, t: any) => sum + (Number(t.duration) || 0), 0);
-    const avgDuration = tripsWithDuration.length > 0 ? totalDuration / tripsWithDuration.length : 0;
+    const avgDuration = durationCount > 0 ? durationSum / durationCount : 0;
 
     const result = {
         totalTrips,
@@ -9660,34 +9701,100 @@ app.post("/make-server-37f42386/parse-inspection", async (c) => {
     }
 });
 
-// Odometer History Endpoints - Optimized
-app.get("/make-server-37f42386/odometer-history/:vehicleId", requireAuth(), async (c) => {
+// Canonical odometer ledger endpoints
+app.get("/make-server-37f42386/odometer/current/:vehicleId", requireAuth(), async (c) => {
   try {
     const vehicleId = c.req.param("vehicleId");
-    const { data, error } = await fromKvStore()
-        .select("value")
-        .like("key", `odometer_reading:${vehicleId}:`)
-        .order("value->>date", { ascending: false });
-
-    if (error) throw error;
-    const history = filterByOrg(data?.map((d: any) => d.value) || [], c);
-    return c.json(history);
+    const current = await getCurrentOdometer(vehicleId);
+    return c.json(current);
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }
 });
 
-app.post("/make-server-37f42386/odometer-history", async (c) => {
+app.get("/make-server-37f42386/odometer/ledger/:vehicleId", requireAuth(), async (c) => {
+  try {
+    const vehicleId = c.req.param("vehicleId");
+    const result = await listOdometerLedger(vehicleId, {
+      source: c.req.query("source") || null,
+      from: c.req.query("from") || null,
+      to: c.req.query("to") || null,
+      includeVoided: c.req.query("includeVoided") === "true",
+      anomaliesOnly: c.req.query("anomaliesOnly") === "true",
+      limit: parseInt(c.req.query("limit") || "500", 10),
+      offset: parseInt(c.req.query("offset") || "0", 10),
+    });
+    return c.json(result);
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.post("/make-server-37f42386/odometer/backfill", requireAuth({ requireOrg: true }), async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const stats = await backfillOdometerLedger({
+      dryRun: !!body?.dryRun,
+      organizationId: body?.organizationId || getOrgId(c),
+    });
+    return c.json({ success: true, stats });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.get("/make-server-37f42386/odometer/health", requireAuth({ requireOrg: true }), async (c) => {
+  try {
+    const health = await odometerLedgerHealth(getOrgId(c));
+    return c.json(health);
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// Odometer History — thin alias to ledger (compat for one release)
+app.get("/make-server-37f42386/odometer-history/:vehicleId", requireAuth(), async (c) => {
+  try {
+    const vehicleId = c.req.param("vehicleId");
+    const { data } = await listOdometerLedger(vehicleId, { limit: 5000, offset: 0 });
+    return c.json(filterByOrg(data, c));
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.post("/make-server-37f42386/odometer-history", requireAuth(), async (c) => {
   try {
     const reading = await c.req.json();
-    if (!reading.id) reading.id = crypto.randomUUID();
     if (!reading.vehicleId) return c.json({ error: "Vehicle ID required" }, 400);
-    if (!reading.createdAt) reading.createdAt = new Date().toISOString();
-    
-    // Key format: odometer_reading:{vehicleId}:{readingId}
-    await kv.set(`odometer_reading:${reading.vehicleId}:${reading.id}`, stampOrg(reading, c));
-    
-    return c.json({ success: true, data: reading });
+    const stamped = stampOrg(reading, c);
+    if (!stamped.id) stamped.id = crypto.randomUUID();
+    if (!stamped.createdAt) stamped.createdAt = new Date().toISOString();
+
+    const sourceRaw = String(stamped.source || "").toLowerCase();
+    const ledgerSource =
+      sourceRaw.includes("import") ? "import"
+      : sourceRaw.includes("correction") ? "correction"
+      : "manual";
+
+    const projected = await projectOdometerReading({
+      organizationId: stamped.organizationId || getOrgId(c),
+      vehicleId: stamped.vehicleId,
+      reading: Number(stamped.value ?? stamped.reading ?? stamped.odometer),
+      source: ledgerSource as any,
+      referenceId: String(stamped.referenceId || stamped.id),
+      referenceType: ledgerSource === "import" ? "import_batch" : ledgerSource === "correction" ? "correction" : "manual",
+      recordedAt: stamped.createdAt || stamped.date,
+      readingDate: stamped.date,
+      driverId: stamped.driverId || null,
+      isHard: stamped.type !== "Calculated",
+      isVerified: !!(stamped.isVerified || stamped.isManagerVerified || stamped.verified),
+      notes: stamped.notes || null,
+      imageUrl: stamped.imageUrl || null,
+      payloadExtra: stamped,
+    });
+
+    return c.json({ success: true, data: projected });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }
@@ -9900,45 +10007,33 @@ app.post("/make-server-37f42386/ai/parse-toll-image", async (c) => {
   }
 });
 
-app.delete("/make-server-37f42386/odometer-history/:id", async (c) => {
+app.delete("/make-server-37f42386/odometer-history/:id", requireAuth(), async (c) => {
     const id = c.req.param("id");
     const vehicleId = c.req.query("vehicleId");
     const source = c.req.query("source");
-    
+    const reason = c.req.query("reason") || "Deleted from odometer history UI";
+
     if (!vehicleId) return c.json({ error: "vehicleId query param required" }, 400);
-    
+
     try {
-        // Determine the correct KV key based on source type
-        const keysToTry: string[] = [];
-        
-        if (source === 'checkin') {
-            const rawId = id.startsWith('checkin_') ? id.replace('checkin_', '') : id;
-            keysToTry.push(`checkin:${rawId}`);
-        } else if (source === 'fuel') {
-            const rawId = id.startsWith('fuel_') ? id.replace('fuel_', '') : id;
-            keysToTry.push(`fuel_entry:${rawId}`);
-        } else if (source === 'service') {
-            const rawId = id.startsWith('service_') ? id.replace('service_', '') : id;
-            keysToTry.push(`maintenance_log:${vehicleId}:${rawId}`);
-        } else {
-            keysToTry.push(`odometer_reading:${vehicleId}:${id}`);
+        // Soft-void ledger row (never hard-delete mileage history)
+        await voidOdometerReading({ id }, reason);
+
+        const rawId = id.replace(/^(fuel_|checkin_|service_)/, "");
+        const ledgerSource =
+          source === "fuel" ? "fuel"
+          : source === "checkin" ? "checkin"
+          : source === "service" ? "service"
+          : source === "manual" || source === "import" ? "manual"
+          : null;
+
+        if (ledgerSource && rawId) {
+          await voidOdometerReading(
+            { vehicleId, source: ledgerSource, referenceId: rawId },
+            reason,
+          );
         }
-        
-        // Also always try the legacy odometer_reading key as fallback
-        if (!keysToTry.includes(`odometer_reading:${vehicleId}:${id}`)) {
-            keysToTry.push(`odometer_reading:${vehicleId}:${id}`);
-        }
-        
-        console.log(`[DELETE odometer-history] Deleting keys for source=${source}, id=${id}:`, keysToTry);
-        
-        for (const key of keysToTry) {
-            try {
-                await kv.del(key);
-            } catch (_e) {
-                // Ignore errors for keys that don't exist
-            }
-        }
-        
+
         return c.json({ success: true });
     } catch(e: any) {
         console.log(`[DELETE odometer-history] Error: ${e.message}`);
@@ -12585,21 +12680,29 @@ app.get("/make-server-37f42386/check-ins", requireAuth(), async (c) => {
   try {
     const driverId = c.req.query("driverId");
     const weekStart = c.req.query("weekStart");
-    const limit = parseInt(c.req.query("limit") || "100");
-    
-    let query = fromKvStore()
-        .select("value")
-        .like("key", "checkin:%");
-    
-    if (driverId) query = query.eq("value->>driverId", driverId);
-    if (weekStart) query = query.eq("value->>weekStart", weekStart);
-    
-    const { data, error } = await query
-        .order("value->>timestamp", { ascending: false })
-        .limit(limit);
+    const vehicleId = c.req.query("vehicleId");
+    const limit = Math.min(parseInt(c.req.query("limit") || "2000", 10) || 2000, 5000);
+    const offset = Math.max(parseInt(c.req.query("offset") || "0", 10) || 0, 0);
+
+    // Prefer first-class columns (promoted); fall back to payload paths for legacy rows
+    let q = fleetDb().from(fleetTable("checkins")).select("*");
+    if (vehicleId) q = q.eq("vehicle_id", vehicleId);
+    if (driverId) q = q.or(`driver_id.eq.${driverId},payload_json->>driverId.eq.${driverId}`);
+    if (weekStart) q = q.or(`week_start.eq.${weekStart},payload_json->>weekStart.eq.${weekStart}`);
+
+    const orgId = getOrgId(c);
+    if (orgId) {
+      q = q.or(
+        `organization_id.eq.${orgId},organization_id.is.null,organization_id.eq.roam-default-org`,
+      );
+    }
+
+    const { data, error } = await q
+      .order("updated_at", { ascending: false })
+      .range(offset, offset + limit - 1);
 
     if (error) throw error;
-    const checkIns = filterByOrg(data?.map((d: any) => d.value) || [], c);
+    const checkIns = filterByOrg((data || []).map((row) => rowToKvValue(row as Record<string, unknown>)), c);
     return c.json(checkIns);
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
@@ -12608,7 +12711,7 @@ app.get("/make-server-37f42386/check-ins", requireAuth(), async (c) => {
 
 app.post("/make-server-37f42386/check-ins", async (c) => {
   try {
-    const checkIn = await c.req.json();
+    let checkIn = await c.req.json();
     if (!checkIn.driverId || !checkIn.weekStart || !checkIn.odometer) {
         return c.json({ error: "Missing required fields" }, 400);
     }
@@ -12616,6 +12719,18 @@ app.post("/make-server-37f42386/check-ins", async (c) => {
     // Validation for Manual Override
     if (checkIn.method === 'manual_override' && !checkIn.manualReadingReason) {
         return c.json({ error: "Reason required for manual override" }, 400);
+    }
+
+    // Client often sends vehicleId "unknown" when assignedVehicleId isn't hydrated yet.
+    // Resolve from driver ↔ vehicle assignment so odometer history stays vehicle-scoped.
+    if (!checkIn.vehicleId || checkIn.vehicleId === "unknown") {
+      delete checkIn.vehicleId;
+      checkIn = await enrichRecordWithDriverVehicle(checkIn, getOrgId(c));
+    }
+    if (!checkIn.vehicleId || checkIn.vehicleId === "unknown") {
+      return c.json({
+        error: "No vehicle assigned to this driver — assign a vehicle before weekly check-in",
+      }, 400);
     }
     
     // Key: checkin:{id}
@@ -12627,9 +12742,18 @@ app.post("/make-server-37f42386/check-ins", async (c) => {
         // In a real system, we might create a 'notification' object here for the fleet manager
     }
 
-    await kv.set(key, stampOrg({ ...checkIn, timestamp: new Date().toISOString() }, c));
+    await kv.set(key, stampOrg({ ...checkIn, timestamp: checkIn.timestamp || new Date().toISOString() }, c));
+
+    try {
+      await projectFromCheckIn(
+        { ...checkIn, timestamp: checkIn.timestamp || new Date().toISOString() },
+        getOrgId(c),
+      );
+    } catch (projErr) {
+      console.error("[check-ins] odometer ledger projection failed:", projErr);
+    }
     
-    return c.json({ success: true });
+    return c.json({ success: true, data: checkIn });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }

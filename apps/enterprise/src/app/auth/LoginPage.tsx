@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, Navigate, useLocation } from 'react-router-dom';
 import { InstallAppButton } from '@fleet/components/pwa/PwaLifecycleHost';
 import { jwtPrimaryRole, supabaseEnterpriseApp } from '@roam/auth-client';
 import { useAuth } from '@/app/auth/AuthProvider';
@@ -111,34 +111,9 @@ export function LoginPage() {
     );
   }
 
-  // Apex marketing host — compact form
+  // Apex never shows a password form — product picker only.
   if (door === 'apex') {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4">
-        <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-8 shadow-xl">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-400">
-            Roam Enterprise
-          </p>
-          <h1 className="mt-2 text-2xl font-semibold text-white">Sign in</h1>
-          <LoginForm
-            email={email}
-            password={password}
-            error={error}
-            submitting={submitting}
-            setEmail={setEmail}
-            setPassword={setPassword}
-            onSubmit={onSubmit}
-            submitLabel="Sign in"
-            variant="dark"
-          />
-          <p className="mt-6 text-center text-sm text-slate-500">
-            <Link to="/" className="text-slate-300 underline-offset-2 hover:underline">
-              Back to marketing site
-            </Link>
-          </p>
-        </div>
-      </div>
-    );
+    return <Navigate to="/sign-in" replace />;
   }
 
   const heroSrc = isFreight ? '/stitch/freight/hero.jpg' : '/stitch/courier/hero.jpg';

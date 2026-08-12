@@ -33,6 +33,7 @@ import { FleetSettlementPage } from '../fleet/FleetSettlementPage';
 import { WeeklyCheckInModal } from '../fleet/WeeklyCheckInModal';
 import { useCurrentDriver } from '../../hooks/useCurrentDriver';
 import { useWeeklyCheckIn } from '../../hooks/useWeeklyCheckIn';
+import { resolveVehicleIdForDriver } from '../../utils/resolveDriverVehicleId';
 
 import { MyVehicle } from '../independent/MyVehicle';
 import { TaxCenter } from '../independent/TaxCenter';
@@ -116,9 +117,19 @@ export function DriverShell({ forcePassengerRides = false }: { forcePassengerRid
     setCheckInSubmitting(true);
     try {
       const vehicleId =
-        driverRecord?.assignedVehicleId || driverRecord?.vehicleId || driverRecord?.vehicle || 'unknown';
+        resolveVehicleIdForDriver(driverRecord, [], user?.id) ||
+        driverRecord?.assignedVehicleId ||
+        driverRecord?.vehicleId ||
+        driverRecord?.vehicle;
+      if (!vehicleId || vehicleId === 'unknown') {
+        toast.error('No vehicle assigned — ask fleet to assign your vehicle before check-in');
+        return;
+      }
       await submitCheckIn(odometer, photo, vehicleId, method, reviewStatus, aiReading, manualReadingReason);
       setCheckInOpen(false);
+      toast.success('Weekly check-in saved');
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to save check-in');
     } finally {
       setCheckInSubmitting(false);
     }

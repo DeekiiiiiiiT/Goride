@@ -6,6 +6,7 @@ import {
   FOOTER_LEGAL,
   MAIN_NAV,
   SECONDARY_NAV,
+  SIGN_IN_CTA,
   type NavLink,
 } from '@/lib/navContent';
 import { RoamLogo } from '@/components/icons/SiteIcons';
@@ -98,7 +99,7 @@ export function MobileNav({ open, onClose, cta = DEFAULT_CTA }: MobileNavProps) 
 
         <nav className="flex-1 overflow-y-auto px-3 py-4" aria-label="Mobile">
           <p className="mb-2 px-4 text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
-            Services
+            Product lines
           </p>
           {MAIN_NAV.map((link) => (
             <NavItem key={link.href} link={link} onNavigate={onClose} />
@@ -110,6 +111,10 @@ export function MobileNav({ open, onClose, cta = DEFAULT_CTA }: MobileNavProps) 
           {SECONDARY_NAV.map((link) => (
             <NavItem key={link.href} link={link} onNavigate={onClose} />
           ))}
+          <NavItem
+            link={{ label: SIGN_IN_CTA.label, href: SIGN_IN_CTA.href }}
+            onNavigate={onClose}
+          />
 
           <p className="mb-2 mt-6 px-4 text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
             Legal

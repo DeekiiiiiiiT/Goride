@@ -970,6 +970,53 @@ export function registerPipelineRoutes(app: FreightApp) {
     return c.json({ package: data });
   });
 
+  /** Ops remove bad pre-alerts / floor mistakes. Locked once on sealed intl path. */
+  const PACKAGE_DELETE_LOCKED = new Set([
+    "manifested",
+    "in_transit_intl",
+    "customs_hold",
+    "customs_cleared",
+  ]);
+
+  app.delete("/packages/:id", async (c) => {
+    const user = await requireUser(c);
+    if (user instanceof Response) return user;
+    const id = c.req.param("id");
+
+    const { data: existing, error: loadErr } = await freightDb()
+      .from("packages")
+      .select("id, status, courier_tracking_number, organization_id, owner_org_id")
+      .eq("id", id)
+      .or(
+        `organization_id.eq.${user.organizationId},owner_org_id.eq.${user.organizationId}`,
+      )
+      .maybeSingle();
+    if (loadErr) return c.json({ error: loadErr.message }, 500);
+    if (!existing) return c.json({ error: "Not found" }, 404);
+    if (PACKAGE_DELETE_LOCKED.has(String(existing.status))) {
+      return c.json(
+        {
+          error:
+            "This package is already on a sealed / customs path. Remove it from the manifesto first, or keep it for history.",
+        },
+        409,
+      );
+    }
+
+    const { error } = await freightDb()
+      .from("packages")
+      .delete()
+      .eq("id", id)
+      .or(
+        `organization_id.eq.${user.organizationId},owner_org_id.eq.${user.organizationId}`,
+      );
+    if (error) return c.json({ error: error.message }, 500);
+    return c.json({
+      ok: true,
+      tracking: existing.courier_tracking_number,
+    });
+  });
+
   // -------------------------------------------------------------------------
   // Miami / generic scan station
   // -------------------------------------------------------------------------

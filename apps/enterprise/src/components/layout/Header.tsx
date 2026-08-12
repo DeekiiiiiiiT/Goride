@@ -77,7 +77,7 @@ export function Header({ cta = DEFAULT_CTA }: HeaderProps) {
           <Link to="/" className="flex shrink-0 items-center gap-2">
             <RoamLogo className="h-8 w-8 text-fleet-slate dark:text-white" />
             <span className="text-lg font-bold text-fleet-slate dark:text-white md:text-xl">
-              Roam Enterprise
+              Roam
             </span>
           </Link>
 

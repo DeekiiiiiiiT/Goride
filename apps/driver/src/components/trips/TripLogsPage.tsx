@@ -32,7 +32,7 @@ import { TripMapDialog } from './TripMapDialog';
 import { TripIssueDialog } from './TripIssueDialog';
 import { DeleteConfirmationDialog } from './DeleteConfirmationDialog';
 import { createManualTrip, ManualTripInput } from '../../utils/tripFactory';
-import { startOfDay, endOfDay, subDays, startOfWeek, startOfMonth } from 'date-fns';
+import { startOfDay, endOfDay, subDays, startOfWeek, startOfMonth, format } from 'date-fns';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { useTripAddressResolution } from '../../hooks/useTripAddressResolution';
 import { getTripVehicleLabel } from '../../utils/tripManifestHelpers';
@@ -144,9 +144,10 @@ export function TripLogsPage() {
         end = endOfDay(parseLocalDate(filters.dateEnd));
     }
 
+    // Send calendar YYYY-MM-DD so fleet.trips.date filters are timezone-safe
     if (start && end) {
-        params.startDate = start.toISOString();
-        params.endDate = end.toISOString();
+        params.startDate = format(start, 'yyyy-MM-dd');
+        params.endDate = format(end, 'yyyy-MM-dd');
     }
     return params;
   }, [filters, page]);

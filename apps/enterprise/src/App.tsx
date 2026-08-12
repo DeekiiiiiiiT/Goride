@@ -26,6 +26,7 @@ import {
 } from '@/doors/DoorStoryRoutes';
 import { RidesPage } from '@/pages/RidesPage';
 import { SafetyPage } from '@/pages/SafetyPage';
+import { SignInChooserPage } from '@/pages/SignInChooserPage';
 import { Gated } from '@/app/modules/Gated';
 import {
   PackageDutyDetailPage,
@@ -236,6 +237,7 @@ export default function App() {
         <Route path="/terms" element={<TermsPage />} />
         <Route path="/cookies" element={<CookiesPage />} />
         <Route path="/accessibility" element={<AccessibilityPage />} />
+        <Route path="/sign-in" element={<SignInChooserPage />} />
 
         <Route
           path="/login"

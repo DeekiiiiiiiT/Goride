@@ -247,6 +247,7 @@ export const FLEET_DOMAINS: FleetDomainDef[] = [
         type: str(v.type),
         entry_mode: str(v.entryMode),
         payment_source: str(v.paymentSource),
+        odometer: num(v.odometer),
       });
     },
   },
@@ -438,18 +439,53 @@ export const FLEET_DOMAINS: FleetDomainDef[] = [
     mapRow: (key, v) =>
       base(key, v, "checkin:", {
         vehicle_id: str(v.vehicleId),
+        odometer: num(v.odometer),
+        driver_id: str(v.driverId),
+        week_start: dateOnly(v.weekStart),
       }),
   },
   {
     domain: "odometer_readings",
     table: "odometer_readings",
     prefixes: ["odometer_reading:"],
-    mapRow: (key, v) =>
-      base(key, v, "odometer_reading:", {
+    mapRow: (key, v) => {
+      const sourceRaw = str(v.source)?.toLowerCase() || "";
+      const source =
+        str(v.ledgerSource) ||
+        (sourceRaw.includes("import")
+          ? "import"
+          : sourceRaw.includes("fuel")
+            ? "fuel"
+            : sourceRaw.includes("check")
+              ? "checkin"
+              : sourceRaw.includes("service")
+                ? "service"
+                : sourceRaw.includes("correction")
+                  ? "correction"
+                  : str(v.ledgerSource) || "manual");
+      const reading =
+        num(v.reading) ?? num(v.odometer) ?? num(v.odo) ?? num(v.value);
+      const recordedAt =
+        str(v.recordedAt) ||
+        str(v.timestamp) ||
+        str(v.createdAt) ||
+        (dateOnly(v.date) ? `${dateOnly(v.date)}T12:00:00.000Z` : null);
+      return base(key, v, "odometer_reading:", {
         vehicle_id: str(v.vehicleId),
-        reading: num(v.reading) ?? num(v.odometer) ?? num(v.odo),
-        reading_date: dateOnly(v.date) ?? dateOnly(v.readingDate),
-      }),
+        reading,
+        reading_date: dateOnly(v.date) ?? dateOnly(v.readingDate) ?? dateOnly(recordedAt),
+        source,
+        reference_id: str(v.referenceId) ?? str(v.id),
+        reference_type: str(v.referenceType) ?? "manual",
+        recorded_at: recordedAt,
+        is_hard: v.isHard === false || v.type === "Calculated" ? false : true,
+        is_verified: !!(v.isVerified || v.isManagerVerified || v.verified),
+        is_voided: !!v.isVoided,
+        is_anomaly: !!v.isAnomaly,
+        void_reason: str(v.voidReason),
+        driver_id: str(v.driverId),
+      });
+    },
   },
   {
     domain: "organization_settings",

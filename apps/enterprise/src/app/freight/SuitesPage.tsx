@@ -1,11 +1,36 @@
 import { FormEvent, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { Upload, UserPlus, X, Check, Copy } from 'lucide-react';
+import { Upload, UserPlus, X, Check, Copy, Pencil } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
-import { useCreateSuite, useFacilities, useFreightClients, useSuites } from '@/app/hooks/useFreight';
+import {
+  useCreateSuite,
+  useFacilities,
+  useFreightClients,
+  useSuites,
+  useUpdateSuite,
+} from '@/app/hooks/useFreight';
 import { SuiteCsvImportPanel } from '@/app/freight/SuiteCsvImportPanel';
 
-type OverlayMode = 'import' | 'import-success' | 'create' | null;
+type OverlayMode = 'import' | 'import-success' | 'create' | 'edit' | null;
+type SuiteRow = Record<string, unknown>;
+
+function fieldStr(v: unknown) {
+  return v == null ? '' : String(v);
+}
+
+function suiteFormPayload(fd: FormData) {
+  return {
+    clientId: (fd.get('clientId') as string) || null,
+    contactName: fd.get('contactName') || null,
+    contactPhone: fd.get('contactPhone') || null,
+    contactEmail: fd.get('contactEmail') || null,
+    trn: fd.get('trn') || null,
+    defaultFulfillmentMode: fd.get('defaultFulfillmentMode') || 'pickup',
+    defaultAssigneeType: fd.get('defaultAssigneeType') || 'org_fleet',
+    defaultPickupFacilityId: (fd.get('defaultPickupFacilityId') as string) || null,
+    deliveryAddress: fd.get('deliveryAddress') || null,
+  };
+}
 
 function buildSuiteAddress(
   suiteCode: string,
@@ -77,6 +102,131 @@ function SuitesOverlay({
   );
 }
 
+function SuiteCustomerFields({
+  suite,
+  clients,
+  branchFacilities,
+  lockSuiteCode,
+}: {
+  suite?: SuiteRow | null;
+  clients: SuiteRow[];
+  branchFacilities: SuiteRow[];
+  lockSuiteCode?: boolean;
+}) {
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      <label className="block text-sm">
+        Suite code {lockSuiteCode ? '' : '(blank = auto)'}
+        <input
+          name="suiteCode"
+          placeholder="JA-1042"
+          defaultValue={fieldStr(suite?.suite_code)}
+          readOnly={lockSuiteCode}
+          className={`mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 ${
+            lockSuiteCode ? 'cursor-not-allowed bg-slate-50 text-slate-600' : ''
+          }`}
+        />
+      </label>
+      <label className="block text-sm">
+        Client
+        <select
+          name="clientId"
+          defaultValue={fieldStr(suite?.client_id)}
+          className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+        >
+          <option value="">— Optional —</option>
+          {clients.map((c) => (
+            <option key={String(c.id)} value={String(c.id)}>
+              {String(c.name)}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="block text-sm">
+        Contact name
+        <input
+          name="contactName"
+          defaultValue={fieldStr(suite?.contact_name)}
+          className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+        />
+      </label>
+      <label className="block text-sm">
+        Phone (SMS)
+        <input
+          name="contactPhone"
+          required
+          defaultValue={fieldStr(suite?.contact_phone)}
+          className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+        />
+      </label>
+      <label className="block text-sm">
+        Email
+        <input
+          name="contactEmail"
+          type="email"
+          defaultValue={fieldStr(suite?.contact_email)}
+          className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+        />
+      </label>
+      <label className="block text-sm">
+        TRN
+        <input
+          name="trn"
+          defaultValue={fieldStr(suite?.trn)}
+          className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+        />
+      </label>
+      <label className="block text-sm">
+        Default fulfillment
+        <select
+          name="defaultFulfillmentMode"
+          defaultValue={fieldStr(suite?.default_fulfillment_mode) || 'pickup'}
+          className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+        >
+          <option value="pickup">Branch pickup</option>
+          <option value="door_delivery">Door delivery</option>
+        </select>
+      </label>
+      <label className="block text-sm">
+        Default fleet
+        <select
+          name="defaultAssigneeType"
+          defaultValue={fieldStr(suite?.default_assignee_type) || 'org_fleet'}
+          className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+        >
+          <option value="org_fleet">Org fleet</option>
+          <option value="roam_marketplace">Auto-dispatch (org drivers)</option>
+          <option value="client_fleet">Client fleet</option>
+          <option value="third_party">3PL</option>
+        </select>
+      </label>
+      <label className="block text-sm">
+        Pickup branch
+        <select
+          name="defaultPickupFacilityId"
+          defaultValue={fieldStr(suite?.default_pickup_facility_id)}
+          className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+        >
+          <option value="">— Optional —</option>
+          {branchFacilities.map((f) => (
+            <option key={String(f.id)} value={String(f.id)}>
+              {String(f.name)}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="block text-sm sm:col-span-2">
+        Delivery address
+        <input
+          name="deliveryAddress"
+          defaultValue={fieldStr(suite?.delivery_address)}
+          className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+        />
+      </label>
+    </div>
+  );
+}
+
 export function SuitesPage() {
   const { data, isLoading, error } = useSuites();
   const clients = useFreightClients();
@@ -91,8 +241,10 @@ export function SuitesPage() {
   const needsFacilitiesSetup =
     !allFacilities.isLoading && (allFacilities.data?.facilities?.length ?? 0) === 0;
   const create = useCreateSuite();
+  const update = useUpdateSuite();
   const [formError, setFormError] = useState<string | null>(null);
   const [overlay, setOverlay] = useState<OverlayMode>(null);
+  const [editSuite, setEditSuite] = useState<SuiteRow | null>(null);
   const [importSuccessMsg, setImportSuccessMsg] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
@@ -124,22 +276,43 @@ export function SuitesPage() {
     const fd = new FormData(form);
     try {
       await create.mutateAsync({
-        clientId: (fd.get('clientId') as string) || null,
+        ...suiteFormPayload(fd),
         suiteCode: (fd.get('suiteCode') as string) || undefined,
-        contactName: fd.get('contactName') || null,
-        contactPhone: fd.get('contactPhone') || null,
-        contactEmail: fd.get('contactEmail') || null,
-        trn: fd.get('trn') || null,
-        defaultFulfillmentMode: fd.get('defaultFulfillmentMode') || 'pickup',
-        defaultAssigneeType: fd.get('defaultAssigneeType') || 'org_fleet',
-        defaultPickupFacilityId: (fd.get('defaultPickupFacilityId') as string) || null,
-        deliveryAddress: fd.get('deliveryAddress') || null,
       });
       form.reset();
       setOverlay(null);
     } catch (err) {
       setFormError((err as Error).message);
     }
+  }
+
+  async function onUpdate(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!editSuite?.id) return;
+    setFormError(null);
+    const fd = new FormData(e.currentTarget);
+    try {
+      await update.mutateAsync({
+        id: String(editSuite.id),
+        body: suiteFormPayload(fd),
+      });
+      setEditSuite(null);
+      setOverlay(null);
+    } catch (err) {
+      setFormError((err as Error).message);
+    }
+  }
+
+  function openEdit(row: SuiteRow) {
+    setFormError(null);
+    setEditSuite(row);
+    setOverlay('edit');
+  }
+
+  function closeOverlay() {
+    setOverlay(null);
+    setEditSuite(null);
+    setFormError(null);
   }
 
   return (
@@ -210,6 +383,7 @@ export function SuitesPage() {
               <th className="px-4 py-2">Phone</th>
               <th className="px-4 py-2">US shipping address</th>
               <th className="px-4 py-2">QR</th>
+              <th className="px-4 py-2 text-right"> </th>
             </tr>
           </thead>
           <tbody>
@@ -238,12 +412,24 @@ export function SuitesPage() {
                     </div>
                     <p className="mt-1 text-[10px] text-slate-400">Scan at receive</p>
                   </td>
+                  <td className="px-4 py-3">
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        title="Edit suite"
+                        onClick={() => openEdit(s)}
+                        className="rounded p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               );
             })}
             {!isLoading && !(data?.suites ?? []).length && (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
+                <td colSpan={6} className="px-4 py-8 text-center text-slate-500">
                   No customers yet — click Add customer or Import CSV.
                 </td>
               </tr>
@@ -256,7 +442,7 @@ export function SuitesPage() {
         <SuitesOverlay
           title="Import customers (CSV)"
           subtitle="Upload mailbox codes from your freight site. Re-import updates matching suite codes."
-          onClose={() => setOverlay(null)}
+          onClose={closeOverlay}
           wide
         >
           <SuiteCsvImportPanel
@@ -299,98 +485,14 @@ export function SuitesPage() {
         <SuitesOverlay
           title="Add customer"
           subtitle="Create one mailbox customer (suite) with their contact details and delivery defaults."
-          onClose={() => setOverlay(null)}
+          onClose={closeOverlay}
           wide
         >
           <form onSubmit={onSubmit} className="space-y-3">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label className="block text-sm">
-                Suite code (blank = auto)
-                <input
-                  name="suiteCode"
-                  placeholder="JA-1042"
-                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-                />
-              </label>
-              <label className="block text-sm">
-                Client
-                <select name="clientId" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2">
-                  <option value="">— Optional —</option>
-                  {(clients.data?.clients ?? []).map((c) => (
-                    <option key={String(c.id)} value={String(c.id)}>
-                      {String(c.name)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="block text-sm">
-                Contact name
-                <input name="contactName" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
-              </label>
-              <label className="block text-sm">
-                Phone (SMS)
-                <input
-                  name="contactPhone"
-                  required
-                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-                />
-              </label>
-              <label className="block text-sm">
-                Email
-                <input
-                  name="contactEmail"
-                  type="email"
-                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-                />
-              </label>
-              <label className="block text-sm">
-                TRN
-                <input name="trn" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
-              </label>
-              <label className="block text-sm">
-                Default fulfillment
-                <select
-                  name="defaultFulfillmentMode"
-                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-                >
-                  <option value="pickup">Branch pickup</option>
-                  <option value="door_delivery">Door delivery</option>
-                </select>
-              </label>
-              <label className="block text-sm">
-                Default fleet
-                <select
-                  name="defaultAssigneeType"
-                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-                >
-                  <option value="org_fleet">Org fleet</option>
-                  <option value="roam_marketplace">Auto-dispatch (org drivers)</option>
-                  <option value="client_fleet">Client fleet</option>
-                  <option value="third_party">3PL</option>
-                </select>
-              </label>
-              <label className="block text-sm">
-                Pickup branch
-                <select
-                  name="defaultPickupFacilityId"
-                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-                >
-                  <option value="">— Optional —</option>
-                  {branchFacilities.map((f) => (
-                    <option key={String(f.id)} value={String(f.id)}>
-                      {String(f.name)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="block text-sm sm:col-span-2">
-                Delivery address
-                <input
-                  name="deliveryAddress"
-                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-                />
-              </label>
-            </div>
+            <SuiteCustomerFields
+              clients={clients.data?.clients ?? []}
+              branchFacilities={branchFacilities}
+            />
             {formError && (
               <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
                 {formError}
@@ -403,6 +505,45 @@ export function SuitesPage() {
             >
               {create.isPending ? 'Saving…' : 'Create suite'}
             </button>
+          </form>
+        </SuitesOverlay>
+      )}
+
+      {overlay === 'edit' && editSuite && (
+        <SuitesOverlay
+          title={`Edit ${String(editSuite.suite_code)}`}
+          subtitle="Update contact, TRN, and delivery defaults. Suite code stays locked (Amazon / Shein labels already use it)."
+          onClose={closeOverlay}
+          wide
+        >
+          <form key={String(editSuite.id)} onSubmit={onUpdate} className="space-y-3">
+            <SuiteCustomerFields
+              suite={editSuite}
+              clients={clients.data?.clients ?? []}
+              branchFacilities={branchFacilities}
+              lockSuiteCode
+            />
+            {formError && (
+              <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {formError}
+              </p>
+            )}
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={closeOverlay}
+                className="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-700"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={update.isPending}
+                className="rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-semibold text-slate-950 hover:bg-amber-400 disabled:opacity-60"
+              >
+                {update.isPending ? 'Saving…' : 'Save changes'}
+              </button>
+            </div>
           </form>
         </SuitesOverlay>
       )}

@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { X } from 'lucide-react';
+import { Upload, X } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { freightService } from '@/app/services/freightService';
@@ -340,21 +340,34 @@ export function CreatePreAlertForm({ onSuccess }: { onSuccess?: () => void }) {
         )}
       </fieldset>
 
-      <label className="block text-sm">
-        {DOC_ROLE.customer_invoice.label}
-        <span className="mt-0.5 block text-xs font-normal text-slate-500">
+      <div className="block text-sm">
+        <p className="font-medium text-slate-800">{DOC_ROLE.customer_invoice.label}</p>
+        <p className="mt-0.5 text-xs font-normal text-slate-500">
           Optional for pre-alert · needed before seal
-        </span>
-        <input
-          type="file"
-          accept="application/pdf,image/*"
-          className="mt-1 block w-full text-sm"
-          onChange={(e) => {
-            void onInvoiceSelected(e.target.files?.[0] ?? null);
-          }}
-        />
-        {invoiceFile && <p className="mt-1 text-xs text-slate-500">{invoiceFile.name}</p>}
-      </label>
+        </p>
+        <div className="mt-2 flex flex-wrap items-center gap-3">
+          <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50">
+            <Upload className="h-4 w-4" aria-hidden />
+            {invoiceFile ? 'Replace file' : 'Upload invoice'}
+            <input
+              type="file"
+              accept="application/pdf,image/*"
+              className="sr-only"
+              onChange={(e) => {
+                void onInvoiceSelected(e.target.files?.[0] ?? null);
+                e.target.value = '';
+              }}
+            />
+          </label>
+          {invoiceFile ? (
+            <p className="min-w-0 flex-1 truncate text-xs text-slate-600" title={invoiceFile.name}>
+              {invoiceFile.name}
+            </p>
+          ) : (
+            <p className="text-xs text-slate-400">PDF or image</p>
+          )}
+        </div>
+      </div>
 
       {(parseReading || invoiceSuggestion) && (
         <InvoiceFillSuggestions

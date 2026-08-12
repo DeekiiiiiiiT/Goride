@@ -1,8 +1,8 @@
 /**
  * Permanent product doors — separate hostnames = separate PWA installs.
- * courier.roamenterprise.co → Courier (/app)
- * warehouse.roamenterprise.co → Warehouse (/warehouse)
- * apex roamenterprise.co → marketing (+ login that routes to a door)
+ * courier.roamenterprise.co → Courier (/app) + /login
+ * warehouse.roamenterprise.co → Warehouse (/warehouse) + /login
+ * apex roamenterprise.co → marketing only; Sign in → /sign-in product picker
  */
 
 export type ProductDoor = 'courier' | 'warehouse' | 'apex';

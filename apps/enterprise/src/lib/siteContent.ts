@@ -4,6 +4,8 @@ export const SERVICE_URLS = {
   haul: 'https://roamhaul.co',
   fleet: 'https://roamfleet.co',
   dash: 'https://roamrush.app',
+  rushCourier: 'https://courier.roamrush.app',
+  rushPartner: 'https://partner.roamrush.app',
   privacy: '/privacy',
   terms: '/terms',
   cookies: '/cookies',

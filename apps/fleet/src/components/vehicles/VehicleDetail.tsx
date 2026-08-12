@@ -448,15 +448,21 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
     remainingKm: 0,
   });
   const [odometerHistory, setOdometerHistory] = useState<any[]>([]);
+  const [ledgerCurrentKm, setLedgerCurrentKm] = useState<number | null>(null);
   /** Start true when a vehicle is shown so maintenance bootstrap waits for unified odometer fetch. */
   const [isOdometerLoading, setIsOdometerLoading] = useState(() => Boolean(vehicle.id || vehicle.licensePlate));
 
   const fetchOdometerHistory = useCallback(async () => {
     if (!vehicle.id && !vehicle.licensePlate) return;
+    const vId = vehicle.id || vehicle.licensePlate;
     setIsOdometerLoading(true);
     try {
-      const data = await odometerService.getUnifiedHistory(vehicle.id || vehicle.licensePlate);
-      setOdometerHistory(data || []);
+      const [ledger, current] = await Promise.all([
+        odometerService.getLedger(vId, { limit: 5000 }),
+        odometerService.getCurrent(vId).catch(() => null),
+      ]);
+      setOdometerHistory(ledger.data || []);
+      setLedgerCurrentKm(current && current.km > 0 ? current.km : null);
     } catch (error) {
       console.error("Failed to load odometer history", error);
     } finally {
@@ -468,7 +474,7 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
     fetchOdometerHistory();
   }, [fetchOdometerHistory, odometerRefreshTrigger]);
 
-  const latestReading = odometerHistory[0]?.value || vehicle.metrics.odometer || 0;
+  const latestReading = ledgerCurrentKm ?? odometerHistory[0]?.value ?? vehicle.metrics?.odometer ?? 0;
   const digits = latestReading.toLocaleString('en-US', { minimumIntegerDigits: 6, useGrouping: false }).split('').slice(-6);
   const lastVerifiedDate = odometerHistory.find(r => r.type === 'Hard')?.date || '';
 

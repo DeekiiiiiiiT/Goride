@@ -1,14 +1,22 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { Trash2 } from 'lucide-react';
 import { useAuth } from '@/app/auth/AuthProvider';
-import { usePackage, usePipelineDashboard } from '@/app/hooks/useFreight';
+import { useDeletePackage, usePackage, usePipelineDashboard } from '@/app/hooks/useFreight';
 import { useWarehouseCourierLinks } from '@/app/hooks/useWarehouseCourierLinks';
 import { useModuleAccess } from '@/app/modules/ModuleAccessProvider';
 import { useSeatAccess } from '@/app/seats/SeatAccessProvider';
 import { freightService } from '@/app/services/freightService';
 import { CreatePreAlertOverlay, PreAlertsPage } from '@/app/freight/os/PreAlertsPage';
 import { InvoiceAuditQueuePage } from '@/app/freight/os/InvoiceAuditQueuePage';
+
+const PACKAGE_DELETE_LOCKED = new Set([
+  'manifested',
+  'in_transit_intl',
+  'customs_hold',
+  'customs_cleared',
+]);
 
 type WorkspaceTab = 'all' | 'expected' | 'needs-invoice';
 
@@ -168,6 +176,19 @@ export function AllPackagesPanel({
       ),
     enabled: Boolean(session),
   });
+  const deletePkg = useDeletePackage();
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  async function onDeletePackage(id: string, tracking: string) {
+    const label = tracking || 'this package';
+    if (!window.confirm(`Delete ${label}? This cannot be undone.`)) return;
+    setDeleteError(null);
+    try {
+      await deletePkg.mutateAsync(id);
+    } catch (err) {
+      setDeleteError((err as Error).message);
+    }
+  }
 
   const courierNames = useMemo(() => {
     const map: Record<string, string> = {};
@@ -218,6 +239,11 @@ export function AllPackagesPanel({
           {(error as Error).message}
         </p>
       )}
+      {deleteError && (
+        <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {deleteError}
+        </p>
+      )}
 
       {!isLoading && !error && packages.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-300 bg-white px-6 py-12 text-center">
@@ -261,25 +287,26 @@ export function AllPackagesPanel({
                 <th className="px-4 py-2">Suite</th>
                 <th className="px-4 py-2">Status</th>
                 <th className="px-4 py-2">Weight</th>
+                <th className="px-4 py-2 text-right"> </th>
               </tr>
             </thead>
             <tbody>
               {packages.map((p) => {
                 const suite = p.suites as { suite_code?: string } | null;
                 const ownerId = String(p.owner_org_id ?? p.organization_id ?? '');
+                const tracking = String(p.courier_tracking_number || p.id);
+                const locked = PACKAGE_DELETE_LOCKED.has(String(p.status));
                 return (
                   <tr key={String(p.id)} className="border-b border-slate-50 hover:bg-slate-50">
                     <td className="px-4 py-2">
                       {warehouseMode ? (
-                        <span className="font-mono text-xs">
-                          {String(p.courier_tracking_number || p.id).slice(0, 24)}
-                        </span>
+                        <span className="font-mono text-xs">{tracking.slice(0, 24)}</span>
                       ) : (
                         <Link
                           to={`/app/packages/${p.id}`}
                           className="font-medium text-amber-800 underline"
                         >
-                          {String(p.courier_tracking_number || p.id).slice(0, 24)}
+                          {tracking.slice(0, 24)}
                         </Link>
                       )}
                     </td>
@@ -290,6 +317,23 @@ export function AllPackagesPanel({
                     <td className="px-4 py-2">{String(p.status).replace(/_/g, ' ')}</td>
                     <td className="px-4 py-2">
                       {p.weight_lbs != null ? `${p.weight_lbs} lb` : '—'}
+                    </td>
+                    <td className="px-4 py-2">
+                      <div className="flex justify-end">
+                        <button
+                          type="button"
+                          title={
+                            locked
+                              ? 'Locked after manifesto / customs'
+                              : 'Delete package'
+                          }
+                          disabled={locked || deletePkg.isPending}
+                          onClick={() => onDeletePackage(String(p.id), tracking)}
+                          className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );

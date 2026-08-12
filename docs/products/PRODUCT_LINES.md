@@ -15,7 +15,7 @@ Fleet managers are tagged `productLine: fleet` and `businessType: rideshare`.
 
 | Domain | Audience | Surfaces |
 |--------|----------|----------|
-| [roamenterprise.co](https://roamenterprise.co) | Multi-vertical B2B orgs | Marketing (public) + `/login` + vertical app shells + `/admin` product ops |
+| [roamenterprise.co](https://roamenterprise.co) | Multi-vertical B2B orgs | Marketing (public) + `/sign-in` product picker; real `/login` only on courier/warehouse doors + `/admin` product ops |
 | [roamdominion.co](https://roamdominion.co) | Platform Super Admin | Dominion segment `enterprise` |
 
 **Architecture (locked 2026-07-31):** Enterprise is its **own authenticated app** inside `apps/enterprise` (Path B). It is **not** a second deploy of `apps/fleet`. Shared packages (`@roam/ui`, `@roam/auth-client`, `@roam/admin-core`, etc.) are reused; Fleet’s app shell is not.
@@ -30,7 +30,7 @@ Sibling products under `productLine: enterprise` (see [`WAREHOUSE_COURIER_MODEL.
 |-----------|---------|-------------------------|----------|
 | `courier.roamenterprise.co` | **Courier** | `freight_forwarding` (+ courier verticals) | `/app` |
 | `warehouse.roamenterprise.co` | **Warehouse** | `warehouse` | `/warehouse` |
-| `roamenterprise.co` (apex) | Marketing | — | public site; `/login` routes to the right door |
+| `roamenterprise.co` (apex) | Marketing | — | public site; `/sign-in` picks Rideshare / Delivery / Enterprise apps (no apex password form) |
 
 Local: `courier.localhost:3003` / `warehouse.localhost:3003`.
 

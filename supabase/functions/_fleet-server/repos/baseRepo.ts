@@ -29,6 +29,25 @@ export function rowToKvValue(row: Record<string, unknown>): Record<string, unkno
       : {};
   if (!payload.id && row.id) payload.id = row.id;
   if (!payload.organizationId && row.organization_id) payload.organizationId = row.organization_id;
+  // Mirror typed columns into camelCase fields clients already read
+  if (!payload.assignedVehicleId && row.assigned_vehicle_id) {
+    payload.assignedVehicleId = row.assigned_vehicle_id;
+  }
+  if (!payload.vehicleId && row.vehicle_id) payload.vehicleId = row.vehicle_id;
+  if (!payload.currentDriverId && row.current_driver_id) {
+    payload.currentDriverId = row.current_driver_id;
+  }
+  if (payload.value == null && row.reading != null) payload.value = row.reading;
+  if (payload.odometer == null && row.odometer != null) payload.odometer = row.odometer;
+  if (!payload.driverId && row.driver_id) payload.driverId = row.driver_id;
+  if (!payload.weekStart && row.week_start) payload.weekStart = row.week_start;
+  if (!payload.source && row.source) payload.source = row.source;
+  if (!payload.referenceId && row.reference_id) payload.referenceId = row.reference_id;
+  if (!payload.recordedAt && row.recorded_at) payload.recordedAt = row.recorded_at;
+  if (payload.isVerified == null && row.is_verified != null) payload.isVerified = row.is_verified;
+  if (payload.isVoided == null && row.is_voided != null) payload.isVoided = row.is_voided;
+  if (payload.isAnomaly == null && row.is_anomaly != null) payload.isAnomaly = row.is_anomaly;
+  if (payload.isHard == null && row.is_hard != null) payload.isHard = row.is_hard;
   return payload;
 }
 
@@ -76,7 +95,20 @@ const COLUMN_ALIASES: Record<string, string> = {
   paymentDate: "payment_date",
   "value->>paymentDate": "payment_date",
   readingDate: "reading_date",
+  reading_date: "reading_date",
   "value->>readingDate": "reading_date",
+  "value->>reading_date": "reading_date",
+  recordedAt: "recorded_at",
+  recorded_at: "recorded_at",
+  "value->>recordedAt": "recorded_at",
+  referenceId: "reference_id",
+  reference_id: "reference_id",
+  "value->>referenceId": "reference_id",
+  referenceType: "reference_type",
+  isHard: "is_hard",
+  isVerified: "is_verified",
+  isVoided: "is_voided",
+  isAnomaly: "is_anomaly",
   documentId: "document_id",
   "value->>documentId": "document_id",
   vendorId: "vendor_id",

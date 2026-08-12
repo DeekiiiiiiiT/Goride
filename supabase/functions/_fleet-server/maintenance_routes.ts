@@ -36,6 +36,7 @@ import {
 } from "./canonical_from_ops.ts";
 import { deleteCanonicalLedgerBySource } from "./ledger_canonical.ts";
 import { isMaintenanceLedgerEligible } from "../../../apps/fleet/src/utils/canonicalMaintenanceLedger.ts";
+import { projectFromMaintenanceLog, voidOdometerReading } from "./odometer_ledger.ts";
 
 // Wave 5: DRY — use shared assertPlatformStaffResponse from rbac_middleware
 const assertVehicleCatalogPlatformAccess = assertPlatformStaffResponse;
@@ -1493,6 +1494,22 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           }
         }
 
+        try {
+          await projectFromMaintenanceLog(
+            {
+              id,
+              vehicleId,
+              odometer: performed_at_miles,
+              date: performed_at_date,
+              serviceType: rowInsert.service_type,
+              organizationId: orgId,
+            },
+            orgId,
+          );
+        } catch (odoErr) {
+          console.error("[maintenance-logs] odometer ledger projection failed:", odoErr);
+        }
+
         return c.json({
           success: true,
           data: inserted,
@@ -1670,6 +1687,22 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           }
         }
 
+        try {
+          await projectFromMaintenanceLog(
+            {
+              id,
+              vehicleId,
+              odometer: performed_at_miles,
+              date: performed_at_date,
+              serviceType: service_type,
+              organizationId: orgId,
+            },
+            orgId,
+          );
+        } catch (odoErr) {
+          console.error("[maintenance-logs PATCH] odometer ledger projection failed:", odoErr);
+        }
+
         return c.json({
           success: true,
           data: updated,
@@ -1705,6 +1738,14 @@ export function registerMaintenanceRoutes(app: { get: unknown; post: unknown; pu
           await deleteCanonicalLedgerBySource("financial_event", [id]);
         } catch (ledgerErr) {
           console.error("[maintenance] ledger delete after record delete failed:", ledgerErr);
+        }
+        try {
+          await voidOdometerReading(
+            { vehicleId, source: "service", referenceId: id },
+            "Maintenance record deleted",
+          );
+        } catch (odoErr) {
+          console.error("[maintenance] odometer ledger void after delete failed:", odoErr);
         }
         return c.json({ success: true });
       } catch (e: unknown) {

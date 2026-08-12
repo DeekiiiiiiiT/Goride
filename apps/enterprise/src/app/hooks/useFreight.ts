@@ -212,6 +212,16 @@ export function useCreateSuite() {
   });
 }
 
+export function useUpdateSuite() {
+  const organizationId = useFreightOrgId();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: unknown }) =>
+      freightService.updateSuite(id, body, organizationId),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['freight', 'suites'] }),
+  });
+}
+
 export function useImportSuites() {
   const organizationId = useFreightOrgId();
   const qc = useQueryClient();
@@ -260,6 +270,20 @@ export function useCreatePackage() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['freight', 'packages'] });
       void qc.invalidateQueries({ queryKey: ['freight', 'pipeline-dashboard'] });
+    },
+  });
+}
+
+export function useDeletePackage() {
+  const organizationId = useFreightOrgId();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => freightService.deletePackage(id, organizationId),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['freight', 'packages'] });
+      void qc.invalidateQueries({ queryKey: ['freight', 'pipeline-dashboard'] });
+      void qc.invalidateQueries({ queryKey: ['freight', 'pipeline-command'] });
+      void qc.invalidateQueries({ queryKey: ['freight', 'pre-alerts'] });
     },
   });
 }

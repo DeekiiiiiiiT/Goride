@@ -613,7 +613,10 @@ export function FuelLogTable({
                         />
                     )}
                 </div>
-                <div className="text-xs text-slate-500">Showing {activeView === 'transactions' ? filteredEntries.length : filteredCycles.length} records</div>
+                <div className="text-xs text-slate-500">
+                  Showing {activeView === 'transactions' ? filteredEntries.length : filteredCycles.length} records
+                  {activeView === 'transactions' ? ' · Δ Fuel = fuel odometer integrity (not Live Status)' : ''}
+                </div>
                 <TooltipProvider>
                     <Tooltip>
                         <TooltipTrigger asChild>
@@ -666,7 +669,7 @@ export function FuelLogTable({
                                 <TableHead>Driver</TableHead>
                                 <TableHead>Vol (L)</TableHead>
                                 <TableHead>Odo</TableHead>
-                                <TableHead>Δ Prev</TableHead>
+                                <TableHead title="Fuel-only odometer integrity (not Live Status)">Δ Fuel</TableHead>
                                 <TableHead>Cost ($)</TableHead>
                                 <TableHead className="text-center">Audit</TableHead>
                                 <TableHead className="text-right">Actions</TableHead>

@@ -108,9 +108,25 @@ export async function throwIfCatalogGateBlocked(response: Response, fallbackMess
 export const api = {
   async getOdometerHistory(vehicleId: string): Promise<OdometerReading[]> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/odometer-history/${vehicleId}`, {
-      headers: { 'Authorization': `Bearer ${publicAnonKey}` }
+      headers: await getHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch odometer history");
+    return response.json();
+  },
+
+  async getOdometerCurrent(vehicleId: string): Promise<{
+    km: number;
+    source: string | null;
+    recordedAt: string | null;
+    readingId: string | null;
+    vehicleId: string;
+    isVerified: boolean;
+  }> {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fuel}/odometer/current/${encodeURIComponent(vehicleId)}`,
+      { headers: await getHeaders(null) },
+    );
+    if (!response.ok) throw new Error("Failed to fetch current odometer");
     return response.json();
   },
 
@@ -119,7 +135,7 @@ export const api = {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`
+        ...(await getHeaders())
       },
       body: JSON.stringify(reading)
     });

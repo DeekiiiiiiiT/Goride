@@ -3,6 +3,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -50,17 +51,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [businessType, setBusinessType] = useState<string | null>(null);
   const [subscribedProducts, setSubscribedProducts] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const bootDoneRef = useRef(false);
+  const userIdRef = useRef<string | null>(null);
 
-  const applySession = useCallback((next: Session | null) => {
+  const applySession = useCallback((next: Session | null, opts?: { soft?: boolean }) => {
     setSession(next);
     setUser(next?.user ?? null);
+    userIdRef.current = next?.user?.id ?? null;
     if (next?.user) {
       setRole(jwtPrimaryRole(next.user) || null);
       setOrganizationId(deriveOrgId(next.user));
       setProductLine(deriveProductLine(next.user));
-      // Prefer JWT until org fetch finishes — never leave door routing with empty profile after SIGNED_IN
-      setBusinessType(deriveJwtBusinessType(next.user));
-      setSubscribedProducts([]);
+      if (!opts?.soft) {
+        // Prefer JWT until org fetch finishes — never leave door routing with empty profile after SIGNED_IN
+        setBusinessType(deriveJwtBusinessType(next.user));
+        setSubscribedProducts([]);
+      } else if (!deriveOrgId(next.user)) {
+        // Soft refresh still picks up JWT door hints if org id was missing
+        setBusinessType((prev) => prev || deriveJwtBusinessType(next.user));
+      }
     } else {
       setRole(null);
       setOrganizationId(null);
@@ -131,19 +140,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           await hydrateOrgProfile(u);
         }
       } finally {
-        if (mounted) setLoading(false);
+        if (mounted) {
+          bootDoneRef.current = true;
+          setLoading(false);
+        }
       }
     })();
 
     const { data: sub } = supabaseEnterpriseApp.auth.onAuthStateChange((event, next) => {
       void (async () => {
-        // Token refresh: keep current org profile; don't flip loading (avoids door bounce flashes).
-        if (event === 'TOKEN_REFRESHED') {
-          applySession(next);
+        const nextUserId = next?.user?.id ?? null;
+        const sameUser = Boolean(nextUserId && nextUserId === userIdRef.current);
+
+        // Soft updates: never unmount /app (kills open forms like Create pre-alert).
+        if (
+          event === 'TOKEN_REFRESHED' ||
+          event === 'USER_UPDATED' ||
+          event === 'INITIAL_SESSION' ||
+          (event === 'SIGNED_IN' && (sameUser || bootDoneRef.current))
+        ) {
+          // True first login from login page: previous user was null → sameUser false,
+          // but bootDone is true; still soft-apply so we don't flash Loading over routes.
+          // Cold boot INITIAL_SESSION is covered by getSession above.
+          applySession(next, { soft: Boolean(sameUser || event === 'TOKEN_REFRESHED') });
           if (next?.user) {
-            const orgId = deriveOrgId(next.user);
-            if (orgId) void loadOrgProfile(orgId);
+            await hydrateOrgProfile(next.user);
           }
+          if (mounted) setLoading(false);
           return;
         }
 
@@ -153,7 +176,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return;
         }
 
-        // SIGNED_IN / INITIAL_SESSION / etc.: block UI until org door fields are known.
+        // Rare path: identity change while app is open.
         if (mounted) setLoading(true);
         try {
           await hydrateOrgProfile(next.user);

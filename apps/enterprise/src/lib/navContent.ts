@@ -6,12 +6,10 @@ export type NavLink = {
   external?: boolean;
 };
 
+/** Top nav mirrors the three product lines + About. */
 export const MAIN_NAV: NavLink[] = [
-  { label: 'Rides', href: '/rides' },
-  { label: 'Drive', href: '/driver' },
-  { label: 'Haul', href: '/haul' },
-  { label: 'Fleet', href: '/fleet' },
-  { label: 'Rush', href: '/rush' },
+  { label: 'Rideshare', href: '/rides' },
+  { label: 'Delivery', href: '/rush' },
   { label: 'Enterprise', href: '/enterprise' },
   { label: 'About', href: '/about' },
 ];
@@ -26,17 +24,18 @@ export const DEFAULT_CTA = {
   href: '/contact',
 } as const;
 
+/** Apex marketing — product picker only (no email/password). */
 export const SIGN_IN_CTA = {
   label: 'Sign In',
-  href: '/login',
+  href: '/sign-in',
 } as const;
 
 export const FOOTER_SERVICES: NavLink[] = [
   { label: 'Roam Rides', href: '/rides' },
   { label: 'Roam Driver', href: '/driver' },
-  { label: 'Roam Haul', href: '/haul' },
   { label: 'Roam Fleet', href: '/fleet' },
   { label: 'Roam Rush', href: '/rush' },
+  { label: 'Enterprise', href: '/enterprise' },
 ];
 
 export const FOOTER_COMPANY: NavLink[] = [

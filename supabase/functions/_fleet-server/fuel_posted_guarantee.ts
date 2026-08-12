@@ -12,6 +12,7 @@ import { resolveFuelPaymentSource } from "./fuel_payment_source.ts";
 import { syncLinkedExpenseTransaction } from "./fuel_transaction_sync.ts";
 import * as fuelLogic from "./fuel_logic.ts";
 import { auditLogic } from "./audit_logic.ts";
+import { projectFromFuelEntry } from "./odometer_ledger.ts";
 
 export type FuelDecisionReason =
   | "AUTO_AI_STATION"
@@ -250,6 +251,11 @@ export async function ensureFuelEntryForApprovedTx(
     if (dirty) {
       const toSave = opts.stamp ? opts.stamp(patched) : patched;
       await kv.set(`fuel_entry:${patched.id}`, toSave);
+      try {
+        await projectFromFuelEntry(toSave as Record<string, unknown>, (toSave as any).organizationId);
+      } catch (e) {
+        console.error("[ensureFuelEntryForApprovedTx] odometer ledger projection failed (existing):", e);
+      }
     }
     return { fuelEntry: patched, created: false, blockedNoVehicle: false };
   }
@@ -440,6 +446,11 @@ export async function ensureFuelEntryForApprovedTx(
   const toSave = opts.stamp ? opts.stamp(fuelEntry) : fuelEntry;
   await kv.set(`fuel_entry:${fuelEntry.id}`, toSave);
   await syncLinkedExpenseTransaction(fuelEntry);
+  try {
+    await projectFromFuelEntry(toSave as Record<string, unknown>, (toSave as any).organizationId);
+  } catch (e) {
+    console.error("[ensureFuelEntryForApprovedTx] odometer ledger projection failed:", e);
+  }
   if (opts.afterPersist) await opts.afterPersist(fuelEntry);
 
   tx.metadata = {

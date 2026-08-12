@@ -121,6 +121,50 @@ export const api = {
     return response.json();
   },
 
+  async getOdometerCurrent(vehicleId: string): Promise<{
+    km: number;
+    source: string | null;
+    recordedAt: string | null;
+    readingId: string | null;
+    vehicleId: string;
+    isVerified: boolean;
+  }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/odometer/current/${encodeURIComponent(vehicleId)}`, {
+      headers: await getHeaders(null, { requireAuth: true }),
+    });
+    if (!response.ok) throw new Error("Failed to fetch current odometer");
+    return response.json();
+  },
+
+  async getOdometerLedger(
+    vehicleId: string,
+    filters: {
+      source?: string;
+      from?: string;
+      to?: string;
+      includeVoided?: boolean;
+      anomaliesOnly?: boolean;
+      limit?: number;
+      offset?: number;
+    } = {},
+  ): Promise<{ data: any[]; total: number }> {
+    const params = new URLSearchParams();
+    if (filters.source) params.set("source", filters.source);
+    if (filters.from) params.set("from", filters.from);
+    if (filters.to) params.set("to", filters.to);
+    if (filters.includeVoided) params.set("includeVoided", "true");
+    if (filters.anomaliesOnly) params.set("anomaliesOnly", "true");
+    if (filters.limit != null) params.set("limit", String(filters.limit));
+    if (filters.offset != null) params.set("offset", String(filters.offset));
+    const qs = params.toString();
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fuel}/odometer/ledger/${encodeURIComponent(vehicleId)}${qs ? `?${qs}` : ""}`,
+      { headers: await getHeaders(null, { requireAuth: true }) },
+    );
+    if (!response.ok) throw new Error("Failed to fetch odometer ledger");
+    return response.json();
+  },
+
   async addOdometerReading(reading: Partial<OdometerReading>) {
     // Phase 1: Use JWT for proper org scoping
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/odometer-history`, {
@@ -3522,12 +3566,17 @@ export const api = {
   },
 
   async getCheckInsByVehicle(vehicleId: string): Promise<any[]> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/check-ins`, {
-      headers: await requireAuthHeaders(null)
-    });
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.fleet}/check-ins?vehicleId=${encodeURIComponent(vehicleId)}&limit=5000`,
+      {
+        headers: await requireAuthHeaders(null)
+      }
+    );
     if (!response.ok) throw new Error("Failed to fetch check-ins");
     const checkIns = await response.json();
-    return checkIns.filter((c: any) => c.vehicleId === vehicleId);
+    return Array.isArray(checkIns)
+      ? checkIns.filter((c: any) => !c.vehicleId || c.vehicleId === vehicleId)
+      : [];
   },
 
   async runChaosSeeder(count: number, vehicleId?: string) {

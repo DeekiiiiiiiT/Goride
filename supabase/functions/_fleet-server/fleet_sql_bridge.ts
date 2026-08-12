@@ -101,8 +101,35 @@ async function executeMapped(calls: Call[]): Promise<{ data: unknown; error: unk
     if (c.method === "like" && c.args[0] === "key") continue;
     if (c.method === "or") {
       const expr = String(c.args[0] ?? "");
-      const m = expr.match(/organizationId\.eq\.([^,]+)/);
-      if (m) filters.push({ op: "orOrg", orgId: m[1] });
+      const orgM = expr.match(/organizationId\.eq\.([^,]+)/);
+      if (orgM) {
+        filters.push({ op: "orOrg", orgId: orgM[1] });
+        continue;
+      }
+      // Trip Analytics date ORs: date.gte/lte OR requestTime.gte/lte → push date column only.
+      // (requestTime lives in payload_json; fleet.trips.date is the indexed filter column.)
+      const dateGte = expr.match(/value->>date\.gte\.([^,]+)/);
+      if (dateGte && /requestTime\.gte\./.test(expr)) {
+        filters.push({ op: "gte", col: "date", value: String(dateGte[1]).slice(0, 10) });
+        continue;
+      }
+      const dateLte = expr.match(/value->>date\.lte\.([^,]+)/);
+      if (dateLte && /requestTime\.lte\./.test(expr)) {
+        filters.push({ op: "lte", col: "date", value: String(dateLte[1]).slice(0, 10) });
+        continue;
+      }
+      // Multi-eq ORs → IN (status Processing variants, Roam/GoRide platform alias, etc.)
+      const statusEqs = [...expr.matchAll(/value->>status\.eq\.([^,]+)/g)].map((m) => m[1]);
+      if (statusEqs.length >= 2) {
+        filters.push({ op: "in", col: "status", value: statusEqs });
+        continue;
+      }
+      const platformEqs = [...expr.matchAll(/value->>platform\.eq\.([^,]+)/g)].map((m) => m[1]);
+      if (platformEqs.length >= 2) {
+        filters.push({ op: "in", col: "platform", value: platformEqs });
+        continue;
+      }
+      console.warn("[fleetSqlBridge] unmapped or() filter (skipped):", expr.slice(0, 200));
       continue;
     }
     const col = String(c.args[0] ?? "");

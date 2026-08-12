@@ -209,6 +209,13 @@ export const freightService = {
       organizationId,
     }),
 
+  updateSuite: (id: string, body: unknown, organizationId?: string | null) =>
+    freightFetch<{ suite: Record<string, unknown> }>(`/suites/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+      organizationId,
+    }),
+
   importSuites: (
     rows: Array<{
       suiteCode: string;
@@ -300,6 +307,12 @@ export const freightService = {
     freightFetch<{ package: Record<string, unknown> }>(`/packages/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(body),
+      organizationId,
+    }),
+
+  deletePackage: (id: string, organizationId?: string | null) =>
+    freightFetch<{ ok: boolean; tracking?: string | null }>(`/packages/${id}`, {
+      method: 'DELETE',
       organizationId,
     }),
 

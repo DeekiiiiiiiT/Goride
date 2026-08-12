@@ -88,8 +88,7 @@ const OdometerHistoryInternal: React.FC<OdometerHistoryProps> = ({
   const fetchHistory = useCallback(async () => {
     setLoading(true);
     try {
-      // Use the unified service to get everything in one go, without trip projections
-      const data = await odometerService.getUnifiedHistory(vehicleId);
+      const { data } = await odometerService.getLedger(vehicleId, { limit: 5000 });
       setHistory(data || []);
     } catch (error) {
       console.error("Failed to load odometer history", error);

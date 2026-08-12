@@ -146,8 +146,20 @@ const MasterLogTimelineInternal: React.FC<MasterLogTimelineProps & React.HTMLAtt
   const fetchTimelineData = useCallback(async () => {
     setLoading(true);
     try {
-      const unifiedHistory = await odometerService.getUnifiedHistory(vehicleId);
+      const [{ data: ledgerRows }, anomalyResult] = await Promise.all([
+        odometerService.getLedger(vehicleId, { limit: 5000 }),
+        odometerService.getLedger(vehicleId, { anomaliesOnly: true, limit: 500 }).catch(() => ({ data: [] as any[] })),
+      ]);
+      const unifiedHistory = ledgerRows || [];
       setHistory(unifiedHistory);
+
+      // Ledger regressions (source-level) surface in anomalies view alongside gap analysis
+      const ledgerAnomalies = (anomalyResult.data || []).filter((r: any) => r.metaData?.isAnomaly);
+      for (const row of ledgerAnomalies) {
+        if (!row.metaData) row.metaData = {};
+        row.metaData.ledgerRegression = true;
+        row.metaData.anomalyReason = row.metaData.anomalyReason || 'Reading below current hard odometer (regression)';
+      }
 
       // Generate reports for each pair of VERIFIED anchors only
       const verifiedOnly = unifiedHistory
@@ -488,10 +500,28 @@ const MasterLogTimelineInternal: React.FC<MasterLogTimelineProps & React.HTMLAtt
   const latestReading = history.length > 0 ? history[0] : null;
 
   const anomalyReports = useMemo(() => {
-     return Object.values(reports)
+     const gapAnomalies = Object.values(reports)
         .filter(r => r.anomalyDetected)
         .sort((a, b) => new Date(b.periodEnd).getTime() - new Date(a.periodEnd).getTime());
-  }, [reports]);
+
+     const ledgerRegs = history
+       .filter((r: any) => r.metaData?.isAnomaly || r.metaData?.ledgerRegression)
+       .map((r: any) => ({
+         periodStart: r.date,
+         periodEnd: r.date,
+         startValue: r.value,
+         endValue: r.value,
+         totalDistance: 0,
+         platformDistance: 0,
+         personalDistance: 0,
+         personalPercentage: 0,
+         anomalyDetected: true,
+         anomalyReason: r.metaData?.anomalyReason || `Ledger regression (${r.source}): ${Number(r.value).toLocaleString()} km`,
+         trips: [],
+       }));
+
+     return [...ledgerRegs, ...gapAnomalies];
+  }, [reports, history]);
 
   if (loading) {
     return (

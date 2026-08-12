@@ -2,155 +2,86 @@ import { api } from './api';
 import { OdometerReading, UnifiedOdometerEntry, UnifiedOdometerSource } from '../types/vehicle';
 import { processUnifiedHistory } from '../utils/odometerUtils';
 
+export type CurrentOdometer = {
+  km: number;
+  source: string | null;
+  recordedAt: string | null;
+  readingId: string | null;
+  vehicleId: string;
+  isVerified: boolean;
+};
+
+export type LedgerFilters = {
+  source?: string;
+  from?: string;
+  to?: string;
+  includeVoided?: boolean;
+  anomaliesOnly?: boolean;
+  limit?: number;
+  offset?: number;
+};
+
+function mapLedgerRowToUnified(r: any, vehicleId: string): UnifiedOdometerEntry {
+  const sourceRaw = String(r.source || 'manual');
+  const source: UnifiedOdometerSource =
+    sourceRaw === 'fuel' ? 'fuel'
+    : sourceRaw === 'checkin' ? 'checkin'
+    : sourceRaw === 'service' ? 'service'
+    : 'manual';
+  const readingValue = Number(r.value ?? r.reading ?? r.odometer ?? 0) || 0;
+  return {
+    ...r,
+    id: r.id,
+    vehicleId: r.vehicleId || vehicleId,
+    date: r.date || r.recordedAt || r.reading_date,
+    value: readingValue,
+    type: r.isHard === false ? 'Calculated' : 'Hard',
+    source,
+    referenceId: r.referenceId || r.reference_id || r.id,
+    isVerified: !!(r.isVerified || r.is_verified),
+    isAnchorPoint: !!(r.isVerified || r.is_verified || source !== 'manual'),
+    imageUrl: r.imageUrl,
+    notes: r.notes,
+    createdAt: r.recordedAt || r.createdAt || r.date,
+    metaData: {
+      ...(r.payload || r.metaData || {}),
+      isAnomaly: !!(r.isAnomaly || r.is_anomaly),
+      ledgerSource: sourceRaw,
+      deltaKm: r.deltaKm,
+    },
+  };
+}
+
 export const odometerService = {
   getHistory: async (vehicleId: string) => {
     return await api.getOdometerHistory(vehicleId);
   },
 
+  getCurrent: async (vehicleId: string): Promise<CurrentOdometer> => {
+    return await api.getOdometerCurrent(vehicleId);
+  },
+
+  getLedger: async (
+    vehicleId: string,
+    filters: LedgerFilters = {},
+  ): Promise<{ data: UnifiedOdometerEntry[]; total: number }> => {
+    const result = await api.getOdometerLedger(vehicleId, filters);
+    const rows = Array.isArray(result?.data) ? result.data : Array.isArray(result) ? result : [];
+    return {
+      data: rows.map((r: any) => mapLedgerRowToUnified(r, vehicleId)),
+      total: Number(result?.total ?? rows.length) || rows.length,
+    };
+  },
+
   /**
-   * Fetches odometer readings from all sources (Check-ins, Fuel Logs, Service Records)
-   * and unifies them into a single chronological timeline.
+   * @deprecated Prefer getLedger — thin wrapper over server ledger for one release.
    */
   getUnifiedHistory: async (vehicleId: string): Promise<UnifiedOdometerEntry[]> => {
     try {
-      // 1. Fetch data from different sources in parallel
-      const [directHistory, fuelEntries, checkIns, maintenanceLogs] = await Promise.all([
-        api.getOdometerHistory(vehicleId),
-        api.getFuelEntriesByVehicle(vehicleId),
-        api.getCheckInsByVehicle(vehicleId),
-        api.getMaintenanceLogs(vehicleId)
-      ]);
-
-      const unified: UnifiedOdometerEntry[] = [];
-
-      // 2. Normalize Direct Readings (Manual Updates from Odometer Table)
-      if (directHistory) {
-        directHistory.forEach(r => {
-            // We include all manual updates, but ensure they map to UnifiedOdometerEntry
-            // Direct history items already have an ID, but we want to ensure source is typed correctly
-            if (r.type !== 'Calculated') {
-                // Respect 'checkin' source if it was restored that way
-                const mappedSource = (r.source === 'Weekly Check-in' || r.source === 'checkin') ? 'checkin' : 'manual';
-                
-                unified.push({
-                    ...r,
-                    source: mappedSource, 
-                    referenceId: r.id, // Self-referential for manual entries
-                    isAnchorPoint: r.isAnchorPoint || r.isVerified || false,
-                    metaData: {
-                        originalSource: r.source // Keep original source string for context
-                    }
-                });
-            }
-        });
-      }
-
-      // 3. Normalize Fuel Entries
-      if (fuelEntries) {
-        fuelEntries.forEach((entry: any) => {
-          if (entry.odometer && entry.odometer > 0) {
-            // Priority: top-level urls, then metadata urls (support both camelCase and snake_case)
-            // Odometer photo takes priority over receipt for evidence display
-            const url = entry.odometerImageUrl || entry.metadata?.odometerImageUrl ||
-                        entry.imageUrl || entry.photoUrl || 
-                        entry.odometerProofUrl || entry.metadata?.odometerProofUrl || 
-                        entry.receiptUrl || entry.receipt_url || entry.metadata?.receiptUrl || entry.metadata?.receipt_url ||
-                        entry.metadata?.photoUrl;
-                        
-            unified.push({
-              id: `fuel_${entry.id}`,
-              vehicleId: entry.vehicleId || vehicleId,
-              driverId: entry.driverId,
-              date: entry.date,
-              value: entry.odometer,
-              type: 'Hard',
-              source: 'fuel',
-              notes: entry.location ? `Fuel at ${entry.location}` : 'Fuel Entry',
-              referenceId: entry.id,
-              isVerified: true, 
-              isAnchorPoint: true,
-              imageUrl: url,
-              createdAt: entry.date,
-              metaData: {
-                ...entry.metadata, // Carry over all raw metadata
-                liters: entry.liters,
-                price: entry.pricePerLiter || entry.price,
-                totalCost: entry.amount || entry.totalCost,
-                paymentSource: entry.paymentSource || entry.payment_source,
-                receiptUrl: entry.receiptUrl || entry.receipt_url || entry.metadata?.receiptUrl || entry.metadata?.receipt_url,
-                odometerProofUrl: entry.odometerProofUrl || entry.metadata?.odometerProofUrl || entry.metadata?.odometer_proof_url,
-                photoUrl: url,
-                odometerMethod: entry.odometerMethod || entry.metadata?.odometerMethod || entry.entryMode || 'Floating'
-              }
-            });
-          }
-        });
-      }
-
-      // 4. Normalize Check-ins
-      if (checkIns) {
-        checkIns.forEach((checkIn: any) => {
-          if (checkIn.odometer && checkIn.odometer > 0) {
-            const date = checkIn.timestamp || checkIn.date;
-            unified.push({
-              id: `checkin_${checkIn.id}`,
-              vehicleId: checkIn.vehicleId || vehicleId,
-              driverId: checkIn.driverId,
-              date: date,
-              value: checkIn.odometer,
-              type: 'Hard',
-              source: 'checkin',
-              notes: `Weekly Check-in (Week: ${checkIn.weekStart})`,
-              referenceId: checkIn.id,
-              imageUrl: checkIn.photoUrl || checkIn.imageUrl || checkIn.metadata?.photoUrl,
-              isVerified: checkIn.verified || false,
-              isAnchorPoint: checkIn.reviewStatus === 'approved' || checkIn.reviewStatus === 'auto_approved',
-              isManagerVerified: checkIn.reviewStatus === 'approved' || checkIn.reviewStatus === 'auto_approved',
-              createdAt: date,
-              metaData: {
-                weekStart: checkIn.weekStart,
-                status: checkIn.status,
-                method: checkIn.method,
-                aiReading: checkIn.aiReading,
-                photoUrl: checkIn.photoUrl || checkIn.imageUrl || checkIn.metadata?.photoUrl
-              }
-            });
-          }
-        });
-      }
-
-      // 5. Normalize Maintenance Logs
-      if (maintenanceLogs) {
-        const logs = Array.isArray(maintenanceLogs) ? maintenanceLogs : [];
-        logs.forEach((log: any) => {
-          if (log.odometer && log.odometer > 0) {
-            unified.push({
-              id: `service_${log.id}`,
-              vehicleId: log.vehicleId || vehicleId,
-              date: log.date,
-              value: log.odometer,
-              type: 'Hard',
-              source: 'service',
-              notes: log.serviceType || 'Maintenance Service',
-              referenceId: log.id,
-              imageUrl: log.invoiceUrl || log.receiptUrl || log.metadata?.receiptUrl || log.metadata?.invoiceUrl,
-              isVerified: true,
-              isAnchorPoint: true, // Service logs are trusted anchors
-              createdAt: log.date,
-              metaData: {
-                serviceType: log.serviceType,
-                garage: log.garage,
-                invoiceUrl: log.invoiceUrl || log.receiptUrl || log.metadata?.receiptUrl || log.metadata?.invoiceUrl
-              }
-            });
-          }
-        });
-      }
-
-      // Apply Phase 3: Merging, Deduplication, and Gap Analysis
-      return processUnifiedHistory(unified);
+      const { data } = await odometerService.getLedger(vehicleId, { limit: 5000 });
+      return processUnifiedHistory(data);
     } catch (error) {
-      console.error("Error fetching unified odometer history:", error);
+      console.error("Error fetching odometer ledger history:", error);
       return [];
     }
   },
@@ -165,20 +96,12 @@ export const odometerService = {
 
   getLatestReading: (history: OdometerReading[]): OdometerReading | null => {
     if (!history || history.length === 0) return null;
-    
-    // Sort by date desc just to be sure
-    const sorted = [...history].sort((a, b) => 
+    const sorted = [...history].sort((a, b) =>
       new Date(b.date).getTime() - new Date(a.date).getTime()
     );
-    
     return sorted[0];
   },
 
-  /**
-   * Restores a batch of unified entries to the database.
-   * Maps 'Unified' types back to 'OdometerReading' types.
-   * Handles Fuel/Service logs by preserving their Reference IDs and Source types.
-   */
   restoreOdometerBatch: async (entries: UnifiedOdometerEntry[], vehicleId: string) => {
       const results = {
           success: 0,
@@ -186,7 +109,6 @@ export const odometerService = {
           errors: [] as any[]
       };
 
-      // Map UnifiedSource to OdometerSource
       const sourceMap: Record<UnifiedOdometerSource, string> = {
           'fuel': 'Fuel Log',
           'service': 'Service Log',
@@ -194,20 +116,14 @@ export const odometerService = {
           'manual': 'Manual Update'
       };
 
-      // Process in chunks to avoid overwhelming the server
       const CHUNK_SIZE = 5;
       for (let i = 0; i < entries.length; i += CHUNK_SIZE) {
           const chunk = entries.slice(i, i + CHUNK_SIZE);
-          
+
           await Promise.all(chunk.map(async (entry) => {
               try {
                   const mappedSource = sourceMap[entry.source] || 'Manual Update';
-                  
-                  // Construct payload
-                  // Ensure we do NOT pass the 'unified' ID (e.g. "fuel_123") as the primary key ID,
-                  // because Supabase likely expects a UUID or generates one.
-                  // However, we MUST preserve the Reference ID.
-                  
+
                   let finalNotes = entry.notes || '';
                   if (entry.metaData?.isRestored) {
                       finalNotes += ` (Restored: ${entry.referenceId})`;
@@ -217,14 +133,13 @@ export const odometerService = {
                       vehicleId: entry.vehicleId || vehicleId,
                       date: entry.date,
                       value: entry.value,
-                      type: 'Hard', // Restored anchors are Hard
+                      type: 'Hard',
                       source: mappedSource as any,
                       referenceId: entry.referenceId,
                       notes: finalNotes,
                       imageUrl: entry.imageUrl || entry.metaData?.odometerProofUrl || entry.metaData?.photoUrl || entry.metaData?.receiptUrl || entry.metaData?.invoiceUrl,
                       isVerified: true,
                       isAnchorPoint: entry.isAnchorPoint || true
-                      // We do NOT send 'id', let DB generate a new UUID for this row
                   };
 
                   await api.addOdometerReading(payload);
@@ -238,5 +153,5 @@ export const odometerService = {
       }
 
       return results;
-  }
+  },
 };

@@ -34,13 +34,21 @@ export function useWeeklyCheckIn(driverId: string | undefined) {
                     'Authorization': `Bearer ${authToken}`
                 }
             });
+            if (!response.ok) {
+                // API failure must not force endless check-in loops
+                console.error("Weekly check-in status request failed", response.status);
+                setNeedsCheckIn(false);
+                return;
+            }
             const data = await response.json();
             
             if (data && Array.isArray(data) && data.length > 0) {
                 setNeedsCheckIn(false);
                 setLastCheckIn(data[0]);
-            } else {
+            } else if (Array.isArray(data)) {
                 setNeedsCheckIn(true);
+            } else {
+                setNeedsCheckIn(false);
             }
         } catch (e) {
             console.error("Error checking weekly status:", e);
@@ -104,7 +112,7 @@ export function useWeeklyCheckIn(driverId: string | undefined) {
             isVerified: reviewStatus === 'auto_approved' || reviewStatus === 'approved'
         } as any;
 
-        await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-37f42386/check-ins`, {
+        const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-37f42386/check-ins`, {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${authToken}`,
@@ -112,6 +120,10 @@ export function useWeeklyCheckIn(driverId: string | undefined) {
             },
             body: JSON.stringify(payload)
         });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.error || 'Failed to save check-in');
+        }
         
         await checkStatus();
     };
