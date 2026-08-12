@@ -28,7 +28,12 @@ export function InvoiceFillSuggestions({
     suggestion.retailer ||
     suggestion.description ||
     suggestion.declaredValueUsd != null ||
-    suggestion.weightLbs != null;
+    suggestion.weightLbs != null ||
+    suggestion.externalOrderNumber ||
+    suggestion.suiteCode ||
+    suggestion.shipTo?.streetLine ||
+    suggestion.shipTo?.postalCode ||
+    suggestion.lines.length > 0;
 
   return (
     <div className="rounded-xl border border-amber-200 bg-amber-50/60 px-4 py-3">
@@ -55,11 +60,23 @@ export function InvoiceFillSuggestions({
       {hasAny ? (
         <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
           <Field label="Retailer" value={suggestion.retailer} />
+          <Field label="Order #" value={suggestion.externalOrderNumber} />
+          <Field label="Suite" value={suggestion.suiteCode} />
           <Field
-            label="Declared value (USD)"
+            label="Ship-to warehouse"
             value={
-              suggestion.declaredValueUsd != null
-                ? `$${suggestion.declaredValueUsd.toFixed(2)}${
+              suggestion.shipTo
+                ? [suggestion.shipTo.streetLine, suggestion.shipTo.city, suggestion.shipTo.state, suggestion.shipTo.postalCode]
+                    .filter(Boolean)
+                    .join(', ')
+                : null
+            }
+          />
+          <Field
+            label="Order total (USD)"
+            value={
+              suggestion.orderTotalUsd != null || suggestion.declaredValueUsd != null
+                ? `$${(suggestion.orderTotalUsd ?? suggestion.declaredValueUsd)!.toFixed(2)}${
                     suggestion.currencyHint && suggestion.currencyHint !== 'USD'
                       ? ` (${suggestion.currencyHint}?)`
                       : ''
@@ -68,9 +85,29 @@ export function InvoiceFillSuggestions({
             }
           />
           <Field label="Weight (lb)" value={suggestion.weightLbs != null ? String(suggestion.weightLbs) : null} />
-          <div className="sm:col-span-2">
-            <Field label="Description" value={suggestion.description} />
-          </div>
+          {suggestion.lines.length > 0 ? (
+            <div className="sm:col-span-2">
+              <dt className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                Line items ({suggestion.lines.length})
+              </dt>
+              <dd className="mt-1 space-y-1">
+                {suggestion.lines.map((line, i) => (
+                  <p key={`${line.description}-${i}`} className="text-slate-900">
+                    {line.description}
+                    {line.lineTotalUsd != null
+                      ? ` · $${line.lineTotalUsd.toFixed(2)}`
+                      : line.unitValueUsd != null
+                        ? ` · $${line.unitValueUsd.toFixed(2)}`
+                        : ''}
+                  </p>
+                ))}
+              </dd>
+            </div>
+          ) : (
+            <div className="sm:col-span-2">
+              <Field label="Description" value={suggestion.description} />
+            </div>
+          )}
         </dl>
       ) : (
         <p className="mt-2 text-sm text-slate-600">No fields to apply from this file.</p>

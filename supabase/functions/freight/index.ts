@@ -16,6 +16,7 @@ import { SHIPMENT_TRANSITIONS } from "./transitions.ts";
 import { registerPipelineRoutes } from "./pipeline.ts";
 import { registerCourierOsRoutes } from "./courierOsRoutes.ts";
 import { registerWarehouseCourierRoutes } from "./warehouseCourierRoutes.ts";
+import { registerRetailOrderRoutes } from "./retailOrdersRoutes.ts";
 import { syncJobFromShipment } from "../logistics/syncFromShipment.ts";
 import { computeRateCardAmountMinor } from "./rateBill.ts";
 import { assertInsideServiceZones } from "./serviceZoneGate.ts";
@@ -109,6 +110,7 @@ app.get("/health", (c) => c.json({ ok: true, service: "freight" }));
 // are not swallowed by /packages/:id from the pipeline router.
 registerCourierOsRoutes(app);
 registerWarehouseCourierRoutes(app);
+registerRetailOrderRoutes(app);
 registerPipelineRoutes(app);
 
 // ---------------------------------------------------------------------------

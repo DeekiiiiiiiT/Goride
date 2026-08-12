@@ -22,6 +22,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../../ui/card";
 import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
+import { formatInFleetTz, useFleetTimezone } from "../../../utils/timezoneDisplay";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -84,6 +85,7 @@ const OdometerHistoryInternal: React.FC<OdometerHistoryProps> = ({
     startDate: '',
     endDate: ''
   });
+  const fleetTz = useFleetTimezone();
 
   const fetchHistory = useCallback(async () => {
     setLoading(true);
@@ -249,7 +251,7 @@ const OdometerHistoryInternal: React.FC<OdometerHistoryProps> = ({
   }, []);
 
   const filteredHistory = useMemo(() => {
-    return history.filter((item) => {
+    const rows = history.filter((item) => {
       // Source filter (must match UnifiedOdometerEntry.source: fuel | service | checkin | manual)
       if (filters.source !== "all" && canonicalSource(item.source) !== filters.source) return false;
       
@@ -268,18 +270,36 @@ const OdometerHistoryInternal: React.FC<OdometerHistoryProps> = ({
 
       return true;
     });
+
+    // Newest first by real clock time (recordedAt), then higher km as tie-break
+    return [...rows].sort((a, b) => {
+      const ta = new Date(a.recordedAt || a.createdAt || a.date).getTime();
+      const tb = new Date(b.recordedAt || b.createdAt || b.date).getTime();
+      if (tb !== ta) return tb - ta;
+      return (Number(b.value) || 0) - (Number(a.value) || 0);
+    });
   }, [history, filters, canonicalSource]);
 
-  const formatDate = (dateStr: string) => {
-    if (!dateStr) return '-';
+  const formatDate = (dateStr: string, recordedAt?: string | null) => {
+    const raw = recordedAt || dateStr;
+    if (!raw) return '-';
     try {
-        if (dateStr.length === 10 && dateStr.includes('-')) {
-            const [year, month, day] = dateStr.split('-').map(Number);
+        const hasTime = /T\d{1,2}:\d{2}/.test(String(raw)) || (String(raw).length > 10 && /\d{2}:\d{2}/.test(String(raw)));
+        if (!hasTime && String(raw).length === 10 && String(raw).includes('-')) {
+            const [year, month, day] = String(raw).split('-').map(Number);
             return format(new Date(year, month - 1, day), 'MMM d, yyyy');
         }
-        return format(new Date(dateStr), 'MMM d, yyyy');
+        // Display in Fleet Jamaica timezone (matches Transaction Logs wall clock)
+        return formatInFleetTz(raw, fleetTz, {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true,
+        });
     } catch (e) {
-        return dateStr;
+        return dateStr || String(raw);
     }
   };
 
@@ -380,7 +400,7 @@ const OdometerHistoryInternal: React.FC<OdometerHistoryProps> = ({
                 <CardTitle className="text-base font-semibold">Raw History</CardTitle>
                 <CardDescription>
                   Displaying {filteredHistory.length} of {history.length} records.
-                  Fuel anchors come from posted fuel logs.
+                  “vs prior log” compares mixed sources (fuel + check-in + service) — not fuel-only integrity.
                 </CardDescription>
               </div>
             </CardHeader>
@@ -400,24 +420,28 @@ const OdometerHistoryInternal: React.FC<OdometerHistoryProps> = ({
                       <TableHead className="w-[140px] font-semibold text-slate-600 h-10">Timestamp</TableHead>
                       <TableHead className="w-[160px] font-semibold text-slate-600 h-10">Anchor Source</TableHead>
                       <TableHead className="font-semibold text-slate-600 h-10 text-right">Odometer</TableHead>
-                      <TableHead className="font-semibold text-slate-600 h-10 text-right">Distance ∆</TableHead>
+                      <TableHead
+                        className="font-semibold text-slate-600 h-10 text-right"
+                        title="Change vs the previous log in this mixed timeline (all sources). Red = regression; does not lower Live Status."
+                      >
+                        vs prior log
+                      </TableHead>
                       <TableHead className="font-semibold text-slate-600 h-10">Description / Verification</TableHead>
                       <TableHead className="w-[40px] h-10"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredHistory.map((reading, index) => {
-                      // Find next reading in the FULL history to calculate delta (since filtered history might have gaps)
-                      const fullIndex = history.findIndex(h => h.id === reading.id);
-                      const prevInFull = history[fullIndex + 1];
+                      // Prior log = next row in newest-first list (correct clock order)
+                      const prevInFull = filteredHistory[index + 1];
                       const delta = prevInFull ? reading.value - prevInFull.value : 0;
-                      
-                      const isManual = reading.source === 'Manual Update';
+                      // True regression: this log is lower than the prior log (mixed sources). Live Status still uses max hard km.
+                      const isRegression = !!prevInFull && delta < -50;
 
                       return (
                         <TableRow key={reading.id} className="group hover:bg-slate-50/80 transition-colors">
                           <TableCell className="font-medium text-slate-900 align-top py-4">
-                            {formatDate(reading.date)}
+                            {formatDate(reading.date, reading.recordedAt || reading.createdAt)}
                           </TableCell>
                           <TableCell className="align-top py-4">
                             <div className="flex items-center gap-2">
@@ -433,7 +457,21 @@ const OdometerHistoryInternal: React.FC<OdometerHistoryProps> = ({
                           </TableCell>
                           <TableCell className="text-right align-top py-4">
                             {prevInFull && (
-                              <Badge variant="outline" className={`font-mono text-[11px] px-1.5 h-5 rounded ${delta >= 0 ? 'bg-slate-50 text-slate-600 border-slate-200' : 'bg-red-50 text-red-600 border-red-100'}`}>
+                              <Badge
+                                variant="outline"
+                                title={
+                                  isRegression
+                                    ? 'Regression vs prior log — stored for audit; does not lower Live Status'
+                                    : 'Change vs previous log in the mixed mileage timeline'
+                                }
+                                className={`font-mono text-[11px] px-1.5 h-5 rounded ${
+                                  isRegression
+                                    ? 'bg-red-50 text-red-600 border-red-100'
+                                    : delta < 0
+                                      ? 'bg-amber-50 text-amber-700 border-amber-100'
+                                      : 'bg-slate-50 text-slate-600 border-slate-200'
+                                }`}
+                              >
                                 {delta > 0 && '+'}{delta.toLocaleString()}
                               </Badge>
                             )}
@@ -441,12 +479,17 @@ const OdometerHistoryInternal: React.FC<OdometerHistoryProps> = ({
                           <TableCell className="align-top py-4">
                             <div className="space-y-1">
                               <p className="text-sm text-slate-600 line-clamp-1 group-hover:line-clamp-none transition-all">
-                                {reading.notes || 'Verified log entry'}
+                                {reading.notes || (isRegression ? 'Log on file (km stepped back vs prior log)' : 'Log entry')}
                               </p>
                               <div className="flex flex-wrap gap-2">
+                                {isRegression && (
+                                  <Badge className="bg-red-100 text-red-700 hover:bg-red-100 border-none text-[10px] py-0 px-1.5 h-4">
+                                    <AlertCircle className="w-2.5 h-2.5 mr-1" /> Regression
+                                  </Badge>
+                                )}
                                 {reading.isVerified && (
                                   <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-none text-[10px] py-0 px-1.5 h-4">
-                                    <CheckCircle2 className="w-2.5 h-2.5 mr-1" /> Verified
+                                    <CheckCircle2 className="w-2.5 h-2.5 mr-1" /> Source on file
                                   </Badge>
                                 )}
                               </div>
@@ -497,7 +540,7 @@ const OdometerHistoryInternal: React.FC<OdometerHistoryProps> = ({
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-[11px] text-slate-500 leading-relaxed">
-                This table shows the raw list of all hard odometer readings (anchors) recorded for this vehicle. For gap analysis and audit discrepancies, open Consumption Reconciliation → Stop-to-Stop → Explain gap.
+                Mixed mileage timeline (fuel, check-in, service, manual). Red “Regression” means this reading is more than 50 km below the prior log — it stays for audit and does not change Live Status (highest hard km). Fuel Management “Anomaly” is tank/fill cycles only, not this column.
               </p>
             </CardContent>
           </Card>

@@ -119,8 +119,9 @@ export function SettingsPage() {
 
 function GeneralPanel() {
   const [isSaving, setIsSaving] = useState(false);
-  const [currency, setCurrency] = useState('jmd');
-  const [timezone, setTimezone] = useState('est-jam');
+  // Locked Fleet Jamaica defaults — not user-selectable until multi-region orgs exist
+  const currency = 'jmd';
+  const timezone = 'America/Jamaica';
   const [darkMode, setDarkMode] = useState(false);
   const businessConfig = useBusinessConfig();
   const businessTypeEntry = BUSINESS_TYPES.find((bt) => bt.key === businessConfig.businessType);
@@ -143,31 +144,17 @@ function GeneralPanel() {
       try {
           const prefs = await api.getPreferences();
           
-          // Helper to toggle theme class
           const applyTheme = (isDark: boolean) => {
               if (isDark) document.documentElement.classList.add('dark');
               else document.documentElement.classList.remove('dark');
           };
 
-          const localCurrency = localStorage.getItem('preference_currency');
-          const localTimezone = localStorage.getItem('preference_timezone');
           const localDarkMode = localStorage.getItem('preference_dark_mode');
 
-          // Currency Strategy: API -> LocalStorage -> Default (State initial 'usd')
-          if (prefs?.currency) {
-              setCurrency(prefs.currency);
-          } else if (localCurrency) {
-              setCurrency(localCurrency);
-          }
+          // Currency / timezone are locked Fleet defaults (legacy est-jam maps to America/Jamaica)
+          localStorage.setItem('preference_currency', currency);
+          localStorage.setItem('preference_timezone', timezone);
 
-          // Timezone Strategy: API -> LocalStorage -> Default (State initial 'pst')
-          if (prefs?.timezone) {
-              setTimezone(prefs.timezone);
-          } else if (localTimezone) {
-              setTimezone(localTimezone);
-          }
-
-          // DarkMode Strategy: API -> LocalStorage -> Default (State initial false)
           if (prefs?.darkMode !== undefined) {
               setDarkMode(prefs.darkMode);
               applyTheme(prefs.darkMode);
@@ -179,13 +166,7 @@ function GeneralPanel() {
 
       } catch (err) {
           console.error("Failed to load preferences", err);
-          // On API error, try to load from local storage
-          const savedCurrency = localStorage.getItem('preference_currency');
-          const savedTimezone = localStorage.getItem('preference_timezone');
           const savedDarkMode = localStorage.getItem('preference_dark_mode');
-
-          if (savedCurrency) setCurrency(savedCurrency);
-          if (savedTimezone) setTimezone(savedTimezone);
           if (savedDarkMode !== null) {
               const isDark = savedDarkMode === 'true';
               setDarkMode(isDark);
@@ -203,7 +184,6 @@ function GeneralPanel() {
             darkMode,
         });
         
-        // Also update local storage for redundancy/speed
         localStorage.setItem('preference_currency', currency);
         localStorage.setItem('preference_timezone', timezone);
         localStorage.setItem('preference_dark_mode', String(darkMode));
@@ -271,27 +251,22 @@ function GeneralPanel() {
            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
              <div className="space-y-2">
                 <Label>Currency</Label>
-                <Select value={currency} onValueChange={setCurrency}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select currency" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="jmd">JMD (J$)</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900/40">
+                  <p className="text-sm font-medium text-slate-900 dark:text-slate-100">JMD (J$)</p>
+                  <p className="text-xs text-slate-500 mt-0.5">Fleet default for Jamaica</p>
+                </div>
              </div>
              <div className="space-y-2">
                 <Label>Timezone</Label>
-                <Select value={timezone} onValueChange={setTimezone}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select timezone" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="est-jam">Jamaica (EST)</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900/40">
+                  <p className="text-sm font-medium text-slate-900 dark:text-slate-100">Jamaica (America/Jamaica)</p>
+                  <p className="text-xs text-slate-500 mt-0.5">Fleet default</p>
+                </div>
              </div>
            </div>
+           <p className="text-xs text-slate-500">
+             Locked for Roam Fleet Jamaica. Multi-timezone / multi-currency comes later when a fleet runs outside Jamaica.
+           </p>
            <div className="flex items-center justify-between pt-2">
               <div className="space-y-0.5">
                 <Label>Dark Mode</Label>

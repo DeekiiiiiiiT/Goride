@@ -284,6 +284,7 @@ export function AllPackagesPanel({
               <tr>
                 <th className="px-4 py-2">Tracking</th>
                 {warehouseMode ? <th className="px-4 py-2">Courier</th> : null}
+                <th className="px-4 py-2">Order</th>
                 <th className="px-4 py-2">Suite</th>
                 <th className="px-4 py-2">Status</th>
                 <th className="px-4 py-2">Weight</th>
@@ -293,6 +294,9 @@ export function AllPackagesPanel({
             <tbody>
               {packages.map((p) => {
                 const suite = p.suites as { suite_code?: string } | null;
+                const order = p.retail_orders as {
+                  external_order_number?: string | null;
+                } | null;
                 const ownerId = String(p.owner_org_id ?? p.organization_id ?? '');
                 const tracking = String(p.courier_tracking_number || p.id);
                 const locked = PACKAGE_DELETE_LOCKED.has(String(p.status));
@@ -313,6 +317,9 @@ export function AllPackagesPanel({
                     {warehouseMode ? (
                       <td className="px-4 py-2">{courierNames[ownerId] ?? '—'}</td>
                     ) : null}
+                    <td className="px-4 py-2 font-mono text-xs">
+                      {order?.external_order_number || '—'}
+                    </td>
                     <td className="px-4 py-2">{suite?.suite_code || '—'}</td>
                     <td className="px-4 py-2">{String(p.status).replace(/_/g, ' ')}</td>
                     <td className="px-4 py-2">

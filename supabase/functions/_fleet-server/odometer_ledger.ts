@@ -4,6 +4,7 @@
  */
 import * as kv from "./kv_store.tsx";
 import { fleetDb, fleetTable, rowToKvValue } from "./repos/baseRepo.ts";
+import { getFleetTimezone, hasTzSuffix, naiveToUtc } from "./timezone_helper.tsx";
 
 export type OdometerLedgerSource =
   | "manual"
@@ -66,6 +67,49 @@ function ymd(isoOrDate: string | null | undefined): string | null {
   const s = String(isoOrDate).trim();
   if (!s) return null;
   return s.slice(0, 10);
+}
+
+/**
+ * Combine fuel date + optional time into a real UTC instant.
+ * Naive fuel wall-clock (no Z) is Jamaica/fleet local — never stamp as UTC Z.
+ * Multi-currency / multi-TZ unlock later; clock truth is getFleetTimezone().
+ */
+export async function resolveFuelRecordedAt(
+  entry: Record<string, unknown>,
+): Promise<string | null> {
+  const dateRaw = String(entry.date || entry.recordedAt || "").trim();
+  const timeRaw = String(entry.time || "").trim();
+  if (!dateRaw) return null;
+
+  const tz = await getFleetTimezone();
+
+  // Already timezone-aware (check-in style / true UTC)
+  if (hasTzSuffix(dateRaw)) {
+    const d = new Date(dateRaw);
+    if (!Number.isNaN(d.getTime())) return d.toISOString();
+  }
+
+  // Naive ISO with clock in the date field → interpret as fleet local
+  if (/T\d{1,2}:\d{2}/.test(dateRaw)) {
+    const d = naiveToUtc(dateRaw.replace(" ", "T"), tz);
+    if (!Number.isNaN(d.getTime())) return d.toISOString();
+  }
+
+  const day = ymd(dateRaw);
+  if (!day) return null;
+
+  const tm = timeRaw.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (tm) {
+    const hh = String(Number(tm[1])).padStart(2, "0");
+    const mm = String(Number(tm[2])).padStart(2, "0");
+    const ss = String(Number(tm[3] ?? 0)).padStart(2, "0");
+    const d = naiveToUtc(`${day}T${hh}:${mm}:${ss}`, tz);
+    if (!Number.isNaN(d.getTime())) return d.toISOString();
+  }
+
+  // Date-only: noon fleet-local so morning fills still sort earlier than "mystery" day anchors
+  const d = naiveToUtc(`${day}T12:00:00`, tz);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
 function ledgerId(vehicleId: string, source: string, referenceId: string): string {
@@ -368,7 +412,7 @@ export async function projectFromFuelEntry(
     source: "fuel",
     referenceId: id,
     referenceType: "fuel_entry",
-    recordedAt: (entry.date as string) || null,
+    recordedAt: await resolveFuelRecordedAt(entry),
     readingDate: ymd(entry.date as string),
     driverId: (entry.driverId as string) || null,
     isHard: true,
@@ -379,7 +423,7 @@ export async function projectFromFuelEntry(
       (entry.odometerProofUrl as string) ||
       (entry.receiptUrl as string) ||
       null,
-    payloadExtra: { metaData: entry.metadata || {} },
+    payloadExtra: { metaData: entry.metadata || {}, time: entry.time || null },
   });
 }
 

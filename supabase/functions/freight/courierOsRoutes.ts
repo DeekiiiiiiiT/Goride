@@ -41,7 +41,9 @@ function invoiceNumber(): string {
 async function loadManifestPackages(orgId: string, manifestId: string) {
   const { data: lines } = await freightDb()
     .from("manifest_packages")
-    .select("line_number, package_id, packages(*, suites(suite_code, trn, trn_valid, contact_name))")
+    .select(
+      "line_number, package_id, packages(*, suites(suite_code, trn, trn_valid, contact_name), retail_orders(invoice_storage_path, invoice_file_name, invoice_verified_at, invoice_unobtainable_at))",
+    )
     .eq("manifest_id", manifestId)
     .eq("organization_id", orgId)
     .order("line_number");
@@ -56,6 +58,12 @@ async function loadManifestPackages(orgId: string, manifestId: string) {
           trn?: string | null;
           trn_valid?: boolean | null;
           contact_name?: string | null;
+        } | null,
+        retail_orders: p.retail_orders as {
+          invoice_storage_path?: string | null;
+          invoice_file_name?: string | null;
+          invoice_verified_at?: string | null;
+          invoice_unobtainable_at?: string | null;
         } | null,
       },
     };
@@ -76,7 +84,7 @@ export function registerCourierOsRoutes(app: FreightApp) {
     const { data: pkgs } = await freightDb()
       .from("packages")
       .select(
-        "status, created_at, updated_at, invoice_required_from_customer, invoice_storage_path, invoice_file_name, invoice_verified_at, invoice_unobtainable_at",
+        "status, created_at, updated_at, invoice_required_from_customer, invoice_storage_path, invoice_file_name, invoice_verified_at, invoice_unobtainable_at, retail_order_id",
       )
       .eq("organization_id", user.organizationId);
 
@@ -93,6 +101,52 @@ export function registerCourierOsRoutes(app: FreightApp) {
       invoice_file_name?: string | null;
       invoice_verified_at?: string | null;
       invoice_unobtainable_at?: string | null;
+      retail_order_id?: string | null;
+    };
+
+    const orderIds = [
+      ...new Set(
+        ((pkgs ?? []) as PkgRow[])
+          .map((p) => p.retail_order_id)
+          .filter(Boolean) as string[],
+      ),
+    ];
+    const orderInvoiceMap = new Map<
+      string,
+      {
+        invoice_storage_path?: string | null;
+        invoice_file_name?: string | null;
+        invoice_verified_at?: string | null;
+        invoice_unobtainable_at?: string | null;
+      }
+    >();
+    if (orderIds.length) {
+      const { data: orders } = await freightDb()
+        .from("retail_orders")
+        .select(
+          "id, invoice_storage_path, invoice_file_name, invoice_verified_at, invoice_unobtainable_at",
+        )
+        .in("id", orderIds);
+      for (const o of orders ?? []) orderInvoiceMap.set(String(o.id), o);
+    }
+
+    const packageHasInvoice = (p: PkgRow) => {
+      const order = p.retail_order_id
+        ? orderInvoiceMap.get(p.retail_order_id)
+        : null;
+      const hasCustomer = Boolean(
+        p.invoice_storage_path ||
+          p.invoice_file_name ||
+          order?.invoice_storage_path ||
+          order?.invoice_file_name,
+      );
+      const unobtainable = Boolean(
+        p.invoice_unobtainable_at || order?.invoice_unobtainable_at,
+      );
+      const verified = Boolean(
+        p.invoice_verified_at || order?.invoice_verified_at,
+      );
+      return { hasCustomer, unobtainable, verified };
     };
 
     const byStatus: Record<string, PkgRow[]> = {};
@@ -137,10 +191,8 @@ export function registerCourierOsRoutes(app: FreightApp) {
     ]);
     const needsInvoiceRows = ((pkgs ?? []) as PkgRow[]).filter((p) => {
       if (!invoiceEligibleStatuses.has(String(p.status ?? ""))) return false;
-      const hasCustomer = Boolean(p.invoice_storage_path || p.invoice_file_name);
-      const unobtainable = Boolean(p.invoice_unobtainable_at);
+      const { hasCustomer, unobtainable, verified } = packageHasInvoice(p);
       const required = Boolean(p.invoice_required_from_customer);
-      const verified = Boolean(p.invoice_verified_at);
       if (verified || unobtainable) return false;
       // required (flagged, no file) | missing (no file) | mismatch (has file, not verified)
       if (required && !hasCustomer) return true;
@@ -210,6 +262,25 @@ export function registerCourierOsRoutes(app: FreightApp) {
         href: "/app/packages?tab=needs-invoice",
         actionLabel: "Open invoice queue",
       });
+    }
+
+    {
+      const { count: unassignedCount } = await freightDb()
+        .from("retail_order_lines")
+        .select("id", { count: "exact", head: true })
+        .eq("organization_id", user.organizationId)
+        .is("package_id", null);
+      if ((unassignedCount ?? 0) > 0) {
+        candidates.push({
+          key: "unassigned_order_lines",
+          label: "Items not on a package",
+          count: unassignedCount ?? 0,
+          oldestAt: null,
+          ageHours: null,
+          href: "/app/packages?tab=expected",
+          actionLabel: "Review pre-alerts",
+        });
+      }
     }
 
     pushStatusNeed(

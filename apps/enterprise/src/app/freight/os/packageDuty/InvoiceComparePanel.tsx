@@ -230,6 +230,11 @@ export function InvoiceComparePanel({
                 confidence: 'none',
                 warnings: [],
                 itemLabels: [],
+                externalOrderNumber: null,
+                suiteCode: null,
+                shipTo: null,
+                orderTotalUsd: null,
+                lines: [],
               }
             }
             onApply={onApplyFill}

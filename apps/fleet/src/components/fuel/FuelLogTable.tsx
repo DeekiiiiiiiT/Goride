@@ -508,9 +508,13 @@ export function FuelLogTable({
                                             {stats.anomalyCycles}
                                         </p>
                                     </TooltipTrigger>
-                                    <TooltipContent><p className="text-[10px]">Cycles with &gt;105% tank volume or poor efficiency variance.</p></TooltipContent>
+                                    <TooltipContent>
+                                      <p className="text-[10px] max-w-[220px]">
+                                        Tank/fill cycle issues only (&gt;105% tank volume or poor efficiency). Not the same as Odometer History “vs prior log” regressions.
+                                      </p>
+                                    </TooltipContent>
                                 </Tooltip>
-                                <p className="text-[10px] text-slate-500">Anomaly</p>
+                                <p className="text-[10px] text-slate-500">Cycle flags</p>
                             </div>
                         </div>
                     </div>
@@ -615,7 +619,7 @@ export function FuelLogTable({
                 </div>
                 <div className="text-xs text-slate-500">
                   Showing {activeView === 'transactions' ? filteredEntries.length : filteredCycles.length} records
-                  {activeView === 'transactions' ? ' · Δ Fuel = fuel odometer integrity (not Live Status)' : ''}
+                  {activeView === 'transactions' ? ' · Δ Fuel = pump-to-pump only (not Odometer History / Live Status)' : ''}
                 </div>
                 <TooltipProvider>
                     <Tooltip>
@@ -669,7 +673,7 @@ export function FuelLogTable({
                                 <TableHead>Driver</TableHead>
                                 <TableHead>Vol (L)</TableHead>
                                 <TableHead>Odo</TableHead>
-                                <TableHead title="Fuel-only odometer integrity (not Live Status)">Δ Fuel</TableHead>
+                                <TableHead title="Pump-to-pump odometer change only — not Odometer History / Live Status">Δ Fuel</TableHead>
                                 <TableHead>Cost ($)</TableHead>
                                 <TableHead className="text-center">Audit</TableHead>
                                 <TableHead className="text-right">Actions</TableHead>

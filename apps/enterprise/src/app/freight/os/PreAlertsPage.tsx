@@ -1,17 +1,10 @@
-import { FormEvent, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { Upload, X } from 'lucide-react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { X } from 'lucide-react';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { freightService } from '@/app/services/freightService';
-import { useSuites } from '@/app/hooks/useFreight';
-import { InvoiceFillSuggestions } from '@/app/freight/invoiceParse/InvoiceFillSuggestions';
-import {
-  applySuggestionToBlanks,
-  parseRetailInvoice,
-} from '@/app/freight/invoiceParse/parseRetailInvoice';
-import type { InvoiceParseSuggestion } from '@/app/freight/invoiceParse/types';
-import { DOC_ROLE } from '@/app/freight/os/packageDuty/docRoles';
+import { CreatePreAlertForm } from '@/app/freight/os/CreatePreAlertWizard';
 
 function PreAlertOverlayShell({
   title,
@@ -67,356 +60,14 @@ function PreAlertOverlayShell({
   );
 }
 
-/** Create form — used in overlay (and optionally inline). */
-export function CreatePreAlertForm({ onSuccess }: { onSuccess?: () => void }) {
-  const { organizationId, session } = useAuth();
-  const qc = useQueryClient();
-  const suites = useSuites();
-  const [formError, setFormError] = useState<string | null>(null);
-  const [warehouseMode, setWarehouseMode] = useState<'roam' | 'external'>('roam');
-  const [invoiceFile, setInvoiceFile] = useState<File | null>(null);
-  const [retailer, setRetailer] = useState('');
-  const [description, setDescription] = useState('');
-  const [declaredValueUsd, setDeclaredValueUsd] = useState('');
-  const [weightLbs, setWeightLbs] = useState('');
-  const [parseReading, setParseReading] = useState(false);
-  const [invoiceSuggestion, setInvoiceSuggestion] = useState<InvoiceParseSuggestion | null>(
-    null,
-  );
-
-  const facilities = useQuery({
-    queryKey: ['freight', 'facilities', organizationId, 'warehouse'],
-    queryFn: () => freightService.listFacilities(organizationId, 'warehouse'),
-    enabled: Boolean(session),
-  });
-
-  const warehousesByCountry = useMemo(() => {
-    return (
-      (facilities.data?.facilities ?? []) as Record<string, unknown>[]
-    ).reduce<Record<string, Record<string, unknown>[]>>((acc, f) => {
-      const cc = String(f.country_code || '??').toUpperCase();
-      if (!acc[cc]) acc[cc] = [];
-      acc[cc].push(f);
-      return acc;
-    }, {});
-  }, [facilities.data?.facilities]);
-
-  const create = useMutation({
-    mutationFn: async (body: Record<string, unknown>) => {
-      const res = await freightService.createPackage(body, organizationId);
-      const pkgId = String(res.package?.id ?? '');
-      if (pkgId && invoiceFile) {
-        await freightService.uploadPackageInvoice(
-          pkgId,
-          invoiceFile,
-          organizationId,
-          'customer',
-        );
-      }
-      return res;
-    },
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['freight', 'pre-alerts'] });
-      void qc.invalidateQueries({ queryKey: ['freight', 'packages'] });
-      setInvoiceFile(null);
-      setInvoiceSuggestion(null);
-      onSuccess?.();
-    },
-  });
-
-  async function onInvoiceSelected(file: File | null) {
-    setInvoiceFile(file);
-    setInvoiceSuggestion(null);
-    if (!file) return;
-    setParseReading(true);
-    try {
-      const suggestion = await parseRetailInvoice(file);
-      setInvoiceSuggestion(suggestion);
-    } finally {
-      setParseReading(false);
-    }
-  }
-
-  function applyInvoiceSuggestion() {
-    if (!invoiceSuggestion) return;
-    const filled = applySuggestionToBlanks(
-      { retailer, description, declaredValueUsd, weightLbs },
-      invoiceSuggestion,
-    );
-    setRetailer(filled.retailer ?? '');
-    setDescription(filled.description ?? '');
-    setDeclaredValueUsd(filled.declaredValueUsd ?? '');
-    setWeightLbs(filled.weightLbs ?? '');
-    setInvoiceSuggestion(null);
-  }
-
-  async function onSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setFormError(null);
-    const form = e.currentTarget;
-    const fd = new FormData(form);
-    const intended =
-      warehouseMode === 'roam' ? String(fd.get('intendedFacilityId') || '') : null;
-    if (warehouseMode === 'roam' && !intended) {
-      setFormError('Pick a Roam warehouse, or switch to External (CSV).');
-      return;
-    }
-    try {
-      await create.mutateAsync({
-        suiteId: (fd.get('suiteId') as string) || null,
-        courierTrackingNumber: fd.get('courierTrackingNumber') || null,
-        description: description || null,
-        retailer: retailer || null,
-        declaredValueUsdMinor: declaredValueUsd
-          ? Math.round(Number(declaredValueUsd) * 100)
-          : null,
-        weightLbs: weightLbs ? Number(weightLbs) : null,
-        lengthIn: fd.get('lengthIn') ? Number(fd.get('lengthIn')) : null,
-        widthIn: fd.get('widthIn') ? Number(fd.get('widthIn')) : null,
-        heightIn: fd.get('heightIn') ? Number(fd.get('heightIn')) : null,
-        intendedFacilityId: intended,
-      });
-      form.reset();
-      setWarehouseMode('roam');
-      setRetailer('');
-      setDescription('');
-      setDeclaredValueUsd('');
-      setWeightLbs('');
-      setInvoiceSuggestion(null);
-    } catch (err) {
-      setFormError((err as Error).message);
-    }
-  }
-
-  return (
-    <form onSubmit={onSubmit} className="space-y-3">
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="block text-sm">
-          Suite
-          <select
-            name="suiteId"
-            required
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-          >
-            <option value="">Select…</option>
-            {(suites.data?.suites ?? []).map((s) => (
-              <option key={String(s.id)} value={String(s.id)}>
-                {String(s.suite_code)} — {String(s.contact_name || '')}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="block text-sm">
-          Courier tracking #
-          <input
-            name="courierTrackingNumber"
-            required
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono"
-          />
-        </label>
-        <label className="block text-sm">
-          Retailer
-          <input
-            name="retailer"
-            value={retailer}
-            onChange={(e) => setRetailer(e.target.value)}
-            placeholder="Amazon, Shein…"
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-          />
-        </label>
-        <label className="block text-sm">
-          Description
-          <input
-            name="description"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-          />
-        </label>
-        <label className="block text-sm">
-          Declared value (USD)
-          <input
-            name="declaredValueUsd"
-            type="number"
-            step="0.01"
-            min={0}
-            value={declaredValueUsd}
-            onChange={(e) => setDeclaredValueUsd(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-          />
-        </label>
-        <label className="block text-sm">
-          Weight (lb, optional)
-          <input
-            name="weightLbs"
-            type="number"
-            step="0.01"
-            min={0}
-            value={weightLbs}
-            onChange={(e) => setWeightLbs(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-          />
-        </label>
-      </div>
-
-      <div className="grid grid-cols-3 gap-3">
-        <label className="block text-sm">
-          L (in)
-          <input
-            name="lengthIn"
-            type="number"
-            step="0.1"
-            min={0}
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-          />
-        </label>
-        <label className="block text-sm">
-          W (in)
-          <input
-            name="widthIn"
-            type="number"
-            step="0.1"
-            min={0}
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-          />
-        </label>
-        <label className="block text-sm">
-          H (in)
-          <input
-            name="heightIn"
-            type="number"
-            step="0.1"
-            min={0}
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-          />
-        </label>
-      </div>
-
-      <fieldset className="rounded-lg border border-slate-100 bg-slate-50 px-4 py-3">
-        <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
-          Destination warehouse
-        </legend>
-        <div className="flex flex-wrap gap-4 text-sm">
-          <label className="inline-flex items-center gap-2">
-            <input
-              type="radio"
-              checked={warehouseMode === 'roam'}
-              onChange={() => setWarehouseMode('roam')}
-            />
-            Roam Warehouse (in-app)
-          </label>
-          <label className="inline-flex items-center gap-2">
-            <input
-              type="radio"
-              checked={warehouseMode === 'external'}
-              onChange={() => setWarehouseMode('external')}
-            />
-            External warehouse (CSV handoff)
-          </label>
-        </div>
-        {warehouseMode === 'roam' ? (
-          <select
-            name="intendedFacilityId"
-            className="mt-3 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            defaultValue=""
-          >
-            <option value="">Select warehouse…</option>
-            {Object.entries(warehousesByCountry)
-              .sort(([a], [b]) => a.localeCompare(b))
-              .map(([cc, list]) => (
-                <optgroup key={cc} label={cc}>
-                  {list.map((f) => (
-                    <option key={String(f.id)} value={String(f.id)}>
-                      {String(f.name)} ({String(f.code)}) · {cc}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-          </select>
-        ) : (
-          <p className="mt-3 text-xs text-slate-600">
-            Pre-alert stays unassigned. Export CSV from the Expected tab to hand off externally.
-          </p>
-        )}
-      </fieldset>
-
-      <div className="block text-sm">
-        <p className="font-medium text-slate-800">{DOC_ROLE.customer_invoice.label}</p>
-        <p className="mt-0.5 text-xs font-normal text-slate-500">
-          Optional for pre-alert · needed before seal
-        </p>
-        <div className="mt-2 flex flex-wrap items-center gap-3">
-          <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50">
-            <Upload className="h-4 w-4" aria-hidden />
-            {invoiceFile ? 'Replace file' : 'Upload invoice'}
-            <input
-              type="file"
-              accept="application/pdf,image/*"
-              className="sr-only"
-              onChange={(e) => {
-                void onInvoiceSelected(e.target.files?.[0] ?? null);
-                e.target.value = '';
-              }}
-            />
-          </label>
-          {invoiceFile ? (
-            <p className="min-w-0 flex-1 truncate text-xs text-slate-600" title={invoiceFile.name}>
-              {invoiceFile.name}
-            </p>
-          ) : (
-            <p className="text-xs text-slate-400">PDF or image</p>
-          )}
-        </div>
-      </div>
-
-      {(parseReading || invoiceSuggestion) && (
-        <InvoiceFillSuggestions
-          reading={parseReading}
-          suggestion={
-            invoiceSuggestion ?? {
-              source: 'pdf_text',
-              retailer: null,
-              description: null,
-              declaredValueUsd: null,
-              weightLbs: null,
-              currencyHint: null,
-              confidence: 'none',
-              warnings: [],
-              itemLabels: [],
-            }
-          }
-          onApply={applyInvoiceSuggestion}
-          onDismiss={() => setInvoiceSuggestion(null)}
-        />
-      )}
-
-      {formError && (
-        <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-          {formError}
-        </p>
-      )}
-      {create.error && (
-        <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-          {(create.error as Error).message}
-        </p>
-      )}
-      <button
-        type="submit"
-        disabled={create.isPending}
-        className="rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-semibold text-slate-950 hover:bg-amber-400 disabled:opacity-60"
-      >
-        {create.isPending ? 'Saving…' : 'Create pre-alert'}
-      </button>
-    </form>
-  );
-}
+export { CreatePreAlertForm };
 
 /** Modal create flow for Packages hub. */
 export function CreatePreAlertOverlay({ onClose }: { onClose: () => void }) {
   return (
     <PreAlertOverlayShell
       title="Create pre-alert"
-      subtitle="Register an expected package for warehouse matching."
+      subtitle="Order → line items → packages (one tracking number per box)."
       onClose={onClose}
     >
       <CreatePreAlertForm onSuccess={onClose} />
@@ -477,13 +128,12 @@ export function PreAlertsPage({ embedded = false }: { embedded?: boolean }) {
 
   return (
     <div className="space-y-6">
-      {!embedded ? (
+      {!embedded && (
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-semibold text-slate-900">Pre-Alerts</h1>
+            <h1 className="text-2xl font-semibold">Pre-alerts</h1>
             <p className="mt-1 text-sm text-slate-500">
-              Create expected packages for warehouse matching. Send in-app to a Roam warehouse, or
-              export CSV for an external warehouse.
+              Expected inbound parcels — one tracking number per package under a retail order.
             </p>
           </div>
           <button
@@ -494,36 +144,32 @@ export function PreAlertsPage({ embedded = false }: { embedded?: boolean }) {
             Create pre-alert
           </button>
         </div>
-      ) : (
-        <p className="text-sm text-slate-500">
-          Expected packages waiting for warehouse receive. Export CSV for external warehouses.
-        </p>
       )}
 
-      <section className="rounded-xl border border-slate-200 bg-white p-4">
+      <section className="rounded-xl border border-slate-200 bg-white px-4 py-3">
         <div className="flex flex-wrap items-end gap-3">
-          <div className="min-w-[220px] flex-1">
-            <label className="text-xs font-medium text-slate-500">Export filter</label>
+          <label className="text-sm">
+            Export warehouse filter
             <select
               value={exportFacilityId}
               onChange={(e) => setExportFacilityId(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              className="mt-1 block rounded-lg border border-slate-300 px-3 py-2 text-sm"
             >
-              <option value="external">External only (no Roam warehouse)</option>
-              <option value="">All expected</option>
+              <option value="external">External / unassigned</option>
+              <option value="">All</option>
               {Object.entries(warehousesByCountry)
                 .sort(([a], [b]) => a.localeCompare(b))
                 .map(([cc, list]) => (
                   <optgroup key={cc} label={cc}>
                     {list.map((f) => (
                       <option key={String(f.id)} value={String(f.id)}>
-                        {String(f.name)} ({String(f.code)})
+                        {String(f.name)}
                       </option>
                     ))}
                   </optgroup>
                 ))}
             </select>
-          </div>
+          </label>
           <button
             type="button"
             disabled={exporting.isPending}
@@ -576,17 +222,29 @@ export function PreAlertsPage({ embedded = false }: { embedded?: boolean }) {
           <thead className="text-xs uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-4 py-2">Tracking</th>
+              <th className="px-4 py-2">Order</th>
               <th className="px-4 py-2">Suite</th>
               <th className="px-4 py-2">Retailer</th>
               <th className="px-4 py-2">Warehouse</th>
-              <th className="px-4 py-2">Customer invoice</th>
+              <th className="px-4 py-2">Invoice</th>
             </tr>
           </thead>
           <tbody>
             {(list.data?.packages ?? []).map((p) => {
               const suite = p.suites as { suite_code?: string } | null;
+              const order = p.retail_orders as {
+                external_order_number?: string | null;
+                invoice_storage_path?: string | null;
+                invoice_file_name?: string | null;
+              } | null;
               const fac = (facilities.data?.facilities ?? []).find(
                 (f) => String(f.id) === String(p.intended_facility_id ?? ''),
+              );
+              const hasInvoice = Boolean(
+                p.invoice_storage_path ||
+                  p.invoice_file_name ||
+                  order?.invoice_storage_path ||
+                  order?.invoice_file_name,
               );
               return (
                 <tr key={String(p.id)} className="border-t border-slate-100 hover:bg-slate-50">
@@ -598,6 +256,9 @@ export function PreAlertsPage({ embedded = false }: { embedded?: boolean }) {
                       {String(p.courier_tracking_number || p.id)}
                     </Link>
                   </td>
+                  <td className="px-4 py-2 font-mono text-xs">
+                    {order?.external_order_number || '—'}
+                  </td>
                   <td className="px-4 py-2">{suite?.suite_code || '—'}</td>
                   <td className="px-4 py-2">{String(p.retailer || '—')}</td>
                   <td className="px-4 py-2 text-xs">
@@ -605,15 +266,13 @@ export function PreAlertsPage({ embedded = false }: { embedded?: boolean }) {
                       ? `${String(fac.name)} (${String(fac.country_code || '')})`
                       : 'External / CSV'}
                   </td>
-                  <td className="px-4 py-2 text-xs">
-                    {p.invoice_storage_path || p.invoice_file_name ? 'On file' : '—'}
-                  </td>
+                  <td className="px-4 py-2 text-xs">{hasInvoice ? 'On file' : '—'}</td>
                 </tr>
               );
             })}
             {!list.isLoading && !(list.data?.packages ?? []).length && (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
+                <td colSpan={6} className="px-4 py-8 text-center text-slate-500">
                   No expected pre-alerts yet.
                 </td>
               </tr>

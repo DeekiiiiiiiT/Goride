@@ -53,6 +53,7 @@ export function applySuggestionToBlanks<
     description?: string;
     declaredValueUsd?: string;
     weightLbs?: string;
+    externalOrderNumber?: string;
   },
 >(current: T, suggestion: InvoiceParseSuggestion): T {
   const next = { ...current };
@@ -67,6 +68,13 @@ export function applySuggestionToBlanks<
   }
   if (!String(next.weightLbs ?? '').trim() && suggestion.weightLbs != null) {
     next.weightLbs = String(suggestion.weightLbs);
+  }
+  if (
+    'externalOrderNumber' in next &&
+    !String(next.externalOrderNumber ?? '').trim() &&
+    suggestion.externalOrderNumber
+  ) {
+    next.externalOrderNumber = suggestion.externalOrderNumber;
   }
   return next;
 }

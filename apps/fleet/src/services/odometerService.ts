@@ -34,6 +34,7 @@ function mapLedgerRowToUnified(r: any, vehicleId: string): UnifiedOdometerEntry 
     id: r.id,
     vehicleId: r.vehicleId || vehicleId,
     date: r.date || r.recordedAt || r.reading_date,
+    recordedAt: r.recordedAt || r.recorded_at || r.date,
     value: readingValue,
     type: r.isHard === false ? 'Calculated' : 'Hard',
     source,

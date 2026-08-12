@@ -76,7 +76,7 @@ export function SourceEvidenceModal({ isOpen, onClose, evidence }: SourceEvidenc
 
     const formatKey = (key: string) => {
         const labels: Record<string, string> = {
-            'deltaKm': 'Distance Since Last',
+                'deltaKm': 'vs prior log',
             'prevReadingId': 'Previous Anchor ID',
             'liters': 'Fuel Volume',
             'price': 'Price per Liter',

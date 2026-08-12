@@ -792,11 +792,46 @@ export function registerPipelineRoutes(app: FreightApp) {
         suiteMap[s.id] = s;
       }
     }
-    const packages = (data ?? []).map((p: { suite_id?: string | null }) => ({
+    const packages = (data ?? []).map((p: { suite_id?: string | null; retail_order_id?: string | null }) => ({
       ...p,
       suites: p.suite_id ? suiteMap[p.suite_id] ?? null : null,
     }));
-    return c.json({ packages });
+
+    const orderIds = [
+      ...new Set(
+        packages
+          .map((p: { retail_order_id?: string | null }) => p.retail_order_id)
+          .filter(Boolean) as string[],
+      ),
+    ];
+    const orderMap: Record<
+      string,
+      {
+        id: string;
+        external_order_number?: string | null;
+        retailer?: string | null;
+        invoice_storage_path?: string | null;
+        invoice_file_name?: string | null;
+        invoice_verified_at?: string | null;
+        invoice_unobtainable_at?: string | null;
+      }
+    > = {};
+    if (orderIds.length) {
+      const { data: orders } = await freightDb()
+        .from("retail_orders")
+        .select(
+          "id, external_order_number, retailer, invoice_storage_path, invoice_file_name, invoice_verified_at, invoice_unobtainable_at",
+        )
+        .in("id", orderIds);
+      for (const o of orders ?? []) orderMap[o.id] = o;
+    }
+
+    return c.json({
+      packages: packages.map((p: { retail_order_id?: string | null }) => ({
+        ...p,
+        retail_orders: p.retail_order_id ? orderMap[p.retail_order_id] ?? null : null,
+      })),
+    });
   });
 
   app.get("/packages/:id", async (c) => {
@@ -827,6 +862,17 @@ export function registerPipelineRoutes(app: FreightApp) {
         .maybeSingle();
       facility = f;
     }
+    let retailOrder = null;
+    if (pkg.retail_order_id) {
+      const { data: o } = await db
+        .from("retail_orders")
+        .select(
+          "id, external_order_number, retailer, order_total_usd_minor, invoice_storage_path, invoice_file_name, invoice_verified_at, invoice_unobtainable_at",
+        )
+        .eq("id", pkg.retail_order_id)
+        .maybeSingle();
+      retailOrder = o;
+    }
 
     const { data: scans } = await db
       .from("package_scan_events")
@@ -834,7 +880,12 @@ export function registerPipelineRoutes(app: FreightApp) {
       .eq("package_id", id)
       .order("occurred_at", { ascending: false });
     return c.json({
-      package: { ...pkg, suites: suite, facilities: facility },
+      package: {
+        ...pkg,
+        suites: suite,
+        facilities: facility,
+        retail_orders: retailOrder,
+      },
       scanEvents: scans ?? [],
     });
   });
@@ -1913,7 +1964,9 @@ export function registerPipelineRoutes(app: FreightApp) {
 
     const { data: lines } = await freightDb()
       .from("manifest_packages")
-      .select("package_id, packages(*, suites(suite_code, trn, trn_valid, contact_name))")
+      .select(
+        "package_id, packages(*, suites(suite_code, trn, trn_valid, contact_name), retail_orders(invoice_storage_path, invoice_file_name, invoice_verified_at, invoice_unobtainable_at))",
+      )
       .eq("manifest_id", id);
     if (!lines?.length) {
       return c.json({ error: "Add packages before sealing" }, 400);

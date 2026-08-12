@@ -10,6 +10,13 @@ export type ReadinessPackage = {
   invoice_file_name?: string | null;
   invoice_verified_at?: string | null;
   invoice_unobtainable_at?: string | null;
+  /** Shared commercial invoice on parent retail order (Amazon multi-box). */
+  retail_orders?: {
+    invoice_storage_path?: string | null;
+    invoice_file_name?: string | null;
+    invoice_verified_at?: string | null;
+    invoice_unobtainable_at?: string | null;
+  } | null;
   suites?: {
     suite_code?: string | null;
     trn?: string | null;
@@ -36,10 +43,22 @@ function hasWeight(p: ReadinessPackage): boolean {
   return (Number.isFinite(lbs) && lbs > 0) || (Number.isFinite(kg) && kg > 0);
 }
 
+function resolveInvoiceFields(p: ReadinessPackage) {
+  const order = p.retail_orders;
+  return {
+    storagePath: p.invoice_storage_path || order?.invoice_storage_path || null,
+    fileName: p.invoice_file_name || order?.invoice_file_name || null,
+    verifiedAt: p.invoice_verified_at || order?.invoice_verified_at || null,
+    unobtainableAt:
+      p.invoice_unobtainable_at || order?.invoice_unobtainable_at || null,
+  };
+}
+
 function invoiceGateOk(p: ReadinessPackage): boolean {
-  if (p.invoice_unobtainable_at) return true;
-  const hasCustomer = Boolean(p.invoice_storage_path || p.invoice_file_name);
-  return hasCustomer && Boolean(p.invoice_verified_at);
+  const inv = resolveInvoiceFields(p);
+  if (inv.unobtainableAt) return true;
+  const hasCustomer = Boolean(inv.storagePath || inv.fileName);
+  return hasCustomer && Boolean(inv.verifiedAt);
 }
 
 export function evaluatePackageReadiness(p: ReadinessPackage): ReadinessBlocker[] {
@@ -65,7 +84,8 @@ export function evaluatePackageReadiness(p: ReadinessPackage): ReadinessBlocker[
   }
 
   if (!invoiceGateOk(p)) {
-    const hasCustomer = Boolean(p.invoice_storage_path || p.invoice_file_name);
+    const inv = resolveInvoiceFields(p);
+    const hasCustomer = Boolean(inv.storagePath || inv.fileName);
     if (!hasCustomer) {
       blockers.push({
         packageId: p.id,

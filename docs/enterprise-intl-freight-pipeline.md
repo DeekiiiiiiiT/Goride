@@ -9,27 +9,39 @@ Ops-managed mailbox freight (no customer portal). SMS status updates. Pickup **a
 ## End-to-end pipeline
 
 1. **Suites** — mailbox customers with Jamaica TRN (9-digit validation + `trn_valid` flag).
-2. **Receive Station** (`/app/receive-station`) — gun/scale scan → weight + bin → `received_at_warehouse`.
-3. **Invoice Audit** — dual files: warehouse packing slip + customer invoice; “required from customer” / “could not obtain”; verify before seal (unobtainable also unlocks seal).
-4. **HS Tariffs + Duty** — CET catalog; Landed Cost Duty Engine (CIF → duty/SCF/ENV/GCT/stamp/CAF; US$100 threshold).
-5. **Consolidated Billing** — dual-ledger invoice (courier revenue vs government pass-through).
-6. **Manifest Builder / Gatekeeper** — seal blocked when TRN, verified invoice, or weight missing.
-7. **AWBOLDS XML** — generate filing record + download; **Submit to JCA** (live or stub).
-8. **Clearance Board** — green/yellow/red lanes; cleared packages unlock for Hub.
-9. **Hub → Fulfillment** — existing sort / pickup / door delivery / POD unchanged.
+2. **Pre-alert (retail order)** — upload commercial invoice → **Order** + **line items** → one **Package** per tracking number (Amazon may split boxes). Shared invoice lives on the order.
+3. **Receive Station** (`/app/receive` / US Intake) — gun/scale scan → weight + bin → `received_at_warehouse` (matches pre-alert by tracking).
+4. **Invoice Audit** — dual files: warehouse packing slip + customer invoice (package **or** parent retail order); “required from customer” / “could not obtain”; verify before seal (unobtainable also unlocks seal). Order-level verify covers all child packages.
+5. **HS Tariffs + Duty** — CET catalog; Landed Cost Duty Engine (CIF → duty/SCF/ENV/GCT/stamp/CAF; US$100 threshold) **per package** after line/value allocation.
+6. **Consolidated Billing** — dual-ledger invoice (courier revenue vs government pass-through).
+7. **Manifest Builder / Gatekeeper** — seal blocked when TRN, verified invoice (package or order), or weight missing.
+8. **AWBOLDS XML** — generate filing record + download; **Submit to JCA** (live or stub).
+9. **Clearance Board** — green/yellow/red lanes; cleared packages unlock for Hub.
+10. **Hub → Fulfillment** — existing sort / pickup / door delivery / POD unchanged.
+
+## Retail order model
+
+| Layer | Entity | Role |
+|-------|--------|------|
+| Purchase | `freight.retail_orders` | Amazon/Shein order #, suite, shared commercial invoice, order total |
+| Merchandise | `freight.retail_order_lines` | Description, qty, USD value; optional `package_id` assignment |
+| Physical box | `freight.packages` | One tracking #; custody / HAWB / duty unit; `retail_order_id` link |
+
+**Rule:** one tracking number = one package. Never paste full order total onto every box when Amazon splits deliveries.
 
 ## Smoke path
 
 1. **Facilities** — US Intake Warehouse (catalog pick) + Jamaica Hub (+ optional Branch / Pickup).
 2. **Suites** — import or create mailbox customers (suite codes + TRN).
-3. **Receive Station** — scan packages at warehouse (`received_at_warehouse`).
-4. **Invoice Audit / Package Duty** — verify invoice; compute landed cost.
-5. **Manifests** — upload CSV or compile from received packages.
-6. **Manifest Builder** — clear blockers → **Seal** → **Download AWBOLDS** → **Submit to JCA**.
-7. **Mark shipped → Arrived Jamaica** (existing manifest transitions).
-8. **Clearance Board** — Hold / Clear / Inspect (or legacy Customs board).
-9. **Hub Station** — inbound scan → sort (pickup or door).
-10. **Fulfillment** — pickup collected or door batch / POD.
+3. **Create pre-alert** — Order wizard: invoice → lines → package(s) with tracking (`expected`).
+4. **Receive Station** — scan packages at warehouse (`received_at_warehouse`).
+5. **Invoice Audit / Package Duty** — verify order invoice; compute landed cost per package.
+6. **Manifests** — upload CSV or compile from received packages.
+7. **Manifest Builder** — clear blockers → **Seal** → **Download AWBOLDS** → **Submit to JCA**.
+8. **Mark shipped → Arrived Jamaica** (existing manifest transitions).
+9. **Clearance Board** — Hold / Clear / Inspect (or legacy Customs board).
+10. **Hub Station** — inbound scan → sort (pickup or door).
+11. **Fulfillment** — pickup collected or door batch / POD.
 
 ## Smoke result (2026-08-08)
 
@@ -73,10 +85,11 @@ Product checklist (owners / brokers / go-live): Notion — **JCA / ASYCUDA live 
 ## Schema (additive)
 
 - `freight.hs_tariff_codes`, `freight.package_duty`
-- Package columns: `hs_tariff_code_id`, `item_category`, freight/insurance minors, `bin_location`, invoice verified fields, `weight_kg`
+- Package columns: `hs_tariff_code_id`, `item_category`, freight/insurance minors, `bin_location`, invoice verified fields, `weight_kg`, `retail_order_id`
 - `suites.trn_valid`
 - `freight.customs_filings`, `freight.clearance_events`
 - `freight.consolidated_invoices`, `freight.invoice_lines`
+- `freight.retail_orders`, `freight.retail_order_lines` (Order → lines → packages; shared commercial invoice)
 
 ## Modules
 

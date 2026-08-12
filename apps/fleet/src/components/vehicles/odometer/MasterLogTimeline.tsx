@@ -65,6 +65,7 @@ import { fuelService } from '../../../services/fuelService';
 import { TripManifestSheet } from './TripManifestSheet';
 import { SourceEvidenceModal } from './SourceEvidenceModal';
 import { AuditTrailModal } from './AuditTrailModal';
+import { formatInFleetTz, useFleetTimezone } from '../../../utils/timezoneDisplay';
 
 interface MasterLogTimelineProps {
   vehicleId: string;
@@ -123,6 +124,7 @@ const MasterLogTimelineInternal: React.FC<MasterLogTimelineProps & React.HTMLAtt
     from: initialDateRange?.from ?? '',
     to: initialDateRange?.to ?? '',
   });
+  const fleetTz = useFleetTimezone();
 
   // Re-seed when recon week / bucket window changes
   useEffect(() => {
@@ -608,7 +610,7 @@ const MasterLogTimelineInternal: React.FC<MasterLogTimelineProps & React.HTMLAtt
                      <div className="flex items-center justify-between">
                         <div>
                             <h3 className="text-lg font-bold text-slate-900">Anomaly Detection</h3>
-                            <p className="text-sm text-slate-500">Displaying {anomalyReports.length} flagged intervals</p>
+                            <p className="text-sm text-slate-500">Mileage regressions and gap issues ({anomalyReports.length}) — separate from Fuel “Cycle flags”</p>
                         </div>
                         <Badge variant="destructive" className="bg-red-50 text-red-600 border-red-200">
                             {anomalyReports.length} Issues
@@ -739,28 +741,35 @@ const MasterLogTimelineInternal: React.FC<MasterLogTimelineProps & React.HTMLAtt
                             <div className="col-span-3">Timestamp</div>
                             <div className="col-span-2">Anchor Source</div>
                             <div className="col-span-2 text-right pr-4">Odometer</div>
-                            <div className="col-span-2 text-right pr-4">Distance Δ</div>
+                            <div className="col-span-2 text-right pr-4" title="Change vs previous log in mixed timeline. Red = regression &gt;50 km.">
+                              vs prior log
+                            </div>
                             <div className="col-span-3">Description / Verification</div>
                         </div>
                         <div className="divide-y divide-slate-100">
                             {filteredHistory.slice(0, visibleCount).map((item, index) => {
                                 const prevItem = index < filteredHistory.length - 1 ? filteredHistory[index + 1] : null;
                                 const delta = prevItem ? item.value - prevItem.value : 0;
-                                const isPlus = delta >= 0;
+                                const isRegression = !!prevItem && delta < -50;
+                                const isSoftDip = !!prevItem && delta < 0 && !isRegression;
 
-                                // Check if there is a report for the gap leading to this item (from previous chronological item)
-                                // In the list, the previous chronological item is at index + 1 (because list is sorted DESC)
-                                // So the gap is between item (End) and prevItem (Start)
-                                // wait, report key is `${prevItem.id}_${item.id}`
-                                // start is prevItem (older), end is item (newer)
+                                // Gap report: start = older (prevItem), end = newer (item)
                                 const report = prevItem ? reports[`${prevItem.id}_${item.id}`] : null;
 
                                 return (
                                     <div key={item.id} className="divide-y divide-slate-100">
                                     <div className="grid grid-cols-12 px-6 py-5 items-center hover:bg-slate-50 transition-colors group relative z-10 bg-white min-h-[72px]">
                                         <div className="col-span-3">
-                                            <p className="text-sm font-semibold text-slate-900">{format(parseDateForDisplay(item.date), 'MMM d, yyyy')}</p>
-                                            <p className="text-xs text-slate-400">{format(parseDateForDisplay(item.date), 'HH:mm')}</p>
+                                            <p className="text-sm font-semibold text-slate-900">
+                                              {formatInFleetTz(item.recordedAt || item.createdAt || item.date, fleetTz, {
+                                                month: 'short', day: 'numeric', year: 'numeric',
+                                              })}
+                                            </p>
+                                            <p className="text-xs text-slate-400">
+                                              {formatInFleetTz(item.recordedAt || item.createdAt || item.date, fleetTz, {
+                                                hour: 'numeric', minute: '2-digit', hour12: true,
+                                              })}
+                                            </p>
                                         </div>
                                         <div className="col-span-2 flex items-center gap-2">
                                             <div className="p-2 rounded-full bg-indigo-100 text-indigo-600">
@@ -776,8 +785,22 @@ const MasterLogTimelineInternal: React.FC<MasterLogTimelineProps & React.HTMLAtt
                                         </div>
                                         <div className="col-span-2 text-right pr-4">
                                             {prevItem && (
-                                                <Badge variant="outline" className={`font-mono font-normal ${isPlus ? 'bg-slate-50 text-slate-600' : 'bg-red-50 text-red-600'}`}>
-                                                    {isPlus ? '+' : ''}{delta.toFixed(1)}
+                                                <Badge
+                                                  variant="outline"
+                                                  title={
+                                                    isRegression
+                                                      ? 'Regression vs prior log — does not lower Live Status'
+                                                      : 'Change vs previous log (mixed sources)'
+                                                  }
+                                                  className={`font-mono font-normal ${
+                                                    isRegression
+                                                      ? 'bg-red-50 text-red-600'
+                                                      : isSoftDip
+                                                        ? 'bg-amber-50 text-amber-700'
+                                                        : 'bg-slate-50 text-slate-600'
+                                                  }`}
+                                                >
+                                                    {delta > 0 ? '+' : ''}{Math.round(delta).toLocaleString()}
                                                 </Badge>
                                             )}
                                         </div>
@@ -790,7 +813,13 @@ const MasterLogTimelineInternal: React.FC<MasterLogTimelineProps & React.HTMLAtt
                                                 >
                                                     {item.notes}
                                                 </button>
-                                                <div className="flex gap-2">
+                                                <div className="flex gap-2 flex-wrap">
+                                                    {isRegression && (
+                                                      <Badge className="text-[10px] h-6 px-2 flex items-center gap-1 bg-red-100 text-red-700 hover:bg-red-100">
+                                                        <AlertCircle className="w-3.5 h-3.5" />
+                                                        Regression
+                                                      </Badge>
+                                                    )}
                                                     <Badge className={`text-[10px] h-6 px-2 flex items-center gap-1 ${item.isVerified ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' : 'bg-amber-100 text-amber-700 hover:bg-amber-200'}`}>
                                                         {item.isVerified ? (
                                                             item.metaData?.method === 'ai_verified' ? (
@@ -799,7 +828,7 @@ const MasterLogTimelineInternal: React.FC<MasterLogTimelineProps & React.HTMLAtt
                                                                 <CheckCircle2 className="w-3.5 h-3.5" />
                                                             )
                                                         ) : <AlertCircle className="w-3.5 h-3.5" />}
-                                                        {item.isVerified ? (item.metaData?.method === 'ai_verified' ? 'AI Scanned' : 'Verified') : 'Unverified'}
+                                                        {item.isVerified ? (item.metaData?.method === 'ai_verified' ? 'AI Scanned' : 'Source on file') : 'Unverified'}
                                                     </Badge>
                                                     
                                                     {item.metaData?.method === 'manual_override' && (

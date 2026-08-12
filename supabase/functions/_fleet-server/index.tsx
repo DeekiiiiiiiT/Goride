@@ -8903,8 +8903,14 @@ app.post("/make-server-37f42386/budgets", requireAuth(), requirePermission('sett
 // General Preferences Endpoints
 app.get("/make-server-37f42386/settings/preferences", async (c) => {
   try {
-    const preferences = await kv.get("preferences:general");
-    return c.json(preferences || {});
+    const preferences = ((await kv.get("preferences:general")) || {}) as Record<string, unknown>;
+    // Normalize legacy est-jam → America/Jamaica; currency locked to jmd for Fleet Jamaica
+    const tz = String(preferences.timezone || "");
+    return c.json({
+      ...preferences,
+      currency: "jmd",
+      timezone: tz === "America/Jamaica" || tz === "est-jam" || !tz ? "America/Jamaica" : "America/Jamaica",
+    });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }
@@ -8912,8 +8918,36 @@ app.get("/make-server-37f42386/settings/preferences", async (c) => {
 
 app.post("/make-server-37f42386/settings/preferences", requireAuth(), requirePermission('settings.edit'), async (c) => {
   try {
-    const preferences = await c.req.json();
+    const body = await c.req.json();
+    // Locked Fleet Jamaica defaults — ignore client attempts to set other codes
+    const currency = "jmd";
+    const timezone = "America/Jamaica";
+    const preferences = {
+      ...(body && typeof body === "object" ? body : {}),
+      currency,
+      timezone,
+    };
     await kv.set("preferences:general", preferences);
+
+    // Keep platform settings in sync so getFleetTimezone / money defaults cannot drift
+    try {
+      const fleetKey = platformSettingsKvKey("fleet");
+      const existing = ((await kv.get(fleetKey)) || (await kv.get(LEGACY_PLATFORM_SETTINGS_KEY)) || {}) as Record<string, unknown>;
+      await kv.set(fleetKey, {
+        ...existing,
+        fleetTimezone: timezone,
+        defaultCurrency: "JMD",
+      });
+      const legacy = ((await kv.get(LEGACY_PLATFORM_SETTINGS_KEY)) || {}) as Record<string, unknown>;
+      await kv.set(LEGACY_PLATFORM_SETTINGS_KEY, {
+        ...legacy,
+        fleetTimezone: timezone,
+        defaultCurrency: "JMD",
+      });
+    } catch (syncErr) {
+      console.warn("[settings/preferences] fleetTimezone sync failed:", syncErr);
+    }
+
     return c.json({ success: true, data: preferences });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);

@@ -303,6 +303,80 @@ export const freightService = {
       organizationId,
     }),
 
+  createRetailOrder: (body: unknown, organizationId?: string | null) =>
+    freightFetch<{
+      order: Record<string, unknown>;
+      lines: Record<string, unknown>[];
+      packages: Record<string, unknown>[];
+      unassignedLineCount?: number;
+    }>('/retail-orders', {
+      method: 'POST',
+      body: JSON.stringify(body),
+      organizationId,
+    }),
+
+  listRetailOrders: (organizationId?: string | null, status?: string) => {
+    const qs = status ? `?status=${encodeURIComponent(status)}` : '';
+    return freightFetch<{ orders: Record<string, unknown>[] }>(`/retail-orders${qs}`, {
+      organizationId,
+    });
+  },
+
+  getRetailOrder: (id: string, organizationId?: string | null) =>
+    freightFetch<{
+      order: Record<string, unknown>;
+      lines: Record<string, unknown>[];
+      packages: Record<string, unknown>[];
+      unassignedLineCount: number;
+    }>(`/retail-orders/${id}`, { organizationId }),
+
+  updateRetailOrder: (id: string, body: unknown, organizationId?: string | null) =>
+    freightFetch<{
+      order: Record<string, unknown>;
+      lines: Record<string, unknown>[];
+      packages: Record<string, unknown>[];
+    }>(`/retail-orders/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+      organizationId,
+    }),
+
+  uploadRetailOrderInvoice: async (
+    orderId: string,
+    file: File,
+    organizationId?: string | null,
+  ) => {
+    const headers = await authHeaders(organizationId, { json: false });
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('fileName', file.name);
+    const res = await fetch(`${API_ENDPOINTS.freight}/retail-orders/${orderId}/invoice`, {
+      method: 'POST',
+      headers,
+      body: fd,
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(typeof json.error === 'string' ? json.error : res.statusText);
+    }
+    return json as {
+      order: Record<string, unknown>;
+      file: Record<string, unknown>;
+    };
+  },
+
+  addRetailOrderPackage: (orderId: string, body: unknown, organizationId?: string | null) =>
+    freightFetch<{
+      package: Record<string, unknown>;
+      order: Record<string, unknown>;
+      lines: Record<string, unknown>[];
+      packages: Record<string, unknown>[];
+    }>(`/retail-orders/${orderId}/packages`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+      organizationId,
+    }),
+
   updatePackage: (id: string, body: unknown, organizationId?: string | null) =>
     freightFetch<{ package: Record<string, unknown> }>(`/packages/${id}`, {
       method: 'PATCH',
