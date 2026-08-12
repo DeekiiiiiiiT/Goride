@@ -234,6 +234,8 @@ export function InvoiceComparePanel({
                 suiteCode: null,
                 shipTo: null,
                 orderTotalUsd: null,
+                estimatedTaxUsd: null,
+                merchandiseSubtotalUsd: null,
                 lines: [],
               }
             }

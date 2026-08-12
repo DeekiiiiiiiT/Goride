@@ -62,6 +62,8 @@ export function parseRetailInvoiceText(rawText: string): InvoiceParseSuggestion 
 
   const weightLbs = extractWeightLbs(text);
   const orderTotalUsd = declaredValueUsd;
+  const estimatedTaxUsd = extractEstimatedTaxUsd(text);
+  const merchandiseSubtotalUsd = findLabeledMoney(text, WEAK_TOTALS).amount;
 
   const filled = [retailer, description, declaredValueUsd, weightLbs, externalOrderNumber].filter(
     (v) => v != null && v !== '',
@@ -96,6 +98,8 @@ export function parseRetailInvoiceText(rawText: string): InvoiceParseSuggestion 
     suiteCode,
     shipTo,
     orderTotalUsd,
+    estimatedTaxUsd,
+    merchandiseSubtotalUsd,
     lines,
   };
 }
@@ -277,6 +281,14 @@ function extractWeightLbs(text: string): number | null {
   return Math.round(n * 100) / 100;
 }
 
+const TAX_LABELS =
+  /(?:estimated\s+tax(?:\s+to\s+be\s+collected)?|sales\s+tax|tax\s+collected)\s*[:.]?\s*/i;
+
+function extractEstimatedTaxUsd(text: string): number | null {
+  const { amount } = findLabeledMoney(text, TAX_LABELS);
+  return amount;
+}
+
 const SKIP_LINE =
   /\b(ship to|sold by|order\s*#|order number|asin|isbn|invoice|payment|credit card|visa|mastercard|billing|tax|shipping|handling|gift|promo|coupon|www\.|http|suite|po box|shipment\s*weight|weight|grand\s*total|order\s*total|amount\s*due|subtotal|\d{5}(?:-\d{4})?)\b/i;
 
@@ -407,6 +419,25 @@ function extractStructuredLines(text: string, isAmazon: boolean): InvoiceParseLi
 }
 
 function extractSoldByColonLines(flat: string): InvoiceParseLine[] {
+  const markers: Array<{ index: number; label: string }> = [];
+  const deliveredRe = /\bDelivered\s+([A-Za-z]+)\s+(\d{1,2})\b/gi;
+  let dm: RegExpExecArray | null;
+  while ((dm = deliveredRe.exec(flat)) != null) {
+    markers.push({
+      index: dm.index,
+      label: `Delivered ${dm[1]} ${dm[2]}`,
+    });
+  }
+
+  function groupAt(pos: number): { index: number; label: string | null } {
+    if (markers.length === 0) return { index: 0, label: null };
+    let idx = 0;
+    for (let i = 0; i < markers.length; i++) {
+      if (markers[i].index <= pos) idx = i;
+    }
+    return { index: idx, label: markers[idx]?.label ?? null };
+  }
+
   const lines: InvoiceParseLine[] = [];
   const soldByRe =
     /(.+?)\s+Sold\s+by:\s*[^$]{0,220}?\$\s*([0-9]+(?:\.[0-9]{2})?)/gi;
@@ -416,11 +447,15 @@ function extractSoldByColonLines(flat: string): InvoiceParseLine[] {
     const amount = parseMoney(sm[2]);
     if (!title || amount == null || amount <= 0) continue;
     if (isJunkProductTitle(title)) continue;
+    // Use end of match (at $price) so "Delivered …" inside the title span counts
+    const group = groupAt(sm.index + sm[0].length - 1);
     lines.push({
       description: title,
       quantity: 1,
       unitValueUsd: amount,
       lineTotalUsd: amount,
+      deliveryGroupIndex: group.index,
+      deliveryLabel: group.label,
     });
     if (lines.length >= 12) break;
   }

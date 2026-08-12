@@ -9,6 +9,10 @@ export type InvoiceParseLine = {
   quantity: number | null;
   unitValueUsd: number | null;
   lineTotalUsd: number | null;
+  /** 0-based Amazon/shipment delivery group from invoice ("Delivered July 13"). */
+  deliveryGroupIndex?: number | null;
+  /** Human label e.g. "Delivered July 13". */
+  deliveryLabel?: string | null;
 };
 
 /** Ship-to fragment used to match Dominion intake / org warehouses. */
@@ -39,6 +43,10 @@ export type InvoiceParseSuggestion = {
   shipTo: InvoiceShipToHint | null;
   /** Order grand total (same as declaredValueUsd when strong total found). */
   orderTotalUsd: number | null;
+  /** Estimated sales tax when labeled on the invoice (not part of customs declared value). */
+  estimatedTaxUsd: number | null;
+  /** Merchandise subtotal when labeled (items before tax). */
+  merchandiseSubtotalUsd: number | null;
   /** Structured merchandise lines for Order → packages assignment. */
   lines: InvoiceParseLine[];
 };
@@ -59,6 +67,8 @@ export function emptySuggestion(
     suiteCode: null,
     shipTo: null,
     orderTotalUsd: null,
+    estimatedTaxUsd: null,
+    merchandiseSubtotalUsd: null,
     lines: [],
     ...partial,
   };

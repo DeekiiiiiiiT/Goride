@@ -133,6 +133,9 @@ function toClientValue(row: Record<string, unknown>): Record<string, unknown> {
         : source === "service"
           ? "service"
           : "manual";
+  // Column recorded_at is source of truth (payload may still hold pre-Jamaica-fix stamps)
+  const recordedAt =
+    row.recorded_at != null ? String(row.recorded_at) : (v.recordedAt != null ? String(v.recordedAt) : null);
   return {
     ...v,
     id: v.id || row.id,
@@ -140,8 +143,8 @@ function toClientValue(row: Record<string, unknown>): Record<string, unknown> {
     value: reading,
     reading,
     odometer: reading,
-    date: v.date || row.reading_date || (v.recordedAt ? String(v.recordedAt).slice(0, 10) : null),
-    recordedAt: v.recordedAt || row.recorded_at,
+    date: v.date || row.reading_date || (recordedAt ? String(recordedAt).slice(0, 10) : null),
+    recordedAt,
     source: uiSource,
     ledgerSource: source,
     referenceId: v.referenceId || row.reference_id,
@@ -154,7 +157,7 @@ function toClientValue(row: Record<string, unknown>): Record<string, unknown> {
     isAnchorPoint: !!(v.isVerified ?? row.is_verified) || source === "fuel" || source === "service",
     driverId: v.driverId || row.driver_id,
     notes: v.notes,
-    createdAt: v.createdAt || row.created_at,
+    createdAt: recordedAt || v.createdAt || row.created_at,
   };
 }
 

@@ -20,6 +20,8 @@ type DraftLine = {
   description: string;
   quantity: string;
   unitValueUsd: string;
+  deliveryGroupIndex: number | null;
+  deliveryLabel: string | null;
 };
 
 type DraftPackage = {
@@ -29,12 +31,29 @@ type DraftPackage = {
   lengthIn: string;
   widthIn: string;
   heightIn: string;
+  /** Always derived from assigned lines at submit; kept blank in UI. */
   declaredValueUsd: string;
   lineKeys: string[];
+  deliveryLabel: string | null;
 };
 
 function newKey(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function emptyPackage(partial?: Partial<DraftPackage>): DraftPackage {
+  return {
+    key: newKey('pkg'),
+    tracking: '',
+    weightLbs: '',
+    lengthIn: '',
+    widthIn: '',
+    heightIn: '',
+    declaredValueUsd: '',
+    lineKeys: [],
+    deliveryLabel: null,
+    ...partial,
+  };
 }
 
 function usdToMinor(raw: string): number | null {
@@ -50,12 +69,51 @@ function lineTotalUsd(line: DraftLine): number {
   return Math.round(unit * qty * 100) / 100;
 }
 
+function packageDeclaredFromLines(pkg: DraftPackage, allLines: DraftLine[]): number {
+  return allLines
+    .filter((l) => pkg.lineKeys.includes(l.key))
+    .reduce((s, l) => s + lineTotalUsd(l), 0);
+}
+
+/** Split draft lines into one package per invoice delivery group. */
+function packagesFromLines(
+  nextLines: DraftLine[],
+  previous: DraftPackage[] = [],
+): DraftPackage[] {
+  const active = nextLines.filter((l) => l.description.trim());
+  if (active.length === 0) {
+    return [previous[0] ? { ...previous[0], lineKeys: [] } : emptyPackage()];
+  }
+
+  const groupIds = [
+    ...new Set(active.map((l) => (l.deliveryGroupIndex != null ? l.deliveryGroupIndex : 0))),
+  ].sort((a, b) => a - b);
+
+  return groupIds.map((gid, i) => {
+    const groupLines = active.filter(
+      (l) => (l.deliveryGroupIndex != null ? l.deliveryGroupIndex : 0) === gid,
+    );
+    const prev = previous[i];
+    return emptyPackage({
+      key: prev?.key ?? newKey('pkg'),
+      tracking: prev?.tracking ?? '',
+      weightLbs: prev?.weightLbs ?? '',
+      lengthIn: prev?.lengthIn ?? '',
+      widthIn: prev?.widthIn ?? '',
+      heightIn: prev?.heightIn ?? '',
+      lineKeys: groupLines.map((l) => l.key),
+      deliveryLabel: groupLines[0]?.deliveryLabel ?? (groupIds.length > 1 ? `Shipment ${i + 1}` : null),
+    });
+  });
+}
+
 /** Create pre-alert wizard: Order → line items → packages (one tracking # each). */
 export function CreatePreAlertForm({ onSuccess }: { onSuccess?: () => void }) {
   const { organizationId, session } = useAuth();
   const qc = useQueryClient();
   const suites = useSuites();
   const [step, setStep] = useState<WizardStep>('order');
+  const [packageFocusIndex, setPackageFocusIndex] = useState(0);
   const [formError, setFormError] = useState<string | null>(null);
 
   const [suiteId, setSuiteId] = useState('');
@@ -64,6 +122,7 @@ export function CreatePreAlertForm({ onSuccess }: { onSuccess?: () => void }) {
   const [retailer, setRetailer] = useState('');
   const [externalOrderNumber, setExternalOrderNumber] = useState('');
   const [orderTotalUsd, setOrderTotalUsd] = useState('');
+  const [estimatedTaxUsd, setEstimatedTaxUsd] = useState<number | null>(null);
   const [warehouseMode, setWarehouseMode] = useState<'roam' | 'external'>('roam');
   const [intendedFacilityId, setIntendedFacilityId] = useState('');
   const [invoiceFile, setInvoiceFile] = useState<File | null>(null);
@@ -72,20 +131,16 @@ export function CreatePreAlertForm({ onSuccess }: { onSuccess?: () => void }) {
     null,
   );
   const [lines, setLines] = useState<DraftLine[]>([
-    { key: newKey('line'), description: '', quantity: '1', unitValueUsd: '' },
-  ]);
-  const [packages, setPackages] = useState<DraftPackage[]>([
     {
-      key: newKey('pkg'),
-      tracking: '',
-      weightLbs: '',
-      lengthIn: '',
-      widthIn: '',
-      heightIn: '',
-      declaredValueUsd: '',
-      lineKeys: [],
+      key: newKey('line'),
+      description: '',
+      quantity: '1',
+      unitValueUsd: '',
+      deliveryGroupIndex: null,
+      deliveryLabel: null,
     },
   ]);
+  const [packages, setPackages] = useState<DraftPackage[]>([emptyPackage()]);
 
   const facilities = useQuery({
     queryKey: ['freight', 'facilities', organizationId, 'warehouse'],
@@ -111,21 +166,26 @@ export function CreatePreAlertForm({ onSuccess }: { onSuccess?: () => void }) {
   }, [packages]);
 
   const packageValuesSum = useMemo(() => {
-    return packages.reduce((sum, p) => {
-      const explicit = Number(p.declaredValueUsd);
-      if (Number.isFinite(explicit) && p.declaredValueUsd.trim()) return sum + explicit;
-      const fromLines = lines
-        .filter((l) => p.lineKeys.includes(l.key))
-        .reduce((s, l) => s + lineTotalUsd(l), 0);
-      return sum + fromLines;
-    }, 0);
+    return packages.reduce((sum, p) => sum + packageDeclaredFromLines(p, lines), 0);
   }, [packages, lines]);
 
+  const focusPackage = packages[packageFocusIndex] ?? packages[0];
+  const packageCount = packages.length;
+
   const orderTotalNum = Number(orderTotalUsd);
+  const valueGap =
+    Number.isFinite(orderTotalNum) && orderTotalNum > 0
+      ? Math.round((orderTotalNum - packageValuesSum) * 100) / 100
+      : 0;
+  const taxExplainsGap =
+    estimatedTaxUsd != null &&
+    estimatedTaxUsd > 0 &&
+    Math.abs(valueGap - estimatedTaxUsd) <= 0.05;
   const valueMismatch =
     Number.isFinite(orderTotalNum) &&
     orderTotalNum > 0 &&
-    Math.abs(packageValuesSum - orderTotalNum) > 0.05;
+    Math.abs(valueGap) > 0.05 &&
+    !taxExplainsGap;
 
   const create = useMutation({
     mutationFn: async () => {
@@ -160,12 +220,11 @@ export function CreatePreAlertForm({ onSuccess }: { onSuccess?: () => void }) {
           const idxs = p.lineKeys
             .map((k) => lineKeyToIndex.get(k))
             .filter((n): n is number => n != null);
-          const fromLines = lines
-            .filter((l) => p.lineKeys.includes(l.key))
-            .reduce((s, l) => s + lineTotalUsd(l), 0);
+          const fromLines = packageDeclaredFromLines(p, lines);
           const declared =
-            usdToMinor(p.declaredValueUsd) ??
-            (idxs.length ? Math.round(fromLines * 100) : null);
+            fromLines > 0
+              ? Math.round(fromLines * 100)
+              : usdToMinor(p.declaredValueUsd);
           return {
             courierTrackingNumber: p.tracking.trim(),
             weightLbs: p.weightLbs ? Number(p.weightLbs) : null,
@@ -285,23 +344,27 @@ export function CreatePreAlertForm({ onSuccess }: { onSuccess?: () => void }) {
     setRetailer(filled.retailer ?? '');
     setOrderTotalUsd(filled.declaredValueUsd ?? '');
     setExternalOrderNumber(filled.externalOrderNumber ?? '');
+    setEstimatedTaxUsd(invoiceSuggestion.estimatedTaxUsd);
     matchSuiteFromCode(invoiceSuggestion.suiteCode);
     matchWarehouseFromSuggestion(invoiceSuggestion.shipTo);
 
     if (invoiceSuggestion.lines.length > 0) {
-      setLines(
-        invoiceSuggestion.lines.map((l) => ({
-          key: newKey('line'),
-          description: l.description,
-          quantity: String(l.quantity ?? 1),
-          unitValueUsd:
-            l.unitValueUsd != null
-              ? String(l.unitValueUsd)
-              : l.lineTotalUsd != null
-                ? String(l.lineTotalUsd)
-                : '',
-        })),
-      );
+      const nextLines = invoiceSuggestion.lines.map((l) => ({
+        key: newKey('line'),
+        description: l.description,
+        quantity: String(l.quantity ?? 1),
+        unitValueUsd:
+          l.unitValueUsd != null
+            ? String(l.unitValueUsd)
+            : l.lineTotalUsd != null
+              ? String(l.lineTotalUsd)
+              : '',
+        deliveryGroupIndex: l.deliveryGroupIndex ?? null,
+        deliveryLabel: l.deliveryLabel ?? null,
+      }));
+      setLines(nextLines);
+      setPackages((prev) => packagesFromLines(nextLines, prev));
+      setPackageFocusIndex(0);
     }
     setInvoiceSuggestion(null);
   }
@@ -321,26 +384,53 @@ export function CreatePreAlertForm({ onSuccess }: { onSuccess?: () => void }) {
       setFormError('Add at least one line item, or upload an invoice.');
       return;
     }
-    // Single package convenience: assign all lines if only one box and none assigned
-    if (packages.length === 1 && packages[0].lineKeys.length === 0) {
-      setPackages([
-        {
-          ...packages[0],
-          lineKeys: lines.filter((l) => l.description.trim()).map((l) => l.key),
-        },
-      ]);
-    }
+    setPackages((prev) => {
+      const rebuilt = packagesFromLines(lines, prev);
+      // If only one group and no assignments somehow empty, assign all
+      if (
+        rebuilt.length === 1 &&
+        rebuilt[0].lineKeys.length === 0 &&
+        lines.some((l) => l.description.trim())
+      ) {
+        return [
+          {
+            ...rebuilt[0],
+            lineKeys: lines.filter((l) => l.description.trim()).map((l) => l.key),
+          },
+        ];
+      }
+      return rebuilt;
+    });
+    setPackageFocusIndex(0);
     setStep('packages');
   }
 
-  function goReview(e: FormEvent) {
+  function goNextPackageStep(e: FormEvent) {
     e.preventDefault();
     setFormError(null);
+    const pkg = packages[packageFocusIndex];
+    if (!pkg?.tracking.trim()) {
+      setFormError('Enter the tracking number for this package.');
+      return;
+    }
+    if (packageFocusIndex < packages.length - 1) {
+      setPackageFocusIndex((i) => i + 1);
+      return;
+    }
     if (!packages.some((p) => p.tracking.trim())) {
       setFormError('Enter at least one tracking number.');
       return;
     }
     setStep('review');
+  }
+
+  function goBackFromPackages() {
+    setFormError(null);
+    if (packageFocusIndex > 0) {
+      setPackageFocusIndex((i) => i - 1);
+      return;
+    }
+    setStep('order');
   }
 
   async function onCreate() {
@@ -357,9 +447,14 @@ export function CreatePreAlertForm({ onSuccess }: { onSuccess?: () => void }) {
       <div className="flex flex-wrap gap-2 text-xs font-semibold uppercase tracking-wide">
         {(
           [
-            ['order', '1. Order'],
-            ['packages', '2. Packages'],
-            ['review', '3. Review'],
+            ['order', 'Step 1 · Order'],
+            [
+              'packages',
+              step === 'packages' && packageCount > 1
+                ? `Step 2 · Package ${Math.min(packageFocusIndex, packageCount - 1) + 1} of ${packageCount}`
+                : 'Step 2 · Packages',
+            ],
+            ['review', 'Step 3 · Review'],
           ] as const
         ).map(([id, label]) => (
           <span
@@ -520,6 +615,8 @@ export function CreatePreAlertForm({ onSuccess }: { onSuccess?: () => void }) {
                   suiteCode: null,
                   shipTo: null,
                   orderTotalUsd: null,
+                  estimatedTaxUsd: null,
+                  merchandiseSubtotalUsd: null,
                   lines: [],
                 }
               }
@@ -536,7 +633,14 @@ export function CreatePreAlertForm({ onSuccess }: { onSuccess?: () => void }) {
                 onClick={() =>
                   setLines((prev) => [
                     ...prev,
-                    { key: newKey('line'), description: '', quantity: '1', unitValueUsd: '' },
+                    {
+                      key: newKey('line'),
+                      description: '',
+                      quantity: '1',
+                      unitValueUsd: '',
+                      deliveryGroupIndex: null,
+                      deliveryLabel: null,
+                    },
                   ])
                 }
                 className="text-xs font-semibold text-amber-800 underline"
@@ -618,29 +722,43 @@ export function CreatePreAlertForm({ onSuccess }: { onSuccess?: () => void }) {
         </form>
       )}
 
-      {step === 'packages' && (
-        <form onSubmit={goReview} className="space-y-3">
+      {step === 'packages' && focusPackage && (
+        <form onSubmit={goNextPackageStep} className="space-y-3">
           <p className="text-sm text-slate-600">
-            One tracking number = one physical box. Assign invoice lines to each box (Amazon often
-            splits deliveries).
+            {packageCount > 1
+              ? `Invoice split into ${packageCount} deliveries — enter tracking for this box only.`
+              : 'One tracking number = one physical box. Assign invoice lines to this package.'}
           </p>
-          {packages.map((pkg, pkgIdx) => {
-            const autoValue = lines
-              .filter((l) => pkg.lineKeys.includes(l.key))
-              .reduce((s, l) => s + lineTotalUsd(l), 0);
+          {(() => {
+            const pkg = focusPackage;
+            const pkgIdx = packageFocusIndex;
+            const autoValue = packageDeclaredFromLines(pkg, lines);
             return (
               <div
                 key={pkg.key}
                 className="space-y-2 rounded-xl border border-slate-200 bg-white p-3"
               >
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-semibold text-slate-900">Package {pkgIdx + 1}</p>
-                  {packages.length > 1 && (
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">
+                      Package {pkgIdx + 1}
+                      {packageCount > 1 ? ` of ${packageCount}` : ''}
+                    </p>
+                    {pkg.deliveryLabel ? (
+                      <p className="text-xs text-slate-500">{pkg.deliveryLabel}</p>
+                    ) : null}
+                  </div>
+                  {packageCount > 1 && (
                     <button
                       type="button"
-                      onClick={() =>
-                        setPackages((prev) => prev.filter((p) => p.key !== pkg.key))
-                      }
+                      onClick={() => {
+                        setPackages((prev) => {
+                          if (prev.length <= 1) return prev;
+                          const next = prev.filter((p) => p.key !== pkg.key);
+                          setPackageFocusIndex((i) => Math.min(i, next.length - 1));
+                          return next;
+                        });
+                      }}
                       className="text-xs text-slate-500 hover:text-red-600"
                     >
                       Remove
@@ -680,26 +798,12 @@ export function CreatePreAlertForm({ onSuccess }: { onSuccess?: () => void }) {
                       className="mt-1 w-full rounded border border-slate-300 px-2 py-1.5 text-sm"
                     />
                   </label>
-                  <label className="block text-xs">
-                    Declared USD
-                    <input
-                      type="number"
-                      min={0}
-                      step="0.01"
-                      value={pkg.declaredValueUsd}
-                      placeholder={autoValue > 0 ? autoValue.toFixed(2) : ''}
-                      onChange={(e) =>
-                        setPackages((prev) =>
-                          prev.map((p) =>
-                            p.key === pkg.key
-                              ? { ...p, declaredValueUsd: e.target.value }
-                              : p,
-                          ),
-                        )
-                      }
-                      className="mt-1 w-full rounded border border-slate-300 px-2 py-1.5 text-sm"
-                    />
-                  </label>
+                  <div className="block text-xs">
+                    <p className="font-medium text-slate-700">Declared USD</p>
+                    <p className="mt-1 rounded border border-slate-200 bg-slate-50 px-2 py-1.5 text-sm font-semibold text-slate-900">
+                      ${autoValue.toFixed(2)}
+                    </p>
+                  </div>
                   <label className="block text-xs">
                     L
                     <input
@@ -753,89 +857,54 @@ export function CreatePreAlertForm({ onSuccess }: { onSuccess?: () => void }) {
                 </div>
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Assign lines
+                    Items in this box
                   </p>
                   <div className="mt-1 space-y-1">
                     {lines
-                      .filter((l) => l.description.trim())
-                      .map((line) => {
-                        const takenElsewhere =
-                          assignedLineKeys.has(line.key) && !pkg.lineKeys.includes(line.key);
-                        return (
-                          <label
-                            key={line.key}
-                            className={`flex items-start gap-2 rounded border px-2 py-1.5 text-sm ${
-                              takenElsewhere
-                                ? 'border-slate-100 bg-slate-50 text-slate-400'
-                                : 'border-slate-200 bg-white'
-                            }`}
-                          >
-                            <input
-                              type="checkbox"
-                              disabled={takenElsewhere}
-                              checked={pkg.lineKeys.includes(line.key)}
-                              onChange={(e) => {
-                                setPackages((prev) =>
-                                  prev.map((p) => {
-                                    if (p.key !== pkg.key) return p;
-                                    const next = e.target.checked
-                                      ? [...p.lineKeys, line.key]
-                                      : p.lineKeys.filter((k) => k !== line.key);
-                                    return { ...p, lineKeys: next };
-                                  }),
-                                );
-                              }}
-                            />
-                            <span>
-                              {line.description}
-                              {line.unitValueUsd
-                                ? ` · $${lineTotalUsd(line).toFixed(2)}`
-                                : ''}
-                            </span>
-                          </label>
-                        );
-                      })}
+                      .filter((l) => l.description.trim() && pkg.lineKeys.includes(l.key))
+                      .map((line) => (
+                        <label
+                          key={line.key}
+                          className="flex items-start gap-2 rounded border border-slate-200 bg-white px-2 py-1.5 text-sm"
+                        >
+                          <input
+                            type="checkbox"
+                            checked
+                            onChange={(e) => {
+                              if (e.target.checked) return;
+                              setPackages((prev) =>
+                                prev.map((p) =>
+                                  p.key === pkg.key
+                                    ? {
+                                        ...p,
+                                        lineKeys: p.lineKeys.filter((k) => k !== line.key),
+                                      }
+                                    : p,
+                                ),
+                              );
+                            }}
+                          />
+                          <span>
+                            {line.description}
+                            {line.unitValueUsd ? ` · $${lineTotalUsd(line).toFixed(2)}` : ''}
+                          </span>
+                        </label>
+                      ))}
+                    {pkg.lineKeys.length === 0 && (
+                      <p className="text-xs text-slate-500">No items assigned to this package.</p>
+                    )}
                   </div>
-                  <button
-                    type="button"
-                    className="mt-1 text-xs font-semibold text-amber-800 underline"
-                    onClick={() => {
-                      const free = lines
-                        .filter((l) => l.description.trim() && !assignedLineKeys.has(l.key))
-                        .map((l) => l.key);
-                      setPackages((prev) =>
-                        prev.map((p) =>
-                          p.key === pkg.key
-                            ? { ...p, lineKeys: [...p.lineKeys, ...free] }
-                            : p,
-                        ),
-                      );
-                    }}
-                  >
-                    Assign all remaining
-                  </button>
                 </div>
               </div>
             );
-          })}
+          })()}
 
           <button
             type="button"
-            onClick={() =>
-              setPackages((prev) => [
-                ...prev,
-                {
-                  key: newKey('pkg'),
-                  tracking: '',
-                  weightLbs: '',
-                  lengthIn: '',
-                  widthIn: '',
-                  heightIn: '',
-                  declaredValueUsd: '',
-                  lineKeys: [],
-                },
-              ])
-            }
+            onClick={() => {
+              setPackages((prev) => [...prev, emptyPackage()]);
+              setPackageFocusIndex(packages.length);
+            }}
             className="text-sm font-semibold text-amber-800 underline"
           >
             Add another package
@@ -849,7 +918,7 @@ export function CreatePreAlertForm({ onSuccess }: { onSuccess?: () => void }) {
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={() => setStep('order')}
+              onClick={goBackFromPackages}
               className="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-700"
             >
               Back
@@ -858,7 +927,9 @@ export function CreatePreAlertForm({ onSuccess }: { onSuccess?: () => void }) {
               type="submit"
               className="rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-semibold text-slate-950 hover:bg-amber-400"
             >
-              Continue to review
+              {packageFocusIndex < packageCount - 1
+                ? `Continue to package ${packageFocusIndex + 2}`
+                : 'Continue to review'}
             </button>
           </div>
         </form>
@@ -878,6 +949,12 @@ export function CreatePreAlertForm({ onSuccess }: { onSuccess?: () => void }) {
             <p className="mt-1">
               Invoice: {invoiceFile ? invoiceFile.name : 'None yet (needed before seal)'}
             </p>
+            {taxExplainsGap && (
+              <p className="mt-2 text-slate-600">
+                Order total includes estimated tax (${estimatedTaxUsd!.toFixed(2)}). Package
+                declared values use merchandise only (${packageValuesSum.toFixed(2)}).
+              </p>
+            )}
             {valueMismatch && (
               <p className="mt-2 text-amber-900">
                 Package declared values (${packageValuesSum.toFixed(2)}) don’t match order total
@@ -900,7 +977,10 @@ export function CreatePreAlertForm({ onSuccess }: { onSuccess?: () => void }) {
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={() => setStep('packages')}
+              onClick={() => {
+                setPackageFocusIndex(Math.max(0, packages.length - 1));
+                setStep('packages');
+              }}
               className="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-700"
             >
               Back

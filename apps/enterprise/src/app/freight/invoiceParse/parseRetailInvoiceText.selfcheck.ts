@@ -51,12 +51,25 @@ const amazon = parseRetailInvoiceText(AMAZON_PRINT);
 assert(amazon.suiteCode === 'BSHPD10859', `amazon suite=${amazon.suiteCode}`);
 assert(amazon.externalOrderNumber === '111-7351808-5310605', `amazon order=${amazon.externalOrderNumber}`);
 assert(amazon.declaredValueUsd === 157.14, `amazon total=${amazon.declaredValueUsd}`);
+assert(amazon.estimatedTaxUsd === 10.28, `amazon tax=${amazon.estimatedTaxUsd}`);
 assert(amazon.shipTo?.postalCode === '33009', `shipTo zip=${amazon.shipTo?.postalCode}`);
 assert(
   /1807/i.test(amazon.shipTo?.streetLine || '') && /31/i.test(amazon.shipTo?.streetLine || ''),
   `shipTo street=${amazon.shipTo?.streetLine}`,
 );
 assert(amazon.lines.length === 5, `amazon lines=${amazon.lines.length} ${JSON.stringify(amazon.lines)}`);
+assert(
+  amazon.lines.filter((l) => (l.deliveryGroupIndex ?? 0) === 0).length === 4,
+  `group0=${JSON.stringify(amazon.lines.map((l) => l.deliveryGroupIndex))}`,
+);
+assert(
+  amazon.lines.filter((l) => l.deliveryGroupIndex === 1).length === 1,
+  `group1=${JSON.stringify(amazon.lines.map((l) => [l.deliveryGroupIndex, l.description.slice(0, 20)]))}`,
+);
+assert(
+  /july\s*13/i.test(amazon.lines[0]?.deliveryLabel || ''),
+  `label0=${amazon.lines[0]?.deliveryLabel}`,
+);
 assert(
   amazon.lines.some((l) => /turtle wax/i.test(l.description) && l.unitValueUsd === 25.9),
   `turtle wax missing: ${JSON.stringify(amazon.lines)}`,
