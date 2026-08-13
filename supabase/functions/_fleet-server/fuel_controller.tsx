@@ -35,8 +35,10 @@ import {
 } from "./fuel_payment_source.ts";
 import {
   ensureFuelEntryForApprovedTx,
+  findFuelEntryByTransactionId,
   healApprovedFuelEntriesMissingLog,
 } from "./fuel_posted_guarantee.ts";
+import { canReuseLinkedFuelEntry } from "./fuel_entry_link.ts";
 import { projectFromFuelEntry } from "./odometer_ledger.ts";
 import { stampOrg, getOrgId, filterByOrg, belongsToOrg } from "./org_scope.ts";
 import {
@@ -2332,23 +2334,18 @@ async function ensureFuelEntryLinkedToTransaction(tx: any, station: any): Promis
     const linkedId = tx.metadata?.fuelEntryId;
     if (linkedId) {
         existing = await kv.get(`fuel_entry:${linkedId}`);
-        if (existing?.transactionId && existing.transactionId !== tx.id) {
-            console.warn(
-                `[BulkAssign-FuelEntry] metadata.fuelEntryId ${linkedId} mismatched transactionId ? searching by transactionId`
-            );
+        if (!canReuseLinkedFuelEntry(existing, tx.id)) {
+            if (existing) {
+                console.warn(
+                    `[BulkAssign-FuelEntry] metadata.fuelEntryId ${linkedId} mismatched transactionId ? searching by transactionId`
+                );
+            }
             existing = null;
         }
     }
 
     if (!existing) {
-        const { data: rows } = await fromKvStore()
-            .select("value")
-            .like("key", "fuel_entry:%")
-            .eq("value->>transactionId", tx.id)
-            .limit(5);
-        if (rows?.length) {
-            existing = rows[0].value;
-        }
+        existing = await findFuelEntryByTransactionId(tx.id);
     }
 
     const stationName = station.name;

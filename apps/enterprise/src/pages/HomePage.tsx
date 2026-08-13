@@ -14,7 +14,7 @@ import { FreightLandingPage } from '@/doors/freight/FreightLandingPage';
 export function HomePage() {
   const door = getProductDoor();
   if (door === 'courier') return <CourierLandingPage />;
-  if (door === 'warehouse') return <FreightLandingPage />;
+  if (door === 'freight_forwarder') return <FreightLandingPage />;
 
   return (
     <>

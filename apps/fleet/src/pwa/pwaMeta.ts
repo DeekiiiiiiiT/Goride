@@ -6,11 +6,11 @@ function enterpriseDoorAppName(): string {
   if (typeof window === 'undefined') return 'Roam Enterprise';
   const host = window.location.hostname.toLowerCase();
   if (
-    host === 'warehouse.localhost' ||
-    host.startsWith('warehouse.') ||
-    host === 'warehouse'
+    host === 'freight-forwarder.localhost' ||
+    host.startsWith('freight-forwarder.') ||
+    host === 'freight-forwarder'
   ) {
-    return 'Roam Freight Forwarding';
+    return 'Roam Freight Forwarder';
   }
   if (
     host === 'courier.localhost' ||
@@ -34,9 +34,9 @@ export function isEnterpriseOpsDoorHost(
     host === 'courier.localhost' ||
     host.startsWith('courier.') ||
     host === 'courier' ||
-    host === 'warehouse.localhost' ||
-    host.startsWith('warehouse.') ||
-    host === 'warehouse'
+    host === 'freight-forwarder.localhost' ||
+    host.startsWith('freight-forwarder.') ||
+    host === 'freight-forwarder'
   );
 }
 

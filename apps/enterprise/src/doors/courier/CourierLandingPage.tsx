@@ -126,14 +126,14 @@ export function CourierLandingPage() {
               </li>
               <li>
                 <span className="font-semibold text-[#111c2d]">Partner floors — </span>
-                Connect in-house or third-party warehouses.
+                Connect in-house or third-party freight forwarders.
               </li>
             </ul>
             <Link
               to="/connect"
               className="mt-8 inline-flex text-sm font-semibold text-[#0045a5] underline-offset-4 hover:underline"
             >
-              How warehouse partners work →
+              How freight forwarder partners work →
             </Link>
           </div>
           <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-[0_4px_20px_rgba(0,0,0,0.06)]">

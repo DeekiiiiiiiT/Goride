@@ -31,8 +31,13 @@ const lineBody = z.object({
   sortOrder: z.number().int().optional(),
 });
 
+function trackingOrNull(raw?: string | null): string | null {
+  const t = raw?.trim();
+  return t ? t : null;
+}
+
 const packageBody = z.object({
-  courierTrackingNumber: z.string().min(1).max(120),
+  courierTrackingNumber: z.string().max(120).optional().nullable(),
   description: z.string().max(500).optional().nullable(),
   weightLbs: z.number().nonnegative().optional().nullable(),
   lengthIn: z.number().nonnegative().optional().nullable(),
@@ -263,7 +268,7 @@ export function registerRetailOrderRoutes(app: FreightApp) {
           owner_org_id: user.organizationId,
           suite_id: b.suiteId,
           retail_order_id: order.id,
-          courier_tracking_number: pkgIn.courierTrackingNumber.trim(),
+          courier_tracking_number: trackingOrNull(pkgIn.courierTrackingNumber),
           description: desc,
           retailer: b.retailer?.trim() || null,
           status: "expected",
@@ -595,7 +600,7 @@ export function registerRetailOrderRoutes(app: FreightApp) {
         owner_org_id: user.organizationId,
         suite_id: order.suite_id,
         retail_order_id: orderId,
-        courier_tracking_number: b.courierTrackingNumber.trim(),
+        courier_tracking_number: trackingOrNull(b.courierTrackingNumber),
         description: desc,
         retailer: order.retailer,
         status: "expected",

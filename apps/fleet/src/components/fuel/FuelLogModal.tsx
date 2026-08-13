@@ -12,6 +12,7 @@ import { StationProfile } from '../../types/station';
 import { Plus, X, History, Loader2, MapPin, Building2, Fuel } from 'lucide-react';
 import { toast } from "sonner@2.0.3";
 import { fuelService } from '../../services/fuelService';
+import { FuelCalculationService } from '../../services/fuelCalculationService';
 import { useQuery } from '@tanstack/react-query';
 import { formatCustomerFacingFuelCardLabel } from '../../utils/fuelCardDisplay';
 
@@ -239,13 +240,22 @@ export function FuelLogModal({
         }
     }, [initialData, verifiedStations]);
 
-    // Auto-calculate Volume (Liters) if Amount and Price per Liter are present
-    const handleCalculation = (field: 'amount' | 'pricePerLiter', value: number) => {
+    const isRideShareCash = formData.type === 'rideshare_cash';
+    const isBulkRideShareCash = bulkCommon.type === 'rideshare_cash';
+
+    // RideShare Cash: cash ÷ liters → $/L. Other cash: amount ÷ $/L → liters.
+    const handleCalculation = (field: 'amount' | 'pricePerLiter' | 'liters', value: number) => {
         const updates: any = { [field]: value };
-        const currentAmount = field === 'amount' ? value : formData.amount;
-        const currentPrice = field === 'pricePerLiter' ? value : formData.pricePerLiter;
-        if (currentAmount && currentAmount > 0 && currentPrice && currentPrice > 0) {
-            updates.liters = Number((currentAmount / currentPrice).toFixed(2));
+        if (formData.type === 'rideshare_cash') {
+            const currentAmount = field === 'amount' ? value : formData.amount;
+            const currentLiters = field === 'liters' ? value : formData.liters;
+            updates.pricePerLiter = FuelCalculationService.calculatePricePerLiter(currentAmount, currentLiters) ?? 0;
+        } else {
+            const currentAmount = field === 'amount' ? value : formData.amount;
+            const currentPrice = field === 'pricePerLiter' ? value : formData.pricePerLiter;
+            if (currentAmount && currentAmount > 0 && currentPrice && currentPrice > 0) {
+                updates.liters = Number((currentAmount / currentPrice).toFixed(2));
+            }
         }
         setFormData(prev => ({ ...prev, ...updates }));
     };
@@ -277,10 +287,17 @@ export function FuelLogModal({
             const updates: any = { [field]: value };
             const numValue = typeof value === 'number' ? value : parseFloat(value) || 0;
             const currentAmount = field === 'amount' ? numValue : entry.amount;
-            const currentPrice = field === 'pricePerLiter' ? numValue : entry.pricePerLiter;
-            if (field === 'amount' || field === 'pricePerLiter') {
-                if (currentAmount > 0 && currentPrice > 0) {
-                    updates.liters = Number((currentAmount / currentPrice).toFixed(2));
+            if (bulkCommon.type === 'rideshare_cash') {
+                const currentLiters = field === 'liters' ? numValue : entry.liters;
+                if (field === 'amount' || field === 'liters') {
+                    updates.pricePerLiter = FuelCalculationService.calculatePricePerLiter(currentAmount, currentLiters) ?? 0;
+                }
+            } else {
+                const currentPrice = field === 'pricePerLiter' ? numValue : entry.pricePerLiter;
+                if (field === 'amount' || field === 'pricePerLiter') {
+                    if (currentAmount > 0 && currentPrice > 0) {
+                        updates.liters = Number((currentAmount / currentPrice).toFixed(2));
+                    }
                 }
             }
             return { ...entry, ...updates };
@@ -329,6 +346,10 @@ export function FuelLogModal({
         if (!formData.date) { toast.error("Please select a date"); return; }
         if (!formData.vehicleId) { toast.error("Please select a vehicle"); return; }
         if (!formData.amount) { toast.error("Please enter a valid amount"); return; }
+        if (isRideShareCash && !(Number(formData.liters) > 0)) {
+            toast.error("Enter liters for RideShare Cash");
+            return;
+        }
 
         const fullDate = formData.date;
         const finalTime = time ? (time.length === 5 ? `${time}:00` : time) : initialData?.time;
@@ -345,7 +366,9 @@ export function FuelLogModal({
                 : (formData.type === 'company_card' ? 'Card_Transaction' : 'Fuel_Manual_Entry'),
             amount: Number(formData.amount),
             liters: Number(formData.liters),
-            pricePerLiter: Number(formData.pricePerLiter),
+            pricePerLiter: isRideShareCash
+                ? (FuelCalculationService.calculatePricePerLiter(formData.amount, formData.liters) ?? 0)
+                : Number(formData.pricePerLiter),
             odometer: Number(formData.odometer),
             location: formData.location || '',
             stationAddress: formData.stationAddress || '',
@@ -364,7 +387,9 @@ export function FuelLogModal({
             bypassSignatureCheck: !!initialData,
             metadata: {
                 ...(initialData?.metadata || {}),
-                pricePerLiter: Number(formData.pricePerLiter),
+                pricePerLiter: isRideShareCash
+                    ? (FuelCalculationService.calculatePricePerLiter(formData.amount, formData.liters) ?? 0)
+                    : Number(formData.pricePerLiter),
                 editReason: formData.editReason,
                 source: 'Fuel Log',
                 portal_type: 'Manual_Entry',
@@ -398,6 +423,10 @@ export function FuelLogModal({
 
         const validEntries = bulkEntries.filter(e => e.amount > 0 && e.date);
         if (validEntries.length === 0) { toast.error("Please add at least one valid entry (Amount > 0)"); return; }
+        if (isBulkRideShareCash && validEntries.some(e => !(e.liters > 0))) {
+            toast.error("Enter liters for each RideShare Cash row");
+            return;
+        }
 
         const entries: any[] = validEntries.map(row => ({
             id: row.id,
@@ -405,7 +434,9 @@ export function FuelLogModal({
             type: bulkCommon.type === 'company_card' ? 'Card_Transaction' : 'Fuel_Manual_Entry',
             amount: row.amount,
             liters: row.liters,
-            pricePerLiter: row.pricePerLiter,
+            pricePerLiter: isBulkRideShareCash
+                ? (FuelCalculationService.calculatePricePerLiter(row.amount, row.liters) ?? 0)
+                : row.pricePerLiter,
             odometer: row.odometer,
             location: row.location,
             stationAddress: row.stationAddress,
@@ -416,7 +447,9 @@ export function FuelLogModal({
             matchedStationId: row.matchedStationId || undefined,
             entrySource: 'bulk-import',
             metadata: {
-                pricePerLiter: row.pricePerLiter,
+                pricePerLiter: isBulkRideShareCash
+                    ? (FuelCalculationService.calculatePricePerLiter(row.amount, row.liters) ?? 0)
+                    : row.pricePerLiter,
                 source: 'Bulk Log',
                 portal_type: 'Manual_Entry',
                 isManual: true,
@@ -564,24 +597,45 @@ export function FuelLogModal({
 
                             <div className="grid grid-cols-3 gap-4">
                                 <div className="space-y-2">
-                                    <Label htmlFor="amount">Total Cost ($)</Label>
+                                    <Label htmlFor="amount">{isRideShareCash ? 'Cash Amount ($)' : 'Total Cost ($)'}</Label>
                                     <Input id="amount" type="number" step="0.01" placeholder="0.00"
                                         value={formData.amount}
                                         onChange={(e) => handleCalculation('amount', parseFloat(e.target.value))}
                                     />
                                 </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="liters">Volume (L)</Label>
-                                    <Input id="liters" type="number" disabled className="bg-slate-50"
-                                        placeholder="Calculated" value={formData.liters || ''}
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Input id="price" type="number" step="0.001" placeholder="0.000"
-                                        value={formData.pricePerLiter || ''}
-                                        onChange={(e) => handleCalculation('pricePerLiter', parseFloat(e.target.value))}
-                                    />
-                                </div>
+                                {isRideShareCash ? (
+                                    <>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="liters">Volume (L)</Label>
+                                            <Input id="liters" type="number" step="0.001" placeholder="0.000"
+                                                value={formData.liters || ''}
+                                                onChange={(e) => handleCalculation('liters', parseFloat(e.target.value))}
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="price">Price ($/L)</Label>
+                                            <Input id="price" disabled className="bg-slate-50"
+                                                value={formData.pricePerLiter ? `$${Number(formData.pricePerLiter).toFixed(3)}` : '—'}
+                                            />
+                                        </div>
+                                    </>
+                                ) : (
+                                    <>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="liters">Volume (L)</Label>
+                                            <Input id="liters" type="number" disabled className="bg-slate-50"
+                                                placeholder="Calculated" value={formData.liters || ''}
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="price">Price ($/L)</Label>
+                                            <Input id="price" type="number" step="0.001" placeholder="0.000"
+                                                value={formData.pricePerLiter || ''}
+                                                onChange={(e) => handleCalculation('pricePerLiter', parseFloat(e.target.value))}
+                                            />
+                                        </div>
+                                    </>
+                                )}
                             </div>
 
                             <div className="space-y-2">
@@ -804,8 +858,8 @@ export function FuelLogModal({
                             <div className="space-y-2">
                                 <div className="grid grid-cols-12 gap-2 text-xs font-medium text-slate-500 px-2">
                                     <div className="col-span-2">Date</div>
-                                    <div className="col-span-1">Amount ($)</div>
-                                    <div className="col-span-1">Fuel Price</div>
+                                    <div className="col-span-1">{isBulkRideShareCash ? 'Cash $' : 'Amount ($)'}</div>
+                                    <div className="col-span-1">{isBulkRideShareCash ? 'Liters' : 'Fuel Price'}</div>
                                     <div className="col-span-1">Odometer</div>
                                     <div className="col-span-3">Gas Station</div>
                                     <div className="col-span-3">Address</div>
@@ -829,11 +883,19 @@ export function FuelLogModal({
                                                 />
                                             </div>
                                             <div className="col-span-1">
-                                                <Input type="number" step="0.001" placeholder="0.000"
-                                                    value={entry.pricePerLiter || ''}
-                                                    onChange={(e) => updateBulkEntry(entry.id, 'pricePerLiter', parseFloat(e.target.value))}
-                                                    className="h-9 text-sm px-2"
-                                                />
+                                                {isBulkRideShareCash ? (
+                                                    <Input type="number" step="0.001" placeholder="0.000"
+                                                        value={entry.liters || ''}
+                                                        onChange={(e) => updateBulkEntry(entry.id, 'liters', parseFloat(e.target.value))}
+                                                        className="h-9 text-sm px-2"
+                                                    />
+                                                ) : (
+                                                    <Input type="number" step="0.001" placeholder="0.000"
+                                                        value={entry.pricePerLiter || ''}
+                                                        onChange={(e) => updateBulkEntry(entry.id, 'pricePerLiter', parseFloat(e.target.value))}
+                                                        className="h-9 text-sm px-2"
+                                                    />
+                                                )}
                                             </div>
                                             <div className="col-span-1">
                                                 <Input type="number" placeholder="Odo"

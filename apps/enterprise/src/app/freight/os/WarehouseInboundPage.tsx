@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useWarehouseCourierLinks } from '@/app/hooks/useWarehouseCourierLinks';
 import { freightService } from '@/app/services/freightService';
-import { DOC_ROLE } from '@/app/freight/os/packageDuty/docRoles';
+import { AddWarehouseBuildingPanel } from '@/app/freight/os/AddWarehouseBuildingPanel';
+import { FREIGHT_FORWARDER_PATH } from '@/app/productDoor';
 
 function awaitingInvoice(p: Record<string, unknown>): boolean {
   return (
@@ -17,24 +18,40 @@ function awaitingInvoice(p: Record<string, unknown>): boolean {
 function PackageTable({
   rows,
   empty,
+  emptyAction,
   showFloorActions,
   showCourier,
   courierNames,
   onToggleInvoice,
   onUploadSlip,
   busyId,
+  onOpenReceive,
 }: {
   rows: Record<string, unknown>[];
   empty: string;
+  emptyAction?: { to: string; label: string };
   showFloorActions?: boolean;
   showCourier?: boolean;
   courierNames?: Record<string, string>;
   onToggleInvoice?: (id: string, next: boolean) => void;
   onUploadSlip?: (id: string, file: File) => void;
   busyId?: string | null;
+  onOpenReceive: (tracking: string) => void;
 }) {
   if (rows.length === 0) {
-    return <p className="px-6 py-10 text-center text-sm text-slate-500">{empty}</p>;
+    return (
+      <div className="px-6 py-10 text-center">
+        <p className="text-sm text-slate-500">{empty}</p>
+        {emptyAction ? (
+          <Link
+            to={emptyAction.to}
+            className="mt-3 inline-flex min-h-11 items-center rounded-lg bg-amber-500 px-4 py-3 text-sm font-semibold text-slate-950 hover:bg-amber-400"
+          >
+            {emptyAction.label}
+          </Link>
+        ) : null}
+      </div>
+    );
   }
 
   return (
@@ -45,7 +62,7 @@ function PackageTable({
           {showCourier ? <th className="px-4 py-2">Courier</th> : null}
           <th className="px-4 py-2">Retailer</th>
           <th className="px-4 py-2">Status</th>
-          <th className="px-4 py-2">Customer invoice</th>
+          <th className="px-4 py-2">Invoice flag</th>
           <th className="px-4 py-2">Weight</th>
           <th className="px-4 py-2">Dims</th>
           <th className="px-4 py-2">Bin</th>
@@ -61,10 +78,18 @@ function PackageTable({
             p.length_in != null || p.width_in != null || p.height_in != null
               ? `${p.length_in ?? '—'}×${p.width_in ?? '—'}×${p.height_in ?? '—'}`
               : '—';
+          const tracking = String(p.courier_tracking_number || '');
           return (
-            <tr key={id} className="border-t border-slate-100">
-              <td className="px-4 py-2.5 font-mono text-xs">
-                {String(p.courier_tracking_number ?? p.id)}
+            <tr
+              key={id}
+              className={`${tracking ? 'cursor-pointer' : ''} border-t border-slate-100 hover:bg-slate-50`}
+              onClick={() => {
+                if (!tracking) return;
+                onOpenReceive(tracking);
+              }}
+            >
+              <td className="px-4 py-3 font-mono text-xs">
+                {tracking || 'No tracking yet'}
               </td>
               {showCourier ? (
                 <td className="px-4 py-2.5 text-slate-700">
@@ -82,10 +107,10 @@ function PackageTable({
                   </span>
                 ) : p.invoice_required_from_customer ? (
                   <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
-                    Soft hold cleared
+                    Cleared
                   </span>
                 ) : (
-                  <span className="text-xs text-slate-400">No soft hold</span>
+                    <span className="text-xs text-slate-400">—</span>
                 )}
               </td>
               <td className="px-4 py-2.5 tabular-nums">
@@ -96,19 +121,19 @@ function PackageTable({
                 {String(p.bin_location ?? '—')}
               </td>
               {showFloorActions ? (
-                <td className="px-4 py-2.5">
+                <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                   <div className="flex flex-col gap-1.5">
-                    <label className="inline-flex items-center gap-1.5 text-xs text-slate-700">
+                    <label className="inline-flex min-h-11 items-center gap-1.5 text-xs text-slate-700">
                       <input
                         type="checkbox"
                         checked={Boolean(p.invoice_required_from_customer)}
                         disabled={busyId === id}
                         onChange={(e) => onToggleInvoice?.(id, e.target.checked)}
                       />
-                      Customer invoice required (soft)
+                      Ask courier for customer invoice
                     </label>
-                    <label className="cursor-pointer text-xs font-medium text-amber-800 underline">
-                      {busyId === id ? 'Saving…' : `Upload ${DOC_ROLE.warehouse_slip.shortLabel.toLowerCase()}`}
+                    <label className="inline-flex min-h-11 cursor-pointer items-center text-xs font-medium text-amber-800 underline">
+                      {busyId === id ? 'Saving…' : 'Upload packing slip'}
                       <input
                         type="file"
                         accept="application/pdf,image/*"
@@ -140,6 +165,7 @@ export function WarehouseInboundPage({
   embedded?: boolean;
   showCourier?: boolean;
 }) {
+  const navigate = useNavigate();
   const { organizationId, session } = useAuth();
   const qc = useQueryClient();
   const [facilityFilter, setFacilityFilter] = useState('');
@@ -181,7 +207,7 @@ export function WarehouseInboundPage({
     ],
     queryFn: () =>
       freightService.listPackages(organizationId, undefined, {
-        ...(embedded ? {} : { scope: 'warehouse' as const }),
+        ...(embedded ? {} : { scope: 'warehouse-desk' as const }),
         ...(ownerOrgFilter ? { ownerOrgId: ownerOrgFilter } : {}),
       }),
     enabled: Boolean(session),
@@ -191,13 +217,7 @@ export function WarehouseInboundPage({
   const expected = rows.filter((p) => String(p.status) === 'expected');
   const onFloor = rows.filter((p) => String(p.status) === 'received_at_warehouse');
 
-  const expectedFiltered = facilityFilter
-    ? expected.filter(
-        (p) =>
-          String(p.intended_facility_id ?? '') === facilityFilter ||
-          p.intended_facility_id == null,
-      )
-    : expected;
+  const expectedFiltered = expected;
   const onFloorFiltered = facilityFilter
     ? onFloor.filter(
         (p) =>
@@ -246,38 +266,50 @@ export function WarehouseInboundPage({
         )
       : null;
 
+  const receivePath = embedded ? '/app/receive?tab=station' : `${FREIGHT_FORWARDER_PATH}/receive`;
+  function openReceive(tracking: string) {
+    const sep = receivePath.includes('?') ? '&' : '?';
+    navigate(`${receivePath}${sep}tracking=${encodeURIComponent(tracking)}`);
+  }
+
+  const warehouseCount = (facilities.data?.facilities ?? []).length;
+
   return (
     <div className="space-y-6">
       {!embedded ? (
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="text-2xl font-semibold text-slate-900">Inbound</h1>
-            <p className="mt-1 text-sm text-slate-500">
-              Expected inbound + packages on the floor
-            </p>
+            <p className="mt-1 text-sm text-slate-500">Coming in, then on the floor.</p>
           </div>
           <Link
-            to="/warehouse/receive"
-            className="rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-semibold text-slate-950 hover:bg-amber-400"
+            to={`${FREIGHT_FORWARDER_PATH}/receive`}
+            className="inline-flex min-h-11 items-center rounded-lg bg-amber-500 px-4 py-3 text-sm font-semibold text-slate-950 hover:bg-amber-400"
           >
             Open Receive Station
           </Link>
         </div>
       ) : (
-        <p className="text-sm text-slate-500">
-          Expected inbound + packages on the floor
-        </p>
+        <p className="text-sm text-slate-500">Coming in, then on the floor.</p>
       )}
+
+      {!embedded && warehouseCount === 0 ? (
+        <AddWarehouseBuildingPanel
+          onCreated={() => {
+            void qc.invalidateQueries({ queryKey: ['freight', 'facilities'] });
+          }}
+        />
+      ) : null}
 
       <div className="flex flex-wrap gap-4">
         <div className="min-w-[12rem] max-w-sm flex-1">
-          <label className="text-xs font-medium text-slate-500">Warehouse filter</label>
+          <label className="text-xs font-medium text-slate-500">Our building (on floor)</label>
           <select
             value={facilityFilter}
             onChange={(e) => setFacilityFilter(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            className="mt-1 w-full min-h-11 rounded-lg border border-slate-300 px-3 py-3 text-sm"
           >
-            <option value="">All warehouses</option>
+            <option value="">All buildings</option>
             {Object.entries(warehousesByCountry)
               .sort(([a], [b]) => a.localeCompare(b))
               .map(([cc, list]) => (
@@ -293,11 +325,11 @@ export function WarehouseInboundPage({
         </div>
         {activeCourierLinks.length > 0 ? (
           <div className="min-w-[12rem] max-w-sm flex-1">
-            <label className="text-xs font-medium text-slate-500">Courier / owner</label>
+            <label className="text-xs font-medium text-slate-500">Which courier</label>
             <select
               value={ownerOrgFilter}
               onChange={(e) => setOwnerOrgFilter(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              className="mt-1 w-full min-h-11 rounded-lg border border-slate-300 px-3 py-3 text-sm"
             >
               <option value="">All couriers</option>
               {activeCourierLinks.map((link) => {
@@ -333,13 +365,15 @@ export function WarehouseInboundPage({
           <h2 className="text-sm font-semibold text-slate-800">
             Expected (incoming) · {expectedFiltered.length}
           </h2>
-          <p className="text-xs text-slate-500">Pre-alerts assigned to this warehouse</p>
+          <p className="text-xs text-slate-500">Courier said these parcels are coming</p>
         </div>
         <PackageTable
           rows={expectedFiltered}
-          empty="No expected packages yet."
+          empty="Waiting for the courier to tell us a parcel is coming."
+          emptyAction={{ to: receivePath, label: 'Open Receive Station' }}
           showCourier={showCourierCol}
           courierNames={courierNames}
+          onOpenReceive={openReceive}
         />
       </section>
 
@@ -348,19 +382,19 @@ export function WarehouseInboundPage({
           <h2 className="text-sm font-semibold text-slate-800">
             On floor (received) · {onFloorFiltered.length}
           </h2>
-          <p className="text-xs text-slate-500">
-            Soft invoice flag — toggle anytime; does not lock the box
-          </p>
+          <p className="text-xs text-slate-500">Tap a row to receive again or add a packing slip</p>
         </div>
         <PackageTable
           rows={onFloorFiltered}
           empty="No packages on the floor yet. Scan at Receive Station."
+          emptyAction={{ to: receivePath, label: 'Open Receive Station' }}
           showFloorActions
           showCourier={showCourierCol}
           courierNames={courierNames}
           busyId={busyId}
           onToggleInvoice={(id, next) => flagMut.mutate({ id, next })}
           onUploadSlip={(id, file) => slipMut.mutate({ id, file })}
+          onOpenReceive={openReceive}
         />
       </section>
     </div>

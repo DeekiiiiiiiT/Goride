@@ -90,7 +90,7 @@ export const ROAM_ENTERPRISE_CHILDREN: NavChild[] = [
   { id: 'enterprise-overview', label: 'Overview', icon: BarChart3 },
   { id: 'enterprise-customers', label: 'Customer Accounts', icon: Users },
   { id: 'enterprise-team-members', label: 'Team Members', icon: UserCog },
-  { id: 'enterprise-intake-warehouses', label: 'Warehouses', icon: Building2 },
+  { id: 'enterprise-intake-warehouses', label: 'Freight forwarder buildings', icon: Building2 },
   ...ENTERPRISE_SETTINGS_CHILDREN,
 ];
 

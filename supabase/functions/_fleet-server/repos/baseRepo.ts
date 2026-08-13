@@ -6,6 +6,9 @@ import { getServiceClient } from "../service_client.ts";
 import { FLEET_DOMAINS, type FleetDomainDef, resolveDomain } from "../fleet_domains.ts";
 import type { FleetDomain } from "../fleet_table_flags.ts";
 import { isFleetReadTableEnabled } from "../fleet_table_flags.ts";
+import { resolveFleetColumn } from "./fleet_column_map.ts";
+
+export { resolveFleetColumn };
 
 export function fleetDb() {
   return getServiceClient();
@@ -48,82 +51,8 @@ export function rowToKvValue(row: Record<string, unknown>): Record<string, unkno
   if (payload.isVoided == null && row.is_voided != null) payload.isVoided = row.is_voided;
   if (payload.isAnomaly == null && row.is_anomaly != null) payload.isAnomaly = row.is_anomaly;
   if (payload.isHard == null && row.is_hard != null) payload.isHard = row.is_hard;
+  if (!payload.transactionId && row.transaction_id) payload.transactionId = row.transaction_id;
   return payload;
-}
-
-/** Map legacy PostgREST `value->>field` / camelCase names onto real fleet columns. */
-const COLUMN_ALIASES: Record<string, string> = {
-  organizationId: "organization_id",
-  organization_id: "organization_id",
-  "value->>organizationId": "organization_id",
-  driverId: "driver_id",
-  driver_id: "driver_id",
-  "value->>driverId": "driver_id",
-  vehicleId: "vehicle_id",
-  vehicle_id: "vehicle_id",
-  "value->>vehicleId": "vehicle_id",
-  batchId: "batch_id",
-  batch_id: "batch_id",
-  "value->>batchId": "batch_id",
-  tripId: "trip_id",
-  trip_id: "trip_id",
-  "value->>tripId": "trip_id",
-  date: "date",
-  "value->>date": "date",
-  status: "status",
-  "value->>status": "status",
-  platform: "platform",
-  "value->>platform": "platform",
-  type: "type",
-  "value->>type": "type",
-  category: "category",
-  "value->>category": "category",
-  uploadDate: "upload_date",
-  "value->>uploadDate": "upload_date",
-  cardId: "card_id",
-  "value->>cardId": "card_id",
-  tollTagId: "toll_tag_id",
-  "value->>tollTagId": "toll_tag_id",
-  plazaId: "plaza_id",
-  "value->>plazaId": "plaza_id",
-  idempotencyKey: "idempotency_key",
-  "value->>idempotencyKey": "idempotency_key",
-  reportingAt: "reporting_at",
-  "value->>reportingAt": "reporting_at",
-  incurredDate: "incurred_date",
-  "value->>incurredDate": "incurred_date",
-  paymentDate: "payment_date",
-  "value->>paymentDate": "payment_date",
-  readingDate: "reading_date",
-  reading_date: "reading_date",
-  "value->>readingDate": "reading_date",
-  "value->>reading_date": "reading_date",
-  recordedAt: "recorded_at",
-  recorded_at: "recorded_at",
-  "value->>recordedAt": "recorded_at",
-  referenceId: "reference_id",
-  reference_id: "reference_id",
-  "value->>referenceId": "reference_id",
-  referenceType: "reference_type",
-  isHard: "is_hard",
-  isVerified: "is_verified",
-  isVoided: "is_voided",
-  isAnomaly: "is_anomaly",
-  documentId: "document_id",
-  "value->>documentId": "document_id",
-  vendorId: "vendor_id",
-  "value->>vendorId": "vendor_id",
-  licensePlate: "license_plate",
-  "value->>licensePlate": "license_plate",
-  legacy_kv_id: "legacy_kv_id",
-  key: "legacy_kv_id",
-};
-
-export function resolveFleetColumn(col: string): string | null {
-  if (COLUMN_ALIASES[col]) return COLUMN_ALIASES[col];
-  // bare snake_case columns already on tables
-  if (/^[a-z][a-z0-9_]*$/.test(col)) return col;
-  return null;
 }
 
 export type FleetQueryFilter =

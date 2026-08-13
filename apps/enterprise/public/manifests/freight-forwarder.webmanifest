@@ -1,8 +1,8 @@
 {
-  "id": "/?product=warehouse",
-  "name": "Roam Freight Forwarding",
-  "short_name": "Freight Floor",
-  "description": "Roam Freight Forwarding — US intake receive floor for linked couriers.",
+  "id": "/?product=freight-forwarder",
+  "name": "Roam Freight Forwarder",
+  "short_name": "Freight Forwarder",
+  "description": "Roam Freight Forwarder — intake, receive, and partner floor for linked couriers.",
   "theme_color": "#0f172a",
   "background_color": "#0f172a",
   "display": "standalone",

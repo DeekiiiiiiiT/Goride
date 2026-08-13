@@ -5,7 +5,7 @@ export function FreightHowItWorksPage() {
   const sections = [
     {
       title: 'Scan & receive station',
-      body: 'High-velocity intake with industrial scan flows designed for US warehouse floors.',
+      body: 'High-velocity intake with industrial scan flows designed for US freight-forwarder floors.',
     },
     {
       title: 'Floor inventory with courier ownership',
@@ -33,7 +33,7 @@ export function FreightHowItWorksPage() {
             Floor operations
           </p>
           <h1 className="mt-4 max-w-3xl text-4xl font-bold text-white md:text-5xl">
-            The precision engine for US warehouse intake.
+            The precision engine for US freight-forwarder intake.
           </h1>
         </div>
       </section>

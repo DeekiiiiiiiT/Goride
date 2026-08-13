@@ -183,7 +183,7 @@ export function registerCourierOsRoutes(app: FreightApp) {
       return oldest;
     };
 
-    // Invoice audit spirit: required + missing + mismatch (unverified), not unobtainable/ready
+    // Needs invoice = no customer file yet (order-level upload counts). Verified/unobtainable/on-file are not missing.
     const invoiceEligibleStatuses = new Set([
       "expected",
       "received_at_warehouse",
@@ -192,13 +192,8 @@ export function registerCourierOsRoutes(app: FreightApp) {
     const needsInvoiceRows = ((pkgs ?? []) as PkgRow[]).filter((p) => {
       if (!invoiceEligibleStatuses.has(String(p.status ?? ""))) return false;
       const { hasCustomer, unobtainable, verified } = packageHasInvoice(p);
-      const required = Boolean(p.invoice_required_from_customer);
-      if (verified || unobtainable) return false;
-      // required (flagged, no file) | missing (no file) | mismatch (has file, not verified)
-      if (required && !hasCustomer) return true;
-      if (!hasCustomer && !required) return true;
-      if (hasCustomer) return true;
-      return false;
+      if (verified || unobtainable || hasCustomer) return false;
+      return true;
     });
 
     const { data: dutyRows } = await freightDb()
@@ -501,31 +496,56 @@ export function registerCourierOsRoutes(app: FreightApp) {
     const { data, error } = await freightDb()
       .from("packages")
       .select(
-        "id, courier_tracking_number, declared_value_usd_minor, weight_lbs, invoice_storage_path, invoice_file_name, invoice_verified_at, warehouse_invoice_storage_path, warehouse_invoice_file_name, invoice_required_from_customer, invoice_unobtainable_at, invoice_unobtainable_note, status, suites(suite_code)",
+        "id, courier_tracking_number, declared_value_usd_minor, weight_lbs, invoice_storage_path, invoice_file_name, invoice_verified_at, warehouse_invoice_storage_path, warehouse_invoice_file_name, invoice_required_from_customer, invoice_unobtainable_at, invoice_unobtainable_note, status, retail_order_id, suites(suite_code), retail_orders(invoice_storage_path, invoice_file_name, invoice_verified_at, invoice_unobtainable_at)",
       )
       .eq("organization_id", user.organizationId)
       .in("status", ["expected", "received_at_warehouse", "exception"])
       .order("updated_at", { ascending: false })
       .limit(200);
     if (error) return c.json({ error: error.message }, 500);
-    const filtered = (data ?? []).filter((p) => {
-      const hasCustomer = Boolean(p.invoice_storage_path || p.invoice_file_name);
-      const unobtainable = Boolean(p.invoice_unobtainable_at);
+
+    type AuditTab = "required" | "missing" | "mismatch" | "unobtainable" | "ready";
+    const classify = (p: (typeof data)[number]): AuditTab | null => {
+      const order = (p as {
+        retail_orders?: {
+          invoice_storage_path?: string | null;
+          invoice_file_name?: string | null;
+          invoice_verified_at?: string | null;
+          invoice_unobtainable_at?: string | null;
+        } | null;
+      }).retail_orders;
+      const hasCustomer = Boolean(
+        p.invoice_storage_path ||
+          p.invoice_file_name ||
+          order?.invoice_storage_path ||
+          order?.invoice_file_name,
+      );
+      const unobtainable = Boolean(
+        p.invoice_unobtainable_at || order?.invoice_unobtainable_at,
+      );
+      const verified = Boolean(p.invoice_verified_at || order?.invoice_verified_at);
       const required = Boolean(p.invoice_required_from_customer);
-      if (tab === "required") {
-        return required && !hasCustomer && !unobtainable && !p.invoice_verified_at;
-      }
-      if (tab === "unobtainable") return unobtainable && !p.invoice_verified_at;
-      if (tab === "missing") {
-        return !hasCustomer && !unobtainable && !required;
-      }
-      if (tab === "ready") {
-        return Boolean(p.invoice_verified_at) || unobtainable;
-      }
-      // mismatch / unverified — has customer file, not verified, not unobtainable
-      return hasCustomer && !p.invoice_verified_at && !unobtainable;
-    });
-    return c.json({ packages: filtered });
+      if (verified) return "ready";
+      if (unobtainable) return "unobtainable";
+      if (required && !hasCustomer) return "required";
+      if (!hasCustomer) return "missing";
+      return "mismatch";
+    };
+
+    const counts: Record<AuditTab, number> = {
+      required: 0,
+      missing: 0,
+      mismatch: 0,
+      unobtainable: 0,
+      ready: 0,
+    };
+    for (const p of data ?? []) {
+      const bucket = classify(p);
+      if (bucket) counts[bucket] += 1;
+    }
+
+    const filtered = (data ?? []).filter((p) => classify(p) === tab);
+    return c.json({ packages: filtered, counts });
   });
 
   /** Multipart invoice attach — slot=warehouse|customer (default customer). */

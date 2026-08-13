@@ -402,6 +402,7 @@
             "npm:openai@*",
             "npm:papaparse@*",
             "npm:pdfjs-dist@*",
+            "npm:qrcode.react@^4.2.0",
             "npm:react-day-picker@^8.10.1",
             "npm:react-dom@^18.3.1",
             "npm:react-dropzone@*",

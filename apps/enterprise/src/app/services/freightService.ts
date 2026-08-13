@@ -249,7 +249,7 @@ export const freightService = {
     opts?: {
       intendedFacilityId?: string;
       ownerOrgId?: string;
-      scope?: 'owner' | 'warehouse' | 'all';
+      scope?: 'owner' | 'warehouse' | 'warehouse-desk' | 'all';
     },
   ) => {
     const qs = new URLSearchParams();
@@ -263,6 +263,12 @@ export const freightService = {
       { organizationId },
     );
   },
+
+  lookupPackageByTracking: (barcode: string, organizationId?: string | null) =>
+    freightFetch<{ package: Record<string, unknown> | null; matched: boolean }>(
+      `/packages/lookup?barcode=${encodeURIComponent(barcode.trim())}`,
+      { organizationId },
+    ),
 
   listPreAlerts: (
     organizationId?: string | null,
@@ -752,10 +758,10 @@ export const freightService = {
     }),
 
   invoiceAuditQueue: (tab: string, organizationId?: string | null) =>
-    freightFetch<{ packages: Record<string, unknown>[] }>(
-      `/packages/invoice-audit?tab=${encodeURIComponent(tab)}`,
-      { organizationId },
-    ),
+    freightFetch<{
+      packages: Record<string, unknown>[];
+      counts?: Record<string, number>;
+    }>(`/packages/invoice-audit?tab=${encodeURIComponent(tab)}`, { organizationId }),
 
   /** Multipart commercial invoice → org Files + package invoice fields. */
   uploadPackageInvoice: async (

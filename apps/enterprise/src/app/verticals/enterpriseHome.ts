@@ -2,6 +2,7 @@ import {
   resolveEnterpriseSeatRole,
   type EnterpriseSeatRole,
 } from '@roam/auth-client';
+import { FREIGHT_FORWARDER_PATH } from '@/app/productDoor';
 
 export type EnterpriseHomeInput = {
   rawRole?: string | null;
@@ -13,26 +14,26 @@ export type EnterpriseHomeInput = {
 export function resolveEnterpriseHomePath(
   rawRoleOrInput: string | null | undefined | EnterpriseHomeInput,
   maybeBusinessType?: string | null,
-): '/app' | '/warehouse' {
+): '/app' | typeof FREIGHT_FORWARDER_PATH {
   const input: EnterpriseHomeInput =
     typeof rawRoleOrInput === 'object' && rawRoleOrInput !== null
       ? rawRoleOrInput
       : { rawRole: rawRoleOrInput, businessType: maybeBusinessType };
 
   const seat = resolveEnterpriseSeatRole(input.rawRole);
-  if (seat === 'enterprise_warehouse') return '/warehouse';
+  if (seat === 'enterprise_warehouse') return FREIGHT_FORWARDER_PATH;
 
   const products = input.subscribedProducts || [];
   const bt = input.businessType || '';
 
   if (bt === 'warehouse' || (products.includes('warehouse') && !products.includes('courier'))) {
-    return '/warehouse';
+    return FREIGHT_FORWARDER_PATH;
   }
 
   return '/app';
 }
 
-/** Warehouse vertical: floor seats + warehouse orgs + owners/customs running receive. */
+/** Freight Forwarder vertical: floor seats + freight-forwarder orgs + owners/customs running receive. */
 export function canAccessWarehouseVertical(
   seatRole: EnterpriseSeatRole,
   opts?: { businessType?: string | null; subscribedProducts?: string[] | null },

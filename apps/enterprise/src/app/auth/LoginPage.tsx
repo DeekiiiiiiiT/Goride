@@ -24,10 +24,10 @@ export function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
 
   const door = getProductDoor();
-  const isFreight = door === 'warehouse';
+  const isFreight = door === 'freight_forwarder';
   const isCourier = door === 'courier';
   const brandName = isFreight
-    ? 'Roam Freight Forwarding'
+    ? 'Roam Freight Forwarder'
     : isCourier
       ? 'Roam Courier'
       : 'Roam Enterprise';
@@ -145,7 +145,7 @@ export function LoginPage() {
             }}
           >
             {isFreight
-              ? 'US intake floor for partner couriers'
+              ? 'US intake floor for freight forwarders'
               : 'Ops for international packages'}
           </p>
         </div>
@@ -186,7 +186,7 @@ export function LoginPage() {
             setEmail={setEmail}
             setPassword={setPassword}
             onSubmit={onSubmit}
-            submitLabel={isFreight ? 'Sign in to Floor' : 'Sign in'}
+            submitLabel={isFreight ? 'Sign in' : 'Sign in'}
             variant={isFreight ? 'freight' : 'courier'}
           />
         </div>

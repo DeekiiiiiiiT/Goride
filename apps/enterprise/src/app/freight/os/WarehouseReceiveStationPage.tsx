@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useWarehouseCourierLinks } from '@/app/hooks/useWarehouseCourierLinks';
 import { freightService } from '@/app/services/freightService';
-import { DOC_ROLE } from '@/app/freight/os/packageDuty/docRoles';
+import { AddWarehouseBuildingPanel } from '@/app/freight/os/AddWarehouseBuildingPanel';
 import {
   ScanBarcodeField,
   ScanDetailsDisclosure,
@@ -11,10 +12,18 @@ import {
   ScanStatusFlash,
 } from '@/app/freight/os/scan';
 
+const fieldClass =
+  'mt-1 w-full min-h-11 rounded-lg border border-slate-300 px-3 py-3 text-sm';
+
+type LookupPkg = Record<string, unknown> & {
+  suites?: { suite_code?: string; contact_name?: string } | null;
+};
+
 /** Gun-friendly Warehouse Receive Station — wired to /scans. */
 export function WarehouseReceiveStationPage({ embedded = false }: { embedded?: boolean }) {
   const { organizationId, session } = useAuth();
   const qc = useQueryClient();
+  const [params, setParams] = useSearchParams();
   const barcodeRef = useRef<HTMLInputElement>(null);
   const [barcode, setBarcode] = useState('');
   const [weightLbs, setWeightLbs] = useState('');
@@ -31,6 +40,9 @@ export function WarehouseReceiveStationPage({ embedded = false }: { embedded?: b
   const [warehouseSlip, setWarehouseSlip] = useState<File | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
   const [flashTone, setFlashTone] = useState<ScanFlashTone>('ok');
+  const [lookupPkg, setLookupPkg] = useState<LookupPkg | null>(null);
+  const [lookupDone, setLookupDone] = useState(false);
+  const [lookupBusy, setLookupBusy] = useState(false);
 
   const clearFlash = useCallback(() => setFlash(null), []);
   const linksQ = useWarehouseCourierLinks();
@@ -52,12 +64,15 @@ export function WarehouseReceiveStationPage({ embedded = false }: { embedded?: b
     enabled: Boolean(session),
   });
 
-  useEffect(() => {
-    const first = facilities.data?.facilities?.[0];
-    if (first && !facilityId) setFacilityId(String(first.id));
-  }, [facilities.data, facilityId]);
+  const warehouseList = (facilities.data?.facilities ?? []) as Record<string, unknown>[];
+  const hasBuilding = warehouseList.length > 0;
 
-  // Default owner to this org (in-house) when links load
+  useEffect(() => {
+    const list = (facilities.data?.facilities ?? []) as Record<string, unknown>[];
+    const first = list[0];
+    if (first && !facilityId) setFacilityId(String(first.id));
+  }, [facilities.data?.facilities, facilityId]);
+
   useEffect(() => {
     if (ownerOrgId || !organizationId) return;
     const selfLink = activeCourierLinks.find((l) => l.is_self);
@@ -78,14 +93,39 @@ export function WarehouseReceiveStationPage({ embedded = false }: { embedded?: b
     setOwnerOrgId(organizationId);
   }, [activeCourierLinks, organizationId, ownerOrgId]);
 
-  const warehousesByCountry = (
-    (facilities.data?.facilities ?? []) as Record<string, unknown>[]
-  ).reduce<Record<string, Record<string, unknown>[]>>((acc, f) => {
+  const trackingFromUrl = params.get('tracking');
+  useEffect(() => {
+    const t = trackingFromUrl?.trim();
+    if (!t) return;
+    setBarcode(t);
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('tracking');
+        return next;
+      },
+      { replace: true },
+    );
+  }, [trackingFromUrl, setParams]);
+
+  const warehousesByCountry = warehouseList.reduce<
+    Record<string, Record<string, unknown>[]>
+  >((acc, f) => {
     const cc = String(f.country_code || '??').toUpperCase();
     if (!acc[cc]) acc[cc] = [];
     acc[cc].push(f);
     return acc;
   }, {});
+
+  const courierNameById = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const link of activeCourierLinks) {
+      const id = String(link.courier_org_id ?? link.courier_org?.id ?? '');
+      if (!id) continue;
+      map[id] = link.is_self ? 'In-house' : String(link.courier_org?.name || 'Courier');
+    }
+    return map;
+  }, [activeCourierLinks]);
 
   const declaredUsdNum = declaredUsd.trim() === '' ? null : Number(declaredUsd);
   const declaredValueUsdMinor =
@@ -110,6 +150,52 @@ export function WarehouseReceiveStationPage({ embedded = false }: { embedded?: b
       setSuiteScan('');
     }
   }
+
+  async function lookupTracking(code: string) {
+    const trimmed = code.trim();
+    if (!trimmed) {
+      setLookupPkg(null);
+      setLookupDone(false);
+      return null;
+    }
+    setLookupBusy(true);
+    try {
+      const res = await freightService.lookupPackageByTracking(trimmed, organizationId);
+      const pkg = res.matched ? ((res.package ?? null) as LookupPkg | null) : null;
+      setLookupPkg(pkg);
+      setLookupDone(true);
+      if (pkg) {
+        const codeFromPkg = String(pkg.suites?.suite_code || '').trim();
+        if (codeFromPkg) setSuiteCode(codeFromPkg);
+        const owner = String(pkg.owner_org_id ?? pkg.organization_id ?? '');
+        if (owner) setOwnerOrgId(owner);
+        if (pkg.weight_lbs != null && !weightLbs) setWeightLbs(String(pkg.weight_lbs));
+        const minor = Number(pkg.declared_value_usd_minor ?? 0);
+        if (minor > 0 && !declaredUsd) setDeclaredUsd((minor / 100).toFixed(2));
+      }
+      return pkg;
+    } catch {
+      setLookupPkg(null);
+      setLookupDone(true);
+      return null;
+    } finally {
+      setLookupBusy(false);
+    }
+  }
+
+  useEffect(() => {
+    const trimmed = barcode.trim();
+    if (!trimmed) {
+      setLookupPkg(null);
+      setLookupDone(false);
+      return;
+    }
+    const t = window.setTimeout(() => {
+      void lookupTracking(trimmed);
+    }, 400);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- debounce barcode only
+  }, [barcode]);
 
   const scan = useMutation({
     mutationFn: async () => {
@@ -148,19 +234,19 @@ export function WarehouseReceiveStationPage({ embedded = false }: { embedded?: b
         const pkgSuiteCode = (res.package as { suites?: { suite_code?: string } } | null)
           ?.suites?.suite_code;
         const matchedSuite = String(pkgSuiteCode || suiteCode || '—');
-        setFlash(`Matched pre-alert ${tracking} · suite ${matchedSuite} · received`);
+        setFlash(`Matched pre-alert ${tracking} · mailbox ${matchedSuite} · received`);
       } else if (res.createdUnknown) {
         setFlashTone('ok');
         setFlash(
           `Received new ${tracking} · status ${String(res.package?.status ?? '')}${
-            invoiceRequired ? ' · invoice required from customer' : ''
+            invoiceRequired ? ' · asked courier for customer invoice' : ''
           }`,
         );
       } else {
         setFlashTone('ok');
         setFlash(
           `Received ${tracking} · status ${String(res.package?.status ?? '')}${
-            invoiceRequired ? ' · invoice required from customer' : ''
+            invoiceRequired ? ' · asked courier for customer invoice' : ''
           }`,
         );
       }
@@ -176,6 +262,8 @@ export function WarehouseReceiveStationPage({ embedded = false }: { embedded?: b
       setBin('');
       setInvoiceRequired(false);
       setWarehouseSlip(null);
+      setLookupPkg(null);
+      setLookupDone(false);
       void qc.invalidateQueries({ queryKey: ['freight', 'packages'] });
       barcodeRef.current?.focus();
     },
@@ -185,22 +273,60 @@ export function WarehouseReceiveStationPage({ embedded = false }: { embedded?: b
     },
   });
 
-  function submitScan() {
+  async function submitScan() {
     if (!barcode.trim() || scan.isPending) return;
     if (!facilityId) {
       setFlashTone('error');
-      setFlash('Select a warehouse.');
+      setFlash('Pick our building.');
       return;
     }
-    if (!suiteCode) {
+    let matched = lookupPkg;
+    if (!lookupDone || lookupBusy) {
+      matched = await lookupTracking(barcode);
+    }
+    if (!matched && !suiteCode) {
       setFlashTone('error');
-      setFlash('Select or scan a suite (required for unknown scans).');
+      setFlash('New box — pick the mailbox.');
       return;
     }
     scan.mutate();
   }
 
   const kg = (Number(weightLbs) || 0) * 0.453592;
+  const matchValue = Number(lookupPkg?.declared_value_usd_minor ?? 0) / 100;
+  const matchHasWeight = lookupPkg?.weight_lbs != null;
+  const showWeightInline = Boolean(barcode.trim()) && (!lookupPkg || !matchHasWeight);
+  const canConfirm =
+    Boolean(barcode.trim() && facilityId) &&
+    (Boolean(lookupPkg) || Boolean(suiteCode)) &&
+    !scan.isPending;
+
+  if (facilities.isLoading) {
+    return <p className="text-sm text-slate-500">Loading…</p>;
+  }
+
+  if (!hasBuilding) {
+    return (
+      <div className="mx-auto max-w-3xl space-y-4">
+        {!embedded ? (
+          <div>
+            <h1 className="text-2xl font-semibold text-slate-900">Receive Station</h1>
+            <p className="mt-1 text-sm text-slate-500">
+              Pick your building first, then scan tracking.
+            </p>
+          </div>
+        ) : (
+          <p className="text-sm text-slate-500">Pick your building first, then scan tracking.</p>
+        )}
+        <AddWarehouseBuildingPanel
+          onCreated={(id) => {
+            setFacilityId(id);
+            void qc.invalidateQueries({ queryKey: ['freight', 'facilities'] });
+          }}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
@@ -208,12 +334,12 @@ export function WarehouseReceiveStationPage({ embedded = false }: { embedded?: b
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">Receive Station</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Scan barcode → confirm suite. Desk fields stay one tap away.
+            Scan tracking. We’ll match the pre-alert if one exists.
           </p>
         </div>
       ) : (
         <p className="text-sm text-slate-500">
-          Scan barcode → confirm suite. Desk fields stay one tap away.
+          Scan tracking. We’ll match the pre-alert if one exists.
         </p>
       )}
 
@@ -225,11 +351,11 @@ export function WarehouseReceiveStationPage({ embedded = false }: { embedded?: b
         }`}
       >
         <div>
-          <label className="text-xs font-medium text-slate-500">Warehouse</label>
+          <label className="text-xs font-medium text-slate-500">Our building</label>
           <select
             value={facilityId}
             onChange={(e) => setFacilityId(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            className={fieldClass}
           >
             {Object.entries(warehousesByCountry)
               .sort(([a], [b]) => a.localeCompare(b))
@@ -246,11 +372,12 @@ export function WarehouseReceiveStationPage({ embedded = false }: { embedded?: b
         </div>
         {showOwnerSelector ? (
           <div>
-            <label className="text-xs font-medium text-slate-500">Courier / owner</label>
+            <label className="text-xs font-medium text-slate-500">Which courier</label>
             <select
               value={ownerOrgId}
               onChange={(e) => setOwnerOrgId(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              className={fieldClass}
+              disabled={Boolean(lookupPkg)}
             >
               {activeCourierLinks.map((link) => {
                 const id = String(link.courier_org_id ?? link.courier_org?.id ?? '');
@@ -266,87 +393,152 @@ export function WarehouseReceiveStationPage({ embedded = false }: { embedded?: b
             </select>
           </div>
         ) : null}
-        <div>
-          <label className="text-xs font-medium text-slate-500">Suite</label>
-          <select
-            value={suiteCode}
-            onChange={(e) => setSuiteCode(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-sm"
-          >
-            <option value="">— Required for unknown scan —</option>
-            {(suites.data?.suites ?? []).map((s) => (
-              <option key={String(s.id)} value={String(s.suite_code)}>
-                {String(s.suite_code)} · {String(s.contact_name || '')}
+        {!lookupPkg ? (
+          <div>
+            <label className="text-xs font-medium text-slate-500">Mailbox #</label>
+            <select
+              value={suiteCode}
+              onChange={(e) => setSuiteCode(e.target.value)}
+              className={`${fieldClass} font-mono`}
+            >
+              <option value="">
+                {lookupDone && barcode.trim()
+                  ? 'Needed only if this tracking is new'
+                  : 'Needed only if this tracking is new'}
               </option>
-            ))}
-          </select>
-          <input
-            value={suiteScan}
-            onChange={(e) => setSuiteScan(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                applySuiteScan(suiteScan);
-              }
-            }}
-            onBlur={() => {
-              if (suiteScan.trim()) applySuiteScan(suiteScan);
-            }}
-            className="mt-2 w-full rounded-lg border border-dashed border-slate-300 px-3 py-2 font-mono text-xs"
-            placeholder="Scan suite QR / type suite code…"
-          />
-        </div>
+              {(suites.data?.suites ?? []).map((s) => (
+                <option key={String(s.id)} value={String(s.suite_code)}>
+                  {String(s.suite_code)} · {String(s.contact_name || '')}
+                </option>
+              ))}
+            </select>
+            <input
+              value={suiteScan}
+              onChange={(e) => setSuiteScan(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  applySuiteScan(suiteScan);
+                }
+              }}
+              onBlur={() => {
+                if (suiteScan.trim()) applySuiteScan(suiteScan);
+              }}
+              className="mt-2 w-full min-h-11 rounded-lg border border-dashed border-slate-300 px-3 py-3 font-mono text-sm"
+              placeholder="Scan mailbox QR / type code…"
+            />
+            {lookupDone && barcode.trim() && !lookupPkg ? (
+              <p className="mt-1 text-xs text-slate-600">New box — pick the mailbox.</p>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       <ScanBarcodeField
         ref={barcodeRef}
         value={barcode}
         onChange={setBarcode}
-        onSubmit={submitScan}
+        onSubmit={() => void submitScan()}
         disabled={scan.isPending}
       />
 
-      <button
-        type="button"
-        disabled={!barcode || !facilityId || !suiteCode || scan.isPending}
-        onClick={submitScan}
-        className="w-full rounded-xl bg-amber-500 py-4 text-base font-bold text-slate-950 hover:bg-amber-400 disabled:opacity-50"
-      >
-        {scan.isPending ? 'Receiving…' : 'Confirm receipt'}
-      </button>
+      {lookupBusy ? (
+        <p className="text-sm text-slate-500">Looking up tracking…</p>
+      ) : null}
 
-      <ScanDetailsDisclosure hint="weight, dims, bin, invoice flags">
-        <div className="grid gap-4 sm:grid-cols-3">
-          <div>
-            <label className="text-xs font-medium text-slate-500">Weight (lbs)</label>
+      {lookupPkg ? (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-950">
+          <p className="font-semibold">We found this</p>
+          <p className="mt-1">
+            Mailbox {lookupPkg.suites?.suite_code || '—'}
+            {lookupPkg.suites?.contact_name ? ` · ${lookupPkg.suites.contact_name}` : ''}
+            {' · '}
+            {courierNameById[String(lookupPkg.owner_org_id ?? '')] || 'Courier'}
+            {matchValue > 0 ? ` · value of this box $${matchValue.toFixed(2)}` : ''}
+            {matchHasWeight ? ` · ${lookupPkg.weight_lbs} lb` : ''}
+            {String(lookupPkg.status) === 'received_at_warehouse' ? ' · already on the floor' : ''}
+          </p>
+        </div>
+      ) : null}
+
+      {showWeightInline ? (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="block text-sm font-medium text-slate-800">
+            Weight (lbs)
             <input
               value={weightLbs}
               onChange={(e) => setWeightLbs(e.target.value)}
               inputMode="decimal"
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-3 text-lg tabular-nums"
+              className={`${fieldClass} text-lg tabular-nums`}
             />
-            <p className="mt-1 text-xs text-slate-500">{kg.toFixed(3)} kg</p>
-          </div>
-          <div>
-            <label className="text-xs font-medium text-slate-500">Declared value (US$)</label>
-            <input
-              value={declaredUsd}
-              onChange={(e) => setDeclaredUsd(e.target.value)}
-              inputMode="decimal"
-              placeholder="0.00"
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-3 text-lg tabular-nums"
-            />
-            <p className="mt-1 text-xs text-slate-500">Declared value</p>
-          </div>
-          <div>
-            <label className="text-xs font-medium text-slate-500">Bin / rack</label>
-            <input
-              value={bin}
-              onChange={(e) => setBin(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-3 font-mono"
-            />
-          </div>
+            <span className="mt-1 block text-xs text-slate-500">{kg.toFixed(3)} kg</span>
+          </label>
         </div>
+      ) : null}
+
+      <button
+        type="button"
+        disabled={!canConfirm}
+        onClick={() => void submitScan()}
+        className="sticky bottom-0 z-10 w-full min-h-11 rounded-xl bg-amber-500 py-4 text-base font-bold text-slate-950 hover:bg-amber-400 disabled:opacity-50"
+      >
+        {scan.isPending ? 'Receiving…' : 'Confirm receipt'}
+      </button>
+
+      <ScanDetailsDisclosure hint="dims, bin, packing slip">
+        {!showWeightInline ? (
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div>
+              <label className="text-xs font-medium text-slate-500">Weight (lbs)</label>
+              <input
+                value={weightLbs}
+                onChange={(e) => setWeightLbs(e.target.value)}
+                inputMode="decimal"
+                className="mt-1 w-full min-h-11 rounded-lg border border-slate-300 px-3 py-3 text-lg tabular-nums"
+              />
+              <p className="mt-1 text-xs text-slate-500">{kg.toFixed(3)} kg</p>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-slate-500">Value of this box (US$)</label>
+              <input
+                value={declaredUsd}
+                onChange={(e) => setDeclaredUsd(e.target.value)}
+                inputMode="decimal"
+                placeholder="0.00"
+                className="mt-1 w-full min-h-11 rounded-lg border border-slate-300 px-3 py-3 text-lg tabular-nums"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-slate-500">Bin / rack</label>
+              <input
+                value={bin}
+                onChange={(e) => setBin(e.target.value)}
+                className="mt-1 w-full min-h-11 rounded-lg border border-slate-300 px-3 py-3 font-mono"
+              />
+            </div>
+          </div>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="text-xs font-medium text-slate-500">Value of this box (US$)</label>
+              <input
+                value={declaredUsd}
+                onChange={(e) => setDeclaredUsd(e.target.value)}
+                inputMode="decimal"
+                placeholder="0.00"
+                className="mt-1 w-full min-h-11 rounded-lg border border-slate-300 px-3 py-3 text-lg tabular-nums"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-slate-500">Bin / rack</label>
+              <input
+                value={bin}
+                onChange={(e) => setBin(e.target.value)}
+                className="mt-1 w-full min-h-11 rounded-lg border border-slate-300 px-3 py-3 font-mono"
+              />
+            </div>
+          </div>
+        )}
 
         <div className="mt-4 grid grid-cols-3 gap-3">
           <div>
@@ -355,7 +547,7 @@ export function WarehouseReceiveStationPage({ embedded = false }: { embedded?: b
               value={lengthIn}
               onChange={(e) => setLengthIn(e.target.value)}
               inputMode="decimal"
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 tabular-nums"
+              className="mt-1 w-full min-h-11 rounded-lg border border-slate-300 px-3 py-3 tabular-nums"
             />
           </div>
           <div>
@@ -364,7 +556,7 @@ export function WarehouseReceiveStationPage({ embedded = false }: { embedded?: b
               value={widthIn}
               onChange={(e) => setWidthIn(e.target.value)}
               inputMode="decimal"
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 tabular-nums"
+              className="mt-1 w-full min-h-11 rounded-lg border border-slate-300 px-3 py-3 tabular-nums"
             />
           </div>
           <div>
@@ -373,33 +565,28 @@ export function WarehouseReceiveStationPage({ embedded = false }: { embedded?: b
               value={heightIn}
               onChange={(e) => setHeightIn(e.target.value)}
               inputMode="decimal"
-              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 tabular-nums"
+              className="mt-1 w-full min-h-11 rounded-lg border border-slate-300 px-3 py-3 tabular-nums"
             />
           </div>
         </div>
 
         <div className="mt-5 space-y-3 rounded-lg border border-slate-100 bg-slate-50 px-4 py-3">
-          <label className="flex items-start gap-2 text-sm text-slate-800">
+          <label className="flex min-h-11 items-start gap-2 text-sm text-slate-800">
             <input
               type="checkbox"
-              className="mt-0.5"
+              className="mt-1"
               checked={invoiceRequired}
               onChange={(e) => setInvoiceRequired(e.target.checked)}
             />
             <span>
-              <span className="font-medium">
-                {DOC_ROLE.customer_invoice.shortLabel} required (soft hold)
-              </span>
+              <span className="font-medium">Ask the courier for the customer invoice</span>
               <span className="mt-0.5 block text-xs text-slate-500">
-                Flag tells the courier to chase the customer invoice. Warehouse can clear
-                anytime — does not block receive.
+                Optional flag. Does not block receive.
               </span>
             </span>
           </label>
           <div>
-            <label className="text-xs font-medium text-slate-500">
-              {DOC_ROLE.warehouse_slip.label} (optional reference)
-            </label>
+            <label className="text-xs font-medium text-slate-500">Packing slip (optional)</label>
             <input
               type="file"
               accept="application/pdf,image/*"

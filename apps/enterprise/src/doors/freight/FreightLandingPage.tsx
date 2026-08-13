@@ -28,10 +28,10 @@ export function FreightLandingPage() {
         <div className="absolute inset-0 bg-gradient-to-r from-[#0f172a]/95 via-[#0f172a]/70 to-[#0f172a]/35" />
         <div className="relative z-10 mx-auto w-full max-w-6xl px-4 pb-16 pt-28 md:px-8 md:pb-24 md:pt-20">
           <p className="mb-4 text-3xl font-extrabold tracking-tight text-white md:text-5xl lg:text-6xl">
-            Roam Freight Forwarding
+            Roam Freight Forwarder
           </p>
           <h1 className="max-w-2xl text-3xl font-bold leading-tight text-white md:text-5xl">
-            The precision engine for US warehouse intake.
+            The precision engine for US freight-forwarder intake.
           </h1>
           <p className="mt-5 max-w-xl text-lg text-white/80">
             Floor ops for partner couriers — scan, hold, and hand back with dual ownership clarity.
@@ -96,7 +96,7 @@ export function FreightLandingPage() {
           <div className="overflow-hidden border border-slate-200">
             <img
               src="/stitch/freight/landing.png"
-              alt="Roam Freight Forwarding product preview"
+              alt="Roam Freight Forwarder product preview"
               className="h-auto w-full object-cover object-top"
             />
           </div>

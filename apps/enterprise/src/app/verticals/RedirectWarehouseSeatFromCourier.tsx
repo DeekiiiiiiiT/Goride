@@ -1,10 +1,15 @@
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useSeatAccess } from '@/app/seats/SeatAccessProvider';
-import { getProductDoor, navigateDoorHref, urlForDoor } from '@/app/productDoor';
+import {
+  FREIGHT_FORWARDER_PATH,
+  getProductDoor,
+  navigateDoorHref,
+  urlForDoor,
+} from '@/app/productDoor';
 import { canAccessCourierVertical } from '@/app/verticals/enterpriseHome';
 
-/** Floor warehouse seats should work on the Warehouse door, not Courier. */
+/** Floor seats should work on the Freight Forwarder door, not Courier. */
 export function RedirectWarehouseSeatFromCourier({
   children,
 }: {
@@ -21,16 +26,15 @@ export function RedirectWarehouseSeatFromCourier({
   ) {
     const door = getProductDoor();
     if (door === 'courier' || door === 'apex') {
-      // Cross-origin bounce to warehouse door when possible
       if (typeof window !== 'undefined') {
-        const href = urlForDoor('warehouse', '/warehouse');
+        const href = urlForDoor('freight_forwarder', FREIGHT_FORWARDER_PATH);
         if (href.startsWith('http')) {
           navigateDoorHref(href);
           return null;
         }
       }
     }
-    return <Navigate to="/warehouse" replace />;
+    return <Navigate to={FREIGHT_FORWARDER_PATH} replace />;
   }
   return <>{children}</>;
 }

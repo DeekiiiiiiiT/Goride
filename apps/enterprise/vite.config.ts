@@ -81,7 +81,7 @@ export default defineConfig({
         'icons/icon-512.png',
         'icons/icon-maskable-512.png',
         'manifests/courier.webmanifest',
-        'manifests/warehouse.webmanifest',
+        'manifests/freight-forwarder.webmanifest',
       ],
       // Door hosts provide their own static manifests via index.html.
       // Apex marketing must not ship an installable web app manifest.
@@ -179,7 +179,7 @@ export default defineConfig({
   },
   server: {
     port: 3003,
-    // Door hosts: http://courier.localhost:3003 and http://warehouse.localhost:3003
+    // Door hosts: http://courier.localhost:3003 and http://freight-forwarder.localhost:3003
     host: true,
     strictPort: true,
     open: false,

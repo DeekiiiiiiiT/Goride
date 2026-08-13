@@ -93,7 +93,7 @@ export function CourierConnectPage() {
             className="max-w-3xl text-4xl font-bold text-white md:text-5xl"
             style={{ fontFamily: 'var(--door-courier-display)' }}
           >
-            Connect warehouses.
+            Connect freight forwarders.
           </h1>
           <p className="mt-5 max-w-2xl text-lg text-white/85">
             Link in-house floors or third-party freight forwarding partners. You keep ownership of
@@ -111,7 +111,7 @@ export function CourierConnectPage() {
               Request & activate
             </h2>
             <p className="mt-3 text-slate-600">
-              Invite a warehouse, accept their link, and go active. Same model whether the floor is
+              Invite a freight forwarder, accept their link, and go active. Same model whether the floor is
               yours or a partner&apos;s.
             </p>
           </div>
@@ -123,7 +123,7 @@ export function CourierConnectPage() {
               Dual ownership
             </h2>
             <p className="mt-3 text-slate-600">
-              Owner org stays with the courier. Operating warehouse org tracks physical custody
+              Owner org stays with the courier. The freight forwarder tracks physical custody
               until handoff for manifesting.
             </p>
           </div>

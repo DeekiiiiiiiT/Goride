@@ -423,8 +423,8 @@ export const ENTERPRISE_INVITABLE_ROLES: readonly {
   },
   {
     value: 'enterprise_warehouse',
-    label: 'Warehouse Intake',
-    description: 'US Receive floor — lands in Warehouse app (/warehouse)',
+    label: 'Freight Forwarder Intake',
+    description: 'US Receive floor — lands in Freight Forwarder app',
   },
   {
     value: 'enterprise_finance',

@@ -5,7 +5,7 @@ import { SeatAccessProvider } from '@/app/seats/SeatAccessProvider';
 import { WarehouseShell } from '@/app/layout/WarehouseShell';
 import { WrongDoorGuard } from '@/app/verticals/WrongDoorGuard';
 
-/** Warehouse product door entry (`warehouse.*` or path /warehouse on apex/preview). */
+/** Freight Forwarder product door (`freight-forwarder.*` / legacy `warehouse.*`). */
 export default function WarehouseEntry() {
   return (
     <ProductProviders>
@@ -13,7 +13,7 @@ export default function WarehouseEntry() {
         <WrongProductLineGate>
           <ModuleAccessProvider>
             <SeatAccessProvider>
-              <WrongDoorGuard door="warehouse">
+              <WrongDoorGuard door="freight_forwarder">
                 <WarehouseShell />
               </WrongDoorGuard>
             </SeatAccessProvider>

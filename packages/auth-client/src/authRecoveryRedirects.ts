@@ -10,7 +10,7 @@ export const AUTH_RECOVERY_REDIRECTS = {
   fleet: 'https://roamfleet.co/reset-password',
   enterprise: 'https://roamenterprise.co/reset-password',
   enterpriseCourier: 'https://courier.roamenterprise.co/reset-password',
-  enterpriseWarehouse: 'https://warehouse.roamenterprise.co/reset-password',
+  enterpriseWarehouse: 'https://freight-forwarder.roamenterprise.co/reset-password',
 } as const;
 
 export type AuthRecoverySurface = keyof typeof AUTH_RECOVERY_REDIRECTS;

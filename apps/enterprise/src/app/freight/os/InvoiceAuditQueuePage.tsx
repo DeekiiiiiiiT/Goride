@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { freightService } from '@/app/services/freightService';
@@ -18,7 +18,8 @@ type Tab = 'required' | 'missing' | 'mismatch' | 'unobtainable' | 'ready';
 
 /** Invoice Audit Queue — dual invoice workflow. */
 export function InvoiceAuditQueuePage({ embedded = false }: { embedded?: boolean }) {
-  const [tab, setTab] = useState<Tab>('required');
+  const [tab, setTab] = useState<Tab>('missing');
+  const navigate = useNavigate();
   const { organizationId, session } = useAuth();
   const qc = useQueryClient();
   const [parseReading, setParseReading] = useState(false);
@@ -84,6 +85,7 @@ export function InvoiceAuditQueuePage({ embedded = false }: { embedded?: boolean
   });
 
   const rows = useMemo(() => q.data?.packages ?? [], [q.data]);
+  const tabCounts = q.data?.counts ?? {};
 
   async function handleCustomerUpload(id: string, file: File) {
     await upload.mutateAsync({ id, file, slot: 'customer' });
@@ -133,40 +135,50 @@ export function InvoiceAuditQueuePage({ embedded = false }: { embedded?: boolean
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">Invoice Audit</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Queue is about the <span className="font-medium text-slate-700">customer commercial invoice</span>{' '}
-            (seal gate). Warehouse packing slip is optional and never blocks seal.
+            Queue is about the{' '}
+            <span className="font-medium text-slate-700">customer invoice (Amazon PDF)</span>{' '}
+            (seal gate). Freight forwarder packing slip is optional and never blocks seal.
           </p>
         </div>
       ) : (
         <p className="text-sm text-slate-500">
-          Queue is about the <span className="font-medium text-slate-700">customer commercial invoice</span>{' '}
-          (seal gate). Warehouse packing slip is optional.
+          Queue is about the{' '}
+          <span className="font-medium text-slate-700">customer invoice (Amazon PDF)</span>{' '}
+          (seal gate). Freight forwarder packing slip is optional.
         </p>
       )}
 
       <div className="flex flex-wrap gap-2">
         {(
           [
-            ['required', 'Customer invoice required'],
-            ['missing', 'Awaiting customer invoice'],
-            ['mismatch', 'Unverified'],
+            ['required', 'Invoice required'],
+            ['missing', 'Waiting for invoice'],
+            ['mismatch', 'Invoice on file — confirm it'],
             ['unobtainable', 'Could not obtain'],
-            ['ready', 'Ready for seal'],
+            ['ready', 'Ready to ship'],
           ] as const
-        ).map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => setTab(id)}
-            className={`rounded-lg px-3 py-2 text-sm font-medium ${
-              tab === id
-                ? 'bg-amber-50 text-amber-900 ring-1 ring-amber-200'
-                : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50'
-            }`}
-          >
-            {label}
-          </button>
-        ))}
+        ).map(([id, label]) => {
+          const count = Number(tabCounts[id] ?? 0);
+          return (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setTab(id)}
+              className={`inline-flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium ${
+                tab === id
+                  ? 'bg-amber-50 text-amber-900 ring-1 ring-amber-200'
+                  : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50'
+              }`}
+            >
+              {label}
+              {count > 0 ? (
+                <span className="rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-slate-950">
+                  {count}
+                </span>
+              ) : null}
+            </button>
+          );
+        })}
       </div>
 
       {q.isLoading && <p className="text-sm text-slate-500">Loading queue…</p>}
@@ -219,7 +231,7 @@ export function InvoiceAuditQueuePage({ embedded = false }: { embedded?: boolean
                 <th className="px-4 py-2">Suite</th>
                 <th className="px-4 py-2">{DOC_ROLE.warehouse_slip.shortLabel}</th>
                 <th className="px-4 py-2">{DOC_ROLE.customer_invoice.shortLabel}</th>
-                <th className="px-4 py-2">Declared USD</th>
+                <th className="px-4 py-2">Value</th>
                 <th className="px-4 py-2">Actions</th>
               </tr>
             </thead>
@@ -231,20 +243,37 @@ export function InvoiceAuditQueuePage({ embedded = false }: { embedded?: boolean
                 const hasWh = Boolean(
                   row.warehouse_invoice_file_name || row.warehouse_invoice_storage_path,
                 );
-                const hasCust = Boolean(row.invoice_file_name || row.invoice_storage_path);
+                const orderInv = row.retail_orders as {
+                  invoice_storage_path?: string | null;
+                  invoice_file_name?: string | null;
+                  invoice_verified_at?: string | null;
+                  invoice_unobtainable_at?: string | null;
+                } | null;
+                const hasCust = Boolean(
+                  row.invoice_file_name ||
+                    row.invoice_storage_path ||
+                    orderInv?.invoice_file_name ||
+                    orderInv?.invoice_storage_path,
+                );
                 const whStatus = warehouseDocStatus(hasWh);
                 const custStatus = customerDocStatus({
                   hasFile: hasCust,
-                  verified: Boolean(row.invoice_verified_at),
-                  unobtainable: Boolean(row.invoice_unobtainable_at),
+                  verified: Boolean(row.invoice_verified_at || orderInv?.invoice_verified_at),
+                  unobtainable: Boolean(
+                    row.invoice_unobtainable_at || orderInv?.invoice_unobtainable_at,
+                  ),
                   requiredFromCustomer: Boolean(row.invoice_required_from_customer),
                   context: 'seal',
                 });
                 const wh = String(row.warehouse_invoice_file_name || '');
-                const cust = String(row.invoice_file_name || '');
+                const cust = String(row.invoice_file_name || orderInv?.invoice_file_name || '');
                 return (
-                  <tr key={id} className="border-t border-slate-100">
-                    <td className="px-4 py-2.5 font-mono text-xs">
+                  <tr
+                    key={id}
+                    className="cursor-pointer border-t border-slate-100 hover:bg-slate-50"
+                    onClick={() => navigate(`/app/packages/${id}`)}
+                  >
+                    <td className="px-4 py-3 font-mono text-xs">
                       {String(row.courier_tracking_number ?? '—')}
                     </td>
                     <td className="px-4 py-2.5">{suite?.suite_code ?? '—'}</td>
@@ -273,18 +302,18 @@ export function InvoiceAuditQueuePage({ embedded = false }: { embedded?: boolean
                       </div>
                     </td>
                     <td className="px-4 py-2.5 tabular-nums">${declared.toFixed(2)}</td>
-                    <td className="px-4 py-2.5">
+                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                       <div className="flex flex-wrap items-center gap-2">
                         <Link
                           to={`/app/packages/${id}`}
-                          className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-medium hover:bg-slate-50"
+                          className="inline-flex min-h-11 items-center rounded-lg border border-slate-300 px-3 py-2 text-xs font-medium hover:bg-slate-50"
                         >
                           Compare
                         </Link>
                         {(tab === 'required' || tab === 'missing' || tab === 'mismatch') && (
                           <>
-                            <label className="cursor-pointer rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-medium hover:bg-slate-50">
-                              Customer commercial invoice
+                            <label className="inline-flex min-h-11 cursor-pointer items-center rounded-lg border border-slate-300 px-3 py-2 text-xs font-medium hover:bg-slate-50">
+                              Customer invoice (Amazon PDF)
                               <input
                                 type="file"
                                 accept="application/pdf,image/*"
@@ -303,7 +332,7 @@ export function InvoiceAuditQueuePage({ embedded = false }: { embedded?: boolean
                               onClick={() =>
                                 flags.mutate({ id, invoiceUnobtainable: true })
                               }
-                              className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-medium hover:bg-slate-50"
+                              className="inline-flex min-h-11 items-center rounded-lg border border-slate-300 px-3 py-2 text-xs font-medium hover:bg-slate-50"
                             >
                               Could not obtain
                             </button>
@@ -314,7 +343,7 @@ export function InvoiceAuditQueuePage({ embedded = false }: { embedded?: boolean
                             type="button"
                             disabled={verify.isPending}
                             onClick={() => verify.mutate(id)}
-                            className="rounded-lg bg-amber-500 px-2.5 py-1 text-xs font-semibold text-slate-950 disabled:opacity-60"
+                            className="inline-flex min-h-11 items-center rounded-lg bg-amber-500 px-3 py-2 text-xs font-semibold text-slate-950 disabled:opacity-60"
                           >
                             Mark verified
                           </button>

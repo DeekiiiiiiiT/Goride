@@ -17,6 +17,7 @@ import { AIExtractionReview } from './AIExtractionReview';
 import { searchAddress, AddressResult, debounce } from '../../utils/locationService';
 import { cn } from "../ui/utils";
 import { fuelService } from '../../services/fuelService';
+import { FuelCalculationService } from '../../services/fuelCalculationService';
 import { StationProfile } from '../../types/station';
 import { useQuery } from '@tanstack/react-query';
 import type { FuelCard } from '../../types/fuel';
@@ -125,6 +126,7 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
     });
 
     const isGasCard = commonData.paymentSource === 'company_card';
+    const isRideShareCash = commonData.paymentSource === 'rideshare_cash';
 
     // Resolve Active inventory card (vehicle first, then driver) — matches live Gas Card path
     useEffect(() => {
@@ -308,9 +310,23 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
 
     const handleAmountChange = (index: number, val: string) => {
         const updates: any = { amount: val };
-        const price = entries[index].pricePerLiter;
-        if (price && val) {
-            updates.liters = (parseFloat(val) / parseFloat(price)).toFixed(2);
+        if (isRideShareCash) {
+            const price = FuelCalculationService.calculatePricePerLiter(val, entries[index].liters);
+            updates.pricePerLiter = price != null ? String(price) : '';
+        } else {
+            const price = entries[index].pricePerLiter;
+            if (price && val) {
+                updates.liters = (parseFloat(val) / parseFloat(price)).toFixed(2);
+            }
+        }
+        updateEntry(index, updates);
+    };
+
+    const handleLitersChange = (index: number, val: string) => {
+        const updates: any = { liters: val };
+        if (isRideShareCash) {
+            const price = FuelCalculationService.calculatePricePerLiter(entries[index].amount, val);
+            updates.pricePerLiter = price != null ? String(price) : '';
         }
         updateEntry(index, updates);
     };
@@ -378,12 +394,17 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
         const index = aiReviewData.index;
         const updates: any = {};
         if (data.odometer) updates.odometer = data.odometer.toString();
-        if (data.amount) {
-            updates.amount = data.amount.toString();
+        if (data.amount) updates.amount = data.amount.toString();
+        if (data.liters) updates.liters = data.liters.toString();
+        const amt = data.amount ?? parseFloat(entries[index].amount);
+        const lts = data.liters ?? parseFloat(entries[index].liters);
+        if (isRideShareCash) {
+            const price = FuelCalculationService.calculatePricePerLiter(amt, lts);
+            if (price != null) updates.pricePerLiter = String(price);
+        } else if (data.amount) {
             const currentPrice = entries[index].pricePerLiter;
             if (currentPrice) updates.liters = (data.amount / parseFloat(currentPrice)).toFixed(2);
         }
-        if (data.liters) updates.liters = data.liters.toString();
         if (data.stationName) updates.stationName = data.stationName;
         if (data.date) updates.date = data.date;
 
@@ -580,6 +601,10 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
             toast.error("Enter at least one valid amount");
             return;
         }
+        if (isRideShareCash && validEntries.some(e => !e.liters || parseFloat(e.liters) <= 0)) {
+            toast.error("Enter liters for RideShare Cash");
+            return;
+        }
 
         setIsSubmitting(true);
         try {
@@ -646,7 +671,9 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
                         // Preserve all existing metadata (GPS coords, AI scores, etc.) on edit
                         ...(initialData?.metadata || {}),
                         stationLocation: entry.stationLocation,
-                        pricePerLiter: entry.pricePerLiter ? parseFloat(entry.pricePerLiter) : undefined,
+                        pricePerLiter: isRideShareCash
+                            ? (FuelCalculationService.calculatePricePerLiter(amountVal, entry.liters) ?? undefined)
+                            : (entry.pricePerLiter ? parseFloat(entry.pricePerLiter) : undefined),
                         source: entries.length > 1 ? 'Bulk Manual' : 'Manual',
                         entrySource: initialData
                             ? (initialData.entrySource === 'admin-manual' || initialData.metadata?.entrySource === 'admin-manual'
@@ -767,6 +794,11 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
                                         </SelectItem>
                                     </SelectContent>
                                 </Select>
+                                {isRideShareCash && (
+                                    <p className="mt-1.5 text-[10px] text-slate-500">
+                                        Enter cash amount and liters from the pump — price per liter is calculated.
+                                    </p>
+                                )}
                                 {isGasCard && (
                                     <div className={cn(
                                         "mt-2 rounded-md border px-3 py-2 text-xs flex items-start gap-2",
@@ -800,6 +832,7 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
                                 <SingleForm 
                                     entry={entries[0]} 
                                     isGasCard={isGasCard}
+                                    isRideShareCash={isRideShareCash}
                                     brands={uniqueBrands}
                                     getStationsForBrand={getStationsForBrand}
                                     stationsLoading={stationsLoading}
@@ -807,6 +840,7 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
                                     onBrandChange={(brand: string) => handleBrandChange(0, brand)}
                                     onVerifiedStationSelect={(stationId: string) => handleVerifiedStationSelect(0, stationId)}
                                     onAmountChange={(v: string) => handleAmountChange(0, v)}
+                                    onLitersChange={(v: string) => handleLitersChange(0, v)}
                                     onPriceChange={(v: string) => handlePriceChange(0, v)}
                                     onLocationChange={(v: string) => handleLocationChange(0, v)}
                                     onSelectAddress={(a: any) => handleSelectAddress(0, a)}
@@ -823,6 +857,7 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
                                 <BulkTable 
                                     entries={entries} 
                                     isGasCard={isGasCard}
+                                    isRideShareCash={isRideShareCash}
                                     brands={uniqueBrands}
                                     getStationsForBrand={getStationsForBrand}
                                     stationsLoading={stationsLoading}
@@ -833,6 +868,7 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
                                     onRemove={removeEntry}
                                     onDuplicate={duplicateEntry}
                                     onAmountChange={handleAmountChange}
+                                    onLitersChange={handleLitersChange}
                                     onPriceChange={handlePriceChange}
                                     onLocationChange={handleLocationChange}
                                     onSelectAddress={handleSelectAddress}
@@ -865,7 +901,7 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
     );
 }
 
-function SingleForm({ entry, isGasCard, brands, getStationsForBrand, stationsLoading, onUpdate, onBrandChange, onVerifiedStationSelect, onAmountChange, onPriceChange, onLocationChange, onSelectAddress, onFileUpload, onOdometerPhotoUpload, onAIVerify, isUploading, isUploadingOdoPhoto, isVerifying, suggestions, showSuggestions }: any) {
+function SingleForm({ entry, isGasCard, isRideShareCash, brands, getStationsForBrand, stationsLoading, onUpdate, onBrandChange, onVerifiedStationSelect, onAmountChange, onLitersChange, onPriceChange, onLocationChange, onSelectAddress, onFileUpload, onOdometerPhotoUpload, onAIVerify, isUploading, isUploadingOdoPhoto, isVerifying, suggestions, showSuggestions }: any) {
     // Get verified stations for the currently selected brand
     const matchingStations: StationProfile[] = entry.stationName ? getStationsForBrand(entry.stationName) : [];
     const hasVerifiedStations = matchingStations.length > 0;
@@ -875,17 +911,32 @@ function SingleForm({ entry, isGasCard, brands, getStationsForBrand, stationsLoa
             {!isGasCard && (
             <div className="grid grid-cols-3 gap-4">
                 <div className="space-y-2">
-                    <Label>Amount ($) *</Label>
+                    <Label>{isRideShareCash ? 'Cash Amount ($) *' : 'Amount ($) *'}</Label>
                     <Input type="number" step="0.01" value={entry.amount} onChange={(e) => onAmountChange(e.target.value)} />
                 </div>
-                <div className="space-y-2">
-                    <Label>Price ($/L) *</Label>
-                    <Input type="number" step="0.01" value={entry.pricePerLiter} onChange={(e) => onPriceChange(e.target.value)} />
-                </div>
-                <div className="space-y-2">
-                    <Label>Volume (L)</Label>
-                    <Input value={entry.liters} readOnly className="bg-slate-50" />
-                </div>
+                {isRideShareCash ? (
+                    <>
+                        <div className="space-y-2">
+                            <Label>Volume (L) *</Label>
+                            <Input type="number" step="0.001" value={entry.liters} onChange={(e) => onLitersChange(e.target.value)} />
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Price ($/L)</Label>
+                            <Input value={entry.pricePerLiter ? `$${entry.pricePerLiter}` : '—'} readOnly className="bg-slate-50" />
+                        </div>
+                    </>
+                ) : (
+                    <>
+                        <div className="space-y-2">
+                            <Label>Price ($/L) *</Label>
+                            <Input type="number" step="0.01" value={entry.pricePerLiter} onChange={(e) => onPriceChange(e.target.value)} />
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Volume (L)</Label>
+                            <Input value={entry.liters} readOnly className="bg-slate-50" />
+                        </div>
+                    </>
+                )}
             </div>
             )}
             <div className="grid grid-cols-2 gap-4">
@@ -1052,7 +1103,7 @@ function SingleForm({ entry, isGasCard, brands, getStationsForBrand, stationsLoa
     );
 }
 
-function BulkTable({ entries, isGasCard, brands, getStationsForBrand, stationsLoading, onUpdate, onBrandChange, onVerifiedStationSelect, onAdd, onRemove, onDuplicate, onAmountChange, onPriceChange, onLocationChange, onSelectAddress, onFileUpload, onOdometerPhotoUpload, onAIVerify, onKeyDown, isUploading, isVerifying, suggestions, showSuggestions, activeLocationIndex }: any) {
+function BulkTable({ entries, isGasCard, isRideShareCash, brands, getStationsForBrand, stationsLoading, onUpdate, onBrandChange, onVerifiedStationSelect, onAdd, onRemove, onDuplicate, onAmountChange, onLitersChange, onPriceChange, onLocationChange, onSelectAddress, onFileUpload, onOdometerPhotoUpload, onAIVerify, onKeyDown, isUploading, isVerifying, suggestions, showSuggestions, activeLocationIndex }: any) {
     return (
         <div className="border rounded-lg bg-white overflow-hidden">
             <div className="bg-slate-50 p-2 flex justify-between items-center"><span className="text-xs font-bold uppercase text-slate-500">Items</span><Button size="sm" variant="outline" className="h-7 text-[10px]" onClick={onAdd}><Plus className="h-3 w-3 mr-1" />Add</Button></div>
@@ -1061,9 +1112,9 @@ function BulkTable({ entries, isGasCard, brands, getStationsForBrand, stationsLo
                     <thead className="bg-slate-50 border-b">
                         <tr>
                             <th className="p-2 text-left">Time</th>
-                            {!isGasCard && <th className="p-2 text-left">Amount</th>}
-                            {!isGasCard && <th className="p-2 text-left">Price</th>}
-                            {!isGasCard && <th className="p-2 text-left">Vol</th>}
+                            {!isGasCard && <th className="p-2 text-left">{isRideShareCash ? 'Cash $' : 'Amount'}</th>}
+                            {!isGasCard && <th className="p-2 text-left">{isRideShareCash ? 'Vol' : 'Price'}</th>}
+                            {!isGasCard && <th className="p-2 text-left">{isRideShareCash ? 'Price' : 'Vol'}</th>}
                             <th className="p-2 text-left">Station</th>
                             <th className="p-2 text-left">Odo</th>
                             <th className="p-2"></th>
@@ -1077,8 +1128,14 @@ function BulkTable({ entries, isGasCard, brands, getStationsForBrand, stationsLo
                                 <tr key={e.id} className="hover:bg-slate-50">
                                     <td className="p-1"><Input className="h-7 text-[10px] px-1 w-16" type="time" value={e.time} onChange={(evt) => onUpdate(i, { time: evt.target.value })} /></td>
                                     {!isGasCard && <td className="p-1"><Input className="h-7 text-[10px] px-1 w-16" type="number" value={e.amount} onChange={(evt) => onAmountChange(i, evt.target.value)} /></td>}
-                                    {!isGasCard && <td className="p-1"><Input className="h-7 text-[10px] px-1 w-16" type="number" value={e.pricePerLiter} onChange={(evt) => onPriceChange(i, evt.target.value)} /></td>}
-                                    {!isGasCard && <td className="p-1 text-slate-400">{e.liters || '--'}</td>}
+                                    {!isGasCard && (isRideShareCash
+                                        ? <td className="p-1"><Input className="h-7 text-[10px] px-1 w-16" type="number" step="0.001" value={e.liters} onChange={(evt) => onLitersChange(i, evt.target.value)} /></td>
+                                        : <td className="p-1"><Input className="h-7 text-[10px] px-1 w-16" type="number" value={e.pricePerLiter} onChange={(evt) => onPriceChange(i, evt.target.value)} /></td>
+                                    )}
+                                    {!isGasCard && (isRideShareCash
+                                        ? <td className="p-1 text-slate-400">{e.pricePerLiter ? `$${e.pricePerLiter}` : '--'}</td>
+                                        : <td className="p-1 text-slate-400">{e.liters || '--'}</td>
+                                    )}
                                     <td className="p-1">
                                         <div className="space-y-1">
                                             <Select value={e.stationName} onValueChange={(v) => onBrandChange(i, v)}>

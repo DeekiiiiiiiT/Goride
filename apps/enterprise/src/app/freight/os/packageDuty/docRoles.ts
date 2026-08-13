@@ -13,8 +13,8 @@ export const DOC_ROLE = {
   },
   warehouse_slip: {
     id: 'warehouse_slip' as const,
-    label: 'Warehouse packing slip',
-    shortLabel: 'Warehouse slip',
+    label: 'Freight forwarder packing slip',
+    shortLabel: 'Forwarder slip',
     purpose: 'What came with the box at US intake — optional, never blocks seal',
   },
 } as const;

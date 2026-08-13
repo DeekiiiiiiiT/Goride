@@ -10,13 +10,13 @@ const brand: Record<
     name: 'Roam Courier',
     nav: [
       { to: '/how-it-works', label: 'How it works' },
-      { to: '/connect', label: 'Connect warehouses' },
+      { to: '/connect', label: 'Connect freight forwarders' },
     ],
     accent: '#0045a5',
     ink: '#111c2d',
   },
   freight: {
-    name: 'Roam Freight Forwarding',
+    name: 'Roam Freight Forwarder',
     nav: [
       { to: '/how-it-works', label: 'Floor ops' },
       { to: '/partners', label: 'Partner couriers' },

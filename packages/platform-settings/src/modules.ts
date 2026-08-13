@@ -91,7 +91,7 @@ export const ENTERPRISE_MODULE_CATALOG: readonly ModuleCatalogEntry[] = [
   {
     key: 'freight_miami_scan',
     label: 'Receive',
-    description: 'Warehouse intake scanning station (any origin country).',
+    description: 'Freight forwarder intake scanning station (any origin country).',
     group: 'freight',
   },
   {
@@ -168,32 +168,32 @@ export const ENTERPRISE_MODULE_CATALOG: readonly ModuleCatalogEntry[] = [
   },
   {
     key: 'warehouse_inbound',
-    label: 'Warehouse Inbound',
-    description: 'Warehouse product — expected + on-floor queue.',
+    label: 'Freight Forwarder Inbound',
+    description: 'Freight Forwarder product — expected + on-floor queue.',
     group: 'warehouse',
   },
   {
     key: 'warehouse_receive',
-    label: 'Warehouse Receive',
-    description: 'Warehouse product — scan station / gun receive.',
+    label: 'Freight Forwarder Receive',
+    description: 'Freight Forwarder product — scan station / gun receive.',
     group: 'warehouse',
   },
   {
     key: 'warehouse_partner_links',
-    label: 'Warehouse Partners',
-    description: 'Connect Courier ↔ Warehouse organizations.',
+    label: 'Freight Forwarder Partners',
+    description: 'Connect Courier ↔ Freight Forwarder organizations.',
     group: 'warehouse',
   },
   {
     key: 'warehouse_storage_billing',
-    label: 'Warehouse Storage Billing',
+    label: 'Freight Forwarder Storage Billing',
     description: 'Charge couriers per receive / storage day (scaffold).',
     group: 'warehouse',
   },
   {
     key: 'warehouse_bins',
-    label: 'Warehouse Bins',
-    description: 'Bin / putaway locations at warehouse facilities.',
+    label: 'Freight Forwarder Bins',
+    description: 'Bin / putaway locations at freight forwarder facilities.',
     group: 'warehouse',
   },
   {

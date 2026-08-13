@@ -9,7 +9,7 @@ import {
 } from '@/app/hooks/useFreight';
 
 const TYPE_LABEL: Record<string, string> = {
-  warehouse: 'Warehouse',
+  warehouse: 'Freight Forwarder',
   ja_hub: 'Customs',
   branch: 'Courier location',
 };
@@ -26,12 +26,12 @@ const TABS: {
 }[] = [
   {
     id: 'warehouse',
-    label: 'Warehouse',
-    addButton: 'Add warehouse',
-    empty: 'No warehouse yet — pick one from the Dominion list above.',
+    label: 'Freight Forwarder',
+    addButton: 'Add building',
+    empty: 'No building yet — pick one from the Dominion list above.',
     addHint:
-      'Origin warehouse used on Receive. Pick from the Dominion master list (US, China, or other). Add more than one if you use multiple terminals.',
-    saveLabel: 'Save warehouse',
+      'Origin building used on Receive. Pick from the Dominion master list (US, China, or other). Add more than one if you use multiple terminals.',
+    saveLabel: 'Save building',
   },
   {
     id: 'ja_hub',
@@ -120,7 +120,7 @@ function FacilityFields({
     return (
       <>
         <label className="block text-sm sm:col-span-2">
-          Warehouse (Dominion list)
+          Building (Dominion list)
           <select
             required
             value={catalogId}
@@ -129,7 +129,7 @@ function FacilityFields({
             disabled={catalogLoading}
           >
             <option value="">
-              {catalogLoading ? 'Loading warehouses…' : 'Select warehouse…'}
+              {catalogLoading ? 'Loading buildings…' : 'Select building…'}
             </option>
             {warehouses.map((w) => (
               <option key={String(w.id)} value={String(w.id)}>
@@ -341,7 +341,7 @@ export function FacilitiesPage({ warehouseOnly = false }: { warehouseOnly?: bool
   ): Promise<{ ok: true; body: Record<string, unknown> } | { ok: false; error: string }> {
     if (type === 'warehouse') {
       if (!selectedCatalogId) {
-        return { ok: false, error: 'Select a warehouse from the Dominion list.' };
+        return { ok: false, error: 'Select a building from the Dominion list.' };
       }
       return {
         ok: true,
@@ -424,8 +424,8 @@ export function FacilitiesPage({ warehouseOnly = false }: { warehouseOnly?: bool
         <h1 className="text-2xl font-semibold">Facilities</h1>
         <p className="mt-1 text-sm text-slate-500">
           {warehouseOnly
-            ? 'Buildings this warehouse company operates. Pick from the Dominion intake catalog.'
-            : 'Set up Warehouse intake, Customs (Jamaica hub), and Courier locations. Required before Receive or Hub Station.'}
+            ? 'Buildings this freight forwarder operates. Pick from the Dominion intake catalog.'
+            : 'Set up Freight Forwarder intake, Customs (Jamaica hub), and Courier locations. Required before Receive or Hub Station.'}
         </p>
       </div>
 

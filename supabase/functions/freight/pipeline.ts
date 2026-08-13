@@ -208,7 +208,7 @@ export function registerPipelineRoutes(app: FreightApp) {
     if (b.facilityType === "warehouse") {
       if (!b.intakeCatalogId) {
         return c.json(
-          { error: "Warehouse must be selected from the Dominion master catalog" },
+          { error: "Freight forwarder building must be selected from the Dominion master catalog" },
           400,
         );
       }
@@ -219,7 +219,7 @@ export function registerPipelineRoutes(app: FreightApp) {
         .eq("status", "active")
         .maybeSingle();
       if (catErr) return c.json({ error: catErr.message }, 500);
-      if (!catalog) return c.json({ error: "Intake warehouse not found or inactive" }, 404);
+      if (!catalog) return c.json({ error: "Intake building not found or inactive" }, 404);
 
       const orgCode =
         (b.code?.toUpperCase().trim()) ||
@@ -315,7 +315,7 @@ export function registerPipelineRoutes(app: FreightApp) {
             : null;
       if (body.intakeCatalogId != null || !existing.intake_catalog_id) {
         if (!nextCatalogId) {
-          return c.json({ error: "Warehouse requires a Dominion catalog selection" }, 400);
+          return c.json({ error: "Freight forwarder building requires a Dominion catalog selection" }, 400);
         }
         const { data: catalog, error: catErr } = await serviceClient()
           .from("intake_warehouse_catalog")
@@ -324,7 +324,7 @@ export function registerPipelineRoutes(app: FreightApp) {
           .eq("status", "active")
           .maybeSingle();
         if (catErr) return c.json({ error: catErr.message }, 500);
-        if (!catalog) return c.json({ error: "Intake warehouse not found or inactive" }, 404);
+        if (!catalog) return c.json({ error: "Intake building not found or inactive" }, 404);
         patch.intake_catalog_id = catalog.id;
         patch.address_line = String(catalog.address_line);
         patch.city = `${String(catalog.city)}, ${String(catalog.state)} ${String(catalog.postal_code)}`.trim();
@@ -745,14 +745,20 @@ export function registerPipelineRoutes(app: FreightApp) {
     const status = c.req.query("status");
     const intendedFacilityId = c.req.query("intendedFacilityId");
     const ownerOrgId = c.req.query("ownerOrgId");
-    const scope = c.req.query("scope"); // owner | warehouse | all
+    const scope = c.req.query("scope"); // owner | warehouse | warehouse-desk | all
     let q = freightDb()
       .from("packages")
       .select("*")
       .order("created_at", { ascending: false })
       .limit(300);
 
-    if (scope === "warehouse") {
+    if (scope === "warehouse-desk") {
+      const courierIds = await linkedCourierOrgIds(user.organizationId);
+      const idList = courierIds.join(",");
+      q = q.or(
+        `operating_warehouse_org_id.eq.${user.organizationId},and(status.eq.expected,owner_org_id.in.(${idList}))`,
+      );
+    } else if (scope === "warehouse") {
       q = q.eq("operating_warehouse_org_id", user.organizationId);
     } else if (scope === "owner") {
       q = q.eq("owner_org_id", user.organizationId);
@@ -831,6 +837,49 @@ export function registerPipelineRoutes(app: FreightApp) {
         ...p,
         retail_orders: p.retail_order_id ? orderMap[p.retail_order_id] ?? null : null,
       })),
+    });
+  });
+
+  /** Match a tracking # to a linked-courier package before receive. */
+  app.get("/packages/lookup", async (c) => {
+    const user = await requireUser(c);
+    if (user instanceof Response) return user;
+    const barcode = (c.req.query("barcode") || "").trim();
+    if (!barcode) return c.json({ package: null, matched: false });
+
+    const courierIds = await linkedCourierOrgIds(user.organizationId);
+    let pkg = (
+      await freightDb()
+        .from("packages")
+        .select("*")
+        .eq("courier_tracking_number", barcode)
+        .in("owner_org_id", courierIds)
+        .maybeSingle()
+    ).data;
+    if (!pkg) {
+      pkg = (
+        await freightDb()
+          .from("packages")
+          .select("*")
+          .eq("courier_tracking_number", barcode)
+          .in("organization_id", courierIds)
+          .maybeSingle()
+      ).data;
+    }
+    if (!pkg) return c.json({ package: null, matched: false });
+
+    let suiteInfo: { suite_code?: string; contact_name?: string } | null = null;
+    if (pkg.suite_id) {
+      const { data: s } = await freightDb()
+        .from("suites")
+        .select("suite_code, contact_name")
+        .eq("id", pkg.suite_id)
+        .maybeSingle();
+      suiteInfo = s;
+    }
+    return c.json({
+      package: { ...pkg, suites: suiteInfo },
+      matched: true,
     });
   });
 
@@ -1152,13 +1201,13 @@ export function registerPipelineRoutes(app: FreightApp) {
       const ownerOrgId = b.ownerOrgId || user.organizationId;
       if (!courierIds.includes(ownerOrgId)) {
         return c.json(
-          { error: "No active link with that courier. Connect warehouses first." },
+          { error: "No active link with that courier. Connect freight forwarders first." },
           403,
         );
       }
       const okLink = await hasActiveLink(operatingWarehouseOrgId, ownerOrgId);
       if (!okLink) {
-        return c.json({ error: "Warehouse↔courier link is not active" }, 403);
+        return c.json({ error: "Freight forwarder↔courier link is not active" }, 403);
       }
 
       let suiteId: string | null = null;

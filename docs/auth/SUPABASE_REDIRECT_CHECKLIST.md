@@ -18,7 +18,7 @@ Include **scheme + host + port + path** where your apps handle the post-auth lan
 | Fleet owner signup | `http://localhost:3000/signup` | `https://roamfleet.co/signup` |
 | Enterprise (apex / marketing) | `http://localhost:3003/` | `https://roamenterprise.co/` |
 | Enterprise Courier door | `http://courier.localhost:3003/` | `https://courier.roamenterprise.co/` |
-| Enterprise Warehouse door | `http://warehouse.localhost:3003/` | `https://warehouse.roamenterprise.co/` |
+| Enterprise Freight Forwarder door | `http://freight-forwarder.localhost:3003/` | `https://freight-forwarder.roamenterprise.co/` |
 | Enterprise Super Admin | `http://localhost:3001/` | `https://roamdominion.co/` (deploy `@roam/admin`) |
 | Driver | `http://localhost:3002/` | `https://roamdriver.co/` |
 | Driver (Android app) | — | `co.roamenterprise.driver://login` |
@@ -51,7 +51,7 @@ Add every production and dev recovery landing URL. See [`PASSWORD_RECOVERY.md`](
 | Fleet manager | `http://localhost:3000/reset-password` | `https://roamfleet.co/reset-password` |
 | Enterprise (apex) | `http://localhost:3003/reset-password` | `https://roamenterprise.co/reset-password` |
 | Enterprise Courier door | `http://courier.localhost:3003/reset-password` | `https://courier.roamenterprise.co/reset-password` |
-| Enterprise Warehouse door | `http://warehouse.localhost:3003/reset-password` | `https://warehouse.roamenterprise.co/reset-password` |
+| Enterprise Freight Forwarder door | `http://freight-forwarder.localhost:3003/reset-password` | `https://freight-forwarder.roamenterprise.co/reset-password` |
 | Driver | `http://localhost:3002/reset-password` | `https://roamdriver.co/reset-password` |
 | Rides passenger | `http://localhost:5180/reset-password` | `https://roam-s.co/reset-password` |
 | Roam Haul | `http://localhost:3004/reset-password` | `https://roamhaul.co/reset-password` |

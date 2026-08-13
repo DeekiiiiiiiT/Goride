@@ -4,7 +4,7 @@ import { LoginPage } from '@/app/auth/LoginPage';
 import { getProductDoor } from '@/app/productDoor';
 
 /**
- * Real email/password login only on product doors (courier / warehouse).
+ * Real email/password login only on product doors (courier / freight-forwarder).
  * Apex marketing uses /sign-in (product picker) — never a password form.
  */
 export default function LoginEntry() {

@@ -9,7 +9,7 @@ Roam Enterprise is one platform with **two product doors** (separate hostnames =
 | Product | Door host | Path | Buyer | Owns |
 |---------|-----------|------|-------|------|
 | **Courier** | `courier.roamenterprise.co` | `/app/*` | Freight / mailbox (`freight_forwarding`) | Customers, suites, packages (goods), manifests, customs, hub, last mile, domestic |
-| **Warehouse** | `warehouse.roamenterprise.co` | `/warehouse/*` | Intake warehouse (`warehouse`) | Buildings, floor staff, physical custody while boxes sit on the floor |
+| **Freight Forwarder** | `freight-forwarder.roamenterprise.co` | `/freight-forwarder/*` | Freight forwarder (`warehouse`) | Buildings, floor staff, physical custody while boxes sit on the floor |
 
 They are **siblings**, not a seat split inside one company. They connect when a courier needs a receive floor.
 
@@ -18,7 +18,7 @@ They are **siblings**, not a seat split inside one company. They connect when a 
 | Door | URL | Test user |
 |------|-----|-----------|
 | Courier | http://courier.localhost:3003/login | `freight.bootstrap+20260731232909@roamenterprise.test` (your existing password) |
-| Warehouse | http://warehouse.localhost:3003/login | `warehouse.smoke@roamenterprise.test` — password in gitignored `docs/products/.local-warehouse-smoke-creds.txt` |
+| Freight Forwarder | http://freight-forwarder.localhost:3003/login | `warehouse.smoke@roamenterprise.test` — password in gitignored `docs/products/.local-warehouse-smoke-creds.txt` |
 
 Orgs are pre-linked via `warehouse_courier_links` (active).
 

@@ -55,7 +55,7 @@ export interface EnterpriseEnabledModules {
   freight_invoice_audit: boolean;
   freight_hs_tariffs: boolean;
   freight_billing: boolean;
-  /** Warehouse product — receive floor, partnerships, storage ledger. */
+  /** Freight Forwarder product — receive floor, partnerships, storage ledger. */
   warehouse_inbound: boolean;
   warehouse_receive: boolean;
   warehouse_partner_links: boolean;

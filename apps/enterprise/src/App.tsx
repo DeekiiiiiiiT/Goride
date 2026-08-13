@@ -1,5 +1,6 @@
 import { lazy, Suspense, type ReactNode } from 'react';
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { FREIGHT_FORWARDER_PATH } from '@/app/productDoor';
 import { PwaProvider } from '@fleet/components/pwa/PwaProvider';
 import { NoPwaProvider } from '@fleet/components/pwa/NoPwaProvider';
 import { isEnterpriseOpsDoorHost } from '@fleet/pwa/pwaMeta';
@@ -30,7 +31,6 @@ import { SignInChooserPage } from '@/pages/SignInChooserPage';
 import { Gated } from '@/app/modules/Gated';
 import {
   PackageDutyDetailPage,
-  PackagesListPage,
   PackagesWorkspacePage,
 } from '@/app/freight/packageLazyPages';
 
@@ -202,6 +202,12 @@ function Fall() {
       Loading…
     </div>
   );
+}
+
+function LegacyWarehousePathRedirect() {
+  const loc = useLocation();
+  const next = loc.pathname.replace(/^\/warehouse/, FREIGHT_FORWARDER_PATH);
+  return <Navigate to={`${next}${loc.search}${loc.hash}`} replace />;
 }
 
 export default function App() {
@@ -769,8 +775,10 @@ export default function App() {
           />
         </Route>
 
+        <Route path="/warehouse" element={<LegacyWarehousePathRedirect />} />
+        <Route path="/warehouse/*" element={<LegacyWarehousePathRedirect />} />
         <Route
-          path="/warehouse"
+          path={FREIGHT_FORWARDER_PATH}
           element={
             <Suspense fallback={<Fall />}>
               <WarehouseEntry />
@@ -805,16 +813,7 @@ export default function App() {
               </Gated>
             }
           />
-          <Route
-            path="packages"
-            element={
-              <Gated module="freight_mailbox_packages">
-                <Suspense fallback={<Fall />}>
-                  <PackagesListPage />
-                </Suspense>
-              </Gated>
-            }
-          />
+          <Route path="packages" element={<Navigate to={FREIGHT_FORWARDER_PATH} replace />} />
           <Route
             path="partners"
             element={

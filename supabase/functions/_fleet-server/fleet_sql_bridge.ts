@@ -135,9 +135,7 @@ async function executeMapped(calls: Call[]): Promise<{ data: unknown; error: unk
     const col = String(c.args[0] ?? "");
     const sqlCol = payloadPathToCol(col);
     if (!sqlCol) {
-      // Unmapped JSON path — cannot push; skip with warning (rare after cutover)
-      console.warn("[fleetSqlBridge] unmapped filter column (skipped):", col);
-      continue;
+      throw new Error(`[fleetSqlBridge] unmapped filter column: ${col}`);
     }
     if (c.method === "eq") filters.push({ op: "eq", col: sqlCol, value: c.args[1] });
     else if (c.method === "neq") filters.push({ op: "neq", col: sqlCol, value: c.args[1] });

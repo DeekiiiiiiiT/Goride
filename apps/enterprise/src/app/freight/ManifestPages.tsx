@@ -27,17 +27,17 @@ type ManifestRow = Record<string, unknown>;
 
 const FIELD_TIPS = {
   carrier:
-    'The airline or shipping line that moves the cargo (example: Amerijet). Not the origin warehouse, and not Jamaica Customs.',
+    'The airline or shipping line that moves the cargo (example: Amerijet). Not the origin freight forwarder, and not Jamaica Customs.',
   shipmentType:
     'How the cargo travels: Air = plane, Sea = ship. Pick Air for air carriers like Amerijet.',
   origin:
-    'Your origin warehouse — where packages were received before this shipment left for Jamaica.',
+    'Your origin freight forwarder — where packages were received before this shipment left for Jamaica.',
   destination:
     'Your main Jamaica hub where cargo will be scanned after Customs clears it.',
   awb:
     'The carrier’s official shipment number. AWB = air waybill (plane). BL = bill of lading (ship). Optional if you do not have it yet — add it later when you submit to Customs.',
   csvFile:
-    'Spreadsheet from the origin warehouse listing every package on this flight/shipment (tracking, suite/mailbox, weight, value). Download the template if you need the column layout.',
+    'Spreadsheet from the origin freight forwarder listing every package on this flight/shipment (tracking, suite/mailbox, weight, value). Download the template if you need the column layout.',
   brokerRef:
     'Optional reference your customs broker gave you. Leave blank if you do not have one yet.',
   flightOrVoyage:
@@ -387,7 +387,7 @@ function UploadManifestForm({
       />
 
       <div>
-        <FieldLabel tip={FIELD_TIPS.csvFile}>Warehouse cargo list (CSV file)</FieldLabel>
+        <FieldLabel tip={FIELD_TIPS.csvFile}>Freight forwarder cargo list (CSV file)</FieldLabel>
         <input
           ref={fileRef}
           type="file"

@@ -148,7 +148,7 @@ export function PackageDutyDetailPage() {
         <>
           <PackageMissionRibbon
             trackingLabel={String(
-              d.pkg.courier_tracking_number || d.pkg.id || packageId,
+              d.pkg.courier_tracking_number || 'No tracking yet',
             ).slice(0, 40)}
             statusLabel={status.replace(/_/g, ' ')}
             mission={mission}
@@ -163,7 +163,15 @@ export function PackageDutyDetailPage() {
               open={openStage === 'receive'}
               onToggle={() => toggleStage('receive')}
             >
-              <PackageSummaryPanel pkg={d.pkg} suite={d.suite} />
+              <PackageSummaryPanel
+                key={String(d.pkg.id ?? packageId)}
+                pkg={d.pkg}
+                suite={d.suite}
+                savingTracking={d.applyInvoiceFill.isPending}
+                onSaveTracking={(tracking) =>
+                  d.applyInvoiceFill.mutate({ courierTrackingNumber: tracking || null })
+                }
+              />
               {!mission.stages[0].done && (
                 <p className="mt-3 text-sm text-slate-600">
                   Still expected — receive at{' '}

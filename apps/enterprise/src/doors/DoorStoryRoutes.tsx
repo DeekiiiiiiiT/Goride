@@ -9,11 +9,11 @@ import {
   FreightPartnersPage,
 } from '@/doors/freight/FreightStoryPages';
 
-/** Door product story routes — only meaningful on courier / warehouse hosts. */
+/** Door product story routes — only meaningful on courier / freight-forwarder hosts. */
 export function DoorHowItWorksPage() {
   const door = getProductDoor();
   if (door === 'courier') return <CourierHowItWorksPage />;
-  if (door === 'warehouse') return <FreightHowItWorksPage />;
+  if (door === 'freight_forwarder') return <FreightHowItWorksPage />;
   return <Navigate to="/" replace />;
 }
 
@@ -25,6 +25,6 @@ export function DoorConnectPage() {
 
 export function DoorPartnersPage() {
   const door = getProductDoor();
-  if (door === 'warehouse') return <FreightPartnersPage />;
+  if (door === 'freight_forwarder') return <FreightPartnersPage />;
   return <Navigate to="/" replace />;
 }

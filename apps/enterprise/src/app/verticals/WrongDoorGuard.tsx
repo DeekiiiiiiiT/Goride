@@ -18,7 +18,7 @@ export function WrongDoorGuard({
   door,
   children,
 }: {
-  door: 'courier' | 'warehouse';
+  door: 'courier' | 'freight_forwarder';
   children: React.ReactNode;
 }) {
   const { businessType, subscribedProducts, loading: authLoading, role } = useAuth();

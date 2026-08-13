@@ -74,13 +74,13 @@ export function getSignInLines(): SignInLine[] {
     {
       id: 'enterprise',
       name: 'Enterprise',
-      description: 'B2B warehouse and courier logistics.',
+      description: 'B2B freight forwarder and courier logistics.',
       products: [
         {
-          id: 'warehouse',
-          name: 'Warehouse',
+          id: 'freight_forwarder',
+          name: 'Freight Forwarder',
           description: 'US intake floor and partner receive.',
-          href: urlForDoor('warehouse', '/login'),
+          href: urlForDoor('freight_forwarder', '/login'),
         },
         {
           id: 'courier',

@@ -12,8 +12,8 @@ type RoleAs = 'warehouse' | 'courier';
 
 /**
  * Shared Connect / Partners screen.
- * Courier: Connect warehouses (+ create in-house).
- * Warehouse: Couriers we receive for (accept/reject).
+ * Courier: Connect freight forwarders (+ create in-house).
+ * Freight Forwarder: Couriers we receive for (accept/reject).
  */
 export function PartnerLinksPage({ roleAs }: { roleAs: RoleAs }) {
   const { organizationId } = useAuth();
@@ -49,10 +49,10 @@ export function PartnerLinksPage({ roleAs }: { roleAs: RoleAs }) {
   }
 
   const title =
-    roleAs === 'courier' ? 'Connect a warehouse' : 'Courier partners';
+    roleAs === 'courier' ? 'Connect a freight forwarder' : 'Courier partners';
   const blurb =
     roleAs === 'courier'
-      ? 'Pick which warehouses hold your packages — your own floor or a third-party warehouse.'
+      ? 'Pick which freight forwarders hold your packages — your own floor or a partner.'
       : 'Accept couriers you receive for. Each package stays tagged to its courier.';
 
   return (
@@ -64,9 +64,9 @@ export function PartnerLinksPage({ roleAs }: { roleAs: RoleAs }) {
 
       {roleAs === 'courier' && (
         <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-4">
-          <p className="text-sm font-medium text-amber-950">In-house warehouse</p>
+          <p className="text-sm font-medium text-amber-950">In-house freight forwarder</p>
           <p className="mt-1 text-xs text-amber-900/80">
-            Run receive yourself under the Warehouse product. Creates an active self-link.
+            Run receive yourself under the Freight Forwarder product. Creates an active self-link.
           </p>
           <button
             type="button"
@@ -79,14 +79,14 @@ export function PartnerLinksPage({ roleAs }: { roleAs: RoleAs }) {
             }}
             className="mt-3 rounded-lg bg-amber-900 px-3 py-2 text-sm font-medium text-white hover:bg-amber-800 disabled:opacity-50"
           >
-            {ensureSelf.isPending ? 'Creating…' : 'Enable my in-house warehouse'}
+            {ensureSelf.isPending ? 'Creating…' : 'Enable my in-house freight forwarder'}
           </button>
         </div>
       )}
 
       <div className="rounded-xl border border-slate-200 bg-white p-4">
         <p className="text-sm font-medium text-slate-900">
-          {roleAs === 'courier' ? 'Invite a warehouse company' : 'Invite a courier company'}
+          {roleAs === 'courier' ? 'Invite a freight forwarder' : 'Invite a courier company'}
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
           <input

@@ -25,7 +25,7 @@ export type PackageMissionDeriveResult = {
 };
 
 const PRIMARY_ACTION: Record<PackageMissionStageId, string> = {
-  receive: 'Receive package at US warehouse',
+  receive: 'Receive package at US freight forwarder',
   invoice: 'Upload / verify customer commercial invoice',
   duty: 'Calculate landed cost / duty',
   bill: 'Generate consolidated billing invoice',
@@ -70,7 +70,7 @@ export function derivePackageMission(
       label: LABELS.receive,
       done: receiveDone,
       summary: receiveDone
-        ? `Received · ${status.replace(/_/g, ' ') || 'in warehouse'}`
+        ? `Received · ${status.replace(/_/g, ' ') || 'at freight forwarder'}`
         : 'Waiting for US receive',
     },
     {

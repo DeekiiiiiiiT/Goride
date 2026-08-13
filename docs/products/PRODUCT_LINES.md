@@ -15,28 +15,28 @@ Fleet managers are tagged `productLine: fleet` and `businessType: rideshare`.
 
 | Domain | Audience | Surfaces |
 |--------|----------|----------|
-| [roamenterprise.co](https://roamenterprise.co) | Multi-vertical B2B orgs | Marketing (public) + `/sign-in` product picker; real `/login` only on courier/warehouse doors + `/admin` product ops |
+| [roamenterprise.co](https://roamenterprise.co) | Multi-vertical B2B orgs | Marketing (public) + `/sign-in` product picker; real `/login` only on courier/freight-forwarder doors + `/admin` product ops |
 | [roamdominion.co](https://roamdominion.co) | Platform Super Admin | Dominion segment `enterprise` |
 
 **Architecture (locked 2026-07-31):** Enterprise is its **own authenticated app** inside `apps/enterprise` (Path B). It is **not** a second deploy of `apps/fleet`. Shared packages (`@roam/ui`, `@roam/auth-client`, `@roam/admin-core`, etc.) are reused; Fleet’s app shell is not.
 
 Enterprise orgs are tagged `productLine: enterprise` with business types from `@roam/business-config` (default vertical: `freight_forwarding`). Rideshare/taxi are excluded from Enterprise signup toggles.
 
-### Products on the same domain (Warehouse & Courier)
+### Products on the same domain (Freight Forwarder & Courier)
 
 Sibling products under `productLine: enterprise` (see [`WAREHOUSE_COURIER_MODEL.md`](./WAREHOUSE_COURIER_MODEL.md) and [`ENTERPRISE_PRODUCT_DOORS.md`](./ENTERPRISE_PRODUCT_DOORS.md)):
 
 | Door host | Product | Buyer (`business_type`) | Lands on |
 |-----------|---------|-------------------------|----------|
 | `courier.roamenterprise.co` | **Courier** | `freight_forwarding` (+ courier verticals) | `/app` |
-| `warehouse.roamenterprise.co` | **Warehouse** | `warehouse` | `/warehouse` |
+| `freight-forwarder.roamenterprise.co` | **Freight Forwarder** | `warehouse` | `/freight-forwarder` |
 | `roamenterprise.co` (apex) | Marketing | — | public site; `/sign-in` picks Rideshare / Delivery / Enterprise apps (no apex password form) |
 
-Local: `courier.localhost:3003` / `warehouse.localhost:3003`.
+Local: `courier.localhost:3003` / `freight-forwarder.localhost:3003`.
 
-**Connection model:** many-to-many `freight.warehouse_courier_links`. Packages carry `owner_org_id` (courier) + `operating_warehouse_org_id` (warehouse). In-house floors use a self-link (`warehouse_org_id = courier_org_id`).
+**Connection model:** many-to-many `freight.warehouse_courier_links`. Packages carry `owner_org_id` (courier) + `operating_warehouse_org_id` (freight forwarder). In-house floors use a self-link (`warehouse_org_id = courier_org_id`).
 
-Paths `/app` and `/warehouse` remain inside the SPA; **permanent installs** are per door hostname (two PWAs).
+Paths `/app` and `/freight-forwarder` remain inside the SPA; **permanent installs** are per door hostname (two PWAs).
 
 ### Locked v1 scope (Freight Forwarding / Courier)
 

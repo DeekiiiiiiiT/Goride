@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { minorToUsd } from './usePackageDutyDetail';
 
@@ -31,7 +32,7 @@ export function PackageDutyChrome({ packageId, pkgOptions, pkg, onSelect }: Prop
           >
             {pkgOptions.map((p) => (
               <option key={String(p.id)} value={String(p.id)}>
-                {String(p.courier_tracking_number ?? p.id)} · {String(p.status)}
+                {String(p.courier_tracking_number || 'No tracking yet')} · {String(p.status)}
               </option>
             ))}
           </select>
@@ -49,11 +50,40 @@ export function PackageDutyChrome({ packageId, pkgOptions, pkg, onSelect }: Prop
 export function PackageSummaryPanel({
   pkg,
   suite,
+  onSaveTracking,
+  savingTracking,
 }: {
   pkg: Record<string, unknown>;
   suite?: Suite;
+  onSaveTracking?: (tracking: string) => void;
+  savingTracking?: boolean;
 }) {
+  const current = String(pkg.courier_tracking_number ?? '');
+  const [tracking, setTracking] = useState(current);
+
   return (
+    <div className="space-y-4">
+      {onSaveTracking ? (
+        <label className="block text-sm font-medium text-slate-800">
+          Tracking # <span className="font-normal text-slate-500">(add later is fine)</span>
+          <div className="mt-1 flex flex-wrap gap-2">
+            <input
+              value={tracking}
+              onChange={(e) => setTracking(e.target.value)}
+              placeholder="Paste TBA / 1Z when you have it"
+              className="min-h-11 min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-3 font-mono text-sm"
+            />
+            <button
+              type="button"
+              disabled={savingTracking || tracking.trim() === current.trim()}
+              onClick={() => onSaveTracking(tracking.trim())}
+              className="min-h-11 rounded-lg bg-amber-500 px-4 py-3 text-sm font-semibold text-slate-950 hover:bg-amber-400 disabled:opacity-60"
+            >
+              {savingTracking ? 'Saving…' : current ? 'Update' : 'Save tracking'}
+            </button>
+          </div>
+        </label>
+      ) : null}
     <dl className="grid grid-cols-2 gap-3 text-sm">
       <div>
         <dt className="text-slate-500">Suite</dt>
@@ -89,5 +119,6 @@ export function PackageSummaryPanel({
         <dd className="font-mono">{String(pkg.bin_location ?? '—')}</dd>
       </div>
     </dl>
+    </div>
   );
 }

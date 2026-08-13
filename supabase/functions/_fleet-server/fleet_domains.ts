@@ -248,6 +248,13 @@ export const FLEET_DOMAINS: FleetDomainDef[] = [
         entry_mode: str(v.entryMode),
         payment_source: str(v.paymentSource),
         odometer: num(v.odometer),
+        transaction_id:
+          str(v.transactionId) ??
+          str(
+            v.metadata && typeof v.metadata === "object"
+              ? (v.metadata as Record<string, unknown>).originalTransactionId
+              : null,
+          ),
       });
     },
   },

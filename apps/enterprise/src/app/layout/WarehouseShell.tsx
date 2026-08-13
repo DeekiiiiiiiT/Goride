@@ -2,16 +2,14 @@ import { NavLink, Outlet } from 'react-router-dom';
 import {
   Building2,
   ClipboardList,
-  CreditCard,
   LayoutDashboard,
   Link2,
   LogOut,
-  Package,
   Users,
 } from 'lucide-react';
 import { useEffect } from 'react';
 import { useAuth } from '@/app/auth/AuthProvider';
-import { navigateDoorHref, urlForDoor } from '@/app/productDoor';
+import { FREIGHT_FORWARDER_PATH, navigateDoorHref, urlForDoor } from '@/app/productDoor';
 import { useSeatAccess } from '@/app/seats/SeatAccessProvider';
 import {
   canAccessCourierVertical,
@@ -19,16 +17,14 @@ import {
 } from '@/app/verticals/enterpriseHome';
 
 const NAV = [
-  { to: '/warehouse', label: 'Inbound', icon: LayoutDashboard, end: true },
-  { to: '/warehouse/receive', label: 'Receive Station', icon: ClipboardList },
-  { to: '/warehouse/facilities', label: 'Facilities', icon: Building2 },
-  { to: '/warehouse/packages', label: 'Packages', icon: Package },
-  { to: '/warehouse/partners', label: 'Courier partners', icon: Link2 },
-  { to: '/warehouse/billing', label: 'Storage billing', icon: CreditCard },
-  { to: '/warehouse/team', label: 'Team', icon: Users },
+  { to: FREIGHT_FORWARDER_PATH, label: 'Inbound', icon: LayoutDashboard, end: true },
+  { to: `${FREIGHT_FORWARDER_PATH}/receive`, label: 'Receive Station', icon: ClipboardList },
+  { to: `${FREIGHT_FORWARDER_PATH}/facilities`, label: 'Facilities', icon: Building2 },
+  { to: `${FREIGHT_FORWARDER_PATH}/partners`, label: 'Courier partners', icon: Link2 },
+  { to: `${FREIGHT_FORWARDER_PATH}/team`, label: 'Team', icon: Users },
 ] as const;
 
-/** Warehouse product shell — floors, partners, storage. */
+/** Freight Forwarder product shell — floors, partners, storage. */
 export function WarehouseShell() {
   const { user, role, signOut, businessType, subscribedProducts } = useAuth();
   const { seatRole } = useSeatAccess();
@@ -61,7 +57,7 @@ export function WarehouseShell() {
     (user?.user_metadata?.full_name as string | undefined) ||
     (user?.user_metadata?.name as string | undefined) ||
     user?.email ||
-    'Warehouse user';
+    'Freight Forwarder user';
 
   const courierHref = urlForDoor('courier', '/app');
 
@@ -72,8 +68,8 @@ export function WarehouseShell() {
           <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-600">
             Roam Enterprise
           </p>
-          <p className="mt-1 text-sm font-semibold">Warehouse</p>
-          <p className="mt-0.5 text-xs text-slate-500">Receive product</p>
+          <p className="mt-1 text-sm font-semibold">Freight Forwarder</p>
+          <p className="mt-0.5 text-xs text-slate-500">Intake product</p>
         </div>
         <nav className="flex-1 space-y-0.5 p-3">
           {NAV.map((item) => (

@@ -270,11 +270,11 @@ export function IntakeWarehouseCatalogPage() {
         <div>
           <h1 className="text-2xl font-semibold text-slate-900 flex items-center gap-2">
             <Warehouse className="h-6 w-6 text-slate-500" />
-            Warehouses
+            Freight forwarder buildings
           </h1>
           <p className="mt-1 text-sm text-slate-500 max-w-2xl">
             Master terminals in any country (US, China, and more). Enterprise customers pick from
-            this list when they set up warehouse intake — they cannot add their own.
+            this list when they set up freight-forwarder intake — they cannot add their own.
           </p>
         </div>
         <button
@@ -286,7 +286,7 @@ export function IntakeWarehouseCatalogPage() {
           className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800"
         >
           <Plus className="h-4 w-4" />
-          Add warehouse
+          Add building
         </button>
       </div>
 
@@ -319,7 +319,7 @@ export function IntakeWarehouseCatalogPage() {
           onSubmit={createWarehouse}
           className="space-y-3 rounded-xl border border-slate-200 bg-white p-4"
         >
-          <h2 className="text-sm font-semibold text-slate-900">New warehouse</h2>
+          <h2 className="text-sm font-semibold text-slate-900">New building</h2>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block text-sm">
               Name
@@ -352,7 +352,7 @@ export function IntakeWarehouseCatalogPage() {
               disabled={savingId === 'new'}
               className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
             >
-              {savingId === 'new' ? 'Creating…' : 'Create warehouse'}
+              {savingId === 'new' ? 'Creating…' : 'Create building'}
             </button>
             <button
               type="button"
@@ -378,7 +378,7 @@ export function IntakeWarehouseCatalogPage() {
             <thead className="border-b border-slate-100 bg-slate-50 text-xs uppercase text-slate-500">
               <tr>
                 <th className="w-8 px-3 py-2" />
-                <th className="px-4 py-2">Warehouse</th>
+                <th className="px-4 py-2">Building</th>
                 <th className="px-4 py-2">Country</th>
                 <th className="px-4 py-2">Address</th>
                 <th className="px-4 py-2">Status</th>
@@ -430,7 +430,7 @@ export function IntakeWarehouseCatalogPage() {
                         <td colSpan={5} className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
                           <div className="max-w-3xl space-y-3 rounded-lg border border-slate-200 bg-white p-4">
                             <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                              Edit warehouse
+                              Edit building
                             </h3>
                             <div className="grid gap-2 sm:grid-cols-2">
                               <label className="block text-sm sm:col-span-2">
@@ -475,7 +475,7 @@ export function IntakeWarehouseCatalogPage() {
                               onClick={() => void saveWarehouse(w.id)}
                               className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
                             >
-                              {savingId === w.id ? 'Saving…' : 'Save warehouse'}
+                              {savingId === w.id ? 'Saving…' : 'Save building'}
                             </button>
                           </div>
                         </td>
@@ -488,8 +488,8 @@ export function IntakeWarehouseCatalogPage() {
                 <tr>
                   <td colSpan={5} className="px-4 py-10 text-center text-slate-500">
                     {rows.length
-                      ? 'No warehouses for this country filter.'
-                      : 'No warehouses yet.'}
+                      ? 'No buildings for this country filter.'
+                      : 'No buildings yet.'}
                   </td>
                 </tr>
               )}

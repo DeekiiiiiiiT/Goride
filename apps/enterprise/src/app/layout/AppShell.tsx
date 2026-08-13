@@ -172,7 +172,7 @@ const NAV_ITEMS: NavItem[] = [
       { to: '/app/facilities', label: 'Facilities', icon: Building2, module: 'freight_suites' },
       {
         to: '/app/connect-warehouses',
-        label: 'Connect warehouses',
+        label: 'Connect freight forwarders',
         icon: Link2,
         module: 'warehouse_partner_links',
       },

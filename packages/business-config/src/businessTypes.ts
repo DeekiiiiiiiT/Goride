@@ -54,9 +54,9 @@ export const BUSINESS_TYPES = [
   },
   {
     key: 'warehouse' as BusinessType,
-    label: 'Intake Warehouse',
+    label: 'Freight Forwarder',
     description:
-      'Standalone Warehouse product — US/origin receive floor that connects to Courier companies',
+      'Freight Forwarder product — US/origin receive floor that connects to Courier companies',
     icon: 'Package',
   },
 ] as const;
@@ -71,7 +71,7 @@ export const ENTERPRISE_BUSINESS_TYPES: BusinessType[] = [
 
 /**
  * Enterprise verticals provisioned by invite / Dominion only (not open signup).
- * Warehouse is sold later; until then only invited partner orgs.
+ * Freight Forwarder is sold later; until then only invited partner orgs.
  */
 export const INVITATION_ONLY_ENTERPRISE_BUSINESS_TYPES: BusinessType[] = [
   'warehouse',

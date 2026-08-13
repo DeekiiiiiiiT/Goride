@@ -2,7 +2,7 @@
 
 export const PIPELINE_FUNNEL = [
   { key: 'expected', label: 'Expected', count: 24 },
-  { key: 'received_at_warehouse', label: 'In Warehouse', count: 18 },
+  { key: 'received_at_warehouse', label: 'At freight forwarder', count: 18 },
   { key: 'manifested', label: 'Manifested', count: 12 },
   { key: 'in_transit_intl', label: 'In Transit', count: 31 },
   { key: 'customs_hold', label: 'Customs Hold', count: 4 },
@@ -159,7 +159,7 @@ export const PACKAGE_DETAIL_MOCK = {
   },
   timeline: [
     { at: '2026-08-01 14:22', event: 'Pre-alert created' },
-    { at: '2026-08-02 09:05', event: 'Received at warehouse' },
+    { at: '2026-08-02 09:05', event: 'Received at freight forwarder' },
     { at: '2026-08-03 16:40', event: 'Manifested · MAWB 235-9982-1102' },
     { at: '2026-08-04 08:10', event: 'In transit to Jamaica' },
   ],

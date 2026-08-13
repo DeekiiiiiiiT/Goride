@@ -2,6 +2,7 @@ import type { ModuleKey } from '@roam/platform-settings';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useModuleAccess } from '@/app/modules/ModuleAccessProvider';
 import { useSeatAccess } from '@/app/seats/SeatAccessProvider';
+import { FREIGHT_FORWARDER_PATH, isFreightForwarderPath } from '@/app/productDoor';
 
 export function RequireModule({
   module,
@@ -38,7 +39,7 @@ export function RequireModule({
         </div>
       );
     }
-    const home = location.pathname.startsWith('/warehouse') ? '/warehouse' : '/app';
+    const home = isFreightForwarderPath(location.pathname) ? FREIGHT_FORWARDER_PATH : '/app';
     return <Navigate to={home} replace />;
   }
 

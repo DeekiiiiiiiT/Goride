@@ -24,7 +24,7 @@ export function MiamiScanPage() {
     e.preventDefault();
     setError(null);
     if (!facilityId) {
-      setError('Add a warehouse under Facilities first.');
+      setError('Add a freight forwarder building under Facilities first.');
       return;
     }
     const form = e.currentTarget;
@@ -76,7 +76,7 @@ export function MiamiScanPage() {
 
       {!intakeList.length && (
         <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          No warehouse yet.{' '}
+          No freight forwarder building yet.{' '}
           <Link to="/app/facilities" className="font-semibold underline">
             Add one under Facilities
           </Link>{' '}

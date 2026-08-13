@@ -37,7 +37,7 @@ function buildSuiteAddress(
   warehouse?: Record<string, unknown> | null,
 ): string {
   const lines = [
-    String(warehouse?.address_line || 'US Warehouse (set address on Facilities)'),
+    String(warehouse?.address_line || 'US freight forwarder (set address on Facilities)'),
     [warehouse?.city, warehouse?.country_code].filter(Boolean).join(', ') || 'United States',
     `Suite ${suiteCode}`,
   ];

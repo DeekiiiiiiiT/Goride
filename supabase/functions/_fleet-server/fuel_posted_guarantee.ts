@@ -13,6 +13,8 @@ import { syncLinkedExpenseTransaction } from "./fuel_transaction_sync.ts";
 import * as fuelLogic from "./fuel_logic.ts";
 import { auditLogic } from "./audit_logic.ts";
 import { projectFromFuelEntry } from "./odometer_ledger.ts";
+import { canReuseLinkedFuelEntry, fuelEntryBelongsToTransaction } from "./fuel_entry_link.ts";
+import { queryFleet } from "./repos/baseRepo.ts";
 
 export type FuelDecisionReason =
   | "AUTO_AI_STATION"
@@ -112,19 +114,39 @@ export async function resolveCanonicalVehicleForFuel(
   return { vehicleId: null, vehiclePlate: hint || undefined };
 }
 
-async function findFuelEntryByTransactionId(txId: string): Promise<any | null> {
-  const { data } = await fromKvStore()
-    .select("value")
-    .like("key", "fuel_entry:%")
-    .eq("value->>transactionId", txId)
-    .limit(1);
-  if (data?.[0]?.value) return data[0].value;
-  const { data: data2 } = await fromKvStore()
-    .select("value")
-    .like("key", "fuel_entry:%")
-    .eq("value->metadata->>originalTransactionId", txId)
-    .limit(1);
-  return data2?.[0]?.value || null;
+export async function findFuelEntryByTransactionId(txId: string): Promise<any | null> {
+  const id = String(txId || "").trim();
+  if (!id) return null;
+
+  const pickOwned = (rows: unknown[]): any | null => {
+    for (const row of rows) {
+      if (row && typeof row === "object" && fuelEntryBelongsToTransaction(row as Record<string, unknown>, id)) {
+        return row;
+      }
+    }
+    return null;
+  };
+
+  const byCol = await queryFleet("fuel_entries", {
+    eq: { transaction_id: id },
+    limit: 10,
+  });
+  if (byCol.error) {
+    console.warn("[findFuelEntryByTransactionId] transaction_id lookup failed:", byCol.error.message);
+  } else {
+    const owned = pickOwned(byCol.data);
+    if (owned) return owned;
+  }
+
+  const byMeta = await queryFleet("fuel_entries", {
+    filters: [{ op: "eq", col: "value->metadata->>originalTransactionId", value: id }],
+    limit: 10,
+  });
+  if (byMeta.error) {
+    console.warn("[findFuelEntryByTransactionId] metadata lookup failed:", byMeta.error.message);
+    return null;
+  }
+  return pickOwned(byMeta.data);
 }
 
 async function resolveDriverName(
@@ -211,17 +233,25 @@ export async function ensureFuelEntryForApprovedTx(
     return { fuelEntry: null, created: false, blockedNoVehicle: true };
   }
 
-  // Idempotent: existing link
+  // Idempotent: existing link — only if that log line belongs to this expense
   const linkedId = tx.metadata?.fuelEntryId;
   if (linkedId) {
     const existing = await kv.get(`fuel_entry:${linkedId}`);
-    if (existing && (!existing.transactionId || existing.transactionId === tx.id)) {
+    if (canReuseLinkedFuelEntry(existing, tx.id)) {
       tx.metadata = {
         ...(tx.metadata || {}),
         fuelEntryId: existing.id,
         decisionReason: opts.decisionReason,
       };
       return { fuelEntry: existing, created: false, blockedNoVehicle: false };
+    }
+    if (existing) {
+      console.warn(
+        `[ensureFuelEntryForApprovedTx] stale fuelEntryId ${linkedId} on tx ${tx.id} (owned by ${existing.transactionId || "none"}) — creating a new log line`,
+      );
+      const nextMeta = { ...(tx.metadata || {}) };
+      delete nextMeta.fuelEntryId;
+      tx.metadata = nextMeta;
     }
   }
 
@@ -345,6 +375,7 @@ export async function ensureFuelEntryForApprovedTx(
       parentCompany: tx.metadata?.parentCompany,
     },
   };
+  delete fuelEntry.metadata.fuelEntryId;
 
   let matchedStation = opts.matchedStation || null;
   if (!matchedStation && fuelEntry.matchedStationId) {
@@ -485,7 +516,12 @@ export async function healApprovedFuelEntriesMissingLog(
     if (!tx?.id) continue;
     if (tx.metadata?.fuelEntryId) {
       const exists = await kv.get(`fuel_entry:${tx.metadata.fuelEntryId}`);
-      if (exists) continue;
+      if (canReuseLinkedFuelEntry(exists, tx.id)) continue;
+      if (exists) {
+        const nextMeta = { ...(tx.metadata || {}) };
+        delete nextMeta.fuelEntryId;
+        tx.metadata = nextMeta;
+      }
     }
     const existing = await findFuelEntryByTransactionId(tx.id);
     if (existing) {
