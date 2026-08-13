@@ -38,6 +38,7 @@ export const BIZ_COLOR: Record<string, string> = {
   trucking: 'bg-purple-500/15 text-purple-400',
   shipping: 'bg-cyan-500/15 text-cyan-400',
   freight_forwarding: 'bg-orange-500/15 text-orange-400',
+  warehouse: 'bg-amber-500/15 text-amber-700',
 };
 
 /** Alias matching product-line naming in specs. */

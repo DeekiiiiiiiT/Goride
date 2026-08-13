@@ -147,7 +147,7 @@ function extractSuiteCode(text: string): string | null {
   return null;
 }
 
-/** Ship-to street / city / ZIP for matching Dominion intake warehouses. */
+/** Ship-to street / city / ZIP for matching intake warehouse listings. */
 function extractShipToAddress(text: string): InvoiceParseSuggestion['shipTo'] {
   const block =
     text.match(

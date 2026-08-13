@@ -15,7 +15,7 @@ export type InvoiceParseLine = {
   deliveryLabel?: string | null;
 };
 
-/** Ship-to fragment used to match Dominion intake / org warehouses. */
+/** Ship-to fragment used to match intake / org warehouses. */
 export type InvoiceShipToHint = {
   streetLine: string | null;
   city: string | null;

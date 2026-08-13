@@ -20,6 +20,48 @@ export type WarehouseCourierLink = {
   updated_at: string;
 };
 
+export type StorageTerms = {
+  free_days: number;
+  per_day_minor: number;
+  currency: string;
+  handling_minor: number;
+};
+
+export const DEFAULT_STORAGE_TERMS: StorageTerms = {
+  free_days: 7,
+  per_day_minor: 0,
+  currency: "USD",
+  handling_minor: 0,
+};
+
+export function parseStorageTerms(raw: unknown): StorageTerms {
+  const t = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  const n = (v: unknown, fallback: number) => {
+    const x = Number(v);
+    return Number.isFinite(x) && x >= 0 ? x : fallback;
+  };
+  return {
+    free_days: Math.floor(n(t.free_days, DEFAULT_STORAGE_TERMS.free_days)),
+    per_day_minor: Math.floor(n(t.per_day_minor, DEFAULT_STORAGE_TERMS.per_day_minor)),
+    currency: String(t.currency || DEFAULT_STORAGE_TERMS.currency).slice(0, 3).toUpperCase(),
+    handling_minor: Math.floor(n(t.handling_minor, DEFAULT_STORAGE_TERMS.handling_minor)),
+  };
+}
+
+export async function getLinkTerms(
+  warehouseOrgId: string,
+  courierOrgId: string,
+): Promise<StorageTerms> {
+  if (warehouseOrgId === courierOrgId) return DEFAULT_STORAGE_TERMS;
+  const { data } = await freight()
+    .from("warehouse_courier_links")
+    .select("terms")
+    .eq("warehouse_org_id", warehouseOrgId)
+    .eq("courier_org_id", courierOrgId)
+    .maybeSingle();
+  return parseStorageTerms(data?.terms);
+}
+
 function freight() {
   return serviceClient().schema("freight");
 }
@@ -135,11 +177,20 @@ export async function inviteLink(input: {
 
   const { data: counterparty } = await publicDb()
     .from("organizations")
-    .select("id, product_line, business_type")
+    .select("id, product_line, business_type, is_external, created_by_org_id")
     .eq("id", input.counterpartyOrgId)
     .eq("product_line", "enterprise")
     .maybeSingle();
   if (!counterparty) throw new Error("Counterparty organization not found");
+  if (
+    counterparty.is_external &&
+    counterparty.created_by_org_id !== input.callerOrgId
+  ) {
+    throw new Error("That off-platform partner belongs to another company");
+  }
+
+  const autoActive = Boolean(counterparty.is_external);
+  const nextStatus: LinkStatus = autoActive ? "active" : "invited";
 
   const { data: existing } = await freight()
     .from("warehouse_courier_links")
@@ -153,10 +204,10 @@ export async function inviteLink(input: {
       const { data, error } = await freight()
         .from("warehouse_courier_links")
         .update({
-          status: "invited",
+          status: nextStatus,
           initiated_by: input.roleAs,
           invited_by_user_id: input.callerUserId,
-          accepted_at: null,
+          accepted_at: autoActive ? new Date().toISOString() : null,
           updated_at: new Date().toISOString(),
         })
         .eq("id", existing.id)
@@ -173,10 +224,105 @@ export async function inviteLink(input: {
     .insert({
       warehouse_org_id: warehouseOrgId,
       courier_org_id: courierOrgId,
-      status: "invited",
+      status: nextStatus,
       initiated_by: input.roleAs,
       invited_by_user_id: input.callerUserId,
+      accepted_at: autoActive ? new Date().toISOString() : null,
+      terms: DEFAULT_STORAGE_TERMS,
     })
+    .select("*")
+    .single();
+  if (error) throw new Error(error.message);
+  return data as WarehouseCourierLink;
+}
+
+function slugifyOrg(name: string): string {
+  const base = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40) || "partner";
+  const suffix = crypto.randomUUID().slice(0, 8);
+  return `ext-${base}-${suffix}`;
+}
+
+/** Off-platform partner: placeholder org + auto-active link. */
+export async function createExternalOrg(input: {
+  callerOrgId: string;
+  callerUserId: string;
+  roleAs: "warehouse" | "courier";
+  name: string;
+  contact?: { name?: string; email?: string; phone?: string };
+}): Promise<{ org: Record<string, unknown>; link: WarehouseCourierLink }> {
+  const name = input.name.trim();
+  if (name.length < 2) throw new Error("Company name is required");
+  const contact = input.contact ?? {};
+  const externalRole = input.roleAs === "courier" ? "warehouse" : "courier";
+  const businessType = externalRole === "warehouse" ? "warehouse" : "freight_forwarding";
+  const subscribed = externalRole === "warehouse" ? ["warehouse"] : ["courier"];
+
+  const { data: org, error } = await publicDb()
+    .from("organizations")
+    .insert({
+      owner_id: null,
+      name,
+      slug: slugifyOrg(name),
+      product_line: "enterprise",
+      business_type: businessType,
+      status: "active",
+      is_external: true,
+      created_by_org_id: input.callerOrgId,
+      contact_email: contact.email?.trim() || null,
+      contact_phone: contact.phone?.trim() || null,
+      external_contact: {
+        name: contact.name?.trim() || null,
+        email: contact.email?.trim() || null,
+        phone: contact.phone?.trim() || null,
+      },
+      subscribed_products: subscribed,
+    })
+    .select("*")
+    .single();
+  if (error) throw new Error(error.message);
+
+  const link = await inviteLink({
+    callerOrgId: input.callerOrgId,
+    callerUserId: input.callerUserId,
+    counterpartyOrgId: org.id as string,
+    roleAs: input.roleAs,
+  });
+  return { org, link };
+}
+
+export async function updateLinkTerms(input: {
+  linkId: string;
+  callerOrgId: string;
+  terms: Partial<StorageTerms>;
+}): Promise<WarehouseCourierLink> {
+  const { data: link, error: findErr } = await freight()
+    .from("warehouse_courier_links")
+    .select("*")
+    .eq("id", input.linkId)
+    .maybeSingle();
+  if (findErr) throw new Error(findErr.message);
+  if (!link) throw new Error("Link not found");
+  if (link.warehouse_org_id !== input.callerOrgId && link.courier_org_id !== input.callerOrgId) {
+    throw new Error("Forbidden: not a party to this link");
+  }
+  if (link.warehouse_org_id !== input.callerOrgId) {
+    throw new Error("Only the freight forwarder sets storage prices");
+  }
+  const next = {
+    ...parseStorageTerms(link.terms),
+    ...input.terms,
+  };
+  const { data, error } = await freight()
+    .from("warehouse_courier_links")
+    .update({
+      terms: parseStorageTerms(next),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", input.linkId)
     .select("*")
     .single();
   if (error) throw new Error(error.message);
@@ -248,8 +394,9 @@ export async function searchEnterpriseOrgs(q: string, limit = 20) {
   const term = q.trim();
   let query = publicDb()
     .from("organizations")
-    .select("id, name, business_type, product_line")
+    .select("id, name, business_type, product_line, is_external")
     .eq("product_line", "enterprise")
+    .eq("is_external", false)
     .limit(limit);
   if (term) {
     query = query.ilike("name", `%${term}%`);

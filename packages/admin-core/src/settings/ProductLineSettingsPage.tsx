@@ -55,7 +55,7 @@ import {
   type ConsumerSegmentSettings,
 } from '@roam/platform-settings';
 import { businessTypesForSegment } from '@roam/business-config';
-import { ENTERPRISE_MODULE_CATALOG } from '@roam/platform-settings';
+import { ENTERPRISE_MODULE_CATALOG, type ModuleCatalogEntry } from '@roam/platform-settings';
 
 // -------------------------------------------------------------------
 // Types
@@ -68,10 +68,16 @@ export type ProductLineSettingsPageProps = {
   userRole?: string;
   activeTab?: string;
   showBusinessTypes?: boolean;
+  /** Enterprise Admin: Courier + Freight Forwarder instead of the full business-type list. */
+  showProductToggles?: boolean;
   showDangerZone?: boolean;
   showFeaturesTab?: boolean;
   platformLabel?: string;
   appearanceSlot?: React.ReactNode;
+  pageTitle?: string;
+  pageDescription?: string;
+  /** When set, Features lists only these catalog groups (Dominion omits this). */
+  moduleGroups?: Array<ModuleCatalogEntry['group']>;
 };
 
 type SettingsData = FleetProductSettings | ConsumerSegmentSettings | Record<string, unknown>;
@@ -97,6 +103,26 @@ const BUSINESS_TYPE_ICON_MAP: Record<string, React.ComponentType<{ className?: s
   Ship,
   Boxes,
 };
+
+const ENTERPRISE_PRODUCT_TOGGLES: Array<{
+  key: string;
+  label: string;
+  description: string;
+  icon: React.ComponentType<{ className?: string }>;
+}> = [
+  {
+    key: 'freight_forwarding',
+    label: 'Courier',
+    description: 'Mailbox courier — packages, suites, and Jamaica freight.',
+    icon: Package,
+  },
+  {
+    key: 'warehouse',
+    label: 'Freight Forwarder',
+    description: 'Origin warehouse that receives boxes for courier partners.',
+    icon: Building2,
+  },
+];
 
 const CURRENCY_OPTIONS = [
   { value: 'JMD', label: 'JMD — Jamaican Dollar' },
@@ -134,10 +160,14 @@ export function ProductLineSettingsPage({
   userRole,
   activeTab: externalTab,
   showBusinessTypes = segment === 'enterprise',
+  showProductToggles = false,
   showDangerZone = isProductLineSegment(segment),
   showFeaturesTab = isProductLineSegment(segment),
   platformLabel = 'Roam Platform Admin',
   appearanceSlot,
+  pageTitle,
+  pageDescription,
+  moduleGroups,
 }: ProductLineSettingsPageProps) {
   const segmentDefaults = useMemo(() => defaultForSegment(segment), [segment]);
 
@@ -233,15 +263,29 @@ export function ProductLineSettingsPage({
   };
 
   const toggleBusinessType = (key: string) => {
-    setSettings(prev => ({
-      ...prev,
-      enabledBusinessTypes: {
-        ...prev.enabledBusinessTypes,
-        [key]: !prev.enabledBusinessTypes[key],
-      },
-    }));
+    setSettings(prev => {
+      const current = prev.enabledBusinessTypes?.[key] !== false;
+      return {
+        ...prev,
+        enabledBusinessTypes: {
+          ...prev.enabledBusinessTypes,
+          [key]: !current,
+        },
+      };
+    });
     setDirty(true);
   };
+
+  const visibleModules = useMemo(() => {
+    if (!moduleGroups?.length) return ENTERPRISE_MODULE_CATALOG;
+    return ENTERPRISE_MODULE_CATALOG.filter((mod) => moduleGroups.includes(mod.group));
+  }, [moduleGroups]);
+
+  const isEnterprise = segment === 'enterprise';
+  const heading = pageTitle ?? 'Platform Settings';
+  const subheading =
+    pageDescription ??
+    'Configure global platform options that affect all customer accounts.';
 
   const toggleModule = (key: string) => {
     if (!('enabledModules' in settings) || !settings.enabledModules) return;
@@ -272,10 +316,8 @@ export function ProductLineSettingsPage({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-slate-900 dark:text-white">Platform Settings</h1>
-          <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">
-            Configure global platform options that affect all customer accounts.
-          </p>
+          <h1 className="text-xl font-bold text-slate-900 dark:text-white">{heading}</h1>
+          <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">{subheading}</p>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -336,7 +378,7 @@ export function ProductLineSettingsPage({
               value={settings.platformName}
               onChange={e => updateField('platformName', e.target.value)}
               className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50"
-              placeholder="Roam Fleet"
+              placeholder={isEnterprise ? 'Roam Enterprise' : 'Roam Fleet'}
             />
           </div>
 
@@ -356,7 +398,9 @@ export function ProductLineSettingsPage({
 
           {/* Fleet Timezone */}
           <div>
-            <label className="block text-xs font-medium text-slate-700 dark:text-slate-400 mb-1.5">Fleet Timezone</label>
+            <label className="block text-xs font-medium text-slate-700 dark:text-slate-400 mb-1.5">
+              {isEnterprise ? 'Timezone' : 'Fleet Timezone'}
+            </label>
             <select
               value={settings.fleetTimezone}
               onChange={e => updateField('fleetTimezone', e.target.value)}
@@ -456,15 +500,61 @@ export function ProductLineSettingsPage({
             <div className="flex items-start gap-2 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2.5 mt-2">
               <AlertCircle className="w-4 h-4 text-amber-700 dark:text-amber-400 mt-0.5 shrink-0" />
               <p className="text-xs text-amber-800 dark:text-amber-900 dark:text-amber-300/80">
-                When maintenance mode is active, all fleet managers, team members, and drivers are blocked from using the platform. Only platform administrators can access the admin portal.
+                {isEnterprise
+                  ? 'When maintenance mode is active, Courier and Freight Forwarder customer accounts are blocked. Only administrators can open this portal.'
+                  : 'When maintenance mode is active, all fleet managers, team members, and drivers are blocked from using the platform. Only platform administrators can access the admin portal.'}
               </p>
             </div>
           </div>
         )}
       </SettingsSection>
 
-      {/* ── Section: Business Types (enterprise only) ── */}
-      {showBusinessTypes && (
+      {/* ── Section: Products (Enterprise Admin) ── */}
+      {showProductToggles && (
+      <SettingsSection
+        icon={<Building2 className="w-4 h-4 text-purple-400" />}
+        title="Products"
+        description="Turn Courier and Freight Forwarder on or off for new customer accounts. Existing accounts are not deleted."
+      >
+        <div className="space-y-2">
+          {ENTERPRISE_PRODUCT_TOGGLES.map((product) => {
+            const enabled =
+              'enabledBusinessTypes' in settings &&
+              settings.enabledBusinessTypes?.[product.key] !== false;
+            const IconComp = product.icon;
+            return (
+              <button
+                key={product.key}
+                type="button"
+                onClick={() => toggleBusinessType(product.key)}
+                className={`w-full flex items-center gap-4 rounded-xl border-2 px-4 py-3.5 text-left transition-all
+                  ${enabled
+                    ? 'border-amber-500/40 bg-amber-500/5'
+                    : 'border-slate-200 bg-white opacity-60 dark:border-slate-800 dark:bg-slate-900/50'
+                  }
+                `}
+              >
+                <div className={`p-2 rounded-lg ${enabled ? 'bg-amber-500/15' : 'bg-slate-100 dark:bg-slate-800'}`}>
+                  <IconComp className={`w-5 h-5 ${enabled ? 'text-amber-700 dark:text-amber-400' : 'text-slate-500'}`} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className={`text-sm font-medium ${enabled ? 'text-slate-900 dark:text-white' : 'text-slate-500'}`}>
+                    {product.label}
+                  </p>
+                  <p className="text-xs text-slate-500 truncate">{product.description}</p>
+                </div>
+                <div className={`shrink-0 ${enabled ? 'text-amber-700 dark:text-amber-400' : 'text-slate-600'}`}>
+                  {enabled ? <ToggleRight className="w-6 h-6" /> : <ToggleLeft className="w-6 h-6" />}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </SettingsSection>
+      )}
+
+      {/* ── Section: Business Types (Dominion enterprise) ── */}
+      {showBusinessTypes && !showProductToggles && (
       <SettingsSection
         icon={<Building2 className="w-4 h-4 text-purple-400" />}
         title="Business Types"
@@ -710,17 +800,27 @@ export function ProductLineSettingsPage({
       {/* ── Section: Modules ── */}
       <SettingsSection
         icon={<Wrench className="w-4 h-4 text-indigo-400" />}
-        title="Modules"
+        title={
+          moduleGroups?.length === 1 && moduleGroups[0] === 'freight'
+            ? 'Courier features'
+            : moduleGroups?.length === 1 && moduleGroups[0] === 'warehouse'
+              ? 'Freight Forwarder features'
+              : 'Modules'
+        }
         description={
-          segment === 'enterprise'
-            ? 'Enable or disable Enterprise back-office modules.'
-            : 'Enable or disable additional features for fleet management.'
+          moduleGroups?.includes('freight') && moduleGroups.length === 1
+            ? 'Turn Courier tools on or off for all customer accounts.'
+            : moduleGroups?.includes('warehouse') && moduleGroups.length === 1
+              ? 'Turn Freight Forwarder tools on or off for all customer accounts.'
+            : segment === 'enterprise'
+              ? 'Enable or disable Enterprise back-office modules.'
+              : 'Enable or disable additional features for fleet management.'
         }
       >
         <div className="space-y-2">
           {segment === 'enterprise' ? (
             <>
-              {ENTERPRISE_MODULE_CATALOG.map((mod) => {
+              {visibleModules.map((mod) => {
                 const on = Boolean(
                   settings.enabledModules &&
                     (settings.enabledModules as Record<string, boolean>)[mod.key],
@@ -735,6 +835,7 @@ export function ProductLineSettingsPage({
                   : mod.key === 'teamManagement' || mod.key === 'freight_clients' ? UserPlus
                   : mod.key === 'freight_carriers' ? Building2
                   : mod.key === 'freight_shipments' || mod.key.startsWith('freight_') ? Ship
+                  : mod.key.startsWith('warehouse_') ? Building2
                   : mod.key.startsWith('grocery_') ? Package
                   : Wrench;
                 return (

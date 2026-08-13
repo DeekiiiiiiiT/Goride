@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import {
+  ArrowLeft,
   Boxes,
   Building2,
   Bell,
@@ -29,6 +30,7 @@ import {
   Route,
   Link2,
 } from 'lucide-react';
+import { navStateFrom, useSafeBack } from '@/app/layout/useSafeBack';
 import type { ModuleKey } from '@roam/platform-settings';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { useModuleAccess } from '@/app/modules/ModuleAccessProvider';
@@ -44,6 +46,15 @@ type NavItem = {
   end?: boolean;
   children?: NavItem[];
 };
+
+function flattenNav(items: NavItem[]): { to: string; label: string }[] {
+  const out: { to: string; label: string }[] = [];
+  for (const item of items) {
+    out.push({ to: item.to, label: item.label });
+    if (item.children?.length) out.push(...flattenNav(item.children));
+  }
+  return out;
+}
 
 /** Top-level items only — no section headers. Flyouts hold the rest. */
 const NAV_ITEMS: NavItem[] = [
@@ -196,6 +207,13 @@ const NAV_ITEMS: NavItem[] = [
     ],
   },
 ];
+
+function courierScreenLabel(path: string): string {
+  const normalized = path.replace(/\/$/, '') || path;
+  const flat = flattenNav(NAV_ITEMS).sort((a, b) => b.to.length - a.to.length);
+  const hit = flat.find((s) => normalized === s.to || normalized.startsWith(`${s.to}/`));
+  return hit?.label ?? 'Back';
+}
 
 function useVisibleChildren(children: NavItem[] | undefined, inheritedModule?: ModuleKey) {
   const { isModuleEnabled } = useModuleAccess();
@@ -389,6 +407,7 @@ function FlyoutRow({
       role="menuitem"
       to={item.to}
       end={Boolean(item.end)}
+      state={navStateFrom(location.pathname, item.to)}
       onClick={onNavigate}
       className={({ isActive }) =>
         `flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm font-medium transition ${
@@ -511,6 +530,7 @@ function NavItemLink({ item }: { item: NavItem }) {
     <NavLink
       to={item.to}
       end={Boolean(item.end)}
+      state={navStateFrom(location.pathname, item.to)}
       className={({ isActive }) =>
         `flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition ${
           isActive
@@ -537,7 +557,13 @@ export function AppShell() {
   const { user, role, signOut } = useAuth();
   const { isModuleEnabled, loading } = useModuleAccess();
   const { canAccessModule, can } = useSeatAccess();
+  const location = useLocation();
+  const { back, label: backLabel } = useSafeBack({
+    homePath: '/app',
+    labelFor: courierScreenLabel,
+  });
   const [inboxOpen, setInboxOpen] = useState(false);
+  const showBack = location.pathname.replace(/\/$/, '') !== '/app';
   const opsInboxOn =
     isModuleEnabled('freight_ops_inbox') && can('freight.alerts.read');
   const alerts = useOpsAlerts(opsInboxOn);
@@ -582,7 +608,19 @@ export function AppShell() {
         </div>
       </aside>
       <main className="min-w-0 flex-1 overflow-auto">
-        <div className="sticky top-0 z-20 flex justify-end border-b border-slate-200/80 bg-slate-50/90 px-6 py-2 backdrop-blur md:px-8">
+        <div className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-slate-200/80 bg-slate-50/90 px-6 py-2 backdrop-blur md:px-8">
+          {showBack ? (
+            <button
+              type="button"
+              onClick={back}
+              className="inline-flex min-h-9 items-center gap-2 text-sm font-medium text-slate-600 hover:text-slate-900"
+            >
+              <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden />
+              {backLabel}
+            </button>
+          ) : (
+            <span />
+          )}
           {opsInboxOn ? (
             <button
               type="button"

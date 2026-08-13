@@ -522,7 +522,6 @@ export const PAGE_PERMISSIONS: Record<string, DominionPageSensitivity> = {
   'enterprise-overview': 'standard',
   'enterprise-customers': 'standard',
   'enterprise-team-members': 'standard',
-  'enterprise-intake-warehouses': 'standard',
   'fleet-overview': 'standard',
   'fleet-customers': 'standard',
   'fleet-team-members': 'standard',

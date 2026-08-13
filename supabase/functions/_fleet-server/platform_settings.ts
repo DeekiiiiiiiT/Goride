@@ -237,7 +237,8 @@ async function readRawSettings(segment: SettingsSegment): Promise<Record<string,
     return settings as Record<string, unknown>;
   }
 
-  if (segment === "fleet" || segment === "enterprise") {
+  // Legacy `platform:settings` is Roam Fleet only. Enterprise must not inherit it.
+  if (segment === "fleet") {
     const legacy = await kv.get(LEGACY_PLATFORM_SETTINGS_KEY);
     if (legacy && typeof legacy === "object") {
       return legacy as Record<string, unknown>;

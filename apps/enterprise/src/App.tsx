@@ -85,6 +85,9 @@ const WarehouseReceiveStationPage = lazy(() =>
 const WarehouseInboundPage = lazy(() =>
   import('@/app/freight/os').then((m) => ({ default: m.WarehouseInboundPage })),
 );
+const FreightForwarderSetupPage = lazy(() =>
+  import('@/app/freight/os').then((m) => ({ default: m.FreightForwarderSetupPage })),
+);
 const WarehouseFacilitiesPage = lazy(() =>
   import('@/app/freight/FacilitiesPage').then((m) => ({
     default: () => <m.FacilitiesPage warehouseOnly />,
@@ -832,6 +835,14 @@ export default function App() {
                   <WarehouseBillingStatementPage />
                 </Suspense>
               </Gated>
+            }
+          />
+          <Route
+            path="setup"
+            element={
+              <Suspense fallback={<Fall />}>
+                <FreightForwarderSetupPage />
+              </Suspense>
             }
           />
           <Route

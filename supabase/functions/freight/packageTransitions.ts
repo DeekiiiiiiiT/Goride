@@ -1,7 +1,8 @@
 /** Package status machine for Jamaica intl mailbox freight. */
 export const PACKAGE_TRANSITIONS: Record<string, string[]> = {
   expected: ["received_at_warehouse", "exception"],
-  received_at_warehouse: ["manifested", "exception"],
+  received_at_warehouse: ["handed_off", "manifested", "exception"],
+  handed_off: ["manifested", "exception"],
   manifested: ["in_transit_intl", "exception"],
   in_transit_intl: ["customs_hold", "customs_cleared", "received_hub", "exception"],
   customs_hold: ["customs_cleared", "exception"],

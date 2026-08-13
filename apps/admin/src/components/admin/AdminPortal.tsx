@@ -21,7 +21,6 @@ import { PendingVehicleCatalogManager } from './vehicle-catalog/PendingVehicleCa
 import { MaintenanceTemplatesManager } from './maintenance-templates/MaintenanceTemplatesManager';
 import { DashOverviewCard } from './product-overviews/DashOverviewCard';
 import { EnterpriseOverviewCard } from './product-overviews/EnterpriseOverviewCard';
-import { IntakeWarehouseCatalogPage } from './IntakeWarehouseCatalogPage';
 import { FleetOverviewCard } from './product-overviews/FleetOverviewCard';
 import { RidesOverviewCard } from './product-overviews/RidesOverviewCard';
 import { DriverOverviewCard } from './product-overviews/DriverOverviewCard';
@@ -200,7 +199,6 @@ export function AdminPortal() {
         </div>
       )}
       {currentPage === 'enterprise-customers' && <CustomerAccounts productLine="enterprise" />}
-      {currentPage === 'enterprise-intake-warehouses' && <IntakeWarehouseCatalogPage />}
       {(currentPage === 'fleet-customers') && (
         <CustomerAccounts productLine="fleet" />
       )}

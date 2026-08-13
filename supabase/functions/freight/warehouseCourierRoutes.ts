@@ -9,11 +9,13 @@ import {
   serviceClient,
 } from "../_shared/enterpriseAccess.ts";
 import {
+  createExternalOrg,
   ensureSelfLink,
   inviteLink,
   listLinksForOrg,
   searchEnterpriseOrgs,
   setLinkStatus,
+  updateLinkTerms,
 } from "../_shared/warehouseCourierAccess.ts";
 
 type FreightApp = Hono;
@@ -31,7 +33,7 @@ export function registerWarehouseCourierRoutes(app: FreightApp) {
       ];
       const { data: orgs } = await serviceClient()
         .from("organizations")
-        .select("id, name, business_type")
+        .select("id, name, business_type, is_external, contact_email")
         .in("id", orgIds.length ? orgIds : ["00000000-0000-0000-0000-000000000000"]);
       const byId = new Map((orgs || []).map((o) => [o.id as string, o]));
       return c.json({
@@ -83,6 +85,67 @@ export function registerWarehouseCourierRoutes(app: FreightApp) {
       return c.json({ link }, 201);
     } catch (e) {
       return c.json({ error: e instanceof Error ? e.message : "Failed" }, 400);
+    }
+  });
+
+  const externalBody = z.object({
+    roleAs: z.enum(["warehouse", "courier"]),
+    name: z.string().min(2).max(160),
+    email: z.string().email().optional().nullable(),
+    phone: z.string().max(40).optional().nullable(),
+    contactName: z.string().max(120).optional().nullable(),
+  });
+
+  app.post("/warehouse-courier-links/external", async (c) => {
+    const user = await requireEnterpriseAccess(c);
+    if (user instanceof Response) return user;
+    const seatGate = requireSeatPermission(user, "freight.mailbox.write");
+    if (seatGate instanceof Response) return seatGate;
+    const parsed = externalBody.safeParse(await c.req.json());
+    if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
+    try {
+      const result = await createExternalOrg({
+        callerOrgId: user.organizationId,
+        callerUserId: user.id,
+        roleAs: parsed.data.roleAs,
+        name: parsed.data.name,
+        contact: {
+          name: parsed.data.contactName ?? undefined,
+          email: parsed.data.email ?? undefined,
+          phone: parsed.data.phone ?? undefined,
+        },
+      });
+      return c.json(result, 201);
+    } catch (e) {
+      return c.json({ error: e instanceof Error ? e.message : "Failed" }, 400);
+    }
+  });
+
+  const termsBody = z.object({
+    free_days: z.number().int().min(0).max(365).optional(),
+    per_day_minor: z.number().int().min(0).max(10_000_000).optional(),
+    currency: z.string().min(3).max(3).optional(),
+    handling_minor: z.number().int().min(0).max(10_000_000).optional(),
+  });
+
+  app.post("/warehouse-courier-links/:id/terms", async (c) => {
+    const user = await requireEnterpriseAccess(c);
+    if (user instanceof Response) return user;
+    const seatGate = requireSeatPermission(user, "freight.mailbox.write");
+    if (seatGate instanceof Response) return seatGate;
+    const parsed = termsBody.safeParse(await c.req.json());
+    if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
+    try {
+      const link = await updateLinkTerms({
+        linkId: c.req.param("id"),
+        callerOrgId: user.organizationId,
+        terms: parsed.data,
+      });
+      return c.json({ link });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed";
+      const code = msg.startsWith("Forbidden") ? 403 : msg.includes("not found") ? 404 : 400;
+      return c.json({ error: msg }, code);
     }
   });
 
@@ -142,11 +205,11 @@ export function registerWarehouseCourierRoutes(app: FreightApp) {
     }
   });
 
-  /** Read-only warehouse storage statement scaffold. */
   app.get("/warehouse-billing/statement", async (c) => {
     const user = await requireEnterpriseAccess(c);
     if (user instanceof Response) return user;
     const courierOrgId = c.req.query("courierOrgId");
+    const openOnly = c.req.query("open") === "1";
     let q = serviceClient()
       .schema("freight")
       .from("warehouse_storage_ledger")
@@ -157,6 +220,7 @@ export function registerWarehouseCourierRoutes(app: FreightApp) {
       .order("occurred_on", { ascending: false })
       .limit(500);
     if (courierOrgId) q = q.eq("courier_org_id", courierOrgId);
+    if (openOnly) q = q.is("invoice_id", null);
     const { data, error } = await q;
     if (error) return c.json({ error: error.message }, 500);
     const totalMinor = (data || []).reduce(
@@ -164,6 +228,143 @@ export function registerWarehouseCourierRoutes(app: FreightApp) {
       0,
     );
     return c.json({ lines: data || [], totalMinor, currency: "USD" });
+  });
+
+  app.post("/warehouse-billing/accrue", async (c) => {
+    const user = await requireEnterpriseAccess(c);
+    if (user instanceof Response) return user;
+    const seatGate = requireSeatPermission(user, "freight.mailbox.write");
+    if (seatGate instanceof Response) return seatGate;
+    const { data, error } = await serviceClient().rpc("accrue_storage_days", {
+      p_on: new Date().toISOString().slice(0, 10),
+    });
+    if (error) return c.json({ error: error.message }, 500);
+    return c.json({ inserted: data ?? 0 });
+  });
+
+  app.get("/warehouse-billing/invoices", async (c) => {
+    const user = await requireEnterpriseAccess(c);
+    if (user instanceof Response) return user;
+    const { data, error } = await serviceClient()
+      .schema("freight")
+      .from("warehouse_storage_invoices")
+      .select("*")
+      .or(
+        `warehouse_org_id.eq.${user.organizationId},courier_org_id.eq.${user.organizationId}`,
+      )
+      .order("created_at", { ascending: false })
+      .limit(100);
+    if (error) return c.json({ error: error.message }, 500);
+    return c.json({ invoices: data || [] });
+  });
+
+  const issueBody = z.object({
+    courierOrgId: z.string().uuid(),
+    periodStart: z.string().min(8).max(10),
+    periodEnd: z.string().min(8).max(10),
+  });
+
+  app.post("/warehouse-billing/invoices", async (c) => {
+    const user = await requireEnterpriseAccess(c);
+    if (user instanceof Response) return user;
+    const seatGate = requireSeatPermission(user, "freight.mailbox.write");
+    if (seatGate instanceof Response) return seatGate;
+    const parsed = issueBody.safeParse(await c.req.json());
+    if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
+    const db = serviceClient().schema("freight");
+    const { courierOrgId, periodStart, periodEnd } = parsed.data;
+
+    const { data: lines, error: lineErr } = await db
+      .from("warehouse_storage_ledger")
+      .select("*")
+      .eq("warehouse_org_id", user.organizationId)
+      .eq("courier_org_id", courierOrgId)
+      .is("invoice_id", null)
+      .gte("occurred_on", periodStart)
+      .lte("occurred_on", periodEnd)
+      .order("occurred_on");
+    if (lineErr) return c.json({ error: lineErr.message }, 500);
+    if (!lines?.length) {
+      return c.json({ error: "No unbilled storage lines in that period" }, 400);
+    }
+
+    const totalMinor = lines.reduce(
+      (sum, row) => sum + Number(row.unit_amount_minor || 0) * Number(row.quantity || 0),
+      0,
+    );
+    const stamp = periodEnd.replace(/-/g, "");
+    const invoiceNumber = `WS-${stamp}-${crypto.randomUUID().slice(0, 6).toUpperCase()}`;
+    const currency = String(lines[0].currency || "USD");
+
+    const { data: invoice, error: invErr } = await db
+      .from("warehouse_storage_invoices")
+      .insert({
+        warehouse_org_id: user.organizationId,
+        courier_org_id: courierOrgId,
+        invoice_number: invoiceNumber,
+        status: "issued",
+        currency,
+        period_start: periodStart,
+        period_end: periodEnd,
+        total_minor: totalMinor,
+        issued_at: new Date().toISOString(),
+      })
+      .select("*")
+      .single();
+    if (invErr) return c.json({ error: invErr.message }, 500);
+
+    const invoiceLines = lines.map((row, i) => ({
+      invoice_id: invoice.id,
+      ledger_id: row.id,
+      code: String(row.event_type),
+      label: `${String(row.event_type).replace(/_/g, " ")} · ${row.occurred_on}`,
+      quantity: row.quantity,
+      amount_minor: Number(row.unit_amount_minor || 0) * Number(row.quantity || 0),
+      sort_order: i + 1,
+    }));
+    const { error: insLinesErr } = await db
+      .from("warehouse_storage_invoice_lines")
+      .insert(invoiceLines);
+    if (insLinesErr) return c.json({ error: insLinesErr.message }, 500);
+
+    const ids = lines.map((r) => r.id as string);
+    const { error: markErr } = await db
+      .from("warehouse_storage_ledger")
+      .update({ invoice_id: invoice.id })
+      .in("id", ids);
+    if (markErr) return c.json({ error: markErr.message }, 500);
+
+    return c.json({ invoice, lines: invoiceLines }, 201);
+  });
+
+  app.post("/warehouse-billing/invoices/:id/mark-paid", async (c) => {
+    const user = await requireEnterpriseAccess(c);
+    if (user instanceof Response) return user;
+    const seatGate = requireSeatPermission(user, "freight.mailbox.write");
+    if (seatGate instanceof Response) return seatGate;
+    const { data: invoice, error: findErr } = await serviceClient()
+      .schema("freight")
+      .from("warehouse_storage_invoices")
+      .select("*")
+      .eq("id", c.req.param("id"))
+      .eq("warehouse_org_id", user.organizationId)
+      .maybeSingle();
+    if (findErr) return c.json({ error: findErr.message }, 500);
+    if (!invoice) return c.json({ error: "Invoice not found" }, 404);
+    if (invoice.status === "void") return c.json({ error: "Invoice is void" }, 409);
+    const { data, error } = await serviceClient()
+      .schema("freight")
+      .from("warehouse_storage_invoices")
+      .update({
+        status: "paid_offline",
+        paid_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", invoice.id)
+      .select("*")
+      .single();
+    if (error) return c.json({ error: error.message }, 500);
+    return c.json({ invoice: data });
   });
 
   app.get("/warehouse-bins", async (c) => {

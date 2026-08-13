@@ -99,7 +99,8 @@ export function registerEnterpriseAdminRoutes(app: Hono, deps: RegisterDeps) {
       }
 
       const entSettings = await getPlatformSettingsCached("enterprise");
-      if (!isEnabledBusinessType(entSettings, businessType)) {
+      // Freight Forwarder (warehouse) is invite-only — Enterprise Admin can always create those accounts.
+      if (businessType !== "warehouse" && !isEnabledBusinessType(entSettings, businessType)) {
         return c.json({ error: `Business type "${businessType}" is not enabled` }, 403);
       }
 

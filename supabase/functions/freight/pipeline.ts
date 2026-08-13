@@ -11,6 +11,7 @@ import {
   type EnterpriseAccessUser,
 } from "../_shared/enterpriseAccess.ts";
 import {
+  getLinkTerms,
   hasActiveLink,
   linkedCourierOrgIds,
 } from "../_shared/warehouseCourierAccess.ts";
@@ -95,6 +96,59 @@ async function appendScan(input: {
   return { event: data, duplicate: false };
 }
 
+/** Box leaves the floor: clear operating warehouse, write handoff ledger + scan. */
+async function releaseWarehouseCustody(input: {
+  pkg: {
+    id: string;
+    owner_org_id?: string | null;
+    organization_id?: string | null;
+    operating_warehouse_org_id?: string | null;
+    status: string;
+  };
+  actorUserId: string;
+  note?: string | null;
+  nextStatus: "handed_off" | "manifested";
+  idempotencyKey?: string | null;
+}) {
+  const owner = input.pkg.owner_org_id || input.pkg.organization_id;
+  const warehouseOrgId = input.pkg.operating_warehouse_org_id;
+  const now = new Date().toISOString();
+  const { data: updated, error } = await freightDb()
+    .from("packages")
+    .update({
+      status: input.nextStatus,
+      operating_warehouse_org_id: null,
+      current_facility_id: null,
+      bin_location: null,
+      updated_at: now,
+    })
+    .eq("id", input.pkg.id)
+    .select("*")
+    .single();
+  if (error) throw new Error(error.message);
+
+  if (warehouseOrgId && owner) {
+    await freightDb().from("warehouse_storage_ledger").insert({
+      warehouse_org_id: warehouseOrgId,
+      courier_org_id: owner,
+      package_id: input.pkg.id,
+      event_type: "handoff",
+      quantity: 1,
+      unit_amount_minor: 0,
+    });
+  }
+
+  const scan = await appendScan({
+    orgId: owner || warehouseOrgId || "",
+    packageId: input.pkg.id,
+    eventType: "handoff",
+    actorUserId: input.actorUserId,
+    note: input.note,
+    idempotencyKey: input.idempotencyKey,
+  });
+  return { package: updated, scanEvent: scan.event, duplicate: scan.duplicate };
+}
+
 async function loadSuiteNotify(suiteId: string | null) {
   if (!suiteId) return null;
   const { data } = await freightDb()
@@ -150,6 +204,84 @@ function marketplaceRejectPayload(
 
 const fulfillmentMode = z.enum(["pickup", "door_delivery"]);
 
+function timezoneForCountry(cc: string): string {
+  if (cc === "JM") return "America/Jamaica";
+  if (cc === "CN") return "Asia/Shanghai";
+  return "America/New_York";
+}
+
+async function catalogClaimOrgs(): Promise<Map<string, string>> {
+  const { data, error } = await freightDb()
+    .from("facilities")
+    .select("intake_catalog_id, organization_id")
+    .eq("facility_type", "warehouse")
+    .not("intake_catalog_id", "is", null);
+  if (error) throw new Error(error.message);
+  const map = new Map<string, string>();
+  for (const r of data ?? []) {
+    const catalogId = r.intake_catalog_id as string | null;
+    const orgId = r.organization_id as string | null;
+    if (catalogId && orgId) map.set(catalogId, orgId);
+  }
+  return map;
+}
+
+async function claimedCatalogIds(): Promise<Set<string>> {
+  return new Set((await catalogClaimOrgs()).keys());
+}
+
+async function pendingCatalogIds(): Promise<Set<string>> {
+  const { data, error } = await freightDb()
+    .from("intake_claim_requests")
+    .select("catalog_id")
+    .eq("status", "pending")
+    .not("catalog_id", "is", null);
+  if (error) throw new Error(error.message);
+  return new Set(
+    (data ?? [])
+      .map((r: { catalog_id: string | null }) => r.catalog_id)
+      .filter((id): id is string => Boolean(id)),
+  );
+}
+
+async function assertCatalogUnclaimed(catalogId: string, orgId: string) {
+  const { data, error } = await freightDb()
+    .from("facilities")
+    .select("id, organization_id")
+    .eq("facility_type", "warehouse")
+    .eq("intake_catalog_id", catalogId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (data) {
+    if (data.organization_id === orgId) {
+      throw new Error("You already added this company.");
+    }
+    throw new Error("This company is already claimed by another account.");
+  }
+}
+
+async function syncOrgNameIfOwner(orgId: string, userId: string, name: string) {
+  const { data: org } = await serviceClient()
+    .from("organizations")
+    .select("owner_id")
+    .eq("id", orgId)
+    .maybeSingle();
+  if (org?.owner_id !== userId) return;
+  await serviceClient().from("organizations").update({ name }).eq("id", orgId);
+}
+
+const claimBody = z.object({
+  kind: z.enum(["join", "claim_edit", "new_listing"]),
+  catalogId: z.string().uuid().optional().nullable(),
+  name: z.string().min(1).max(200),
+  addressLine: z.string().min(1).max(500),
+  city: z.string().min(1).max(120),
+  state: z.string().max(80).optional().default(""),
+  postalCode: z.string().min(1).max(20),
+  countryCode: z.string().length(2),
+  timezone: z.string().max(64).optional(),
+});
+
 export function registerPipelineRoutes(app: FreightApp) {
   // -------------------------------------------------------------------------
   // Facilities
@@ -168,10 +300,11 @@ export function registerPipelineRoutes(app: FreightApp) {
     status: z.enum(["active", "inactive"]).optional(),
   });
 
-  /** Active master warehouses for Enterprise Facilities picker (any country). */
+  /** Master buildings. `for=connect` = courier attach (full list). Default = FF join. */
   app.get("/intake-warehouses", async (c) => {
     const user = await requireUser(c);
     if (user instanceof Response) return user;
+    const forConnect = c.req.query("for") === "connect";
     const { data, error } = await serviceClient()
       .from("intake_warehouse_catalog")
       .select(
@@ -180,7 +313,110 @@ export function registerPipelineRoutes(app: FreightApp) {
       .eq("status", "active")
       .order("name");
     if (error) return c.json({ error: error.message }, 500);
-    return c.json({ warehouses: data ?? [] });
+    let claimOrgs: Map<string, string>;
+    let pending: Set<string>;
+    try {
+      claimOrgs = await catalogClaimOrgs();
+      pending = await pendingCatalogIds();
+    } catch (e) {
+      return c.json({ error: (e as Error).message }, 500);
+    }
+    const orgIds = [...new Set(claimOrgs.values())];
+    const orgs = orgIds.length
+      ? (
+          await serviceClient()
+            .from("organizations")
+            .select("id, name")
+            .in("id", orgIds)
+        ).data ?? []
+      : [];
+    const orgName = Object.fromEntries(
+      orgs.map((o: { id: string; name: string }) => [o.id, o.name]),
+    );
+    const warehouses = (data ?? []).map((w: { id: string }) => {
+      const orgId = claimOrgs.get(w.id) ?? null;
+      return {
+        ...w,
+        claimed_by_org_id: orgId,
+        claimed_by_org_name: orgId ? orgName[orgId] || null : null,
+        available: forConnect ? true : !orgId && !pending.has(w.id),
+      };
+    });
+    return c.json({ warehouses });
+  });
+
+  app.get("/intake-claims", async (c) => {
+    const user = await requireUser(c);
+    if (user instanceof Response) return user;
+    const { data, error } = await freightDb()
+      .from("intake_claim_requests")
+      .select("*")
+      .eq("organization_id", user.organizationId)
+      .order("created_at", { ascending: false })
+      .limit(20);
+    if (error) return c.json({ error: error.message }, 500);
+    return c.json({ requests: data ?? [] });
+  });
+
+  app.post("/intake-claims", async (c) => {
+    const user = await requireUser(c);
+    if (user instanceof Response) return user;
+    const parsed = claimBody.safeParse(await c.req.json());
+    if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
+    const b = parsed.data;
+    if ((b.kind === "join" || b.kind === "claim_edit") && !b.catalogId) {
+      return c.json({ error: "Pick the company listing you want to join." }, 400);
+    }
+    if ((b.kind === "join" || b.kind === "claim_edit") && b.catalogId) {
+      try {
+        await assertCatalogUnclaimed(b.catalogId, user.organizationId);
+      } catch (e) {
+        return c.json({ error: (e as Error).message }, 409);
+      }
+      const { data: catalog } = await serviceClient()
+        .from("intake_warehouse_catalog")
+        .select("id, status")
+        .eq("id", b.catalogId)
+        .maybeSingle();
+      if (!catalog || catalog.status !== "active") {
+        return c.json({ error: "That company listing is not available." }, 404);
+      }
+    }
+    const countryCode = b.countryCode.toUpperCase();
+    const { data, error } = await freightDb()
+      .from("intake_claim_requests")
+      .insert({
+        organization_id: user.organizationId,
+        requested_by: user.id,
+        kind: b.kind,
+        catalog_id: b.kind === "new_listing" ? null : b.catalogId,
+        proposed_name: b.name.trim(),
+        proposed_address_line: b.addressLine.trim(),
+        proposed_city: b.city.trim(),
+        proposed_state: (b.state || "").trim(),
+        proposed_postal_code: b.postalCode.trim(),
+        proposed_country_code: countryCode,
+        proposed_timezone: (b.timezone || timezoneForCountry(countryCode)).trim(),
+        status: "pending",
+      })
+      .select("*")
+      .single();
+    if (error) {
+      if (String(error.message).includes("idx_freight_intake_claims_one_pending_catalog")) {
+        return c.json(
+          { error: "Another account already requested this company. Pick a different listing." },
+          409,
+        );
+      }
+      if (String(error.message).includes("idx_freight_intake_claims_one_pending")) {
+        return c.json(
+          { error: "You already have a request waiting for approval." },
+          409,
+        );
+      }
+      return c.json({ error: error.message }, 500);
+    }
+    return c.json({ request: data }, 201);
   });
 
   app.get("/facilities", async (c) => {
@@ -206,45 +442,13 @@ export function registerPipelineRoutes(app: FreightApp) {
     const b = parsed.data;
 
     if (b.facilityType === "warehouse") {
-      if (!b.intakeCatalogId) {
-        return c.json(
-          { error: "Freight forwarder building must be selected from the Dominion master catalog" },
-          400,
-        );
-      }
-      const { data: catalog, error: catErr } = await serviceClient()
-        .from("intake_warehouse_catalog")
-        .select("*")
-        .eq("id", b.intakeCatalogId)
-        .eq("status", "active")
-        .maybeSingle();
-      if (catErr) return c.json({ error: catErr.message }, 500);
-      if (!catalog) return c.json({ error: "Intake building not found or inactive" }, 404);
-
-      const orgCode =
-        (b.code?.toUpperCase().trim()) ||
-        `${String(catalog.code).slice(0, 24)}-INTAKE`;
-
-      const { data, error } = await freightDb()
-        .from("facilities")
-        .insert({
-          organization_id: user.organizationId,
-          name: b.name?.trim() || String(catalog.name),
-          code: orgCode,
-          facility_type: "warehouse",
-          intake_catalog_id: catalog.id,
-          address_line: String(catalog.address_line),
-          city: `${String(catalog.city)}, ${String(catalog.state)} ${String(catalog.postal_code)}`.trim(),
-          country_code: String(catalog.country_code || "US"),
-          lat: b.lat ?? null,
-          lng: b.lng ?? null,
-          timezone: String(catalog.timezone || "America/New_York"),
-          status: b.status ?? "active",
-        })
-        .select("*")
-        .single();
-      if (error) return c.json({ error: error.message }, 500);
-      return c.json({ facility: data }, 201);
+      return c.json(
+        {
+          error:
+            "Roam must approve this company before you can receive packages. Submit a join request from Setup.",
+        },
+        403,
+      );
     }
 
     const name = b.name?.trim();
@@ -307,32 +511,14 @@ export function registerPipelineRoutes(app: FreightApp) {
     if (body.timezone != null) patch.timezone = String(body.timezone).trim();
 
     if (existing.facility_type === "warehouse") {
-      const nextCatalogId =
-        body.intakeCatalogId != null
-          ? String(body.intakeCatalogId)
-          : existing.intake_catalog_id
-            ? String(existing.intake_catalog_id)
-            : null;
-      if (body.intakeCatalogId != null || !existing.intake_catalog_id) {
-        if (!nextCatalogId) {
-          return c.json({ error: "Freight forwarder building requires a Dominion catalog selection" }, 400);
-        }
-        const { data: catalog, error: catErr } = await serviceClient()
-          .from("intake_warehouse_catalog")
-          .select("*")
-          .eq("id", nextCatalogId)
-          .eq("status", "active")
-          .maybeSingle();
-        if (catErr) return c.json({ error: catErr.message }, 500);
-        if (!catalog) return c.json({ error: "Intake building not found or inactive" }, 404);
-        patch.intake_catalog_id = catalog.id;
-        patch.address_line = String(catalog.address_line);
-        patch.city = `${String(catalog.city)}, ${String(catalog.state)} ${String(catalog.postal_code)}`.trim();
-        patch.country_code = String(catalog.country_code || "US");
-        patch.timezone = String(catalog.timezone || "America/New_York");
-        if (body.name == null && body.intakeCatalogId != null) {
-          patch.name = String(catalog.name);
-        }
+      if (
+        body.intakeCatalogId != null &&
+        String(body.intakeCatalogId) !== String(existing.intake_catalog_id || "")
+      ) {
+        return c.json(
+          { error: "To change company listing, submit a request for approval from Setup." },
+          400,
+        );
       }
     } else {
       if (body.addressLine !== undefined || body.address_line !== undefined) {
@@ -1275,14 +1461,15 @@ export function registerPipelineRoutes(app: FreightApp) {
       pkg = created;
       createdUnknown = true;
 
-      // Scaffold storage ledger line on receive
+      const terms = await getLinkTerms(operatingWarehouseOrgId, ownerOrgId);
       await freightDb().from("warehouse_storage_ledger").insert({
         warehouse_org_id: operatingWarehouseOrgId,
         courier_org_id: ownerOrgId,
         package_id: pkg.id,
         event_type: "receive",
         quantity: 1,
-        unit_amount_minor: 0,
+        unit_amount_minor: terms.handling_minor,
+        currency: terms.currency,
       });
     }
 
@@ -1337,6 +1524,7 @@ export function registerPipelineRoutes(app: FreightApp) {
 
     // Miami / warehouse receive
     if (facility.facility_type === "warehouse") {
+      const firstReceive = !createdUnknown && pkg.status === "expected";
       if (!createdUnknown && pkg.status === "expected") {
         if (!canTransitionPackage(pkg.status, "received_at_warehouse")) {
           return c.json({ error: `Illegal transition ${pkg.status} → received_at_warehouse` }, 409);
@@ -1392,6 +1580,19 @@ export function registerPipelineRoutes(app: FreightApp) {
 
       if (!scan.duplicate) {
         await maybeNotifyPackage(pkg, "received_at_warehouse");
+        if (firstReceive) {
+          const ownerId = pkg.owner_org_id || pkg.organization_id || user.organizationId;
+          const terms = await getLinkTerms(operatingWarehouseOrgId, ownerId);
+          await freightDb().from("warehouse_storage_ledger").insert({
+            warehouse_org_id: operatingWarehouseOrgId,
+            courier_org_id: ownerId,
+            package_id: pkg.id,
+            event_type: "receive",
+            quantity: 1,
+            unit_amount_minor: terms.handling_minor,
+            currency: terms.currency,
+          });
+        }
       }
 
       let suiteInfo: { suite_code?: string; contact_name?: string } | null = null;
@@ -1414,6 +1615,43 @@ export function registerPipelineRoutes(app: FreightApp) {
     }
 
     return c.json({ error: "Unsupported facility type for scan" }, 400);
+  });
+
+  app.post("/packages/:id/handoff", async (c) => {
+    const user = await requireUser(c);
+    if (user instanceof Response) return user;
+    const seatGate = requireSeatPermission(user, "freight.mailbox.write");
+    if (seatGate instanceof Response) return seatGate;
+    const id = c.req.param("id");
+    const body = (await c.req.json().catch(() => ({}))) as { note?: string };
+    const { data: pkg, error: findErr } = await freightDb()
+      .from("packages")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
+    if (findErr) return c.json({ error: findErr.message }, 500);
+    if (!pkg) return c.json({ error: "Package not found" }, 404);
+    if (pkg.operating_warehouse_org_id !== user.organizationId && !user.isPlatformRole) {
+      return c.json({ error: "Only the freight forwarder holding this box can release it" }, 403);
+    }
+    if (pkg.status !== "received_at_warehouse") {
+      return c.json({ error: `Cannot release from status ${pkg.status}` }, 409);
+    }
+    if (!canTransitionPackage(pkg.status, "handed_off")) {
+      return c.json({ error: `Illegal transition ${pkg.status} → handed_off` }, 409);
+    }
+    try {
+      const result = await releaseWarehouseCustody({
+        pkg,
+        actorUserId: user.id,
+        note: body.note || "Released from floor",
+        nextStatus: "handed_off",
+        idempotencyKey: c.req.header("Idempotency-Key") || `handoff:${id}`,
+      });
+      return c.json(result);
+    } catch (e) {
+      return c.json({ error: e instanceof Error ? e.message : "Failed" }, 400);
+    }
   });
 
   // Hub sort → ready_for_fulfillment
@@ -2049,13 +2287,36 @@ export function registerPipelineRoutes(app: FreightApp) {
     if (error) return c.json({ error: error.message }, 500);
 
     for (const line of lines) {
-      await freightDb()
-        .from("packages")
-        .update({
-          status: "manifested",
-          updated_at: now,
-        })
-        .eq("id", line.package_id);
+      const pkgRow = (line.packages ?? {}) as {
+        id?: string;
+        owner_org_id?: string | null;
+        organization_id?: string | null;
+        operating_warehouse_org_id?: string | null;
+        status?: string;
+      };
+      if (pkgRow.operating_warehouse_org_id && pkgRow.id) {
+        await releaseWarehouseCustody({
+          pkg: {
+            id: pkgRow.id,
+            owner_org_id: pkgRow.owner_org_id,
+            organization_id: pkgRow.organization_id,
+            operating_warehouse_org_id: pkgRow.operating_warehouse_org_id,
+            status: String(pkgRow.status || "received_at_warehouse"),
+          },
+          actorUserId: user.id,
+          note: `Left floor on manifest ${manifest.manifest_number}`,
+          nextStatus: "manifested",
+          idempotencyKey: `${idem}:handoff:${pkgRow.id}`,
+        });
+      } else {
+        await freightDb()
+          .from("packages")
+          .update({
+            status: "manifested",
+            updated_at: now,
+          })
+          .eq("id", line.package_id);
+      }
       await appendScan({
         orgId: user.organizationId,
         packageId: line.package_id,

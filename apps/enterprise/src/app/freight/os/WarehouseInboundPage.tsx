@@ -1,10 +1,9 @@
 import { useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/app/auth/AuthProvider';
-import { useWarehouseCourierLinks } from '@/app/hooks/useWarehouseCourierLinks';
+import { useHandoffPackage, useWarehouseCourierLinks } from '@/app/hooks/useWarehouseCourierLinks';
 import { freightService } from '@/app/services/freightService';
-import { AddWarehouseBuildingPanel } from '@/app/freight/os/AddWarehouseBuildingPanel';
 import { FREIGHT_FORWARDER_PATH } from '@/app/productDoor';
 
 function awaitingInvoice(p: Record<string, unknown>): boolean {
@@ -26,6 +25,7 @@ function PackageTable({
   onUploadSlip,
   busyId,
   onOpenReceive,
+  onHandoff,
 }: {
   rows: Record<string, unknown>[];
   empty: string;
@@ -37,6 +37,7 @@ function PackageTable({
   onUploadSlip?: (id: string, file: File) => void;
   busyId?: string | null;
   onOpenReceive: (tracking: string) => void;
+  onHandoff?: (id: string) => void;
 }) {
   if (rows.length === 0) {
     return (
@@ -132,6 +133,16 @@ function PackageTable({
                       />
                       Ask courier for customer invoice
                     </label>
+                    {onHandoff && String(p.status) === 'received_at_warehouse' ? (
+                      <button
+                        type="button"
+                        disabled={busyId === id}
+                        onClick={() => onHandoff(id)}
+                        className="inline-flex min-h-11 items-center text-xs font-medium text-slate-800 underline"
+                      >
+                        Release from floor
+                      </button>
+                    ) : null}
                     <label className="inline-flex min-h-11 cursor-pointer items-center text-xs font-medium text-amber-800 underline">
                       {busyId === id ? 'Saving…' : 'Upload packing slip'}
                       <input
@@ -166,6 +177,7 @@ export function WarehouseInboundPage({
   showCourier?: boolean;
 }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const { organizationId, session } = useAuth();
   const qc = useQueryClient();
   const [facilityFilter, setFacilityFilter] = useState('');
@@ -226,6 +238,8 @@ export function WarehouseInboundPage({
       )
     : onFloor;
 
+  const handoff = useHandoffPackage();
+
   const flagMut = useMutation({
     mutationFn: async ({ id, next }: { id: string; next: boolean }) => {
       await freightService.setInvoiceFlags(
@@ -258,10 +272,11 @@ export function WarehouseInboundPage({
   }, {});
 
   const busyId =
-    flagMut.isPending || slipMut.isPending
+    flagMut.isPending || slipMut.isPending || handoff.isPending
       ? String(
           (flagMut.variables as { id?: string } | undefined)?.id ??
             (slipMut.variables as { id?: string } | undefined)?.id ??
+            (handoff.variables as { id?: string } | undefined)?.id ??
             '',
         )
       : null;
@@ -269,7 +284,9 @@ export function WarehouseInboundPage({
   const receivePath = embedded ? '/app/receive?tab=station' : `${FREIGHT_FORWARDER_PATH}/receive`;
   function openReceive(tracking: string) {
     const sep = receivePath.includes('?') ? '&' : '?';
-    navigate(`${receivePath}${sep}tracking=${encodeURIComponent(tracking)}`);
+    navigate(`${receivePath}${sep}tracking=${encodeURIComponent(tracking)}`, {
+      state: { from: location.pathname },
+    });
   }
 
   const warehouseCount = (facilities.data?.facilities ?? []).length;
@@ -284,6 +301,7 @@ export function WarehouseInboundPage({
           </div>
           <Link
             to={`${FREIGHT_FORWARDER_PATH}/receive`}
+            state={{ from: location.pathname }}
             className="inline-flex min-h-11 items-center rounded-lg bg-amber-500 px-4 py-3 text-sm font-semibold text-slate-950 hover:bg-amber-400"
           >
             Open Receive Station
@@ -294,11 +312,19 @@ export function WarehouseInboundPage({
       )}
 
       {!embedded && warehouseCount === 0 ? (
-        <AddWarehouseBuildingPanel
-          onCreated={() => {
-            void qc.invalidateQueries({ queryKey: ['freight', 'facilities'] });
-          }}
-        />
+        <div className="rounded-xl border border-dashed border-slate-300 bg-white px-5 py-6">
+          <p className="text-sm font-semibold text-slate-900">No warehouse address yet</p>
+          <p className="mt-1 text-sm text-slate-500">
+            Confirm your company in Setup. Packages show here after Roam approves the join.
+          </p>
+          <Link
+            to={`${FREIGHT_FORWARDER_PATH}/setup`}
+            state={{ from: location.pathname }}
+            className="mt-4 inline-flex min-h-11 items-center rounded-lg bg-amber-500 px-4 py-3 text-sm font-semibold text-slate-950 hover:bg-amber-400"
+          >
+            Go to Setup
+          </Link>
+        </div>
       ) : null}
 
       <div className="flex flex-wrap gap-4">
@@ -354,9 +380,9 @@ export function WarehouseInboundPage({
           {(q.error as Error).message}
         </p>
       )}
-      {(flagMut.error || slipMut.error) && (
+      {(flagMut.error || slipMut.error || handoff.error) && (
         <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-          {((flagMut.error || slipMut.error) as Error).message}
+          {((flagMut.error || slipMut.error || handoff.error) as Error).message}
         </p>
       )}
 
@@ -394,6 +420,7 @@ export function WarehouseInboundPage({
           busyId={busyId}
           onToggleInvoice={(id, next) => flagMut.mutate({ id, next })}
           onUploadSlip={(id, file) => slipMut.mutate({ id, file })}
+          onHandoff={(id) => handoff.mutate({ id })}
           onOpenReceive={openReceive}
         />
       </section>

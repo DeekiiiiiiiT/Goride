@@ -157,12 +157,30 @@ export function useFacilities(type?: string) {
   });
 }
 
-export function useIntakeWarehouses() {
+export function useIntakeWarehouses(purpose: 'join' | 'connect' = 'join') {
   const { organizationId, session } = useAuth();
   return useQuery({
-    queryKey: ['freight', 'intake-warehouses', organizationId],
-    queryFn: () => freightService.listIntakeWarehouses(organizationId),
+    queryKey: ['freight', 'intake-warehouses', organizationId, purpose],
+    queryFn: () => freightService.listIntakeWarehouses(organizationId, purpose),
     enabled: Boolean(session),
+  });
+}
+
+export function useIntakeClaims() {
+  const { organizationId, session } = useAuth();
+  return useQuery({
+    queryKey: ['freight', 'intake-claims', organizationId],
+    queryFn: () => freightService.listIntakeClaims(organizationId),
+    enabled: Boolean(session),
+  });
+}
+
+export function useSubmitIntakeClaim() {
+  const organizationId = useFreightOrgId();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: unknown) => freightService.submitIntakeClaim(body, organizationId),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['freight', 'intake-claims'] }),
   });
 }
 
@@ -171,7 +189,10 @@ export function useCreateFacility() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: unknown) => freightService.createFacility(body, organizationId),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['freight', 'facilities'] }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['freight', 'facilities'] });
+      void qc.invalidateQueries({ queryKey: ['freight', 'intake-warehouses'] });
+    },
   });
 }
 
@@ -181,7 +202,10 @@ export function useUpdateFacility() {
   return useMutation({
     mutationFn: ({ id, body }: { id: string; body: unknown }) =>
       freightService.updateFacility(id, body, organizationId),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['freight', 'facilities'] }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['freight', 'facilities'] });
+      void qc.invalidateQueries({ queryKey: ['freight', 'intake-warehouses'] });
+    },
   });
 }
 
@@ -190,7 +214,10 @@ export function useDeleteFacility() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => freightService.deleteFacility(id, organizationId),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['freight', 'facilities'] }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['freight', 'facilities'] });
+      void qc.invalidateQueries({ queryKey: ['freight', 'intake-warehouses'] });
+    },
   });
 }
 

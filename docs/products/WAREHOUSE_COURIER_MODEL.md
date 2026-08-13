@@ -38,8 +38,29 @@ Table: `freight.warehouse_courier_links`
 - `warehouse_org_id` + `courier_org_id` + `status` (`invited` | `active` | `paused` | `revoked`)
 - Either side may invite; the other accepts
 - One warehouse may serve many couriers; one courier may pull from many warehouses
+- `terms` JSONB: `free_days`, `per_day_minor`, `handling_minor`, `currency` (freight forwarder sets prices)
 
 Visibility rule: a row is visible if the caller’s org is **owner** OR **operating warehouse**, and (for cross-org) an **active** link exists.
+
+### Off-platform partners
+
+`public.organizations.is_external = true` is a placeholder company with **no login**. `created_by_org_id` is the Roam customer that added them. The link is auto-`active`. Admin can convert them into a real customer (create login, keep the same org id so packages and links stay attached).
+
+Connect UI (Courier and Freight Forwarder) has three choices: already on Roam, invite by name, not on Roam.
+
+## Custody release
+
+When a box leaves the floor (Receive Station **Release / hand off**, or a sealed manifest):
+
+- `operating_warehouse_org_id` is set to null
+- status becomes `handed_off` (or `manifested` if sealed)
+- a `handoff` scan event and ledger line are written
+
+## Storage billing
+
+`freight.warehouse_storage_ledger` records `receive` (handling fee from link terms), `storage_day` (nightly `freight.accrue_storage_days()`), and `handoff`. Period close writes `freight.warehouse_storage_invoices` (`issued` / `paid_offline`). No payment gateway.
+
+Enterprise Admin (`roamenterprise.co/admin`) Freight Forwarder tab: Customers, Buildings, Join requests, Connections, Off-platform, Storage billing, Features.
 
 ## In-house warehouses
 
@@ -47,7 +68,7 @@ A courier that runs its own floor gets a **self-link** where `warehouse_org_id =
 
 ## Physical addresses
 
-`public.intake_warehouse_catalog` remains the Dominion master list of lease addresses. Warehouse orgs (and in-house courier orgs) create `freight.facilities` rows pointing at a catalog entry.
+`public.intake_warehouse_catalog` is the master building list, managed in Roam Enterprise Admin (`roamenterprise.co/admin`). Freight-forwarder orgs confirm a listing or request a new one; `freight.facilities` rows point at a catalog entry.
 
 ## Security spine
 
@@ -55,11 +76,8 @@ Nothing cross-org ships until edge + RLS authorize via **owner OR operating ware
 
 ## Sequencing
 
-1. Data model + backfill + self-links  
-2. Link APIs + scan dual-write + access helpers  
-3. Warehouse product shell (standalone)  
-4. Courier “Connect a warehouse”  
-5. Warehouse multi-courier inbox  
-6. Redundancy cleanup  
-7. Per-product subscription + storage billing scaffold  
-8–9. Future product depth (see `docs/products/WAREHOUSE_FUTURE.md` and `docs/products/COURIER_FUTURE.md`)
+Shipped: data model, links, dual custody, product shells, connect (including off-platform), handoff, storage invoices (paid offline), Enterprise Admin sync.
+
+Optional demo seed: `supabase/scripts/seed_freight_marketplace_demo.sql`. Isolation probe: `supabase/scripts/test_external_org_isolation.sql`.
+
+Future product depth: `docs/products/WAREHOUSE_FUTURE.md` and `docs/products/COURIER_FUTURE.md`.

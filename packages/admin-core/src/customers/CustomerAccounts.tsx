@@ -77,6 +77,7 @@ export function CustomerAccounts({
   apiNamespace,
   pageTitle,
   subtitle,
+  restrictBusinessTypes,
   renderOrganizationDetail,
 }: CustomerAccountsProps) {
   const resolvedTitle =
@@ -94,6 +95,9 @@ export function CustomerAccounts({
   const { canSuspend, canEditUser, canCreate, canResetPassword, canFullDelete, canEdit } = caps;
   const recoverySurface = recoverySurfaceForCustomers(apiNamespace, productLine);
   const defaultBizType = defaultBusinessTypeForProductLine(productLine);
+  const lockedTypes = restrictBusinessTypes?.filter(Boolean) ?? [];
+  const productLocked = lockedTypes.length > 0;
+  const productDefaultType = lockedTypes[0] ?? defaultBizType;
 
   const [search, setSearch] = useState('');
   const [bizFilter, setBizFilter] = useState<string>('all');
@@ -130,7 +134,7 @@ export function CustomerAccounts({
   const [createOpen, setCreateOpen] = useState(false);
   const [createName, setCreateName] = useState('');
   const [createEmail, setCreateEmail] = useState('');
-  const [createBizType, setCreateBizType] = useState(defaultBizType);
+  const [createBizType, setCreateBizType] = useState(productDefaultType);
   const [createLoading, setCreateLoading] = useState(false);
   const [createResult, setCreateResult] = useState<{ password: string; email: string } | null>(null);
   const [createCopied, setCreateCopied] = useState(false);
@@ -181,8 +185,11 @@ export function CustomerAccounts({
 
   const error = queryError ? (queryError as Error).message : null;
 
-  // Derived: all business types (always show every type in filter)
-  const bizTypes = useMemo(() => businessTypeKeysForProductLine(productLine), [productLine]);
+  const bizTypes = useMemo(
+    () =>
+      productLocked ? lockedTypes : businessTypeKeysForProductLine(productLine),
+    [productLine, productLocked, lockedTypes],
+  );
 
   // Filtered + sorted list
   const displayed = useMemo(() => {
@@ -196,9 +203,10 @@ export function CustomerAccounts({
       );
     }
 
-    // Business type filter
-    if (bizFilter !== 'all') {
-      list = list.filter(c => c.businessType === bizFilter);
+    if (productLocked) {
+      list = list.filter((c) => lockedTypes.includes(c.businessType));
+    } else if (bizFilter !== 'all') {
+      list = list.filter((c) => c.businessType === bizFilter);
     }
 
     // Status filter
@@ -224,7 +232,7 @@ export function CustomerAccounts({
     });
 
     return list;
-  }, [customers, search, bizFilter, statusFilter, sortKey, sortDir]);
+  }, [customers, search, bizFilter, statusFilter, sortKey, sortDir, productLocked, lockedTypes]);
 
   // Reset to page 1 when filters/sort change
   useEffect(() => {
@@ -477,7 +485,7 @@ export function CustomerAccounts({
     setCreateOpen(false);
     setCreateName('');
     setCreateEmail('');
-    setCreateBizType(defaultBizType);
+    setCreateBizType(productDefaultType);
     setCreateResult(null);
     setCreateCopied(false);
   };
@@ -574,7 +582,7 @@ export function CustomerAccounts({
           />
         </div>
 
-        {/* Business type filter */}
+        {!productLocked ? (
         <div className="relative">
           <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
           <select
@@ -588,6 +596,7 @@ export function CustomerAccounts({
             ))}
           </select>
         </div>
+        ) : null}
 
         {/* Status filter */}
         <div className="relative">
@@ -875,7 +884,7 @@ export function CustomerAccounts({
               />
             </div>
 
-            {/* Business Type */}
+            {productLocked && lockedTypes.length === 1 ? null : (
             <div>
               <label className="block text-xs font-medium text-slate-400 mb-1">Business Type</label>
               <select
@@ -883,11 +892,12 @@ export function CustomerAccounts({
                 onChange={e => setEditBizType(e.target.value)}
                 className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50 cursor-pointer"
               >
-                {Object.entries(BIZ_LABEL).map(([key, label]) => (
-                  <option key={key} value={key}>{label}</option>
+                {bizTypes.map((key) => (
+                  <option key={key} value={key}>{BIZ_LABEL[key] || key}</option>
                 ))}
               </select>
             </div>
+            )}
 
             {/* Buttons */}
             <div className="flex justify-end gap-3 pt-2">
@@ -944,6 +954,7 @@ export function CustomerAccounts({
                   />
                 </div>
 
+                {productLocked && lockedTypes.length === 1 ? null : (
                 <div>
                   <label className="block text-xs font-medium text-slate-400 mb-1">Business Type</label>
                   <select
@@ -951,11 +962,12 @@ export function CustomerAccounts({
                     onChange={e => setCreateBizType(e.target.value)}
                     className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 dark:bg-slate-800 dark:border-slate-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50 cursor-pointer"
                   >
-                    {Object.entries(BIZ_LABEL).map(([key, label]) => (
-                      <option key={key} value={key}>{label}</option>
+                    {bizTypes.map((key) => (
+                      <option key={key} value={key}>{BIZ_LABEL[key] || key}</option>
                     ))}
                   </select>
                 </div>
+                )}
 
                 <div className="flex justify-end gap-3 pt-2">
                   <button

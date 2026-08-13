@@ -99,13 +99,6 @@ export function EnterpriseOverviewCard({ onNavigate }: EnterpriseOverviewCardPro
         >
           Open team members
         </button>
-        <button
-          type="button"
-          onClick={() => onNavigate('enterprise-intake-warehouses')}
-          className="px-4 py-2 text-sm rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-700"
-        >
-          Freight forwarder buildings
-        </button>
       </div>
     </div>
   );

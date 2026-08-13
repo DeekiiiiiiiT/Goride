@@ -1,6 +1,7 @@
 export { PipelineCommandPage } from './PipelineCommandPage';
 export { WarehouseReceiveStationPage } from './WarehouseReceiveStationPage';
 export { WarehouseInboundPage } from './WarehouseInboundPage';
+export { FreightForwarderSetupPage } from './FreightForwarderSetupPage';
 export { ReceiveWorkspacePage } from './ReceiveWorkspacePage';
 export { PreAlertsPage, CreatePreAlertOverlay } from './PreAlertsPage';
 export { PackageDutyDetailPage } from './PackageDutyDetailPage';

@@ -17,7 +17,10 @@ export type ProductLineAccountsProps = {
   }) => React.ReactNode;
 };
 
-export type CustomerAccountsProps = ProductLineAccountsProps;
+export type CustomerAccountsProps = ProductLineAccountsProps & {
+  /** When set, only these business types are listed / created (Courier vs Freight Forwarder). */
+  restrictBusinessTypes?: string[];
+};
 
 export type TeamMembersProps = Omit<
   ProductLineAccountsProps,

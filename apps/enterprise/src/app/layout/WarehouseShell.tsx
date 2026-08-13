@@ -1,26 +1,33 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
+  ArrowLeft,
   Building2,
   ClipboardList,
+  CreditCard,
   LayoutDashboard,
   Link2,
   LogOut,
+  SlidersHorizontal,
   Users,
 } from 'lucide-react';
 import { useEffect } from 'react';
 import { useAuth } from '@/app/auth/AuthProvider';
+import { useFacilities } from '@/app/hooks/useFreight';
 import { FREIGHT_FORWARDER_PATH, navigateDoorHref, urlForDoor } from '@/app/productDoor';
 import { useSeatAccess } from '@/app/seats/SeatAccessProvider';
 import {
   canAccessCourierVertical,
   canAccessWarehouseVertical,
 } from '@/app/verticals/enterpriseHome';
+import { FF_SETUP, isFfHome, useSafeBack } from '@/app/layout/ffNavigation';
 
 const NAV = [
   { to: FREIGHT_FORWARDER_PATH, label: 'Inbound', icon: LayoutDashboard, end: true },
   { to: `${FREIGHT_FORWARDER_PATH}/receive`, label: 'Receive Station', icon: ClipboardList },
   { to: `${FREIGHT_FORWARDER_PATH}/facilities`, label: 'Facilities', icon: Building2 },
   { to: `${FREIGHT_FORWARDER_PATH}/partners`, label: 'Courier partners', icon: Link2 },
+  { to: `${FREIGHT_FORWARDER_PATH}/billing`, label: 'Billing', icon: CreditCard },
+  { to: FF_SETUP, label: 'Setup', icon: SlidersHorizontal },
   { to: `${FREIGHT_FORWARDER_PATH}/team`, label: 'Team', icon: Users },
 ] as const;
 
@@ -28,6 +35,13 @@ const NAV = [
 export function WarehouseShell() {
   const { user, role, signOut, businessType, subscribedProducts } = useAuth();
   const { seatRole } = useSeatAccess();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { back, label: backLabel } = useSafeBack();
+  const facilities = useFacilities('warehouse');
+  const hasBuilding = (facilities.data?.facilities ?? []).length > 0;
+  const onSetup = location.pathname === FF_SETUP || location.pathname.startsWith(`${FF_SETUP}/`);
+  const showBack = hasBuilding && !isFfHome(location.pathname);
 
   const canWarehouse = canAccessWarehouseVertical(seatRole, {
     businessType,
@@ -39,6 +53,13 @@ export function WarehouseShell() {
       navigateDoorHref(urlForDoor('courier', '/app'));
     }
   }, [canWarehouse]);
+
+  useEffect(() => {
+    if (!canWarehouse || facilities.isLoading) return;
+    if (!hasBuilding && !onSetup) {
+      navigate(FF_SETUP, { replace: true });
+    }
+  }, [canWarehouse, facilities.isLoading, hasBuilding, onSetup, navigate]);
 
   if (!canWarehouse) {
     return (
@@ -77,6 +98,9 @@ export function WarehouseShell() {
               key={item.to}
               to={item.to}
               end={'end' in item ? item.end : false}
+              state={
+                location.pathname === item.to ? location.state : { from: location.pathname }
+              }
               className={({ isActive }) =>
                 `flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition ${
                   isActive
@@ -111,8 +135,22 @@ export function WarehouseShell() {
           </button>
         </div>
       </aside>
-      <main className="min-w-0 flex-1 p-6">
-        <Outlet />
+      <main className="flex min-w-0 flex-1 flex-col">
+        {showBack ? (
+          <div className="border-b border-slate-200 bg-white px-6 py-3">
+            <button
+              type="button"
+              onClick={back}
+              className="inline-flex min-h-9 items-center gap-2 text-sm font-medium text-slate-600 hover:text-slate-900"
+            >
+              <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden />
+              {backLabel}
+            </button>
+          </div>
+        ) : null}
+        <div className="min-w-0 flex-1 p-6">
+          <Outlet />
+        </div>
       </main>
     </div>
   );

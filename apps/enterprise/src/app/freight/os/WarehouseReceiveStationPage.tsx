@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/app/auth/AuthProvider';
-import { useWarehouseCourierLinks } from '@/app/hooks/useWarehouseCourierLinks';
+import { useHandoffPackage, useWarehouseCourierLinks } from '@/app/hooks/useWarehouseCourierLinks';
 import { freightService } from '@/app/services/freightService';
-import { AddWarehouseBuildingPanel } from '@/app/freight/os/AddWarehouseBuildingPanel';
+import { FREIGHT_FORWARDER_PATH } from '@/app/productDoor';
 import {
   ScanBarcodeField,
   ScanDetailsDisclosure,
@@ -22,6 +22,7 @@ type LookupPkg = Record<string, unknown> & {
 /** Gun-friendly Warehouse Receive Station — wired to /scans. */
 export function WarehouseReceiveStationPage({ embedded = false }: { embedded?: boolean }) {
   const { organizationId, session } = useAuth();
+  const location = useLocation();
   const qc = useQueryClient();
   const [params, setParams] = useSearchParams();
   const barcodeRef = useRef<HTMLInputElement>(null);
@@ -46,6 +47,7 @@ export function WarehouseReceiveStationPage({ embedded = false }: { embedded?: b
 
   const clearFlash = useCallback(() => setFlash(null), []);
   const linksQ = useWarehouseCourierLinks();
+  const handoff = useHandoffPackage();
 
   const activeCourierLinks = useMemo(
     () => (linksQ.data?.links ?? []).filter((l) => String(l.status) === 'active'),
@@ -306,24 +308,30 @@ export function WarehouseReceiveStationPage({ embedded = false }: { embedded?: b
   }
 
   if (!hasBuilding) {
+    const setupTo = embedded ? '/app/facilities' : `${FREIGHT_FORWARDER_PATH}/setup`;
     return (
       <div className="mx-auto max-w-3xl space-y-4">
         {!embedded ? (
           <div>
             <h1 className="text-2xl font-semibold text-slate-900">Receive Station</h1>
-            <p className="mt-1 text-sm text-slate-500">
-              Pick your building first, then scan tracking.
-            </p>
+            <p className="mt-1 text-sm text-slate-500">Finish Setup and wait for approval before you scan.</p>
           </div>
         ) : (
-          <p className="text-sm text-slate-500">Pick your building first, then scan tracking.</p>
+          <p className="text-sm text-slate-500">Finish Setup and wait for approval before you scan.</p>
         )}
-        <AddWarehouseBuildingPanel
-          onCreated={(id) => {
-            setFacilityId(id);
-            void qc.invalidateQueries({ queryKey: ['freight', 'facilities'] });
-          }}
-        />
+        <div className="rounded-xl border border-dashed border-slate-300 bg-white px-5 py-6">
+          <p className="text-sm font-semibold text-slate-900">No warehouse address yet</p>
+          <p className="mt-1 text-sm text-slate-500">
+            Confirm your company in Setup. Roam must approve the join before you can scan.
+          </p>
+          <Link
+            to={setupTo}
+            state={{ from: location.pathname }}
+            className="mt-4 inline-flex min-h-11 items-center rounded-lg bg-amber-500 px-4 py-3 text-sm font-semibold text-slate-950 hover:bg-amber-400"
+          >
+            Go to Setup
+          </Link>
+        </div>
       </div>
     );
   }
@@ -458,6 +466,29 @@ export function WarehouseReceiveStationPage({ embedded = false }: { embedded?: b
             {matchHasWeight ? ` · ${lookupPkg.weight_lbs} lb` : ''}
             {String(lookupPkg.status) === 'received_at_warehouse' ? ' · already on the floor' : ''}
           </p>
+          {String(lookupPkg.status) === 'received_at_warehouse' && lookupPkg.id ? (
+            <button
+              type="button"
+              disabled={handoff.isPending}
+              onClick={() =>
+                handoff.mutate(
+                  { id: String(lookupPkg.id) },
+                  {
+                    onSuccess: () => {
+                      setLookupPkg(null);
+                      setLookupDone(false);
+                      setBarcode('');
+                      setFlash('Released from the floor');
+                      setFlashTone('ok');
+                    },
+                  },
+                )
+              }
+              className="mt-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800"
+            >
+              {handoff.isPending ? 'Releasing…' : 'Release / hand off'}
+            </button>
+          ) : null}
         </div>
       ) : null}
 

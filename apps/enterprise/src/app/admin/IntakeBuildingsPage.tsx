@@ -1,7 +1,6 @@
-import React, { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
-import { ChevronDown, ChevronRight, Loader2, Plus, Warehouse } from 'lucide-react';
-import { useAuth } from '../auth/AuthContext';
-import { API_ENDPOINTS } from '../../services/apiConfig';
+import { FormEvent, Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import { ChevronDown, ChevronRight, Loader2, Plus } from 'lucide-react';
+import { API_ENDPOINTS } from '@roam/api-client';
 
 export type IntakeWarehouse = {
   id: string;
@@ -14,6 +13,8 @@ export type IntakeWarehouse = {
   country_code: string;
   timezone: string;
   status: 'active' | 'inactive';
+  claimed_by_org_id?: string | null;
+  claimed_by_org_name?: string | null;
 };
 
 type DraftFields = {
@@ -66,10 +67,85 @@ function toDraft(w: IntakeWarehouse): DraftFields {
   };
 }
 
-/** Dominion master warehouses (any country) — Enterprise orgs only pick from this list. */
-export function IntakeWarehouseCatalogPage() {
-  const { session } = useAuth();
-  const token = session?.access_token;
+function GeoFields({
+  value,
+  onChange,
+}: {
+  value: DraftFields;
+  onChange: (patch: Partial<DraftFields>) => void;
+}) {
+  return (
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <label className="block text-sm sm:col-span-2 lg:col-span-1">
+        Country (ISO)
+        <input
+          required
+          maxLength={2}
+          value={value.countryCode}
+          onChange={(e) => onChange({ countryCode: e.target.value.toUpperCase() })}
+          className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 uppercase"
+          placeholder="US, CN, JM…"
+        />
+      </label>
+      <label className="block text-sm">
+        Timezone
+        <select
+          required
+          value={value.timezone}
+          onChange={(e) => onChange({ timezone: e.target.value })}
+          className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+        >
+          {TIMEZONE_OPTIONS.map((tz) => (
+            <option key={tz} value={tz}>
+              {tz}
+            </option>
+          ))}
+          {!TIMEZONE_OPTIONS.includes(value.timezone as (typeof TIMEZONE_OPTIONS)[number]) &&
+            value.timezone && <option value={value.timezone}>{value.timezone}</option>}
+        </select>
+      </label>
+      <label className="block text-sm sm:col-span-2 lg:col-span-3">
+        Street
+        <input
+          required
+          value={value.addressLine}
+          onChange={(e) => onChange({ addressLine: e.target.value })}
+          className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+        />
+      </label>
+      <label className="block text-sm">
+        City
+        <input
+          required
+          value={value.city}
+          onChange={(e) => onChange({ city: e.target.value })}
+          className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+        />
+      </label>
+      <label className="block text-sm">
+        Region / state
+        <input
+          value={value.state}
+          onChange={(e) => onChange({ state: e.target.value })}
+          className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+          placeholder="FL, Guangdong…"
+        />
+      </label>
+      <label className="block text-sm">
+        Postal code
+        <input
+          required
+          value={value.postalCode}
+          onChange={(e) => onChange({ postalCode: e.target.value })}
+          className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+        />
+      </label>
+    </div>
+  );
+}
+
+/** Master freight-forwarder buildings — customers pick from this list at Setup. */
+export function IntakeBuildingsPage({ accessToken }: { accessToken: string }) {
   const [rows, setRows] = useState<IntakeWarehouse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -82,19 +158,18 @@ export function IntakeWarehouseCatalogPage() {
 
   const headers = useCallback(
     () => ({
-      Authorization: `Bearer ${token}`,
+      Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     }),
-    [token],
+    [accessToken],
   );
 
   const load = useCallback(async () => {
-    if (!token) return;
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${API_ENDPOINTS.admin}/admin/intake-warehouses`, {
-        headers: { Authorization: `Bearer ${token}` },
+      const res = await fetch(`${API_ENDPOINTS.admin}/enterprise-admin/intake-warehouses`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.error || res.statusText);
@@ -106,7 +181,7 @@ export function IntakeWarehouseCatalogPage() {
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [accessToken]);
 
   useEffect(() => {
     void load();
@@ -141,13 +216,12 @@ export function IntakeWarehouseCatalogPage() {
   }
 
   async function saveWarehouse(id: string) {
-    if (!token) return;
     const d = drafts[id];
     if (!d) return;
     setSavingId(id);
     setError(null);
     try {
-      const res = await fetch(`${API_ENDPOINTS.admin}/admin/intake-warehouses/${id}`, {
+      const res = await fetch(`${API_ENDPOINTS.admin}/enterprise-admin/intake-warehouses/${id}`, {
         method: 'PATCH',
         headers: headers(),
         body: JSON.stringify(bodyFromDraft(d)),
@@ -162,13 +236,30 @@ export function IntakeWarehouseCatalogPage() {
     }
   }
 
+  async function releaseClaim(id: string) {
+    setSavingId(id);
+    setError(null);
+    try {
+      const res = await fetch(
+        `${API_ENDPOINTS.admin}/enterprise-admin/intake-warehouses/${id}/release`,
+        { method: 'POST', headers: headers() },
+      );
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error || res.statusText);
+      await load();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setSavingId(null);
+    }
+  }
+
   async function createWarehouse(e: FormEvent) {
     e.preventDefault();
-    if (!token) return;
     setSavingId('new');
     setError(null);
     try {
-      const res = await fetch(`${API_ENDPOINTS.admin}/admin/intake-warehouses`, {
+      const res = await fetch(`${API_ENDPOINTS.admin}/enterprise-admin/intake-warehouses`, {
         method: 'POST',
         headers: headers(),
         body: JSON.stringify(bodyFromDraft(createForm)),
@@ -187,94 +278,15 @@ export function IntakeWarehouseCatalogPage() {
     }
   }
 
-  function GeoFields({
-    value,
-    onChange,
-  }: {
-    value: DraftFields;
-    onChange: (patch: Partial<DraftFields>) => void;
-  }) {
-    return (
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <label className="block text-sm sm:col-span-2 lg:col-span-1">
-          Country (ISO)
-          <input
-            required
-            maxLength={2}
-            value={value.countryCode}
-            onChange={(e) => onChange({ countryCode: e.target.value.toUpperCase() })}
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 uppercase"
-            placeholder="US, CN, JM…"
-          />
-        </label>
-        <label className="block text-sm">
-          Timezone
-          <select
-            required
-            value={value.timezone}
-            onChange={(e) => onChange({ timezone: e.target.value })}
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-          >
-            {TIMEZONE_OPTIONS.map((tz) => (
-              <option key={tz} value={tz}>
-                {tz}
-              </option>
-            ))}
-            {!TIMEZONE_OPTIONS.includes(value.timezone as (typeof TIMEZONE_OPTIONS)[number]) &&
-              value.timezone && <option value={value.timezone}>{value.timezone}</option>}
-          </select>
-        </label>
-        <label className="block text-sm sm:col-span-2 lg:col-span-3">
-          Street
-          <input
-            required
-            value={value.addressLine}
-            onChange={(e) => onChange({ addressLine: e.target.value })}
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-          />
-        </label>
-        <label className="block text-sm">
-          City
-          <input
-            required
-            value={value.city}
-            onChange={(e) => onChange({ city: e.target.value })}
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-          />
-        </label>
-        <label className="block text-sm">
-          Region / state
-          <input
-            value={value.state}
-            onChange={(e) => onChange({ state: e.target.value })}
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-            placeholder="FL, Guangdong…"
-          />
-        </label>
-        <label className="block text-sm">
-          Postal code
-          <input
-            required
-            value={value.postalCode}
-            onChange={(e) => onChange({ postalCode: e.target.value })}
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-          />
-        </label>
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900 flex items-center gap-2">
-            <Warehouse className="h-6 w-6 text-slate-500" />
-            Freight forwarder buildings
-          </h1>
-          <p className="mt-1 text-sm text-slate-500 max-w-2xl">
-            Master terminals in any country (US, China, and more). Enterprise customers pick from
-            this list when they set up freight-forwarder intake — they cannot add their own.
+          <h1 className="text-2xl font-semibold text-slate-900">Freight forwarder buildings</h1>
+          <p className="mt-1 max-w-2xl text-sm text-slate-500">
+            Master company list customers pick from at Setup. Joins, corrections, and new companies
+            wait under Join requests. Claimed buildings stay here but are hidden from Setup until
+            you make them available again.
           </p>
         </div>
         <button
@@ -290,33 +302,31 @@ export function IntakeWarehouseCatalogPage() {
         </button>
       </div>
 
-      <div className="flex flex-wrap items-end gap-3">
-        <label className="block text-sm text-slate-600">
-          Country
-          <select
-            value={countryFilter}
-            onChange={(e) => setCountryFilter(e.target.value)}
-            className="mt-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
-          >
-            <option value="">All countries</option>
-            {countries.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
+      <label className="block text-sm text-slate-600">
+        Country
+        <select
+          value={countryFilter}
+          onChange={(e) => setCountryFilter(e.target.value)}
+          className="mt-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+        >
+          <option value="">All countries</option>
+          {countries.map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
+        </select>
+      </label>
 
-      {error && (
+      {error ? (
         <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
           {error}
         </p>
-      )}
+      ) : null}
 
-      {creating && (
+      {creating ? (
         <form
-          onSubmit={createWarehouse}
+          onSubmit={(e) => void createWarehouse(e)}
           className="space-y-3 rounded-xl border border-slate-200 bg-white p-4"
         >
           <h2 className="text-sm font-semibold text-slate-900">New building</h2>
@@ -366,7 +376,7 @@ export function IntakeWarehouseCatalogPage() {
             </button>
           </div>
         </form>
-      )}
+      ) : null}
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
         {loading ? (
@@ -381,6 +391,7 @@ export function IntakeWarehouseCatalogPage() {
                 <th className="px-4 py-2">Building</th>
                 <th className="px-4 py-2">Country</th>
                 <th className="px-4 py-2">Address</th>
+                <th className="px-4 py-2">Claim</th>
                 <th className="px-4 py-2">Status</th>
               </tr>
             </thead>
@@ -389,9 +400,9 @@ export function IntakeWarehouseCatalogPage() {
                 const open = expandedId === w.id;
                 const d = drafts[w.id] || toDraft(w);
                 return (
-                  <React.Fragment key={w.id}>
+                  <Fragment key={w.id}>
                     <tr
-                      className="border-b border-slate-50 cursor-pointer hover:bg-slate-50/80"
+                      className="cursor-pointer border-b border-slate-50 hover:bg-slate-50/80"
                       onClick={() => setExpandedId(open ? null : w.id)}
                     >
                       <td className="px-3 py-3 text-slate-400">
@@ -414,6 +425,20 @@ export function IntakeWarehouseCatalogPage() {
                         {[w.city, w.state, w.postal_code].filter(Boolean).join(', ')}
                       </td>
                       <td className="px-4 py-3">
+                        {w.claimed_by_org_name ? (
+                          <div>
+                            <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800">
+                              Claimed
+                            </span>
+                            <p className="mt-1 text-xs text-slate-500">{w.claimed_by_org_name}</p>
+                          </div>
+                        ) : (
+                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+                            Available
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
                         <span
                           className={
                             w.status === 'active'
@@ -425,9 +450,9 @@ export function IntakeWarehouseCatalogPage() {
                         </span>
                       </td>
                     </tr>
-                    {open && (
+                    {open ? (
                       <tr className="border-b border-slate-100 bg-slate-50/60">
-                        <td colSpan={5} className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
+                        <td colSpan={6} className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
                           <div className="max-w-3xl space-y-3 rounded-lg border border-slate-200 bg-white p-4">
                             <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                               Edit building
@@ -465,34 +490,47 @@ export function IntakeWarehouseCatalogPage() {
                                 </select>
                               </label>
                             </div>
-                            <GeoFields
-                              value={d}
-                              onChange={(patch) => patchDraft(w.id, patch)}
-                            />
-                            <button
-                              type="button"
-                              disabled={savingId === w.id}
-                              onClick={() => void saveWarehouse(w.id)}
-                              className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
-                            >
-                              {savingId === w.id ? 'Saving…' : 'Save building'}
-                            </button>
+                            <GeoFields value={d} onChange={(patch) => patchDraft(w.id, patch)} />
+                            {w.claimed_by_org_name ? (
+                              <p className="text-sm text-slate-600">
+                                Hidden on Setup because <span className="font-medium">{w.claimed_by_org_name}</span>{' '}
+                                already confirmed this company.
+                              </p>
+                            ) : null}
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                disabled={savingId === w.id}
+                                onClick={() => void saveWarehouse(w.id)}
+                                className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                              >
+                                {savingId === w.id ? 'Saving…' : 'Save building'}
+                              </button>
+                              {w.claimed_by_org_id ? (
+                                <button
+                                  type="button"
+                                  disabled={savingId === w.id}
+                                  onClick={() => void releaseClaim(w.id)}
+                                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 disabled:opacity-60"
+                                >
+                                  Make available again
+                                </button>
+                              ) : null}
+                            </div>
                           </div>
                         </td>
                       </tr>
-                    )}
-                  </React.Fragment>
+                    ) : null}
+                  </Fragment>
                 );
               })}
-              {!filtered.length && (
+              {!filtered.length ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-slate-500">
-                    {rows.length
-                      ? 'No buildings for this country filter.'
-                      : 'No buildings yet.'}
+                  <td colSpan={6} className="px-4 py-10 text-center text-slate-500">
+                    {rows.length ? 'No buildings for this country filter.' : 'No buildings yet.'}
                   </td>
                 </tr>
-              )}
+              ) : null}
             </tbody>
           </table>
         )}

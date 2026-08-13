@@ -74,7 +74,7 @@ function scoreFacility(shipTo: InvoiceShipToHint, facility: WarehouseFacilityLik
 }
 
 /**
- * Match invoice ship-to to an org warehouse copied from Dominion intake catalog.
+ * Match invoice ship-to to an org warehouse copied from the intake catalog.
  * Requires a clear winner (ZIP + street number is enough for Complete Sourcing).
  */
 export function matchWarehouseFromShipTo(

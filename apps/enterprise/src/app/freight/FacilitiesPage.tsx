@@ -4,9 +4,12 @@ import {
   useCreateFacility,
   useDeleteFacility,
   useFacilities,
-  useIntakeWarehouses,
   useUpdateFacility,
 } from '@/app/hooks/useFreight';
+import { AddWarehouseBuildingPanel } from '@/app/freight/os/AddWarehouseBuildingPanel';
+import { ConnectFreightForwarderPanel } from '@/app/freight/os/ConnectFreightForwarderPanel';
+import { useAuth } from '@/app/auth/AuthProvider';
+import { useWarehouseCourierLinks } from '@/app/hooks/useWarehouseCourierLinks';
 
 const TYPE_LABEL: Record<string, string> = {
   warehouse: 'Freight Forwarder',
@@ -28,9 +31,8 @@ const TABS: {
     id: 'warehouse',
     label: 'Freight Forwarder',
     addButton: 'Add building',
-    empty: 'No building yet — pick one from the Dominion list above.',
-    addHint:
-      'Origin building used on Receive. Pick from the Dominion master list (US, China, or other). Add more than one if you use multiple terminals.',
+    empty: 'No freight forwarder connected yet — add a building above.',
+    addHint: 'Pick the freight forwarder that receives your packages.',
     saveLabel: 'Save building',
   },
   {
@@ -99,88 +101,30 @@ function FacilityFields({
   facilityType,
   form,
   setForm,
-  catalogId,
-  setCatalogId,
-  warehouses,
-  catalogLoading,
-  selectedCatalog,
-  requireIdentity,
 }: {
   facilityType: FacilityType;
   form: FormState;
   setForm: (updater: (f: FormState) => FormState) => void;
-  catalogId: string;
-  setCatalogId: (id: string) => void;
-  warehouses: FacilityRow[];
-  catalogLoading: boolean;
-  selectedCatalog?: FacilityRow;
-  requireIdentity: boolean;
 }) {
   if (facilityType === 'warehouse') {
     return (
       <>
         <label className="block text-sm sm:col-span-2">
-          Building (Dominion list)
-          <select
+          Display name
+          <input
             required
-            value={catalogId}
-            onChange={(e) => setCatalogId(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-            disabled={catalogLoading}
-          >
-            <option value="">
-              {catalogLoading ? 'Loading buildings…' : 'Select building…'}
-            </option>
-            {warehouses.map((w) => (
-              <option key={String(w.id)} value={String(w.id)}>
-                {String(w.country_code || '??')} · {String(w.name)} — {String(w.city)}
-                {w.state ? `, ${String(w.state)}` : ''}
-              </option>
-            ))}
-          </select>
-        </label>
-        {selectedCatalog && (
-          <div className="sm:col-span-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-            <p className="font-medium">{String(selectedCatalog.name)}</p>
-            <p>
-              {String(selectedCatalog.address_line)}
-              <br />
-              {[selectedCatalog.city, selectedCatalog.state, selectedCatalog.postal_code]
-                .filter(Boolean)
-                .map(String)
-                .join(', ')}{' '}
-              · {String(selectedCatalog.country_code || '')}
-            </p>
-            <p className="mt-2 text-xs text-slate-500">
-              Your customers ship to this terminal; packages are sorted by suite code (e.g.
-              BSHPD10859).
-            </p>
-          </div>
-        )}
-        <label className="block text-sm">
-          Org facility code {requireIdentity ? '' : '(optional)'}
-          <input
-            value={form.code}
-            onChange={(e) => setForm((f) => ({ ...f, code: e.target.value }))}
-            required={requireIdentity}
-            placeholder={
-              selectedCatalog
-                ? `${String(selectedCatalog.code).slice(0, 20)}-INTAKE`
-                : 'CS-INTAKE'
-            }
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono uppercase"
-          />
-        </label>
-        <label className="block text-sm">
-          Display name {requireIdentity ? '' : '(optional)'}
-          <input
             value={form.name}
             onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-            required={requireIdentity}
-            placeholder={
-              selectedCatalog ? String(selectedCatalog.name) : 'Complete Sourcing USA'
-            }
             className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+          />
+        </label>
+        <label className="block text-sm sm:col-span-2">
+          Org facility code
+          <input
+            required
+            value={form.code}
+            onChange={(e) => setForm((f) => ({ ...f, code: e.target.value }))}
+            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono uppercase"
           />
         </label>
       </>
@@ -240,11 +184,12 @@ function FacilityFields({
 
 /**
  * Warehouse / hub / branch setup — Day-1 before Suites or Receive.
- * Origin warehouses must pick a Dominion catalog entry (catalog-only).
+ * Freight-forwarder buildings go through confirm-or-approve (same as Setup).
  */
 export function FacilitiesPage({ warehouseOnly = false }: { warehouseOnly?: boolean }) {
+  const { organizationId } = useAuth();
   const { data, isLoading, error } = useFacilities();
-  const catalog = useIntakeWarehouses();
+  const linksQ = useWarehouseCourierLinks();
   const create = useCreateFacility();
   const update = useUpdateFacility();
   const remove = useDeleteFacility();
@@ -252,26 +197,38 @@ export function FacilitiesPage({ warehouseOnly = false }: { warehouseOnly?: bool
   const [viewType, setViewType] = useState<FacilityType>('warehouse');
   const [addType, setAddType] = useState<FacilityType | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
-  const [catalogId, setCatalogId] = useState('');
   const [form, setForm] = useState<FormState>(() => emptyForm('warehouse'));
 
   const [editRow, setEditRow] = useState<FacilityRow | null>(null);
-  const [editCatalogId, setEditCatalogId] = useState('');
   const [editForm, setEditForm] = useState<FormState>(() => emptyForm('warehouse'));
   const [editError, setEditError] = useState<string | null>(null);
   const [deleteRow, setDeleteRow] = useState<FacilityRow | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const rows = useMemo(() => data?.facilities ?? [], [data?.facilities]);
-  const warehouses = useMemo(
-    () => (catalog.data?.warehouses ?? []) as FacilityRow[],
-    [catalog.data?.warehouses],
-  );
-  const selectedCatalog = warehouses.find((w) => String(w.id) === catalogId);
-  const editSelectedCatalog = warehouses.find((w) => String(w.id) === editCatalogId);
   const saving = create.isPending || update.isPending || remove.isPending;
 
+  const partnerFfs = useMemo(() => {
+    if (warehouseOnly) return [];
+    return (linksQ.data?.links ?? []).filter(
+      (l) =>
+        !l.is_self &&
+        String(l.courier_org_id) === String(organizationId) &&
+        String(l.status) !== 'revoked',
+    );
+  }, [warehouseOnly, linksQ.data?.links, organizationId]);
+
   const activeTab = TABS.find((t) => t.id === viewType) || TABS[0];
+  const warehouseCopy = warehouseOnly
+    ? {
+        empty: 'No building yet — join from Setup.',
+        addHint:
+          'Origin building used on Receive. Joins wait for Roam approval before you can scan.',
+      }
+    : {
+        empty: 'No freight forwarder connected yet — add a building above.',
+        addHint: 'Pick the freight forwarder that receives your packages.',
+      };
   const addTab = addType ? TABS.find((t) => t.id === addType) : null;
   const visibleTabs = useMemo(
     () => (warehouseOnly ? TABS.filter((t) => t.id === 'warehouse') : TABS),
@@ -308,7 +265,6 @@ export function FacilitiesPage({ warehouseOnly = false }: { warehouseOnly?: bool
     setDeleteRow(null);
     setViewType(type);
     setAddType(type);
-    setCatalogId('');
     setForm(emptyForm(type));
     setFormError(null);
   }
@@ -322,7 +278,6 @@ export function FacilitiesPage({ warehouseOnly = false }: { warehouseOnly?: bool
     setAddType(null);
     setDeleteRow(null);
     setEditRow(row);
-    setEditCatalogId(row.intake_catalog_id ? String(row.intake_catalog_id) : '');
     setEditForm(rowToForm(row));
     setEditError(null);
   }
@@ -337,20 +292,14 @@ export function FacilitiesPage({ warehouseOnly = false }: { warehouseOnly?: bool
   async function buildBody(
     type: FacilityType,
     state: FormState,
-    selectedCatalogId: string,
   ): Promise<{ ok: true; body: Record<string, unknown> } | { ok: false; error: string }> {
     if (type === 'warehouse') {
-      if (!selectedCatalogId) {
-        return { ok: false, error: 'Select a building from the Dominion list.' };
-      }
+      const name = state.name.trim();
+      const code = state.code.trim();
+      if (!name || !code) return { ok: false, error: 'Name and code are required.' };
       return {
         ok: true,
-        body: {
-          facilityType: 'warehouse',
-          intakeCatalogId: selectedCatalogId,
-          code: state.code.trim() || undefined,
-          name: state.name.trim() || undefined,
-        },
+        body: { name, code },
       };
     }
     const name = state.name.trim();
@@ -373,14 +322,13 @@ export function FacilitiesPage({ warehouseOnly = false }: { warehouseOnly?: bool
     e.preventDefault();
     if (!addType) return;
     setFormError(null);
-    const built = await buildBody(addType, form, catalogId);
+    const built = await buildBody(addType, form);
     if (!built.ok) {
       setFormError(built.error);
       return;
     }
     try {
       await create.mutateAsync(built.body);
-      setCatalogId('');
       setForm(emptyForm(addType));
       setViewType(addType);
       closeAdd();
@@ -394,7 +342,7 @@ export function FacilitiesPage({ warehouseOnly = false }: { warehouseOnly?: bool
     if (!editRow) return;
     setEditError(null);
     const type = String(editRow.facility_type) as FacilityType;
-    const built = await buildBody(type, editForm, editCatalogId);
+    const built = await buildBody(type, editForm);
     if (!built.ok) {
       setEditError(built.error);
       return;
@@ -424,7 +372,7 @@ export function FacilitiesPage({ warehouseOnly = false }: { warehouseOnly?: bool
         <h1 className="text-2xl font-semibold">Facilities</h1>
         <p className="mt-1 text-sm text-slate-500">
           {warehouseOnly
-            ? 'Buildings this freight forwarder operates. Pick from the Dominion intake catalog.'
+            ? 'Buildings this freight forwarder operates. Confirm a listed company or add yours for approval.'
             : 'Set up Freight Forwarder intake, Customs (Jamaica hub), and Courier locations. Required before Receive or Hub Station.'}
         </p>
       </div>
@@ -454,7 +402,11 @@ export function FacilitiesPage({ warehouseOnly = false }: { warehouseOnly?: bool
         <div className="flex border-b border-slate-200">
           {visibleTabs.map((tab) => {
             const active = viewType === tab.id;
-            const count = rows.filter((r) => String(r.facility_type) === tab.id).length;
+            const count =
+              tab.id === 'warehouse' && !warehouseOnly
+                ? partnerFfs.length +
+                  rows.filter((r) => String(r.facility_type) === 'warehouse').length
+                : rows.filter((r) => String(r.facility_type) === tab.id).length;
             return (
               <button
                 key={tab.id}
@@ -496,6 +448,22 @@ export function FacilitiesPage({ warehouseOnly = false }: { warehouseOnly?: bool
               </tr>
             </thead>
             <tbody>
+              {viewType === 'warehouse' &&
+                partnerFfs.map((link) => {
+                  const name = String(
+                    (link.warehouse_org as { name?: string } | null)?.name || 'Freight forwarder',
+                  );
+                  return (
+                    <tr key={String(link.id)} className="border-b border-slate-50">
+                      <td className="px-4 py-2 font-medium">{name}</td>
+                      <td className="px-4 py-2 font-mono text-xs">—</td>
+                      <td className="px-4 py-2 font-mono text-xs uppercase">—</td>
+                      <td className="px-4 py-2">—</td>
+                      <td className="px-4 py-2 capitalize text-slate-600">{String(link.status)}</td>
+                      <td className="px-4 py-2" />
+                    </tr>
+                  );
+                })}
               {filteredRows.map((f) => (
                 <tr key={String(f.id)} className="border-b border-slate-50">
                   <td className="px-4 py-2 font-medium">{String(f.name)}</td>
@@ -527,10 +495,10 @@ export function FacilitiesPage({ warehouseOnly = false }: { warehouseOnly?: bool
                   </td>
                 </tr>
               ))}
-              {!isLoading && !filteredRows.length && (
+              {!isLoading && !filteredRows.length && !(viewType === 'warehouse' && partnerFfs.length) && (
                 <tr>
                   <td colSpan={6} className="px-4 py-8 text-center text-slate-500">
-                    {activeTab.empty}
+                    {viewType === 'warehouse' ? warehouseCopy.empty : activeTab.empty}
                   </td>
                 </tr>
               )}
@@ -551,14 +519,16 @@ export function FacilitiesPage({ warehouseOnly = false }: { warehouseOnly?: bool
             role="dialog"
             aria-modal="true"
             aria-labelledby="add-facility-title"
-            className="relative z-10 w-full max-w-lg rounded-xl border border-slate-200 bg-white shadow-xl"
+            className="relative z-10 max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl"
           >
             <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
               <div>
                 <h2 id="add-facility-title" className="text-base font-semibold text-slate-900">
                   {addTab.addButton}
                 </h2>
-                <p className="mt-0.5 text-sm text-slate-500">{addTab.addHint}</p>
+                <p className="mt-0.5 text-sm text-slate-500">
+                  {addType === 'warehouse' ? warehouseCopy.addHint : addTab.addHint}
+                </p>
               </div>
               <button
                 type="button"
@@ -568,45 +538,42 @@ export function FacilitiesPage({ warehouseOnly = false }: { warehouseOnly?: bool
                 <X className="h-4 w-4" />
               </button>
             </div>
-            <form onSubmit={onCreate} className="space-y-3 px-5 py-4">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <FacilityFields
-                  facilityType={addType}
-                  form={form}
-                  setForm={setForm}
-                  catalogId={catalogId}
-                  setCatalogId={setCatalogId}
-                  warehouses={warehouses}
-                  catalogLoading={catalog.isLoading}
-                  selectedCatalog={selectedCatalog}
-                  requireIdentity={false}
-                />
+            {addType === 'warehouse' ? (
+              <div className="px-5 py-4">
+                {warehouseOnly ? (
+                  <AddWarehouseBuildingPanel onSubmitted={() => closeAdd()} />
+                ) : (
+                  <ConnectFreightForwarderPanel onConnected={() => closeAdd()} />
+                )}
               </div>
-              {catalog.error && addType === 'warehouse' && (
-                <p className="text-sm text-red-600">{(catalog.error as Error).message}</p>
-              )}
-              {formError && (
-                <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                  {formError}
-                </p>
-              )}
-              <div className="flex justify-end gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={closeAdd}
-                  className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-amber-400 disabled:opacity-60"
-                >
-                  {create.isPending ? 'Saving…' : addTab.saveLabel}
-                </button>
-              </div>
-            </form>
+            ) : (
+              <form onSubmit={onCreate} className="space-y-3 px-5 py-4">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <FacilityFields facilityType={addType} form={form} setForm={setForm} />
+                </div>
+                {formError && (
+                  <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                    {formError}
+                  </p>
+                )}
+                <div className="flex justify-end gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={closeAdd}
+                    className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-amber-400 disabled:opacity-60"
+                  >
+                    {create.isPending ? 'Saving…' : addTab.saveLabel}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}
@@ -646,12 +613,6 @@ export function FacilitiesPage({ warehouseOnly = false }: { warehouseOnly?: bool
                   facilityType={String(editRow.facility_type) as FacilityType}
                   form={editForm}
                   setForm={setEditForm}
-                  catalogId={editCatalogId}
-                  setCatalogId={setEditCatalogId}
-                  warehouses={warehouses}
-                  catalogLoading={catalog.isLoading}
-                  selectedCatalog={editSelectedCatalog}
-                  requireIdentity
                 />
               </div>
               {editError && (

@@ -174,8 +174,24 @@ export const freightService = {
       { organizationId },
     ),
 
-  listIntakeWarehouses: (organizationId?: string | null) =>
-    freightFetch<{ warehouses: Record<string, unknown>[] }>('/intake-warehouses', {
+  listIntakeWarehouses: (
+    organizationId?: string | null,
+    purpose?: 'join' | 'connect',
+  ) =>
+    freightFetch<{ warehouses: Record<string, unknown>[] }>(
+      `/intake-warehouses${purpose === 'connect' ? '?for=connect' : ''}`,
+      { organizationId },
+    ),
+
+  listIntakeClaims: (organizationId?: string | null) =>
+    freightFetch<{ requests: Record<string, unknown>[] }>('/intake-claims', {
+      organizationId,
+    }),
+
+  submitIntakeClaim: (body: unknown, organizationId?: string | null) =>
+    freightFetch<{ request: Record<string, unknown> }>('/intake-claims', {
+      method: 'POST',
+      body: JSON.stringify(body),
       organizationId,
     }),
 
@@ -894,9 +910,20 @@ export const freightService = {
     freightFetch<{
       links: Array<
         Record<string, unknown> & {
-          warehouse_org?: { id: string; name: string; business_type?: string } | null;
-          courier_org?: { id: string; name: string; business_type?: string } | null;
+          warehouse_org?: {
+            id: string;
+            name: string;
+            business_type?: string;
+            is_external?: boolean;
+          } | null;
+          courier_org?: {
+            id: string;
+            name: string;
+            business_type?: string;
+            is_external?: boolean;
+          } | null;
           is_self?: boolean;
+          terms?: Record<string, unknown>;
         }
       >;
     }>('/warehouse-courier-links', { organizationId }),
@@ -916,6 +943,51 @@ export const freightService = {
       body: JSON.stringify(body),
       organizationId,
     }),
+
+  createExternalPartner: (
+    body: {
+      roleAs: 'warehouse' | 'courier';
+      name: string;
+      email?: string;
+      phone?: string;
+      contactName?: string;
+    },
+    organizationId?: string | null,
+  ) =>
+    freightFetch<{ org: Record<string, unknown>; link: Record<string, unknown> }>(
+      '/warehouse-courier-links/external',
+      {
+        method: 'POST',
+        body: JSON.stringify(body),
+        organizationId,
+      },
+    ),
+
+  updatePartnerLinkTerms: (
+    id: string,
+    terms: {
+      free_days?: number;
+      per_day_minor?: number;
+      currency?: string;
+      handling_minor?: number;
+    },
+    organizationId?: string | null,
+  ) =>
+    freightFetch<{ link: Record<string, unknown> }>(`/warehouse-courier-links/${id}/terms`, {
+      method: 'POST',
+      body: JSON.stringify(terms),
+      organizationId,
+    }),
+
+  handoffPackage: (id: string, note?: string, organizationId?: string | null) =>
+    freightFetch<{ package: Record<string, unknown>; scanEvent: Record<string, unknown> }>(
+      `/packages/${id}/handoff`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ note: note || 'Released from floor' }),
+        organizationId,
+      },
+    ),
 
   ensureInHouseWarehouseLink: (organizationId?: string | null) =>
     freightFetch<{ link: Record<string, unknown> }>('/warehouse-courier-links/ensure-self', {
@@ -938,16 +1010,56 @@ export const freightService = {
   warehouseBillingStatement: (
     organizationId?: string | null,
     courierOrgId?: string | null,
+    openOnly?: boolean,
   ) =>
     freightFetch<{
       lines: Record<string, unknown>[];
       totalMinor: number;
       currency: string;
     }>(
-      `/warehouse-billing/statement${
-        courierOrgId ? `?courierOrgId=${encodeURIComponent(courierOrgId)}` : ''
-      }`,
+      `/warehouse-billing/statement${(() => {
+        const qs = new URLSearchParams();
+        if (courierOrgId) qs.set('courierOrgId', courierOrgId);
+        if (openOnly) qs.set('open', '1');
+        const s = qs.toString();
+        return s ? `?${s}` : '';
+      })()}`,
       { organizationId },
+    ),
+
+  accrueWarehouseStorage: (organizationId?: string | null) =>
+    freightFetch<{ inserted: number }>('/warehouse-billing/accrue', {
+      method: 'POST',
+      body: JSON.stringify({}),
+      organizationId,
+    }),
+
+  listWarehouseStorageInvoices: (organizationId?: string | null) =>
+    freightFetch<{ invoices: Record<string, unknown>[] }>('/warehouse-billing/invoices', {
+      organizationId,
+    }),
+
+  issueWarehouseStorageInvoice: (
+    body: { courierOrgId: string; periodStart: string; periodEnd: string },
+    organizationId?: string | null,
+  ) =>
+    freightFetch<{ invoice: Record<string, unknown>; lines: Record<string, unknown>[] }>(
+      '/warehouse-billing/invoices',
+      {
+        method: 'POST',
+        body: JSON.stringify(body),
+        organizationId,
+      },
+    ),
+
+  markWarehouseStorageInvoicePaid: (id: string, organizationId?: string | null) =>
+    freightFetch<{ invoice: Record<string, unknown> }>(
+      `/warehouse-billing/invoices/${id}/mark-paid`,
+      {
+        method: 'POST',
+        body: JSON.stringify({}),
+        organizationId,
+      },
     ),
 
   listWarehouseBins: (organizationId?: string | null, facilityId?: string | null) =>
