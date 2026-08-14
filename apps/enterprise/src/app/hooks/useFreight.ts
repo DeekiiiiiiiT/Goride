@@ -249,6 +249,15 @@ export function useUpdateSuite() {
   });
 }
 
+export function useDeleteSuite() {
+  const organizationId = useFreightOrgId();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => freightService.deleteSuite(id, organizationId),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['freight', 'suites'] }),
+  });
+}
+
 export function useImportSuites() {
   const organizationId = useFreightOrgId();
   const qc = useQueryClient();

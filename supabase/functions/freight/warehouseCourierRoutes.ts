@@ -21,6 +21,88 @@ import {
 type FreightApp = Hono;
 
 export function registerWarehouseCourierRoutes(app: FreightApp) {
+  /**
+   * Pre-alert destinations: own warehouse buildings + active/invited partner FF buildings.
+   * Invoice ship-to matching uses this list (not only the courier's own facilities).
+   */
+  app.get("/destination-warehouses", async (c) => {
+    const user = await requireEnterpriseAccess(c);
+    if (user instanceof Response) return user;
+    try {
+      const links = await listLinksForOrg(user.organizationId);
+      const usable = links.filter(
+        (l) =>
+          l.courier_org_id === user.organizationId &&
+          (l.status === "active" || l.status === "invited"),
+      );
+      const selfActive = usable.some((l) => l.warehouse_org_id === l.courier_org_id);
+      const partnerOrgIds = [
+        ...new Set(
+          usable
+            .filter((l) => l.warehouse_org_id !== l.courier_org_id)
+            .map((l) => l.warehouse_org_id),
+        ),
+      ];
+
+      const freight = serviceClient().schema("freight");
+      const { data: ownRows, error: ownErr } = await freight
+        .from("facilities")
+        .select(
+          "id, name, code, address_line, city, country_code, organization_id, status",
+        )
+        .eq("organization_id", user.organizationId)
+        .eq("facility_type", "warehouse")
+        .eq("status", "active")
+        .order("name");
+      if (ownErr) return c.json({ error: ownErr.message }, 500);
+
+      let partnerRows: Record<string, unknown>[] = [];
+      if (partnerOrgIds.length) {
+        const { data, error } = await freight
+          .from("facilities")
+          .select(
+            "id, name, code, address_line, city, country_code, organization_id, status",
+          )
+          .in("organization_id", partnerOrgIds)
+          .eq("facility_type", "warehouse")
+          .eq("status", "active")
+          .order("name");
+        if (error) return c.json({ error: error.message }, 500);
+        partnerRows = (data ?? []) as Record<string, unknown>[];
+      }
+
+      const orgIds = [...new Set(partnerRows.map((r) => String(r.organization_id)))];
+      const { data: orgs } = orgIds.length
+        ? await serviceClient()
+          .from("organizations")
+          .select("id, name")
+          .in("id", orgIds)
+        : { data: [] as { id: string; name: string }[] };
+      const orgName = new Map((orgs || []).map((o) => [o.id as string, o.name as string]));
+
+      const own = selfActive || (ownRows?.length ?? 0) > 0
+        ? (ownRows ?? []).map((f) => ({
+          ...f,
+          source: "own" as const,
+          partner_name: null,
+        }))
+        : [];
+
+      const partner = partnerRows.map((f) => ({
+        ...f,
+        source: "partner" as const,
+        partner_name: orgName.get(String(f.organization_id)) ?? String(f.name || ""),
+      }));
+
+      return c.json({
+        warehouses: [...own, ...partner],
+        hasOwnWarehouse: own.length > 0,
+      });
+    } catch (e) {
+      return c.json({ error: e instanceof Error ? e.message : "Failed" }, 500);
+    }
+  });
+
   app.get("/warehouse-courier-links", async (c) => {
     const user = await requireEnterpriseAccess(c);
     if (user instanceof Response) return user;

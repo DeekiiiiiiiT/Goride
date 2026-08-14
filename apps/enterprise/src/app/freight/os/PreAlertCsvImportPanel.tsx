@@ -1,16 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { freightService } from '@/app/services/freightService';
 import { useSuites } from '@/app/hooks/useFreight';
+import { useDestinationWarehouses } from '@/app/hooks/useWarehouseCourierLinks';
+import {
+  DestinationFreightForwarderField,
+  resolveIntendedFacilityId,
+} from '@/app/freight/os/DestinationFreightForwarderField';
 import {
   parsePreAlertCsv,
   PRE_ALERT_CSV_TEMPLATE,
   type PreAlertCsvRow,
 } from '@/app/freight/preAlertCsvImport';
-
-const fieldClass =
-  'mt-1 w-full min-h-11 rounded-lg border border-slate-300 px-3 py-3 text-sm';
 
 type SuiteLike = { id?: unknown; suite_code?: unknown };
 
@@ -35,9 +37,10 @@ export function PreAlertCsvImportPanel({
   onSuccess?: () => void;
   onBack?: () => void;
 }) {
-  const { organizationId, session } = useAuth();
+  const { organizationId } = useAuth();
   const qc = useQueryClient();
   const suites = useSuites();
+  const destinationsQ = useDestinationWarehouses();
   const fileRef = useRef<HTMLInputElement>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const [preview, setPreview] = useState<PreAlertCsvRow[]>([]);
@@ -47,15 +50,9 @@ export function PreAlertCsvImportPanel({
     null,
   );
 
-  const facilities = useQuery({
-    queryKey: ['freight', 'facilities', organizationId, 'warehouse'],
-    queryFn: () => freightService.listFacilities(organizationId, 'warehouse'),
-    enabled: Boolean(session),
-  });
-
   const warehouses = useMemo(
-    () => (facilities.data?.facilities ?? []) as Record<string, unknown>[],
-    [facilities.data?.facilities],
+    () => destinationsQ.data?.warehouses ?? [],
+    [destinationsQ.data?.warehouses],
   );
 
   useEffect(() => {
@@ -103,11 +100,8 @@ export function PreAlertCsvImportPanel({
   const importing = useMutation({
     mutationFn: async () => {
       if (!preview.length) throw new Error('No rows to import.');
-      const isExternal = intendedFacilityId === 'external';
-      const facilityId = isExternal
-        ? null
-        : intendedFacilityId || (warehouses.length === 1 ? String(warehouses[0].id) : '');
-      if (!isExternal && !facilityId) throw new Error('Pick a freight forwarder for this batch.');
+      if (!intendedFacilityId) throw new Error('Pick a freight forwarder for this batch.');
+      const facilityId = resolveIntendedFacilityId(intendedFacilityId);
       const groups = groupRows(preview);
       let created = 0;
       const missing: string[] = [];
@@ -195,24 +189,12 @@ export function PreAlertCsvImportPanel({
         </button>
       </div>
 
-      <label className="block text-sm font-medium text-slate-800">
-        Freight forwarder for this batch
-        <select
-          value={intendedFacilityId}
-          onChange={(e) => setIntendedFacilityId(e.target.value)}
-          className={fieldClass}
-        >
-          <option value="">
-            {warehouses.length === 1 ? 'Use only freight forwarder' : 'Select freight forwarder…'}
-          </option>
-          <option value="external">Someone else’s freight forwarder</option>
-          {warehouses.map((f) => (
-            <option key={String(f.id)} value={String(f.id)}>
-              {String(f.name)} ({String(f.code)})
-            </option>
-          ))}
-        </select>
-      </label>
+      <DestinationFreightForwarderField
+        value={intendedFacilityId}
+        onChange={setIntendedFacilityId}
+        warehouses={warehouses}
+        required
+      />
 
       <label
         className="flex min-h-[88px] cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center hover:border-amber-400"

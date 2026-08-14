@@ -1,15 +1,20 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Upload } from 'lucide-react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { freightService } from '@/app/services/freightService';
 import { useSuites } from '@/app/hooks/useFreight';
+import { useDestinationWarehouses } from '@/app/hooks/useWarehouseCourierLinks';
 import {
   applySuggestionToBlanks,
   parseRetailInvoice,
 } from '@/app/freight/invoiceParse/parseRetailInvoice';
 import type { InvoiceParseSuggestion, InvoiceShipToHint } from '@/app/freight/invoiceParse/types';
 import { matchWarehouseFromShipTo } from '@/app/freight/invoiceParse/matchWarehouseFromShipTo';
+import {
+  DestinationFreightForwarderField,
+  resolveIntendedFacilityId,
+} from '@/app/freight/os/DestinationFreightForwarderField';
 
 type WizardStep = 'order' | 'packages' | 'review';
 
@@ -122,7 +127,7 @@ export function CreatePreAlertForm({
   onBack?: () => void;
   invoiceFirst?: boolean;
 }) {
-  const { organizationId, session } = useAuth();
+  const { organizationId } = useAuth();
   const qc = useQueryClient();
   const suites = useSuites();
   const [step, setStep] = useState<WizardStep>('order');
@@ -136,7 +141,6 @@ export function CreatePreAlertForm({
   const [externalOrderNumber, setExternalOrderNumber] = useState('');
   const [orderTotalUsd, setOrderTotalUsd] = useState('');
   const [estimatedTaxUsd, setEstimatedTaxUsd] = useState<number | null>(null);
-  const [warehouseMode, setWarehouseMode] = useState<'roam' | 'external'>('roam');
   const [intendedFacilityId, setIntendedFacilityId] = useState('');
   const [invoiceFile, setInvoiceFile] = useState<File | null>(null);
   const [parseReading, setParseReading] = useState(false);
@@ -155,30 +159,18 @@ export function CreatePreAlertForm({
   ]);
   const [packages, setPackages] = useState<DraftPackage[]>([emptyPackage()]);
 
-  const facilities = useQuery({
-    queryKey: ['freight', 'facilities', organizationId, 'warehouse'],
-    queryFn: () => freightService.listFacilities(organizationId, 'warehouse'),
-    enabled: Boolean(session),
-  });
-
-  const warehousesByCountry = useMemo(() => {
-    return (
-      (facilities.data?.facilities ?? []) as Record<string, unknown>[]
-    ).reduce<Record<string, Record<string, unknown>[]>>((acc, f) => {
-      const cc = String(f.country_code || '??').toUpperCase();
-      if (!acc[cc]) acc[cc] = [];
-      acc[cc].push(f);
-      return acc;
-    }, {});
-  }, [facilities.data?.facilities]);
+  const destinationsQ = useDestinationWarehouses();
+  const destinationWarehouses = useMemo(
+    () => destinationsQ.data?.warehouses ?? [],
+    [destinationsQ.data?.warehouses],
+  );
 
   useEffect(() => {
-    if (warehouseMode !== 'roam' || intendedFacilityId) return;
-    const list = (facilities.data?.facilities ?? []) as Record<string, unknown>[];
-    if (list.length === 1) {
-      setIntendedFacilityId(String(list[0].id));
+    if (intendedFacilityId) return;
+    if (destinationWarehouses.length === 1) {
+      setIntendedFacilityId(String(destinationWarehouses[0].id));
     }
-  }, [facilities.data?.facilities, warehouseMode, intendedFacilityId]);
+  }, [destinationWarehouses, intendedFacilityId]);
 
   const assignedLineKeys = useMemo(() => {
     const set = new Set<string>();
@@ -211,10 +203,9 @@ export function CreatePreAlertForm({
 
   const create = useMutation({
     mutationFn: async () => {
-      const intended =
-        warehouseMode === 'roam' ? intendedFacilityId || null : null;
-      if (warehouseMode === 'roam' && !intended) {
-        throw new Error('Pick our freight forwarder, or switch to someone else’s freight forwarder.');
+      const intended = resolveIntendedFacilityId(intendedFacilityId);
+      if (!intendedFacilityId) {
+        throw new Error('Pick a destination freight forwarder.');
       }
       if (!suiteId) throw new Error('Select a suite.');
       if (!packages.length) {
@@ -319,14 +310,12 @@ export function CreatePreAlertForm({
 
   function matchWarehouseFromSuggestion(shipTo: InvoiceShipToHint | null | undefined) {
     if (!shipTo) return;
-    const list = (facilities.data?.facilities ?? []) as Record<string, unknown>[];
-    if (!list.length) {
+    if (!destinationWarehouses.length) {
       setPendingShipTo(shipTo);
       return;
     }
-    const hit = matchWarehouseFromShipTo(shipTo, list);
+    const hit = matchWarehouseFromShipTo(shipTo, destinationWarehouses);
     if (hit) {
-      setWarehouseMode('roam');
       setIntendedFacilityId(hit.facilityId);
       setPendingShipTo(null);
       return;
@@ -343,10 +332,10 @@ export function CreatePreAlertForm({
 
   useEffect(() => {
     if (!pendingShipTo || intendedFacilityId) return;
-    if (!(facilities.data?.facilities ?? []).length) return;
+    if (!destinationWarehouses.length) return;
     matchWarehouseFromSuggestion(pendingShipTo);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- rematch when facilities load
-  }, [pendingShipTo, intendedFacilityId, facilities.data?.facilities]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- rematch when destinations load
+  }, [pendingShipTo, intendedFacilityId, destinationWarehouses]);
 
   function applyParsedInvoice(suggestion: InvoiceParseSuggestion) {
     const filled = applySuggestionToBlanks(
@@ -392,8 +381,8 @@ export function CreatePreAlertForm({
       setFormError('Select a suite.');
       return;
     }
-    if (warehouseMode === 'roam' && !intendedFacilityId) {
-      setFormError('Pick our freight forwarder, or switch to someone else’s freight forwarder.');
+    if (!intendedFacilityId) {
+      setFormError('Pick a destination freight forwarder.');
       return;
     }
     if (!lines.some((l) => l.description.trim()) && !invoiceFile) {
@@ -580,53 +569,12 @@ export function CreatePreAlertForm({
                 </label>
               </div>
 
-              <fieldset className="rounded-lg border border-slate-100 bg-slate-50 px-4 py-3">
-                <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Destination freight forwarder
-                </legend>
-                <div className="flex flex-wrap gap-4 text-sm">
-                  <label className="inline-flex min-h-11 items-center gap-2">
-                    <input
-                      type="radio"
-                      checked={warehouseMode === 'roam'}
-                      onChange={() => setWarehouseMode('roam')}
-                    />
-                    Our freight forwarder
-                  </label>
-                  <label className="inline-flex min-h-11 items-center gap-2">
-                    <input
-                      type="radio"
-                      checked={warehouseMode === 'external'}
-                      onChange={() => setWarehouseMode('external')}
-                    />
-                    Someone else’s freight forwarder
-                  </label>
-                </div>
-                {warehouseMode === 'roam' ? (
-                  <select
-                    value={intendedFacilityId}
-                    onChange={(e) => setIntendedFacilityId(e.target.value)}
-                    className={fieldClass}
-                  >
-                    <option value="">Select freight forwarder…</option>
-                    {Object.entries(warehousesByCountry)
-                      .sort(([a], [b]) => a.localeCompare(b))
-                      .map(([cc, list]) => (
-                        <optgroup key={cc} label={cc}>
-                          {list.map((f) => (
-                            <option key={String(f.id)} value={String(f.id)}>
-                              {String(f.name)} ({String(f.code)}) · {cc}
-                            </option>
-                          ))}
-                        </optgroup>
-                      ))}
-                  </select>
-                ) : (
-                  <p className="mt-3 text-xs text-slate-600">
-                    Order stays unassigned. Export from Expected if you hand off outside.
-                  </p>
-                )}
-              </fieldset>
+              <DestinationFreightForwarderField
+                value={intendedFacilityId}
+                onChange={setIntendedFacilityId}
+                warehouses={destinationWarehouses}
+                required
+              />
 
               <div>
                 <div className="flex items-center justify-between gap-2">

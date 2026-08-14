@@ -72,7 +72,7 @@ export function GasCardSummary({
                  <CreditCard className="h-4 w-4" /> Gas Card
               </span>
               <span className={`font-mono text-xs font-medium ${cardMissing ? 'text-rose-600' : 'text-slate-900'}`}>
-                 {cardMissing ? 'No active card on vehicle' : (cardLabel || '—')}
+                 {cardMissing ? 'No active card for you' : (cardLabel || '—')}
               </span>
            </div>
         </CardContent>
@@ -80,7 +80,7 @@ export function GasCardSummary({
 
       {cardMissing ? (
         <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
-          Ask your fleet manager to assign an Active Roam Fuels card to this vehicle in Card Inventory before logging a Gas Card fill.
+          Ask your fleet manager to assign an Active Roam Fuels card to you in Card Inventory before logging a Gas Card fill.
         </div>
       ) : (
         <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">

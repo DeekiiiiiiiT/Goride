@@ -1,9 +1,10 @@
 import { FormEvent, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { Upload, UserPlus, X, Check, Copy, Pencil } from 'lucide-react';
+import { Upload, UserPlus, X, Check, Copy, Pencil, Trash2 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import {
   useCreateSuite,
+  useDeleteSuite,
   useFacilities,
   useFreightClients,
   useSuites,
@@ -11,7 +12,7 @@ import {
 } from '@/app/hooks/useFreight';
 import { SuiteCsvImportPanel } from '@/app/freight/SuiteCsvImportPanel';
 
-type OverlayMode = 'import' | 'import-success' | 'create' | 'edit' | null;
+type OverlayMode = 'import' | 'import-success' | 'create' | 'edit' | 'delete' | null;
 type SuiteRow = Record<string, unknown>;
 
 function fieldStr(v: unknown) {
@@ -242,9 +243,12 @@ export function SuitesPage() {
     !allFacilities.isLoading && (allFacilities.data?.facilities?.length ?? 0) === 0;
   const create = useCreateSuite();
   const update = useUpdateSuite();
+  const remove = useDeleteSuite();
   const [formError, setFormError] = useState<string | null>(null);
   const [overlay, setOverlay] = useState<OverlayMode>(null);
   const [editSuite, setEditSuite] = useState<SuiteRow | null>(null);
+  const [deleteSuite, setDeleteSuite] = useState<SuiteRow | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [importSuccessMsg, setImportSuccessMsg] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
@@ -305,14 +309,38 @@ export function SuitesPage() {
 
   function openEdit(row: SuiteRow) {
     setFormError(null);
+    setDeleteSuite(null);
+    setDeleteError(null);
     setEditSuite(row);
     setOverlay('edit');
+  }
+
+  function openDelete(row: SuiteRow) {
+    setFormError(null);
+    setEditSuite(null);
+    setDeleteError(null);
+    setDeleteSuite(row);
+    setOverlay('delete');
+  }
+
+  async function confirmDelete() {
+    if (!deleteSuite?.id) return;
+    setDeleteError(null);
+    try {
+      await remove.mutateAsync(String(deleteSuite.id));
+      setDeleteSuite(null);
+      setOverlay(null);
+    } catch (err) {
+      setDeleteError((err as Error).message);
+    }
   }
 
   function closeOverlay() {
     setOverlay(null);
     setEditSuite(null);
+    setDeleteSuite(null);
     setFormError(null);
+    setDeleteError(null);
   }
 
   return (
@@ -413,7 +441,7 @@ export function SuitesPage() {
                     <p className="mt-1 text-[10px] text-slate-400">Scan at receive</p>
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex justify-end">
+                    <div className="flex justify-end gap-1">
                       <button
                         type="button"
                         title="Edit suite"
@@ -421,6 +449,14 @@ export function SuitesPage() {
                         className="rounded p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-900"
                       >
                         <Pencil className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        title="Delete suite"
+                        onClick={() => openDelete(s)}
+                        className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"
+                      >
+                        <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
                   </td>
@@ -545,6 +581,58 @@ export function SuitesPage() {
               </button>
             </div>
           </form>
+        </SuitesOverlay>
+      )}
+
+      {overlay === 'delete' && deleteSuite && (
+        <SuitesOverlay
+          title="Delete suite?"
+          subtitle="This removes the mailbox code from your customer list. Past packages stay in history but are unlinked from this suite."
+          onClose={closeOverlay}
+        >
+          <div className="space-y-3">
+            <p className="text-sm text-slate-600">
+              Remove{' '}
+              <span className="font-mono font-semibold text-slate-900">
+                {String(deleteSuite.suite_code)}
+              </span>
+              {deleteSuite.contact_name
+                ? (
+                  <>
+                    {' '}
+                    (
+                    <span className="font-semibold text-slate-900">
+                      {String(deleteSuite.contact_name)}
+                    </span>
+                    )
+                  </>
+                  )
+                : null}
+              ? This cannot be undone.
+            </p>
+            {deleteError && (
+              <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {deleteError}
+              </p>
+            )}
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={closeOverlay}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={remove.isPending}
+                onClick={() => void confirmDelete()}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-500 disabled:opacity-60"
+              >
+                {remove.isPending ? 'Deleting…' : 'Delete suite'}
+              </button>
+            </div>
+          </div>
         </SuitesOverlay>
       )}
     </div>

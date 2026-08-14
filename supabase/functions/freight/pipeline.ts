@@ -96,6 +96,97 @@ async function appendScan(input: {
   return { event: data, duplicate: false };
 }
 
+/**
+ * Matched pre-alert already has the customer commercial invoice (on package or retail order).
+ * Receive confirms it for seal — FF packing slip stays optional and separate.
+ */
+async function confirmPreAlertInvoiceOnReceive(input: {
+  pkg: Record<string, unknown>;
+  actorUserId: string;
+  /** FF explicitly asked courier for invoice — do not auto-confirm. */
+  skipAutoConfirm?: boolean;
+}): Promise<{
+  invoiceConfirmed: boolean;
+  invoiceFileName: string | null;
+  packagePatch: Record<string, unknown>;
+}> {
+  const empty = {
+    invoiceConfirmed: false,
+    invoiceFileName: null as string | null,
+    packagePatch: {} as Record<string, unknown>,
+  };
+  if (input.skipAutoConfirm) return empty;
+  if (input.pkg.invoice_unobtainable_at) {
+    return { invoiceConfirmed: true, invoiceFileName: null, packagePatch: {} };
+  }
+  if (input.pkg.invoice_verified_at && (input.pkg.invoice_storage_path || input.pkg.invoice_file_name)) {
+    return {
+      invoiceConfirmed: true,
+      invoiceFileName: (input.pkg.invoice_file_name as string | null) ?? null,
+      packagePatch: {},
+    };
+  }
+
+  let storagePath = (input.pkg.invoice_storage_path as string | null) ?? null;
+  let fileName = (input.pkg.invoice_file_name as string | null) ?? null;
+  let orderVerifiedAt: string | null = null;
+  let orderUnobtainable = false;
+
+  if ((!storagePath && !fileName) && input.pkg.retail_order_id) {
+    const { data: order } = await freightDb()
+      .from("retail_orders")
+      .select(
+        "invoice_storage_path, invoice_file_name, invoice_verified_at, invoice_unobtainable_at",
+      )
+      .eq("id", input.pkg.retail_order_id)
+      .maybeSingle();
+    storagePath = (order?.invoice_storage_path as string | null) ?? null;
+    fileName = (order?.invoice_file_name as string | null) ?? null;
+    orderVerifiedAt = (order?.invoice_verified_at as string | null) ?? null;
+    orderUnobtainable = Boolean(order?.invoice_unobtainable_at);
+  }
+
+  if (orderUnobtainable) {
+    return {
+      invoiceConfirmed: true,
+      invoiceFileName: null,
+      packagePatch: {
+        invoice_unobtainable_at: new Date().toISOString(),
+        invoice_required_from_customer: false,
+      },
+    };
+  }
+  if (!storagePath && !fileName) return empty;
+
+  const now = orderVerifiedAt || new Date().toISOString();
+  const packagePatch: Record<string, unknown> = {
+    invoice_storage_path: storagePath,
+    invoice_file_name: fileName,
+    invoice_verified_at: now,
+    invoice_verified_by: input.actorUserId,
+    invoice_required_from_customer: false,
+    invoice_unobtainable_at: null,
+    invoice_unobtainable_by: null,
+    invoice_unobtainable_note: null,
+  };
+
+  if (input.pkg.retail_order_id && !orderVerifiedAt) {
+    await freightDb()
+      .from("retail_orders")
+      .update({
+        invoice_verified_at: now,
+        invoice_verified_by: input.actorUserId,
+        invoice_unobtainable_at: null,
+        invoice_unobtainable_by: null,
+        invoice_unobtainable_note: null,
+        updated_at: now,
+      })
+      .eq("id", input.pkg.retail_order_id);
+  }
+
+  return { invoiceConfirmed: true, invoiceFileName: fileName, packagePatch };
+}
+
 /** Box leaves the floor: clear operating warehouse, write handoff ledger + scan. */
 async function releaseWarehouseCustody(input: {
   pkg: {
@@ -899,6 +990,29 @@ export function registerPipelineRoutes(app: FreightApp) {
     return c.json({ suite: data });
   });
 
+  app.delete("/suites/:id", async (c) => {
+    const user = await requireUser(c);
+    if (user instanceof Response) return user;
+    const id = c.req.param("id");
+    const { data: existing, error: loadErr } = await freightDb()
+      .from("suites")
+      .select("id")
+      .eq("id", id)
+      .eq("organization_id", user.organizationId)
+      .maybeSingle();
+    if (loadErr) return c.json({ error: loadErr.message }, 500);
+    if (!existing) return c.json({ error: "Suite not found" }, 404);
+
+    // Packages keep history; suite_id becomes null (ON DELETE SET NULL).
+    const { error } = await freightDb()
+      .from("suites")
+      .delete()
+      .eq("id", id)
+      .eq("organization_id", user.organizationId);
+    if (error) return c.json({ error: error.message }, 500);
+    return c.json({ ok: true });
+  });
+
   // -------------------------------------------------------------------------
   // Packages
   // -------------------------------------------------------------------------
@@ -1063,8 +1177,40 @@ export function registerPipelineRoutes(app: FreightApp) {
         .maybeSingle();
       suiteInfo = s;
     }
+
+    let retailOrder: {
+      invoice_storage_path?: string | null;
+      invoice_file_name?: string | null;
+      invoice_verified_at?: string | null;
+      invoice_unobtainable_at?: string | null;
+    } | null = null;
+    if (pkg.retail_order_id) {
+      const { data: o } = await freightDb()
+        .from("retail_orders")
+        .select(
+          "invoice_storage_path, invoice_file_name, invoice_verified_at, invoice_unobtainable_at",
+        )
+        .eq("id", pkg.retail_order_id)
+        .maybeSingle();
+      retailOrder = o;
+    }
+
+    const customerInvoiceOnFile = Boolean(
+      pkg.invoice_storage_path ||
+        pkg.invoice_file_name ||
+        retailOrder?.invoice_storage_path ||
+        retailOrder?.invoice_file_name ||
+        pkg.invoice_unobtainable_at ||
+        retailOrder?.invoice_unobtainable_at,
+    );
+
     return c.json({
-      package: { ...pkg, suites: suiteInfo },
+      package: {
+        ...pkg,
+        suites: suiteInfo,
+        retail_orders: retailOrder,
+        customer_invoice_on_file: customerInvoiceOnFile,
+      },
       matched: true,
     });
   });
@@ -1537,6 +1683,15 @@ export function registerPipelineRoutes(app: FreightApp) {
         return c.json({ error: `Package already past Miami (${pkg.status})` }, 409);
       }
 
+      const askCourierForInvoice = b.invoiceRequiredFromCustomer === true;
+      const invoiceConfirm = !createdUnknown
+        ? await confirmPreAlertInvoiceOnReceive({
+          pkg,
+          actorUserId: user.id,
+          skipAutoConfirm: askCourierForInvoice,
+        })
+        : { invoiceConfirmed: false, invoiceFileName: null, packagePatch: {} };
+
       const { data: updated, error } = await freightDb()
         .from("packages")
         .update({
@@ -1554,10 +1709,14 @@ export function registerPipelineRoutes(app: FreightApp) {
           height_in: b.heightIn ?? pkg.height_in,
           description: b.description || pkg.description,
           declared_value_usd_minor: b.declaredValueUsdMinor ?? pkg.declared_value_usd_minor,
-          invoice_required_from_customer:
-            typeof b.invoiceRequiredFromCustomer === "boolean"
-              ? b.invoiceRequiredFromCustomer
-              : pkg.invoice_required_from_customer,
+          invoice_required_from_customer: askCourierForInvoice
+            ? true
+            : invoiceConfirm.invoiceConfirmed
+            ? false
+            : typeof b.invoiceRequiredFromCustomer === "boolean"
+            ? b.invoiceRequiredFromCustomer
+            : pkg.invoice_required_from_customer,
+          ...invoiceConfirm.packagePatch,
           updated_at: new Date().toISOString(),
         })
         .eq("id", pkg.id)
@@ -1573,9 +1732,18 @@ export function registerPipelineRoutes(app: FreightApp) {
         actorUserId: user.id,
         facilityId: facility.id,
         barcode: b.barcode,
-        note: b.note || (createdUnknown ? "Unknown pre-alert created on scan" : null),
+        note: b.note ||
+          (createdUnknown
+            ? "Unknown pre-alert created on scan"
+            : invoiceConfirm.invoiceConfirmed
+            ? "Received · customer invoice confirmed from courier pre-alert"
+            : null),
         idempotencyKey: idem,
-        metadata: { createdUnknown, operatingWarehouseOrgId },
+        metadata: {
+          createdUnknown,
+          operatingWarehouseOrgId,
+          invoiceConfirmedFromPreAlert: invoiceConfirm.invoiceConfirmed,
+        },
       });
 
       if (!scan.duplicate) {
@@ -1611,6 +1779,8 @@ export function registerPipelineRoutes(app: FreightApp) {
         createdUnknown,
         duplicate: scan.duplicate,
         matchedPreAlert: !createdUnknown && !scan.duplicate,
+        invoiceConfirmedFromPreAlert: invoiceConfirm.invoiceConfirmed,
+        invoiceFileName: invoiceConfirm.invoiceFileName,
       });
     }
 

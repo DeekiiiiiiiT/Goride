@@ -1,8 +1,13 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { freightService } from '@/app/services/freightService';
 import { useSuites } from '@/app/hooks/useFreight';
+import { useDestinationWarehouses } from '@/app/hooks/useWarehouseCourierLinks';
+import {
+  DestinationFreightForwarderField,
+  resolveIntendedFacilityId,
+} from '@/app/freight/os/DestinationFreightForwarderField';
 
 const fieldClass =
   'mt-1 w-full min-h-11 rounded-lg border border-slate-300 px-3 py-3 text-sm';
@@ -15,42 +20,34 @@ export function CreateManualPreAlertForm({
   onSuccess?: () => void;
   onBack?: () => void;
 }) {
-  const { organizationId, session } = useAuth();
+  const { organizationId } = useAuth();
   const qc = useQueryClient();
   const suites = useSuites();
+  const destinationsQ = useDestinationWarehouses();
   const [suiteId, setSuiteId] = useState('');
   const [tracking, setTracking] = useState('');
   const [retailer, setRetailer] = useState('');
   const [valueUsd, setValueUsd] = useState('');
-  const [warehouseMode, setWarehouseMode] = useState<'roam' | 'external'>('roam');
   const [intendedFacilityId, setIntendedFacilityId] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
 
-  const facilities = useQuery({
-    queryKey: ['freight', 'facilities', organizationId, 'warehouse'],
-    queryFn: () => freightService.listFacilities(organizationId, 'warehouse'),
-    enabled: Boolean(session),
-  });
-
   const warehouses = useMemo(
-    () => (facilities.data?.facilities ?? []) as Record<string, unknown>[],
-    [facilities.data?.facilities],
+    () => destinationsQ.data?.warehouses ?? [],
+    [destinationsQ.data?.warehouses],
   );
 
   useEffect(() => {
-    if (warehouseMode !== 'roam' || intendedFacilityId) return;
+    if (intendedFacilityId) return;
     if (warehouses.length === 1) {
       setIntendedFacilityId(String(warehouses[0].id));
     }
-  }, [warehouses, warehouseMode, intendedFacilityId]);
+  }, [warehouses, intendedFacilityId]);
 
   const create = useMutation({
     mutationFn: async () => {
-      const intended = warehouseMode === 'roam' ? intendedFacilityId || null : null;
       if (!suiteId) throw new Error('Select a suite.');
-      if (warehouseMode === 'roam' && !intended) {
-        throw new Error('Pick our freight forwarder, or switch to someone else’s freight forwarder.');
-      }
+      if (!intendedFacilityId) throw new Error('Pick a destination freight forwarder.');
+      const intended = resolveIntendedFacilityId(intendedFacilityId);
       const value = Number(valueUsd);
       const declared =
         Number.isFinite(value) && value >= 0 ? Math.round(value * 100) : null;
@@ -157,47 +154,12 @@ export function CreateManualPreAlertForm({
           className={fieldClass}
         />
       </label>
-      <fieldset className="rounded-lg border border-slate-100 bg-slate-50 px-4 py-3">
-        <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
-          Destination freight forwarder
-        </legend>
-        <div className="flex flex-wrap gap-4 text-sm">
-          <label className="inline-flex min-h-11 items-center gap-2">
-            <input
-              type="radio"
-              checked={warehouseMode === 'roam'}
-              onChange={() => setWarehouseMode('roam')}
-            />
-            Our freight forwarder
-          </label>
-          <label className="inline-flex min-h-11 items-center gap-2">
-            <input
-              type="radio"
-              checked={warehouseMode === 'external'}
-              onChange={() => setWarehouseMode('external')}
-            />
-            Someone else’s freight forwarder
-          </label>
-        </div>
-        {warehouseMode === 'roam' ? (
-          <select
-            value={intendedFacilityId}
-            onChange={(e) => setIntendedFacilityId(e.target.value)}
-            className={fieldClass}
-          >
-            <option value="">Select freight forwarder…</option>
-            {warehouses.map((f) => (
-              <option key={String(f.id)} value={String(f.id)}>
-                {String(f.name)} ({String(f.code)})
-              </option>
-            ))}
-          </select>
-        ) : (
-          <p className="mt-3 text-xs text-slate-600">
-            Stays unassigned. Export from Expected if you hand off outside.
-          </p>
-        )}
-      </fieldset>
+      <DestinationFreightForwarderField
+        value={intendedFacilityId}
+        onChange={setIntendedFacilityId}
+        warehouses={warehouses}
+        required
+      />
       {formError ? (
         <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
           {formError}

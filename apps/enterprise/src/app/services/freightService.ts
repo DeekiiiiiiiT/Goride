@@ -174,6 +174,13 @@ export const freightService = {
       { organizationId },
     ),
 
+  /** Own + connected partner warehouse buildings for pre-alert destination. */
+  listDestinationWarehouses: (organizationId?: string | null) =>
+    freightFetch<{
+      warehouses: Array<Record<string, unknown> & { source?: string; partner_name?: string | null }>;
+      hasOwnWarehouse: boolean;
+    }>('/destination-warehouses', { organizationId }),
+
   listIntakeWarehouses: (
     organizationId?: string | null,
     purpose?: 'join' | 'connect',
@@ -229,6 +236,12 @@ export const freightService = {
     freightFetch<{ suite: Record<string, unknown> }>(`/suites/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(body),
+      organizationId,
+    }),
+
+  deleteSuite: (id: string, organizationId?: string | null) =>
+    freightFetch<{ ok: boolean }>(`/suites/${id}`, {
+      method: 'DELETE',
       organizationId,
     }),
 
@@ -419,6 +432,8 @@ export const freightService = {
       createdUnknown?: boolean;
       duplicate?: boolean;
       matchedPreAlert?: boolean;
+      invoiceConfirmedFromPreAlert?: boolean;
+      invoiceFileName?: string | null;
     }>('/scans', {
       method: 'POST',
       body: JSON.stringify(body),

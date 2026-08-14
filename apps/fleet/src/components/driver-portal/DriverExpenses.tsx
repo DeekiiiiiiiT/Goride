@@ -499,7 +499,7 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
         return;
       }
       if (!assignedGasCard) {
-        const msg = "No Active gas card assigned to this vehicle. Contact your fleet manager.";
+        const msg = "No Active gas card assigned to you. Contact your fleet manager.";
         setSubmitError(msg);
         toast.error(msg);
         return;

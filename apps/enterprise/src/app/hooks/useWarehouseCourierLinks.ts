@@ -11,6 +11,16 @@ export function useWarehouseCourierLinks() {
   });
 }
 
+/** Pre-alert destinations: own warehouse + connected partner FF buildings. */
+export function useDestinationWarehouses() {
+  const { organizationId, session } = useAuth();
+  return useQuery({
+    queryKey: ['freight', 'destination-warehouses', organizationId],
+    enabled: Boolean(session && organizationId),
+    queryFn: () => freightService.listDestinationWarehouses(organizationId),
+  });
+}
+
 export function useEnsureInHouseWarehouse() {
   const { organizationId } = useAuth();
   const qc = useQueryClient();
@@ -18,6 +28,7 @@ export function useEnsureInHouseWarehouse() {
     mutationFn: () => freightService.ensureInHouseWarehouseLink(organizationId),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['warehouse-courier-links'] });
+      void qc.invalidateQueries({ queryKey: ['freight', 'destination-warehouses'] });
     },
   });
 }
@@ -30,6 +41,7 @@ export function useInvitePartnerLink() {
       freightService.inviteWarehouseCourierLink(body, organizationId),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['warehouse-courier-links'] });
+      void qc.invalidateQueries({ queryKey: ['freight', 'destination-warehouses'] });
     },
   });
 }
@@ -47,6 +59,7 @@ export function useCreateExternalPartner() {
     }) => freightService.createExternalPartner(body, organizationId),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['warehouse-courier-links'] });
+      void qc.invalidateQueries({ queryKey: ['freight', 'destination-warehouses'] });
     },
   });
 }
@@ -92,6 +105,7 @@ export function useSetPartnerLinkStatus() {
     }) => freightService.setWarehouseCourierLinkStatus(input.id, input.status, organizationId),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['warehouse-courier-links'] });
+      void qc.invalidateQueries({ queryKey: ['freight', 'destination-warehouses'] });
     },
   });
 }

@@ -438,6 +438,24 @@ export function registerRetailOrderRoutes(app: FreightApp) {
       .select("*")
       .maybeSingle();
     if (error) return c.json({ error: error.message }, 500);
+
+    // Pre-alert invoice is order-scoped; seal UI / verify look at packages — keep them in sync.
+    await freightDb()
+      .from("packages")
+      .update({
+        invoice_storage_path: upload.file.storage_path,
+        invoice_file_name: upload.file.file_name,
+        invoice_verified_at: null,
+        invoice_verified_by: null,
+        invoice_unobtainable_at: null,
+        invoice_unobtainable_by: null,
+        invoice_unobtainable_note: null,
+        updated_at: now,
+      })
+      .eq("retail_order_id", id)
+      .eq("organization_id", user.organizationId)
+      .is("invoice_storage_path", null);
+
     return c.json({ order, file: upload.file });
   });
 

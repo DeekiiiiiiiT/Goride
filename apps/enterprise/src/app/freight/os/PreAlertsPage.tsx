@@ -4,6 +4,8 @@ import { MoreHorizontal, X } from 'lucide-react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/app/auth/AuthProvider';
 import { freightService } from '@/app/services/freightService';
+import { useDestinationWarehouses } from '@/app/hooks/useWarehouseCourierLinks';
+import { destinationLabel } from '@/app/freight/os/DestinationFreightForwarderField';
 import { CreatePreAlertForm } from '@/app/freight/os/CreatePreAlertWizard';
 import { PreAlertChooser, type PreAlertEntry } from '@/app/freight/os/PreAlertChooser';
 import { CreateManualPreAlertForm } from '@/app/freight/os/CreateManualPreAlertForm';
@@ -118,11 +120,7 @@ export function PreAlertsPage({
   const [showCreate, setShowCreate] = useState(false);
   const [showExport, setShowExport] = useState(false);
 
-  const facilities = useQuery({
-    queryKey: ['freight', 'facilities', organizationId, 'warehouse'],
-    queryFn: () => freightService.listFacilities(organizationId, 'warehouse'),
-    enabled: Boolean(session),
-  });
+  const facilities = useDestinationWarehouses();
 
   const list = useQuery({
     queryKey: ['freight', 'pre-alerts', organizationId, listFilter],
@@ -134,15 +132,15 @@ export function PreAlertsPage({
   });
 
   const warehousesByCountry = useMemo(() => {
-    return (
-      (facilities.data?.facilities ?? []) as Record<string, unknown>[]
-    ).reduce<Record<string, Record<string, unknown>[]>>((acc, f) => {
+    return (facilities.data?.warehouses ?? []).reduce<
+      Record<string, Record<string, unknown>[]>
+    >((acc, f) => {
       const cc = String(f.country_code || '??').toUpperCase();
       if (!acc[cc]) acc[cc] = [];
       acc[cc].push(f);
       return acc;
     }, {});
-  }, [facilities.data?.facilities]);
+  }, [facilities.data?.warehouses]);
 
   const exporting = useMutation({
     mutationFn: async () => {
@@ -290,7 +288,7 @@ export function PreAlertsPage({
                 invoice_storage_path?: string | null;
                 invoice_file_name?: string | null;
               } | null;
-              const fac = (facilities.data?.facilities ?? []).find(
+              const fac = (facilities.data?.warehouses ?? []).find(
                 (f) => String(f.id) === String(p.intended_facility_id ?? ''),
               );
               const hasInvoice = Boolean(
@@ -320,9 +318,7 @@ export function PreAlertsPage({
                   <td className="px-4 py-3">{suite?.suite_code || '—'}</td>
                   <td className="px-4 py-3">{String(p.retailer || '—')}</td>
                   <td className="px-4 py-3 text-xs">
-                    {fac
-                      ? `${String(fac.name)} (${String(fac.country_code || '')})`
-                      : 'Someone else’s freight forwarder'}
+                    {fac ? destinationLabel(fac) : 'Someone else’s freight forwarder'}
                   </td>
                   <td className="px-4 py-3 text-xs">{hasInvoice ? 'On file' : '—'}</td>
                 </tr>

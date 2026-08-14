@@ -17,6 +17,11 @@ const fieldClass =
 
 type LookupPkg = Record<string, unknown> & {
   suites?: { suite_code?: string; contact_name?: string } | null;
+  retail_orders?: {
+    invoice_storage_path?: string | null;
+    invoice_file_name?: string | null;
+  } | null;
+  customer_invoice_on_file?: boolean;
 };
 
 /** Gun-friendly Warehouse Receive Station — wired to /scans. */
@@ -174,6 +179,14 @@ export function WarehouseReceiveStationPage({ embedded = false }: { embedded?: b
         if (pkg.weight_lbs != null && !weightLbs) setWeightLbs(String(pkg.weight_lbs));
         const minor = Number(pkg.declared_value_usd_minor ?? 0);
         if (minor > 0 && !declaredUsd) setDeclaredUsd((minor / 100).toFixed(2));
+        const hasInv = Boolean(
+          pkg.customer_invoice_on_file ||
+            pkg.invoice_storage_path ||
+            pkg.invoice_file_name ||
+            pkg.retail_orders?.invoice_storage_path ||
+            pkg.retail_orders?.invoice_file_name,
+        );
+        if (hasInv) setInvoiceRequired(false);
       }
       return pkg;
     } catch {
@@ -212,7 +225,7 @@ export function WarehouseReceiveStationPage({ embedded = false }: { embedded?: b
           heightIn: heightIn ? Number(heightIn) : null,
           declaredValueUsdMinor,
           binLocation: bin || null,
-          invoiceRequiredFromCustomer: invoiceRequired,
+          invoiceRequiredFromCustomer: matchHasCustomerInvoice ? false : invoiceRequired,
           ...(ownerOrgId ? { ownerOrgId } : {}),
         },
         organizationId,
@@ -236,7 +249,14 @@ export function WarehouseReceiveStationPage({ embedded = false }: { embedded?: b
         const pkgSuiteCode = (res.package as { suites?: { suite_code?: string } } | null)
           ?.suites?.suite_code;
         const matchedSuite = String(pkgSuiteCode || suiteCode || '—');
-        setFlash(`Matched pre-alert ${tracking} · mailbox ${matchedSuite} · received`);
+        const invoiceBit = res.invoiceConfirmedFromPreAlert
+          ? ` · customer invoice confirmed${
+              res.invoiceFileName ? ` (${res.invoiceFileName})` : ''
+            }`
+          : '';
+        setFlash(
+          `Matched pre-alert ${tracking} · mailbox ${matchedSuite} · received${invoiceBit}`,
+        );
       } else if (res.createdUnknown) {
         setFlashTone('ok');
         setFlash(
@@ -297,6 +317,18 @@ export function WarehouseReceiveStationPage({ embedded = false }: { embedded?: b
   const kg = (Number(weightLbs) || 0) * 0.453592;
   const matchValue = Number(lookupPkg?.declared_value_usd_minor ?? 0) / 100;
   const matchHasWeight = lookupPkg?.weight_lbs != null;
+  const matchHasCustomerInvoice = Boolean(
+    lookupPkg?.customer_invoice_on_file ||
+      lookupPkg?.invoice_storage_path ||
+      lookupPkg?.invoice_file_name ||
+      lookupPkg?.retail_orders?.invoice_storage_path ||
+      lookupPkg?.retail_orders?.invoice_file_name,
+  );
+  const matchInvoiceName = String(
+    lookupPkg?.invoice_file_name ||
+      lookupPkg?.retail_orders?.invoice_file_name ||
+      '',
+  );
   const showWeightInline = Boolean(barcode.trim()) && (!lookupPkg || !matchHasWeight);
   const canConfirm =
     Boolean(barcode.trim() && facilityId) &&
@@ -466,6 +498,18 @@ export function WarehouseReceiveStationPage({ embedded = false }: { embedded?: b
             {matchHasWeight ? ` · ${lookupPkg.weight_lbs} lb` : ''}
             {String(lookupPkg.status) === 'received_at_warehouse' ? ' · already on the floor' : ''}
           </p>
+          {matchHasCustomerInvoice ? (
+            <p className="mt-2 rounded-lg border border-emerald-300 bg-white/70 px-3 py-2 text-xs text-emerald-950">
+              Customer invoice already on the courier pre-alert
+              {matchInvoiceName ? ` (${matchInvoiceName})` : ''}. Confirming receipt will match
+              and clear the invoice step — packing slip below stays optional.
+            </p>
+          ) : (
+            <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+              No customer invoice on this pre-alert yet. You can still receive — ask the courier
+              for the invoice if needed.
+            </p>
+          )}
           {String(lookupPkg.status) === 'received_at_warehouse' && lookupPkg.id ? (
             <button
               type="button"
@@ -602,28 +646,42 @@ export function WarehouseReceiveStationPage({ embedded = false }: { embedded?: b
         </div>
 
         <div className="mt-5 space-y-3 rounded-lg border border-slate-100 bg-slate-50 px-4 py-3">
-          <label className="flex min-h-11 items-start gap-2 text-sm text-slate-800">
-            <input
-              type="checkbox"
-              className="mt-1"
-              checked={invoiceRequired}
-              onChange={(e) => setInvoiceRequired(e.target.checked)}
-            />
-            <span>
-              <span className="font-medium">Ask the courier for the customer invoice</span>
+          {matchHasCustomerInvoice ? (
+            <p className="text-sm text-slate-700">
+              <span className="font-medium text-emerald-900">Customer invoice ready</span>
               <span className="mt-0.5 block text-xs text-slate-500">
-                Optional flag. Does not block receive.
+                From the courier pre-alert — confirming receipt verifies it for seal. No re-upload.
               </span>
-            </span>
-          </label>
+            </p>
+          ) : (
+            <label className="flex min-h-11 items-start gap-2 text-sm text-slate-800">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={invoiceRequired}
+                onChange={(e) => setInvoiceRequired(e.target.checked)}
+              />
+              <span>
+                <span className="font-medium">Ask the courier for the customer invoice</span>
+                <span className="mt-0.5 block text-xs text-slate-500">
+                  Use when there was no invoice on the pre-alert. Does not block receive.
+                </span>
+              </span>
+            </label>
+          )}
           <div>
-            <label className="text-xs font-medium text-slate-500">Packing slip (optional)</label>
+            <label className="text-xs font-medium text-slate-500">
+              Packing slip from the box (optional)
+            </label>
             <input
               type="file"
               accept="application/pdf,image/*"
               className="mt-1 block w-full text-sm text-slate-600"
               onChange={(e) => setWarehouseSlip(e.target.files?.[0] ?? null)}
             />
+            <p className="mt-1 text-xs text-slate-500">
+              Paper slip inside the carton if present — never blocks seal.
+            </p>
             {warehouseSlip && (
               <p className="mt-1 text-xs text-slate-500">{warehouseSlip.name}</p>
             )}

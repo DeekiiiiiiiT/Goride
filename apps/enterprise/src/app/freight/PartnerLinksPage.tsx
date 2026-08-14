@@ -26,9 +26,16 @@ export function PartnerLinksPage({ roleAs }: { roleAs: RoleAs }) {
   const [handling, setHandling] = useState('0');
 
   const links = linksQ.data?.links ?? [];
+  const hasActiveSelfLink = links.some(
+    (l) => Boolean(l.is_self) && String(l.status) === 'active',
+  );
+  // Remove (revoke) clears the row and brings the setup card back.
+  const showInHouseOffer = roleAs === 'courier' && !hasActiveSelfLink && !linksQ.isLoading;
   const sorted = useMemo(
     () =>
-      [...links].sort((a, b) => String(a.created_at).localeCompare(String(b.created_at))),
+      [...links]
+        .filter((l) => !(Boolean(l.is_self) && String(l.status) !== 'active'))
+        .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at))),
     [links],
   );
 
@@ -36,8 +43,8 @@ export function PartnerLinksPage({ roleAs }: { roleAs: RoleAs }) {
     roleAs === 'courier' ? 'Connect a freight forwarder' : 'Courier partners';
   const blurb =
     roleAs === 'courier'
-      ? 'Connect a freight forwarder on Roam, invite one, or add a company that is not on Roam yet.'
-      : 'Connect couriers you receive for — on Roam, by invite, or off-platform.';
+      ? 'Pick who receives your packages. If they are not in the list, add them.'
+      : 'Connect the courier companies you receive for.';
 
   return (
     <div className="space-y-6">
@@ -46,11 +53,11 @@ export function PartnerLinksPage({ roleAs }: { roleAs: RoleAs }) {
         <p className="mt-1 text-sm text-slate-500">{blurb}</p>
       </div>
 
-      {roleAs === 'courier' && (
+      {showInHouseOffer ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-4">
-          <p className="text-sm font-medium text-amber-950">In-house freight forwarder</p>
+          <p className="text-sm font-medium text-amber-950">We also run our own warehouse</p>
           <p className="mt-1 text-xs text-amber-900/80">
-            Run receive yourself under the Freight Forwarder product. Creates an active self-link.
+            Same company receives packages and runs the courier — no partner link needed for your own boxes.
           </p>
           <button
             type="button"
@@ -63,13 +70,15 @@ export function PartnerLinksPage({ roleAs }: { roleAs: RoleAs }) {
             }}
             className="mt-3 rounded-lg bg-amber-900 px-3 py-2 text-sm font-medium text-white hover:bg-amber-800 disabled:opacity-50"
           >
-            {ensureSelf.isPending ? 'Creating…' : 'Enable my in-house freight forwarder'}
+            {ensureSelf.isPending ? 'Turning on…' : 'Turn on warehouse for this company'}
           </button>
         </div>
-      )}
+      ) : null}
 
       <div className="rounded-xl border border-slate-200 bg-white p-4">
-        <p className="text-sm font-medium text-slate-900">Add a partner</p>
+        <p className="text-sm font-medium text-slate-900">
+          {roleAs === 'courier' ? 'Choose a freight forwarder' : 'Add a courier'}
+        </p>
         <div className="mt-3">
           <PartnerConnectPanel roleAs={roleAs} />
         </div>
@@ -101,7 +110,7 @@ export function PartnerLinksPage({ roleAs }: { roleAs: RoleAs }) {
               const partner =
                 roleAs === 'courier' ? link.warehouse_org : link.courier_org;
               const name = link.is_self
-                ? 'In-house (this company)'
+                ? 'Your own freight forwarder'
                 : partner?.name || 'Partner';
               const status = String(link.status);
               const id = String(link.id);
@@ -124,7 +133,11 @@ export function PartnerLinksPage({ roleAs }: { roleAs: RoleAs }) {
                     ) : null}
                   </td>
                   <td className="px-4 py-2.5 text-slate-500">
-                    {link.is_self ? 'Self' : offPlatform ? 'Off-platform' : `${String(link.initiated_by)} invited`}
+                    {link.is_self
+                      ? 'Same company'
+                      : offPlatform
+                        ? 'Off-platform'
+                        : `${String(link.initiated_by)} invited`}
                   </td>
                   <td className="px-4 py-2.5">
                     <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium capitalize">
@@ -155,6 +168,17 @@ export function PartnerLinksPage({ roleAs }: { roleAs: RoleAs }) {
                           Reject
                         </button>
                       )}
+                      {status === 'active' && link.is_self ? (
+                        <button
+                          type="button"
+                          className="rounded-md border border-red-200 px-2 py-1 text-xs text-red-700"
+                          onClick={() =>
+                            setStatus.mutate({ id, status: 'revoked' })
+                          }
+                        >
+                          Remove
+                        </button>
+                      ) : null}
                       {status === 'active' && !link.is_self && (
                         <button
                           type="button"

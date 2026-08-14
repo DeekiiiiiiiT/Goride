@@ -673,12 +673,25 @@ export function registerCourierOsRoutes(app: FreightApp) {
 
     const { data: current } = await freightDb()
       .from("packages")
-      .select("id, invoice_storage_path, invoice_file_name")
+      .select("id, invoice_storage_path, invoice_file_name, retail_order_id")
       .eq("id", c.req.param("id"))
       .eq("organization_id", user.organizationId)
       .maybeSingle();
     if (!current) return c.json({ error: "Not found" }, 404);
-    if (!current.invoice_storage_path && !current.invoice_file_name) {
+
+    let storagePath = current.invoice_storage_path as string | null;
+    let fileName = current.invoice_file_name as string | null;
+    if (!storagePath && !fileName && current.retail_order_id) {
+      const { data: order } = await freightDb()
+        .from("retail_orders")
+        .select("invoice_storage_path, invoice_file_name")
+        .eq("id", current.retail_order_id)
+        .eq("organization_id", user.organizationId)
+        .maybeSingle();
+      storagePath = (order?.invoice_storage_path as string | null) ?? null;
+      fileName = (order?.invoice_file_name as string | null) ?? null;
+    }
+    if (!storagePath && !fileName) {
       return c.json(
         { error: "Upload a customer commercial invoice before verifying" },
         400,
@@ -689,6 +702,8 @@ export function registerCourierOsRoutes(app: FreightApp) {
     const { data: pkg, error } = await freightDb()
       .from("packages")
       .update({
+        invoice_storage_path: storagePath,
+        invoice_file_name: fileName,
         invoice_verified_at: now,
         invoice_verified_by: user.id,
         invoice_unobtainable_at: null,
@@ -704,6 +719,22 @@ export function registerCourierOsRoutes(app: FreightApp) {
       .maybeSingle();
     if (error) return c.json({ error: error.message }, 500);
     if (!pkg) return c.json({ error: "Not found" }, 404);
+
+    if (current.retail_order_id) {
+      await freightDb()
+        .from("retail_orders")
+        .update({
+          invoice_verified_at: now,
+          invoice_verified_by: user.id,
+          invoice_unobtainable_at: null,
+          invoice_unobtainable_by: null,
+          invoice_unobtainable_note: null,
+          updated_at: now,
+        })
+        .eq("id", current.retail_order_id)
+        .eq("organization_id", user.organizationId);
+    }
+
     return c.json({ package: pkg });
   });
 

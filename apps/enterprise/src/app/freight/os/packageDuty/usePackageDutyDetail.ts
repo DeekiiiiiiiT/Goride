@@ -137,7 +137,32 @@ export function usePackageDutyDetail(packageId: string) {
     applyInvoiceFill.mutate(body);
   }
 
-  const pkg = detail.data?.package;
+  const pkgRaw = detail.data?.package;
+  const orderInv = pkgRaw?.retail_orders as
+    | {
+        invoice_storage_path?: string | null;
+        invoice_file_name?: string | null;
+        invoice_verified_at?: string | null;
+        invoice_unobtainable_at?: string | null;
+      }
+    | null
+    | undefined;
+
+  // Pre-alert invoice lives on the retail order; seal UI must treat that as on-file.
+  const pkg = pkgRaw
+    ? {
+        ...pkgRaw,
+        invoice_storage_path:
+          pkgRaw.invoice_storage_path || orderInv?.invoice_storage_path || null,
+        invoice_file_name:
+          pkgRaw.invoice_file_name || orderInv?.invoice_file_name || null,
+        invoice_verified_at:
+          pkgRaw.invoice_verified_at || orderInv?.invoice_verified_at || null,
+        invoice_unobtainable_at:
+          pkgRaw.invoice_unobtainable_at || orderInv?.invoice_unobtainable_at || null,
+      }
+    : pkgRaw;
+
   const suite = pkg?.suites as
     | { suite_code?: string; contact_name?: string; trn?: string; trn_valid?: boolean }
     | undefined;
