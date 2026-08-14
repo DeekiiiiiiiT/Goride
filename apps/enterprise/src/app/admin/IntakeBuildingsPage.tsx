@@ -2,7 +2,7 @@ import { FormEvent, Fragment, useCallback, useEffect, useMemo, useState } from '
 import { ChevronDown, ChevronRight, Loader2, Plus } from 'lucide-react';
 import { API_ENDPOINTS } from '@roam/api-client';
 
-export type IntakeWarehouse = {
+export type IntakeCompany = {
   id: string;
   name: string;
   code: string;
@@ -15,7 +15,16 @@ export type IntakeWarehouse = {
   status: 'active' | 'inactive';
   claimed_by_org_id?: string | null;
   claimed_by_org_name?: string | null;
+  linked_courier_catalog_id?: string | null;
+  linked_courier_name?: string | null;
 };
+
+/** @deprecated Prefer IntakeCompany */
+export type IntakeWarehouse = IntakeCompany;
+
+export type IntakeCompanyKind = 'freight_forwarder' | 'courier';
+
+type CourierOption = { id: string; name: string; code: string };
 
 type DraftFields = {
   name: string;
@@ -27,6 +36,7 @@ type DraftFields = {
   countryCode: string;
   timezone: string;
   status: 'active' | 'inactive';
+  linkedCourierCatalogId: string;
 };
 
 const TIMEZONE_OPTIONS = [
@@ -41,19 +51,91 @@ const TIMEZONE_OPTIONS = [
   'UTC',
 ] as const;
 
-const emptyDraft = (): DraftFields => ({
-  name: '',
-  code: '',
-  addressLine: '',
-  city: '',
-  state: '',
-  postalCode: '',
-  countryCode: 'US',
-  timezone: 'America/New_York',
-  status: 'active',
-});
+const COUNTRY_OPTIONS = [
+  { code: 'JM', label: 'Jamaica' },
+  { code: 'US', label: 'United States' },
+  { code: 'CN', label: 'China' },
+  { code: 'GB', label: 'United Kingdom' },
+] as const;
 
-function toDraft(w: IntakeWarehouse): DraftFields {
+const FIELD =
+  'mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900';
+const FIELD_READONLY =
+  'mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-mono uppercase text-slate-600';
+
+function slugCode(raw: string): string {
+  return String(raw || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 40);
+}
+
+function timezoneForCountry(cc: string): string {
+  if (cc === 'JM') return 'America/Jamaica';
+  if (cc === 'CN') return 'Asia/Shanghai';
+  if (cc === 'GB') return 'Europe/London';
+  return 'America/New_York';
+}
+
+const KIND_COPY: Record<
+  IntakeCompanyKind,
+  {
+    title: string;
+    subtitle: string;
+    listKey: 'warehouses' | 'couriers';
+    itemKey: 'warehouse' | 'courier';
+    apiPath: string;
+    supportsClaim: boolean;
+    namePlaceholder: string;
+    codePlaceholder: string;
+    defaultCountry: string;
+  }
+> = {
+  freight_forwarder: {
+    title: 'Freight forwarder companies',
+    subtitle:
+      'Master company list customers pick from at Setup. Joins, corrections, and new companies wait under Join requests. Claimed companies stay here but are hidden from Setup until you make them available again. Link each FF to its Jamaica courier when they have one.',
+    listKey: 'warehouses',
+    itemKey: 'warehouse',
+    apiPath: 'intake-warehouses',
+    supportsClaim: true,
+    namePlaceholder: 'Complete Sourcing USA',
+    codePlaceholder: 'COMPLETE_SOURCING',
+    defaultCountry: 'US',
+  },
+  courier: {
+    title: 'Courier companies',
+    subtitle:
+      'Master mailbox courier list for this product. Add companies like BShip’D here so customers and partners can be matched to the right courier.',
+    listKey: 'couriers',
+    itemKey: 'courier',
+    apiPath: 'intake-couriers',
+    supportsClaim: false,
+    namePlaceholder: "BShip'D Couriers",
+    codePlaceholder: 'BSHIPD',
+    defaultCountry: 'JM',
+  },
+};
+
+const emptyDraft = (kind: IntakeCompanyKind = 'freight_forwarder'): DraftFields => {
+  const cc = KIND_COPY[kind].defaultCountry;
+  return {
+    name: '',
+    code: '',
+    addressLine: '',
+    city: '',
+    state: '',
+    postalCode: '',
+    countryCode: cc,
+    timezone: timezoneForCountry(cc),
+    status: 'active',
+    linkedCourierCatalogId: '',
+  };
+};
+
+function toDraft(w: IntakeCompany): DraftFields {
   return {
     name: w.name,
     code: w.code,
@@ -64,6 +146,7 @@ function toDraft(w: IntakeWarehouse): DraftFields {
     countryCode: w.country_code || 'US',
     timezone: w.timezone || 'America/New_York',
     status: w.status,
+    linkedCourierCatalogId: w.linked_courier_catalog_id || '',
   };
 }
 
@@ -74,26 +157,37 @@ function GeoFields({
   value: DraftFields;
   onChange: (patch: Partial<DraftFields>) => void;
 }) {
+  const knownCountry = COUNTRY_OPTIONS.some((c) => c.code === value.countryCode);
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-      <label className="block text-sm sm:col-span-2 lg:col-span-1">
-        Country (ISO)
-        <input
+    <div className="grid gap-3 text-slate-900 sm:grid-cols-2 lg:grid-cols-3">
+      <label className="block text-sm font-medium text-slate-700 sm:col-span-2 lg:col-span-1">
+        Country
+        <select
           required
-          maxLength={2}
           value={value.countryCode}
-          onChange={(e) => onChange({ countryCode: e.target.value.toUpperCase() })}
-          className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 uppercase"
-          placeholder="US, CN, JM…"
-        />
+          onChange={(e) => {
+            const countryCode = e.target.value.toUpperCase();
+            onChange({ countryCode, timezone: timezoneForCountry(countryCode) });
+          }}
+          className={FIELD}
+        >
+          {COUNTRY_OPTIONS.map((c) => (
+            <option key={c.code} value={c.code}>
+              {c.label} ({c.code})
+            </option>
+          ))}
+          {!knownCountry && value.countryCode ? (
+            <option value={value.countryCode}>{value.countryCode}</option>
+          ) : null}
+        </select>
       </label>
-      <label className="block text-sm">
+      <label className="block text-sm font-medium text-slate-700">
         Timezone
         <select
           required
           value={value.timezone}
           onChange={(e) => onChange({ timezone: e.target.value })}
-          className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+          className={FIELD}
         >
           {TIMEZONE_OPTIONS.map((tz) => (
             <option key={tz} value={tz}>
@@ -104,49 +198,57 @@ function GeoFields({
             value.timezone && <option value={value.timezone}>{value.timezone}</option>}
         </select>
       </label>
-      <label className="block text-sm sm:col-span-2 lg:col-span-3">
+      <label className="block text-sm font-medium text-slate-700 sm:col-span-2 lg:col-span-3">
         Street
         <input
           required
           value={value.addressLine}
           onChange={(e) => onChange({ addressLine: e.target.value })}
-          className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+          className={FIELD}
         />
       </label>
-      <label className="block text-sm">
+      <label className="block text-sm font-medium text-slate-700">
         City
         <input
           required
           value={value.city}
           onChange={(e) => onChange({ city: e.target.value })}
-          className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+          className={FIELD}
         />
       </label>
-      <label className="block text-sm">
+      <label className="block text-sm font-medium text-slate-700">
         Region / state
         <input
           value={value.state}
           onChange={(e) => onChange({ state: e.target.value })}
-          className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-          placeholder="FL, Guangdong…"
+          className={FIELD}
+          placeholder="Kingston, FL…"
         />
       </label>
-      <label className="block text-sm">
+      <label className="block text-sm font-medium text-slate-700">
         Postal code
         <input
           required
           value={value.postalCode}
           onChange={(e) => onChange({ postalCode: e.target.value })}
-          className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+          className={FIELD}
         />
       </label>
     </div>
   );
 }
 
-/** Master freight-forwarder buildings — customers pick from this list at Setup. */
-export function IntakeBuildingsPage({ accessToken }: { accessToken: string }) {
-  const [rows, setRows] = useState<IntakeWarehouse[]>([]);
+/** Master company catalogs — freight-forwarder or courier. */
+export function IntakeCompaniesPage({
+  accessToken,
+  kind,
+}: {
+  accessToken: string;
+  kind: IntakeCompanyKind;
+}) {
+  const copy = KIND_COPY[kind];
+  const [rows, setRows] = useState<IntakeCompany[]>([]);
+  const [courierOptions, setCourierOptions] = useState<CourierOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [countryFilter, setCountryFilter] = useState('');
@@ -154,7 +256,7 @@ export function IntakeBuildingsPage({ accessToken }: { accessToken: string }) {
   const [drafts, setDrafts] = useState<Record<string, DraftFields>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
-  const [createForm, setCreateForm] = useState(emptyDraft());
+  const [createForm, setCreateForm] = useState(() => emptyDraft(kind));
 
   const headers = useCallback(
     () => ({
@@ -164,24 +266,45 @@ export function IntakeBuildingsPage({ accessToken }: { accessToken: string }) {
     [accessToken],
   );
 
+  const baseUrl = `${API_ENDPOINTS.admin}/enterprise-admin/${copy.apiPath}`;
+
+  const loadCouriers = useCallback(async () => {
+    if (kind !== 'freight_forwarder') {
+      setCourierOptions([]);
+      return;
+    }
+    try {
+      const res = await fetch(`${API_ENDPOINTS.admin}/enterprise-admin/intake-couriers`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) return;
+      const list = (json.couriers as CourierOption[]) || [];
+      setCourierOptions(list.map((c) => ({ id: c.id, name: c.name, code: c.code })));
+    } catch {
+      /* optional for FF link dropdown */
+    }
+  }, [accessToken, kind]);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${API_ENDPOINTS.admin}/enterprise-admin/intake-warehouses`, {
+      const res = await fetch(baseUrl, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.error || res.statusText);
-      const list = (json.warehouses as IntakeWarehouse[]) || [];
+      const list = (json[copy.listKey] as IntakeCompany[]) || [];
       setRows(list);
       setDrafts(Object.fromEntries(list.map((w) => [w.id, toDraft(w)])));
+      await loadCouriers();
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setLoading(false);
     }
-  }, [accessToken]);
+  }, [accessToken, baseUrl, copy.listKey, loadCouriers]);
 
   useEffect(() => {
     void load();
@@ -202,9 +325,8 @@ export function IntakeBuildingsPage({ accessToken }: { accessToken: string }) {
   }
 
   function bodyFromDraft(d: DraftFields) {
-    return {
+    const body: Record<string, unknown> = {
       name: d.name,
-      code: d.code,
       addressLine: d.addressLine,
       city: d.city,
       state: d.state,
@@ -213,15 +335,19 @@ export function IntakeBuildingsPage({ accessToken }: { accessToken: string }) {
       timezone: d.timezone,
       status: d.status,
     };
+    if (kind === 'freight_forwarder') {
+      body.linkedCourierCatalogId = d.linkedCourierCatalogId || null;
+    }
+    return body;
   }
 
-  async function saveWarehouse(id: string) {
+  async function saveCompany(id: string) {
     const d = drafts[id];
     if (!d) return;
     setSavingId(id);
     setError(null);
     try {
-      const res = await fetch(`${API_ENDPOINTS.admin}/enterprise-admin/intake-warehouses/${id}`, {
+      const res = await fetch(`${baseUrl}/${id}`, {
         method: 'PATCH',
         headers: headers(),
         body: JSON.stringify(bodyFromDraft(d)),
@@ -240,10 +366,10 @@ export function IntakeBuildingsPage({ accessToken }: { accessToken: string }) {
     setSavingId(id);
     setError(null);
     try {
-      const res = await fetch(
-        `${API_ENDPOINTS.admin}/enterprise-admin/intake-warehouses/${id}/release`,
-        { method: 'POST', headers: headers() },
-      );
+      const res = await fetch(`${baseUrl}/${id}/release`, {
+        method: 'POST',
+        headers: headers(),
+      });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.error || res.statusText);
       await load();
@@ -254,12 +380,12 @@ export function IntakeBuildingsPage({ accessToken }: { accessToken: string }) {
     }
   }
 
-  async function createWarehouse(e: FormEvent) {
+  async function createCompany(e: FormEvent) {
     e.preventDefault();
     setSavingId('new');
     setError(null);
     try {
-      const res = await fetch(`${API_ENDPOINTS.admin}/enterprise-admin/intake-warehouses`, {
+      const res = await fetch(baseUrl, {
         method: 'POST',
         headers: headers(),
         body: JSON.stringify(bodyFromDraft(createForm)),
@@ -267,8 +393,8 @@ export function IntakeBuildingsPage({ accessToken }: { accessToken: string }) {
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.error || res.statusText);
       setCreating(false);
-      setCreateForm(emptyDraft());
-      const created = json.warehouse as IntakeWarehouse | undefined;
+      setCreateForm(emptyDraft(kind));
+      const created = json[copy.itemKey] as IntakeCompany | undefined;
       await load();
       if (created?.id) setExpandedId(created.id);
     } catch (err) {
@@ -278,16 +404,14 @@ export function IntakeBuildingsPage({ accessToken }: { accessToken: string }) {
     }
   }
 
+  const colSpan = (copy.supportsClaim ? 6 : 5) + (kind === 'freight_forwarder' ? 1 : 0);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Freight forwarder buildings</h1>
-          <p className="mt-1 max-w-2xl text-sm text-slate-500">
-            Master company list customers pick from at Setup. Joins, corrections, and new companies
-            wait under Join requests. Claimed buildings stay here but are hidden from Setup until
-            you make them available again.
-          </p>
+          <h1 className="text-2xl font-semibold text-slate-900">{copy.title}</h1>
+          <p className="mt-1 max-w-2xl text-sm text-slate-500">{copy.subtitle}</p>
         </div>
         <button
           type="button"
@@ -298,7 +422,7 @@ export function IntakeBuildingsPage({ accessToken }: { accessToken: string }) {
           className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800"
         >
           <Plus className="h-4 w-4" />
-          Add building
+          Add company
         </button>
       </div>
 
@@ -307,14 +431,21 @@ export function IntakeBuildingsPage({ accessToken }: { accessToken: string }) {
         <select
           value={countryFilter}
           onChange={(e) => setCountryFilter(e.target.value)}
-          className="mt-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+          className="mt-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
         >
           <option value="">All countries</option>
-          {countries.map((c) => (
-            <option key={c} value={c}>
-              {c}
+          {COUNTRY_OPTIONS.map((c) => (
+            <option key={c.code} value={c.code}>
+              {c.label} ({c.code})
             </option>
           ))}
+          {countries
+            .filter((c) => !COUNTRY_OPTIONS.some((o) => o.code === c))
+            .map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
         </select>
       </label>
 
@@ -326,31 +457,55 @@ export function IntakeBuildingsPage({ accessToken }: { accessToken: string }) {
 
       {creating ? (
         <form
-          onSubmit={(e) => void createWarehouse(e)}
+          onSubmit={(e) => void createCompany(e)}
           className="space-y-3 rounded-xl border border-slate-200 bg-white p-4"
         >
-          <h2 className="text-sm font-semibold text-slate-900">New building</h2>
+          <h2 className="text-sm font-semibold text-slate-900">New company</h2>
           <div className="grid gap-3 sm:grid-cols-2">
-            <label className="block text-sm">
+            <label className="block text-sm font-medium text-slate-700 sm:col-span-2">
               Name
               <input
                 required
                 value={createForm.name}
-                onChange={(e) => setCreateForm((f) => ({ ...f, name: e.target.value }))}
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-                placeholder="Complete Sourcing USA"
+                onChange={(e) => {
+                  const name = e.target.value;
+                  setCreateForm((f) => ({ ...f, name, code: slugCode(name) }));
+                }}
+                className={FIELD}
+                placeholder={copy.namePlaceholder}
               />
             </label>
-            <label className="block text-sm">
+            <label className="block text-sm font-medium text-slate-700 sm:col-span-2">
               Code
               <input
-                required
-                value={createForm.code}
-                onChange={(e) => setCreateForm((f) => ({ ...f, code: e.target.value }))}
-                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono uppercase"
-                placeholder="COMPLETE_SOURCING"
+                readOnly
+                value={createForm.code || 'Generated from name'}
+                className={FIELD_READONLY}
+                aria-readonly="true"
               />
+              <span className="mt-1 block text-xs text-slate-500">
+                Auto-generated from the company name.
+              </span>
             </label>
+            {kind === 'freight_forwarder' ? (
+              <label className="block text-sm font-medium text-slate-700 sm:col-span-2">
+                Linked Jamaica courier
+                <select
+                  value={createForm.linkedCourierCatalogId}
+                  onChange={(e) =>
+                    setCreateForm((f) => ({ ...f, linkedCourierCatalogId: e.target.value }))
+                  }
+                  className={FIELD}
+                >
+                  <option value="">None</option>
+                  {courierOptions.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
           </div>
           <GeoFields
             value={createForm}
@@ -362,13 +517,13 @@ export function IntakeBuildingsPage({ accessToken }: { accessToken: string }) {
               disabled={savingId === 'new'}
               className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
             >
-              {savingId === 'new' ? 'Creating…' : 'Create building'}
+              {savingId === 'new' ? 'Creating…' : 'Create company'}
             </button>
             <button
               type="button"
               onClick={() => {
                 setCreating(false);
-                setCreateForm(emptyDraft());
+                setCreateForm(emptyDraft(kind));
               }}
               className="rounded-lg border border-slate-300 px-4 py-2 text-sm"
             >
@@ -388,10 +543,11 @@ export function IntakeBuildingsPage({ accessToken }: { accessToken: string }) {
             <thead className="border-b border-slate-100 bg-slate-50 text-xs uppercase text-slate-500">
               <tr>
                 <th className="w-8 px-3 py-2" />
-                <th className="px-4 py-2">Building</th>
+                <th className="px-4 py-2">Company</th>
                 <th className="px-4 py-2">Country</th>
                 <th className="px-4 py-2">Address</th>
-                <th className="px-4 py-2">Claim</th>
+                {kind === 'freight_forwarder' ? <th className="px-4 py-2">Courier</th> : null}
+                {copy.supportsClaim ? <th className="px-4 py-2">Claim</th> : null}
                 <th className="px-4 py-2">Status</th>
               </tr>
             </thead>
@@ -424,20 +580,29 @@ export function IntakeBuildingsPage({ accessToken }: { accessToken: string }) {
                         <br />
                         {[w.city, w.state, w.postal_code].filter(Boolean).join(', ')}
                       </td>
-                      <td className="px-4 py-3">
-                        {w.claimed_by_org_name ? (
-                          <div>
-                            <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800">
-                              Claimed
+                      {kind === 'freight_forwarder' ? (
+                        <td className="px-4 py-3 text-slate-700">
+                          {w.linked_courier_name || (
+                            <span className="text-slate-400">Not linked</span>
+                          )}
+                        </td>
+                      ) : null}
+                      {copy.supportsClaim ? (
+                        <td className="px-4 py-3">
+                          {w.claimed_by_org_name ? (
+                            <div>
+                              <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800">
+                                Claimed
+                              </span>
+                              <p className="mt-1 text-xs text-slate-500">{w.claimed_by_org_name}</p>
+                            </div>
+                          ) : (
+                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+                              Available
                             </span>
-                            <p className="mt-1 text-xs text-slate-500">{w.claimed_by_org_name}</p>
-                          </div>
-                        ) : (
-                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
-                            Available
-                          </span>
-                        )}
-                      </td>
+                          )}
+                        </td>
+                      ) : null}
                       <td className="px-4 py-3">
                         <span
                           className={
@@ -452,29 +617,34 @@ export function IntakeBuildingsPage({ accessToken }: { accessToken: string }) {
                     </tr>
                     {open ? (
                       <tr className="border-b border-slate-100 bg-slate-50/60">
-                        <td colSpan={6} className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
-                          <div className="max-w-3xl space-y-3 rounded-lg border border-slate-200 bg-white p-4">
+                        <td
+                          colSpan={colSpan}
+                          className="px-4 py-4"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <div className="max-w-3xl space-y-3 rounded-lg border border-slate-200 bg-white p-4 text-slate-900">
                             <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                              Edit building
+                              Edit company
                             </h3>
                             <div className="grid gap-2 sm:grid-cols-2">
-                              <label className="block text-sm sm:col-span-2">
+                              <label className="block text-sm font-medium text-slate-700 sm:col-span-2">
                                 Name
                                 <input
                                   value={d.name}
                                   onChange={(e) => patchDraft(w.id, { name: e.target.value })}
-                                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+                                  className={FIELD}
                                 />
                               </label>
-                              <label className="block text-sm">
+                              <label className="block text-sm font-medium text-slate-700">
                                 Code
                                 <input
+                                  readOnly
                                   value={d.code}
-                                  onChange={(e) => patchDraft(w.id, { code: e.target.value })}
-                                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-mono uppercase"
+                                  className={FIELD_READONLY}
+                                  aria-readonly="true"
                                 />
                               </label>
-                              <label className="block text-sm">
+                              <label className="block text-sm font-medium text-slate-700">
                                 Status
                                 <select
                                   value={d.status}
@@ -483,30 +653,53 @@ export function IntakeBuildingsPage({ accessToken }: { accessToken: string }) {
                                       status: e.target.value as 'active' | 'inactive',
                                     })
                                   }
-                                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+                                  className={FIELD}
                                 >
                                   <option value="active">Active</option>
                                   <option value="inactive">Inactive</option>
                                 </select>
                               </label>
+                              {kind === 'freight_forwarder' ? (
+                                <label className="block text-sm font-medium text-slate-700 sm:col-span-2">
+                                  Linked Jamaica courier
+                                  <select
+                                    value={d.linkedCourierCatalogId}
+                                    onChange={(e) =>
+                                      patchDraft(w.id, { linkedCourierCatalogId: e.target.value })
+                                    }
+                                    className={FIELD}
+                                  >
+                                    <option value="">None</option>
+                                    {courierOptions.map((c) => (
+                                      <option key={c.id} value={c.id}>
+                                        {c.name}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <span className="mt-1 block text-xs text-slate-500">
+                                    Example: Complete Sourcing USA → Complete Sourcing JA.
+                                  </span>
+                                </label>
+                              ) : null}
                             </div>
                             <GeoFields value={d} onChange={(patch) => patchDraft(w.id, patch)} />
-                            {w.claimed_by_org_name ? (
+                            {copy.supportsClaim && w.claimed_by_org_name ? (
                               <p className="text-sm text-slate-600">
-                                Hidden on Setup because <span className="font-medium">{w.claimed_by_org_name}</span>{' '}
-                                already confirmed this company.
+                                Hidden on Setup because{' '}
+                                <span className="font-medium">{w.claimed_by_org_name}</span> already
+                                confirmed this company.
                               </p>
                             ) : null}
                             <div className="flex flex-wrap gap-2">
                               <button
                                 type="button"
                                 disabled={savingId === w.id}
-                                onClick={() => void saveWarehouse(w.id)}
+                                onClick={() => void saveCompany(w.id)}
                                 className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
                               >
-                                {savingId === w.id ? 'Saving…' : 'Save building'}
+                                {savingId === w.id ? 'Saving…' : 'Save company'}
                               </button>
-                              {w.claimed_by_org_id ? (
+                              {copy.supportsClaim && w.claimed_by_org_id ? (
                                 <button
                                   type="button"
                                   disabled={savingId === w.id}
@@ -526,8 +719,8 @@ export function IntakeBuildingsPage({ accessToken }: { accessToken: string }) {
               })}
               {!filtered.length ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-slate-500">
-                    {rows.length ? 'No buildings for this country filter.' : 'No buildings yet.'}
+                  <td colSpan={colSpan} className="px-4 py-10 text-center text-slate-500">
+                    {rows.length ? 'No companies for this country filter.' : 'No companies yet.'}
                   </td>
                 </tr>
               ) : null}
@@ -537,4 +730,9 @@ export function IntakeBuildingsPage({ accessToken }: { accessToken: string }) {
       </div>
     </div>
   );
+}
+
+/** @deprecated Prefer IntakeCompaniesPage with kind="freight_forwarder" */
+export function IntakeBuildingsPage({ accessToken }: { accessToken: string }) {
+  return <IntakeCompaniesPage accessToken={accessToken} kind="freight_forwarder" />;
 }

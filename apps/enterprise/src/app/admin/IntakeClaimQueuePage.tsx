@@ -97,7 +97,7 @@ export function IntakeClaimQueuePage({ accessToken }: { accessToken: string }) {
           <h1 className="text-2xl font-semibold text-slate-900">Join requests</h1>
           <p className="mt-1 max-w-2xl text-sm text-slate-500">
             Companies waiting to operate a warehouse. Approve a join to let them scan. Corrections
-            update the master listing. New companies are added to Buildings.
+            update the master listing. New companies are added to Companies.
           </p>
         </div>
         <select

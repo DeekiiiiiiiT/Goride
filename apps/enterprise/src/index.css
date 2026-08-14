@@ -92,6 +92,36 @@ body {
   background-size: 40px 40px;
 }
 
+/* Enterprise Admin is always a light surface — dark app theme must not wash out form text */
+.enterprise-admin-shell {
+  color: #0f172a;
+  color-scheme: light;
+  --color-on-surface: #0f172a;
+  --color-on-surface-variant: #475569;
+  --color-background: #f8fafc;
+  --color-surface: #ffffff;
+}
+
+.enterprise-admin-shell input,
+.enterprise-admin-shell select,
+.enterprise-admin-shell textarea {
+  color: #0f172a !important;
+  -webkit-text-fill-color: #0f172a !important;
+  background-color: #ffffff !important;
+  caret-color: #0f172a;
+}
+
+.enterprise-admin-shell input::placeholder,
+.enterprise-admin-shell textarea::placeholder {
+  color: #94a3b8 !important;
+  -webkit-text-fill-color: #94a3b8 !important;
+}
+
+.enterprise-admin-shell option {
+  color: #0f172a;
+  background-color: #ffffff;
+}
+
 .dark {
   color-scheme: dark;
   --color-on-surface: #eaf1ff;

@@ -5,17 +5,17 @@ import { ProductLineSettingsPage } from '@roam/admin-core/settings';
 import { API_ENDPOINTS } from '@roam/api-client';
 import { useAdminAuth } from '@/app/auth/AdminAuthProvider';
 import { EnterpriseAdminLogin } from '@/app/admin/EnterpriseAdminLogin';
-import { IntakeBuildingsPage } from '@/app/admin/IntakeBuildingsPage';
+import { IntakeCompaniesPage } from '@/app/admin/IntakeBuildingsPage';
 import { IntakeClaimQueuePage } from '@/app/admin/IntakeClaimQueuePage';
 import { AdminConnectionsPage } from '@/app/admin/AdminConnectionsPage';
 import { AdminExternalOrgsPage } from '@/app/admin/AdminExternalOrgsPage';
 import { AdminStorageBillingPage } from '@/app/admin/AdminStorageBillingPage';
 
 type PrimaryTab = 'team' | 'courier' | 'freight_forwarder' | 'platform';
-type CourierPage = 'customers' | 'features';
+type CourierPage = 'customers' | 'companies' | 'features';
 type FfPage =
   | 'customers'
-  | 'buildings'
+  | 'companies'
   | 'claims'
   | 'connections'
   | 'external'
@@ -31,12 +31,13 @@ const PRIMARY: { id: PrimaryTab; label: string }[] = [
 
 const COURIER_PAGES: { id: CourierPage; label: string }[] = [
   { id: 'customers', label: 'Customers' },
+  { id: 'companies', label: 'Companies' },
   { id: 'features', label: 'Features' },
 ];
 
 const FF_PAGES: { id: FfPage; label: string }[] = [
   { id: 'customers', label: 'Customers' },
-  { id: 'buildings', label: 'Buildings' },
+  { id: 'companies', label: 'Companies' },
   { id: 'claims', label: 'Join requests' },
   { id: 'connections', label: 'Connections' },
   { id: 'external', label: 'Off-platform' },
@@ -101,8 +102,8 @@ export function EnterpriseAdminPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="border-b border-slate-200 bg-white px-6 py-4">
+    <div className="enterprise-admin-shell min-h-screen bg-slate-50 text-slate-900">
+      <header className="border-b border-slate-200 bg-white px-6 py-4 text-slate-900">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-widest text-amber-600">
@@ -188,6 +189,9 @@ export function EnterpriseAdminPage() {
             subtitle="Mailbox courier companies on this product."
           />
         )}
+        {primary === 'courier' && courierPage === 'companies' && (
+          <IntakeCompaniesPage accessToken={accessToken} kind="courier" />
+        )}
         {primary === 'courier' && courierPage === 'features' && (
           <ProductLineSettingsPage
             {...settingsBase}
@@ -207,8 +211,8 @@ export function EnterpriseAdminPage() {
             subtitle="Create their login here. They confirm the warehouse in Setup; you approve the join under Join requests before they can scan."
           />
         )}
-        {primary === 'freight_forwarder' && ffPage === 'buildings' && (
-          <IntakeBuildingsPage accessToken={accessToken} />
+        {primary === 'freight_forwarder' && ffPage === 'companies' && (
+          <IntakeCompaniesPage accessToken={accessToken} kind="freight_forwarder" />
         )}
         {primary === 'freight_forwarder' && ffPage === 'claims' && (
           <IntakeClaimQueuePage accessToken={accessToken} />

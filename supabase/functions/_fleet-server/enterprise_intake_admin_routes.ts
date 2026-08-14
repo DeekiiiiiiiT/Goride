@@ -1,5 +1,5 @@
 /**
- * Enterprise Admin: freight-forwarder building catalog + customer claim queue.
+ * Enterprise Admin: freight-forwarder + courier company catalogs + claim queue.
  * Gated with requireProductAdmin("enterprise").
  */
 import type { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
@@ -53,7 +53,9 @@ function assertWrite(auth: ProductAdminUser): Response | null {
 
 function parseCatalogBody(body: Record<string, unknown>, partial: boolean) {
   const name = body.name != null ? String(body.name).trim() : "";
-  const code = body.code != null ? slugCode(String(body.code || name)) : "";
+  // Code is server-owned; clients may omit it. Slug from name when creating.
+  const codeRaw = body.code != null ? String(body.code) : name;
+  const code = slugCode(codeRaw || name);
   const addressLine = String(body.addressLine ?? body.address_line ?? "").trim();
   const city = String(body.city ?? "").trim();
   const state = String(body.state ?? "").trim().slice(0, 80);
@@ -64,16 +66,16 @@ function parseCatalogBody(body: Record<string, unknown>, partial: boolean) {
     .slice(0, 2);
   const timezone = String(body.timezone ?? "").trim() || timezoneForCountry(countryCode);
   if (!partial) {
-    if (!name || !code || !addressLine || !city || !postalCode || !countryCode || !timezone) {
+    if (!name || !addressLine || !city || !postalCode || !countryCode || !timezone) {
       return {
-        error:
-          "name, code, addressLine, city, postalCode, countryCode, and timezone are required",
+        error: "name, addressLine, city, postalCode, countryCode, and timezone are required",
       };
     }
   }
   const row: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (!partial || body.name != null) row.name = name;
-  if (!partial || body.code != null) row.code = code;
+  // Never accept client code on patch; create path sets unique code separately.
+  if (!partial) row.code = code || slugCode(name) || "COMPANY";
   if (!partial || body.addressLine != null || body.address_line != null) {
     row.address_line = addressLine;
   }
@@ -88,7 +90,50 @@ function parseCatalogBody(body: Record<string, unknown>, partial: boolean) {
   if (!partial || body.timezone != null) row.timezone = timezone;
   if (body.status === "active" || body.status === "inactive") row.status = body.status;
   else if (!partial) row.status = "active";
+
+  if (
+    Object.prototype.hasOwnProperty.call(body, "linkedCourierCatalogId") ||
+    Object.prototype.hasOwnProperty.call(body, "linked_courier_catalog_id")
+  ) {
+    const raw = body.linkedCourierCatalogId ?? body.linked_courier_catalog_id;
+    row.linked_courier_catalog_id =
+      raw === null || raw === "" || raw === undefined ? null : String(raw);
+  }
   return { row };
+}
+
+async function withLinkedCouriers(warehouses: Record<string, unknown>[]) {
+  const courierIds = [
+    ...new Set(
+      warehouses
+        .map((w) => w.linked_courier_catalog_id)
+        .filter((id): id is string => typeof id === "string" && !!id),
+    ),
+  ];
+  if (!courierIds.length) {
+    return warehouses.map((w) => ({
+      ...w,
+      linked_courier_name: null,
+    }));
+  }
+  const { data: couriers, error } = await serviceClient()
+    .from("intake_courier_catalog")
+    .select("id, name, code")
+    .in("id", courierIds);
+  if (error) throw new Error(error.message);
+  const byId = Object.fromEntries(
+    (couriers ?? []).map((c: { id: string; name: string; code: string }) => [c.id, c]),
+  );
+  return warehouses.map((w) => {
+    const linked = w.linked_courier_catalog_id
+      ? byId[String(w.linked_courier_catalog_id)]
+      : null;
+    return {
+      ...w,
+      linked_courier_name: linked?.name ?? null,
+      linked_courier_code: linked?.code ?? null,
+    };
+  });
 }
 
 async function withClaimInfo(warehouses: Record<string, unknown>[]) {
@@ -138,11 +183,26 @@ async function withClaimInfo(warehouses: Record<string, unknown>[]) {
 
 async function uniqueCatalogCode(base: string): Promise<string> {
   const supabase = serviceClient();
-  let code = slugCode(base) || "FF_BUILDING";
+  let code = slugCode(base) || "FF_COMPANY";
   for (let i = 0; i < 12; i++) {
     const tryCode = i === 0 ? code : `${code.slice(0, 32)}_${i + 1}`;
     const { data } = await supabase
       .from("intake_warehouse_catalog")
+      .select("id")
+      .eq("code", tryCode)
+      .maybeSingle();
+    if (!data) return tryCode;
+  }
+  return `${code.slice(0, 28)}_${Date.now().toString(36).toUpperCase()}`.slice(0, 40);
+}
+
+async function uniqueCourierCatalogCode(base: string): Promise<string> {
+  const supabase = serviceClient();
+  let code = slugCode(base) || "COURIER";
+  for (let i = 0; i < 12; i++) {
+    const tryCode = i === 0 ? code : `${code.slice(0, 32)}_${i + 1}`;
+    const { data } = await supabase
+      .from("intake_courier_catalog")
       .select("id")
       .eq("code", tryCode)
       .maybeSingle();
@@ -215,7 +275,8 @@ export function registerEnterpriseIntakeAdminRoutes(app: Hono) {
       .order("name");
     if (error) return c.json({ error: error.message }, 500);
     try {
-      return c.json({ warehouses: await withClaimInfo(data ?? []) });
+      const withClaims = await withClaimInfo(data ?? []);
+      return c.json({ warehouses: await withLinkedCouriers(withClaims) });
     } catch (e) {
       return c.json({ error: (e as Error).message }, 500);
     }
@@ -229,13 +290,19 @@ export function registerEnterpriseIntakeAdminRoutes(app: Hono) {
     const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
     const parsed = parseCatalogBody(body, false);
     if ("error" in parsed) return c.json({ error: parsed.error }, 400);
+    parsed.row.code = await uniqueCatalogCode(String(parsed.row.name || parsed.row.code || ""));
     const { data, error } = await serviceClient()
       .from("intake_warehouse_catalog")
       .insert(parsed.row)
       .select("*")
       .single();
     if (error) return c.json({ error: error.message }, 500);
-    return c.json({ warehouse: data }, 201);
+    try {
+      const [warehouse] = await withLinkedCouriers(await withClaimInfo([data]));
+      return c.json({ warehouse }, 201);
+    } catch (e) {
+      return c.json({ error: (e as Error).message }, 500);
+    }
   });
 
   app.patch(`${BASE}/intake-warehouses/:id`, async (c) => {
@@ -247,6 +314,7 @@ export function registerEnterpriseIntakeAdminRoutes(app: Hono) {
     const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
     const parsed = parseCatalogBody(body, true);
     if ("error" in parsed) return c.json({ error: parsed.error }, 400);
+    delete parsed.row.code;
     const { data, error } = await serviceClient()
       .from("intake_warehouse_catalog")
       .update(parsed.row)
@@ -255,7 +323,7 @@ export function registerEnterpriseIntakeAdminRoutes(app: Hono) {
       .single();
     if (error) return c.json({ error: error.message }, 500);
     try {
-      const [warehouse] = await withClaimInfo([data]);
+      const [warehouse] = await withLinkedCouriers(await withClaimInfo([data]));
       return c.json({ warehouse });
     } catch (e) {
       return c.json({ error: (e as Error).message }, 500);
@@ -275,7 +343,7 @@ export function registerEnterpriseIntakeAdminRoutes(app: Hono) {
       .eq("id", id)
       .maybeSingle();
     if (catErr) return c.json({ error: catErr.message }, 500);
-    if (!catalog) return c.json({ error: "Building not found" }, 404);
+    if (!catalog) return c.json({ error: "Company not found" }, 404);
     const { error } = await freightDb()
       .from("facilities")
       .update({ intake_catalog_id: null })
@@ -283,11 +351,62 @@ export function registerEnterpriseIntakeAdminRoutes(app: Hono) {
       .eq("intake_catalog_id", id);
     if (error) return c.json({ error: error.message }, 500);
     try {
-      const [warehouse] = await withClaimInfo([catalog]);
+      const [warehouse] = await withLinkedCouriers(await withClaimInfo([catalog]));
       return c.json({ warehouse });
     } catch (e) {
       return c.json({ error: (e as Error).message }, 500);
     }
+  });
+
+  app.get(`${BASE}/intake-couriers`, async (c) => {
+    const auth = await requireProductAdmin(c, "enterprise");
+    if (auth instanceof Response) return auth;
+    const { data, error } = await serviceClient()
+      .from("intake_courier_catalog")
+      .select("*")
+      .order("name");
+    if (error) return c.json({ error: error.message }, 500);
+    return c.json({ couriers: data ?? [] });
+  });
+
+  app.post(`${BASE}/intake-couriers`, async (c) => {
+    const auth = await requireProductAdmin(c, "enterprise");
+    if (auth instanceof Response) return auth;
+    const denied = assertWrite(auth);
+    if (denied) return denied;
+    const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+    const parsed = parseCatalogBody(body, false);
+    if ("error" in parsed) return c.json({ error: parsed.error }, 400);
+    delete parsed.row.linked_courier_catalog_id;
+    parsed.row.code = await uniqueCourierCatalogCode(String(parsed.row.name || parsed.row.code || ""));
+    const { data, error } = await serviceClient()
+      .from("intake_courier_catalog")
+      .insert(parsed.row)
+      .select("*")
+      .single();
+    if (error) return c.json({ error: error.message }, 500);
+    return c.json({ courier: data }, 201);
+  });
+
+  app.patch(`${BASE}/intake-couriers/:id`, async (c) => {
+    const auth = await requireProductAdmin(c, "enterprise");
+    if (auth instanceof Response) return auth;
+    const denied = assertWrite(auth);
+    if (denied) return denied;
+    const id = c.req.param("id");
+    const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+    const parsed = parseCatalogBody(body, true);
+    if ("error" in parsed) return c.json({ error: parsed.error }, 400);
+    delete parsed.row.code;
+    delete parsed.row.linked_courier_catalog_id;
+    const { data, error } = await serviceClient()
+      .from("intake_courier_catalog")
+      .update(parsed.row)
+      .eq("id", id)
+      .select("*")
+      .single();
+    if (error) return c.json({ error: error.message }, 500);
+    return c.json({ courier: data });
   });
 
   app.get(`${BASE}/intake-claims`, async (c) => {
@@ -407,7 +526,7 @@ export function registerEnterpriseIntakeAdminRoutes(app: Hono) {
         catalog = created;
       }
 
-      if (!catalog) return c.json({ error: "Could not save building listing." }, 500);
+      if (!catalog) return c.json({ error: "Could not save company listing." }, 500);
 
       await attachWarehouseFacility(String(reqRow.organization_id), {
         id: String(catalog.id),
