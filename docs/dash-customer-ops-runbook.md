@@ -28,7 +28,7 @@
 | `WIPAY_ACCOUNT_NUMBER` | Intent creation |
 | `GOOGLE_MAPS_API_KEY` (and/or merchant key) | Places autocomplete + reverse geocode |
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | Web Push (courier/merchant/customer) |
-| `FCM_SERVER_KEY` | Native FCM sends for Partner/Courier/Rush |
+| `FCM_SERVICE_ACCOUNT_JSON` | Native FCM sends for Partner/Courier/Rush (HTTP v1) |
 
 See also [roam-rush-production-gate0-ops.md](roam-rush-production-gate0-ops.md).
 

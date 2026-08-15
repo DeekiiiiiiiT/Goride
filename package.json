@@ -73,7 +73,12 @@
     "deploy:functions:all": "pnpm deploy:edge && pnpm deploy:delivery && pnpm deploy:merchant-push && pnpm deploy:notifications && pnpm deploy:payments && pnpm deploy:send-sms && pnpm deploy:rides && pnpm deploy:driver && pnpm deploy:haul && pnpm deploy:freight && pnpm deploy:logistics && pnpm deploy:toll-brain && pnpm deploy:fuel-brain && pnpm deploy:matching && pnpm deploy:identity && pnpm deploy:evidence-cleanup && pnpm deploy:petrojam-prices && pnpm deploy:fleet-ops && pnpm deploy:platform-catalog && pnpm deploy:before-user-created && pnpm deploy:custom-access-token"
   },
   "devDependencies": {
+    "sharp": "^0.35.3",
     "typescript": "^5.4.0"
   },
-  "workspaces": ["apps/*", "packages/*", "services/*"]
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "services/*"
+  ]
 }

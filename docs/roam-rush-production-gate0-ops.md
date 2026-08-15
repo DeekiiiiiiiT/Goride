@@ -16,14 +16,20 @@ Re-checked live GoRide project (`csfllzzastacofsvcdsc`). These seven tables that
 | payments | merchant_adjustments | on | 1 |
 | payments | refunds | on | 1 |
 
-## Seed / catalog
+## Seed / catalog — **updated 2026-08-15**
 
-Live counts as of 2026-08-15:
+Live active merchants for Rush discovery:
 
-- **Merchants:** 4 total in `delivery.merchants`, of which **1 active** (`is_active`) / 1 verified — need more live partners before public launch.
-- **Promotions:** 0 rows in `delivery.merchant_promotions` — Deals tab will show empty state until partners publish promos.
+| Merchant | City | Menu items | Active promos |
+|----------|------|------------|---------------|
+| Code Blue | Portmore | (existing) | — |
+| Island Grill | Kingston | 3 | `ISLAND20` (20% off) |
+| Mario's Pizzeria | Kingston | 3 | `PIZZA300` (J$300 off) |
+| The Burger Spot | Kingston | 3 | `FREEDEL` (free delivery) |
+| Green Life Bowls | Kingston | 3 | — |
 
-Action: seed additional Kingston merchants + at least a few live promotions before launch marketing.
+Seed SQL: `supabase/migrations/20260815160000_dash_kingston_soft_launch_seed.sql`  
+Seed owner emails (Auth): `seed-island-grill@roamrush.app`, `seed-marios@roamrush.app`, `seed-burger-spot@roamrush.app`, `seed-green-life@roamrush.app`.
 
 ## Required secrets checklist
 
@@ -37,7 +43,8 @@ Confirm in Supabase Edge Function secrets (and CI where applicable):
 | `WIPAY_ENV` | `sandbox` vs live |
 | `GOOGLE_MAPS_API_KEY` | Server geocode / maps (delivery function) |
 | `VAPID` / VAPID key pair | Web Push for courier offer alerts (also set client `VITE_VAPID_PUBLIC_KEY`) |
-| `FCM_SERVER_KEY` | Legacy FCM server key if still used by push path |
+| `FCM_SERVICE_ACCOUNT_JSON` | Firebase Cloud Messaging HTTP v1 (preferred; service account JSON) |
+| `FCM_SERVER_KEY` | Legacy only — not available on new Firebase projects |
 
 Also confirm per-app Vite public env for production builds (Supabase URL/anon key, Sentry DSN, etc.).
 
@@ -55,15 +62,20 @@ Also already present: driver/rides native schemes + Fleet/Enterprise web origins
 
 Dashboard: https://supabase.com/dashboard/project/csfllzzastacofsvcdsc/auth/url-configuration
 
-## Firebase native config
+## Firebase native config — **Android files placed 2026-08-15**
 
-Per app, place secrets **locally / CI only** (do not commit):
+Firebase project: `roam-rush` (Spark). Android apps registered:
+`co.roamenterprise.rush`, `co.roamenterprise.courier`, `co.roamenterprise.partner`.
+
+Per app, place secrets **locally / CI only** (do not commit — gitignored):
 
 | App | Android | iOS |
 |-----|---------|-----|
 | Rush | `apps/dash-customer/android/app/google-services.json` | `apps/dash-customer/ios/App/App/GoogleService-Info.plist` |
 | Courier | `apps/dash-courier/android/app/google-services.json` | `apps/dash-courier/ios/App/App/GoogleService-Info.plist` |
 | Partner | `apps/dash-merchant/android/app/google-services.json` | `apps/dash-merchant/ios/App/App/GoogleService-Info.plist` |
+
+**Status:** Android `google-services.json` present locally for all three. iOS plists still pending (Mac / App Store step). **`FCM_SERVICE_ACCOUNT_JSON` set in Supabase** (Firebase project `roam-rush`, HTTP v1). Redeploy `merchant-push` + `notifications` after secret changes.
 
 `GoogleService-Info.plist` is gitignored. See `docs/roam-rush-ios-setup.md` for APNs entitlements.
 

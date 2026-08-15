@@ -6,6 +6,7 @@ import { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import webpush from "npm:web-push@3.6.7";
 import { applyCors } from "../_shared/corsAllowlist.ts";
+import { sendFcmPush } from "../_shared/fcmSend.ts";
 
 const app = new Hono().basePath("/notifications");
 
@@ -108,58 +109,6 @@ function nativeDeviceToken(sub: PushSubRow, channel: "fcm" | "apns"): string {
     : sub.endpoint;
 }
 
-async function sendFcmLegacy(
-  token: string,
-  title: string,
-  message: string,
-  url: string,
-): Promise<{ ok: boolean; stale: boolean }> {
-  const serverKey = Deno.env.get("FCM_SERVER_KEY")?.trim();
-  if (!serverKey) {
-    console.warn("[notifications] FCM_SERVER_KEY not set; skipping native token");
-    return { ok: false, stale: false };
-  }
-
-  const res = await fetch("https://fcm.googleapis.com/fcm/send", {
-    method: "POST",
-    headers: {
-      Authorization: `key=${serverKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      to: token,
-      notification: { title, body: message },
-      data: { url },
-      priority: "high",
-    }),
-  });
-
-  if (res.status === 404 || res.status === 410) {
-    return { ok: false, stale: true };
-  }
-
-  const payload = await res.json().catch(() => ({})) as {
-    failure?: number;
-    results?: Array<{ error?: string }>;
-  };
-
-  if (!res.ok) {
-    console.error("[notifications] FCM HTTP error:", res.status, payload);
-    return { ok: false, stale: false };
-  }
-
-  const err = payload.results?.[0]?.error;
-  if (err === "NotRegistered" || err === "InvalidRegistration") {
-    return { ok: false, stale: true };
-  }
-  if ((payload.failure ?? 0) > 0 && err) {
-    console.error("[notifications] FCM send failed:", err);
-    return { ok: false, stale: false };
-  }
-
-  return { ok: true, stale: false };
-}
-
 async function fanoutPush(opts: {
   audience: Audience;
   userId: string;
@@ -232,7 +181,7 @@ async function fanoutPush(opts: {
     try {
       if (channel === "fcm" || channel === "apns") {
         const token = nativeDeviceToken(sub, channel);
-        const result = await sendFcmLegacy(token, opts.title, opts.message, opts.url);
+        const result = await sendFcmPush(token, opts.title, opts.message, opts.url, opts.logTag);
         if (result.stale) {
           await sb.from(table).delete().eq("id", sub.id);
         }

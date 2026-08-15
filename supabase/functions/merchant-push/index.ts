@@ -1,12 +1,13 @@
 /**
- * Merchant Web Push + native FCM/APNs — sends notifications to subscribed merchant devices.
+ * Merchant Web Push + native FCM — sends notifications to subscribed merchant devices.
  * Requires MERCHANT_PUSH_SECRET (or FLEET_CRON_SECRET) via X-Merchant-Push-Secret
  * or Authorization: Bearer <secret>. Database webhooks must send the same secret.
- * Native FCM/APNs sends require FCM_SERVER_KEY (Firebase Cloud Messaging legacy server key).
+ * Native sends: FCM_SERVICE_ACCOUNT_JSON (HTTP v1) or legacy FCM_SERVER_KEY.
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import webpush from "npm:web-push@3.6.7";
 import { buildCorsOriginFn } from "../_shared/corsAllowlist.ts";
+import { sendFcmPush } from "../_shared/fcmSend.ts";
 import { requireInternalSecret } from "../_shared/requireInternalSecret.ts";
 import { timingSafeEqual } from "../_shared/timingSafeEqual.ts";
 
@@ -110,60 +111,6 @@ function nativeDeviceToken(sub: PushSubRow, channel: "fcm" | "apns"): string {
     : sub.endpoint;
 }
 
-/** Legacy FCM HTTP API — set FCM_SERVER_KEY in Supabase function secrets. */
-async function sendFcmLegacy(
-  token: string,
-  title: string,
-  message: string,
-  url: string,
-): Promise<{ ok: boolean; stale: boolean }> {
-  const serverKey = Deno.env.get("FCM_SERVER_KEY")?.trim();
-  if (!serverKey) {
-    console.warn("[merchant-push] FCM_SERVER_KEY not set; skipping native token");
-    return { ok: false, stale: false };
-  }
-
-  const res = await fetch("https://fcm.googleapis.com/fcm/send", {
-    method: "POST",
-    headers: {
-      Authorization: `key=${serverKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      to: token,
-      notification: { title, body: message },
-      data: { url },
-      priority: "high",
-    }),
-  });
-
-  if (res.status === 404 || res.status === 410) {
-    return { ok: false, stale: true };
-  }
-
-  const payload = await res.json().catch(() => ({})) as {
-    success?: number;
-    failure?: number;
-    results?: Array<{ error?: string }>;
-  };
-
-  if (!res.ok) {
-    console.error("[merchant-push] FCM HTTP error:", res.status, payload);
-    return { ok: false, stale: false };
-  }
-
-  const err = payload.results?.[0]?.error;
-  if (err === "NotRegistered" || err === "InvalidRegistration") {
-    return { ok: false, stale: true };
-  }
-  if ((payload.failure ?? 0) > 0 && err) {
-    console.error("[merchant-push] FCM send failed:", err);
-    return { ok: false, stale: false };
-  }
-
-  return { ok: true, stale: false };
-}
-
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeadersFor(req) });
@@ -234,7 +181,7 @@ Deno.serve(async (req) => {
       try {
         if (channel === "fcm" || channel === "apns") {
           const token = nativeDeviceToken(sub, channel);
-          const result = await sendFcmLegacy(token, title, message, url);
+          const result = await sendFcmPush(token, title, message, url, "merchant-push");
           if (result.stale) stale.push(sub.endpoint);
           if (result.ok) {
             sent += 1;

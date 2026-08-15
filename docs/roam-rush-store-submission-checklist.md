@@ -10,31 +10,26 @@ Covers **Android + iOS** for all three apps: Rush (`dash-customer`), Courier (`d
 | Roam Courier | `co.roamenterprise.courier` | `pnpm cap:courier:android` | `pnpm cap:courier:ios` |
 | Roam Partner | `co.roamenterprise.partner` | `pnpm cap:partner:android` | `pnpm cap:partner:ios` |
 
-## Branding / icons
+## Branding / icons — **Android launchers + splash updated 2026-08-15**
 
 Splash / status bar colors (already in each `capacitor.config.ts`):
 
-| App | Color |
-|-----|-------|
-| Rush | `#006d43` |
-| Partner | `#10b981` |
-| Courier | `#006d43` (same as Rush until distinct courier brand) |
+| App | Color | Launcher source |
+|-----|-------|-----------------|
+| Rush | `#006d43` | Official RR mark: `public/images/brand/roam-rush-icon-master.png` (+ Play screenshots in `public/images/play-store/`) |
+| Partner | `#10b981` | Official RR Partner mark: `public/images/brand/roam-partner-icon-master.png` (+ Play screenshots in `public/images/play-store/`) |
+| Courier | `#006d43` | Official RR Courier mark: `public/images/brand/roam-courier-icon-master.png` (+ Play screenshots in `public/images/play-store/`) |
 
-Best-effort local branding:
+Regenerated locally (density-correct mipmaps + branded splash):
 
 ```bash
-# From repo root — tints adaptive backgrounds; resizes logos if sharp is installed
+pnpm add -Dw sharp   # once
 pnpm icons:dash-android
-# or: node scripts/generate-dash-android-icons.mjs
 ```
 
-**Before store submit**, regenerate proper adaptive / App Icon assets:
+**Still for Play Console listing (marketing, not the APK icon):** feature graphic 1024×500 + phone screenshots. Optional polish: [Android Asset Studio](https://romannurik.github.io/AndroidAssetStudio/icons-launcher.html) if you want a designer-made adaptive mask later.
 
-1. [Android Asset Studio](https://romannurik.github.io/AndroidAssetStudio/icons-launcher.html) **or**
-2. `pnpm dlx @capacitor/assets generate` with a 1024×1024 master icon per app
-3. Courier: add `apps/dash-courier/public/images/logo.png` (currently no dedicated logo — script falls back to avatar or background-only)
-
-iOS: set App Icon in Xcode Assets (`AppIcon`) from the same 1024 master; do not ship Capacitor default icons.
+iOS App Icons still need a Mac / Xcode pass (`docs/roam-rush-ios-setup.md`).
 
 ## Android (Play Console)
 
@@ -76,7 +71,7 @@ For each app:
 - [ ] WiPay secrets set (`WIPAY_*`)
 - [ ] `GOOGLE_MAPS_API_KEY`, VAPID, FCM configured
 - [ ] `notifications` edge function deployed
-- [ ] Enough merchants + promotions seeded for a credible launch (Gate 0: promotions still 0)
+- [ ] Enough merchants + promotions seeded for a credible launch (Gate 0: 5 active merchants + 3 promos as of 2026-08-15)
 
 ## CI
 

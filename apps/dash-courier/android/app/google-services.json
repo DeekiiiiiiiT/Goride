@@ -1,0 +1,67 @@
+{
+  "project_info": {
+    "project_number": "30100153303",
+    "project_id": "roam-rush",
+    "storage_bucket": "roam-rush.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:30100153303:android:85410c075fae6c2679a192",
+        "android_client_info": {
+          "package_name": "co.roamenterprise.courier"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB7eHnDKDbkz22Re5rdlUJ2CI5sivDiQr0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:30100153303:android:b20a612d8e383b7e79a192",
+        "android_client_info": {
+          "package_name": "co.roamenterprise.partner"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB7eHnDKDbkz22Re5rdlUJ2CI5sivDiQr0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:30100153303:android:d15bb5b637a5fa8e79a192",
+        "android_client_info": {
+          "package_name": "co.roamenterprise.rush"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB7eHnDKDbkz22Re5rdlUJ2CI5sivDiQr0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
