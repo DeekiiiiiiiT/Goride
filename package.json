@@ -75,11 +75,5 @@
   "devDependencies": {
     "typescript": "^5.4.0"
   },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "@tailwindcss/oxide",
-      "esbuild"
-    ]
-  },
   "workspaces": ["apps/*", "packages/*", "services/*"]
 }

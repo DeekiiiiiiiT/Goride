@@ -2,6 +2,8 @@ packages:
   - "apps/*"
   - "packages/*"
   - "services/*"
+
+# pnpm 11: replace onlyBuiltDependencies with allowBuilds
 allowBuilds:
-  '@tailwindcss/oxide': set this to true or false
-  esbuild: set this to true or false
+  "@tailwindcss/oxide": true
+  esbuild: true
