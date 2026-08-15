@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { toast } from 'sonner';
 import { MaterialIcon } from '../signup/components/MaterialIcon';
 import { formatJmd, formatSignedJmd, PartnerTab } from '../lib/partner-utils';
 import { useMerchantEarnings, useMerchantPayoutDetail } from '../hooks/useMerchantEarnings';
@@ -119,13 +118,6 @@ export default function EarningsPage({ onNavigate }: EarningsPageProps) {
           <p className="mb-inset-md text-body-sm text-on-surface-variant">
             Next payout: {data.nextPayoutDate}
           </p>
-          <button
-            type="button"
-            onClick={() => toast.info('Instant payout is coming soon')}
-            className="flex min-h-[48px] items-center justify-center rounded-lg border border-secondary px-6 py-3 text-label-md text-secondary transition-colors hover:bg-secondary/5 active:scale-95"
-          >
-            Instant Payout
-          </button>
         </section>
 
         <section className="flex flex-col gap-inset-sm rounded-xl border border-outline-variant bg-surface-container-lowest p-inset-md shadow-sm">

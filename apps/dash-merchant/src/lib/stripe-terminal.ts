@@ -63,11 +63,7 @@ async function getTerminal(): Promise<TerminalInstance> {
 export function isStripeTerminalSimulated(): boolean {
   try {
     const env = (import.meta as ImportMeta & { env?: Record<string, string | boolean | undefined> }).env;
-    if (env?.VITE_STRIPE_TERMINAL_SIMULATED === 'true' || env?.VITE_STRIPE_TERMINAL_SIMULATED === true) {
-      return true;
-    }
-    // Dev builds default to simulated so local QA works without hardware
-    return Boolean(env?.DEV);
+    return env?.VITE_STRIPE_TERMINAL_SIMULATED === 'true' || env?.VITE_STRIPE_TERMINAL_SIMULATED === true;
   } catch {
     return false;
   }

@@ -195,7 +195,7 @@ export function saveDeliveryAddress(address: DeliveryAddress): void {
 
 /** Persist onboarding delivery address into saved_addresses (local + backend). */
 export async function persistOnboardingAddress(
-  details: DeliveryAddress & { city?: string },
+  details: DeliveryAddress & { city?: string; lat?: number; lng?: number },
 ): Promise<void> {
   saveDeliveryAddress(details);
   const existing = getSavedAddresses();
@@ -206,6 +206,8 @@ export async function persistOnboardingAddress(
     line2: details.line2,
     instructions: details.instructions,
     city: details.city ?? 'Kingston, Jamaica',
+    lat: details.lat,
+    lng: details.lng,
     isDefault: true,
   };
   await upsertSavedAddressAsync(address);

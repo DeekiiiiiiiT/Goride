@@ -33,7 +33,11 @@ export type ActiveDelivery = {
   pickupLng?: number;
   customerName: string;
   customerFirstName: string;
+  customerPhone?: string;
+  storePhone?: string;
   dropoffAddress: string;
+  dropoffLat?: number;
+  dropoffLng?: number;
   gateCode: string;
   unit: string;
   deliveryInstructions: string;

@@ -1,14 +1,15 @@
 import { useRef, useState } from 'react';
 import { resolveFulfillmentType } from '@roam/vertical-config';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
+import { DeliveryMap } from '@/components/map/DeliveryMap';
 import { SlideToConfirm } from '@/components/ui/SlideToConfirm';
 import { WaitTimeSheet } from '@/components/delivery/WaitTimeSheet';
+import { NavigationPickerSheet } from '@/components/ui/NavigationPickerSheet';
 import type { ActiveDelivery } from '@/lib/mockActiveDelivery';
-import { MOCK_GROCERY_PICK_DELIVERY } from '@/lib/mockActiveDelivery';
+import { openPhoneCall, toDialablePhone } from '@/lib/contactLinks';
+import { openNavigationApp } from '@/lib/navigationUrls';
+import { realDispatchProvider } from '@/services/courierDispatch/RealDispatchProvider';
 import { ShopAndPickPage } from './ShopAndPickPage';
-
-const STORE_MAP =
-  'https://lh3.googleusercontent.com/aida-public/AB6AXuDTz49LTqVcEUFH0TIAxjnijRfymvAbWhJt_EUnjEN2Pv6ph6Gf-ie1vfGyJwZg5G43-34WS9AyiJRJdXDB7T5-ON23uaGmkBlz5Gq5oFpvg2pTteelJ5OHYfHDUepn7Iv3g-HFmRKr2svV4AJvyqnOCEv82CXJBAQoTYwOC0URw2MWloJ99wY7vMKuzRH-P46ox3LOdrCR9Bzwa-q9Co4snbpyAVPZaJz2uH6x9dFBrFdAXT0si1CwY3BE1gteCLHkVbAiW4a-1lU';
 
 type AtStorePageProps = {
   delivery: ActiveDelivery;
@@ -28,14 +29,9 @@ export function AtStorePage({
   const fulfillment = resolveFulfillmentType(delivery.fulfillment_type);
 
   if (fulfillment === 'pick_and_pack') {
-    const pickDelivery = {
-      ...MOCK_GROCERY_PICK_DELIVERY,
-      orderId: delivery.orderId,
-      customerName: delivery.customerName,
-    };
     return (
       <ShopAndPickPage
-        delivery={pickDelivery}
+        delivery={delivery}
         onClose={onClose}
         onConfirmPickup={onConfirmPickup}
         onRequestUnassign={onRequestUnassign}
@@ -45,6 +41,8 @@ export function AtStorePage({
   }
 
   const storeName = delivery.storeName ?? delivery.restaurant;
+  const storePhone = toDialablePhone(delivery.storePhone);
+  const gps = realDispatchProvider.getLastCoords();
   const [checked, setChecked] = useState<Record<string, boolean>>(() => {
     const initial: Record<string, boolean> = {};
     delivery.checklist.forEach((item) => {
@@ -54,6 +52,7 @@ export function AtStorePage({
   });
   const [confirmAll, setConfirmAll] = useState(false);
   const [waitSheetOpen, setWaitSheetOpen] = useState(false);
+  const [navPickerOpen, setNavPickerOpen] = useState(false);
   const [pickupPhotoUrl, setPickupPhotoUrl] = useState<string | undefined>();
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -99,13 +98,25 @@ export function AtStorePage({
               </div>
               <p className="mb-4 text-body-md text-on-surface-variant">{delivery.pickupAddressFull}</p>
               <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  className="flex items-center justify-center gap-2 rounded-lg bg-surface-container-high py-2.5 text-label-lg font-semibold text-on-surface-variant transition-colors hover:bg-surface-container-highest active:scale-95"
-                >
-                  <MaterialIcon name="call" />
-                  Call Store
-                </button>
+                {storePhone ? (
+                  <button
+                    type="button"
+                    onClick={() => openPhoneCall(storePhone)}
+                    className="flex items-center justify-center gap-2 rounded-lg bg-surface-container-high py-2.5 text-label-lg font-semibold text-on-surface-variant transition-colors hover:bg-surface-container-highest active:scale-95"
+                  >
+                    <MaterialIcon name="call" />
+                    Call Store
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setNavPickerOpen(true)}
+                    className="flex items-center justify-center gap-2 rounded-lg bg-surface-container-high py-2.5 text-label-lg font-semibold text-on-surface-variant transition-colors hover:bg-surface-container-highest active:scale-95"
+                  >
+                    <MaterialIcon name="map" />
+                    Open Maps
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={onReportIssue}
@@ -120,12 +131,25 @@ export function AtStorePage({
         </section>
 
         <section className="mb-6">
-          <div className="relative h-40 overflow-hidden rounded-xl border border-outline-variant bg-surface-container shadow-sm">
-            <img alt="" src={STORE_MAP} className="h-full w-full object-cover" />
+          <button
+            type="button"
+            onClick={() => setNavPickerOpen(true)}
+            className="relative h-40 w-full overflow-hidden rounded-xl border border-outline-variant bg-surface-container shadow-sm active:scale-[0.99]"
+          >
+            <DeliveryMap
+              className="pointer-events-none h-full w-full"
+              height="160px"
+              interactive={false}
+              courierLat={gps.lat}
+              courierLng={gps.lng}
+              destinationLat={delivery.pickupLat}
+              destinationLng={delivery.pickupLng}
+              destinationLabel={storeName}
+            />
             <div className="absolute right-2 top-2 rounded-full bg-surface p-2 shadow-md">
               <MaterialIcon name="navigation" className="text-primary" />
             </div>
-          </div>
+          </button>
         </section>
 
         <section className="mb-6">
@@ -244,6 +268,20 @@ export function AtStorePage({
           setWaitSheetOpen(false);
           onRequestUnassign();
         }}
+      />
+
+      <NavigationPickerSheet
+        open={navPickerOpen}
+        destination={storeName}
+        onSelect={(app) => {
+          openNavigationApp(app as 'google' | 'waze' | 'apple', {
+            lat: delivery.pickupLat,
+            lng: delivery.pickupLng,
+            address: delivery.pickupAddressFull || delivery.pickupAddress,
+          });
+          setNavPickerOpen(false);
+        }}
+        onClose={() => setNavPickerOpen(false)}
       />
     </div>
   );

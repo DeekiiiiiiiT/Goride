@@ -2,16 +2,15 @@ import { useMemo, useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { SlideToConfirm } from '@/components/ui/SlideToConfirm';
 import { FRESH_MART_LOGO, type ActiveDelivery } from '@/lib/mockActiveDelivery';
+import { openPhoneCall, openSmsMessage, toDialablePhone } from '@/lib/contactLinks';
 
 type ShopAndPickPageProps = {
   delivery: ActiveDelivery;
   onClose: () => void;
-  onConfirmPickup: () => void;
+  onConfirmPickup: (pickupPhotoUrl?: string) => void;
   onRequestUnassign: () => void;
   onReportIssue: () => void;
 };
-
-const TOTAL_ITEMS = 7;
 
 export function ShopAndPickPage({
   delivery,
@@ -20,6 +19,9 @@ export function ShopAndPickPage({
   onReportIssue,
 }: ShopAndPickPageProps) {
   const storeName = delivery.storeName ?? delivery.restaurant;
+  const storePhone = toDialablePhone(delivery.storePhone);
+  const customerPhone = toDialablePhone(delivery.customerPhone);
+  const totalItems = Math.max(1, delivery.checklist.length || delivery.itemCount || 1);
   const [picked, setPicked] = useState<Record<string, boolean>>(() => {
     const initial: Record<string, boolean> = {};
     delivery.checklist.forEach((item) => {
@@ -30,13 +32,13 @@ export function ShopAndPickPage({
     return initial;
   });
 
-  const pickedCount = useMemo(() => {
-    const base = Object.values(picked).filter(Boolean).length;
-    return Math.max(base, 3);
-  }, [picked]);
+  const pickedCount = useMemo(
+    () => Object.values(picked).filter(Boolean).length,
+    [picked],
+  );
 
-  const progressPct = (pickedCount / TOTAL_ITEMS) * 100;
-  const canCheckout = pickedCount >= TOTAL_ITEMS - 1;
+  const progressPct = (pickedCount / totalItems) * 100;
+  const canCheckout = pickedCount >= Math.max(1, totalItems - 1);
 
   const togglePicked = (id: string) => {
     setPicked((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -78,7 +80,7 @@ export function ShopAndPickPage({
             <p className="text-label-lg opacity-90">Progress</p>
             <div className="mt-2">
               <p className="text-headline-md font-bold leading-none">
-                {pickedCount} of {TOTAL_ITEMS}
+                {pickedCount} of {totalItems}
               </p>
               <p className="mt-1 text-label-md">items picked</p>
             </div>
@@ -204,22 +206,30 @@ export function ShopAndPickPage({
       </main>
 
       <div className="fixed bottom-0 left-0 z-50 w-full">
-        <div className="mx-4 mb-4 flex gap-3 rounded-2xl border border-outline-variant bg-white/85 p-3 shadow-lg backdrop-blur-md">
-          <button
-            type="button"
-            className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-surface-container-high py-3 text-label-lg font-semibold text-on-surface"
-          >
-            <MaterialIcon name="chat_bubble" className="text-xl" />
-            Message customer
-          </button>
-          <button
-            type="button"
-            className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-surface-container-high py-3 text-label-lg font-semibold text-on-surface"
-          >
-            <MaterialIcon name="call" className="text-xl" />
-            Call store
-          </button>
-        </div>
+        {(customerPhone || storePhone) && (
+          <div className="mx-4 mb-4 flex gap-3 rounded-2xl border border-outline-variant bg-white/85 p-3 shadow-lg backdrop-blur-md">
+            {customerPhone && (
+              <button
+                type="button"
+                onClick={() => openSmsMessage(customerPhone, 'Hi, this is your Roam Rush courier shopping your order.')}
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-surface-container-high py-3 text-label-lg font-semibold text-on-surface"
+              >
+                <MaterialIcon name="chat_bubble" className="text-xl" />
+                Message customer
+              </button>
+            )}
+            {storePhone && (
+              <button
+                type="button"
+                onClick={() => openPhoneCall(storePhone)}
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-surface-container-high py-3 text-label-lg font-semibold text-on-surface"
+              >
+                <MaterialIcon name="call" className="text-xl" />
+                Call store
+              </button>
+            )}
+          </div>
+        )}
         <div className="border-t border-outline-variant bg-surface px-4 pb-safe pt-4 shadow-[0_-8px_24px_rgba(0,0,0,0.05)]">
           {canCheckout ? (
             <SlideToConfirm

@@ -754,12 +754,23 @@ async function clearCourierActiveOrderOnCancel(
   serviceSb: ReturnType<typeof getServiceSupabase>,
   status: string,
   courierId: string | null | undefined,
+  orderId?: string,
 ) {
-  if (status !== "cancelled" || !courierId) return;
-  await serviceSb
-    .from("courier_availability")
-    .update({ active_order_id: null })
-    .eq("driver_id", courierId);
+  if (status !== "cancelled") return;
+  // Clear by driver_id when known
+  if (courierId) {
+    await serviceSb
+      .from("courier_availability")
+      .update({ active_order_id: null })
+      .eq("driver_id", courierId);
+  }
+  // Also clear by active_order_id so a mismatched courier_id cannot leave a dangling slot
+  if (orderId) {
+    await serviceSb
+      .from("courier_availability")
+      .update({ active_order_id: null })
+      .eq("active_order_id", orderId);
+  }
 }
 
 app.put("/orders/:id/status", async (c) => {
@@ -824,6 +835,7 @@ app.put("/orders/:id/status", async (c) => {
       serviceSb,
       status,
       orderRow.courier_id as string | null | undefined,
+      id,
     );
 
     const shiftHeader = c.req.header("X-Staff-Shift-Token");
@@ -962,6 +974,7 @@ app.put("/orders/:id/status", async (c) => {
     serviceSb,
     status,
     (order as { courier_id?: string | null }).courier_id,
+    id,
   );
 
   // Soft-launch: when merchant marks ready, fan out courier offers
@@ -1158,7 +1171,8 @@ app.get("/courier/available-orders", async (c) => {
     .from("orders")
     .select(`
       *,
-      merchant:merchants(id, name, address, lat, lng)
+      merchant:merchants(id, name, address, lat, lng, phone, vertical_type, fulfillment_type),
+      customer:customers(name, phone)
     `)
     .eq("status", "ready")
     .is("courier_id", null)
@@ -2049,6 +2063,29 @@ app.post("/merchant/push/subscribe", async (c) => {
   if (!merchant) return c.json({ error: "Not a merchant" }, 403);
 
   const body = await c.req.json();
+  const nativePlatform = body.platform as string | undefined;
+  const nativeToken = typeof body.token === "string" ? body.token.trim() : "";
+
+  // Capacitor FCM/APNs device token
+  if (nativeToken && (nativePlatform === "fcm" || nativePlatform === "apns")) {
+    const endpoint = `${nativePlatform}:${nativeToken}`;
+    const { error } = await supabase
+      .from("merchant_push_subscriptions")
+      .upsert({
+        merchant_id: merchant.id,
+        user_id: user.id,
+        endpoint,
+        channel: nativePlatform,
+        p256dh: null,
+        auth: null,
+        user_agent: c.req.header("User-Agent") || null,
+        last_used_at: new Date().toISOString(),
+      }, { onConflict: "endpoint" });
+
+    if (error) return c.json({ error: error.message }, 500);
+    return c.json({ ok: true, channel: nativePlatform });
+  }
+
   const endpoint = body.endpoint as string;
   const keys = body.keys as { p256dh?: string; auth?: string };
   if (!endpoint || !keys?.p256dh || !keys?.auth) {
@@ -2061,6 +2098,7 @@ app.post("/merchant/push/subscribe", async (c) => {
       merchant_id: merchant.id,
       user_id: user.id,
       endpoint,
+      channel: "web",
       p256dh: keys.p256dh,
       auth: keys.auth,
       user_agent: c.req.header("User-Agent") || null,
@@ -2068,7 +2106,7 @@ app.post("/merchant/push/subscribe", async (c) => {
     }, { onConflict: "endpoint" });
 
   if (error) return c.json({ error: error.message }, 500);
-  return c.json({ ok: true });
+  return c.json({ ok: true, channel: "web" });
 });
 
 app.delete("/merchant/push/unsubscribe", async (c) => {

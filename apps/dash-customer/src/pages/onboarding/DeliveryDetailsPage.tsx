@@ -12,6 +12,8 @@ type DeliveryDetailsPageProps = {
     line2?: string;
     instructions?: string;
     label: AddressLabel;
+    lat?: number;
+    lng?: number;
   }) => void;
   onOutOfZone?: (address: AddressSelection) => void;
 };
@@ -29,9 +31,14 @@ export function DeliveryDetailsPage({ address, onBack, onSave, onOutOfZone }: De
   const [label, setLabel] = useState<AddressLabel>('home');
 
   const handleSave = () => {
-    const zone = checkDeliveryZone({ line1, line2 });
+    const zone = checkDeliveryZone({
+      line1,
+      line2,
+      lat: address.lat,
+      lng: address.lng,
+    });
     if (!zone.inZone) {
-      onOutOfZone?.({ line1, line2 });
+      onOutOfZone?.({ line1, line2, lat: address.lat, lng: address.lng });
       return;
     }
     onSave({
@@ -39,6 +46,8 @@ export function DeliveryDetailsPage({ address, onBack, onSave, onOutOfZone }: De
       line2: line2 || undefined,
       instructions: instructions || undefined,
       label,
+      lat: address.lat,
+      lng: address.lng,
     });
   };
 
@@ -73,6 +82,10 @@ export function DeliveryDetailsPage({ address, onBack, onSave, onOutOfZone }: De
           <button
             type="button"
             className="absolute bottom-4 right-4 w-10 h-10 bg-surface text-on-surface rounded-full shadow-md flex items-center justify-center hover:bg-surface-variant transition-colors"
+            aria-hidden
+            tabIndex={-1}
+            disabled
+            title="Location set on previous screen"
           >
             <MaterialIcon name="my_location" />
           </button>

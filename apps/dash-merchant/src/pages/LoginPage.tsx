@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { GOOGLE_OAUTH_EMAIL_ONLY_SCOPES, useForgotPassword } from '@roam/auth-client';
+import { isNativeCapacitorPlatform } from '@roam/types';
 import { supabase } from '../lib/partner-supabase';
 import { toast } from 'sonner';
 import { MaterialIcon } from '../signup/components/MaterialIcon';
@@ -79,15 +80,22 @@ export default function LoginPage({
         PARTNER_OAUTH_INTENT_KEY,
         isSignUp ? PARTNER_OAUTH_INTENT_SIGNUP : PARTNER_OAUTH_INTENT_LOGIN,
       );
-      const { error } = await supabase.auth.signInWithOAuth({
+      const redirectTo = getPartnerAuthRedirectUrl();
+      const native = isNativeCapacitorPlatform();
+      const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: getPartnerAuthRedirectUrl(),
+          redirectTo,
+          skipBrowserRedirect: native,
           scopes: GOOGLE_OAUTH_EMAIL_ONLY_SCOPES,
           queryParams: { prompt: 'select_account' },
         },
       });
       if (error) throw error;
+      if (native && data?.url) {
+        const { Browser } = await import('@capacitor/browser');
+        await Browser.open({ url: data.url });
+      }
     } catch (error) {
       clearPartnerOAuthIntent();
       toast.error(
@@ -97,6 +105,7 @@ export default function LoginPage({
             ? 'Google sign-up failed.'
             : 'Google sign-in failed.',
       );
+    } finally {
       setOauthLoading(false);
     }
   };
@@ -121,7 +130,7 @@ export default function LoginPage({
           options: {
             emailRedirectTo: inviteMode
               ? `${window.location.origin}${window.location.pathname}`
-              : `${window.location.origin}/`,
+              : getPartnerAuthRedirectUrl(),
           },
         });
         if (error) throw error;

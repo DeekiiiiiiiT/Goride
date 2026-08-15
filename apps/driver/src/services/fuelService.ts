@@ -1,4 +1,3 @@
-import { publicAnonKey } from '../utils/supabase/info';
 import { supabase } from '../utils/supabase/client';
 import { FuelCard, FuelEntry, MileageAdjustment, FuelScenario } from '../types/fuel';
 import { FinancialTransaction } from '../types/data';
@@ -6,10 +5,22 @@ import { API_ENDPOINTS } from './apiConfig';
 import { settlementService } from './settlementService';
 import { throwIfCatalogGateBlocked } from './api';
 
-/** Fuel controller requires a real user JWT (strict auth) — never send anon alone. */
+/**
+ * Fuel controller is requireAuth({ strict: true }) — anon key always 401s.
+ * Refresh near-expiry tokens; never fall back to anon (that looked like "no card").
+ */
 async function authHeaders(contentType: string | null = 'application/json'): Promise<Record<string, string>> {
-  const { data: { session } } = await supabase.auth.getSession();
-  const token = session?.access_token || publicAnonKey;
+  let { data: { session } } = await supabase.auth.getSession();
+  const expiresAt = session?.expires_at ?? 0;
+  const now = Math.floor(Date.now() / 1000);
+  if (session && expiresAt - now < 90) {
+    const refreshed = await supabase.auth.refreshSession();
+    if (!refreshed.error && refreshed.data.session) session = refreshed.data.session;
+  }
+  const token = session?.access_token;
+  if (!token) {
+    throw new Error('You must be signed in to load fuel cards.');
+  }
   const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
   if (contentType) headers['Content-Type'] = contentType;
   return headers;

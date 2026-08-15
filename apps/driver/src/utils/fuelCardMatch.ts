@@ -21,6 +21,10 @@ export function findFuelCardByCode(
   });
 }
 
+function isActiveFuelCardStatus(status: string | undefined | null): boolean {
+  return String(status || '').trim().toLowerCase() === 'active';
+}
+
 /** Active card assigned to a Roam vehicle (preferred Gas Card path). */
 export function findActiveFuelCardForVehicle(
   fuelCards: FuelCard[] | undefined,
@@ -28,7 +32,7 @@ export function findActiveFuelCardForVehicle(
 ): FuelCard | undefined {
   if (!vehicleId || !fuelCards?.length) return undefined;
   return fuelCards.find(
-    (c) => c.status === 'Active' && c.assignedVehicleId === vehicleId,
+    (c) => isActiveFuelCardStatus(c.status) && c.assignedVehicleId === vehicleId,
   );
 }
 
@@ -36,10 +40,19 @@ export function findActiveFuelCardForVehicle(
 export function findActiveFuelCardForDriver(
   fuelCards: FuelCard[] | undefined,
   driverId: string | undefined | null,
+  extraDriverIds?: Array<string | null | undefined>,
 ): FuelCard | undefined {
-  if (!driverId || !fuelCards?.length) return undefined;
+  if (!fuelCards?.length) return undefined;
+  const ids = new Set(
+    [driverId, ...(extraDriverIds || [])]
+      .map((id) => String(id || '').trim())
+      .filter(Boolean),
+  );
+  if (ids.size === 0) return undefined;
   return fuelCards.find(
-    (c) => c.status === 'Active' && c.assignedDriverId === driverId,
+    (c) =>
+      isActiveFuelCardStatus(c.status) &&
+      ids.has(String(c.assignedDriverId || '').trim()),
   );
 }
 
@@ -49,10 +62,15 @@ export function findActiveFuelCardForDriver(
  */
 export function findActiveFuelCardForSession(
   fuelCards: FuelCard[] | undefined,
-  opts: { vehicleId?: string | null; driverId?: string | null },
+  opts: {
+    vehicleId?: string | null;
+    driverId?: string | null;
+    /** Roam / Uber / auth aliases — Card Inventory may store any of them */
+    driverIds?: Array<string | null | undefined>;
+  },
 ): FuelCard | undefined {
   return (
     findActiveFuelCardForVehicle(fuelCards, opts.vehicleId) ||
-    findActiveFuelCardForDriver(fuelCards, opts.driverId)
+    findActiveFuelCardForDriver(fuelCards, opts.driverId, opts.driverIds)
   );
 }

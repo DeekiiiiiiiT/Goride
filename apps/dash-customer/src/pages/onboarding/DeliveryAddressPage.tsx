@@ -1,31 +1,24 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { reverseGeocode } from '@roam/location';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
+import { AddressAutocomplete } from '@/components/ui/AddressAutocomplete';
+import {
+  getSavedAddresses,
+  type SavedAddress,
+} from '@/lib/addressStorage';
 import { checkDeliveryZone } from '@/lib/deliveryZones';
+import {
+  getRushCurrentPosition,
+  requestRushGeolocationPermission,
+} from '@/lib/rushGeolocation';
+import { toast } from '@/lib/toast';
 
 export type AddressSelection = {
   line1: string;
   line2?: string;
+  lat?: number;
+  lng?: number;
 };
-
-type SavedAddressItem = {
-  id: string;
-  label: string;
-  line1: string;
-  line2: string;
-  icon: string;
-};
-
-const SAVED_ADDRESSES: SavedAddressItem[] = [
-  { id: 'home', label: 'Home', line1: '45 Constant Spring Rd, Kingston', line2: '', icon: 'home' },
-  { id: 'work', label: 'Work', line1: '123 Business Park, Kingston', line2: '', icon: 'work' },
-  {
-    id: 'recent',
-    label: '789 Valencia St',
-    line1: 'Apt 4B, San Francisco, CA',
-    line2: 'Apt 4B',
-    icon: 'history',
-  },
-];
 
 type DeliveryAddressPageProps = {
   onBack: () => void;
@@ -33,27 +26,48 @@ type DeliveryAddressPageProps = {
   onOutOfZone?: (address: AddressSelection) => void;
 };
 
+function labelIcon(label: SavedAddress['label']): string {
+  if (label === 'home') return 'home';
+  if (label === 'work') return 'work';
+  return 'history';
+}
+
+function labelTitle(addr: SavedAddress): string {
+  if (addr.label === 'home') return 'Home';
+  if (addr.label === 'work') return 'Work';
+  return addr.line1;
+}
+
 export function DeliveryAddressPage({ onBack, onConfirm, onOutOfZone }: DeliveryAddressPageProps) {
-  const [searchQuery, setSearchQuery] = useState('');
+  const [line1, setLine1] = useState('');
   const [selected, setSelected] = useState<AddressSelection | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [saved, setSaved] = useState<SavedAddress[]>([]);
+  const [locating, setLocating] = useState(false);
 
-  const selectAddress = (item: SavedAddressItem) => {
+  useEffect(() => {
+    setSaved(getSavedAddresses());
+  }, []);
+
+  const selectSaved = (item: SavedAddress) => {
     setSelectedId(item.id);
-    if (item.id === 'home') {
-      setSelected({ line1: '45 Constant Spring Rd' });
-      return;
-    }
-    if (item.id === 'work') {
-      setSelected({ line1: '123 Business Park, Kingston' });
-      return;
-    }
-    setSelected({ line1: '789 Valencia St', line2: 'Apt 4B' });
+    setLine1(item.line1);
+    setSelected({
+      line1: item.line1,
+      line2: item.line2,
+      lat: item.lat,
+      lng: item.lng,
+    });
   };
 
   const handleConfirm = () => {
-    if (!selected) return;
-    const zone = checkDeliveryZone(selected);
+    if (!selected?.line1.trim()) return;
+    const zone = checkDeliveryZone({
+      line1: selected.line1,
+      line2: selected.line2,
+      lat: selected.lat,
+      lng: selected.lng,
+    });
     if (!zone.inZone) {
       onOutOfZone?.(selected);
       return;
@@ -61,10 +75,35 @@ export function DeliveryAddressPage({ onBack, onConfirm, onOutOfZone }: Delivery
     onConfirm(selected);
   };
 
+  const useCurrentLocation = async () => {
+    setLocating(true);
+    try {
+      const perm = await requestRushGeolocationPermission();
+      if (perm !== 'granted') {
+        toast.error('Location permission is required to use your current location.');
+        return;
+      }
+      const coords = await getRushCurrentPosition();
+      const geo = await reverseGeocode(coords.lat, coords.lng);
+      const next: AddressSelection = {
+        line1: geo.streetAddress || geo.formattedAddress || `${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}`,
+        lat: coords.lat,
+        lng: coords.lng,
+      };
+      setSelectedId('current');
+      setLine1(next.line1);
+      setSelected(next);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not get current location');
+    } finally {
+      setLocating(false);
+    }
+  };
+
   return (
     <div className="app-fullscreen-screen bg-surface-container-lowest text-on-surface antialiased">
       <main className="w-full max-w-md h-full flex flex-col relative bg-surface-container-lowest mx-auto pt-safe">
-      <header className="flex items-center justify-between px-4 min-h-16 w-full shrink-0 z-10">
+        <header className="flex items-center justify-between px-4 min-h-16 w-full shrink-0 z-10">
           <button
             type="button"
             onClick={onBack}
@@ -81,7 +120,7 @@ export function DeliveryAddressPage({ onBack, onConfirm, onOutOfZone }: Delivery
             </h1>
           </section>
 
-          <section className="relative w-full h-[309px] min-h-[250px] rounded-[24px] overflow-hidden shadow-sm border border-surface-variant shrink-0">
+          <section className="relative w-full h-[220px] min-h-[180px] rounded-[24px] overflow-hidden shadow-sm border border-surface-variant shrink-0">
             <div
               className="absolute inset-0 bg-surface-variant bg-cover bg-center"
               style={{ backgroundImage: "url('/images/address-map.png')" }}
@@ -94,14 +133,14 @@ export function DeliveryAddressPage({ onBack, onConfirm, onOutOfZone }: Delivery
             </div>
             <button
               type="button"
-              onClick={() => {
-                setSelectedId('current');
-                setSelected({ line1: '45 Constant Spring Rd, Kingston' });
-              }}
-              className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-surface-container-lowest text-primary px-5 py-3 rounded-full shadow-[0px_10px_30px_rgba(0,0,0,0.08)] flex items-center gap-2 active:scale-95 transition-transform duration-200"
+              disabled={locating}
+              onClick={() => void useCurrentLocation()}
+              className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-surface-container-lowest text-primary px-5 py-3 rounded-full shadow-[0px_10px_30px_rgba(0,0,0,0.08)] flex items-center gap-2 active:scale-95 transition-transform duration-200 disabled:opacity-60"
             >
               <MaterialIcon name="my_location" className="text-[20px]" />
-              <span className="text-sm font-semibold tracking-wide">Use current location</span>
+              <span className="text-sm font-semibold tracking-wide">
+                {locating ? 'Locating…' : 'Use current location'}
+              </span>
             </button>
           </section>
 
@@ -111,60 +150,65 @@ export function DeliveryAddressPage({ onBack, onConfirm, onOutOfZone }: Delivery
             <div className="flex-1 h-px bg-surface-variant" />
           </div>
 
-          <section className="relative">
-            <div className="flex items-center bg-surface-container rounded-xl px-4 py-4 transition-all duration-200 focus-within:bg-surface-container-lowest focus-within:ring-2 focus-within:ring-primary focus-within:shadow-sm">
-              <MaterialIcon name="search" className="text-outline mr-3" />
-              <input
-                className="w-full bg-transparent border-none outline-none text-base text-on-surface placeholder:text-outline p-0 focus:ring-0"
-                placeholder="Enter your address"
-                type="text"
-                value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
-                  if (e.target.value.trim()) {
-                    setSelectedId('search');
-                    setSelected({ line1: e.target.value.trim() });
-                  }
-                }}
-              />
-            </div>
+          <section>
+            <AddressAutocomplete
+              value={line1}
+              onChange={(v) => {
+                setLine1(v);
+                setSelectedId('search');
+                setSelected(v.trim() ? { line1: v.trim(), lat: selected?.lat, lng: selected?.lng } : null);
+              }}
+              onSelect={(s) => {
+                setLine1(s.line1);
+                setSelectedId(s.id);
+                setSelected({
+                  line1: s.line1,
+                  line2: s.line2,
+                  lat: s.lat,
+                  lng: s.lng,
+                });
+              }}
+              placeholder="Search for address in Kingston"
+            />
           </section>
 
-          <section className="flex flex-col gap-2">
-            <h2 className="text-xs font-medium text-outline-variant uppercase tracking-wider mb-2">
-              Recent &amp; Saved
-            </h2>
-            <ul className="flex flex-col">
-              {SAVED_ADDRESSES.map((item) => (
-                <li key={item.id}>
-                  <button
-                    type="button"
-                    onClick={() => selectAddress(item)}
-                    className={`w-full flex items-center gap-4 py-3 active:bg-surface-variant transition-colors rounded-lg -mx-2 px-2 border-b border-surface-variant/50 last:border-0 text-left ${
-                      selectedId === item.id ? 'bg-surface-container-low' : ''
-                    }`}
-                  >
-                    <div className="bg-surface-container-high p-2 rounded-full flex items-center justify-center text-outline">
-                      <MaterialIcon name={item.icon} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold tracking-wide text-on-surface">{item.label}</p>
-                      <p className="text-sm text-outline mt-0.5 truncate">
-                        {item.id === 'recent' ? item.line1 : item.line1}
-                      </p>
-                    </div>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </section>
+          {saved.length > 0 ? (
+            <section className="flex flex-col gap-2">
+              <h2 className="text-xs font-medium text-outline-variant uppercase tracking-wider mb-2">
+                Recent &amp; Saved
+              </h2>
+              <ul className="flex flex-col">
+                {saved.map((item) => (
+                  <li key={item.id}>
+                    <button
+                      type="button"
+                      onClick={() => selectSaved(item)}
+                      className={`w-full flex items-center gap-4 py-3 active:bg-surface-variant transition-colors rounded-lg -mx-2 px-2 border-b border-surface-variant/50 last:border-0 text-left ${
+                        selectedId === item.id ? 'bg-surface-container-low' : ''
+                      }`}
+                    >
+                      <div className="bg-surface-container-high p-2 rounded-full flex items-center justify-center text-outline">
+                        <MaterialIcon name={labelIcon(item.label)} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold tracking-wide text-on-surface">
+                          {labelTitle(item)}
+                        </p>
+                        <p className="text-sm text-outline mt-0.5 truncate">{item.line1}</p>
+                      </div>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
         </div>
 
         <div className="absolute bottom-0 left-0 w-full bg-surface-container-lowest/90 backdrop-blur-md px-4 py-4 pb-safe shadow-[0px_-10px_30px_rgba(0,0,0,0.03)] z-50">
           <button
             type="button"
             onClick={handleConfirm}
-            disabled={!selected}
+            disabled={!selected?.line1.trim()}
             className="w-full bg-primary text-on-primary text-sm font-semibold tracking-wide py-4 rounded-xl shadow-md active:scale-[0.98] transition-transform duration-200 flex justify-center items-center disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Confirm Address

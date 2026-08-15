@@ -490,6 +490,10 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
         .update({ active_order_id: null })
         .eq("driver_id", order.courier_id);
     }
+    await serviceSb
+      .from("courier_availability")
+      .update({ active_order_id: null })
+      .eq("active_order_id", id);
 
     // Queue refund for paid orders (provider call may be pending if WiPay refund URL unset)
     let refundQueued = false;

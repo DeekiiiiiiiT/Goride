@@ -1,16 +1,24 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
+  addFavoriteItem,
   addFavoriteMerchant,
+  fetchFavoriteItems,
   fetchFavoriteMerchantIds,
   isCustomerLoggedIn,
+  removeFavoriteItem,
   removeFavoriteMerchant,
 } from './customerApi';
+import {
+  parseFavoriteItemKey,
+  toFavoriteItemKey,
+  type FavoriteItemKey,
+} from './favoriteItemKey';
+
+export { parseFavoriteItemKey, toFavoriteItemKey, type FavoriteItemKey } from './favoriteItemKey';
 
 const LEGACY_KEY = 'roam-dash-favorites';
 const RESTAURANTS_KEY = 'roam-dash-favorite-restaurants';
 const ITEMS_KEY = 'roam-dash-favorite-items';
-
-export type FavoriteItemKey = `${string}:${string}`;
 
 type FavoritesListener = () => void;
 
@@ -35,6 +43,11 @@ function migrateLegacyRestaurants(): string[] {
 
 function writeRestaurantIds(ids: string[]): void {
   localStorage.setItem(RESTAURANTS_KEY, JSON.stringify(ids));
+  notifyListeners();
+}
+
+function writeItemKeys(keys: FavoriteItemKey[]): void {
+  localStorage.setItem(ITEMS_KEY, JSON.stringify(keys));
   notifyListeners();
 }
 
@@ -67,7 +80,7 @@ export function isFavorite(merchantId: string): boolean {
 }
 
 export function isFavoriteItem(merchantId: string, itemId: string): boolean {
-  return getFavoriteItems().includes(`${merchantId}:${itemId}`);
+  return getFavoriteItems().includes(toFavoriteItemKey(merchantId, itemId));
 }
 
 /** Optimistic local toggle; syncs to delivery edge when logged in. */
@@ -112,32 +125,93 @@ export async function toggleFavoriteAsync(merchantId: string): Promise<boolean> 
 }
 
 export function toggleFavoriteItem(merchantId: string, itemId: string): boolean {
-  const key = `${merchantId}:${itemId}` as FavoriteItemKey;
+  const key = toFavoriteItemKey(merchantId, itemId);
   const current = getFavoriteItems();
   const exists = current.includes(key);
   const next = exists ? current.filter((k) => k !== key) : [...current, key];
-  localStorage.setItem(ITEMS_KEY, JSON.stringify(next));
-  notifyListeners();
+  writeItemKeys(next);
+
+  void (async () => {
+    if (!(await isCustomerLoggedIn())) return;
+    try {
+      if (exists) await removeFavoriteItem(merchantId, itemId);
+      else await addFavoriteItem(merchantId, itemId);
+    } catch {
+      writeItemKeys(current);
+    }
+  })();
+
   return !exists;
 }
 
-/** Pull merchant favorites from backend when logged in. */
-export async function syncFavoritesFromBackend(): Promise<string[]> {
-  if (!(await isCustomerLoggedIn())) return getFavoriteRestaurants();
-  try {
-    const remote = await fetchFavoriteMerchantIds();
-    const local = getFavoriteRestaurants();
-    // Union: keep any local-only ids that failed to sync earlier, then push missing to server
-    const merged = Array.from(new Set([...remote, ...local]));
-    writeRestaurantIds(merged);
+export async function toggleFavoriteItemAsync(merchantId: string, itemId: string): Promise<boolean> {
+  const key = toFavoriteItemKey(merchantId, itemId);
+  const current = getFavoriteItems();
+  const exists = current.includes(key);
+  const next = exists ? current.filter((k) => k !== key) : [...current, key];
+  writeItemKeys(next);
 
-    const missingOnServer = local.filter((id) => !remote.includes(id));
-    await Promise.all(
-      missingOnServer.map((id) => addFavoriteMerchant(id).catch(() => undefined)),
-    );
-    return merged;
+  if (await isCustomerLoggedIn()) {
+    try {
+      if (exists) await removeFavoriteItem(merchantId, itemId);
+      else await addFavoriteItem(merchantId, itemId);
+    } catch (err) {
+      writeItemKeys(current);
+      throw err;
+    }
+  }
+
+  return !exists;
+}
+
+async function syncMerchantFavoritesFromBackend(): Promise<string[]> {
+  const remote = await fetchFavoriteMerchantIds();
+  const local = getFavoriteRestaurants();
+  const merged = Array.from(new Set([...remote, ...local]));
+  writeRestaurantIds(merged);
+
+  const missingOnServer = local.filter((id) => !remote.includes(id));
+  await Promise.all(
+    missingOnServer.map((id) => addFavoriteMerchant(id).catch(() => undefined)),
+  );
+  return merged;
+}
+
+async function syncItemFavoritesFromBackend(): Promise<FavoriteItemKey[]> {
+  const remoteRows = await fetchFavoriteItems();
+  const remote = remoteRows.map((row) => toFavoriteItemKey(row.merchantId, row.menuItemId));
+  const local = getFavoriteItems();
+  const merged = Array.from(new Set([...remote, ...local])) as FavoriteItemKey[];
+  writeItemKeys(merged);
+
+  const remoteSet = new Set(remote);
+  const missingOnServer = local.filter((key) => !remoteSet.has(key));
+  await Promise.all(
+    missingOnServer.map((key) => {
+      const parsed = parseFavoriteItemKey(key);
+      if (!parsed) return Promise.resolve();
+      return addFavoriteItem(parsed.merchantId, parsed.itemId).catch(() => undefined);
+    }),
+  );
+  return merged;
+}
+
+/** Pull merchant + item favorites from backend when logged in. */
+export async function syncFavoritesFromBackend(): Promise<{
+  restaurants: string[];
+  items: FavoriteItemKey[];
+}> {
+  if (!(await isCustomerLoggedIn())) {
+    return { restaurants: getFavoriteRestaurants(), items: getFavoriteItems() };
+  }
+  try {
+    const [restaurants, items] = await Promise.all([
+      syncMerchantFavoritesFromBackend(),
+      syncItemFavoritesFromBackend(),
+    ]);
+    return { restaurants, items };
   } catch {
-    return getFavoriteRestaurants();
+    return { restaurants: getFavoriteRestaurants(), items: getFavoriteItems() };
   }
 }
 

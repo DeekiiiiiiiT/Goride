@@ -12,11 +12,21 @@ export function isNativeCapacitorPlatform(): boolean {
   return cap?.isNativePlatform?.() === true;
 }
 
+/**
+ * Capacitor plugin proxies trap `.then`. Returning the plugin from `async`
+ * makes JS unwrap it as a thenable and throw `"Geolocation.then()" is not implemented`.
+ * Return a plain object of methods instead. Fixes ROAM-DRIVER-1.
+ */
 async function getNativeGeolocation() {
   if (!isNativeCapacitorPlatform()) return null;
   try {
     const { Geolocation } = await import('@capacitor/geolocation');
-    return Geolocation;
+    return {
+      checkPermissions: () => Geolocation.checkPermissions(),
+      requestPermissions: () => Geolocation.requestPermissions(),
+      getCurrentPosition: (options: Parameters<typeof Geolocation.getCurrentPosition>[0]) =>
+        Geolocation.getCurrentPosition(options),
+    };
   } catch {
     return null;
   }
@@ -107,7 +117,10 @@ async function getNativeContacts() {
   if (!isNativeCapacitorPlatform()) return null;
   try {
     const { Contacts } = await import('@capacitor-community/contacts');
-    return Contacts;
+    return {
+      checkPermissions: () => Contacts.checkPermissions(),
+      requestPermissions: () => Contacts.requestPermissions(),
+    };
   } catch {
     return null;
   }

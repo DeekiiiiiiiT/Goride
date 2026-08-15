@@ -5,7 +5,7 @@ import { SkeletonEarnings } from '@/components/ui/Skeleton';
 import { ErrorScreen } from '@/components/ui/ErrorScreen';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { fetchCourierEarnings } from '@/lib/courierApi';
-import { formatJmd } from '@/lib/mockEarnings';
+import { formatJmd } from '@/lib/formatMoney';
 import { toast } from '@/lib/toast';
 
 type EarningsPageProps = {

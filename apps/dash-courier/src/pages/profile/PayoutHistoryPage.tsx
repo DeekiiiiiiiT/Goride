@@ -3,7 +3,7 @@ import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { SubPageHeader } from '@/components/layout/SubPageHeader';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { fetchCourierEarnings } from '@/lib/courierApi';
-import { formatPayoutJmd, payoutStatusLabel, type PayoutStatus } from '@/lib/mockPayoutHistory';
+import { formatPayoutJmd, payoutStatusLabel, type PayoutStatus } from '@/lib/payoutFormat';
 
 type PayoutHistoryPageProps = {
   onBack: () => void;

@@ -5,9 +5,11 @@ import {
   counterOrdersForTab,
   counterReadyTabLabel,
   filterOrderItemsForPrepStation,
+  itemMatchesBarStations,
   kitchenQueueForPrepStation,
   kitchenQueueOrders,
   orderHasPrepStationItems,
+  resolveBarPrepStationIds,
 } from './staff-ops-order-filters';
 import type { Order } from '../types/order';
 
@@ -28,6 +30,7 @@ describe('staff-ops-order-filters', () => {
       'accepted',
       'preparing',
       'ready',
+      'assigned',
     ]);
   });
 
@@ -96,5 +99,27 @@ describe('staff-ops-order-filters', () => {
 
     expect(kitchenQueueForPrepStation([grillOrder, fryOrder], 'grill', lookup)).toEqual([grillOrder]);
     expect(kitchenQueueOrders([grillOrder, fryOrder])).toEqual([grillOrder, fryOrder]);
+  });
+
+  it('routes bar queue items by prep_station_id, not item name heuristics', () => {
+    const lookup = buildItemPrepStationLookup([
+      { id: 'soda', name: 'House Soda', prep_station_id: 'prep-bar' },
+      { id: 'burger', name: 'Burger with drink deal', prep_station_id: 'grill' },
+    ]);
+    const barIds = resolveBarPrepStationIds([
+      { id: 'prep-bar', name: 'Expo' },
+      { id: 'grill', name: 'Grill' },
+    ]);
+    expect(barIds).toEqual(['prep-bar']);
+    expect(
+      itemMatchesBarStations({ menuItemId: 'soda', name: 'House Soda' }, barIds, lookup),
+    ).toBe(true);
+    expect(
+      itemMatchesBarStations(
+        { menuItemId: 'burger', name: 'Burger with drink deal' },
+        barIds,
+        lookup,
+      ),
+    ).toBe(false);
   });
 });

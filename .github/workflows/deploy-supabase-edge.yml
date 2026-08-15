@@ -60,6 +60,7 @@ jobs:
             make-server-37f42386
             delivery
             merchant-push
+            notifications
             payments
             send-sms
             rides

@@ -24,11 +24,12 @@ Include **scheme + host + port + path** where your apps handle the post-auth lan
 | Driver (Android app) | — | `co.roamenterprise.driver://login` |
 | Driver admin tracker | — | Same URLs; see `docs/legal/PLAY_STORE_DRIVER_LAUNCH.md` |
 | Dash customer | `http://localhost:5174/` | `https://roamrush.app/` (or customer subdomain) |
-| Dash customer (Android app) | — | `co.roamenterprise.rush://login` |
+| Dash customer (native app) | — | `co.roamenterprise.rush://login` |
 | Dash courier | `http://localhost:5176/` | `https://courier.roamrush.app/` |
-| Dash courier (Android app) | — | `co.roamenterprise.courier://login` |
+| Dash courier (native app) | — | `co.roamenterprise.courier://login` |
 | Dash courier admin | `http://localhost:5176/admin` | `https://courier.roamrush.app/admin` |
 | Dash merchant | `http://localhost:5175/` | `https://partner.roamrush.app/` (if used) |
+| Dash merchant (Android / iOS app) | — | `co.roamenterprise.partner://login` |
 | Rides passenger | `http://localhost:5180/login` | `https://roam-s.co/login` |
 | Rides passenger (Android app) | — | `co.roamenterprise.rides://login` |
 | Roam Haul (hauler) | `http://localhost:3004/` | `https://roamhaul.co/` |

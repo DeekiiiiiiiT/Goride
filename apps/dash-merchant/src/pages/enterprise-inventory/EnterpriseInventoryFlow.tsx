@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { Merchant } from '../../hooks/useMerchant';
 import { CAPABILITY_IN_STORE, hasCapability } from '../../lib/merchant-capabilities';
+import { allowMocks } from '../../lib/mocksGate';
 import {
   FIXTURE_COUNT,
   FIXTURE_ITEMS,
@@ -78,25 +79,37 @@ export default function EnterpriseInventoryFlow({
   sectionTitle = 'Enterprise inventory',
 }: EnterpriseInventoryFlowProps) {
   const useApi = hasCapability(merchant, CAPABILITY_IN_STORE);
+  const mocksOk = allowMocks();
   const [view, setView] = useState<EnterpriseInventoryView>('hub');
-  const [selectedNodeId, setSelectedNodeId] = useState(FIXTURE_NODES[0]?.id ?? '');
+  const [selectedNodeId, setSelectedNodeId] = useState(
+    mocksOk ? (FIXTURE_NODES[0]?.id ?? '') : '',
+  );
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [selectedVendorId, setSelectedVendorId] = useState<string | null>(null);
   const [selectedPoId, setSelectedPoId] = useState<string | null>(null);
 
-  const [nodes, setNodes] = useState(FIXTURE_NODES);
-  const [items, setItems] = useState(FIXTURE_ITEMS);
-  const [kpis, setKpis] = useState(FIXTURE_KPIS);
-  const [orders, setOrders] = useState(FIXTURE_POS);
-  const [ledger, setLedger] = useState(FIXTURE_LEDGER);
+  const [nodes, setNodes] = useState(mocksOk ? FIXTURE_NODES : []);
+  const [items, setItems] = useState(mocksOk ? FIXTURE_ITEMS : []);
+  const [kpis, setKpis] = useState(
+    mocksOk ? FIXTURE_KPIS : { stockValue: 0, lowStockCount: 0, openPoCount: 0, varianceCost: 0 },
+  );
+  const [orders, setOrders] = useState(mocksOk ? FIXTURE_POS : []);
+  const [ledger, setLedger] = useState(mocksOk ? FIXTURE_LEDGER : []);
   const [activeCount, setActiveCount] = useState<PhysicalCount | null>(null);
-  const [varianceRows, setVarianceRows] = useState<VarianceRow[]>(FIXTURE_VARIANCE);
-  const [vendors, setVendors] = useState<Vendor[]>(FIXTURE_VENDORS);
-  const [vendorCatalog, setVendorCatalog] = useState<VendorCatalogEntry[]>(FIXTURE_VENDOR_CATALOG);
-  const [transfers, setTransfers] = useState<InventoryTransfer[]>(FIXTURE_TRANSFERS);
-  const [recipes, setRecipes] = useState<RecipeV2[]>(FIXTURE_RECIPES_V2);
-  const [menuItems, setMenuItems] = useState(FIXTURE_MENU_ITEMS);
-  const [locationTree, setLocationTree] = useState<LocationHierarchyNode[]>(FIXTURE_LOCATION_TREE);
+  const [varianceRows, setVarianceRows] = useState<VarianceRow[]>(mocksOk ? FIXTURE_VARIANCE : []);
+  // Vendors/transfers stay empty in production unless allowMocks — never flash fixtures as live data
+  const [vendors, setVendors] = useState<Vendor[]>(mocksOk ? FIXTURE_VENDORS : []);
+  const [vendorCatalog, setVendorCatalog] = useState<VendorCatalogEntry[]>(
+    mocksOk ? FIXTURE_VENDOR_CATALOG : [],
+  );
+  const [transfers, setTransfers] = useState<InventoryTransfer[]>(
+    mocksOk ? FIXTURE_TRANSFERS : [],
+  );
+  const [recipes, setRecipes] = useState<RecipeV2[]>(mocksOk ? FIXTURE_RECIPES_V2 : []);
+  const [menuItems, setMenuItems] = useState(mocksOk ? FIXTURE_MENU_ITEMS : []);
+  const [locationTree, setLocationTree] = useState<LocationHierarchyNode[]>(
+    mocksOk ? FIXTURE_LOCATION_TREE : [],
+  );
 
   const loadApi = useCallback(async () => {
     if (!useApi) return;
@@ -136,7 +149,7 @@ export default function EnterpriseInventoryFlow({
         import('../../lib/partner-api').then((m) => m.deliveryFetch('/merchant/menu')),
       ]);
 
-      setNodes(nodeList.length > 0 ? nodeList : FIXTURE_NODES);
+      setNodes(nodeList.length > 0 ? nodeList : mocksOk ? FIXTURE_NODES : []);
       setItems(itemList);
       setKpis(kpiData);
       setOrders(poList);
@@ -158,7 +171,7 @@ export default function EnterpriseInventoryFlow({
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to load inventory');
     }
-  }, [useApi, selectedNodeId, merchant.name]);
+  }, [useApi, selectedNodeId, merchant.name, mocksOk]);
 
   useEffect(() => {
     void loadApi();
@@ -383,7 +396,19 @@ export default function EnterpriseInventoryFlow({
       case 'count':
         return (
           <BlindCountView
-            count={activeCount ?? FIXTURE_COUNT}
+            count={
+              activeCount ??
+              (mocksOk
+                ? FIXTURE_COUNT
+                : {
+                    id: 'count-pending',
+                    nodeId: selectedNodeId,
+                    status: 'open' as const,
+                    blindMode: true,
+                    countDate: new Date().toISOString().slice(0, 10),
+                    items: [],
+                  })
+            }
             useApi={useApi}
             onBack={goHub}
             onSubmitItem={async (itemId, qty, uomCode) => {

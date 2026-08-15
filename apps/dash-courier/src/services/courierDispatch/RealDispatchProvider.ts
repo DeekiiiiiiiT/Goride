@@ -68,6 +68,10 @@ export class RealDispatchProvider implements CourierDispatchService {
     this.lastCoords = { lat, lng };
   }
 
+  getLastCoords(): { lat?: number; lng?: number } {
+    return { ...this.lastCoords };
+  }
+
   getCurrentOfferId(): string {
     return this.currentOfferId;
   }
@@ -129,9 +133,15 @@ export class RealDispatchProvider implements CourierDispatchService {
     void this.ensurePushSubscription();
   }
 
-  /** Best-effort web-push subscribe for background offer alerts. */
+  /** Best-effort web-push + native FCM/APNs subscribe for background offer alerts. */
   private async ensurePushSubscription(): Promise<void> {
     try {
+      const { Capacitor } = await import('@capacitor/core');
+      if (Capacitor.isNativePlatform()) {
+        await this.ensureNativePushSubscription();
+        return;
+      }
+
       if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
       const vapidKey = import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undefined;
       if (!vapidKey) return;
@@ -153,6 +163,47 @@ export class RealDispatchProvider implements CourierDispatchService {
     } catch {
       // non-fatal — polling still works while foregrounded
     }
+  }
+
+  private async ensureNativePushSubscription(): Promise<void> {
+    const { PushNotifications } = await import('@capacitor/push-notifications');
+    const { Capacitor } = await import('@capacitor/core');
+    const perm = await PushNotifications.requestPermissions();
+    if (perm.receive !== 'granted') return;
+
+    const token = await new Promise<string>((resolve, reject) => {
+      let settled = false;
+      const timeout = window.setTimeout(() => {
+        if (!settled) {
+          settled = true;
+          void PushNotifications.removeAllListeners();
+          reject(new Error('Timed out waiting for push token'));
+        }
+      }, 20000);
+
+      void PushNotifications.addListener('registration', (event) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timeout);
+        resolve(event.value);
+      });
+      void PushNotifications.addListener('registrationError', (event) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timeout);
+        reject(new Error(event.error || 'Push registration failed'));
+      });
+
+      void PushNotifications.register().catch((err: unknown) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timeout);
+        reject(err instanceof Error ? err : new Error('Push registration failed'));
+      });
+    });
+
+    const platform = Capacitor.getPlatform() === 'ios' ? 'apns' : 'fcm';
+    await subscribeCourierPush(`${platform}:${token}`, undefined, platform);
   }
 
   setMode(mode: HomeMode): void {
@@ -238,18 +289,56 @@ export class RealDispatchProvider implements CourierDispatchService {
   }
 
   /** Watch active order so merchant/admin cancel surfaces mid-delivery. */
+  private orderChannel: { unsubscribe: () => void } | null = null;
+
   private startActiveOrderWatch(orderId: string): void {
     this.stopActiveOrderWatch();
     void this.pollActiveOrderStatus(orderId);
     this.activeOrderPollTimer = window.setInterval(() => {
       void this.pollActiveOrderStatus(orderId);
     }, 5000);
+    void this.startOrderRealtime(orderId);
   }
 
   private stopActiveOrderWatch(): void {
     if (this.activeOrderPollTimer != null) {
       window.clearInterval(this.activeOrderPollTimer);
       this.activeOrderPollTimer = null;
+    }
+    void this.stopOrderRealtime();
+  }
+
+  private async startOrderRealtime(orderId: string): Promise<void> {
+    await this.stopOrderRealtime();
+    try {
+      const channel = supabase
+        .channel(`courier-order:${orderId}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'delivery',
+            table: 'orders',
+            filter: `id=eq.${orderId}`,
+          },
+          (payload) => {
+            const status = String((payload.new as { status?: string } | null)?.status ?? '');
+            if (status === 'cancelled') {
+              this.handleRemoteCancel();
+            }
+          },
+        )
+        .subscribe();
+      this.orderChannel = { unsubscribe: () => { void supabase.removeChannel(channel); } };
+    } catch {
+      // polling remains the fallback
+    }
+  }
+
+  private async stopOrderRealtime(): Promise<void> {
+    if (this.orderChannel) {
+      this.orderChannel.unsubscribe();
+      this.orderChannel = null;
     }
   }
 

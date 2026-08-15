@@ -209,6 +209,8 @@ PAYPAL_CLIENT_SECRET=
 WIPAY_ACCOUNT_NUMBER=
 WIPAY_API_KEY=
 WIPAY_CALLBACK_SECRET=
+WIPAY_REFUND_URL=
+WIPAY_ENV=sandbox
 
 # SMS
 DIGICEL_SMS_API_KEY=
@@ -283,6 +285,8 @@ supabase secrets set PAYPAL_CLIENT_SECRET=<value>
 supabase secrets set WIPAY_ACCOUNT_NUMBER=<value>
 supabase secrets set WIPAY_API_KEY=<value>
 supabase secrets set WIPAY_CALLBACK_SECRET=<value>   # new — see finding 2
+supabase secrets set WIPAY_REFUND_URL=<value>        # required for completed refunds (else refund_pending)
+supabase secrets set WIPAY_ENV=sandbox               # or live
 
 # SMS
 supabase secrets set DIGICEL_SMS_API_KEY=<value>

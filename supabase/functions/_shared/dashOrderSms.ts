@@ -1,5 +1,6 @@
 /**
  * Transactional Dash order SMS — Digicel/Flow when configured; stub-log otherwise.
+ * Push fanout (additive) goes through notifications/customer-order-status.
  */
 export async function sendDashOrderStatusSms(input: {
   to: string;
@@ -73,7 +74,39 @@ export async function sendDashOrderStatusSms(input: {
   return false;
 }
 
-/** Load customer phone for an order and send status SMS (best-effort). */
+async function notifyCustomerOrderPush(input: {
+  customerUserId: string;
+  orderId: string;
+  orderNumber: string;
+  status: string;
+  merchantName?: string | null;
+}): Promise<void> {
+  const base = Deno.env.get("SUPABASE_URL");
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!base || !serviceKey) return;
+
+  try {
+    await fetch(`${base}/functions/v1/notifications/customer-order-status`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${serviceKey}`,
+        "x-service-role": serviceKey,
+      },
+      body: JSON.stringify({
+        customerUserId: input.customerUserId,
+        orderId: input.orderId,
+        orderNumber: input.orderNumber,
+        status: input.status,
+        merchantName: input.merchantName ?? null,
+      }),
+    });
+  } catch (e) {
+    console.error("[dash_order_sms] customer push fanout failed:", e);
+  }
+}
+
+/** Load customer phone for an order and send status SMS + additive push (best-effort). */
 export async function notifyCustomerOrderStatus(
   // deno-lint-ignore no-explicit-any
   serviceSb: any,
@@ -83,31 +116,46 @@ export async function notifyCustomerOrderStatus(
   try {
     const { data: order } = await serviceSb
       .from("orders")
-      .select("id, order_number, customer_id, merchant_id, merchant:merchants(name), customer:customers(phone, name)")
+      .select("id, order_number, customer_id, merchant_id, merchant:merchants(name), customer:customers(phone, name, user_id)")
       .eq("id", orderId)
       .single();
 
     if (!order) return;
-    const customer = order.customer as { phone?: string | null } | null;
+    const customer = order.customer as {
+      phone?: string | null;
+      user_id?: string | null;
+    } | null;
     const merchant = order.merchant as { name?: string | null } | null;
+    const orderNumber = String(order.order_number || orderId);
+    const merchantName = merchant?.name ?? null;
     const phone = customer?.phone ? String(customer.phone) : "";
-    if (!phone) {
+    const customerUserId = customer?.user_id ? String(customer.user_id) : "";
+
+    if (phone) {
+      await sendDashOrderStatusSms({
+        to: phone,
+        orderNumber,
+        status,
+        merchantName,
+      });
+    } else {
       console.log(JSON.stringify({
         svc: "dash_order_sms",
-        intent: "email_or_push_deferred",
+        intent: "sms_skipped_no_phone",
         orderId,
         status,
-        reason: "no_customer_phone",
       }));
-      return;
     }
 
-    await sendDashOrderStatusSms({
-      to: phone,
-      orderNumber: String(order.order_number || orderId),
-      status,
-      merchantName: merchant?.name ?? null,
-    });
+    if (customerUserId) {
+      await notifyCustomerOrderPush({
+        customerUserId,
+        orderId,
+        orderNumber,
+        status,
+        merchantName,
+      });
+    }
   } catch (e) {
     console.error("[dash_order_sms] notify failed:", e);
   }

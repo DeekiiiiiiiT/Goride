@@ -2,6 +2,12 @@ import * as Sentry from '@sentry/react';
 
 const dsn = import.meta.env.VITE_SENTRY_DSN;
 
+/** Dev-only setup / HMR noise — not product regressions. */
+const localDevNoise = [
+  /Failed to fetch dynamically imported module:.*(?:localhost|127\.0\.0\.1)/i,
+  /Missing Supabase config: set VITE_SUPABASE_URL/,
+];
+
 // Init before app code loads. No-op when DSN is missing.
 if (dsn) {
   Sentry.init({
@@ -23,5 +29,6 @@ if (dsn) {
     replaysSessionSampleRate: 0.1,
     replaysOnErrorSampleRate: 1.0,
     enableLogs: true,
+    ignoreErrors: import.meta.env.DEV ? localDevNoise : [],
   });
 }

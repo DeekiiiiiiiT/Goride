@@ -1,8 +1,15 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
 import { getProfile } from '@/lib/accountContent';
 import { getNotificationPrefs, saveNotificationPrefs, type NotificationPrefs } from '@/lib/accountSubContent';
+import {
+  isRushPushSubscribedLocally,
+  isRushPushSupported,
+  subscribeRushPush,
+  unsubscribeRushPush,
+} from '@/lib/rushPushSubscribe';
+import { toast } from '@/lib/toast';
 
 type Props = {
   onNavigate: (page: string) => void;
@@ -16,7 +23,11 @@ type ToggleRow = {
 };
 
 const PUSH_ROWS: ToggleRow[] = [
-  { key: 'orderUpdates', title: 'Order updates', description: 'Essential real-time tracking for active orders.', disabled: true },
+  {
+    key: 'orderUpdates',
+    title: 'Order updates',
+    description: 'Push alerts for accepted, on the way, and delivered (SMS stays on for critical moments).',
+  },
   { key: 'promotions', title: 'Promotions & deals', description: 'Special offers, discounts, and exclusive events.' },
   { key: 'newRestaurants', title: 'New restaurant alerts', description: 'Be the first to know when hot new spots join Roam Rush.' },
   { key: 'personalizedPicks', title: 'Personalized picks', description: 'Curated suggestions based on your past orders.' },
@@ -29,12 +40,64 @@ const CHANNEL_ROWS: ToggleRow[] = [
 
 export default function NotificationSettingsPage({ onNavigate }: Props) {
   const [prefs, setPrefs] = useState(getNotificationPrefs);
+  const [busyKey, setBusyKey] = useState<keyof NotificationPrefs | null>(null);
   const profile = getProfile();
+  const pushSupported = isRushPushSupported();
+
+  // Align toggle with a real device subscription when prefs say order updates are on.
+  useEffect(() => {
+    if (!prefs.orderUpdates || !pushSupported) return;
+    if (isRushPushSubscribedLocally()) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        await subscribeRushPush();
+      } catch {
+        if (!cancelled) {
+          const next = { ...getNotificationPrefs(), orderUpdates: false };
+          setPrefs(next);
+          saveNotificationPrefs(next);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [prefs.orderUpdates, pushSupported]);
 
   const update = (key: keyof NotificationPrefs, value: boolean) => {
     const next = { ...prefs, [key]: value };
     setPrefs(next);
     saveNotificationPrefs(next);
+  };
+
+  const handleToggle = async (key: keyof NotificationPrefs, value: boolean) => {
+    if (key !== 'orderUpdates') {
+      update(key, value);
+      return;
+    }
+
+    if (!pushSupported && value) {
+      toast.error('Push is not available on this device');
+      return;
+    }
+
+    setBusyKey('orderUpdates');
+    try {
+      if (value) {
+        await subscribeRushPush();
+        update('orderUpdates', true);
+        toast.success('Order update push enabled');
+      } else {
+        await unsubscribeRushPush();
+        update('orderUpdates', false);
+        toast.success('Order update push disabled');
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not update push settings');
+    } finally {
+      setBusyKey(null);
+    }
   };
 
   return (
@@ -54,7 +117,7 @@ export default function NotificationSettingsPage({ onNavigate }: Props) {
 
       <main className="flex-grow px-4 py-6 max-w-[1200px] mx-auto w-full pb-32">
         <p className="text-body-md text-on-surface-variant mb-6">
-          Manage how Roam Rush communicates with you. We&apos;ll always send essential order updates.
+          Manage how Roam Rush communicates with you. SMS remains the primary channel for critical order moments; push is optional and additive.
         </p>
 
         <section className="bg-surface-container-lowest rounded-xl shadow-[0px_4px_20px_rgba(0,0,0,0.04)] p-4 mb-6">
@@ -69,11 +132,20 @@ export default function NotificationSettingsPage({ onNavigate }: Props) {
                   <div className="pr-2">
                     <span className="text-body-lg font-medium block">{row.title}</span>
                     <span className="text-body-sm text-on-surface-variant">{row.description}</span>
+                    {row.key === 'orderUpdates' && !pushSupported && (
+                      <span className="text-body-sm text-on-surface-variant block mt-1">
+                        Push is unavailable in this browser — SMS order updates still work.
+                      </span>
+                    )}
                   </div>
                   <ToggleSwitch
                     checked={prefs[row.key]}
-                    onChange={v => update(row.key, v)}
-                    disabled={row.disabled}
+                    onChange={(v) => void handleToggle(row.key, v)}
+                    disabled={
+                      row.disabled ||
+                      busyKey === row.key ||
+                      (row.key === 'orderUpdates' && !pushSupported && !prefs.orderUpdates)
+                    }
                   />
                 </div>
               </div>
@@ -94,7 +166,7 @@ export default function NotificationSettingsPage({ onNavigate }: Props) {
                     <span className="text-body-lg font-medium block">{row.title}</span>
                     <span className="text-body-sm text-on-surface-variant">{row.description}</span>
                   </div>
-                  <ToggleSwitch checked={prefs[row.key]} onChange={v => update(row.key, v)} />
+                  <ToggleSwitch checked={prefs[row.key]} onChange={(v) => update(row.key, v)} />
                 </div>
               </div>
             ))}

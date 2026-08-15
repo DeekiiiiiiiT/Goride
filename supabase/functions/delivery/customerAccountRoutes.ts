@@ -1,5 +1,5 @@
 /**
- * Customer account routes — profile, saved addresses, merchant favorites.
+ * Customer account routes — profile, saved addresses, merchant + item favorites.
  * Service-role writes for delivery.customers + auth user_metadata.
  */
 import type { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
@@ -34,6 +34,11 @@ const PatchProfileBody = z.object({
 
 const FavoriteBody = z.object({
   merchantId: z.string().min(1),
+});
+
+const FavoriteItemBody = z.object({
+  merchantId: z.string().min(1),
+  menuItemId: z.string().min(1),
 });
 
 type CustomerRow = {
@@ -302,5 +307,101 @@ export function registerCustomerAccountRoutes(app: Hono, deps: CustomerAccountRo
     if (delErr) return c.json({ error: delErr.message }, 500);
 
     return c.json({ ok: true, merchantId });
+  });
+
+  // GET /customer/favorite-items
+  app.get("/customer/favorite-items", async (c) => {
+    const auth = await requireUser(c.req.header("Authorization"), getSupabase);
+    if ("error" in auth) return c.json({ error: auth.error }, auth.status);
+
+    const serviceSb = getServiceSupabase();
+    const { customer, error } = await ensureCustomer(serviceSb, auth.user);
+    if (error || !customer) return c.json({ error: error || "profile_unavailable" }, 500);
+
+    const { data, error: favErr } = await serviceSb
+      .from("customer_favorite_items")
+      .select("merchant_id, menu_item_id, created_at")
+      .eq("customer_id", customer.id)
+      .order("created_at", { ascending: false });
+
+    if (favErr) return c.json({ error: favErr.message }, 500);
+
+    const items = (data ?? []).map((row) => ({
+      merchantId: row.merchant_id as string,
+      menuItemId: row.menu_item_id as string,
+      createdAt: row.created_at as string,
+    }));
+
+    return c.json({
+      items,
+      itemKeys: items.map((row) => `${row.merchantId}:${row.menuItemId}`),
+    });
+  });
+
+  // POST /customer/favorite-items
+  app.post("/customer/favorite-items", async (c) => {
+    const auth = await requireUser(c.req.header("Authorization"), getSupabase);
+    if ("error" in auth) return c.json({ error: auth.error }, auth.status);
+
+    const body = await validateBody(c, FavoriteItemBody);
+    if (body instanceof Response) return body;
+
+    const serviceSb = getServiceSupabase();
+    const { customer, error } = await ensureCustomer(serviceSb, auth.user);
+    if (error || !customer) return c.json({ error: error || "profile_unavailable" }, 500);
+
+    const { data: merchant } = await serviceSb
+      .from("merchants")
+      .select("id")
+      .eq("id", body.merchantId)
+      .maybeSingle();
+    if (!merchant) return c.json({ error: "merchant_not_found" }, 404);
+
+    const { error: insertErr } = await serviceSb
+      .from("customer_favorite_items")
+      .upsert(
+        {
+          customer_id: customer.id,
+          merchant_id: body.merchantId,
+          menu_item_id: body.menuItemId,
+        },
+        { onConflict: "customer_id,merchant_id,menu_item_id", ignoreDuplicates: true },
+      );
+
+    if (insertErr) return c.json({ error: insertErr.message }, 500);
+
+    return c.json({
+      ok: true,
+      merchantId: body.merchantId,
+      menuItemId: body.menuItemId,
+      itemKey: `${body.merchantId}:${body.menuItemId}`,
+    });
+  });
+
+  // DELETE /customer/favorite-items/:merchantId/:menuItemId
+  app.delete("/customer/favorite-items/:merchantId/:menuItemId", async (c) => {
+    const auth = await requireUser(c.req.header("Authorization"), getSupabase);
+    if ("error" in auth) return c.json({ error: auth.error }, auth.status);
+
+    const merchantId = c.req.param("merchantId");
+    const menuItemId = c.req.param("menuItemId");
+    if (!merchantId || !menuItemId) {
+      return c.json({ error: "merchant_id_and_menu_item_id_required" }, 400);
+    }
+
+    const serviceSb = getServiceSupabase();
+    const { customer, error } = await ensureCustomer(serviceSb, auth.user);
+    if (error || !customer) return c.json({ error: error || "profile_unavailable" }, 500);
+
+    const { error: delErr } = await serviceSb
+      .from("customer_favorite_items")
+      .delete()
+      .eq("customer_id", customer.id)
+      .eq("merchant_id", merchantId)
+      .eq("menu_item_id", menuItemId);
+
+    if (delErr) return c.json({ error: delErr.message }, 500);
+
+    return c.json({ ok: true, merchantId, menuItemId });
   });
 }

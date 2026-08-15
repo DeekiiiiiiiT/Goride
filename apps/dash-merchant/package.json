@@ -7,9 +7,24 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "build:mobile": "node ../../scripts/assert-vite-supabase-env.mjs && vite build",
+    "cap:sync": "pnpm run build:mobile && cap sync",
+    "cap:release": "node scripts/bump-android-version.mjs && pnpm run cap:sync",
+    "cap:aab": "node scripts/build-android-aab.mjs",
+    "cap:open:android": "cap open android",
+    "cap:open:ios": "cap open ios",
+    "cap:run:android": "pnpm run cap:sync && cap run android"
   },
   "dependencies": {
+    "@capacitor/android": "^7.6.5",
+    "@capacitor/app": "^7.1.2",
+    "@capacitor/browser": "^7.0.5",
+    "@capacitor/core": "^7.6.5",
+    "@capacitor/ios": "^7.6.8",
+    "@capacitor/push-notifications": "^7.0.7",
+    "@capacitor/splash-screen": "^7.0.5",
+    "@capacitor/status-bar": "^7.0.6",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
@@ -37,6 +52,7 @@
     "tailwind-merge": "*"
   },
   "devDependencies": {
+    "@capacitor/cli": "^7.6.5",
     "@tailwindcss/vite": "4.1.12",
     "@types/node": "^20.10.0",
     "@types/react": "^18.3.0",

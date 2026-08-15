@@ -1,8 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
+import { DeliveryMap } from '@/components/map/DeliveryMap';
 import { SlideToArrive } from '@/components/delivery/SlideToArrive';
+import { NavigationPickerSheet } from '@/components/ui/NavigationPickerSheet';
 import type { ActiveDelivery } from '@/lib/mockActiveDelivery';
-import { EN_ROUTE_MAP } from '@/lib/mockActiveDelivery';
+import { openPhoneCall, openSmsMessage, toDialablePhone } from '@/lib/contactLinks';
+import { openNavigationApp } from '@/lib/navigationUrls';
+import { realDispatchProvider } from '@/services/courierDispatch/RealDispatchProvider';
 
 type EnRoutePageProps = {
   delivery: ActiveDelivery;
@@ -10,32 +14,21 @@ type EnRoutePageProps = {
 };
 
 export function EnRoutePage({ delivery, onArrived }: EnRoutePageProps) {
+  const [navPickerOpen, setNavPickerOpen] = useState(false);
+  const customerPhone = toDialablePhone(delivery.customerPhone);
+  const gps = realDispatchProvider.getLastCoords();
+
   return (
     <div className="fixed inset-0 z-[60] bg-background flex flex-col overflow-hidden">
-      <div className="absolute inset-0 z-0 bg-surface-variant pointer-events-none">
-        <div
-          className="w-full h-full bg-cover bg-center opacity-90"
-          style={{ backgroundImage: `url('${EN_ROUTE_MAP}')` }}
+      <div className="absolute inset-0 z-0 bg-surface-variant">
+        <DeliveryMap
+          className="h-full w-full"
+          courierLat={gps.lat}
+          courierLng={gps.lng}
+          destinationLat={delivery.dropoffLat}
+          destinationLng={delivery.dropoffLng}
+          destinationLabel={delivery.customerFirstName || 'Customer'}
         />
-        <svg className="absolute inset-0 w-full h-full drop-shadow-md pointer-events-none" preserveAspectRatio="none" viewBox="0 0 400 850" aria-hidden>
-          <path
-            d="M 200 450 C 200 350, 150 250, 180 180"
-            fill="none"
-            stroke="#10b981"
-            strokeLinecap="round"
-            strokeWidth="6"
-            className="opacity-80"
-          />
-        </svg>
-        <div className="absolute left-[45%] top-[50%] w-6 h-6 bg-primary rounded-full border-4 border-surface shadow-md z-10 flex items-center justify-center">
-          <div className="absolute inset-0 rounded-full bg-primary courier-status-pulse" />
-        </div>
-        <div className="absolute left-[41%] top-[18%] flex flex-col items-center z-10">
-          <div className="w-8 h-8 bg-on-surface rounded-full flex items-center justify-center shadow-lg mb-1 relative">
-            <MaterialIcon name="home" className="text-surface text-lg" filled />
-            <div className="absolute -bottom-1.5 w-0 h-0 border-l-[6px] border-r-[6px] border-t-[8px] border-l-transparent border-r-transparent border-t-on-surface" />
-          </div>
-        </div>
       </div>
 
       <div className="relative z-20 flex flex-col w-full flex-1">
@@ -95,26 +88,36 @@ export function EnRoutePage({ delivery, onArrived }: EnRoutePageProps) {
             </div>
 
             <div className="flex gap-2">
-              <button
-                type="button"
-                className="flex-1 h-[52px] bg-secondary-fixed text-on-secondary-fixed-variant rounded-xl flex items-center justify-center gap-2 text-xs font-semibold uppercase tracking-wide active:scale-95"
-              >
-                <MaterialIcon name="call" className="text-xl" filled />
-                Call
-              </button>
-              <button
-                type="button"
-                className="flex-1 h-[52px] bg-secondary-fixed text-on-secondary-fixed-variant rounded-xl flex items-center justify-center gap-2 text-xs font-semibold uppercase tracking-wide active:scale-95"
-              >
-                <MaterialIcon name="chat" className="text-xl" filled />
-                Message
-              </button>
+              {customerPhone && (
+                <button
+                  type="button"
+                  onClick={() => openPhoneCall(customerPhone)}
+                  className="flex-1 h-[52px] bg-secondary-fixed text-on-secondary-fixed-variant rounded-xl flex items-center justify-center gap-2 text-xs font-semibold uppercase tracking-wide active:scale-95"
+                >
+                  <MaterialIcon name="call" className="text-xl" filled />
+                  Call
+                </button>
+              )}
+              {customerPhone && (
+                <button
+                  type="button"
+                  onClick={() => openSmsMessage(customerPhone, `Hi, your Roam Rush courier is nearby.`)}
+                  className="flex-1 h-[52px] bg-secondary-fixed text-on-secondary-fixed-variant rounded-xl flex items-center justify-center gap-2 text-xs font-semibold uppercase tracking-wide active:scale-95"
+                >
+                  <MaterialIcon name="chat" className="text-xl" filled />
+                  Message
+                </button>
+              )}
               <button
                 type="button"
                 aria-label="Open in Maps"
-                className="w-[52px] h-[52px] bg-surface-container border border-outline-variant/50 text-on-surface rounded-xl flex items-center justify-center active:scale-95"
+                onClick={() => setNavPickerOpen(true)}
+                className={`${customerPhone ? 'w-[52px]' : 'flex-1'} h-[52px] bg-surface-container border border-outline-variant/50 text-on-surface rounded-xl flex items-center justify-center gap-2 active:scale-95`}
               >
                 <MaterialIcon name="map" className="text-[22px]" />
+                {!customerPhone && (
+                  <span className="text-xs font-semibold uppercase tracking-wide">Open in Maps</span>
+                )}
               </button>
             </div>
 
@@ -122,6 +125,20 @@ export function EnRoutePage({ delivery, onArrived }: EnRoutePageProps) {
           </div>
         </div>
       </div>
+
+      <NavigationPickerSheet
+        open={navPickerOpen}
+        destination={delivery.customerFirstName || 'Customer'}
+        onSelect={(app) => {
+          openNavigationApp(app as 'google' | 'waze' | 'apple', {
+            lat: delivery.dropoffLat,
+            lng: delivery.dropoffLng,
+            address: delivery.dropoffAddress,
+          });
+          setNavPickerOpen(false);
+        }}
+        onClose={() => setNavPickerOpen(false)}
+      />
     </div>
   );
 }

@@ -1,4 +1,6 @@
-export type PayoutStatus = 'deposited' | 'pending' | 'failed';
+import type { PayoutStatus } from './payoutFormat';
+
+export type { PayoutStatus } from './payoutFormat';
 
 export type PayoutRecord = {
   id: string;
@@ -82,16 +84,4 @@ export const MOCK_PAYOUT_HISTORY: PayoutHistoryGroup[] = [
   },
 ];
 
-export function formatPayoutJmd(amount: number): string {
-  return amount.toLocaleString('en-JM');
-}
-
-const STATUS_LABELS: Record<PayoutStatus, string> = {
-  deposited: 'Deposited',
-  pending: 'Pending',
-  failed: 'Failed',
-};
-
-export function payoutStatusLabel(status: PayoutStatus): string {
-  return STATUS_LABELS[status];
-}
+export { formatPayoutJmd, payoutStatusLabel } from './payoutFormat';

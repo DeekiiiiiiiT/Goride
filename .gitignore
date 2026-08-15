@@ -37,6 +37,35 @@ apps/dash-customer/android/build/
 apps/dash-customer/android/local.properties
 apps/dash-customer/android/.idea/
 apps/dash-customer/android/capacitor-cordova-android-plugins/build/
+
+# Capacitor / Android (dash-merchant / Roam Partner)
+apps/dash-merchant/android/.gradle/
+apps/dash-merchant/android/app/build/
+apps/dash-merchant/android/build/
+apps/dash-merchant/android/local.properties
+apps/dash-merchant/android/.idea/
+apps/dash-merchant/android/capacitor-cordova-android-plugins/build/
+
+# Capacitor / Android (dash-courier)
+apps/dash-courier/android/.gradle/
+apps/dash-courier/android/app/build/
+apps/dash-courier/android/build/
+apps/dash-courier/android/local.properties
+apps/dash-courier/android/.idea/
+apps/dash-courier/android/capacitor-cordova-android-plugins/build/
+
+# Capacitor / iOS — commit the ios/ project; ignore Firebase secrets only
+**/GoogleService-Info.plist
+apps/dash-customer/ios/DerivedData/
+apps/dash-courier/ios/DerivedData/
+apps/dash-merchant/ios/DerivedData/
+apps/dash-customer/ios/App/Pods/
+apps/dash-courier/ios/App/Pods/
+apps/dash-merchant/ios/App/Pods/
+apps/dash-customer/ios/App/App.xcworkspace/xcuserdata/
+apps/dash-courier/ios/App/App.xcworkspace/xcuserdata/
+apps/dash-merchant/ios/App/App.xcworkspace/xcuserdata/
+
 **/.DS_Store
 .vercel
 .env*

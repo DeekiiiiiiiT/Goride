@@ -17,6 +17,21 @@
    - **Provider configured** → refund may show `completed` / order `refunded` or `partially_refunded`.
    - **Provider not configured** (common for WiPay without `WIPAY_REFUND_URL`) → refund row is **pending**, order `payment_status` = `refund_pending`. Do not tell the customer money has cleared until finance confirms.
 
+### Launch secrets checklist (confirm in Supabase before go-live)
+
+| Secret | Required for |
+|--------|----------------|
+| `WIPAY_REFUND_URL` | Completing WiPay refunds (not just pending rows) |
+| `WIPAY_API_KEY` | WiPay intents + refunds |
+| `WIPAY_CALLBACK_SECRET` | WiPay webhook auth |
+| `WIPAY_ENV` | sandbox vs live |
+| `WIPAY_ACCOUNT_NUMBER` | Intent creation |
+| `GOOGLE_MAPS_API_KEY` (and/or merchant key) | Places autocomplete + reverse geocode |
+| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | Web Push (courier/merchant/customer) |
+| `FCM_SERVER_KEY` | Native FCM sends for Partner/Courier/Rush |
+
+See also [roam-rush-production-gate0-ops.md](roam-rush-production-gate0-ops.md).
+
 Admin **Cancel** on a paid order automatically queues a full refund the same way.
 
 ## Disputes

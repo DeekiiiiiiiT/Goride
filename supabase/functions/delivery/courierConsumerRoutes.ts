@@ -275,8 +275,9 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
         *,
         order:orders(
           id, order_number, status, total, delivery_fee, tip, delivery_address,
-          delivery_lat, delivery_lng, ready_at,
-          merchant:merchants(id, name, address, lat, lng)
+          delivery_lat, delivery_lng, ready_at, delivery_instructions, items,
+          merchant:merchants(id, name, address, lat, lng, phone, vertical_type, fulfillment_type),
+          customer:customers(name, phone)
         )
       `)
       .eq("courier_user_id", auth.userId)

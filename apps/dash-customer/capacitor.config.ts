@@ -1,6 +1,7 @@
 /**
  * Capacitor config for Roam Rush (customer ordering).
- * After `pnpm install`, run: `npx cap add android` then `pnpm cap:sync`.
+ * After `pnpm install`, run: `npx cap add android` / `npx cap add ios` then `pnpm cap:sync`.
+ * Splash / status bar use Rush brand green #006d43.
  */
 import type { CapacitorConfig } from '@capacitor/cli';
 
@@ -10,6 +11,7 @@ const config: CapacitorConfig = {
   webDir: 'dist',
   server: {
     androidScheme: 'https',
+    iosScheme: 'https',
   },
   plugins: {
     SplashScreen: {

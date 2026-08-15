@@ -104,15 +104,22 @@ export function kitchenQueueForPrepStation(
   );
 }
 
-/** Prep stations whose name indicates bar/drinks (KDS routing). */
+/** Prep stations for the bar KDS — prefer id/slug markers, fall back to name heuristics. */
 export function resolveBarPrepStationIds(
   prepStations: Array<{ id: string; name: string }>,
 ): string[] {
+  const byMarker = prepStations.filter((station) =>
+    /(?:^|[-_])bar(?:$|[-_])|^bar$/i.test(station.id) ||
+    /(?:^|[-_])drink/i.test(station.id),
+  );
+  if (byMarker.length > 0) return byMarker.map((station) => station.id);
+
   return prepStations
     .filter((station) => /bar|drink|beverage|cocktail/i.test(station.name))
     .map((station) => station.id);
 }
 
+/** Item belongs on bar queue only when its menu prep_station_id is a bar station (no item-name regex). */
 export function itemMatchesBarStations(
   item: { menuItemId?: string; name: string },
   barStationIds: string[],

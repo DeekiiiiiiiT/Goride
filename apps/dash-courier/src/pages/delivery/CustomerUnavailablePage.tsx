@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
+import { openPhoneCall, toDialablePhone } from '@/lib/contactLinks';
 
 type CustomerUnavailablePageProps = {
+  customerPhone?: string | null;
   onClose: () => void;
   onLeaveAtSafeLocation: () => void;
 };
@@ -15,11 +17,13 @@ function formatTime(seconds: number): string {
 }
 
 export function CustomerUnavailablePage({
+  customerPhone,
   onClose,
   onLeaveAtSafeLocation,
 }: CustomerUnavailablePageProps) {
   const [secondsLeft, setSecondsLeft] = useState(INITIAL_SECONDS);
   const timerExpired = secondsLeft <= 0;
+  const dialable = toDialablePhone(customerPhone);
 
   useEffect(() => {
     if (secondsLeft <= 0) return;
@@ -61,22 +65,18 @@ export function CustomerUnavailablePage({
           </p>
         </section>
 
-        <section className="grid grid-cols-2 gap-4">
-          <button
-            type="button"
-            className="flex flex-col items-center justify-center bg-primary text-on-primary rounded-xl py-4 px-2 shadow-primary active:scale-95 min-h-20"
-          >
-            <MaterialIcon name="call" className="mb-2" />
-            <span className="text-xs font-semibold uppercase tracking-wide">Call Customer</span>
-          </button>
-          <button
-            type="button"
-            className="flex flex-col items-center justify-center bg-surface border border-outline-variant text-on-surface rounded-xl py-4 px-2 shadow-soft active:scale-95 min-h-20"
-          >
-            <MaterialIcon name="notifications_active" className="mb-2" />
-            <span className="text-xs font-semibold uppercase tracking-wide">Send Notification</span>
-          </button>
-        </section>
+        {dialable && (
+          <section className="grid grid-cols-1 gap-4">
+            <button
+              type="button"
+              onClick={() => openPhoneCall(dialable)}
+              className="flex flex-col items-center justify-center bg-primary text-on-primary rounded-xl py-4 px-2 shadow-primary active:scale-95 min-h-20"
+            >
+              <MaterialIcon name="call" className="mb-2" />
+              <span className="text-xs font-semibold uppercase tracking-wide">Call Customer</span>
+            </button>
+          </section>
+        )}
 
         <hr className="border-t border-surface-container-high -mx-[var(--spacing-edge)]" />
 
@@ -104,45 +104,6 @@ export function CustomerUnavailablePage({
                   Leave at safe location
                 </span>
                 <span className="block text-sm text-muted">Requires a photo</span>
-              </div>
-            </div>
-            <MaterialIcon name="chevron_right" className="text-muted" />
-          </button>
-
-          <button
-            type="button"
-            disabled={!timerExpired}
-            className={`flex items-center justify-between w-full bg-surface p-4 rounded-xl shadow-soft text-left border border-transparent ${
-              timerExpired
-                ? 'hover:border-outline-variant active:scale-95'
-                : 'opacity-50 cursor-not-allowed'
-            }`}
-          >
-            <div className="flex items-center gap-4">
-              <div className="bg-surface-container-low p-2 rounded-full text-muted">
-                <MaterialIcon name="assignment_return" />
-              </div>
-              <div>
-                <span className="block text-base font-semibold text-on-surface">
-                  Return order to restaurant
-                </span>
-                <span className="block text-sm text-muted">Available after timer expires</span>
-              </div>
-            </div>
-            <MaterialIcon name="chevron_right" className="text-muted" />
-          </button>
-
-          <button
-            type="button"
-            className="flex items-center justify-between w-full bg-surface p-4 rounded-xl shadow-soft active:scale-95 text-left border border-transparent hover:border-outline-variant mt-4"
-          >
-            <div className="flex items-center gap-4">
-              <div className="bg-surface-container-low p-2 rounded-full text-on-surface">
-                <MaterialIcon name="support_agent" />
-              </div>
-              <div>
-                <span className="block text-base font-semibold text-on-surface">Contact Support</span>
-                <span className="block text-sm text-muted">Get help with this delivery</span>
               </div>
             </div>
             <MaterialIcon name="chevron_right" className="text-muted" />

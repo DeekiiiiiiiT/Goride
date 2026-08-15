@@ -118,24 +118,15 @@ export default function PaymentMethodsPage({ returnTo = 'account', mode = 'manag
         </section>
 
         <section className="flex flex-col gap-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-label-md font-semibold text-on-surface-variant uppercase tracking-wider">
-              Saved cards
-            </h2>
-            <button
-              type="button"
-              onClick={() => onNavigate('add-card', { returnTo: 'payment-methods' })}
-              className="text-label-md font-semibold text-primary"
-            >
-              Add
-            </button>
-          </div>
+          <h2 className="text-label-md font-semibold text-on-surface-variant uppercase tracking-wider">
+            Saved cards
+          </h2>
           {vaultLoading ? (
             <p className="text-body-sm text-on-surface-variant">Checking vault…</p>
           ) : vaultMethods.length === 0 ? (
             <div className="bg-surface-container-lowest rounded-xl p-4 border border-dashed border-surface-variant">
               <p className="text-body-md text-on-surface-variant">
-                No saved cards yet. Card saving needs a WiPay token — use WiPay or PayPal at checkout for now.
+                Cards are saved securely during checkout through WiPay or PayPal (hosted payment). There is no separate Add Card step in the app.
               </p>
             </div>
           ) : (
@@ -156,6 +147,9 @@ export default function PaymentMethodsPage({ returnTo = 'account', mode = 'manag
                   </div>
                 </div>
               ))}
+              <p className="text-body-sm text-on-surface-variant px-1">
+                New cards are added automatically when you pay with WiPay or PayPal at checkout.
+              </p>
             </div>
           )}
         </section>

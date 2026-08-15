@@ -48,22 +48,23 @@ import { DeclineReasonSheet } from '@/components/offers/DeclineReasonSheet';
 import type { DeclineReasonId } from '@/lib/declineReasons';
 import { persistDeclineReason } from '@/lib/declineReasonStorage';
 import type { ActiveDelivery, DropoffMethod } from '@/lib/mockActiveDelivery';
-import { MOCK_GROCERY_PICK_DELIVERY } from '@/lib/mockActiveDelivery';
 import { emptyActiveDelivery, mapOrderToActiveDelivery } from '@/lib/mapOrderToActiveDelivery';
+import { mapOrderToSingleOffer } from '@/lib/mapOrderToSingleOffer';
 import { MOCK_CACHED_DELIVERY } from '@/lib/mockCachedDelivery';
-import {
-  MOCK_DETAILED_OFFER,
-  MOCK_GROCERY_OFFER,
-  MOCK_SINGLE_OFFER,
-  MOCK_STACKED_OFFER,
-} from '@/lib/mockOffers';
+import { MOCK_SINGLE_OFFER, MOCK_STACKED_OFFER, type SingleOffer } from '@/lib/mockOffers';
 import { useCourierFeedback } from '@/hooks/useCourierFeedback';
 import { useBackgroundLocation } from '@/hooks/useBackgroundLocation';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { useCourierDispatch } from '@/hooks/useCourierDispatch';
 import { OfflineError, assertOnline } from '@/lib/networkGuard';
 import { loadCourierProfile } from '@/lib/courierProfileService';
-import { patchCourierLocation, putCourierAvailability, submitCourierIssue, updateCourierOrderStatus } from '@/lib/courierApi';
+import {
+  patchCourierLocation,
+  putCourierAvailability,
+  submitCourierIssue,
+  updateCourierOrderStatus,
+  type AvailableOrder,
+} from '@/lib/courierApi';
 import { nextClientSeq } from '@/lib/locationSeq';
 import { realDispatchProvider } from '@/services/courierDispatch/RealDispatchProvider';
 import { toast } from '@/lib/toast';
@@ -104,6 +105,7 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
   const [declineReasonOpen, setDeclineReasonOpen] = useState(false);
   const [pushBannerOpen, setPushBannerOpen] = useState(false);
   const [courierName, setCourierName] = useState<string | undefined>();
+  const [completionRate, setCompletionRate] = useState<number | null>(null);
   const [activeDelivery, setActiveDelivery] = useState<ActiveDelivery | null>(null);
   const delivery = activeDelivery ?? emptyActiveDelivery();
   const hasActiveDeliveryData = Boolean(activeDelivery?.orderId);
@@ -114,13 +116,44 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
   const networkOffline = !networkOnline;
   const isOnline = mode === 'online' || mode === 'on-delivery';
   const { coords } = useBackgroundLocation(isOnline);
-  const mapOffset = coords
-    ? {
-        x: 50 + (coords.lng + 76.8099) * 800,
-        y: 50 + (coords.lat - 18.0179) * 800,
-      }
-    : { x: 50, y: 50 };
 
+  const getProviderPendingOrder = useCallback((): AvailableOrder | null => {
+    if (
+      'getPendingOrder' in provider &&
+      typeof (provider as { getPendingOrder?: () => AvailableOrder | null }).getPendingOrder ===
+        'function'
+    ) {
+      return (provider as { getPendingOrder: () => AvailableOrder | null }).getPendingOrder();
+    }
+    return null;
+  }, [provider]);
+
+  const getProviderOfferId = useCallback((): string => {
+    if (
+      'getCurrentOfferId' in provider &&
+      typeof (provider as { getCurrentOfferId?: () => string }).getCurrentOfferId === 'function'
+    ) {
+      return (provider as { getCurrentOfferId: () => string }).getCurrentOfferId();
+    }
+    return '';
+  }, [provider]);
+
+  const getProviderLastCoords = useCallback((): { lat?: number; lng?: number } => {
+    if (
+      'getLastCoords' in provider &&
+      typeof (provider as { getLastCoords?: () => { lat?: number; lng?: number } }).getLastCoords ===
+        'function'
+    ) {
+      return (provider as { getLastCoords: () => { lat?: number; lng?: number } }).getLastCoords();
+    }
+    return coords ? { lat: coords.lat, lng: coords.lng } : {};
+  }, [provider, coords]);
+
+  const currentSingleOffer: SingleOffer = (() => {
+    const pending = getProviderPendingOrder();
+    const mapped = mapOrderToSingleOffer(pending, getProviderLastCoords());
+    return mapped || MOCK_SINGLE_OFFER;
+  })();
   // Transmit GPS to availability + active order
   useEffect(() => {
     if (!coords || !isOnline) return;
@@ -153,6 +186,9 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
   useEffect(() => {
     void loadCourierProfile().then((profile) => {
       if (profile?.display_name) setCourierName(profile.display_name);
+      if (profile?.completion_rate_pct != null) {
+        setCompletionRate(profile.completion_rate_pct);
+      }
     });
   }, []);
 
@@ -233,16 +269,14 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
       const offerId =
         offerPhase === 'stacked'
           ? MOCK_STACKED_OFFER.id
-          : offerPhase === 'details'
-            ? MOCK_DETAILED_OFFER.id
-            : MOCK_SINGLE_OFFER.id;
+          : getProviderOfferId() || currentSingleOffer.id;
       if (reasonId) {
         persistDeclineReason({ reasonId, offerId });
         toast.success('Feedback recorded', 'Thanks for letting us know.');
       }
       dispatch.declineOffer(offerId, reasonId ? { reasonId, offerId } : undefined);
     },
-    [dispatch, offerPhase],
+    [dispatch, offerPhase, getProviderOfferId, currentSingleOffer.id],
   );
 
   const handleAcceptStackedOffer = useCallback(() => {
@@ -257,33 +291,12 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
   const handleAcceptSingleOffer = useCallback(() => {
     guardAction(() => {
       feedback.onAccept();
-      const offerId =
-        'getCurrentOfferId' in provider &&
-        typeof (provider as { getCurrentOfferId?: () => string }).getCurrentOfferId === 'function'
-          ? (provider as { getCurrentOfferId: () => string }).getCurrentOfferId()
-          : MOCK_SINGLE_OFFER.id;
-      const pending =
-        'getPendingOrder' in provider &&
-        typeof (provider as { getPendingOrder?: () => {
-          id: string;
-          merchant?: { name?: string } | null;
-          delivery_address?: string;
-          order_number?: string;
-        } | null }).getPendingOrder === 'function'
-          ? (
-              provider as {
-                getPendingOrder: () => {
-                  id: string;
-                  merchant?: { name?: string } | null;
-                  delivery_address?: string;
-                  order_number?: string;
-                } | null;
-              }
-            ).getPendingOrder()
-          : null;
+      const offerId = getProviderOfferId() || currentSingleOffer.id;
+      const pending = getProviderPendingOrder();
+      const lastCoords = getProviderLastCoords();
 
       if (pending) {
-        setActiveDelivery(mapOrderToActiveDelivery(pending as Parameters<typeof mapOrderToActiveDelivery>[0]));
+        setActiveDelivery(mapOrderToActiveDelivery(pending, lastCoords));
       } else {
         setActiveDelivery(emptyActiveDelivery());
       }
@@ -292,7 +305,15 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
       dispatch.acceptOffer(offerId);
       setActiveTab('home');
     });
-  }, [feedback, dispatch, guardAction, provider]);
+  }, [
+    feedback,
+    dispatch,
+    guardAction,
+    getProviderOfferId,
+    getProviderPendingOrder,
+    getProviderLastCoords,
+    currentSingleOffer.id,
+  ]);
 
   const handleReportIssueSubmit = useCallback(
     (issueId: string, notes?: string, photoUrl?: string) => {
@@ -459,7 +480,8 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
           onRequestEndDash={() => setDashSummaryOpen(true)}
           onOfferReceived={handleOfferReceived}
           onViewPromotions={() => setPromotionsOpen(true)}
-          mapOffset={mapOffset}
+          courierLat={coords?.lat}
+          courierLng={coords?.lng}
         />
       );
     }
@@ -497,7 +519,7 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
       {offerPhase === 'single' && (
         <ImmersiveScreen>
           <DeliveryOfferPage
-            offer={MOCK_GROCERY_OFFER}
+            offer={currentSingleOffer}
             onClose={requestDeclineOffer}
             onTimerExpire={handleOfferTimerExpire}
             onDecline={requestDeclineOffer}
@@ -511,7 +533,7 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
       {offerPhase === 'details' && (
         <ImmersiveScreen className="z-[70]">
           <OfferDetailsPage
-            offer={MOCK_DETAILED_OFFER}
+            offer={currentSingleOffer}
             onBack={() => dispatch.dismissOfferDetails()}
             onTimerExpire={handleOfferTimerExpire}
             onDecline={requestDeclineOffer}
@@ -595,6 +617,7 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
 
       {deliveryPhase === 'customer-unavailable' && !acceptedStacked && hasActiveDeliveryData && (
         <CustomerUnavailablePage
+          customerPhone={delivery.customerPhone}
           onClose={() => dispatch.setDeliveryPhase('at-customer')}
           onLeaveAtSafeLocation={() => dispatch.setDeliveryPhase('complete')}
         />
@@ -632,6 +655,7 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
 
       <UnassignConfirmModal
         open={showUnassignModal}
+        completionRate={completionRate}
         onConfirm={handleUnassign}
         onCancel={() => setShowUnassignModal(false)}
       />
@@ -655,8 +679,8 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
 
       {pushBannerOpen && (
         <OfferPushBanner
-          restaurant={MOCK_SINGLE_OFFER.restaurant}
-          earnings={MOCK_SINGLE_OFFER.earnings}
+          restaurant={currentSingleOffer.restaurant}
+          earnings={currentSingleOffer.earnings}
           secondsLeft={90}
           onTap={() => {
             setPushBannerOpen(false);

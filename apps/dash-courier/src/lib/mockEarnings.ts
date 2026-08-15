@@ -104,6 +104,4 @@ export const MOCK_WEEKLY_EARNINGS: WeeklyEarnings = {
   pending: 6350,
 };
 
-export function formatJmd(amount: number): string {
-  return amount.toLocaleString('en-JM');
-}
+export { formatJmd } from './formatMoney';

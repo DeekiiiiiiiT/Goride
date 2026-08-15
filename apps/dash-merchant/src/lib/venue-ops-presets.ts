@@ -63,5 +63,6 @@ export interface PrepStation {
 export const FIXTURE_PREP_STATIONS: PrepStation[] = [
   { id: 'prep-grill', name: 'Grill', sortOrder: 0 },
   { id: 'prep-fry', name: 'Fry', sortOrder: 1 },
-  { id: 'prep-cold', name: 'Cold', sortOrder: 2 },
+  { id: 'prep-bar', name: 'Bar', sortOrder: 2 },
+  { id: 'prep-cold', name: 'Cold', sortOrder: 3 },
 ];

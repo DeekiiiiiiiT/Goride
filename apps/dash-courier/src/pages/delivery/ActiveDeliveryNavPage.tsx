@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
+import { DeliveryMap } from '@/components/map/DeliveryMap';
 import { SlideToArrive } from '@/components/delivery/SlideToArrive';
 import { NavigationPickerSheet } from '@/components/ui/NavigationPickerSheet';
 import type { ActiveDelivery } from '@/lib/mockActiveDelivery';
-import { NAV_MAP } from '@/lib/mockActiveDelivery';
 import { openNavigationApp } from '@/lib/navigationUrls';
+import { realDispatchProvider } from '@/services/courierDispatch/RealDispatchProvider';
 
 type ActiveDeliveryNavPageProps = {
   delivery: ActiveDelivery;
@@ -13,43 +14,19 @@ type ActiveDeliveryNavPageProps = {
 
 export function ActiveDeliveryNavPage({ delivery, onArrived }: ActiveDeliveryNavPageProps) {
   const [navPickerOpen, setNavPickerOpen] = useState(false);
+  const gps = realDispatchProvider.getLastCoords();
 
   return (
     <div className="flex flex-col flex-1 min-h-0 h-full w-full overflow-hidden bg-surface-container">
       <div className="absolute inset-0 z-0 overflow-hidden">
-        <img src={NAV_MAP} alt="" className="object-cover w-full h-full opacity-80" />
-        <svg
-          className="absolute inset-0 w-full h-full pointer-events-none"
-          preserveAspectRatio="xMidYMid slice"
-          viewBox="0 0 400 800"
-          aria-hidden
-        >
-          <defs>
-            <filter id="route-shadow" height="140%" width="140%" x="-20%" y="-20%">
-              <feDropShadow dx="0" dy="4" floodColor="#22C55E" floodOpacity="0.3" stdDeviation="6" />
-            </filter>
-          </defs>
-          <path
-            d="M 120,650 C 180,550 150,450 220,380 S 280,250 320,180"
-            fill="none"
-            filter="url(#route-shadow)"
-            stroke="#22C55E"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth="8"
-          />
-          <g transform="translate(120, 650)">
-            <circle className="opacity-20 animate-pulse" cx="0" cy="0" fill="#10b981" r="16" />
-            <circle className="shadow-md" cx="0" cy="0" fill="#006c49" r="8" stroke="#ffffff" strokeWidth="3" />
-          </g>
-          <g transform="translate(320, 180)">
-            <path
-              d="M0,0 C-8,-10 -14,-18 -14,-26 A14,14 0 1,1 14,-26 C14,-18 8,-10 0,0 Z"
-              fill="#1e1b19"
-            />
-            <circle cx="0" cy="-26" fill="#ffffff" r="5" />
-          </g>
-        </svg>
+        <DeliveryMap
+          className="h-full w-full"
+          courierLat={gps.lat}
+          courierLng={gps.lng}
+          destinationLat={delivery.pickupLat}
+          destinationLng={delivery.pickupLng}
+          destinationLabel={delivery.storeName ?? delivery.restaurant}
+        />
       </div>
 
       <div className="absolute top-0 inset-x-0 pt-safe px-[var(--spacing-edge)] z-10 flex flex-col gap-2 pointer-events-none">

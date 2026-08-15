@@ -95,6 +95,41 @@ export async function removeFavoriteMerchant(merchantId: string): Promise<void> 
   if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Failed to remove favorite');
 }
 
+export type FavoriteItemDto = {
+  merchantId: string;
+  menuItemId: string;
+};
+
+export async function fetchFavoriteItems(): Promise<FavoriteItemDto[]> {
+  const headers = await authHeaders();
+  if (!headers) return [];
+  const res = await fetch(`${API_ENDPOINTS.delivery}/customer/favorite-items`, { headers });
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Failed to load favorite items');
+  const data = await res.json();
+  return (data.items as FavoriteItemDto[]) ?? [];
+}
+
+export async function addFavoriteItem(merchantId: string, menuItemId: string): Promise<void> {
+  const headers = await authHeaders();
+  if (!headers) throw new Error('Sign in required');
+  const res = await fetch(`${API_ENDPOINTS.delivery}/customer/favorite-items`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ merchantId, menuItemId }),
+  });
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Failed to add favorite item');
+}
+
+export async function removeFavoriteItem(merchantId: string, menuItemId: string): Promise<void> {
+  const headers = await authHeaders();
+  if (!headers) throw new Error('Sign in required');
+  const res = await fetch(
+    `${API_ENDPOINTS.delivery}/customer/favorite-items/${encodeURIComponent(merchantId)}/${encodeURIComponent(menuItemId)}`,
+    { method: 'DELETE', headers },
+  );
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Failed to remove favorite item');
+}
+
 export async function isCustomerLoggedIn(): Promise<boolean> {
   const { data: { session } } = await supabase.auth.getSession();
   return Boolean(session?.access_token);

@@ -35,8 +35,22 @@ export type AvailableOrder = {
   delivery_address?: string;
   delivery_lat?: number;
   delivery_lng?: number;
+  delivery_instructions?: string;
   ready_at?: string;
-  merchant?: { id: string; name: string; address?: string; lat?: number; lng?: number } | null;
+  items?: Array<{ name?: string; quantity?: number; note?: string }>;
+  customer_name?: string;
+  customer_phone?: string;
+  customer?: { name?: string | null; phone?: string | null } | null;
+  merchant?: {
+    id: string;
+    name: string;
+    address?: string;
+    lat?: number;
+    lng?: number;
+    phone?: string;
+    vertical_type?: import('@roam/types').VerticalType;
+    fulfillment_type?: import('@roam/types').FulfillmentType;
+  } | null;
 };
 
 export type CourierOfferRow = {
@@ -270,11 +284,24 @@ export async function closeCourierPayoutPeriod(periodStart: string, periodEnd: s
   return (await res.json()) as { payout: unknown };
 }
 
-export async function subscribeCourierPush(endpoint: string, keys?: Record<string, string>) {
+export async function subscribeCourierPush(
+  endpoint: string,
+  keys?: Record<string, string>,
+  platform?: 'fcm' | 'apns' | 'web_push',
+) {
   const {
     data: { session },
   } = await supabase.auth.getSession();
   if (!session?.access_token) return false;
+  const body: Record<string, unknown> = {
+    endpoint,
+    keys,
+    audience: 'courier',
+  };
+  if (platform === 'fcm' || platform === 'apns') {
+    body.platform = platform;
+    body.token = endpoint.includes(':') ? endpoint.slice(endpoint.indexOf(':') + 1) : endpoint;
+  }
   const res = await fetch(`${API_ENDPOINTS.notifications}/subscribe`, {
     method: 'POST',
     headers: {
@@ -282,7 +309,7 @@ export async function subscribeCourierPush(endpoint: string, keys?: Record<strin
       apikey: publicAnonKey,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ endpoint, keys, audience: 'courier' }),
+    body: JSON.stringify(body),
   });
   return res.ok || res.status === 202;
 }

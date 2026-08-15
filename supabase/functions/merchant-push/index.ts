@@ -1,7 +1,8 @@
 /**
- * Merchant Web Push — sends notifications to subscribed merchant devices.
+ * Merchant Web Push + native FCM/APNs — sends notifications to subscribed merchant devices.
  * Requires MERCHANT_PUSH_SECRET (or FLEET_CRON_SECRET) via X-Merchant-Push-Secret
  * or Authorization: Bearer <secret>. Database webhooks must send the same secret.
+ * Native FCM/APNs sends require FCM_SERVER_KEY (Firebase Cloud Messaging legacy server key).
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import webpush from "npm:web-push@3.6.7";
@@ -85,6 +86,84 @@ function resolvePushRequest(body: Record<string, unknown>) {
   return null;
 }
 
+type PushSubRow = {
+  id: string;
+  endpoint: string;
+  channel?: string | null;
+  p256dh?: string | null;
+  auth?: string | null;
+};
+
+function resolveChannel(sub: PushSubRow): "web" | "fcm" | "apns" {
+  if (sub.channel === "fcm" || sub.channel === "apns" || sub.channel === "web") {
+    return sub.channel;
+  }
+  if (sub.endpoint.startsWith("fcm:")) return "fcm";
+  if (sub.endpoint.startsWith("apns:")) return "apns";
+  return "web";
+}
+
+function nativeDeviceToken(sub: PushSubRow, channel: "fcm" | "apns"): string {
+  const prefix = `${channel}:`;
+  return sub.endpoint.startsWith(prefix)
+    ? sub.endpoint.slice(prefix.length)
+    : sub.endpoint;
+}
+
+/** Legacy FCM HTTP API — set FCM_SERVER_KEY in Supabase function secrets. */
+async function sendFcmLegacy(
+  token: string,
+  title: string,
+  message: string,
+  url: string,
+): Promise<{ ok: boolean; stale: boolean }> {
+  const serverKey = Deno.env.get("FCM_SERVER_KEY")?.trim();
+  if (!serverKey) {
+    console.warn("[merchant-push] FCM_SERVER_KEY not set; skipping native token");
+    return { ok: false, stale: false };
+  }
+
+  const res = await fetch("https://fcm.googleapis.com/fcm/send", {
+    method: "POST",
+    headers: {
+      Authorization: `key=${serverKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      to: token,
+      notification: { title, body: message },
+      data: { url },
+      priority: "high",
+    }),
+  });
+
+  if (res.status === 404 || res.status === 410) {
+    return { ok: false, stale: true };
+  }
+
+  const payload = await res.json().catch(() => ({})) as {
+    success?: number;
+    failure?: number;
+    results?: Array<{ error?: string }>;
+  };
+
+  if (!res.ok) {
+    console.error("[merchant-push] FCM HTTP error:", res.status, payload);
+    return { ok: false, stale: false };
+  }
+
+  const err = payload.results?.[0]?.error;
+  if (err === "NotRegistered" || err === "InvalidRegistration") {
+    return { ok: false, stale: true };
+  }
+  if ((payload.failure ?? 0) > 0 && err) {
+    console.error("[merchant-push] FCM send failed:", err);
+    return { ok: false, stale: false };
+  }
+
+  return { ok: true, stale: false };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeadersFor(req) });
@@ -122,7 +201,6 @@ Deno.serve(async (req) => {
   }
 
   try {
-    configureVapid();
     const body = await req.json();
     const resolved = resolvePushRequest(body as Record<string, unknown>);
 
@@ -141,12 +219,38 @@ Deno.serve(async (req) => {
       return jsonResponse(req, { error: error.message }, 500);
     }
 
+    const rows = (subscriptions || []) as PushSubRow[];
+    const hasWeb = rows.some((s) => resolveChannel(s) === "web");
+    if (hasWeb) {
+      configureVapid();
+    }
+
     const payload = JSON.stringify({ title, body: message, url });
     let sent = 0;
     const stale: string[] = [];
 
-    for (const sub of subscriptions || []) {
+    for (const sub of rows) {
+      const channel = resolveChannel(sub);
       try {
+        if (channel === "fcm" || channel === "apns") {
+          const token = nativeDeviceToken(sub, channel);
+          const result = await sendFcmLegacy(token, title, message, url);
+          if (result.stale) stale.push(sub.endpoint);
+          if (result.ok) {
+            sent += 1;
+            await supabase
+              .from("merchant_push_subscriptions")
+              .update({ last_used_at: new Date().toISOString() })
+              .eq("id", sub.id);
+          }
+          continue;
+        }
+
+        if (!sub.p256dh || !sub.auth) {
+          console.warn("[merchant-push] skipping web sub missing keys:", sub.id);
+          continue;
+        }
+
         await webpush.sendNotification(
           {
             endpoint: sub.endpoint,

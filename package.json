@@ -25,6 +25,7 @@
     "deploy:delivery": "npx supabase functions deploy delivery --use-api --project-ref csfllzzastacofsvcdsc",
     "deploy:payments": "npx supabase functions deploy payments --use-api --project-ref csfllzzastacofsvcdsc",
     "deploy:merchant-push": "npx supabase functions deploy merchant-push --use-api --project-ref csfllzzastacofsvcdsc",
+    "deploy:notifications": "npx supabase functions deploy notifications --use-api --project-ref csfllzzastacofsvcdsc",
     "deploy:send-sms": "npx supabase functions deploy send-sms --use-api --project-ref csfllzzastacofsvcdsc",
     "deploy:driver": "npx supabase functions deploy driver --use-api --project-ref csfllzzastacofsvcdsc",
     "deploy:matching": "npx supabase functions deploy matching --use-api --project-ref csfllzzastacofsvcdsc",
@@ -47,10 +48,18 @@
     "cap:courier:release": "pnpm --filter @roam/dash-courier cap:release",
     "cap:courier:aab": "pnpm --filter @roam/dash-courier cap:aab",
     "cap:courier:android": "pnpm --filter @roam/dash-courier cap:open:android",
+    "cap:courier:ios": "pnpm --filter @roam/dash-courier cap:open:ios",
     "cap:rush:sync": "pnpm --filter @roam/dash-customer cap:sync",
     "cap:rush:release": "pnpm --filter @roam/dash-customer cap:release",
     "cap:rush:aab": "pnpm --filter @roam/dash-customer cap:aab",
     "cap:rush:android": "pnpm --filter @roam/dash-customer cap:open:android",
+    "cap:rush:ios": "pnpm --filter @roam/dash-customer cap:open:ios",
+    "cap:partner:sync": "pnpm --filter @roam/dash-merchant cap:sync",
+    "cap:partner:release": "pnpm --filter @roam/dash-merchant cap:release",
+    "cap:partner:aab": "pnpm --filter @roam/dash-merchant cap:aab",
+    "cap:partner:android": "pnpm --filter @roam/dash-merchant cap:open:android",
+    "cap:partner:ios": "pnpm --filter @roam/dash-merchant cap:open:ios",
+    "icons:dash-android": "node scripts/generate-dash-android-icons.mjs",
     "cap:rides:sync": "pnpm --filter @roam/rides-passenger cap:sync",
     "cap:rides:release": "pnpm --filter @roam/rides-passenger cap:release",
     "cap:rides:aab": "pnpm --filter @roam/rides-passenger cap:aab",
@@ -61,7 +70,7 @@
     "deploy:logistics": "npx supabase functions deploy logistics --use-api --project-ref csfllzzastacofsvcdsc",
     "deploy:toll-brain": "npx supabase functions deploy toll-brain --use-api --project-ref csfllzzastacofsvcdsc",
     "deploy:fuel-brain": "npx supabase functions deploy fuel-brain --use-api --project-ref csfllzzastacofsvcdsc",
-    "deploy:functions:all": "pnpm deploy:edge && pnpm deploy:delivery && pnpm deploy:merchant-push && pnpm deploy:payments && pnpm deploy:send-sms && pnpm deploy:rides && pnpm deploy:driver && pnpm deploy:haul && pnpm deploy:freight && pnpm deploy:logistics && pnpm deploy:toll-brain && pnpm deploy:fuel-brain && pnpm deploy:matching && pnpm deploy:identity && pnpm deploy:evidence-cleanup && pnpm deploy:petrojam-prices && pnpm deploy:fleet-ops && pnpm deploy:platform-catalog && pnpm deploy:before-user-created && pnpm deploy:custom-access-token"
+    "deploy:functions:all": "pnpm deploy:edge && pnpm deploy:delivery && pnpm deploy:merchant-push && pnpm deploy:notifications && pnpm deploy:payments && pnpm deploy:send-sms && pnpm deploy:rides && pnpm deploy:driver && pnpm deploy:haul && pnpm deploy:freight && pnpm deploy:logistics && pnpm deploy:toll-brain && pnpm deploy:fuel-brain && pnpm deploy:matching && pnpm deploy:identity && pnpm deploy:evidence-cleanup && pnpm deploy:petrojam-prices && pnpm deploy:fleet-ops && pnpm deploy:platform-catalog && pnpm deploy:before-user-created && pnpm deploy:custom-access-token"
   },
   "devDependencies": {
     "typescript": "^5.4.0"

@@ -1,37 +1,37 @@
 import React from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { BusyZoneShader } from '@/components/map/BusyZoneShader';
+import { DeliveryMap } from '@/components/map/DeliveryMap';
 import { LocationRippleShader } from '@/components/map/LocationRippleShader';
-
-const KINGSTON_MAP =
-  'https://lh3.googleusercontent.com/aida-public/AB6AXuCji4y249H5Or2pgZf6Z-yVTxpcz2_hVTZlUJENMXmFd1OgyQE1rcNDoF1NsEFNidUWi4VE_9zUClLEPRmuQLgtRYYp3PBXoomeK-8kwDU-0iOiQ_O81fkvXC_jRbTr2Cba6oFfjG5bHalysHHROuZVscaBZEvK94A5gfOWVlWo2V9_hehkEwxmqjREGW-0Re7h0VZ48XSZxLAsWhke8QBgS8ZiAH_UZO68WQR96QQSECUeyXpO7rMBMaDSyx9aMdCsxPILycfvtHY';
 
 type HomeOnlinePageProps = {
   onRequestEndDash: () => void;
   onOfferReceived?: () => void;
   onViewPromotions?: () => void;
-  mapOffset?: { x: number; y: number };
+  courierLat?: number | null;
+  courierLng?: number | null;
 };
 
 export function HomeOnlinePage({
   onRequestEndDash,
   onOfferReceived: _onOfferReceived,
   onViewPromotions,
-  mapOffset = { x: 50, y: 50 },
+  courierLat,
+  courierLng,
 }: HomeOnlinePageProps) {
   // Offers arrive via RealDispatchProvider polling / Realtime — no fake timer.
   void _onOfferReceived;
 
   return (
     <main className="relative w-full flex-1 min-h-[calc(100dvh-var(--app-bottom-nav-total)-3.5rem)] flex flex-col bg-surface-variant overflow-hidden md:rounded-xl md:mx-auto md:max-w-xl md:my-2 md:min-h-[calc(100dvh-1rem)]">
-      <div
-        className="absolute inset-0 z-0 bg-cover bg-center opacity-90 mix-blend-multiply transition-[background-position] duration-1000"
-        style={{
-          backgroundImage: `url('${KINGSTON_MAP}')`,
-          backgroundPosition: `${mapOffset.x}% ${mapOffset.y}%`,
-        }}
-        aria-hidden
-      />
+      <div className="absolute inset-0 z-0">
+        <DeliveryMap
+          className="h-full w-full opacity-90"
+          courierLat={courierLat}
+          courierLng={courierLng}
+          interactive={false}
+        />
+      </div>
 
       <div className="relative z-10 flex-1 flex flex-col justify-between p-[var(--spacing-edge)] pb-6 pointer-events-none">
         <div className="space-y-2 w-full max-w-md mx-auto pointer-events-auto pt-2">

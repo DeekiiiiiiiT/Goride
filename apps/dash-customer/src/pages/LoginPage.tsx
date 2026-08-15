@@ -81,9 +81,6 @@ export default function LoginPage({
       );
       const redirectTo = getDashCustomerAuthRedirectUrl();
       const native = isNativeCapacitorPlatform();
-      // #region agent log
-      fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'be05d1'},body:JSON.stringify({sessionId:'be05d1',runId:'pre-fix',hypothesisId:'A',location:'LoginPage.tsx:handleGoogleAuth:before',message:'starting Google OAuth',data:{native,redirectTo,origin:typeof window!=='undefined'?window.location?.origin:null,hrefHost:typeof window!=='undefined'?window.location?.hostname:null,buildMarker:'rush-oauth-debug-be05d1'},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
@@ -94,26 +91,9 @@ export default function LoginPage({
         },
       });
       if (error) throw error;
-      // #region agent log
-      {
-        let oauthHost: string | null = null;
-        let oauthRedirectParam: string | null = null;
-        try {
-          if (data?.url) {
-            const u = new URL(data.url);
-            oauthHost = u.host;
-            oauthRedirectParam = u.searchParams.get('redirect_to');
-          }
-        } catch { /* ignore */ }
-        fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'be05d1'},body:JSON.stringify({sessionId:'be05d1',runId:'pre-fix',hypothesisId:'C',location:'LoginPage.tsx:handleGoogleAuth:after',message:'OAuth URL issued',data:{native,hasUrl:Boolean(data?.url),oauthHost,oauthRedirectParam,error:error?.message??null},timestamp:Date.now()})}).catch(()=>{});
-      }
-      // #endregion
       if (native && data?.url) {
         const { Browser } = await import('@capacitor/browser');
         await Browser.open({ url: data.url });
-        // #region agent log
-        fetch('http://127.0.0.1:7418/ingest/a3d13dc6-6745-44ac-a4fd-f2bafc5169ae',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'be05d1'},body:JSON.stringify({sessionId:'be05d1',runId:'pre-fix',hypothesisId:'D',location:'LoginPage.tsx:handleGoogleAuth:browserOpen',message:'opened system browser for OAuth',data:{native,oauthHost:(()=>{try{return data.url?new URL(data.url).host:null}catch{return null}})()},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
       }
     } catch (error) {
       clearDashCustomerOAuthIntent();

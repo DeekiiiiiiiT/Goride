@@ -25,7 +25,13 @@ type ApiPromo = {
   type: string;
   discountPercent: number | null;
   discountAmount: number | null;
+  imageUrl?: string | null;
+  logoUrl?: string | null;
+  image?: string | null;
+  logo?: string | null;
 };
+
+const DEAL_IMAGE_FALLBACK = '/images/logo.png';
 
 function mapPromo(p: ApiPromo): FeaturedDeal {
   const filter: DealFilter =
@@ -34,6 +40,8 @@ function mapPromo(p: ApiPromo): FeaturedDeal {
       : p.type === 'bogo'
         ? 'bogo'
         : 'percent-off';
+  const image = (p.imageUrl || p.image || '').trim() || DEAL_IMAGE_FALLBACK;
+  const logo = (p.logoUrl || p.logo || '').trim() || DEAL_IMAGE_FALLBACK;
   return {
     id: p.id,
     merchantId: p.merchantId,
@@ -43,11 +51,11 @@ function mapPromo(p: ApiPromo): FeaturedDeal {
         ? `${p.discountPercent}% OFF`
         : p.discountAmount != null
           ? `J$${p.discountAmount} OFF`
-          : p.promoCode,
+          : p.promoCode || 'Deal',
     title: p.title,
-    validUntil: p.promoCode,
-    image: '',
-    logo: '',
+    validUntil: p.promoCode || 'Limited time',
+    image,
+    logo,
     filter,
   };
 }
@@ -116,8 +124,8 @@ export default function DealsPage({ onNavigate }: Props) {
         <div className="px-4">
           <EmptyState
             icon="local_offer"
-            title="Deals coming soon"
-            description="Promotions will show up here once partners publish them."
+            title="No deals in Kingston right now"
+            description="Partners haven’t published live promotions yet. Check back soon, or browse restaurants and save with everyday menu pricing."
             actionLabel="Browse restaurants"
             onAction={() => onNavigate('home')}
           />
@@ -129,15 +137,27 @@ export default function DealsPage({ onNavigate }: Props) {
               key={deal.id}
               type="button"
               onClick={() => onNavigate('restaurant', { merchantId: deal.merchantId })}
-              className="w-full text-left bg-surface-container-lowest rounded-xl p-4 shadow-sm border border-surface-variant"
+              className="w-full text-left bg-surface-container-lowest rounded-xl p-4 shadow-sm border border-surface-variant overflow-hidden"
             >
               <div className="flex items-start justify-between gap-3">
-                <div>
-                  <span className="text-label-sm font-semibold text-primary">{deal.badge}</span>
-                  <h3 className="text-headline-sm font-bold mt-1">{deal.title}</h3>
-                  <p className="text-body-sm text-on-surface-variant mt-1">{deal.merchantName}</p>
+                <div className="flex min-w-0 flex-1 gap-3">
+                  <img
+                    src={deal.image || DEAL_IMAGE_FALLBACK}
+                    alt=""
+                    className="h-14 w-14 shrink-0 rounded-lg object-cover bg-surface-variant"
+                    onError={(e) => {
+                      const el = e.currentTarget;
+                      if (el.src.endsWith(DEAL_IMAGE_FALLBACK)) return;
+                      el.src = DEAL_IMAGE_FALLBACK;
+                    }}
+                  />
+                  <div className="min-w-0">
+                    <span className="text-label-sm font-semibold text-primary">{deal.badge}</span>
+                    <h3 className="text-headline-sm font-bold mt-1">{deal.title}</h3>
+                    <p className="text-body-sm text-on-surface-variant mt-1">{deal.merchantName}</p>
+                  </div>
                 </div>
-                <MaterialIcon name="chevron_right" className="text-outline-variant" />
+                <MaterialIcon name="chevron_right" className="text-outline-variant shrink-0" />
               </div>
             </button>
           ))}

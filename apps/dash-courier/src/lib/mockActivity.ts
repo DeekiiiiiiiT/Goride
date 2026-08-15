@@ -1,4 +1,4 @@
-import { formatJmd } from '@/lib/mockEarnings';
+import { formatJmd } from '@/lib/formatMoney';
 
 export type ActivityTab = 'current' | 'history';
 export type HistoryFilter = 'all' | 'completed' | 'cancelled';

@@ -196,6 +196,10 @@ export function registerOrderAdminRoutes(app: Hono) {
         .update({ active_order_id: null })
         .eq("driver_id", courierId);
     }
+    await db
+      .from("courier_availability")
+      .update({ active_order_id: null })
+      .eq("active_order_id", orderId);
 
     await db.from("order_events").insert({
       order_id: orderId,

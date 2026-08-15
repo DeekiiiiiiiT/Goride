@@ -1,21 +1,23 @@
 import React from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
-import { MOCK_COURIER_PROFILE } from '@/lib/mockProfile';
 
 type UnassignConfirmModalProps = {
   open: boolean;
-  completionRate?: number;
+  completionRate?: number | null;
   onConfirm: () => void;
   onCancel: () => void;
 };
 
 export function UnassignConfirmModal({
   open,
-  completionRate = MOCK_COURIER_PROFILE.completionRate,
+  completionRate,
   onConfirm,
   onCancel,
 }: UnassignConfirmModalProps) {
   if (!open) return null;
+
+  const rateLabel =
+    completionRate != null && Number.isFinite(completionRate) ? `${completionRate}%` : '—';
 
   return (
     <div className="fixed inset-0 z-[90] flex items-center justify-center p-[var(--spacing-edge)]">
@@ -39,7 +41,7 @@ export function UnassignConfirmModal({
             <span className="text-[11px] text-muted uppercase tracking-wider">
               Current Completion Rate
             </span>
-            <span className="text-[28px] font-bold text-error leading-9">{completionRate}%</span>
+            <span className="text-[28px] font-bold text-error leading-9">{rateLabel}</span>
           </div>
           <div className="w-full flex flex-col gap-4">
             <button

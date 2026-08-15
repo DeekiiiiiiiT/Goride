@@ -1,3 +1,4 @@
+// @refresh reset — giant route table; HMR otherwise throws "X is not defined" (ROAM-ENTERPRISE-3).
 import { lazy, Suspense, type ReactNode } from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { FREIGHT_FORWARDER_PATH } from '@/app/productDoor';

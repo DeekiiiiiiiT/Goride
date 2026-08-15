@@ -1,10 +1,22 @@
+import { isNativeCapacitorPlatform } from '@roam/types';
+
 export const PARTNER_PRODUCTION_ORIGIN = 'https://partner.roamrush.app';
+
+/** Native deep link registered in AndroidManifest + Supabase redirect URLs. */
+export const PARTNER_NATIVE_AUTH_CALLBACK = 'co.roamenterprise.partner://login';
 
 export const PARTNER_OAUTH_INTENT_KEY = 'roam_partner_oauth_intent';
 export const PARTNER_OAUTH_INTENT_SIGNUP = 'signup';
 export const PARTNER_OAUTH_INTENT_LOGIN = 'login';
 
+/**
+ * Supabase OAuth / email `redirectTo`.
+ * Capacitor serves the app at https://localhost — never use window.location.origin on native.
+ */
 export function getPartnerAuthRedirectUrl(): string {
+  if (isNativeCapacitorPlatform()) {
+    return PARTNER_NATIVE_AUTH_CALLBACK;
+  }
   if (typeof window !== 'undefined' && window.location?.origin) {
     const { origin, pathname } = window.location;
     if (pathname.startsWith('/team-invite/')) {
@@ -16,6 +28,13 @@ export function getPartnerAuthRedirectUrl(): string {
     return `${origin}/`;
   }
   return `${PARTNER_PRODUCTION_ORIGIN}/`;
+}
+
+export function isPartnerAuthCallbackUrl(url: string): boolean {
+  return (
+    url.startsWith(PARTNER_NATIVE_AUTH_CALLBACK) ||
+    url.startsWith(`${PARTNER_PRODUCTION_ORIGIN}/`)
+  );
 }
 
 export function clearPartnerOAuthIntent(): void {

@@ -101,7 +101,7 @@ export default function NotificationSettingsView({
 
   const handlePushToggle = async (enabled: boolean) => {
     if (!isSupported) {
-      toast.info('Push notifications are not supported in this browser');
+      toast.info('Push notifications are not available on this device');
       return;
     }
 

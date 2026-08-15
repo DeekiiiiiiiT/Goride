@@ -38,7 +38,7 @@ import { api } from '../../services/api';
 import { uploadEvidenceFile } from '../../services/uploadEvidence';
 import { EvidenceRetentionNotice } from '../evidence/EvidenceRetentionNotice';
 import { resolveVehicleIdForDriver } from '../../utils/resolveDriverVehicleId';
-import { resolveCanonicalDriverIdentity } from '@roam/types/driverIdentity';
+import { collectDriverAliasIds, resolveCanonicalDriverIdentity } from '@roam/types/driverIdentity';
 import { FinancialTransaction, TransactionCategory } from '../../types/data';
 import { StationProfile } from '../../types/station';
 import { DriverClaims } from './DriverClaims';
@@ -942,25 +942,31 @@ export function DriverExpenses({ defaultOpen = false, onBack }: ExpenseLoggerPro
       setFuelPumpStep('photo');
       setViewState('gas_card_details');
       try {
+        // Do not swallow getFuelCards failures as [] — that falsely shows "no card".
         const [vehicles, cards] = await Promise.all([
           api.getVehicles().catch(() => []),
-          fuelService.getFuelCards().catch(() => [] as FuelCard[]),
+          fuelService.getFuelCards(),
         ]);
         const resolvedVehicleId = resolveVehicleIdForDriver(driverRecord, vehicles, user?.id);
         const { driverId: canonicalDriverId } = resolveCanonicalDriverIdentity(
           driverRecord,
           { id: user?.id, name: user?.user_metadata?.name, email: user?.email },
         );
-        // Vehicle first; rental / driver cards resolve via assignedDriverId
+        const driverIds = collectDriverAliasIds(
+          driverRecord || { id: user?.id, driverId: user?.id },
+        );
+        // Vehicle first; rental / driver cards resolve via assignedDriverId (+ aliases)
         setAssignedGasCard(
           findActiveFuelCardForSession(cards, {
             vehicleId: resolvedVehicleId,
             driverId: canonicalDriverId || driverRecord?.id || driverRecord?.driverId || user?.id,
+            driverIds: [...driverIds, user?.id],
           }) || null,
         );
       } catch (e) {
         console.warn('[DriverExpenses] Gas card lookup failed', e);
         setAssignedGasCard(null);
+        toast.error(e instanceof Error ? e.message : 'Could not load your gas card. Try again.');
       } finally {
         setGasCardLookupDone(true);
       }

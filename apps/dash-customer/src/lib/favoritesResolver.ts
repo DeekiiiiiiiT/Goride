@@ -1,7 +1,7 @@
 import { FEATURED_RESTAURANTS, POPULAR_RESTAURANTS, SEARCH_RESULTS, type DiscoverRestaurant } from '@/lib/discoverContent';
 import { getRestaurantProfile } from '@/lib/restaurantContent';
 import { searchDishes } from '@/lib/searchDishes';
-import type { FavoriteItemKey } from '@/lib/favoritesStorage';
+import { parseFavoriteItemKey, type FavoriteItemKey } from '@/lib/favoriteItemKey';
 
 const ALL_RESTAURANTS: DiscoverRestaurant[] = [
   ...FEATURED_RESTAURANTS,
@@ -35,7 +35,9 @@ export function resolveFavoriteRestaurant(merchantId: string) {
 }
 
 export function resolveFavoriteItem(key: FavoriteItemKey) {
-  const [merchantId, itemId] = key.split(':');
+  const parsed = parseFavoriteItemKey(key);
+  if (!parsed) return null;
+  const { merchantId, itemId } = parsed;
   const dish = searchDishes('').find((d) => d.merchantId === merchantId && d.itemId === itemId);
   if (dish) {
     return {

@@ -1,3 +1,4 @@
+// @refresh reset — lazy DispatchBoardPage is undefined mid-HMR (ROAM-ENTERPRISE-3).
 import { lazy, Suspense, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useModuleAccess } from '@/app/modules/ModuleAccessProvider';

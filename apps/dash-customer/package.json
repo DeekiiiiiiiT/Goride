@@ -9,10 +9,11 @@
     "preview": "vite preview",
     "test": "vitest run",
     "build:mobile": "node ../../scripts/assert-vite-supabase-env.mjs && vite build",
-    "cap:sync": "pnpm run build:mobile && cap sync android",
+    "cap:sync": "pnpm run build:mobile && cap sync",
     "cap:release": "node scripts/bump-android-version.mjs && pnpm run cap:sync",
     "cap:aab": "node scripts/build-android-aab.mjs",
     "cap:open:android": "cap open android",
+    "cap:open:ios": "cap open ios",
     "cap:run:android": "pnpm run cap:sync && cap run android"
   },
   "dependencies": {
@@ -20,6 +21,9 @@
     "@capacitor/app": "^7.1.2",
     "@capacitor/browser": "^7.0.5",
     "@capacitor/core": "^7.6.5",
+    "@capacitor/geolocation": "^7.1.5",
+    "@capacitor/ios": "^7.6.8",
+    "@capacitor/push-notifications": "^7.0.7",
     "@capacitor/splash-screen": "^7.0.5",
     "@capacitor/status-bar": "^7.0.6",
     "@roam/api-client": "workspace:*",

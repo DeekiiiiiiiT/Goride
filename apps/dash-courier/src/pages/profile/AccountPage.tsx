@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
-import { MOCK_COURIER_PROFILE } from '@/lib/mockProfile';
+import type { CourierProfile } from '@/lib/mockProfile';
 import { loadCourierProfile } from '@/lib/courierProfileService';
 
 export type ProfileDestination =
@@ -23,6 +23,20 @@ type MenuItem = {
   id: ProfileDestination;
   label: string;
   icon: string;
+};
+
+const EMPTY_PROFILE: CourierProfile = {
+  fullName: '',
+  displayName: '',
+  phone: '',
+  email: '',
+  avatarUrl: '',
+  memberSince: '',
+  rating: 0,
+  acceptanceRate: 0,
+  completionRate: 0,
+  totalDeliveries: 0,
+  verified: false,
 };
 
 const MENU_GROUPS: MenuItem[][] = [
@@ -67,27 +81,31 @@ function MenuGroup({ items, onNavigate }: { items: MenuItem[]; onNavigate: Accou
 }
 
 export function AccountPage({ onNavigate, onSignOut, onRatingTap }: AccountPageProps) {
-  const [profile, setProfile] = useState(MOCK_COURIER_PROFILE);
+  const [profile, setProfile] = useState<CourierProfile>(EMPTY_PROFILE);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     void loadCourierProfile().then((row) => {
+      setLoading(false);
       if (!row) return;
-      setProfile((prev) => ({
-        ...prev,
-        displayName: row.display_name ?? prev.displayName,
-        fullName: row.display_name ?? prev.fullName,
-        phone: row.phone ?? prev.phone,
-        email: row.email ?? prev.email,
-        rating: row.rating ?? prev.rating,
-        acceptanceRate: row.acceptance_rate_pct ?? prev.acceptanceRate,
-        completionRate: row.completion_rate_pct ?? prev.completionRate,
-        totalDeliveries: row.total_deliveries ?? prev.totalDeliveries,
-      }));
+      setProfile({
+        fullName: row.display_name || '',
+        displayName: row.display_name || '',
+        phone: row.phone || '',
+        email: row.email || '',
+        avatarUrl: '',
+        memberSince: '',
+        rating: row.rating ?? 0,
+        acceptanceRate: row.acceptance_rate_pct ?? 0,
+        completionRate: row.completion_rate_pct ?? 0,
+        totalDeliveries: row.total_deliveries ?? 0,
+        verified: row.background_check_status === 'approved' || row.status === 'active',
+      });
     });
   }, []);
 
   const stats = [
-    { value: profile.rating.toFixed(2), label: 'Courier Rating', star: true },
+    { value: profile.rating > 0 ? profile.rating.toFixed(2) : '—', label: 'Courier Rating', star: true },
     { value: `${profile.acceptanceRate}%`, label: 'Acceptance Rate' },
     { value: `${profile.completionRate}%`, label: 'Completion Rate' },
     { value: String(profile.totalDeliveries), label: 'Total Deliveries' },
@@ -119,17 +137,23 @@ export function AccountPage({ onNavigate, onSignOut, onRatingTap }: AccountPageP
         <section className="bg-surface rounded-xl p-6 shadow-soft relative overflow-hidden">
           <div className="absolute top-0 left-0 w-full h-24 bg-surface-container-low" />
           <div className="relative z-10 flex flex-col items-center mt-6">
-            <div className="w-24 h-24 rounded-full border-4 border-surface overflow-hidden shadow-sm mb-4 bg-surface-container">
-              <img
-                src={profile.avatarUrl}
-                alt=""
-                className="w-full h-full object-cover"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).style.display = 'none';
-                }}
-              />
+            <div className="w-24 h-24 rounded-full border-4 border-surface overflow-hidden shadow-sm mb-4 bg-surface-container flex items-center justify-center">
+              {profile.avatarUrl ? (
+                <img
+                  src={profile.avatarUrl}
+                  alt=""
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).style.display = 'none';
+                  }}
+                />
+              ) : (
+                <MaterialIcon name="person" className="text-4xl text-muted" />
+              )}
             </div>
-            <h2 className="text-2xl font-semibold text-on-surface mb-1">{profile.fullName}</h2>
+            <h2 className="text-2xl font-semibold text-on-surface mb-1">
+              {loading ? 'Loading…' : profile.fullName || 'Courier'}
+            </h2>
             {profile.verified && (
               <div className="flex items-center gap-1 bg-surface-container-low text-primary px-3 py-1 rounded-full mb-6">
                 <MaterialIcon name="check_circle" className="text-success text-base" filled />
@@ -163,9 +187,11 @@ export function AccountPage({ onNavigate, onSignOut, onRatingTap }: AccountPageP
             })}
           </div>
 
-          <p className="text-center mt-6 text-[11px] text-muted">
-            Member since {profile.memberSince}
-          </p>
+          {profile.memberSince ? (
+            <p className="text-center mt-6 text-[11px] text-muted">
+              Member since {profile.memberSince}
+            </p>
+          ) : null}
         </section>
 
         {MENU_GROUPS.map((group, i) => (
