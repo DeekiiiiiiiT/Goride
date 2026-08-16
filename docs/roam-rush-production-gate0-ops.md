@@ -92,9 +92,8 @@ Primary staff console: **https://partner.roamrush.app/admin** (subtitle: Ops Con
 
 Covers Merchants, Couriers (embedded), Customers, Orders, Live Ops, Markets/zones, Finance, Team invites, Support cases, Activity audit.
 
-- Markets/zones are admin-editable (`delivery.service_markets` + `delivery.service_zone_polygons`). Soft-launch seeds: Kingston + Spanish Town.
-- Ops Console → Delivery Markets: draw **include** / **exclude** polygons on a Leaflet map (no JSON paste). Soft-block: cannot activate a market without ≥1 include zone. Pin-test: `POST /admin/markets/check-point`.
-- Zone kinds: `include` (serve) / `exclude` (carve-out; exclude wins). Rush evaluates: inside any include AND not inside any exclude among active markets.
+- Markets: Parish → Town (`delivery.service_parishes` → `service_markets` → `service_zone_polygons`). Adding a town auto-creates a green delivery outline (curated for Kingston/Spanish Town; ~4 km circle fallback otherwise). Ops carve out no-go areas (“Don’t deliver here”); soft-block: cannot activate without ≥1 delivery area. Pin-test: `POST /admin/markets/check-point`.
+- Soft-launch seeds: all 14 Jamaica parishes; Kingston town under Kingston parish; Spanish Town under St. Catherine.
 - Rush app loads zones from `GET /geo/delivery-zones` (cache TTL ~10m, key `roam-dash-delivery-zones-v2`; fallback Kingston polygon if offline).
 - Team invite: `POST /admin/team/invite` (dash_admin / dash_ops / courier_admin / courier_ops).
 - Courier-only roles see a reduced nav (Couriers + Live Ops + Orders + Support).

@@ -10,8 +10,57 @@ import {
   type CoverageVertex,
   type CoverageZone,
 } from "./coverageEval.ts";
+import {
+  deliveryAreaName,
+  resolveTownOutline,
+  type OutlineVertex,
+} from "./townOutlines.ts";
 
 type Vertex = CoverageVertex;
+
+function hasValidInclude(zones: unknown[]): boolean {
+  return zones.some((z) => {
+    const row = z as Record<string, unknown>;
+    const kind = normalizeKind(row.kind);
+    const poly = row.polygon;
+    return kind === "include" && Array.isArray(poly) && poly.length >= 3;
+  });
+}
+
+async function resolveParishSlug(
+  db: ReturnType<typeof getDb>,
+  parishId: string | null,
+): Promise<string | null> {
+  if (!parishId) return null;
+  const { data } = await db.from("service_parishes").select("slug").eq("id", parishId).maybeSingle();
+  return data?.slug != null ? String(data.slug) : null;
+}
+
+async function insertAutoDeliveryArea(
+  db: ReturnType<typeof getDb>,
+  market: { id: string; name: string; slug: string; parish_id?: string | null },
+): Promise<Record<string, unknown> | null> {
+  const parishSlug = await resolveParishSlug(
+    db,
+    market.parish_id != null ? String(market.parish_id) : null,
+  );
+  const polygon: OutlineVertex[] = resolveTownOutline({
+    townSlug: String(market.slug),
+    parishSlug,
+  });
+  const { data, error } = await db.from("service_zone_polygons").insert({
+    market_id: market.id,
+    name: deliveryAreaName(String(market.name)),
+    polygon,
+    kind: "include",
+    priority: 10,
+  }).select().single();
+  if (error) {
+    console.error("auto delivery area insert failed", error.message);
+    return null;
+  }
+  return data as Record<string, unknown>;
+}
 
 /** Validate/normalize a polygon payload into an array of {lat,lng} vertices. */
 function normalizePolygon(input: unknown): Vertex[] | null {
@@ -57,9 +106,16 @@ export function registerMarketAdminRoutes(app: Hono) {
     await next();
   });
 
-  // List markets with their zones.
+  // List markets with their zones + parish grouping.
   admin.get("/", async (c) => {
     const db = getDb();
+    const { data: parishes, error: pErr } = await db
+      .from("service_parishes")
+      .select("*")
+      .order("sort_order", { ascending: true })
+      .order("name", { ascending: true });
+    if (pErr) return c.json({ error: pErr.message }, 500);
+
     const { data: markets, error } = await db
       .from("service_markets")
       .select("*")
@@ -83,12 +139,119 @@ export function registerMarketAdminRoutes(app: Hono) {
       }, new Map<string, unknown[]>());
     }
 
+    const enrichedMarkets = [];
+    for (const m of markets ?? []) {
+      const market = m as Record<string, unknown>;
+      const id = String(market.id);
+      let zones = zonesByMarket.get(id) ?? [];
+      if (!hasValidInclude(zones)) {
+        const inserted = await insertAutoDeliveryArea(db, {
+          id,
+          name: String(market.name ?? ""),
+          slug: String(market.slug ?? ""),
+          parish_id: market.parish_id != null ? String(market.parish_id) : null,
+        });
+        if (inserted) {
+          zones = [inserted, ...zones];
+          zonesByMarket.set(id, zones);
+        }
+      }
+      enrichedMarkets.push({ ...market, zones });
+    }
+
+    const townsByParish = new Map<string, typeof enrichedMarkets>();
+    const unassigned: typeof enrichedMarkets = [];
+    for (const m of enrichedMarkets) {
+      const parishId = (m as Record<string, unknown>).parish_id;
+      if (parishId == null || parishId === "") {
+        unassigned.push(m);
+        continue;
+      }
+      const key = String(parishId);
+      const list = townsByParish.get(key) ?? [];
+      list.push(m);
+      townsByParish.set(key, list);
+    }
+
     return c.json({
-      markets: (markets ?? []).map((m) => ({
-        ...m,
-        zones: zonesByMarket.get(String((m as Record<string, unknown>).id)) ?? [],
+      markets: enrichedMarkets,
+      parishes: (parishes ?? []).map((p) => ({
+        ...p,
+        towns: townsByParish.get(String((p as Record<string, unknown>).id)) ?? [],
       })),
+      unassigned,
     });
+  });
+
+  // ---- Parishes (before /:id) ----
+  admin.get("/parishes", async (c) => {
+    const db = getDb();
+    const { data, error } = await db
+      .from("service_parishes")
+      .select("*")
+      .order("sort_order", { ascending: true })
+      .order("name", { ascending: true });
+    if (error) return c.json({ error: error.message }, 500);
+    return c.json({ parishes: data ?? [] });
+  });
+
+  admin.post("/parishes", async (c) => {
+    const adminUser = c.get("adminUser") as ProductAdminUser;
+    const denied = requireDashWrite(adminUser);
+    if (denied) return denied;
+    const body = await c.req.json().catch(() => ({}));
+    const name = String(body.name || "").trim();
+    if (!name) return c.json({ error: "name is required" }, 400);
+    const slug = String(body.slug || slugify(name)).trim();
+    if (!slug) return c.json({ error: "slug is required" }, 400);
+    const sortOrder = Number.isFinite(Number(body.sort_order))
+      ? Math.trunc(Number(body.sort_order))
+      : 999;
+
+    const db = getDb();
+    const { data, error } = await db.from("service_parishes").insert({
+      name,
+      slug,
+      sort_order: sortOrder,
+    }).select().single();
+    if (error) return c.json({ error: error.message }, 500);
+    await writeKvAudit(adminUser, "roam_dash.parish_created", String(data.id), "", `Parish ${name}`);
+    return c.json({ parish: data }, 201);
+  });
+
+  admin.patch("/parishes/:parishId", async (c) => {
+    const adminUser = c.get("adminUser") as ProductAdminUser;
+    const denied = requireDashWrite(adminUser);
+    if (denied) return denied;
+    const body = await c.req.json().catch(() => ({}));
+    const updates: Record<string, unknown> = {};
+    if (body.name != null) updates.name = String(body.name).trim();
+    if (body.slug != null) updates.slug = slugify(String(body.slug));
+    if (body.sort_order != null && Number.isFinite(Number(body.sort_order))) {
+      updates.sort_order = Math.trunc(Number(body.sort_order));
+    }
+    if (Object.keys(updates).length === 0) return c.json({ error: "No fields to update" }, 400);
+
+    const db = getDb();
+    const { data, error } = await db.from("service_parishes")
+      .update(updates)
+      .eq("id", c.req.param("parishId"))
+      .select().single();
+    if (error) return c.json({ error: error.message }, 500);
+    await writeKvAudit(adminUser, "roam_dash.parish_updated", c.req.param("parishId"), "", JSON.stringify(updates));
+    return c.json({ parish: data });
+  });
+
+  admin.delete("/parishes/:parishId", async (c) => {
+    const adminUser = c.get("adminUser") as ProductAdminUser;
+    const denied = requireDashDelete(adminUser);
+    if (denied) return denied;
+    const db = getDb();
+    // Towns become unassigned via ON DELETE SET NULL
+    const { error } = await db.from("service_parishes").delete().eq("id", c.req.param("parishId"));
+    if (error) return c.json({ error: error.message }, 500);
+    await writeKvAudit(adminUser, "roam_dash.parish_deleted", c.req.param("parishId"), "", "Parish removed");
+    return c.json({ ok: true });
   });
 
   // Must register before /:id so "check-point" is not treated as a market id.
@@ -161,15 +324,28 @@ export function registerMarketAdminRoutes(app: Hono) {
     if (!slug) return c.json({ error: "slug is required" }, 400);
 
     const db = getDb();
+    const parishId = body.parish_id != null && String(body.parish_id).trim()
+      ? String(body.parish_id).trim()
+      : null;
     const { data, error } = await db.from("service_markets").insert({
       slug,
       name,
       is_active: body.is_active === true,
       waitlist_enabled: body.waitlist_enabled !== false,
+      parish_id: parishId,
     }).select().single();
     if (error) return c.json({ error: error.message }, 500);
-    await writeKvAudit(adminUser, "roam_dash.market_created", String(data.id), "", `Market ${name} (${slug})`);
-    return c.json({ market: data }, 201);
+
+    const autoZone = await insertAutoDeliveryArea(db, {
+      id: String(data.id),
+      name: String(data.name),
+      slug: String(data.slug),
+      parish_id: parishId,
+    });
+    const zones = autoZone ? [autoZone] : [];
+
+    await writeKvAudit(adminUser, "roam_dash.market_created", String(data.id), "", `Town ${name} (${slug})`);
+    return c.json({ market: { ...data, zones } }, 201);
   });
 
   admin.patch("/:id", async (c) => {
@@ -182,6 +358,11 @@ export function registerMarketAdminRoutes(app: Hono) {
     if (body.slug != null) updates.slug = slugify(String(body.slug));
     if (body.is_active != null) updates.is_active = Boolean(body.is_active);
     if (body.waitlist_enabled != null) updates.waitlist_enabled = Boolean(body.waitlist_enabled);
+    if (body.parish_id !== undefined) {
+      updates.parish_id = body.parish_id == null || body.parish_id === ""
+        ? null
+        : String(body.parish_id);
+    }
     if (Object.keys(updates).length === 0) return c.json({ error: "No fields to update" }, 400);
 
     // Soft-block: cannot activate a market with no include zones.
@@ -198,7 +379,7 @@ export function registerMarketAdminRoutes(app: Hono) {
         return kind === "include" && Array.isArray(poly) && poly.length >= 3;
       });
       if (!hasInclude) {
-        return c.json({ error: "Add at least one include zone before activating this market" }, 400);
+        return c.json({ error: "Add a delivery area before activating this market" }, 400);
       }
     }
 
@@ -292,13 +473,56 @@ export function registerMarketAdminRoutes(app: Hono) {
     const adminUser = c.get("adminUser") as ProductAdminUser;
     const denied = requireDashDelete(adminUser);
     if (denied) return denied;
+    const marketId = c.req.param("id");
+    const zoneId = c.req.param("zoneId");
     const db = getDb();
+
+    const { data: existing } = await db
+      .from("service_zone_polygons")
+      .select("id, kind, polygon")
+      .eq("market_id", marketId);
+    const target = (existing ?? []).find((z) => String((z as Record<string, unknown>).id) === zoneId);
+    if (!target) return c.json({ error: "Zone not found" }, 404);
+
+    const targetKind = normalizeKind((target as Record<string, unknown>).kind);
+    const others = (existing ?? []).filter((z) => String((z as Record<string, unknown>).id) !== zoneId);
+    if (targetKind === "include" && !hasValidInclude(others)) {
+      // Keep town deliverable: replace last delivery area with auto outline instead of deleting.
+      const { data: market } = await db
+        .from("service_markets")
+        .select("id, name, slug, parish_id")
+        .eq("id", marketId)
+        .maybeSingle();
+      if (!market) return c.json({ error: "Market not found" }, 404);
+
+      const { error: delErr } = await db.from("service_zone_polygons")
+        .delete()
+        .eq("id", zoneId)
+        .eq("market_id", marketId);
+      if (delErr) return c.json({ error: delErr.message }, 500);
+
+      const restored = await insertAutoDeliveryArea(db, {
+        id: String(market.id),
+        name: String(market.name),
+        slug: String(market.slug),
+        parish_id: market.parish_id != null ? String(market.parish_id) : null,
+      });
+      await writeKvAudit(
+        adminUser,
+        "roam_dash.zone_deleted",
+        zoneId,
+        "",
+        "Last delivery area reset to auto outline",
+      );
+      return c.json({ ok: true, restored_zone: restored });
+    }
+
     const { error } = await db.from("service_zone_polygons")
       .delete()
-      .eq("id", c.req.param("zoneId"))
-      .eq("market_id", c.req.param("id"));
+      .eq("id", zoneId)
+      .eq("market_id", marketId);
     if (error) return c.json({ error: error.message }, 500);
-    await writeKvAudit(adminUser, "roam_dash.zone_deleted", c.req.param("zoneId"), "", "Zone removed");
+    await writeKvAudit(adminUser, "roam_dash.zone_deleted", zoneId, "", "Zone removed");
     return c.json({ ok: true });
   });
 

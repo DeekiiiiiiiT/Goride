@@ -604,7 +604,17 @@ export interface DashMarketRow {
   slug?: string | null;
   is_active: boolean;
   waitlist_enabled?: boolean;
+  parish_id?: string | null;
   zones?: DashZoneRow[];
+  created_at?: string;
+}
+
+export interface DashParishRow {
+  id: string;
+  name: string;
+  slug: string;
+  sort_order?: number;
+  towns?: DashMarketRow[];
   created_at?: string;
 }
 
@@ -616,7 +626,38 @@ export interface CoverageCheckResult {
 }
 
 export function listMarkets(accessToken: string) {
-  return deliveryFetch<{ markets: DashMarketRow[] }>(accessToken, '/admin/markets');
+  return deliveryFetch<{
+    markets: DashMarketRow[];
+    parishes: DashParishRow[];
+    unassigned: DashMarketRow[];
+  }>(accessToken, '/admin/markets');
+}
+
+export function createParish(accessToken: string, payload: { name: string; sort_order?: number }) {
+  return deliveryFetch<{ parish: DashParishRow }>(accessToken, '/admin/markets/parishes', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateParish(
+  accessToken: string,
+  parishId: string,
+  payload: { name?: string; sort_order?: number },
+) {
+  return deliveryFetch<{ parish: DashParishRow }>(
+    accessToken,
+    `/admin/markets/parishes/${parishId}`,
+    { method: 'PATCH', body: JSON.stringify(payload) },
+  );
+}
+
+export function deleteParish(accessToken: string, parishId: string) {
+  return deliveryFetch<{ ok: boolean }>(
+    accessToken,
+    `/admin/markets/parishes/${parishId}`,
+    { method: 'DELETE' },
+  );
 }
 
 export function updateMarket(
@@ -626,6 +667,7 @@ export function updateMarket(
     is_active?: boolean;
     name?: string;
     waitlist_enabled?: boolean;
+    parish_id?: string | null;
   },
 ) {
   return deliveryFetch<{ market: DashMarketRow }>(accessToken, `/admin/markets/${id}`, {
@@ -636,7 +678,12 @@ export function updateMarket(
 
 export function createMarket(
   accessToken: string,
-  payload: { name: string; is_active?: boolean; waitlist_enabled?: boolean },
+  payload: {
+    name: string;
+    is_active?: boolean;
+    waitlist_enabled?: boolean;
+    parish_id?: string | null;
+  },
 ) {
   return deliveryFetch<{ market: DashMarketRow }>(accessToken, '/admin/markets', {
     method: 'POST',
