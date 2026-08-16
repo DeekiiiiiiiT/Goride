@@ -22,8 +22,6 @@ export type ActiveCoverageZone = {
   polygon: LatLng[];
 };
 
-import { API_ENDPOINTS, publicAnonKey } from '@roam/api-client';
-
 /** Bump when zone payload shape changes so stale caches drop. */
 const ZONES_CACHE_KEY = 'roam-dash-delivery-zones-v2';
 /** Short TTL so Ops map edits reach customers within minutes. */
@@ -173,6 +171,8 @@ export async function loadDeliveryZones(): Promise<LatLng[]> {
   if (cached?.length) activeZones = cached;
 
   try {
+    // Lazy import so geometry unit tests do not require VITE_SUPABASE_* at module load.
+    const { API_ENDPOINTS, publicAnonKey } = await import('@roam/api-client');
     const res = await fetch(`${API_ENDPOINTS.delivery}/geo/delivery-zones`, {
       headers: { apikey: publicAnonKey },
     });
@@ -186,7 +186,7 @@ export async function loadDeliveryZones(): Promise<LatLng[]> {
       }
     }
   } catch {
-    // network error — keep cache / fallback
+    // network / missing env — keep cache / fallback
   }
 
   if (!cached?.length) {
