@@ -15,6 +15,7 @@ import { AdminLoginForm } from './components/AdminLoginForm';
 import { AdminConfirmProvider } from './contexts/AdminConfirmContext';
 import {
   DASH_ADMIN_CONFIG,
+  filterConfigForRole,
   navIdToPath,
   pathnameToNavId,
 } from './config/dashAdminNav';
@@ -38,6 +39,14 @@ import { CustomerDetailPage } from './pages/customers/CustomerDetailPage';
 import { FinancePage } from './pages/finance/FinancePage';
 import { ReviewsPage } from './pages/reviews/ReviewsPage';
 import { DashPlayStoreLaunchPage } from './pages/PlayStoreLaunchPage';
+import { CouriersListPage } from './pages/couriers/CouriersListPage';
+import { CourierDetailPage } from './pages/couriers/CourierDetailPage';
+import { ComplianceManager } from './pages/couriers/ComplianceManager';
+import { CourierPresenceManager } from './pages/couriers/CourierPresenceManager';
+import { DeliveryLedgerPage } from './pages/couriers/DeliveryLedgerPage';
+import { LiveOpsPage } from './pages/liveops/LiveOpsPage';
+import { MarketsPage } from './pages/markets/MarketsPage';
+import { ActivityLogPage } from './pages/activity/ActivityLogPage';
 
 export type AdminOutletContext = { session: Session };
 
@@ -45,6 +54,7 @@ function AdminLayoutShell({ session }: { session: Session }) {
   const location = useLocation();
   const navigate = useNavigate();
   const userRole = jwtPrimaryRole(session.user);
+  const config = filterConfigForRole(userRole);
   const currentPage = pathnameToNavId(location.pathname);
 
   const handleSignOut = async () => {
@@ -59,7 +69,7 @@ function AdminLayoutShell({ session }: { session: Session }) {
 
   return (
     <AdminShell
-      config={DASH_ADMIN_CONFIG}
+      config={config}
       currentPage={currentPage}
       onNavigate={(page) => navigate(navIdToPath(page))}
       user={{
@@ -88,7 +98,9 @@ export function DashAdminPortal() {
     return () => subscription.unsubscribe();
   }, []);
 
-  const hasJwtAccess = !!session && hasProductAdminRole(session.user, 'dash');
+  const hasJwtAccess =
+    !!session &&
+    (hasProductAdminRole(session.user, 'dash') || hasProductAdminRole(session.user, 'courier'));
   const hasDbAccess = !!session && !permsLoading && hasPermission('dash.portal.access');
   const accessResolved = !session || hasJwtAccess || !permsLoading;
   const hasAccess = hasJwtAccess || hasDbAccess;
@@ -132,9 +144,18 @@ export function DashAdminPortal() {
               </Route>
               <Route path=":id" element={<MerchantDetailPage />} />
             </Route>
+            <Route path="live-ops" element={<LiveOpsPage />} />
             <Route path="orders" element={<OrdersListPage />} />
             <Route path="orders/:id" element={<OrderDetailPage />} />
+            <Route path="couriers" element={<CouriersListPage />} />
+            <Route path="couriers/compliance" element={<ComplianceManager />} />
+            <Route path="couriers/presence" element={<CourierPresenceManager />} />
+            <Route path="couriers/ledger" element={<DeliveryLedgerPage />} />
+            <Route path="couriers/:userId" element={<CourierDetailPage />} />
+            <Route path="markets" element={<MarketsPage />} />
+            <Route path="team" element={<DashTeamPage />} />
             <Route path="users" element={<DashTeamPage />} />
+            <Route path="activity" element={<ActivityLogPage />} />
             <Route path="customers" element={<CustomersListPage />} />
             <Route path="customers/:id" element={<CustomerDetailPage />} />
             <Route path="finance" element={<FinancePage />} />

@@ -1,4 +1,5 @@
 import { FormEvent, useState } from 'react';
+import { reverseGeocode } from '@roam/location';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { AddressAutocomplete } from '@/components/ui/AddressAutocomplete';
 import { ADD_ADDRESS_MAP } from '@/lib/accountContent';
@@ -9,6 +10,10 @@ import {
   type SavedAddress,
 } from '@/lib/addressStorage';
 import { checkDeliveryZone } from '@/lib/deliveryZones';
+import {
+  getRushCurrentPosition,
+  requestRushGeolocationPermission,
+} from '@/lib/rushGeolocation';
 import { toast } from '@/lib/toast';
 
 type Props = {
@@ -34,6 +39,39 @@ export default function AddAddressPage({ addressId, onNavigate }: Props) {
     lng: existing?.lng,
   });
   const [saving, setSaving] = useState(false);
+  const [locating, setLocating] = useState(false);
+  // Compact confirm UI only after successful GPS pin
+  const [pinSuccess, setPinSuccess] = useState(false);
+
+  const useCurrentLocation = async () => {
+    setLocating(true);
+    try {
+      const perm = await requestRushGeolocationPermission();
+      if (perm !== 'granted') {
+        toast.error('Allow location access so we can pin your exact spot for the courier.');
+        return;
+      }
+      const { lat, lng } = await getRushCurrentPosition();
+      setCoords({ lat, lng });
+      setPinSuccess(true);
+
+      // Jamaica house numbers often miss Places — GPS is the courier pin; label stays editable
+      try {
+        const geo = await reverseGeocode(lat, lng);
+        const guessed =
+          geo.streetAddress || geo.formattedAddress || `Pinned location (${lat.toFixed(5)}, ${lng.toFixed(5)})`;
+        if (!line1.trim()) setLine1(guessed);
+      } catch {
+        if (!line1.trim()) {
+          setLine1(`Pinned location (${lat.toFixed(5)}, ${lng.toFixed(5)})`);
+        }
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not get current location');
+    } finally {
+      setLocating(false);
+    }
+  };
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -47,6 +85,10 @@ export default function AddAddressPage({ addressId, onNavigate }: Props) {
     });
     if (!zone.inZone) {
       onNavigate('out-of-delivery', { returnTo: 'add-address', attemptedAddress: line1 });
+      return;
+    }
+    if (coords.lat == null || coords.lng == null) {
+      toast.error('Tap “Use current location” so the courier gets your exact pin.');
       return;
     }
     const address: SavedAddress = {
@@ -89,106 +131,155 @@ export default function AddAddressPage({ addressId, onNavigate }: Props) {
       </header>
 
       <main className="flex-1 flex flex-col relative max-w-[1200px] mx-auto w-full">
-        <div className="relative h-[309px] w-full bg-surface-container-highest overflow-hidden">
-          <img src={ADD_ADDRESS_MAP} alt="Map" className="absolute inset-0 w-full h-full object-cover opacity-80 mix-blend-multiply" />
-          <div
-            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-full flex flex-col items-center"
-            style={{ animation: 'bounce 2s 3' }}
-          >
-            <div className="bg-primary-container rounded-full p-2 shadow-[0px_10px_30px_rgba(0,0,0,0.15)] relative z-10">
-              <MaterialIcon name="location_on" className="text-on-primary" filled />
+        {!pinSuccess && (
+          <div className="relative h-[309px] w-full bg-surface-container-highest overflow-hidden">
+            <img
+              src={ADD_ADDRESS_MAP}
+              alt="Map"
+              className="absolute inset-0 h-full w-full object-cover opacity-80 mix-blend-multiply"
+            />
+            <div
+              className="absolute top-1/2 left-1/2 flex -translate-x-1/2 -translate-y-full flex-col items-center"
+              style={{ animation: 'bounce 2s 3' }}
+            >
+              <div className="relative z-10 rounded-full bg-primary-container p-2 shadow-[0px_10px_30px_rgba(0,0,0,0.15)]">
+                <MaterialIcon name="location_on" className="text-on-primary" filled />
+              </div>
+              <div className="mt-1 h-2 w-2 rounded-full bg-on-surface/20 shadow-inner" />
             </div>
-            <div className="w-2 h-2 bg-on-surface/20 rounded-full mt-1 shadow-inner" />
+            <button
+              type="button"
+              disabled={locating}
+              onClick={() => void useCurrentLocation()}
+              className="absolute bottom-8 left-1/2 z-30 flex -translate-x-1/2 items-center gap-2 rounded-full bg-surface px-5 py-3 text-primary shadow-[0px_10px_30px_rgba(0,0,0,0.12)] transition-transform active:scale-95 disabled:opacity-60"
+            >
+              <MaterialIcon name="my_location" className="text-[20px]" />
+              <span className="text-sm font-semibold tracking-wide">
+                {locating ? 'Locating…' : 'Use current location'}
+              </span>
+            </button>
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-16 map-gradient" />
           </div>
-          <div className="absolute inset-x-0 bottom-0 h-16 map-gradient z-20 pointer-events-none" />
-        </div>
+        )}
 
-        <div className="flex-1 bg-surface px-4 py-6 flex flex-col gap-6 relative z-30 rounded-t-xl -mt-4 shadow-[0px_-4px_20px_rgba(0,0,0,0.04)]">
+        <div
+          className={`relative z-30 flex flex-1 flex-col gap-6 bg-surface px-4 py-6 ${
+            pinSuccess ? 'pt-8' : '-mt-4 rounded-t-xl shadow-[0px_-4px_20px_rgba(0,0,0,0.04)]'
+          }`}
+        >
           <AddressAutocomplete
             value={line1}
-            onChange={setLine1}
+            onChange={(v) => {
+              setLine1(v);
+              setPinSuccess(false);
+            }}
             onSelect={(s) => {
               setLine1(s.line1);
               if (s.line2) setLine2(s.line2);
               setCoords({ lat: s.lat, lng: s.lng });
+              setPinSuccess(false);
             }}
             placeholder="Search for address in Kingston"
           />
 
-          <div className="w-full h-px bg-surface-container-high" />
+          {pinSuccess && (
+            <p className="-mt-2 flex items-center gap-2 text-body-sm font-semibold text-primary">
+              <MaterialIcon name="check_circle" className="text-[18px]" filled />
+              PIN saved
+            </p>
+          )}
 
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-            <div className="space-y-1">
-              <label htmlFor="line1" className="text-label-md font-semibold text-on-surface-variant block ml-1">
-                Address Line 1
-              </label>
-              <input
-                id="line1"
-                value={line1}
-                onChange={e => setLine1(e.target.value)}
-                className="form-input-soft"
-                placeholder="Street address, P.O. box, etc."
-                required
-              />
-            </div>
-            <div className="space-y-1">
-              <label htmlFor="line2" className="text-label-md font-semibold text-on-surface-variant block ml-1">
-                Apt / Suite / Floor (Optional)
-              </label>
-              <input
-                id="line2"
-                value={line2}
-                onChange={e => setLine2(e.target.value)}
-                className="form-input-soft"
-                placeholder="e.g. Apt 4B"
-              />
-            </div>
-            <div className="space-y-1">
-              <label htmlFor="instructions" className="text-label-md font-semibold text-on-surface-variant block ml-1">
-                Delivery Instructions
-              </label>
-              <textarea
-                id="instructions"
-                value={instructions}
-                onChange={e => setInstructions(e.target.value)}
-                className="form-input-soft resize-none"
-                placeholder="e.g. Leave at the front door, gate code 1234"
-                rows={2}
-              />
-            </div>
+          {!pinSuccess && (
+            <>
+              <div className="h-px w-full bg-surface-container-high" />
 
-            <div className="pt-2">
-              <label className="text-label-md font-semibold text-on-surface-variant block ml-1 mb-2">Save as</label>
-              <div className="flex gap-2">
-                {LABEL_OPTIONS.map(option => (
-                  <button
-                    key={option.id}
-                    type="button"
-                    onClick={() => setLabel(option.id)}
-                    className={`label-chip ${label === option.id ? 'active' : ''}`}
+              <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+                <div className="space-y-1">
+                  <label
+                    htmlFor="line1"
+                    className="ml-1 block text-label-md font-semibold text-on-surface-variant"
                   >
-                    <MaterialIcon
-                      name={option.icon}
-                      className="mr-2 text-[18px]"
-                      filled={label === option.id}
-                    />
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            </div>
+                    Address Line 1
+                  </label>
+                  <input
+                    id="line1"
+                    value={line1}
+                    onChange={(e) => setLine1(e.target.value)}
+                    className="form-input-soft"
+                    placeholder="Street address, P.O. box, etc."
+                    required
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label
+                    htmlFor="line2"
+                    className="ml-1 block text-label-md font-semibold text-on-surface-variant"
+                  >
+                    Apt / Suite / Floor (Optional)
+                  </label>
+                  <input
+                    id="line2"
+                    value={line2}
+                    onChange={(e) => setLine2(e.target.value)}
+                    className="form-input-soft"
+                    placeholder="e.g. Apt 4B"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label
+                    htmlFor="instructions"
+                    className="ml-1 block text-label-md font-semibold text-on-surface-variant"
+                  >
+                    Delivery Instructions
+                  </label>
+                  <textarea
+                    id="instructions"
+                    value={instructions}
+                    onChange={(e) => setInstructions(e.target.value)}
+                    className="form-input-soft resize-none"
+                    placeholder="e.g. Leave at the front door, gate code 1234"
+                    rows={2}
+                  />
+                </div>
 
-            <div className="h-24" />
-          </form>
+                <div className="pt-2">
+                  <label className="mb-2 ml-1 block text-label-md font-semibold text-on-surface-variant">
+                    Save as
+                  </label>
+                  <div className="flex gap-2">
+                    {LABEL_OPTIONS.map((option) => (
+                      <button
+                        key={option.id}
+                        type="button"
+                        onClick={() => setLabel(option.id)}
+                        className={`label-chip ${label === option.id ? 'active' : ''}`}
+                      >
+                        <MaterialIcon
+                          name={option.icon}
+                          className="mr-2 text-[18px]"
+                          filled={label === option.id}
+                        />
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="h-24" />
+              </form>
+            </>
+          )}
+
+          {pinSuccess && <div className="h-24" />}
         </div>
       </main>
 
-      <div className="fixed bottom-0 left-0 w-full bg-surface/90 backdrop-blur-md border-t border-surface-container-low p-4 pb-safe z-50 flex justify-center shadow-[0px_-10px_30px_rgba(0,0,0,0.03)]">
+      <div className="fixed bottom-0 left-0 z-50 flex w-full justify-center border-t border-surface-container-low bg-surface/90 p-4 pb-safe shadow-[0px_-10px_30px_rgba(0,0,0,0.03)] backdrop-blur-md">
         <button
           type="button"
           onClick={(e) => void handleSubmit(e as unknown as FormEvent)}
           disabled={saving || !line1.trim()}
-          className="w-full max-w-[1200px] bg-primary-container text-on-primary text-headline-sm font-semibold py-4 rounded-lg shadow-md hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-50"
+          className="w-full max-w-[1200px] rounded-lg bg-primary-container py-4 text-headline-sm font-semibold text-on-primary shadow-md transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-50"
         >
           {saving ? 'Saving…' : 'Save Address'}
         </button>

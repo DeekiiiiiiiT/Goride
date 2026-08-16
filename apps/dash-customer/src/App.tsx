@@ -33,6 +33,7 @@ import PaymentMethodsPage from './pages/PaymentMethodsPage';
 import AddCardPage from './pages/AddCardPage';
 import LoginPage from './pages/LoginPage';
 import PaymentCallbackPage from './pages/PaymentCallbackPage';
+import { loadDeliveryZones } from './lib/deliveryZones';
 import { CartProvider, useCart } from './hooks/useCart';
 import { useImmersiveMode } from './hooks/useImmersiveMode';
 import { useNetworkStatus } from './hooks/useNetworkStatus';
@@ -167,6 +168,7 @@ function DashCustomerShell() {
 
   useEffect(() => {
     document.title = 'Roam Rush';
+    void loadDeliveryZones();
   }, []);
 
   const clearOAuthUrl = useCallback(() => {
@@ -512,7 +514,6 @@ function DashCustomerShell() {
           <HomePage
             onNavigate={navigate}
             onSearchFocus={() => handleTabChange('search')}
-            showActiveOrder={!!session}
             showQuickReorder={!!session}
             onProfileClick={() => handleTabChange('account')}
           />
@@ -639,7 +640,12 @@ function DashCustomerShell() {
       case 'edit-profile':
         return <EditProfilePage onNavigate={navigate} />;
       case 'saved-addresses':
-        return <SavedAddressesPage onNavigate={navigate} />;
+        return (
+          <SavedAddressesPage
+            onNavigate={navigate}
+            returnTo={(pageData?.returnTo as string | undefined) ?? 'account'}
+          />
+        );
       case 'add-address':
         return (
           <AddAddressPage
@@ -686,7 +692,7 @@ function DashCustomerShell() {
         return (
           <ConnectionErrorPage
             onNavigate={navigate}
-            hasActiveOrder={!!session}
+            hasActiveOrder={false}
             onRetry={() => {
               if (navigator.onLine) window.location.reload();
             }}
@@ -717,7 +723,7 @@ function DashCustomerShell() {
     return (
       <ConnectionErrorPage
         onNavigate={navigate}
-        hasActiveOrder={!!session}
+        hasActiveOrder={false}
         onRetry={() => {
           if (navigator.onLine) window.location.reload();
         }}

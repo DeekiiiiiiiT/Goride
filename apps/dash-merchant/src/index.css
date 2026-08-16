@@ -1,10 +1,15 @@
 @import "tailwindcss";
 
+/* Ops Console uses class="dark" on AdminShell — must not rely on OS prefers-color-scheme */
+@custom-variant dark (&:is(.dark *));
+
 @import "../../../packages/admin-core/src/styles/admin-portal.css";
 
 /* Spacing: use gap-inset-*, p-inset-*, etc. for design tokens — not max-w-sm/md (Tailwind layout). */
 
 @source './**/*.{js,ts,jsx,tsx}';
+/* Ops Console settings/shell live in admin-core — without this, dark: card styles never ship and panels stay white */
+@source '../../../packages/admin-core/src/**/*.{js,ts,jsx,tsx}';
 
 @theme {
   --color-background: #fff8f5;

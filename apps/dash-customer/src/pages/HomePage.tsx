@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { API_ENDPOINTS } from '@roam/api-client';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { ActiveOrderBanner } from '@/components/home/ActiveOrderBanner';
 import { QuickReorderSection } from '@/components/home/QuickReorderSection';
@@ -15,19 +17,25 @@ import {
 } from '@/lib/merchantDiscovery';
 import type { VerticalType } from '@roam/types';
 import { getSavedAddress } from '@/lib/addressStorage';
+import { supabase } from '@/lib/supabase';
 
 type HomePageProps = {
   onNavigate: (page: string, data?: Record<string, unknown>) => void;
   onSearchFocus?: () => void;
-  showActiveOrder?: boolean;
   showQuickReorder?: boolean;
   onProfileClick?: () => void;
+};
+
+type ApiOrder = {
+  id: string;
+  order_number: string;
+  status: string;
+  merchant: { id: string; name: string; logo_url: string };
 };
 
 export default function HomePage({
   onNavigate,
   onSearchFocus,
-  showActiveOrder,
   showQuickReorder,
   onProfileClick,
 }: HomePageProps) {
@@ -37,7 +45,36 @@ export default function HomePage({
   const savedAddress = getSavedAddress();
   const addressLabel = savedAddress
     ? `Deliver to · ${savedAddress.line1}${savedAddress.line2 ? `, ${savedAddress.line2}` : ''}`
-    : 'Deliver to · 45 Constant Spring Rd';
+    : 'Set delivery address';
+
+  const { data: ordersData } = useQuery({
+    queryKey: ['customer-orders', 'home-active'],
+    queryFn: async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session) return { orders: [] as ApiOrder[] };
+      const res = await fetch(`${API_ENDPOINTS.delivery}/customer/orders`, {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (!res.ok) throw new Error('Failed to fetch orders');
+      return res.json() as Promise<{ orders?: ApiOrder[] }>;
+    },
+    retry: false,
+  });
+
+  const activeOrder = useMemo(() => {
+    const rows = ordersData?.orders ?? [];
+    const live = rows.find((o) => !['completed', 'cancelled', 'delivered'].includes(o.status));
+    if (!live) return null;
+    return {
+      id: live.id,
+      orderNumber: live.order_number,
+      merchantName: live.merchant?.name ?? 'Store',
+      eta: '15-25 min',
+      trackingStatus: live.status,
+    };
+  }, [ordersData]);
 
   const loadMerchants = useCallback(async (vertical: VerticalType) => {
     setLoading(true);
@@ -72,7 +109,7 @@ export default function HomePage({
       <header className="sticky top-0 z-40 flex min-h-16 w-full items-center justify-between border-b border-outline-variant/30 bg-surface px-4 shadow-sm safe-t">
         <button
           type="button"
-          onClick={() => onNavigate('addresses')}
+          onClick={() => onNavigate('saved-addresses', { returnTo: 'home' })}
           className="flex max-w-[200px] items-center gap-2 rounded-full border border-outline-variant bg-surface-container-low px-3 py-1.5 shadow-sm transition-transform active:scale-95"
         >
           <MaterialIcon name="location_on" className="text-xl text-primary" />
@@ -97,113 +134,104 @@ export default function HomePage({
         </div>
       </header>
 
-      {showActiveOrder ? (
-        <main className="mx-auto mt-4 flex max-w-[1200px] flex-col gap-6 px-4">
-          <ActiveOrderBanner onTrack={() => onNavigate('tracking', { orderId: '8492' })} />
-          <section className="flex flex-col gap-4">
-            <h2 className="text-xl font-semibold text-on-surface">Recommended for you</h2>
-            {loading ? (
-              <RestaurantCardSkeleton count={2} variant="card" />
-            ) : (
-              <div className="grid grid-cols-2 gap-4">
-                {filteredPopular.slice(0, 4).map((item) => (
-                  <DiscoverStoreCard key={item.id} merchant={item} onClick={() => openStore(item)} />
-                ))}
-              </div>
-            )}
+      <main className="pb-8">
+        {activeOrder && (
+          <section className="mx-auto mt-4 max-w-[1200px] px-4">
+            <ActiveOrderBanner
+              order={activeOrder}
+              onTrack={() => onNavigate('tracking', { orderId: activeOrder.id })}
+            />
           </section>
-        </main>
-      ) : (
-        <main className="pb-8">
-          <section className="mx-auto mt-6 max-w-[1200px] px-4">
+        )}
+
+        <section className="mx-auto mt-6 max-w-[1200px] px-4">
+          <button
+            type="button"
+            onClick={onSearchFocus}
+            className="group relative flex h-14 w-full items-center rounded-xl border border-outline-variant bg-white shadow-sm transition-all"
+          >
+            <MaterialIcon
+              name="search"
+              className="pointer-events-none absolute left-4 text-on-surface-variant"
+            />
+            <span className="pl-12 text-body-md text-on-surface-variant">
+              Search restaurants, groceries, stores...
+            </span>
+            <span className="absolute right-4 rounded-lg p-1 text-primary transition-colors group-hover:bg-surface-container">
+              <MaterialIcon name="tune" />
+            </span>
+          </button>
+        </section>
+
+        <section className="mt-6 overflow-x-auto no-scrollbar">
+          <div className="flex min-w-max gap-3 px-4 pb-2">
+            {HOME_VERTICAL_TABS.map((tab) => {
+              const active = selectedVertical === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setSelectedVertical(tab.id)}
+                  className={`flex items-center gap-2 whitespace-nowrap rounded-full px-6 py-2.5 text-label-lg font-semibold transition-all active:scale-95 ${
+                    active
+                      ? 'bg-primary text-on-primary shadow-md'
+                      : 'border border-outline-variant bg-white text-on-surface-variant hover:bg-surface-container-low'
+                  }`}
+                >
+                  <MaterialIcon
+                    name={tab.icon}
+                    className="text-xl"
+                    filled={active && tab.filled}
+                  />
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
+        <PromoCarousel onPromoClick={() => onNavigate('promotions')} />
+
+        {showQuickReorder && (
+          <div className="mt-4">
+            <QuickReorderSection onNavigate={onNavigate} />
+          </div>
+        )}
+
+        <section className="mx-auto mt-8 max-w-[1200px] px-4">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-headline-lg-mobile font-bold text-on-surface">Popular near you</h2>
             <button
               type="button"
-              onClick={onSearchFocus}
-              className="group relative flex h-14 w-full items-center rounded-xl border border-outline-variant bg-white shadow-sm transition-all"
+              className="flex items-center gap-1 text-label-lg font-semibold text-primary"
             >
-              <MaterialIcon
-                name="search"
-                className="pointer-events-none absolute left-4 text-on-surface-variant"
-              />
-              <span className="pl-12 text-body-md text-on-surface-variant">
-                Search restaurants, groceries, stores...
-              </span>
-              <span className="absolute right-4 rounded-lg p-1 text-primary transition-colors group-hover:bg-surface-container">
-                <MaterialIcon name="tune" />
-              </span>
+              See all
+              <MaterialIcon name="arrow_forward" className="text-lg" />
             </button>
-          </section>
-
-          <section className="mt-6 overflow-x-auto no-scrollbar">
-            <div className="flex min-w-max gap-3 px-4 pb-2">
-              {HOME_VERTICAL_TABS.map((tab) => {
-                const active = selectedVertical === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => setSelectedVertical(tab.id)}
-                    className={`flex items-center gap-2 whitespace-nowrap rounded-full px-6 py-2.5 text-label-lg font-semibold transition-all active:scale-95 ${
-                      active
-                        ? 'bg-primary text-on-primary shadow-md'
-                        : 'border border-outline-variant bg-white text-on-surface-variant hover:bg-surface-container-low'
-                    }`}
-                  >
-                    <MaterialIcon
-                      name={tab.icon}
-                      className="text-xl"
-                      filled={active && tab.filled}
-                    />
-                    {tab.label}
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-
-          <PromoCarousel onPromoClick={() => onNavigate('promotions')} />
-
-          {showQuickReorder && (
-            <div className="mt-4">
-              <QuickReorderSection onNavigate={onNavigate} />
-            </div>
-          )}
-
-          <section className="mx-auto mt-8 max-w-[1200px] px-4">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-headline-lg-mobile font-bold text-on-surface">Popular near you</h2>
-              <button
-                type="button"
-                className="flex items-center gap-1 text-label-lg font-semibold text-primary"
-              >
-                See all
-                <MaterialIcon name="arrow_forward" className="text-lg" />
-              </button>
-            </div>
-            <div className="flex flex-col gap-6">
-              {loading ? (
-                <RestaurantCardSkeleton count={2} />
-              ) : filteredPopular.length === 0 ? (
-                <EmptyState
-                  icon="storefront"
-                  title="No stores found"
-                  description="Try another category or pull to refresh."
-                  actionLabel="Show all food"
-                  onAction={() => setSelectedVertical('restaurant')}
+          </div>
+          <div className="flex flex-col gap-6">
+            {loading ? (
+              <RestaurantCardSkeleton count={2} />
+            ) : filteredPopular.length === 0 ? (
+              <EmptyState
+                icon="storefront"
+                title="No stores found"
+                description="Try another category or pull to refresh."
+                actionLabel="Show all food"
+                onAction={() => setSelectedVertical('restaurant')}
+              />
+            ) : (
+              filteredPopular.map((merchant) => (
+                <DiscoverStoreCard
+                  key={merchant.id}
+                  merchant={merchant}
+                  onClick={() => openStore(merchant)}
                 />
-              ) : (
-                filteredPopular.map((merchant) => (
-                  <DiscoverStoreCard
-                    key={merchant.id}
-                    merchant={merchant}
-                    onClick={() => openStore(merchant)}
-                  />
-                ))
-              )}
-            </div>
-          </section>
-        </main>
-      )}
+              ))
+            )}
+          </div>
+        </section>
+      </main>
     </PullToRefresh>
   );
 }

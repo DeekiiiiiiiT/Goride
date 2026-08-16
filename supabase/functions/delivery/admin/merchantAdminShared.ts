@@ -242,9 +242,9 @@ export async function writeKvAudit(
   targetEmail: string,
   details: string,
 ) {
+  const ts = new Date();
   try {
     const kvClient = getAuthAdmin();
-    const ts = new Date();
     const tsKey = ts.toISOString().replace(/[:.]/g, "-");
     const suffix = Math.random().toString(36).slice(2, 8);
     await kvClient.from("kv_store_37f42386").upsert({
@@ -261,6 +261,21 @@ export async function writeKvAudit(
     });
   } catch (e) {
     console.error("[audit-bridge] failed:", e);
+  }
+
+  // Structured mirror for queryable admin audit history (best-effort; table optional).
+  try {
+    await getDb().from("admin_audit_events").insert({
+      actor_id: admin.id || null,
+      actor_email: admin.email || null,
+      action,
+      target_id: targetId || null,
+      target_email: targetEmail || null,
+      details: details || null,
+      created_at: ts.toISOString(),
+    });
+  } catch (e) {
+    console.error("[audit-events] mirror failed:", e);
   }
 }
 

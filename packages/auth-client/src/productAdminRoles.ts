@@ -15,7 +15,7 @@ export const PLATFORM_ROLES = new Set([
 export const PRODUCT_ADMIN_ROLES: Record<ProductKey, Set<string>> = {
   fleet: new Set([...PLATFORM_ROLES, 'fleet_admin', 'fleet_ops']),
   enterprise: new Set([...PLATFORM_ROLES, 'enterprise_admin', 'enterprise_ops']),
-  dash: new Set([...PLATFORM_ROLES, 'dash_admin', 'dash_ops']),
+  dash: new Set([...PLATFORM_ROLES, 'dash_admin', 'dash_ops', 'courier_admin', 'courier_ops']),
   rides: new Set([...PLATFORM_ROLES, 'rides_admin', 'rides_ops']),
   driver: new Set([...PLATFORM_ROLES, 'driver_admin', 'driver_ops']),
   haul: new Set([...PLATFORM_ROLES, 'haul_admin', 'haul_ops']),

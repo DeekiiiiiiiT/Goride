@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   KINGSTON_DELIVERY_POLYGON,
+  __setActiveZonesForTests,
   checkDeliveryZone,
+  evaluateActiveCoverage,
   pointInPolygon,
 } from './deliveryZones';
 
@@ -24,10 +26,29 @@ describe('pointInPolygon / Kingston delivery zone', () => {
   });
 
   it('checkDeliveryZone uses polygon when lat/lng provided', () => {
+    __setActiveZonesForTests([{ kind: 'include', polygon: KINGSTON_DELIVERY_POLYGON }]);
     expect(checkDeliveryZone({ line1: 'Anywhere', lat: 18.01, lng: -76.78 }).inZone).toBe(true);
     expect(checkDeliveryZone({ line1: 'Anywhere', lat: 18.476, lng: -77.893 }).inZone).toBe(
       false,
     );
+  });
+
+  it('exclude wins over include', () => {
+    __setActiveZonesForTests([
+      { kind: 'include', name: 'Kingston', polygon: KINGSTON_DELIVERY_POLYGON },
+      {
+        kind: 'exclude',
+        name: 'Hole',
+        polygon: [
+          { lat: 18.02, lng: -76.79 },
+          { lat: 18.02, lng: -76.77 },
+          { lat: 18.0, lng: -76.77 },
+          { lat: 18.0, lng: -76.79 },
+        ],
+      },
+    ]);
+    expect(evaluateActiveCoverage(18.01, -76.78).inZone).toBe(false);
+    expect(evaluateActiveCoverage(18.05, -76.85).inZone).toBe(true);
   });
 
   it('falls back to keywords when coords missing', () => {

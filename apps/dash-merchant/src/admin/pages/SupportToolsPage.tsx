@@ -1,10 +1,17 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useOutletContext } from 'react-router-dom';
 import { Loader2, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAdminConfirm } from '../contexts/AdminConfirmContext';
 import { canWriteDashAdmin } from '../utils/dashAdminRoles';
-import { cancelOrder, getOrderDetail, refundOrder } from '../services/dashAdminService';
+import {
+  cancelOrder,
+  createSupportCase,
+  getOrderDetail,
+  listSupportCases,
+  refundOrder,
+  type SupportCaseRow,
+} from '../services/dashAdminService';
 import type { AdminOutletContext } from '../DashAdminPortal';
 
 export function SupportToolsPage() {
@@ -18,6 +25,56 @@ export function SupportToolsPage() {
   const [order, setOrder] = useState<Record<string, unknown> | null>(null);
   const [events, setEvents] = useState<Array<Record<string, unknown>>>([]);
   const [transaction, setTransaction] = useState<Record<string, unknown> | null>(null);
+
+  const [cases, setCases] = useState<SupportCaseRow[]>([]);
+  const [casesLoading, setCasesLoading] = useState(true);
+  const [caseStatus, setCaseStatus] = useState('open');
+
+  const loadCases = useCallback(async () => {
+    setCasesLoading(true);
+    try {
+      const res = await listSupportCases(token, caseStatus || undefined);
+      setCases(res.cases);
+    } catch {
+      setCases([]);
+    } finally {
+      setCasesLoading(false);
+    }
+  }, [token, caseStatus]);
+
+  useEffect(() => {
+    void loadCases();
+  }, [loadCases]);
+
+  const runCreateCase = async () => {
+    if (!canWrite) return;
+    const values = await prompt({
+      title: 'New support case',
+      description: 'Log a support case for follow-up.',
+      confirmLabel: 'Create case',
+      fields: [
+        { key: 'subject', label: 'Subject', required: true },
+        { key: 'priority', label: 'Priority (low | normal | high | urgent)', placeholder: 'normal', required: false },
+        { key: 'order_id', label: 'Related order ID (optional)', required: false },
+        { key: 'customer_id', label: 'Related customer ID (optional)', required: false },
+        { key: 'notes', label: 'Notes', required: false, multiline: true },
+      ],
+    });
+    if (!values) return;
+    try {
+      await createSupportCase(token, {
+        subject: values.subject,
+        priority: values.priority?.trim() || undefined,
+        order_id: values.order_id?.trim() || undefined,
+        customer_id: values.customer_id?.trim() || undefined,
+        notes: values.notes?.trim() || undefined,
+      });
+      toast.success('Case created');
+      void loadCases();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Create failed');
+    }
+  };
 
   const doLookup = async () => {
     const id = lookup.trim();
@@ -92,7 +149,7 @@ export function SupportToolsPage() {
   const customer = order?.customer as { id?: string; name?: string } | null;
 
   return (
-    <div className="space-y-4 max-w-2xl">
+    <div className="space-y-8 max-w-2xl">
       <h2 className="text-xl font-semibold text-white">Support tools</h2>
       <p className="text-sm text-slate-400">Look up an order by ID.</p>
 
@@ -147,6 +204,59 @@ export function SupportToolsPage() {
           </div>
         </div>
       )}
+
+      <section className="space-y-3">
+        <div className="flex items-center justify-between gap-4">
+          <h3 className="text-lg font-semibold text-white">Support cases</h3>
+          {canWrite && (
+            <button type="button" onClick={() => void runCreateCase()} className="px-3 py-1.5 rounded-lg bg-amber-600 text-white text-sm font-medium">
+              New case
+            </button>
+          )}
+        </div>
+        <div className="flex gap-2">
+          {(['open', 'in_progress', 'resolved', ''] as const).map((s) => (
+            <button
+              key={s || 'all'}
+              type="button"
+              onClick={() => setCaseStatus(s)}
+              className={`px-3 py-1.5 rounded-lg text-xs capitalize ${
+                caseStatus === s ? 'bg-slate-700 text-white' : 'bg-slate-900 text-slate-400 border border-slate-800'
+              }`}
+            >
+              {s ? s.replace(/_/g, ' ') : 'all'}
+            </button>
+          ))}
+        </div>
+        {casesLoading ? (
+          <Loader2 className="w-6 h-6 animate-spin text-amber-400" />
+        ) : cases.length === 0 ? (
+          <p className="text-sm text-slate-500">No cases.</p>
+        ) : (
+          <div className="rounded-xl border border-slate-800 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-900/80 text-slate-400 text-left">
+                <tr>
+                  <th className="px-4 py-3">Subject</th>
+                  <th className="px-4 py-3">Priority</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Opened</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800">
+                {cases.map((c) => (
+                  <tr key={c.id}>
+                    <td className="px-4 py-3 text-white">{c.subject}</td>
+                    <td className="px-4 py-3 text-slate-400 capitalize">{c.priority ?? '—'}</td>
+                    <td className="px-4 py-3 text-slate-400 capitalize">{c.status.replace(/_/g, ' ')}</td>
+                    <td className="px-4 py-3 text-slate-500">{new Date(c.created_at).toLocaleDateString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
     </div>
   );
 }

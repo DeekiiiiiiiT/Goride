@@ -282,6 +282,41 @@ export function registerFinanceAdminRoutes(app: Hono) {
     return c.json({ promotions: data ?? [] });
   });
 
+  admin.post("/promotions", async (c) => {
+    const adminUser = c.get("adminUser") as ProductAdminUser;
+    const denied = requireDashWrite(adminUser);
+    if (denied) return denied;
+    const body = await c.req.json().catch(() => ({}));
+    const merchantId = String(body.merchant_id || "").trim();
+    const type = String(body.type || "").trim();
+    const title = String(body.title || "").trim();
+    const dateStart = String(body.date_start || body.dateStart || "").trim();
+    const promoCode = String(body.promo_code || body.promoCode || "").trim().toUpperCase();
+    if (!merchantId) return c.json({ error: "merchant_id is required" }, 400);
+    if (!type) return c.json({ error: "type is required" }, 400);
+    if (!title) return c.json({ error: "title is required" }, 400);
+    if (!dateStart) return c.json({ error: "date_start is required" }, 400);
+
+    const db = getDb();
+    const { data, error } = await db.from("merchant_promotions").insert({
+      merchant_id: merchantId,
+      type,
+      title,
+      discount_percent: body.discount_percent ?? body.discountPercent ?? null,
+      discount_amount: body.discount_amount ?? body.discountAmount ?? null,
+      min_order: body.min_order ?? body.minOrder ?? null,
+      applies_to: body.applies_to ?? body.appliesTo ?? "entire_order",
+      promo_code: promoCode || null,
+      customer_eligibility: body.customer_eligibility ?? body.customerEligibility ?? "all",
+      date_start: dateStart,
+      date_end: body.date_end ?? body.dateEnd ?? null,
+      usage_limit_per_customer: body.usage_limit_per_customer ?? body.usageLimitPerCustomer ?? null,
+      status: body.status || "active",
+    }).select().single();
+    if (error) return c.json({ error: error.message }, 500);
+    return c.json({ promotion: data }, 201);
+  });
+
   admin.post("/promotions/:id/disable", async (c) => {
     const admin = c.get("adminUser") as ProductAdminUser;
     const denied = requireDashWrite(admin);

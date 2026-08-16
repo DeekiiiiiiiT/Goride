@@ -12,6 +12,7 @@ import { toast } from '@/lib/toast';
 
 type Props = {
   onNavigate: (page: string, data?: Record<string, unknown>) => void;
+  returnTo?: string;
 };
 
 const LABEL_ICONS: Record<AddressLabel, { icon: string; filled: boolean; bg: string; text: string }> = {
@@ -74,7 +75,7 @@ function AddressCard({
   );
 }
 
-export default function SavedAddressesPage({ onNavigate }: Props) {
+export default function SavedAddressesPage({ onNavigate, returnTo = 'account' }: Props) {
   const [addresses, setAddresses] = useState(getSavedAddresses);
 
   useEffect(() => {
@@ -97,7 +98,7 @@ export default function SavedAddressesPage({ onNavigate }: Props) {
           <button
             type="button"
             aria-label="Go back"
-            onClick={() => onNavigate('account')}
+            onClick={() => onNavigate(returnTo)}
             className="text-on-surface-variant p-2 -ml-2 rounded-full btn-press"
           >
             <MaterialIcon name="arrow_back" />

@@ -450,13 +450,53 @@ export function listCustomers(
   return deliveryFetch(accessToken, `/admin/customers?${sp}`);
 }
 
+export interface CustomerAddress {
+  id?: string;
+  label?: string | null;
+  line1?: string | null;
+  line2?: string | null;
+  city?: string | null;
+  parish?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  is_default?: boolean;
+  instructions?: string | null;
+}
+
+export interface CustomerDevice {
+  id?: string;
+  platform?: string | null;
+  model?: string | null;
+  app_version?: string | null;
+  push_enabled?: boolean;
+  last_active_at?: string | null;
+}
+
+export interface CustomerTrust {
+  risk_score?: number | null;
+  risk_level?: string | null;
+  chargebacks?: number | null;
+  refunds_count?: number | null;
+  refunds_amount?: number | null;
+  cancelled_orders?: number | null;
+  flagged?: boolean;
+  flags?: string[];
+  email_verified?: boolean;
+  phone_verified?: boolean;
+}
+
+export interface CustomerDetailResponse {
+  customer: Record<string, unknown>;
+  recentOrders: Array<Record<string, unknown>>;
+  orderCount?: number;
+  lifetimeSpend?: number;
+  addresses?: CustomerAddress[];
+  devices?: CustomerDevice[];
+  trust?: CustomerTrust | null;
+}
+
 export function getCustomerDetail(accessToken: string, id: string) {
-  return deliveryFetch<{
-    customer: Record<string, unknown>;
-    recentOrders: Array<Record<string, unknown>>;
-    orderCount?: number;
-    lifetimeSpend?: number;
-  }>(accessToken, `/admin/customers/${id}`);
+  return deliveryFetch<CustomerDetailResponse>(accessToken, `/admin/customers/${id}`);
 }
 
 export function patchCustomerNotes(accessToken: string, id: string, admin_internal_notes: string | null) {
@@ -503,6 +543,285 @@ export function removeDashTeamMember(
   return deliveryFetch<{ ok: boolean }>(accessToken, `/admin/team/${userId}`, {
     method: 'DELETE',
     body: JSON.stringify(payload ?? {}),
+  });
+}
+
+/** Assignable dash / courier admin roles from the Rush Ops console */
+export type DashTeamRole = 'dash_admin' | 'dash_ops' | 'courier_admin' | 'courier_ops';
+
+export interface DashTeamInvite {
+  id: string;
+  email: string;
+  role: string;
+  status: string;
+  invited_at: string;
+  invited_by?: string | null;
+}
+
+export function inviteDashTeamMember(
+  accessToken: string,
+  payload: { email: string; role: DashTeamRole },
+) {
+  return deliveryFetch<{ ok: boolean; invite?: DashTeamInvite; member?: { userId: string; email: string; role: string } }>(
+    accessToken,
+    '/admin/team/invite',
+    { method: 'POST', body: JSON.stringify(payload) },
+  );
+}
+
+export function changeDashTeamRole(accessToken: string, userId: string, role: DashTeamRole) {
+  return deliveryFetch<{ ok: boolean; member?: { userId: string; email: string; role: string } }>(
+    accessToken,
+    `/admin/team/${userId}`,
+    { method: 'PATCH', body: JSON.stringify({ role }) },
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Markets / coverage zones
+// ---------------------------------------------------------------------------
+
+export type DashZoneKind = 'include' | 'exclude';
+
+export interface DashZoneVertex {
+  lat: number;
+  lng: number;
+}
+
+export interface DashZoneRow {
+  id: string;
+  market_id: string;
+  name: string;
+  polygon: DashZoneVertex[];
+  priority: number;
+  kind: DashZoneKind;
+  created_at?: string;
+}
+
+export interface DashMarketRow {
+  id: string;
+  name: string;
+  slug?: string | null;
+  is_active: boolean;
+  waitlist_enabled?: boolean;
+  zones?: DashZoneRow[];
+  created_at?: string;
+}
+
+export interface CoverageCheckResult {
+  inZone: boolean;
+  reason?: string;
+  matchedInclude?: { id: string; name: string; market_id?: string } | null;
+  matchedExclude?: { id: string; name: string; market_id?: string } | null;
+}
+
+export function listMarkets(accessToken: string) {
+  return deliveryFetch<{ markets: DashMarketRow[] }>(accessToken, '/admin/markets');
+}
+
+export function updateMarket(
+  accessToken: string,
+  id: string,
+  payload: {
+    is_active?: boolean;
+    name?: string;
+    waitlist_enabled?: boolean;
+  },
+) {
+  return deliveryFetch<{ market: DashMarketRow }>(accessToken, `/admin/markets/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function createMarket(
+  accessToken: string,
+  payload: { name: string; is_active?: boolean; waitlist_enabled?: boolean },
+) {
+  return deliveryFetch<{ market: DashMarketRow }>(accessToken, '/admin/markets', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function createZone(
+  accessToken: string,
+  marketId: string,
+  payload: {
+    name: string;
+    polygon: DashZoneVertex[];
+    priority?: number;
+    kind?: DashZoneKind;
+  },
+) {
+  return deliveryFetch<{ zone: DashZoneRow }>(
+    accessToken,
+    `/admin/markets/${marketId}/zones`,
+    { method: 'POST', body: JSON.stringify(payload) },
+  );
+}
+
+export function updateZone(
+  accessToken: string,
+  marketId: string,
+  zoneId: string,
+  payload: {
+    name?: string;
+    polygon?: DashZoneVertex[];
+    priority?: number;
+    kind?: DashZoneKind;
+  },
+) {
+  return deliveryFetch<{ zone: DashZoneRow }>(
+    accessToken,
+    `/admin/markets/${marketId}/zones/${zoneId}`,
+    { method: 'PATCH', body: JSON.stringify(payload) },
+  );
+}
+
+export function deleteZone(accessToken: string, marketId: string, zoneId: string) {
+  return deliveryFetch<{ ok: boolean }>(
+    accessToken,
+    `/admin/markets/${marketId}/zones/${zoneId}`,
+    { method: 'DELETE' },
+  );
+}
+
+/** Server-side coverage check (same rules as Rush customer app). */
+export function checkCoveragePoint(accessToken: string, lat: number, lng: number) {
+  return deliveryFetch<CoverageCheckResult>(accessToken, '/admin/markets/check-point', {
+    method: 'POST',
+    body: JSON.stringify({ lat, lng }),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Live Ops
+// ---------------------------------------------------------------------------
+
+export interface LiveOrderRow {
+  id: string;
+  order_number: string;
+  status: string;
+  total: number;
+  placed_at: string;
+  merchant_name?: string | null;
+  courier_display_name?: string | null;
+  courier_user_id?: string | null;
+  delivery_address?: string | null;
+  eta_minutes?: number | null;
+}
+
+export function listLiveOrders(
+  accessToken: string,
+  opts: { status?: string; merchant_id?: string; unassigned?: boolean } = {},
+) {
+  const sp = new URLSearchParams();
+  if (opts.status) sp.set('status', opts.status);
+  if (opts.merchant_id) sp.set('merchant_id', opts.merchant_id);
+  if (opts.unassigned) sp.set('unassigned', 'true');
+  return deliveryFetch<{ orders: LiveOrderRow[]; total: number; count?: number }>(
+    accessToken,
+    `/admin/ops/live-orders?${sp}`,
+  );
+}
+
+export function redispatchOrder(accessToken: string, orderId: string, reason?: string) {
+  return deliveryFetch<{ ok: boolean }>(accessToken, `/admin/ops/orders/${orderId}/redispatch`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Activity log
+// ---------------------------------------------------------------------------
+
+export interface ActivityLogRow {
+  id: string;
+  actor_email?: string | null;
+  actor_id?: string | null;
+  action: string;
+  entity_type?: string | null;
+  entity_id?: string | null;
+  target_id?: string | null;
+  target_email?: string | null;
+  notes?: string | null;
+  details?: string | null;
+  created_at: string;
+}
+
+export function listActivityLog(
+  accessToken: string,
+  opts: { q?: string; action?: string; page?: number; limit?: number } = {},
+) {
+  const sp = new URLSearchParams();
+  if (opts.q) sp.set('q', opts.q);
+  if (opts.action) sp.set('action', opts.action);
+  if (opts.page != null) sp.set('page', String(opts.page));
+  if (opts.limit != null) sp.set('limit', String(opts.limit));
+  return deliveryFetch<{ events: ActivityLogRow[]; total: number; page: number; limit: number }>(
+    accessToken,
+    `/admin/audit/events?${sp}`,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Support cases
+// ---------------------------------------------------------------------------
+
+export interface SupportCaseRow {
+  id: string;
+  subject: string;
+  status: string;
+  priority?: string | null;
+  order_id?: string | null;
+  customer_id?: string | null;
+  assignee_email?: string | null;
+  created_at: string;
+  updated_at?: string | null;
+}
+
+export function listSupportCases(accessToken: string, status?: string) {
+  const sp = status ? `?status=${status}` : '';
+  return deliveryFetch<{ cases: SupportCaseRow[] }>(accessToken, `/admin/support/cases${sp}`);
+}
+
+export function createSupportCase(
+  accessToken: string,
+  payload: { subject: string; priority?: string; order_id?: string; customer_id?: string; notes?: string },
+) {
+  return deliveryFetch<{ case: SupportCaseRow }>(accessToken, '/admin/support/cases', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Finance adjustments
+// ---------------------------------------------------------------------------
+
+export interface AdjustmentRow {
+  id: string;
+  merchant_id?: string | null;
+  amount: number;
+  reason: string;
+  type: string;
+  created_at: string;
+}
+
+export function listAdjustments(accessToken: string, merchantId?: string) {
+  const sp = merchantId ? `?merchant_id=${merchantId}` : '';
+  return deliveryFetch<{ adjustments: AdjustmentRow[] }>(accessToken, `/admin/finance/adjustments${sp}`);
+}
+
+export function createAdjustment(
+  accessToken: string,
+  payload: { merchant_id?: string; amount: number; reason: string; type: string },
+) {
+  return deliveryFetch<{ adjustment: AdjustmentRow }>(accessToken, '/admin/finance/adjustments', {
+    method: 'POST',
+    body: JSON.stringify(payload),
   });
 }
 

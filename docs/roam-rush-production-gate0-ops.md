@@ -86,7 +86,19 @@ Per app, place secrets **locally / CI only** (do not commit — gitignored):
 - `pnpm deploy:notifications`
 - `pnpm deploy:functions:all` (includes notifications alongside delivery, payments, merchant-push, etc.)
 
-## Related docs
+## Rush Ops Console (2026-08-16)
+
+Primary staff console: **https://partner.roamrush.app/admin** (subtitle: Ops Console).
+
+Covers Merchants, Couriers (embedded), Customers, Orders, Live Ops, Markets/zones, Finance, Team invites, Support cases, Activity audit.
+
+- Markets/zones are admin-editable (`delivery.service_markets` + `delivery.service_zone_polygons`). Soft-launch seeds: Kingston + Spanish Town.
+- Ops Console → Delivery Markets: draw **include** / **exclude** polygons on a Leaflet map (no JSON paste). Soft-block: cannot activate a market without ≥1 include zone. Pin-test: `POST /admin/markets/check-point`.
+- Zone kinds: `include` (serve) / `exclude` (carve-out; exclude wins). Rush evaluates: inside any include AND not inside any exclude among active markets.
+- Rush app loads zones from `GET /geo/delivery-zones` (cache TTL ~10m, key `roam-dash-delivery-zones-v2`; fallback Kingston polygon if offline).
+- Team invite: `POST /admin/team/invite` (dash_admin / dash_ops / courier_admin / courier_ops).
+- Courier-only roles see a reduced nav (Couriers + Live Ops + Orders + Support).
+
 
 - iOS Mac scaffold: `docs/roam-rush-ios-setup.md`
 - Store submission: `docs/roam-rush-store-submission-checklist.md`

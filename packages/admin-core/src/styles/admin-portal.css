@@ -15,11 +15,26 @@ body:has(.rides-admin-portal) {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Form controls + settings cards — dark chrome even if Tailwind dark: misses */
 .dash-admin-portal input,
 .dash-admin-portal textarea,
 .dash-admin-portal select {
   color: #f8fafc !important;
   -webkit-text-fill-color: #f8fafc;
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+}
+
+.dash-admin-portal button.bg-white,
+.dash-admin-portal .bg-white {
+  background-color: #0f172a !important;
+  border-color: #1e293b !important;
+  color: #e2e8f0 !important;
+}
+
+.dash-admin-portal .bg-slate-50,
+.dash-admin-portal .hover\:bg-slate-50:hover {
+  background-color: rgba(30, 41, 59, 0.5) !important;
 }
 
 .dash-admin-portal input::placeholder,

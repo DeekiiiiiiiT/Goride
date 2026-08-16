@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { API_ENDPOINTS, publicAnonKey } from '@roam/api-client';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 
 const WAITLIST_KEY = 'roam-dash-waitlist-email';
@@ -7,21 +8,40 @@ type Props = {
   onNavigate: (page: string, data?: Record<string, unknown>) => void;
   returnTo?: string;
   onReturn?: () => void;
+  address?: string;
 };
 
-export default function OutOfDeliveryPage({ onNavigate, returnTo = 'saved-addresses', onReturn }: Props) {
+export default function OutOfDeliveryPage({ onNavigate, returnTo = 'saved-addresses', onReturn, address }: Props) {
   const [email, setEmail] = useState('');
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.trim()) return;
+    const value = email.trim();
+    if (!value || submitting) return;
+    setSubmitting(true);
     try {
-      localStorage.setItem(WAITLIST_KEY, email.trim());
+      localStorage.setItem(WAITLIST_KEY, value);
     } catch {
       // ignore
     }
-    setSubmitted(true);
+    try {
+      await fetch(`${API_ENDPOINTS.delivery}/geo/zone-waitlist`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', apikey: publicAnonKey },
+        body: JSON.stringify({
+          email: value,
+          attempted_address: address || undefined,
+          source: 'out-of-delivery',
+        }),
+      });
+    } catch {
+      // Best-effort: local capture already succeeded; don't block the UX.
+    } finally {
+      setSubmitting(false);
+      setSubmitted(true);
+    }
   };
 
   const handleTryDifferent = () => {
@@ -59,7 +79,7 @@ export default function OutOfDeliveryPage({ onNavigate, returnTo = 'saved-addres
             Thanks! We&apos;ll notify you at {email}.
           </p>
         ) : (
-          <form className="w-full flex flex-col gap-4" onSubmit={handleSubmit}>
+          <form className="w-full flex flex-col gap-4" onSubmit={(e) => void handleSubmit(e)}>
             <label htmlFor="notify-email" className="sr-only">
               Email address
             </label>
@@ -74,9 +94,10 @@ export default function OutOfDeliveryPage({ onNavigate, returnTo = 'saved-addres
             />
             <button
               type="submit"
-              className="w-full bg-primary-container text-white text-label-md font-semibold tracking-wide py-4 rounded-lg shadow-sm active:scale-95 transition-transform"
+              disabled={submitting}
+              className="w-full bg-primary-container text-white text-label-md font-semibold tracking-wide py-4 rounded-lg shadow-sm active:scale-95 transition-transform disabled:opacity-60"
             >
-              Notify Me
+              {submitting ? 'Submitting…' : 'Notify Me'}
             </button>
           </form>
         )}

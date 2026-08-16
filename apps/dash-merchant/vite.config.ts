@@ -10,6 +10,7 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src'),
       '@roam/admin-core': path.resolve(__dirname, '../../packages/admin-core/src'),
+      '@courier-admin': path.resolve(__dirname, '../dash-courier/src/admin'),
     },
   },
   server: {
