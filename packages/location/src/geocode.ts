@@ -164,7 +164,22 @@ export interface AddressSuggestion {
   secondaryText: string;
 }
 
-export async function searchAddresses(query: string): Promise<AddressSuggestion[]> {
+export type SearchAddressesOptions = {
+  /** Prefer results near this point (meters). */
+  locationBias?: { lat: number; lng: number; radiusMeters?: number };
+  /** Soft rectangular bias (southwest / northeast). */
+  boundsBias?: {
+    south: number;
+    west: number;
+    north: number;
+    east: number;
+  };
+};
+
+export async function searchAddresses(
+  query: string,
+  options: SearchAddressesOptions = {},
+): Promise<AddressSuggestion[]> {
   if (!query.trim()) return [];
   await loadPartnerMapsApi();
 
@@ -172,10 +187,30 @@ export async function searchAddresses(query: string): Promise<AddressSuggestion[
     'places',
   )) as google.maps.PlacesLibrary;
 
-  const { suggestions } = await AutocompleteSuggestion.fetchAutocompleteSuggestions({
+  const request: Record<string, unknown> = {
     input: query,
     includedRegionCodes: ['jm'],
-  });
+  };
+
+  if (options.locationBias) {
+    const radius = options.locationBias.radiusMeters ?? 8_000;
+    request.locationBias = {
+      center: { lat: options.locationBias.lat, lng: options.locationBias.lng },
+      radius,
+    };
+  } else if (options.boundsBias) {
+    const b = options.boundsBias;
+    request.locationBias = {
+      south: b.south,
+      west: b.west,
+      north: b.north,
+      east: b.east,
+    };
+  }
+
+  const { suggestions } = await AutocompleteSuggestion.fetchAutocompleteSuggestions(
+    request as google.maps.places.AutocompleteRequest,
+  );
 
   return suggestions.map((s) => {
     const pred = s.placePrediction;

@@ -1,206 +1,289 @@
 /**
- * Leaflet map for Rush town coverage: view borders, cut out no-go areas, adjust delivery area.
+ * Google Maps ops editor for Rush town coverage:
+ * Places search (in-town), satellite, adjust border, freehand + radius cutouts, test pin.
  */
 import React, { useEffect, useRef, useState } from 'react';
-import L from 'leaflet';
-import { MapPin, Pencil, Trash2, Check, Crosshair, Scissors } from 'lucide-react';
-import type { DashZoneKind, DashZoneVertex, CoverageCheckResult } from '../../services/dashAdminService';
+import {
+  Check,
+  Crosshair,
+  Loader2,
+  MapPin,
+  Pencil,
+  Satellite,
+  Scissors,
+  Search,
+  Trash2,
+} from 'lucide-react';
+import { getPlaceDetails, loadPartnerMapsApi, searchAddresses } from '@roam/location';
+import type { AddressSuggestion } from '@roam/location';
+import type { CoverageCheckResult, DashZoneKind, DashZoneVertex } from '../../services/dashAdminService';
+import {
+  circleToPolygon,
+  pointInPolygon,
+  polygonBounds,
+  polygonCentroid,
+  type GeoVertex,
+} from './coverageGeo';
 
-const JAMAICA_CENTER: L.LatLngExpression = [18.0, -77.0];
-const DEFAULT_ZOOM = 11;
-
-export type ZoneMapUiMode = 'view' | 'cutout' | 'adjust';
+export type ZoneMapUiMode = 'view' | 'cutout' | 'adjust' | 'radius';
 
 export type ZoneMapOverlay = {
   id: string;
   kind: DashZoneKind;
   polygon: DashZoneVertex[];
   name?: string;
+  source?: string | null;
+  center_lat?: number | null;
+  center_lng?: number | null;
+  radius_m?: number | null;
 };
-
-function ensureLeafletCss() {
-  if (typeof document === 'undefined') return;
-  if (document.getElementById('leaflet-css')) return;
-  const link = document.createElement('link');
-  link.id = 'leaflet-css';
-  link.rel = 'stylesheet';
-  link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-  document.head.appendChild(link);
-}
-
-function fixLeafletIcon() {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  delete (L.Icon.Default.prototype as any)._getIconUrl;
-  L.Icon.Default.mergeOptions({
-    iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
-    iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
-    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-  });
-}
-
-function styleForKind(kind: DashZoneKind, dimmed = false): L.PathOptions {
-  if (kind === 'exclude') {
-    return {
-      color: '#f87171',
-      fillColor: '#ef4444',
-      fillOpacity: dimmed ? 0.12 : 0.25,
-      weight: 2,
-      dashArray: '6 4',
-    };
-  }
-  return {
-    color: '#34d399',
-    fillColor: '#10b981',
-    fillOpacity: dimmed ? 0.12 : 0.22,
-    weight: 2,
-  };
-}
 
 export type ZoneMapEditorProps = {
   zones: ZoneMapOverlay[];
   uiMode: ZoneMapUiMode;
-  /** Vertices being drawn/edited (cutout starts empty; adjust starts with delivery area). */
   initialPolygon?: DashZoneVertex[];
-  /** When editing, hide this zone from the background overlays. */
   editingZoneId?: string | null;
-  onSave: (polygon: DashZoneVertex[]) => void | Promise<void>;
+  /** Town delivery polygons used to filter Places results. */
+  townIncludePolygons: GeoVertex[][];
+  onSave: (payload: {
+    polygon: DashZoneVertex[];
+    source?: 'manual' | 'radius';
+    center_lat?: number;
+    center_lng?: number;
+    radius_m?: number;
+    nameHint?: string;
+  }) => void | Promise<void>;
   onCancel: () => void;
   saving?: boolean;
   onTestPoint?: (lat: number, lng: number) => Promise<CoverageCheckResult>;
+  mapHeight?: number;
+  /** Enter radius mode from parent when a place is already selected externally */
+  onRequestRadiusMode?: () => void;
 };
+
+function styleForKind(kind: DashZoneKind): google.maps.PolygonOptions {
+  if (kind === 'exclude') {
+    return {
+      strokeColor: '#f87171',
+      fillColor: '#ef4444',
+      fillOpacity: 0.28,
+      strokeWeight: 2,
+      strokeOpacity: 0.9,
+    };
+  }
+  return {
+    strokeColor: '#34d399',
+    fillColor: '#10b981',
+    fillOpacity: 0.22,
+    strokeWeight: 2,
+  };
+}
+
+function pathToVertices(path: google.maps.MVCArray<google.maps.LatLng>): DashZoneVertex[] {
+  const out: DashZoneVertex[] = [];
+  for (let i = 0; i < path.getLength(); i++) {
+    const p = path.getAt(i);
+    out.push({ lat: p.lat(), lng: p.lng() });
+  }
+  return out;
+}
 
 export function ZoneMapEditor({
   zones,
   uiMode,
   initialPolygon = [],
   editingZoneId = null,
+  townIncludePolygons,
   onSave,
   onCancel,
   saving,
   onTestPoint,
+  mapHeight = 520,
 }: ZoneMapEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<L.Map | null>(null);
-  const overlayRef = useRef<L.LayerGroup | null>(null);
-  const polyRef = useRef<L.Polygon | null>(null);
-  const markersRef = useRef<L.Marker[]>([]);
-  const testMarkerRef = useRef<L.Marker | null>(null);
-  const verticesRef = useRef<DashZoneVertex[]>(
-    initialPolygon.length >= 3 ? [...initialPolygon] : [...initialPolygon],
-  );
-  const interactionRef = useRef<'draw' | 'test'>('draw');
+  const mapRef = useRef<google.maps.Map | null>(null);
+  const overlayPolysRef = useRef<google.maps.Polygon[]>([]);
+  const editPolyRef = useRef<google.maps.Polygon | null>(null);
+  const clickListenerRef = useRef<google.maps.MapsEventListener | null>(null);
+  const searchMarkerRef = useRef<google.maps.Marker | null>(null);
+  const testMarkerRef = useRef<google.maps.Marker | null>(null);
+  const radiusCircleRef = useRef<google.maps.Circle | null>(null);
+  const verticesRef = useRef<DashZoneVertex[]>([...initialPolygon]);
   const uiModeRef = useRef(uiMode);
 
   const [ready, setReady] = useState(false);
-  const [vertexCount, setVertexCount] = useState(verticesRef.current.length);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [mapType, setMapType] = useState<'roadmap' | 'hybrid'>('roadmap');
+  const [vertexCount, setVertexCount] = useState(initialPolygon.length);
   const [testActive, setTestActive] = useState(false);
   const [testResult, setTestResult] = useState<CoverageCheckResult | null>(null);
   const [testBusy, setTestBusy] = useState(false);
 
-  uiModeRef.current = uiMode;
-  interactionRef.current = testActive ? 'test' : 'draw';
+  const [searchQ, setSearchQ] = useState('');
+  const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
+  const [searchBusy, setSearchBusy] = useState(false);
+  const [searchEmpty, setSearchEmpty] = useState(false);
+  const [selectedPlace, setSelectedPlace] = useState<{
+    lat: number;
+    lng: number;
+    label: string;
+  } | null>(null);
+  const [radiusM, setRadiusM] = useState(300);
 
-  const editKind: DashZoneKind = uiMode === 'cutout' ? 'exclude' : 'include';
+  uiModeRef.current = uiMode;
   const drawing = uiMode === 'cutout' || uiMode === 'adjust';
+  const editKind: DashZoneKind = uiMode === 'cutout' ? 'exclude' : 'include';
+
+  const primaryInclude =
+    townIncludePolygons.find((p) => p.length >= 3) ??
+    zones.find((z) => z.kind === 'include' && z.polygon.length >= 3)?.polygon ??
+    [];
+
+  const clearOverlays = () => {
+    for (const p of overlayPolysRef.current) p.setMap(null);
+    overlayPolysRef.current = [];
+  };
+
+  const clearEditPoly = () => {
+    if (editPolyRef.current) {
+      editPolyRef.current.setMap(null);
+      editPolyRef.current = null;
+    }
+  };
+
+  const syncOverlays = () => {
+    const map = mapRef.current;
+    if (!map) return;
+    clearOverlays();
+    const bounds = new google.maps.LatLngBounds();
+    let hasBounds = false;
+    for (const z of zones) {
+      if (editingZoneId && z.id === editingZoneId) continue;
+      if (z.polygon.length < 3) continue;
+      const path = z.polygon.map((v) => ({ lat: v.lat, lng: v.lng }));
+      const poly = new google.maps.Polygon({
+        paths: path,
+        map,
+        editable: false,
+        draggable: false,
+        ...styleForKind(z.kind),
+        fillOpacity: drawing || uiMode === 'radius' ? 0.12 : styleForKind(z.kind).fillOpacity,
+      });
+      overlayPolysRef.current.push(poly);
+      for (const v of path) {
+        bounds.extend(v);
+        hasBounds = true;
+      }
+    }
+    if (hasBounds && uiMode === 'view') {
+      map.fitBounds(bounds, 48);
+    }
+  };
 
   const syncEditPolygon = () => {
     const map = mapRef.current;
     if (!map) return;
+    clearEditPoly();
     const verts = verticesRef.current;
     setVertexCount(verts.length);
+    if (!drawing || verts.length < 2) return;
+    const poly = new google.maps.Polygon({
+      paths: verts.map((v) => ({ lat: v.lat, lng: v.lng })),
+      map,
+      editable: true,
+      draggable: false,
+      ...styleForKind(editKind),
+    });
+    const syncFromPath = () => {
+      const path = poly.getPath();
+      verticesRef.current = pathToVertices(path);
+      setVertexCount(verticesRef.current.length);
+    };
+    poly.getPath().addListener('set_at', syncFromPath);
+    poly.getPath().addListener('insert_at', syncFromPath);
+    poly.getPath().addListener('remove_at', syncFromPath);
+    editPolyRef.current = poly;
+  };
 
-    if (polyRef.current) {
-      map.removeLayer(polyRef.current);
-      polyRef.current = null;
+  const syncRadiusPreview = () => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (radiusCircleRef.current) {
+      radiusCircleRef.current.setMap(null);
+      radiusCircleRef.current = null;
     }
-    for (const m of markersRef.current) map.removeLayer(m);
-    markersRef.current = [];
-
-    if (!drawing) return;
-
-    if (verts.length >= 2) {
-      const latlngs = verts.map((v) => [v.lat, v.lng] as L.LatLngExpression);
-      polyRef.current = L.polygon(latlngs, styleForKind(editKind)).addTo(map);
-    }
-
-    verts.forEach((v, idx) => {
-      const marker = L.marker([v.lat, v.lng], { draggable: true }).addTo(map);
-      marker.on('drag', () => {
-        const p = marker.getLatLng();
-        verticesRef.current[idx] = { lat: p.lat, lng: p.lng };
-        if (polyRef.current) {
-          polyRef.current.setLatLngs(verticesRef.current.map((x) => [x.lat, x.lng]));
-        }
-      });
-      marker.on('dragend', () => {
-        const p = marker.getLatLng();
-        verticesRef.current[idx] = { lat: p.lat, lng: p.lng };
-        syncEditPolygon();
-      });
-      marker.on('dblclick', (e) => {
-        L.DomEvent.stopPropagation(e);
-        if (verticesRef.current.length <= 3) return;
-        verticesRef.current.splice(idx, 1);
-        syncEditPolygon();
-      });
-      markersRef.current.push(marker);
+    if (uiMode !== 'radius' || !selectedPlace) return;
+    radiusCircleRef.current = new google.maps.Circle({
+      map,
+      center: { lat: selectedPlace.lat, lng: selectedPlace.lng },
+      radius: radiusM,
+      strokeColor: '#f87171',
+      fillColor: '#ef4444',
+      fillOpacity: 0.25,
+      strokeWeight: 2,
+      editable: true,
+    });
+    radiusCircleRef.current.addListener('radius_changed', () => {
+      const r = radiusCircleRef.current?.getRadius();
+      if (r && Number.isFinite(r)) setRadiusM(Math.round(Math.min(1000, Math.max(100, r))));
+    });
+    radiusCircleRef.current.addListener('center_changed', () => {
+      const c = radiusCircleRef.current?.getCenter();
+      if (!c) return;
+      setSelectedPlace((prev) =>
+        prev ? { ...prev, lat: c.lat(), lng: c.lng() } : prev,
+      );
     });
   };
 
-  const syncOverlays = (fit = false) => {
-    const map = mapRef.current;
-    if (!map || !overlayRef.current) return;
-    overlayRef.current.clearLayers();
-
-    const bounds: L.LatLngExpression[] = [];
-    for (const z of zones) {
-      if (editingZoneId && z.id === editingZoneId) continue;
-      if (!Array.isArray(z.polygon) || z.polygon.length < 3) continue;
-      const latlngs = z.polygon.map((v) => [v.lat, v.lng] as L.LatLngExpression);
-      L.polygon(latlngs, styleForKind(z.kind, drawing)).addTo(overlayRef.current);
-      for (const ll of latlngs) bounds.push(ll);
-    }
-    if (fit && !drawing && bounds.length > 0) {
-      map.fitBounds(L.latLngBounds(bounds).pad(0.2));
-    }
-  };
-
   useEffect(() => {
-    ensureLeafletCss();
-    fixLeafletIcon();
-    setReady(true);
+    let cancelled = false;
+    void (async () => {
+      try {
+        await loadPartnerMapsApi();
+        if (cancelled) return;
+        setReady(true);
+      } catch (e) {
+        if (!cancelled) {
+          setLoadError(e instanceof Error ? e.message : 'Maps failed to load');
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
     if (!ready || !containerRef.current || mapRef.current) return;
+    const center =
+      polygonCentroid(primaryInclude) ??
+      (initialPolygon.length ? polygonCentroid(initialPolygon) : null) ?? { lat: 18.0, lng: -77.0 };
 
-    const map = L.map(containerRef.current).setView(JAMAICA_CENTER, DEFAULT_ZOOM);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap',
-    }).addTo(map);
+    const map = new google.maps.Map(containerRef.current, {
+      center,
+      zoom: 13,
+      mapTypeId: mapType,
+      streetViewControl: false,
+      fullscreenControl: false,
+      mapTypeControl: false,
+      gestureHandling: 'greedy',
+    });
     mapRef.current = map;
-    overlayRef.current = L.layerGroup().addTo(map);
 
-    verticesRef.current =
-      initialPolygon.length > 0 ? [...initialPolygon] : [];
-    syncOverlays(true);
-    syncEditPolygon();
+    map.addListener('click', async (e: google.maps.MapMouseEvent) => {
+      const latLng = e.latLng;
+      if (!latLng) return;
+      const lat = latLng.lat();
+      const lng = latLng.lng();
 
-    if (verticesRef.current.length >= 3) {
-      const bounds = L.latLngBounds(verticesRef.current.map((v) => [v.lat, v.lng]));
-      map.fitBounds(bounds.pad(0.2));
-    }
-
-    map.on('click', async (e: L.LeafletMouseEvent) => {
-      if (interactionRef.current === 'test') {
+      if (testActive) {
         if (!onTestPoint) return;
-        const { lat, lng } = e.latlng;
-        if (testMarkerRef.current) map.removeLayer(testMarkerRef.current);
-        testMarkerRef.current = L.marker([lat, lng]).addTo(map);
+        if (testMarkerRef.current) testMarkerRef.current.setMap(null);
+        testMarkerRef.current = new google.maps.Marker({ map, position: { lat, lng } });
         setTestBusy(true);
         try {
-          const res = await onTestPoint(lat, lng);
-          setTestResult(res);
+          setTestResult(await onTestPoint(lat, lng));
         } catch {
           setTestResult({ inZone: false, reason: 'Check failed' });
         } finally {
@@ -208,126 +291,345 @@ export function ZoneMapEditor({
         }
         return;
       }
-      if (uiModeRef.current !== 'cutout' && uiModeRef.current !== 'adjust') return;
-      verticesRef.current = [...verticesRef.current, { lat: e.latlng.lat, lng: e.latlng.lng }];
-      syncEditPolygon();
+
+      if (uiModeRef.current === 'cutout' || uiModeRef.current === 'adjust') {
+        verticesRef.current = [...verticesRef.current, { lat, lng }];
+        syncEditPolygon();
+      } else if (uiModeRef.current === 'view' || uiModeRef.current === 'radius') {
+        const inside =
+          townIncludePolygons.some((poly) => pointInPolygon(lat, lng, poly)) ||
+          (primaryInclude.length >= 3 && pointInPolygon(lat, lng, primaryInclude));
+        if (!inside && primaryInclude.length >= 3) return;
+        setSelectedPlace({ lat, lng, label: 'Dropped pin' });
+        if (searchMarkerRef.current) searchMarkerRef.current.setMap(null);
+        searchMarkerRef.current = new google.maps.Marker({
+          map,
+          position: { lat, lng },
+          title: 'Selected',
+        });
+      }
     });
 
-    setTimeout(() => map.invalidateSize(), 80);
+    syncOverlays();
+    verticesRef.current = [...initialPolygon];
+    syncEditPolygon();
 
     return () => {
-      map.remove();
+      if (clickListenerRef.current) {
+        google.maps.event.removeListener(clickListenerRef.current);
+      }
+      clearOverlays();
+      clearEditPoly();
+      if (searchMarkerRef.current) searchMarkerRef.current.setMap(null);
+      if (testMarkerRef.current) testMarkerRef.current.setMap(null);
+      if (radiusCircleRef.current) radiusCircleRef.current.setMap(null);
       mapRef.current = null;
-      overlayRef.current = null;
-      polyRef.current = null;
-      markersRef.current = [];
-      testMarkerRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount once per editor instance
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready]);
 
-  const zonesKey = zones
-    .map((z) => `${z.id}:${z.kind}:${z.polygon.length}`)
-    .join('|');
+  useEffect(() => {
+    mapRef.current?.setMapTypeId(mapType);
+  }, [mapType]);
 
   useEffect(() => {
     if (!mapRef.current) return;
-    verticesRef.current = initialPolygon.length > 0 ? [...initialPolygon] : [];
+    verticesRef.current = [...initialPolygon];
     setTestActive(false);
     setTestResult(null);
-    syncOverlays(uiMode === 'view');
+    syncOverlays();
     syncEditPolygon();
+    syncRadiusPreview();
     if (drawing && verticesRef.current.length >= 3) {
-      const bounds = L.latLngBounds(verticesRef.current.map((v) => [v.lat, v.lng]));
-      mapRef.current.fitBounds(bounds.pad(0.2));
+      const b = polygonBounds(verticesRef.current);
+      if (b) {
+        mapRef.current.fitBounds(
+          new google.maps.LatLngBounds(
+            { lat: b.south, lng: b.west },
+            { lat: b.north, lng: b.east },
+          ),
+          48,
+        );
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [uiMode, editingZoneId, zonesKey]);
+  }, [uiMode, editingZoneId, zones.map((z) => z.id).join(',')]);
 
-  // Refresh dimmed overlays when zone geometry changes without remounting
   useEffect(() => {
-    if (!mapRef.current || drawing) return;
-    syncOverlays(false);
+    syncRadiusPreview();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [zonesKey]);
+  }, [selectedPlace, radiusM, uiMode]);
 
-  const clearPolygon = () => {
-    verticesRef.current = [];
-    setTestResult(null);
-    if (testMarkerRef.current && mapRef.current) {
-      mapRef.current.removeLayer(testMarkerRef.current);
-      testMarkerRef.current = null;
+  const includeKey = primaryInclude.map((p) => `${p.lat.toFixed(5)},${p.lng.toFixed(5)}`).join('|');
+
+  useEffect(() => {
+    if (!searchQ.trim()) {
+      setSuggestions([]);
+      setSearchEmpty(false);
+      return;
     }
+    const t = window.setTimeout(() => {
+      void (async () => {
+        setSearchBusy(true);
+        setSearchEmpty(false);
+        try {
+          const bounds = polygonBounds(primaryInclude);
+          const center = polygonCentroid(primaryInclude);
+          const raw = await searchAddresses(searchQ.trim(), {
+            boundsBias: bounds ?? undefined,
+            locationBias: center
+              ? { lat: center.lat, lng: center.lng, radiusMeters: 10_000 }
+              : undefined,
+          });
+          setSuggestions(raw.slice(0, 8));
+          setSearchEmpty(raw.length === 0);
+        } catch {
+          setSuggestions([]);
+          setSearchEmpty(true);
+        } finally {
+          setSearchBusy(false);
+        }
+      })();
+    }, 280);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- includeKey captures polygon
+  }, [searchQ, includeKey]);
+
+  const selectSuggestion = async (s: AddressSuggestion) => {
+    setSearchBusy(true);
+    try {
+      const details = await getPlaceDetails(s.placeId);
+      const inside =
+        townIncludePolygons.some((poly) => pointInPolygon(details.lat, details.lng, poly)) ||
+        (primaryInclude.length >= 3 &&
+          pointInPolygon(details.lat, details.lng, primaryInclude));
+      if (!inside) {
+        setSuggestions([]);
+        setSearchEmpty(true);
+        setSearchQ('');
+        return;
+      }
+      setSelectedPlace({
+        lat: details.lat,
+        lng: details.lng,
+        label: details.formattedAddress || s.description,
+      });
+      setSearchQ('');
+      setSuggestions([]);
+      const map = mapRef.current;
+      if (map) {
+        map.panTo({ lat: details.lat, lng: details.lng });
+        map.setZoom(Math.max(map.getZoom() ?? 13, 15));
+        if (searchMarkerRef.current) searchMarkerRef.current.setMap(null);
+        searchMarkerRef.current = new google.maps.Marker({
+          map,
+          position: { lat: details.lat, lng: details.lng },
+          title: details.formattedAddress || s.mainText,
+        });
+      }
+    } catch {
+      setSearchEmpty(true);
+    } finally {
+      setSearchBusy(false);
+    }
+  };
+
+  const clearDrawing = () => {
+    verticesRef.current = [];
+    setVertexCount(0);
     syncEditPolygon();
   };
 
-  const handleSave = () => {
+  const handleSavePolygon = () => {
+    if (editPolyRef.current) {
+      verticesRef.current = pathToVertices(editPolyRef.current.getPath());
+    }
     if (verticesRef.current.length < 3) return;
-    void onSave(verticesRef.current.map((v) => ({ lat: v.lat, lng: v.lng })));
+    void onSave({ polygon: verticesRef.current, source: 'manual' });
+  };
+
+  const handleSaveRadius = () => {
+    if (!selectedPlace) return;
+    const r = radiusCircleRef.current?.getRadius() ?? radiusM;
+    const center = radiusCircleRef.current?.getCenter();
+    const lat = center?.lat() ?? selectedPlace.lat;
+    const lng = center?.lng() ?? selectedPlace.lng;
+    const radius = Math.round(Math.min(1000, Math.max(100, r)));
+    const polygon = circleToPolygon({ lat, lng }, radius);
+    void onSave({
+      polygon,
+      source: 'radius',
+      center_lat: lat,
+      center_lng: lng,
+      radius_m: radius,
+      nameHint: selectedPlace.label,
+    });
   };
 
   const hint =
-    uiMode === 'cutout'
-      ? 'Click the map to mark where you don’t deliver · drag points to reshape'
-      : uiMode === 'adjust'
-        ? 'Drag points to reshape the town delivery area · double-click a point to remove'
-        : 'Green is where you deliver. Red cutouts are where you don’t. Use Test pin to check an address.';
+    uiMode === 'radius'
+      ? 'Search or drop a pin, set the radius, then save the no-delivery circle.'
+      : uiMode === 'cutout'
+        ? 'Click the map to draw a no-delivery shape · drag corners to reshape'
+        : uiMode === 'adjust'
+          ? 'Drag corners to reshape the town delivery area'
+          : 'Search inside this town, or use Test pin. Switch to satellite for schemes and yards.';
+
+  if (loadError) {
+    return (
+      <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-4 text-sm text-red-200">
+        {loadError}
+      </div>
+    );
+  }
+
+  if (!ready) {
+    return (
+      <div className="flex items-center justify-center gap-2 rounded-xl border border-slate-700 p-12 text-slate-400">
+        <Loader2 className="w-5 h-5 animate-spin" />
+        Loading map…
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3 rounded-xl border border-slate-700 bg-slate-950/80 p-3">
-      <div className="flex flex-wrap items-center gap-2 justify-between">
-        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
-          {uiMode === 'cutout' ? (
-            <Scissors className="w-3.5 h-3.5 text-red-400" />
-          ) : (
-            <Pencil className="w-3.5 h-3.5 text-emerald-400" />
+      <div className="relative flex flex-wrap items-start gap-2">
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-slate-500" />
+          <input
+            type="search"
+            value={searchQ}
+            onChange={(e) => setSearchQ(e.target.value)}
+            placeholder="Search places in this town…"
+            className="w-full pl-8 pr-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-sm text-white"
+          />
+          {(suggestions.length > 0 || searchEmpty || searchBusy) && searchQ.trim() && (
+            <div className="absolute z-20 mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 shadow-xl overflow-hidden">
+              {searchBusy && (
+                <p className="px-3 py-2 text-xs text-slate-500 flex items-center gap-2">
+                  <Loader2 className="w-3 h-3 animate-spin" /> Searching…
+                </p>
+              )}
+              {!searchBusy && searchEmpty && (
+                <p className="px-3 py-2 text-xs text-slate-400">
+                  No places inside this town’s delivery area.
+                </p>
+              )}
+              {!searchBusy &&
+                suggestions.map((s) => (
+                  <button
+                    key={s.placeId}
+                    type="button"
+                    onClick={() => void selectSuggestion(s)}
+                    className="w-full text-left px-3 py-2 text-sm text-slate-200 hover:bg-slate-900 border-b border-slate-800 last:border-0"
+                  >
+                    <span className="font-medium text-white">{s.mainText}</span>
+                    {s.secondaryText ? (
+                      <span className="block text-xs text-slate-500">{s.secondaryText}</span>
+                    ) : null}
+                  </button>
+                ))}
+            </div>
           )}
-          <span>{hint}</span>
         </div>
-        <div className="flex items-center gap-2">
-          {onTestPoint && (
-            <button
-              type="button"
-              onClick={() => {
-                setTestActive((v) => !v);
-                setTestResult(null);
-              }}
-              className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-xs ${
-                testActive
-                  ? 'border-amber-500/50 bg-amber-500/15 text-amber-200'
-                  : 'border-slate-700 text-slate-300'
-              }`}
-            >
-              <Crosshair className="w-3.5 h-3.5" />
-              {testActive ? 'Testing…' : 'Test pin'}
-            </button>
-          )}
-        </div>
+        <button
+          type="button"
+          onClick={() => setMapType((t) => (t === 'roadmap' ? 'hybrid' : 'roadmap'))}
+          className={`inline-flex items-center gap-1 px-2.5 py-2 rounded-lg border text-xs ${
+            mapType === 'hybrid'
+              ? 'border-sky-500/50 bg-sky-500/15 text-sky-200'
+              : 'border-slate-700 text-slate-300'
+          }`}
+        >
+          <Satellite className="w-3.5 h-3.5" />
+          {mapType === 'hybrid' ? 'Satellite' : 'Streets'}
+        </button>
+        {onTestPoint && (
+          <button
+            type="button"
+            onClick={() => {
+              setTestActive((v) => !v);
+              setTestResult(null);
+            }}
+            className={`inline-flex items-center gap-1 px-2.5 py-2 rounded-lg border text-xs ${
+              testActive
+                ? 'border-amber-500/50 bg-amber-500/15 text-amber-200'
+                : 'border-slate-700 text-slate-300'
+            }`}
+          >
+            <Crosshair className="w-3.5 h-3.5" />
+            {testActive ? 'Testing…' : 'Test pin'}
+          </button>
+        )}
       </div>
+
+      <p className="text-xs text-slate-400 flex items-center gap-1.5">
+        {uiMode === 'cutout' || uiMode === 'radius' ? (
+          <Scissors className="w-3.5 h-3.5 text-red-400" />
+        ) : (
+          <Pencil className="w-3.5 h-3.5 text-emerald-400" />
+        )}
+        {hint}
+      </p>
+
+      {selectedPlace && uiMode !== 'adjust' && uiMode !== 'cutout' && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs text-slate-300">
+          <MapPin className="w-3.5 h-3.5 text-emerald-400" />
+          <span className="flex-1 min-w-0 truncate text-slate-200">{selectedPlace.label}</span>
+          {uiMode === 'radius' ? (
+            <>
+              <label className="flex items-center gap-1 text-slate-400">
+                Radius
+                <input
+                  type="range"
+                  min={100}
+                  max={1000}
+                  step={25}
+                  value={radiusM}
+                  onChange={(e) => setRadiusM(Number(e.target.value))}
+                  className="w-28"
+                />
+                <span className="text-slate-200 w-12">{radiusM}m</span>
+              </label>
+              <button
+                type="button"
+                disabled={saving}
+                onClick={handleSaveRadius}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-500 text-slate-950 font-semibold disabled:opacity-50"
+              >
+                <Check className="w-3.5 h-3.5" />
+                {saving ? 'Saving…' : 'Save cutout'}
+              </button>
+            </>
+          ) : (
+            <span className="text-slate-500">Use “Don’t deliver near here” to cut a circle</span>
+          )}
+        </div>
+      )}
 
       <div
         ref={containerRef}
         className="w-full rounded-lg overflow-hidden border border-slate-800"
-        style={{ height: '420px' }}
+        style={{ height: `${mapHeight}px` }}
       />
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs text-slate-500 flex items-center gap-1.5">
           <MapPin className="w-3.5 h-3.5" />
           {drawing
-            ? `${vertexCount} point${vertexCount === 1 ? '' : 's'} · ${
-                uiMode === 'cutout' ? 'no-delivery cutout' : 'delivery area'
-              }`
-            : `${zones.filter((z) => z.kind === 'include').length ? 'Delivery area shown' : 'No delivery area'} · ${
-                zones.filter((z) => z.kind === 'exclude').length
-              } cutout${zones.filter((z) => z.kind === 'exclude').length === 1 ? '' : 's'}`}
-          {testActive ? ' · click map to test coverage' : ''}
+            ? `${vertexCount} points · ${uiMode === 'cutout' ? 'no-delivery cutout' : 'delivery area'}`
+            : uiMode === 'radius'
+              ? `Radius cutout · ${radiusM}m`
+              : `${zones.filter((z) => z.kind === 'include').length ? 'Delivery area shown' : 'No delivery area'} · ${
+                  zones.filter((z) => z.kind === 'exclude').length
+                } cutouts`}
         </p>
         {drawing && (
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={clearPolygon}
+              onClick={clearDrawing}
               className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-700 text-xs text-slate-300"
             >
               <Trash2 className="w-3.5 h-3.5" />
@@ -343,17 +645,22 @@ export function ZoneMapEditor({
             <button
               type="button"
               disabled={saving || vertexCount < 3}
-              onClick={handleSave}
+              onClick={handleSavePolygon}
               className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-amber-500 text-slate-950 text-xs font-semibold disabled:opacity-50"
             >
               <Check className="w-3.5 h-3.5" />
-              {saving
-                ? 'Saving…'
-                : uiMode === 'cutout'
-                  ? 'Save cutout'
-                  : 'Save delivery area'}
+              {saving ? 'Saving…' : uiMode === 'cutout' ? 'Save cutout' : 'Save delivery area'}
             </button>
           </div>
+        )}
+        {uiMode === 'radius' && (
+          <button
+            type="button"
+            onClick={onCancel}
+            className="px-3 py-1.5 rounded-lg border border-slate-700 text-xs text-slate-300"
+          >
+            Cancel
+          </button>
         )}
       </div>
 

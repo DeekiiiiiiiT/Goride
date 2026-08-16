@@ -23,7 +23,7 @@ export type ActiveCoverageZone = {
 };
 
 /** Bump when zone payload shape changes so stale caches drop. */
-const ZONES_CACHE_KEY = 'roam-dash-delivery-zones-v2';
+const ZONES_CACHE_KEY = 'roam-dash-delivery-zones-v3';
 /** Short TTL so Ops map edits reach customers within minutes. */
 const ZONES_CACHE_TTL_MS = 10 * 60 * 1000; // 10m
 

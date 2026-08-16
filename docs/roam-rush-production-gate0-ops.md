@@ -92,9 +92,10 @@ Primary staff console: **https://partner.roamrush.app/admin** (subtitle: Ops Con
 
 Covers Merchants, Couriers (embedded), Customers, Orders, Live Ops, Markets/zones, Finance, Team invites, Support cases, Activity audit.
 
-- Markets: Parish → Town (`delivery.service_parishes` → `service_markets` → `service_zone_polygons`). Adding a town auto-creates a green delivery outline (curated for Kingston/Spanish Town; ~4 km circle fallback otherwise). Ops carve out no-go areas (“Don’t deliver here”); soft-block: cannot activate without ≥1 delivery area. Pin-test: `POST /admin/markets/check-point`.
+- Markets (enterprise coverage): Parish → Town → draft zones → **Publish** snapshot (`service_coverage_versions`). Ops map is Google Maps (streets/satellite) with Places search limited to the town delivery border. Primary carve-out: search/pin → “Don’t deliver near here” (radius). Also freehand cutouts, GeoJSON import, version restore. Soft-activate uses readiness checks (`GET /admin/markets/:id/readiness`); `force: true` for dash_admin/platform_owner. Customer apps read **published** zones from `GET /geo/delivery-zones` (cache key `roam-dash-delivery-zones-v3`).
 - Soft-launch seeds: all 14 Jamaica parishes; Kingston town under Kingston parish; Spanish Town under St. Catherine.
-- Rush app loads zones from `GET /geo/delivery-zones` (cache TTL ~10m, key `roam-dash-delivery-zones-v2`; fallback Kingston polygon if offline).
+- Rush app loads zones from `GET /geo/delivery-zones` (cache TTL ~10m, key `roam-dash-delivery-zones-v3`; fallback Kingston polygon if offline).
+- Markets playbook: Open map → search in-town → cut out → Publish coverage → readiness green → Activate.
 - Team invite: `POST /admin/team/invite` (dash_admin / dash_ops / courier_admin / courier_ops).
 - Courier-only roles see a reduced nav (Couriers + Live Ops + Orders + Support).
 

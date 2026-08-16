@@ -582,6 +582,7 @@ export function changeDashTeamRole(accessToken: string, userId: string, role: Da
 // ---------------------------------------------------------------------------
 
 export type DashZoneKind = 'include' | 'exclude';
+export type DashZoneSource = 'manual' | 'radius' | 'auto_outline' | 'import';
 
 export interface DashZoneVertex {
   lat: number;
@@ -595,7 +596,12 @@ export interface DashZoneRow {
   polygon: DashZoneVertex[];
   priority: number;
   kind: DashZoneKind;
+  source?: DashZoneSource | string | null;
+  center_lat?: number | null;
+  center_lng?: number | null;
+  radius_m?: number | null;
   created_at?: string;
+  updated_at?: string;
 }
 
 export interface DashMarketRow {
@@ -606,6 +612,10 @@ export interface DashMarketRow {
   waitlist_enabled?: boolean;
   parish_id?: string | null;
   zones?: DashZoneRow[];
+  draft_dirty?: boolean;
+  published_version_id?: string | null;
+  readiness_merchants_min?: number;
+  readiness_couriers_min?: number;
   created_at?: string;
 }
 
@@ -623,6 +633,31 @@ export interface CoverageCheckResult {
   reason?: string;
   matchedInclude?: { id: string; name: string; market_id?: string } | null;
   matchedExclude?: { id: string; name: string; market_id?: string } | null;
+}
+
+export interface CoverageVersionRow {
+  id: string;
+  market_id: string;
+  version: number;
+  label?: string | null;
+  notes?: string | null;
+  created_at?: string;
+  created_by?: string | null;
+}
+
+export interface ReadinessCheck {
+  id: string;
+  ok: boolean;
+  label: string;
+  detail?: string;
+}
+
+export interface MarketReadiness {
+  market_id: string;
+  ready: boolean;
+  checks: ReadinessCheck[];
+  draft_dirty: boolean;
+  published_version_id?: string | null;
 }
 
 export function listMarkets(accessToken: string) {
@@ -668,12 +703,19 @@ export function updateMarket(
     name?: string;
     waitlist_enabled?: boolean;
     parish_id?: string | null;
+    force?: boolean;
+    readiness_merchants_min?: number;
+    readiness_couriers_min?: number;
   },
 ) {
-  return deliveryFetch<{ market: DashMarketRow }>(accessToken, `/admin/markets/${id}`, {
-    method: 'PATCH',
-    body: JSON.stringify(payload),
-  });
+  return deliveryFetch<{ market: DashMarketRow; failed_checks?: ReadinessCheck[]; checks?: ReadinessCheck[] }>(
+    accessToken,
+    `/admin/markets/${id}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    },
+  );
 }
 
 export function createMarket(
@@ -699,6 +741,10 @@ export function createZone(
     polygon: DashZoneVertex[];
     priority?: number;
     kind?: DashZoneKind;
+    source?: DashZoneSource;
+    center_lat?: number;
+    center_lng?: number;
+    radius_m?: number;
   },
 ) {
   return deliveryFetch<{ zone: DashZoneRow }>(
@@ -717,6 +763,10 @@ export function updateZone(
     polygon?: DashZoneVertex[];
     priority?: number;
     kind?: DashZoneKind;
+    source?: DashZoneSource;
+    center_lat?: number;
+    center_lng?: number;
+    radius_m?: number;
   },
 ) {
   return deliveryFetch<{ zone: DashZoneRow }>(
@@ -740,6 +790,58 @@ export function checkCoveragePoint(accessToken: string, lat: number, lng: number
     method: 'POST',
     body: JSON.stringify({ lat, lng }),
   });
+}
+
+export function getMarketReadiness(accessToken: string, marketId: string) {
+  return deliveryFetch<MarketReadiness>(accessToken, `/admin/markets/${marketId}/readiness`);
+}
+
+export function listCoverageVersions(accessToken: string, marketId: string) {
+  return deliveryFetch<{ versions: CoverageVersionRow[] }>(
+    accessToken,
+    `/admin/markets/${marketId}/versions`,
+  );
+}
+
+export function publishMarketCoverage(
+  accessToken: string,
+  marketId: string,
+  payload: { label?: string; notes?: string } = {},
+) {
+  return deliveryFetch<{ market: DashMarketRow; version: CoverageVersionRow }>(
+    accessToken,
+    `/admin/markets/${marketId}/publish`,
+    { method: 'POST', body: JSON.stringify(payload) },
+  );
+}
+
+export function restoreCoverageVersion(
+  accessToken: string,
+  marketId: string,
+  versionId: string,
+  republish = true,
+) {
+  return deliveryFetch<{ market: DashMarketRow }>(
+    accessToken,
+    `/admin/markets/${marketId}/versions/${versionId}/restore`,
+    { method: 'POST', body: JSON.stringify({ republish }) },
+  );
+}
+
+export function importMarketGeoJson(
+  accessToken: string,
+  marketId: string,
+  payload: {
+    polygon?: DashZoneVertex[];
+    geojson?: unknown;
+    promote_template?: boolean;
+  },
+) {
+  return deliveryFetch<{ zone: DashZoneRow }>(
+    accessToken,
+    `/admin/markets/${marketId}/import-geojson`,
+    { method: 'POST', body: JSON.stringify(payload) },
+  );
 }
 
 // ---------------------------------------------------------------------------

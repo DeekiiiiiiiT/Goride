@@ -7,6 +7,7 @@ export {
   searchAddresses,
   getPlaceDetails,
   type AddressSuggestion,
+  type SearchAddressesOptions,
 } from './geocode';
 export {
   getCurrentPosition,
