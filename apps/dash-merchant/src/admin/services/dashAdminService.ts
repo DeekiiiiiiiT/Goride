@@ -624,6 +624,9 @@ export interface DashParishRow {
   name: string;
   slug: string;
   sort_order?: number;
+  /** Ops parish foundation outline — not used for customer delivery. */
+  foundation_polygon?: DashZoneVertex[] | null;
+  foundation_updated_at?: string | null;
   towns?: DashMarketRow[];
   created_at?: string;
 }
@@ -692,6 +695,23 @@ export function deleteParish(accessToken: string, parishId: string) {
     accessToken,
     `/admin/markets/parishes/${parishId}`,
     { method: 'DELETE' },
+  );
+}
+
+/** Save parish foundation border (ops geography). Promotes default template by default. */
+export function updateParishOutline(
+  accessToken: string,
+  parishId: string,
+  payload: {
+    polygon: DashZoneVertex[];
+    confirm_foundation_edit: true;
+    promote_template?: boolean;
+  },
+) {
+  return deliveryFetch<{ parish: DashParishRow; promoted_template?: boolean }>(
+    accessToken,
+    `/admin/markets/parishes/${parishId}/outline`,
+    { method: 'PUT', body: JSON.stringify(payload) },
   );
 }
 
@@ -767,6 +787,10 @@ export function updateZone(
     center_lat?: number;
     center_lng?: number;
     radius_m?: number;
+    /** Required when patching an include (town foundation) polygon. */
+    confirm_foundation_edit?: boolean;
+    /** Upsert town_outline_templates from this include polygon. */
+    promote_template?: boolean;
   },
 ) {
   return deliveryFetch<{ zone: DashZoneRow }>(

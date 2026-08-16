@@ -48,6 +48,31 @@ export function polygonCentroid(polygon: GeoVertex[]): GeoVertex | null {
   return { lat: lat / polygon.length, lng: lng / polygon.length };
 }
 
+/** Sort ring clockwise around centroid so N→S→E→W entry order cannot bow-tie. */
+export function orderRingClockwise<T extends GeoVertex>(points: T[]): T[] {
+  if (points.length < 3) return points;
+  const c = polygonCentroid(points);
+  if (!c) return points;
+  return [...points].sort((a, b) => {
+    // Angle from north, clockwise (atan2 east-component, north-component)
+    const aa = Math.atan2(a.lng - c.lng, a.lat - c.lat);
+    const bb = Math.atan2(b.lng - c.lng, b.lat - c.lat);
+    return aa - bb;
+  });
+}
+
+/** Axis-aligned box from farthest N/S/E/W readings (good for “outer limits”). */
+export function rectangleFromExtremes(points: GeoVertex[]): GeoVertex[] {
+  const b = polygonBounds(points);
+  if (!b) return [];
+  return [
+    { lat: b.north, lng: b.west },
+    { lat: b.north, lng: b.east },
+    { lat: b.south, lng: b.east },
+    { lat: b.south, lng: b.west },
+  ];
+}
+
 /** Approximate circle as N-gon ring (meters). */
 export function circleToPolygon(
   center: GeoVertex,
@@ -99,7 +124,7 @@ export function detectCoverageConflicts(
       if (latSpan < 200 || lngSpan < 200) {
         conflicts.push({
           code: 'tiny_delivery_area',
-          message: 'Delivery area looks unusually small — confirm the town border.',
+          message: 'Town border looks unusually small — confirm the foundation outline.',
         });
       }
     }
@@ -108,7 +133,7 @@ export function detectCoverageConflicts(
       if (!anyInside) {
         conflicts.push({
           code: 'cutout_outside_town',
-          message: `Cutout “${ex.name}” does not intersect the delivery area.`,
+          message: `Non-delivery zone “${ex.name}” does not intersect the town border.`,
         });
       }
     }
@@ -118,7 +143,7 @@ export function detectCoverageConflicts(
       if (polygonsOverlapOrTouch(excludes[i].polygon, excludes[j].polygon)) {
         conflicts.push({
           code: 'overlapping_cutouts',
-          message: `Cutouts “${excludes[i].name}” and “${excludes[j].name}” overlap.`,
+          message: `Non-delivery zones “${excludes[i].name}” and “${excludes[j].name}” overlap.`,
         });
       }
     }

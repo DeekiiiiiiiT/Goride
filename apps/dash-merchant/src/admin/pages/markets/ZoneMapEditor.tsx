@@ -24,6 +24,10 @@ import {
   polygonCentroid,
   type GeoVertex,
 } from './coverageGeo';
+import {
+  CoordinateEntryOverlay,
+  type NamedBorderPoint,
+} from './CoordinateEntryOverlay';
 
 export type ZoneMapUiMode = 'view' | 'cutout' | 'adjust' | 'radius';
 
@@ -59,9 +63,11 @@ export type ZoneMapEditorProps = {
   mapHeight?: number;
   /** Enter radius mode from parent when a place is already selected externally */
   onRequestRadiusMode?: () => void;
+  /** Which foundation layer is being edited (copy + save labels). */
+  foundationScope?: 'town' | 'parish';
 };
 
-function styleForKind(kind: DashZoneKind): google.maps.PolygonOptions {
+function styleForKind(kind: DashZoneKind, zoneId?: string): google.maps.PolygonOptions {
   if (kind === 'exclude') {
     return {
       strokeColor: '#f87171',
@@ -69,6 +75,15 @@ function styleForKind(kind: DashZoneKind): google.maps.PolygonOptions {
       fillOpacity: 0.28,
       strokeWeight: 2,
       strokeOpacity: 0.9,
+    };
+  }
+  if (zoneId === 'parish-foundation') {
+    return {
+      strokeColor: '#38bdf8',
+      fillColor: '#0ea5e9',
+      fillOpacity: 0.16,
+      strokeWeight: 2.5,
+      strokeOpacity: 0.95,
     };
   }
   return {
@@ -99,7 +114,11 @@ export function ZoneMapEditor({
   saving,
   onTestPoint,
   mapHeight = 520,
+  foundationScope = 'town',
 }: ZoneMapEditorProps) {
+  const foundationNoun = foundationScope === 'parish' ? 'parish' : 'town';
+  const foundationTitle =
+    foundationScope === 'parish' ? 'parish foundation border' : 'town foundation border';
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
   const overlayPolysRef = useRef<google.maps.Polygon[]>([]);
@@ -115,6 +134,7 @@ export function ZoneMapEditor({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [mapType, setMapType] = useState<'roadmap' | 'hybrid'>('roadmap');
   const [vertexCount, setVertexCount] = useState(initialPolygon.length);
+  const [editVertices, setEditVertices] = useState<DashZoneVertex[]>([...initialPolygon]);
   const [testActive, setTestActive] = useState(false);
   const [testResult, setTestResult] = useState<CoverageCheckResult | null>(null);
   const [testBusy, setTestBusy] = useState(false);
@@ -128,7 +148,10 @@ export function ZoneMapEditor({
     lng: number;
     label: string;
   } | null>(null);
+  const [showCoordOverlay, setShowCoordOverlay] = useState(false);
+  const [namedPoints, setNamedPoints] = useState<NamedBorderPoint[]>([]);
   const [radiusM, setRadiusM] = useState(300);
+
 
   uiModeRef.current = uiMode;
   const drawing = uiMode === 'cutout' || uiMode === 'adjust';
@@ -166,8 +189,8 @@ export function ZoneMapEditor({
         map,
         editable: false,
         draggable: false,
-        ...styleForKind(z.kind),
-        fillOpacity: drawing || uiMode === 'radius' ? 0.12 : styleForKind(z.kind).fillOpacity,
+        ...styleForKind(z.kind, z.id),
+        fillOpacity: drawing || uiMode === 'radius' ? 0.12 : styleForKind(z.kind, z.id).fillOpacity,
       });
       overlayPolysRef.current.push(poly);
       for (const v of path) {
@@ -186,22 +209,27 @@ export function ZoneMapEditor({
     clearEditPoly();
     const verts = verticesRef.current;
     setVertexCount(verts.length);
+    setEditVertices([...verts]);
     if (!drawing || verts.length < 2) return;
     const poly = new google.maps.Polygon({
       paths: verts.map((v) => ({ lat: v.lat, lng: v.lng })),
       map,
       editable: true,
       draggable: false,
-      ...styleForKind(editKind),
+      ...styleForKind(editKind, editingZoneId ?? undefined),
     });
     const syncFromPath = () => {
       const path = poly.getPath();
       verticesRef.current = pathToVertices(path);
       setVertexCount(verticesRef.current.length);
+      setEditVertices([...verticesRef.current]);
     };
-    poly.getPath().addListener('set_at', syncFromPath);
-    poly.getPath().addListener('insert_at', syncFromPath);
-    poly.getPath().addListener('remove_at', syncFromPath);
+    const path = poly.getPath();
+    path.addListener('set_at', syncFromPath);
+    path.addListener('insert_at', syncFromPath);
+    path.addListener('remove_at', syncFromPath);
+    // Dragging vertices sometimes only settles on mouseup — keep ref in sync.
+    poly.addListener('mouseup', syncFromPath);
     editPolyRef.current = poly;
   };
 
@@ -292,10 +320,22 @@ export function ZoneMapEditor({
         return;
       }
 
-      if (uiModeRef.current === 'cutout' || uiModeRef.current === 'adjust') {
-        verticesRef.current = [...verticesRef.current, { lat, lng }];
-        syncEditPolygon();
-      } else if (uiModeRef.current === 'view' || uiModeRef.current === 'radius') {
+      // Cutout draw only: click-to-add points. Adjust mode uses drag handles only —
+      // click-to-add was rebuilding the polygon and wiping in-progress border edits.
+      if (uiModeRef.current === 'cutout') {
+        if (editPolyRef.current) {
+          editPolyRef.current.getPath().push(new google.maps.LatLng(lat, lng));
+          verticesRef.current = pathToVertices(editPolyRef.current.getPath());
+          setVertexCount(verticesRef.current.length);
+          setEditVertices([...verticesRef.current]);
+        } else {
+          verticesRef.current = [...verticesRef.current, { lat, lng }];
+          syncEditPolygon();
+        }
+        return;
+      }
+
+      if (uiModeRef.current === 'view' || uiModeRef.current === 'radius') {
         const inside =
           townIncludePolygons.some((poly) => pointInPolygon(lat, lng, poly)) ||
           (primaryInclude.length >= 3 && pointInPolygon(lat, lng, primaryInclude));
@@ -332,15 +372,19 @@ export function ZoneMapEditor({
     mapRef.current?.setMapTypeId(mapType);
   }, [mapType]);
 
+  // Only re-seed the edit polygon when mode / zone target changes — not when
+  // the parent refreshes zone lists (that was snapping borders back to default).
   useEffect(() => {
     if (!mapRef.current) return;
     verticesRef.current = [...initialPolygon];
+    setEditVertices([...initialPolygon]);
     setTestActive(false);
     setTestResult(null);
+    setShowCoordOverlay(false);
     syncOverlays();
     syncEditPolygon();
     syncRadiusPreview();
-    if (drawing && verticesRef.current.length >= 3) {
+    if ((uiMode === 'cutout' || uiMode === 'adjust') && verticesRef.current.length >= 3) {
       const b = polygonBounds(verticesRef.current);
       if (b) {
         mapRef.current.fitBounds(
@@ -353,7 +397,14 @@ export function ZoneMapEditor({
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [uiMode, editingZoneId, zones.map((z) => z.id).join(',')]);
+  }, [uiMode, editingZoneId]);
+
+  // Keep background overlays in sync without resetting the in-progress edit.
+  useEffect(() => {
+    if (!mapRef.current) return;
+    syncOverlays();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zones.map((z) => `${z.id}:${z.polygon.length}`).join('|')]);
 
   useEffect(() => {
     syncRadiusPreview();
@@ -434,18 +485,65 @@ export function ZoneMapEditor({
     }
   };
 
+  const fitToCurrentEdit = () => {
+    const map = mapRef.current;
+    const verts = verticesRef.current;
+    if (!map || verts.length === 0) return;
+    if (verts.length === 1) {
+      map.panTo({ lat: verts[0].lat, lng: verts[0].lng });
+      map.setZoom(Math.max(map.getZoom() ?? 13, 14));
+      return;
+    }
+    const b = polygonBounds(verts);
+    if (b) {
+      map.fitBounds(
+        new google.maps.LatLngBounds(
+          { lat: b.south, lng: b.west },
+          { lat: b.north, lng: b.east },
+        ),
+        48,
+      );
+    }
+  };
+
+  const applyVerticesToMap = (verts: DashZoneVertex[], replace: boolean) => {
+    if (replace) {
+      verticesRef.current = verts;
+    } else {
+      verticesRef.current = [...verticesRef.current, ...verts];
+    }
+    setVertexCount(verticesRef.current.length);
+    setEditVertices([...verticesRef.current]);
+    syncEditPolygon();
+    fitToCurrentEdit();
+  };
+
+  const applyNamedCoordinates = (points: NamedBorderPoint[]) => {
+    setNamedPoints(points);
+    applyVerticesToMap(
+      points.map((p) => ({ lat: p.lat, lng: p.lng })),
+      true,
+    );
+  };
+
   const clearDrawing = () => {
     verticesRef.current = [];
     setVertexCount(0);
+    setEditVertices([]);
+    setNamedPoints([]);
     syncEditPolygon();
   };
 
   const handleSavePolygon = () => {
+    // Always read live path from the map — don't trust possibly stale refs after drags.
     if (editPolyRef.current) {
       verticesRef.current = pathToVertices(editPolyRef.current.getPath());
     }
     if (verticesRef.current.length < 3) return;
-    void onSave({ polygon: verticesRef.current, source: 'manual' });
+    void onSave({
+      polygon: verticesRef.current.map((v) => ({ lat: v.lat, lng: v.lng })),
+      source: 'manual',
+    });
   };
 
   const handleSaveRadius = () => {
@@ -468,12 +566,14 @@ export function ZoneMapEditor({
 
   const hint =
     uiMode === 'radius'
-      ? 'Search or drop a pin, set the radius, then save the no-delivery circle.'
+      ? 'Search or drop a pin, set the radius, then save the non-delivery circle.'
       : uiMode === 'cutout'
-        ? 'Click the map to draw a no-delivery shape · drag corners to reshape'
+        ? 'Click the map to add corners · drag handles to reshape · then Save non-delivery zone'
         : uiMode === 'adjust'
-          ? 'Drag corners to reshape the town delivery area'
-          : 'Search inside this town, or use Test pin. Switch to satellite for schemes and yards.';
+          ? `Drag the green handles to reshape the ${foundationTitle}. Use Enter coordinates for typed limits. Then Save ${foundationNoun} border.`
+          : foundationScope === 'parish'
+            ? 'Blue/green outline = parish foundation. Town borders shown for context. Customer delivery still uses town borders.'
+            : 'Green = town border (foundation). Red = no delivery. Search inside the town or use Test pin.';
 
   if (loadError) {
     return (
@@ -573,6 +673,74 @@ export function ZoneMapEditor({
         {hint}
       </p>
 
+      {uiMode === 'view' && (
+        <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-400 px-0.5">
+          <span className="inline-flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500/70 border border-emerald-400/50" />
+            {foundationScope === 'parish' ? 'Parish border (foundation)' : 'Town border (foundation)'}
+          </span>
+          {foundationScope === 'town' ? (
+            <span className="inline-flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-sm bg-red-500/70 border border-red-400/50" />
+              Non-delivery zone
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-sm bg-sky-500/50 border border-sky-400/40" />
+              Town borders (context)
+            </span>
+          )}
+        </div>
+      )}
+
+      {drawing && (
+        <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2">
+          <p className="text-xs text-amber-100">
+            {uiMode === 'cutout'
+              ? `Editing non-delivery zone · ${vertexCount} points — save or cancel when done`
+              : `Editing ${foundationTitle} · ${vertexCount} points — save or cancel when done`}
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowCoordOverlay(true)}
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-600 text-xs text-slate-200"
+            >
+              <MapPin className="w-3.5 h-3.5" />
+              Enter coordinates
+            </button>
+            <button
+              type="button"
+              onClick={onCancel}
+              className="px-3 py-1.5 rounded-lg border border-slate-600 text-xs text-slate-200"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={saving || vertexCount < 3}
+              onClick={handleSavePolygon}
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-amber-500 text-slate-950 text-xs font-semibold disabled:opacity-50"
+            >
+              <Check className="w-3.5 h-3.5" />
+              {saving
+                ? 'Saving…'
+                : uiMode === 'cutout'
+                  ? 'Save non-delivery zone'
+                  : `Save ${foundationNoun} border`}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <CoordinateEntryOverlay
+        open={showCoordOverlay}
+        onClose={() => setShowCoordOverlay(false)}
+        vertices={editVertices}
+        knownPoints={namedPoints.length > 0 ? namedPoints : undefined}
+        onApply={applyNamedCoordinates}
+      />
+
       {selectedPlace && uiMode !== 'adjust' && uiMode !== 'cutout' && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs text-slate-300">
           <MapPin className="w-3.5 h-3.5 text-emerald-400" />
@@ -599,7 +767,7 @@ export function ZoneMapEditor({
                 className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-500 text-slate-950 font-semibold disabled:opacity-50"
               >
                 <Check className="w-3.5 h-3.5" />
-                {saving ? 'Saving…' : 'Save cutout'}
+                {saving ? 'Saving…' : 'Save non-delivery zone'}
               </button>
             </>
           ) : (
@@ -618,12 +786,14 @@ export function ZoneMapEditor({
         <p className="text-xs text-slate-500 flex items-center gap-1.5">
           <MapPin className="w-3.5 h-3.5" />
           {drawing
-            ? `${vertexCount} points · ${uiMode === 'cutout' ? 'no-delivery cutout' : 'delivery area'}`
+            ? `${vertexCount} points · ${uiMode === 'cutout' ? 'non-delivery zone' : foundationTitle}`
             : uiMode === 'radius'
-              ? `Radius cutout · ${radiusM}m`
-              : `${zones.filter((z) => z.kind === 'include').length ? 'Delivery area shown' : 'No delivery area'} · ${
-                  zones.filter((z) => z.kind === 'exclude').length
-                } cutouts`}
+              ? `Radius non-delivery · ${radiusM}m`
+              : foundationScope === 'parish'
+                ? `${zones.some((z) => z.id === 'parish-foundation' && z.polygon.length >= 3) ? 'Parish border shown' : 'No parish border yet'} · towns as context`
+                : `${zones.filter((z) => z.kind === 'include').length ? 'Town border shown' : 'No town border'} · ${
+                    zones.filter((z) => z.kind === 'exclude').length
+                  } non-delivery zone${zones.filter((z) => z.kind === 'exclude').length === 1 ? '' : 's'}`}
         </p>
         {drawing && (
           <div className="flex items-center gap-2">
@@ -649,7 +819,11 @@ export function ZoneMapEditor({
               className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-amber-500 text-slate-950 text-xs font-semibold disabled:opacity-50"
             >
               <Check className="w-3.5 h-3.5" />
-              {saving ? 'Saving…' : uiMode === 'cutout' ? 'Save cutout' : 'Save delivery area'}
+              {saving
+                ? 'Saving…'
+                : uiMode === 'cutout'
+                  ? 'Save non-delivery zone'
+                  : `Save ${foundationNoun} border`}
             </button>
           </div>
         )}

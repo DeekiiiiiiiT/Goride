@@ -251,11 +251,22 @@ export function registerMarketAdminRoutes(app: Hono) {
       : 999;
 
     const db = getDb();
-    const { data, error } = await db.from("service_parishes").insert({
+    const { data: tmpl } = await db
+      .from("parish_outline_templates")
+      .select("polygon")
+      .eq("slug", slug)
+      .maybeSingle();
+    const seedPoly = normalizePolygon(tmpl?.polygon);
+    const insertRow: Record<string, unknown> = {
       name,
       slug,
       sort_order: sortOrder,
-    }).select().single();
+    };
+    if (seedPoly) {
+      insertRow.foundation_polygon = seedPoly;
+      insertRow.foundation_updated_at = new Date().toISOString();
+    }
+    const { data, error } = await db.from("service_parishes").insert(insertRow).select().single();
     if (error) return c.json({ error: error.message }, 500);
     await writeKvAudit(adminUser, "roam_dash.parish_created", String(data.id), "", `Parish ${name}`);
     return c.json({ parish: data }, 201);
@@ -282,6 +293,70 @@ export function registerMarketAdminRoutes(app: Hono) {
     if (error) return c.json({ error: error.message }, 500);
     await writeKvAudit(adminUser, "roam_dash.parish_updated", c.req.param("parishId"), "", JSON.stringify(updates));
     return c.json({ parish: data });
+  });
+
+  /** Set parish foundation outline (ops geography — not customer delivery). */
+  admin.put("/parishes/:parishId/outline", async (c) => {
+    const adminUser = c.get("adminUser") as ProductAdminUser;
+    const denied = requireDashWrite(adminUser);
+    if (denied) return denied;
+    const body = await c.req.json().catch(() => ({}));
+    if (body.confirm_foundation_edit !== true) {
+      return c.json({
+        error:
+          "Parish foundation border edits require confirm_foundation_edit. Town delivery still uses town borders + cutouts.",
+      }, 400);
+    }
+    const polygon = normalizePolygon(body.polygon);
+    if (!polygon) {
+      return c.json({ error: "polygon must be an array of >=3 {lat,lng} vertices" }, 400);
+    }
+
+    const parishId = c.req.param("parishId");
+    const db = getDb();
+    const { data: before, error: beforeErr } = await db
+      .from("service_parishes")
+      .select("*")
+      .eq("id", parishId)
+      .maybeSingle();
+    if (beforeErr) return c.json({ error: beforeErr.message }, 500);
+    if (!before) return c.json({ error: "Parish not found" }, 404);
+
+    const now = new Date().toISOString();
+    const { data, error } = await db
+      .from("service_parishes")
+      .update({
+        foundation_polygon: polygon,
+        foundation_updated_at: now,
+      })
+      .eq("id", parishId)
+      .select()
+      .single();
+    if (error) return c.json({ error: error.message }, 500);
+
+    const promote = body.promote_template !== false;
+    if (promote && before.slug) {
+      await db.from("parish_outline_templates").upsert({
+        slug: String(before.slug),
+        name: String(data.name ?? before.name),
+        polygon,
+        version: 1,
+        updated_at: now,
+      }, { onConflict: "slug" });
+    }
+
+    await writeKvAudit(
+      adminUser,
+      "roam_dash.parish_outline_updated",
+      parishId,
+      "",
+      JSON.stringify({
+        before: polygonSummary((before as Record<string, unknown>).foundation_polygon),
+        after: polygonSummary(polygon),
+        promote_template: promote,
+      }),
+    );
+    return c.json({ parish: data, promoted_template: promote });
   });
 
   admin.delete("/parishes/:parishId", async (c) => {
@@ -813,13 +888,32 @@ export function registerMarketAdminRoutes(app: Hono) {
     const denied = requireDashWrite(adminUser);
     if (denied) return denied;
     const body = await c.req.json().catch(() => ({}));
+    const marketId = c.req.param("id");
+    const zoneId = c.req.param("zoneId");
     const db = getDb();
     const { data: before } = await db
       .from("service_zone_polygons")
       .select("*")
-      .eq("id", c.req.param("zoneId"))
-      .eq("market_id", c.req.param("id"))
+      .eq("id", zoneId)
+      .eq("market_id", marketId)
       .maybeSingle();
+    if (!before) return c.json({ error: "Zone not found" }, 404);
+
+    const beforeKind = normalizeKind((before as Record<string, unknown>).kind);
+    const nextKind = body.kind != null ? normalizeKind(body.kind) : beforeKind;
+    const touchesFoundationGeometry =
+      nextKind === "include" &&
+      (body.polygon != null || (body.kind != null && normalizeKind(body.kind) === "include"));
+
+    // Soft guard: include (town foundation) geometry edits require explicit confirm.
+    if (beforeKind === "include" && body.polygon != null) {
+      if (body.confirm_foundation_edit !== true) {
+        return c.json({
+          error:
+            "Town foundation border edits require confirm_foundation_edit. Use non-delivery cutouts for day-to-day exclusions.",
+        }, 400);
+      }
+    }
 
     const updates: Record<string, unknown> = { updated_by: adminUser.id || null, updated_at: new Date().toISOString() };
     if (body.name != null) updates.name = String(body.name);
@@ -828,10 +922,12 @@ export function registerMarketAdminRoutes(app: Hono) {
     if (body.priority != null && Number.isFinite(Number(body.priority))) {
       updates.priority = Math.trunc(Number(body.priority));
     }
+    let nextPolygon: Array<{ lat: number; lng: number }> | null = null;
     if (body.polygon != null) {
       const polygon = normalizePolygon(body.polygon);
       if (!polygon) return c.json({ error: "polygon must be an array of >=3 {lat,lng} vertices" }, 400);
       updates.polygon = polygon;
+      nextPolygon = polygon;
     }
     if (body.center_lat != null) updates.center_lat = Number(body.center_lat);
     if (body.center_lng != null) updates.center_lng = Number(body.center_lng);
@@ -839,23 +935,48 @@ export function registerMarketAdminRoutes(app: Hono) {
 
     const { data, error } = await db.from("service_zone_polygons")
       .update(updates)
-      .eq("id", c.req.param("zoneId"))
-      .eq("market_id", c.req.param("id"))
+      .eq("id", zoneId)
+      .eq("market_id", marketId)
       .select().single();
     if (error) return c.json({ error: error.message }, 500);
-    await markDraftDirty(db, c.req.param("id"));
+    await markDraftDirty(db, marketId);
+
+    const promote = body.promote_template === true && nextKind === "include";
+    if (promote) {
+      const { data: market } = await db
+        .from("service_markets")
+        .select("slug, name")
+        .eq("id", marketId)
+        .maybeSingle();
+      const poly =
+        nextPolygon ??
+        normalizePolygon((data as Record<string, unknown>).polygon) ??
+        normalizePolygon((before as Record<string, unknown>).polygon);
+      if (market?.slug && poly) {
+        await db.from("town_outline_templates").upsert({
+          slug: String(market.slug),
+          name: String(market.name),
+          polygon: poly,
+          version: 1,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: "slug" });
+      }
+    }
+
     await writeKvAudit(
       adminUser,
       "roam_dash.zone_updated",
-      c.req.param("zoneId"),
+      zoneId,
       "",
       JSON.stringify({
         before: before ? polygonSummary((before as Record<string, unknown>).polygon) : null,
         after: polygonSummary(data.polygon),
         fields: Object.keys(updates),
+        foundation: touchesFoundationGeometry,
+        promote_template: promote,
       }),
     );
-    return c.json({ zone: data });
+    return c.json({ zone: data, promoted_template: promote });
   });
 
   admin.delete("/:id/zones/:zoneId", async (c) => {

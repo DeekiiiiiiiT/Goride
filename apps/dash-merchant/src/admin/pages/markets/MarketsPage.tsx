@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { canWriteDashAdmin } from '../../utils/dashAdminRoles';
+import { useAdminConfirm } from '../../contexts/AdminConfirmContext';
 import {
   checkCoveragePoint,
   createMarket,
@@ -32,6 +33,7 @@ import {
   publishMarketCoverage,
   restoreCoverageVersion,
   updateMarket,
+  updateParishOutline,
   updateZone,
   type ActivityLogRow,
   type CoverageVersionRow,
@@ -60,6 +62,22 @@ function normalizeZone(z: DashZoneRow): DashZoneRow {
 
 function normalizeTown(m: DashMarketRow): DashMarketRow {
   return { ...m, zones: (m.zones ?? []).map(normalizeZone) };
+}
+
+function normalizeParish(p: DashParishRow): DashParishRow {
+  const poly = Array.isArray(p.foundation_polygon) ? p.foundation_polygon : [];
+  return {
+    ...p,
+    foundation_polygon: poly.filter(
+      (v) => v && Number.isFinite(v.lat) && Number.isFinite(v.lng),
+    ) as DashZoneVertex[],
+    towns: (p.towns ?? []).map(normalizeTown),
+  };
+}
+
+function parishFoundationVerts(p: DashParishRow): DashZoneVertex[] {
+  const poly = p.foundation_polygon ?? [];
+  return poly.filter((v) => v && Number.isFinite(v.lat) && Number.isFinite(v.lng));
 }
 
 function includeZones(m: DashMarketRow): DashZoneRow[] {
@@ -99,7 +117,6 @@ function TownCard({
   const zones = m.zones ?? [];
   const includes = zones.filter((z) => z.kind === 'include');
   const excludes = zones.filter((z) => z.kind === 'exclude');
-  const delivery = primaryDeliveryArea(m);
 
   return (
     <div className="rounded-lg border border-slate-800 bg-slate-950/40 overflow-hidden">
@@ -124,9 +141,9 @@ function TownCard({
           <p className="text-xs text-slate-500">
             Town · {m.is_active ? 'Active' : 'Inactive'}
             {' · '}
-            {includes.length > 0 ? 'Delivery area' : 'No delivery area'}
+            {includes.length > 0 ? 'Town border set' : 'No town border'}
             {' · '}
-            {excludes.length} cutout{excludes.length === 1 ? '' : 's'}
+            {excludes.length} non-delivery zone{excludes.length === 1 ? '' : 's'}
           </p>
         </div>
         <button
@@ -146,7 +163,7 @@ function TownCard({
             }`}
             title={
               includeZones(m).length === 0 && !m.is_active
-                ? 'Add a delivery area first'
+                ? 'Add a town border first'
                 : undefined
             }
           >
@@ -169,7 +186,7 @@ function TownCard({
                   className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-800 bg-slate-900/50 px-3 py-2 text-sm"
                 >
                   <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-red-500/15 text-red-300">
-                    {z.source === 'radius' ? 'Radius' : 'Cutout'}
+                    {z.source === 'radius' ? 'Radius' : 'No delivery'}
                   </span>
                   <span className="font-medium text-slate-200">{z.name}</span>
                   {canWrite && (
@@ -180,7 +197,7 @@ function TownCard({
                           onOpenMap({ editor: { mode: 'adjust', marketId: m.id, zone: z } })
                         }
                         className="p-1.5 rounded hover:bg-slate-800 text-slate-300"
-                        title="Edit cutout on map"
+                        title="Edit non-delivery zone on map"
                       >
                         <Pencil className="w-3.5 h-3.5" />
                       </button>
@@ -188,7 +205,7 @@ function TownCard({
                         type="button"
                         onClick={() => onRemoveZone(m.id, z)}
                         className="p-1.5 rounded hover:bg-slate-800 text-red-400"
-                        title="Delete cutout"
+                        title="Delete non-delivery zone"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -205,7 +222,7 @@ function TownCard({
                 type="button"
                 onClick={() => {
                   if (includes.length === 0) {
-                    toast.error('Delivery area missing — reload the page to restore it');
+                    toast.error('Town border missing — reload the page to restore it');
                     return;
                   }
                   onOpenMap({ editor: { mode: 'radius', marketId: m.id } });
@@ -219,28 +236,14 @@ function TownCard({
                 type="button"
                 onClick={() => {
                   if (includes.length === 0) {
-                    toast.error('Delivery area missing — reload the page to restore it');
+                    toast.error('Town border missing — reload the page to restore it');
                     return;
                   }
                   onOpenMap({ editor: { mode: 'cutout', marketId: m.id } });
                 }}
                 className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-red-500/30 text-xs text-red-200/90"
               >
-                Draw cutout shape
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (!delivery) {
-                    toast.error('Delivery area missing — reload the page to restore it');
-                    return;
-                  }
-                  onOpenMap({ editor: { mode: 'adjust', marketId: m.id, zone: delivery } });
-                }}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-emerald-500/40 text-xs text-emerald-300"
-              >
-                <Pencil className="w-3.5 h-3.5" />
-                Adjust delivery area
+                Draw non-delivery zone
               </button>
             </div>
           )}
@@ -274,6 +277,7 @@ type MapOverlayProps = {
   onRestore: (versionId: string) => void;
   onImportGeoJson: (text: string, promote: boolean) => void;
   onRefreshReadiness: () => void;
+  onRequestEditFoundation: () => void;
 };
 
 function TownMapOverlay({
@@ -293,12 +297,14 @@ function TownMapOverlay({
   onRestore,
   onImportGeoJson,
   onRefreshReadiness,
+  onRequestEditFoundation,
 }: MapOverlayProps) {
   const zones = town.zones ?? [];
   const [showHistory, setShowHistory] = useState(false);
   const [importText, setImportText] = useState('');
   const [showImport, setShowImport] = useState(false);
-  const [promoteTemplate, setPromoteTemplate] = useState(false);
+  const [promoteTemplate, setPromoteTemplate] = useState(true);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const editingThis =
     editor &&
@@ -387,22 +393,7 @@ function TownMapOverlay({
                 onClick={() => onSetEditor({ mode: 'cutout', marketId: town.id })}
                 className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-red-500/30 text-xs text-red-200"
               >
-                Draw cutout
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const delivery = primaryDeliveryArea(town);
-                  if (!delivery) {
-                    toast.error('Delivery area missing');
-                    return;
-                  }
-                  onSetEditor({ mode: 'adjust', marketId: town.id, zone: delivery });
-                }}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-emerald-500/40 text-xs text-emerald-300"
-              >
-                <Pencil className="w-3.5 h-3.5" />
-                Adjust border
+                Draw non-delivery zone
               </button>
               <button
                 type="button"
@@ -435,8 +426,8 @@ function TownMapOverlay({
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
           {showTip && (
             <p className="text-xs text-emerald-200/90 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2">
-              Green is where you deliver. Search a place, then cut out what you don’t serve. Publish
-              before activating.
+              Green is the town border (foundation). Red zones are where you don’t deliver. Set the
+              border once, then carve out non-delivery areas and publish before activating.
             </p>
           )}
 
@@ -494,16 +485,46 @@ function TownMapOverlay({
             onTestPoint={(lat, lng) => checkCoveragePoint(accessToken, lat, lng)}
           />
 
-          {canWrite && (
-            <div className="flex flex-wrap gap-2">
+          {canWrite && uiMode === 'view' && (
+            <div className="rounded-lg border border-slate-800 bg-slate-900/40">
               <button
                 type="button"
-                onClick={() => setShowImport((v) => !v)}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-700 text-xs text-slate-300"
+                onClick={() => setShowAdvanced((v) => !v)}
+                className="w-full flex items-center justify-between gap-2 px-3 py-2 text-xs text-slate-400 hover:text-slate-200"
               >
-                <FileUp className="w-3.5 h-3.5" />
-                Import GeoJSON
+                <span>Advanced · town border foundation</span>
+                {showAdvanced ? (
+                  <ChevronDown className="w-3.5 h-3.5" />
+                ) : (
+                  <ChevronRight className="w-3.5 h-3.5" />
+                )}
               </button>
+              {showAdvanced && (
+                <div className="px-3 pb-3 space-y-2 border-t border-slate-800/80 pt-2">
+                  <p className="text-[11px] text-slate-500">
+                    Only change the green town border if the real boundary is wrong. Day-to-day
+                    exclusions belong in non-delivery zones above.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={onRequestEditFoundation}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-emerald-500/40 text-xs text-emerald-300"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                      Edit town border…
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowImport((v) => !v)}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-700 text-xs text-slate-300"
+                    >
+                      <FileUp className="w-3.5 h-3.5" />
+                      Import GeoJSON
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -527,10 +548,10 @@ function TownMapOverlay({
                 type="button"
                 disabled={saving || !importText.trim()}
                 onClick={() => onImportGeoJson(importText.trim(), promoteTemplate)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 text-slate-950 text-xs font-semibold disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 text-slate-900 text-xs font-semibold disabled:opacity-50"
               >
                 <Upload className="w-3.5 h-3.5" />
-                Import delivery area
+                Import as town border
               </button>
             </div>
           )}
@@ -588,9 +609,133 @@ function TownMapOverlay({
   );
 }
 
+type ParishMapOverlayProps = {
+  parish: DashParishRow;
+  canWrite: boolean;
+  saving: boolean;
+  editing: boolean;
+  onClose: () => void;
+  onSetEditing: (v: boolean) => void;
+  onSaveOutline: (polygon: DashZoneVertex[]) => void;
+  onRequestEditFoundation: () => void;
+};
+
+function ParishMapOverlay({
+  parish,
+  canWrite,
+  saving,
+  editing,
+  onClose,
+  onSetEditing,
+  onSaveOutline,
+  onRequestEditFoundation,
+}: ParishMapOverlayProps) {
+  const foundation = parishFoundationVerts(parish);
+  const townOverlays =
+    parish.towns?.flatMap((t) =>
+      includeZones(t).map((z) => ({
+        id: z.id,
+        kind: 'include' as const,
+        polygon: z.polygon,
+        name: t.name,
+      })),
+    ) ?? [];
+
+  const zones = [
+    {
+      id: 'parish-foundation',
+      kind: 'include' as const,
+      polygon: foundation,
+      name: `${parish.name} parish`,
+    },
+    ...townOverlays,
+  ];
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6">
+      <button
+        type="button"
+        className="absolute inset-0 bg-black/75"
+        aria-label="Close map"
+        onClick={onClose}
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="parish-map-title"
+        className="relative z-10 flex w-full max-w-6xl max-h-[94vh] flex-col rounded-xl border border-slate-700 bg-slate-950 shadow-2xl overflow-hidden"
+      >
+        <div className="flex flex-wrap items-center gap-3 border-b border-slate-800 px-4 py-3">
+          <div className="flex-1 min-w-0">
+            <h3 id="parish-map-title" className="font-semibold text-white truncate">
+              {parish.name} · parish map
+            </h3>
+            <p className="text-xs text-slate-500">
+              Parish foundation · {foundation.length >= 3 ? 'border set' : 'no border yet'} ·{' '}
+              {(parish.towns ?? []).length} town{(parish.towns ?? []).length === 1 ? '' : 's'}
+            </p>
+          </div>
+          {canWrite && !editing && (
+            <button
+              type="button"
+              onClick={onRequestEditFoundation}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-sky-500/40 text-xs text-sky-300"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+              Edit parish border…
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-900"
+            aria-label="Close"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          <p className="text-xs text-sky-200/90 rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2">
+            This is the parish foundation outline. Town borders (green) show for context. Customer
+            delivery still uses each town’s border and non-delivery zones.
+          </p>
+
+          <ZoneMapEditor
+            key={`${parish.id}-${editing ? 'edit' : 'view'}`}
+            zones={zones}
+            uiMode={editing ? 'adjust' : 'view'}
+            initialPolygon={foundation}
+            editingZoneId={editing ? 'parish-foundation' : null}
+            townIncludePolygons={
+              foundation.length >= 3
+                ? [foundation]
+                : townOverlays.map((z) => z.polygon).filter((p) => p.length >= 3)
+            }
+            saving={saving}
+            foundationScope="parish"
+            mapHeight={Math.min(560, typeof window !== 'undefined' ? window.innerHeight - 240 : 560)}
+            onCancel={() => onSetEditing(false)}
+            onSave={(payload) => onSaveOutline(payload.polygon)}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function MarketsPage() {
   const { session } = useOutletContext<AdminOutletContext>();
   const canWrite = canWriteDashAdmin(session.user);
+  const { confirm } = useAdminConfirm();
 
   const [parishes, setParishes] = useState<DashParishRow[]>([]);
   const [unassigned, setUnassigned] = useState<DashMarketRow[]>([]);
@@ -605,6 +750,8 @@ export function MarketsPage() {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [townExpanded, setTownExpanded] = useState<Record<string, boolean>>({});
   const [mapTownId, setMapTownId] = useState<string | null>(null);
+  const [mapParishId, setMapParishId] = useState<string | null>(null);
+  const [parishEditing, setParishEditing] = useState(false);
   const [tipTownId, setTipTownId] = useState<string | null>(null);
   const [readiness, setReadiness] = useState<MarketReadiness | null>(null);
   const [versions, setVersions] = useState<CoverageVersionRow[]>([]);
@@ -616,10 +763,7 @@ export function MarketsPage() {
       const towns = (res.markets ?? []).map(normalizeTown);
       setMarkets(towns);
       setParishes(
-        (res.parishes ?? []).map((p) => ({
-          ...p,
-          towns: (p.towns ?? []).map(normalizeTown),
-        })),
+        (res.parishes ?? []).map((p) => normalizeParish(p)),
       );
       setUnassigned((res.unassigned ?? []).map(normalizeTown));
     } catch (e) {
@@ -642,8 +786,11 @@ export function MarketsPage() {
     unassigned.find((m) => m.id === id);
 
   const mapTown = mapTownId ? findTown(mapTownId) : null;
+  const mapParish = mapParishId ? parishes.find((p) => p.id === mapParishId) : null;
 
   const openTownMap = (townId: string, opts?: { editor?: EditorTarget }) => {
+    setMapParishId(null);
+    setParishEditing(false);
     setMapTownId(townId);
     setEditor(opts?.editor ?? null);
   };
@@ -653,6 +800,40 @@ export function MarketsPage() {
     setEditor(null);
     setTipTownId(null);
     setReadiness(null);
+  };
+
+  const openParishMap = (parishId: string) => {
+    setMapTownId(null);
+    setEditor(null);
+    setMapParishId(parishId);
+    setParishEditing(false);
+  };
+
+  const closeParishMap = () => {
+    setMapParishId(null);
+    setParishEditing(false);
+  };
+
+  const saveParishOutline = async (polygon: DashZoneVertex[]) => {
+    if (!mapParishId || !canWrite) return;
+    setSaving(true);
+    try {
+      const res = await updateParishOutline(session.access_token, mapParishId, {
+        polygon,
+        confirm_foundation_edit: true,
+        promote_template: true,
+      });
+      const name = res.parish?.name ?? mapParish?.name ?? 'this parish';
+      toast.success(
+        `Parish border saved (${polygon.length} points). This outline is now the default for ${name}.`,
+      );
+      setParishEditing(false);
+      await load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Save failed');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const refreshOverlayMeta = useCallback(async () => {
@@ -717,7 +898,7 @@ export function MarketsPage() {
         is_active: false,
         parish_id: parishId,
       });
-      toast.success('Town created with delivery area');
+      toast.success('Town created with foundation border');
       setAddTownParishId(null);
       setNewTownName('');
       if (parishId) setCollapsed((c) => ({ ...c, [parishId]: false }));
@@ -781,18 +962,30 @@ export function MarketsPage() {
           center_lng: payload.center_lng,
           radius_m: payload.radius_m,
         });
-        toast.success('Cutout saved — publish when ready');
+        toast.success('Non-delivery zone saved — publish when ready');
       } else {
-        await updateZone(session.access_token, editor.marketId, editor.zone.id, {
+        const isFoundation = editor.zone.kind === 'include';
+        const updated = await updateZone(session.access_token, editor.marketId, editor.zone.id, {
           polygon: payload.polygon,
           kind: editor.zone.kind,
           source: payload.source ?? 'manual',
+          ...(isFoundation
+            ? { confirm_foundation_edit: true, promote_template: true }
+            : {}),
         });
-        toast.success(
-          editor.zone.kind === 'exclude'
-            ? 'Cutout updated — publish when ready'
-            : 'Delivery area updated — publish when ready',
-        );
+        const savedPts = Array.isArray(updated.zone?.polygon) ? updated.zone.polygon.length : 0;
+        if (savedPts < 3) {
+          toast.error('Border did not save correctly — try again');
+          return;
+        }
+        if (isFoundation) {
+          const town = findTown(editor.marketId);
+          toast.success(
+            `Town border saved (${savedPts} points). This outline is now the default for ${town?.name ?? 'this town'}. Publish when ready.`,
+          );
+        } else {
+          toast.success('Non-delivery zone updated — publish when ready');
+        }
       }
       setEditor(null);
       await load();
@@ -806,11 +999,11 @@ export function MarketsPage() {
 
   const removeZone = async (marketId: string, zone: DashZoneRow) => {
     if (!canWrite) return;
-    const label = zone.kind === 'exclude' ? 'cutout' : 'delivery area';
+    const label = zone.kind === 'exclude' ? 'non-delivery zone' : 'town border';
     if (!window.confirm(`Delete ${label} “${zone.name}”?`)) return;
     try {
       await deleteZone(session.access_token, marketId, zone.id);
-      toast.success(zone.kind === 'exclude' ? 'Cutout deleted' : 'Delivery area reset');
+      toast.success(zone.kind === 'exclude' ? 'Non-delivery zone deleted' : 'Town border reset');
       if (editor && editor.mode === 'adjust' && editor.zone.id === zone.id) setEditor(null);
       await load();
     } catch (e) {
@@ -832,6 +1025,7 @@ export function MarketsPage() {
   const renderParishBlock = (p: DashParishRow) => {
     const isCollapsed = collapsed[p.id] !== false;
     const towns = p.towns ?? [];
+    const hasParishBorder = parishFoundationVerts(p).length >= 3;
     return (
       <div key={p.id} className="rounded-xl border border-slate-800 bg-slate-900/40 overflow-hidden">
         <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-slate-800/80">
@@ -845,9 +1039,18 @@ export function MarketsPage() {
           <div className="flex-1 min-w-0">
             <h3 className="font-semibold text-white">{p.name}</h3>
             <p className="text-xs text-slate-500">
-              Parish · {towns.length} town{towns.length === 1 ? '' : 's'}
+              Parish · {hasParishBorder ? 'border set' : 'no border yet'} · {towns.length} town
+              {towns.length === 1 ? '' : 's'}
             </p>
           </div>
+          <button
+            type="button"
+            onClick={() => openParishMap(p.id)}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-sky-500/40 bg-slate-900 text-xs text-sky-100 hover:bg-slate-800"
+          >
+            <Maximize2 className="w-3.5 h-3.5 text-sky-400" />
+            Open parish map
+          </button>
           {canWrite && (
             <div className="flex items-center gap-2">
               <button
@@ -928,7 +1131,7 @@ export function MarketsPage() {
             Delivery Markets
           </h2>
           <p className="text-sm text-slate-400 mt-1">
-            Search inside a town, cut out no-go areas, publish coverage, then activate when ready.
+            Two foundations: parish border, then town border. Non-delivery zones sit on towns.
           </p>
         </div>
         {canWrite && (
@@ -946,8 +1149,9 @@ export function MarketsPage() {
       <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-100">
         <p className="font-medium text-amber-200">Ops playbook</p>
         <p className="mt-1 text-amber-100/80">
-          Open map → search a place → Don’t deliver near here → Publish coverage → check readiness →
-          Activate. Satellite helps with schemes and yards.
+          Open parish map → set parish border once → Open town map → set town border → add
+          non-delivery zones → Publish coverage → Activate. Customer delivery uses town borders
+          only.
         </p>
       </div>
 
@@ -1027,6 +1231,23 @@ export function MarketsPage() {
           onSetEditor={setEditor}
           onSaveEditor={(payload) => void saveEditor(payload)}
           onRefreshReadiness={() => void refreshOverlayMeta()}
+          onRequestEditFoundation={() => {
+            void (async () => {
+              const delivery = primaryDeliveryArea(mapTown);
+              if (!delivery) {
+                toast.error('Town border missing — reload the page to restore it');
+                return;
+              }
+              const ok = await confirm({
+                title: 'Edit town foundation border?',
+                description:
+                  'This is the base delivery outline. Only change it if the real town boundary is wrong. Day-to-day exclusions should be non-delivery zones.',
+                confirmLabel: 'Edit town border',
+              });
+              if (!ok) return;
+              setEditor({ mode: 'adjust', marketId: mapTown.id, zone: delivery });
+            })();
+          }}
           onPublish={() => {
             void (async () => {
               setSaving(true);
@@ -1086,6 +1307,30 @@ export function MarketsPage() {
               } finally {
                 setSaving(false);
               }
+            })();
+          }}
+        />
+      )}
+
+      {mapParish && (
+        <ParishMapOverlay
+          parish={mapParish}
+          canWrite={canWrite}
+          saving={saving}
+          editing={parishEditing}
+          onClose={closeParishMap}
+          onSetEditing={setParishEditing}
+          onSaveOutline={(polygon) => void saveParishOutline(polygon)}
+          onRequestEditFoundation={() => {
+            void (async () => {
+              const ok = await confirm({
+                title: 'Edit parish foundation border?',
+                description:
+                  'This is the parish base outline. Only change it if the real parish boundary is wrong. Town delivery borders and cutouts are edited on each town map.',
+                confirmLabel: 'Edit parish border',
+              });
+              if (!ok) return;
+              setParishEditing(true);
             })();
           }}
         />
