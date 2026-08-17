@@ -110,6 +110,10 @@ const IMMERSIVE_STACK_PAGES: StackPage[] = [
   'rate-order',
   'report-issue',
   'edit-profile',
+  'out-of-delivery',
+  'saved-addresses',
+  'payment-callback-wipay',
+  'payment-callback-paypal',
 ];
 
 /** Customer ordering app (roamrush.app). Admin portal: partner.roamrush.app/admin */
@@ -491,7 +495,7 @@ function DashCustomerShell() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="app-fullscreen-screen flex items-center justify-center bg-background">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-container" />
       </div>
     );

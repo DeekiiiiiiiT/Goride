@@ -38,7 +38,7 @@ export default function RestaurantReviewsPage({ merchantId, onNavigate }: Props)
   const reviews = sortReviews(summary.reviews, sort);
 
   return (
-    <div className="bg-surface text-on-surface antialiased pb-28 min-h-screen">
+    <div className="bg-surface text-on-surface antialiased pb-28 min-h-dvh">
       <header className="sticky top-0 z-40 bg-surface shadow-sm safe-t">
         <div className="flex items-center justify-between px-4 min-h-16 max-w-[1200px] mx-auto">
           <button

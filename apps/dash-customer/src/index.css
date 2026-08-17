@@ -168,14 +168,24 @@ select {
   max-width: 32rem;
 }
 
+/* Fixed chrome (bottom nav, floating bars) — match shell width on tablet */
+.app-chrome-width {
+  width: 100%;
+  max-width: 32rem;
+  margin-left: auto;
+  margin-right: auto;
+}
+
 @media (min-width: 640px) {
-  .app-shell-frame {
+  .app-shell-frame,
+  .app-chrome-width {
     max-width: 36rem;
   }
 }
 
 @media (min-width: 1024px) {
-  .app-shell-frame {
+  .app-shell-frame,
+  .app-chrome-width {
     max-width: 75rem;
   }
 }
@@ -191,6 +201,9 @@ select {
   max-height: 100dvh;
   overflow: hidden;
   background-color: var(--color-background);
+  /* Phone-first: keep immersive flows readable on large tablets */
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .pt-safe {

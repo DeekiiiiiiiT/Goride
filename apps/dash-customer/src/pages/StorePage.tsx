@@ -9,7 +9,7 @@ import { allowMocks } from '@/lib/mocksGate';
 import { mapMerchantMenuResponse } from '@/lib/merchantMenu';
 import { formatJmd } from '@/lib/restaurantContent';
 import { getSavedAddress } from '@/lib/addressStorage';
-import { API_ENDPOINTS, publicAnonKey } from '@roam/api-client';
+import { API_ENDPOINTS, supabaseAnonFunctionHeaders } from '@roam/api-client';
 
 type Props = {
   merchantId?: string;
@@ -90,14 +90,14 @@ function GroceryStoreView({
   const savedAddress = getSavedAddress();
   const deliveryLabel = savedAddress
     ? `Deliver to · ${savedAddress.line1}`
-    : 'Deliver to · Kingston, JM';
+    : 'Set delivery address';
 
   const { data: menu, isLoading, isError, refetch } = useQuery({
     queryKey: ['merchant-menu', storeLookup, 'grocery'],
     queryFn: async () => {
       // Bypass restaurant mock profile — grocery uses its own DEV product fallback
       const res = await fetch(`${API_ENDPOINTS.delivery}/merchants/${encodeURIComponent(storeLookup)}`, {
-        headers: { apikey: publicAnonKey },
+        headers: supabaseAnonFunctionHeaders(),
       });
       if (!res.ok) throw new Error('Failed to fetch store');
       const data = await res.json();

@@ -1,4 +1,4 @@
-import { API_ENDPOINTS, publicAnonKey } from '@roam/api-client';
+import { API_ENDPOINTS, supabaseAnonFunctionHeaders } from '@roam/api-client';
 import type { VerticalType } from '@roam/types';
 import {
   FEATURED_RESTAURANTS,
@@ -90,7 +90,7 @@ export async function fetchDiscoverMerchants(vertical?: VerticalType): Promise<D
   try {
     const qs = vertical ? `?vertical=${encodeURIComponent(vertical)}` : '';
     const res = await fetch(`${API_ENDPOINTS.delivery}/merchants${qs}`, {
-      headers: { apikey: publicAnonKey },
+      headers: supabaseAnonFunctionHeaders(),
     });
     if (!res.ok) throw new Error('fetch failed');
     const data = (await res.json()) as { merchants?: Record<string, unknown>[] };

@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
-import { KINGSTON_MAP_PREVIEW } from '@/lib/accountContent';
 import {
   deleteSavedAddressAsync,
   getSavedAddresses,
@@ -92,7 +91,7 @@ export default function SavedAddressesPage({ onNavigate, returnTo = 'account' }:
   };
 
   return (
-    <div className="font-body-md text-on-surface antialiased flex flex-col min-h-screen bg-[#FAFAFA]">
+    <div className="font-body-md text-on-surface antialiased flex flex-col min-h-dvh bg-[#FAFAFA]">
       <header className="w-full top-0 sticky bg-surface shadow-sm z-50 safe-t">
         <div className="flex items-center justify-between px-4 py-2 w-full max-w-[1200px] mx-auto min-h-16">
           <button
@@ -118,16 +117,6 @@ export default function SavedAddressesPage({ onNavigate, returnTo = 'account' }:
               onDelete={() => void handleDelete(address.id)}
             />
           ))}
-        </div>
-
-        <div className="rounded-xl overflow-hidden h-32 card-shadow relative border border-surface-variant/50">
-          <div
-            className="bg-cover bg-center w-full h-full opacity-60"
-            style={{ backgroundImage: `url('${KINGSTON_MAP_PREVIEW}')` }}
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-surface-container-lowest/80 to-transparent flex items-end p-4">
-            <p className="text-label-sm text-on-surface-variant">Viewing addresses in Kingston</p>
-          </div>
         </div>
       </main>
 

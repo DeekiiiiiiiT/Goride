@@ -226,6 +226,60 @@ describe('matchJaaStatementToDriverLogs', () => {
       true,
     );
   });
+
+  it('does not treat statement/declined rows as driver logs (5179KZ Aug 11–14)', () => {
+    const cardId = '0e012bd9-dffd-4638-82ea-41a2df2f0aad';
+    const vehicleId = '5179KZ';
+    const stmt = (id: string, date: string, time: string, kind: string, amount: number, liters: number | null) =>
+      entry({
+        id,
+        date,
+        time,
+        amount,
+        liters,
+        cardId,
+        vehicleId,
+        entrySource: 'fuel-card',
+        paymentSource: 'Gas_Card',
+        metadata: { importSource: 'jaa_raw', jaaRowKind: kind },
+      });
+    const admin = (id: string, date: string, time: string) =>
+      entry({
+        id,
+        date,
+        time,
+        amount: 0,
+        liters: null,
+        cardId,
+        vehicleId,
+        type: 'Manual_Entry',
+        entryMode: 'Anchor',
+        entrySource: 'admin-manual',
+        paymentSource: 'Gas_Card',
+        metadata: { awaitingCardStatement: true },
+      });
+
+    const statements = [
+      stmt('s-14', '2026-08-14', '17:29:49', 'approved_fuel', 2950, 12.89),
+      stmt('s-13', '2026-08-13', '17:36:36', 'approved_fuel', 6003.8, 25.22),
+      stmt('s-11', '2026-08-11', '10:08:32', 'approved_fuel', 6045, 26.31),
+      stmt('d-1105', '2026-08-11', '10:05:48', 'declined', 6045, null),
+      stmt('d-1104', '2026-08-11', '10:04:04', 'declined', 6045, null),
+    ];
+    const logs = [
+      admin('a-14', '2026-08-14', '17:29:00'),
+      admin('a-13', '2026-08-13', '17:37:00'),
+      admin('a-11', '2026-08-11', '10:10:00'),
+    ];
+
+    const { updates, summary } = buildJaaMatchUpdates(statements, [...statements, ...logs]);
+    expect(summary.ambiguous).toBe(0);
+    expect(summary.matched).toBe(3);
+    expect(updates.find((u) => u.id === 'a-14')?.amount).toBe(2950);
+    expect(updates.find((u) => u.id === 'a-13')?.liters).toBe(25.22);
+    expect(updates.find((u) => u.id === 'a-11')?.amount).toBe(6045);
+    expect(updates.find((u) => u.id === 'a-14')?.metadata?.awaitingCardStatement).toBe(false);
+  });
 });
 
 describe('hydrateStatementsFromCards', () => {

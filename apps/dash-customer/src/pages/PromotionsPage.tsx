@@ -104,7 +104,7 @@ export default function PromotionsPage({ onNavigate }: Props) {
   };
 
   return (
-    <div className="bg-surface text-on-surface antialiased pb-24 min-h-screen">
+    <div className="bg-surface text-on-surface antialiased pb-24 min-h-dvh">
       <AccountSubHeader />
 
       <main className="max-w-[1200px] mx-auto px-4 pt-6 flex flex-col gap-6">

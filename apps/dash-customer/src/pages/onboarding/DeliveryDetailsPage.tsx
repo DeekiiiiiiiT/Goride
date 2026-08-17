@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import type { AddressLabel } from '@/lib/addressStorage';
-import { checkDeliveryZone } from '@/lib/deliveryZones';
+import { checkDeliveryZoneAsync } from '@/lib/deliveryZones';
 import type { AddressSelection } from './DeliveryAddressPage';
 
 type DeliveryDetailsPageProps = {
@@ -30,8 +30,8 @@ export function DeliveryDetailsPage({ address, onBack, onSave, onOutOfZone }: De
   const [instructions, setInstructions] = useState('');
   const [label, setLabel] = useState<AddressLabel>('home');
 
-  const handleSave = () => {
-    const zone = checkDeliveryZone({
+  const handleSave = async () => {
+    const zone = await checkDeliveryZoneAsync({
       line1,
       line2,
       lat: address.lat,
@@ -171,7 +171,7 @@ export function DeliveryDetailsPage({ address, onBack, onSave, onOutOfZone }: De
         <div className="max-w-[1200px] mx-auto">
           <button
             type="button"
-            onClick={handleSave}
+            onClick={() => void handleSave()}
             disabled={!line1.trim()}
             className="w-full bg-primary text-on-primary rounded-lg py-4 text-sm font-semibold tracking-wide flex justify-center items-center shadow-sm active:scale-[0.98] transition-transform duration-200 disabled:opacity-50"
           >

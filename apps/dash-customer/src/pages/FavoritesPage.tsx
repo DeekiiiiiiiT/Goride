@@ -47,7 +47,7 @@ export default function FavoritesPage({ onNavigate }: Props) {
   };
 
   return (
-    <div className="bg-background text-on-background min-h-screen pb-24">
+    <div className="bg-background text-on-background min-h-dvh pb-24">
       <AccountSubHeader />
 
       <main className="flex-grow px-4 pt-6 max-w-[1200px] mx-auto w-full">

@@ -36,10 +36,11 @@ export async function requestRushGeolocationPermission(): Promise<PermissionGran
 export async function getRushCurrentPosition(): Promise<{ lat: number; lng: number }> {
   if (Capacitor.isNativePlatform()) {
     const { Geolocation } = await import('@capacitor/geolocation');
+    // maximumAge: 0 — address pinning must not reuse a stale cached fix
     const pos = await Geolocation.getCurrentPosition({
       enableHighAccuracy: true,
-      timeout: 15000,
-      maximumAge: 5000,
+      timeout: 20000,
+      maximumAge: 0,
     });
     return { lat: pos.coords.latitude, lng: pos.coords.longitude };
   }

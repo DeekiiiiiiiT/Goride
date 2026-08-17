@@ -1,4 +1,4 @@
-import { API_ENDPOINTS, publicAnonKey } from '@roam/api-client';
+import { API_ENDPOINTS, supabaseAnonFunctionHeaders } from '@roam/api-client';
 import { allowMocks } from './mocksGate';
 import {
   getRestaurantProfile,
@@ -115,7 +115,7 @@ export function mapMerchantMenuResponse(data: {
 export async function fetchMerchantMenu(id: string): Promise<RestaurantProfile> {
   try {
     const res = await fetch(`${API_ENDPOINTS.delivery}/merchants/${encodeURIComponent(id)}`, {
-      headers: { apikey: publicAnonKey },
+      headers: supabaseAnonFunctionHeaders(),
     });
     if (!res.ok) throw new Error('Failed to fetch merchant menu');
     const data = (await res.json()) as {

@@ -22,22 +22,14 @@ export type ActiveCoverageZone = {
   polygon: LatLng[];
 };
 
-/** Bump when zone payload shape changes so stale caches drop. */
-const ZONES_CACHE_KEY = 'roam-dash-delivery-zones-v3';
+/** Bump when zone payload shape / fallback policy changes so stale caches drop. */
+const ZONES_CACHE_KEY = 'roam-dash-delivery-zones-v5';
 /** Short TTL so Ops map edits reach customers within minutes. */
 const ZONES_CACHE_TTL_MS = 10 * 60 * 1000; // 10m
 
-/** Soft-launch Kingston metro bounding box (fallback when polygon miss / empty) */
-const KINGSTON_BOUNDS = {
-  minLat: 17.92,
-  maxLat: 18.12,
-  minLng: -76.92,
-  maxLng: -76.68,
-};
-
 /**
- * Soft-launch Kingston delivery polygon (clockwise, closed ring optional).
- * Prefer polygon when coords exist; bbox remains the fallback.
+ * @deprecated Soft-launch Kingston polygon — kept for unit tests only.
+ * Production coverage comes from `/geo/delivery-zones` (active markets).
  */
 export const KINGSTON_DELIVERY_POLYGON: LatLng[] = [
   { lat: 18.12, lng: -76.88 },
@@ -50,22 +42,21 @@ export const KINGSTON_DELIVERY_POLYGON: LatLng[] = [
   { lat: 18.12, lng: -76.88 },
 ];
 
-/**
- * Active coverage zones (includes + excludes). Defaults to Kingston include;
- * replaced at runtime once remote delivery zones are loaded.
- */
-let activeZones: ActiveCoverageZone[] = [
-  { kind: 'include', name: 'Kingston Metro', polygon: KINGSTON_DELIVERY_POLYGON },
-];
+/** Active coverage zones from API / cache. Empty until loaded — never invent Kingston. */
+let activeZones: ActiveCoverageZone[] = [];
+let loadPromise: Promise<LatLng[]> | null = null;
+let zonesHydrated = false;
 
 export function getActiveDeliveryPolygon(): LatLng[] {
   const include = activeZones.find((z) => z.kind === 'include' && z.polygon.length >= 3);
-  return include?.polygon ?? KINGSTON_DELIVERY_POLYGON;
+  return include?.polygon ?? [];
 }
 
 /** @internal test helper */
 export function __setActiveZonesForTests(zones: ActiveCoverageZone[]): void {
   activeZones = zones;
+  zonesHydrated = true;
+  loadPromise = null;
 }
 
 /** Convert a GeoJSON-ish coordinate ring ([lng,lat] pairs) into LatLng[] */
@@ -162,45 +153,62 @@ function writeCachedZones(zones: ActiveCoverageZone[]): void {
   }
 }
 
+async function fetchRemoteZones(): Promise<ActiveCoverageZone[]> {
+  // Lazy import so geometry unit tests do not require VITE_SUPABASE_* at module load.
+  // Edge gateway requires both apikey + Authorization (anon JWT) — apikey alone is 401.
+  const { API_ENDPOINTS, supabaseAnonFunctionHeaders } = await import('@roam/api-client');
+  const res = await fetch(`${API_ENDPOINTS.delivery}/geo/delivery-zones`, {
+    headers: supabaseAnonFunctionHeaders(),
+  });
+  if (!res.ok) {
+    throw new Error(`delivery-zones HTTP ${res.status}`);
+  }
+  const body = (await res.json()) as unknown;
+  return parseAllZonesPayload(body);
+}
+
 /**
  * Load delivery zones from the API, cache the result, and update active polygons.
- * Falls back to cache / Kingston so the zone check always has a usable boundary.
+ * No hard-coded city fallback — coverage is whatever Ops has activated.
  */
 export async function loadDeliveryZones(): Promise<LatLng[]> {
-  const cached = readCachedZones();
-  if (cached?.length) activeZones = cached;
+  if (!loadPromise) {
+    loadPromise = (async () => {
+      const cached = readCachedZones();
+      if (cached?.length) activeZones = cached;
 
-  try {
-    // Lazy import so geometry unit tests do not require VITE_SUPABASE_* at module load.
-    const { API_ENDPOINTS, publicAnonKey } = await import('@roam/api-client');
-    const res = await fetch(`${API_ENDPOINTS.delivery}/geo/delivery-zones`, {
-      headers: { apikey: publicAnonKey },
-    });
-    if (res.ok) {
-      const body = (await res.json()) as unknown;
-      const zones = parseAllZonesPayload(body);
-      if (zones.length > 0) {
-        activeZones = zones;
-        writeCachedZones(zones);
-        return getActiveDeliveryPolygon();
+      try {
+        const zones = await fetchRemoteZones();
+        if (zones.length > 0) {
+          activeZones = zones;
+          writeCachedZones(zones);
+        } else if (!cached?.length) {
+          activeZones = [];
+        }
+      } catch {
+        // network / missing env — keep cache if any
+        if (!cached?.length) activeZones = [];
       }
-    }
-  } catch {
-    // network / missing env — keep cache / fallback
-  }
 
-  if (!cached?.length) {
-    activeZones = [
-      { kind: 'include', name: 'Kingston Metro', polygon: KINGSTON_DELIVERY_POLYGON },
-    ];
+      zonesHydrated = true;
+      return getActiveDeliveryPolygon();
+    })().finally(() => {
+      loadPromise = null;
+    });
   }
-  return getActiveDeliveryPolygon();
+  return loadPromise;
+}
+
+/** Await a fresh (or in-flight) zone load before checking coverage. */
+export async function ensureDeliveryZonesLoaded(): Promise<void> {
+  if (zonesHydrated && activeZones.length > 0) return;
+  await loadDeliveryZones();
 }
 
 const IN_ZONE_KEYWORDS = [
-  'kingston',
   'spanish town',
   'magil',
+  'kingston',
   'constant spring',
   'half way tree',
   'new kingston',
@@ -232,15 +240,6 @@ function normalizeAddress(address: DeliveryAddressInput): string {
   return [address.line1, address.line2, address.city].filter(Boolean).join(' ').toLowerCase();
 }
 
-function inKingstonBounds(lat: number, lng: number): boolean {
-  return (
-    lat >= KINGSTON_BOUNDS.minLat &&
-    lat <= KINGSTON_BOUNDS.maxLat &&
-    lng >= KINGSTON_BOUNDS.minLng &&
-    lng <= KINGSTON_BOUNDS.maxLng
-  );
-}
-
 /** Ray-cast point-in-polygon (lat/lng). Ring may or may not repeat the first vertex. */
 export function pointInPolygon(lat: number, lng: number, polygon: LatLng[]): boolean {
   if (!polygon || polygon.length < 3) return false;
@@ -260,14 +259,17 @@ export function pointInPolygon(lat: number, lng: number, polygon: LatLng[]): boo
 
 /** include wins only if no exclude covers the point. */
 export function evaluateActiveCoverage(lat: number, lng: number): DeliveryZoneResult {
-  const zones = activeZones.length > 0
-    ? activeZones
-    : [{ kind: 'include' as const, polygon: KINGSTON_DELIVERY_POLYGON }];
+  if (activeZones.length === 0) {
+    return {
+      inZone: false,
+      reason: 'We could not confirm this location is in our delivery area. Try again in a moment.',
+    };
+  }
 
   let inInclude = false;
   let hitExclude = false;
 
-  for (const zone of zones) {
+  for (const zone of activeZones) {
     if (zone.polygon.length < 3) continue;
     if (!pointInPolygon(lat, lng, zone.polygon)) continue;
     if (zone.kind === 'exclude') hitExclude = true;
@@ -279,12 +281,9 @@ export function evaluateActiveCoverage(lat: number, lng: number): DeliveryZoneRe
   }
   if (inInclude) return { inZone: true };
 
-  // No remote zones loaded and empty list → bbox fallback
-  if (zones.length === 0 && inKingstonBounds(lat, lng)) return { inZone: true };
-
   return {
     inZone: false,
-    reason: 'This address is outside our current Kingston delivery area.',
+    reason: 'This address is outside our current delivery area.',
   };
 }
 
@@ -322,6 +321,19 @@ export function checkDeliveryZone(address: DeliveryAddressInput): DeliveryZoneRe
   return {
     inZone: false,
     reason:
-      'We could not confirm this location is in zone. Enable maps geocode or pick a Kingston address.',
+      'We could not confirm this location is in zone. Enable maps geocode or pick an address in our delivery area.',
   };
+}
+
+/** Prefer this before save/confirm so GPS checks use live Ops coverage, not a stale default. */
+export async function checkDeliveryZoneAsync(
+  address: DeliveryAddressInput,
+): Promise<DeliveryZoneResult> {
+  await ensureDeliveryZonesLoaded();
+  // If still empty after load, force one more fetch (cache miss / first launch)
+  if (activeZones.length === 0) {
+    zonesHydrated = false;
+    await loadDeliveryZones();
+  }
+  return checkDeliveryZone(address);
 }

@@ -101,7 +101,7 @@ export default function NotificationSettingsPage({ onNavigate }: Props) {
   };
 
   return (
-    <div className="bg-background text-on-background min-h-screen flex flex-col">
+    <div className="bg-background text-on-background min-h-dvh flex flex-col">
       <header className="bg-surface w-full top-0 sticky shadow-sm z-40">
         <div className="flex items-center justify-between px-4 py-2 w-full max-w-[1200px] mx-auto">
           <button type="button" onClick={() => onNavigate('account')} className="flex items-center gap-2 text-primary">

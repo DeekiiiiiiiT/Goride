@@ -22,7 +22,7 @@ export function FloatingCartBar({
 
   return (
     <div
-      className={`fixed left-0 right-0 z-40 safe-x pointer-events-none flex justify-center ${
+      className={`fixed left-0 right-0 z-40 safe-x pointer-events-none flex justify-center app-chrome-width ${
         hasBottomNav ? 'bottom-[var(--app-bottom-nav-total)]' : 'safe-b'
       }`}
     >

@@ -134,7 +134,7 @@ export default function OrderTrackingPage({ orderId, demoPhase, onNavigate }: Pr
 
   if (!orderId) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-4">
+      <div className="min-h-dvh flex flex-col items-center justify-center px-4">
         <p className="text-on-surface-variant mb-4">No order selected</p>
         <button type="button" onClick={() => onNavigate('orders')} className="text-primary font-semibold">
           View orders
@@ -145,7 +145,7 @@ export default function OrderTrackingPage({ orderId, demoPhase, onNavigate }: Pr
 
   if (isLoading && !(mocksOk && demoPhase)) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-dvh flex items-center justify-center">
         <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-primary-container" />
       </div>
     );
@@ -153,7 +153,7 @@ export default function OrderTrackingPage({ orderId, demoPhase, onNavigate }: Pr
 
   if (!order || (error && !mocksOk)) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-4 gap-4">
+      <div className="min-h-dvh flex flex-col items-center justify-center px-4 gap-4">
         <MaterialIcon name="error_outline" className="text-4xl text-on-surface-variant" />
         <p className="text-on-surface-variant text-center">Couldn&apos;t load this order.</p>
         <button
@@ -172,7 +172,7 @@ export default function OrderTrackingPage({ orderId, demoPhase, onNavigate }: Pr
 
   if (phase === 'delivered') {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-dvh flex items-center justify-center">
         <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-primary-container" />
       </div>
     );

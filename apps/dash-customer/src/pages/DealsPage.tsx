@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { API_ENDPOINTS, publicAnonKey } from '@roam/api-client';
+import { API_ENDPOINTS, supabaseAnonFunctionHeaders } from '@roam/api-client';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PullToRefresh } from '@/components/ui/PullToRefresh';
@@ -69,7 +69,7 @@ export default function DealsPage({ onNavigate }: Props) {
     setLoading(true);
     try {
       const res = await fetch(`${API_ENDPOINTS.delivery}/promotions`, {
-        headers: { apikey: publicAnonKey },
+        headers: supabaseAnonFunctionHeaders(),
       });
       if (!res.ok) throw new Error('failed');
       const data = await res.json();

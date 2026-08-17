@@ -85,7 +85,7 @@ export default function RateOrderPage({
   };
 
   return (
-    <div className="bg-background text-on-background min-h-screen pb-[100px]">
+    <div className="bg-background text-on-background min-h-dvh pb-[100px]">
       <header className="flex justify-between items-center px-4 min-h-16 w-full max-w-[1200px] mx-auto bg-surface shadow-sm sticky top-0 z-50 safe-t">
         <button
           type="button"

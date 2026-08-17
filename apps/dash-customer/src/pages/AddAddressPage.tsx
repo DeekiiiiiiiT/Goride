@@ -9,7 +9,7 @@ import {
   type AddressLabel,
   type SavedAddress,
 } from '@/lib/addressStorage';
-import { checkDeliveryZone } from '@/lib/deliveryZones';
+import { checkDeliveryZoneAsync } from '@/lib/deliveryZones';
 import {
   getRushCurrentPosition,
   requestRushGeolocationPermission,
@@ -32,6 +32,7 @@ export default function AddAddressPage({ addressId, onNavigate }: Props) {
 
   const [line1, setLine1] = useState(existing?.line1 ?? '');
   const [line2, setLine2] = useState(existing?.line2 ?? '');
+  const [city, setCity] = useState(existing?.city ?? '');
   const [instructions, setInstructions] = useState(existing?.instructions ?? '');
   const [label, setLabel] = useState<AddressLabel>(existing?.label ?? 'home');
   const [coords, setCoords] = useState<{ lat?: number; lng?: number }>({
@@ -53,19 +54,36 @@ export default function AddAddressPage({ addressId, onNavigate }: Props) {
       }
       const { lat, lng } = await getRushCurrentPosition();
       setCoords({ lat, lng });
-      setPinSuccess(true);
 
       // Jamaica house numbers often miss Places — GPS is the courier pin; label stays editable
+      let guessed = `Pinned location (${lat.toFixed(5)}, ${lng.toFixed(5)})`;
+      let resolvedCity = city;
       try {
         const geo = await reverseGeocode(lat, lng);
-        const guessed =
-          geo.streetAddress || geo.formattedAddress || `Pinned location (${lat.toFixed(5)}, ${lng.toFixed(5)})`;
-        if (!line1.trim()) setLine1(guessed);
-      } catch {
-        if (!line1.trim()) {
-          setLine1(`Pinned location (${lat.toFixed(5)}, ${lng.toFixed(5)})`);
+        guessed =
+          geo.streetAddress || geo.formattedAddress || guessed;
+        if (geo.city) {
+          resolvedCity = geo.city;
+          setCity(geo.city);
         }
+      } catch {
+        // keep coordinate label
       }
+      setLine1(guessed);
+      setPinSuccess(true);
+
+      // Confirm coverage against live Ops zones while the pin is fresh
+      const zone = await checkDeliveryZoneAsync({
+        line1: guessed,
+        city: resolvedCity || undefined,
+        lat,
+        lng,
+      });
+      if (!zone.inZone) {
+        onNavigate('out-of-delivery', { returnTo: 'add-address', attemptedAddress: guessed });
+        return;
+      }
+      toast.success('Location pinned — you’re in our delivery area');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not get current location');
     } finally {
@@ -75,11 +93,10 @@ export default function AddAddressPage({ addressId, onNavigate }: Props) {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    const city = existing?.city ?? 'Kingston, Jamaica';
-    const zone = checkDeliveryZone({
+    const zone = await checkDeliveryZoneAsync({
       line1,
       line2,
-      city,
+      city: city || undefined,
       lat: coords.lat,
       lng: coords.lng,
     });
@@ -97,7 +114,7 @@ export default function AddAddressPage({ addressId, onNavigate }: Props) {
       line1,
       line2: line2 || undefined,
       instructions: instructions || undefined,
-      city,
+      city: city || undefined,
       lat: coords.lat,
       lng: coords.lng,
       isDefault: existing?.isDefault ?? !addressId,
@@ -114,8 +131,8 @@ export default function AddAddressPage({ addressId, onNavigate }: Props) {
   };
 
   return (
-    <div className="bg-background text-on-background min-h-dvh flex flex-col antialiased">
-      <header className="flex items-center justify-between px-4 py-2 w-full max-w-[1200px] mx-auto bg-surface shadow-sm sticky top-0 z-50 safe-t min-h-14">
+    <div className="app-fullscreen-screen bg-background text-on-background antialiased">
+      <header className="flex items-center justify-between px-4 py-2 w-full max-w-md mx-auto bg-surface shadow-sm sticky top-0 z-50 safe-t min-h-14 shrink-0">
         <button
           type="button"
           aria-label="Go back"
@@ -130,7 +147,7 @@ export default function AddAddressPage({ addressId, onNavigate }: Props) {
         <div className="w-10" />
       </header>
 
-      <main className="flex-1 flex flex-col relative max-w-[1200px] mx-auto w-full">
+      <main className="flex-1 flex flex-col relative max-w-md mx-auto w-full min-h-0 overflow-y-auto overscroll-contain">
         {!pinSuccess && (
           <div className="relative h-[309px] w-full bg-surface-container-highest overflow-hidden">
             <img
@@ -179,7 +196,7 @@ export default function AddAddressPage({ addressId, onNavigate }: Props) {
               setCoords({ lat: s.lat, lng: s.lng });
               setPinSuccess(false);
             }}
-            placeholder="Search for address in Kingston"
+            placeholder="Search for your address"
           />
 
           {pinSuccess && (

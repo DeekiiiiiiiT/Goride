@@ -71,7 +71,7 @@ export default function PaymentCallbackPage({ onNavigate, session, provider }: P
 
   if (status === 'processing') {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-4">
+      <div className="min-h-dvh flex flex-col items-center justify-center p-4">
         <Loader2 className="w-16 h-16 text-emerald-500 animate-spin mb-4" />
         <h1 className="text-xl font-semibold text-gray-900">Processing your payment...</h1>
         <p className="text-gray-500 mt-2">Please wait while we confirm your payment</p>
@@ -81,7 +81,7 @@ export default function PaymentCallbackPage({ onNavigate, session, provider }: P
 
   if (status === 'success') {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-4">
+      <div className="min-h-dvh flex flex-col items-center justify-center p-4">
         <CheckCircle className="w-20 h-20 text-emerald-500 mb-4" />
         <h1 className="text-2xl font-bold text-gray-900 mb-2">Payment Successful!</h1>
         <p className="text-gray-500 mb-8">Your order has been confirmed</p>
@@ -96,7 +96,7 @@ export default function PaymentCallbackPage({ onNavigate, session, provider }: P
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-4">
+    <div className="min-h-dvh flex flex-col items-center justify-center p-4">
       <XCircle className="w-20 h-20 text-red-500 mb-4" />
       <h1 className="text-2xl font-bold text-gray-900 mb-2">Payment Failed</h1>
       <p className="text-gray-500 mb-8">Something went wrong with your payment</p>

@@ -7,16 +7,16 @@ import {
   pointInPolygon,
 } from './deliveryZones';
 
-describe('pointInPolygon / Kingston delivery zone', () => {
-  it('treats New Kingston roughly in-polygon', () => {
+describe('pointInPolygon / delivery zone coverage', () => {
+  it('treats New Kingston roughly in-polygon for the legacy test ring', () => {
     expect(pointInPolygon(18.01, -76.78, KINGSTON_DELIVERY_POLYGON)).toBe(true);
   });
 
-  it('treats Half Way Tree area in-polygon', () => {
+  it('treats Half Way Tree area in-polygon for the legacy test ring', () => {
     expect(pointInPolygon(18.012, -76.799, KINGSTON_DELIVERY_POLYGON)).toBe(true);
   });
 
-  it('rejects Montego Bay coords', () => {
+  it('rejects Montego Bay coords against the legacy test ring', () => {
     expect(pointInPolygon(18.476, -77.893, KINGSTON_DELIVERY_POLYGON)).toBe(false);
   });
 
@@ -25,7 +25,7 @@ describe('pointInPolygon / Kingston delivery zone', () => {
     expect(pointInPolygon(18.115, -76.685, KINGSTON_DELIVERY_POLYGON)).toBe(false);
   });
 
-  it('checkDeliveryZone uses polygon when lat/lng provided', () => {
+  it('checkDeliveryZone uses active zones when lat/lng provided', () => {
     __setActiveZonesForTests([{ kind: 'include', polygon: KINGSTON_DELIVERY_POLYGON }]);
     expect(checkDeliveryZone({ line1: 'Anywhere', lat: 18.01, lng: -76.78 }).inZone).toBe(true);
     expect(checkDeliveryZone({ line1: 'Anywhere', lat: 18.476, lng: -77.893 }).inZone).toBe(
@@ -35,7 +35,7 @@ describe('pointInPolygon / Kingston delivery zone', () => {
 
   it('exclude wins over include', () => {
     __setActiveZonesForTests([
-      { kind: 'include', name: 'Kingston', polygon: KINGSTON_DELIVERY_POLYGON },
+      { kind: 'include', name: 'Metro', polygon: KINGSTON_DELIVERY_POLYGON },
       {
         kind: 'exclude',
         name: 'Hole',
@@ -49,6 +49,23 @@ describe('pointInPolygon / Kingston delivery zone', () => {
     ]);
     expect(evaluateActiveCoverage(18.01, -76.78).inZone).toBe(false);
     expect(evaluateActiveCoverage(18.05, -76.85).inZone).toBe(true);
+  });
+
+  it('denies coverage when no active zones are loaded', () => {
+    __setActiveZonesForTests([]);
+    expect(evaluateActiveCoverage(18.01, -76.95).inZone).toBe(false);
+  });
+
+  it('accepts Spanish Town coords against a Spanish Town-like ring', () => {
+    const spanishTown: { lat: number; lng: number }[] = [
+      { lat: 18.05, lng: -77.02 },
+      { lat: 18.05, lng: -76.93 },
+      { lat: 17.97, lng: -76.93 },
+      { lat: 17.97, lng: -77.02 },
+    ];
+    __setActiveZonesForTests([{ kind: 'include', name: 'Spanish Town', polygon: spanishTown }]);
+    expect(evaluateActiveCoverage(18.01, -76.96).inZone).toBe(true);
+    expect(evaluateActiveCoverage(18.01, -76.78).inZone).toBe(false);
   });
 
   it('falls back to keywords when coords missing', () => {

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { API_ENDPOINTS, publicAnonKey } from '@roam/api-client';
+import { API_ENDPOINTS, supabaseAnonFunctionHeaders } from '@roam/api-client';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 
 const WAITLIST_KEY = 'roam-dash-waitlist-email';
@@ -29,7 +29,7 @@ export default function OutOfDeliveryPage({ onNavigate, returnTo = 'saved-addres
     try {
       await fetch(`${API_ENDPOINTS.delivery}/geo/zone-waitlist`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', apikey: publicAnonKey },
+        headers: supabaseAnonFunctionHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           email: value,
           attempted_address: address || undefined,
@@ -57,8 +57,8 @@ export default function OutOfDeliveryPage({ onNavigate, returnTo = 'saved-addres
   };
 
   return (
-    <div className="bg-background min-h-screen font-body-md text-on-background antialiased flex flex-col justify-center items-center px-4">
-      <main className="w-full max-w-md mx-auto flex flex-col items-center text-center">
+    <div className="app-fullscreen-screen safe-x safe-t bg-background font-body-md text-on-background antialiased">
+      <main className="flex-1 w-full max-w-md mx-auto flex flex-col justify-center items-center text-center px-4 pb-safe overflow-y-auto overscroll-contain">
         <div className="mb-6 rounded-full bg-surface-container-high w-32 h-32 flex items-center justify-center shadow-sm">
           <MaterialIcon
             name="sentiment_dissatisfied"
@@ -90,12 +90,12 @@ export default function OutOfDeliveryPage({ onNavigate, returnTo = 'saved-addres
               onChange={(e) => setEmail(e.target.value)}
               placeholder="your@email.com"
               required
-              className="w-full bg-[#F3F4F6] border-none text-on-surface text-body-md px-4 py-4 rounded-lg focus:bg-white focus:ring-2 focus:ring-primary-container focus:outline-none transition-colors"
+              className="input-touch w-full bg-[#F3F4F6] border-none text-on-surface text-body-md px-4 rounded-lg focus:bg-white focus:ring-2 focus:ring-primary-container focus:outline-none transition-colors"
             />
             <button
               type="submit"
               disabled={submitting}
-              className="w-full bg-primary-container text-white text-label-md font-semibold tracking-wide py-4 rounded-lg shadow-sm active:scale-95 transition-transform disabled:opacity-60"
+              className="btn-touch w-full bg-primary-container text-white text-label-md font-semibold tracking-wide py-4 rounded-lg shadow-sm active:scale-95 transition-transform disabled:opacity-60"
             >
               {submitting ? 'Submitting…' : 'Notify Me'}
             </button>
@@ -106,7 +106,7 @@ export default function OutOfDeliveryPage({ onNavigate, returnTo = 'saved-addres
           <button
             type="button"
             onClick={handleTryDifferent}
-            className="text-label-md font-semibold tracking-wide text-primary-container hover:opacity-80 transition-opacity"
+            className="btn-touch px-4 text-label-md font-semibold tracking-wide text-primary-container hover:opacity-80 transition-opacity"
           >
             Try a different address
           </button>

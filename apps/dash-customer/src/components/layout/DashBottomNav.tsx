@@ -18,7 +18,7 @@ const TABS: { id: DashTab; label: string; icon: string }[] = [
 
 export function DashBottomNav({ activeTab, onTabChange, ordersBadge }: DashBottomNavProps) {
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 flex justify-around items-center py-2 safe-x safe-b bg-surface shadow-[0px_-4px_20px_rgba(0,0,0,0.04)] rounded-t-xl border-t border-surface-container-high max-w-[75rem] mx-auto w-full">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 flex justify-around items-center py-2 safe-x safe-b bg-surface shadow-[0px_-4px_20px_rgba(0,0,0,0.04)] rounded-t-xl border-t border-surface-container-high app-chrome-width">
       {TABS.map((tab) => {
         const active = activeTab === tab.id;
         return (

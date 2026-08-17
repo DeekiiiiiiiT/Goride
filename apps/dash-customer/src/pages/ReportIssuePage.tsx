@@ -19,7 +19,7 @@ export default function ReportIssuePage({ onNavigate }: Props) {
 
   if (submitted) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-4 bg-background">
+      <div className="min-h-dvh flex flex-col items-center justify-center px-4 bg-background">
         <MaterialIcon name="check_circle" className="text-primary text-[64px] mb-4" filled />
         <h2 className="text-headline-md font-semibold mb-2">Report submitted</h2>
         <p className="text-body-md text-on-surface-variant text-center">We&apos;ll respond within 24 hours.</p>
@@ -28,7 +28,7 @@ export default function ReportIssuePage({ onNavigate }: Props) {
   }
 
   return (
-    <div className="text-on-surface antialiased bg-background pb-[100px] min-h-screen">
+    <div className="text-on-surface antialiased bg-background pb-[100px] min-h-dvh">
       <header className="bg-surface w-full top-0 sticky shadow-sm z-40 safe-t">
         <div className="flex items-center justify-between px-4 py-2 w-full max-w-[600px] mx-auto min-h-16">
           <div className="flex items-center gap-4">

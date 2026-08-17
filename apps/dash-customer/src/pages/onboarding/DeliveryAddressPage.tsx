@@ -6,7 +6,7 @@ import {
   getSavedAddresses,
   type SavedAddress,
 } from '@/lib/addressStorage';
-import { checkDeliveryZone } from '@/lib/deliveryZones';
+import { checkDeliveryZoneAsync } from '@/lib/deliveryZones';
 import {
   getRushCurrentPosition,
   requestRushGeolocationPermission,
@@ -60,9 +60,9 @@ export function DeliveryAddressPage({ onBack, onConfirm, onOutOfZone }: Delivery
     });
   };
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (!selected?.line1.trim()) return;
-    const zone = checkDeliveryZone({
+    const zone = await checkDeliveryZoneAsync({
       line1: selected.line1,
       line2: selected.line2,
       lat: selected.lat,
@@ -84,15 +84,33 @@ export function DeliveryAddressPage({ onBack, onConfirm, onOutOfZone }: Delivery
         return;
       }
       const coords = await getRushCurrentPosition();
-      const geo = await reverseGeocode(coords.lat, coords.lng);
+      let line =
+        `${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}`;
+      try {
+        const geo = await reverseGeocode(coords.lat, coords.lng);
+        line = geo.streetAddress || geo.formattedAddress || line;
+      } catch {
+        // keep coordinate label so the pin is still usable
+      }
       const next: AddressSelection = {
-        line1: geo.streetAddress || geo.formattedAddress || `${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}`,
+        line1: line,
         lat: coords.lat,
         lng: coords.lng,
       };
       setSelectedId('current');
       setLine1(next.line1);
       setSelected(next);
+
+      const zone = await checkDeliveryZoneAsync({
+        line1: next.line1,
+        lat: next.lat,
+        lng: next.lng,
+      });
+      if (!zone.inZone) {
+        onOutOfZone?.(next);
+        return;
+      }
+      toast.success('Location pinned — you’re in our delivery area');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not get current location');
     } finally {
@@ -168,7 +186,7 @@ export function DeliveryAddressPage({ onBack, onConfirm, onOutOfZone }: Delivery
                   lng: s.lng,
                 });
               }}
-              placeholder="Search for address in Kingston"
+              placeholder="Search for your address"
             />
           </section>
 
@@ -207,7 +225,7 @@ export function DeliveryAddressPage({ onBack, onConfirm, onOutOfZone }: Delivery
         <div className="absolute bottom-0 left-0 w-full bg-surface-container-lowest/90 backdrop-blur-md px-4 py-4 pb-safe shadow-[0px_-10px_30px_rgba(0,0,0,0.03)] z-50">
           <button
             type="button"
-            onClick={handleConfirm}
+            onClick={() => void handleConfirm()}
             disabled={!selected?.line1.trim()}
             className="w-full bg-primary text-on-primary text-sm font-semibold tracking-wide py-4 rounded-xl shadow-md active:scale-[0.98] transition-transform duration-200 flex justify-center items-center disabled:opacity-50 disabled:cursor-not-allowed"
           >

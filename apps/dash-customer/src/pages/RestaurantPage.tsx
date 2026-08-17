@@ -144,7 +144,7 @@ export default function RestaurantPage({ merchantId, onNavigate }: Props) {
 
   if (!lookupId) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-4">
+      <div className="flex min-h-dvh flex-col items-center justify-center gap-4 px-4">
         <p className="text-on-surface-variant">No store selected</p>
         <button type="button" onClick={() => onNavigate('home')} className="font-semibold text-primary">
           Back home
@@ -155,7 +155,7 @@ export default function RestaurantPage({ merchantId, onNavigate }: Props) {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <div className="flex min-h-dvh items-center justify-center">
         <div className="h-10 w-10 animate-spin rounded-full border-t-2 border-b-2 border-primary-container" />
       </div>
     );
@@ -163,7 +163,7 @@ export default function RestaurantPage({ merchantId, onNavigate }: Props) {
 
   if (isError || !restaurant) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-4">
+      <div className="flex min-h-dvh flex-col items-center justify-center gap-4 px-4">
         <MaterialIcon name="error_outline" className="text-4xl text-on-surface-variant" />
         <p className="text-center text-on-surface-variant">Couldn&apos;t load this menu.</p>
         <button
@@ -181,7 +181,7 @@ export default function RestaurantPage({ merchantId, onNavigate }: Props) {
   }
 
   return (
-    <div className="relative mx-auto min-h-screen w-full max-w-[480px] overflow-x-hidden bg-surface pb-32 shadow-lg">
+    <div className="relative mx-auto min-h-dvh w-full max-w-[480px] overflow-x-hidden bg-surface pb-32 shadow-lg">
       <header className="pointer-events-none absolute top-0 left-0 z-20 flex w-full items-start justify-between px-4 pt-4 pt-safe">
         <button
           type="button"

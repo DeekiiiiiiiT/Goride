@@ -3279,13 +3279,21 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
 
     // Step 3.1: Immutability Lockdown (Legacy)
     // Bypass when admin is explicitly editing via the modal (bypassSignatureCheck flag)
+    // Gas Card $0 anchors are allowed to receive statement liters/amount (match enrich).
     if (existingEntry && !existingEntry.signature && !entry.bypassSignatureCheck) {
-        const protectedFields = ['liters', 'amount', 'odometer', 'date', 'vehicleId'];
+        const awaitingCard =
+          existingEntry.metadata?.awaitingCardStatement === true ||
+          (existingEntry.paymentSource === "Gas_Card" &&
+            Number(existingEntry.amount) === 0 &&
+            existingEntry.entryMode === "Anchor");
+        const protectedFields = awaitingCard
+          ? ["odometer", "date", "vehicleId"]
+          : ["liters", "amount", "odometer", "date", "vehicleId"];
         const isAttemptingIllegalChange = protectedFields.some(f => existingEntry[f] !== undefined && entry[f] !== undefined && existingEntry[f] !== entry[f]);
         
         if (isAttemptingIllegalChange) {
-            entry.liters = existingEntry.liters;
-            entry.amount = existingEntry.amount;
+            entry.liters = awaitingCard ? entry.liters : existingEntry.liters;
+            entry.amount = awaitingCard ? entry.amount : existingEntry.amount;
             entry.odometer = existingEntry.odometer;
             entry.date = existingEntry.date;
             entry.vehicleId = existingEntry.vehicleId;

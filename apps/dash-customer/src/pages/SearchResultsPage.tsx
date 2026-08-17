@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { API_ENDPOINTS, publicAnonKey } from '@roam/api-client';
+import { API_ENDPOINTS, supabaseAnonFunctionHeaders } from '@roam/api-client';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PullToRefresh } from '@/components/ui/PullToRefresh';
@@ -110,7 +110,7 @@ export default function SearchResultsPage({
       const q = query.trim();
       if (q.length < 2) return { merchants: [] as SearchableRestaurant[], items: [] as DishSearchResult[] };
       const res = await fetch(`${API_ENDPOINTS.delivery}/search?q=${encodeURIComponent(q)}`, {
-        headers: { apikey: publicAnonKey },
+        headers: supabaseAnonFunctionHeaders(),
       });
       if (!res.ok) throw new Error('Search failed');
       const json = await res.json();

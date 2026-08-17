@@ -25,8 +25,8 @@ export default function OrderDeliveredPage({
   };
 
   return (
-    <div className="bg-background min-h-screen text-on-surface pb-safe">
-      <header className="w-full flex items-center justify-between px-4 h-16 pt-safe">
+    <div className="app-fullscreen-screen safe-x bg-background text-on-surface">
+      <header className="w-full flex items-center justify-between px-4 min-h-16 pt-safe shrink-0">
         <button type="button" onClick={() => onNavigate('home')} className="w-10 h-10 flex items-center justify-center rounded-full">
           <MaterialIcon name="close" />
         </button>
@@ -34,7 +34,7 @@ export default function OrderDeliveredPage({
         <div className="w-10" />
       </header>
 
-      <main className="px-4 pb-36">
+      <main className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 pb-36">
         <div className="flex flex-col items-center text-center mt-6 mb-8">
           <div className="w-20 h-20 bg-primary-container/20 rounded-full flex items-center justify-center mb-4 relative">
             <MaterialIcon name="check_circle" className="text-primary text-[40px]" filled />

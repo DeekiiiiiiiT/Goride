@@ -55,6 +55,8 @@ export interface FuelMatchPair<T extends FuelEntryLike = FuelEntryLike> {
 }
 
 const DAY_WINDOW_MS = 36 * 60 * 60 * 1000; // ±1.5 days
+const TWO_HOUR_MS = 2 * 60 * 60 * 1000;
+const FIFTEEN_MIN_MS = 15 * 60 * 1000;
 
 const STATEMENT_IMPORT_SOURCES = new Set([
   'jaa_raw',
@@ -156,6 +158,9 @@ function isRoamGasCardAnchor(e: FuelEntryLike): boolean {
 }
 
 function isGasCardDriverLog(e: FuelEntryLike): boolean {
+  // Card Inventory rows are never Roam logs — including them makes every
+  // import look "ambiguous" against itself / declined attempts.
+  if (isJaaStatementLedgerRow(e)) return false;
   if (isRoamGasCardAnchor(e)) return true;
   if (e.paymentSource === 'Gas_Card') return true;
   if (e.type === 'Card_Transaction' && e.entrySource === 'driver-portal') return true;
@@ -234,18 +239,23 @@ export function matchJaaStatementToDriverLogs<T extends FuelEntryLike>(
         }
 
         const dayDelta = Math.abs(dayMs(stmt.date, stmt.time) - dayMs(d.date, d.time));
-        if (dayDelta <= DAY_WINDOW_MS) score += 30;
-        else {
+        if (dayDelta > DAY_WINDOW_MS) {
           score -= 35;
           notes.push('date out of window');
+        } else if (dayDelta <= FIFTEEN_MIN_MS) {
+          score += 45; // same pump event
+        } else if (dayDelta <= TWO_HOUR_MS) {
+          score += 35;
+        } else {
+          score += 15; // same 36h window but not the same fill
         }
 
         if (metaOf(d).awaitingCardStatement) score += 5;
 
-        return { d, score, notes };
+        return { d, score, notes, dayDelta };
       })
-      .filter((c) => c.score >= 55)
-      .sort((a, b) => b.score - a.score);
+      .filter((c) => c.score >= 55 && !c.notes.includes('date out of window'))
+      .sort((a, b) => b.score - a.score || a.dayDelta - b.dayDelta);
 
     if (candidates.length === 0) {
       pairs.push({

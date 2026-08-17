@@ -83,7 +83,7 @@ export default function OrderDetailsPage({ orderId, onNavigate }: Props) {
 
   if (!orderId) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-4">
+      <div className="flex min-h-dvh flex-col items-center justify-center gap-4 px-4">
         <p className="text-on-surface-variant">No order selected</p>
         <button type="button" onClick={() => onNavigate('orders')} className="font-semibold text-primary">
           View orders
@@ -94,7 +94,7 @@ export default function OrderDetailsPage({ orderId, onNavigate }: Props) {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <div className="flex min-h-dvh items-center justify-center">
         <div className="h-10 w-10 animate-spin rounded-full border-t-2 border-b-2 border-primary-container" />
       </div>
     );
@@ -102,7 +102,7 @@ export default function OrderDetailsPage({ orderId, onNavigate }: Props) {
 
   if (!order || (error && !mocksOk)) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-4">
+      <div className="flex min-h-dvh flex-col items-center justify-center gap-4 px-4">
         <MaterialIcon name="error_outline" className="text-4xl text-on-surface-variant" />
         <p className="text-center text-on-surface-variant">Couldn&apos;t load this order.</p>
         <button

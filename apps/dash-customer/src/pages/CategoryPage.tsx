@@ -19,7 +19,7 @@ export default function CategoryPage({ categoryId, onNavigate, onBack }: Props) 
 
   if (!category) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4">
+      <div className="min-h-dvh flex items-center justify-center p-4">
         <p className="text-body-md text-on-surface-variant">Category not found.</p>
       </div>
     );
