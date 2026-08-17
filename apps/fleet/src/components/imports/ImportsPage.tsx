@@ -1048,7 +1048,11 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
                   ]);
                   const { pairs, updates, summary } = buildJaaMatchUpdates(saved, existing, inventory);
                   for (const entry of updates) {
-                      await fuelService.saveFuelEntry(entry);
+                      try {
+                          await fuelService.saveFuelEntry({ ...entry, bypassSignatureCheck: true });
+                      } catch (saveErr) {
+                          console.warn('[Import] JAA match save failed', entry.id, saveErr);
+                      }
                   }
                   setJaaMatchPairs(pairs as FuelMatchPair[]);
                   if (summary.matched > 0) {

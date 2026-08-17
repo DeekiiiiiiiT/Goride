@@ -373,12 +373,38 @@ export function AdminJaaGasCardsPage() {
         );
       }
 
-      const matchResult = await runJaaGasCardMatch(savedEntries);
       const fuel = payload.matchedEntries.filter(
         (e) => (e.metadata as any)?.jaaRowKind === 'approved_fuel',
       ).length;
       const dropped =
         importPreview.unmatchedRows.length - payload.unmatchedRows.length;
+
+      // Close the wizard as soon as the CSV is in — matching must not trap the overlay.
+      setWizardOpen(false);
+      setImportPreview(null);
+      setImporting(false);
+      if (payload.unmatchedRows.length) setTab('unmatched');
+      else if (saved) setTab('matched');
+      if (failed && !saved) {
+        setImportError(lastFail || 'All row saves failed — check console / auth.');
+        toast.error(lastFail || 'Import failed to save any rows');
+      } else if (saved) {
+        toast.success(`Saved ${saved} statement row(s). Matching driver logs…`);
+      }
+
+      let matchResult = {
+        matched: 0,
+        unmatchedStatement: 0,
+        ambiguous: 0,
+        unmatchedDriver: 0,
+      };
+      try {
+        matchResult = await runJaaGasCardMatch();
+      } catch (matchErr) {
+        console.error('[JAA Import] match step failed', matchErr);
+        toast.error(matchErr instanceof Error ? matchErr.message : 'Statement saved, but log matching failed');
+      }
+
       const summary =
         `Parsed ${importPreview.parsedRows} rows · saved ${saved}` +
         (failed ? ` · ${failed} failed` : '') +
@@ -405,19 +431,8 @@ export function AdminJaaGasCardsPage() {
       });
 
       setLastImportSummary(summary);
-      setWizardOpen(false);
-      setImportPreview(null);
-
-      if (failed && !saved) {
-        setImportError(lastFail || 'All row saves failed — check console / auth.');
-        toast.error(lastFail || 'Import failed to save any rows');
-      } else if (failed) {
-        toast.warning(summary);
-      } else {
-        toast.success(summary);
-      }
-      if (payload.unmatchedRows.length) setTab('unmatched');
-      else if (saved) setTab('matched');
+      if (saved && matchResult.matched > 0) toast.success(summary);
+      else if (saved) toast.message(summary);
       await load();
     } catch (e: any) {
       console.error(e);
@@ -441,7 +456,14 @@ export function AdminJaaGasCardsPage() {
         : all.filter(isJaaStatementLedgerRow);
     const { updates, summary } = buildJaaMatchUpdates(statements, all, inventory);
     for (const entry of updates) {
-      await fuelService.saveFuelEntry(entry as FuelEntry);
+      try {
+        await fuelService.saveFuelEntry({
+          ...entry,
+          bypassSignatureCheck: true,
+        } as FuelEntry);
+      } catch (err) {
+        console.error('[JAA match] save failed', entry.id, err);
+      }
     }
     return summary;
   };

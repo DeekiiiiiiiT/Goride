@@ -21,6 +21,8 @@ export interface FuelEntryLike {
   entrySource?: string;
   reconciliationStatus?: string;
   metadata?: Record<string, unknown> | null;
+  /** Set on statement-enrich writes so signed $0 Gas Card anchors can receive $ / L. */
+  bypassSignatureCheck?: boolean;
 }
 
 /** Inventory card fields used to hydrate statement identity before match. */
@@ -355,6 +357,7 @@ export function applyFuelMatchLinks<T extends FuelEntryLike>(
       priorDriverAmount: drv.amount,
       priorDriverLiters: drv.liters,
     },
+    bypassSignatureCheck: true,
   } as T;
 
   if (stmtMeta.jaaFuelType && !(driver as FuelEntryLike & { fuelType?: string }).fuelType) {

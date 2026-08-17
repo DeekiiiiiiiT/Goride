@@ -3255,9 +3255,17 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
     // Phase 5: Integrity Guardrail - Prevent modifications to signed records
     const existingEntry = await kv.get(`fuel_entry:${entry.id}`);
     const isNewFuelEntry = !existingEntry;
+    const awaitingCardStatement =
+      existingEntry?.metadata?.awaitingCardStatement === true ||
+      (existingEntry?.paymentSource === "Gas_Card" &&
+        Number(existingEntry?.amount) === 0 &&
+        existingEntry?.entryMode === "Anchor");
     if (existingEntry && existingEntry.signature && !entry.bypassSignatureCheck) {
-        // If it's already signed, we only allow specific audit resolution metadata updates
-        const coreFields = ['liters', 'amount', 'odometer', 'date', 'vehicleId', 'lat', 'lng'];
+        // Signed $0 Gas Card anchors are created before statement money exists —
+        // amount/liters must be fillable later. Odometer/date/vehicle stay locked.
+        const coreFields = awaitingCardStatement
+          ? ["odometer", "date", "vehicleId", "lat", "lng"]
+          : ["liters", "amount", "odometer", "date", "vehicleId", "lat", "lng"];
         const isTampered = coreFields.some(f => existingEntry[f] !== undefined && entry[f] !== undefined && existingEntry[f] !== entry[f]);
         
         if (isTampered) {
@@ -3281,11 +3289,7 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
     // Bypass when admin is explicitly editing via the modal (bypassSignatureCheck flag)
     // Gas Card $0 anchors are allowed to receive statement liters/amount (match enrich).
     if (existingEntry && !existingEntry.signature && !entry.bypassSignatureCheck) {
-        const awaitingCard =
-          existingEntry.metadata?.awaitingCardStatement === true ||
-          (existingEntry.paymentSource === "Gas_Card" &&
-            Number(existingEntry.amount) === 0 &&
-            existingEntry.entryMode === "Anchor");
+        const awaitingCard = awaitingCardStatement;
         const protectedFields = awaitingCard
           ? ["odometer", "date", "vehicleId"]
           : ["liters", "amount", "odometer", "date", "vehicleId"];
