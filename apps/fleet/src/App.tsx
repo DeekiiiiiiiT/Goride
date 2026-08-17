@@ -94,12 +94,41 @@ function AppContent() {
   /** Vehicle deep link into Expense Hub (register or recurring) */
   const [expenseHubVehicleId, setExpenseHubVehicleId] = useState<string | null>(null);
   const [expenseHubSubview, setExpenseHubSubview] = useState<ExpenseHubSubview | null>(null);
+  /** Deep link from Tag Inventory → Toll Reconciliation */
+  const [tollReconFocus, setTollReconFocus] = useState<{
+    vehicleId?: string;
+    driverId?: string;
+    vehicleLabel?: string;
+  } | null>(null);
 
-  const handleNavigate = (page: string, periodHint?: { startYmd: string; endYmd: string }) => {
+  type NavigateOpts =
+    | { startYmd: string; endYmd: string }
+    | { vehicleId?: string; driverId?: string; vehicleLabel?: string };
+
+  const handleNavigate = (page: string, opts?: NavigateOpts) => {
+    const periodHint =
+      opts && 'startYmd' in opts && typeof opts.startYmd === 'string'
+        ? { startYmd: opts.startYmd, endYmd: opts.endYmd }
+        : undefined;
+    const tollFocus =
+      opts && ('vehicleId' in opts || 'driverId' in opts || 'vehicleLabel' in opts) && !('startYmd' in opts)
+        ? {
+            vehicleId: opts.vehicleId,
+            driverId: opts.driverId,
+            vehicleLabel: opts.vehicleLabel,
+          }
+        : undefined;
+
     if (periodHint) {
       setFinancePeriodHint(periodHint);
     } else if (page === 'business-finance') {
       setFinancePeriodHint(null);
+    }
+
+    if (page === 'toll-tags') {
+      setTollReconFocus(tollFocus || null);
+    } else {
+      setTollReconFocus(null);
     }
     if (page === 'transactions') {
       // Legacy Financial Analytics → Workbench (one set of books)
@@ -473,12 +502,16 @@ function AppContent() {
         )}
         {currentPage === 'toll-tags' && (
           <PermissionGate permission="nav.toll_reconciliation" onNavigate={setCurrentPage}>
-            <TollReconciliation />
+            <TollReconciliation
+              focusVehicleId={tollReconFocus?.vehicleId}
+              focusDriverId={tollReconFocus?.driverId}
+              focusVehicleLabel={tollReconFocus?.vehicleLabel}
+            />
           </PermissionGate>
         )}
         {currentPage === 'tag-inventory' && (
           <PermissionGate permission="nav.toll_tag_inventory" onNavigate={setCurrentPage}>
-            <TagInventory onNavigate={setCurrentPage} />
+            <TagInventory onNavigate={handleNavigate} />
           </PermissionGate>
         )}
         {currentPage === 'toll-logs' && (

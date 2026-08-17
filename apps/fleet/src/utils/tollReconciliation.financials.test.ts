@@ -3,6 +3,7 @@ import {
   calculateTollFinancials,
   buildTollFinancialsContext,
   buildTripRefundAllocation,
+  sumTagUsageFinancials,
   VARIANCE_THRESHOLD,
 } from './tollReconciliation';
 import type { Claim, DisputeRefund, FinancialTransaction, Trip } from '../types/data';
@@ -157,6 +158,36 @@ describe('calculateTollFinancials enriched', () => {
     const alloc = buildTripRefundAllocation(tolls, new Map([['trip-a', tripWithRefund]]));
     expect(alloc.get('a')).toBe(60);
     expect(alloc.get('b')).toBe(40);
+  });
+
+  it('sumTagUsageFinancials does not double-count a two-plaza trip refund', () => {
+    const trip: Trip = {
+      id: 'trip-a',
+      platform: 'Uber',
+      date: '2026-06-30',
+      tollCharges: 370,
+    };
+    const east = {
+      ...toll285,
+      id: 'east',
+      amount: -370,
+      tripId: 'trip-a',
+      linkedTrip: trip,
+    } as FinancialTransaction & { linkedTrip: Trip };
+    const west = {
+      ...toll285,
+      id: 'west',
+      amount: -370,
+      tripId: 'trip-a',
+      linkedTrip: trip,
+    } as FinancialTransaction & { linkedTrip: Trip };
+    const naive =
+      calculateTollFinancials(east, trip).totalRecovered +
+      calculateTollFinancials(west, trip).totalRecovered;
+    expect(naive).toBe(740);
+    const pooled = sumTagUsageFinancials({ usageTolls: [east, west], claims: [] });
+    expect(pooled.totalRecovered).toBe(370);
+    expect(pooled.netLoss).toBe(370);
   });
 
   it('treats near-zero net loss as recovered within tolerance', () => {

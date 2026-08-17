@@ -1229,7 +1229,8 @@ async function loadAllTollTransactionsWithTrips(): Promise<{ tollTx: any[]; trip
 function tollLedgerToTxShape(entry: TollLedgerRecord): any {
   // Map status back to transaction status format
   let status = "Pending";
-  if (entry.status === "approved" || entry.status === "resolved") status = "Approved";
+  if (entry.status === "voided" || entry.metadata?.voided === true) status = "Voided";
+  else if (entry.status === "approved" || entry.status === "resolved") status = "Approved";
   else if (entry.status === "rejected") status = "Rejected";
   else if (entry.status === "reconciled") status = "Approved";
   else if (entry.status === "pending") status = "Pending";
@@ -2601,9 +2602,9 @@ app.get(`${BASE}/toll-logs`, async (c) => {
 
 type TollType = 'usage' | 'top_up' | 'refund' | 'adjustment' | 'balance_transfer';
 type TollPaymentMethod = 'tag_balance' | 'cash' | 'card' | 'fleet_account';
-type TollStatus = 'pending' | 'approved' | 'rejected' | 'reconciled' | 'resolved' | 'disputed';
+type TollStatus = 'pending' | 'approved' | 'rejected' | 'reconciled' | 'resolved' | 'disputed' | 'voided';
 type TollResolution = 'personal' | 'business' | 'write_off' | 'refunded';
-type TollAuditAction = 'created' | 'updated' | 'reconciled' | 'unreconciled' | 'approved' | 'rejected' | 'resolved' | 'imported' | 'edited' | 'deleted';
+type TollAuditAction = 'created' | 'updated' | 'reconciled' | 'unreconciled' | 'approved' | 'rejected' | 'resolved' | 'imported' | 'edited' | 'deleted' | 'voided';
 
 interface TollAuditEntry {
   action: TollAuditAction;
@@ -2739,25 +2740,19 @@ async function saveTollLedgerEntry(entry: TollLedgerRecord, c?: Context): Promis
     }
   }
 
-  // Phase D: LEDGER_LEGACY_WRITE_KV_TOLL_LEDGER=0 skips island KV; unified still posts.
-  const { isLedgerLegacyMoneyWriteEnabled } = await import("../_shared/unifiedLedger/flags.ts");
-  const writeLegacy = isLedgerLegacyMoneyWriteEnabled("kv_toll_ledger");
-  if (writeLegacy) {
-    await kv.set(`${TOLL_LEDGER_PREFIX}${entry.id}`, entry);
-    console.log(`[TollLedgerStorage] Saved toll_ledger:${entry.id}`);
-  } else {
-    console.log(`[TollLedgerStorage] legacy write off — unified-only toll_ledger:${entry.id}`);
-  }
+  // Always persist via kv.set — fleet cutover writes fleet.toll_ledger in afterUpsert
+  // even when legacy kv_store island writes are off (LEDGER_LEGACY_WRITE_KV_TOLL_LEDGER=0).
+  // Skipping kv.set previously returned import success while leaving Tag Inventory empty.
+  await kv.set(`${TOLL_LEDGER_PREFIX}${entry.id}`, entry);
+  console.log(`[TollLedgerStorage] Saved toll_ledger:${entry.id}`);
 
   // Business Finance P&L — usage/refund only (top_up deliberately excluded).
   // Failures must not block the operational write; variance flags catch lag.
-  if (writeLegacy) {
-    try {
-      const stubCtx = { get: () => undefined } as unknown as Context;
-      await appendCanonicalTollIfEligible(entry, c ?? stubCtx);
-    } catch (e) {
-      console.error("[TollLedgerStorage] canonical toll append failed:", e);
-    }
+  try {
+    const stubCtx = { get: () => undefined } as unknown as Context;
+    await appendCanonicalTollIfEligible(entry, c ?? stubCtx);
+  } catch (e) {
+    console.error("[TollLedgerStorage] canonical toll append failed:", e);
   }
 
   try {
@@ -3986,6 +3981,89 @@ app.post(`${BASE}/toll-ledger/:id/plaza`, async (c) => {
     return c.json({ error: e.message }, 500);
   }
 });
+
+/**
+ * Soft-void a toll ledger entry (zeros amount; keeps originalAmount in metadata).
+ * Reconciled / matched rows require force=true.
+ * Path also exposed at /make-server-37f42386/toll-ledger/:id/void (below).
+ */
+export async function voidTollLedgerEntryHandler(c: Context) {
+  try {
+    const id = c.req.param("id");
+    const body = await c.req.json().catch(() => ({}));
+    const reason = typeof body?.reason === "string" ? body.reason.trim() : "";
+    const force = body?.force === true;
+    if (!reason) {
+      return c.json({ error: "reason is required" }, 400);
+    }
+
+    const entry = await getTollLedgerEntryOrHydrate(id);
+    if (!entry) return c.json({ error: "Toll ledger entry not found" }, 404);
+
+    if (entry.status === "voided" || entry.metadata?.voided === true) {
+      return c.json({ success: true, data: entry, alreadyVoided: true });
+    }
+
+    const needsForce =
+      entry.isReconciled ||
+      entry.status === "reconciled" ||
+      entry.status === "resolved" ||
+      entry.matchStatus === "matched" ||
+      entry.workflowStage === "matched";
+
+    if (needsForce && !force) {
+      return c.json(
+        {
+          error: "Entry is reconciled or matched. Pass force=true to void.",
+          code: "REQUIRES_FORCE",
+        },
+        409,
+      );
+    }
+
+    const now = new Date().toISOString();
+    const rbacUser = c.get("rbacUser") as RbacUser | undefined;
+    const originalAmount = entry.amount;
+
+    const updated: TollLedgerRecord = {
+      ...entry,
+      status: "voided",
+      amount: 0,
+      updatedAt: now,
+      metadata: {
+        ...(entry.metadata || {}),
+        voided: true,
+        voidReason: reason,
+        voidedAt: now,
+        originalAmount,
+        forceVoid: force || undefined,
+      },
+      auditTrail: [
+        ...(entry.auditTrail || []),
+        {
+          action: "voided",
+          timestamp: now,
+          userId: rbacUser?.userId,
+          userName: rbacUser?.email || rbacUser?.userId,
+          changes: {
+            amount: { from: originalAmount, to: 0 },
+            status: { from: entry.status, to: "voided" },
+          },
+          metadata: { reason, force: force || false },
+        },
+      ],
+    };
+
+    await saveTollLedgerEntry(updated, c);
+    return c.json({ success: true, data: updated });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+}
+
+app.post(`${BASE}/toll-ledger/:id/void`, requirePermission('toll.manage'), voidTollLedgerEntryHandler);
+// Canonical product path (not under /toll-reconciliation prefix)
+app.post(`/make-server-37f42386/toll-ledger/:id/void`, requirePermission('toll.manage'), voidTollLedgerEntryHandler);
 
 /**
  * Repairs toll_ledger.date values by comparing against legacy transaction:${id} when present.
@@ -9337,6 +9415,7 @@ export {
   deleteTollLedgerEntry,
   transactionToTollLedgerServer,
   isTollCategory,
+  voidTollLedgerEntryHandler,
 };
 
 // ── Exported helpers for dispute-refund → trip/settlement sync ─────────────

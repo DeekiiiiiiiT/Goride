@@ -20,13 +20,9 @@ export function DriverAnalytics({
     loading,
     hasData,
     period,
-    preset,
     setPreset,
-    customStart,
-    customEnd,
     setCustomStart,
     setCustomEnd,
-    clearPeriod,
     search,
     setSearch,
     leaderboardMode,
@@ -109,13 +105,9 @@ export function DriverAnalytics({
 
       <DriverAnalyticsToolbar
         period={period}
-        preset={preset}
         onPreset={setPreset}
-        customStart={customStart}
-        customEnd={customEnd}
         onCustomStart={setCustomStart}
         onCustomEnd={setCustomEnd}
-        onClear={clearPeriod}
         tierFilter={tierFilter}
         onTierFilter={setTierFilter}
         tierOptions={tierOptions}

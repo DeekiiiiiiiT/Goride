@@ -349,6 +349,8 @@ export function applyFuelMatchLinks<T extends FuelEntryLike>(
     metadata: {
       ...drvMeta,
       awaitingCardStatement: false,
+      countsInFuelSpend: true,
+      countsInFuelVolume: Number(stmt.liters) > 0,
       jaaMatchedStatementId: stmt.id,
       jaaReceiptNumber: stmtMeta.jaaReceiptNumber,
       jaaResponse: stmtMeta.jaaResponse,

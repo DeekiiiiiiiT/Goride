@@ -347,6 +347,17 @@ export function AdminJaaGasCardsPage() {
     setImporting(true);
     const importId = crypto.randomUUID();
     try {
+      await fuelService.saveJaaCsvImport({
+        id: importId,
+        fileName: importPreview.fileName,
+        uploadedAt: new Date().toISOString(),
+        parsedRows: importPreview.parsedRows,
+        savedEntries: 0,
+        unmatchedCount: 0,
+        skippedDuplicates: importPreview.skippedDuplicates,
+        failedSaves: 0,
+        status: 'in_progress',
+      });
       let saved = 0;
       let failed = 0;
       let lastFail = '';

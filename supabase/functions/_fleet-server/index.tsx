@@ -170,6 +170,7 @@ import tollApp, {
   computeAndPersistTollMatchOnIngest,
   reconsiderTollsForNewTrips,
   invalidateStaleTollMatchesForTrip,
+  voidTollLedgerEntryHandler,
 } from "./toll_controller.tsx";
 import { resolveDriverFromFleetRecords } from "./driver_identity.ts";
 import disputeRefundApp from "./dispute_refund_controller.tsx";
@@ -485,7 +486,7 @@ async function writeTollToLedger(transaction: any, c: Context): Promise<void> {
     transaction.driverName = normalized.driverName;
   }
 
-  const tollRecord = transactionToTollLedgerServer(transaction);
+  const tollRecord = stampOrg(transactionToTollLedgerServer(transaction), c);
   await saveTollLedgerEntry(tollRecord, c);
   console.log(`[TollLedger] Saved toll_ledger:${tollRecord.id}`);
   // Canonical append is inside saveTollLedgerEntry (idempotent).
@@ -5231,6 +5232,8 @@ app.get("/make-server-37f42386/ledger/toll-ledger-backup", requireAuth(), requir
   }
 });
 
+app.post("/make-server-37f42386/toll-ledger/:id/void", requireAuth(), requirePermission('toll.manage'), voidTollLedgerEntryHandler);
+
 app.post("/make-server-37f42386/ledger/toll-ledger-repair-dates", requireAuth(), requirePermission('data.backfill'), async (c) => {
   try {
     const body = await c.req.json().catch(() => ({}));
@@ -7715,6 +7718,152 @@ app.delete("/make-server-37f42386/toll-tags/:id", requireAuth(), requirePermissi
     return c.json({ error: e.message }, 500);
   }
 });
+
+// Atomic assign: vehicle + tag updated together; rollback vehicle if tag write fails
+app.post(
+  "/make-server-37f42386/toll-tags/assign",
+  requireAuth(),
+  requirePermission('toll.manage'),
+  requireCatalogMatched({
+    label: "POST /toll-tags/assign",
+    vehicleId: (_c, body) => {
+      if (!body || typeof body !== "object") return null;
+      const id = (body as { vehicleId?: unknown }).vehicleId;
+      return typeof id === "string" && id.trim() ? id.trim() : null;
+    },
+  }),
+  async (c) => {
+    try {
+      const body = (c.get("__cachedRequestBody") as Record<string, unknown> | null) ?? (await c.req.json());
+      const tagId = typeof body?.tagId === "string" ? body.tagId.trim() : "";
+      const vehicleId = typeof body?.vehicleId === "string" ? body.vehicleId.trim() : "";
+      if (!tagId || !vehicleId) {
+        return c.json({ error: "tagId and vehicleId are required" }, 400);
+      }
+
+      const tag = await kv.get(`toll_tag:${tagId}`) as Record<string, unknown> | null;
+      if (!tag) return c.json({ error: "Toll tag not found" }, 404);
+      if (!belongsToOrg(tag, c)) return c.json({ error: "Toll tag not found" }, 404);
+
+      const vehicle = await kv.get(`vehicle:${vehicleId}`) as Record<string, unknown> | null;
+      if (!vehicle) return c.json({ error: "Vehicle not found" }, 404);
+      if (!belongsToOrg(vehicle, c)) return c.json({ error: "Vehicle not found" }, 404);
+
+      const previousVehicle = { ...vehicle };
+      const now = new Date().toISOString();
+      const plate = String(vehicle.licensePlate || vehicle.id || "");
+
+      const updatedVehicle = stampOrg({
+        ...vehicle,
+        tollTagId: tag.tagNumber,
+        tollTagUuid: tag.id,
+        tollTagProvider: tag.provider,
+      }, c);
+
+      await kv.set(`vehicle:${vehicleId}`, updatedVehicle);
+
+      const history = Array.isArray(tag.assignmentHistory) ? [...(tag.assignmentHistory as any[])] : [];
+      history.push({
+        vehicleId,
+        vehicleName: plate,
+        assignedAt: now,
+      });
+
+      const updatedTag = stampOrg({
+        ...tag,
+        assignedVehicleId: vehicleId,
+        assignedVehicleName: plate,
+        assignmentHistory: history,
+        updatedAt: now,
+      }, c);
+
+      try {
+        await kv.set(`toll_tag:${tagId}`, updatedTag);
+      } catch (tagErr) {
+        // Restore vehicle if tag write fails after vehicle was already updated
+        await kv.set(`vehicle:${vehicleId}`, stampOrg(previousVehicle, c));
+        throw tagErr;
+      }
+
+      return c.json({ success: true, data: updatedTag });
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  },
+);
+
+// Atomic unassign: clear vehicle then tag; restore vehicle if tag write fails
+app.post(
+  "/make-server-37f42386/toll-tags/unassign",
+  requireAuth(),
+  requirePermission('toll.manage'),
+  async (c) => {
+    try {
+      const body = await c.req.json().catch(() => ({}));
+      const tagId = typeof body?.tagId === "string" ? body.tagId.trim() : "";
+      if (!tagId) return c.json({ error: "tagId is required" }, 400);
+
+      const tag = await kv.get(`toll_tag:${tagId}`) as Record<string, unknown> | null;
+      if (!tag) return c.json({ error: "Toll tag not found" }, 404);
+      if (!belongsToOrg(tag, c)) return c.json({ error: "Toll tag not found" }, 404);
+
+      const now = new Date().toISOString();
+      let previousVehicle: Record<string, unknown> | null = null;
+      let vehicleId: string | null = null;
+
+      const assignedVehicleId = typeof tag.assignedVehicleId === "string" ? tag.assignedVehicleId : null;
+      if (assignedVehicleId) {
+        vehicleId = assignedVehicleId;
+        const vehicle = await kv.get(`vehicle:${assignedVehicleId}`) as Record<string, unknown> | null;
+        if (vehicle && belongsToOrg(vehicle, c)) {
+          previousVehicle = { ...vehicle };
+          const clearedVehicle = stampOrg({
+            ...vehicle,
+            tollTagId: null,
+            tollTagUuid: null,
+            tollTagProvider: null,
+          }, c);
+          // Drop null toll fields so clients treat as unassigned
+          delete (clearedVehicle as any).tollTagId;
+          delete (clearedVehicle as any).tollTagUuid;
+          delete (clearedVehicle as any).tollTagProvider;
+          await kv.set(`vehicle:${assignedVehicleId}`, clearedVehicle);
+        }
+      }
+
+      const history = Array.isArray(tag.assignmentHistory)
+        ? (tag.assignmentHistory as any[]).map((entry: any) =>
+            entry.vehicleId === tag.assignedVehicleId && !entry.unassignedAt
+              ? { ...entry, unassignedAt: now }
+              : entry
+          )
+        : [];
+
+      const updatedTag = stampOrg({
+        ...tag,
+        assignedVehicleId: undefined,
+        assignedVehicleName: undefined,
+        assignmentHistory: history,
+        updatedAt: now,
+      }, c);
+      delete (updatedTag as any).assignedVehicleId;
+      delete (updatedTag as any).assignedVehicleName;
+
+      try {
+        await kv.set(`toll_tag:${tagId}`, updatedTag);
+      } catch (tagErr) {
+        if (previousVehicle && vehicleId) {
+          await kv.set(`vehicle:${vehicleId}`, stampOrg(previousVehicle, c));
+        }
+        throw tagErr;
+      }
+
+      return c.json({ success: true, data: updatedTag });
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  },
+);
 
 // =========================================================================
 // Toll Plaza Endpoints (Phase 2 — Toll Database CRUD)

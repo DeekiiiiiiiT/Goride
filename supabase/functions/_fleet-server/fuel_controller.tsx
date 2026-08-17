@@ -423,14 +423,39 @@ app.get(`${BASE_PATH}/jaa-csv-imports`, requirePlatformStaff(), async (c) => {
       String(b.uploadedAt || b.createdAt || "").localeCompare(String(a.uploadedAt || a.createdAt || "")),
     );
 
-    // Surface orphan JAA statement data (pre-tracking uploads)
+    // Surface orphan JAA statement data (pre-tracking uploads + interrupted submits)
     const entries = (await kv.getByPrefix("fuel_entry:")) || [];
     const unmatched = (await kv.getByPrefix("jaa_unmatched:")) || [];
+    const knownImportIds = new Set(imports.map((i: any) => String(i.id || "")));
     const orphanEntries = entries.filter(
       (e: any) =>
         e?.metadata?.importSource === "jaa_raw" && !e?.metadata?.jaaImportId,
     ).length;
     const orphanUnmatched = unmatched.filter((r: any) => !r?.importId).length;
+
+    const danglingById = new Map<string, { count: number; uploadedAt?: string }>();
+    for (const e of entries) {
+      if (e?.metadata?.importSource !== "jaa_raw") continue;
+      const iid = String(e?.metadata?.jaaImportId || "");
+      if (!iid || knownImportIds.has(iid)) continue;
+      const prev = danglingById.get(iid) || { count: 0, uploadedAt: e.createdAt || e.date };
+      prev.count += 1;
+      danglingById.set(iid, prev);
+    }
+    for (const [id, info] of danglingById) {
+      imports.push({
+        id,
+        fileName: "Unrecorded upload (import interrupted)",
+        uploadedAt: info.uploadedAt,
+        savedEntries: info.count,
+        unmatchedCount: 0,
+        status: "orphaned",
+        summary: "Statement rows saved before the upload history record was written.",
+      });
+    }
+    imports.sort((a: any, b: any) =>
+      String(b.uploadedAt || b.createdAt || "").localeCompare(String(a.uploadedAt || a.createdAt || "")),
+    );
 
     return c.json({
       imports,
@@ -498,15 +523,16 @@ app.delete(`${BASE_PATH}/jaa-csv-imports/:id`, requirePlatformStaff(), async (c)
       return c.json({ error: "Use /jaa-csv-imports/untracked" }, 400);
     }
     const existing = await kv.get(`jaa_csv_import:${id}`);
-    if (!existing) return c.json({ error: "Import not found" }, 404);
-
     const { count: entriesDeleted } = await purgeFuelEntriesWhere(
       (e) => String(e?.metadata?.jaaImportId || "") === id,
     );
     const unmatchedDeleted = await purgeUnmatchedWhere(
       (r) => String(r?.importId || "") === id,
     );
-    await kv.del(`jaa_csv_import:${id}`);
+    if (existing) await kv.del(`jaa_csv_import:${id}`);
+    if (!existing && entriesDeleted === 0 && unmatchedDeleted === 0) {
+      return c.json({ error: "Import not found" }, 404);
+    }
 
     return c.json({
       success: true,

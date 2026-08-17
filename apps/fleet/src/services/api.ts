@@ -1925,6 +1925,55 @@ export const api = {
     return response.json();
   },
 
+  async assignTollTag(tagId: string, vehicleId: string) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/toll-tags/assign`, {
+      method: 'POST',
+      headers: await requireAuthHeaders(),
+      body: JSON.stringify({ tagId, vehicleId }),
+    });
+    if (!response.ok) {
+      await throwIfCatalogGateBlocked(response, "Cannot assign toll tag — vehicle is pending catalog approval");
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to assign toll tag");
+    }
+    return response.json();
+  },
+
+  async unassignTollTag(tagId: string) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/toll-tags/unassign`, {
+      method: 'POST',
+      headers: await requireAuthHeaders(),
+      body: JSON.stringify({ tagId }),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to unassign toll tag");
+    }
+    return response.json();
+  },
+
+  async voidTollLedgerEntry(id: string, reason: string, force?: boolean) {
+    const response = await fetchWithRetry(
+      `${API_ENDPOINTS.financial}/toll-ledger/${encodeURIComponent(id)}/void`,
+      {
+        method: 'POST',
+        headers: await requireAuthHeaders(),
+        body: JSON.stringify({ reason, force: force === true }),
+      },
+    );
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      const error = new Error(err.error || "Failed to void toll ledger entry") as Error & {
+        status?: number;
+        code?: string;
+      };
+      error.status = response.status;
+      error.code = err.code;
+      throw error;
+    }
+    return response.json();
+  },
+
   // -----------------------------------------------------------------------
   // Toll Plaza CRUD (Phase 3 — Toll Database)
   // -----------------------------------------------------------------------
@@ -2188,6 +2237,33 @@ export const api = {
         headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch check-ins");
+    return response.json();
+  },
+
+  async saveCheckIn(payload: {
+    id: string;
+    driverId: string;
+    vehicleId: string;
+    timestamp: string;
+    odometer: number;
+    weekStart: string;
+    method?: string;
+    reviewStatus?: string;
+    verified?: boolean;
+    isVerified?: boolean;
+    manualReadingReason?: string;
+    source?: string;
+    managerNotes?: string;
+  }) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/check-ins`, {
+      method: 'POST',
+      headers: await requireAuthHeaders(),
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to save check-in');
+    }
     return response.json();
   },
 

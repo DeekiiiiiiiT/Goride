@@ -399,6 +399,58 @@ export function buildTripRefundAllocation(
     return allocateTripRefundAcrossTolls(reconciledTolls, tripRefundById);
 }
 
+/**
+ * Tag Inventory Recovered / Net Loss — same pooling + dispute/unlinked ctx as Reconciliation.
+ * Pass every sibling tag-usage row in `usageTolls` so multi-plaza trips do not double-count.
+ */
+export function sumTagUsageFinancials(input: {
+    usageTolls: FinancialTransaction[];
+    claims: Claim[];
+    disputeRefunds?: DisputeRefund[];
+    /** Extra trips for unlinkedSourceTripId lookup (linkedTrip embeds usually cover match trips). */
+    trips?: Trip[];
+}): { totalRecovered: number; netLoss: number; allocation: Map<string, number> } {
+    const usageTolls = input.usageTolls || [];
+    const claims = input.claims || [];
+    const disputeRefunds = input.disputeRefunds || [];
+
+    const tripById = new Map<string, Trip>();
+    for (const t of input.trips || []) {
+        if (t?.id) tripById.set(t.id, t);
+    }
+    for (const tx of usageTolls) {
+        const linked = (tx as { linkedTrip?: Trip }).linkedTrip;
+        if (linked?.id) tripById.set(linked.id, linked);
+    }
+
+    const spentByTripId = spentUnlinkedCreditsByTripId({
+        claims,
+        disputeRefunds,
+        tolls: usageTolls,
+    });
+    const allocation = buildTripRefundAllocation(usageTolls, tripById, spentByTripId);
+    const tripsArr = [...tripById.values()];
+
+    let totalRecovered = 0;
+    let netLoss = 0;
+    for (const tx of usageTolls) {
+        const trip =
+            (tx.tripId ? tripById.get(tx.tripId) : undefined) ||
+            (tx as { linkedTrip?: Trip }).linkedTrip ||
+            undefined;
+        const claim = claims.find((c) => c.transactionId === tx.id);
+        const ctx = buildTollFinancialsContext(tx, trip, claim, tripsArr, disputeRefunds, allocation);
+        const financials = calculateTollFinancials(tx, trip, claim, ctx);
+        totalRecovered += financials.totalRecovered;
+        netLoss += financials.netLoss;
+    }
+    return {
+        totalRecovered: Math.round(totalRecovered * 100) / 100,
+        netLoss: Math.round(netLoss * 100) / 100,
+        allocation,
+    };
+}
+
 export function calculateTollFinancials(
     transaction: FinancialTransaction,
     trip?: Trip,

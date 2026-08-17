@@ -14,7 +14,11 @@ import { toast } from "sonner";
 import { FleetBusyProvider, useFleetBusy } from "../components/shared/FleetBusyLock";
 import { useLockedDialog } from "../components/shared/useLockedDialog";
 
-export function TagInventory({ onNavigate }: { onNavigate?: (page: string) => void }) {
+export function TagInventory({
+  onNavigate,
+}: {
+  onNavigate?: (page: string, opts?: { vehicleId?: string; driverId?: string; vehicleLabel?: string }) => void;
+}) {
   return (
     <FleetBusyProvider>
       <TagInventoryInner onNavigate={onNavigate} />
@@ -22,7 +26,11 @@ export function TagInventory({ onNavigate }: { onNavigate?: (page: string) => vo
   );
 }
 
-function TagInventoryInner({ onNavigate }: { onNavigate?: (page: string) => void }) {
+function TagInventoryInner({
+  onNavigate,
+}: {
+  onNavigate?: (page: string, opts?: { vehicleId?: string; driverId?: string; vehicleLabel?: string }) => void;
+}) {
   const { runExclusive } = useFleetBusy();
   const [tags, setTags] = useState<TollTag[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -139,41 +147,14 @@ function TagInventoryInner({ onNavigate }: { onNavigate?: (page: string) => void
     if (!window.confirm(`Are you sure you want to unassign this tag from ${tag.assignedVehicleName}?`)) return;
 
     try {
-      if (tag.assignedVehicleId) {
-        const vehicles = await api.getVehicles();
-        const vehicle = vehicles.find((v: Vehicle) => v.id === tag.assignedVehicleId);
-        
-        if (vehicle) {
-            const updatedVehicle = {
-                ...vehicle,
-                tollTagId: undefined,
-                tollTagUuid: undefined,
-                tollTagProvider: undefined
-            };
-            await api.saveVehicle(updatedVehicle);
-        }
-      }
-
-      const updatedTag = {
-        ...tag,
-        assignedVehicleId: undefined,
-        assignedVehicleName: undefined,
-        // Phase 8: Close current assignment in history
-        assignmentHistory: (tag.assignmentHistory || []).map((entry: any) =>
-          entry.vehicleId === tag.assignedVehicleId && !entry.unassignedAt
-            ? { ...entry, unassignedAt: new Date().toISOString() }
-            : entry
-        ),
-        updatedAt: new Date().toISOString(),
-      };
-      await api.saveTollTag(updatedTag);
-
+      const res = await api.unassignTollTag(tag.id);
+      const updatedTag = res?.data || { ...tag, assignedVehicleId: undefined, assignedVehicleName: undefined };
       toast.success("Tag unassigned successfully");
       fetchTags();
       if (selectedTag?.id === tag.id) setSelectedTag(updatedTag);
     } catch (error) {
       console.error("Failed to unassign tag:", error);
-      toast.error("Failed to unassign tag");
+      toast.error(error instanceof Error ? error.message : "Failed to unassign tag");
     }
   };
 
@@ -189,8 +170,27 @@ function TagInventoryInner({ onNavigate }: { onNavigate?: (page: string) => void
               <TollTagDetail 
                   tag={selectedTag} 
                   onBack={() => setSelectedTag(null)}
-                  onNavigateToReconciliation={onNavigate ? (_vehicleId: string) => {
-                      onNavigate('toll-tags');
+                  onNavigateToReconciliation={onNavigate ? async (vehicleId: string) => {
+                      try {
+                        const vehicles = await api.getVehicles();
+                        const vehicle = vehicles.find((v: Vehicle) => v.id === vehicleId);
+                        const driverId =
+                          (vehicle as any)?.currentDriverId ||
+                          (vehicle as any)?.assignedDriverId ||
+                          (vehicle as any)?.driverId ||
+                          undefined;
+                        const vehicleLabel =
+                          vehicle?.licensePlate ||
+                          selectedTag.assignedVehicleName ||
+                          vehicleId;
+                        onNavigate('toll-tags', { vehicleId, driverId, vehicleLabel });
+                      } catch (error) {
+                        console.error("Failed to resolve vehicle for reconciliation:", error);
+                        onNavigate('toll-tags', {
+                          vehicleId,
+                          vehicleLabel: selectedTag.assignedVehicleName || vehicleId,
+                        });
+                      }
                   } : undefined}
               />
           </div>

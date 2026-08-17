@@ -4,6 +4,7 @@ import {
   isTagLedgerTx,
   isTagUsage,
   isTagCredit,
+  isVoidedTx,
   type TagTxLike,
 } from "./tollTagLedger";
 
@@ -18,6 +19,13 @@ const receiptToll: TagTxLike = { category: "Toll Usage", paymentMethod: "Tag Bal
 const legacyCashToll: TagTxLike = { category: "Tolls", amount: -380 };
 const legacyCashTollSingular: TagTxLike = { category: "Toll", amount: -380 };
 const legacyTopUp: TagTxLike = { category: "Toll Top-up", amount: 3000 };
+const voidedUsage: TagTxLike = {
+  category: "Toll Usage",
+  paymentMethod: "Tag Balance",
+  amount: 0,
+  status: "Voided",
+  metadata: { voided: true, originalAmount: -380 },
+};
 
 describe("isOffTagToll", () => {
   it("keeps genuine tag-ledger rows on-tag", () => {
@@ -57,6 +65,15 @@ describe("isTagLedgerTx", () => {
   });
 });
 
+describe("isVoidedTx", () => {
+  it("detects voided status and metadata.voided", () => {
+    expect(isVoidedTx(voidedUsage)).toBe(true);
+    expect(isVoidedTx({ status: "voided", amount: 0 })).toBe(true);
+    expect(isVoidedTx({ metadata: { voided: true }, amount: 0 })).toBe(true);
+    expect(isVoidedTx(ledgerTagUsage)).toBe(false);
+  });
+});
+
 describe("isTagUsage / isTagCredit", () => {
   it("classifies tag debits as usage", () => {
     expect(isTagUsage(ledgerTagUsage)).toBe(true);
@@ -76,6 +93,11 @@ describe("isTagUsage / isTagCredit", () => {
       expect(isTagCredit(tx)).toBe(false);
     }
   });
+
+  it("excludes voided rows from usage and credit", () => {
+    expect(isTagUsage(voidedUsage)).toBe(false);
+    expect(isTagCredit({ ...ledgerTopUp, status: "Voided", metadata: { voided: true }, amount: 0 })).toBe(false);
+  });
 });
 
 describe("tag balance derivation (signed sum of tag-ledger rows)", () => {
@@ -83,6 +105,14 @@ describe("tag balance derivation (signed sum of tag-ledger rows)", () => {
     const rows = [ledgerTopUp, ledgerTagUsage, ledgerCashToll, legacyCashToll];
     const balance = rows.filter(isTagLedgerTx).reduce((s, r) => s + (r.amount ?? 0), 0);
     // 5000 top-up − 380 tag usage; the two cash tolls are excluded.
+    expect(balance).toBe(4620);
+  });
+
+  it("excludes voided rows from the balance sum", () => {
+    const rows = [ledgerTopUp, ledgerTagUsage, voidedUsage];
+    const balance = rows
+      .filter((r) => isTagLedgerTx(r) && !isVoidedTx(r))
+      .reduce((s, r) => s + (r.amount ?? 0), 0);
     expect(balance).toBe(4620);
   });
 });

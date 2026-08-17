@@ -6,6 +6,7 @@ import { Label } from "../ui/label";
 import { Loader2 } from "lucide-react";
 import { Vehicle, TollTag } from "../../types/vehicle";
 import { api } from "../../services/api";
+import { toast } from "sonner";
 
 interface AssignTagModalProps {
   isOpen: boolean;
@@ -30,8 +31,6 @@ export function AssignTagModal({ isOpen, onClose, tag, onAssign }: AssignTagModa
     setIsLoading(true);
     try {
       const allVehicles = await api.getVehicles();
-      // Filter for active vehicles that don't have a toll tag assigned (or allow overwriting?)
-      // For now, let's just show all active vehicles, maybe mark ones that already have a tag
       const activeVehicles = allVehicles.filter((v: Vehicle) => v.status === 'Active');
       setVehicles(activeVehicles);
     } catch (error) {
@@ -46,40 +45,12 @@ export function AssignTagModal({ isOpen, onClose, tag, onAssign }: AssignTagModa
     
     setIsSaving(true);
     try {
-      const vehicle = vehicles.find(v => v.id === selectedVehicleId);
-      if (!vehicle) return;
-
-      // 1. Update Vehicle
-      const updatedVehicle = {
-        ...vehicle,
-        tollTagId: tag.tagNumber,
-        tollTagUuid: tag.id,
-        tollTagProvider: tag.provider
-      };
-      await api.saveVehicle(updatedVehicle);
-
-      // 2. Update Toll Tag
-      const updatedTag = {
-        ...tag,
-        assignedVehicleId: vehicle.id,
-        assignedVehicleName: vehicle.licensePlate,
-        // Phase 8: Record assignment in history
-        assignmentHistory: [
-          ...(tag.assignmentHistory || []),
-          {
-            vehicleId: vehicle.id,
-            vehicleName: vehicle.licensePlate,
-            assignedAt: new Date().toISOString(),
-          },
-        ],
-        updatedAt: new Date().toISOString(),
-      };
-      await api.saveTollTag(updatedTag);
-
+      await api.assignTollTag(tag.id, selectedVehicleId);
       onAssign();
       onClose();
     } catch (error) {
       console.error("Failed to assign tag", error);
+      toast.error(error instanceof Error ? error.message : "Failed to assign tag");
     } finally {
       setIsSaving(false);
     }

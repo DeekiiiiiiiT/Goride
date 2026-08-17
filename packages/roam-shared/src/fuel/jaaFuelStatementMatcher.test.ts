@@ -191,6 +191,7 @@ describe('matchJaaStatementToDriverLogs', () => {
     expect(linked.driver?.amount).toBe(100);
     expect(linked.driver?.liters).toBe(10);
     expect(linked.driver?.metadata?.awaitingCardStatement).toBe(false);
+    expect(linked.driver?.metadata?.countsInFuelSpend).toBe(true);
     expect(linked.driver?.metadata?.jaaReceiptNumber).toBe('R1');
   });
 

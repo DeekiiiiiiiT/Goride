@@ -89,6 +89,7 @@ import { Vehicle, VehicleDocument } from '../../types/vehicle';
 import { Trip } from '../../types/data';
 import { api } from '../../services/api';
 import { odometerService } from '../../services/odometerService';
+import { dateWeekKey } from '../../utils/fleetMondayWeekKey';
 import { ImageWithFallback } from '../figma/ImageWithFallback';
 import { format, subDays, isSameDay, getHours, differenceInDays, addDays, startOfDay, endOfDay, isWithinInterval, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from 'date-fns';
 import { DateRange } from "react-day-picker";
@@ -417,7 +418,12 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
   // Odometer Update Form
   const [newOdometerValue, setNewOdometerValue] = useState('');
   const [newOdometerDate, setNewOdometerDate] = useState(new Date().toISOString().split('T')[0]);
+  const [newOdometerTime, setNewOdometerTime] = useState(() => {
+    const n = new Date();
+    return `${String(n.getHours()).padStart(2, '0')}:${String(n.getMinutes()).padStart(2, '0')}`;
+  });
   const [newOdometerNotes, setNewOdometerNotes] = useState('');
+  const [odometerEntryKind, setOdometerEntryKind] = useState<'manual' | 'checkin'>('manual');
   const [isUpdatingOdometer, setIsUpdatingOdometer] = useState(false);
 
   const [isUploadOpen, setIsUploadOpen] = useState(false);
@@ -889,30 +895,76 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
           toast.error("Please enter a valid reading and date");
           return;
       }
-      
+      const km = parseFloat(newOdometerValue);
+      if (!Number.isFinite(km) || km <= 0) {
+          toast.error("Enter a valid odometer reading");
+          return;
+      }
+
+      if (odometerEntryKind === 'checkin') {
+          if (!vehicle.currentDriverId) {
+              toast.error("Assign a driver to this vehicle before logging a check-in");
+              return;
+          }
+          if (!newOdometerNotes.trim()) {
+              toast.error("Add a note — required for a manager check-in");
+              return;
+          }
+      }
+
+      const recordedAt = (() => {
+          const [y, mo, d] = newOdometerDate.split('-').map(Number);
+          const [hh, mm] = (newOdometerTime || '12:00').split(':').map(Number);
+          return new Date(y, mo - 1, d, hh || 0, mm || 0, 0).toISOString();
+      })();
+
       setIsUpdatingOdometer(true);
       try {
-          await odometerService.addReading({
-              vehicleId: vehicle.id || vehicle.licensePlate,
-              value: parseFloat(newOdometerValue),
-              date: newOdometerDate,
-              source: 'Manual Update',
-              type: 'Hard',
-              isVerified: true,
-              isAnchorPoint: true,
-              notes: newOdometerNotes
-          });
-          
-          toast.success("Odometer updated successfully");
+          if (odometerEntryKind === 'checkin') {
+              const weekStart = dateWeekKey(newOdometerDate, 'America/Jamaica');
+              if (!weekStart) {
+                  toast.error("Pick a valid date");
+                  return;
+              }
+              const reason = newOdometerNotes.trim();
+              await api.saveCheckIn({
+                  id: crypto.randomUUID(),
+                  driverId: vehicle.currentDriverId as string,
+                  vehicleId: vehicle.id || vehicle.licensePlate,
+                  timestamp: recordedAt,
+                  odometer: km,
+                  weekStart,
+                  method: 'manual_override',
+                  reviewStatus: 'approved',
+                  verified: true,
+                  isVerified: true,
+                  manualReadingReason: reason,
+                  managerNotes: reason,
+                  source: 'Weekly Check-in',
+              });
+              toast.success("Check-in logged");
+          } else {
+              await odometerService.addReading({
+                  vehicleId: vehicle.id || vehicle.licensePlate,
+                  value: km,
+                  date: recordedAt,
+                  source: 'Manual Update',
+                  type: 'Hard',
+                  isVerified: true,
+                  isAnchorPoint: true,
+                  notes: newOdometerNotes
+              });
+              toast.success("Odometer updated successfully");
+          }
+
           setOdometerRefreshTrigger(prev => prev + 1);
           setIsUpdateOdometerOpen(false);
-          
-          // Reset form
           setNewOdometerValue('');
           setNewOdometerNotes('');
+          setOdometerEntryKind('manual');
       } catch (error) {
           console.error(error);
-          toast.error("Failed to update odometer");
+          toast.error(error instanceof Error ? error.message : "Failed to update odometer");
       } finally {
           setIsUpdatingOdometer(false);
       }
@@ -1907,10 +1959,29 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
       <Dialog open={isUpdateOdometerOpen} onOpenChange={setIsUpdateOdometerOpen}>
           <DialogContent>
               <DialogHeader>
-                  <DialogTitle2>Update Odometer</DialogTitle2>
-                  <DialogDescription>Record a new odometer reading for this vehicle.</DialogDescription>
+                  <DialogTitle2>{odometerEntryKind === 'checkin' ? 'Log check-in' : 'Update Odometer'}</DialogTitle2>
+                  <DialogDescription>
+                    {odometerEntryKind === 'checkin'
+                      ? 'Record a weekly check-in for the driver assigned to this vehicle.'
+                      : 'Record a new odometer reading for this vehicle.'}
+                  </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                      <Label>Type</Label>
+                      <Select
+                        value={odometerEntryKind}
+                        onValueChange={(v) => setOdometerEntryKind(v as 'manual' | 'checkin')}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="manual">Manual reading</SelectItem>
+                          <SelectItem value="checkin">Weekly check-in</SelectItem>
+                        </SelectContent>
+                      </Select>
+                  </div>
                   <div className="space-y-2">
                       <Label>New Reading (km)</Label>
                       <Input 
@@ -1920,18 +1991,28 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
                           onChange={(e) => setNewOdometerValue(e.target.value)}
                       />
                   </div>
-                  <div className="space-y-2">
-                      <Label>Date</Label>
-                      <Input 
-                          type="date" 
-                          value={newOdometerDate}
-                          onChange={(e) => setNewOdometerDate(e.target.value)}
-                      />
+                  <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                          <Label>Date</Label>
+                          <Input 
+                              type="date" 
+                              value={newOdometerDate}
+                              onChange={(e) => setNewOdometerDate(e.target.value)}
+                          />
+                      </div>
+                      <div className="space-y-2">
+                          <Label>Time</Label>
+                          <Input 
+                              type="time" 
+                              value={newOdometerTime}
+                              onChange={(e) => setNewOdometerTime(e.target.value)}
+                          />
+                      </div>
                   </div>
                   <div className="space-y-2">
-                      <Label>Notes (Optional)</Label>
+                      <Label>{odometerEntryKind === 'checkin' ? 'Notes (required)' : 'Notes (Optional)'}</Label>
                       <Textarea 
-                          placeholder="Routine check, service, etc."
+                          placeholder={odometerEntryKind === 'checkin' ? 'Why this check-in is being logged' : 'Routine check, service, etc.'}
                           value={newOdometerNotes}
                           onChange={(e) => setNewOdometerNotes(e.target.value)}
                       />
@@ -1941,7 +2022,7 @@ export function VehicleDetail({ vehicle, trips, onBack, onAssignDriver, onUpdate
                   <Button variant="outline" onClick={() => setIsUpdateOdometerOpen(false)}>Cancel</Button>
                   <Button onClick={handleUpdateOdometer} disabled={isUpdatingOdometer}>
                       {isUpdatingOdometer && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                      Update Reading
+                      {odometerEntryKind === 'checkin' ? 'Save check-in' : 'Update Reading'}
                   </Button>
               </div>
           </DialogContent>

@@ -27,6 +27,8 @@ export interface TagTxLike {
   amount?: number | null;
   receiptUrl?: string | null;
   type?: string | null;
+  status?: string | null;
+  metadata?: { voided?: boolean; [key: string]: unknown } | null;
 }
 
 const normPm = (tx: TagTxLike): string => (tx.paymentMethod || '').toLowerCase();
@@ -58,12 +60,20 @@ export function isTagLedgerTx(tx: TagTxLike): boolean {
   return !isOffTagToll(tx);
 }
 
+/** Soft-voided ledger rows — keep visible but exclude from balance / recovery math. */
+export function isVoidedTx(tx: TagTxLike): boolean {
+  const status = (tx.status || '').toLowerCase();
+  if (status === 'voided') return true;
+  if (tx.metadata?.voided === true) return true;
+  return false;
+}
+
 /** Tag-balance deduction (a transponder read at a gantry). */
 export function isTagUsage(tx: TagTxLike): boolean {
-  return isTagLedgerTx(tx) && (tx.amount ?? 0) < 0;
+  return isTagLedgerTx(tx) && !isVoidedTx(tx) && (tx.amount ?? 0) < 0;
 }
 
 /** Credit to the tag balance (top-up or refund). */
 export function isTagCredit(tx: TagTxLike): boolean {
-  return isTagLedgerTx(tx) && (tx.amount ?? 0) > 0;
+  return isTagLedgerTx(tx) && !isVoidedTx(tx) && (tx.amount ?? 0) > 0;
 }
