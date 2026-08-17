@@ -1,18 +1,19 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import {
   ChevronDown,
   ChevronRight,
-  FileUp,
   History,
   Loader2,
   Map,
+  MapPin,
   Maximize2,
+  Minimize2,
   Plus,
   Pencil,
   Trash2,
   Scissors,
-  Upload,
+  Download,
   X,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -47,6 +48,17 @@ import {
 import type { AdminOutletContext } from '../../DashAdminPortal';
 import { ZoneMapEditor, type ZoneMapUiMode } from './ZoneMapEditor';
 import { detectCoverageConflicts } from './coverageGeo';
+import { ManageZonesOverlay } from './ManageZonesOverlay';
+import { ImportTownBorderOverlay } from './ImportTownBorderOverlay';
+import {
+  downloadTextFile,
+  parsePolygonCsv,
+  polygonFromGeoJson,
+  polygonToCsv,
+  polygonToGeoJson,
+  slugFilename,
+  zonesToCsv,
+} from './coverageIo';
 
 function normalizeZone(z: DashZoneRow): DashZoneRow {
   const poly = Array.isArray(z.polygon) ? z.polygon : [];
@@ -91,9 +103,9 @@ function primaryDeliveryArea(m: DashMarketRow): DashZoneRow | null {
 }
 
 type EditorTarget =
-  | { mode: 'cutout'; marketId: string }
+  | { mode: 'cutout'; marketId: string; openCoordinates?: boolean }
   | { mode: 'radius'; marketId: string }
-  | { mode: 'adjust'; marketId: string; zone: DashZoneRow };
+  | { mode: 'adjust'; marketId: string; zone: DashZoneRow; openCoordinates?: boolean };
 
 type TownCardProps = {
   town: DashMarketRow;
@@ -276,8 +288,11 @@ type MapOverlayProps = {
   onPublish: () => void;
   onRestore: (versionId: string) => void;
   onImportGeoJson: (text: string, promote: boolean) => void;
+  onImportCsv: (text: string, promote: boolean) => void;
   onRefreshReadiness: () => void;
-  onRequestEditFoundation: () => void;
+  onRequestEditFoundationOnMap: () => void;
+  onRequestEditFoundationCoordinates: () => void;
+  onRemoveZone: (zone: DashZoneRow) => void;
 };
 
 function TownMapOverlay({
@@ -296,15 +311,25 @@ function TownMapOverlay({
   onPublish,
   onRestore,
   onImportGeoJson,
+  onImportCsv,
   onRefreshReadiness,
-  onRequestEditFoundation,
+  onRequestEditFoundationOnMap,
+  onRequestEditFoundationCoordinates,
+  onRemoveZone,
 }: MapOverlayProps) {
   const zones = town.zones ?? [];
+  const excludes = zones.filter((z) => z.kind === 'exclude');
+  const delivery = primaryDeliveryArea(town);
   const [showHistory, setShowHistory] = useState(false);
   const [importText, setImportText] = useState('');
   const [showImport, setShowImport] = useState(false);
+  const [importKind, setImportKind] = useState<'geojson' | 'csv'>('geojson');
   const [promoteTemplate, setPromoteTemplate] = useState(true);
-  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showManageZones, setShowManageZones] = useState(false);
+  const [showIoMenu, setShowIoMenu] = useState(false);
+  /** Near-fullscreen map workspace for tracing borders. */
+  const [mapExpanded, setMapExpanded] = useState(false);
+  const ioMenuRef = useRef<HTMLDivElement>(null);
 
   const editingThis =
     editor &&
@@ -315,20 +340,24 @@ function TownMapOverlay({
   let uiMode: ZoneMapUiMode = 'view';
   let initialPolygon: DashZoneVertex[] = [];
   let editingZoneId: string | null = null;
+  let autoOpenCoordinates = false;
   if (editingThis && editor) {
     if (editor.mode === 'radius') {
       uiMode = 'radius';
     } else if (editor.mode === 'cutout') {
       uiMode = 'cutout';
       initialPolygon = [];
+      autoOpenCoordinates = editor.openCoordinates === true;
     } else if (editor.zone.kind === 'exclude') {
       uiMode = 'cutout';
       initialPolygon = editor.zone.polygon;
       editingZoneId = editor.zone.id;
+      autoOpenCoordinates = editor.openCoordinates === true;
     } else {
       uiMode = 'adjust';
       initialPolygon = editor.zone.polygon;
       editingZoneId = editor.zone.id;
+      autoOpenCoordinates = editor.openCoordinates === true;
     }
   }
 
@@ -337,10 +366,12 @@ function TownMapOverlay({
     name: z.name,
     polygon: z.polygon,
   }));
-  const excludes = (town.zones ?? [])
-    .filter((z) => z.kind === 'exclude')
-    .map((z) => ({ id: z.id, name: z.name, polygon: z.polygon }));
-  const conflicts = detectCoverageConflicts(includes, excludes);
+  const excludeShapes = excludes.map((z) => ({
+    id: z.id,
+    name: z.name,
+    polygon: z.polygon,
+  }));
+  const conflicts = detectCoverageConflicts(includes, excludeShapes);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -354,24 +385,107 @@ function TownMapOverlay({
     onRefreshReadiness();
   }, [town.id, town.draft_dirty, zones.length, onRefreshReadiness]);
 
+  useEffect(() => {
+    if (!showIoMenu) return;
+    const onDoc = (e: MouseEvent) => {
+      if (ioMenuRef.current && !ioMenuRef.current.contains(e.target as Node)) {
+        setShowIoMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [showIoMenu]);
+
+  const exportTownGeoJson = () => {
+    if (!delivery || delivery.polygon.length < 3) {
+      toast.error('No town border to export');
+      return;
+    }
+    downloadTextFile(
+      slugFilename(town.name, 'geojson'),
+      polygonToGeoJson(delivery.polygon, town.name),
+      'application/geo+json',
+    );
+    toast.success('Town border GeoJSON downloaded');
+  };
+
+  const exportTownCsv = () => {
+    if (!delivery || delivery.polygon.length < 3) {
+      toast.error('No town border to export');
+      return;
+    }
+    downloadTextFile(
+      slugFilename(town.name, 'csv'),
+      polygonToCsv(delivery.polygon),
+      'text/csv;charset=utf-8',
+    );
+    toast.success('Town border CSV downloaded');
+  };
+
+  const exportAllZonesCsv = () => {
+    const rows = zones.map((z) => ({
+      kind: z.kind,
+      name: z.name,
+      id: z.id,
+      source: z.source,
+      radius_m: z.radius_m,
+      center_lat: z.center_lat,
+      center_lng: z.center_lng,
+      polygon: z.polygon,
+    }));
+    if (rows.every((r) => r.polygon.length < 1)) {
+      toast.error('Nothing to export');
+      return;
+    }
+    downloadTextFile(
+      slugFilename(`${town.name}-zones`, 'csv'),
+      zonesToCsv(rows),
+      'text/csv;charset=utf-8',
+    );
+    toast.success('All zones CSV downloaded');
+  };
+
+  // Jump to a big map workspace when tracing / cutting — easier than a tiny inset.
+  useEffect(() => {
+    if (uiMode !== 'view') setMapExpanded(true);
+  }, [uiMode]);
+
+  const viewportH = typeof window !== 'undefined' ? window.innerHeight : 800;
+  const mapHeight = mapExpanded
+    ? Math.max(420, viewportH - (uiMode === 'view' ? 120 : 168))
+    : Math.min(560, viewportH - 280);
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6">
-      <button
-        type="button"
-        className="absolute inset-0 bg-black/75"
-        aria-label="Close map"
-        onClick={onClose}
-      />
+    <div
+      className={`fixed inset-0 z-50 flex items-center justify-center ${
+        mapExpanded ? 'p-0' : 'p-3 sm:p-6'
+      }`}
+    >
+      {!mapExpanded && (
+        <button
+          type="button"
+          className="absolute inset-0 bg-black/75"
+          aria-label="Close map"
+          onClick={onClose}
+        />
+      )}
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="town-map-title"
-        className="relative z-10 flex w-full max-w-6xl max-h-[94vh] flex-col rounded-xl border border-slate-700 bg-slate-950 shadow-2xl overflow-hidden"
+        className={`relative z-10 flex w-full flex-col border border-slate-700 bg-slate-950 shadow-2xl overflow-hidden ${
+          mapExpanded
+            ? 'max-w-none h-[100dvh] max-h-[100dvh] rounded-none'
+            : 'max-w-6xl max-h-[94vh] rounded-xl'
+        }`}
       >
-        <div className="flex flex-wrap items-center gap-3 border-b border-slate-800 px-4 py-3">
+        <div className="flex flex-wrap items-center gap-3 border-b border-slate-800 px-4 py-3 shrink-0">
           <div className="flex-1 min-w-0">
             <h3 id="town-map-title" className="font-semibold text-white truncate">
               {town.name} · map
+              {mapExpanded ? (
+                <span className="ml-2 text-xs font-normal text-sky-300">· expanded</span>
+              ) : null}
             </h3>
             <p className="text-xs text-slate-500">
               {town.is_active ? 'Active' : 'Inactive'}
@@ -380,6 +494,15 @@ function TownMapOverlay({
           </div>
           {canWrite && uiMode === 'view' && (
             <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setShowManageZones(true)}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-500 bg-slate-800 text-xs text-white font-medium"
+              >
+                <MapPin className="w-3.5 h-3.5 text-amber-300" />
+                Manage zones
+                {excludes.length > 0 ? ` (${excludes.length})` : ''}
+              </button>
               <button
                 type="button"
                 onClick={() => onSetEditor({ mode: 'radius', marketId: town.id })}
@@ -395,6 +518,80 @@ function TownMapOverlay({
               >
                 Draw non-delivery zone
               </button>
+              <div className="relative" ref={ioMenuRef}>
+                <button
+                  type="button"
+                  onClick={() => setShowIoMenu((v) => !v)}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-500 text-xs text-slate-100"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  Import / Export
+                  <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                </button>
+                {showIoMenu && (
+                  <div className="absolute right-0 top-full mt-1 z-20 w-56 rounded-lg border border-slate-700 bg-slate-900 shadow-xl py-1">
+                    <p className="px-3 py-1 text-[10px] uppercase tracking-wide text-slate-500">
+                      Import town border
+                    </p>
+                    <button
+                      type="button"
+                      className="w-full text-left px-3 py-2 text-xs text-slate-200 hover:bg-slate-800"
+                      onClick={() => {
+                        setImportKind('geojson');
+                        setShowImport(true);
+                        setShowIoMenu(false);
+                      }}
+                    >
+                      Import GeoJSON…
+                    </button>
+                    <button
+                      type="button"
+                      className="w-full text-left px-3 py-2 text-xs text-slate-200 hover:bg-slate-800"
+                      onClick={() => {
+                        setImportKind('csv');
+                        setShowImport(true);
+                        setShowIoMenu(false);
+                      }}
+                    >
+                      Import CSV…
+                    </button>
+                    <div className="my-1 border-t border-slate-800" />
+                    <p className="px-3 py-1 text-[10px] uppercase tracking-wide text-slate-500">
+                      Export
+                    </p>
+                    <button
+                      type="button"
+                      className="w-full text-left px-3 py-2 text-xs text-slate-200 hover:bg-slate-800"
+                      onClick={() => {
+                        setShowIoMenu(false);
+                        exportTownGeoJson();
+                      }}
+                    >
+                      Export town GeoJSON
+                    </button>
+                    <button
+                      type="button"
+                      className="w-full text-left px-3 py-2 text-xs text-slate-200 hover:bg-slate-800"
+                      onClick={() => {
+                        setShowIoMenu(false);
+                        exportTownCsv();
+                      }}
+                    >
+                      Export town CSV
+                    </button>
+                    <button
+                      type="button"
+                      className="w-full text-left px-3 py-2 text-xs text-slate-200 hover:bg-slate-800"
+                      onClick={() => {
+                        setShowIoMenu(false);
+                        exportAllZonesCsv();
+                      }}
+                    >
+                      Export all zones CSV
+                    </button>
+                  </div>
+                )}
+              </div>
               <button
                 type="button"
                 disabled={saving || !town.draft_dirty}
@@ -405,6 +602,28 @@ function TownMapOverlay({
               </button>
             </div>
           )}
+          <button
+            type="button"
+            onClick={() => setMapExpanded((v) => !v)}
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs ${
+              mapExpanded
+                ? 'border-sky-500/50 bg-sky-500/15 text-sky-200'
+                : 'border-slate-700 text-slate-300 hover:bg-slate-900'
+            }`}
+            title={mapExpanded ? 'Shrink map back into panel' : 'Expand map to full screen'}
+          >
+            {mapExpanded ? (
+              <>
+                <Minimize2 className="w-3.5 h-3.5" />
+                Shrink
+              </>
+            ) : (
+              <>
+                <Maximize2 className="w-3.5 h-3.5" />
+                Expand map
+              </>
+            )}
+          </button>
           <button
             type="button"
             onClick={() => setShowHistory((v) => !v)}
@@ -423,23 +642,29 @@ function TownMapOverlay({
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-3">
-          {showTip && (
+        <div
+          className={`flex-1 overflow-y-auto space-y-3 ${
+            mapExpanded ? 'p-2 sm:p-3 flex flex-col min-h-0' : 'p-4'
+          }`}
+        >
+          {!mapExpanded && showTip && (
             <p className="text-xs text-emerald-200/90 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2">
-              Green is the town border (foundation). Red zones are where you don’t deliver. Set the
-              border once, then carve out non-delivery areas and publish before activating.
+              Green is the town border (foundation). Red zones are where you don’t deliver. Use{' '}
+              <span className="text-amber-200 font-medium">Manage zones</span> →{' '}
+              <span className="text-amber-200 font-medium">Edit on map</span> to redraw the green
+              border.
             </p>
           )}
 
           {conflicts.length > 0 && (
-            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100 space-y-1">
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100 space-y-1 shrink-0">
               {conflicts.map((c) => (
                 <p key={`${c.code}-${c.message}`}>{c.message}</p>
               ))}
             </div>
           )}
 
-          {readiness && (
+          {!mapExpanded && readiness && (
             <div className="rounded-lg border border-slate-800 bg-slate-900/50 px-3 py-2">
               <p className="text-xs font-medium text-slate-300 mb-2">
                 Activation readiness · {readiness.ready ? 'Ready' : 'Not ready'}
@@ -462,101 +687,33 @@ function TownMapOverlay({
             </div>
           )}
 
-          <ZoneMapEditor
-            key={`${town.id}-${uiMode}-${editingZoneId ?? 'view'}`}
-            zones={zones.map((z) => ({
-              id: z.id,
-              kind: z.kind,
-              polygon: z.polygon,
-              name: z.name,
-              source: z.source,
-              center_lat: z.center_lat,
-              center_lng: z.center_lng,
-              radius_m: z.radius_m,
-            }))}
-            uiMode={uiMode}
-            initialPolygon={initialPolygon}
-            editingZoneId={editingZoneId}
-            townIncludePolygons={includeZones(town).map((z) => z.polygon)}
-            saving={saving}
-            mapHeight={Math.min(560, typeof window !== 'undefined' ? window.innerHeight - 280 : 560)}
-            onCancel={() => onSetEditor(null)}
-            onSave={onSaveEditor}
-            onTestPoint={(lat, lng) => checkCoveragePoint(accessToken, lat, lng)}
-          />
+          <div className={mapExpanded ? 'flex-1 min-h-0' : undefined}>
+            <ZoneMapEditor
+              key={`${town.id}-${uiMode}-${editingZoneId ?? 'view'}-${autoOpenCoordinates ? 'coords' : 'map'}`}
+              zones={zones.map((z) => ({
+                id: z.id,
+                kind: z.kind,
+                polygon: z.polygon,
+                name: z.name,
+                source: z.source,
+                center_lat: z.center_lat,
+                center_lng: z.center_lng,
+                radius_m: z.radius_m,
+              }))}
+              uiMode={uiMode}
+              initialPolygon={initialPolygon}
+              editingZoneId={editingZoneId}
+              townIncludePolygons={includeZones(town).map((z) => z.polygon)}
+              saving={saving}
+              autoOpenCoordinates={autoOpenCoordinates}
+              mapHeight={mapHeight}
+              onCancel={() => onSetEditor(null)}
+              onSave={onSaveEditor}
+              onTestPoint={(lat, lng) => checkCoveragePoint(accessToken, lat, lng)}
+            />
+          </div>
 
-          {canWrite && uiMode === 'view' && (
-            <div className="rounded-lg border border-slate-800 bg-slate-900/40">
-              <button
-                type="button"
-                onClick={() => setShowAdvanced((v) => !v)}
-                className="w-full flex items-center justify-between gap-2 px-3 py-2 text-xs text-slate-400 hover:text-slate-200"
-              >
-                <span>Advanced · town border foundation</span>
-                {showAdvanced ? (
-                  <ChevronDown className="w-3.5 h-3.5" />
-                ) : (
-                  <ChevronRight className="w-3.5 h-3.5" />
-                )}
-              </button>
-              {showAdvanced && (
-                <div className="px-3 pb-3 space-y-2 border-t border-slate-800/80 pt-2">
-                  <p className="text-[11px] text-slate-500">
-                    Only change the green town border if the real boundary is wrong. Day-to-day
-                    exclusions belong in non-delivery zones above.
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={onRequestEditFoundation}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-emerald-500/40 text-xs text-emerald-300"
-                    >
-                      <Pencil className="w-3.5 h-3.5" />
-                      Edit town border…
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setShowImport((v) => !v)}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-700 text-xs text-slate-300"
-                    >
-                      <FileUp className="w-3.5 h-3.5" />
-                      Import GeoJSON
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {showImport && (
-            <div className="rounded-lg border border-slate-700 bg-slate-900/60 p-3 space-y-2">
-              <textarea
-                value={importText}
-                onChange={(e) => setImportText(e.target.value)}
-                placeholder='Paste GeoJSON Polygon / Feature, or [{"lat":…,"lng":…},…]'
-                className="w-full h-28 rounded-lg bg-slate-950 border border-slate-700 text-xs text-slate-200 p-2 font-mono"
-              />
-              <label className="flex items-center gap-2 text-xs text-slate-400">
-                <input
-                  type="checkbox"
-                  checked={promoteTemplate}
-                  onChange={(e) => setPromoteTemplate(e.target.checked)}
-                />
-                Save as default outline template for this town slug
-              </label>
-              <button
-                type="button"
-                disabled={saving || !importText.trim()}
-                onClick={() => onImportGeoJson(importText.trim(), promoteTemplate)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 text-slate-900 text-xs font-semibold disabled:opacity-50"
-              >
-                <Upload className="w-3.5 h-3.5" />
-                Import as town border
-              </button>
-            </div>
-          )}
-
-          {showHistory && (
+          {showHistory && !mapExpanded && (
             <div className="grid md:grid-cols-2 gap-3">
               <div className="rounded-lg border border-slate-800 p-3">
                 <p className="text-xs font-medium text-slate-300 mb-2">Published versions</p>
@@ -605,6 +762,69 @@ function TownMapOverlay({
           )}
         </div>
       </div>
+
+      <ManageZonesOverlay
+        open={showManageZones && uiMode === 'view'}
+        townName={town.name}
+        delivery={delivery}
+        excludes={excludes}
+        onClose={() => setShowManageZones(false)}
+        onEditTownOnMap={() => {
+          setShowManageZones(false);
+          onRequestEditFoundationOnMap();
+        }}
+        onEditTownCoordinates={() => {
+          setShowManageZones(false);
+          onRequestEditFoundationCoordinates();
+        }}
+        onEditExcludeOnMap={(zone) => {
+          setShowManageZones(false);
+          onSetEditor({
+            mode: 'adjust',
+            marketId: town.id,
+            zone,
+          });
+        }}
+        onEditExcludeCoordinates={(zone) => {
+          setShowManageZones(false);
+          onSetEditor({
+            mode: 'adjust',
+            marketId: town.id,
+            zone,
+            openCoordinates: true,
+          });
+        }}
+        onDeleteExclude={(zone) => {
+          setShowManageZones(false);
+          onRemoveZone(zone);
+        }}
+      />
+
+      <ImportTownBorderOverlay
+        open={showImport && uiMode === 'view'}
+        kind={importKind}
+        townName={town.name}
+        text={importText}
+        promoteTemplate={promoteTemplate}
+        saving={saving}
+        onTextChange={setImportText}
+        onPromoteChange={setPromoteTemplate}
+        onClose={() => {
+          setShowImport(false);
+          setImportText('');
+        }}
+        onImport={() => {
+          const text = importText.trim();
+          if (!text) return;
+          if (importKind === 'csv') {
+            onImportCsv(text, promoteTemplate);
+          } else {
+            onImportGeoJson(text, promoteTemplate);
+          }
+          setShowImport(false);
+          setImportText('');
+        }}
+      />
     </div>
   );
 }
@@ -1000,7 +1220,13 @@ export function MarketsPage() {
   const removeZone = async (marketId: string, zone: DashZoneRow) => {
     if (!canWrite) return;
     const label = zone.kind === 'exclude' ? 'non-delivery zone' : 'town border';
-    if (!window.confirm(`Delete ${label} “${zone.name}”?`)) return;
+    const ok = await confirm({
+      title: `Delete ${label}?`,
+      description: `Delete “${zone.name}”? Publish afterward if you want this change live for customers.`,
+      confirmLabel: 'Delete',
+      variant: 'danger',
+    });
+    if (!ok) return;
     try {
       await deleteZone(session.access_token, marketId, zone.id);
       toast.success(zone.kind === 'exclude' ? 'Non-delivery zone deleted' : 'Town border reset');
@@ -1231,23 +1457,41 @@ export function MarketsPage() {
           onSetEditor={setEditor}
           onSaveEditor={(payload) => void saveEditor(payload)}
           onRefreshReadiness={() => void refreshOverlayMeta()}
-          onRequestEditFoundation={() => {
+          onRequestEditFoundationOnMap={() => {
+            const delivery = primaryDeliveryArea(mapTown);
+            if (!delivery) {
+              toast.error('Town border missing — reload the page to restore it');
+              return;
+            }
             void (async () => {
-              const delivery = primaryDeliveryArea(mapTown);
-              if (!delivery) {
-                toast.error('Town border missing — reload the page to restore it');
-                return;
-              }
               const ok = await confirm({
-                title: 'Edit town foundation border?',
+                title: 'Edit town border on the map?',
                 description:
-                  'This is the base delivery outline. Only change it if the real town boundary is wrong. Day-to-day exclusions should be non-delivery zones.',
-                confirmLabel: 'Edit town border',
+                  'You’ll redraw the green delivery foundation for this town. Non-delivery zones stay; publish when you’re done.',
+                confirmLabel: 'Edit on map',
               });
               if (!ok) return;
-              setEditor({ mode: 'adjust', marketId: mapTown.id, zone: delivery });
+              setEditor({
+                mode: 'adjust',
+                marketId: mapTown.id,
+                zone: delivery,
+              });
             })();
           }}
+          onRequestEditFoundationCoordinates={() => {
+            const delivery = primaryDeliveryArea(mapTown);
+            if (!delivery) {
+              toast.error('Town border missing — reload the page to restore it');
+              return;
+            }
+            setEditor({
+              mode: 'adjust',
+              marketId: mapTown.id,
+              zone: delivery,
+              openCoordinates: true,
+            });
+          }}
+          onRemoveZone={(zone) => void removeZone(mapTown.id, zone)}
           onPublish={() => {
             void (async () => {
               setSaving(true);
@@ -1291,15 +1535,49 @@ export function MarketsPage() {
                   if (Array.isArray(parsed)) {
                     payload.polygon = parsed as DashZoneVertex[];
                   } else {
-                    payload.geojson = parsed;
+                    // geojson.io exports FeatureCollection — unwrap to lat/lng ring
+                    const ring = polygonFromGeoJson(parsed);
+                    if (ring) {
+                      payload.polygon = ring;
+                    } else {
+                      payload.geojson = parsed;
+                    }
                   }
                 } catch {
                   toast.error('Invalid JSON');
                   setSaving(false);
                   return;
                 }
+                if (!payload.polygon && !payload.geojson) {
+                  toast.error('Need a Polygon (or FeatureCollection with one)');
+                  setSaving(false);
+                  return;
+                }
                 await importMarketGeoJson(session.access_token, mapTown.id, payload);
-                toast.success('Delivery area imported — publish when ready');
+                toast.success('Town border imported — publish when ready');
+                await load();
+                await refreshOverlayMeta();
+              } catch (e) {
+                toast.error(e instanceof Error ? e.message : 'Import failed');
+              } finally {
+                setSaving(false);
+              }
+            })();
+          }}
+          onImportCsv={(text, promote) => {
+            void (async () => {
+              const polygon = parsePolygonCsv(text);
+              if (!polygon) {
+                toast.error('CSV needs at least 3 valid lat,lng rows');
+                return;
+              }
+              setSaving(true);
+              try {
+                await importMarketGeoJson(session.access_token, mapTown.id, {
+                  polygon,
+                  promote_template: promote,
+                });
+                toast.success(`Town border imported (${polygon.length} points) — publish when ready`);
                 await load();
                 await refreshOverlayMeta();
               } catch (e) {

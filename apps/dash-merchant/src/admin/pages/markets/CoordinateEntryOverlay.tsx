@@ -164,12 +164,10 @@ export function CoordinateEntryOverlay({
     }
     if (mode === 'box') {
       onApply(boxNamedPoints(points));
-      onClose();
       return;
     }
     // Walk around the town edge — ignores the order you typed them in.
     onApply(orderRingClockwise(points));
-    onClose();
   };
 
   const validCount = rows.filter((r) => parseLatLng(r.lat, r.lng)).length;
@@ -196,8 +194,9 @@ export function CoordinateEntryOverlay({
             <p className="text-xs text-slate-400 mt-0.5">
               North / South / East / West limits are <span className="text-slate-200">not</span> drawn
               in that list order — that makes a bow-tie. Use{' '}
-              <span className="text-amber-300">Apply as outer box</span> for a proper rectangle, or
-              we’ll auto-sort corners around the town edge.
+              <span className="text-amber-300">Save as outer box</span> for a proper rectangle, or
+              we’ll auto-sort corners around the edge. Saving here finishes the edit — no second
+              confirm.
             </p>
           </div>
           <button
@@ -372,7 +371,7 @@ export function CoordinateEntryOverlay({
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-600 text-xs text-slate-200"
             >
               <Check className="w-3.5 h-3.5" />
-              Apply around edge
+              Save around edge
             </button>
             <button
               type="button"
@@ -380,7 +379,7 @@ export function CoordinateEntryOverlay({
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-500 text-slate-950 text-xs font-semibold"
             >
               <Square className="w-3.5 h-3.5" />
-              Apply as outer box
+              Save as outer box
             </button>
           </div>
         </div>

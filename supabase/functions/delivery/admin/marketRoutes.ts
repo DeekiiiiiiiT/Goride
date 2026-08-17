@@ -92,6 +92,57 @@ function normalizePolygon(input: unknown): Vertex[] | null {
   return vertices;
 }
 
+/** Accept FeatureCollection / Feature / Polygon / MultiPolygon from geojson.io etc. */
+function extractRingFromGeoJson(geojson: unknown): Vertex[] | null {
+  if (!geojson || typeof geojson !== "object") return null;
+  const g = geojson as Record<string, unknown>;
+
+  let geometry: Record<string, unknown> | null = null;
+  if (g.type === "FeatureCollection" && Array.isArray(g.features)) {
+    for (const f of g.features) {
+      if (!f || typeof f !== "object") continue;
+      const feat = f as Record<string, unknown>;
+      const geom = feat.geometry && typeof feat.geometry === "object"
+        ? (feat.geometry as Record<string, unknown>)
+        : null;
+      if (geom && (geom.type === "Polygon" || geom.type === "MultiPolygon")) {
+        geometry = geom;
+        break;
+      }
+    }
+  } else if (g.type === "Feature" && g.geometry && typeof g.geometry === "object") {
+    geometry = g.geometry as Record<string, unknown>;
+  } else if (g.type === "Polygon" || g.type === "MultiPolygon") {
+    geometry = g;
+  }
+
+  if (!geometry) return null;
+
+  let ring: unknown = null;
+  if (geometry.type === "Polygon" && Array.isArray(geometry.coordinates)) {
+    ring = (geometry.coordinates as unknown[])[0];
+  } else if (geometry.type === "MultiPolygon" && Array.isArray(geometry.coordinates)) {
+    const firstPoly = (geometry.coordinates as unknown[])[0];
+    ring = Array.isArray(firstPoly) ? firstPoly[0] : null;
+  }
+
+  if (!Array.isArray(ring) || ring.length < 3) return null;
+
+  const mapped = ring.map((c) => {
+    const pair = c as number[];
+    return { lng: Number(pair[0]), lat: Number(pair[1]) };
+  });
+  const vertices = normalizePolygon(mapped);
+  if (!vertices) return null;
+  // Drop duplicate closing vertex if present
+  if (vertices.length >= 4) {
+    const a = vertices[0];
+    const b = vertices[vertices.length - 1];
+    if (a.lat === b.lat && a.lng === b.lng) vertices.pop();
+  }
+  return vertices.length >= 3 ? vertices : null;
+}
+
 function normalizeSource(input: unknown): "manual" | "radius" | "auto_outline" | "import" {
   const s = String(input || "manual").toLowerCase();
   if (s === "radius" || s === "auto_outline" || s === "import") return s;
@@ -628,29 +679,16 @@ export function registerMarketAdminRoutes(app: Hono) {
     if (denied) return denied;
     const marketId = c.req.param("id");
     const body = await c.req.json().catch(() => ({}));
-    // Accept Feature, Polygon coordinates, or {lat,lng}[]
+    // Accept FeatureCollection / Feature / Polygon / MultiPolygon, or {lat,lng}[]
     let polygon: Vertex[] | null = null;
     if (Array.isArray(body.polygon)) {
       polygon = normalizePolygon(body.polygon);
     } else if (body.geojson) {
-      const g = body.geojson as Record<string, unknown>;
-      let coords: unknown = null;
-      if (g.type === "Feature" && g.geometry && typeof g.geometry === "object") {
-        const geom = g.geometry as Record<string, unknown>;
-        coords = Array.isArray(geom.coordinates) ? (geom.coordinates as unknown[])[0] : null;
-      } else if (g.type === "Polygon") {
-        coords = Array.isArray(g.coordinates) ? (g.coordinates as unknown[])[0] : null;
-      }
-      if (Array.isArray(coords)) {
-        polygon = normalizePolygon(
-          coords.map((c) => {
-            const pair = c as number[];
-            return { lng: Number(pair[0]), lat: Number(pair[1]) };
-          }),
-        );
-      }
+      polygon = extractRingFromGeoJson(body.geojson);
     }
-    if (!polygon) return c.json({ error: "Valid GeoJSON Polygon or polygon[{lat,lng}] required" }, 400);
+    if (!polygon) {
+      return c.json({ error: "Valid GeoJSON Polygon or polygon([[lat,lng]]) required" }, 400);
+    }
 
     const db = getDb();
     const { data: market } = await db.from("service_markets").select("*").eq("id", marketId).maybeSingle();

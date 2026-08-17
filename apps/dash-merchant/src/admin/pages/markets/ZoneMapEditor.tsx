@@ -9,10 +9,12 @@ import {
   Loader2,
   MapPin,
   Pencil,
+  PencilLine,
   Satellite,
   Scissors,
   Search,
   Trash2,
+  Undo2,
 } from 'lucide-react';
 import { getPlaceDetails, loadPartnerMapsApi, searchAddresses } from '@roam/location';
 import type { AddressSuggestion } from '@roam/location';
@@ -65,6 +67,8 @@ export type ZoneMapEditorProps = {
   onRequestRadiusMode?: () => void;
   /** Which foundation layer is being edited (copy + save labels). */
   foundationScope?: 'town' | 'parish';
+  /** Open the lat/lng coordinate overlay immediately (e.g. from Edit coordinates). */
+  autoOpenCoordinates?: boolean;
 };
 
 function styleForKind(kind: DashZoneKind, zoneId?: string): google.maps.PolygonOptions {
@@ -103,6 +107,24 @@ function pathToVertices(path: google.maps.MVCArray<google.maps.LatLng>): DashZon
   return out;
 }
 
+/** Rough meters between two lat/lng points (good enough for draw sampling). */
+function metersBetween(a: DashZoneVertex, b: DashZoneVertex): number {
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const R = 6371000;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const lat1 = toRad(a.lat);
+  const lat2 = toRad(b.lat);
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+/** Freehand sample spacing — denser outline without flooding the path. */
+const FREEHAND_MIN_M = 14;
+const CLICK_DEDUPE_M = 4;
+
 export function ZoneMapEditor({
   zones,
   uiMode,
@@ -115,6 +137,7 @@ export function ZoneMapEditor({
   onTestPoint,
   mapHeight = 520,
   foundationScope = 'town',
+  autoOpenCoordinates = false,
 }: ZoneMapEditorProps) {
   const foundationNoun = foundationScope === 'parish' ? 'parish' : 'town';
   const foundationTitle =
@@ -129,6 +152,11 @@ export function ZoneMapEditor({
   const radiusCircleRef = useRef<google.maps.Circle | null>(null);
   const verticesRef = useRef<DashZoneVertex[]>([...initialPolygon]);
   const uiModeRef = useRef(uiMode);
+  const drawTraceRef = useRef(false);
+  const freehandRef = useRef(false);
+  const freehandActiveRef = useRef(false);
+  const lastSampleRef = useRef<DashZoneVertex | null>(null);
+  const mapListenersRef = useRef<google.maps.MapsEventListener[]>([]);
 
   const [ready, setReady] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -138,6 +166,13 @@ export function ZoneMapEditor({
   const [testActive, setTestActive] = useState(false);
   const [testResult, setTestResult] = useState<CoverageCheckResult | null>(null);
   const [testBusy, setTestBusy] = useState(false);
+  const testActiveRef = useRef(false);
+  /** Click / freehand adds corners. Off = drag handles only (safer reshape). */
+  const [drawTrace, setDrawTrace] = useState(
+    () => uiMode === 'cutout' || initialPolygon.length < 3,
+  );
+  /** Hold-drag to lay denser border points along the edge. */
+  const [freehand, setFreehand] = useState(false);
 
   const [searchQ, setSearchQ] = useState('');
   const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
@@ -148,12 +183,17 @@ export function ZoneMapEditor({
     lng: number;
     label: string;
   } | null>(null);
-  const [showCoordOverlay, setShowCoordOverlay] = useState(false);
+  const [showCoordOverlay, setShowCoordOverlay] = useState(
+    () => autoOpenCoordinates && (uiMode === 'cutout' || uiMode === 'adjust'),
+  );
   const [namedPoints, setNamedPoints] = useState<NamedBorderPoint[]>([]);
   const [radiusM, setRadiusM] = useState(300);
 
 
   uiModeRef.current = uiMode;
+  drawTraceRef.current = drawTrace;
+  freehandRef.current = freehand;
+  testActiveRef.current = testActive;
   const drawing = uiMode === 'cutout' || uiMode === 'adjust';
   const editKind: DashZoneKind = uiMode === 'cutout' ? 'exclude' : 'include';
 
@@ -172,6 +212,46 @@ export function ZoneMapEditor({
       editPolyRef.current.setMap(null);
       editPolyRef.current = null;
     }
+  };
+
+  const publishVertices = (verts: DashZoneVertex[]) => {
+    verticesRef.current = verts;
+    setVertexCount(verts.length);
+    setEditVertices([...verts]);
+  };
+
+  /** Push a corner without rebuilding the editable polygon (keeps drag handles intact). */
+  const addVertexAt = (lat: number, lng: number, minGapM: number) => {
+    const next = { lat, lng };
+    if (editPolyRef.current) {
+      const path = editPolyRef.current.getPath();
+      if (path.getLength() > 0) {
+        const last = path.getAt(path.getLength() - 1);
+        if (metersBetween({ lat: last.lat(), lng: last.lng() }, next) < minGapM) return;
+      }
+      path.push(new google.maps.LatLng(lat, lng));
+      publishVertices(pathToVertices(path));
+      return;
+    }
+    const prev = verticesRef.current;
+    if (prev.length > 0 && metersBetween(prev[prev.length - 1], next) < minGapM) return;
+    const verts = [...prev, next];
+    publishVertices(verts);
+    syncEditPolygon();
+  };
+
+  const undoLastPoint = () => {
+    if (editPolyRef.current) {
+      const path = editPolyRef.current.getPath();
+      if (path.getLength() === 0) return;
+      path.removeAt(path.getLength() - 1);
+      publishVertices(pathToVertices(path));
+      if (path.getLength() < 2) clearEditPoly();
+      return;
+    }
+    if (verticesRef.current.length === 0) return;
+    publishVertices(verticesRef.current.slice(0, -1));
+    syncEditPolygon();
   };
 
   const syncOverlays = () => {
@@ -231,6 +311,18 @@ export function ZoneMapEditor({
     // Dragging vertices sometimes only settles on mouseup — keep ref in sync.
     poly.addListener('mouseup', syncFromPath);
     editPolyRef.current = poly;
+  };
+
+  const addVertexAtRef = useRef(addVertexAt);
+  addVertexAtRef.current = addVertexAt;
+  const undoLastPointRef = useRef(undoLastPoint);
+  undoLastPointRef.current = undoLastPoint;
+
+  const endFreehand = () => {
+    if (!freehandActiveRef.current) return;
+    freehandActiveRef.current = false;
+    lastSampleRef.current = null;
+    mapRef.current?.setOptions({ draggable: true, gestureHandling: 'greedy' });
   };
 
   const syncRadiusPreview = () => {
@@ -305,7 +397,7 @@ export function ZoneMapEditor({
       const lat = latLng.lat();
       const lng = latLng.lng();
 
-      if (testActive) {
+      if (testActiveRef.current) {
         if (!onTestPoint) return;
         if (testMarkerRef.current) testMarkerRef.current.setMap(null);
         testMarkerRef.current = new google.maps.Marker({ map, position: { lat, lng } });
@@ -320,22 +412,15 @@ export function ZoneMapEditor({
         return;
       }
 
-      // Cutout draw only: click-to-add points. Adjust mode uses drag handles only —
-      // click-to-add was rebuilding the polygon and wiping in-progress border edits.
-      if (uiModeRef.current === 'cutout') {
-        if (editPolyRef.current) {
-          editPolyRef.current.getPath().push(new google.maps.LatLng(lat, lng));
-          verticesRef.current = pathToVertices(editPolyRef.current.getPath());
-          setVertexCount(verticesRef.current.length);
-          setEditVertices([...verticesRef.current]);
-        } else {
-          verticesRef.current = [...verticesRef.current, { lat, lng }];
-          syncEditPolygon();
-        }
+      const mode = uiModeRef.current;
+      const tracing = mode === 'cutout' || mode === 'adjust';
+      // Freehand owns pointer input — skip click so we don't double-add.
+      if (tracing && drawTraceRef.current && !freehandRef.current) {
+        addVertexAtRef.current(lat, lng, CLICK_DEDUPE_M);
         return;
       }
 
-      if (uiModeRef.current === 'view' || uiModeRef.current === 'radius') {
+      if (mode === 'view' || mode === 'radius') {
         const inside =
           townIncludePolygons.some((poly) => pointInPolygon(lat, lng, poly)) ||
           (primaryInclude.length >= 3 && pointInPolygon(lat, lng, primaryInclude));
@@ -350,11 +435,51 @@ export function ZoneMapEditor({
       }
     });
 
+    const onMouseDown = (e: google.maps.MapMouseEvent) => {
+      if (testActiveRef.current) return;
+      const mode = uiModeRef.current;
+      if (!(mode === 'cutout' || mode === 'adjust')) return;
+      if (!drawTraceRef.current || !freehandRef.current || !e.latLng) return;
+      freehandActiveRef.current = true;
+      map.setOptions({ draggable: false, gestureHandling: 'none' });
+      const lat = e.latLng.lat();
+      const lng = e.latLng.lng();
+      lastSampleRef.current = { lat, lng };
+      addVertexAtRef.current(lat, lng, CLICK_DEDUPE_M);
+    };
+    const onMouseMove = (e: google.maps.MapMouseEvent) => {
+      if (!freehandActiveRef.current || !e.latLng) return;
+      const lat = e.latLng.lat();
+      const lng = e.latLng.lng();
+      const next = { lat, lng };
+      const last = lastSampleRef.current;
+      if (last && metersBetween(last, next) < FREEHAND_MIN_M) return;
+      lastSampleRef.current = next;
+      addVertexAtRef.current(lat, lng, FREEHAND_MIN_M);
+    };
+    const onMouseUp = () => {
+      if (!freehandActiveRef.current) return;
+      freehandActiveRef.current = false;
+      lastSampleRef.current = null;
+      map.setOptions({ draggable: true, gestureHandling: 'greedy' });
+    };
+
+    mapListenersRef.current = [
+      map.addListener('mousedown', onMouseDown),
+      map.addListener('mousemove', onMouseMove),
+      map.addListener('mouseup', onMouseUp),
+      map.addListener('mouseout', onMouseUp),
+    ];
+
     syncOverlays();
     verticesRef.current = [...initialPolygon];
     syncEditPolygon();
 
     return () => {
+      for (const l of mapListenersRef.current) {
+        google.maps.event.removeListener(l);
+      }
+      mapListenersRef.current = [];
       if (clickListenerRef.current) {
         google.maps.event.removeListener(clickListenerRef.current);
       }
@@ -372,6 +497,13 @@ export function ZoneMapEditor({
     mapRef.current?.setMapTypeId(mapType);
   }, [mapType]);
 
+  // Google Maps needs an explicit resize after the container grows (Expand map).
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    google.maps.event.trigger(map, 'resize');
+  }, [mapHeight]);
+
   // Only re-seed the edit polygon when mode / zone target changes — not when
   // the parent refreshes zone lists (that was snapping borders back to default).
   useEffect(() => {
@@ -381,6 +513,9 @@ export function ZoneMapEditor({
     setTestActive(false);
     setTestResult(null);
     setShowCoordOverlay(false);
+    setDrawTrace(uiMode === 'cutout' || initialPolygon.length < 3);
+    setFreehand(false);
+    endFreehand();
     syncOverlays();
     syncEditPolygon();
     syncRadiusPreview();
@@ -398,6 +533,25 @@ export function ZoneMapEditor({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uiMode, editingZoneId]);
+
+  // Keyboard: Undo last point while drawing (Backspace / Ctrl·Cmd+Z)
+  useEffect(() => {
+    if (!drawing) return;
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return;
+      }
+      const undo =
+        e.key === 'Backspace' ||
+        ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z'));
+      if (!undo) return;
+      e.preventDefault();
+      undoLastPointRef.current();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [drawing]);
 
   // Keep background overlays in sync without resetting the in-progress edit.
   useEffect(() => {
@@ -520,21 +674,33 @@ export function ZoneMapEditor({
 
   const applyNamedCoordinates = (points: NamedBorderPoint[]) => {
     setNamedPoints(points);
-    applyVerticesToMap(
-      points.map((p) => ({ lat: p.lat, lng: p.lng })),
-      true,
-    );
+    const polygon = points.map((p) => ({ lat: p.lat, lng: p.lng }));
+    verticesRef.current = polygon;
+    setEditVertices(polygon);
+    setVertexCount(polygon.length);
+    setShowCoordOverlay(false);
+    // Apply on the coordinates form is the final save — no second map confirm.
+    void onSave({ polygon, source: 'manual' });
+  };
+
+  const closeCoordinateOverlay = () => {
+    setShowCoordOverlay(false);
+    // Opened from Manage zones → Cancel exits edit mode entirely.
+    if (autoOpenCoordinates) onCancel();
   };
 
   const clearDrawing = () => {
+    endFreehand();
     verticesRef.current = [];
     setVertexCount(0);
     setEditVertices([]);
     setNamedPoints([]);
+    setDrawTrace(true);
     syncEditPolygon();
   };
 
   const handleSavePolygon = () => {
+    endFreehand();
     // Always read live path from the map — don't trust possibly stale refs after drags.
     if (editPolyRef.current) {
       verticesRef.current = pathToVertices(editPolyRef.current.getPath());
@@ -567,13 +733,15 @@ export function ZoneMapEditor({
   const hint =
     uiMode === 'radius'
       ? 'Search or drop a pin, set the radius, then save the non-delivery circle.'
-      : uiMode === 'cutout'
-        ? 'Click the map to add corners · drag handles to reshape · then Save non-delivery zone'
-        : uiMode === 'adjust'
-          ? `Drag the green handles to reshape the ${foundationTitle}. Use Enter coordinates for typed limits. Then Save ${foundationNoun} border.`
-          : foundationScope === 'parish'
-            ? 'Blue/green outline = parish foundation. Town borders shown for context. Customer delivery still uses town borders.'
-            : 'Green = town border (foundation). Red = no delivery. Search inside the town or use Test pin.';
+      : uiMode === 'cutout' || uiMode === 'adjust'
+        ? freehand
+          ? 'Freehand on: hold and drag along the border · Undo removes the last point · then Save'
+          : drawTrace
+            ? 'Click corners to trace · turn on Freehand for denser edges · drag handles to fine-tune · Undo / Clear as needed'
+            : `Drag the handles to reshape. Turn on “Trace” to click or freehand new points along the ${foundationTitle}.`
+        : foundationScope === 'parish'
+          ? 'Blue/green outline = parish foundation. Town borders shown for context. Customer delivery still uses town borders.'
+          : 'Green = town border (foundation). Red = no delivery. Search inside the town or use Test pin.';
 
   if (loadError) {
     return (
@@ -697,17 +865,19 @@ export function ZoneMapEditor({
         <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2">
           <p className="text-xs text-amber-100">
             {uiMode === 'cutout'
-              ? `Editing non-delivery zone · ${vertexCount} points — save or cancel when done`
-              : `Editing ${foundationTitle} · ${vertexCount} points — save or cancel when done`}
+              ? `Editing non-delivery zone · ${vertexCount} points`
+              : `Editing ${foundationTitle} · ${vertexCount} points`}
+            {freehand ? ' · freehand' : drawTrace ? ' · click to add' : ' · drag handles'}
+            {' — save or cancel when done'}
           </p>
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => setShowCoordOverlay(true)}
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-600 text-xs text-slate-200"
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-100 text-slate-900 text-xs font-semibold"
             >
               <MapPin className="w-3.5 h-3.5" />
-              Enter coordinates
+              Enter / edit coordinates
             </button>
             <button
               type="button"
@@ -735,7 +905,7 @@ export function ZoneMapEditor({
 
       <CoordinateEntryOverlay
         open={showCoordOverlay}
-        onClose={() => setShowCoordOverlay(false)}
+        onClose={closeCoordinateOverlay}
         vertices={editVertices}
         knownPoints={namedPoints.length > 0 ? namedPoints : undefined}
         onApply={applyNamedCoordinates}
@@ -796,11 +966,55 @@ export function ZoneMapEditor({
                   } non-delivery zone${zones.filter((z) => z.kind === 'exclude').length === 1 ? '' : 's'}`}
         </p>
         {drawing && (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setDrawTrace((v) => {
+                  const next = !v;
+                  if (!next) setFreehand(false);
+                  return next;
+                });
+              }}
+              className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-xs ${
+                drawTrace
+                  ? 'border-emerald-500/50 bg-emerald-500/15 text-emerald-200'
+                  : 'border-slate-700 text-slate-300'
+              }`}
+              title="Click the map to add border points"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+              Trace
+            </button>
+            <button
+              type="button"
+              disabled={!drawTrace}
+              onClick={() => setFreehand((v) => !v)}
+              className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-xs disabled:opacity-40 ${
+                freehand
+                  ? 'border-sky-500/50 bg-sky-500/15 text-sky-200'
+                  : 'border-slate-700 text-slate-300'
+              }`}
+              title="Hold and drag to lay denser points (~14m apart)"
+            >
+              <PencilLine className="w-3.5 h-3.5" />
+              Freehand
+            </button>
+            <button
+              type="button"
+              onClick={undoLastPoint}
+              disabled={vertexCount < 1}
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-700 text-xs text-slate-300 disabled:opacity-40"
+              title="Undo last point (Backspace or Ctrl+Z)"
+            >
+              <Undo2 className="w-3.5 h-3.5" />
+              Undo
+            </button>
             <button
               type="button"
               onClick={clearDrawing}
               className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-700 text-xs text-slate-300"
+              title="Clear all points and start over"
             >
               <Trash2 className="w-3.5 h-3.5" />
               Clear
