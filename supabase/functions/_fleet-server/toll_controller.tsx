@@ -9415,7 +9415,6 @@ export {
   deleteTollLedgerEntry,
   transactionToTollLedgerServer,
   isTollCategory,
-  voidTollLedgerEntryHandler,
 };
 
 // ── Exported helpers for dispute-refund → trip/settlement sync ─────────────

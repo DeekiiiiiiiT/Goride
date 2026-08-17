@@ -1002,8 +1002,7 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
   const totalRecovered = recoveredAmount + matchedDisputeRefundAmount;
 
   const periodTolls = [...pUnreconciled, ...pReconciled] as TollWithLinkedTrip[];
-  // Gross spend = tag/plaza debits + trip-only tolls (unlinked / cash wash) by platform.
-  // Net loss still uses tag-only spend so cash washes don't fake fleet leakage.
+  // Toll Spend = plaza ledger debits. Unmatched trip tolls stay on Reimbursed only.
   const {
     total: tollSpend,
     byPlatform: tollSpendByPlatform,

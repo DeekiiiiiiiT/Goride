@@ -416,9 +416,8 @@ app.get(`${BASE}/periods`, requirePermission('toll.view'), async (c) => {
     }
 
     // ── Per-period financials (same rule as wizard cards) ──────────────────
-    // Gross Toll Spend = tag/plaza debits + trip-only tolls (no linked tag).
-    // Reimbursed (display) includes cash_wash — Uber paid on the trip.
-    // Net Loss uses tag spend − fleet-offset reimbursements (no cash_wash).
+    // Toll Spend = plaza ledger debits. Cash-wash trips with no linked tag
+    // are extra cash spend. Pending Unlinked Refunds are reimbursements only.
     for (const tx of scopedTollTx) {
       if (!tx?.date) continue;
       const amt = Number(tx.amount) < 0 ? Math.abs(Number(tx.amount)) : 0;
@@ -438,8 +437,8 @@ app.get(`${BASE}/periods`, requirePermission('toll.view'), async (c) => {
       if (status && status !== "pending") {
         acc.financials.resolvedRefundsAmount += tc;
       }
-      // Trip-only spend: real plaza toll with no tag debit linked this period.
-      if (!linkedTripIds.has(String(t.id)) && status !== "phantom") {
+      // Cash at plaza (no tag debit). Do not add unmatched Uber credits — that doubled spend.
+      if (!linkedTripIds.has(String(t.id)) && status === "cash_wash") {
         acc.financials.tollSpend += tc;
       }
       // Phantom = fake credit — never reimbursed.

@@ -83,9 +83,9 @@ export function computeTollSpendByPlatform(
 }
 
 /**
- * Trip tolls with no linked tag debit in this period — still real spend
- * (unlinked Uber/InDrive/Roam credits, cash washes, expense-logged leftovers).
- * Phantom credits are excluded (not real plaza spend).
+ * Extra plaza spend that never hit the tag: only cash-wash trips (driver paid
+ * cash at the plaza; Uber still reimbursed). Pending Unlinked Refunds are
+ * reimbursements waiting to match a tag charge — not a second bill.
  */
 export function collectTripOnlyTollSpend(input: {
   tolls: TollWithLinkedTrip[];
@@ -104,7 +104,8 @@ export function collectTripOnlyTollSpend(input: {
 
   const add = (t: Trip | null | undefined) => {
     if (!t?.id || seen.has(t.id) || linkedTripIds.has(t.id)) return;
-    if (t.tollRefundResolution?.status === 'phantom') return;
+    // Cash at plaza, no tag debit. Uber credits on unmatched trips stay in Reimbursed only.
+    if (t.tollRefundResolution?.status !== 'cash_wash') return;
     const amount = Math.abs(Number(t.tollCharges) || 0);
     if (amount <= 0) return;
     seen.add(t.id);
@@ -117,7 +118,11 @@ export function collectTripOnlyTollSpend(input: {
   return { total, byPlatform };
 }
 
-/** Tag debits + trip-only tolls, merged by platform (no double-count). */
+/**
+ * Toll Spend = plaza payments on the ledger (tag/cash/card).
+ * Unmatched Uber trip tolls are Reimbursed, not spend — adding them before
+ * match doubled the same crossings.
+ */
 export function computeGrossTollSpendByPlatform(input: {
   tolls: TollWithLinkedTrip[];
   resolvePlatform: (tx: FinancialTransaction) => PlatformBucket;

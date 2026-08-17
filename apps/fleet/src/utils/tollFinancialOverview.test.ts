@@ -26,19 +26,37 @@ describe('tollFinancialOverview', () => {
     expect(byPlatform.Roam).toBe(50);
   });
 
-  it('computeGrossTollSpendByPlatform includes unlinked trip tolls by platform', () => {
+  it('computeGrossTollSpendByPlatform does not treat unmatched Uber trip tolls as spend', () => {
     const { total, byPlatform, tagTotal } = computeGrossTollSpendByPlatform({
-      tolls: [],
-      resolvePlatform: () => 'Unlinked',
+      tolls: [{ id: 'tag1', amount: -4620, date: '2026-08-10' } as FinancialTransaction],
+      resolvePlatform: () => 'Uber',
       unclaimedRefunds: [
         { id: 'u1', platform: 'Uber', tollCharges: 275 } as Trip,
         { id: 'u2', platform: 'Uber', tollCharges: 370 } as Trip,
-        { id: 'u3', platform: 'Uber', tollCharges: 370 } as Trip,
+        { id: 'u3', platform: 'Uber', tollCharges: 3975 } as Trip,
+      ],
+    });
+    expect(tagTotal).toBe(4620);
+    expect(total).toBe(4620);
+    expect(byPlatform.Uber).toBe(4620);
+  });
+
+  it('computeGrossTollSpendByPlatform adds cash-wash trips with no tag debit', () => {
+    const { total, byPlatform, tagTotal } = computeGrossTollSpendByPlatform({
+      tolls: [],
+      resolvePlatform: () => 'Unlinked',
+      resolvedRefunds: [
+        {
+          id: 'wash1',
+          platform: 'Uber',
+          tollCharges: 370,
+          tollRefundResolution: { status: 'cash_wash' },
+        } as Trip,
       ],
     });
     expect(tagTotal).toBe(0);
-    expect(total).toBe(1015);
-    expect(byPlatform.Uber).toBe(1015);
+    expect(total).toBe(370);
+    expect(byPlatform.Uber).toBe(370);
   });
 
   it('computeGrossTollSpendByPlatform does not double-count linked trips', () => {
