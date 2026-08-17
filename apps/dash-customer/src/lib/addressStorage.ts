@@ -216,3 +216,13 @@ export async function persistOnboardingAddress(
 export function hasDeliveryAddress(): boolean {
   return getSavedAddress() !== null || getSavedAddresses().length > 0;
 }
+
+/** Lat/lng for checkout — prefer the default saved pin, never 0,0. */
+export function getCheckoutLocation(): { lat?: number; lng?: number } {
+  const saved = getSavedAddresses().find((a) => a.isDefault) ?? getSavedAddresses()[0];
+  const lat = Number(saved?.lat);
+  const lng = Number(saved?.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return {};
+  if (lat === 0 && lng === 0) return {};
+  return { lat, lng };
+}

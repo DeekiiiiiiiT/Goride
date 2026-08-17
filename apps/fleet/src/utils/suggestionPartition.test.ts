@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { partitionSuggestions, smartReadyBannerLabel } from './suggestionPartition';
+import { partitionSuggestions, smartReadyBannerLabel, collectReadyToLinkPairs } from './suggestionPartition';
 import { FinancialTransaction } from '../types/data';
 import { MatchResult } from './tollReconciliation';
 
@@ -54,5 +54,33 @@ describe('smartReadyBannerLabel', () => {
     expect(smartReadyBannerLabel('personal-use')).toBe('Confirm personal');
     expect(smartReadyBannerLabel('deadhead')).toBe('Confirm deadhead');
     expect(smartReadyBannerLabel('needs-review')).toBe('Ready to link');
+  });
+});
+
+describe('collectReadyToLinkPairs', () => {
+  it('links money matches and skips ambiguous, personal, cash, and duplicate trips', () => {
+    const moneyA = toll('m1');
+    const moneyB = toll('m2');
+    const sameTrip = toll('m3');
+    const ambiguous = toll('a1');
+    const personal = toll('p1');
+    const cash = toll('c1', { paymentMethod: 'Cash' });
+    const map = new Map<string, MatchResult[]>([
+      ['m1', [match({ matchType: 'PERFECT_MATCH', trip: { id: 't1' } as any, confidence: 'medium', confidenceScore: 100 })]],
+      ['m2', [match({ matchType: 'PERFECT_MATCH', trip: { id: 't2' } as any, confidenceScore: 90 })]],
+      ['m3', [match({ matchType: 'PERFECT_MATCH', trip: { id: 't1' } as any })]],
+      ['a1', [match({ matchType: 'AMOUNT_VARIANCE', isAmbiguous: true, trip: { id: 't9' } as any })]],
+      ['p1', [match({ matchType: 'PERSONAL_MATCH', trip: { id: 't8' } as any })]],
+      ['c1', [match({ matchType: 'PERFECT_MATCH', trip: { id: 't7' } as any })]],
+    ]);
+    const { suggestions: entries } = partitionSuggestions(
+      [moneyA, moneyB, sameTrip, ambiguous, personal, cash],
+      map,
+      'needs-review',
+    );
+    expect(collectReadyToLinkPairs(entries, map)).toEqual([
+      { transactionId: 'm1', tripId: 't1' },
+      { transactionId: 'm2', tripId: 't2' },
+    ]);
   });
 });

@@ -10,6 +10,7 @@ import { toast } from '@/lib/toast';
 import { useCart } from '@/hooks/useCart';
 import {
   buildReorderCartItems,
+  buildReorderFromOrder,
   groupOrdersByDate,
   MOCK_ORDERS,
   type OrderHistoryEntry,
@@ -27,8 +28,16 @@ type ApiOrder = {
   status: string;
   total: number;
   created_at: string;
+  merchant_id?: string;
   merchant: { id: string; name: string; logo_url: string };
-  items: Array<{ name: string; quantity: number }>;
+  items: Array<{
+    name: string;
+    quantity: number;
+    price?: number;
+    menuItemId?: string;
+    id?: string;
+    item_id?: string;
+  }>;
 };
 
 function mapApiOrder(order: ApiOrder): OrderHistoryEntry {
@@ -36,11 +45,16 @@ function mapApiOrder(order: ApiOrder): OrderHistoryEntry {
   return {
     id: order.id,
     orderNumber: order.order_number,
-    merchantId: order.merchant.id,
+    merchantId: order.merchant?.id ?? order.merchant_id ?? '',
     merchantName: order.merchant.name,
     merchantLogo: order.merchant.logo_url,
     status: order.status === 'cancelled' ? 'cancelled' : active ? 'active' : 'delivered',
-    items: order.items.map(i => ({ quantity: i.quantity, name: i.name, price: 0 })),
+    items: order.items.map(i => ({
+      quantity: i.quantity,
+      name: i.name,
+      price: i.price ?? 0,
+      menuItemId: i.menuItemId ?? i.id ?? i.item_id,
+    })),
     itemSummary: order.items.map(i => `${i.quantity}x ${i.name}`).join(', '),
     total: order.total,
     placedAt: order.created_at,
@@ -56,6 +70,7 @@ function mapApiOrder(order: ApiOrder): OrderHistoryEntry {
 export default function OrdersPage({ onNavigate }: Props) {
   const { itemCount, addItem } = useCart();
   const [reorderOpen, setReorderOpen] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState<OrderHistoryEntry | null>(null);
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['customer-orders'],
@@ -89,20 +104,44 @@ export default function OrdersPage({ onNavigate }: Props) {
   const pastGroups = groupOrdersByDate(pastOrders);
 
   const handleReorderAdd = () => {
-    buildReorderCartItems().forEach(({ item, quantity, merchantName }, index) => {
-      addItem(
-        {
-          itemId: item.id,
-          merchantId: 'island-grill',
-          name: item.name,
-          price: item.price,
-          quantity,
-          imageUrl: item.image,
-        },
-        merchantName,
-        { replace: index === 0 },
-      );
-    });
+    if (selectedOrder) {
+      const rawItems = (data?.orders as ApiOrder[] | undefined)?.find((o) => o.id === selectedOrder.id)
+        ?.items as Array<Record<string, unknown>> | undefined;
+      const lines = buildReorderFromOrder(selectedOrder, rawItems);
+      if (!lines.length) {
+        toast.error('Cannot reorder — menu items are unavailable');
+        return;
+      }
+      lines.forEach((line, index) => {
+        addItem(
+          {
+            itemId: line.itemId,
+            merchantId: selectedOrder.merchantId,
+            name: line.name,
+            price: line.price,
+            quantity: line.quantity,
+            imageUrl: line.imageUrl,
+          },
+          selectedOrder.merchantName,
+          { replace: index === 0 },
+        );
+      });
+    } else if (allowMocks()) {
+      buildReorderCartItems().forEach(({ item, quantity, merchantName }, index) => {
+        addItem(
+          {
+            itemId: item.id,
+            merchantId: 'island-grill',
+            name: item.name,
+            price: item.price,
+            quantity,
+            imageUrl: item.image,
+          },
+          merchantName,
+          { replace: index === 0 },
+        );
+      });
+    }
     setReorderOpen(false);
     onNavigate('cart');
   };
@@ -211,7 +250,10 @@ export default function OrdersPage({ onNavigate }: Props) {
                   <div className="flex gap-2">
                     <button
                       type="button"
-                      onClick={() => setReorderOpen(true)}
+                      onClick={() => {
+                        setSelectedOrder(order);
+                        setReorderOpen(true);
+                      }}
                       className="flex-1 bg-transparent border border-primary text-primary font-semibold text-label-md py-2 rounded-lg hover:bg-surface-variant transition-colors"
                     >
                       Reorder
@@ -243,11 +285,20 @@ export default function OrdersPage({ onNavigate }: Props) {
 
       <ReorderSheet
         open={reorderOpen}
-        onClose={() => setReorderOpen(false)}
+        onClose={() => {
+          setReorderOpen(false);
+          setSelectedOrder(null);
+        }}
         onAddToCart={handleReorderAdd}
+        merchantName={selectedOrder?.merchantName}
+        merchantLogo={selectedOrder?.merchantLogo}
+        items={selectedOrder?.items}
+        estimatedTotal={selectedOrder?.total}
         onViewMenu={() => {
           setReorderOpen(false);
-          onNavigate('restaurant', { merchantId: 'island-grill' });
+          if (selectedOrder?.merchantId) {
+            onNavigate('restaurant', { merchantId: selectedOrder.merchantId });
+          }
         }}
       />
     </PullToRefresh>

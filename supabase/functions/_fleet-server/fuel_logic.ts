@@ -1087,9 +1087,11 @@ export function calculateIntegrity(
     efficiencyThreshold?: number,
     // Phase 6 (Deadhead): optional deadhead km to add to distance for efficiency calc
     deadheadKm?: number
+    /** Linked JAA pairs / statement ledger rows — skip frequency flag */
+    suppressFrequency?: boolean
   }
 ) {
-  const { volume, tankCapacity, prevCumulative, distanceSinceAnchor, profileEfficiency, recentTxCount, isTopUp, isAnchor, rangeMin, isCardTransaction, frequencyThreshold, rollingAvgEfficiency, efficiencyThreshold, deadheadKm } = params;
+  const { volume, tankCapacity, prevCumulative, distanceSinceAnchor, profileEfficiency, recentTxCount, isTopUp, isAnchor, rangeMin, isCardTransaction, frequencyThreshold, rollingAvgEfficiency, efficiencyThreshold, deadheadKm, suppressFrequency } = params;
   
   const totalVolumeInCycle = prevCumulative + volume;
   // Phase 23: prefer rolling average over manufacturer spec when available
@@ -1114,7 +1116,7 @@ export function calculateIntegrity(
   // frequencyThreshold = total card swipes in 4h window that triggers alert (default 3).
   // recentTxCount excludes the current entry, so we compare >= (threshold - 1).
   const effectiveThreshold = frequencyThreshold ?? 3;
-  if (isCardTransaction && recentTxCount >= (effectiveThreshold - 1)) {
+  if (!suppressFrequency && isCardTransaction && recentTxCount >= (effectiveThreshold - 1)) {
     return { status: 'critical' as const, reason: 'High Transaction Frequency', auditStatus: 'Flagged' as const };
   }
 

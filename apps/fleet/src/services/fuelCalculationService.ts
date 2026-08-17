@@ -406,6 +406,10 @@ export const FuelCalculationService = {
 
         const fuelCycles = calculateFuelCycles(vehicleEntries, [vehicle]);
         const closedCycles = fuelCycles.filter((c) => c.status === 'Complete' || c.status === 'Anomaly');
+        const exceptionCycles = closedCycles.filter(
+            (c) => c.signalTier === 'exception' || (c.status === 'Anomaly' && c.signalTier !== 'review'),
+        );
+        const reviewCycles = closedCycles.filter((c) => c.signalTier === 'review');
         const tankCap =
             Number(vehicle.specifications?.tankCapacity) ||
             Number(vehicle.fuelSettings?.tankCapacity) ||
@@ -428,7 +432,7 @@ export const FuelCalculationService = {
             if (closedCycles.length === 0 && vehicleEntries.length > 0) {
                 healthStatus = 'Red';
                 healthScore = 0;
-            } else if (closedCycles.some((c) => c.status === 'Anomaly') || severeGap) {
+            } else if (exceptionCycles.length > 0 || severeGap) {
                 healthStatus = 'Red';
                 healthScore = 40;
             } else {
@@ -437,7 +441,7 @@ export const FuelCalculationService = {
                     if (!(c.efficiency > 0) || !(observedEfficiency > 0)) return false;
                     return Math.abs(c.efficiency - observedEfficiency) / observedEfficiency > SOFT_CYCLE_EFFICIENCY_BAND;
                 });
-                if (softEffOff || gapAnomalyBuckets.length > 0) {
+                if (reviewCycles.length > 0 || softEffOff || gapAnomalyBuckets.length > 0) {
                     healthStatus = 'Amber';
                     healthScore = 70;
                 }

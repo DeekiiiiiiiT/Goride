@@ -208,10 +208,11 @@ describe('buildPnLFromCanonicalEvents — toll netting', () => {
     });
   });
 
-  it('flags pending (unresolved) trip-level tolls as provisional', () => {
+  it('flags unmatched Uber trip tolls as reimbursement coverage', () => {
     const events = [tollCharge({ sourceType: 'trip', sourceId: 'trip-5', netAmount: 30, grossAmount: 30 })];
     const pnl = buildPnLFromCanonicalEvents(events, period);
-    expect(pnl.coverageNote).toMatch(/no cash-wash\/phantom\/personal determination synced/);
+    expect(pnl.lines.find((l) => l.id === 'tolls')!.amount).toBe(-0);
+    expect(pnl.coverageNote).toMatch(/counted as reimbursement/);
   });
 });
 

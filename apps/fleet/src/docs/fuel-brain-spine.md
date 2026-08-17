@@ -4,33 +4,54 @@ Single source of truth for tank integrity vs km attribution vs stop-to-stop diag
 
 | Concern | Owner | Must not invent |
 |---|---|---|
-| Capacity full close + SPLIT | Server `fuel_logic.ts` (`classifyAnchor`, `resolveTankCapacity`) | Threshold forks in `index.tsx` / `fuel_controller.tsx` |
-| Cycle display | `fuelCycleEngine.ts` | Re-capping that ignores persisted `volumeContributed` |
+| Cycle stamp + lane split | Server `fuel_cycle_stamp.ts` | Ad-hoc cycle math in `index.tsx` / `fuel_controller.tsx` |
+| Close policy (rideshare default) | `fuel_cycle_close_policy.ts` | Client-only 98% stacking unless org opts into `cumulative_98` |
+| Cycle snapshots | `fuel_cycle_snapshot.ts` + `GET /fuel/cycles` | Client re-derive when server snapshot available |
 | Week health Emerald/Amber/Red | `fuelCalculationService.ts` | Bucket ±20% variance as primary Amber |
 | Km purpose (RS / Personal / DH) | `fuelBrainClassify.ts` | Tank integrity / capacity close |
 
-## Locked constants
+## Three lanes (locked)
 
-- **Capacity full threshold:** **98%** of tank capacity (`SOFT_ANCHOR_THRESHOLD` / `CAPACITY_CLOSE_THRESHOLD = 0.98`)
-- **Tank capacity order:** `specifications.tankCapacity` → `fuelSettings.tankCapacity` → `0` (fail closed on server; client UI may default 40 for display only)
-- **Trust:** Capacity full close (with spillover) is the only tank-cycle close. Driver Full Tank checkbox removed / ignored. Expense-backed fills (`type: Reimbursement` in Roam) **do** participate in capacity cycles; only ignore stale hard/Full Tank flags.
+```
+Cash lane liters  ──► tank cycle volume (partials OK, rideshare close)
+Card statement    ──► Card Inventory only (jaa_raw / approved_fuel) — never tank volume
+Card admin anchor ──► odometer only when linked to statement; liters live on statement row
+```
 
-## Cycle close rule
+**Matched pairs** (`jaaMatchedStatementId` ↔ `jaaMatchedDriverEntryId`) count as **one** swipe for frequency; frequency flags suppressed.
 
-1. Sum liters in the open cycle (plus carryover `excessVolume` from prior capacity close).
-2. When cumulative ≥ 98% of tank capacity → **capacity full close**.
-3. Always **SPLIT**: `volumeContributed` fills this cycle to capacity; `excessVolume` opens the next cycle.
-4. Stamp `metadata.cycleId` on every fill; mint a new UUID after a capacity close when spillover starts the next cycle.
+## Close modes
+
+| Mode | Default | Closes when |
+|---|---|---|
+| `rideshare` | **Yes (all fleets)** | Single fill ≥ 90% tank, admin confirmed full, week finalize |
+| `cumulative_98` | Org opt-in (`fuelSettings.cycleCloseMode`) | Legacy 98% partial stacking + SPLIT |
+
+Org flag: `vehicle.fuelSettings.cycleCloseMode` or `config:audit_settings.cycleCloseMode`.
+
+## Signal tiers (UI contract)
+
+| Tier | Meaning | Header count | Finalize |
+|---|---|---|---|
+| `observe` | Log only (fragmented purchase, high $/km) | No | Allowed |
+| `review` | Queue (unmatched card, same-odo same day) | No | Warn |
+| `exception` | Real problem (odo regression, duplicate card) | **Yes — "Exceptions"** | **Blocked** |
+
+Cycle `status` (Complete / Active / Anomaly) is decoupled from row `integrityStatus`. Overflow from partial stacking is **informational** in rideshare mode — not an exception.
 
 ## Canonical `cycleId` (stable UUID)
 
-- Mint **one UUID** when a cycle opens (first fill of a vehicle, or first fill after a capacity close).
-- Stamp that UUID on **every** `fuel_entry` / fuel `transaction` in the cycle as `metadata.cycleId`.
-- Capacity SPLIT closer keeps the **same** cycle id for the closing fill; excess carryover opens the **next** UUID.
-- Client `fuelCycleEngine` must prefer persisted `metadata.cycleId` over derived `cycle_${entryId}_${index}`.
-- Finalized reports store **slim** cycle summaries (ids + stats + `transactionIds`, no embedded `transactions[]`).
-- Helpers: `mintCycleId()` / cycle-id stamp flow in `fuel_logic.ts` (mirrored conceptually in client tests).
+- Mint **one UUID** when a cycle opens; stamp on every fill as `metadata.cycleId`.
+- Server stamper is the single write path: `stampEntryCycleMetadata`.
+- Client `useFuelCycles` reads `GET /fuel/cycles`; fallback `fuelCycleEngine` only when `VITE_FUEL_CYCLE_LEGACY_CLIENT=1`.
 
 ## Client mirror
 
-Pure helpers live in `utils/fuelAnchorLogic.ts` and must stay in sync with `fuel_logic.ts` exports of the same names.
+- `utils/fuelCycleClosePolicy.ts` — close mode helpers (keep in sync with server).
+- `utils/fuelAnchorLogic.ts` — legacy 98% classify for `cumulative_98` orgs only.
+
+## Fuel Brain vs Cycle engine vs Ledger
+
+- **Fuel Brain** = km attribution (RS / Personal / Deadhead)
+- **Cycle engine** = tank/cost grouping (cash lane + close policy)
+- **Ledger** = wallet money (Pending → Finalize settlement)

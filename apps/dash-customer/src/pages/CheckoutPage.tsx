@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Session } from '@supabase/supabase-js';
-import { API_ENDPOINTS } from '@roam/api-client';
+import { API_ENDPOINTS, supabaseAnonFunctionHeaders } from '@roam/api-client';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { AddTipSheet } from '@/components/checkout/AddTipSheet';
 import { ScheduleDeliverySheet } from '@/components/checkout/ScheduleDeliverySheet';
 import { useCart } from '@/hooks/useCart';
-import { getSavedAddress } from '@/lib/addressStorage';
+import { getCheckoutLocation, getSavedAddress } from '@/lib/addressStorage';
 import { resolveCheckoutAddress } from '@/lib/checkoutAddress';
 import {
   getApiPaymentMethod,
@@ -14,7 +14,7 @@ import {
   getPaymentLabel,
   saveCheckoutPreferences,
 } from '@/lib/checkoutStorage';
-import { calculateOrderTotals } from '@/lib/orderPricing';
+import { calculateOrderTotals, fetchMerchantCheckoutPricing } from '@/lib/orderPricing';
 import { formatJmd } from '@/lib/restaurantContent';
 import { toast } from 'sonner';
 import { fetchCustomerProfile } from '@/lib/customerApi';
@@ -75,18 +75,10 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
     let cancelled = false;
     void (async () => {
       try {
-        const res = await fetch(`${API_ENDPOINTS.delivery}/merchants/${merchantId}/pricing`);
-        const data = (await res.json().catch(() => ({}))) as {
-          platform_fee_rate?: number;
-          delivery_fee?: number;
-        };
-        if (cancelled) return;
-        if (typeof data.platform_fee_rate === 'number') {
-          setPlatformFeeRate(data.platform_fee_rate);
-        }
-        if (typeof data.delivery_fee === 'number' && Number.isFinite(data.delivery_fee)) {
-          setMerchantDeliveryFee(Math.max(0, data.delivery_fee));
-        }
+        const pricing = await fetchMerchantCheckoutPricing(merchantId, session?.access_token);
+        if (cancelled || !pricing) return;
+        setPlatformFeeRate(pricing.platformFeeRate);
+        setMerchantDeliveryFee(pricing.deliveryFee);
       } catch {
         /* keep fallback */
       }
@@ -94,7 +86,7 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [merchantId]);
+  }, [merchantId, session?.access_token]);
 
   useEffect(() => {
     const vertical = sessionStorage.getItem('roam_cart_vertical');
@@ -175,6 +167,7 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
 
     setIsPlacingOrder(true);
     const paymentMethod = getApiPaymentMethod(getCheckoutPreferences().paymentMethodId);
+    const checkoutLocation = getCheckoutLocation();
 
     try {
       const res = await fetch(`${API_ENDPOINTS.delivery}/orders`, {
@@ -195,6 +188,8 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
             options: item.options,
           })),
           deliveryAddress,
+          deliveryLat: checkoutLocation.lat,
+          deliveryLng: checkoutLocation.lng,
           deliveryInstructions: handoff === 'door' ? instructions : 'Hand it to me',
           deliveryFee: totals.deliveryFee,
           tip: totals.tip,
@@ -219,13 +214,22 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
       if (paymentMethod === 'wipay' || paymentMethod === 'paypal') {
         const paymentRes = await fetch(`${API_ENDPOINTS.payments}/intents`, {
           method: 'POST',
-          headers: {
+          headers: supabaseAnonFunctionHeaders({
             'Content-Type': 'application/json',
             Authorization: `Bearer ${session.access_token}`,
-          },
-          body: JSON.stringify({ orderId: order.id, provider: paymentMethod }),
+          }),
+          body: JSON.stringify({
+            orderId: order.id,
+            provider: paymentMethod,
+            returnOrigin: window.location.origin,
+          }),
         });
-        if (!paymentRes.ok) throw new Error('Failed to create payment');
+        if (!paymentRes.ok) {
+          const paymentError = await paymentRes.json().catch(() => ({}));
+          throw new Error(
+            (paymentError as { error?: string }).error || 'Failed to create payment',
+          );
+        }
         const { clientSecret } = await paymentRes.json();
         clearCart();
         window.location.href = clientSecret;

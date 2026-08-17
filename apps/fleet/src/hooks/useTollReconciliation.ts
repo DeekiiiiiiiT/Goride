@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { api, fetchFleetTimezone } from '../services/api';
 import { FinancialTransaction, Trip, DisputeRefund } from '../types/data';
 import { findTollMatches, MatchResult } from '../utils/tollReconciliation';
+import { collectReadyToLinkPairs, partitionSuggestions } from '../utils/suggestionPartition';
 import { demoteSpuriousDeadheadMatch } from '../utils/deadheadMatchGuard';
 import { fleetCalendarDay, ymdToLocalDate } from '../utils/timezoneDisplay';
 import { toast } from 'sonner@2.0.3';
@@ -55,21 +56,23 @@ function inPeriodFleetDay(
  */
 
 /**
- * @internal Paginate through ALL trips.
- * Still needed for:
- *  - ManualMatchModal (client-side trip search)
- *  - unreconcile() fallback (re-generate suggestions locally via findTollMatches)
- * Phase 8 note: This is the only remaining full-data-dump call.
- * If ManualMatchModal is ever given a server search endpoint, this can be removed.
+ * Period trips for ManualMatch + local rematch — not the whole fleet history.
  */
-async function fetchAllTrips(): Promise<Trip[]> {
+async function fetchTripsInRange(startDate: string, endDate: string): Promise<Trip[]> {
   const PAGE_SIZE = 500;
   let offset = 0;
   const all: Trip[] = [];
   while (true) {
-    const batch = await api.getTrips({ limit: PAGE_SIZE, offset });
+    const res = await api.getTripsFiltered({
+      startDate,
+      endDate,
+      limit: PAGE_SIZE,
+      offset,
+    });
+    const batch = res.data || [];
     all.push(...batch);
-    if (batch.length < PAGE_SIZE) break; // last page
+    const total = res.total ?? all.length;
+    if (batch.length < PAGE_SIZE || all.length >= total) break;
     offset += PAGE_SIZE;
   }
   return all;
@@ -242,20 +245,40 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
       // fleet calendar day (period list uses fleet TZ; old API filter used UTC).
       const dateParams = period ? paddedPeriodDateParams(period) : {};
       const filterParams = { ...(driverId ? { driverId } : {}), ...dateParams, autoMatch: opts?.autoMatch };
+      const tripRange = period
+        ? { startDate: shiftYmd(period.startDate, -2), endDate: shiftYmd(period.endDate, 2) }
+        : null;
       const fleetTz = await fetchFleetTimezone();
 
-      // Step 1: Fetch unreconciled in pages (server caps page size; avoids edge timeout)
-      const unreconciledRes = await fetchAllUnreconciled(filterParams);
-      if (gen !== fetchGen.current) return;
-
-      // Step 2: Now fetch reconciled + refunds + trips (after auto-reconciliation writes have persisted)
-      const [reconciledRes, reconciledAllRes, refundsRes, allTrips] = await Promise.all([
+      const [unreconciledRes, reconciledRes, refundsRes, periodTrips, drRes, sugRes, resolvedRes, shortRes] = await Promise.all([
+        fetchAllUnreconciled(filterParams),
         api.getTollReconciled({ limit: 1000, ...(driverId ? { driverId } : {}), ...dateParams }),
-        period
-          ? api.getTollReconciled({ limit: 1000, ...(driverId ? { driverId } : {}) })
-          : Promise.resolve({ data: [] as FinancialTransaction[] }),
         api.getTollUnclaimedRefunds({ limit: 1000, ...(driverId ? { driverId } : {}), ...dateParams }),
-        fetchAllTrips()
+        tripRange ? fetchTripsInRange(tripRange.startDate, tripRange.endDate) : Promise.resolve([] as Trip[]),
+        api.getDisputeRefunds(
+          period ? { dateFrom: period.startDate, dateTo: period.endDate } : undefined,
+        ).catch((drErr) => {
+          console.error('[Reconciliation] Failed to fetch dispute refunds:', drErr);
+          return { data: [] as DisputeRefund[] };
+        }),
+        api.getRefundSuggestions({
+          ...(driverId ? { driverId } : {}),
+          ...dateParams,
+        }).catch((err) => {
+          console.error('[Reconciliation] Failed to fetch refund suggestions:', err);
+          return { suggestions: {} };
+        }),
+        api.getResolvedRefunds(filterParams).catch((err) => {
+          console.error('[Reconciliation] Failed to fetch resolved refunds:', err);
+          return { data: [] as Trip[] };
+        }),
+        api.getUnlinkedShortfallSuggestions({
+          ...(driverId ? { driverId } : {}),
+          ...(period ? { from: period.startDate, to: period.endDate } : {}),
+        }).catch((err) => {
+          console.error('[Reconciliation] Failed to fetch shortfall suggestions:', err);
+          return { suggestions: {} };
+        }),
       ]);
       if (gen !== fetchGen.current) return;
 
@@ -266,7 +289,6 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
 
       const unreconciled: FinancialTransaction[] = trimToPeriod(unreconciledRes.data || []);
       const reconciled: FinancialTransaction[] = trimToPeriod(reconciledRes.data || []);
-      const reconciledAll: FinancialTransaction[] = reconciledAllRes.data || reconciled;
       const refundsRaw: Trip[] = trimToPeriod(refundsRes.data || []);
       // Belt: server may historically return duplicate trip ids from unordered pages.
       const seenRefundIds = new Set<string>();
@@ -278,9 +300,10 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
 
       setUnreconciledTolls(unreconciled);
       setReconciledTolls(reconciled);
-      setAllReconciledTolls(reconciledAll);
+      setAllReconciledTolls(reconciled);
       setUnclaimedRefunds(refunds);
-      setTrips(allTrips);
+      setTrips(periodTrips);
+      setDisputeRefunds(drRes.data || []);
 
       // Convert server suggestions to client MatchResult format
       if (unreconciledRes.suggestions) {
@@ -289,7 +312,6 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
         setSuggestions(new Map());
       }
 
-      // Phase 2/6: Notify admin if auto-matching occurred + persist count for banner
       const autoCount = unreconciledRes.autoReconciled;
       setAutoReconciledCount(autoCount || 0);
       if (autoCount && autoCount > 0) {
@@ -299,57 +321,21 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
         });
       }
 
-      // Phase 6 (Dispute Refunds): Fetch imported dispute refunds
-      try {
-        const drRes = await api.getDisputeRefunds(
-          period ? { dateFrom: period.startDate, dateTo: period.endDate } : undefined,
-        );
-        if (gen !== fetchGen.current) return;
-        setDisputeRefunds(drRes.data || []);
-      } catch (drErr) {
-        if (gen !== fetchGen.current) return;
-        console.error('[Reconciliation] Failed to fetch dispute refunds:', drErr);
-        setDisputeRefunds([]);
+      const sugMap = new Map<string, RefundSuggestion>();
+      const rawSug = sugRes?.suggestions || {};
+      for (const [tripId, s] of Object.entries(rawSug)) {
+        sugMap.set(tripId, s as RefundSuggestion);
       }
+      setRefundSuggestions(sugMap);
+      setResolvedRefunds(trimToPeriod(resolvedRes?.data || []));
 
-      // Phase 3: leftovers + underpaid Apply targets together so Unlinked rows show
-      // orange Apply from first paint (not only after a later Accept refresh).
-      try {
-        const [sugRes, resolvedRes, shortRes] = await Promise.all([
-          api.getRefundSuggestions(driverId ? { driverId } : undefined),
-          api.getResolvedRefunds(filterParams),
-          // Exact period bounds (no ±1 pad) — pad was leaking next-week underpaids
-          // into "best match" and the violet Other period banner.
-          api.getUnlinkedShortfallSuggestions({
-            ...(driverId ? { driverId } : {}),
-            ...(period ? { from: period.startDate, to: period.endDate } : {}),
-          }),
-        ]);
-        if (gen !== fetchGen.current) return;
-        const sugMap = new Map<string, RefundSuggestion>();
-        const rawSug = sugRes?.suggestions || {};
-        for (const [tripId, s] of Object.entries(rawSug)) {
-          sugMap.set(tripId, s as RefundSuggestion);
+      if (shortfallGen === shortfallFetchGen.current) {
+        const shortMap = new Map<string, UnlinkedShortfallSuggestion[]>();
+        const rawShort = shortRes?.suggestions || {};
+        for (const [tripId, list] of Object.entries(rawShort)) {
+          shortMap.set(tripId, list as UnlinkedShortfallSuggestion[]);
         }
-        setRefundSuggestions(sugMap);
-        setResolvedRefunds(trimToPeriod(resolvedRes?.data || []));
-
-        if (shortfallGen === shortfallFetchGen.current) {
-          const shortMap = new Map<string, UnlinkedShortfallSuggestion[]>();
-          const rawShort = shortRes?.suggestions || {};
-          for (const [tripId, list] of Object.entries(rawShort)) {
-            shortMap.set(tripId, list as UnlinkedShortfallSuggestion[]);
-          }
-          setShortfallSuggestions(shortMap);
-        }
-      } catch (refErr) {
-        if (gen !== fetchGen.current) return;
-        console.error('[Reconciliation] Failed to fetch refund/shortfall suggestions:', refErr);
-        setRefundSuggestions(new Map());
-        setResolvedRefunds([]);
-        if (shortfallGen === shortfallFetchGen.current) {
-          setShortfallSuggestions(new Map());
-        }
+        setShortfallSuggestions(shortMap);
       }
 
     } catch (error) {
@@ -495,34 +481,46 @@ export function useTollReconciliation(driverId?: string, period?: Reconciliation
       }
   };
 
-  const autoMatchAll = async () => {
-    // Filter for high confidence matches
-    const highConfidenceMatches: { transactionId: string, tripId: string }[] = [];
-    
-    unreconciledTolls.forEach(tx => {
-        const matches = suggestions.get(tx.id);
-        if (matches && matches.length > 0) {
-            const best = matches[0];
-            if (best.confidence === 'high') {
-                highConfidenceMatches.push({ transactionId: tx.id, tripId: best.trip.id });
-            }
-        }
-    });
+  const autoMatchAll = async (
+    matches?: Array<{ transactionId: string; tripId: string }>,
+  ) => {
+    const highConfidenceMatches =
+      matches && matches.length > 0
+        ? matches
+        : collectReadyToLinkPairs(
+            partitionSuggestions(unreconciledTolls, suggestions, 'needs-review').suggestions,
+            suggestions,
+          );
 
-    if (highConfidenceMatches.length === 0) return;
+    if (highConfidenceMatches.length === 0) {
+      toast.message('Nothing ready to link in bulk');
+      return;
+    }
 
     try {
-        // Phase 4: Use bulk endpoint (1 call instead of N sequential calls)
         const result = await api.bulkReconcileTolls(highConfidenceMatches);
         console.log(`[AutoMatch] Bulk result: ${result.matched} matched, ${result.skipped} skipped, ${result.failed} failed`);
         if (result.errors?.length > 0) {
             console.warn('[AutoMatch] Errors:', result.errors);
         }
+        if (result.matched > 0) {
+          toast.success(`Linked ${result.matched} trip${result.matched === 1 ? '' : 's'}`);
+        }
+        if (result.failed > 0) {
+          toast.error(`${result.failed} could not be linked`);
+        }
+        if (result.matched === 0 && result.failed === 0) {
+          toast.message(
+            result.skipped > 0
+              ? `No new trips were linked (${result.skipped} skipped)`
+              : 'No new trips were linked',
+          );
+        }
 
-        // Silent refresh — keep the dashboard mounted while data syncs
         await fetchData();
     } catch (e) {
         console.error("Auto-match failed", e);
+        toast.error('Bulk link failed');
     }
   };
 

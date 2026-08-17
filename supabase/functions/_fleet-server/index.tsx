@@ -20,6 +20,7 @@ import { generatePerformanceReport } from "./performance-metrics.tsx";
 import { pMap } from "./concurrency.ts";
 import { findMatchingStationSmart } from "./geo_matcher.ts";
 import * as fuelLogic from "./fuel_logic.ts";
+import { recalculateVehicleFuelEntries } from "./fuel_cycle_stamp.ts";
 import { Buffer } from "node:buffer";
 import {
   requireAuth,
@@ -154,6 +155,7 @@ import {
 import { syncLinkedExpenseTransaction } from "./fuel_transaction_sync.ts";
 import { resolveFuelPaymentSource } from "./fuel_payment_source.ts";
 import { ensureFuelEntryForApprovedTx } from "./fuel_posted_guarantee.ts";
+import { normalizeAdminCashFuelTransaction } from "./fuel_transaction_normalize.ts";
 import auditApp from "./audit_controller.tsx";
 import safetyApp from "./safety_controller.tsx";
 import syncApp from "./sync_controller.tsx";
@@ -1258,168 +1260,23 @@ app.post("/make-server-37f42386/admin/fuel-audit/recalculate-all", requireAuth({
 
         const entryUpdates: any[] = [];
         let entryModifiedCount = 0;
+        const auditConfig = await kv.get("config:audit_settings");
 
         for (const [vId, entries] of entriesByVehicle.entries()) {
             const vehicleInfo = vehicleMap.get(vId);
             if (!vehicleInfo || vehicleInfo.capacity <= 0) continue;
-            const capacity = vehicleInfo.capacity;
-            const profileKmPerLiter = vehicleInfo.fuelEconomy;
-            const rangeMin = vehicleInfo.estimatedRangeMin;
+            const vehicle = await kv.get(`vehicle:${vId}`);
+            if (!vehicle) continue;
 
-            // Sort chronologically
-            entries.sort((a, b) => {
-                const dateA = new Date(a.date).getTime();
-                const dateB = new Date(b.date).getTime();
-                if (!isNaN(dateA) && !isNaN(dateB) && dateA !== dateB) return dateA - dateB;
-                return (a.odometer || 0) - (b.odometer || 0);
-            });
-
-            let runningCumulative = 0;
-            // Phase 20: running anchor odometer tracker (replaces broken per-entry metadata lookup)
-            let lastAnchorOdo = 0;
-            let currentCycleId = fuelLogic.isStableCycleId(entries[0]?.metadata?.cycleId)
-                ? (entries[0].metadata.cycleId as string)
-                : fuelLogic.mintCycleId();
-            // Phase 21: pre-compute rolling average efficiency for this vehicle's fuel entries
-            const entryRollingAvg = fuelLogic.calculateRollingEfficiencyBatch(entries);
-            const efficiencyBaseline = entryRollingAvg?.avgKmPerLiter || 0;
-            if (!entryRollingAvg) efficiencySkippedCount += entries.length;
-
-            for (let i = 0; i < entries.length; i++) {
-                const entry = entries[i];
-                const volume = Number(entry.liters) || Number(entry.metadata?.fuelVolume) || 0;
-                const prevCumulative = runningCumulative;
-
-                const anchor = fuelLogic.classifyAnchor({
-                    prevCumulative,
-                    volume,
-                    tankCapacity: capacity,
-                    entryType: entry.type,
-                    paymentSource: entry.paymentSource,
-                });
-                runningCumulative = anchor.totalVolumeInCycle;
-                const percentOfTank = anchor.percentOfTank;
-                const isSoftAnchor = anchor.isSoft;
-                const isCapacityClose = anchor.isCapacityClose;
-                const isAnchor = anchor.isAnchor;
-                const volumeContributed = anchor.volumeContributed;
-                const excessVolume = anchor.excessVolume;
-
-                // Efficiency calculation
-                // Phase 20: use running lastAnchorOdo instead of broken metadata lookup
-                const distanceSinceAnchor = (entry.odometer && lastAnchorOdo) ? (entry.odometer - lastAnchorOdo) : 0;
-                let actualKmPerLiter = 0;
-                let efficiencyVariance = 0;
-                if (distanceSinceAnchor > 0 && runningCumulative > 0 && efficiencyBaseline > 0) {
-                    actualKmPerLiter = distanceSinceAnchor / runningCumulative;
-                    efficiencyVariance = (efficiencyBaseline - actualKmPerLiter) / efficiencyBaseline;
-                }
-
-                // Frequency check (4-hour window) — card-only
-                const fourHoursAgo = new Date(new Date(entry.date).getTime() - (4 * 60 * 60 * 1000)).toISOString();
-                const recentTxCount = entries.slice(0, i).filter(e => e.date >= fourHoursAgo).length;
-                const isCardTx = entry.type === 'Card_Transaction' || entry.paymentSource === 'Gas_Card' ||
-                    entry.paymentMethod === 'Gas Card' || entry.paymentMethod === 'Fuel Card';
-                const isHighFrequency = isCardTx && recentTxCount >= (frequencyThreshold - 1);
-                const isFragmented = capacity > 0 && (volume / capacity) < 0.15 && !entry.metadata?.isTopUp;
-
-                // Determine new integrity
-                let newIntegrityStatus = 'stable';
-                let newAnomalyReason: string | null = null;
-                let newAuditStatus = 'Clean';
-
-                if (capacity > 0 && volume > (capacity * 1.02)) {
-                    newIntegrityStatus = 'critical';
-                    newAnomalyReason = 'Tank Overfill Anomaly';
-                    newAuditStatus = 'Flagged';
-                } else if (isAnchor && distanceSinceAnchor > 0) {
-                    // Phase 19/20: only check efficiency when we have real distance data
-                    // Phase 21: skip if no rolling average (efficiencyBaseline=0), use configurable threshold
-                    const isHighConsumption = efficiencyBaseline > 0 && efficiencyVariance > efficiencyThreshold;
-                    const isRangeSuspicious = rangeMin > 0 && distanceSinceAnchor > 0 && distanceSinceAnchor < (rangeMin * 0.5) && (runningCumulative / capacity) > 0.8;
-                    if (isHighConsumption || isRangeSuspicious) {
-                        newIntegrityStatus = 'critical';
-                        newAnomalyReason = 'High Fuel Consumption';
-                        newAuditStatus = 'Flagged';
-                    }
-                } else if (isHighFrequency) {
-                    newIntegrityStatus = 'critical';
-                    newAnomalyReason = 'High Transaction Frequency';
-                    newAuditStatus = 'Flagged';
-                } else if (isFragmented) {
-                    newIntegrityStatus = 'warning';
-                    newAnomalyReason = 'Fragmented Purchase';
-                    newAuditStatus = 'Flagged';
-                } else if (percentOfTank > 85) {
-                    newIntegrityStatus = 'warning';
-                    newAnomalyReason = 'Approaching Capacity';
-                    newAuditStatus = 'Observing';
-                }
-
-                const newIsFlagged = newIntegrityStatus === 'critical';
-
-                // Skip if already manually resolved / healed (don't override human decisions)
-                if (entry.auditStatus === 'Resolved' || entry.auditStatus === 'Auto-Resolved' || entry.metadata?.isHealed) {
-                    if (isAnchor) {
-                        runningCumulative = excessVolume;
-                        lastAnchorOdo = entry.odometer || lastAnchorOdo;
-                        currentCycleId = fuelLogic.resolveNextCycleIdAfterAnchor(entries[i + 1], currentCycleId);
-                    }
-                    continue;
-                }
-
-                // Always persist soft/hard + SPLIT fields so cycle engine can trust metadata
-                const oldStatus = entry.metadata?.integrityStatus;
-                const oldReason = entry.metadata?.anomalyReason || entry.anomalyReason;
-                const oldFlagged = entry.isFlagged;
-                const softMetaChanged =
-                    entry.metadata?.isSoftAnchor !== isSoftAnchor ||
-                    entry.metadata?.isAnchor !== isAnchor ||
-                    entry.metadata?.volumeContributed !== Number(volumeContributed.toFixed(2)) ||
-                    entry.metadata?.excessVolume !== (excessVolume > 0 ? Number(excessVolume.toFixed(2)) : undefined) ||
-                    entry.metadata?.cycleId !== currentCycleId;
-
-                if (oldStatus !== newIntegrityStatus || oldReason !== newAnomalyReason || oldFlagged !== newIsFlagged || softMetaChanged) {
-                    entry.isFlagged = newIsFlagged;
-                    entry.auditStatus = newAuditStatus;
-                    entry.anomalyReason = newAnomalyReason;
-                    entry.metadata = {
-                        ...entry.metadata,
-                        integrityStatus: newIntegrityStatus,
-                        anomalyReason: newAnomalyReason,
-                        auditStatus: newAuditStatus,
-                        volumeContributed: Number(volumeContributed.toFixed(2)),
-                        excessVolume: excessVolume > 0 ? Number(excessVolume.toFixed(2)) : undefined,
-                        distanceSinceAnchor,
-                        actualKmPerLiter: Number(actualKmPerLiter.toFixed(2)),
-                        profileKmPerLiter,
-                        // Phase 21: rolling average metadata
-                        rollingAvgKmPerLiter: entryRollingAvg?.avgKmPerLiter ?? null,
-                        rollingAvgWindow: entryRollingAvg?.window ?? null,
-                        rollingAvgEntryCount: entryRollingAvg?.entryCount ?? 0,
-                        efficiencyBaseline: entryRollingAvg ? 'rolling' : 'skipped',
-                        efficiencyVariance: Number(efficiencyVariance.toFixed(4)),
-                        isHighFrequency,
-                        isFragmented,
-                        isSoftAnchor,
-                        isCapacityClose: isCapacityClose || undefined,
-                        isFullTank: isCapacityClose || undefined,
-                        isAnchor,
-                        isHardAnchor: undefined,
-                        cycleId: currentCycleId,
-                        recalculatedAt: new Date().toISOString()
-                    };
-                    entryUpdates.push(entry);
-                    entryModifiedCount++;
-                }
-
-                // Reset cycle at anchors (carry soft SPLIT excess into next cycle)
-                if (isAnchor) {
-                    runningCumulative = excessVolume;
-                    lastAnchorOdo = entry.odometer || lastAnchorOdo;
-                    currentCycleId = fuelLogic.resolveNextCycleIdAfterAnchor(entries[i + 1], currentCycleId);
-                }
+            const { modified } = await recalculateVehicleFuelEntries(
+                entries,
+                vehicle as Record<string, unknown>,
+                auditConfig,
+            );
+            for (const entry of modified) {
+                entryUpdates.push(entry);
             }
+            entryModifiedCount += modified.length;
         }
 
         // 7. Batch Save fuel_entry:* (Chunked)
@@ -3325,6 +3182,13 @@ app.post("/make-server-37f42386/transactions", requireAuth(), async (c) => {
     const previousTransaction = await kv.get(`transaction:${transaction.id}`);
     if (!transaction.timestamp) {
         transaction.timestamp = new Date().toISOString();
+    }
+
+    // Admin manual cash fuel: book as Expense debit (not positive Fuel_Manual_Entry credit).
+    if (normalizeAdminCashFuelTransaction(transaction)) {
+        console.log(
+            `[FuelLedger] Normalized admin cash fuel tx ${transaction.id} → Expense ${transaction.amount}`,
+        );
     }
 
     // Future-Date Guard: flag transactions with dates beyond today

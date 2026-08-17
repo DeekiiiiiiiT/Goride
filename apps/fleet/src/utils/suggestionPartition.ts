@@ -96,3 +96,38 @@ export function smartReadyBannerLabel(stepId?: SuggestionStepId): string {
   if (stepId === 'deadhead') return 'Confirm deadhead';
   return 'Ready to link';
 }
+
+export interface ReadyToLinkPair {
+  transactionId: string;
+  tripId: string;
+}
+
+function isCashOrReceiptToll(tx: FinancialTransaction): boolean {
+  return tx.paymentMethod === 'Cash' || !!tx.receiptUrl;
+}
+
+/**
+ * Needs Review "Link Trip" bulk set: money matches with a chosen trip.
+ * Skips ambiguous picks, personal/deadhead, cash claims (Approve path),
+ * and duplicate trip targets in one batch.
+ */
+export function collectReadyToLinkPairs(
+  entries: SuggestionEntry[],
+  suggestions: Map<string, MatchResult[]>,
+): ReadyToLinkPair[] {
+  const usedTrips = new Set<string>();
+  const pairs: ReadyToLinkPair[] = [];
+
+  for (const entry of entries) {
+    if (entry.kind !== 'money' || entry.orphanMode) continue;
+    if (isCashOrReceiptToll(entry.toll)) continue;
+    const best = suggestions.get(entry.toll.id)?.[0];
+    const tripId = best?.trip?.id;
+    if (!tripId) continue;
+    if (usedTrips.has(tripId)) continue;
+    usedTrips.add(tripId);
+    pairs.push({ transactionId: entry.toll.id, tripId });
+  }
+
+  return pairs;
+}

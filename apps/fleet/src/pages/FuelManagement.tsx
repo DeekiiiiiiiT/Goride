@@ -299,7 +299,11 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
           void fuelService.ensurePostedEntries(40).catch(() => ({ healed: 0, blocked: 0 }));
 
           // Start all fetches immediately; paint cards (and names) as soon as those resolve.
-          const vehiclesP = api.getVehicles().catch(() => []);
+          const vehiclesP = api.getVehicles().catch((err) => {
+              console.error('[FuelManagement] getVehicles failed', err);
+              toast.error('Could not load vehicles — session may have expired.');
+              return [];
+          });
           const driversP = api.getDrivers().catch(() => []);
           const scenariosP = fuelService.getFuelScenarios().catch(() => []);
           const cardsP = fuelService.getFuelCards().then(
@@ -309,10 +313,17 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
                   throw err;
               },
           );
-          const logsP = fuelService.getFuelEntries().catch(() => []);
+          const logsP = fuelService.getFuelEntries().catch((err) => {
+              console.error('[FuelManagement] getFuelEntries failed', err);
+              toast.error('Could not load fuel entries — try logging out and back in.');
+              return [];
+          });
           const adjsP = fuelService.getMileageAdjustments().catch(() => []);
           const disputesP = FuelDisputeService.getAllDisputes().catch(() => []);
-          const txP = api.getTransactions(undefined, { limit: 10000 }).catch(() => []);
+          const txP = api.getTransactions(undefined, { limit: 10000 }).catch((err) => {
+              console.error('[FuelManagement] getTransactions failed', err);
+              return [];
+          });
           const finalizedP = api.getFinalizedReports().catch(() => []);
           const programsP = fuelService.getJaaPrograms().catch(() => [] as JaaProgram[]);
 

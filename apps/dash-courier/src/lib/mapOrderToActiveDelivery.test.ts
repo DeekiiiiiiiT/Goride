@@ -66,4 +66,18 @@ describe('mapOrderToActiveDelivery', () => {
     expect(delivery.etaMinutes).toBe(0);
     expect(delivery.distanceKm).toBe(0);
   });
+
+  it('ignores null dropoff coords so distance is not Earth-scale', () => {
+    const delivery = mapOrderToActiveDelivery(
+      {
+        ...baseOrder,
+        delivery_lat: null,
+        delivery_lng: null,
+      },
+      { lat: 18.01, lng: -76.82 },
+    );
+    expect(delivery.dropoffDistanceKm).toBeLessThan(50);
+    expect(delivery.dropoffLat).toBeUndefined();
+    expect(delivery.dropoffLng).toBeUndefined();
+  });
 });

@@ -110,6 +110,11 @@ export async function finalizeFuelWeekReports(
     );
 
     if (relevantEntries.length > 0) {
+      opts.onProgress?.(`Closing open tank cycles…`);
+      if (report.vehicleId) {
+        const weekEnd = format(parseISO(reportWeekYmdBounds(report).end), 'yyyy-MM-dd');
+        await api.closeFuelWeekCycles(report.vehicleId, weekEnd).catch(() => undefined);
+      }
       opts.onProgress?.(`Posting ${relevantEntries.length} fill(s)…`);
       await settlementService.commitWeeklyStatement(report, relevantEntries, settlementDeps || undefined);
       successCount++;

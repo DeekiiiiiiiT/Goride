@@ -75,6 +75,40 @@ describe('computeTollFleetLossNetting', () => {
     expect(agg.tolls).toBe(0);
   });
 
+  it('does not double-count tag plaza spend and unmatched Uber trip reimbursement', () => {
+    const events = [
+      charge({ sourceId: 'tag-1', netAmount: 4620, grossAmount: 4620 }),
+      charge({ sourceType: 'trip', sourceId: 'trip-1', netAmount: 4620, grossAmount: 4620 }),
+    ];
+    const netting = computeTollFleetLossNetting(events);
+    expect(netting.gross).toBe(4620);
+    expect(netting.recovered).toBe(4620);
+    expect(netting.net).toBe(0);
+    const pnl = buildPnLFromCanonicalEvents(events, period);
+    expect(-(pnl.lines.find((l) => l.id === 'tolls')!.amount ?? 0)).toBe(0);
+  });
+
+  it('unmatched tag without a trip stays a fleet loss', () => {
+    expect(computeTollFleetLossNetting([charge({ netAmount: 370, grossAmount: 370 })]).net).toBe(370);
+  });
+
+  it('cash-washed trip does not wipe a real tag debit', () => {
+    const events = [
+      charge({ sourceId: 'tag-1', netAmount: 370, grossAmount: 370 }),
+      charge({ sourceType: 'trip', sourceId: 'trip-1', netAmount: 370, grossAmount: 370 }),
+      {
+        eventType: 'toll_charge_offset',
+        date: '2026-02-10',
+        driverId: 'd1',
+        sourceType: 'trip',
+        sourceId: 'trip-1',
+        netAmount: 370,
+        direction: 'inflow',
+      },
+    ];
+    expect(computeTollFleetLossNetting(events).net).toBe(370);
+  });
+
   it('does not treat a top_up-shaped refund as fleet recovery when absent from events', () => {
     // Go-forward: top_ups are not emitted as toll_refund. A plain charge stays a loss.
     const events = [charge()];

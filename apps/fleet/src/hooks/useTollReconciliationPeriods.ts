@@ -60,6 +60,7 @@ export function useTollReconciliationPeriods(driverId?: string) {
   const [totals, setTotals] = useState<ReconciliationTotals>(EMPTY_TOTALS);
   const [workflowStageBackfillComplete, setWorkflowStageBackfillComplete] = useState(true);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   // Only blank the UI on first load — action refreshes stay silent
   const isInitialLoad = useRef(true);
 
@@ -71,8 +72,10 @@ export function useTollReconciliationPeriods(driverId?: string) {
       setPeriods(res.periods || []);
       setTotals(res.totals || EMPTY_TOTALS);
       setWorkflowStageBackfillComplete(res.workflowStageBackfillComplete !== false);
+      setLoadError(null);
     } catch (error) {
       console.error('Failed to fetch reconciliation periods', error);
+      setLoadError(error instanceof Error ? error.message : 'Could not load tolls');
     } finally {
       isInitialLoad.current = false;
       if (blockUi) setLoading(false);
@@ -97,6 +100,7 @@ export function useTollReconciliationPeriods(driverId?: string) {
     totals,
     workflowStageBackfillComplete,
     loading,
+    loadError,
     refresh: fetchPeriods,
   };
 }

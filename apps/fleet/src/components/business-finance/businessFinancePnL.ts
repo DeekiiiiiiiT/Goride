@@ -7,6 +7,7 @@ import { inPeriod } from './periodRange';
 import { round2 } from './money';
 import {
   computeTollFleetLossNetting,
+  isTripSourcedTollCharge,
   tollEventAmount,
   tollEventDate,
   tollRecoveredWashedMemo,
@@ -156,7 +157,7 @@ export function buildPnLFromCanonicalEvents(
   }
   if (tollNet.provisional > 0.005) {
     noteParts.push(
-      `${formatMoneyPlain(tollNet.provisional)} of Tolls is from trip-level tolls with no cash-wash/phantom/personal determination synced to this P&L yet — if these were already resolved in Toll Reconciliation, run the P&L offset backfill to sync them here; this number may otherwise change once reviewed.`,
+      `${formatMoneyPlain(tollNet.provisional)} of Uber trip tolls is counted as reimbursement (not extra spend). Confirm in Toll Reconciliation — cash-wash / phantom / personal still need a P&L offset if those trips are not covering a tag debit.`,
     );
   }
   if (tollNet.clipped) {
@@ -235,6 +236,12 @@ export function sumExpenseRowsFromEvents(
     'maintenance',
     'operating_expense',
   ];
+  const tripOffsetSourceIds = new Set<string>();
+  for (const e of scoped) {
+    if (String(e.eventType || '') !== 'toll_charge_offset') continue;
+    if (String(e.direction || '') !== 'inflow') continue;
+    tripOffsetSourceIds.add(String(e.sourceId || ''));
+  }
   for (const e of scoped) {
     const t = String(e.eventType || '');
     if (!RECOGNIZED.includes(t)) continue;
@@ -257,9 +264,15 @@ export function sumExpenseRowsFromEvents(
         signedAmount = amt;
       }
     } else if (t === 'toll_charge') {
-      tolls += amt;
       tollEventCount++;
       category = 'Toll';
+      // Unmatched Uber trip toll = reimbursement credit, not a second plaza bill.
+      if (isTripSourcedTollCharge(e) && !tripOffsetSourceIds.has(String(e.sourceId || ''))) {
+        tolls -= amt;
+        signedAmount = -amt;
+      } else {
+        tolls += amt;
+      }
     } else if (t === 'toll_refund') {
       // Real refund from the toll operator — a credit against Tolls.
       tolls -= amt;
@@ -306,7 +319,7 @@ export function sumExpenseRowsFromEvents(
   rows.sort((a, b) => b.dateYmd.localeCompare(a.dateYmd));
   return {
     fuel: round2(Math.max(0, fuel)),
-    tolls: round2(Math.max(0, tolls)),
+    tolls: computeTollFleetLossNetting(scoped).net,
     maintenance: round2(Math.max(0, maintenance)),
     fixed: round2(Math.max(0, fixed)),
     operating: round2(Math.max(0, operating)),

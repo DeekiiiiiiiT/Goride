@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { MaterialIcon } from '../../signup/components/MaterialIcon';
 import { formatJmd, formatMinAgo } from '../../lib/partner-utils';
-import { formatTime } from '../../lib/order-utils';
+import { formatTime, orderCustomerName } from '../../lib/order-utils';
 import { getItemOptionLines, Order } from '../../types/order';
 import { Merchant } from '../../hooks/useMerchant';
 
@@ -182,7 +182,7 @@ export default function OrdersDesktopDashboard({
                       </span>
                     </div>
                     <div className="mb-1 text-headline-md font-semibold text-on-surface">
-                      {order.customer.name}
+                      {orderCustomerName(order)}
                     </div>
                     <div className="mt-4 flex items-end justify-between">
                       <span
@@ -247,9 +247,9 @@ export default function OrdersDesktopDashboard({
                         Customer
                       </div>
                       <div className="text-headline-md font-semibold text-on-surface">
-                        {selectedOrder.customer.name}
+                        {orderCustomerName(selectedOrder)}
                       </div>
-                      {selectedOrder.customer.phone && (
+                      {selectedOrder.customer?.phone && (
                         <a
                           href={`tel:${selectedOrder.customer.phone}`}
                           className="mt-1 flex items-center gap-1 text-primary transition-colors hover:text-primary-fixed-dim"

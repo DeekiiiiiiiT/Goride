@@ -18,6 +18,13 @@ import {
 } from "./platformFeeRate.ts";
 import { assertMerchantAcceptingOrders } from "./merchantOpenCheck.ts";
 
+function asCoord(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  return n;
+}
+
 const PlaceOrderBody = z.object({
   merchantId: z.string().min(1),
   items: z.array(z.unknown()).min(1),
@@ -65,7 +72,7 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
     // Get or create customer — enforce suspend before pricing/insert
     let { data: customer } = await supabase
       .from("customers")
-      .select("id, account_status")
+      .select("id, account_status, default_lat, default_lng")
       .eq("user_id", user.id)
       .maybeSingle();
 
@@ -82,7 +89,7 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
           phone: body.phone,
           email: user.email,
         })
-        .select("id, account_status")
+        .select("id, account_status, default_lat, default_lng")
         .single();
 
       if (customerError) return c.json({ error: customerError.message }, 500);
@@ -208,7 +215,18 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       (pricing.subtotal - discount + platformFee + deliveryFee + pricing.tax + tip) * 100,
     ) / 100;
 
-    const { data: order, error: orderError } = await supabase
+    // Service role: customers have SELECT-only RLS on orders (no INSERT policy).
+    const customerRow = customer as {
+      id: string;
+      account_status?: string;
+      default_lat?: number | null;
+      default_lng?: number | null;
+    };
+    const dropoffLat = asCoord(body.deliveryLat) ?? asCoord(customerRow.default_lat);
+    const dropoffLng = asCoord(body.deliveryLng) ?? asCoord(customerRow.default_lng);
+    const hasDropoffPin = dropoffLat != null && dropoffLng != null && !(dropoffLat === 0 && dropoffLng === 0);
+
+    const { data: order, error: orderError } = await serviceSb
       .from("orders")
       .insert({
         customer_id: customer.id,
@@ -222,8 +240,8 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
         discount,
         total,
         delivery_address: body.deliveryAddress,
-        delivery_lat: body.deliveryLat,
-        delivery_lng: body.deliveryLng,
+        delivery_lat: hasDropoffPin ? dropoffLat : null,
+        delivery_lng: hasDropoffPin ? dropoffLng : null,
         delivery_instructions: body.deliveryInstructions,
         payment_method: body.paymentMethod || "cash",
         ...(appliedPromoCode ? { promo_code: appliedPromoCode } : {}),
@@ -234,7 +252,7 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
     if (orderError) return c.json({ error: orderError.message }, 500);
 
     // Create initial order event
-    await supabase.from("order_events").insert({
+    await serviceSb.from("order_events").insert({
       order_id: order.id,
       status: "placed",
       actor_type: "customer",

@@ -871,10 +871,11 @@ app.put("/orders/:id/status", async (c) => {
   if (!user) return c.json({ error: "Unauthorized" }, 401);
 
   const serviceSb = getServiceSupabase();
+  let merchantAccess: Awaited<ReturnType<typeof requireResolvedMerchantWithPermission>> | null = null;
 
   if (actorType === "merchant") {
-    const access = await requireResolvedMerchantWithPermission(user.id, user.email, "orders");
-    if (!access.ok) return c.json({ error: access.message }, access.status);
+    merchantAccess = await requireResolvedMerchantWithPermission(user.id, user.email, "orders");
+    if (!merchantAccess.ok) return c.json({ error: merchantAccess.message }, merchantAccess.status);
   }
 
   if (actorType === "courier") {
@@ -930,14 +931,24 @@ app.put("/orders/:id/status", async (c) => {
     return c.json({ order: updatedOrder });
   }
   
+  // Merchant writes use service role — orders UPDATE RLS WITH CHECK subqueries
+  // delivery.orders and recurses under the JWT-scoped client.
+  const writer = actorType === "merchant" ? serviceSb : supabase;
+
   // Get current order
-  const { data: order, error: orderError } = await supabase
+  const { data: order, error: orderError } = await writer
     .from("orders")
-    .select("status, channel, courier_id")
+    .select("status, channel, courier_id, merchant_id")
     .eq("id", id)
     .single();
   
   if (orderError) return c.json({ error: orderError.message }, 404);
+
+  if (actorType === "merchant" && merchantAccess?.ok) {
+    if (String((order as { merchant_id?: string }).merchant_id) !== String(merchantAccess.resolved.merchant.id)) {
+      return c.json({ error: "Order not found" }, 404);
+    }
+  }
   
   const allowed = transitionsForChannel((order as { channel?: string }).channel)[order.status] || [];
   if (!allowed.includes(status)) {
@@ -961,7 +972,7 @@ app.put("/orders/:id/status", async (c) => {
     updateData.estimated_prep_time_mins = estimatedPrepTimeMins;
   }
   
-  const { data: updatedOrder, error: updateError } = await supabase
+  const { data: updatedOrder, error: updateError } = await writer
     .from("orders")
     .update(updateData)
     .eq("id", id)
@@ -984,20 +995,17 @@ app.put("/orders/:id/status", async (c) => {
 
   const shiftHeader = c.req.header("X-Staff-Shift-Token");
   let teamMemberId: string | null = null;
-  if (shiftHeader && actorType === "merchant") {
-    const access = await requireResolvedMerchantWithPermission(user.id, user.email, "orders");
-    if (access.ok) {
-      const shift = await resolveShiftTokenFromRequest(
-        shiftHeader,
-        access.resolved.merchant.id as string,
-        serviceSb,
-      );
-      if (shift) teamMemberId = shift.teamMemberId;
-    }
+  if (shiftHeader && actorType === "merchant" && merchantAccess?.ok) {
+    const shift = await resolveShiftTokenFromRequest(
+      shiftHeader,
+      merchantAccess.resolved.merchant.id as string,
+      serviceSb,
+    );
+    if (shift) teamMemberId = shift.teamMemberId;
   }
 
   // Log event
-  await supabase.from("order_events").insert({
+  await writer.from("order_events").insert({
     order_id: id,
     status,
     actor_type: actorType,
@@ -1097,7 +1105,7 @@ app.get("/merchant/orders", async (c) => {
     if (!access.ok) return c.json({ error: access.message }, access.status);
 
     merchantId = access.resolved.merchant.id as string;
-    queryClient = supabase;
+    queryClient = getServiceSupabase();
   }
 
   let query = queryClient
@@ -1116,6 +1124,9 @@ app.get("/merchant/orders", async (c) => {
   }
   // channel=all or omitted: no channel filter (backward compatible pre-migration)
   
+  // Hide unpaid WiPay/PayPal orders from the kitchen until payment clears.
+  query = query.or("payment_method.not.in.(wipay,paypal),payment_status.neq.pending");
+
   if (status) {
     query = query.eq("status", status);
   } else {
@@ -1167,7 +1178,7 @@ app.get("/courier/available-orders", async (c) => {
   const gate = await requireActiveCourier(serviceSb, user.id);
   if (!gate.ok) return c.json({ error: gate.error }, gate.status);
   
-  const { data: orders, error } = await supabase
+  const { data: orders, error } = await serviceSb
     .from("orders")
     .select(`
       *,

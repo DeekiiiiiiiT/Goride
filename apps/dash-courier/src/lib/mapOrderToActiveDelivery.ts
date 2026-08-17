@@ -44,8 +44,17 @@ function emptyActiveDelivery(): ActiveDelivery {
 }
 
 function finiteCoord(value: unknown): number | undefined {
+  if (value == null || value === '') return undefined;
   const n = Number(value);
   return Number.isFinite(n) ? n : undefined;
+}
+
+function pinFrom(lat: unknown, lng: unknown): { lat: number; lng: number } | undefined {
+  const resolvedLat = finiteCoord(lat);
+  const resolvedLng = finiteCoord(lng);
+  if (resolvedLat == null || resolvedLng == null) return undefined;
+  if (resolvedLat === 0 && resolvedLng === 0) return undefined;
+  return { lat: resolvedLat, lng: resolvedLng };
 }
 
 /** Map a real accepted order into ActiveDelivery — never seed from mock. */
@@ -70,12 +79,15 @@ export function mapOrderToActiveDelivery(
     note: item.note,
   }));
 
-  const pickupLat = finiteCoord(order.merchant?.lat);
-  const pickupLng = finiteCoord(order.merchant?.lng);
-  const dropoffLat = finiteCoord(order.delivery_lat);
-  const dropoffLng = finiteCoord(order.delivery_lng);
-  const fromLat = finiteCoord(lastCoords?.lat);
-  const fromLng = finiteCoord(lastCoords?.lng);
+  const pickupPin = pinFrom(order.merchant?.lat, order.merchant?.lng);
+  const dropoffPin = pinFrom(order.delivery_lat, order.delivery_lng);
+  const fromPin = pinFrom(lastCoords?.lat, lastCoords?.lng);
+  const pickupLat = pickupPin?.lat;
+  const pickupLng = pickupPin?.lng;
+  const dropoffLat = dropoffPin?.lat;
+  const dropoffLng = dropoffPin?.lng;
+  const fromLat = fromPin?.lat;
+  const fromLng = fromPin?.lng;
 
   // Prefer courier→pickup when GPS known; otherwise pickup→dropoff for both legs' baseline.
   let distanceKm = 0;

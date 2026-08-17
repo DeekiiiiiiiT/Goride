@@ -36,11 +36,11 @@ export interface Order {
   cancellation_reason?: string | null;
   cancelled_by?: string | null;
   items: OrderItem[];
-  customer: {
-    id: string;
-    name: string;
-    phone: string;
-  };
+  customer?: {
+    id?: string;
+    name?: string | null;
+    phone?: string | null;
+  } | null;
   courier?: {
     display_name: string | null;
     phone: string | null;

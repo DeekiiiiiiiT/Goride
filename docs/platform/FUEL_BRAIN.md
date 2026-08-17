@@ -49,6 +49,19 @@ No driver toggles. No Unknown purpose bucket. No driving-session evidence produc
 
 Money layer unchanged: receipts + scenario coverage %. Brain only supplies category km.
 
+## Cycle engine (separate from Fuel Brain)
+
+Tank cycles, close policy, and alert tiers live in the **cycle engine** — not Fuel Brain.
+
+| Module | Role |
+|---|---|
+| `fuel_cycle_stamp.ts` | Single server stamper; lane split; frequency dedupe |
+| `fuel_cycle_close_policy.ts` | Rideshare default close; legacy `cumulative_98` per org |
+| `fuel_cycle_snapshot.ts` | Authoritative cycle snapshots for UI + finalize |
+| `fuel_jaa_match.ts` | Server JAA apply-matches + re-stamp |
+
+See `apps/fleet/src/docs/fuel-brain-spine.md` for lane diagram and tier definitions.
+
 ## Personal Allowance (Option 2) — Fleet money layer
 
 Separate from Fuel Brain. Brain still measures **Personal km**. When Personal Allowance is enabled on the effective Earnings Policy (or legacy Tier Settings fallback):

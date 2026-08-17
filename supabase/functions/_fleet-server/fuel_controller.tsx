@@ -17,6 +17,14 @@ import * as kv from "./kv_store.tsx";
 import * as cache from "./cache.ts";
 import * as memCache from "./memory_cache.ts";
 import * as fuelLogic from "./fuel_logic.ts";
+import {
+  stampEntryCycleMetadata,
+  healCorruptedCycleCumulative,
+  recalculateVehicleFuelEntries,
+  closeOpenCyclesForWeek,
+} from "./fuel_cycle_stamp.ts";
+import { buildFleetCycleSnapshot } from "./fuel_cycle_snapshot.ts";
+import { persistFuelMatchPair } from "./fuel_jaa_match.ts";
 import { auditLogic } from "./audit_logic.ts";
 import { findMatchingStation, findMatchingStationSmart, calculateDistance } from "./geo_matcher.ts";
 import { trackedProviderCall, ProviderBlockedError } from "./api_usage_logger.ts";
@@ -37,7 +45,11 @@ import {
   ensureFuelEntryForApprovedTx,
   findFuelEntryByTransactionId,
   healApprovedFuelEntriesMissingLog,
+  healFuelEntriesMissingPendingStatus,
+  stampPendingReconciliationStatus,
 } from "./fuel_posted_guarantee.ts";
+import { healAdminCashFuelLedgerDebits } from "./fuel_transaction_normalize.ts";
+import { findConflictingGasCardAnchor } from "./gas_card_anchor_guard.ts";
 import { canReuseLinkedFuelEntry } from "./fuel_entry_link.ts";
 import { projectFromFuelEntry } from "./odometer_ledger.ts";
 import { stampOrg, getOrgId, filterByOrg, belongsToOrg } from "./org_scope.ts";
@@ -92,10 +104,16 @@ app.post(`${BASE_PATH}/fuel/ensure-posted-entries`, requirePermission("fuel.view
     const result = await healApprovedFuelEntriesMissingLog(limit, (rec) =>
       stampOrg(rec, c),
     );
-    console.log(
-      `[EnsurePosted] org=${orgId || "none"} healed=${result.healed} blocked=${result.blocked}`,
+    const debitHeal = await healAdminCashFuelLedgerDebits(limit, (rec) =>
+      stampOrg(rec, c),
     );
-    return c.json({ success: true, ...result });
+    const pendingHeal = await healFuelEntriesMissingPendingStatus(limit, (rec) =>
+      stampOrg(rec, c),
+    );
+    console.log(
+      `[EnsurePosted] org=${orgId || "none"} healed=${result.healed} blocked=${result.blocked} debitHeal=${debitHeal.healed} pendingHeal=${pendingHeal.healed}`,
+    );
+    return c.json({ success: true, ...result, debitHeal, pendingHeal });
   } catch (e: any) {
     console.error("[EnsurePosted] failed", e);
     return c.json({ error: e?.message || "Ensure failed" }, 500);
@@ -1971,6 +1989,117 @@ app.post(`${BASE_PATH}/fuel-pnl-offset-backfill/backfill`, async (c) => {
   }
 });
 
+// --- Fuel cycle snapshots (server-owned) ---
+app.get(`${BASE_PATH}/cycles`, requirePermission("fuel.view"), async (c) => {
+  try {
+    const vehicleId = c.req.query("vehicleId") || "";
+    const weekStart = c.req.query("weekStart") || undefined;
+    const weekEnd = c.req.query("weekEnd") || undefined;
+    if (!vehicleId) return c.json({ error: "vehicleId required" }, 400);
+
+    const { queryFleet } = await import("./repos/baseRepo.ts");
+    const res = await queryFleet("fuel_entries", {
+      legacyPrefix: "fuel_entry:",
+      filters: [{ op: "eq", col: "vehicle_id", value: vehicleId }],
+      dateFrom: weekStart ? String(weekStart).slice(0, 10) : undefined,
+      dateTo: weekEnd ? String(weekEnd).slice(0, 10) : undefined,
+      order: { col: "date", ascending: true },
+      limit: 5000,
+    });
+    if (res.error) throw res.error;
+
+    const entries = filterByOrg((res.data || []) as Record<string, unknown>[], c, {
+      endpoint: "/fuel/cycles",
+    });
+    const vehicle = await kv.get(`vehicle:${vehicleId}`);
+    const cycles = buildFleetCycleSnapshot(entries, { [vehicleId]: vehicle as Record<string, unknown> }, {
+      vehicleId,
+      weekStart: weekStart ? String(weekStart).slice(0, 10) : undefined,
+      weekEnd: weekEnd ? String(weekEnd).slice(0, 10) : undefined,
+    });
+
+    return c.json({ vehicleId, weekStart, weekEnd, cycles });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.post(`${BASE_PATH}/cycles/recalculate`, requirePermission("fuel.edit"), async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const vehicleId = String(body.vehicleId || c.req.query("vehicleId") || "");
+    const auditConfig = await kv.get("config:audit_settings");
+
+    const { data } = await fromKvStore()
+      .select("key, value")
+      .like("key", "fuel_entry:%")
+      .eq("value->>vehicleId", vehicleId || undefined);
+
+    let entries = (data || []).map((r) => r.value as Record<string, unknown>);
+    entries = filterByOrg(entries, c, { endpoint: "/fuel/cycles/recalculate" });
+    if (vehicleId) entries = entries.filter((e) => e.vehicleId === vehicleId);
+
+    const byVehicle = new Map<string, Record<string, unknown>[]>();
+    for (const e of entries) {
+      const vid = String(e.vehicleId || "unknown");
+      if (!byVehicle.has(vid)) byVehicle.set(vid, []);
+      byVehicle.get(vid)!.push(e);
+    }
+
+    let totalModified = 0;
+    for (const [vid, vehEntries] of byVehicle) {
+      const vehicle = await kv.get(`vehicle:${vid}`);
+      if (!vehicle) continue;
+      const { modified } = await recalculateVehicleFuelEntries(
+        vehEntries,
+        vehicle as Record<string, unknown>,
+        auditConfig,
+      );
+      for (const entry of modified) {
+        await kv.set(`fuel_entry:${entry.id}`, entry);
+      }
+      totalModified += modified.length;
+    }
+
+    const heal = await healCorruptedCycleCumulative(500);
+    return c.json({ success: true, modified: totalModified, heal });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.post(`${BASE_PATH}/cycles/close-week`, requirePermission("fuel.edit"), async (c) => {
+  try {
+    const body = await c.req.json();
+    const vehicleId = String(body.vehicleId || "");
+    const weekEnd = String(body.weekEnd || "").slice(0, 10);
+    if (!vehicleId || !weekEnd) {
+      return c.json({ error: "vehicleId and weekEnd required" }, 400);
+    }
+    const closed = await closeOpenCyclesForWeek(vehicleId, weekEnd);
+    return c.json({ success: true, closed });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.post(`${BASE_PATH}/jaa/apply-matches`, requirePermission("fuel.edit"), async (c) => {
+  try {
+    const body = await c.req.json();
+    const pairs = Array.isArray(body.pairs) ? body.pairs : body.pair ? [body.pair] : [];
+    if (!pairs.length) return c.json({ error: "pairs array required" }, 400);
+
+    const results = [];
+    for (const pair of pairs) {
+      const result = await persistFuelMatchPair(pair);
+      results.push(result);
+    }
+    return c.json({ success: true, results });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
 // --- SCALABILITY & PERFORMANCE (Phase 8) ? native fleet_fuel_entries ---
 app.get(`${BASE_PATH}/fuel-entries`, async (c) => {
   try {
@@ -3281,6 +3410,21 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
     // Phase 5: Integrity Guardrail - Prevent modifications to signed records
     const existingEntry = await kv.get(`fuel_entry:${entry.id}`);
     const isNewFuelEntry = !existingEntry;
+
+    if (isNewFuelEntry) {
+      const gasConflict = await findConflictingGasCardAnchor(entry as Record<string, unknown>);
+      if (gasConflict) {
+        return c.json(
+          {
+            error: gasConflict.reason,
+            code: "DUPLICATE_GAS_CARD_ANCHOR",
+            conflictingEntryId: gasConflict.id,
+          },
+          409,
+        );
+      }
+    }
+
     const awaitingCardStatement =
       existingEntry?.metadata?.awaitingCardStatement === true ||
       (existingEntry?.paymentSource === "Gas_Card" &&
@@ -3334,133 +3478,17 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
     if (entry.vehicleId) {
         const vehicle = await kv.get(`vehicle:${entry.vehicleId}`);
         if (vehicle) {
-            const { tankCapacity, baselineEfficiencyL100km, rangeMin } = fuelLogic.getVehicleBaselines(vehicle);
-            // Convert L/100km ? km/L for all downstream comparisons
-            const profileKmPerLiter = baselineEfficiencyL100km > 0 ? (100 / baselineEfficiencyL100km) : 0;
-
-            // Phase 23: compute rolling average efficiency for this vehicle as of this entry's date
-            const rollingAvg = await fuelLogic.calculateRollingEfficiency(entry.vehicleId, entry.date);
-            const effectiveBaseline = rollingAvg?.avgKmPerLiter || 0;
-
-            // 2. Fetch cycle state as-of this entry (historical edits must not see later fills)
-            const lastAnchor = await fuelLogic.getLastAnchor(entry.vehicleId, {
-                asOfDate: entry.date,
-                excludeId: entry.id,
-            });
-            const lastAnchorOdo = Number(lastAnchor?.odometer) || 0;
-            const lastAnchorDate = lastAnchor?.date || null;
-            
-            const cycleEntries = await fuelLogic.getEntriesSinceLastAnchor(
-                entry.vehicleId,
-                lastAnchorDate,
-                { asOfDate: entry.date, excludeId: entry.id },
-            );
-            
-            // Step 2.1: Accumulation Logic (with carryover support)
-            let carryoverFromLastAnchor = 0;
-            if (lastAnchor?.metadata?.isSoftAnchor && lastAnchor?.metadata?.excessVolume) {
-                carryoverFromLastAnchor = Number(lastAnchor.metadata.excessVolume) || 0;
-            }
-
-            let runningCumulative = carryoverFromLastAnchor;
-            for (const ce of cycleEntries) {
-                if (ce.id !== entry.id) {
-                    runningCumulative = Number((runningCumulative + (Number(ce.liters) || 0)).toFixed(4));
-                }
-            }
-
-            const volumeAtEntry = (Number(entry.liters) || 0);
-            const prevCumulative = runningCumulative;
-            const totalVolumeInCycle = Number((runningCumulative + volumeAtEntry).toFixed(4));
-            const distanceSinceAnchor = (entry.odometer && lastAnchorOdo) ? (entry.odometer - lastAnchorOdo) : 0;
-            
-            // Step 2.2?2.3: Capacity full close + SPLIT via shared classifyAnchor (98%)
-            const anchor = fuelLogic.classifyAnchor({
-                prevCumulative,
-                volume: volumeAtEntry,
-                tankCapacity,
-                entryType: entry.type,
-                paymentSource: entry.paymentSource,
-            });
-            const isHardAnchor = false;
-            const isSoftAnchor = anchor.isSoft;
-            const isCapacityClose = anchor.isCapacityClose;
-            const volumeContributed = anchor.volumeContributed;
-            const excessVolume = anchor.excessVolume;
-
-            // Efficiency Math
-            // Phase 23: use rolling average baseline instead of manufacturer spec
-            let actualKmPerLiter = 0;
-            let efficiencyVariance = 0;
-            if (distanceSinceAnchor > 0 && totalVolumeInCycle > 0) {
-                actualKmPerLiter = distanceSinceAnchor / totalVolumeInCycle;
-                if (effectiveBaseline > 0) {
-                    efficiencyVariance = (effectiveBaseline - actualKmPerLiter) / effectiveBaseline;
-                }
-            }
-
-            // Step 3.2: Behavioral Integrity - Frequency Check
-            // Optimized: use targeted Supabase queries instead of loading ALL entries
-            const recentTimeWindow = new Date(new Date(entry.date).getTime() - (4 * 60 * 60 * 1000)).toISOString();
-            
-            const { count: recentTxCountRaw } = await fromKvStore()
-                .select("*", { count: 'exact', head: true })
-                .like("key", "fuel_entry:%")
-                .eq("value->>vehicleId", entry.vehicleId)
-                .gte("value->>date", recentTimeWindow)
-                .neq("value->>id", entry.id);
-            const recentTxCount = recentTxCountRaw || 0;
-
-            // Step 5.1: Odometer sequence ? previous fill BEFORE this entry's timestamp
-            const prevEntry = await fuelLogic.getPreviousFuelEntry(
-                entry.vehicleId,
-                entry.date,
-                entry.id,
-            );
-            const odoAudit = fuelLogic.auditOdometerSequence({
-                currentOdo: Number(entry.odometer),
-                prevOdo: Number(prevEntry?.odometer || 0),
-                maxExpectedDistance: rangeMin * 1.5
-            });
-
-            // Step 3.3: Integrated Integrity Engine
-            // Card-only frequency check: only flag card transactions, cash/reimbursement exempt
-            const isCardTransaction = entry.type === 'Card_Transaction' || entry.paymentSource === 'Gas_Card';
             const auditConfig = await kv.get("config:audit_settings");
-            const frequencyThreshold = Number(auditConfig?.frequencyThreshold) || 3;
-            // Phase 23: configurable efficiency variance threshold
-            const efficiencyThreshold = Number(auditConfig?.efficiencyThreshold) || 0.30;
-            
-            const integrity = fuelLogic.calculateIntegrity({
-                volume: volumeAtEntry,
-                tankCapacity,
-                prevCumulative,
-                distanceSinceAnchor,
-                profileEfficiency: profileKmPerLiter,
-                recentTxCount,
-                isTopUp: entry.metadata?.isTopUp,
-                isAnchor: isHardAnchor || isSoftAnchor,
-                rangeMin,
-                isCardTransaction,
-                frequencyThreshold,
-                // Phase 23: pass rolling average and configurable threshold
-                rollingAvgEfficiency: effectiveBaseline,
-                efficiencyThreshold
-            });
+            const stamp = await stampEntryCycleMetadata(entry, vehicle, { auditConfig });
 
-            // Override if Odo Audit is more severe
-            let integrityStatus = integrity.status;
-            let anomalyReason = integrity.reason;
-            let auditStatus = integrity.auditStatus;
-
-            if (odoAudit.status === 'critical' || (odoAudit.status === 'warning' && integrityStatus === 'valid')) {
-                integrityStatus = odoAudit.status;
-                anomalyReason = odoAudit.reason;
-                auditStatus = odoAudit.auditStatus || auditStatus;
-            }
-
-            const isHighFrequency = isCardTransaction && recentTxCount >= (frequencyThreshold - 1); 
-            const isFragmented = tankCapacity > 0 && (volumeAtEntry / tankCapacity) < 0.15 && !entry.metadata?.isTopUp;
+            if (stamp) {
+            const { tankCapacity, baselineEfficiencyL100km } = fuelLogic.getVehicleBaselines(vehicle);
+            const profileKmPerLiter = baselineEfficiencyL100km > 0 ? (100 / baselineEfficiencyL100km) : 0;
+            const totalVolumeInCycle = Number(stamp.metadata.cumulativeLitersAtEntry) || 0;
+            const distanceSinceAnchor = Number(stamp.metadata.distanceSinceAnchor) || 0;
+            const actualKmPerLiter = Number(stamp.metadata.actualKmPerLiter) || 0;
+            const isSoftAnchor = !!stamp.metadata.isSoftAnchor;
+            const volumeAtEntry = Number(entry.liters) || 0;
 
             // Phase 7: Predictive Intelligence Integration
             const predictive = fuelLogic.calculatePredictiveMetrics({
@@ -3468,76 +3496,56 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
                 currentCumulative: totalVolumeInCycle,
                 tankCapacity,
                 profileEfficiency: profileKmPerLiter
-                // Use default 150km/day for now, could be improved with real trip data
             });
+
+            const rollingAvg = await fuelLogic.calculateRollingEfficiency(entry.vehicleId, entry.date);
+            const effectiveBaseline = rollingAvg?.avgKmPerLiter || 0;
 
             const leakage = fuelLogic.detectPredictiveLeakage({
                 actualEfficiency: actualKmPerLiter,
                 profileEfficiency: profileKmPerLiter,
-                utilization: (totalVolumeInCycle / tankCapacity) * 100,
-                isAnchor: isHardAnchor || isSoftAnchor,
-                // Phase 23: pass rolling average for more accurate leakage detection
+                utilization: tankCapacity > 0 ? (totalVolumeInCycle / tankCapacity) * 100 : 0,
+                isAnchor: !!stamp.metadata.isAnchor,
                 rollingAvgEfficiency: effectiveBaseline
             });
 
-            const openCycleId = fuelLogic.resolveCycleIdForOpenCycle(cycleEntries);
-
-            // Update Entry Metadata (Step 1.1 Schema)
             entry.metadata = {
                 ...entry.metadata,
-                volumeContributed: Number(volumeContributed.toFixed(2)),
-                excessVolume: excessVolume > 0 ? Number(excessVolume.toFixed(2)) : undefined,
-                cumulativeLitersAtEntry: Number(totalVolumeInCycle.toFixed(2)),
-                tankUtilizationPercentage: tankCapacity > 0 ? Number(((totalVolumeInCycle / tankCapacity) * 100).toFixed(1)) : 0,
-                distanceSinceAnchor,
-                actualKmPerLiter: Number(actualKmPerLiter.toFixed(2)),
-                profileKmPerLiter,
-                // Phase 23: rolling average metadata
-                rollingAvgKmPerLiter: rollingAvg?.avgKmPerLiter ?? null,
-                rollingAvgWindow: rollingAvg?.window ?? null,
-                rollingAvgEntryCount: rollingAvg?.entryCount ?? 0,
-                efficiencyBaseline: rollingAvg ? 'rolling' : 'skipped',
-                efficiencyVariance: Number((efficiencyVariance * 100).toFixed(1)),
-                isSoftAnchor,
-                isCapacityClose: isCapacityClose || undefined,
-                // Capacity close = product "full tank" (derived); never driver checkbox
-                isFullTank: isCapacityClose || undefined,
-                isAnchor: anchor.isAnchor,
-                isHardAnchor: undefined,
-                integrityStatus,
-                anomalyReason,
-                auditStatus,
-                isFragmented,
-                isHighFrequency,
-                cycleId: openCycleId,
-                flaggedAt: (integrityStatus === 'critical' || integrityStatus === 'warning' || leakage?.leakageRisk === 'high') ? new Date().toISOString() : undefined,
-                
-                // Phase 7: Predictive Metadata
                 expectedAnchorDate: predictive?.expectedAnchorDate,
                 daysUntilAnchor: predictive?.daysUntilAnchor,
                 leakageRisk: leakage?.leakageRisk,
                 leakageAlertReason: leakage?.alertReason,
-                isPredictiveAlert: leakage?.isAlertTriggered
+                isPredictiveAlert: leakage?.isAlertTriggered,
             };
 
-            // Elevate integrity status if predictive leakage is high
-            if (leakage?.leakageRisk === 'high' && integrityStatus === 'valid') {
+            if (leakage?.leakageRisk === 'high' && stamp.integrityStatus === 'valid') {
                 entry.metadata.integrityStatus = 'critical';
                 entry.metadata.anomalyReason = leakage.alertReason;
+                entry.metadata.signalTier = 'exception';
                 entry.auditStatus = 'Flagged';
             }
 
             entry.isFlagged = entry.metadata.integrityStatus === 'critical';
-            entry.auditStatus = auditStatus;
+            entry.auditStatus = entry.metadata.auditStatus || entry.auditStatus;
 
             if (isSoftAnchor) {
-                entry.metadata.softAnchorNote = `Soft Anchor: Cumulative volume (${totalVolumeInCycle.toFixed(1)}L) reached ${Math.round(fuelLogic.SOFT_ANCHOR_THRESHOLD * 100)}% of ${tankCapacity}L. Resetting cycle.`;
+                entry.metadata.softAnchorNote = `Soft Anchor: Cumulative volume (${totalVolumeInCycle.toFixed(1)}L) reached capacity threshold of ${tankCapacity}L. Resetting cycle.`;
             }
 
             // Step 3.2: Automated Healing Logic
-            if (isHardAnchor || isSoftAnchor) {
-                const isAggregatedEfficiencyValid = efficiencyVariance < 0.15; // Within 15% on aggregate
+            if (stamp.metadata.isAnchor) {
+                const efficiencyVariance = Number(stamp.metadata.efficiencyVariance) / 100 || 0;
+                const isAggregatedEfficiencyValid = efficiencyVariance < 0.15;
                 if (isAggregatedEfficiencyValid) {
+                    const lastAnchor = await fuelLogic.getLastAnchor(entry.vehicleId, {
+                        asOfDate: entry.date,
+                        excludeId: entry.id,
+                    });
+                    const cycleEntries = await fuelLogic.getEntriesSinceLastAnchor(
+                        entry.vehicleId,
+                        lastAnchor?.date || null,
+                        { asOfDate: entry.date, excludeId: entry.id },
+                    );
                     for (const ce of cycleEntries) {
                         if (ce.auditStatus === 'Flagged' || ce.auditStatus === 'Observing') {
                             ce.metadata.isHealed = true;
@@ -3549,6 +3557,7 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
                         }
                     }
                 }
+            }
             }
         }
     }
@@ -3882,6 +3891,7 @@ app.post(`${BASE_PATH}/fuel-entries`, async (c: Context) => {
 
     // Re-stamp after mutations so platform/fleet org cannot be stripped mid-handler
     Object.assign(entry, stampFuelRecord(entry as Record<string, unknown>, c));
+    stampPendingReconciliationStatus(entry as Record<string, unknown>);
     await kv.set(`fuel_entry:${entry.id}`, entry);
     try {
       await projectFromFuelEntry(entry as Record<string, unknown>, (entry as any).organizationId || getOrgId(c));

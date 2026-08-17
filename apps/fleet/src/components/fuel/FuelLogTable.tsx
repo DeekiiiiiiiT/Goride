@@ -66,6 +66,7 @@ import { isEntryInInclusiveYmdRange, toEntryYmd } from '../../utils/fuelWeekPeri
 import { resolveFuelEntrySource } from '../../utils/fuelEntrySource';
 import { isJaaStatementLedgerRow } from '../../utils/jaaFuelStatementMatcher';
 import { countsInFuelLogSpend } from '../../utils/fuelOpsEligibility';
+import { resolveGasCardLedgerIntegrity } from '../../utils/fuelLedgerIntegrity';
 
 /** Sort/display timestamp: live ISO `date` or admin `date` + `time`. */
 function fuelEntrySortMs(e: { date?: string; time?: string | null }): number {
@@ -157,8 +158,14 @@ export function FuelLogTable({
         }
     }, [entries]);
 
-    // Phase 2: Cycle Mapping
-    const allCycles = useFuelCycles(entries, vehicles);
+    const periodStart = dateRange?.from ? format(dateRange.from, 'yyyy-MM-dd') : undefined;
+    const periodEnd = dateRange?.to ? format(dateRange.to, 'yyyy-MM-dd') : undefined;
+
+    // Phase 2: Cycle Mapping (server snapshot when available)
+    const allCycles = useFuelCycles(entries, vehicles, {
+        weekStart: periodStart,
+        weekEnd: periodEnd,
+    });
     
     // Phase 7: Shared Anchor Logic
     const { validAnchorIds, anchorFailures, getLinkedTransaction } = useFuelAnchors(entries, transactions);
@@ -172,9 +179,6 @@ export function FuelLogTable({
         const ids = Array.from(new Set(entries.map(e => e.driverId).filter(Boolean))) as string[];
         return ids.map(id => ({ id, name: getDriverName(id) })).sort((a, b) => a.name.localeCompare(b.name));
     }, [entries, getDriverName]);
-
-    const periodStart = dateRange?.from ? format(dateRange.from, 'yyyy-MM-dd') : undefined;
-    const periodEnd = dateRange?.to ? format(dateRange.to, 'yyyy-MM-dd') : undefined;
 
     const activeFilterCount = [
         filterType !== 'all',
@@ -267,6 +271,11 @@ export function FuelLogTable({
         const integrityMap = new Map<string, 'Complete' | 'Partial' | 'Orphaned' | 'Pending'>();
         entries.forEach(entry => {
             if (!isManualEntry(entry)) return;
+            const gasCardIntegrity = resolveGasCardLedgerIntegrity(entry);
+            if (gasCardIntegrity) {
+                integrityMap.set(entry.id, gasCardIntegrity);
+                return;
+            }
             if (entry.reconciliationStatus === 'Pending') {
                 integrityMap.set(entry.id, 'Pending');
                 return;
@@ -317,7 +326,9 @@ export function FuelLogTable({
                 .reduce((sum, e) => sum + (Number(e.amount) || 0), 0),
             imbalancedCount: manualEntries.filter(e => ledgerIntegrity.get(e.id) !== 'Complete' && ledgerIntegrity.get(e.id) !== 'Pending').length,
             completedCycles: cycleScope.filter(c => c.status === 'Complete').length,
-            anomalyCycles: cycleScope.filter(c => c.status === 'Anomaly').length,
+            anomalyCycles: cycleScope.filter(
+                (c) => c.signalTier === 'exception' || (c.status === 'Anomaly' && c.signalTier !== 'review'),
+            ).length,
             activeCycles: cycleScope.filter(c => c.status === 'Active').length
         };
     }, [entries, validAnchorIds, dateRange, ledgerIntegrity, allCycles]);
@@ -510,11 +521,11 @@ export function FuelLogTable({
                                     </TooltipTrigger>
                                     <TooltipContent>
                                       <p className="text-[10px] max-w-[220px]">
-                                        Tank/fill cycle issues only (&gt;105% tank volume or poor efficiency). Not the same as Odometer History “vs prior log” regressions.
+                                        Real exceptions only (odometer regression, ledger imbalance, unmatched duplicates). Review-tier items are not counted here.
                                       </p>
                                     </TooltipContent>
                                 </Tooltip>
-                                <p className="text-[10px] text-slate-500">Cycle flags</p>
+                                <p className="text-[10px] text-slate-500">Exceptions</p>
                             </div>
                         </div>
                     </div>
@@ -1012,20 +1023,23 @@ export function FuelLogTable({
                                             </div>
 
                                             <div className="flex-1" />
-                                            {cycle.status === 'Anomaly' ? (
+                                            {cycle.signalTier === 'exception' || cycle.status === 'Anomaly' ? (
                                                 <Tooltip>
                                                     <TooltipTrigger asChild>
                                                         <Badge className="bg-rose-50 text-rose-700 border-rose-200 gap-1.5 cursor-help">
                                                             <AlertCircle className="h-3 w-3" />
-                                                            ANOMALY
+                                                            EXCEPTION
                                                         </Badge>
                                                     </TooltipTrigger>
                                                     <TooltipContent className="max-w-[200px]">
                                                         <div className="space-y-1">
-                                                            <p className="font-bold text-xs text-rose-600">Cycle Issues Detected:</p>
+                                                            <p className="font-bold text-xs text-rose-600">Cycle exception:</p>
                                                             <ul className="text-[10px] list-disc pl-4 space-y-0.5">
-                                                                {cycle.isCapped && cycle.excessVolume && cycle.excessVolume > 5 && (
-                                                                    <li>Significant overflow carried forward ({cycle.excessVolume.toFixed(1)} L)</li>
+                                                                {cycle.closeReason && (
+                                                                    <li>{String(cycle.closeReason).replace(/_/g, ' ')}</li>
+                                                                )}
+                                                                {cycle.isCapped && cycle.excessVolume && cycle.excessVolume > 5 && cycle.closeReason === 'tank_overfill' && (
+                                                                    <li>Single-fill overfill ({cycle.excessVolume.toFixed(1)} L)</li>
                                                                 )}
                                                                 {cycle.efficiency < 8 && cycle.distance > 0 && <li>Efficiency below target baseline</li>}
                                                                 {cycle.distance === 0 && <li>Incomplete distance data</li>}
@@ -1033,7 +1047,7 @@ export function FuelLogTable({
                                                         </div>
                                                     </TooltipContent>
                                                 </Tooltip>
-                                            ) : 
+                                            ) :
                                              cycle.status === 'Active' ? (
                                                 <div className="flex flex-col items-end gap-1">
                                                     <Badge className="bg-blue-50 text-blue-700 border-blue-200 animate-pulse">ACTIVE CYCLE</Badge>

@@ -23,9 +23,8 @@
  * accepted at all. The TOLL side (`findTollsInDateRange`) has no such
  * constraint — narrowing which tolls we look at is safe.
  *
- * NON-BREAKAGE: nothing in this file is called by any existing code path.
- * It is pure new, additive, unused infrastructure until the ingest-time
- * hooks (MOI-3/MOI-4) are wired to it, both gated behind `matchOnIngestEnabled`.
+ * NON-BREAKAGE: match-on-ingest still gates writes. The wizard read path
+ * uses `findTripsInDateRange` so opening a week does not dump every trip.
  */
 
 import { fromKvStore } from "./fleet_sql_bridge.ts";

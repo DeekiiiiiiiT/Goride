@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { MaterialIcon } from '../../signup/components/MaterialIcon';
 import { formatTimeAgo } from '../../lib/partner-utils';
-import { getItemModifiersText, HANDOFF_CHECKLIST_ITEMS } from '../../lib/order-utils';
+import { getItemModifiersText, HANDOFF_CHECKLIST_ITEMS, orderCustomerName } from '../../lib/order-utils';
 import { Order } from '../../types/order';
 
 interface ReadyOrderDetailProps {
@@ -124,7 +124,7 @@ export default function ReadyOrderDetail({
         <div className="rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-sm">
           <div className="mb-inset-xs flex items-center gap-inset-xs">
             <MaterialIcon name="person" size={20} className="text-on-surface-variant" />
-            <h2 className="text-headline-md font-semibold text-on-surface">{order.customer.name}</h2>
+            <h2 className="text-headline-md font-semibold text-on-surface">{orderCustomerName(order)}</h2>
           </div>
         </div>
 

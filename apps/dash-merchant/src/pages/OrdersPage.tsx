@@ -31,7 +31,7 @@ import RejectOrderSheet, {
 import OrderAcceptedSheet from '../components/OrderAcceptedSheet';
 import OrderDetailPage from './OrderDetailPage';
 import OrderHistoryView from '../components/OrderHistoryView';
-import { getInitials } from '../lib/order-utils';
+import { getInitials, orderCustomerName } from '../lib/order-utils';
 import {
   markFirstOrderCelebrationSeen,
   markPayoutSetupDismissed,
@@ -714,10 +714,10 @@ export default function OrdersPage({ merchant, onNavigate, onOpenMobileNav }: Or
                     <>
                       <div className="mt-inset-xs flex items-center gap-inset-xs border-y border-surface-variant py-inset-xs pl-inset-xs">
                         <div className="flex h-8 w-8 items-center justify-center rounded-full bg-secondary-container/20 text-label-md font-semibold text-secondary">
-                          {getInitials(order.customer.name)}
+                          {getInitials(orderCustomerName(order))}
                         </div>
                         <span className="text-body-sm font-medium text-on-surface">
-                          {order.customer.name}
+                          {orderCustomerName(order)}
                         </span>
                       </div>
 
@@ -814,7 +814,7 @@ export default function OrdersPage({ merchant, onNavigate, onOpenMobileNav }: Or
                           </span>
                         </div>
                       </div>
-                      {order.customer.phone && (
+                      {order.customer?.phone && (
                         <a
                           href={`tel:${order.customer.phone}`}
                           className="flex h-10 w-10 items-center justify-center rounded-full text-on-surface transition-colors hover:bg-surface-variant"

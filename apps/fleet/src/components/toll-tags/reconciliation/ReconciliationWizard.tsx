@@ -54,6 +54,7 @@ import {
   type TollWithLinkedTrip,
 } from "../../../utils/tollFinancialOverview";
 import { computeTollFleetLossNetting } from "../../../utils/tollFleetLossNetting";
+import { collectReadyToLinkPairs, partitionSuggestions } from "../../../utils/suggestionPartition";
 
 type PlatformFilter = 'all' | 'Uber' | 'InDrive' | 'Roam';
 const PLATFORM_OPTIONS: PlatformFilter[] = ['all', 'Uber', 'InDrive', 'Roam'];
@@ -112,7 +113,7 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
   const [platformFilter, setPlatformFilter] = useState<PlatformFilter>('all');
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const fleetTz = useFleetTimezone();
-  // Net Toll Loss = Business Finance P&L Tolls (canonical), not Spend−Reimbursed−Charged.
+  // Net Toll Loss = plaza spend minus Uber trip reimbursement (same canonical netting as P&L).
   const [fleetLossNet, setFleetLossNet] = useState<number | null>(period.financials?.netTollLoss ?? null);
 
   useEffect(() => {
@@ -1050,10 +1051,11 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
     (stepCounts['dispute-refunds']?.actionable || 0) +
     (stepCounts['unlinked-refunds']?.actionable || 0);
 
-  const filteredTollIds = new Set(filteredUnreconciledTolls.map(tx => tx.id));
-  const highConfidenceCount = Array.from(suggestions.entries())
-    .filter(([txId, matches]) => filteredTollIds.has(txId) && matches[0]?.confidence === 'high')
-    .length;
+  const needsReviewReadyPairs = collectReadyToLinkPairs(
+    partitionSuggestions(classified['needs-review'] || [], suggestions, 'needs-review').suggestions,
+    suggestions,
+  );
+  const highConfidenceCount = needsReviewReadyPairs.length;
 
   const handleSmartReconcile = async (tx: FinancialTransaction, trip: TripType) => {
       if (!trip?.id) {
@@ -1260,8 +1262,10 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
   const lockedResolveRefund = lock('Resolving refund…', resolveRefund);
   const lockedBulkResolve = lock('Resolving refunds…', bulkResolveRefunds);
   const lockedUndoRefund = lock('Undoing refund…', undoRefund);
-  const lockedAutoMatch = lock('Auto-matching…', async () => {
-    await autoMatchAll();
+  const lockedAutoMatch = lock('Linking trips…', async (
+    pairs?: Array<{ transactionId: string; tripId: string }>,
+  ) => {
+    await autoMatchAll(pairs && pairs.length > 0 ? pairs : needsReviewReadyPairs);
   });
   const lockedRefresh = lock('Refreshing…', async () => {
     await refresh({ autoMatch: true });
@@ -1342,7 +1346,7 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
             {highConfidenceCount > 0 && (
                 <Button variant="default" size="sm" onClick={() => void lockedAutoMatch()} disabled={actionBusy} className="bg-indigo-600 hover:bg-indigo-700">
                     <Wand2 className="h-4 w-4 mr-2" />
-                    Auto-match {highConfidenceCount}
+                    Link all ready {highConfidenceCount}
                 </Button>
             )}
             {activeStepId === 'personal-use' && orphanNoTripAutoChargeCount > 0 && (
@@ -1429,6 +1433,7 @@ function ReconciliationWizardInner({ period, driverId, drivers, onExit }: Reconc
               onFlag={lockedFlag}
               onManualResolve={lockedManualResolve}
               onEdit={lockedEditToll}
+              onBulkLinkReady={lockedAutoMatch}
               advancePrompt={showAdvancePrompt ? renderAdvancePrompt(true) : undefined}
               emptyState={{ icon: HelpCircle, title: "No tolls pending review", description: "There are no tolls needing review this period." }}
               listTitle="Needs Review"

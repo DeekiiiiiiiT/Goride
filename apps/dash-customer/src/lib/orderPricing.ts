@@ -94,3 +94,30 @@ export function calculateOrderTotals(
     total,
   };
 }
+
+/** Live merchant fee + delivery for cart/checkout display. */
+export async function fetchMerchantCheckoutPricing(
+  merchantId: string,
+  accessToken?: string | null,
+): Promise<{ platformFeeRate: number; deliveryFee: number } | null> {
+  const { API_ENDPOINTS, supabaseAnonFunctionHeaders } = await import('@roam/api-client');
+  const headers = supabaseAnonFunctionHeaders(
+    accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+  );
+  const res = await fetch(`${API_ENDPOINTS.delivery}/merchants/${merchantId}/pricing`, { headers });
+  if (!res.ok) return null;
+  const data = (await res.json().catch(() => ({}))) as {
+    platform_fee_rate?: number;
+    delivery_fee?: number;
+  };
+  if (typeof data.platform_fee_rate !== 'number' || !Number.isFinite(data.platform_fee_rate)) {
+    return null;
+  }
+  return {
+    platformFeeRate: data.platform_fee_rate,
+    deliveryFee:
+      typeof data.delivery_fee === 'number' && Number.isFinite(data.delivery_fee)
+        ? Math.max(0, data.delivery_fee)
+        : 0,
+  };
+}

@@ -43,6 +43,7 @@ interface PeriodLandingPageProps {
   reconciled: ReconciliationPeriod[];
   totals: ReconciliationTotals;
   loading: boolean;
+  loadError?: string | null;
 }
 
 function periodDateBadge(startDate: string) {
@@ -171,6 +172,7 @@ export function PeriodLandingPage({
   reconciled,
   totals,
   loading,
+  loadError,
 }: PeriodLandingPageProps) {
   const [bulkResetOpen, setBulkResetOpen] = useState(false);
   const allPeriods = useMemo(
@@ -193,7 +195,7 @@ export function PeriodLandingPage({
     );
   }
 
-  const isEmpty = outstanding.length === 0 && inProgress.length === 0 && reconciled.length === 0;
+  const isEmpty = !loadError && outstanding.length === 0 && inProgress.length === 0 && reconciled.length === 0;
   const defaultTab =
     outstanding.length > 0 ? 'outstanding' : inProgress.length > 0 ? 'in_progress' : 'completed';
   const showActionBanner = totals.needsReviewCount > 0;
@@ -246,6 +248,13 @@ export function PeriodLandingPage({
         </div>
       </div>
 
+      {loadError ? (
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 py-16 text-center text-rose-800">
+          <p className="text-sm font-medium">Could not load tolls — the fleet server is down.</p>
+          <p className="mt-1 text-xs text-rose-600">Your data is still there. Refresh this page in a moment.</p>
+        </div>
+      ) : (
+      <>
       {/* Action Required banner */}
       {showActionBanner && (
         <section
@@ -353,6 +362,8 @@ export function PeriodLandingPage({
             />
           </TabsContent>
         </Tabs>
+      )}
+      </>
       )}
 
       <BulkPeriodResetDialog

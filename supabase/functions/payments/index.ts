@@ -16,6 +16,7 @@ import { validateBody, z } from "../_shared/validateBody.ts";
 const PaymentIntentBody = z.object({
   orderId: z.string().uuid(),
   provider: z.enum(["wipay", "paypal"]).optional(),
+  returnOrigin: z.string().url().optional(),
 });
 
 const app = new Hono().basePath("/payments");
@@ -37,11 +38,220 @@ function getServiceSupabase() {
   );
 }
 
+function wipayEnv(): string {
+  return (Deno.env.get("WIPAY_ENV") ?? "sandbox").toLowerCase();
+}
+
+function isSandboxWipay(): boolean {
+  const env = wipayEnv();
+  return env !== "live" && env !== "production";
+}
+
+/** WiPay sandbox public test merchant — live must use real secrets. */
+function wipayAccountNumber(): string | null {
+  const fromEnv = Deno.env.get("WIPAY_ACCOUNT_NUMBER")?.trim();
+  if (fromEnv) return fromEnv;
+  return isSandboxWipay() ? "1234567890" : null;
+}
+
+function wipayApiKey(): string | null {
+  const fromEnv = Deno.env.get("WIPAY_API_KEY")?.trim();
+  if (fromEnv) return fromEnv;
+  return isSandboxWipay() ? "123" : null;
+}
+
 /** Shared callback secret for WiPay webhooks (never trust unsigned callbacks). */
 function wipayCallbackSecret(): string | null {
   const s = Deno.env.get("WIPAY_CALLBACK_SECRET");
-  if (!s || !s.trim()) return null;
-  return s.trim();
+  if (s?.trim()) return s.trim();
+  return isSandboxWipay() ? "sandbox-wipay-callback" : null;
+}
+
+function isAllowedPayReturnOrigin(raw: string): boolean {
+  try {
+    const u = new URL(raw);
+    if (u.protocol !== "http:" && u.protocol !== "https:") return false;
+    const host = u.hostname.toLowerCase();
+    if (host === "localhost" || host === "127.0.0.1") return true;
+    return (
+      host === "roamrush.app" ||
+      host.endsWith(".roamrush.app") ||
+      host === "dash.roamja.com" ||
+      host.endsWith(".roamja.com")
+    );
+  } catch {
+    return false;
+  }
+}
+
+function resolvePayReturnBase(originHeader: string | undefined, bodyOrigin?: string): string {
+  if (bodyOrigin && isAllowedPayReturnOrigin(bodyOrigin)) {
+    return new URL(bodyOrigin).origin;
+  }
+  if (originHeader && isAllowedPayReturnOrigin(originHeader)) {
+    return new URL(originHeader).origin;
+  }
+  return Deno.env.get("APP_URL") ?? "https://roamrush.app";
+}
+
+function paymentsPublicUrl(): string {
+  const base = (Deno.env.get("SUPABASE_URL") ?? "").replace(/\/$/, "");
+  return `${base}/functions/v1/payments`;
+}
+
+function wipaySuccess(status: unknown): boolean {
+  const s = String(status ?? "").trim().toLowerCase();
+  return s === "success" || s === "successful" || s === "completed" || s === "paid" || s === "ok" || s === "approved" || s === "1" || s === "true";
+}
+
+function payloadString(payload: Record<string, unknown>, ...keys: string[]): string {
+  for (const key of keys) {
+    const value = payload[key];
+    if (value != null && String(value).trim()) return String(value).trim();
+  }
+  return "";
+}
+
+async function readWipayPayload(c: { req: { method: string; url: string; header: (n: string) => string | undefined; json: () => Promise<unknown>; parseBody: () => Promise<Record<string, unknown>> } }): Promise<Record<string, unknown>> {
+  const url = new URL(c.req.url);
+  const fromQuery: Record<string, unknown> = {};
+  url.searchParams.forEach((value, key) => {
+    if (key !== "secret") fromQuery[key] = value;
+  });
+  if (c.req.method === "GET" || c.req.method === "HEAD") return fromQuery;
+
+  const contentType = c.req.header("content-type") ?? "";
+  try {
+    if (contentType.includes("application/json")) {
+      const json = await c.req.json();
+      if (json && typeof json === "object") return { ...fromQuery, ...(json as Record<string, unknown>) };
+      return fromQuery;
+    }
+    const form = await c.req.parseBody();
+    return { ...fromQuery, ...form };
+  } catch {
+    return fromQuery;
+  }
+}
+
+async function findWipayIntent(
+  serviceSupabase: ReturnType<typeof getServiceSupabase>,
+  payload: Record<string, unknown>,
+  orderIdHint?: string,
+) {
+  const transactionId = payloadString(payload, "transaction_id", "transactionId", "transactionid");
+  if (transactionId) {
+    const { data } = await serviceSupabase
+      .schema("payments")
+      .from("payment_intents")
+      .select("*")
+      .eq("provider_intent_id", transactionId)
+      .maybeSingle();
+    if (data) return data;
+  }
+
+  const orderRef = orderIdHint || payloadString(payload, "order_id", "orderId");
+  if (!orderRef) return null;
+
+  const uuidLike = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orderRef);
+  let orderId = uuidLike ? orderRef : "";
+  if (!orderId) {
+    const { data: order } = await serviceSupabase
+      .schema("delivery")
+      .from("orders")
+      .select("id")
+      .eq("order_number", orderRef)
+      .maybeSingle();
+    orderId = String(order?.id ?? "");
+  }
+  if (!orderId) return null;
+
+  const { data: intents } = await serviceSupabase
+    .schema("payments")
+    .from("payment_intents")
+    .select("*")
+    .eq("order_id", orderId)
+    .eq("provider", "wipay")
+    .order("created_at", { ascending: false })
+    .limit(1);
+  return intents?.[0] ?? null;
+}
+
+async function completeWipayIntent(
+  serviceSupabase: ReturnType<typeof getServiceSupabase>,
+  intent: Record<string, unknown>,
+  payload: Record<string, unknown>,
+) {
+  const alreadyPaid = String(intent.status) === "completed";
+  if (!alreadyPaid) {
+    await serviceSupabase
+      .schema("payments")
+      .from("payment_intents")
+      .update({
+        status: "completed",
+        completed_at: new Date().toISOString(),
+        provider_data: { ...(intent.provider_data as Record<string, unknown> | null ?? {}), callback: payload },
+      })
+      .eq("id", intent.id);
+
+    const { data: order } = await serviceSupabase
+      .schema("delivery")
+      .from("orders")
+      .select("merchant_id, courier_id, platform_fee, delivery_fee, tip")
+      .eq("id", intent.order_id)
+      .single();
+
+    const { computeDashCaptureSplit } = await import("../_shared/dashMoneySplit.ts");
+    const split = computeDashCaptureSplit(order || {}, Number(intent.amount));
+    const transactionId = payloadString(payload, "transaction_id", "transactionId", "transactionid")
+      || String(intent.provider_intent_id ?? "");
+
+    const { data: txn } = await serviceSupabase
+      .schema("payments")
+      .from("transactions")
+      .insert({
+        intent_id: intent.id,
+        order_id: intent.order_id,
+        customer_id: intent.customer_id,
+        amount: intent.amount,
+        net_amount: split.merchantReceivable,
+        currency: "JMD",
+        status: "completed",
+        provider: "wipay",
+        provider_transaction_id: transactionId,
+        provider_data: { ...payload, money_split: split },
+        payment_method: "credit_card",
+      })
+      .select("id")
+      .maybeSingle();
+
+    if (txn?.id) {
+      try {
+        const { dualWriteDashPayment } = await import("../_shared/unifiedLedger/dualWriteDash.ts");
+        await dualWriteDashPayment({
+          transactionId: String(txn.id),
+          orderId: String(intent.order_id),
+          merchantId: split.merchantId,
+          courierId: split.courierId,
+          amount: split.merchantReceivable,
+          currency: "JMD",
+          kind: "order_capture",
+          split,
+        });
+      } catch (e) {
+        console.error("[payments/wipay] unified dual-write failed:", e);
+      }
+    }
+  }
+
+  // Keep kitchen status as placed — "confirmed" is not a valid orders.status.
+  await serviceSupabase
+    .schema("delivery")
+    .from("orders")
+    .update({ payment_status: "paid" })
+    .eq("id", intent.order_id);
+
+  return String(intent.order_id);
 }
 
 function verifyWipayCallbackSecret(c: { req: { header: (n: string) => string | undefined; url: string } }): boolean {
@@ -102,13 +312,12 @@ async function assertCustomerOwnsOrder(
   return { ok: true, order: order as Record<string, unknown>, customerId: String(customer.id) };
 }
 
-/** WiPay gateway host — sandbox vs live by WIPAY_ENV. */
+/** Jamaica Payments API host — https://docs.wipayfinancial.com/platforms-and-environments */
 function wipayGatewayUrl(): string {
-  const env = (Deno.env.get("WIPAY_ENV") ?? "sandbox").toLowerCase();
-  if (env === "live" || env === "production") {
-    return "https://www.wipayfinancial.com/v1/gateway_live";
+  if (isSandboxWipay()) {
+    return "https://jmsb.wipayfinancial.com/plugins/payments/request";
   }
-  return "https://sandbox.wipayfinancial.com/v1/gateway_live";
+  return "https://jm.wipayfinancial.com/plugins/payments/request";
 }
 
 // Health check
@@ -139,11 +348,12 @@ app.post("/intents", async (c) => {
   
   const body = await validateBody(c, PaymentIntentBody);
   if (body instanceof Response) return body;
-  const { orderId, provider = "wipay" } = body;
+  const { orderId, provider = "wipay", returnOrigin } = body;
 
   const owned = await assertCustomerOwnsOrder(user.id, orderId);
   if (!owned.ok) return c.json({ error: owned.error }, owned.status);
   const order = owned.order;
+  const returnBase = resolvePayReturnBase(c.req.header("origin"), returnOrigin);
   
   const serviceSupabase = getServiceSupabase();
   
@@ -152,7 +362,7 @@ app.post("/intents", async (c) => {
   let providerData = {};
   
   if (provider === "wipay") {
-    const wipayResult = await createWiPayIntent(order);
+    const wipayResult = await createWiPayIntent(order, returnBase, user.email ?? "");
     if (wipayResult.error) {
       return c.json({ error: wipayResult.error }, 500);
     }
@@ -203,159 +413,159 @@ app.post("/intents", async (c) => {
 // WiPay Integration
 // ============================================================================
 
-async function createWiPayIntent(order: any) {
-  const wipayAccountNumber = Deno.env.get("WIPAY_ACCOUNT_NUMBER");
-  const wipayApiKey = Deno.env.get("WIPAY_API_KEY");
+async function createWiPayIntent(order: any, returnBase: string, customerEmail: string) {
+  const accountNumber = wipayAccountNumber();
+  const apiKey = wipayApiKey();
   
-  if (!wipayAccountNumber || !wipayApiKey) {
+  if (!accountNumber || !apiKey) {
     return { error: "WiPay not configured" };
   }
   
-  const returnUrl = Deno.env.get("APP_URL") ?? "https://dash.roamja.com";
   const callbackSecret = wipayCallbackSecret();
   if (!callbackSecret) {
     return { error: "WiPay callback secret not configured — set WIPAY_CALLBACK_SECRET" };
   }
-  const responseUrl = new URL(`${returnUrl}/payment/callback/wipay`);
-  // WiPay will hit our webhook/callback with this secret so we can verify authenticity.
+  const responseUrl = new URL(`${paymentsPublicUrl()}/webhooks/wipay`);
   responseUrl.searchParams.set("secret", callbackSecret);
-  
+  const customerReturn = `${returnBase}/payment/callback/wipay`;
+  const orderRef = String(order.order_number || order.id).replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 16);
+  const accountValue = /^\d+$/.test(accountNumber) ? Number(accountNumber) : accountNumber;
+
   try {
     const response = await fetchWithTimeout(wipayGatewayUrl(), {
       method: "POST",
       headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
+        Accept: "application/json",
+        "Content-Type": "application/json",
       },
-      body: new URLSearchParams({
-        account_number: wipayAccountNumber,
+      body: JSON.stringify({
+        account_number: accountValue,
         avs: "0",
         country_code: "JM",
         currency: "JMD",
-        data: JSON.stringify({ orderId: order.id }),
-        environment: Deno.env.get("WIPAY_ENV") ?? "sandbox",
+        data: JSON.stringify({ orderId: order.id, returnBase }),
+        email: customerEmail || "customer@roamrush.app",
+        environment: isSandboxWipay() ? "sandbox" : "live",
         fee_structure: "customer_pay",
-        method: "credit_card",
-        order_id: order.order_number,
-        origin: "roam-dash",
+        method: "credit_card_co",
+        order_id: orderRef || "order",
+        origin: "RoamRush",
         response_url: responseUrl.toString(),
-        return_url: `${returnUrl}/orders/${order.id}`,
-        total: order.total.toString(),
+        return_url: customerReturn,
+        total: Number(order.total).toFixed(2),
       }),
       timeoutMs: 15000,
     });
-    
-    const result = await response.json();
-    
-    if (result.status === "success") {
-      return {
-        paymentUrl: result.url,
-        transactionId: result.transaction_id,
-        raw: result
-      };
-    } else {
+
+    const raw = await response.text();
+    let result: { url?: string; message?: string; transaction_id?: string } = {};
+    try {
+      result = JSON.parse(raw) as { url?: string; message?: string; transaction_id?: string };
+    } catch {
+      console.error("WiPay non-JSON response:", raw.slice(0, 300));
+      return { error: "Failed to create WiPay payment" };
+    }
+
+    const checkoutUrl = String(result.url || "");
+    if (!checkoutUrl || checkoutUrl.includes("status=error")) {
       return { error: result.message || "WiPay error" };
     }
+    return {
+      paymentUrl: checkoutUrl,
+      transactionId: result.transaction_id,
+      returnBase,
+      raw: result,
+    };
   } catch (err) {
     console.error("WiPay error:", err);
     return { error: "Failed to create WiPay payment" };
   }
 }
 
-// WiPay webhook callback — requires WIPAY_CALLBACK_SECRET (header or ?secret=)
-app.post("/webhooks/wipay", async (c) => {
+// WiPay webhook — no user JWT; verified with WIPAY_CALLBACK_SECRET.
+app.all("/webhooks/wipay", async (c) => {
   if (!verifyWipayCallbackSecret(c)) {
     return c.json({ error: "Unauthorized" }, 401);
   }
 
-  const body = await c.req.json();
+  const payload = await readWipayPayload(c);
   const serviceSupabase = getServiceSupabase();
-  
-  const { transaction_id, status, order_id, data } = body;
-  
-  const { data: intent } = await serviceSupabase
-    .schema("payments")
-    .from("payment_intents")
-    .select("*")
-    .eq("provider_intent_id", transaction_id)
-    .single();
-  
+  const intent = await findWipayIntent(serviceSupabase, payload);
   if (!intent) {
     return c.json({ error: "Intent not found" }, 404);
   }
-  
-  const isSuccess = status === "success";
-  
-  await serviceSupabase
-    .schema("payments")
-    .from("payment_intents")
-    .update({
-      status: isSuccess ? "completed" : "failed",
-      completed_at: new Date().toISOString(),
-      provider_data: body
-    })
-    .eq("id", intent.id);
-  
-  if (isSuccess) {
-    // Get fee fields for Model A split
-    const { data: order } = await serviceSupabase
-      .schema("delivery")
-      .from("orders")
-      .select("merchant_id, courier_id, platform_fee, delivery_fee, tip")
-      .eq("id", intent.order_id)
-      .single();
 
-    const { computeDashCaptureSplit } = await import("../_shared/dashMoneySplit.ts");
-    const split = computeDashCaptureSplit(order || {}, Number(intent.amount));
-
-    const { data: txn } = await serviceSupabase
-      .schema("payments")
-      .from("transactions")
-      .insert({
-        intent_id: intent.id,
-        order_id: intent.order_id,
-        customer_id: intent.customer_id,
-        amount: intent.amount,
-        net_amount: split.merchantReceivable,
-        currency: "JMD",
-        status: "completed",
-        provider: "wipay",
-        provider_transaction_id: transaction_id,
-        provider_data: {
-          ...body,
-          money_split: split,
-        },
-        payment_method: "credit_card"
-      })
-      .select("id")
-      .single();
-
-    // Dual-write to unified ledger
-    if (txn?.id) {
-      try {
-        const { dualWriteDashPayment } = await import("../_shared/unifiedLedger/dualWriteDash.ts");
-        await dualWriteDashPayment({
-          transactionId: String(txn.id),
-          orderId: String(intent.order_id),
-          merchantId: split.merchantId,
-          courierId: split.courierId,
-          amount: split.merchantReceivable,
-          currency: "JMD",
-          kind: "order_capture",
-          split,
-        });
-      } catch (e) {
-        console.error("[payments/wipay] unified dual-write failed:", e);
-      }
-    }
-    
+  const success = wipaySuccess(payload.status ?? payload.payment_status);
+  let orderId = String(intent.order_id);
+  if (success) {
+    orderId = await completeWipayIntent(serviceSupabase, intent as Record<string, unknown>, payload);
+  } else {
     await serviceSupabase
-      .schema("delivery")
-      .from("orders")
-      .update({ status: "confirmed", payment_status: "paid" })
-      .eq("id", intent.order_id);
+      .schema("payments")
+      .from("payment_intents")
+      .update({
+        status: "failed",
+        completed_at: new Date().toISOString(),
+        provider_data: { ...(intent.provider_data as Record<string, unknown> | null ?? {}), callback: payload },
+      })
+      .eq("id", intent.id);
   }
-  
-  return c.json({ received: true });
+
+  const providerData = (intent.provider_data ?? {}) as { returnBase?: string };
+  const returnBase = isAllowedPayReturnOrigin(String(providerData.returnBase ?? ""))
+    ? String(providerData.returnBase)
+    : (Deno.env.get("APP_URL") ?? "https://roamrush.app");
+  const customerReturn = `${returnBase}/payment/callback/wipay?status=${success ? "success" : "failed"}&order_id=${encodeURIComponent(orderId)}`;
+
+  const accept = c.req.header("accept") ?? "";
+  const contentType = c.req.header("content-type") ?? "";
+  const wantsJson = contentType.includes("application/json") && !accept.includes("text/html");
+  if (wantsJson || c.req.header("x-wipay-no-redirect") === "1") {
+    return c.json({ received: true, success, orderId });
+  }
+  return c.redirect(customerReturn, 302);
+});
+
+const WipayCompleteBody = z.object({
+  orderId: z.string().min(1),
+  transactionId: z.string().optional(),
+  status: z.string().optional(),
+});
+
+// Customer return from WiPay hosted page — marks the order paid so the kitchen can see it.
+app.post("/wipay/complete", async (c) => {
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
+
+  const supabase = getSupabase(authHeader);
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+  const body = await validateBody(c, WipayCompleteBody);
+  if (body instanceof Response) return body;
+
+  const serviceSupabase = getServiceSupabase();
+  const payload = {
+    order_id: body.orderId,
+    transaction_id: body.transactionId,
+    status: body.status,
+  };
+  const intent = await findWipayIntent(serviceSupabase, payload, body.orderId);
+  if (!intent) return c.json({ error: "Payment not found" }, 404);
+
+  const owned = await assertCustomerOwnsOrder(user.id, String(intent.order_id));
+  if (!owned.ok) return c.json({ error: owned.error }, owned.status);
+
+  if (!wipaySuccess(body.status) && String(intent.status) !== "completed") {
+    return c.json({ error: "Payment not completed" }, 400);
+  }
+
+  const orderId = await completeWipayIntent(
+    serviceSupabase,
+    intent as Record<string, unknown>,
+    { ...payload, status: body.status ?? "success" },
+  );
+  return c.json({ success: true, orderId });
 });
 
 // ============================================================================
@@ -561,7 +771,7 @@ app.post("/paypal/capture", async (c) => {
       await serviceSupabase
         .schema("delivery")
         .from("orders")
-        .update({ status: "confirmed", payment_status: "paid" })
+        .update({ payment_status: "paid" })
         .eq("id", intent.order_id);
       
       return c.json({ success: true, captureId: capture.id });

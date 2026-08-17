@@ -24,7 +24,7 @@ export interface TollFinancialOverviewCardsProps {
 /**
  * The financial snapshot. Spend / Reimbursed / Charged are operational cards.
  * Net Toll Loss is the same fleet-loss number as Business Finance P&L Tolls
- * (canonical ledger netting) — not Spend − Reimbursed − Charged.
+ * (plaza spend minus Uber trip reimbursement and washed offsets).
  * Shared by PeriodLandingPage and ReconciliationWizard.
  */
 function PlatformSplit({ breakdown, className }: { breakdown?: PlatformAmountBreakdown; className?: string }) {

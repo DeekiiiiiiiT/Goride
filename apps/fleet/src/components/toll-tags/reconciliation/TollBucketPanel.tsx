@@ -36,7 +36,7 @@ import { EditTollModal } from "./EditTollModal";
 import { formatInFleetTz, useFleetTimezone } from '../../../utils/timezoneDisplay';
 import { MatchResult } from "../../../utils/tollReconciliation";
 import { isTripLinkConfirmed, isOrphanPersonalMatch, personalMatchReasonLabel } from "../../../utils/tollBucket";
-import { partitionSuggestions } from "../../../utils/suggestionPartition";
+import { collectReadyToLinkPairs, partitionSuggestions } from "../../../utils/suggestionPartition";
 import { SuggestedMatchCard } from "./SuggestedMatchCard";
 import { SmartSuggestionsSection } from "./SmartSuggestionsSection";
 import { ManualMatchModal } from "./ManualMatchModal";
@@ -97,6 +97,8 @@ export interface TollBucketPanelProps {
   onChargePersonal?: (tx: FinancialTransaction, match?: MatchResult) => void;
   /** Personal-use step: charge several selected tolls in one go. */
   onBulkChargePersonal?: (items: Array<{ tx: FinancialTransaction; match?: MatchResult }>) => Promise<void> | void;
+  /** Needs Review: link every ready-to-link suggestion in one request. */
+  onBulkLinkReady?: (pairs: Array<{ transactionId: string; tripId: string }>) => Promise<void> | void;
   /** Wizard step — controls orphan card surfacing and status labels. */
   stepId?: 'needs-review' | 'personal-use' | 'deadhead';
   /** Period wizard: one card + one list (no duplicate week headers / stacked smart zone). */
@@ -108,7 +110,7 @@ export interface TollBucketPanelProps {
 export function TollBucketPanel({
   tolls, suggestions, onReconcile, allTrips, onApprove, onReject, onDiscardReceipt, onFlag, onManualResolve, onEdit, drivers = [],
   emptyState, listTitle = 'Tolls', listDescription = "Toll provider charges that haven't been linked to a specific trip.",
-  approveLabel = 'Approve', onChargeDriver, onChargePersonal, onBulkChargePersonal, onAcceptPersonal, stepId, unifiedPeriodView = false, advancePrompt,
+  approveLabel = 'Approve', onChargeDriver, onChargePersonal, onBulkChargePersonal, onBulkLinkReady, onAcceptPersonal, stepId, unifiedPeriodView = false, advancePrompt,
 }: TollBucketPanelProps) {
     const [selectedTxForManual, setSelectedTxForManual] = useState<FinancialTransaction | null>(null);
     const [competingPickTx, setCompetingPickTx] = useState<FinancialTransaction | null>(null);
@@ -117,6 +119,7 @@ export function TollBucketPanel({
     const [visibleWeekCount, setVisibleWeekCount] = useState(12);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [isBulkCharging, setIsBulkCharging] = useState(false);
+    const [isBulkLinking, setIsBulkLinking] = useState(false);
     const fleetTz = useFleetTimezone();
 
     const [detailTx, setDetailTx] = useState<FinancialTransaction | null>(null);
@@ -427,6 +430,17 @@ export function TollBucketPanel({
         suggestions,
         stepId,
     );
+    const readyToLinkPairs = collectReadyToLinkPairs(suggestionEntries, suggestions);
+
+    const handleBulkLinkReady = async () => {
+        if (!onBulkLinkReady || readyToLinkPairs.length === 0) return;
+        setIsBulkLinking(true);
+        try {
+            await onBulkLinkReady(readyToLinkPairs);
+        } finally {
+            setIsBulkLinking(false);
+        }
+    };
 
     const smartMatches = suggestionEntries.filter((e) => !e.orphanMode).map((e) => e.toll);
 
@@ -845,6 +859,9 @@ export function TollBucketPanel({
                             onShowMore={() => setVisibleSmartMatches((prev) => prev + 10)}
                             stepId={stepId}
                             renderCard={(tx, orphanMode) => renderSuggestedMatchCard(tx, orphanMode)}
+                            readyToLinkCount={onBulkLinkReady ? readyToLinkPairs.length : 0}
+                            onBulkLinkReady={onBulkLinkReady ? () => void handleBulkLinkReady() : undefined}
+                            bulkLinkBusy={isBulkLinking}
                         />
                         {otherTolls.length > 0 && (
                             <Table>

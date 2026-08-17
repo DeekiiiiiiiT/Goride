@@ -25,6 +25,13 @@ describe('calculateOrderTotals', () => {
     const totals = calculateOrderTotals(500, null, 0, 0, 0.05);
     expect(totals.deliveryFee).toBe(0);
   });
+
+  it('matches server Island Grill smoke totals at 15% platform fee', () => {
+    const totals = calculateOrderTotals(1200, null, 100, 150, 0.15);
+    expect(totals.serviceFee).toBe(180);
+    expect(totals.tax).toBe(198);
+    expect(totals.total).toBe(1828);
+  });
 });
 
 describe('resolveCheckoutAddress', () => {

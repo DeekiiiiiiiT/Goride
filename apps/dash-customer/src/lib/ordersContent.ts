@@ -5,6 +5,7 @@ export type OrderLineItem = {
   name: string;
   note?: string;
   price: number;
+  menuItemId?: string;
 };
 
 export type OrderHistoryEntry = {

@@ -13,7 +13,7 @@ import {
   getCheckoutPreferences,
   saveCheckoutPreferences,
 } from '@/lib/checkoutStorage';
-import { cacheValidatedPromo, calculateOrderTotals } from '@/lib/orderPricing';
+import { cacheValidatedPromo, calculateOrderTotals, fetchMerchantCheckoutPricing } from '@/lib/orderPricing';
 import { formatJmd, getRestaurantProfile } from '@/lib/restaurantContent';
 import { toast } from '@/lib/toast';
 
@@ -59,18 +59,10 @@ export default function CartPage({ onNavigate, session }: Props) {
     let cancelled = false;
     void (async () => {
       try {
-        const res = await fetch(`${API_ENDPOINTS.delivery}/merchants/${merchantId}/pricing`);
-        const data = (await res.json().catch(() => ({}))) as {
-          platform_fee_rate?: number;
-          delivery_fee?: number;
-        };
-        if (cancelled) return;
-        if (typeof data.platform_fee_rate === 'number') {
-          setPlatformFeeRate(data.platform_fee_rate);
-        }
-        if (typeof data.delivery_fee === 'number' && Number.isFinite(data.delivery_fee)) {
-          setMerchantDeliveryFee(Math.max(0, data.delivery_fee));
-        }
+        const pricing = await fetchMerchantCheckoutPricing(merchantId, session?.access_token);
+        if (cancelled || !pricing) return;
+        setPlatformFeeRate(pricing.platformFeeRate);
+        setMerchantDeliveryFee(pricing.deliveryFee);
       } catch {
         /* keep fallback */
       }
@@ -78,7 +70,7 @@ export default function CartPage({ onNavigate, session }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [merchantId]);
+  }, [merchantId, session?.access_token]);
 
   const { discount, deliveryFee, serviceFee, tax, total } = calculateOrderTotals(
     subtotal,

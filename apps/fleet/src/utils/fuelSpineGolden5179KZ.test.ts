@@ -144,3 +144,62 @@ describe('5179KZ Jun 15–21 golden spine', () => {
     expect(closed.some((c) => c.id === cycleUuid)).toBe(true);
   });
 });
+
+describe('5179KZ Aug 10–16 golden — lane split + frequency suppress', () => {
+  const vehicleId = '5179KZ-uuid';
+  const augVehicle: Vehicle = {
+    id: vehicleId,
+    licensePlate: '5179KZ',
+    specifications: { tankCapacity: 36 },
+    fuelSettings: { tankCapacity: 36, efficiencyCity: 7.3, cycleCloseMode: 'rideshare' },
+  } as Vehicle;
+
+  function augEntries(): FuelEntry[] {
+    const gasAdmin = ['Jampet', 'FESCO', 'RUBiS'].map((_, i) => ({
+      id: `admin-${i}`,
+      vehicleId,
+      date: `2026-08-1${1 + i}T10:00:00`,
+      liters: 0,
+      amount: 0,
+      odometer: 164000 + i * 50,
+      type: 'Manual_Entry',
+      paymentSource: 'Gas_Card',
+      metadata: {
+        jaaMatchedStatementId: `stmt-${i}`,
+        entryMode: 'Anchor',
+        signalTier: 'observe',
+        integrityStatus: 'valid',
+        isAnchor: true,
+        volumeContributed: 0,
+      },
+    })) as FuelEntry[];
+
+    const cash = [0, 1].map((i) => ({
+      id: `cash-${i}`,
+      vehicleId,
+      date: `2026-08-12T${12 + i}:00:00`,
+      liters: 15,
+      amount: -3000,
+      odometer: 164200 + i * 30,
+      type: 'Expense',
+      paymentSource: 'Cash',
+      reconciliationStatus: 'Pending',
+      metadata: {
+        integrityStatus: 'valid',
+        signalTier: 'observe',
+        volumeContributed: 15,
+        cycleCloseMode: 'rideshare',
+      },
+    })) as FuelEntry[];
+
+    return [...gasAdmin, ...cash];
+  }
+
+  it('0 exception-tier cycles after lane split (linked admin + cash partials)', () => {
+    const cycles = calculateFuelCycles(augEntries(), [augVehicle]);
+    const exceptions = cycles.filter(
+      (c) => c.signalTier === 'exception' || (c.status === 'Anomaly' && c.signalTier !== 'review'),
+    );
+    expect(exceptions.length).toBe(0);
+  });
+});

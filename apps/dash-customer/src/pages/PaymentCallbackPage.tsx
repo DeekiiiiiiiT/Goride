@@ -1,10 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Session } from '@supabase/supabase-js';
-import { API_ENDPOINTS } from '@roam/api-client';
+import { API_ENDPOINTS, supabaseAnonFunctionHeaders } from '@roam/api-client';
 import { CheckCircle, XCircle, Loader2 } from 'lucide-react';
 
 interface PaymentCallbackPageProps {
-  onNavigate: (page: string, data?: any) => void;
+  onNavigate: (page: string, data?: Record<string, unknown>) => void;
   session: Session | null;
   provider: 'wipay' | 'paypal';
 }
@@ -15,7 +15,7 @@ export default function PaymentCallbackPage({ onNavigate, session, provider }: P
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    
+
     if (provider === 'paypal') {
       const paypalOrderId = params.get('token');
       const orderIdParam = params.get('orderId');
@@ -27,31 +27,70 @@ export default function PaymentCallbackPage({ onNavigate, session, provider }: P
       }
 
       if (paypalOrderId && orderIdParam && session) {
-        capturePayPalPayment(paypalOrderId, orderIdParam);
+        void capturePayPalPayment(paypalOrderId, orderIdParam);
+      } else if (!session) {
+        return;
       } else {
         setStatus('failed');
       }
-    } else if (provider === 'wipay') {
-      const wipayStatus = params.get('status');
-      const orderIdParam = params.get('order_id');
-
-      if (wipayStatus === 'success' && orderIdParam) {
-        setStatus('success');
-        setOrderId(orderIdParam);
-      } else {
-        setStatus('failed');
-      }
+      return;
     }
+
+    const wipayStatus = params.get('status') || params.get('payment_status') || '';
+    const orderIdParam = params.get('order_id') || params.get('orderId') || '';
+    const transactionId = params.get('transaction_id') || params.get('transactionId') || '';
+
+    if (!session) {
+      setStatus('failed');
+      return;
+    }
+
+    if (!orderIdParam && !transactionId) {
+      setStatus('failed');
+      return;
+    }
+
+    void completeWipayPayment(orderIdParam, transactionId, wipayStatus);
   }, [provider, session]);
+
+  const completeWipayPayment = async (
+    orderIdParam: string,
+    transactionId: string,
+    wipayStatus: string,
+  ) => {
+    try {
+      const res = await fetch(`${API_ENDPOINTS.payments}/wipay/complete`, {
+        method: 'POST',
+        headers: supabaseAnonFunctionHeaders({
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session!.access_token}`,
+        }),
+        body: JSON.stringify({
+          orderId: orderIdParam,
+          transactionId: transactionId || undefined,
+          status: wipayStatus || undefined,
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { orderId?: string };
+      if (res.ok) {
+        setOrderId(data.orderId || orderIdParam);
+        setStatus('success');
+        return;
+      }
+      setStatus('failed');
+    } catch {
+      setStatus('failed');
+    }
+  };
 
   const capturePayPalPayment = async (paypalOrderId: string, orderIdParam: string) => {
     try {
       const res = await fetch(`${API_ENDPOINTS.payments}/paypal/capture`, {
         method: 'POST',
-        headers: {
+        headers: supabaseAnonFunctionHeaders({
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session!.access_token}`,
-        },
+          Authorization: `Bearer ${session!.access_token}`,
+        }),
         body: JSON.stringify({
           paypalOrderId,
           orderId: orderIdParam,
@@ -86,7 +125,8 @@ export default function PaymentCallbackPage({ onNavigate, session, provider }: P
         <h1 className="text-2xl font-bold text-gray-900 mb-2">Payment Successful!</h1>
         <p className="text-gray-500 mb-8">Your order has been confirmed</p>
         <button
-          onClick={() => onNavigate('tracking', { orderId })}
+          type="button"
+          onClick={() => onNavigate(orderId ? 'tracking' : 'orders', orderId ? { orderId } : undefined)}
           className="px-8 py-3 bg-emerald-500 text-white rounded-lg font-medium hover:bg-emerald-600"
         >
           Track Your Order
@@ -102,12 +142,14 @@ export default function PaymentCallbackPage({ onNavigate, session, provider }: P
       <p className="text-gray-500 mb-8">Something went wrong with your payment</p>
       <div className="flex gap-4">
         <button
+          type="button"
           onClick={() => onNavigate('cart')}
           className="px-6 py-3 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200"
         >
           Try Again
         </button>
         <button
+          type="button"
           onClick={() => onNavigate('home')}
           className="px-6 py-3 bg-emerald-500 text-white rounded-lg font-medium hover:bg-emerald-600"
         >

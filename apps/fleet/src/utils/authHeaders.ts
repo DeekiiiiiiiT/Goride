@@ -1,4 +1,4 @@
-import { publicAnonKey } from './supabase/info';
+import { publicAnonKey, supabaseAnonFunctionHeaders } from '@roam/api-client';
 import { supabase } from './supabase/client';
 import { getProductLineHeaders } from '../config/productLine';
 
@@ -42,7 +42,9 @@ export async function getHeaders(
   }
 
   const headers: Record<string, string> = {
-    'Authorization': `Bearer ${token || publicAnonKey}`,
+    ...supabaseAnonFunctionHeaders({
+      Authorization: `Bearer ${token || publicAnonKey}`,
+    }),
     ...getProductLineHeaders(),
   };
 

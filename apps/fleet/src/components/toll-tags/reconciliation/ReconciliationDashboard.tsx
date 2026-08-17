@@ -70,6 +70,7 @@ export function ReconciliationDashboard({
         reconciled={periodData.reconciled}
         totals={periodData.totals}
         loading={periodData.loading}
+        loadError={periodData.loadError}
       />
     </div>
   );

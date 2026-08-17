@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { MaterialIcon } from '../signup/components/MaterialIcon';
 import { formatCountdown, formatJmd } from '../lib/partner-utils';
 import { getItemOptionLines, Order } from '../types/order';
+import { orderCustomerName } from '../lib/order-utils';
 
 const AUTO_REJECT_MINS = 5;
 
@@ -110,7 +111,7 @@ export default function NewOrderDetailSheet({
               </div>
             </div>
             <h2 className="text-headline-md font-semibold text-on-surface-variant">
-              {order.customer.name}
+              {orderCustomerName(order)}
             </h2>
           </section>
 

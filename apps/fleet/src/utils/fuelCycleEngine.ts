@@ -145,7 +145,22 @@ export function calculateFuelCycles(entries: FuelEntry[], vehicles: Vehicle[] = 
                             return sum + (e.amount || 0);
                         }, 0);
 
-                        const status = entry.metadata?.integrityStatus === 'critical' ? 'Anomaly' : 'Complete';
+                        const status =
+                            entry.metadata?.signalTier === 'exception' ||
+                            (!entry.metadata?.signalTier &&
+                                entry.metadata?.integrityStatus === 'critical' &&
+                                !entry.metadata?.jaaMatchedStatementId &&
+                                !entry.metadata?.jaaMatchedDriverEntryId)
+                              ? 'Anomaly'
+                              : 'Complete';
+                        const cycleSignalTier =
+                            entry.metadata?.signalTier === 'exception'
+                              ? 'exception'
+                              : entry.metadata?.signalTier === 'review'
+                                ? 'review'
+                                : status === 'Anomaly'
+                                  ? 'exception'
+                                  : 'observe';
                         const resetType: FuelCycle['resetType'] = isCapped || isSoft || meta.isCapacityClose
                             ? 'Auto_Soft'
                             : entry.metadata?.integrityStatus === 'critical'
@@ -183,6 +198,7 @@ export function calculateFuelCycles(entries: FuelEntry[], vehicles: Vehicle[] = 
                             startingPercentage,
                             isCapped,
                             excessVolume: excessVolume > 0 ? excessVolume : undefined,
+                            signalTier: cycleSignalTier,
                         });
 
                         carryoverVolume = excessVolume;

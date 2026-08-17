@@ -21,7 +21,7 @@
     "build:courier": "pnpm --filter @roam/dash-courier build",
     "test": "pnpm -r test",
     "lint": "pnpm -r lint",
-    "deploy:edge": "npx supabase functions deploy make-server-37f42386 --use-api --project-ref csfllzzastacofsvcdsc",
+    "deploy:edge": "node scripts/check-fleet-edge-duplicates.mjs && npx supabase functions deploy make-server-37f42386 --use-api --project-ref csfllzzastacofsvcdsc && node scripts/smoke-fleet-health.mjs",
     "deploy:delivery": "npx supabase functions deploy delivery --use-api --project-ref csfllzzastacofsvcdsc",
     "deploy:payments": "npx supabase functions deploy payments --use-api --project-ref csfllzzastacofsvcdsc",
     "deploy:merchant-push": "npx supabase functions deploy merchant-push --use-api --project-ref csfllzzastacofsvcdsc",

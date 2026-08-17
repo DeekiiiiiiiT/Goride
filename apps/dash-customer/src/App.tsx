@@ -144,16 +144,24 @@ function DashCustomerApp() {
   );
 }
 
+function paymentCallbackStackPage(): StackPage | null {
+  if (typeof window === 'undefined') return null;
+  const path = window.location.pathname;
+  if (path.includes('/payment/callback/wipay')) return 'payment-callback-wipay';
+  if (path.includes('/payment/callback/paypal')) return 'payment-callback-paypal';
+  return null;
+}
+
 function DashCustomerShell() {
   const { itemCount, subtotal } = useCart();
   const { isOnline, wasOffline, clearWasOffline } = useNetworkStatus();
-  const [phase, setPhase] = useState<AppPhase>('splash');
+  const [phase, setPhase] = useState<AppPhase>(() => (paymentCallbackStackPage() ? 'app' : 'splash'));
   const [loginSignUp, setLoginSignUp] = useState(true);
   const [pendingAddress, setPendingAddress] = useState<AddressSelection | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<DashTab>('home');
-  const [stackPage, setStackPage] = useState<StackPage | null>(null);
+  const [stackPage, setStackPage] = useState<StackPage | null>(() => paymentCallbackStackPage());
   const [pageData, setPageData] = useState<Record<string, unknown> | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchMode, setSearchMode] = useState<'browse' | 'results' | 'deals' | 'category'>('browse');

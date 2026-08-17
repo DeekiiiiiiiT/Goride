@@ -730,6 +730,51 @@ export const api = {
     return all.filter((e: any) => e.isFlagged);
   },
 
+  async getFuelCycles(params: {
+    vehicleId: string;
+    weekStart?: string;
+    weekEnd?: string;
+  }) {
+    const qs = new URLSearchParams({ vehicleId: params.vehicleId });
+    if (params.weekStart) qs.set('weekStart', params.weekStart);
+    if (params.weekEnd) qs.set('weekEnd', params.weekEnd);
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/cycles?${qs}`, {
+      headers: await requireAuthHeaders(null),
+    });
+    if (!response.ok) throw new Error('Failed to fetch fuel cycles');
+    return response.json() as Promise<{ cycles: import('../types/fuel').FuelCycle[] }>;
+  },
+
+  async recalculateFuelCycles(vehicleId?: string) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/cycles/recalculate`, {
+      method: 'POST',
+      headers: await requireAuthHeaders(),
+      body: JSON.stringify(vehicleId ? { vehicleId } : {}),
+    });
+    if (!response.ok) throw new Error('Failed to recalculate fuel cycles');
+    return response.json();
+  },
+
+  async closeFuelWeekCycles(vehicleId: string, weekEnd: string) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/cycles/close-week`, {
+      method: 'POST',
+      headers: await requireAuthHeaders(),
+      body: JSON.stringify({ vehicleId, weekEnd }),
+    });
+    if (!response.ok) throw new Error('Failed to close week cycles');
+    return response.json();
+  },
+
+  async applyJaaFuelMatches(pairs: unknown[]) {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/jaa/apply-matches`, {
+      method: 'POST',
+      headers: await requireAuthHeaders(),
+      body: JSON.stringify({ pairs }),
+    });
+    if (!response.ok) throw new Error('Failed to apply JAA fuel matches');
+    return response.json();
+  },
+
   async resolveFuelAnomaly(transactionId: string, status: 'resolved' | 'disputed' | 'rejected', note: string) {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fleet}/admin/fuel-audit/resolve`, {
         method: 'POST',
@@ -2612,9 +2657,11 @@ export const api = {
     return response.json();
   },
 
-  async getRefundSuggestions(params?: { driverId?: string }): Promise<{ success: boolean; suggestions: Record<string, { status: string; confidence: number; reason: string }> }> {
+  async getRefundSuggestions(params?: { driverId?: string; from?: string; to?: string }): Promise<{ success: boolean; suggestions: Record<string, { status: string; confidence: number; reason: string }> }> {
     const qs = new URLSearchParams();
     if (params?.driverId) qs.set('driverId', params.driverId);
+    if (params?.from) qs.set('from', params.from);
+    if (params?.to) qs.set('to', params.to);
     const response = await fetchWithRetry(`${API_ENDPOINTS.financial}/toll-reconciliation/refund-suggestions?${qs.toString()}`, {
       headers: await requireAuthHeaders(null)
     });

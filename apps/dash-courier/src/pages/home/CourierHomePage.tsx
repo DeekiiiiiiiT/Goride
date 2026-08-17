@@ -372,6 +372,11 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
     }
   }, []);
 
+  const persistDelivered = useCallback(() => {
+    const orderId = realDispatchProvider.activeOrderId || delivery.orderId;
+    if (orderId) void updateCourierOrderStatus(orderId, 'delivered');
+  }, [delivery.orderId, realDispatchProvider.activeOrderId]);
+
   const handleAtCustomerComplete = useCallback(
     (method: DropoffMethod, _hasPhoto: boolean, photoUrl?: string) => {
       const orderId = realDispatchProvider.activeOrderId || delivery.orderId;
@@ -610,7 +615,10 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
       {deliveryPhase === 'confirm-handoff' && !acceptedStacked && hasActiveDeliveryData && (
         <ConfirmHandoffPage
           onBack={() => dispatch.setDeliveryPhase('at-customer')}
-          onComplete={() => dispatch.setDeliveryPhase('complete')}
+          onComplete={() => {
+            persistDelivered();
+            dispatch.setDeliveryPhase('complete');
+          }}
           onCustomerUnavailable={() => dispatch.setDeliveryPhase('customer-unavailable')}
         />
       )}
@@ -619,7 +627,10 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
         <CustomerUnavailablePage
           customerPhone={delivery.customerPhone}
           onClose={() => dispatch.setDeliveryPhase('at-customer')}
-          onLeaveAtSafeLocation={() => dispatch.setDeliveryPhase('complete')}
+          onLeaveAtSafeLocation={() => {
+            persistDelivered();
+            dispatch.setDeliveryPhase('complete');
+          }}
         />
       )}
 

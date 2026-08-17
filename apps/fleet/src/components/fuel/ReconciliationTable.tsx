@@ -469,16 +469,33 @@ export function ReconciliationTable({
     };
 
     const dataQualityWarnings = useMemo(() => {
+        const startYmd = dateRange?.from ? format(dateRange.from, 'yyyy-MM-dd') : '';
+        const endYmd = dateRange?.to ? format(dateRange.to, 'yyyy-MM-dd') : startYmd;
+        const exceptionEntries = fuelEntries.filter((e) => {
+            const d = String(e.date || '').split('T')[0];
+            if (startYmd && d < startYmd) return false;
+            if (endYmd && d > endYmd) return false;
+            return e.metadata?.signalTier === 'exception';
+        });
         return reports.reduce((acc, r) => {
             const openDispute = findDisputeForReport(r)?.status === 'Open';
             const isUnhealthy = r.healthStatus && r.healthStatus !== 'Emerald';
             const hasPending = (r.pendingCount || 0) > 0;
-            if (openDispute || isUnhealthy || hasPending) {
-                acc.push({ vehicleId: r.vehicleId, healthStatus: r.healthStatus, pendingCount: r.pendingCount || 0, openDispute });
+            const vehicleExceptions = exceptionEntries.filter((e) => e.vehicleId === r.vehicleId).length;
+            if (openDispute || isUnhealthy || hasPending || vehicleExceptions > 0) {
+                acc.push({
+                    vehicleId: r.vehicleId,
+                    healthStatus: r.healthStatus,
+                    pendingCount: r.pendingCount || 0,
+                    openDispute,
+                    exceptionCount: vehicleExceptions,
+                });
             }
             return acc;
-        }, [] as { vehicleId: string; healthStatus?: string; pendingCount: number; openDispute: boolean }[]);
-    }, [reports, disputes]);
+        }, [] as { vehicleId: string; healthStatus?: string; pendingCount: number; openDispute: boolean; exceptionCount?: number }[]);
+    }, [reports, disputes, fuelEntries, dateRange]);
+
+    const hasExceptionBlockers = dataQualityWarnings.some((w) => (w.exceptionCount || 0) > 0);
 
     const [financeWarningAcknowledged, setFinanceWarningAcknowledged] = useState(false);
     const hasBlockingWarnings =
@@ -570,7 +587,7 @@ export function ReconciliationTable({
                         Export
                     </Button>
                     {!hideFinalize && !periodLocked && (
-                      <Button onClick={() => { setFinanceWarningAcknowledged(false); setIsFinalizeDialogOpen(true); }} disabled={reports.length === 0}>
+                      <Button onClick={() => { setFinanceWarningAcknowledged(false); setIsFinalizeDialogOpen(true); }} disabled={reports.length === 0 || hasExceptionBlockers}>
                           <FileCheck className="mr-2 h-4 w-4" />
                           Finalize
                       </Button>

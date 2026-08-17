@@ -641,6 +641,7 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
                     odometerImageUrl = url;
                 }
 
+                // Cash-style admin manual = Expense debit (driver portal parity). Gas card uses anchor path above.
                 const transactionData = {
                     id: entry.id,
                     date: commonData.date || entry.date || getLocalDateString(),
@@ -649,7 +650,7 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
                     driverName: driver?.name || 'Unknown Driver',
                     vehicleId: commonData.vehicleId,
                     vehiclePlate: vehicle?.licensePlate,
-                    type: 'Fuel_Manual_Entry',
+                    type: 'Expense',
                     // Tag source: new entry = admin-manual/bulk-import; editing a portal entry = admin-edit; editing an admin entry stays admin-manual
                     entrySource: initialData
                         ? (initialData.entrySource === 'admin-manual' || initialData.metadata?.entrySource === 'admin-manual'
@@ -658,7 +659,7 @@ export function SubmitExpenseModal({ isOpen, onClose, onSave, drivers, vehicles,
                         : (entries.length > 1 ? 'bulk-import' : 'admin-manual'),
                     category: 'Fuel',
                     description: entry.notes || 'Fuel Expense Log',
-                    amount: amountVal, 
+                    amount: -Math.abs(amountVal),
                     paymentMethod: pSource === 'company_card' ? 'Gas Card' : (pSource === 'petty_cash' ? 'Other' : (pSource === 'rideshare_cash' ? 'RideShare Cash' : 'Cash')),
                     status: initialData?.status || 'Pending',
                     receiptUrl,

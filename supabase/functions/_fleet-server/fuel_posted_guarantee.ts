@@ -11,6 +11,7 @@ import {
 import { resolveFuelPaymentSource } from "./fuel_payment_source.ts";
 import { syncLinkedExpenseTransaction } from "./fuel_transaction_sync.ts";
 import * as fuelLogic from "./fuel_logic.ts";
+import { stampEntryCycleMetadata } from "./fuel_cycle_stamp.ts";
 import { auditLogic } from "./audit_logic.ts";
 import { projectFromFuelEntry } from "./odometer_ledger.ts";
 import { canReuseLinkedFuelEntry, fuelEntryBelongsToTransaction } from "./fuel_entry_link.ts";
@@ -174,6 +175,22 @@ export type PersistFuelEntryOptions = {
   afterPersist?: (fuelEntry: any) => Promise<void>;
 };
 
+const TERMINAL_RECON_STATUSES = new Set(["Verified", "Archived"]);
+
+/** Finalize only posts Pending fills — null/blank must become Pending unless week is closed. */
+export function stampPendingReconciliationStatus(entry: Record<string, unknown>): boolean {
+  const status = entry.reconciliationStatus;
+  if (status && TERMINAL_RECON_STATUSES.has(String(status))) return false;
+  const meta =
+    entry.metadata && typeof entry.metadata === "object"
+      ? (entry.metadata as Record<string, unknown>)
+      : {};
+  if (meta.finalizedByReport) return false;
+  if (status === "Pending") return false;
+  entry.reconciliationStatus = "Pending";
+  return true;
+}
+
 const AUTH_SOURCES = new Set([
   "driver-portal",
   "admin-manual",
@@ -238,12 +255,17 @@ export async function ensureFuelEntryForApprovedTx(
   if (linkedId) {
     const existing = await kv.get(`fuel_entry:${linkedId}`);
     if (canReuseLinkedFuelEntry(existing, tx.id)) {
+      const patched = { ...existing };
+      if (stampPendingReconciliationStatus(patched)) {
+        const toSave = opts.stamp ? opts.stamp(patched) : patched;
+        await kv.set(`fuel_entry:${patched.id}`, toSave);
+      }
       tx.metadata = {
         ...(tx.metadata || {}),
-        fuelEntryId: existing.id,
+        fuelEntryId: patched.id,
         decisionReason: opts.decisionReason,
       };
-      return { fuelEntry: existing, created: false, blockedNoVehicle: false };
+      return { fuelEntry: patched, created: false, blockedNoVehicle: false };
     }
     if (existing) {
       console.warn(
@@ -278,6 +300,7 @@ export async function ensureFuelEntryForApprovedTx(
       patched.driverName = dName;
       dirty = true;
     }
+    if (stampPendingReconciliationStatus(patched)) dirty = true;
     if (dirty) {
       const toSave = opts.stamp ? opts.stamp(patched) : patched;
       await kv.set(`fuel_entry:${patched.id}`, toSave);
@@ -349,6 +372,7 @@ export async function ensureFuelEntryForApprovedTx(
     source: opts.source,
     entrySource,
     paymentSource: paySrc.enum,
+    reconciliationStatus: "Pending",
     metadata: {
       ...(tx.metadata || {}),
       portal_type: tx.metadata?.portal_type || "Manual_Entry",
@@ -382,64 +406,15 @@ export async function ensureFuelEntryForApprovedTx(
     matchedStation = await kv.get(`station:${fuelEntry.matchedStationId}`);
   }
 
-  // Capacity cycle spine: stamp cycleId + capacity-close flags (driver Full Tank ignored)
+  // Capacity cycle spine: unified stamper (cycleId + close policy + integrity)
   try {
     const vehicle =
       canonical.vehicle ||
       (fuelEntry.vehicleId ? await kv.get(`vehicle:${fuelEntry.vehicleId}`) : null);
-    const tankCapacity = fuelLogic.resolveTankCapacity(vehicle);
-    const lastAnchor = fuelEntry.vehicleId
-      ? await fuelLogic.getLastAnchor(fuelEntry.vehicleId, {
-          asOfDate: fuelEntry.date,
-          excludeId: fuelEntry.id,
-        })
-      : null;
-    const cycleEntries = fuelEntry.vehicleId
-      ? await fuelLogic.getEntriesSinceLastAnchor(
-          fuelEntry.vehicleId,
-          lastAnchor?.date || null,
-          { asOfDate: fuelEntry.date, excludeId: fuelEntry.id },
-        )
-      : [];
-
-    let carryover = 0;
-    if (lastAnchor?.metadata?.isSoftAnchor || lastAnchor?.metadata?.isCapacityClose) {
-      carryover = Number(lastAnchor?.metadata?.excessVolume) || 0;
+    if (vehicle) {
+      await stampEntryCycleMetadata(fuelEntry, vehicle);
+      delete fuelEntry.metadata.isHardAnchor;
     }
-    let prevCumulative = carryover;
-    for (const ce of cycleEntries) {
-      if (ce?.id === fuelEntry.id) continue;
-      prevCumulative = Number(
-        (prevCumulative + (Number(ce.liters) || Number(ce.metadata?.fuelVolume) || 0)).toFixed(4),
-      );
-    }
-
-    const volumeAtEntry = Number(fuelEntry.liters) || 0;
-    const anchor = fuelLogic.classifyAnchor({
-      prevCumulative,
-      volume: volumeAtEntry,
-      tankCapacity,
-      entryType: fuelEntry.type,
-      paymentSource: fuelEntry.paymentSource,
-    });
-    const cycleId = fuelLogic.resolveCycleIdForOpenCycle(
-      cycleEntries.map((e: any) => ({ metadata: e?.metadata })),
-    );
-
-    const meta = { ...(fuelEntry.metadata || {}) };
-    delete meta.isHardAnchor;
-    // Never trust driver checkbox on create — capacity math only
-    meta.isFullTank = anchor.isCapacityClose ? true : false;
-    meta.isSoftAnchor = anchor.isSoft;
-    meta.isCapacityClose = anchor.isCapacityClose || false;
-    meta.isAnchor = anchor.isAnchor;
-    meta.volumeContributed = Number(anchor.volumeContributed.toFixed(2));
-    if (anchor.excessVolume > 0) meta.excessVolume = Number(anchor.excessVolume.toFixed(2));
-    else delete meta.excessVolume;
-    meta.cumulativeLitersAtEntry = Number(anchor.totalVolumeInCycle.toFixed(2));
-    meta.tankCapacityAtEntry = tankCapacity;
-    meta.cycleId = cycleId;
-    fuelEntry.metadata = meta;
   } catch (cycleErr) {
     console.warn("[ensureFuelEntryForApprovedTx] cycle stamp failed:", cycleErr);
     if (fuelEntry.metadata) {
@@ -546,4 +521,36 @@ export async function healApprovedFuelEntriesMissingLog(
     }
   }
   return { healed, blocked };
+}
+
+/** Heal fuel logs missing reconciliationStatus so Finalize can settle them. */
+export async function healFuelEntriesMissingPendingStatus(
+  limit = 100,
+  stamp?: (record: Record<string, unknown>) => Record<string, unknown>,
+): Promise<{ healed: number; scanned: number }> {
+  const { data } = await fromKvStore()
+    .select("key, value")
+    .like("key", "fuel_entry:%")
+    .is("value->reconciliationStatus", null)
+    .limit(Math.min(limit * 5, 500));
+
+  let healed = 0;
+  let scanned = 0;
+
+  for (const row of data || []) {
+    if (healed >= limit) break;
+    const entry = row.value as Record<string, unknown>;
+    if (!entry?.id) continue;
+
+    scanned++;
+    const copy = { ...(entry as Record<string, unknown>) };
+    if (!stampPendingReconciliationStatus(copy)) continue;
+
+    const toSave = stamp ? stamp(copy) : copy;
+    await kv.set(`fuel_entry:${entry.id}`, toSave);
+    healed++;
+    console.log(`[HealFuelPending] ${entry.id} → Pending (${entry.date})`);
+  }
+
+  return { healed, scanned };
 }

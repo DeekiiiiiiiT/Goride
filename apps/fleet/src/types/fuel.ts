@@ -332,6 +332,10 @@ export interface FuelCycle {
   startingPercentage?: number;
   isCapped?: boolean;
   excessVolume?: number;
+  /** Alert tier from server snapshot — exception counts in header badges */
+  signalTier?: 'observe' | 'review' | 'exception';
+  healthStatus?: 'healthy' | 'review' | 'exception';
+  closeReason?: string | null;
 }
 
 /** Slim cycle frozen on finalized_report (no embedded transactions). */

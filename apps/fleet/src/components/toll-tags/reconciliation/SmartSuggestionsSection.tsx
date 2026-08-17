@@ -1,5 +1,5 @@
 import React from 'react';
-import { ChevronDown, Sparkles } from 'lucide-react';
+import { Check, ChevronDown, Loader2, Sparkles } from 'lucide-react';
 import { Button } from '../../ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../../ui/collapsible';
 import { FinancialTransaction } from '../../../types/data';
@@ -15,6 +15,10 @@ interface SmartSuggestionsSectionProps {
   onShowMore: () => void;
   stepId?: SuggestionStepId;
   renderCard: (tx: FinancialTransaction, orphanMode: boolean) => React.ReactNode;
+  /** Needs Review: link every Ready-to-link card in one go. */
+  readyToLinkCount?: number;
+  onBulkLinkReady?: () => void;
+  bulkLinkBusy?: boolean;
 }
 
 /**
@@ -27,6 +31,9 @@ export function SmartSuggestionsSection({
   onShowMore,
   stepId,
   renderCard,
+  readyToLinkCount = 0,
+  onBulkLinkReady,
+  bulkLinkBusy = false,
 }: SmartSuggestionsSectionProps) {
   if (entries.length === 0) return null;
 
@@ -37,6 +44,7 @@ export function SmartSuggestionsSection({
   );
   const ambiguousCount = visible.filter((e) => e.kind === 'ambiguous').length;
   const readyLabel = smartReadyBannerLabel(stepId);
+  const showBulkLink = !!onBulkLinkReady && readyToLinkCount > 0;
 
   return (
     <Collapsible defaultOpen className="group rounded-xl border border-slate-200 bg-slate-50/40 overflow-hidden">
@@ -56,14 +64,34 @@ export function SmartSuggestionsSection({
             <span className="font-semibold">No trips match these tolls ({orphanCount})</span>
           </div>
         )}
-        {normalNonAmbiguous.length > 0 && ambiguousCount === 0 && orphanCount === 0 && (
-          <div className="flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50/60 px-3 py-2 text-indigo-800 text-sm mt-3">
-            <Sparkles className="h-4 w-4 shrink-0" />
-            <span className="font-semibold">
-              {readyLabel} ({normalNonAmbiguous.length})
-            </span>
+        {(normalNonAmbiguous.length > 0 && ambiguousCount === 0 && orphanCount === 0) || showBulkLink ? (
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-indigo-200 bg-indigo-50/60 px-3 py-2 text-indigo-800 text-sm mt-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <Sparkles className="h-4 w-4 shrink-0" />
+              <span className="font-semibold">
+                {readyLabel} ({readyToLinkCount || normalNonAmbiguous.length})
+              </span>
+            </div>
+            {showBulkLink && (
+              <Button
+                size="sm"
+                className="bg-emerald-600 hover:bg-emerald-700 shrink-0"
+                disabled={bulkLinkBusy}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onBulkLinkReady?.();
+                }}
+              >
+                {bulkLinkBusy ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Check className="h-4 w-4 mr-2" />
+                )}
+                Link all {readyToLinkCount}
+              </Button>
+            )}
           </div>
-        )}
+        ) : null}
         <div className="space-y-3 w-full min-w-0">
           {visible.map(({ toll, orphanMode }) => (
             <div key={toll.id} className="w-full min-w-0">

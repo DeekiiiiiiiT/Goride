@@ -22,7 +22,7 @@ import { requireAuth, requirePermission, type RbacUser } from "./rbac_middleware
 import { getServiceClient } from "./service_client.ts";
 import { fromKvStore } from "./fleet_sql_bridge.ts";
 import { checkRateLimit, recordFailedAttempt, getClientIp } from "./rate_limiter.ts";
-import { isTollCategory } from "./toll_category_flags.ts";
+import { isPlazaUsageTollRow, isTollCategory } from "./toll_category_flags.ts";
 import { classifyOrphanToll } from "./orphanTollClassifier.ts";
 import { emitDriverTollCharge, isUnifiedTollSettlementEnabled } from "./driver_toll_charge.ts";
 import {
@@ -1404,6 +1404,7 @@ function isReconcilableTollExpense(tx: any): boolean {
 
 /**
  * Phase 5+ loader: merged toll rows + all trips (for reconciliation views).
+ * Period wizard must NOT use this — it dumps the whole fleet.
  */
 async function loadAllTollLedgerWithTrips(): Promise<{ tollTx: any[]; trips: any[] }> {
   const [tollTx, trips] = await Promise.all([
@@ -1411,6 +1412,51 @@ async function loadAllTollLedgerWithTrips(): Promise<{ tollTx: any[]; trips: any
     loadAllTrips(),
   ]);
   return { tollTx, trips };
+}
+
+/** Matcher windows are request−45 → dropoff+15; ±2 calendar days covers TZ edges. */
+const RECON_TRIP_MATCH_PAD_DAYS = 2;
+
+function shiftYmdUtc(ymd: string, days: number): string {
+  const d = new Date(`${String(ymd).slice(0, 10)}T12:00:00.000Z`);
+  if (Number.isNaN(d.getTime())) return String(ymd).slice(0, 10);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Week-scoped trip load for the reconciliation wizard.
+ * Toll ledger stays unbounded (small) so already-linked trips in other weeks
+ * are not mis-listed as Unlinked Refunds.
+ */
+async function loadTollLedgerWithTripsInRange(
+  from?: string,
+  to?: string,
+): Promise<{ tollTx: any[]; trips: any[] }> {
+  const fromDay = from ? String(from).slice(0, 10) : undefined;
+  const toDay = to ? String(to).slice(0, 10) : undefined;
+  if (!fromDay && !toDay) return loadAllTollLedgerWithTrips();
+
+  const tollFrom = fromDay ?? toDay!;
+  const tollTo = toDay ?? fromDay!;
+  const tripFrom = shiftYmdUtc(tollFrom, -RECON_TRIP_MATCH_PAD_DAYS);
+  const tripTo = shiftYmdUtc(tollTo, RECON_TRIP_MATCH_PAD_DAYS);
+
+  const [tollTx, trips] = await Promise.all([
+    loadMergedTollTxArray(),
+    findTripsInDateRange(tripFrom, tripTo),
+  ]);
+
+  return { tollTx, trips: (trips || []).filter(Boolean) };
+}
+
+/** Prefer week-scoped SQL when the wizard passes from/to. */
+async function loadTollLedgerWithTrips(
+  from?: string,
+  to?: string,
+): Promise<{ tollTx: any[]; trips: any[] }> {
+  if (from || to) return loadTollLedgerWithTripsInRange(from, to);
+  return loadAllTollLedgerWithTrips();
 }
 
 /** Support adjustments (`dispute-refund:*`), excluding dedup index keys. */
@@ -1839,8 +1885,7 @@ app.get(`${BASE}/unreconciled`, async (c) => {
     }
     const { driverId, limit, offset, autoMatch, from, to } = parseUnreconciledQueryParams(c);
 
-    // Phase 5: Read from toll_ledger:* (single source of truth)
-    const loaded = await loadAllTollLedgerWithTrips();
+    const loaded = await loadTollLedgerWithTrips(from, to);
     let tollTx = loaded.tollTx;
     let trips = loaded.trips;
 
@@ -2222,8 +2267,7 @@ app.get(`${BASE}/unclaimed-refunds`, async (c) => {
   try {
     const { driverId, limit, offset, from, to } = parseQueryParams(c);
 
-    // Phase 5: Read from toll_ledger:* (single source of truth)
-    const loaded = await loadAllTollLedgerWithTrips();
+    const loaded = await loadTollLedgerWithTrips(from, to);
     const tollTx = filterByDriver(loaded.tollTx, driverId);
     let trips = filterByDriver(loaded.trips, driverId);
 
@@ -2323,7 +2367,9 @@ app.get(`${BASE}/reconciled`, async (c) => {
   try {
     const { driverId, limit, offset, from, to } = parseQueryParams(c);
 
-    const allTollTx = await loadMergedTollTxArray();
+    const allTollTx = (from || to)
+      ? (await loadTollLedgerWithTrips(from, to)).tollTx
+      : await loadMergedTollTxArray();
 
     // Trip-linked matches AND claim/personal resolutions without a trip (cash
     // shortfalls) — both are real period spend. Requiring tripId hid cash
@@ -6045,10 +6091,10 @@ app.post(`${BASE}/bulk-reconcile`, requirePermission('toll.manage'), async (c) =
 
       for (let j = 0; j < batch.length; j++) {
         const { transactionId, tripId } = batch[j];
-        const tx = txValues[j];
+        const raw = txValues[j];
         const trip = tripValues[j];
 
-        if (!tx) {
+        if (!raw) {
           results.errors.push(`Transaction ${transactionId} not found`);
           results.failed++;
           continue;
@@ -6058,15 +6104,21 @@ app.post(`${BASE}/bulk-reconcile`, requirePermission('toll.manage'), async (c) =
           results.failed++;
           continue;
         }
-        if (!isTollCategory(tx.category)) {
-          results.errors.push(`Transaction ${transactionId} is not a toll category`);
+        // Ledger rows use `type: usage` (no category). Checking category
+        // skipped every plaza charge and bulk-link reported "nothing linked".
+        if (!isPlazaUsageTollRow(raw)) {
+          results.errors.push(`Transaction ${transactionId} is not a plaza usage`);
           results.skipped++;
           continue;
         }
-        if (tx.isReconciled && tx.tripId) {
+        if ((raw.isReconciled || raw.status === "reconciled") && raw.tripId) {
           results.skipped++;
           continue;
         }
+        if (!tollLedgerValues[j]) {
+          await saveTollLedgerEntry(transactionToTollLedgerServer(raw));
+        }
+        const tx = raw;
 
         // Phase 6: Write ONLY to toll_ledger
         tollLedgerUpdates.push({
@@ -7248,10 +7300,11 @@ async function buildUnresolvedRefundSuggestionStatuses(
 // ─── GET /refund-suggestions ─────────────────────────────────────────────
 app.get(`${BASE}/refund-suggestions`, async (c) => {
   try {
-    const { driverId } = parseQueryParams(c);
-    const loaded = await loadAllTollLedgerWithTrips();
+    const { driverId, from, to } = parseQueryParams(c);
+    const loaded = await loadTollLedgerWithTrips(from, to);
     const tollTx = filterByDriver(loaded.tollTx, driverId);
     let trips = filterByDriver(loaded.trips, driverId);
+    trips = await filterByDateRange(trips, from, to);
 
     const linkedTripIds = collectLinkedTripIds(tollTx);
     const unresolved = trips.filter((t: any) => isUnresolvedRefund(t, linkedTripIds));
@@ -7299,15 +7352,18 @@ type UnlinkedShortfallContext = {
   disputeCoveredTollIds: Set<string>;
 };
 
-/** Shared claim+ledger snapshot — load claims once; reuse ledger already in memory when provided. */
-async function loadUnlinkedShortfallContext(ledgerHint?: any[]): Promise<UnlinkedShortfallContext> {
+/** Shared claim+ledger snapshot — load claims once; reuse ledger/trips already in memory when provided. */
+async function loadUnlinkedShortfallContext(
+  ledgerHint?: any[],
+  tripsHint?: any[],
+): Promise<UnlinkedShortfallContext> {
   const ledger =
     ledgerHint && ledgerHint.length > 0
       ? ledgerHint
       : ((await loadAllByPrefix("toll_ledger:")) as any[]);
   const [claims, trips, disputeRefunds] = await Promise.all([
     loadAllByPrefix("claim:"),
-    loadAllTrips(),
+    tripsHint ? Promise.resolve(tripsHint) : loadAllTrips(),
     loadDisputeRefundRecords(),
   ]);
   const tollById = new Map<string, any>();
@@ -8476,7 +8532,7 @@ app.get(`${BASE}/unlinked-shortfall-suggestions`, async (c) => {
   try {
     const { driverId, from, to } = parseQueryParams(c);
     const fleetTz = await getFleetTimezone();
-    const loaded = await loadAllTollLedgerWithTrips();
+    const loaded = await loadTollLedgerWithTrips(from, to);
     const tollTx = filterByDriver(loaded.tollTx, driverId);
     let trips = filterByDriver(loaded.trips, driverId);
     // Period-scoped when wizard passes from/to — avoid scoring every historical unlinked trip.
@@ -8485,7 +8541,7 @@ app.get(`${BASE}/unlinked-shortfall-suggestions`, async (c) => {
     const linkedTripIds = collectLinkedTripIds(tollTx);
     const unresolved = trips.filter((t: any) => isUnresolvedRefund(t, linkedTripIds));
 
-    const ctx = await loadUnlinkedShortfallContext(tollTx);
+    const ctx = await loadUnlinkedShortfallContext(tollTx, loaded.trips);
     const suggestions: Record<string, any[]> = {};
     for (const t of unresolved) {
       // Same Mon–Sun week as the refund only — never promote next-week guesses.
@@ -8654,7 +8710,7 @@ app.post(`${BASE}/resolve-refund/bulk`, async (c) => {
 app.get(`${BASE}/resolved-refunds`, async (c) => {
   try {
     const { driverId, limit, offset, from, to } = parseQueryParams(c);
-    const loaded = await loadAllTollLedgerWithTrips();
+    const loaded = await loadTollLedgerWithTrips(from, to);
     const trips = filterByDriver(loaded.trips, driverId);
 
     // Phase F4: optional period scoping for the gated reconciliation wizard.

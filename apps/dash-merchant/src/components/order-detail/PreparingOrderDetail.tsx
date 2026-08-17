@@ -4,6 +4,7 @@ import { formatElapsedTimer } from '../../lib/partner-utils';
 import {
   getDurationMinutes,
   getInitials,
+  orderCustomerName,
   splitInstructions,
 } from '../../lib/order-utils';
 import { getItemOptionLines, Order } from '../../types/order';
@@ -103,17 +104,17 @@ export default function PreparingOrderDetail({
           <div className="flex flex-col gap-inset-sm rounded-xl border border-outline-variant bg-surface-container-lowest p-inset-md shadow-sm">
             <div className="flex items-center gap-inset-sm">
               <div className="flex h-inset-xl w-inset-xl shrink-0 items-center justify-center rounded-full bg-secondary-container text-headline-md font-semibold text-on-secondary-container shadow-inner">
-                {getInitials(order.customer.name)}
+                {getInitials(orderCustomerName(order))}
               </div>
               <div className="min-w-0 flex-1">
                 <div className="mb-0.5 text-label-sm uppercase tracking-wider text-on-surface-variant">
                   Customer
                 </div>
                 <div className="truncate text-body-lg font-semibold text-on-surface">
-                  {order.customer.name}
+                  {orderCustomerName(order)}
                 </div>
               </div>
-              {order.customer.phone && (
+              {order.customer?.phone && (
                 <a
                   href={`tel:${order.customer.phone}`}
                   className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-primary transition-transform hover:bg-surface-container active:scale-95"

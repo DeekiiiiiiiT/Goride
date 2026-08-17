@@ -46,10 +46,16 @@ export function clearRestaurantSetupInProgress(merchantId: string) {
   localStorage.removeItem(restaurantSetupInProgressKey(merchantId));
 }
 
-/** Post-approval go-live screen — only after platform admin sets verified_at. */
-export function shouldShowGoLiveScreen(merchant: Pick<Merchant, 'id' | 'verification_status' | 'verified_at'>): boolean {
+/** Post-approval go-live screen — skip when already live or owner finished the gate. */
+export function shouldShowGoLiveScreen(
+  merchant: Pick<
+    Merchant,
+    'id' | 'verification_status' | 'verified_at' | 'is_accepting_orders'
+  >,
+): boolean {
   if (merchant.verification_status !== 'approved') return false;
   if (!merchant.verified_at) return false;
+  if (merchant.is_accepting_orders) return false;
   if (hasCompletedGoLive(merchant.id)) return false;
   return true;
 }

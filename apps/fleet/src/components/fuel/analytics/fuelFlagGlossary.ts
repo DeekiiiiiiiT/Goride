@@ -82,7 +82,7 @@ export const FUEL_FLAG_GLOSSARY: FuelFlagGlossaryGroup[] = [
       {
         title: 'High Transaction Frequency',
         meaning:
-          'The same fuel card was swiped unusually often in a short window. Can be normal road work, or a misuse pattern worth a quick look.',
+          'The same fuel card was swiped unusually often in a short window. Linked admin+statement pairs count as one swipe — only unmatched swipes flag.',
       },
       {
         title: 'Fragmented Purchase',
@@ -113,6 +113,23 @@ export const FUEL_FLAG_GLOSSARY: FuelFlagGlossaryGroup[] = [
         title: 'Extreme Proximity Deviation',
         meaning:
           'GPS puts this fill well outside the station geofence. Confirm whether the location is wrong or the station map needs an update.',
+      },
+    ],
+  },
+  {
+    heading: 'Signal tiers',
+    items: [
+      {
+        title: 'Observe',
+        meaning: 'Logged for ops — does not block finalize or appear in the Exceptions header count.',
+      },
+      {
+        title: 'Review',
+        meaning: 'Queue item (unmatched card, same-day overlap). Warn on finalize; does not block.',
+      },
+      {
+        title: 'Exception',
+        meaning: 'Real problem — blocks finalize and counts in Transaction Logs "Exceptions".',
       },
     ],
   },

@@ -6,6 +6,7 @@ import { useCart } from '@/hooks/useCart';
 import { allowMocks } from '@/lib/mocksGate';
 import {
   buildReorderCartItems,
+  buildReorderFromOrder,
   MOCK_ORDERS,
   type OrderHistoryEntry,
 } from '@/lib/ordersContent';
@@ -25,7 +26,16 @@ type ApiOrder = {
   created_at: string;
   merchant_id?: string;
   merchant: { id: string; name: string; logo_url: string };
-  items: Array<{ name: string; quantity: number; price?: number; menuItemId?: string; id?: string; image?: string }>;
+  items: Array<{
+    name: string;
+    quantity: number;
+    price?: number;
+    menuItemId?: string;
+    id?: string;
+    item_id?: string;
+    image?: string;
+    image_url?: string;
+  }>;
 };
 
 function mapApiOrder(order: ApiOrder): OrderHistoryEntry {
@@ -44,6 +54,7 @@ function mapApiOrder(order: ApiOrder): OrderHistoryEntry {
       quantity: i.quantity,
       name: i.name,
       price: i.price ?? 0,
+      menuItemId: i.menuItemId ?? i.id ?? i.item_id,
     })),
     itemSummary: order.items.map((i) => `${i.quantity}x ${i.name}`).join(', '),
     total: order.total,
@@ -85,14 +96,23 @@ export function QuickReorderSection({ onNavigate }: Props) {
 
   const handleReorderAdd = useCallback(() => {
     if (selected) {
-      selected.items.forEach((item, index) => {
+      const rawItems = (data?.orders ?? []).find((o) => o.id === selected.id)?.items as
+        | Array<Record<string, unknown>>
+        | undefined;
+      const lines = buildReorderFromOrder(selected, rawItems);
+      if (!lines.length) {
+        toast.error('Cannot reorder — menu items are unavailable');
+        return;
+      }
+      lines.forEach((line, index) => {
         addItem(
           {
-            itemId: `${selected.id}-${index}`,
+            itemId: line.itemId,
             merchantId: selected.merchantId,
-            name: item.name,
-            price: item.price,
-            quantity: item.quantity,
+            name: line.name,
+            price: line.price,
+            quantity: line.quantity,
+            imageUrl: line.imageUrl,
           },
           selected.merchantName,
           { replace: index === 0 },
@@ -117,7 +137,7 @@ export function QuickReorderSection({ onNavigate }: Props) {
     toast.success('Items added to cart');
     setReorderOpen(false);
     onNavigate('cart');
-  }, [addItem, onNavigate, selected]);
+  }, [addItem, data?.orders, onNavigate, selected]);
 
   if (orders.length === 0) return null;
 
