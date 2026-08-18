@@ -105,6 +105,7 @@ import { FuelEntry, FuelCard, JaaProgram } from '../../types/fuel';
 import { api } from '../../services/api';
 import { supabase } from '../../utils/supabase/client';
 import { fuelService } from '../../services/fuelService';
+import { trailingDaysWindow, FUEL_ALERTS_TRAILING_DAYS } from '../../utils/fuelWeekPeriod';
 import { DataSanitizer } from '../../services/dataSanitizer';
 import { tripCalibrationService } from '../../services/tripCalibrationService';
 import { ImpactAnalysis } from './ImpactAnalysis';
@@ -1029,7 +1030,10 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
           if (processedFuelEntries.length > 0) {
               let entriesToSave = [...processedFuelEntries];
               try {
-                  const existingAll = await fuelService.getFuelEntries({ limit: 3000 });
+                  const existingAll = await fuelService.getFuelEntries({
+                    ...trailingDaysWindow(FUEL_ALERTS_TRAILING_DAYS),
+                    limit: 1500,
+                  });
                   // Statement receipts only — driver logs with matched jaaReceiptNumber must not block re-import
                   const existingReceipts = collectJaaStatementReceiptNumbers(existingAll);
                   const beforeDedup = entriesToSave.length;
@@ -1080,7 +1084,10 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
 
               try {
                   const [existing, inventory] = await Promise.all([
-                      fuelService.getFuelEntries({ limit: 1000 }),
+                      fuelService.getFuelEntries({
+                        ...trailingDaysWindow(FUEL_ALERTS_TRAILING_DAYS),
+                        limit: 500,
+                      }),
                       fuelService.getFuelCards().catch(() => []),
                   ]);
                   const { pairs, updates, summary } = buildJaaMatchUpdates(saved, existing, inventory);

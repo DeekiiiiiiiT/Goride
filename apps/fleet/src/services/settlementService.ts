@@ -6,7 +6,7 @@ import { API_ENDPOINTS } from './apiConfig';
 
 import { requireAuthHeaders } from '../utils/authHeaders';
 import { pickScenarioForDriverMembership, resolveActiveFuelPolicyForDriverWeek } from '../utils/fuelPolicyVersion';
-import { reportWeekYmdBounds, toEntryYmd } from '../utils/fuelWeekPeriod';
+import { reportWeekYmdBounds, toEntryYmd, addDaysYmd } from '../utils/fuelWeekPeriod';
 import { countsInGasCardSpend, isGasCardFuelEntry } from '../utils/fuelPaidByDriver';
 import {
   isCashStyleFuelPaymentSource,
@@ -389,17 +389,19 @@ export const settlementService = {
    */
   async getParentFuelEntry(transaction: FinancialTransaction): Promise<FuelEntry | null> {
     const { fuelService } = await import('./fuelService');
-    const fuelEntries = await fuelService.getFuelEntries();
-    
-    // 1. Explicit Link
     const sourceId = transaction.metadata?.sourceId || transaction.metadata?.linkedFuelId;
     if (sourceId) {
-      const match = fuelEntries.find(e => e.id === sourceId);
+      const match = await fuelService.getFuelEntry(String(sourceId)).catch(() => null);
       if (match) return match;
     }
 
-    // 2. Fingerprint Match
     const txDay = toYmd(transaction.date);
+    const windowStart = addDaysYmd(txDay, -14);
+    const fuelEntries = await fuelService.getFuelEntries({
+      startDate: windowStart,
+      endDate: txDay,
+      limit: 500,
+    });
     const absTxAmount = Math.abs(transaction.amount);
     
     return fuelEntries.find(e => {

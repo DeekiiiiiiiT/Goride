@@ -35,7 +35,13 @@ export function ReportsPage() {
               const trips = await api.getTrips();
               summary = ReportGenerator.generateTaxExport(trips);
           } else if (type.includes('Fuel')) {
-              const entries = await fuelService.getFuelEntries();
+              const { trailingDaysWindow, FUEL_ALERTS_TRAILING_DAYS } = await import('../../utils/fuelWeekPeriod');
+              const win = trailingDaysWindow(FUEL_ALERTS_TRAILING_DAYS);
+              const entries = await fuelService.getFuelEntries({
+                startDate: win.startDate,
+                endDate: win.endDate,
+                limit: 500,
+              });
               summary = ReportGenerator.generateFuelReport(entries);
           } else {
               const vehicles = await api.getVehicleMetrics();

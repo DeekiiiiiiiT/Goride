@@ -88,7 +88,7 @@ export function useFuelAnalytics() {
     queryKey: ['fuelAnalyticsEntries', fetchStart, fetchEndInclusive],
     queryFn: () =>
       fuelService
-        .getFuelEntries({ limit: 5000, startDate: fetchStart, endDate: fetchEndInclusive })
+        .getFuelEntries({ limit: 1500, startDate: fetchStart, endDate: fetchEndInclusive })
         .catch(() => []),
     staleTime: 2 * 60 * 1000,
     refetchOnWindowFocus: false,

@@ -42,11 +42,14 @@ export function DriverFuelStats() {
             const start = startOfWeek(targetDate, { weekStartsOn: 1 }); // Monday
             const end = endOfWeek(targetDate, { weekStartsOn: 1 }); // Sunday
 
+            const endYmd = format(end, 'yyyy-MM-dd');
+            const lookbackStart = format(subWeeks(start, 2), 'yyyy-MM-dd');
+
             // Fetch necessary data
             const [vehicles, trips, entries, adjustments, scenarios] = await Promise.all([
                 api.getVehicles(),
                 api.getTrips(),
-                fuelService.getFuelEntries(),
+                fuelService.getFuelEntries({ startDate: lookbackStart, endDate: endYmd, limit: 500 }),
                 fuelService.getMileageAdjustments(),
                 fuelService.getFuelScenarios()
             ]);

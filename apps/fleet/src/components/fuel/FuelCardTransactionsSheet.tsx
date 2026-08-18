@@ -25,7 +25,7 @@ import type { StationProfile } from '../../types/station';
 import { fuelService } from '../../services/fuelService';
 import { getCustomerFacingFuelProvider } from '../../utils/fuelCardDisplay';
 import { normalizeFuelCardCode } from '../../utils/fuelCardMatch';
-import { currentFuelWeekRange } from '../../utils/fuelWeekPeriod';
+import { currentFuelWeekRange, fuelListWindow, toEntryYmd } from '../../utils/fuelWeekPeriod';
 import { isJaaStatementLedgerRow } from '../../utils/jaaFuelStatementMatcher';
 import { resolveCardTransactionStation } from '../../utils/jaaStationDisplay';
 import { FuelCardAssignmentHistoryList } from './FuelCardAssignmentHistoryList';
@@ -134,8 +134,12 @@ export function FuelCardTransactionsSheet({
     if (!open || !card) return;
     let cancelled = false;
     setLoading(true);
+    const win = fuelListWindow({
+      startYmd: dateRange?.from ? toEntryYmd(dateRange.from) : toEntryYmd(currentFuelWeekRange().from),
+      endYmd: dateRange?.to ? toEntryYmd(dateRange.to) : toEntryYmd(currentFuelWeekRange().to),
+    });
     Promise.all([
-      fuelService.getFuelEntries({ limit: 3000 }),
+      fuelService.getFuelEntries({ ...win, limit: 500 }),
       fuelService.getStations().catch(() => [] as StationProfile[]),
     ])
       .then(([all, stations]) => {
@@ -176,7 +180,7 @@ export function FuelCardTransactionsSheet({
     return () => {
       cancelled = true;
     };
-  }, [open, card?.id]);
+  }, [open, card?.id, dateRange?.from, dateRange?.to]);
 
   const periodStart = dateRange?.from ? format(dateRange.from, 'yyyy-MM-dd') : undefined;
   const periodEnd = dateRange?.to

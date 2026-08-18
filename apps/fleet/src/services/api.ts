@@ -870,7 +870,7 @@ export const api = {
     );
   },
 
-  async getTransactions(driverIdOrIds?: string | string[], options?: { limit?: number; offset?: number }) {
+  async getTransactions(driverIdOrIds?: string | string[], options?: { limit?: number; offset?: number; startDate?: string; endDate?: string }) {
     let url = `${API_ENDPOINTS.financial}/transactions`;
     const params = new URLSearchParams();
     if (driverIdOrIds) {
@@ -881,6 +881,8 @@ export const api = {
     }
     if (options?.limit !== undefined) params.set('limit', String(options.limit));
     if (options?.offset !== undefined) params.set('offset', String(options.offset));
+    if (options?.startDate) params.set('startDate', options.startDate);
+    if (options?.endDate) params.set('endDate', options.endDate);
     const qs = params.toString();
     if (qs) url += `?${qs}`;
     // Phase 1: Use JWT for proper org scoping
@@ -3679,12 +3681,15 @@ export const api = {
   },
 
   async getFuelEntriesByVehicle(vehicleId: string): Promise<any[]> {
+    const { trailingDaysWindow, FUEL_ALERTS_TRAILING_DAYS } = await import('../utils/fuelWeekPeriod');
+    const win = trailingDaysWindow(FUEL_ALERTS_TRAILING_DAYS);
+    const qs = `vehicleId=${vehicleId}&limit=500&startDate=${win.startDate}&endDate=${win.endDate}`;
     // Check both potential key formats in the database for backward compatibility
     const [resUnderscore, resHyphen] = await Promise.all([
-      fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries?vehicleId=${vehicleId}&limit=1000`, {
+      fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries?${qs}`, {
         headers: await requireAuthHeaders(null)
       }),
-      fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries?vehicleId=${vehicleId}&prefix=fuel-entry&limit=1000`, {
+      fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries?${qs}&prefix=fuel-entry`, {
         headers: await requireAuthHeaders(null)
       })
     ]);

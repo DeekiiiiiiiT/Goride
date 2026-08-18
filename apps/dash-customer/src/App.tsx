@@ -628,9 +628,13 @@ function DashCustomerShell() {
         return (
           <OrderDeliveredPage
             onNavigate={navigate}
+            orderId={pageData?.orderId as string | undefined}
             orderNumber={pageData?.orderNumber as string | undefined}
             tip={pageData?.tip as number | undefined}
             merchantId={pageData?.merchantId as string | undefined}
+            merchantName={pageData?.merchantName as string | undefined}
+            deliveredAt={pageData?.deliveredAt as string | undefined}
+            proofPhotoUrl={pageData?.proofPhotoUrl as string | undefined}
           />
         );
       case 'rate-order':
@@ -640,6 +644,7 @@ function DashCustomerShell() {
             orderId={pageData?.orderId as string | undefined}
             merchantName={pageData?.merchantName as string | undefined}
             deliveredAt={pageData?.deliveredAt as string | undefined}
+            initialRating={pageData?.rating as number | undefined}
           />
         );
       case 'order-details':

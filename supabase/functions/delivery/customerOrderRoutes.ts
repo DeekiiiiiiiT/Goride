@@ -25,6 +25,9 @@ function asCoord(value: unknown): number | null {
   return n;
 }
 
+const ORDER_ID_UUID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const PlaceOrderBody = z.object({
   merchantId: z.string().min(1),
   items: z.array(z.unknown()).min(1),
@@ -402,11 +405,10 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
 
     if (!customer) return c.json({ error: "Customer not found" }, 404);
 
-    const { data: order, error: orderError } = await serviceSb
-      .from("orders")
-      .select("id, customer_id, status, customer_rating")
-      .eq("id", id)
-      .single();
+    const lookup = ORDER_ID_UUID.test(id)
+      ? serviceSb.from("orders").select("id, customer_id, status, customer_rating").eq("id", id)
+      : serviceSb.from("orders").select("id, customer_id, status, customer_rating").eq("order_number", id);
+    const { data: order, error: orderError } = await lookup.maybeSingle();
 
     if (orderError || !order) return c.json({ error: "Order not found" }, 404);
     if (order.customer_id !== customer.id) return c.json({ error: "Forbidden" }, 403);
@@ -416,17 +418,33 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       return c.json({ error: "Order must be delivered before reviewing" }, 400);
     }
 
+    const now = new Date().toISOString();
+    const patch: Record<string, unknown> = {
+      customer_rating: rating,
+      customer_review: review || null,
+      updated_at: now,
+    };
+    if (status === "delivered") patch.status = "completed";
+
     const { data: updated, error: updateError } = await serviceSb
       .from("orders")
-      .update({
-        customer_rating: rating,
-        customer_review: review || null,
-      })
-      .eq("id", id)
-      .select("id, customer_rating, customer_review")
+      .update(patch)
+      .eq("id", order.id)
+      .select("id, status, customer_rating, customer_review")
       .single();
 
     if (updateError) return c.json({ error: updateError.message }, 500);
+
+    if (status === "delivered") {
+      await serviceSb.from("order_events").insert({
+        order_id: order.id,
+        status: "completed",
+        actor_type: "customer",
+        actor_id: user.id,
+        notes: "Customer submitted rating",
+      });
+    }
+
     return c.json({ order: updated });
   });
 

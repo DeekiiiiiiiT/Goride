@@ -42,7 +42,11 @@ export function ReportGeneratorModal({ open, onOpenChange }: ReportGeneratorModa
             // In a real app, we might optimize this to only fetch what's needed
             const [trips, transactions, drivers] = await Promise.all([
                 api.getTrips(),
-                api.getTransactions(),
+                api.getTransactions(undefined, {
+                  startDate: format(startDate, 'yyyy-MM-dd'),
+                  endDate: format(endDate, 'yyyy-MM-dd'),
+                  limit: 500,
+                }),
                 api.getDrivers()
             ]);
 

@@ -18,7 +18,8 @@ import {
     CLAIM_CSV_COLUMNS, EQUIPMENT_CSV_COLUMNS, INVENTORY_CSV_COLUMNS,
     TOLL_TRANSACTION_CSV_COLUMNS,
 } from '../types/csv-schemas';
-import { ImportType } from './import-validator';
+import { fuelService } from './fuelService';
+import { addDaysYmd, toEntryYmd } from '../utils/fuelWeekPeriod';
 
 export type ExportType = 'fuel' | 'service' | 'odometer' | 'checkin' | 'trip'
     | 'drivers' | 'driverMetrics' | 'vehicles' | 'vehicleMetrics'
@@ -69,14 +70,29 @@ async function mapPool<T, R>(items: T[], concurrency: number, worker: (item: T) 
  */
 async function fetchAllFuelLogs(): Promise<FuelEntry[]> {
     try {
-        const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries`, {
-            headers: await requireAuthHeaders(null)
-        });
-        if (!response.ok) throw new Error("Failed to fetch fuel entries");
-        const data: FuelEntry[] = await response.json();
-        
-        // Sort by date ascending
-        return data.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        const bounds = await fuelService.getFuelActivityBounds();
+        const endYmd = toEntryYmd(new Date()) || new Date().toISOString().slice(0, 10);
+        let cursor = bounds.minDate || addDaysYmd(endYmd, -90);
+        const all: FuelEntry[] = [];
+        const seen = new Set<string>();
+        while (cursor <= endYmd && all.length < 20000) {
+            const chunkEnd = addDaysYmd(cursor, 89);
+            const endDate = chunkEnd < endYmd ? chunkEnd : endYmd;
+            const page = await fuelService.getFuelEntries({
+                startDate: cursor,
+                endDate,
+                limit: 1500,
+            });
+            for (const e of page) {
+                if (e?.id && !seen.has(e.id)) {
+                    seen.add(e.id);
+                    all.push(e);
+                }
+            }
+            if (endDate >= endYmd) break;
+            cursor = addDaysYmd(endDate, 1);
+        }
+        return all.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
     } catch (error) {
         console.error("Error fetching fuel logs:", error);
         return [];

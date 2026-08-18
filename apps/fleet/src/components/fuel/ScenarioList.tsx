@@ -32,7 +32,7 @@ import {
   evaluateFuelPolicyDeleteGuard,
   type FuelPolicyDeleteGuardResult,
 } from '../../utils/fuelPolicyDeleteGuard';
-import { generateFuelWeekOptions } from '../../utils/fuelWeekPeriod';
+import { generateFuelWeekOptions, trailingDaysWindow, FUEL_ALERTS_TRAILING_DAYS } from '../../utils/fuelWeekPeriod';
 import { useFleetTimezone } from '../../utils/timezoneDisplay';
 
 function vehiclePlate(v: any): string {
@@ -87,7 +87,7 @@ export function ScenarioList({
                 fuelService.getFuelScenarios(),
                 api.getVehicles().catch(() => []),
                 api.getDrivers().catch(() => []),
-                fuelService.getFuelEntries({ limit: 5000 }).catch(() => []),
+                fuelService.getFuelEntries({ ...trailingDaysWindow(FUEL_ALERTS_TRAILING_DAYS), limit: 500 }).catch(() => []),
                 api.getFinalizedReports().catch(() => []),
             ]);
             commitScenarios(scen);

@@ -59,6 +59,8 @@ import {
   postFuelFinalizedEventsFromReport,
   reverseFuelFinancialEventsAndRebuild,
 } from "./fuel_financial_reset.ts";
+import { periodAnchorFor, periodEndForAnchor } from "./financial_ledger.ts";
+import { getFleetTimezone } from "./timezone_helper.tsx";
 
 const app = new Hono();
 
@@ -96,6 +98,15 @@ const supabase = createClient(
 );
 
 const BASE_PATH = "/make-server-37f42386";
+
+const FUEL_LIST_DEFAULT_LIMIT = 500;
+const FUEL_LIST_MAX_LIMIT = 1500;
+
+async function defaultFuelWeekBounds(): Promise<{ startDate: string; endDate: string }> {
+  const tz = await getFleetTimezone();
+  const startDate = await periodAnchorFor(new Date(), tz);
+  return { startDate, endDate: periodEndForAnchor(startDate) };
+}
 
 /** Heal Approved fuel expenses missing fuel_entry (Posted guarantee). Called on Fuel Management refresh. */
 app.post(`${BASE_PATH}/fuel/ensure-posted-entries`, requirePermission("fuel.view"), async (c) => {
@@ -2132,16 +2143,62 @@ app.post(`${BASE_PATH}/jaa/apply-matches`, requirePermission("fuel.edit"), async
   }
 });
 
+// Tiny bounds read so Fuel week picker does not need every historical log in the browser.
+app.get(`${BASE_PATH}/fuel-entries/activity-bounds`, async (c) => {
+  try {
+    const { queryFleet } = await import("./repos/baseRepo.ts");
+    const orgFilter = getOrgId(c) || (isPlatformCaller(c) ? (c.req.query("organizationId") || "").trim() : "");
+    const res = await queryFleet("fuel_entries", {
+      org: orgFilter || undefined,
+      order: { col: "date", ascending: true },
+      limit: 1,
+    });
+    if (res.error) throw res.error;
+    const first = (res.data?.[0] || {}) as Record<string, unknown>;
+    const minDate = String(first.date || "").slice(0, 10) || null;
+    return c.json({ minDate });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.get(`${BASE_PATH}/fuel-entries/:id`, async (c) => {
+  try {
+    const { getById, getByLegacyKvId } = await import("./repos/baseRepo.ts");
+    const id = c.req.param("id");
+    let row = await getById("fuel_entries", id);
+    if (!row) row = await getByLegacyKvId("fuel_entries", id);
+    if (!row) {
+      const kvRow = await kv.get(`fuel_entry:${id}`);
+      if (!kvRow) return c.json({ error: "Not found" }, 404);
+      row = kvRow as Record<string, unknown>;
+    }
+    const scoped = filterByOrg([row], c, { endpoint: "/fuel-entries/:id" });
+    const narrowed = narrowPlatformOrg(scoped, c);
+    if (!narrowed[0]) return c.json({ error: "Not found" }, 404);
+    return c.json(narrowed[0]);
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
 // --- SCALABILITY & PERFORMANCE (Phase 8) ? native fleet_fuel_entries ---
 app.get(`${BASE_PATH}/fuel-entries`, async (c) => {
   try {
     const { queryFleet } = await import("./repos/baseRepo.ts");
-    const limit = parseInt(c.req.query("limit") || "2000");
+    const rawLimit = parseInt(c.req.query("limit") || String(FUEL_LIST_DEFAULT_LIMIT), 10);
+    const limit = Math.min(Math.max(Number.isFinite(rawLimit) ? rawLimit : FUEL_LIST_DEFAULT_LIMIT, 1), FUEL_LIST_MAX_LIMIT);
     const offset = parseInt(c.req.query("offset") || "0");
     const vehicleId = c.req.query("vehicleId");
-    const startDate = c.req.query("startDate");
-    const endDate = c.req.query("endDate");
     const orgFilter = getOrgId(c) || (isPlatformCaller(c) ? (c.req.query("organizationId") || "").trim() : "");
+
+    let startDate = (c.req.query("startDate") || "").slice(0, 10);
+    let endDate = (c.req.query("endDate") || "").slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
+      const week = await defaultFuelWeekBounds();
+      startDate = week.startDate;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(endDate)) endDate = week.endDate;
+    }
 
     const customPrefix = c.req.query("prefix") || "fuel_entry";
     const filters: import("./repos/baseRepo.ts").FleetQueryFilter[] = [];
@@ -2154,8 +2211,8 @@ app.get(`${BASE_PATH}/fuel-entries`, async (c) => {
 
     const res = await queryFleet("fuel_entries", {
       legacyPrefix: customPrefix.endsWith(":") ? customPrefix : `${customPrefix}:`,
-      dateFrom: startDate ? String(startDate).slice(0, 10) : undefined,
-      dateTo: endDate ? String(endDate).slice(0, 10) : undefined,
+      dateFrom: startDate,
+      dateTo: /^\d{4}-\d{2}-\d{2}$/.test(endDate) ? endDate : undefined,
       filters,
       order: { col: "date", ascending: false },
       limit,

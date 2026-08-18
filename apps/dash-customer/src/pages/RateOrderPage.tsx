@@ -10,6 +10,7 @@ type Props = {
   orderId?: string;
   merchantName?: string;
   deliveredAt?: string;
+  initialRating?: number;
   onNavigate: (page: string, data?: Record<string, unknown>) => void;
 };
 
@@ -17,9 +18,10 @@ export default function RateOrderPage({
   orderId,
   merchantName = 'Restaurant',
   deliveredAt = '',
+  initialRating = 0,
   onNavigate,
 }: Props) {
-  const [overall, setOverall] = useState(0);
+  const [overall, setOverall] = useState(initialRating >= 1 && initialRating <= 5 ? initialRating : 0);
   const [foodQuality, setFoodQuality] = useState(4);
   const [deliverySpeed, setDeliverySpeed] = useState(5);
   const [feedback, setFeedback] = useState('');

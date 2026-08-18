@@ -91,6 +91,9 @@ export default function OrderTrackingPage({ orderId, demoPhase, onNavigate }: Pr
         orderNumber: order.orderNumber,
         tip: order.tip,
         merchantId: order.merchantId,
+        merchantName: order.merchantName,
+        deliveredAt: order.deliveredLabel,
+        proofPhotoUrl: order.deliveryPhotoUrl,
       });
     }
   }, [phase, onNavigate, order]);

@@ -57,6 +57,7 @@ import {
 import type { DateRange } from 'react-day-picker';
 import { projectId } from '../../utils/supabase/info';
 import { requireAuthHeaders } from '../../utils/authHeaders';
+import { trailingDaysWindow, FUEL_ALERTS_TRAILING_DAYS } from '../../utils/fuelWeekPeriod';
 import {
   Select,
   SelectContent,
@@ -262,8 +263,9 @@ export function KmLTracking({ vehicle }: KmLTrackingProps) {
     setLoading(true);
     setError(null);
     try {
+      const win = trailingDaysWindow(FUEL_ALERTS_TRAILING_DAYS);
       const res = await fetch(
-        `${API_BASE}/fuel-entries?vehicleId=${encodeURIComponent(vehicleId)}&limit=5000`,
+        `${API_BASE}/fuel-entries?vehicleId=${encodeURIComponent(vehicleId)}&limit=1500&startDate=${win.startDate}&endDate=${win.endDate}`,
         { headers: await requireAuthHeaders(null) }
       );
       if (!res.ok) throw new Error(`Failed to load fuel entries: ${res.status}`);

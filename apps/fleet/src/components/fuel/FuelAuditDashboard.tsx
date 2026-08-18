@@ -36,6 +36,7 @@ import { FleetBusyProvider, useFleetBusy } from "../shared/FleetBusyLock";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { format } from "date-fns";
 import { toast } from "sonner@2.0.3";
+import { trailingDaysWindow, FUEL_ALERTS_TRAILING_DAYS } from "../../utils/fuelWeekPeriod";
 import { motion, AnimatePresence } from "motion/react";
 import { TabLoadingSkeleton } from "../ui/TabLoadingSkeleton";
 import {
@@ -201,13 +202,13 @@ function FuelAuditDashboardInner() {
             api.getFlaggedTransactions(),
             api.getVehicles(),
             api.getFuelAuditSummary(), // Always fetch fleet stats for comparison
-            api.getTransactions(),
+            api.getTransactions(undefined, { ...trailingDaysWindow(FUEL_ALERTS_TRAILING_DAYS), limit: 500 }),
             api.getIntegrityMetrics(),
             api.getStations(),
             api.getLearntLocations().catch(() => []), // Step 6.1: Graceful fail for learnt
             api.getDrivers().catch(() => []), // Fetch drivers for name resolution
             api.getAuditConfig().catch(() => ({ frequencyThreshold: 3, efficiencyThreshold: 0.30 })),
-            fuelService.getFuelEntries().catch(() => []) // Ledger Sync: fetch ALL fuel entries for orphan matching
+            fuelService.getFuelEntries({ ...trailingDaysWindow(FUEL_ALERTS_TRAILING_DAYS), limit: 500 }).catch(() => []) // Ledger Sync: recent entries for orphan matching
         ]);
             
             // Load audit config

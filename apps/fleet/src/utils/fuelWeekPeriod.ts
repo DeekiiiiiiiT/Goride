@@ -3,7 +3,7 @@
  * Period id = Monday yyyy-MM-dd (same contract as toll).
  */
 
-import { endOfWeek, format, parseISO, startOfWeek } from 'date-fns';
+import { endOfWeek, format, parseISO, startOfWeek, subDays } from 'date-fns';
 import {
   generatePeriodWeekOptions,
   generateWeekOptionsForDateRange,
@@ -142,6 +142,47 @@ export function bucketClosesInFuelWeek(
 export function currentFuelWeekRange(timezone?: string): { from: Date; to: Date } {
   const bucket = fuelWeekBucketForDate(new Date(), timezone);
   return { from: bucket.weekStart, to: bucket.weekEnd };
+}
+
+/** Days before week start so recon still sees the previous fill for opening km/L. */
+export const FUEL_LIST_LOOKBACK_DAYS = 14;
+export const FUEL_ALERTS_TRAILING_DAYS = 90;
+
+export function addDaysYmd(ymd: string, days: number): string {
+  const d = ymdToLocalDate(String(ymd).slice(0, 10));
+  d.setDate(d.getDate() + days);
+  return format(d, 'yyyy-MM-dd');
+}
+
+/** Dated list window: selected week plus lookback. Never all-time. */
+export function fuelListWindow(opts: {
+  startYmd: string;
+  endYmd: string;
+  lookbackDays?: number;
+}): { startDate: string; endDate: string } {
+  const lookback = opts.lookbackDays ?? FUEL_LIST_LOOKBACK_DAYS;
+  return {
+    startDate: addDaysYmd(opts.startYmd, -lookback),
+    endDate: opts.endYmd,
+  };
+}
+
+export function currentFuelListWindow(timezone?: string): { startDate: string; endDate: string } {
+  const range = currentFuelWeekRange(timezone);
+  return fuelListWindow({
+    startYmd: toEntryYmd(range.from),
+    endYmd: toEntryYmd(range.to),
+  });
+}
+
+export function trailingDaysWindow(
+  days: number,
+  asOf: Date = new Date(),
+): { startDate: string; endDate: string } {
+  return {
+    startDate: format(subDays(asOf, days), 'yyyy-MM-dd'),
+    endDate: format(asOf, 'yyyy-MM-dd'),
+  };
 }
 
 /**

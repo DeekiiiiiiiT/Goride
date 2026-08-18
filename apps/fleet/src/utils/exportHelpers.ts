@@ -1,4 +1,5 @@
 import { api } from '../services/api';
+import { trailingDaysWindow, FUEL_ALERTS_TRAILING_DAYS } from './fuelWeekPeriod';
 import { FinancialTransaction } from '../types/data';
 import { Vehicle, TollTag } from '../types/vehicle';
 import { formatDateJM } from './csv-helper';
@@ -23,7 +24,7 @@ export async function fetchFullTollHistory(): Promise<UniversalTollExportRow[]> 
     try {
         // 1. Fetch All Relevant Data in Parallel
         const [transactions, vehicles, drivers, tollTags] = await Promise.all([
-            api.getTransactions(), // Fetches all transactions
+            api.getTransactions(undefined, { ...trailingDaysWindow(FUEL_ALERTS_TRAILING_DAYS), limit: 500 }),
             api.getVehicles(),     // Fetches all vehicles
             api.getDrivers(),      // Fetches all drivers
             api.getTollTags()      // Fetches all toll tags

@@ -11,6 +11,7 @@ import {
   FileText
 } from "lucide-react";
 import { startOfWeek } from "date-fns";
+import { FUEL_ALERTS_TRAILING_DAYS, trailingDaysWindow } from '../../utils/fuelWeekPeriod';
 import { useVocab } from '../../utils/vocabulary';
 import { 
   DropdownMenu, 
@@ -119,10 +120,15 @@ export function Dashboard() {
   // ── Wave 3 (deferred — fires after Wave 2) ─────────────────────────
   // Phase 7: Fetch Fuel & Check-In Data for Alerts
   const currentWeekStart = useMemo(() => startOfWeek(new Date(), { weekStartsOn: 1 }).toISOString().split('T')[0], []);
-  
+  const fuelAlertsWindow = useMemo(() => trailingDaysWindow(FUEL_ALERTS_TRAILING_DAYS), []);
+
   const { data: fuelEntries = [] } = useQuery({
-    queryKey: ['fuelEntries'],
-    queryFn: () => fuelService.getFuelEntries(),
+    queryKey: ['fuelEntries', fuelAlertsWindow.startDate, fuelAlertsWindow.endDate],
+    queryFn: () => fuelService.getFuelEntries({
+      startDate: fuelAlertsWindow.startDate,
+      endDate: fuelAlertsWindow.endDate,
+      limit: 500,
+    }),
     staleTime: 1000 * 60 * 5,
     enabled: wave >= 3,
   });

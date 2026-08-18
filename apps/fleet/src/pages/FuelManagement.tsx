@@ -23,6 +23,7 @@ import {
   currentFuelWeekRange,
   resolveFuelActivityEarliestMonday,
   buildFuelReconciliationWeekOptions,
+  fuelListWindow,
 } from '../utils/fuelWeekPeriod';
 import { useFleetTimezone } from '../utils/timezoneDisplay';
 import { type PeriodWeekOption } from '../utils/periodWeekOptions';
@@ -84,15 +85,6 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
     setActiveTab(defaultTab);
   }, [defaultTab]);
 
-  // Silent refresh when switching to Logs / Review if data is stale (>30s)
-  useEffect(() => {
-    if (activeTab !== 'logs' && activeTab !== 'reimbursements') return;
-    const age = Date.now() - lastFuelDataLoadAtRef.current;
-    if (lastFuelDataLoadAtRef.current > 0 && age > 30_000) {
-      void loadData(true);
-    }
-  }, [activeTab]);
-
   const fleetTz = useFleetTimezone();
 
   // Shared active fuel week (Mon–Sun) — Logs / Recon / Reimbursements default from this.
@@ -120,6 +112,28 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
   const reconciliationDateRange = activeFuelWeek;
   const reimbursementDateRange = activeFuelWeek;
   const logDateRange = logCustomOverride ? logDateRangeOverride : activeFuelWeek;
+
+  const [activityMinDate, setActivityMinDate] = useState<string | null>(null);
+
+  const fuelFetchWindow = useMemo(() => {
+    const week = currentFuelWeekRange(fleetTz || undefined);
+    const weekStart = reconciliationDateRange?.from
+      ? toEntryYmd(reconciliationDateRange.from)
+      : toEntryYmd(week.from);
+    const weekEnd = reconciliationDateRange?.to
+      ? toEntryYmd(reconciliationDateRange.to)
+      : toEntryYmd(week.to);
+    const base = fuelListWindow({ startYmd: weekStart, endYmd: weekEnd });
+    if (logCustomOverride && logDateRangeOverride?.from) {
+      const customStart = toEntryYmd(logDateRangeOverride.from);
+      const customEnd = toEntryYmd(logDateRangeOverride.to || logDateRangeOverride.from);
+      return {
+        startDate: customStart < base.startDate ? customStart : base.startDate,
+        endDate: customEnd > base.endDate ? customEnd : base.endDate,
+      };
+    }
+    return base;
+  }, [reconciliationDateRange, logCustomOverride, logDateRangeOverride, fleetTz]);
 
   const setLogDateRange = (range: DateRange | undefined) => {
     const activeStart = activeFuelWeek?.from ? toEntryYmd(activeFuelWeek.from) : '';
@@ -223,12 +237,12 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
   // Week list starts at first real fuel activity (not a hard-coded Dec 2025 launch date)
   const reconciliationWeekOptions = useMemo(() => {
     const earliest = resolveFuelActivityEarliestMonday(
-      logs.map((e) => e.date),
+      [activityMinDate, ...logs.map((e) => e.date)],
       finalizedReports.map((f) => f.weekStart),
       fleetTz || undefined,
     );
     return buildFuelReconciliationWeekOptions(earliest, fleetTz || undefined);
-  }, [logs, finalizedReports, fleetTz]);
+  }, [activityMinDate, logs, finalizedReports, fleetTz]);
 
   const fuelReconPeriods = useMemo(
     () =>
@@ -289,6 +303,41 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
     fetchTripsForRange();
   }, [reconciliationDateRange]);
 
+  const loadLogsAndTransactions = useCallback(async () => {
+    const { startDate, endDate } = fuelFetchWindow;
+    try {
+      const [logsData, txData] = await Promise.all([
+        fuelService.getFuelEntries({ startDate, endDate, limit: 500 }).catch((err) => {
+          console.error('[FuelManagement] getFuelEntries failed', err);
+          toast.error('Could not load fuel entries — try logging out and back in.');
+          return [] as FuelEntry[];
+        }),
+        api.getTransactions(undefined, { startDate, endDate, limit: 500 }).catch((err) => {
+          console.error('[FuelManagement] getTransactions failed', err);
+          return [] as FinancialTransaction[];
+        }),
+      ]);
+      setLogs(logsData);
+      setTransactions(txData);
+      lastFuelDataLoadAtRef.current = Date.now();
+    } catch (e) {
+      console.error('[FuelManagement] Dated fuel/tx load failed', e);
+    }
+  }, [fuelFetchWindow]);
+
+  useEffect(() => {
+    void loadLogsAndTransactions();
+  }, [loadLogsAndTransactions]);
+
+  // Silent refresh when switching to Logs / Review if data is stale (>30s)
+  useEffect(() => {
+    if (activeTab !== 'logs' && activeTab !== 'reimbursements') return;
+    const age = Date.now() - lastFuelDataLoadAtRef.current;
+    if (lastFuelDataLoadAtRef.current > 0 && age > 30_000) {
+      void loadLogsAndTransactions();
+    }
+  }, [activeTab, loadLogsAndTransactions]);
+
   const loadData = useCallback(async (silent = false) => {
       if (!silent) setIsRefreshing(true);
       try {
@@ -310,19 +359,11 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
                   throw err;
               },
           );
-          const logsP = fuelService.getFuelEntries().catch((err) => {
-              console.error('[FuelManagement] getFuelEntries failed', err);
-              toast.error('Could not load fuel entries — try logging out and back in.');
-              return [];
-          });
           const adjsP = fuelService.getMileageAdjustments().catch(() => []);
           const disputesP = FuelDisputeService.getAllDisputes().catch(() => []);
-          const txP = api.getTransactions(undefined, { limit: 10000 }).catch((err) => {
-              console.error('[FuelManagement] getTransactions failed', err);
-              return [];
-          });
           const finalizedP = api.getFinalizedReports().catch(() => []);
           const programsP = fuelService.getJaaPrograms().catch(() => [] as JaaProgram[]);
+          const boundsP = fuelService.getFuelActivityBounds().catch(() => ({ minDate: null as string | null }));
 
           // Card Inventory only needs cards (+ drivers/vehicles for Assigned To)
           try {
@@ -345,16 +386,14 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
               // Keep previous cards if any — never pretend the inventory was empty
           }
 
-          const [scenariosData, logsData, adjsData, disputesData, txData, finalizedData] =
-              await Promise.all([scenariosP, logsP, adjsP, disputesP, txP, finalizedP]);
+          const [scenariosData, adjsData, disputesData, finalizedData, boundsData] =
+              await Promise.all([scenariosP, adjsP, disputesP, finalizedP, boundsP]);
 
           setScenarios(scenariosData);
-          setLogs(logsData);
           setAdjustments(adjsData);
           setDisputes(disputesData);
-          setTransactions(txData);
           setFinalizedReports(Array.isArray(finalizedData) ? finalizedData : []);
-          lastFuelDataLoadAtRef.current = Date.now();
+          setActivityMinDate(boundsData.minDate);
 
           if (!silent) toast.success("Data refreshed");
       } catch (e) {
@@ -372,13 +411,8 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
 
   // Lightweight refresh for fuel entries only (used after Bulk Assign)
   const refreshLogs = useCallback(async () => {
-    try {
-      const logsData = await fuelService.getFuelEntries();
-      setLogs(logsData);
-    } catch (e) {
-      console.error("[FuelManagement] Failed to refresh fuel entries after bulk assign", e);
-    }
-  }, []);
+    await loadLogsAndTransactions();
+  }, [loadLogsAndTransactions]);
 
   // Card Handlers
   const handleSaveCard = useCallback(async (card: FuelCard) => {
@@ -609,14 +643,13 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
           const updated = await api.approveExpense(id, notes, odometer);
           setTransactions(prev => prev.map(t => t.id === id ? updated : t));
           // Refresh logs to pick up the new fuel_entry created by server
-          const freshLogs = await fuelService.getFuelEntries();
-          setLogs(freshLogs);
+          await loadLogsAndTransactions();
           toast.success("Posted to Transaction Logs");
       } catch (e) {
           console.error(e);
           toast.error("Failed to approve log review");
       }
-  }, []);
+  }, [loadLogsAndTransactions]);
 
   // Reimbursement Handlers
   const handleApproveReimbursement = useCallback(async (
@@ -631,8 +664,7 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
           if (updated.category === 'Fuel' || updated.category === 'Fuel Reimbursement') {
               await fuelService.getFuelScenarios();
               try {
-                  const freshLogs = await fuelService.getFuelEntries();
-                  setLogs(freshLogs);
+                  await loadLogsAndTransactions();
               } catch {
                   /* non-fatal */
               }
@@ -644,7 +676,7 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
           console.error(e);
           toast.error("Failed to approve reimbursement");
       }
-  }, []);
+  }, [loadLogsAndTransactions]);
 
   const handleRejectReimbursement = useCallback(async (id: string, reason?: string) => {
       try {
@@ -1045,7 +1077,10 @@ function FuelManagementInner({ defaultTab = 'logs', onViewDriverLedger, onTabCha
             <Button 
                 variant="outline" 
                 size="sm" 
-                onClick={() => loadData()} 
+                onClick={() => {
+                    void loadData();
+                    void loadLogsAndTransactions();
+                }} 
                 disabled={isRefreshing}
                 className="text-slate-600 border-slate-200"
             >

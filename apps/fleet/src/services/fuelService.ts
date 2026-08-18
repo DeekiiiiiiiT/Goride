@@ -4,7 +4,7 @@ import { FuelCard, FuelEntry, MileageAdjustment, FuelScenario, JaaProgram } from
 import { FinancialTransaction } from '../types/data';
 import { API_ENDPOINTS } from './apiConfig';
 import { settlementService } from './settlementService';
-import { throwIfCatalogGateBlocked } from './api';
+import { currentFuelListWindow } from '../utils/fuelWeekPeriod';
 
 async function fetchWithRetry(url: string, options: RequestInit = {}, retries = 3, backoff = 500): Promise<Response> {
   try {
@@ -81,16 +81,41 @@ export const fuelService = {
 
   // --- Fuel Entries ---
   async getFuelEntries(options?: { limit?: number, startDate?: string, endDate?: string }): Promise<FuelEntry[]> {
+    const fallback = currentFuelListWindow();
+    const startDate = options?.startDate || fallback.startDate;
+    const endDate = options?.endDate || fallback.endDate;
     const query = new URLSearchParams();
-    query.append("limit", (options?.limit || 2000).toString());
-    if (options?.startDate) query.append("startDate", options.startDate);
-    if (options?.endDate) query.append("endDate", options.endDate);
+    query.append("limit", String(options?.limit || 500));
+    query.append("startDate", startDate);
+    query.append("endDate", endDate);
 
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries?${query.toString()}`, {
       headers: await requireAuthHeaders(null)
     });
     if (!response.ok) throw new Error("Failed to fetch fuel entries");
     return response.json();
+  },
+
+  async getFuelEntry(id: string): Promise<FuelEntry | null> {
+    const enc = encodeURIComponent(id);
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries/${enc}`, {
+      headers: await requireAuthHeaders(null)
+    });
+    if (response.status === 404) return null;
+    if (!response.ok) throw new Error("Failed to fetch fuel entry");
+    return response.json();
+  },
+
+  async getFuelActivityBounds(): Promise<{ minDate: string | null }> {
+    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries/activity-bounds`, {
+      headers: await requireAuthHeaders(null)
+    });
+    if (!response.ok) return { minDate: null };
+    const data = await response.json().catch(() => ({}));
+    const minDate = typeof data?.minDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(data.minDate)
+      ? data.minDate
+      : null;
+    return { minDate };
   },
 
   /** Heal Approved fuel expenses missing fuel_entry (Posted guarantee). */
@@ -378,8 +403,7 @@ export const fuelService = {
    */
   async getCleanupMap(entryId: string): Promise<{ entry: FuelEntry | null, relatedTransactions: FinancialTransaction[] }> {
     try {
-      const allEntries = await this.getFuelEntries();
-      const entry = allEntries.find(e => e.id === entryId) || null;
+      const entry = await this.getFuelEntry(entryId);
       
       if (!entry) {
         return { entry: null, relatedTransactions: [] };

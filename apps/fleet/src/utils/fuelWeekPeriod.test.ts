@@ -10,6 +10,8 @@ import {
   buildFuelReconciliationWeekOptions,
   fuelWeekBucketForDate,
   generateFuelWeekOptions,
+  fuelListWindow,
+  trailingDaysWindow,
 } from './fuelWeekPeriod';
 import {
   entriesBelongingToDriverWeekReport,
@@ -116,6 +118,20 @@ describe('fuelWeekPeriod YMD helpers', () => {
     expect(opts.some((o) => o.startDate === '2025-12-01')).toBe(false);
     expect(opts.some((o) => o.startDate === '2025-12-08')).toBe(false);
     expect(opts.some((o) => o.startDate === '2026-01-12')).toBe(true);
+  });
+});
+
+describe('fuel list windows', () => {
+  it('fuelListWindow subtracts 14 days from week start', () => {
+    const win = fuelListWindow({ startYmd: '2026-08-10', endYmd: '2026-08-16' });
+    expect(win.startDate).toBe('2026-07-27');
+    expect(win.endDate).toBe('2026-08-16');
+  });
+
+  it('trailingDaysWindow is inclusive of asOf', () => {
+    const win = trailingDaysWindow(90, new Date(2026, 7, 18));
+    expect(win.startDate).toBe('2026-05-20');
+    expect(win.endDate).toBe('2026-08-18');
   });
 });
 

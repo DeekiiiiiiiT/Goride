@@ -1,20 +1,29 @@
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { DeliveryPhotoViewer } from '@/components/ui/DeliveryPhotoViewer';
 import { StarRating } from '@/components/rating/StarRating';
-import { FEEDBACK_CHIPS, formatJmd, TRACKING_MAP_IMAGES } from '@/lib/trackingContent';
+import { FEEDBACK_CHIPS, formatJmd } from '@/lib/trackingContent';
 
 type Props = {
+  orderId?: string;
   orderNumber?: string;
   tip?: number;
   merchantId?: string;
+  merchantName?: string;
+  deliveredAt?: string;
+  proofPhotoUrl?: string;
   onNavigate: (page: string, data?: Record<string, unknown>) => void;
 };
 
 export default function OrderDeliveredPage({
-  orderNumber = '8492',
-  tip = 400,
-  merchantId = 'island-grill',
+  orderId,
+  orderNumber,
+  tip = 0,
+  merchantId,
+  merchantName = 'Restaurant',
+  deliveredAt,
+  proofPhotoUrl,
   onNavigate,
 }: Props) {
   const [rating, setRating] = useState(0);
@@ -44,13 +53,15 @@ export default function OrderDeliveredPage({
           <p className="text-body-md text-on-surface-variant">Enjoy your meal.</p>
         </div>
 
-        <section className="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden mb-8">
-          <DeliveryPhotoViewer
-            src={TRACKING_MAP_IMAGES.proofOfDelivery}
-            timestamp="Photo taken at 2:42 PM"
-            location="Left at your door"
-          />
-        </section>
+        {proofPhotoUrl ? (
+          <section className="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden mb-8">
+            <DeliveryPhotoViewer
+              src={proofPhotoUrl}
+              timestamp={deliveredAt ? `Photo taken at ${deliveredAt}` : undefined}
+              location="Left at your door"
+            />
+          </section>
+        ) : null}
 
         <section className="mb-8">
           <h2 className="text-headline-md font-semibold text-center mb-4">Rate your experience</h2>
@@ -92,13 +103,19 @@ export default function OrderDeliveredPage({
       <div className="fixed bottom-0 left-0 w-full bg-surface-container-lowest border-t border-surface-variant px-4 py-4 pb-safe z-50">
         <button
           type="button"
-          onClick={() =>
+          onClick={() => {
+            if (!orderId) {
+              toast.error('Missing order');
+              return;
+            }
             onNavigate('rate-order', {
-              orderId: orderNumber,
-              merchantName: 'Island Grill',
-              deliveredAt: '2:42 PM',
-            })
-          }
+              orderId,
+              orderNumber,
+              merchantName,
+              deliveredAt,
+              rating,
+            });
+          }}
           className="w-full bg-primary text-on-primary font-semibold text-label-md py-4 rounded-lg mb-2 active:scale-[0.98] transition-transform"
         >
           Rate Order
@@ -106,7 +123,7 @@ export default function OrderDeliveredPage({
         <div className="flex gap-2">
           <button
             type="button"
-            onClick={() => onNavigate('restaurant', { merchantId })}
+            onClick={() => onNavigate('restaurant', merchantId ? { merchantId } : undefined)}
             className="flex-1 border border-primary text-primary font-semibold text-label-md py-3 rounded-lg active:scale-[0.98] transition-transform"
           >
             Reorder

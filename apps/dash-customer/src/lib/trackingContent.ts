@@ -37,6 +37,8 @@ export type TrackingOrder = {
   };
   courierLat?: number | null;
   courierLng?: number | null;
+  deliveryPhotoUrl?: string;
+  deliveredLabel?: string;
   /** Approximate map until live courier GPS (Phase 3) */
   locationApproximate?: boolean;
 };
@@ -120,6 +122,13 @@ export function formatJmd(amount: number): string {
   return `J$${amount.toLocaleString()}`;
 }
 
+export function formatDeliveredClock(value: unknown): string | undefined {
+  if (value == null || value === '') return undefined;
+  const date = new Date(String(value));
+  if (Number.isNaN(date.getTime())) return undefined;
+  return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+}
+
 export function mapApiOrderToTracking(order: Record<string, unknown>): TrackingOrder {
   const merchant = (order.merchant as Record<string, unknown>) ?? {};
   const courier = order.courier as Record<string, unknown> | undefined;
@@ -168,6 +177,8 @@ export function mapApiOrderToTracking(order: Record<string, unknown>): TrackingO
         },
     courierLat: order.courier_lat != null ? Number(order.courier_lat) : null,
     courierLng: order.courier_lng != null ? Number(order.courier_lng) : null,
+    deliveryPhotoUrl: order.delivery_photo_url ? String(order.delivery_photo_url) : undefined,
+    deliveredLabel: formatDeliveredClock(order.delivered_at),
     locationApproximate: order.courier_lat == null || order.courier_lng == null,
   };
 }

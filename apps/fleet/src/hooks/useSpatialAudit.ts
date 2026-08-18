@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { fuelService } from '../services/fuelService';
+import { trailingDaysWindow } from '../utils/fuelWeekPeriod';
 import { StationProfile } from '../types/station';
 import { FuelEntry } from '../types/fuel';
 import { 
@@ -30,7 +31,10 @@ export function useSpatialAudit(options?: { limit?: number; days?: number }): Sp
     try {
       const [stationsData, fuelData] = await Promise.all([
         fuelService.getStations(),
-        fuelService.getFuelEntries({ limit: options?.limit || 500 })
+        fuelService.getFuelEntries({
+          limit: options?.limit || 500,
+          ...trailingDaysWindow(options?.days || 30),
+        })
       ]);
 
       setStations(stationsData as StationProfile[]);

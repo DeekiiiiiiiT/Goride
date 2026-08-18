@@ -192,6 +192,7 @@ import driverFinancialPeriodApp from "./driver_financial_period_controller.tsx";
 import paymentLedgerLineApp from "./payment_ledger_line_controller.tsx";
 import apiCenterApp from "./api_command_center.tsx";
 import { getFleetTimezone, naiveToUtc, fleetCalendarDay, toFleetCalendarDay } from "./timezone_helper.tsx";
+import { periodAnchorFor, periodEndForAnchor } from "./financial_ledger.ts";
 import * as unverifiedVendor from './unverified_vendor_controller.tsx';
 import { suggestStationMatches } from './vendor_matcher.ts';
 import { checkRateLimit, recordFailedAttempt, clearRateLimit, getClientIp, getRateLimitStats } from './rate_limiter.ts';
@@ -2912,6 +2913,10 @@ app.get("/make-server-37f42386/transactions", requireAuth({ requireOrg: true }),
     const limitParam = c.req.query("limit");
     const offsetParam = c.req.query("offset");
     const offset = offsetParam ? parseInt(offsetParam) : 0;
+    let startDate = (c.req.query("startDate") || "").slice(0, 10);
+    let endDate = (c.req.query("endDate") || "").slice(0, 10);
+    if (startDate && !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) startDate = "";
+    if (endDate && !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) endDate = "";
 
     const rawDriverIds = new Set<string>();
     if (driverIdParam) rawDriverIds.add(driverIdParam.trim());
@@ -2931,23 +2936,39 @@ app.get("/make-server-37f42386/transactions", requireAuth({ requireOrg: true }),
 
     const isDriverScoped = idsToFilter.size > 0;
 
-    // When filtering by specific driver(s), use a much higher default limit
-    // to avoid truncating financial data (payments, floats, tolls).
-    // A driver with 905 trips can easily have 500+ transactions.
-    // Unscoped (global) queries keep the conservative default of 100.
-    const limit = limitParam
-        ? parseInt(limitParam)
-        : (isDriverScoped ? 5000 : 100);
+    // Unscoped list reads must be dated — all-time dumps are the egress leak.
+    if (!isDriverScoped && !startDate) {
+      const tz = await getFleetTimezone();
+      startDate = await periodAnchorFor(new Date(), tz);
+      if (!endDate) endDate = periodEndForAnchor(startDate);
+    }
 
-    const { shouldReadTable, listByOrg } = await import("./repos/baseRepo.ts");
+    const TX_UNSCOPED_MAX = 500;
+    const TX_DRIVER_MAX = 5000;
+    const parsedLimit = limitParam ? parseInt(limitParam, 10) : NaN;
+    const requested = Number.isFinite(parsedLimit) && parsedLimit > 0
+      ? parsedLimit
+      : (isDriverScoped ? 5000 : 100);
+    const limit = Math.min(requested, isDriverScoped ? TX_DRIVER_MAX : TX_UNSCOPED_MAX);
+
+    const { shouldReadTable, queryFleet } = await import("./repos/baseRepo.ts");
     if (shouldReadTable("transactions")) {
       const orgId = getOrgId(c);
-      let rows = await listByOrg("transactions", orgId, { limit: offset + limit + (isDriverScoped ? 0 : 0) });
+      const filters: import("./repos/baseRepo.ts").FleetQueryFilter[] = [];
       if (isDriverScoped) {
-        rows = rows.filter((t) => idsToFilter.has(String((t as any).driverId || "")));
+        filters.push({ op: "in", col: "driver_id", value: Array.from(idsToFilter) });
       }
-      const page = rows.slice(offset, offset + limit);
-      const scoped = await filterByOrgSafe(page, c, { endpoint: '/transactions' });
+      const res = await queryFleet("transactions", {
+        org: orgId || undefined,
+        dateFrom: startDate || undefined,
+        dateTo: endDate || undefined,
+        filters,
+        order: { col: "date", ascending: false },
+        limit,
+        offset,
+      });
+      if (res.error) throw res.error;
+      const scoped = await filterByOrgSafe(res.data as Record<string, unknown>[], c, { endpoint: '/transactions' });
       return c.json(scoped);
     }
 
@@ -2961,6 +2982,8 @@ app.get("/make-server-37f42386/transactions", requireAuth({ requireOrg: true }),
             .join(',');
         query = query.or(orConditions);
     }
+    if (startDate) query = query.gte("value->>date", startDate);
+    if (endDate) query = query.lte("value->>date", `${endDate}T23:59:59.999`);
 
     const { data, error } = await query
         .order("value->>date", { ascending: false })
