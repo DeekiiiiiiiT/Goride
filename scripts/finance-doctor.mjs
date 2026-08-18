@@ -19,44 +19,42 @@ function dollars(minor) {
   return Math.round(Number(minor || 0)) / 100;
 }
 
-const { data: rows, error } = await sb
-  .schema("ledger")
-  .from("entries")
-  .select("id, idempotency_key, entry_type, amount_minor, effective_at, metadata, reference_id")
-  .limit(20000);
-if (error) {
-  console.error(error.message);
-  process.exit(2);
+const entries = [];
+const page = 1000;
+for (let from = 0; from < 50000; from += page) {
+  const { data: rows, error } = await sb
+    .from("ledger_entries")
+    .select("id, idempotency_key, entry_type, amount_minor, effective_at, metadata, reference_id")
+    .range(from, from + page - 1);
+  if (error) {
+    console.error(error.message);
+    process.exit(2);
+  }
+  const chunk = rows || [];
+  entries.push(...chunk);
+  if (chunk.length < page) break;
 }
-
-const entries = rows || [];
 const meta = (e) => (e.metadata && typeof e.metadata === "object" ? e.metadata : {});
 
 const c1Clusters = [];
 const cash = entries.filter((e) => e.entry_type === "payout_cash");
 const cashGroups = new Map();
 for (const e of cash) {
+  const driver =
+    String(meta(e).driverId || meta(e).driver_id || "")
+      .trim()
+      .toLowerCase() || "__none__";
   const d = String(e.effective_at || "").slice(0, 10);
   const amt = dollars(e.amount_minor);
-  const k = `${d}|${amt.toFixed(2)}`;
+  const k = `${driver}|${d}|${amt.toFixed(2)}`;
   if (!cashGroups.has(k)) cashGroups.set(k, []);
   cashGroups.get(k).push(e);
-}
-function isOrgCashKey(key) {
-  const k = String(key || "");
-  return k.includes("|payout|CASH") && !k.includes("|payout|cash|");
-}
-function isDriverCashKey(key) {
-  return String(key || "").includes("|payout|cash|");
 }
 
 for (const [k, group] of cashGroups) {
   if (group.length < 2) continue;
-  const hasOrg = group.some((e) => isOrgCashKey(e.idempotency_key));
-  const hasDriver = group.some((e) => isDriverCashKey(e.idempotency_key));
-  const hasUntagged = group.some((e) => !String(meta(e).platform || "").trim());
-  const hasTagged = group.some((e) => String(meta(e).platform || "").trim());
-  if (!(hasOrg && hasDriver) && !(hasUntagged && hasTagged)) continue;
+  const uniq = new Set(group.map((e) => String(e.idempotency_key || "").trim()).filter(Boolean));
+  if (uniq.size < 2) continue;
   const posted = group.reduce((s, e) => s + dollars(e.amount_minor), 0);
   c1Clusters.push({
     key: k,

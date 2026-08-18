@@ -15,6 +15,15 @@ function dollars(minor: unknown): number {
   return Math.round(Number(minor || 0)) / 100;
 }
 
+function errMsg(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  try {
+    return JSON.stringify(e);
+  } catch {
+    return String(e);
+  }
+}
+
 type EntryRow = {
   id: string;
   idempotency_key: string | null;
@@ -48,14 +57,18 @@ Deno.serve(async (req) => {
   );
 
   try {
-    const { data, error } = await supabase
-      .schema("ledger")
-      .from("entries")
-      .select("id, idempotency_key, entry_type, amount_minor, effective_at, metadata, reference_id")
-      .limit(20000);
-    if (error) throw error;
-
-    const entries = (data || []) as EntryRow[];
+    const entries: EntryRow[] = [];
+    const page = 1000;
+    for (let from = 0; from < 50000; from += page) {
+      const { data, error } = await supabase
+        .from("ledger_entries")
+        .select("id, idempotency_key, entry_type, amount_minor, effective_at, metadata, reference_id")
+        .range(from, from + page - 1);
+      if (error) throw error;
+      const rows = (data || []) as EntryRow[];
+      entries.push(...rows);
+      if (rows.length < page) break;
+    }
     const meta = (e: EntryRow) =>
       e.metadata && typeof e.metadata === "object" ? e.metadata : {};
 
@@ -63,23 +76,21 @@ Deno.serve(async (req) => {
     const cash = entries.filter((e) => e.entry_type === "payout_cash");
     const cashGroups = new Map<string, EntryRow[]>();
     for (const e of cash) {
+      const driver = String(meta(e).driverId || meta(e).driver_id || "").trim().toLowerCase() ||
+        "__none__";
       const d = String(e.effective_at || "").slice(0, 10);
       const amt = dollars(e.amount_minor);
-      const k = `${d}|${amt.toFixed(2)}`;
+      const k = `${driver}|${d}|${amt.toFixed(2)}`;
       const g = cashGroups.get(k) || [];
       g.push(e);
       cashGroups.set(k, g);
     }
     for (const [k, group] of cashGroups) {
       if (group.length < 2) continue;
-      const hasOrg = group.some((e) => {
-        const key = String(e.idempotency_key || "");
-        return key.includes("|payout|CASH") && !key.includes("|payout|cash|");
-      });
-      const hasDriver = group.some((e) => String(e.idempotency_key || "").includes("|payout|cash|"));
-      const hasUntagged = group.some((e) => !String(meta(e).platform || "").trim());
-      const hasTagged = group.some((e) => String(meta(e).platform || "").trim());
-      if (!(hasOrg && hasDriver) && !(hasUntagged && hasTagged)) continue;
+      const uniq = new Set(
+        group.map((e) => String(e.idempotency_key || "").trim()).filter(Boolean),
+      );
+      if (uniq.size < 2) continue;
       const posted = group.reduce((s, e) => s + dollars(e.amount_minor), 0);
       c1Clusters.push({
         key: k,
@@ -200,11 +211,21 @@ Deno.serve(async (req) => {
       c6.length > 1 ||
       c4.filter((e) => e.entry_type === "payout_cash").length > 0;
 
+    const { error: persistErr } = await supabase.from("finance_doctor_runs").insert({
+      ok: !blocking,
+      blocking,
+      c1_clusters: c1Clusters.length,
+      report,
+    });
+    if (persistErr) {
+      console.warn("[finance-doctor] persist failed:", persistErr.message);
+    }
+
     return new Response(JSON.stringify({ success: true, blocking, report }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
+    const msg = errMsg(e);
     return new Response(JSON.stringify({ error: msg }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

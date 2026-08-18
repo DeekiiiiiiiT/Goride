@@ -15,6 +15,15 @@ function round2(n: number): number {
   return Math.round((Number(n) || 0) * 100) / 100;
 }
 
+function errMsg(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  try {
+    return JSON.stringify(e);
+  } catch {
+    return String(e);
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -44,7 +53,6 @@ Deno.serve(async (req) => {
 
   try {
     const { data: periods, error } = await supabase
-      .schema("ledger")
       .from("driver_financial_periods")
       .select(
         "driver_id, period_anchor, cash_collected, cash_returned, cash_written_off, cash_still_held, settlement_amount, organization_id, payout_net, driver_share, fuel_deduction, fuel_fleet_share, toll_cash_spend, toll_charged_to_driver",
@@ -86,7 +94,7 @@ Deno.serve(async (req) => {
       console.warn(`[finance-recon] ${drifts.length} drift(s), nullOrg=${nullOrg}`);
     }
 
-    await supabase.schema("ledger").from("finance_recon_runs").insert({
+    const { error: persistErr } = await supabase.from("finance_recon_runs").insert({
       week_from: fromYmd,
       week_to: toYmd,
       period_count: rows.length,
@@ -95,6 +103,7 @@ Deno.serve(async (req) => {
       ok,
       details: drifts.slice(0, 100),
     });
+    if (persistErr) throw persistErr;
 
     return new Response(
       JSON.stringify({
@@ -108,7 +117,7 @@ Deno.serve(async (req) => {
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
+    const msg = errMsg(e);
     return new Response(JSON.stringify({ error: msg }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

@@ -972,13 +972,18 @@ Independent check of the completed implementation: code diffs reviewed, **live l
 
 Also verified: recon identity now the full formula; signed-week gate on rebuilds (with "left N signed weeks unchanged" feedback); statement splitting per week at import (`statementWeekSplit`); platform required on all toll event types. **Tests: 74/74 green** (19 finance-core, 55 fleet money suites).
 
-### 12.4 Remaining gaps — small, but two can re-corrupt data
+### 12.4 Remaining to-do list — owner action items (as of 2026-08-18)
 
-1. **Historical files are invisible to the re-import guard.** All 286 pre-existing import-money rows lack `metadata.sourceFileHash` (only new writes stamp it). Re-importing any *old* CSV under a new batch bypasses `importFileHashAlreadyPosted` (no hash match) and creates new-format keys that don't collide with the old batch-scoped keys — C1 can recur for old files. **Fix: backfill `sourceFileHash` onto the 286 rows from their import-batch records.**
-2. **The doctor's C1 heuristic has a blind spot.** It only flags a cluster when org+driver doors or tagged+untagged mix. A clean re-import twin (both rows tagged, both per-driver keys) — exactly what gap 1 would produce — passes silently. **Fix: flag any same-driver/same-day/same-amount `payout_cash` pair from different idempotency keys, no door test.**
-3. **Nightly scheduling unconfirmed.** `finance-doctor` is registered in `config.toml`, but no cron trigger was verifiable in the repo for doctor or recon. "Nightly forever" needs an actual schedule (pg_cron or the existing cron-secret caller) — confirm one exists.
-4. **Nothing is committed.** The entire lock — 34 modified files, 6 new ones — sits uncommitted in the working tree. One reset loses all of it. Commit now.
+Everything below is what stands between the current state and "done". Items 1–2 can re-corrupt data if skipped; item 4 can lose the entire lock.
+
+- [x] **1. Commit the work.** Lock is on `origin/main`. This follow-up (hashes, broader C1, nightly cron) is the remaining commit.
+- [x] **2. Backfill `sourceFileHash` onto historical import rows.** 283 of 286 stamped from `fleet.import_batches.contentFingerprint`. 3 leftover KV-era rows have no batch record (promotion / org bank / statement line) — not cash, so they cannot recreate C1.
+- [x] **3. Broaden the doctor's C1 check.** Flags any same-driver / same-day / same-amount `payout_cash` pair from different idempotency keys. Live scan: **0 clusters**.
+- [x] **4. Nightly schedule fires.** `fleet-finance-recon-nightly` at 04:00 UTC and `fleet-finance-doctor-nightly` at 04:10 UTC. Confirmed run 2026-08-18: recon ok (0 drift), doctor ok (not blocking, C1=0) in `ledger.finance_recon_runs` / `ledger.finance_doctor_runs`.
+- [x] **5. Deploy check.** `_fleet-server`, `finance-doctor`, and `finance-recon` redeployed. Kenny Aug 3–9 saved week still **cash $54,196.26**, fleet owes **$5,808.10**.
+- [ ] **6. Settle the two restated driver liabilities.** May 18: fleet owes Kenny **$8,011.87** (previously marked settled). Aug 3–9: fleet owes Kenny **$5,808.10**. Both now appear on the Pay side of the Settlements desk — pay or formally acknowledge them so the books and reality match.
+- [ ] **7. Re-import drill (final acceptance test).** After items 1–5: re-import one already-posted CSV end-to-end and confirm zero new rows appear and the doctor stays green. That drill passing is the "permanent" in Permanent financial lock.
 
 ### 12.5 Verdict
 
-The system is **materially sound**: the ledger is clean on every measured class, one week rule and one-door writers are in place, restatement is documented with attribution, the two known driver liabilities (May 18 $8,011.87; Aug 3–9 $5,808.10 — both *fleet owes driver*) are on the books, and the controls exist. "Perfect" is not a state a financial system holds — it is the property that **corruption cannot enter silently and cannot persist undetected**. That property is real here once §12.4 items 1–2 are closed and the doctor actually runs nightly. Items 1–4 are collectively under a day of work.
+The system is **materially sound**: the ledger is clean on every measured class, one week rule and one-door writers are in place, restatement is documented with attribution, the two known driver liabilities (May 18 $8,011.87; Aug 3–9 $5,808.10 — both *fleet owes driver*) are on the books, and the controls now run nightly. Remaining owner work is pay/acknowledge those two weeks, then re-import one old CSV to prove the hash guard.
