@@ -431,6 +431,8 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
   const [tripGapDiagOpen, setTripGapDiagOpen] = useState(false);
   const [tripGapDiagResult, setTripGapDiagResult] = useState<any>(null);
   const [tripGapDiagLoading, setTripGapDiagLoading] = useState(false);
+  const [rebuildWeeksInProgress, setRebuildWeeksInProgress] = useState(false);
+  const [rebuildWeeksMsg, setRebuildWeeksMsg] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -2313,8 +2315,10 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
           ? { csv: uberCsvCash, ledger: uberLedgerCash, delta: uberCsvCash - uberLedgerCash }
           : null;
 
-      // Ledger may count every Roam/InDrive fare as cash — use trip evidence for wallet/risk display.
-      if (dateRange?.from) {
+      // Ledger may count every Roam/InDrive fare as cash — trip evidence is a different cut.
+      // Saved-week overlay already set period.cashCollected; do not smash it with chip sum.
+      const fromSavedWeek = ledgerOverview.source === 'driver_financial_periods';
+      if (!fromSavedWeek && dateRange?.from) {
         const periodStart = startOfDay(dateRange.from);
         const periodEnd = dateRange.to ? endOfDay(dateRange.to) : endOfDay(dateRange.from);
         for (const [platform, stats] of Object.entries(platformStats)) {
@@ -2332,7 +2336,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         }
       }
 
-      /** Headline = ledger period.earnings (= fare/tip SSOT; disputes stay on Toll card only). */
+      /** Headline = saved week when overlay is on; otherwise fare/tip SSOT. */
       const displayPeriodEarnings = Number(ledgerOverview.period.earnings) || 0;
       const sumMergedCash = (() => {
         let t = 0;
@@ -2343,7 +2347,9 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         return t;
       })();
 
-      const displayCashCollected = sumMergedCash;
+      const displayCashCollected = fromSavedWeek
+        ? Number(ledgerOverview.period.cashCollected) || 0
+        : sumMergedCash;
       const prevEarningsNum = Number(ledgerOverview.prevPeriod.earnings) || 0;
       const trendPercentMerged =
         prevEarningsNum > 0
@@ -2372,7 +2378,9 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         platformStats,
         weeklyEarningsData,
         tripCount: ledgerOverview.period.tripCount,
-        readModelSource: ledgerOverview.readModelSource,
+        readModelSource: fromSavedWeek
+          ? 'driver_financial_periods'
+          : ledgerOverview.readModelSource,
         source: 'ledger' as const,
         isLedgerComplete,
         dataIncomplete: !isLedgerComplete,
@@ -2722,6 +2730,26 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
     }
   };
 
+  const handleRebuildPayWeeks = async () => {
+    setRebuildWeeksInProgress(true);
+    setRebuildWeeksMsg(null);
+    try {
+      const r = await api.rebuildDriverFinancialPeriods(driverId);
+      const n = Number(r?.rebuilt ?? r?.data?.length ?? 0);
+      const skipped = Number(r?.skippedSigned ?? 0);
+      setRebuildWeeksMsg(
+        skipped > 0
+          ? `Rebuilt ${n} open week${n === 1 ? '' : 's'}. Left ${skipped} signed week${skipped === 1 ? '' : 's'} unchanged.`
+          : `Rebuilt ${n} week${n === 1 ? '' : 's'}.`,
+      );
+      setLedgerRefreshKey((k) => k + 1);
+    } catch (err: unknown) {
+      setRebuildWeeksMsg(err instanceof Error ? err.message : 'Rebuild failed');
+    } finally {
+      setRebuildWeeksInProgress(false);
+    }
+  };
+
   const handleCashDiagnostic = async () => {
     setCashDiagLoading(true);
     setCashDiagResult(null);
@@ -3067,6 +3095,24 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                </div>
              )}
 
+             <div className="flex items-center gap-3">
+               <button
+                 type="button"
+                 onClick={handleRebuildPayWeeks}
+                 disabled={rebuildWeeksInProgress}
+                 className="px-3 py-1.5 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 transition-colors"
+               >
+                 {rebuildWeeksInProgress ? (
+                   <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Rebuilding weeks…</>
+                 ) : (
+                   <><RefreshCw className="h-3.5 w-3.5" /> Rebuild pay weeks</>
+                 )}
+               </button>
+               {rebuildWeeksMsg && (
+                 <span className="text-xs text-slate-600 dark:text-slate-300">{rebuildWeeksMsg}</span>
+               )}
+             </div>
+
              {false && (
              <div className="flex items-center gap-3">
                <button
@@ -3353,10 +3399,10 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
                   </CardContent>
                </Card>
                <MetricCard 
-                  title={resolvedFinancials.disputeRefunds > 0 ? "Total Toll Recovery" : "Platform Toll Refunds"}
-                  value={`$${(resolvedFinancials.totalTolls + (resolvedFinancials.disputeRefunds || 0)).toFixed(2)}`}
-                  subtext={resolvedFinancials.disputeRefunds > 0 ? "Trip refunds + dispute recoveries" : "From trip-level toll charges"}
-                   tooltip={resolvedFinancials.disputeRefunds > 0 ? "Trip Toll Refunds: Tolls automatically reimbursed by the platform in trip fares. Dispute Refunds: Additional refunds won by disputing underpaid tolls with Uber Support." : undefined}
+                  title="Toll refunds"
+                  value={`$${(resolvedFinancials.disputeRefunds || 0).toFixed(2)}`}
+                  subtext="Driver cash risk — genuine Uber/support refunds"
+                  tooltip="Uber/support toll refunds that change what the driver owes. Plaza tag cost minus Uber trip credits lives on Business Finance P&L."
                   icon={<DollarSign className="h-4 w-4 text-slate-500" />}
                   loading={localLoading}
                    breakdown={Object.entries(metrics.platformStats)

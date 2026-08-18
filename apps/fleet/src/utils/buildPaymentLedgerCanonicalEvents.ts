@@ -8,21 +8,24 @@ function toYmd(iso: string): string {
 
 /**
  * Payment CSV grain stays on `payment_line` so trip-projected fare_earning/tip/prior
- * remain the money SSOT for driver-overview / PA. Only org payout / support toll lines
- * keep promoted types (not duplicated by buildCanonicalTripFareEventsFromTrip).
+ * remain the money SSOT for driver-overview / PA. Only org payout / genuine support
+ * toll lines keep promoted types. A fare line with a nested tollRefund is NOT a
+ * support adjustment (Bug A — that posted full fares as "dispute recoveries").
  */
 function mapDescriptionToEventType(line: PaymentLedgerLine): string {
   const d = line.description.toLowerCase();
   if (d.includes('so.payout')) return 'payout_bank';
   if (d.startsWith('support adjustment')) return 'toll_support_adjustment';
-  if (line.lineKind === 'toll_refund' || Math.abs(line.fareBreakdown.tollRefund) > 0) {
-    return 'toll_support_adjustment';
-  }
-  // Tip / prior / fare completed orders → payment_line (raw). Trip rows hold fare SSOT.
+  if (line.lineKind === 'toll_refund') return 'toll_support_adjustment';
   return 'payment_line';
 }
 
-function primaryAmount(line: PaymentLedgerLine): number {
+function primaryAmount(line: PaymentLedgerLine, eventType: string): number {
+  if (eventType === 'toll_support_adjustment') {
+    if (Math.abs(line.fareBreakdown.tollRefund) > 1e-9) return line.fareBreakdown.tollRefund;
+    if (Math.abs(line.paidToYou) > 1e-9) return line.paidToYou;
+    return line.earningsGross;
+  }
   if (Math.abs(line.earningsGross) > 1e-9) return line.earningsGross;
   if (Math.abs(line.paidToYou) > 1e-9) return line.paidToYou;
   if (Math.abs(line.fareBreakdown.tollRefund) > 1e-9) return line.fareBreakdown.tollRefund;
@@ -44,7 +47,7 @@ export function buildPaymentLedgerCanonicalEvents(
     }
 
     const eventType = mapDescriptionToEventType(line);
-    const amt = primaryAmount(line);
+    const amt = primaryAmount(line, eventType);
     if (Math.abs(amt) < 1e-9 && eventType !== 'payment_line') continue;
 
     const direction: 'inflow' | 'outflow' = amt >= 0 ? 'inflow' : 'outflow';

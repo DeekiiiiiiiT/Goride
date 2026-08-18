@@ -417,3 +417,6 @@ verify_jwt = false
 
 [functions.finance-recon]
 verify_jwt = false
+
+[functions.finance-doctor]
+verify_jwt = false

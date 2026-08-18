@@ -39,11 +39,23 @@ function round2(n: number): number {
 /** True when the event participates in fleet Tolls netting. */
 export function isTollFleetLossEvent(e: TollLedgerLikeEvent): boolean {
   const t = String(e.eventType || '');
-  return t === 'toll_charge' || t === 'toll_refund' || t === 'toll_charge_offset';
+  return (
+    t === 'toll_charge' ||
+    t === 'toll_refund' ||
+    t === 'toll_charge_offset' ||
+    t === 'toll_reimbursement'
+  );
+}
+
+/** Uber trip toll credit — legacy trip-sourced toll_charge or explicit reimbursement. */
+export function isUberTollReimbursement(e: TollLedgerLikeEvent): boolean {
+  const t = String(e.eventType || '');
+  if (t === 'toll_reimbursement') return true;
+  return t === 'toll_charge' && String(e.sourceType || '') === 'trip';
 }
 
 export function isTripSourcedTollCharge(e: TollLedgerLikeEvent): boolean {
-  return String(e.eventType || '') === 'toll_charge' && String(e.sourceType || '') === 'trip';
+  return isUberTollReimbursement(e);
 }
 
 /**
@@ -85,10 +97,10 @@ export function computeTollFleetLossNetting(scoped: TollLedgerLikeEvent[]): Toll
   for (const e of scoped) {
     const t = String(e.eventType || '');
     const amt = tollEventAmount(e);
-    if (t === 'toll_charge') {
-      if (isTripSourcedTollCharge(e)) {
+    if (t === 'toll_charge' || t === 'toll_reimbursement') {
+      if (isUberTollReimbursement(e)) {
         tripCharges.push({ sourceId: String(e.sourceId || ''), amt });
-      } else {
+      } else if (t === 'toll_charge') {
         plazaCharges += amt;
       }
     } else if (t === 'toll_refund') {

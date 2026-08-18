@@ -23,6 +23,9 @@ const MONEY_PLATFORM_REQUIRED = new Set([
   "prior_period_adjustment",
   "payment_line",
   "dispute_refund",
+  "toll_charge",
+  "toll_support_adjustment",
+  "toll_reimbursement",
 ]);
 const MAX_BATCH = 200;
 const MAX_IDEMPOTENCY_KEY_LEN = 512;
@@ -39,6 +42,7 @@ const VALID_CANONICAL_EVENT_TYPES = new Set([
   "fuel_expense",
   "fuel_charge_offset",
   "toll_charge",
+  "toll_reimbursement",
   "toll_refund",
   "adjustment",
   "other",
@@ -173,6 +177,48 @@ function supabaseKv() {
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
+}
+
+const IMPORT_MONEY_TYPES = new Set([
+  "payout_cash",
+  "payout_bank",
+  "promotion",
+  "statement_line",
+  "payment_line",
+  "toll_support_adjustment",
+]);
+
+/** True when this CSV file hash already posted money under a different batch. */
+export async function importFileHashAlreadyPosted(
+  sourceFileHash: string,
+  currentBatchId?: string,
+): Promise<boolean> {
+  const hash = String(sourceFileHash || "").trim();
+  if (hash.length < 8) return false;
+  try {
+    const client = supabaseKv();
+    const { data, error } = await client
+      .from("ledger_entries")
+      .select("id, metadata, entry_type")
+      .eq("metadata->>sourceFileHash", hash)
+      .limit(40);
+    if (error || !data?.length) return false;
+    const batch = String(currentBatchId || "").trim();
+    return data.some((row) => {
+      const t = String((row as { entry_type?: string }).entry_type || "");
+      if (!IMPORT_MONEY_TYPES.has(t)) return false;
+      const meta = ((row as { metadata?: Record<string, unknown> }).metadata || {}) as Record<
+        string,
+        unknown
+      >;
+      const existingBatch = String(meta.batchId || "").trim();
+      if (batch && existingBatch && existingBatch === batch) return false;
+      return true;
+    });
+  } catch (err) {
+    console.warn("[canonical] importFileHashAlreadyPosted failed:", err);
+    return false;
+  }
 }
 
 async function deleteUnifiedEntries(opts: {
@@ -484,6 +530,9 @@ export async function appendCanonicalLedgerEvents(
       if (base.category) metaBase.category = base.category;
       if (base.driverId) metaBase.driverId = base.driverId;
       if (base.direction) metaBase.direction = base.direction;
+      if (typeof base.sourceFileHash === "string" && base.sourceFileHash.trim()) {
+        metaBase.sourceFileHash = base.sourceFileHash.trim();
+      }
 
       const { fleetDualWriteCanonicalEvent } = await import("./unified_ledger_dual_write.ts");
       await fleetDualWriteCanonicalEvent({

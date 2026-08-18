@@ -272,6 +272,7 @@ export function sumExpenseRowsFromEvents(
     'fuel_expense',
     'fuel_charge_offset',
     'toll_charge',
+    'toll_reimbursement',
     'toll_refund',
     'toll_charge_offset',
     'refund_expense',
@@ -307,7 +308,7 @@ export function sumExpenseRowsFromEvents(
         fuel += amt;
         signedAmount = amt;
       }
-    } else if (t === 'toll_charge') {
+    } else if (t === 'toll_charge' || t === 'toll_reimbursement') {
       tollEventCount++;
       category = 'Toll';
       // Unmatched Uber trip toll = reimbursement credit, not a second plaza bill.

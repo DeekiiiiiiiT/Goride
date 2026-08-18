@@ -84,6 +84,7 @@ import {
   deleteCanonicalLedgerBySourceFromDate,
   deleteCanonicalLedgerByBatchId,
   countCanonicalLedgerByBatchId,
+  importFileHashAlreadyPosted,
 } from "./ledger_canonical.ts";
 import { isUnifiedTollSettlementEnabled } from "./driver_toll_charge.ts";
 import { upsertClaim, deleteClaim, executeClaimDateBackfill } from "./claim_service.ts";
@@ -4248,6 +4249,7 @@ app.get("/make-server-37f42386/ledger/statement-summary", requireAuth(), async (
       "tip",
       "promotion",
       "toll_charge",
+      "toll_reimbursement",
       "toll_refund",
       "toll_support_adjustment",
       "prior_period_adjustment",
@@ -4461,9 +4463,10 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
               );
             }
             if (!isFinanceShadowProjection()) {
+              const prevRow = await getDriverFinancialPeriodDetail(driverId, prevStartC);
               return c.json({
                 success: true,
-                data: overlayOverviewFromPeriod(resultCanon, periodRow),
+                data: overlayOverviewFromPeriod(resultCanon, periodRow, prevRow),
               });
             }
           }
@@ -4933,6 +4936,7 @@ app.post(
       const body = await c.req.json();
       const events = body?.events;
       const confirmSignedWeek = body?.confirmSignedWeek === true;
+      const confirmDuplicateFile = body?.confirmDuplicateFile === true;
       const rbacUser = c.get("rbacUser") as RbacUser | undefined;
       const importerUserId =
         (rbacUser as any)?.userId || (rbacUser as any)?.email || undefined;
@@ -4942,6 +4946,31 @@ app.post(
             importerUserId: e?.importerUserId ?? importerUserId,
           }))
         : [];
+      if (!confirmDuplicateFile && enriched.length > 0) {
+        const hashes = [
+          ...new Set(
+            enriched
+              .map((e: { sourceFileHash?: string; metadata?: { sourceFileHash?: string } }) =>
+                String(e?.sourceFileHash || e?.metadata?.sourceFileHash || "").trim(),
+              )
+              .filter((h: string) => h.length >= 8),
+          ),
+        ];
+        const batchId = String(enriched[0]?.batchId || "").trim();
+        for (const hash of hashes) {
+          if (await importFileHashAlreadyPosted(hash, batchId)) {
+            return c.json(
+              {
+                error: "DUPLICATE_FILE_HASH",
+                message:
+                  "This CSV file was already imported. Re-importing would post a second copy of the same money. Confirm only if you intend a visible restatement.",
+                sourceFileHash: hash,
+              },
+              409,
+            );
+          }
+        }
+      }
       if (!confirmSignedWeek && enriched.length > 0) {
         const signed = await findSignedWeeksTouchedByEvents(enriched);
         if (signed.length > 0) {
@@ -5670,7 +5699,7 @@ app.get("/make-server-37f42386/ledger/driver-earnings-history", requireAuth(), a
         .reduce((s: number, e: any) => s + (e.netAmount || 0), 0);
 
       const tolls = periodEntries
-        .filter((e: any) => e.eventType === "toll_charge")
+        .filter((e: any) => e.eventType === "toll_charge" && e.sourceType !== "trip")
         .reduce((s: number, e: any) => s + Math.abs(e.netAmount || 0), 0);
 
       const platformFees = periodEntries

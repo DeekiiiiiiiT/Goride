@@ -943,10 +943,25 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
           if (canonicalEvents.length > 0) {
               try {
                   let confirmSignedWeek = false;
+                  let confirmDuplicateFile = false;
                   const appendChunk = async (chunk: typeof canonicalEvents) => {
                       try {
-                          return await api.appendCanonicalLedgerEvents(chunk, { confirmSignedWeek });
+                          return await api.appendCanonicalLedgerEvents(chunk, {
+                              confirmSignedWeek,
+                              confirmDuplicateFile,
+                          });
                       } catch (err: any) {
+                          if (err?.code === 'DUPLICATE_FILE_HASH' && !confirmDuplicateFile) {
+                              const ok = window.confirm(
+                                  'This CSV was already imported. Re-importing would post a second copy of the same money. Continue only if you intend a visible restatement?',
+                              );
+                              if (!ok) throw err;
+                              confirmDuplicateFile = true;
+                              return api.appendCanonicalLedgerEvents(chunk, {
+                                  confirmSignedWeek,
+                                  confirmDuplicateFile: true,
+                              });
+                          }
                           if (err?.code === 'SIGNED_WEEK' && !confirmSignedWeek) {
                               const weeks = Array.isArray(err.signedWeeks)
                                   ? err.signedWeeks

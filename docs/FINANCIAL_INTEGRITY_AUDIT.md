@@ -715,3 +715,270 @@ Worth stating plainly, because the situation is better than it feels:
 - **The Deno re-export trick** that lets the edge function share the frontend's settlement formula is the single reason Engines A and B haven't diverged completely. It needs to move to `packages/`, but the instinct was right.
 
 You did not build a jungle. You built seven correct answers to seven slightly different questions and then put them on screens that all say "cash". The fix is to agree on the question.
+
+---
+
+## 9. Post-implementation verification — 2026-08-18
+
+Phases 0–7 were landed in a single commit on 2026-08-18. This section is the independent check of that implementation, including **live database queries** against `ledger.entries` and `ledger.driver_financial_periods`. Verdict up front:
+
+> **The code implementation is ~80% faithful and includes genuinely good work — the Kenny worksheet found the true root cause of the $18,867.05. But the process gates were skipped, the stored projections were never rebuilt, the projection overlay is not actually live, and the inflated Toll Refunded card is caused by two pre-existing data bugs that the plan's Phase 0 goldens would have caught if they had been run before the cutover instead of alongside it.**
+
+### 9.1 The $18,867.05 mystery is solved — and the true number has the opposite sign
+
+The implementation's worksheet (`docs/finance-recon/kenny-aug-3-worksheet.md`) found it: **two `payout_cash` rows for the same $29,976.26**, one tagged to Kenny's Uber UUID, one untagged, both dated 2026-08-04. The rebuild summed both:
+
+```
+29,976.26 × 2 + 13,720 (InDrive) + 10,500 (Roam) = 84,172.52   ← stored cash_collected
+```
+
+With the duplicate removed, Kenny's Aug 3–9 settlement is **+$11,109.21 — the fleet owes Kenny**, not Kenny owing $18,867.05. The sign flips.
+
+**But the stored row was never rebuilt.** The baseline dump shows `2026-08-03 · cash 84,172.52 · settlement −18,867.05 · driver_owes` still persisted. The de-dupe (`foldPayoutCashByWeek`) only takes effect when `rebuildDriverFinancialPeriod` re-runs — and nothing triggered a rebuild. Worse, the new client-side overlays (§9.4) now push this stale wrong row onto **more** screens than before.
+
+> ⚠️ **Do not collect $18,867.05 from Kenny.** The correct position per the implementation's own worksheet is the fleet owing him $11,109.21 (before the tips-quota question in §9.5).
+
+### 9.2 The Toll Refunded card ($29,904.89) — live-data decomposition
+
+Queried `ledger.entries` for Kenny, Aug 10–16, event types `toll_charge` / `toll_support_adjustment` / `dispute_refund`:
+
+| Component | Rows | Amount | What it actually is |
+|---|---|---|---|
+| `toll_charge`, platform **Roam**, source `toll_ledger:*` | 13 | $4,620.00 | Real plaza passages (the tag/receipt ledger) |
+| `toll_charge`, platform **Uber**, source `trip:*` | 13 | $4,620.00 | **The same physical passages again**, posted from Uber trips' toll fields — created 2026-08-17 |
+| `toll_support_adjustment`, "trip completed order" | 13 | $20,649.89 | **Full Uber trip fares mislabeled as toll adjustments** — created 2026-08-17 |
+| `toll_support_adjustment`, case 91bae090 | 2 | $30.00 | One genuine $15 support adjustment, posted twice by two different writers |
+
+The honest card value for this week is roughly **$4,620 + $15 ≈ $4,635**, not $29,904.89. Two distinct bugs:
+
+**Bug A — full fares posted as toll adjustments.** [`buildPaymentLedgerCanonicalEvents.ts:14-30`](apps/fleet/src/utils/buildPaymentLedgerCanonicalEvents.ts#L14-L30) (last modified 2026-08-10, *before* this implementation) promotes any payment-CSV line with a non-zero `fareBreakdown.tollRefund` to `toll_support_adjustment` — and then `primaryAmount()` prefers `line.earningsGross` (the whole fare) over the toll-refund component. A "trip completed order" for $2,010.76 that happens to include a $370 toll refund becomes a $2,010.76 "toll support adjustment". The CSV re-import on Aug 17 materialized 13 of these. They feed `pDisputeRefunds` in Engine C, which is the "Dispute Recoveries $20,664.89" line on the card.
+
+**Bug B — trip-sourced toll charges double the plaza ledger.** The `trip:*|toll_charge` rows created Aug 17 duplicate the `toll_ledger:*|toll_charge` rows for the same passages. Business Finance already knows about this pair and nets it ([`sumExpenseRowsFromEvents`](apps/fleet/src/components/business-finance/businessFinancePnL.ts) treats trip-sourced toll charges as reimbursement credits) — **but Engine C's driver-overview aggregation has no such netting** and sums every `toll_charge` at face value. Hence Uber $4,620 + Roam $4,620 for identical passages.
+
+Neither bug was *introduced* by the implementation — but the implementation's own Phase 0 said to pin baselines and run recon *before* changing read paths, which would have caught both on day one.
+
+### 9.3 Plan-compliance scorecard
+
+| Plan requirement | Status |
+|---|---|
+| Phase 0: characterization goldens | ⚠️ Written, but landed **in the same commit** as the behavior changes — the "before" state was never pinned in CI |
+| Phase 0: recon report / discrepancy inventory | ✅ `docs/finance-recon/` baseline + worksheet — genuinely good work |
+| Phase 1: **owner** decides D1–D7 | ❌ ADRs 0006–0012 were authored and "Accepted" by the implementer on the same day. These are business policies — see §9.5 |
+| Phase 2 hotfixes (P&L payout_cash, COGS, tips double-count, KPI split, org_id, 80-cap, silent catches, floors, admin copy) | ✅ Verified faithful in the diffs — this tranche is solid |
+| Phase 3 `finance-core` package, one `periodKeyFor` | ✅ Real package, tested; copies re-exported |
+| Phase 3: statement **splitting at import** before strict window | ❌ **Not built.** `buildCanonicalImportEvents` untouched, yet the ±14-day grace band was deleted read-side. Legacy statement/payout rows dated by pay/posting day now land in whatever week the posting date falls in |
+| Phase 3: platform backfill/quarantine of blank rows | ❌ Not done — "Other" still renders ($1,756.20 this week); `toll_charge`/`toll_support_adjustment` not in the required-platform set |
+| Phase 4: shadow mode, 7 clean days per screen, then flip | ❌ **Skipped entirely.** Server flags default ON day one; the Cash Wallet / payout-tab overlays are client-side and **have no flag at all** — the documented `FIN_READ_PROJECTION_*=0` rollback does not exist for them, and the cash-wallet / payout / driver-app flags in `flags.ts` are wired to nothing |
+| Phase 4: rebuild projections before screens read them | ❌ Stored rows still carry pre-fix values (§9.1) |
+| Phase 6: recon job formula | ❌ **Wrong identity.** `finance-recon` asserts `held = collected − returned − writtenOff`, omitting charged tolls, toll wash, and fuel credits — it will flag essentially every real week as drift, which makes the control useless noise |
+| Phase 6: signed-week import gate | ✅ Implemented (imports only; note rebuilds can still silently change settled weeks) |
+| Phase 7: repo hygiene, migration note | ✅ Temp files removed |
+
+**Also: the overview overlay is not live.** The Aug 10–16 headline ($99,328.46) exactly equals the sum of Engine C's platform rows (85,525.25 + 11,547.01 + 500 + 1,756.20) and does **not** equal the stored projection's `earnings_gross` (100,931.45). Either the edge function wasn't redeployed or the overlay path is erroring and silently falling back. And when it does go live it has a basis bug: it swaps the card to gross-fares+tips while `prevPeriod` stays on the old net basis (the "−2.1% vs prev" becomes meaningless) and the per-platform rows aren't overlaid, so the card will no longer foot.
+
+### 9.4 New defects introduced by the implementation
+
+1. **Strict window without import splitting** — the single riskiest change. Legacy statement rows whose `date` is a pay/posting day now relocate wholesale into the wrong week on the Overview. Until imports split statements per week, the Overview will misweek any historical row whose posting date trails its statement week.
+2. **Unconditional client overlays** — `overlayCashWeeksFromPeriods` / `overlaySharedPeriodsOntoPayoutRows` run with no flag, so the stale, known-wrong stored projections (§9.1) now drive Cash Wallet and the payout tabs too. The rollback story documented in this file's header is not true for those screens.
+3. **Recon identity is wrong** (§9.3) — worse than no control, because a permanently red control trains you to ignore it.
+4. **`foldPayoutCashByWeek` dedupe key is `day|amount` only** — two genuinely distinct payouts of the same amount on the same day (e.g. a correction batch) will be silently collapsed. It should key on driver + source row identity, and ideally the duplicate should be *reversed in the ledger*, not hidden at read time.
+5. **Overlay earnings-basis mismatch** (§9.3 last paragraph).
+6. **Retroactive policy in rebuilds** — the tips-quota gate (§9.5) changes `netPayout` for every historical week the next time it is rebuilt, including weeks marked `settled`, with no adjustment trail. The signed-week gate protects imports but not rebuilds.
+
+### 9.5 Decisions that are yours to ratify — not yet legitimate
+
+ADRs 0006–0012 were machine-authored and self-accepted. Most are reasonable codifications, but two **change real money policy** and must be explicitly confirmed or reverted by you:
+
+- **ADR 0008 (tips quota):** "Driver receives 100% of tips only if the $100,000 weekly quota is met; otherwise the fleet keeps them." This is now live math in `computeWeekCommissionShare` → `computePeriodSettlement`. If this is not your actual policy, drivers' balances will be wrong in a direction that hurts them. Kenny's corrected Aug 3–9 (+$11,109.21) currently *excludes* his $580 of tips on this rule.
+- **ADR 0006 (Uber cash source):** ledger `payout_cash` wins; CSV disagreements ($950.79 for Kenny's week) only warn. Reasonable — but it's your call which source is the auditable truth.
+
+### 9.6 Ordered repair list
+
+1. **Data first — reverse the fake toll rows.** Delete or post reversals for the 13 `toll_support_adjustment` "trip completed order" rows (full-fare amounts, created 2026-08-17, `reference_id` = trip UUIDs) and one of the two duplicate $15.00 case-91bae090 rows. Fix `mapDescriptionToEventType` / `primaryAmount` so a toll-refund promotion posts the **toll-refund component**, never `earningsGross`.
+2. **Stop the toll double-count in Engine C**: either apply the same trip-offset netting Business Finance uses to the driver-overview toll aggregation, or stop emitting `trip:*` `toll_charge` rows where a `toll_ledger:*` row exists for the same passage.
+3. **Ratify or reject ADRs 0006–0012** — especially 0008 (tips). Ten minutes of your time; everything downstream depends on it.
+4. **Rebuild all `driver_financial_periods`** (after 1–3), then re-verify Kenny Aug 3–9 lands at the worksheet's +$11,109.21 (± the tips decision). Update the Settlements desk expectations — the desk will flip that week from Collect to Pay.
+5. **Fix the recon identity** to the full formula (`collected + tollPersonal − returned − tollWash − fuelCredits − writtenOff`) and re-run; it should go green on real weeks before you trust it.
+6. **Restore a rollback path**: put the client overlays behind the flags that already exist for them, default OFF, and go through the shadow-soak week per screen as originally specified. Redeploy the edge functions and confirm the overview overlay actually activates (headline should change basis — fix the prev-period/platform-row mismatch first).
+7. **Build statement splitting at import** (the missing half of the one-week rule), then keep the strict window. Until then, expect misweeked legacy Uber rows on the Overview.
+8. Backfill/quarantine blank-platform rows and add the toll event types to the platform-required set.
+
+### 9.7 What deserves to be kept as-is
+
+The `finance-core` package and its tests, the Phase 2 hotfix tranche (P&L structure, KPI split, org scoping, cap removal, error surfacing), the worksheet-driven diagnosis, the signed-week import gate, and the recon *infrastructure* (table + job — once its formula is fixed) are all genuinely to spec and better than what they replaced. The failure mode here was not bad code; it was **doing Phases 0–7 in one motion**, which converted every safety gate in the plan into paperwork after the fact.
+
+---
+
+## 10. THE root cause, and what "every week correct since inception" actually requires
+
+**Added 2026-08-18 after the owner asked the right question:** why does a long fix still produce wrong numbers, and does this audit contain everything needed for the whole app to calculate every week from inception correctly?
+
+The honest answer to the second question was **no — until this section**. Sections 2–8 diagnosed the *read side* (seven engines, four week rules) and §9 audited the implementation. But the deepest layer had not yet been named and measured. It now has been, with live queries against `ledger.entries`.
+
+### 10.1 The single root cause, in one paragraph
+
+**Your app is not bad at math. Your ledger has more than one door, and the same real-world dollar walks in through two of them.** Money enters `ledger.entries` from at least **twelve writer paths** (live count, §10.2). Idempotency keys prevent the *same* door from posting twice — but nothing prevents *two different doors* from posting the same dollar, because each door builds its key from its own source ID (`trip:<id>` vs `toll_ledger:<id>` vs `fin_event:<id>` vs import batch). Every read engine then compensates with its own private de-duplication heuristics — which is exactly the seven-engine jungle of §2. Formulas were never the problem. Arithmetic on duplicated inputs produces wrong outputs no matter how correct the formula is. **Fixing engines (what the implementation did) treats the symptom; closing the doors and reversing the historical duplicates treats the disease.**
+
+### 10.2 The doors — live census of `ledger.entries`
+
+| Door (idempotency prefix) | Rows | Active | What it posts |
+|---|---|---|---|
+| `kv_ledger_event:trip` | 2,957 | Dec 2025 – Aug 2026 | Trip fares, tips, cash — **and trip-sourced toll charges** |
+| `kv_ledger_event:fuel_entry` | 1,263 | Jan – Aug 2026 | Fuel expenses |
+| `kv_ledger_event:toll_ledger` | 449 | Dec 2025 – Aug 2026 | Plaza toll charges |
+| `fin_event:backfill` | 306 | Dec 2025 – Jul 2026 | Historical backfill |
+| `kv_ledger_event:toll_charge` | 301 | Dec 2025 – Aug 2026 | Driver toll charges (wallet) |
+| `fin_event:toll_ledger` | 263 | Dec 2025 – Aug 2026 | Toll charges **again**, via financial_events bridge |
+| `fin_event:fuel_finalized` | 196 | Jan – Aug 2026 | Fuel finalization postings |
+| `kv_ledger_event:toll_charge_reversal` | 179 | Dec 2025 – Aug 2026 | Toll charge reversals |
+| `fin_event:toll_charge` | 178 | Dec 2025 – Aug 2026 | Toll charges via a **third** path |
+| `kv_ledger_event:payment_line` | 141 | Aug 2026 | Payment-CSV lines (incl. the Bug-A mislabels) |
+| `fin_event:fuel_reset` | 110 | Jan – Aug 2026 | Fuel period resets |
+| `kv_ledger_event:transaction` | 32 | Feb – Aug 2026 | Manual wallet transactions |
+
+**The toll domain alone has five doors** (`trip`, `toll_ledger`, `toll_charge`, `fin_event:toll_ledger`, `fin_event:toll_charge`, plus reversals). No accountant could keep books where the same toll bill can arrive as five different documents with five different reference numbers.
+
+### 10.3 Complete corruption inventory — whole history, all drivers, measured
+
+| Class | What | Rows | Dollars | Span | Status |
+|---|---|---|---|---|---|
+| **C1** | `payout_cash` duplicates (same day+amount posted twice) | 2 clusters (4 rows) | **$80,944.06** posted vs $40,472.03 real *(corrected 2026-08-18; first version halved both figures)* | May 18 + Aug 4 2026 | Enumerated — reverse one copy of each. **Root mechanism (verified): idempotency keys embed the batch id, so re-importing the same statement under a new batch always creates a fresh copy.** Aug 4 pair = same per-driver door, two batches; May 18 pair = per-driver door + org-fallback door |
+| **C2** | Trip-sourced `toll_charge` shadowing plaza `toll_ledger` rows | 194 rows | **$72,710.00** | Dec 2025 – Aug 2026 | Every overview toll figure since inception is inflated. **Correction (owner, 2026-08-18): these are Uber toll reimbursements, not junk — reclassify/offset them (plaza charge minus Uber credit), do NOT reverse.** Reversing would erase real reimbursements and overstate toll cost by ~$72k. The original R2 advice to reverse them was wrong |
+| **C3** | Full fares mislabeled `toll_support_adjustment` ("trip completed order") | 22 rows | **$35,023.96** | Aug 4 – 15 2026 | Fake "Dispute Recoveries" on BOTH screenshots ($14,404.07 and $20,664.89 were both this) — reverse all 22 |
+| **C4** | Blank/unknown-platform money rows (the "Other" bucket) | **5 rows total** | $73,327.12 | — | Fully enumerable: untagged `payout_bank` $37,838.90; untagged `payout_cash` $29,976.26 (C1's Kenny duplicate); `statement_line` $3,660.00; `fare_earning` $1,756.20 (this week's "Other"); `promotion` $95.76 (the original "Other") — tag or reverse each |
+| **C5** | Uber statement + per-trip fare rows in the same week (double basis) | **0 weeks** | $0 | — | ✅ Clean — the read-side switching logic never actually had duplicated data to fight |
+| **C6** | Duplicate support-adjustment writers (same case, two doors) | 2 rows | $30.00 | Aug 10 | Reverse one |
+
+Perspective: this is a **small, fully repairable dataset** — roughly 36 weeks, 4 drivers with money, and the corruption concentrates in ~225 rows across four classes. This is not a rebuild-from-scratch situation. It is one focused remediation phase.
+
+### 10.4 Phase R — whole-history data remediation (insert between §9's repairs and any further cutover)
+
+**R0 — Freeze writers that double-post (half a day).**
+Stop the trip→`toll_charge` emission where a `toll_ledger` row covers the same passage (link the trip to the toll row instead); fix `buildPaymentLedgerCanonicalEvents` (`primaryAmount` must use the toll-refund component, and only genuinely toll-natured lines may promote); remove the org-fallback `payout_cash` path that created untagged copies; make every payout row carry the canonical driver id (aliases resolved at write time, not read time).
+
+**R1 — Detection suite as code (1 day).**
+Turn the six class queries from §10.3 into a permanent `finance-doctor` script/edge function that reports per-class row lists with dollar impact. It must return zero rows before any screen work continues, and it runs nightly forever after (folded into `finance-recon` once that job's identity formula is fixed).
+
+**R2 — Reversal batches, owner-approved (1 day).**
+For each class: post explicit reversal entries (or hard-delete with a dated backup table, matching the `kv_money_backup_20260811` pattern you already used). Never silently mutate. Each batch gets a memo row so future-you can see what was corrected and why. C1: one copy of each cluster. C2: the 194 trip copies (after R0 stops new ones). C3: all 22. C4: tag the 3 legitimately-attributable rows (the $95.76 promotion, $1,756.20 fare, $3,660 statement line), reverse the 2 that are C1 duplicates. C6: one copy.
+
+**R3 — Full-history projection rebuild (half a day, mostly compute).**
+`rebuildAllPeriodsForDriver` for every driver from the first week (Dec 2025). This is the step the 2026-08-18 implementation skipped — projections must be rebuilt *after* the ledger is clean, or the screens faithfully display garbage.
+
+**R4 — Tie-out to source documents (1–2 days, the accountant's step).**
+For every import batch: sum of its canonical events must equal the CSV file's own totals (per-batch checksum). For every week: `driver_financial_periods` values must derive from surviving ledger rows only. Sample-verify 4 weeks by hand against the actual Uber/InDrive statements — one early (Dec/Jan), one mid (Apr), the two disputed August weeks.
+
+**R5 — One door per money fact, enforced (2–3 days).**
+The permanent fix: for each domain, declare exactly one writer (tolls: `toll_ledger`; Uber money: import batches; fares: trip projection; fuel: `fuel_entry`) and make the others **link, not post**. Add a uniqueness advisory: a nightly check that no two entries share (driver, calendar-day, amount, domain) across different doors without an explicit `supersedes`/link marker. That check is what makes C1/C2-style corruption *structurally detectable forever* instead of discovered by a suspicious owner squinting at a card.
+
+**R6 — Only then resume §9.6 steps 5–7** (recon formula, flag-gated overlays with real shadow soak, statement splitting at import).
+
+### 10.5 Direct answers
+
+**"Why am I having such a hard time calculating basic math with my app?"**
+Because it was never a math problem. The same dollar enters your ledger through two doors (five, for tolls), nothing detects it, and every screen guesses differently about which copy to ignore. You experienced that as "the app can't calculate" because the totals were wrong in different ways on different screens — which is exactly what duplicated inputs plus per-screen de-dup heuristics produces.
+
+**"Why did a long fix still leave wrong numbers?"**
+The 2026-08-18 implementation fixed formulas and read paths (the top two layers) but (a) never rebuilt the stored projections, so screens kept serving pre-fix values, and (b) never touched the ingestion layer, so C2 and C3 sat in the ledger untouched — and an Aug 17 CSV re-import plus an auto-repair run *added* fresh corrupted rows the same day. Fixing readers while writers still double-post is bailing with the tap open.
+
+**"Does this audit now have everything needed for every week from inception to be correct?"**
+Yes — with this section it covers all three layers: **formulas** (§3, fixed and verified), **read paths / engines** (§2, §5, §9 — partially done, gaps listed in §9.6), and **ingestion + historical data** (§10 — measured, enumerated, with a finite repair plan). The completeness argument: every dollar on any screen comes from `ledger.entries` or a projection derived from it; §10.2 is a census of *every* door into that table; §10.3 scanned the *full* table history for every duplication class those doors can produce (including one that came back clean); and R4 ties the surviving rows back to your source CSVs, which you've said you trust. When `finance-doctor` returns zero across all classes, every projection has been rebuilt from the clean ledger, and four sample weeks tie to the actual statements — that is the definition of "every week from inception is correct", and it is checkable, not vibes-based. Estimated effort for Phase R: **about one focused week.**
+
+---
+
+## 11. Review of the owner's execution plan — "Permanent financial lock" (2026-08-18)
+
+The owner turned §10 into an execution plan ("Permanent financial lock": freeze writers → finance-doctor → reversal/reclassify batches → full rebuild → screens → one door per fact). This section is the independent review of that plan, with its assumptions tested against the live ledger. **The plan supersedes §10.4's Phase R where they differ** — notably on C2.
+
+### 11.1 Verdict
+
+The plan's ordering, scope, and "done" criteria are sound, and it corrects two genuine errors in this audit (both now fixed in §10.3):
+
+1. **C2 — reclassify, don't reverse.** The 194 trip-sourced toll rows are Uber toll *reimbursements* (what Uber credited), not duplicate bills. The plaza tag receipt is the charge; the pair nets to a small real loss (e.g. $380 paid vs $370 credited). Reversing them — this audit's original R2 advice — would have erased ~$72,710 of real credits and overstated toll cost. The plan's netting approach (the same one `tollFleetLossNetting.ts` already applies in Business Finance) is the correct books.
+2. **C1 dollars** — the audit's first version halved both figures; live truth is $80,944.06 posted vs $40,472.03 real.
+
+Safe to execute **after** amending the items below.
+
+### 11.2 Three plan assumptions that fail against live data
+
+**A. Killing the org-fallback does not stop re-import duplicates.** All four C1 rows were pulled with their idempotency keys. The Aug 4 pair is two *per-driver-door* rows from two different import batches — org-fallback wasn't involved. The real mechanism: **import idempotency keys embed the `batchId`, so re-importing the same CSV under a new batch always creates a fresh copy of every row.** The plan's own "done" criterion ("re-import creates no new C1/C3 rows") fails unless import idempotency is re-scoped to **`sourceFileHash` + driver + line semantics** (the events already carry `sourceFileHash`), or a second batch with an already-seen file hash is hard-blocked at import. This belongs in the plan's Phase 0 — it is the change that makes C1 structurally impossible.
+
+**B. "Keep the tagged row, reverse the untagged twin" cannot resolve May 18.** Both May 18 rows carry the same Uber UUID tag — one arrived via the per-driver door, one via the org-fallback `|payout|CASH` door. The doctor's keep/reverse rule must be: *keep the per-driver-key row whose batch ties out to the CSV file totals; reverse the other* — decided by key format + batch tie-out, never by driver tag.
+
+**C. Structural toll pairing has nothing to pair on in `ledger.entries`.** Zero of the 233 plaza `toll_charge` entries carry a `tripId` (verified). The trip link lives in the KV `toll_ledger:*` records. The Phase 2 C2 pairing job must therefore join *through* the KV toll store (plaza entry `reference_id` → KV row → `tripId` → trip rows), and leftovers are expected by construction (194 trip rows vs 233 plaza rows).
+
+### 11.3 Two traps to defuse before execution
+
+**D. The alias-rewrite can recreate C1.** Import idempotency keys embed the driver id (`…|payout|cash|52ff47da…`). If `appendCanonicalLedgerEvents` rewrites Uber UUID → Roam id *before key construction*, a re-import of any pre-fix statement computes a different key than the stored row and posts a duplicate instead of colliding. Store the canonical id in metadata (or a column) and resolve at the projection layer — never feed the rewritten id into key derivation.
+
+**E. Deploy readers before reclassifying.** The moment historical trip rows become a new reimbursement event type, any screen that doesn't recognize that type shows the money as vanished. Engine C, the BF netting, and Expense Hub must consume the new type in production *before* the Phase 2 reclassification batch runs. Deploy order: readers → writer → reclassify.
+
+### 11.4 Gaps in the plan
+
+**F. C4 addresses 4 of 5 rows.** The untagged `payout_bank` **$37,838.90** — the largest blank-platform row — has no disposition. It is probably the org wire (fleet bank), not driver money: tag it to the org or reverse it, but decide.
+
+**G. The rebuild restates weeks for three different reasons with no attribution.** The Dec-2025→now rebuild applies (a) data cleanup, (b) the newly ratified tips-quota rule (ADR 0008), and (c) the month-boundary tier change (ADR 0009) simultaneously. Snapshot `driver_financial_periods` before the rebuild (the `kv_money_backup` pattern) and produce a per-week delta report attributing each change to its cause. This is not hygiene: the **May 18 week may have been settled on doubled cash** — if the driver paid against a wrong number, the restatement report is the artifact that surfaces money the fleet owes back. That is a real liability with no owner-facing artifact in the plan as written.
+
+**H. The overlay earnings basis is still unresolved.** Phase 4 fixes headline *cash* but not earnings: the overlay swaps the headline to gross+tips while `prevPeriod` stays net (the "% vs prev" compares two bases), and the platform chips don't foot to the headline. Pick the basis, overlay prev-period with the same one, and make chips reconcile or label them as a different cut.
+
+**I. "Toll Refunded — Added to Debt (Cash Risk)" is a settlement concept; plaza-minus-reimbursement is a P&L concept.** Wiring the BF net into that card changes what the card means. The reimbursement total is the defensible number for a cash-risk card (what the driver received on trips); the net is the cost number. Decide which the card is and rename it to match — otherwise the card will "disagree with the P&L" by design and reopen this whole investigation.
+
+### 11.5 Small notes
+
+- Run finance-doctor once **before** Phase 0 as the frozen baseline.
+- Keep C5 as a permanent doctor check even though it is clean today.
+- Engine A settlements never double-counted tolls — the rebuild reads the KV toll store with its own wash logic, not `ledger.entries` toll rows. C2's blast radius is Overview / BF / Expense Hub only; do not "fix" rebuild toll logic in this pass.
+- Tips: quota-missed weeks withhold tips ($580 for Kenny Aug 3–9). The **driver app** must show that line explicitly — a withheld amount invisible to the driver is a dispute waiting to happen.
+
+With A, D, and G folded in, the plan is fit to execute in its stated order.
+
+---
+
+## 12. Final verification — "Permanent financial lock" executed (2026-08-18)
+
+Independent check of the completed implementation: code diffs reviewed, **live ledger re-scanned**, and all money test suites run.
+
+### 12.1 Live corruption classes — re-measured after cleanup
+
+| Class | Before | After (live) | Verdict |
+|---|---|---|---|
+| C1 payout_cash duplicates | 2 clusters, $80,944.06 posted | **0 clusters** | ✅ |
+| C2 trip toll_charge shadows | 194 charge rows | **0 charges; 194 `toll_reimbursement` rows, $72,710 preserved as credits** | ✅ reclassified, not reversed |
+| C3 fake toll adjustments | 22 rows, $35,023.96 | **0 rows** | ✅ |
+| C4 blank-platform money | 6 rows | **0 rows** | ✅ tagged/reversed per baseline doc |
+| C5 double-basis weeks | 0 | 0 | ✅ permanent check kept |
+| C6 duplicate case rows | 3 rows | **1 row** (the genuine $15) | ✅ |
+
+### 12.2 Restatement — verified in `ledger.driver_financial_periods`
+
+- Kenny **Aug 3–9**: cash $84,172.52 → **$54,196.26**; `driver_owes $18,867.05` → **`company_owes $5,808.10`** (gross ~$11,109 less $5,301 already paid). Matches the worksheet.
+- Kenny **May 18**: cash → $31,535.77; settled → **`company_owes $8,011.87`** — the fleet owes money back on a previously settled week, exactly the liability §11.4-G predicted.
+- `ledger.driver_financial_periods_backup_20260818` exists; `docs/finance-recon/2026-08-18-rebuild-delta.md` attributes every changed week to **cleanup / tips / tier** — item G delivered in full.
+
+### 12.3 §11 amendment scorecard
+
+| Item | Status |
+|---|---|
+| A — file-hash idempotency | ✅ `importMoneyIdempotencyKey` + `importFileHashAlreadyPosted` guard at the append route; org-fallback `\|payout\|CASH` deleted |
+| B — May 18 keep/reverse rule | ✅ per baseline doc (kept per-driver row, reversed org twin) |
+| C — pairing via KV toll store | ✅ reclassification done; plaza writer now copies `tripId` forward |
+| D — alias not in key derivation | ✅ keys derive from file hash + raw ids |
+| E — readers before reclassify | ✅ Engine C, `tollFleetLossNetting`, expense categories all consume `toll_reimbursement`; legacy-collision skip in the trip writer |
+| F — $37,838.90 payout_bank | ✅ tagged as Uber org bank |
+| G — restatement attribution | ✅ backup + delta doc |
+| H — overlay earnings/prev-period basis | ✅ prevPeriod overlaid with same basis; headline cash = saved week, chips no longer smash it |
+| I — toll card semantics | ✅ card reworked around `tollReimbursed` with dynamic subtext |
+| Tips visible to driver | ✅ "Tips held by fleet (quota missed)" line in the driver app |
+
+Also verified: recon identity now the full formula; signed-week gate on rebuilds (with "left N signed weeks unchanged" feedback); statement splitting per week at import (`statementWeekSplit`); platform required on all toll event types. **Tests: 74/74 green** (19 finance-core, 55 fleet money suites).
+
+### 12.4 Remaining gaps — small, but two can re-corrupt data
+
+1. **Historical files are invisible to the re-import guard.** All 286 pre-existing import-money rows lack `metadata.sourceFileHash` (only new writes stamp it). Re-importing any *old* CSV under a new batch bypasses `importFileHashAlreadyPosted` (no hash match) and creates new-format keys that don't collide with the old batch-scoped keys — C1 can recur for old files. **Fix: backfill `sourceFileHash` onto the 286 rows from their import-batch records.**
+2. **The doctor's C1 heuristic has a blind spot.** It only flags a cluster when org+driver doors or tagged+untagged mix. A clean re-import twin (both rows tagged, both per-driver keys) — exactly what gap 1 would produce — passes silently. **Fix: flag any same-driver/same-day/same-amount `payout_cash` pair from different idempotency keys, no door test.**
+3. **Nightly scheduling unconfirmed.** `finance-doctor` is registered in `config.toml`, but no cron trigger was verifiable in the repo for doctor or recon. "Nightly forever" needs an actual schedule (pg_cron or the existing cron-secret caller) — confirm one exists.
+4. **Nothing is committed.** The entire lock — 34 modified files, 6 new ones — sits uncommitted in the working tree. One reset loses all of it. Commit now.
+
+### 12.5 Verdict
+
+The system is **materially sound**: the ledger is clean on every measured class, one week rule and one-door writers are in place, restatement is documented with attribution, the two known driver liabilities (May 18 $8,011.87; Aug 3–9 $5,808.10 — both *fleet owes driver*) are on the books, and the controls exist. "Perfect" is not a state a financial system holds — it is the property that **corruption cannot enter silently and cannot persist undetected**. That property is real here once §12.4 items 1–2 are closed and the doctor actually runs nightly. Items 1–4 are collectively under a day of work.

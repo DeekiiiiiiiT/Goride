@@ -1,6 +1,11 @@
 import type { CanonicalLedgerEventInput } from '../types/ledgerCanonical';
 import type { Trip, OrganizationMetrics, DisputeRefund } from '../types/data';
 import type { UberSsotTotals } from './uberSsot';
+import {
+  importMoneyIdempotencyKey,
+  splitAmountByStatementWeeks,
+  statementWeekWeightsFromTrips,
+} from '@roam/finance-core';
 
 const LINE = {
   /** From `OrganizationMetrics.refundsToll` (payments_organization). */
@@ -70,7 +75,11 @@ function pushStatementLine(
   },
 ): void {
   out.push({
-    idempotencyKey: `${p.batchId}|stmt|${p.driverId}|${p.lineCode}`,
+    idempotencyKey: importMoneyIdempotencyKey(
+      p.sourceFileHash,
+      p.batchId,
+      `stmt|${p.driverId}|${p.lineCode}`,
+    ),
     date: p.date,
     driverId: p.driverId,
     eventType: 'statement_line',
@@ -131,6 +140,7 @@ export function buildCanonicalImportEvents(
    * `periodStart` / `periodEnd` on each event still carry the financial statement window for overlap queries.
    */
   const ledgerPostingDate = bounds.min;
+  const weekWeights = statementWeekWeightsFromTrips(trips);
 
   const primary = pickPrimaryUberDriverId(trips);
   const out: CanonicalLedgerEventInput[] = [];
@@ -162,55 +172,44 @@ export function buildCanonicalImportEvents(
       if (Math.abs(promo) < 1e-9) continue;
       const did = String(driverId).trim();
       if (!did) continue;
-      out.push({
-        idempotencyKey: `${batchId}|driver_promotion|${did.toLowerCase()}`,
-        date: ledgerPostingDate,
-        driverId: did,
-        eventType: 'promotion',
-        direction: 'inflow',
-        netAmount: promo,
-        grossAmount: promo,
-        currency: 'JMD',
-        sourceType: 'import_batch',
-        sourceId: batchId,
-        batchId,
-        sourceFileHash,
-        periodStart,
-        periodEnd,
-        platform: 'Uber',
-        description: 'Promotions (payments_driver statement total)',
-        metadata: { source: 'payments_driver' },
-      });
+      const promoSlices = splitAmountByStatementWeeks(promo, weekWeights, ledgerPostingDate);
+      for (const slice of promoSlices) {
+        const multi = promoSlices.length > 1;
+        out.push({
+          idempotencyKey: importMoneyIdempotencyKey(
+            sourceFileHash,
+            batchId,
+            multi
+              ? `driver_promotion|${did.toLowerCase()}|${slice.weekKey}`
+              : `driver_promotion|${did.toLowerCase()}`,
+          ),
+          date: slice.date,
+          driverId: did,
+          eventType: 'promotion',
+          direction: 'inflow',
+          netAmount: slice.amount,
+          grossAmount: slice.amount,
+          currency: 'JMD',
+          sourceType: 'import_batch',
+          sourceId: batchId,
+          batchId,
+          sourceFileHash,
+          periodStart,
+          periodEnd,
+          platform: 'Uber',
+          description: 'Promotions (payments_driver statement total)',
+          metadata: { source: 'payments_driver', weekKey: slice.weekKey },
+        });
+      }
     }
   }
 
-  // ─── PAYOUTS (actual cash/bank payout totals) ───────────────────────────────
+  // ─── PAYOUTS — org bank only (never dump org cash onto a primary driver) ────
   if (org && primary) {
-    const cash = org.totalCashExposure ?? 0;
     const bank = org.bankTransfer ?? 0;
-    if (Math.abs(cash) > 1e-9) {
-      out.push({
-        idempotencyKey: `${batchId}|payout|CASH`,
-        date: ledgerPostingDate,
-        driverId: primary,
-        eventType: 'payout_cash',
-        direction: 'inflow',
-        netAmount: Math.abs(cash),
-        grossAmount: Math.abs(cash),
-        currency: 'JMD',
-        sourceType: 'import_batch',
-        sourceId: batchId,
-        batchId,
-        sourceFileHash,
-        periodStart,
-        periodEnd,
-        platform: 'Uber',
-        description: 'Cash collected (organization import)',
-      });
-    }
     if (Math.abs(bank) > 1e-9) {
       out.push({
-        idempotencyKey: `${batchId}|payout|BANK`,
+        idempotencyKey: importMoneyIdempotencyKey(sourceFileHash, batchId, 'payout|BANK'),
         date: ledgerPostingDate,
         driverId: primary,
         eventType: 'payout_bank',
@@ -225,7 +224,8 @@ export function buildCanonicalImportEvents(
         periodStart,
         periodEnd,
         platform: 'Uber',
-        description: 'Bank transfer (organization import)',
+        description: 'Fleet bank deposit (organization import)',
+        metadata: { recipient: 'org', bankRole: 'org_deposit', source: 'payments_organization' },
       });
     }
   }

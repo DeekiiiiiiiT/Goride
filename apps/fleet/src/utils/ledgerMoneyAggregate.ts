@@ -405,9 +405,13 @@ function accumulateWindow(events: CanonicalMoneyEvent[], platformsParam?: string
       if (plat === "Uber" && !uberHasStatement) a.pUberRefund += Math.abs(net);
       addDaily(e.date.slice(0, 10), plat, net);
     } else if (et === "toll_charge") {
+      // Plaza/tag only. Uber trip tolls are reimbursements — never a second bill.
+      if (e.sourceType === "trip") continue;
       a.pTolls += Math.abs(net);
       ensurePlat(plat);
       a.pPlatformStats[plat].tolls += Math.abs(net);
+    } else if (et === "toll_reimbursement") {
+      continue;
     } else if (et === "platform_fee") {
       const fee = Math.abs(net);
       a.pPlatformFees += fee;
@@ -415,7 +419,8 @@ function accumulateWindow(events: CanonicalMoneyEvent[], platformsParam?: string
     } else if (et === "cancelled_trip_loss") {
       a.pCancelledCount += 1;
     } else if (et === "toll_support_adjustment" || et === "dispute_refund") {
-      // Dispute / toll-support recoveries belong on Toll Refunded only — never Period Earnings.
+      const desc = String(e.description || e.uberDescription || "").toLowerCase();
+      if (desc.includes("trip completed order")) continue;
       a.pDisputeRefunds += Math.abs(net);
     } else if (et === "statement_adjustment") {
       a.pEarnings += net;

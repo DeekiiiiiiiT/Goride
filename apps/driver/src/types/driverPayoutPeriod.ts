@@ -85,4 +85,5 @@ export type DriverFinancialPeriodClient = {
   settlementStatus: string;
   payoutStatus: string;
   tollStatus: string;
+  metadata?: Record<string, unknown>;
 };

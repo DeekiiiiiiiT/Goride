@@ -1,1 +1,1 @@
-export { dateWeekKey, periodKeyFor, periodEndForAnchor, fleetCalendarDay } from '@roam/finance-core';
+export { dateWeekKey, periodKeyFor, periodEndForAnchor, fleetCalendarDay } from '../../../../packages/finance-core/src/periodKey.ts';

@@ -102,6 +102,29 @@ describe('foldPayoutCashByWeek', () => {
     );
     expect(map.get('2026-08-03')).toBe(29976.26);
   });
+
+  it('keeps two tagged remittances of the same amount on the same day', () => {
+    const map = foldPayoutCashByWeek(
+      [
+        {
+          eventType: 'payout_cash',
+          date: '2026-08-04',
+          netAmount: 100,
+          driverId: 'd1',
+          idempotencyKey: 'file:aaa|payout|cash|d1',
+        },
+        {
+          eventType: 'payout_cash',
+          date: '2026-08-04',
+          netAmount: 100,
+          driverId: 'd1',
+          idempotencyKey: 'file:bbb|payout|cash|d1',
+        },
+      ],
+      'America/Jamaica',
+    );
+    expect(map.get('2026-08-03')).toBe(200);
+  });
 });
 
 describe('computePeriodSettlement — tips paid add to net payout', () => {
@@ -134,5 +157,18 @@ describe('Kenny Aug 3–9 2026 expected (D1 de-dupe + D3 tips withheld)', () => 
     });
     expect(r.adjCashBalance).toBeCloseTo(11183.37, 2);
     expect(r.settlement).toBeCloseTo(11109.21, 2);
+  });
+
+  it('over-returned cash vs collected yields negative held (persist floors; settlement stays signed)', () => {
+    const r = computePeriodSettlement({
+      driverShare: 100,
+      fuelDeduction: 0,
+      baseCashOwed: 100,
+      baseCashPaid: 200,
+      tollCashWash: 0,
+      tollPersonal: 0,
+    });
+    expect(r.adjCashBalance).toBe(-100);
+    expect(r.settlement).toBe(200);
   });
 });

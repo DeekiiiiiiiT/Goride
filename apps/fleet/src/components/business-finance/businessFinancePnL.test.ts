@@ -240,6 +240,22 @@ describe('buildPnLFromCanonicalEvents — toll netting', () => {
     expect(pnl.lines.find((l) => l.id === 'tolls')!.amount).toBe(-0);
     expect(pnl.coverageNote).toMatch(/counted as reimbursement/);
   });
+
+  it('nets explicit toll_reimbursement against plaza even without sourceType', () => {
+    const events = [
+      tollCharge({ sourceType: 'toll_ledger', sourceId: 'plaza-1', netAmount: 370, grossAmount: 370 }),
+      {
+        ...tollCharge({ id: 'reimb', sourceId: 'trip-9', netAmount: 380, grossAmount: 380 }),
+        eventType: 'toll_reimbursement',
+        sourceType: undefined,
+      },
+    ];
+    const agg = sumExpenseRowsFromEvents(events, period);
+    const reimbRow = agg.rows.find((r) => r.id === 'reimb');
+    expect(reimbRow?.amount).toBe(-380);
+    expect(agg.tollEventCount).toBe(2);
+    expect(agg.tolls).toBe(0);
+  });
 });
 
 describe('sumExpenseRowsFromEvents — Toll rows tie out to the P&L summary', () => {

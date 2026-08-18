@@ -98,6 +98,69 @@ describe('buildPaymentLedgerCanonicalEvents', () => {
 
     const events = buildPaymentLedgerCanonicalEvents([line], 'batch-1');
     expect(events).toHaveLength(1);
+    expect(events[0].idempotencyKey).toBe('payment_line:uber_tx:tx-tip');
+  });
+
+  it('does not promote a trip-completed fare with nested tollRefund to support adjustment', () => {
+    const line: PaymentLedgerLine = {
+      id: 'tx-fare-toll',
+      platform: 'Uber',
+      tripId: 'trip-c',
+      driverId: 'driver-1',
+      description: 'trip completed order',
+      reportingAt: '2026-08-10T12:00:00.000Z',
+      paidToYou: 2010.76,
+      earningsGross: 2010.76,
+      cashCollected: 0,
+      bankTransferred: 0,
+      fareBreakdown: {
+        base: 1640.76,
+        surge: 0,
+        waitPickup: 0,
+        timeAtStop: 0,
+        cancellation: 0,
+        taxes: 0,
+        tip: 0,
+        tollRefund: 370,
+      },
+      sourceType: 'uber_import',
+      lineKind: 'fare_earning',
+      idempotencyKey: 'uber_tx:tx-fare-toll',
+      externalTransactionId: 'tx-fare-toll',
+    };
+    const events = buildPaymentLedgerCanonicalEvents([line], 'batch-1');
+    expect(events).toHaveLength(1);
     expect(events[0].eventType).toBe('payment_line');
+    expect(events[0].netAmount).toBe(2010.76);
+  });
+
+  it('posts genuine support adjustment as the toll-refund component', () => {
+    const line: PaymentLedgerLine = {
+      id: 'tx-support',
+      platform: 'Uber',
+      driverId: 'driver-1',
+      description: 'support adjustment 91bae090',
+      reportingAt: '2026-08-10T12:00:00.000Z',
+      paidToYou: 15,
+      earningsGross: 15,
+      cashCollected: 0,
+      bankTransferred: 0,
+      fareBreakdown: {
+        base: 0,
+        surge: 0,
+        waitPickup: 0,
+        timeAtStop: 0,
+        cancellation: 0,
+        taxes: 0,
+        tip: 0,
+        tollRefund: 15,
+      },
+      sourceType: 'uber_import',
+      lineKind: 'toll_refund',
+      idempotencyKey: 'uber_tx:tx-support',
+    };
+    const events = buildPaymentLedgerCanonicalEvents([line], 'batch-1');
+    expect(events[0].eventType).toBe('toll_support_adjustment');
+    expect(events[0].netAmount).toBe(15);
   });
 });

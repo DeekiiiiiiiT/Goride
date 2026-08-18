@@ -102,8 +102,8 @@ describe('buildCanonicalImportEvents', () => {
     expect(keys).not.toContain(`${batchId}|stmt|${driverId}|TIPS`);
     expect(keys).not.toContain(`${batchId}|stmt|${driverId}|REFUNDS_EXPENSES`);
     
-    // Org bank deposit + unallocated cash fallback (no per-driver cash/bank in ssot)
-    expect(keys).toContain(`${batchId}|payout|CASH`);
+    // Org bank deposit — no unallocated org-cash dump onto a driver
+    expect(keys).not.toContain(`${batchId}|payout|CASH`);
     expect(keys.some((k) => k.startsWith(`${batchId}|payout|bank|org|`))).toBe(true);
     expect(keys).not.toContain(`${batchId}|payout|BANK`);
     
@@ -128,8 +128,8 @@ describe('buildCanonicalImportEvents', () => {
     expect(events[0].sourceType).toBe('import_batch');
     expect(events.every((e) => e.sourceId === batchId)).toBe(true);
     
-    // REFUNDS_TOLL, promotion, org bank, unallocated cash, toll_support_adjustment
-    expect(events.length).toBe(5);
+    // REFUNDS_TOLL, promotion, org bank, toll_support_adjustment
+    expect(events.length).toBe(4);
     const promoEv = events.find((e) => e.eventType === 'promotion');
     expect(promoEv?.netAmount).toBe(5);
     expect(promoEv?.idempotencyKey).toBe(`${batchId}|driver_promotion|${driverId.toLowerCase()}`);
@@ -228,5 +228,37 @@ describe('buildCanonicalImportEvents', () => {
     expect(promoEv?.date).toBe('2026-03-23');
     expect(promoEv?.periodStart).toBe('2026-03-17');
     expect(promoEv?.periodEnd).toBe('2026-03-23');
+  });
+
+  it('splits cash across fleet weeks when trips span two Mondays', () => {
+    const batchId = 'batch-22222222-2222-2222-2222-222222222222';
+    const driverId = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
+    const ssot: Record<string, UberSsotTotals> = {
+      [driverId]: {
+        periodEarningsGross: 200,
+        fareComponents: 200,
+        statementNetFare: 200,
+        promotions: 0,
+        tips: 0,
+        refundsAndExpenses: 0,
+        cashCollected: 100,
+        bankTransferred: 0,
+      },
+    };
+    const events = buildCanonicalImportEvents({
+      batchId,
+      sourceFileHash: 'abcdef0123456789',
+      trips: [
+        baseTrip({ driverId, date: '2026-08-09', amount: 50 }),
+        baseTrip({ driverId, date: '2026-08-10', amount: 50 }),
+      ],
+      organizationMetrics: null,
+      uberStatementsByDriverId: ssot,
+      disputeRefunds: [],
+    });
+    const cash = events.filter((e) => e.eventType === 'payout_cash');
+    expect(cash).toHaveLength(2);
+    expect(cash.map((e) => e.date).sort()).toEqual(['2026-08-09', '2026-08-10']);
+    expect(cash.reduce((s, e) => s + Number(e.netAmount), 0)).toBe(100);
   });
 });

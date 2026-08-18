@@ -102,8 +102,8 @@ describe('buildCanonicalImportEvents', () => {
     expect(keys).not.toContain(`${batchId}|stmt|${driverId}|TIPS`);
     expect(keys).not.toContain(`${batchId}|stmt|${driverId}|REFUNDS_EXPENSES`);
     
-    // Payout events ARE still emitted
-    expect(keys).toContain(`${batchId}|payout|CASH`);
+    // Payout: org bank only — never dump org cash onto a driver
+    expect(keys).not.toContain(`${batchId}|payout|CASH`);
     expect(keys).toContain(`${batchId}|payout|BANK`);
     
     // Toll support adjustment IS still emitted
@@ -127,8 +127,8 @@ describe('buildCanonicalImportEvents', () => {
     expect(events[0].sourceType).toBe('import_batch');
     expect(events.every((e) => e.sourceId === batchId)).toBe(true);
     
-    // REFUNDS_TOLL, promotion, payout_cash, payout_bank, toll_support_adjustment
-    expect(events.length).toBe(5);
+    // REFUNDS_TOLL, promotion, payout_bank, toll_support_adjustment
+    expect(events.length).toBe(4);
     const promoEv = events.find((e) => e.eventType === 'promotion');
     expect(promoEv?.netAmount).toBe(5);
     expect(promoEv?.idempotencyKey).toBe(`${batchId}|driver_promotion|${driverId.toLowerCase()}`);

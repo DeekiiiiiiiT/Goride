@@ -718,7 +718,9 @@ export interface PaginatedLedgerResponse {
 
 export interface LedgerDriverOverview {
   /** Present when overview aggregates from `ledger_event:*`. */
-  readModelSource?: 'canonical_events';
+  readModelSource?: 'canonical_events' | 'driver_financial_periods';
+  /** Saved pay-week overlay when FIN_READ_PROJECTION_OVERVIEW is on. */
+  source?: string;
   period: {
     earnings: number;
     cashCollected: number;

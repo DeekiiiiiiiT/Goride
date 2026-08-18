@@ -1,4 +1,5 @@
 import { useIndriveWallet, type IndriveWalletDateRange } from '../../hooks/useIndriveWallet';
+import { useDriverFinancialPeriods } from '../../hooks/useDriverFinancialPeriods';
 import { usePermissions } from '../../hooks/usePermissions';
 import { api } from '../../services/api';
 import { buildIndriveWalletLoadTransaction } from '../../utils/indriveWalletLoad';
@@ -13,6 +14,7 @@ import {
   ChevronDown,
   Wallet,
   Banknote,
+  Ticket,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Progress } from '../ui/progress';
@@ -308,6 +310,34 @@ export function OverviewMetricsGrid({
   const rangeReady = !!(driverId && walletRange?.startDate && walletRange?.endDate);
   const { data: walletData, loading: walletLoading, error: walletError, refetch: refetchWallet } =
     useIndriveWallet(driverId, rangeReady ? walletRange : null);
+  const periodsQuery = useDriverFinancialPeriods(driverId || '');
+  const weekPeriod = useMemo(() => {
+    const start = walletRange?.startDate?.slice(0, 10);
+    if (!start) return null;
+    return (periodsQuery.data || []).find((p) => String(p.periodAnchor).slice(0, 10) === start) || null;
+  }, [periodsQuery.data, walletRange?.startDate]);
+
+  const [cashWash, setCashWash] = useState(0);
+  useEffect(() => {
+    if (!driverId || !walletRange?.startDate || !walletRange?.endDate) {
+      setCashWash(0);
+      return;
+    }
+    let active = true;
+    api
+      .getDriverTollCharges(driverId, { from: walletRange.startDate, to: walletRange.endDate })
+      .then((res) => {
+        if (!active) return;
+        const totals = (res?.data?.totals || {}) as { cashWash?: number };
+        setCashWash(Number(totals.cashWash) || 0);
+      })
+      .catch(() => {
+        if (active) setCashWash(0);
+      });
+    return () => {
+      active = false;
+    };
+  }, [driverId, walletRange?.startDate, walletRange?.endDate]);
 
   useEffect(() => {
     if (logLoadOpen) {
@@ -340,16 +370,33 @@ export function OverviewMetricsGrid({
     [resolvedFinancials]
   );
 
-  const tollsBreakdown = useMemo(() =>
-    Object.entries(resolvedFinancials.platformStats)
-      .filter(([_, stats]: [string, any]) => stats.tolls > 0)
-      .map(([label, stats]: [string, any]) => ({
-        label,
-        value: `$${stats.tolls.toFixed(2)}`,
-        color: getPlatformColor(label)
-      })),
-    [resolvedFinancials]
-  );
+  const tollsBreakdown = useMemo(() => {
+    if (weekPeriod) {
+      const tagSpent = Number(weekPeriod.tollTagSpend) || 0;
+      const tagCredited = Number(weekPeriod.tollReimbursed) || 0;
+      const cashSpent = Number(weekPeriod.tollCashSpend) || 0;
+      const support = Number(resolvedFinancials.disputeRefunds) || 0;
+      const rows: Array<{ label: string; value: string; color: string }> = [
+        { label: 'Tag spent', value: `$${fmtMoney(tagSpent)}`, color: '#64748b' },
+        { label: 'Tag credited', value: `$${fmtMoney(tagCredited)}`, color: '#10b981' },
+        { label: 'Cash spent', value: `$${fmtMoney(cashSpent)}`, color: '#0ea5e9' },
+        { label: 'Cash washed', value: `$${fmtMoney(cashWash)}`, color: '#38bdf8' },
+      ];
+      if (support > 0.005) {
+        rows.push({ label: 'Uber/support', value: `$${fmtMoney(support)}`, color: '#3b82f6' });
+      }
+      return rows;
+    }
+    const dr = Number(resolvedFinancials.disputeRefunds) || 0;
+    if (dr <= 0.005) return [];
+    return [
+      {
+        label: 'Uber/support',
+        value: `$${dr.toFixed(2)}`,
+        color: getPlatformColor('Uber'),
+      },
+    ];
+  }, [weekPeriod, cashWash, resolvedFinancials]);
 
   const platformEarningsSum = useMemo(() => {
     if (!resolvedFinancials.platformStats) return 0;
@@ -1209,7 +1256,9 @@ export function OverviewMetricsGrid({
         subtext={
           resolvedFinancials.tripFallback
             ? "Trip logs for selected dates — not week Ledger Gross on Settlement"
-            : resolvedFinancials.source === "ledger"
+            : resolvedFinancials.readModelSource === "driver_financial_periods"
+              ? "Saved pay week — same basis as Settlement"
+              : resolvedFinancials.source === "ledger"
               ? `Overview period roll-up${resolvedFinancials.dataIncomplete ? `${resolvedFinancials.missingPlatforms?.length > 0 ? ` incomplete (missing: ${resolvedFinancials.missingPlatforms.join(", ")})` : " incomplete"}` : ""} · ≠ Settlement Ledger Gross`
               : resolvedFinancials.dataIncomplete
                 ? `Ledger incomplete${resolvedFinancials.missingPlatforms?.length > 0 ? ` (missing: ${resolvedFinancials.missingPlatforms.join(", ")})` : ""}`
@@ -1230,7 +1279,7 @@ export function OverviewMetricsGrid({
         title="Cash Collected"
         value={showFinancialValues ? `$${resolvedFinancials.cashCollected.toFixed(2)}` : '—'}
         icon={<DollarSign className="h-4 w-4 text-slate-500" />}
-        tooltip="Total cash collected from trips during this period"
+        tooltip="Passenger cash on the saved pay week — same number as Settlements"
         loading={localLoading}
         breakdown={showFinancialValues ? cashBreakdown : []}
         onClick={() => setCashCollectedOpen(true)}
@@ -1411,18 +1460,23 @@ export function OverviewMetricsGrid({
         </CardContent>
       </Card>
 
-      {/* Card 5: Toll Refunded — breakdown now from resolvedFinancials */}
+      {/* Card 5: pay-week toll snapshot (tag / cash / charged) + Uber/support cash-risk. */}
       <MetricCard
-        title="Toll Refunded"
+        title="Tolls"
         value={
           showFinancialValues
-            ? `$${(
-                (resolvedFinancials.totalTolls || 0) + (resolvedFinancials.disputeRefunds || 0)
-              ).toFixed(2)}`
+            ? weekPeriod
+              ? `$${fmtMoney(Number(weekPeriod.tollChargedToDriver) || 0)}`
+              : `$${(resolvedFinancials.disputeRefunds || 0).toFixed(2)}`
             : '—'
         }
-        subtext="Added to Debt (Cash Risk)"
-        icon={<DollarSign className="h-4 w-4 text-slate-500" />}
+        subtext={
+          weekPeriod
+            ? 'Charged to driver this pay week'
+            : 'Driver cash risk — Uber/support refunds'
+        }
+        tooltip="Tag spent vs Uber credited, cash plaza vs wash, and personal billed to the driver. Uber/support refunds are cash-risk only — plaza net lives on Business Finance P&L."
+        icon={<Ticket className="h-4 w-4 text-slate-500" />}
         loading={localLoading}
         breakdown={showFinancialValues ? tollsBreakdown : []}
       />

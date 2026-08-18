@@ -3,4 +3,4 @@ export {
   platformsEqual,
   assertKnownPlatform,
   isKnownPlatform,
-} from '@roam/finance-core';
+} from '../../../../packages/finance-core/src/normalizePlatform.ts';

@@ -47,7 +47,7 @@ Deno.serve(async (req) => {
       .schema("ledger")
       .from("driver_financial_periods")
       .select(
-        "driver_id, period_anchor, cash_collected, cash_returned, cash_written_off, cash_still_held, settlement_amount, organization_id, payout_net, driver_share, fuel_deduction",
+        "driver_id, period_anchor, cash_collected, cash_returned, cash_written_off, cash_still_held, settlement_amount, organization_id, payout_net, driver_share, fuel_deduction, fuel_fleet_share, toll_cash_spend, toll_charged_to_driver",
       )
       .gte("period_anchor", fromYmd)
       .order("period_anchor", { ascending: true });
@@ -60,9 +60,15 @@ Deno.serve(async (req) => {
       if (!p.organization_id) nullOrg++;
       const held = round2(Number(p.cash_still_held) || 0);
       const expectedHeld = round2(
-        (Number(p.cash_collected) || 0) -
-          (Number(p.cash_returned) || 0) -
-          (Number(p.cash_written_off) || 0),
+        Math.max(
+          0,
+          (Number(p.cash_collected) || 0) +
+            (Number(p.toll_charged_to_driver) || 0) -
+            (Number(p.cash_returned) || 0) -
+            (Number(p.toll_cash_spend) || 0) -
+            (Number(p.fuel_fleet_share) || 0) -
+            (Number(p.cash_written_off) || 0),
+        ),
       );
       if (Math.abs(held - expectedHeld) > 0.01) {
         drifts.push({

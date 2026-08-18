@@ -44,3 +44,9 @@ export {
 export type { LedgerFareLike, TripCashLike, QuotaConfigLike } from './periodShareCash.ts';
 export { foldPayoutCashByWeek } from './payoutCashDedupe.ts';
 export type { PayoutCashLike } from './payoutCashDedupe.ts';
+export { importMoneyIdempotencyKey } from './importIdempotency.ts';
+export {
+  statementWeekWeightsFromTrips,
+  splitAmountByStatementWeeks,
+} from './statementWeekSplit.ts';
+export type { StatementWeekWeight, StatementWeekSlice } from './statementWeekSplit.ts';

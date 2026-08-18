@@ -75,6 +75,26 @@ describe('computeTollFleetLossNetting', () => {
     expect(agg.tolls).toBe(0);
   });
 
+  it('nets explicit toll_reimbursement the same as a legacy trip toll_charge', () => {
+    const events = [
+      charge({ sourceId: 'tag-1', netAmount: 380, grossAmount: 380 }),
+      {
+        eventType: 'toll_reimbursement',
+        date: '2026-02-10',
+        driverId: 'd1',
+        sourceType: 'trip',
+        sourceId: 'trip-1',
+        netAmount: 370,
+        grossAmount: 370,
+        direction: 'inflow',
+      },
+    ];
+    const netting = computeTollFleetLossNetting(events);
+    expect(netting.gross).toBe(380);
+    expect(netting.recovered).toBe(370);
+    expect(netting.net).toBe(10);
+  });
+
   it('does not double-count tag plaza spend and unmatched Uber trip reimbursement', () => {
     const events = [
       charge({ sourceId: 'tag-1', netAmount: 4620, grossAmount: 4620 }),

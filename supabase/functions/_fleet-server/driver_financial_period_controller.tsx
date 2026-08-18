@@ -44,11 +44,15 @@ import {
 } from "./toll_controller.tsx";
 import { driverIdsReferToSamePerson } from "./driver_identity.ts";
 import { getOrgId } from "./org_scope.ts";
+import { requireInternalSecret } from "../_shared/requireInternalSecret.ts";
 
 const app = new Hono();
 
-// Auth gate: every route in this controller requires a valid user JWT (Wave 1B).
-app.use("*", requireAuth({ strict: true }));
+const auth = requireAuth({ strict: true });
+app.use("*", async (c, next) => {
+  if (c.req.path.includes("/internal-rebuild")) return next();
+  return auth(c, next);
+});
 
 const BASE = "/make-server-37f42386/driver-financial-periods";
 
@@ -445,9 +449,32 @@ app.post(`${BASE}/rebuild`, requirePermission('transactions.edit'), async (c) =>
       const row = await rebuildDriverFinancialPeriod(driverId, body.periodAnchor);
       return c.json({ success: true, data: row });
     }
-    const n = await rebuildAllPeriodsForDriver(driverId);
+    const n = await rebuildAllPeriodsForDriver(driverId, { force: !!body.force });
     const periods = await listDriverFinancialPeriods(driverId);
-    return c.json({ success: true, rebuilt: n, data: periods });
+    return c.json({ success: true, rebuilt: n.rebuilt, skippedSigned: n.skippedSigned, data: periods });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+app.post(`${BASE}/internal-rebuild`, async (c) => {
+  const denied = requireInternalSecret(c.req.raw, {
+    envKeys: ["FLEET_CRON_SECRET", "RIDES_CRON_SECRET"],
+    headerNames: ["X-Fleet-Cron-Secret", "X-Rides-Cron-Secret"],
+  });
+  if (denied) {
+    const body = await denied.text();
+    return new Response(body, {
+      status: denied.status,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const driverId = String(body.driverId || "").trim();
+    if (!driverId) return c.json({ error: "driverId is required" }, 400);
+    const n = await rebuildAllPeriodsForDriver(driverId, { force: !!body.force });
+    return c.json({ success: true, rebuilt: n.rebuilt, skippedSigned: n.skippedSigned });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }
@@ -620,7 +647,7 @@ app.post(`${BASE}/backfill`, requirePermission('transactions.edit'), async (c) =
       // Rebuild from usage anchors only (shared context) — skip full trip fan-out in same request.
       for (const id of driverIds) {
         try {
-          report.periodsRebuilt += await rebuildAllPeriodsForDriver(id);
+          report.periodsRebuilt += (await rebuildAllPeriodsForDriver(id)).rebuilt;
         } catch (e: any) {
           report.errors.push(`rebuild ${id}: ${e?.message || e}`);
         }

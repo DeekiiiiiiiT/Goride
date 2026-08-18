@@ -129,6 +129,11 @@ function EarningsWeekCard({
             </p>
           </div>
         </div>
+        {week.tipsWithheld > 0.005 ? (
+          <p className="text-xs text-amber-700 dark:text-amber-400">
+            Tips held by fleet (quota missed): ${plainAmount(week.tipsWithheld)}
+          </p>
+        ) : null}
       </CardContent>
     </Card>
   );
@@ -224,6 +229,11 @@ export function FleetEarningsSettlementTab({
                     </p>
                   </div>
                 </div>
+                {selected.tipsWithheld > 0.005 ? (
+                  <p className="mt-2 text-xs text-amber-700 dark:text-amber-400">
+                    Tips held by fleet (quota missed): ${plainAmount(selected.tipsWithheld)}
+                  </p>
+                ) : null}
               </div>
 
               <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">

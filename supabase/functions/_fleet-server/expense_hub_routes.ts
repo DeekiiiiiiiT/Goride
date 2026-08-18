@@ -322,6 +322,7 @@ export function registerExpenseHubRoutes(app: {
           "fuel_expense",
           "fuel_charge_offset",
           "toll_charge",
+          "toll_reimbursement",
           "toll_refund",
           "toll_charge_offset",
           "maintenance",
@@ -357,8 +358,13 @@ export function registerExpenseHubRoutes(app: {
             category = "Fuel";
             if (String(e.direction || "") === "inflow") signed = -Math.abs(amt);
           } else if (t === "toll_charge") {
+            if (String(e.sourceType || "") === "trip") continue;
             kind = "toll";
             category = "Toll";
+          } else if (t === "toll_reimbursement") {
+            kind = "toll";
+            category = "Toll";
+            signed = -Math.abs(amt);
           } else if (t === "toll_refund") {
             kind = "toll";
             category = "Toll";

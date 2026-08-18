@@ -8,17 +8,20 @@ export type PayoutCashLike = {
   grossAmount?: number;
   driverId?: string | null;
   eventType?: string;
+  idempotencyKey?: string;
 };
 
 /**
- * D1: one payout_cash figure per week. Duplicate rows (same date + amount,
- * one untagged) are collapsed to a single posting. Prefer the tagged driverId.
+ * One payout_cash figure per remittance per week.
+ * Distinct source keys (file-hash / batch line) are kept even if day+amount match.
+ * Untagged same-day same-amount twins of a tagged row are still collapsed (C1 safety).
  */
 export function foldPayoutCashByWeek(
   events: PayoutCashLike[],
   fleetTz: string = DEFAULT_FLEET_TZ,
 ): Map<WeekKey, number> {
-  const seen = new Set<string>();
+  const seenId = new Set<string>();
+  const seenAmt = new Set<string>();
   const byWeek = new Map<WeekKey, number>();
 
   const cashEvents = (events || []).filter(
@@ -34,9 +37,16 @@ export function foldPayoutCashByWeek(
     const amt = round2(Math.abs(Number(e.netAmount) || Number(e.grossAmount) || 0));
     if (amt < MONEY_EPS) continue;
     const day = String(e.date || '').slice(0, 10);
-    const dedupeKey = `${day}|${amt.toFixed(2)}`;
-    if (seen.has(dedupeKey)) continue;
-    seen.add(dedupeKey);
+    const amtKey = `${day}|${amt.toFixed(2)}`;
+    const idKey = String(e.idempotencyKey || e.id || '').trim();
+    if (idKey) {
+      if (seenId.has(idKey)) continue;
+      seenId.add(idKey);
+    }
+    const tagged = Boolean(String(e.driverId || '').trim());
+    if (seenAmt.has(amtKey) && !tagged) continue;
+    if (!idKey && seenAmt.has(amtKey)) continue;
+    seenAmt.add(amtKey);
     const week = periodKeyFor(e, fleetTz);
     if (!week) continue;
     byWeek.set(week, round2((byWeek.get(week) || 0) + amt));

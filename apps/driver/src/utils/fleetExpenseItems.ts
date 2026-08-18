@@ -27,6 +27,9 @@ export interface FleetExpenseWeekGroup {
   deductionsTotal: number;
   /** earned − deductionsTotal. */
   net: number;
+  /** Tips the fleet kept because quota was missed. 0 when quota was met. */
+  tipsWithheld: number;
+  quotaMet: boolean | null;
   /** @deprecated Prefer deductionsTotal — kept for any leftover callers. */
   total: number;
   /** Always Fuel / Toll / Maintenance / Misc (zeros included). */
@@ -162,6 +165,12 @@ export function buildEarningsWeeksFromPeriods(input: {
 
     const deductionsTotal = round2(categories.reduce((s, c) => s + c.total, 0));
     const net = round2(earned - deductionsTotal);
+    const fc =
+      period?.metadata && typeof period.metadata.financeCore === 'object'
+        ? (period.metadata.financeCore as Record<string, unknown>)
+        : {};
+    const tipsWithheld = round2(Math.max(0, Number(fc.tipsWithheld) || 0));
+    const quotaMet = typeof fc.quotaMet === 'boolean' ? fc.quotaMet : null;
 
     return {
       weekKey,
@@ -170,6 +179,8 @@ export function buildEarningsWeeksFromPeriods(input: {
       earned,
       deductionsTotal,
       net,
+      tipsWithheld,
+      quotaMet,
       total: deductionsTotal,
       categories,
     };

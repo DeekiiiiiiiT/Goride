@@ -2,6 +2,11 @@ import type { CanonicalLedgerEventInput } from '../types/ledgerCanonical';
 import type { Trip, OrganizationMetrics, DisputeRefund } from '../types/data';
 import type { UberSsotTotals } from './uberSsot';
 import { orgBankLedgerDriverId } from './fleetOrgIdentity';
+import {
+  importMoneyIdempotencyKey,
+  splitAmountByStatementWeeks,
+  statementWeekWeightsFromTrips,
+} from '@roam/finance-core';
 
 const LINE = {
   /** From `OrganizationMetrics.refundsToll` (payments_organization). */
@@ -72,7 +77,11 @@ function pushStatementLine(
   },
 ): void {
   out.push({
-    idempotencyKey: `${p.batchId}|stmt|${p.driverId}|${p.lineCode}`,
+    idempotencyKey: importMoneyIdempotencyKey(
+      p.sourceFileHash,
+      p.batchId,
+      `stmt|${p.driverId}|${p.lineCode}`,
+    ),
     date: p.date,
     driverId: p.driverId,
     eventType: 'statement_line',
@@ -113,11 +122,11 @@ export interface BuildCanonicalImportEventsParams {
  * - promotion (driver statement total from uberStatementsByDriverId / payments_driver)
  * - payout_bank org deposit from payments_organization (recipient: org)
  * - payout_cash / payout_bank driver share from payments_driver (bankRole: driver_share)
- * - org-only cash fallback to primary driver when no per-driver cash (never dumps org bank onto a driver)
  * - toll refund lines (REFUNDS_TOLL)
  * - toll_support_adjustment / dispute_refund events
- * 
- * Idempotency keys are stable for the same batchId + logical fact.
+ *
+ * Idempotency keys follow sourceFileHash when present so a re-import of the same CSV
+ * cannot mint a second copy (C1).
  */
 export function buildCanonicalImportEvents(
   params: BuildCanonicalImportEventsParams,
@@ -135,6 +144,7 @@ export function buildCanonicalImportEvents(
    * `periodStart` / `periodEnd` on each event still carry the financial statement window for overlap queries.
    */
   const ledgerPostingDate = bounds.min;
+  const weekWeights = statementWeekWeightsFromTrips(trips);
 
   const primary = pickPrimaryUberDriverId(trips);
   const out: CanonicalLedgerEventInput[] = [];
@@ -166,25 +176,35 @@ export function buildCanonicalImportEvents(
       if (Math.abs(promo) < 1e-9) continue;
       const did = String(driverId).trim();
       if (!did) continue;
-      out.push({
-        idempotencyKey: `${batchId}|driver_promotion|${did.toLowerCase()}`,
-        date: ledgerPostingDate,
-        driverId: did,
-        eventType: 'promotion',
-        direction: 'inflow',
-        netAmount: promo,
-        grossAmount: promo,
-        currency: 'JMD',
-        sourceType: 'import_batch',
-        sourceId: batchId,
-        batchId,
-        sourceFileHash,
-        periodStart,
-        periodEnd,
-        platform: 'Uber',
-        description: 'Promotions (payments_driver statement total)',
-        metadata: { source: 'payments_driver' },
-      });
+      const promoSlices = splitAmountByStatementWeeks(promo, weekWeights, ledgerPostingDate);
+      for (const slice of promoSlices) {
+        const multi = promoSlices.length > 1;
+        out.push({
+          idempotencyKey: importMoneyIdempotencyKey(
+            sourceFileHash,
+            batchId,
+            multi
+              ? `driver_promotion|${did.toLowerCase()}|${slice.weekKey}`
+              : `driver_promotion|${did.toLowerCase()}`,
+          ),
+          date: slice.date,
+          driverId: did,
+          eventType: 'promotion',
+          direction: 'inflow',
+          netAmount: slice.amount,
+          grossAmount: slice.amount,
+          currency: 'JMD',
+          sourceType: 'import_batch',
+          sourceId: batchId,
+          batchId,
+          sourceFileHash,
+          periodStart,
+          periodEnd,
+          platform: 'Uber',
+          description: 'Promotions (payments_driver statement total)',
+          metadata: { source: 'payments_driver', weekKey: slice.weekKey },
+        });
+      }
     }
   }
 
@@ -194,7 +214,11 @@ export function buildCanonicalImportEvents(
     if (orgBank > 1e-9) {
       const orgLedgerId = orgBankLedgerDriverId(org.organizationUuid);
       out.push({
-        idempotencyKey: `${batchId}|payout|bank|org|${orgLedgerId.toLowerCase()}`,
+        idempotencyKey: importMoneyIdempotencyKey(
+          sourceFileHash,
+          batchId,
+          `payout|bank|org|${orgLedgerId.toLowerCase()}`,
+        ),
         date: ledgerPostingDate,
         driverId: orgLedgerId,
         eventType: 'payout_bank',
@@ -222,7 +246,6 @@ export function buildCanonicalImportEvents(
   }
 
   // ─── DRIVER PAYOUT SHARES (payments_driver — allocation / cash risk, not org wire) ─
-  let emittedPerDriverCash = false;
   if (ssot && Object.keys(ssot).length > 0) {
     const driverIds = Object.keys(ssot).sort((a, b) => a.localeCompare(b));
     for (const driverId of driverIds) {
@@ -234,78 +257,73 @@ export function buildCanonicalImportEvents(
       const bank = Math.abs(Number(totals.bankTransferred) || 0);
       if (cash < 1e-9 && bank < 1e-9) continue;
       if (cash > 1e-9) {
-        emittedPerDriverCash = true;
-        out.push({
-          idempotencyKey: `${batchId}|payout|cash|${did.toLowerCase()}`,
-          date: ledgerPostingDate,
-          driverId: did,
-          eventType: 'payout_cash',
-          direction: 'inflow',
-          netAmount: cash,
-          grossAmount: cash,
-          currency: 'JMD',
-          sourceType: 'import_batch',
-          sourceId: batchId,
-          batchId,
-          sourceFileHash,
-          periodStart,
-          periodEnd,
-          platform: 'Uber',
-          description: 'Cash collected (payments_driver)',
-          metadata: { source: 'payments_driver' },
-        });
+        const cashSlices = splitAmountByStatementWeeks(cash, weekWeights, ledgerPostingDate);
+        for (const slice of cashSlices) {
+          const multi = cashSlices.length > 1;
+          out.push({
+            idempotencyKey: importMoneyIdempotencyKey(
+              sourceFileHash,
+              batchId,
+              multi
+                ? `payout|cash|${did.toLowerCase()}|${slice.weekKey}`
+                : `payout|cash|${did.toLowerCase()}`,
+            ),
+            date: slice.date,
+            driverId: did,
+            eventType: 'payout_cash',
+            direction: 'inflow',
+            netAmount: slice.amount,
+            grossAmount: slice.amount,
+            currency: 'JMD',
+            sourceType: 'import_batch',
+            sourceId: batchId,
+            batchId,
+            sourceFileHash,
+            periodStart,
+            periodEnd,
+            platform: 'Uber',
+            description: 'Cash collected (payments_driver)',
+            metadata: { source: 'payments_driver', weekKey: slice.weekKey },
+          });
+        }
       }
       // Driver bank share — informational allocation for Settlement; not the fleet wire.
       if (bank > 1e-9) {
-        out.push({
-          idempotencyKey: `${batchId}|payout|bank|share|${did.toLowerCase()}`,
-          date: ledgerPostingDate,
-          driverId: did,
-          eventType: 'payout_bank',
-          direction: 'inflow',
-          netAmount: bank,
-          grossAmount: bank,
-          currency: 'JMD',
-          sourceType: 'import_batch',
-          sourceId: batchId,
-          batchId,
-          sourceFileHash,
-          periodStart,
-          periodEnd,
-          platform: 'Uber',
-          description: 'Bank allocation (payments_driver share)',
-          metadata: {
-            source: 'payments_driver',
-            bankRole: 'driver_share',
-            recipient: 'driver_share',
-          },
-        });
+        const bankSlices = splitAmountByStatementWeeks(bank, weekWeights, ledgerPostingDate);
+        for (const slice of bankSlices) {
+          const multi = bankSlices.length > 1;
+          out.push({
+            idempotencyKey: importMoneyIdempotencyKey(
+              sourceFileHash,
+              batchId,
+              multi
+                ? `payout|bank|share|${did.toLowerCase()}|${slice.weekKey}`
+                : `payout|bank|share|${did.toLowerCase()}`,
+            ),
+            date: slice.date,
+            driverId: did,
+            eventType: 'payout_bank',
+            direction: 'inflow',
+            netAmount: slice.amount,
+            grossAmount: slice.amount,
+            currency: 'JMD',
+            sourceType: 'import_batch',
+            sourceId: batchId,
+            batchId,
+            sourceFileHash,
+            periodStart,
+            periodEnd,
+            platform: 'Uber',
+            description: 'Bank allocation (payments_driver share)',
+            metadata: {
+              source: 'payments_driver',
+              bankRole: 'driver_share',
+              recipient: 'driver_share',
+              weekKey: slice.weekKey,
+            },
+          });
+        }
       }
-    }
-  }
-  // Org-only cash fallback (no per-driver statement) — never dump org bank onto a primary driver.
-  if (!emittedPerDriverCash && org && primary) {
-    const cash = org.totalCashExposure ?? 0;
-    if (Math.abs(cash) > 1e-9) {
-      out.push({
-        idempotencyKey: `${batchId}|payout|CASH`,
-        date: ledgerPostingDate,
-        driverId: primary,
-        eventType: 'payout_cash',
-        direction: 'inflow',
-        netAmount: Math.abs(cash),
-        grossAmount: Math.abs(cash),
-        currency: 'JMD',
-        sourceType: 'import_batch',
-        sourceId: batchId,
-        batchId,
-        sourceFileHash,
-        periodStart,
-        periodEnd,
-        platform: 'Uber',
-        description: 'Cash collected (organization import — unallocated)',
-        metadata: { source: 'payments_organization', cashRole: 'unallocated_org' },
-      });
     }
   }
 
@@ -321,9 +339,11 @@ export function buildCanonicalImportEvents(
       ref.source === 'platform_import' ||
       ref.source === 'toll_usage';
     out.push({
-      idempotencyKey: useTollSupport
-        ? `${batchId}|toll_support|${ref.id}`
-        : `${batchId}|dispute_refund|${ref.id}`,
+      idempotencyKey: importMoneyIdempotencyKey(
+        sourceFileHash,
+        batchId,
+        useTollSupport ? `toll_support|${ref.id}` : `dispute_refund|${ref.id}`,
+      ),
       date: d,
       driverId,
       eventType: useTollSupport ? 'toll_support_adjustment' : 'dispute_refund',

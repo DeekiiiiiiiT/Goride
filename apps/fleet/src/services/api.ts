@@ -2494,7 +2494,16 @@ export const api = {
         body: JSON.stringify({ driverId, periodAnchor }),
       },
     );
-    if (!response.ok) throw new Error("Failed to rebuild driver financial periods");
+    if (!response.ok) {
+      let detail = "Failed to rebuild driver financial periods";
+      try {
+        const body = await response.json();
+        if (body?.error) detail = String(body.error);
+      } catch {
+        /* keep default */
+      }
+      throw new Error(detail);
+    }
     return response.json();
   },
 
@@ -4397,24 +4406,30 @@ export const api = {
   /** Phase 2: idempotent canonical ledger events (`ledger_event:*`). Same idempotencyKey → skipped on retry. */
   async appendCanonicalLedgerEvents(
     events: CanonicalLedgerEventInput[],
-    opts?: { confirmSignedWeek?: boolean },
+    opts?: { confirmSignedWeek?: boolean; confirmDuplicateFile?: boolean },
   ): Promise<AppendCanonicalLedgerResult> {
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.financial}/ledger/canonical-events/append`,
       {
         method: 'POST',
         headers: await requireAuthHeaders(),
-        body: JSON.stringify({ events, confirmSignedWeek: opts?.confirmSignedWeek === true }),
+        body: JSON.stringify({
+          events,
+          confirmSignedWeek: opts?.confirmSignedWeek === true,
+          confirmDuplicateFile: opts?.confirmDuplicateFile === true,
+        }),
       },
     );
     if (response.status === 409) {
       const body = await response.json().catch(() => ({}));
-      const err = new Error(body.message || 'This import would change a signed week') as Error & {
+      const err = new Error(body.message || 'This import was blocked') as Error & {
         code?: string;
         signedWeeks?: unknown;
+        sourceFileHash?: string;
       };
-      err.code = 'SIGNED_WEEK';
+      err.code = body.error === 'DUPLICATE_FILE_HASH' ? 'DUPLICATE_FILE_HASH' : 'SIGNED_WEEK';
       err.signedWeeks = body.signedWeeks;
+      err.sourceFileHash = body.sourceFileHash;
       throw err;
     }
     if (!response.ok) {

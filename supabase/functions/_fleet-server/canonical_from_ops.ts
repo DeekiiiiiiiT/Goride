@@ -3,7 +3,7 @@
  * Import/CSV flows use buildCanonicalImportEvents + append separately.
  */
 import type { Context } from "npm:hono";
-import { appendCanonicalLedgerEvents } from "./ledger_canonical.ts";
+import { appendCanonicalLedgerEvents, canonicalEventExistsByIdemKey } from "./ledger_canonical.ts";
 import type { FixedExpenseConfig } from "../../../apps/fleet/src/types/expenses.ts";
 import { buildFixedExpenseOccurrences } from "../../../apps/fleet/src/utils/fixedExpenseOccurrences.ts";
 import { classifyPostedBusinessTransaction } from "../../../apps/fleet/src/utils/businessTransactionAccounting.ts";
@@ -201,19 +201,19 @@ export function buildCanonicalTripFareEventsFromTrip(trip: Record<string, unknow
   // ─── PROMOTIONS (Uber) ──────────────────────────────────────────────────────
   // Posted once per driver/period from payments_driver via buildCanonicalImportEvents (import_batch).
 
-  // ─── TOLLS (Uber trips) ─────────────────────────────────────────────────────
+  // Uber trip toll = reimbursement credit (plaza tag remains the only charge).
   if (isUber) {
     const tollAmount = coerceAmount(trip.tollCharges);
     if (tollAmount > 0) {
       events.push({
         ...commonFields,
-        idempotencyKey: `trip:${id}|toll_charge`,
-        eventType: "toll_charge",
-        direction: "outflow",
+        idempotencyKey: `trip:${id}|toll_reimbursement`,
+        eventType: "toll_reimbursement",
+        direction: "inflow",
         netAmount: tollAmount,
         grossAmount: tollAmount,
-        description: `Trip toll (${platform})`,
-        metadata: { tripId: id },
+        description: `Uber trip toll reimbursement (${platform})`,
+        metadata: { tripId: id, role: "uber_toll_reimbursement" },
       });
     }
   }
@@ -298,6 +298,7 @@ export interface TollLedgerLike {
   type: string;
   description?: string | null;
   vehicleId?: string | null;
+  tripId?: string | null;
 }
 
 export function buildCanonicalTollEventFromTollLedger(entry: TollLedgerLike): Record<string, unknown> | null {
@@ -327,7 +328,10 @@ export function buildCanonicalTollEventFromTollLedger(entry: TollLedgerLike): Re
       vehicleId: typeof entry.vehicleId === "string" && entry.vehicleId ? entry.vehicleId : undefined,
       platform: "Roam",
       description: entry.description?.trim() || "Toll charge",
-      metadata: { tollLedgerId: id },
+      metadata: {
+        tollLedgerId: id,
+        ...(entry.tripId ? { tripId: String(entry.tripId) } : {}),
+      },
     };
   }
 
@@ -406,10 +410,19 @@ export async function appendCanonicalTripFaresIfEligibleWithStats(
   let skipped = 0;
   let failed = 0;
   const batch: Record<string, unknown>[] = [];
-  // Always project trip → fare_earning/tip/prior/toll. Uber payment_line rows are raw grain only
-  // (import_batch) and must not suppress trip fares — otherwise Period Earnings / PA lose Uber.
+  // Always project trip → fare_earning/tip/prior. Uber trip tolls post as reimbursement.
+  // If a legacy trip:*|toll_charge already exists, skip the new reimbursement until reclassify.
   for (const trip of trips) {
-    batch.push(...buildCanonicalTripFareEventsFromTrip(trip));
+    const evs = buildCanonicalTripFareEventsFromTrip(trip);
+    const tripId = String(trip.id ?? "").trim();
+    let skipReimburse = false;
+    if (tripId && evs.some((e) => e.eventType === "toll_reimbursement")) {
+      skipReimburse = await canonicalEventExistsByIdemKey(`trip:${tripId}|toll_charge`);
+    }
+    for (const ev of evs) {
+      if (skipReimburse && ev.eventType === "toll_reimbursement") continue;
+      batch.push(ev);
+    }
   }
   if (batch.length === 0) return { inserted, skipped, failed };
   const CHUNK = 200;

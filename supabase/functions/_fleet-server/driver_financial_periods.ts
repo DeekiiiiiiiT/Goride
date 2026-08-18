@@ -638,7 +638,9 @@ export async function rebuildDriverFinancialPeriod(
     settlementPaid: settlementPaidRaw,
     tipsPaidToDriver: share.tipsPaidToDriver || 0,
   });
-  const cashStillHeld = settled.adjCashBalance;
+  // Pocket cash cannot go negative (DB cash_nonneg). Over-return vs collected
+  // is fleet-owes on settlement_amount, not a negative held balance.
+  const cashStillHeld = round2(Math.max(0, settled.adjCashBalance));
   const payoutNet = settled.netPayout;
   const settlementPaid = settled.settlementPaid;
   // Persist outstanding after payouts so Driver Balances / chips stay correct.
@@ -743,6 +745,8 @@ export async function rebuildDriverFinancialPeriod(
         uberTripCash: cashBase.uberTripCash,
         nonUberTripCash: cashBase.nonUberTripCash,
         cashSourceMismatch: cashBase.cashSourceMismatch,
+        cashHeldClamped: settled.adjCashBalance < -0.005,
+        unclampedCashHeld: round2(settled.adjCashBalance),
       },
     },
   };
@@ -813,11 +817,12 @@ export async function rebuildDriverFinancialPeriod(
     trip_count: row.tripCount,
     tier_id: row.tierId,
     tier_name: row.tierName,
-    cash_collected: row.cashCollected,
-    cash_returned: row.cashReturned,
-    cash_written_off: row.cashWrittenOff,
-    settlement_paid: row.settlementPaid,
-    cash_still_held: row.cashStillHeld,
+    cash_collected: round2(Math.max(0, row.cashCollected)),
+    cash_returned: round2(Math.max(0, row.cashReturned)),
+    cash_written_off: round2(Math.max(0, row.cashWrittenOff)),
+    settlement_paid: round2(Math.max(0, row.settlementPaid)),
+    cash_still_held: round2(Math.max(0, row.cashStillHeld)),
+    toll_cash_spend: round2(Math.max(0, row.tollCashSpend)),
     settlement_amount: row.settlementAmount,
     payout_net: row.payoutNet,
     settlement_status: row.settlementStatus,
@@ -1058,8 +1063,17 @@ export async function getDriverFinancialPeriodDetail(
   return row;
 }
 
-/** Discover period anchors for a driver (tolls, charges, fuel, earnings, cash). */
-export async function rebuildAllPeriodsForDriver(driverId: string): Promise<number> {
+function isSignedWeekRow(r: { fuel_finalized?: unknown; status?: unknown; payout_status?: unknown }): boolean {
+  const fuelDone = !!r.fuel_finalized;
+  const closed = String(r.status || "") === "closed";
+  const payoutDone = String(r.payout_status || "").toLowerCase() === "finalized";
+  return fuelDone || closed || payoutDone;
+}
+
+export async function rebuildAllPeriodsForDriver(
+  driverId: string,
+  opts?: { force?: boolean },
+): Promise<{ rebuilt: number; skippedSigned: number }> {
   const ctx = await loadRebuildContext(driverId);
   const anchors = new Set<string>();
   for (const tx of ctx.scopedTolls) {
@@ -1104,13 +1118,44 @@ export async function rebuildAllPeriodsForDriver(driverId: string): Promise<numb
       anchors.add(weekKey);
     }
   }
+  const { data: savedWeeks } = await sb()
+    .from("driver_financial_periods")
+    .select("period_anchor")
+    .eq("driver_id", driverId);
+  for (const r of savedWeeks || []) {
+    const a = String(r.period_anchor || "").slice(0, 10);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(a)) anchors.add(a);
+  }
 
   let n = 0;
-  for (const anchor of [...anchors].sort()) {
-    await rebuildDriverFinancialPeriod(driverId, anchor, ctx);
-    n++;
+  let skippedSigned = 0;
+  const signedAnchors = new Set<string>();
+  if (!opts?.force) {
+    const { data: signedRows } = await sb()
+      .from("driver_financial_periods")
+      .select("period_anchor, fuel_finalized, status, payout_status")
+      .eq("driver_id", driverId);
+    for (const r of signedRows || []) {
+      if (isSignedWeekRow(r)) signedAnchors.add(String(r.period_anchor || "").slice(0, 10));
+    }
   }
-  return n;
+  for (const anchor of [...anchors].sort()) {
+    if (signedAnchors.has(anchor)) {
+      skippedSigned++;
+      continue;
+    }
+    try {
+      await rebuildDriverFinancialPeriod(driverId, anchor, ctx);
+      n++;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[DriverFinancialPeriods] rebuild ${driverId} ${anchor}:`, msg);
+    }
+  }
+  if (n === 0 && skippedSigned === 0) {
+    throw new Error("rebuild wrote 0 weeks");
+  }
+  return { rebuilt: n, skippedSigned };
 }
 
 /** Rebuild a small set of anchors with one shared context load (parity / repair). */
@@ -1472,6 +1517,7 @@ export function isSingleFleetWeek(startDate: string, endDate: string): boolean {
 export function overlayOverviewFromPeriod(
   overview: Record<string, unknown>,
   period: DriverFinancialPeriodRow,
+  prevPeriod?: DriverFinancialPeriodRow | null,
 ): Record<string, unknown> {
   const periodBlock = {
     ...((overview.period && typeof overview.period === "object"
@@ -1481,6 +1527,15 @@ export function overlayOverviewFromPeriod(
     cashCollected: period.cashCollected,
     tripCount: period.tripCount,
   };
+  const prevBlock = {
+    ...((overview.prevPeriod && typeof overview.prevPeriod === "object"
+      ? overview.prevPeriod
+      : {}) as Record<string, unknown>),
+  };
+  if (prevPeriod) {
+    prevBlock.earnings = prevPeriod.earningsGross;
+    prevBlock.cashCollected = prevPeriod.cashCollected;
+  }
   const fc =
     period.metadata && typeof period.metadata.financeCore === "object"
       ? (period.metadata.financeCore as Record<string, unknown>)
@@ -1500,6 +1555,7 @@ export function overlayOverviewFromPeriod(
   return {
     ...overview,
     period: periodBlock,
+    prevPeriod: prevBlock,
     platformStats,
     completeness: {
       ...priorComplete,
@@ -1508,6 +1564,7 @@ export function overlayOverviewFromPeriod(
       isComplete: Number(priorComplete.missingCount || 0) === 0,
     },
     source: "driver_financial_periods",
+    readModelSource: "driver_financial_periods",
   };
 }
 
@@ -1537,10 +1594,7 @@ export async function findSignedWeeksTouchedByEvents(
   }
   const signed: Array<{ driverId: string; periodAnchor: string }> = [];
   for (const r of data || []) {
-    const fuelDone = !!r.fuel_finalized;
-    const closed = String(r.status || "") === "closed";
-    const payoutDone = String(r.payout_status || "").toLowerCase() === "finalized";
-    if (!fuelDone && !closed && !payoutDone) continue;
+    if (!isSignedWeekRow(r)) continue;
     const id = String(r.driver_id);
     const anchor = String(r.period_anchor).slice(0, 10);
     if (pairs.has(`${id}|${anchor}`)) signed.push({ driverId: id, periodAnchor: anchor });
