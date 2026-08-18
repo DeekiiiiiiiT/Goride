@@ -2299,29 +2299,19 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
       // Phase 8: Surface dispute / toll-support refunds in overview breakdown (tolls column).
       const drAmt = Number(ledgerOverview.period.disputeRefunds) || 0;
       if (drAmt > 0) {
-        const drRow = {
+        platformStats['Dispute Recoveries'] = {
           earnings: 0, trips: 0, completed: 0, distance: 0,
           ratingSum: 0, ratingCount: 0, cashCollected: 0,
           tolls: drAmt,
         };
-        platformStats['Dispute Recoveries'] = drRow;
-        metrics.platformStats['Dispute Recoveries'] = drRow;
-      } else {
-        delete platformStats['Dispute Recoveries'];
-        delete metrics.platformStats['Dispute Recoveries'];
       }
 
-      // Replace trip Uber cash with CSV statement total when import + operational signal corroborate.
       const uberCsvCash = metrics.uberCsvCashCollectedMagnitude;
-      if (uberCsvCash != null) {
-        if (platformStats.Uber) {
-          platformStats.Uber.cashCollected = uberCsvCash;
-        } else if (metrics.platformStats?.Uber) {
-          platformStats.Uber = { ...metrics.platformStats.Uber, cashCollected: uberCsvCash };
-        }
-      } else if (platformStats.Uber) {
-        platformStats.Uber.cashCollected = metrics.platformStats?.Uber?.cashCollected ?? 0;
-      }
+      const uberLedgerCash = Number(platformStats.Uber?.cashCollected) || 0;
+      const uberCashMismatch =
+        uberCsvCash != null && Math.abs(uberCsvCash - uberLedgerCash) > 0.01
+          ? { csv: uberCsvCash, ledger: uberLedgerCash, delta: uberCsvCash - uberLedgerCash }
+          : null;
 
       // Ledger may count every Roam/InDrive fare as cash — use trip evidence for wallet/risk display.
       if (dateRange?.from) {
@@ -2378,6 +2368,7 @@ export function DriverDetail({ driverId, driverName, driver, trips, metrics: csv
         platformFees: ledgerOverview.period.platformFees ?? 0,
         platformFeesByPlatform: ledgerOverview.period.platformFeesByPlatform || {},
         fareGrossMinusNetByPlatform: ledgerOverview.period.fareGrossMinusNetByPlatform || {},
+        cashSourceMismatch: uberCashMismatch,
         platformStats,
         weeklyEarningsData,
         tripCount: ledgerOverview.period.tripCount,

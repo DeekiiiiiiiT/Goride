@@ -48,6 +48,7 @@ function fuelExpensePumpPay(e: LedgerLike): 'card' | 'cash' | 'unknown' {
 export function buildPnLFromCanonicalEvents(
   events: LedgerLike[] | undefined | null,
   period: BusinessFinancePeriod,
+  extras?: { driverCommission?: number; cashWriteOffs?: number; basis?: 'accrual' | 'cash' },
 ): BusinessFinancePnL {
   const scoped = (events || []).filter((e) => inPeriod(eventDate(e), period));
 
@@ -60,10 +61,14 @@ export function buildPnLFromCanonicalEvents(
   let driverPayouts = 0;
   for (const e of scoped) {
     const t = String(e.eventType || '');
-    if (t === 'payout_cash' || t === 'driver_payout') {
+    if (t === 'driver_payout') {
       driverPayouts += eventAmount(e);
     }
   }
+  const driverCommission = round2(Math.max(0, extras?.driverCommission || 0));
+  const cashWriteOffs = round2(extras?.cashWriteOffs || 0);
+  const basis = extras?.basis === 'cash' ? 'cash' : 'accrual';
+  const payoutsInProfit = basis === 'cash' ? round2(driverPayouts) : 0;
 
   const fuelNet = computeFuelFleetLossNetting(scoped);
   const fuel = fuelNet.net;
@@ -145,31 +150,38 @@ export function buildPnLFromCanonicalEvents(
       : undefined;
 
   const netTrip = round2(gross - fees);
-  // Wallet loads are transfers (Cash & Bank), not P&L expenses.
   const operatingProfit = round2(
     netTrip +
       otherIncome -
+      driverCommission -
       fuel -
       tolls -
       maintenance -
       fixedOverhead -
       operatingExpenses -
-      driverPayouts,
+      cashWriteOffs -
+      payoutsInProfit,
   );
   const operatingRatio = gross > 0.005 ? round2(((gross - operatingProfit) / gross) * 100) : null;
 
-  // Memo line retired — Tolls/Fuel accordions on PnLTab carry the owner breakdown.
   const lines: PnLLine[] = [
     { id: 'gross', label: 'Gross platform earnings', amount: round2(gross), kind: 'total' },
     { id: 'platform_fees', label: 'Platform fees', amount: -round2(fees), kind: 'expense' },
     { id: 'net_trip', label: 'Net trip revenue', amount: netTrip, kind: 'subtotal' },
+    { id: 'driver_commission', label: 'Driver commission (COGS)', amount: -driverCommission, kind: 'expense' },
     { id: 'fuel', label: 'Fuel', amount: -round2(fuel), kind: 'expense' },
     { id: 'tolls', label: 'Tolls', amount: -round2(tolls), kind: 'expense' },
     { id: 'maintenance', label: 'Maintenance', amount: -round2(maintenance), kind: 'expense' },
     { id: 'fixed_overhead', label: 'Fixed overhead', amount: -round2(fixedOverhead), kind: 'expense' },
     { id: 'operating_expenses', label: 'Other operating expenses', amount: -round2(operatingExpenses), kind: 'expense' },
     { id: 'other_income', label: 'Other income', amount: round2(otherIncome), kind: 'subtotal' },
-    { id: 'driver_payouts', label: 'Driver payouts', amount: -round2(driverPayouts), kind: 'expense' },
+    { id: 'cash_write_offs', label: 'Cash write-offs', amount: -cashWriteOffs, kind: 'expense' },
+    {
+      id: 'driver_payouts',
+      label: 'Driver payouts (cash)',
+      amount: -round2(driverPayouts),
+      kind: basis === 'cash' ? 'expense' : 'memo',
+    },
     { id: 'operating_profit', label: 'Operating profit', amount: operatingProfit, kind: 'result' },
   ];
 
@@ -224,10 +236,11 @@ export function sumExpenseRowsFromEvents(
   fixed: number;
   operating: number;
   byCategory: Record<string, number>;
-  other: number;
-  tollEventCount: number;
-  fuelEventCount: number;
-  rows: Array<{
+    other: number;
+    tollEventCount: number;
+    fuelEventCount: number;
+    rowCount: number;
+    rows: Array<{
     id: string;
     dateYmd: string;
     category: string;
@@ -349,17 +362,18 @@ export function sumExpenseRowsFromEvents(
 
   rows.sort((a, b) => b.dateYmd.localeCompare(a.dateYmd));
   return {
-    fuel: round2(Math.max(0, fuel)),
+    fuel: round2(fuel),
     tolls: computeTollFleetLossNetting(scoped).net,
-    maintenance: round2(Math.max(0, maintenance)),
-    fixed: round2(Math.max(0, fixed)),
-    operating: round2(Math.max(0, operating)),
+    maintenance: round2(maintenance),
+    fixed: round2(fixed),
+    operating: round2(operating),
     byCategory: Object.fromEntries(
       Object.entries(byCategory).map(([key, value]) => [key, round2(value)]),
     ),
     other: round2(other),
     tollEventCount,
     fuelEventCount,
+    rowCount: rows.length,
     rows: rows.slice(0, 100),
   };
 }

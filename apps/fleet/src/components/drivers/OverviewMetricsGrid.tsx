@@ -973,20 +973,10 @@ export function OverviewMetricsGrid({
                         ${fmtMoney(resolvedFinancials.totalTips || 0)}
                       </span>
                     </div>
-                    {(resolvedFinancials.disputeRefunds || 0) > 0 && (
-                      <div className="flex justify-between gap-4 text-xs">
-                        <span className="text-slate-500">Dispute recoveries</span>
-                        <span className="tabular-nums text-emerald-700">
-                          ${fmtMoney(resolvedFinancials.disputeRefunds)}
-                        </span>
-                      </div>
-                    )}
                     <div className="flex justify-between gap-4 border-t border-slate-200 pt-2 dark:border-slate-700">
                       <span className="text-slate-700 dark:text-slate-300">Net fare + tips</span>
                       <span className="font-semibold tabular-nums">
-                        ${fmtMoney(
-                          (resolvedFinancials.periodEarnings || 0) + (resolvedFinancials.totalTips || 0),
-                        )}
+                        ${fmtMoney(resolvedFinancials.periodEarnings || 0)}
                       </span>
                     </div>
                     <p className="text-[11px] leading-snug text-slate-500">
@@ -1016,9 +1006,10 @@ export function OverviewMetricsGrid({
                         <span className="tabular-nums font-medium">${fmtMoney(stats.cashCollected)}</span>
                       </div>
                     ))}
-                    {cashByPlatformRows.length === 0 && (resolvedFinancials.cashCollected || 0) > 0 && (
-                      <p className="text-[11px] text-slate-500">
-                        Cash total is from the ledger; per-platform cash may be unallocated in older data.
+                    {resolvedFinancials.cashSourceMismatch && (
+                      <p className="text-[11px] text-amber-700">
+                        CSV Uber cash ${fmtMoney(resolvedFinancials.cashSourceMismatch.csv)} disagrees with
+                        ledger payout_cash ${fmtMoney(resolvedFinancials.cashSourceMismatch.ledger)} — ledger wins.
                       </p>
                     )}
                   </div>

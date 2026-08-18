@@ -173,12 +173,13 @@ export default defineConfig({
         __dirname,
         '../../packages/roam-shared/src/fuel/jaaFuelStatementMatcher.ts',
       ),
+      '@roam/finance-core': path.resolve(__dirname, '../../packages/finance-core/src/index.ts'),
       '@': path.resolve(__dirname, './src'),
     },
   },
   optimizeDeps: {
     include: ['react', 'react-dom', 'react/jsx-runtime'],
-    exclude: ['@roam/roam-shared'],
+    exclude: ['@roam/roam-shared', '@roam/finance-core'],
   },
   build: {
     target: 'esnext',

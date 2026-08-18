@@ -110,6 +110,9 @@ importers:
       '@roam/business-config':
         specifier: workspace:*
         version: link:../../packages/business-config
+      '@roam/finance-core':
+        specifier: workspace:*
+        version: link:../../packages/finance-core
       '@roam/platform-settings':
         specifier: workspace:*
         version: link:../../packages/platform-settings
@@ -690,6 +693,9 @@ importers:
       '@roam/business-config':
         specifier: workspace:*
         version: link:../../packages/business-config
+      '@roam/finance-core':
+        specifier: workspace:*
+        version: link:../../packages/finance-core
       '@roam/hauler-dispatch':
         specifier: workspace:*
         version: link:../../packages/hauler-dispatch
@@ -1133,6 +1139,9 @@ importers:
       '@roam/business-config':
         specifier: workspace:*
         version: link:../../packages/business-config
+      '@roam/finance-core':
+        specifier: workspace:*
+        version: link:../../packages/finance-core
       '@roam/platform-settings':
         specifier: workspace:*
         version: link:../../packages/platform-settings
@@ -1562,6 +1571,12 @@ importers:
         version: link:../types
 
   packages/design-tokens: {}
+
+  packages/finance-core:
+    devDependencies:
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.4(@types/node@20.19.40)(jiti@2.7.0)(lightningcss@1.30.1)(terser@5.49.0)
 
   packages/hauler-dispatch:
     dependencies:

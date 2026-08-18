@@ -98,3 +98,31 @@ export function ledgerRetiredIslands(): Set<string> {
   if (!raw) return new Set();
   return new Set(raw.split(",").map((s) => s.trim()).filter(Boolean));
 }
+
+/** Default ON. Set FIN_READ_PROJECTION_*=0 to roll a screen back to the legacy engine. */
+function envFlagDefaultOn(name: string): boolean {
+  const v = Deno.env.get(name);
+  if (v === undefined || v === "") return true;
+  return v === "1" || v === "true" || v === "yes";
+}
+
+export function isFinanceReadProjectionOverview(): boolean {
+  return envFlagDefaultOn("FIN_READ_PROJECTION_OVERVIEW");
+}
+
+export function isFinanceReadProjectionCashWallet(): boolean {
+  return envFlagDefaultOn("FIN_READ_PROJECTION_CASH_WALLET");
+}
+
+export function isFinanceReadProjectionPayoutTabs(): boolean {
+  return envFlagDefaultOn("FIN_READ_PROJECTION_PAYOUT_TABS");
+}
+
+export function isFinanceReadProjectionDriverApp(): boolean {
+  return envFlagDefaultOn("FIN_READ_PROJECTION_DRIVER_APP");
+}
+
+/** When ON, screens keep the legacy response and only log deltas > $0.01. */
+export function isFinanceShadowProjection(): boolean {
+  return envTruthy("FIN_SHADOW_PROJECTION");
+}

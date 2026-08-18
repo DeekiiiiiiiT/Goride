@@ -128,7 +128,14 @@ export function ExpensesTab({
 
       <Card className="border-slate-200 dark:border-slate-800 rounded-md overflow-hidden">
         <CardHeader className="border-b border-slate-100 dark:border-slate-800 py-3">
-          <CardTitle className="text-sm font-semibold">Expense detail</CardTitle>
+          <CardTitle className="text-sm font-semibold">
+            Expense detail
+            {typeof expenses.rowCount === 'number' && expenses.rowCount > (expenses.rows?.length || 0) && (
+              <span className="ml-2 font-normal text-slate-500">
+                showing {expenses.rows.length} of {expenses.rowCount}
+              </span>
+            )}
+          </CardTitle>
         </CardHeader>
         <CardContent className="p-0 overflow-x-auto">
           <Table>

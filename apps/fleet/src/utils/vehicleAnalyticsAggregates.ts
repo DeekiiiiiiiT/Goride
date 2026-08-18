@@ -142,7 +142,7 @@ export function aggregateLedgerCosts(
       if (isCleaningCategory(e)) fleetCleaning += amt;
       else fleetOperating += amt;
     } else if (type === 'other_income') otherIncome += amt;
-    else if (type === 'payout_cash' || type === 'driver_payout') driverPayouts += amt;
+    else if (type === 'driver_payout') driverPayouts += amt;
   }
 
   const fleetCosts: CostBuckets = {

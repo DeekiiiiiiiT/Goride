@@ -22,6 +22,9 @@ import {
   computeWeekCommissionShare,
   computeWeekCashBase,
 } from "./period_share_cash.ts";
+import { foldPayoutCashByWeek } from "../../../packages/finance-core/src/payoutCashDedupe.ts";
+import { periodKeyFor } from "../../../packages/finance-core/src/periodKey.ts";
+import { getServiceClientWithSchema } from "./service_client.ts";
 import { isPlatformReimbursedPlazaToll } from "./toll_platform_reimbursed.ts";
 
 function sb() {
@@ -125,6 +128,7 @@ export type DriverFinancialPeriodRow = {
   sourceEventHash: string;
   projectionVersion: number;
   projectedAt: string;
+  metadata?: Record<string, unknown>;
   lines: Array<{
     lineType: string;
     domain: string;
@@ -150,6 +154,7 @@ type RebuildContext = {
   fareEntries: any[];
   tipEntries: any[];
   payoutCashByAnchor: Map<string, number>;
+  organizationId: string | null;
   earningsPolicies: any[];
   legacyEarnings: {
     tiers: any[];
@@ -158,6 +163,26 @@ type RebuildContext = {
   };
   persistLines?: boolean;
 };
+
+async function resolveDriverOrganizationId(driverId: string): Promise<string | null> {
+  try {
+    const dr: any = await kv.get(`driver:${driverId}`);
+    if (dr?.organizationId) return String(dr.organizationId);
+  } catch {
+    /* ignore */
+  }
+  try {
+    const { data } = await getServiceClientWithSchema("fleet")
+      .from("drivers")
+      .select("organization_id")
+      .eq("id", driverId)
+      .maybeSingle();
+    if (data?.organization_id) return String(data.organization_id);
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
 
 const DEFAULT_TIERS_EH = [
   { id: "tier_1", name: "Bronze", minEarnings: 0, maxEarnings: 75000, sharePercentage: 25, color: "#CD7F32" },
@@ -251,15 +276,11 @@ async function loadRebuildContext(driverId: string): Promise<RebuildContext> {
     (e: any) => e && String(e.eventType || "") === "tip",
   );
 
-  const payoutCashByAnchor = new Map<string, number>();
-  for (const e of ledgerEvents || []) {
-    if (!e || String(e.eventType || "") !== "payout_cash") continue;
-    const d = String(e.date || "").slice(0, 10);
-    if (!d) continue;
-    const anchor = await periodAnchorFor(d, timezone);
-    const amt = Math.abs(Number(e.netAmount) || Number(e.grossAmount) || 0);
-    payoutCashByAnchor.set(anchor, round2((payoutCashByAnchor.get(anchor) || 0) + amt));
-  }
+  const payoutCashByAnchor = foldPayoutCashByWeek(
+    (ledgerEvents || []).filter((e: any) => e && String(e.eventType || "") === "payout_cash"),
+    timezone,
+  );
+  const organizationId = await resolveDriverOrganizationId(driverId);
 
   const prefs: any = prefsEH || {};
   const earningsPolicies = (Array.isArray(policyItemsRaw) ? policyItemsRaw : []).filter(
@@ -283,6 +304,7 @@ async function loadRebuildContext(driverId: string): Promise<RebuildContext> {
     fareEntries,
     tipEntries,
     payoutCashByAnchor,
+    organizationId,
     earningsPolicies,
     legacyEarnings,
     persistLines: false,
@@ -555,6 +577,7 @@ export async function rebuildDriverFinancialPeriod(
     periodAnchor,
     periodEnd,
     tiers: bundleEH.tiers || context.legacyEarnings.tiers,
+    quotaConfig: bundleEH.quotas || context.legacyEarnings.quotas,
   });
   let earningsGross = share.earningsGross;
   let driverShare = share.driverShare;
@@ -613,6 +636,7 @@ export async function rebuildDriverFinancialPeriod(
     fuelCredits: fuelFleetShare,
     cashWrittenOff,
     settlementPaid: settlementPaidRaw,
+    tipsPaidToDriver: share.tipsPaidToDriver || 0,
   });
   const cashStillHeld = settled.adjCashBalance;
   const payoutNet = settled.netPayout;
@@ -707,6 +731,20 @@ export async function rebuildDriverFinancialPeriod(
     projectionVersion: 1,
     projectedAt: new Date().toISOString(),
     lines,
+    metadata: {
+      financeCore: {
+        tips: share.tips,
+        tipsPaidToDriver: share.tipsPaidToDriver,
+        tipsWithheld: share.tipsWithheld,
+        quotaTarget: share.quotaTarget,
+        quotaPercent: share.quotaPercent,
+        quotaMet: share.quotaMet,
+        uberCash: cashBase.uberCash,
+        uberTripCash: cashBase.uberTripCash,
+        nonUberTripCash: cashBase.nonUberTripCash,
+        cashSourceMismatch: cashBase.cashSourceMismatch,
+      },
+    },
   };
 
   // Keep weeks with settlement activity (earnings/cash/fuel/tolls); drop empty phantoms.
@@ -750,6 +788,7 @@ export async function rebuildDriverFinancialPeriod(
     period_anchor: periodAnchor,
     period_end: periodEnd,
     timezone,
+    organization_id: context.organizationId,
     status: periodStatus,
     toll_spend: row.tollSpend,
     toll_cash_spend: row.tollCashSpend,
@@ -793,6 +832,7 @@ export async function rebuildDriverFinancialPeriod(
         ? row.projectedAt
         : null,
     closed_at: periodStatus === "closed" ? row.projectedAt : null,
+    metadata: row.metadata || {},
   };
 
   const { data: saved, error } = await sb()
@@ -982,6 +1022,7 @@ function mapDbPeriod(r: any): DriverFinancialPeriodRow {
     sourceEventHash: r.source_event_hash,
     projectionVersion: r.projection_version,
     projectedAt: r.projected_at,
+    metadata: r.metadata && typeof r.metadata === "object" ? r.metadata : {},
     lines: [],
   };
 }
@@ -1198,6 +1239,7 @@ export async function listCompanyOwesPeriods(opts?: {
   periodEnd?: string;
   minAmount?: number;
   limit?: number;
+  organizationId?: string | null;
 }): Promise<CompanyOwesPeriodRow[]> {
   const limit = Math.min(Math.max(Number(opts?.limit) || 500, 1), 2000);
   let q = sb()
@@ -1210,6 +1252,10 @@ export async function listCompanyOwesPeriods(opts?: {
     .order("period_anchor", { ascending: false })
     .order("driver_id", { ascending: true })
     .limit(limit);
+
+  if (opts?.organizationId) {
+    q = q.eq("organization_id", opts.organizationId);
+  }
 
   if (opts?.periodAnchor && /^\d{4}-\d{2}-\d{2}$/.test(opts.periodAnchor)) {
     q = q.eq("period_anchor", opts.periodAnchor);
@@ -1299,8 +1345,11 @@ export type DriverOwesPeriodRow = CompanyOwesPeriodRow & {
 
 function applyPeriodRangeFilters(
   q: any,
-  opts?: { periodAnchor?: string; periodStart?: string; periodEnd?: string },
+  opts?: { periodAnchor?: string; periodStart?: string; periodEnd?: string; organizationId?: string | null },
 ) {
+  if (opts?.organizationId) {
+    q = q.eq("organization_id", opts.organizationId);
+  }
   if (opts?.periodAnchor && /^\d{4}-\d{2}-\d{2}$/.test(opts.periodAnchor)) {
     return q.eq("period_anchor", opts.periodAnchor);
   }
@@ -1337,6 +1386,7 @@ export async function listDriverOwesPeriods(opts?: {
   periodEnd?: string;
   minAmount?: number;
   limit?: number;
+  organizationId?: string | null;
 }): Promise<DriverOwesPeriodRow[]> {
   const limit = Math.min(Math.max(Number(opts?.limit) || 500, 1), 2000);
   let q = sb()
@@ -1376,6 +1426,7 @@ export async function listCashHeldPeriods(opts?: {
   periodEnd?: string;
   minAmount?: number;
   limit?: number;
+  organizationId?: string | null;
 }): Promise<DriverOwesPeriodRow[]> {
   const limit = Math.min(Math.max(Number(opts?.limit) || 500, 1), 2000);
   let q = sb()
@@ -1409,4 +1460,90 @@ export async function listCashHeldPeriods(opts?: {
       return { ...row, amountOwed: Math.max(0, row.cashStillHeld) };
     })
     .filter(Boolean) as DriverOwesPeriodRow[];
+}
+
+export function isSingleFleetWeek(startDate: string, endDate: string): boolean {
+  const key = periodKeyFor(startDate);
+  if (!key || key !== startDate) return false;
+  return endDate === periodEndForAnchor(key);
+}
+
+/** Overlay Engine C overview JSON with the persisted weekly projection (Phase 4). */
+export function overlayOverviewFromPeriod(
+  overview: Record<string, unknown>,
+  period: DriverFinancialPeriodRow,
+): Record<string, unknown> {
+  const periodBlock = {
+    ...((overview.period && typeof overview.period === "object"
+      ? overview.period
+      : {}) as Record<string, unknown>),
+    earnings: period.earningsGross,
+    cashCollected: period.cashCollected,
+    tripCount: period.tripCount,
+  };
+  const fc =
+    period.metadata && typeof period.metadata.financeCore === "object"
+      ? (period.metadata.financeCore as Record<string, unknown>)
+      : {};
+  const platformStats = {
+    ...((overview.platformStats && typeof overview.platformStats === "object"
+      ? overview.platformStats
+      : {}) as Record<string, Record<string, number>>),
+  };
+  if (fc.uberCash != null) {
+    platformStats.Uber = {
+      ...(platformStats.Uber || {}),
+      cashCollected: Number(fc.uberCash) || 0,
+    };
+  }
+  const priorComplete = (overview.completeness || {}) as Record<string, unknown>;
+  return {
+    ...overview,
+    period: periodBlock,
+    platformStats,
+    completeness: {
+      ...priorComplete,
+      totalTrips: period.tripCount,
+      ledgerTrips: Number(priorComplete.ledgerTrips) || period.tripCount,
+      isComplete: Number(priorComplete.missingCount || 0) === 0,
+    },
+    source: "driver_financial_periods",
+  };
+}
+
+export async function findSignedWeeksTouchedByEvents(
+  events: Array<Record<string, unknown>>,
+): Promise<Array<{ driverId: string; periodAnchor: string }>> {
+  const pairs = new Map<string, { driverId: string; periodAnchor: string }>();
+  for (const e of events) {
+    const driverId = typeof e.driverId === "string" ? e.driverId.trim() : "";
+    const key = periodKeyFor(
+      typeof e.date === "string" ? e.date : typeof e.periodStart === "string" ? e.periodStart : "",
+    );
+    if (!driverId || !key) continue;
+    pairs.set(`${driverId}|${key}`, { driverId, periodAnchor: key });
+  }
+  if (pairs.size === 0) return [];
+  const driverIds = [...new Set([...pairs.values()].map((p) => p.driverId))];
+  const anchors = [...new Set([...pairs.values()].map((p) => p.periodAnchor))];
+  const { data, error } = await sb()
+    .from("driver_financial_periods")
+    .select("driver_id, period_anchor, fuel_finalized, status, payout_status")
+    .in("driver_id", driverIds)
+    .in("period_anchor", anchors);
+  if (error) {
+    console.warn("[DriverFinancialPeriods] signed-week lookup:", error.message);
+    return [];
+  }
+  const signed: Array<{ driverId: string; periodAnchor: string }> = [];
+  for (const r of data || []) {
+    const fuelDone = !!r.fuel_finalized;
+    const closed = String(r.status || "") === "closed";
+    const payoutDone = String(r.payout_status || "").toLowerCase() === "finalized";
+    if (!fuelDone && !closed && !payoutDone) continue;
+    const id = String(r.driver_id);
+    const anchor = String(r.period_anchor).slice(0, 10);
+    if (pairs.has(`${id}|${anchor}`)) signed.push({ driverId: id, periodAnchor: anchor });
+  }
+  return signed;
 }

@@ -1,8 +1,7 @@
 /**
- * Single source of truth for canonical money aggregation (`ledger_event:*` → driver-overview shape).
- * Used by GET /ledger/driver-overview (canonical), import preview, and tests.
- *
- * Keep snapshot merge logic aligned with `src/utils/snapshotsFromCanonicalLedgerEvents.ts`.
+ * Canonical money aggregation (`ledger.entries` → driver-overview shape).
+ * Weekly SSOT for cash/earnings is `ledger.driver_financial_periods` (Phase 4 overlay).
+ * Used by GET /ledger/driver-overview, import preview, and tests.
  */
 
 export type CanonicalMoneyEvent = {
@@ -449,60 +448,17 @@ export function addDaysYmd(ymd: string, days: number): string {
 }
 
 /**
- * Driver overview date filter: include rows whose `date` falls in [startDate, endDate], OR
- * (for statement / payout lines) whose `periodStart`..`periodEnd` overlaps that range.
- *
- * **Contrast with Roam/InDrive in the UI:** those platforms’ period cards often sum **`trip.date`** in-range
- * (simple interval). Uber money here is **ledger_event**-based, not raw trip rows — so a 1-day picker can
- * include Roam/InDrive trips for that day while Uber canonical rows need this window + statement rules.
- *
- * Import canonical events set `date` to the **earliest trip day** in the batch for Uber promotion/payout/REFUNDS_TOLL
- * (`buildCanonicalImportEvents`), so calendar-week filters align with trip activity; `periodStart`/`periodEnd` still carry
- * the statement window for overlap rules (e.g. driver-overview).
- *
- * Legacy rows often omitted `periodStart`/`periodEnd` in KV. `date` may be period end, a mid-week posting day,
- * or a **pay/settlement day many days after** the statement week (e.g. week ending Mar 29 but `date` Apr 10).
- * A ±7d band after `endDate` was still excluding those rows for a tight Mar 23–29 picker while Mar 28–Apr 4
- * worked — widen the post-period side so statement/payout lines still match the user’s CSV week.
+ * Strict fleet-calendar window (ADR 0007). No ±14-day grace band.
+ * Statement rows belong to the week of `date` (split at import).
  */
 export function canonicalEventInSelectedWindow(
   v: Record<string, unknown>,
   startDate: string,
   endDate: string,
 ): boolean {
-  const d = ymdSlice(v.date as string);
-  const ps = ymdSlice(v.periodStart as string);
-  const pe = ymdSlice(v.periodEnd as string);
-  const et = typeof v.eventType === 'string' ? v.eventType : '';
-  const isStatementish =
-    et === 'statement_line' || et === 'payout_cash' || et === 'payout_bank';
-
-  // Statement / payout imports: period start must fall inside the selected range.
-  if (isStatementish && ps && pe) {
-    if (!(ps <= endDate && pe >= startDate)) return false;
-    const spanDays =
-      (new Date(`${pe}T12:00:00.000Z`).getTime() - new Date(`${ps}T12:00:00.000Z`).getTime()) /
-      (24 * 60 * 60 * 1000);
-    if (spanDays > 10) return ps >= startDate && pe <= endDate;
-    return ps >= startDate && ps <= endDate;
-  }
-
-  // Trip-dated rows and anything with an explicit calendar date inside the picker range.
-  if (d && d >= startDate && d <= endDate) return true;
-
-  if (ps && pe) return ps <= endDate && pe >= startDate;
-
-  // Statement rows with only periodStart (no periodEnd): include if periodStart overlaps range
-  if (isStatementish && ps && !pe) {
-    if (ps >= startDate && ps <= endDate) return true;
-  }
-
-  // Legacy rows without period fields: posting/settlement may trail period end, never precede it by weeks.
-  if (isStatementish && d && (!ps || !pe)) {
-    const graceHi = addDaysYmd(endDate, 14);
-    if (d >= startDate && d <= graceHi) return true;
-  }
-  return false;
+  const d = ymdSlice(v.date as string) || ymdSlice(v.periodStart as string);
+  if (!d) return false;
+  return d >= startDate && d <= endDate;
 }
 
 /**
@@ -529,8 +485,12 @@ export function aggregateCanonicalEventsToLedgerDriverOverview(
   const completeness = {
     totalTrips: p.pTripCount,
     ledgerTrips: p.pTripCount,
-    isComplete: true,
-    missingCount: 0,
+    isComplete: period.filter((e) => normPlatform(e.platform) === "Other" && (
+      e.eventType === "fare_earning" || e.eventType === "payout_cash" || e.eventType === "statement_line" || e.eventType === "tip"
+    )).length === 0,
+    missingCount: period.filter((e) => normPlatform(e.platform) === "Other" && (
+      e.eventType === "fare_earning" || e.eventType === "payout_cash" || e.eventType === "statement_line" || e.eventType === "tip"
+    )).length,
     byPlatform: {} as Record<string, { trips: number; ledger: number }>,
   };
 

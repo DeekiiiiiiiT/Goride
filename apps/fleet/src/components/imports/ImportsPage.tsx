@@ -942,9 +942,31 @@ function ImportsPageInner({ onNavigate }: ImportsPageProps) {
           let canonFailed = 0;
           if (canonicalEvents.length > 0) {
               try {
+                  let confirmSignedWeek = false;
+                  const appendChunk = async (chunk: typeof canonicalEvents) => {
+                      try {
+                          return await api.appendCanonicalLedgerEvents(chunk, { confirmSignedWeek });
+                      } catch (err: any) {
+                          if (err?.code === 'SIGNED_WEEK' && !confirmSignedWeek) {
+                              const weeks = Array.isArray(err.signedWeeks)
+                                  ? err.signedWeeks
+                                        .map((w: { periodAnchor?: string }) => w.periodAnchor)
+                                        .filter(Boolean)
+                                        .join(', ')
+                                  : '';
+                              const ok = window.confirm(
+                                  `This import would change signed week(s)${weeks ? `: ${weeks}` : ''}. Post as a visible adjustment?`,
+                              );
+                              if (!ok) throw err;
+                              confirmSignedWeek = true;
+                              return api.appendCanonicalLedgerEvents(chunk, { confirmSignedWeek: true });
+                          }
+                          throw err;
+                      }
+                  };
                   for (let i = 0; i < canonicalEvents.length; i += CANONICAL_APPEND_MAX) {
                       const chunk = canonicalEvents.slice(i, i + CANONICAL_APPEND_MAX);
-                      const r = await api.appendCanonicalLedgerEvents(chunk);
+                      const r = await appendChunk(chunk);
                       canonInserted += r.inserted;
                       canonSkipped += r.skipped;
                       canonFailed += r.failed;

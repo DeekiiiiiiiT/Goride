@@ -5,10 +5,25 @@
 import type { Context } from "npm:hono";
 import { createClient } from "jsr:@supabase/supabase-js@2.49.8";
 import { stampOrg } from "./org_scope.ts";
+import { isKnownPlatform, normalizePlatform } from "../../../packages/finance-core/src/normalizePlatform.ts";
 
 export const CANONICAL_SCHEMA_VERSION = 1;
 export const CANONICAL_EVENT_KIND = "canonical";
 
+const MONEY_PLATFORM_REQUIRED = new Set([
+  "fare_earning",
+  "tip",
+  "statement_line",
+  "statement_adjustment",
+  "payout_cash",
+  "payout_bank",
+  "platform_fee",
+  "promotion",
+  "surge_bonus",
+  "prior_period_adjustment",
+  "payment_line",
+  "dispute_refund",
+]);
 const MAX_BATCH = 200;
 const MAX_IDEMPOTENCY_KEY_LEN = 512;
 
@@ -344,7 +359,17 @@ function validateOne(raw: unknown, index: number): { ok: true; value: Record<str
   if (typeof e.sourceFileHash === "string" && e.sourceFileHash.trim()) out.sourceFileHash = e.sourceFileHash.trim();
   if (typeof e.periodStart === "string" && /^\d{4}-\d{2}-\d{2}$/.test(e.periodStart)) out.periodStart = e.periodStart;
   if (typeof e.periodEnd === "string" && /^\d{4}-\d{2}-\d{2}$/.test(e.periodEnd)) out.periodEnd = e.periodEnd;
-  if (typeof e.platform === "string" && e.platform.trim()) out.platform = e.platform.trim();
+  if (MONEY_PLATFORM_REQUIRED.has(eventType)) {
+    if (!isKnownPlatform(typeof e.platform === "string" ? e.platform : null)) {
+      return {
+        ok: false,
+        error: `Event ${index}: known platform required (Uber/Roam/InDrive)`,
+      };
+    }
+    out.platform = normalizePlatform(String(e.platform));
+  } else if (typeof e.platform === "string" && e.platform.trim()) {
+    out.platform = e.platform.trim();
+  }
   if (typeof e.vehicleId === "string" && e.vehicleId.trim()) out.vehicleId = e.vehicleId.trim();
   if (typeof e.category === "string" && e.category.trim()) out.category = e.category.trim();
   else out.category = eventType;

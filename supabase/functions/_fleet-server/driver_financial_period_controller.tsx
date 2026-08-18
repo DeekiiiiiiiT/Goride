@@ -43,6 +43,7 @@ import {
   getDriverAliasMap,
 } from "./toll_controller.tsx";
 import { driverIdsReferToSamePerson } from "./driver_identity.ts";
+import { getOrgId } from "./org_scope.ts";
 
 const app = new Hono();
 
@@ -74,6 +75,7 @@ function queueListQuery(c: { req: { query: (k: string) => string | undefined } }
     periodEnd: c.req.query("periodEnd") || undefined,
     minAmount: c.req.query("minAmount") ? Number(c.req.query("minAmount")) : undefined,
     limit: c.req.query("limit") ? Number(c.req.query("limit")) : undefined,
+    organizationId: getOrgId(c as never) || undefined,
   };
 }
 

@@ -47,6 +47,7 @@ export default defineConfig({
       { find: '@', replacement: adminSrc },
       { find: '@roam/toll-ui', replacement: path.resolve(repoRoot, 'packages/toll-ui/src/index.ts') },
       { find: '@roam/roam-shared', replacement: path.resolve(repoRoot, 'packages/roam-shared/src/index.ts') },
+      { find: '@roam/finance-core', replacement: path.resolve(repoRoot, 'packages/finance-core/src/index.ts') },
       {
         find: '@roam/roam-shared/fuel',
         replacement: path.resolve(repoRoot, 'packages/roam-shared/src/fuel/jaaFuelStatementMatcher.ts'),

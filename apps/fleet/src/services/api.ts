@@ -4397,15 +4397,26 @@ export const api = {
   /** Phase 2: idempotent canonical ledger events (`ledger_event:*`). Same idempotencyKey → skipped on retry. */
   async appendCanonicalLedgerEvents(
     events: CanonicalLedgerEventInput[],
+    opts?: { confirmSignedWeek?: boolean },
   ): Promise<AppendCanonicalLedgerResult> {
     const response = await fetchWithRetry(
       `${API_ENDPOINTS.financial}/ledger/canonical-events/append`,
       {
         method: 'POST',
         headers: await requireAuthHeaders(),
-        body: JSON.stringify({ events }),
+        body: JSON.stringify({ events, confirmSignedWeek: opts?.confirmSignedWeek === true }),
       },
     );
+    if (response.status === 409) {
+      const body = await response.json().catch(() => ({}));
+      const err = new Error(body.message || 'This import would change a signed week') as Error & {
+        code?: string;
+        signedWeeks?: unknown;
+      };
+      err.code = 'SIGNED_WEEK';
+      err.signedWeeks = body.signedWeeks;
+      throw err;
+    }
     if (!response.ok) {
       const errText = await response.text();
       throw new Error(`Canonical ledger append failed: ${errText}`);

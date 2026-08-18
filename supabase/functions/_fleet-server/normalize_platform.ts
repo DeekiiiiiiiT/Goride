@@ -1,2 +1,1 @@
-/** Deno re-export — shared platform normalization for edge bundle. */
-export * from "../../../apps/fleet/src/utils/normalizePlatform.ts";
+export * from "../../../packages/finance-core/src/normalizePlatform.ts";

@@ -46,6 +46,7 @@
     "@roam/api-client": "workspace:*",
     "@roam/auth-client": "workspace:*",
     "@roam/business-config": "workspace:*",
+    "@roam/finance-core": "workspace:*",
     "@roam/hauler-dispatch": "workspace:*",
     "@roam/play-store-launch": "workspace:*",
     "@roam/ride-chat": "workspace:*",

@@ -281,7 +281,21 @@ export function PnLTab({ pnl }: { pnl: BusinessFinancePnL }) {
         <CardContent className="pt-2 pb-3">
           <ul className="divide-y divide-slate-100 dark:divide-slate-800">
             {pnl.lines.map((line) => {
-              if (line.kind === 'memo') return null;
+              if (line.kind === 'memo') {
+                const amt = line.amount ?? 0;
+                return (
+                  <li
+                    key={line.id}
+                    className="py-2.5 text-sm flex items-center justify-between gap-2 text-slate-500"
+                  >
+                    <span>
+                      {line.label}
+                      <span className="ml-1.5 text-[10px] uppercase tracking-wide">cash movement</span>
+                    </span>
+                    <span className="tabular-nums">{formatMoney(amt)}</span>
+                  </li>
+                );
+              }
 
               if (line.id === 'gross' && hasGrossBreakdown) {
                 const amt = line.amount ?? 0;

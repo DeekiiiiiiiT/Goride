@@ -460,7 +460,14 @@ export function DriverSettlementsPage({
       });
   }, [txsQuery.data, weekFrom, weekTo, search]);
 
-  const driverOwesTotal = collectOutstanding.reduce((s, r) => s + collectAmount(r), 0);
+  const settledOwesTotal = (driverOwesQuery.data?.rows || []).reduce(
+    (s, r) => s + collectAmount(r),
+    0,
+  );
+  const cashHeldKpiTotal = (cashHeldQuery.data?.rows || []).reduce(
+    (s, r) => s + collectAmount(r),
+    0,
+  );
   const fleetOwesTotal = payOutstanding.reduce((s, r) => s + payOutstandingAmount(r), 0);
   const awaitingTotal = awaitingRows.reduce((s, t) => s + Math.abs(Number(t.amount) || 0), 0);
   const clearedThisWeek =
@@ -823,8 +830,19 @@ export function DriverSettlementsPage({
         </Button>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Kpi label="Driver owes" value={MONEY(driverOwesTotal)} sub={`${collectOutstanding.length} weeks`} tone="owed" />
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+        <Kpi
+          label="Driver owes (settled)"
+          value={MONEY(settledOwesTotal)}
+          sub={`${driverOwesQuery.data?.rows?.length || 0} weeks`}
+          tone="owed"
+        />
+        <Kpi
+          label="Cash held (not finalized)"
+          value={MONEY(cashHeldKpiTotal)}
+          sub={`${cashHeldQuery.data?.rows?.length || 0} weeks`}
+          tone="pending"
+        />
         <Kpi label="Fleet owes" value={MONEY(fleetOwesTotal)} sub={`${payOutstanding.length} weeks`} tone="pay" />
         <Kpi
           label="Awaiting bank clear"

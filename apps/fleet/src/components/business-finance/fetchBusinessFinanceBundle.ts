@@ -52,7 +52,7 @@ function driverName(d: Record<string, unknown>): string {
 
 export async function fetchBusinessFinanceBundle(
   period: BusinessFinancePeriod,
-  opts: { organizationId?: string | null; fleetTimezone: string },
+  opts: { organizationId?: string | null; fleetTimezone: string; basis?: 'accrual' | 'cash' },
 ): Promise<BusinessFinanceBundle> {
   const incomplete: string[] = [];
 
@@ -102,7 +102,7 @@ export async function fetchBusinessFinanceBundle(
     name: string;
     periods: DriverFinancialPeriodClient[];
   };
-  const packs = await mapPool(drivers.slice(0, 80), 4, async (d) => {
+  const packs = await mapPool(drivers, 4, async (d) => {
     const driverId = String(d.id || '');
     const name = driverName(d);
     if (!driverId) return { driverId: '', name, periods: [] as DriverFinancialPeriodClient[] };
@@ -111,20 +111,17 @@ export async function fetchBusinessFinanceBundle(
       const periods = Array.isArray(res?.data) ? (res.data as DriverFinancialPeriodClient[]) : [];
       return { driverId, name, periods };
     } catch {
+      incomplete.push(`Driver periods (${name || driverId})`);
       return { driverId, name, periods: [] as DriverFinancialPeriodClient[] };
     }
   });
-
-  if (drivers.length > 80) {
-    /* truncated flag set below — do not push soft note into hard incomplete banner */
-  }
 
   let cashCollected = 0;
   let cashStillHeld = 0;
   let cashWrittenOff = 0;
   let fuelGasCardFromPeriods = 0;
   let fuelDriverFromPeriods = 0;
-  let driverPayoutsFromPeriods = 0;
+  let driverCommissionFromPeriods = 0;
   const debtors: Array<{ driverId: string; name: string; amount: number }> = [];
   const balanceRows: DriverBalanceRow[] = [];
 
@@ -132,22 +129,16 @@ export async function fetchBusinessFinanceBundle(
     if (!pack.driverId) continue;
     const inRange = pack.periods.filter((p) => inPeriod(String(p.periodAnchor || '').slice(0, 10), period));
     for (const p of inRange) {
-      cashCollected += Number(p.cashReturned) || 0;
-      cashStillHeld += Math.max(0, Number(p.cashStillHeld) || 0);
-      cashWrittenOff += Math.max(0, Number(p.cashWrittenOff) || 0);
+      cashCollected += Number(p.cashCollected) || 0;
+      cashStillHeld += Number(p.cashStillHeld) || 0;
+      cashWrittenOff += Number(p.cashWrittenOff) || 0;
       fuelGasCardFromPeriods += Number(p.fuelGasCardSpend) || 0;
       fuelDriverFromPeriods += Number(p.fuelDriverSpend) || 0;
-      const settlement = Number(p.settlementAmount) || 0;
-      if (settlement > 0) driverPayoutsFromPeriods += settlement;
-    }
-    const latest = inRange.sort((a, b) =>
-      String(b.periodAnchor).localeCompare(String(a.periodAnchor)),
-    )[0];
-    if (latest) {
-      const held = Math.max(0, Number(latest.cashStillHeld) || 0);
-      const companyOwes = Math.max(0, Number(latest.settlementAmount) || 0);
+      driverCommissionFromPeriods += Number(p.driverShare) || 0;
+      const held = Number(p.cashStillHeld) || 0;
+      const companyOwes = Math.max(0, Number(p.settlementAmount) || 0);
       if (held > 0.005) debtors.push({ driverId: pack.driverId, name: pack.name, amount: round2(held) });
-      const weekBank = bankRows.find((r) => r.weekStartYmd === String(latest.periodAnchor).slice(0, 10));
+      const weekBank = bankRows.find((r) => r.weekStartYmd === String(p.periodAnchor).slice(0, 10));
       balanceRows.push({
         driverId: pack.driverId,
         name: pack.name,
@@ -158,9 +149,9 @@ export async function fetchBusinessFinanceBundle(
             ? 'confirmed'
             : 'pending'
           : 'unknown',
-        weekLabel: String(latest.periodAnchor).slice(0, 10),
-        periodAnchor: String(latest.periodAnchor).slice(0, 10),
-        status: String(latest.settlementStatus || latest.status || 'open'),
+        weekLabel: String(p.periodAnchor).slice(0, 10),
+        periodAnchor: String(p.periodAnchor).slice(0, 10),
+        status: String(p.settlementStatus || p.status || 'open'),
       });
     }
   }
@@ -168,7 +159,11 @@ export async function fetchBusinessFinanceBundle(
   debtors.sort((a, b) => b.amount - a.amount);
   balanceRows.sort((a, b) => b.cashStillHeld - a.cashStillHeld);
 
-  const pnl = buildPnLFromCanonicalEvents(ledgerEvents, period);
+  const pnl = buildPnLFromCanonicalEvents(ledgerEvents, period, {
+    driverCommission: driverCommissionFromPeriods,
+    cashWriteOffs,
+    basis: opts.basis === 'cash' ? 'cash' : 'accrual',
+  });
   const expenseAgg = sumExpenseRowsFromEvents(ledgerEvents, period);
 
   if (pnl.fuelBreakdown) {
@@ -195,15 +190,10 @@ export async function fetchBusinessFinanceBundle(
   const fuel = expenseAgg.fuelEventCount > 0 ? expenseAgg.fuel : 0;
   const tolls = expenseAgg.tollEventCount > 0 ? expenseAgg.tolls : 0;
   const driverPayoutLine = pnl.lines.find((line) => line.id === 'driver_payouts')?.amount ?? 0;
-  const driverPayouts =
-    Math.abs(driverPayoutLine) > 0.005
-      ? Math.abs(driverPayoutLine)
-      : round2(driverPayoutsFromPeriods);
+  const driverPayouts = Math.abs(driverPayoutLine);
 
   const grossLine = pnl.lines.find((l) => l.id === 'gross')?.amount || 0;
-  const profitLineBase = Number(pnl.lines.find((l) => l.id === 'operating_profit')?.amount) || 0;
-  // Cash write-offs are company loss from period projection — not yet a ledger event type.
-  const profitLine = round2(profitLineBase - cashWrittenOff);
+  const profitLine = Number(pnl.lines.find((l) => l.id === 'operating_profit')?.amount) || 0;
 
   // Wallet loads: sum canonical wallet_credit already in ledgerEvents (funding transfer, not P&L).
   const { periodLoads: walletLoads } = computeIndriveWalletLoadsFromLedgerEntries(
@@ -240,7 +230,7 @@ export async function fetchBusinessFinanceBundle(
     const missing = Number((periodsRes as any)?.totals?.missingCanonicalChargeCount) || 0;
     tollVarianceFlags = missing > 0 ? missing : 0;
   } catch {
-    /* optional health signal — do not fail the bundle */
+    incomplete.push('Toll health');
   }
 
   let fuelVarianceFlags = 0;
@@ -249,7 +239,7 @@ export async function fetchBusinessFinanceBundle(
     const missing = Number((fuelHealth as any)?.totals?.missingCanonicalExpenseCount) || 0;
     fuelVarianceFlags = missing > 0 ? missing : 0;
   } catch {
-    /* optional */
+    incomplete.push('Fuel health');
   }
 
   let walletShortDriverCount = 0;
@@ -260,7 +250,7 @@ export async function fetchBusinessFinanceBundle(
     });
     walletShortDriverCount = Number(walletFleet?.totals?.shortDriverCount) || 0;
   } catch {
-    /* optional health signal — do not fail the bundle */
+    incomplete.push('InDrive wallet');
   }
 
   const overview: BusinessFinanceOverview = {
@@ -336,7 +326,7 @@ export async function fetchBusinessFinanceBundle(
 
   const expenses: ExpensesSnapshot = buildExpensesSnapshot(ledgerEvents, period);
 
-  const truncated = drivers.length > 80;
+  const truncated = false;
 
   return {
     period,

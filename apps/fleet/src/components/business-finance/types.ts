@@ -30,12 +30,14 @@ export type PnLLineId =
   | 'gross'
   | 'platform_fees'
   | 'net_trip'
+  | 'driver_commission'
   | 'fuel'
   | 'tolls'
   | 'maintenance'
   | 'fixed_overhead'
   | 'other_income'
   | 'operating_expenses'
+  | 'cash_write_offs'
   | 'driver_payouts'
   | 'operating_profit';
 
@@ -194,6 +196,7 @@ export type ExpenseRow = {
 export type ExpensesSnapshot = {
   categories: ExpenseCategorySummary[];
   rows: ExpenseRow[];
+  rowCount?: number;
   incompleteSources: string[];
 };
 

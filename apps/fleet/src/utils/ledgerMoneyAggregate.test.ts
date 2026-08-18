@@ -7,24 +7,27 @@ import {
 const driver = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 
 describe('canonicalEventInSelectedWindow', () => {
-  it('includes legacy statement/payout rows when posting date is within range or shortly after', () => {
+  it('includes rows whose calendar date falls in the selected range', () => {
     const range = ['2026-03-23', '2026-03-29'] as const;
-    expect(
-      canonicalEventInSelectedWindow({ eventType: 'statement_line', date: '2026-03-30' }, ...range),
-    ).toBe(true);
-    expect(
-      canonicalEventInSelectedWindow({ eventType: 'payout_bank', date: '2026-03-30' }, ...range),
-    ).toBe(true);
     expect(
       canonicalEventInSelectedWindow({ eventType: 'statement_line', date: '2026-03-28' }, ...range),
     ).toBe(true);
-    // Pay/settlement date after week end (within 14-day grace)
     expect(
-      canonicalEventInSelectedWindow({ eventType: 'statement_line', date: '2026-04-10' }, ...range),
+      canonicalEventInSelectedWindow({ eventType: 'payout_bank', date: '2026-03-23' }, ...range),
     ).toBe(true);
   });
 
-  it('does not include statement rows from before the selected range via legacy date band', () => {
+  it('does not include posting dates after the selected week (no grace band)', () => {
+    const range = ['2026-03-23', '2026-03-29'] as const;
+    expect(
+      canonicalEventInSelectedWindow({ eventType: 'statement_line', date: '2026-03-30' }, ...range),
+    ).toBe(false);
+    expect(
+      canonicalEventInSelectedWindow({ eventType: 'statement_line', date: '2026-04-10' }, ...range),
+    ).toBe(false);
+  });
+
+  it('does not include statement rows from before the selected range', () => {
     expect(
       canonicalEventInSelectedWindow(
         { eventType: 'payout_cash', date: '2026-06-01' },
@@ -32,16 +35,9 @@ describe('canonicalEventInSelectedWindow', () => {
         '2026-03-29',
       ),
     ).toBe(false);
-    expect(
-      canonicalEventInSelectedWindow(
-        { eventType: 'payout_cash', date: '2026-05-20' },
-        '2026-06-08',
-        '2026-06-14',
-      ),
-    ).toBe(false);
   });
 
-  it('does not attribute a prior-week statement that only touches the range end date', () => {
+  it('attributes by posting date, not statement span', () => {
     expect(
       canonicalEventInSelectedWindow(
         {
@@ -53,22 +49,7 @@ describe('canonicalEventInSelectedWindow', () => {
         '2026-06-16',
         '2026-06-20',
       ),
-    ).toBe(false);
-    expect(
-      canonicalEventInSelectedWindow(
-        {
-          eventType: 'payout_cash',
-          date: '2026-06-16',
-          periodStart: '2026-06-16',
-          periodEnd: '2026-06-22',
-        },
-        '2026-06-16',
-        '2026-06-20',
-      ),
     ).toBe(true);
-  });
-
-  it('does not attribute month-wide payout_cash to a single week inside the month', () => {
     expect(
       canonicalEventInSelectedWindow(
         {
@@ -79,28 +60,6 @@ describe('canonicalEventInSelectedWindow', () => {
         },
         '2026-06-08',
         '2026-06-14',
-      ),
-    ).toBe(false);
-    expect(
-      canonicalEventInSelectedWindow(
-        {
-          eventType: 'payout_cash',
-          date: '2026-06-15',
-          periodStart: '2026-06-01',
-          periodEnd: '2026-06-30',
-        },
-        '2026-06-01',
-        '2026-06-30',
-      ),
-    ).toBe(true);
-  });
-
-  it('does not include statement rows far outside the grace window', () => {
-    expect(
-      canonicalEventInSelectedWindow(
-        { eventType: 'statement_line', date: '2026-06-01' },
-        '2026-03-23',
-        '2026-03-29',
       ),
     ).toBe(false);
   });

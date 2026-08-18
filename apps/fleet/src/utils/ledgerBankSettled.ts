@@ -1,15 +1,10 @@
 /**
  * Bank / cash settled for a week from ledger `payout_bank` / `payout_cash` events.
- *
- * Org/import often stamps periodStart===periodEnd (pay/settlement day). Matching
- * Settlement weeks via canonicalEventInSelectedWindow then piles many batches into
- * whatever Mon–Sun contains that pay day (e.g. $724k on Apr 6). When the period
- * span is degenerate, bucket by event `date` (earliest trip day in the batch) —
- * the real statement-week signal.
+ * Week assignment: ADR 0007 `periodKeyFor` on posting `date` (America/Jamaica).
  */
 
 import { format } from 'date-fns';
-import { weekBucketForDate } from './tollWeekPeriod';
+import { periodKeyFor, DEFAULT_FLEET_TZ } from '@roam/finance-core';
 
 export type PayoutBankEventLike = Record<string, unknown>;
 
@@ -19,35 +14,16 @@ function ymdSlice(raw: unknown): string | null {
   return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
 }
 
-function periodSpanDays(ps: string, pe: string): number {
-  const a = new Date(`${ps}T12:00:00.000Z`).getTime();
-  const b = new Date(`${pe}T12:00:00.000Z`).getTime();
-  if (!Number.isFinite(a) || !Number.isFinite(b)) return -1;
-  return (b - a) / (24 * 60 * 60 * 1000);
-}
-
 /**
  * Which Settlement Mon–Sun week key a payout_bank / payout_cash event belongs to.
- * Proper week-sized period → week of periodStart; otherwise → week of event date.
  */
 export function payoutBankEventWeekKey(
   ev: PayoutBankEventLike,
   timezone?: string,
 ): string | null {
-  const ps = ymdSlice(ev.periodStart);
-  const pe = ymdSlice(ev.periodEnd);
-  const d = ymdSlice(ev.date);
-  if (ps && pe) {
-    const span = periodSpanDays(ps, pe);
-    // Real statement week (~Mon–Sun). Degenerate single-day stamps are pay dates.
-    if (span >= 5 && span <= 10) {
-      return weekBucketForDate(new Date(`${ps}T12:00:00`), timezone).key;
-    }
-  }
-  if (d) {
-    return weekBucketForDate(new Date(`${d}T12:00:00`), timezone).key;
-  }
-  return null;
+  const date = ymdSlice(ev.date) || ymdSlice(ev.periodStart);
+  if (!date) return null;
+  return periodKeyFor(date, timezone || DEFAULT_FLEET_TZ);
 }
 
 function sumLedgerPayoutForWeek(

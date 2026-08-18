@@ -88,6 +88,13 @@ return **410**. `isLedgerReadUnifiedFleetEnabled()` is permanently ON;
 **Disaster rollback:** restore `ledger.kv_money_backup_20260811` → `kv_store_37f42386`,
 re-enable legacy/dual-write flags, turn product read flags off.
 
+## Driver-week read model (2026-08-18)
+
+Driver-week cash, commission, tips quota, and settlement live in `@roam/finance-core`.
+`rebuildDriverFinancialPeriod` writes `ledger.driver_financial_periods`; Settlements, Overview,
+Cash Wallet, the driver app, and Business Finance read that row (flags `FIN_READ_PROJECTION_*`).
+Policy: [FINANCIAL_INTEGRITY_AUDIT](./FINANCIAL_INTEGRITY_AUDIT.md) and ADRs 0006–0012.
+
 
 ## Key artifacts (Phases 6–15)
 

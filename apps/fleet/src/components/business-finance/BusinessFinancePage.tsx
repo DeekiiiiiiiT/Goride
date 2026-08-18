@@ -41,6 +41,7 @@ export function BusinessFinancePage({
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
   const [bannerDismissed, setBannerDismissed] = useState(false);
+  const [pnlBasis, setPnlBasis] = useState<'accrual' | 'cash'>('accrual');
 
   const customReady = Boolean(customStart && customEnd);
   const queryPreset: PeriodPreset =
@@ -50,6 +51,7 @@ export function BusinessFinancePage({
     queryPreset,
     customReady ? customStart : undefined,
     customReady ? customEnd : undefined,
+    pnlBasis,
   );
 
   const setPresetSafe = (p: PeriodPreset) => {
@@ -166,6 +168,24 @@ export function BusinessFinancePage({
               />
             </TabsContent>
             <TabsContent value="pnl" className="mt-0">
+              <div className="mb-3 flex gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={pnlBasis === 'accrual' ? 'default' : 'outline'}
+                  onClick={() => setPnlBasis('accrual')}
+                >
+                  Accrual
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={pnlBasis === 'cash' ? 'default' : 'outline'}
+                  onClick={() => setPnlBasis('cash')}
+                >
+                  Cash
+                </Button>
+              </div>
               <PnLTab pnl={data.pnl} />
             </TabsContent>
             <TabsContent value="cash-bank" className="mt-0">

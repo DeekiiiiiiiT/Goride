@@ -53,6 +53,7 @@ export type DriverFinancialPeriodClient = {
   sourceEventHash?: string;
   projectionVersion?: number;
   projectedAt?: string;
+  metadata?: Record<string, unknown>;
   lines?: unknown[];
 };
 
@@ -222,6 +223,40 @@ export function overlaySharedPeriodsOntoPayoutRows<T extends {
       tripCount: Number(p.tripCount) || row.tripCount,
       driverSharePercent: Number(p.driverSharePercent) || row.driverSharePercent,
       tierName: p.tierName || row.tierName,
+    };
+  });
+}
+
+/** Overlay Cash Wallet weeks with persisted projection passenger cash (Phase 4). */
+export function overlayCashWeeksFromPeriods<T extends {
+  start: Date;
+  amountOwed: number;
+  amountPaid: number;
+  balance: number;
+  breakdown: { cashCollected: number };
+}>(weeks: T[], periods: DriverFinancialPeriodClient[] | undefined | null): T[] {
+  if (!periods?.length || !weeks.length) return weeks;
+  const byAnchor = new Map<string, DriverFinancialPeriodClient>();
+  for (const p of periods) {
+    const a = String(p.periodAnchor || '').slice(0, 10);
+    if (a) byAnchor.set(a, p);
+  }
+  return weeks.map((week) => {
+    const key = [
+      week.start.getFullYear(),
+      String(week.start.getMonth() + 1).padStart(2, '0'),
+      String(week.start.getDate()).padStart(2, '0'),
+    ].join('-');
+    const p = byAnchor.get(key);
+    if (!p) return week;
+    const amountOwed = Number(p.cashCollected) || 0;
+    const amountPaid = Number(p.cashReturned) || 0;
+    return {
+      ...week,
+      amountOwed,
+      amountPaid,
+      balance: Math.round((amountOwed - amountPaid) * 100) / 100,
+      breakdown: { ...week.breakdown, cashCollected: amountOwed },
     };
   });
 }

@@ -19,7 +19,7 @@ describe('payoutBankEventWeekKey', () => {
     ).toBe('2026-06-22');
   });
 
-  it('uses periodStart when period is a real statement week', () => {
+  it('uses posting date, not the statement span (ADR 0007)', () => {
     expect(
       payoutBankEventWeekKey({
         eventType: 'payout_bank',
@@ -28,7 +28,7 @@ describe('payoutBankEventWeekKey', () => {
         periodEnd: '2026-07-05',
         netAmount: 100,
       }),
-    ).toBe('2026-06-29');
+    ).toBe('2026-06-22');
   });
 });
 

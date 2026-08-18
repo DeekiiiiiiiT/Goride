@@ -113,6 +113,16 @@ import {
   canonicalEventInSelectedWindow,
 } from "./ledger_money_aggregate.ts";
 import {
+  getDriverFinancialPeriodDetail,
+  isSingleFleetWeek,
+  overlayOverviewFromPeriod,
+  findSignedWeeksTouchedByEvents,
+} from "./driver_financial_periods.ts";
+import {
+  isFinanceReadProjectionOverview,
+  isFinanceShadowProjection,
+} from "../_shared/unifiedLedger/flags.ts";
+import {
   computeIndriveWalletFeesFromLedgerEntries,
   computeIndriveWalletLoadsFromLedgerEntries,
   buildIndriveWalletFleetFromLedger,
@@ -4434,10 +4444,34 @@ app.get("/make-server-37f42386/ledger/driver-overview", requireAuth(), async (c)
         prevValsCanon,
         lifetimeValsCanon,
         platformsParam || undefined,
-      );
+      ) as Record<string, unknown>;
       console.log(
         `[Ledger DriverOverview] OK — period earnings=${(resultCanon.period as any)?.earnings} events=${periodValsCanon.length}`,
       );
+
+      if (isSingleFleetWeek(startDate, endDate) && isFinanceReadProjectionOverview()) {
+        try {
+          const periodRow = await getDriverFinancialPeriodDetail(driverId, startDate);
+          if (periodRow) {
+            const legacyCash = Number((resultCanon.period as { cashCollected?: number })?.cashCollected) || 0;
+            const projCash = Number(periodRow.cashCollected) || 0;
+            if (Math.abs(legacyCash - projCash) > 0.01) {
+              console.warn(
+                `[FIN_SHADOW overview] driver=${driverId} week=${startDate} legacyCash=${legacyCash} projCash=${projCash}`,
+              );
+            }
+            if (!isFinanceShadowProjection()) {
+              return c.json({
+                success: true,
+                data: overlayOverviewFromPeriod(resultCanon, periodRow),
+              });
+            }
+          }
+        } catch (projErr) {
+          console.warn("[Ledger DriverOverview] projection overlay skipped:", projErr);
+        }
+      }
+
       return c.json({ success: true, data: resultCanon });
     } catch (canonErr: any) {
       console.log(`[Ledger DriverOverview] Error: ${canonErr.message}`);
@@ -4898,6 +4932,7 @@ app.post(
     try {
       const body = await c.req.json();
       const events = body?.events;
+      const confirmSignedWeek = body?.confirmSignedWeek === true;
       const rbacUser = c.get("rbacUser") as RbacUser | undefined;
       const importerUserId =
         (rbacUser as any)?.userId || (rbacUser as any)?.email || undefined;
@@ -4907,6 +4942,20 @@ app.post(
             importerUserId: e?.importerUserId ?? importerUserId,
           }))
         : [];
+      if (!confirmSignedWeek && enriched.length > 0) {
+        const signed = await findSignedWeeksTouchedByEvents(enriched);
+        if (signed.length > 0) {
+          return c.json(
+            {
+              error: "SIGNED_WEEK",
+              message:
+                "This import would change an already-signed week. Confirm to post a visible adjustment.",
+              signedWeeks: signed,
+            },
+            409,
+          );
+        }
+      }
       const result = await appendCanonicalLedgerEvents(enriched, c);
       if (result.inserted > 0) {
         try {

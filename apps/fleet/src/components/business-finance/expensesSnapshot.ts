@@ -143,6 +143,7 @@ export function buildExpensesSnapshot(
       },
     ],
     rows: expenseAgg.rows,
+    rowCount: expenseAgg.rowCount,
     incompleteSources: [],
   };
 }

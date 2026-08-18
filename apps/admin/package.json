@@ -40,6 +40,7 @@
     "@roam/api-client": "workspace:*",
     "@roam/auth-client": "workspace:*",
     "@roam/business-config": "workspace:*",
+    "@roam/finance-core": "workspace:*",
     "@roam/platform-settings": "workspace:*",
     "@roam/roam-shared": "workspace:*",
     "@roam/toll-ui": "workspace:*",

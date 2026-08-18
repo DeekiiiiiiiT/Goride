@@ -510,3 +510,52 @@ describe('buildPnLFromCanonicalEvents — business overhead', () => {
     expect(agg.rows).toHaveLength(3);
   });
 });
+
+describe('P&L golden month — payout_cash is not an expense', () => {
+  const month: BusinessFinancePeriod = {
+    preset: 'this_month',
+    startYmd: '2026-07-01',
+    endYmd: '2026-07-31',
+  };
+
+  it('foots accrual profit without treating passenger cash as a payout', () => {
+    const events = [
+      {
+        eventType: 'fare_earning',
+        date: '2026-07-02',
+        netAmount: 100000,
+        grossAmount: 100000,
+        platform: 'Uber',
+        direction: 'inflow',
+      },
+      {
+        eventType: 'platform_fee',
+        date: '2026-07-02',
+        netAmount: 5000,
+        platform: 'Uber',
+        direction: 'outflow',
+      },
+      {
+        eventType: 'payout_cash',
+        date: '2026-07-02',
+        netAmount: 30000,
+        platform: 'Uber',
+        direction: 'inflow',
+      },
+      {
+        eventType: 'driver_payout',
+        date: '2026-07-03',
+        netAmount: 1000,
+        direction: 'outflow',
+      },
+    ];
+    const pnl = buildPnLFromCanonicalEvents(events, month, {
+      driverCommission: 25000,
+      cashWriteOffs: 100,
+      basis: 'accrual',
+    });
+    expect(pnl.lines.find((l) => l.id === 'driver_payouts')?.kind).toBe('memo');
+    expect(pnl.lines.find((l) => l.id === 'driver_payouts')?.amount).toBe(-1000);
+    expect(pnl.lines.find((l) => l.id === 'driver_commission')?.amount).toBe(-25000);
+  });
+});

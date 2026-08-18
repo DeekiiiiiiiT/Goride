@@ -16,6 +16,7 @@ import {
 } from './useDriverFinancialBundle';
 import {
   overlaySharedPeriodsOntoPayoutRows,
+  overlayCashWeeksFromPeriods,
   periodsToPayoutPeriodRows,
   useDriverFinancialPeriods,
 } from './useDriverFinancialPeriods';
@@ -197,7 +198,9 @@ export function useDriverPayoutPeriodRows(opts: {
   });
 
   const cashWeeks: CashWeekData[] = useMemo(() => {
-    if (useSharedWeekly) return sharedWeekly?.cashWeeks ?? [];
+    if (useSharedWeekly) {
+      return overlayCashWeeksFromPeriods(sharedWeekly?.cashWeeks ?? [], sharedPeriodsQuery.data);
+    }
     const overviewMap = overviewCashBankByWeekQuery.data || {};
     const overviewUberCashByWeek: Record<string, number> = {};
     for (const [k, v] of Object.entries(overviewMap)) {
@@ -212,9 +215,11 @@ export function useDriverPayoutPeriodRows(opts: {
       payoutBankEvents,
       overviewUberCashByWeek: hasPayoutCashEvents ? undefined : overviewUberCashByWeek,
     });
-    if (!Object.keys(overviewMap).length) return base;
+    if (!Object.keys(overviewMap).length) {
+      return overlayCashWeeksFromPeriods(base, sharedPeriodsQuery.data);
+    }
 
-    return base.map((week) => {
+    const merged = base.map((week) => {
       const key = format(week.start, 'yyyy-MM-dd');
       let bank = overviewMap[key]?.bank ?? 0;
       if (!(bank > 0.005)) {
@@ -233,6 +238,7 @@ export function useDriverPayoutPeriodRows(opts: {
         breakdown: { ...week.breakdown, bankSettled: bank },
       };
     });
+    return overlayCashWeeksFromPeriods(merged, sharedPeriodsQuery.data);
   }, [
     useSharedWeekly,
     sharedWeekly?.cashWeeks,
@@ -244,6 +250,7 @@ export function useDriverPayoutPeriodRows(opts: {
     payoutBankEvents,
     hasPayoutCashEvents,
     overviewCashBankByWeekQuery.data,
+    sharedPeriodsQuery.data,
   ]);
 
   const periodData: PayoutPeriodRow[] = useMemo(() => {

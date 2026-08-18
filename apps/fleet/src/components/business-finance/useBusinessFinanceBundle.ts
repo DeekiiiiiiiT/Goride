@@ -10,6 +10,7 @@ export function useBusinessFinanceBundle(
   preset: PeriodPreset,
   customStart?: string,
   customEnd?: string,
+  basis: 'accrual' | 'cash' = 'accrual',
 ) {
   const { organizationId } = useAuth();
   const fleetTz = useFleetTimezone();
@@ -25,11 +26,13 @@ export function useBusinessFinanceBundle(
       period.endYmd,
       organizationId || null,
       fleetTz,
+      basis,
     ],
     queryFn: () =>
       fetchBusinessFinanceBundle(period, {
         organizationId,
         fleetTimezone: fleetTz,
+        basis,
       }),
     staleTime: 60_000,
   });

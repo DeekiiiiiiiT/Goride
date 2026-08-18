@@ -24,7 +24,9 @@
       "@roam/auth-client": ["packages/auth-client/src"],
       "@roam/auth-client/*": ["packages/auth-client/src/*"],
       "@roam/business-config": ["packages/business-config/src"],
-      "@roam/business-config/*": ["packages/business-config/src/*"]
+      "@roam/business-config/*": ["packages/business-config/src/*"],
+      "@roam/finance-core": ["packages/finance-core/src"],
+      "@roam/finance-core/*": ["packages/finance-core/src/*"]
     }
   },
   "exclude": ["node_modules", "dist", "build"]

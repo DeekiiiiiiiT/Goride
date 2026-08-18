@@ -38,7 +38,7 @@ export interface CashSettlementInput {
 export interface CashWeekData {
     start: Date;
     end: Date;
-    amountOwed: number;     // cash collected + float issued
+    amountOwed: number;     // passenger cash only — never bank/float/personal
     amountPaid: number;     // allocated payments + FIFO + surplus + toll credits + fuel credits
     balance: number;        // amountOwed - amountPaid
     status: 'Paid' | 'Partial' | 'Unpaid' | 'Overpaid' | 'No Activity';
@@ -142,7 +142,7 @@ export function computeWeeklyCashSettlement(input: CashSettlementInput): CashWee
                 }),
             );
 
-        const amountOwed = Math.max(csvCash, tripCalculatedCash) + weeklyFloat + weeklyTollCharges;
+        const amountOwed = Math.max(csvCash, tripCalculatedCash);
         const isFromCsv = csvCash > tripCalculatedCash;
 
         // --- Calculate Credits (Allocated Payments + Approved Cash Tolls) ---

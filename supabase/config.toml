@@ -414,3 +414,6 @@ verify_jwt = false
 # WiPay/PayPal webhooks have no user JWT — each route authenticates itself
 [functions.payments]
 verify_jwt = false
+
+[functions.finance-recon]
+verify_jwt = false

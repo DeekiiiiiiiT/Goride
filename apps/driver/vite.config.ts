@@ -13,6 +13,7 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
       '@roam/admin-core': path.resolve(__dirname, '../../packages/admin-core/src'),
       '@roam/hauler-dispatch': path.resolve(__dirname, '../../packages/hauler-dispatch/src'),
+      '@roam/finance-core': path.resolve(__dirname, '../../packages/finance-core/src/index.ts'),
     },
   },
   build: {

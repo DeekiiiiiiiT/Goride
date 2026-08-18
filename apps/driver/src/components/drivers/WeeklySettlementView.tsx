@@ -10,6 +10,8 @@ import { format } from "date-fns";
 import { DollarSign, Info, Eye, ArrowUpCircle, ArrowDownCircle, Wallet, Banknote, Fuel, Receipt, CreditCard, Scale } from "lucide-react";
 import { cn } from '@roam/ui';
 import { computeWeeklyCashSettlement } from '../../utils/cashSettlementCalc';
+import { api } from '../../services/api';
+import { useQuery } from '@tanstack/react-query';
 
 /** Match PayoutPeriodDetail currency display. */
 function fmtMoney(n: number) {
@@ -42,10 +44,41 @@ interface WeeklySettlementViewProps {
 }
 
 export function WeeklySettlementView({ trips = [], transactions = [], csvMetrics = [], weekSettlementByMonday, onLogPayment, onWeeksComputed, readOnly = false }: WeeklySettlementViewProps) {
-    
+    const driverId = String(trips[0]?.driverId || '');
+    const periodsQuery = useQuery({
+        queryKey: ['driverFinancialPeriods', driverId],
+        queryFn: async () => {
+            const res = await api.getDriverFinancialPeriods(driverId);
+            return Array.isArray(res?.data) ? res.data : [];
+        },
+        enabled: Boolean(driverId),
+        staleTime: 60_000,
+    });
+
     const weeks = useMemo(() => {
-        return computeWeeklyCashSettlement({ trips, transactions, csvMetrics });
-    }, [trips, transactions, csvMetrics]);
+        const base = computeWeeklyCashSettlement({ trips, transactions, csvMetrics });
+        const periods = periodsQuery.data || [];
+        if (!periods.length) return base;
+        const byAnchor = new Map<string, { cashCollected: number; cashReturned: number }>();
+        for (const p of periods) {
+            const a = String(p.periodAnchor || '').slice(0, 10);
+            if (a) byAnchor.set(a, { cashCollected: Number(p.cashCollected) || 0, cashReturned: Number(p.cashReturned) || 0 });
+        }
+        return base.map((week) => {
+            const key = format(week.start, 'yyyy-MM-dd');
+            const p = byAnchor.get(key);
+            if (!p) return week;
+            const amountOwed = p.cashCollected;
+            const amountPaid = p.cashReturned;
+            return {
+                ...week,
+                amountOwed,
+                amountPaid,
+                balance: Math.round((amountOwed - amountPaid) * 100) / 100,
+                breakdown: { ...week.breakdown, cashCollected: amountOwed },
+            };
+        });
+    }, [trips, transactions, csvMetrics, periodsQuery.data]);
 
     type WeekData = typeof weeks[number];
     const [selectedWeek, setSelectedWeek] = useState<WeekData | null>(null);
