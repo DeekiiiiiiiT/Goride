@@ -39,7 +39,7 @@ import {
   hasDismissedPayoutSetup,
 } from '../lib/first-order';
 import { fetchBankAccount } from '../lib/partner-api';
-import { getItemOptionLines, Order } from '../types/order';
+import { getItemOptionLines, normalizeOrder, Order } from '../types/order';
 import {
   fetchMerchantHistoryOrders,
   merchantOrdersKeys,
@@ -121,7 +121,7 @@ export default function OrdersPage({ merchant, onNavigate, onOpenMobileNav }: Or
 
   const handleRealtimeInsert = useCallback(
     (payload: { new: Record<string, unknown> }) => {
-      const newOrder = payload.new as Order;
+      const newOrder = normalizeOrder(payload.new as Order);
       setNewOrderIds((prev) => new Set([...prev, newOrder.id]));
       setDetailOrderId(newOrder.id);
       setShowOrderDetail(false);

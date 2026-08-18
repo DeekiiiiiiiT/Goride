@@ -56,6 +56,7 @@ export default function OnboardingCompletePage({
     setLoading(true);
     void fetchApplicationStatus()
       .then((res) => setChecklist(res.checklist))
+      .catch(() => setChecklist({}))
       .finally(() => setLoading(false));
   }, [refreshKey]);
 

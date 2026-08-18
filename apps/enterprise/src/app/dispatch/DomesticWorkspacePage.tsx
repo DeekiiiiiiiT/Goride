@@ -8,7 +8,11 @@ const ShipmentsListPage = lazy(() =>
   import('@/app/freight/ShipmentsListPage').then((m) => ({ default: m.ShipmentsListPage })),
 );
 const DispatchBoardPage = lazy(() =>
-  import('@/app/dispatch/DispatchBoardPage').then((m) => ({ default: m.DispatchBoardPage })),
+  import('@/app/dispatch/DispatchBoardPage').then((m) => ({
+    default: m.DispatchBoardPage ?? function DispatchBoardUnavailable() {
+      return null;
+    },
+  })),
 );
 
 type DomesticTab = 'shipments' | 'dispatch';

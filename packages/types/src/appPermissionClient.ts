@@ -12,20 +12,48 @@ export function isNativeCapacitorPlatform(): boolean {
   return cap?.isNativePlatform?.() === true;
 }
 
+export type NativeGeolocationPosition = {
+  coords: {
+    latitude: number;
+    longitude: number;
+    heading?: number | null;
+    accuracy?: number | null;
+    speed?: number | null;
+  };
+};
+
+export type NativeGeolocationWatchCallback = (
+  position: NativeGeolocationPosition | null,
+  err?: unknown,
+) => void;
+
+export type NativeGeolocationApi = {
+  checkPermissions: () => Promise<{ location?: string }>;
+  requestPermissions: () => Promise<{ location?: string }>;
+  getCurrentPosition: (options?: Record<string, unknown>) => Promise<NativeGeolocationPosition>;
+  watchPosition: (
+    options: Record<string, unknown>,
+    callback: NativeGeolocationWatchCallback,
+  ) => Promise<string>;
+  clearWatch: (opts: { id: string }) => Promise<void>;
+};
+
 /**
- * Capacitor plugin proxies trap `.then`. Returning the plugin from `async`
- * makes JS unwrap it as a thenable and throw `"Geolocation.then()" is not implemented`.
- * Return a plain object of methods instead. Fixes ROAM-DRIVER-1.
+ * Capacitor plugin proxies trap `.then`. Destructuring/`return` of the plugin from
+ * `async` or `.then()` makes JS unwrap it and throw `"Geolocation.then()" is not implemented`.
+ * Always take the module namespace first, then wrap methods on a plain object. Fixes ROAM-DRIVER-1.
  */
-async function getNativeGeolocation() {
+export async function getNativeGeolocation(): Promise<NativeGeolocationApi | null> {
   if (!isNativeCapacitorPlatform()) return null;
   try {
-    const { Geolocation } = await import('@capacitor/geolocation');
+    const mod = await import('@capacitor/geolocation');
+    const Geo = mod.Geolocation;
     return {
-      checkPermissions: () => Geolocation.checkPermissions(),
-      requestPermissions: () => Geolocation.requestPermissions(),
-      getCurrentPosition: (options: Parameters<typeof Geolocation.getCurrentPosition>[0]) =>
-        Geolocation.getCurrentPosition(options),
+      checkPermissions: () => Geo.checkPermissions(),
+      requestPermissions: () => Geo.requestPermissions(),
+      getCurrentPosition: (options) => Geo.getCurrentPosition(options),
+      watchPosition: (options, callback) => Geo.watchPosition(options, callback),
+      clearWatch: (opts) => Geo.clearWatch(opts),
     };
   } catch {
     return null;

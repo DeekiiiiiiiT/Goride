@@ -64,12 +64,32 @@ export interface OrderEvent {
   notes?: string | null;
 }
 
-export function getItemOptionLines(item: OrderItem) {
+export function getItemOptionLines(item: OrderItem | null | undefined) {
+  if (!item) return [];
   return (
     item.options?.flatMap((option) => {
-      const selections = option.selections?.map((s) => s.name).join(', ') ?? '';
+      if (!option) return [];
+      const selections =
+        option.selections
+          ?.filter((s): s is NonNullable<typeof s> => Boolean(s?.name))
+          .map((s) => s.name)
+          .join(', ') ?? '';
       if (!selections) return [];
-      return `${option.name}: ${selections}`;
+      return `${option.name ?? 'Option'}: ${selections}`;
     }) ?? []
   );
+}
+
+/** Drop null line items / modifiers from API or realtime payloads (ROAM-DASH-MERCHANT-4). */
+export function normalizeOrderItems(
+  items: Array<OrderItem | null | undefined> | null | undefined,
+): OrderItem[] {
+  if (!Array.isArray(items)) return [];
+  return items.filter((item): item is OrderItem => Boolean(item && typeof item.name === 'string'));
+}
+
+export function normalizeOrder<T extends { items?: Array<OrderItem | null | undefined> | null }>(
+  order: T,
+): T & { items: OrderItem[] } {
+  return { ...order, items: normalizeOrderItems(order.items) };
 }

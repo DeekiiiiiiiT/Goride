@@ -43,6 +43,7 @@ import {
 } from '../services/logisticsDriverEdge';
 import {
   checkGeolocationGranted,
+  getNativeGeolocation,
   isBlockedByPolicy,
   isNativeCapacitorPlatform,
   isWebApplicable,
@@ -256,9 +257,9 @@ export function useRideDispatch() {
     const id = watchId.current;
     watchId.current = null;
     if (isNativeCapacitorPlatform()) {
-      void import('@capacitor/geolocation').then(({ Geolocation }) =>
-        Geolocation.clearWatch({ id: String(id) }),
-      );
+      void getNativeGeolocation().then((Geo) => {
+        if (Geo) void Geo.clearWatch({ id: String(id) });
+      });
       return;
     }
     navigator.geolocation.clearWatch(id as number);
@@ -476,9 +477,9 @@ export function useRideDispatch() {
 
     if (isNativeCapacitorPlatform()) {
       void (async () => {
-        const { Geolocation } = await import('@capacitor/geolocation');
-        if (cancelled) return;
-        watchId.current = await Geolocation.watchPosition(
+        const Geo = await getNativeGeolocation();
+        if (!Geo || cancelled) return;
+        watchId.current = await Geo.watchPosition(
           { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 },
           (position, err) => {
             if (cancelled) return;

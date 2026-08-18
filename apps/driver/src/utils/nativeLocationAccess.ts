@@ -1,5 +1,6 @@
 import {
   checkGeolocationGranted,
+  getNativeGeolocation,
   isNativeCapacitorPlatform,
   requestGeolocationPermission,
 } from '@roam/types';
@@ -12,11 +13,12 @@ export async function ensureDriverLocationAccess(): Promise<DriverLocationAccess
     return state === 'granted' ? 'granted' : 'denied_needs_settings';
   }
 
-  const { Geolocation } = await import('@capacitor/geolocation');
-  let perm = await Geolocation.checkPermissions();
+  const Geo = await getNativeGeolocation();
+  if (!Geo) return 'unsupported';
+  let perm = await Geo.checkPermissions();
 
   if (perm.location !== 'granted' && perm.location !== 'limited') {
-    perm = await Geolocation.requestPermissions();
+    perm = await Geo.requestPermissions();
   }
 
   if (perm.location !== 'granted' && perm.location !== 'limited') {
@@ -24,7 +26,7 @@ export async function ensureDriverLocationAccess(): Promise<DriverLocationAccess
   }
 
   try {
-    await Geolocation.getCurrentPosition({
+    await Geo.getCurrentPosition({
       enableHighAccuracy: true,
       timeout: 20000,
       maximumAge: 10000,
@@ -46,9 +48,10 @@ export type DriverPosition = {
 
 export async function readCurrentDriverPosition(): Promise<DriverPosition | null> {
   if (isNativeCapacitorPlatform()) {
-    const { Geolocation } = await import('@capacitor/geolocation');
+    const Geo = await getNativeGeolocation();
+    if (!Geo) return null;
     try {
-      const pos = await Geolocation.getCurrentPosition({
+      const pos = await Geo.getCurrentPosition({
         enableHighAccuracy: true,
         timeout: 20000,
         maximumAge: 10000,

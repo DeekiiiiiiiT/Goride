@@ -5525,7 +5525,7 @@ app.get("/make-server-37f42386/ledger/driver-earnings-history", requireAuth(), a
       `[Ledger EarningsHistory] driverId=${driverId} periodType=${periodType} range=${startDateParam || "auto"}..${endDateParam || "auto"} readModel=canonical`,
     );
 
-    const driverIdsResolved = await resolveDriverIdsForEarningsHistory(driverId);
+    const driverIdsResolved = await expandStatementSummaryDriverIds(driverId);
 
     // ── Step 1: Fetch canonical ledger_event rows for this driver (multi-ID) ──
     const allEntries = await fetchAllLedgerEventValuesForDrivers(driverIdsResolved, c);

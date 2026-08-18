@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { RideRequestRow } from '@roam/types/rides';
-import { isNativeCapacitorPlatform } from '@roam/types';
+import { getNativeGeolocation, isNativeCapacitorPlatform } from '@roam/types';
 import {
   ridesDriverPostRideLocation,
   type DriverRideLocationLive,
@@ -65,9 +65,9 @@ export function useActiveRideTracking(
     const id = watchIdRef.current;
     watchIdRef.current = null;
     if (isNativeCapacitorPlatform()) {
-      void import('@capacitor/geolocation').then(({ Geolocation }) =>
-        Geolocation.clearWatch({ id: String(id) }),
-      );
+      void getNativeGeolocation().then((Geo) => {
+        if (Geo) void Geo.clearWatch({ id: String(id) });
+      });
       return;
     }
     if (navigator.geolocation) {
@@ -126,8 +126,9 @@ export function useActiveRideTracking(
     if (!activeRide?.id) return;
 
     if (isNativeCapacitorPlatform()) {
-      void import('@capacitor/geolocation').then(({ Geolocation }) => {
-        void Geolocation.getCurrentPosition({
+      void getNativeGeolocation().then((Geo) => {
+        if (!Geo) return;
+        void Geo.getCurrentPosition({
           enableHighAccuracy: true,
           maximumAge: 0,
           timeout: 15000,
@@ -184,9 +185,9 @@ export function useActiveRideTracking(
     let cancelled = false;
 
     if (isNativeCapacitorPlatform()) {
-      void import('@capacitor/geolocation').then(({ Geolocation }) => {
-        if (cancelled) return;
-        void Geolocation.watchPosition(
+      void getNativeGeolocation().then((Geo) => {
+        if (!Geo || cancelled) return;
+        void Geo.watchPosition(
           { enableHighAccuracy: true, maximumAge: intervalMs, timeout: 15000 },
           (position, err) => {
             if (err || !position) return;

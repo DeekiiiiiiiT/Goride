@@ -10,6 +10,8 @@ const geo = {
   getCurrentPosition: vi.fn(async () => ({
     coords: { latitude: 18.0, longitude: -77.0 },
   })),
+  watchPosition: vi.fn(async () => 'watch-1'),
+  clearWatch: vi.fn(async () => undefined),
 };
 
 vi.mock('@capacitor/geolocation', () => ({
@@ -23,6 +25,7 @@ vi.mock('@capacitor/geolocation', () => ({
 
 import {
   checkGeolocationGranted,
+  getNativeGeolocation,
   requestGeolocationPermission,
 } from '@roam/types';
 
@@ -51,5 +54,14 @@ describe('native geolocation thenable (ROAM-DRIVER-1)', () => {
     await expect(requestGeolocationPermission()).resolves.toBe('granted');
     expect(thenTrap).not.toHaveBeenCalled();
     expect(geo.requestPermissions).toHaveBeenCalledOnce();
+  });
+
+  it('returns a plain method wrapper instead of the Capacitor plugin', async () => {
+    const api = await getNativeGeolocation();
+    expect(api).not.toBeNull();
+    expect(Object.prototype.hasOwnProperty.call(api, 'then')).toBe(false);
+    await expect(api!.watchPosition({}, () => undefined)).resolves.toBe('watch-1');
+    await expect(api!.clearWatch({ id: 'watch-1' })).resolves.toBeUndefined();
+    expect(thenTrap).not.toHaveBeenCalled();
   });
 });

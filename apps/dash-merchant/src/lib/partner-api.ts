@@ -45,7 +45,7 @@ export async function deliveryFetch(path: string, init?: RequestInit) {
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `Request failed: ${res.status}`);
+    throw new Error(body.error || `Request failed: ${res.status} ${path}`);
   }
   return res.json();
 }

@@ -15,6 +15,7 @@ import {
 import { fetchBusinessTypeMetadataById } from "./admin/onboardingConfigRoutes.ts";
 import {
   allowedDocumentTypesForMerchant,
+  merchantGoLiveRuleFromRow,
   rowToBusinessTypeMetadata,
   verticalSnapshotFromMetadata,
 } from "./verticalMetadata.ts";

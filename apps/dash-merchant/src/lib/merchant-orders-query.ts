@@ -1,6 +1,6 @@
 import { API_ENDPOINTS, supabaseAnonFunctionHeaders } from '@roam/api-client';
 import type { Session } from '@supabase/supabase-js';
-import type { Order } from '../types/order';
+import { normalizeOrder, type Order } from '../types/order';
 import { getStationAuthHeaders } from './partner-api';
 import { isStoreTabletContext } from './storeTabletUrl';
 import { readDeviceSession } from './store-tablet-session';
@@ -48,7 +48,7 @@ export async function fetchMerchantActiveOrders(
     const headers = await getStationAuthHeaders('');
     const res = await fetch(`${API_ENDPOINTS.delivery}/merchant/orders${queryString}`, { headers });
     if (!res.ok) throw new Error('Failed to fetch orders');
-    return res.json();
+    return normalizeOrdersResponse(await res.json());
   }
   if (!session) throw new Error('Not authenticated');
   const res = await fetch(`${API_ENDPOINTS.delivery}/merchant/orders${queryString}`, {
@@ -57,7 +57,7 @@ export async function fetchMerchantActiveOrders(
     }),
   });
   if (!res.ok) throw new Error('Failed to fetch orders');
-  return res.json();
+  return normalizeOrdersResponse(await res.json());
 }
 
 export async function fetchMerchantHistoryOrders(
@@ -70,7 +70,14 @@ export async function fetchMerchantHistoryOrders(
     }),
   });
   if (!res.ok) throw new Error('Failed to fetch orders');
-  return res.json();
+  return normalizeOrdersResponse(await res.json());
+}
+
+function normalizeOrdersResponse(data: MerchantOrdersResponse): MerchantOrdersResponse {
+  return {
+    ...data,
+    orders: (data.orders ?? []).map((order) => normalizeOrder(order)),
+  };
 }
 
 export function invalidateAllMerchantOrders(

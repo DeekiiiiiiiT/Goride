@@ -54,6 +54,7 @@ export default function AccountPendingPage({ onSignOut }: AccountPendingPageProp
   useEffect(() => {
     void fetchApplicationStatus()
       .then(setData)
+      .catch(() => setData(null))
       .finally(() => setLoading(false));
   }, []);
 
