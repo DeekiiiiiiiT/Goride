@@ -92,6 +92,31 @@ describe('computeTollFleetLossNetting', () => {
     expect(computeTollFleetLossNetting([charge({ netAmount: 370, grossAmount: 370 })]).net).toBe(370);
   });
 
+  it('matched plaza with platform_reimbursed offset is not a fleet loss', () => {
+    const events = [
+      charge({ sourceId: 'tag-1', netAmount: 4620, grossAmount: 4620 }),
+      {
+        eventType: 'toll_charge_offset',
+        date: '2026-02-10',
+        driverId: 'd1',
+        sourceType: 'transaction',
+        sourceId: 'tag-1',
+        netAmount: 4620,
+        direction: 'inflow',
+        metadata: { reason: 'platform_reimbursed' },
+      },
+    ];
+    const netting = computeTollFleetLossNetting(events);
+    expect(netting.net).toBe(0);
+    expect(netting.recovered).toBe(4620);
+    const pnl = buildPnLFromCanonicalEvents(events, period);
+    expect(-(pnl.lines.find((l) => l.id === 'tolls')!.amount ?? 0)).toBe(0);
+  });
+
+  it('write-off / business plaza with no offset stays a fleet cost', () => {
+    expect(computeTollFleetLossNetting([charge({ sourceId: 'wo-1', netAmount: 370, grossAmount: 370 })]).net).toBe(370);
+  });
+
   it('cash-washed trip does not wipe a real tag debit', () => {
     const events = [
       charge({ sourceId: 'tag-1', netAmount: 370, grossAmount: 370 }),

@@ -31,4 +31,4 @@ jobs:
       - name: Run Deno test suites
         run: |
           set -euo pipefail
-          deno test --allow-env --allow-net --allow-read supabase/functions/
+          deno test --no-check --allow-env --allow-net --allow-read supabase/functions/

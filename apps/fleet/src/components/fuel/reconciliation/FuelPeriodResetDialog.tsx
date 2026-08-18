@@ -67,9 +67,9 @@ export function FuelPeriodResetDialog({
       return;
     }
     setExecuting(true);
-    const toastId = toast.loading('Resetting period…');
+    const toastId = toast.loading('Reopening week…');
     try {
-      const result = await runExclusive('Resetting period…', async () => {
+      const result = await runExclusive('Reopening week…', async () => {
         const weekKey = period.startDate || period.id;
         try {
           return await api.resetFuelPeriod(weekKey);
@@ -174,13 +174,13 @@ export function FuelPeriodResetDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-rose-700">
             <RotateCcw className="h-5 w-5" />
-            Reset Period
+            Reopen week
           </DialogTitle>
           <DialogDescription>
             Re-open <strong>{period.label}</strong>
             {inventory.canReset
               ? ' by removing finalized snapshots and reversing linked settlements.'
-              : '. This week has no posted settlements — Reset still clears wizard progress and returns you to the period list.'}{' '}
+              : '. This week has no posted settlements — Reopen still clears wizard progress and returns you to the period list.'}{' '}
             This cannot be undone.
           </DialogDescription>
         </DialogHeader>
@@ -245,10 +245,10 @@ export function FuelPeriodResetDialog({
             {executing ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Resetting…
+                Reopening…
               </>
             ) : (
-              'Reset Period'
+              'Reopen week'
             )}
           </Button>
         </DialogFooter>

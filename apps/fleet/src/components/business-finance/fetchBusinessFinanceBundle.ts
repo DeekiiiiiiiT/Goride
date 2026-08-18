@@ -122,8 +122,8 @@ export async function fetchBusinessFinanceBundle(
   let cashCollected = 0;
   let cashStillHeld = 0;
   let cashWrittenOff = 0;
-  let fuelFromPeriods = 0;
-  let tollFromPeriods = 0;
+  let fuelGasCardFromPeriods = 0;
+  let fuelDriverFromPeriods = 0;
   let driverPayoutsFromPeriods = 0;
   const debtors: Array<{ driverId: string; name: string; amount: number }> = [];
   const balanceRows: DriverBalanceRow[] = [];
@@ -135,8 +135,8 @@ export async function fetchBusinessFinanceBundle(
       cashCollected += Number(p.cashReturned) || 0;
       cashStillHeld += Math.max(0, Number(p.cashStillHeld) || 0);
       cashWrittenOff += Math.max(0, Number(p.cashWrittenOff) || 0);
-      fuelFromPeriods += (Number(p.fuelGasCardSpend) || 0) + (Number(p.fuelDriverSpend) || 0);
-      tollFromPeriods += Number(p.tollSpend) || 0;
+      fuelGasCardFromPeriods += Number(p.fuelGasCardSpend) || 0;
+      fuelDriverFromPeriods += Number(p.fuelDriverSpend) || 0;
       const settlement = Number(p.settlementAmount) || 0;
       if (settlement > 0) driverPayoutsFromPeriods += settlement;
     }
@@ -171,11 +171,29 @@ export async function fetchBusinessFinanceBundle(
   const pnl = buildPnLFromCanonicalEvents(ledgerEvents, period);
   const expenseAgg = sumExpenseRowsFromEvents(ledgerEvents, period);
 
+  if (pnl.fuelBreakdown) {
+    const ledgerNamed =
+      (pnl.fuelBreakdown.gasCardSpend || 0) > 0.005 ||
+      (pnl.fuelBreakdown.driverCashSpend || 0) > 0.005;
+    if (!ledgerNamed) {
+      pnl.fuelBreakdown.gasCardSpend = round2(fuelGasCardFromPeriods);
+      pnl.fuelBreakdown.driverCashSpend = round2(fuelDriverFromPeriods);
+    }
+  } else if (fuelGasCardFromPeriods > 0.005 || fuelDriverFromPeriods > 0.005) {
+    pnl.fuelBreakdown = {
+      grossSpend: 0,
+      gasCardSpend: round2(fuelGasCardFromPeriods),
+      driverCashSpend: round2(fuelDriverFromPeriods),
+      alreadyCovered: 0,
+      reimbursedToDrivers: 0,
+      fleetLoss: 0,
+    };
+  }
+
   // Prefer ledger when fuel/toll events exist — never treat net $0 as "ledger empty".
-  const fuel =
-    expenseAgg.fuelEventCount > 0 ? expenseAgg.fuel : round2(fuelFromPeriods);
-  const tolls =
-    expenseAgg.tollEventCount > 0 ? expenseAgg.tolls : round2(tollFromPeriods);
+  // Do not sum card + driver cash into one Fuel fallback (that labeled company plastic as driver money).
+  const fuel = expenseAgg.fuelEventCount > 0 ? expenseAgg.fuel : 0;
+  const tolls = expenseAgg.tollEventCount > 0 ? expenseAgg.tolls : 0;
   const driverPayoutLine = pnl.lines.find((line) => line.id === 'driver_payouts')?.amount ?? 0;
   const driverPayouts =
     Math.abs(driverPayoutLine) > 0.005
@@ -316,10 +334,7 @@ export async function fetchBusinessFinanceBundle(
     ),
   };
 
-  const expenses: ExpensesSnapshot = buildExpensesSnapshot(ledgerEvents, period, {
-    fuel: fuelFromPeriods,
-    tolls: tollFromPeriods,
-  });
+  const expenses: ExpensesSnapshot = buildExpensesSnapshot(ledgerEvents, period);
 
   const truncated = drivers.length > 80;
 

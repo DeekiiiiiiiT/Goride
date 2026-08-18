@@ -143,7 +143,7 @@ export interface WeeklyFuelReport {
   vehicleId: string;
   driverId: string;
 
-  // 1. The Truth (Financial)
+  // 1. The Truth (Financial) — all ops fill $ this week (card + cash). Not card-only.
   totalGasCardCost: number;
   
   // 2. The Operation (Trips) -> Ride Share

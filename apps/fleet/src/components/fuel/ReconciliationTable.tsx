@@ -21,7 +21,10 @@ import {
     History,
     CheckCircle2,
     AlertTriangle,
-    ShieldCheck
+    ShieldCheck,
+    Minus,
+    TrendingDown,
+    Check,
 } from "lucide-react";
 import { format } from "date-fns";
 import { DateRange } from "react-day-picker";
@@ -45,31 +48,18 @@ import {
 
 import { Vehicle } from '../../types/vehicle';
 import { Trip } from '../../types/data';
-import { FuelEntry, MileageAdjustment, WeeklyFuelReport, FuelDispute, FuelScenario, OdometerBucket, FinalizedFuelReport, FuelCard } from '../../types/fuel';
-import { FuelCalculationService, VehicleDeadheadInput, FuelBrainClassificationInput } from '../../services/fuelCalculationService';
-import { classifyWeekForRecon } from '../../services/fuelBrainClient';
-import { sumTripRideshareKm } from '../../utils/tripRideshareKm';
-import {
-  DEFAULT_INDUSTRY_FALLBACK_PCT,
-  resolveDeadheadHintForBrain,
-} from '../../utils/deadheadHintForBrain';
+import { FuelEntry, MileageAdjustment, WeeklyFuelReport, FuelDispute, FuelScenario, OdometerBucket, FinalizedFuelReport, FuelCard, UNASSIGNED_FUEL_DRIVER_ID } from '../../types/fuel';
+import { FuelCalculationService, type VehicleDeadheadInput, type FuelBrainClassificationInput, type PersonalAllowanceReconContext } from '../../services/fuelCalculationService';
 import { downloadCSV } from '../../utils/export';
 import { ScenarioSplitDashboard } from './ScenarioSplitDashboard';
-import { api } from '../../services/api';
-import { UNASSIGNED_FUEL_DRIVER_ID } from '../../types/fuel';
-import { reportWeekYmdBounds, toEntryYmd, isSameFuelStatement } from '../../utils/fuelWeekPeriod';
+import { reportWeekYmdBounds, isSameFuelStatement } from '../../utils/fuelWeekPeriod';
 import { sumPaidByDriverForReport } from '../../utils/fuelPaidByDriver';
 import { resolveActiveFuelPolicyForDriverWeek } from '../../utils/fuelPolicyVersion';
-import { tierService } from '../../services/tierService';
-import { earningsPolicyService } from '../../services/earningsPolicyService';
-import type { PersonalAllowanceTierConfig, QuotaConfig, TierConfig } from '../../types/data';
-import type { EarningsPolicy } from '../../types/earningsPolicy';
-import { mergePersonalAllowanceDefaults, personalAllowanceBonusKey } from '../../utils/personalAllowance';
-import {
-  resolveActiveEarningsBundleForDriverWeek,
-  extractEarningsPolicySnapshot,
-} from '../../utils/earningsPolicyResolve';
-import { createDefaultTiers } from '../../utils/earningsPolicyDefaults';
+import { evaluateFuelFinalizeGating, weekBoundsFromDateRange, findDisputeForReport } from '../../utils/fuelFinalizeGating';
+import { buildPersonalAllowanceReconContext } from '../../utils/buildPersonalAllowanceReconContext';
+import { fetchDeadheadMap, buildBrainMap } from '../../utils/buildFuelWeekReportsForFinalize';
+import { getLeakageDisplay } from '../../utils/fuelLeakageDisplay';
+import { FUEL_MONEY_EPS } from '../../utils/fuelMoneyEpsilon';
 
 interface ReconciliationTableProps {
     vehicles: Vehicle[];
@@ -93,6 +83,8 @@ interface ReconciliationTableProps {
     onAddAdjustment?: () => void;
     onResolveDispute?: (dispute: FuelDispute) => void;
     onViewBuckets?: (vehicle: Vehicle) => void;
+    loading?: boolean;
+    reportsOverride?: WeeklyFuelReport[];
 }
 
 export function ReconciliationTable({
@@ -113,67 +105,35 @@ export function ReconciliationTable({
     onFinalize,
     onAddAdjustment,
     onResolveDispute,
-    onViewBuckets
+    onViewBuckets,
+    loading = false,
+    reportsOverride,
 }: ReconciliationTableProps) {
     const [isFinalizeDialogOpen, setIsFinalizeDialogOpen] = React.useState(false);
 
     const weekStart = dateRange?.from;
     const weekEnd = dateRange?.to || dateRange?.from;
 
-    // Phase 3: Deadhead attribution data from server
+    const skipLiveCompute = Array.isArray(reportsOverride);
     const [deadheadMap, setDeadheadMap] = useState<Map<string, VehicleDeadheadInput>>(new Map());
     const [deadheadLoading, setDeadheadLoading] = useState(false);
     const [brainByDriverVehicle, setBrainByDriverVehicle] = useState<Map<string, FuelBrainClassificationInput>>(new Map());
-    const [personalAllowanceConfig, setPersonalAllowanceConfig] = useState<PersonalAllowanceTierConfig>(
-        mergePersonalAllowanceDefaults(null),
-    );
-    const [quotaConfig, setQuotaConfig] = useState<QuotaConfig | null>(null);
-    const [legacyTiers, setLegacyTiers] = useState<TierConfig[]>(createDefaultTiers());
-    const [earningsPolicies, setEarningsPolicies] = useState<EarningsPolicy[]>([]);
-    const [bonusByDriverId, setBonusByDriverId] = useState<Map<string, number>>(new Map());
-    const [ledgerGrossByDriverId, setLedgerGrossByDriverId] = useState<Map<string, number>>(new Map());
+    const [paContext, setPaContext] = useState<PersonalAllowanceReconContext | undefined>();
 
     useEffect(() => {
+        if (skipLiveCompute || !weekStart || !weekEnd) return;
         let cancelled = false;
+        const weekStartYmd = format(weekStart, 'yyyy-MM-dd');
+        const weekEndYmd = format(weekEnd, 'yyyy-MM-dd');
         (async () => {
             try {
-                const [pa, quotas, tiers, policies, prefs] = await Promise.all([
-                    tierService.getPersonalAllowanceSettings(),
-                    tierService.getQuotaSettings(),
-                    tierService.getTiers().catch(() => createDefaultTiers()),
-                    earningsPolicyService.getEarningsPolicies().catch(() => [] as EarningsPolicy[]),
-                    api.getPreferences().catch(() => ({})),
-                ]);
-                if (cancelled) return;
-                // Seed prefs when PA never configured so recon gets enabled defaults
-                let paConfig = pa;
-                if (!(prefs as any)?.personalAllowance) {
-                    paConfig = mergePersonalAllowanceDefaults(null);
-                    if (paConfig.enabled) {
-                        try {
-                            await tierService.savePersonalAllowanceSettings(paConfig);
-                        } catch (seedErr) {
-                            console.warn('[PersonalAllowance] seed enable failed', seedErr);
-                        }
-                    }
-                }
-                setPersonalAllowanceConfig(paConfig);
-                setQuotaConfig(quotas);
-                setLegacyTiers(Array.isArray(tiers) && tiers.length ? tiers : createDefaultTiers());
-                setEarningsPolicies(Array.isArray(policies) ? policies : []);
-                const ledger = (prefs.personalAllowanceBonuses || {}) as Record<string, number>;
-                const map = new Map<string, number>();
-                if (weekStart) {
-                    const weekStartYmd = format(weekStart, 'yyyy-MM-dd');
-                    for (const d of drivers) {
-                        const id = d.id || d.driverId;
-                        if (!id) continue;
-                        const key = personalAllowanceBonusKey(id, weekStartYmd);
-                        const km = Number(ledger[key]) || 0;
-                        if (km > 0) map.set(id, km);
-                    }
-                }
-                setBonusByDriverId(map);
+                const pa = await buildPersonalAllowanceReconContext({
+                    weekStartYmd,
+                    weekEndYmd,
+                    drivers,
+                    seedIfMissing: true,
+                });
+                if (!cancelled) setPaContext(pa.context);
             } catch (e) {
                 console.warn('[PersonalAllowance] failed to load settings', e);
             }
@@ -181,102 +141,26 @@ export function ReconciliationTable({
         return () => {
             cancelled = true;
         };
-    }, [weekStart, drivers]);
-
-    // Same period.earnings as Driver Detail (ledgerMoneyAggregate / driver-overview) for PA quota %
-    const paMayBeActive = useMemo(() => {
-        if (personalAllowanceConfig.enabled) return true;
-        return earningsPolicies.some((p) => p.personalAllowance?.enabled || p.versions?.some((v) => v.personalAllowance?.enabled));
-    }, [personalAllowanceConfig.enabled, earningsPolicies]);
+    }, [skipLiveCompute, weekStart, weekEnd, drivers]);
 
     useEffect(() => {
-        if (!weekStart || !weekEnd || !paMayBeActive) {
-            setLedgerGrossByDriverId(new Map());
-            return;
-        }
-        let cancelled = false;
-        const startDate = format(weekStart, 'yyyy-MM-dd');
-        const endDate = format(weekEnd, 'yyyy-MM-dd');
-        const ids = [
-            ...new Set(
-                drivers
-                    .map((d) => d.id || d.driverId)
-                    .filter((id): id is string => !!id && id !== UNASSIGNED_FUEL_DRIVER_ID),
-            ),
-        ];
-        if (!ids.length) {
-            setLedgerGrossByDriverId(new Map());
-            return;
-        }
-        (async () => {
-            const map = new Map<string, number>();
-            await Promise.all(
-                ids.map(async (driverId) => {
-                    try {
-                        // Same period.earnings SSOT as Driver Detail / ledgerMoneyAggregate
-                        const overview = await api.getLedgerDriverOverview({
-                            driverId,
-                            startDate,
-                            endDate,
-                        });
-                        const earnings = Number(overview?.period?.earnings);
-                        if (Number.isFinite(earnings)) {
-                            map.set(driverId, earnings);
-                        }
-                    } catch {
-                        /* leave missing — PA falls back to trip gross */
-                    }
-                }),
-            );
-            if (!cancelled) setLedgerGrossByDriverId(map);
-        })();
-        return () => {
-            cancelled = true;
-        };
-    }, [weekStart, weekEnd, drivers, paMayBeActive]);
-
-    // Per-period deadhead fetch: use the selected week range directly
-    // (previously used broad date range, which overcounted deadhead per week)
-    useEffect(() => {
-        if (!weekStart || !weekEnd) return;
+        if (skipLiveCompute || !weekStart || !weekEnd) return;
         let cancelled = false;
         setDeadheadLoading(true);
-
         const startStr = format(weekStart, 'yyyy-MM-dd');
         const endStr = format(weekEnd, 'yyyy-MM-dd');
-
-        api.getFleetDeadhead(startStr, endStr)
-            .then((data: any) => {
-                if (cancelled) return;
-                const map = new Map<string, VehicleDeadheadInput>();
-                for (const v of (data?.vehicles || [])) {
-                    map.set(v.vehicleId, {
-                        vehicleId: v.vehicleId,
-                        deadheadKm: v.deadheadKm || 0,
-                        personalKm: v.personalKm || 0,
-                        totalOdometerKm: v.totalOdometerKm || 0,
-                        tripKm: v.tripKm || 0,
-                        method: v.method || 'fallback',
-                        confidenceLevel: v.confidenceLevel || 'low',
-                        confidenceReason: v.confidenceReason || 'No data',
-                    });
-                }
-                setDeadheadMap(map);
-            })
-            .catch((err: any) => {
-                console.error('Failed to fetch deadhead attribution:', err);
-                // Graceful degradation: reconciliation still works without deadhead
+        fetchDeadheadMap(startStr, endStr)
+            .then((map) => {
+                if (!cancelled) setDeadheadMap(map);
             })
             .finally(() => {
                 if (!cancelled) setDeadheadLoading(false);
             });
-
         return () => { cancelled = true; };
-    }, [weekStart, weekEnd]);
+    }, [skipLiveCompute, weekStart, weekEnd]);
 
-    // Fuel Brain classify — residual Personal after RS / Company Ops / capped Deadhead
     useEffect(() => {
-        if (!weekStart || !weekEnd) return;
+        if (skipLiveCompute || !weekStart || !weekEnd) return;
         if (!FLEET_USE_FUEL_BRAIN && !FUEL_BRAIN_SHADOW_COMPARE) {
             setBrainByDriverVehicle(new Map());
             return;
@@ -284,95 +168,22 @@ export function ReconciliationTable({
         let cancelled = false;
         const startStr = format(weekStart, 'yyyy-MM-dd');
         const endStr = format(weekEnd, 'yyyy-MM-dd');
-
         (async () => {
-            const map = new Map<string, FuelBrainClassificationInput>();
-            try {
-                for (const v of vehicles) {
-                    const driverId = v.currentDriverId || '';
-                    if (!driverId) continue;
-                    const vTrips = trips.filter(
-                        (t) =>
-                            t.vehicleId === v.id &&
-                            (t.status === 'Completed' || t.status === 'Cancelled'),
-                    );
-                    const vAdj = adjustments.filter((a) => a.vehicleId === v.id);
-                    const companyOpsKm = vAdj
-                        .filter((a) => a.type === 'Company_Misc' || a.type === 'Maintenance')
-                        .reduce((s, a) => s + (a.distance || 0), 0);
-                    const dh = deadheadMap.get(v.id);
-                    const tripRideshareKm = sumTripRideshareKm(vTrips);
-                    const classified = await classifyWeekForRecon({
-                        driverId,
-                        vehicleId: v.id,
-                        weekStart: startStr,
-                        weekEnd: endStr,
-                        totalOdometerKm: dh?.totalOdometerKm || 0,
-                        tripRideshareKm,
-                        companyOpsKm,
-                        // Root-cause belt: never feed brain a trip-blind full-odo fallback
-                        deadheadHintKm: resolveDeadheadHintForBrain({
-                            server: dh,
-                            clientTripRideshareKm: tripRideshareKm,
-                            companyOpsKm,
-                            industryFallbackPct: DEFAULT_INDUSTRY_FALLBACK_PCT,
-                        }),
-                        industryFallbackPct: DEFAULT_INDUSTRY_FALLBACK_PCT,
-                    });
-                    map.set(`${driverId}:${v.id}`, {
-                        rideShareKm: classified.rideShareKm,
-                        personalKm: classified.personalKm,
-                        companyOpsKm: classified.companyOpsKm,
-                        deadheadKm: classified.deadheadKm,
-                        availableKm: classified.availableKm,
-                        confidence: classified.confidence as Record<string, string>,
-                        method: classified.method,
-                    });
-                }
-            } catch (e) {
-                console.warn('[FuelBrain] classify batch failed', e);
-            }
-            if (!cancelled) setBrainByDriverVehicle(map);
+            const map = await buildBrainMap({
+                vehicles,
+                trips,
+                adjustments,
+                deadheadMap,
+                weekStartYmd: startStr,
+                weekEndYmd: endStr,
+            });
+            if (!cancelled) setBrainByDriverVehicle(map || new Map());
         })();
+        return () => { cancelled = true; };
+    }, [skipLiveCompute, weekStart, weekEnd, vehicles, trips, adjustments, deadheadMap]);
 
-        return () => {
-            cancelled = true;
-        };
-    }, [weekStart, weekEnd, vehicles, trips, adjustments, deadheadMap]);
-
-    // Calculate Data — hooks must always run (React rules of hooks)
-    // Driver-first: one report per driver+week (shared cars → multiple rows)
-    const reports = useMemo(() => {
-        if (!weekStart) return [];
-        const weekStartYmd = format(weekStart, 'yyyy-MM-dd');
-        const legacy = {
-            tiers: legacyTiers,
-            quotas: quotaConfig || {
-                daily: { enabled: false, amount: 0 },
-                weekly: { enabled: false, amount: 0 },
-                monthly: { enabled: false, amount: 0 },
-            },
-            personalAllowance: personalAllowanceConfig,
-        };
-        const personalAllowance = {
-            config: personalAllowanceConfig,
-            quotaConfig,
-            bonusByDriverId,
-            ledgerGrossByDriverId,
-            resolveForDriver: (driverId: string) => {
-                const bundle = resolveActiveEarningsBundleForDriverWeek({
-                    policies: earningsPolicies,
-                    driverId,
-                    weekStartYmd,
-                    legacy,
-                });
-                return {
-                    config: bundle.personalAllowance,
-                    quotaConfig: bundle.quotas,
-                    earningsPolicy: extractEarningsPolicySnapshot(bundle),
-                };
-            },
-        };
+    const computedReports = useMemo(() => {
+        if (skipLiveCompute || !weekStart) return [];
         return FuelCalculationService.generateDriverFleetReport(
             vehicles,
             drivers,
@@ -384,11 +195,14 @@ export function ReconciliationTable({
             scenarios,
             deadheadMap,
             fuelCards,
-            // Only inject into money path when consumer flag is on
             FLEET_USE_FUEL_BRAIN ? brainByDriverVehicle : undefined,
-            personalAllowance,
+            paContext,
         );
-    }, [vehicles, drivers, trips, fuelEntries, adjustments, weekStart, weekEnd, scenarios, deadheadMap, fuelCards, brainByDriverVehicle, personalAllowanceConfig, quotaConfig, bonusByDriverId, ledgerGrossByDriverId, earningsPolicies, legacyTiers]);
+    }, [skipLiveCompute, vehicles, drivers, trips, fuelEntries, adjustments, weekStart, weekEnd, scenarios, deadheadMap, fuelCards, brainByDriverVehicle, paContext]);
+
+    const reports = reportsOverride ?? computedReports;
+
+    const paMayBeActive = Boolean(paContext?.config?.enabled) || reports.some((r) => !!r.metadata?.personalAllowance);
 
     useEffect(() => {
         onReportsChange?.(reports);
@@ -435,87 +249,57 @@ export function ReconciliationTable({
     // ALL entries in the week — adding a late entry can shift the week's observed
     // efficiency/price-per-liter and retroactively reallocate cost already posted —
     // so surface the delta before the admin confirms rather than silently overwriting.
-    const reFinalizeWarnings = useMemo(() => {
-        return reports.reduce((acc, r) => {
-            const prior = finalizedReports.find((f) => isSameFuelStatement(f, r));
-            if (prior) {
-                const priorDriverShare = prior.postedDriverShare ?? prior.driverShare ?? 0;
-                const delta = r.driverShare - priorDriverShare;
-                acc.push({ vehicleId: r.vehicleId, driverId: r.driverId, priorDriverShare, delta });
-            }
-            return acc;
-        }, [] as { vehicleId: string; driverId: string; priorDriverShare: number; delta: number }[]);
-    }, [reports, finalizedReports]);
-
-    // Finalize gating (Step 5): no existing "block on status" pattern exists in
-    // this codebase, so this warns rather than hard-blocks — an admin may need to
-    // override — but requires an explicit acknowledgment when any selected report
-    // has a data-quality flag (Amber/Red health, unresolved pending logs, or an
-    // Open dispute for that vehicle/week).
-    const findDisputeForReport = (report: WeeklyFuelReport) => {
-        const { start, end } = reportWeekYmdBounds(report);
-        return disputes.find(d => {
-            const dStart = toEntryYmd(d.weekStart);
-            if (report.driverId && d.driverId && d.driverId === report.driverId) {
-                if (dStart !== start) return false;
-                if (d.weekEnd) return toEntryYmd(d.weekEnd) === end;
-                return true;
-            }
-            if (d.vehicleId !== report.vehicleId) return false;
-            if (dStart !== start) return false;
-            if (d.weekEnd) return toEntryYmd(d.weekEnd) === end;
-            return true;
-        });
-    };
-
-    const dataQualityWarnings = useMemo(() => {
-        const startYmd = dateRange?.from ? format(dateRange.from, 'yyyy-MM-dd') : '';
-        const endYmd = dateRange?.to ? format(dateRange.to, 'yyyy-MM-dd') : startYmd;
-        const exceptionEntries = fuelEntries.filter((e) => {
-            const d = String(e.date || '').split('T')[0];
-            if (startYmd && d < startYmd) return false;
-            if (endYmd && d > endYmd) return false;
-            return e.metadata?.signalTier === 'exception';
-        });
-        return reports.reduce((acc, r) => {
-            const openDispute = findDisputeForReport(r)?.status === 'Open';
-            const isUnhealthy = r.healthStatus && r.healthStatus !== 'Emerald';
-            const hasPending = (r.pendingCount || 0) > 0;
-            const vehicleExceptions = exceptionEntries.filter((e) => e.vehicleId === r.vehicleId).length;
-            if (openDispute || isUnhealthy || hasPending || vehicleExceptions > 0) {
-                acc.push({
-                    vehicleId: r.vehicleId,
-                    healthStatus: r.healthStatus,
-                    pendingCount: r.pendingCount || 0,
-                    openDispute,
-                    exceptionCount: vehicleExceptions,
-                });
-            }
-            return acc;
-        }, [] as { vehicleId: string; healthStatus?: string; pendingCount: number; openDispute: boolean; exceptionCount?: number }[]);
-    }, [reports, disputes, fuelEntries, dateRange]);
-
-    const hasExceptionBlockers = dataQualityWarnings.some((w) => (w.exceptionCount || 0) > 0);
+    const { startYmd, endYmd } = weekBoundsFromDateRange(dateRange);
+    const gate = useMemo(
+      () =>
+        evaluateFuelFinalizeGating({
+          reports,
+          disputes,
+          fuelEntries,
+          finalizedReports,
+          weekStartYmd: startYmd,
+          weekEndYmd: endYmd,
+        }),
+      [reports, disputes, fuelEntries, finalizedReports, startYmd, endYmd],
+    );
+    const reFinalizeWarnings = gate.reFinalizeWarnings;
+    const dataQualityWarnings = gate.dataQualityWarnings;
+    const hasExceptionBlockers = gate.hasExceptionBlockers;
+    const hasBlockingWarnings = gate.hasBlockingWarnings;
 
     const [financeWarningAcknowledged, setFinanceWarningAcknowledged] = useState(false);
-    const hasBlockingWarnings =
-      dataQualityWarnings.length > 0 ||
-      reFinalizeWarnings.some((w) => Math.abs(w.delta) > 0.01);
 
-    // Handle invalid/loading date range — early return AFTER all hooks
+    const [tableScrollTop, setTableScrollTop] = useState(0);
+    const ROW_H = 56;
+    const VIEW_H = 560;
+    const overscan = 12;
+    const windowed = reports.length > 40;
+    const start = windowed
+      ? Math.max(0, Math.floor(tableScrollTop / ROW_H) - overscan)
+      : 0;
+    const visibleCount = windowed ? Math.ceil(VIEW_H / ROW_H) + overscan * 2 : reports.length;
+    const end = Math.min(reports.length, start + visibleCount);
+    const visibleReports = reports.slice(start, end);
+    const padTop = start * ROW_H;
+    const padBottom = Math.max(0, (reports.length - end) * ROW_H);
+
     if (!dateRange || !dateRange.from) {
         return <div className="p-8 text-center text-slate-500">Select a date range to view reconciliation reports.</div>;
+    }
+
+    if (loading || deadheadLoading) {
+        return <div className="p-8 text-center text-slate-500">Loading week data…</div>;
     }
 
     const formatCurrency = (val: number) => {
         return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val);
     };
 
-    const getLeakageColor = (val: number) => {
-        if (val > 50) return "text-red-600 font-bold"; // High leakage
-        if (val > 0) return "text-amber-600"; // Minor leakage
-        if (val < 0) return "text-emerald-600"; // Savings
-        return "text-slate-600";
+    const leakageIcon = (kind: ReturnType<typeof getLeakageDisplay>['icon']) => {
+        if (kind === 'alert') return <AlertTriangle className="h-3 w-3" />;
+        if (kind === 'minus') return <Minus className="h-3 w-3" />;
+        if (kind === 'trend-down') return <TrendingDown className="h-3 w-3" />;
+        return <Check className="h-3 w-3" />;
     };
 
     const handleExport = async () => {
@@ -578,8 +362,10 @@ export function ReconciliationTable({
                 <div className="flex items-center gap-2">
                     <div className="text-right mr-4">
                         <p className="text-xs text-slate-500">Unassigned spend</p>
-                        <p className={`font-bold ${getLeakageColor(totals.misc)}`}>
-                            {formatCurrency(totals.misc)}
+                        <p className={`font-bold flex items-center justify-end gap-1 ${getLeakageDisplay(totals.misc).colorClass}`}>
+                            {leakageIcon(getLeakageDisplay(totals.misc).icon)}
+                            <span>{formatCurrency(totals.misc)}</span>
+                            <span className="text-[10px] font-medium text-slate-500">{getLeakageDisplay(totals.misc).label}</span>
                         </p>
                     </div>
                     <Button variant="outline" onClick={handleExport}>
@@ -604,6 +390,11 @@ export function ReconciliationTable({
             {/* Main Table */}
             <Card>
                 <CardContent className="p-0">
+                    <div
+                      className={windowed ? 'overflow-auto' : undefined}
+                      style={windowed ? { maxHeight: VIEW_H } : undefined}
+                      onScroll={windowed ? (e) => setTableScrollTop(e.currentTarget.scrollTop) : undefined}
+                    >
                     <Table>
                         <TableHeader className="bg-slate-50">
                             <TableRow>
@@ -870,7 +661,12 @@ export function ReconciliationTable({
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {reports.map((report) => {
+                            {padTop > 0 && (
+                                <TableRow aria-hidden>
+                                    <TableCell colSpan={12} style={{ height: padTop, padding: 0, border: 0 }} />
+                                </TableRow>
+                            )}
+                            {visibleReports.map((report) => {
                                 const vehicle = vehicles.find(v => v.id === report.vehicleId);
                                 const reportDriver = report.driverId && report.driverId !== UNASSIGNED_FUEL_DRIVER_ID
                                     ? drivers.find((d: any) => d.id === report.driverId || d.driverId === report.driverId)
@@ -903,11 +699,11 @@ export function ReconciliationTable({
                                     }
                                   | undefined;
                                 const estimateExceedsSpend =
-                                  report.rideShareCost > report.totalGasCardCost + 0.01 ||
+                                  report.rideShareCost > report.totalGasCardCost + FUEL_MONEY_EPS ||
                                   Math.abs(report.miscellaneousCost) > report.totalGasCardCost * 0.5;
 
                                 // Check if dispute overlaps with report period (YMD bounds)
-                                const dispute = findDisputeForReport(report);
+                                const dispute = findDisputeForReport(disputes, report);
 
                                 return (
                                     <TableRow key={report.id}>
@@ -1234,8 +1030,14 @@ export function ReconciliationTable({
                                                 </Tooltip>
                                             </TooltipProvider>
                                         </TableCell>
-                                        <TableCell className={`text-right text-sm border-r border-slate-200 ${getLeakageColor(report.miscellaneousCost)}`}>
-                                            {formatCurrency(report.miscellaneousCost)}
+                                        <TableCell className={`text-right text-sm border-r border-slate-200 ${getLeakageDisplay(report.miscellaneousCost).colorClass}`}>
+                                            <div className="flex items-center justify-end gap-1">
+                                                {leakageIcon(getLeakageDisplay(report.miscellaneousCost).icon)}
+                                                <span>{formatCurrency(report.miscellaneousCost)}</span>
+                                            </div>
+                                            {report.dataQuality?.odometerIncomplete && (
+                                                <p className="text-[10px] text-amber-700">Incomplete odometer data — Misc / Leakage may be inflated</p>
+                                            )}
                                         </TableCell>
                                         {/* End Breakdown */}
 
@@ -1255,8 +1057,13 @@ export function ReconciliationTable({
                             {reports.length === 0 && (
                                 <TableRow>
                                     <TableCell colSpan={12} className="h-24 text-center text-slate-500">
-                                        No vehicles found.
+                                        No vehicles this week.
                                     </TableCell>
+                                </TableRow>
+                            )}
+                            {padBottom > 0 && (
+                                <TableRow aria-hidden>
+                                    <TableCell colSpan={12} style={{ height: padBottom, padding: 0, border: 0 }} />
                                 </TableRow>
                             )}
                         </TableBody>
@@ -1271,8 +1078,11 @@ export function ReconciliationTable({
                                 <TableCell className="text-right">{formatCurrency(totals.companyUsage)}</TableCell>
                                 <TableCell className="text-right text-amber-600">{formatCurrency(totals.deadhead)}</TableCell>
                                 <TableCell className="text-right">{formatCurrency(totals.personal)}</TableCell>
-                                <TableCell className={`text-right border-r border-slate-200 ${getLeakageColor(totals.misc)}`}>
-                                    {formatCurrency(totals.misc)}
+                                <TableCell className={`text-right border-r border-slate-200 ${getLeakageDisplay(totals.misc).colorClass}`}>
+                                    <span className="inline-flex items-center gap-1">
+                                        {leakageIcon(getLeakageDisplay(totals.misc).icon)}
+                                        {formatCurrency(totals.misc)}
+                                    </span>
                                 </TableCell>
 
                                 <TableCell className="text-right text-emerald-700">{formatCurrency(totals.paidByDriver)}</TableCell>
@@ -1283,6 +1093,7 @@ export function ReconciliationTable({
                             </TableRow>
                         </TableFooter>
                     </Table>
+                    </div>
                 </CardContent>
             </Card>
 
@@ -1305,8 +1116,8 @@ export function ReconciliationTable({
                      Residual after trips, company ops, and deadhead (includes unlabeled miles).
                  </div>
                  <div className="p-3 bg-slate-50 rounded border">
-                     <span className="font-semibold block mb-1">Misc (Leakage)</span>
-                     Residual: Total Spend − estimated categories (can be largely negative).
+                     <span className="font-semibold block mb-1">Misc / Leakage</span>
+                     Residual: Total Spend − estimated categories. Incomplete odometer data can inflate this.
                  </div>
             </div>
 
@@ -1351,8 +1162,8 @@ export function ReconciliationTable({
                                                 return (
                                                     <div key={w.vehicleId} className="flex justify-between text-xs">
                                                         <span>{vehicle?.licensePlate || w.vehicleId}</span>
-                                                        <span className={`font-medium ${Math.abs(w.delta) > 0.01 ? 'text-amber-900' : 'text-slate-500'}`}>
-                                                            {Math.abs(w.delta) > 0.01
+                                                        <span className={`font-medium ${Math.abs(w.delta) > FUEL_MONEY_EPS ? 'text-amber-900' : 'text-slate-500'}`}>
+                                                            {Math.abs(w.delta) > FUEL_MONEY_EPS
                                                                 ? `${w.delta > 0 ? '+' : ''}${formatCurrency(w.delta)} vs. prior`
                                                                 : 'No change'}
                                                         </span>

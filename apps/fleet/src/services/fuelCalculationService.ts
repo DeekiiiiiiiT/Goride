@@ -29,6 +29,7 @@ import {
 import type { PersonalAllowanceTierConfig, QuotaConfig } from '../types/data';
 import { calculateFuelCycles } from '../utils/fuelCycleEngine';
 import { FLEET_CYCLE_HEALTH, FLEET_USE_FUEL_BRAIN } from '../utils/fuelBrainFlags';
+import { blendedDriverShareRatioFromReport } from '@roam/roam-shared';
 import {
   filterFuelOpsLogEntries,
   fuelOpsLiters,
@@ -37,6 +38,12 @@ import {
 
 /** Soft-cycle efficiency band vs week observed km/L before Amber (cycle-health mode). */
 const SOFT_CYCLE_EFFICIENCY_BAND = 0.30;
+export const FALLBACK_EFFICIENCY_KM_L = 10;
+export const FALLBACK_PRICE_PER_LITER = 1.50;
+export const GAP_ANOMALY_PCT = 0.10;
+export const SEVERE_GAP_PCT = 0.30;
+export const TANK_OVERFLOW_MULT = 1.05;
+export const UNACCOUNTED_DISTANCE_DEDUCTION_KM = 10;
 
 export type { FuelCoverageCategory };
 
@@ -166,8 +173,7 @@ export const FuelCalculationService = {
      * postings consistent with the category-weighted `driverShare` shown on screen.
      */
     getBlendedDriverShareRatio: (report: WeeklyFuelReport): number => {
-        if (!report.totalGasCardCost || report.totalGasCardCost <= 0) return 0;
-        return report.driverShare / report.totalGasCardCost;
+        return blendedDriverShareRatioFromReport(report);
     },
 
     /**
@@ -247,7 +253,7 @@ export const FuelCalculationService = {
             isEntryInInclusiveYmdRange(a.date, startStr, endStr)
         );
 
-        // 3. Aggregate Costs (same eligibility as Transaction Logs Total Spend)
+        // 3. Aggregate Costs (all ops fill $ this week — card + cash; UI label is Total Spend)
         const totalGasCardCost = vehicleEntries.reduce((sum, e) => sum + fuelOpsSpendAmount(e), 0);
         const totalLiters = vehicleEntries.reduce((sum, e) => sum + fuelOpsLiters(e), 0);
 
@@ -278,7 +284,7 @@ export const FuelCalculationService = {
                 // efficiencyCity is L/100km, convert to km/L
                 observedEfficiency = 100 / cityEfficiency;
             } else {
-                observedEfficiency = 10; // Last resort fallback
+                observedEfficiency = FALLBACK_EFFICIENCY_KM_L;
             }
         }
 
@@ -288,7 +294,7 @@ export const FuelCalculationService = {
             actualPricePerLiter = totalGasCardCost / totalLiters;
         }
         if (actualPricePerLiter <= 0) {
-            actualPricePerLiter = 1.50; // Fallback if no fuel entries exist
+            actualPricePerLiter = FALLBACK_PRICE_PER_LITER;
         }
         
         // 4. Aggregate Distances
@@ -302,6 +308,7 @@ export const FuelCalculationService = {
         // 4b. Option C: Hybrid Residual — compute personal km from odometer buckets.
         // Move bucket calculation up so we can derive personal distance from the odometer delta.
         const buckets = FuelCalculationService.calculateOdometerBuckets(vehicle, vehicleEntries, vehicleTrips, vehicleAdjustments);
+        const odometerIncomplete = buckets.length === 0 && vehicleEntries.length > 0;
         const totalOdometerDelta = buckets.reduce((sum, b) => sum + (b.endOdometer - b.startOdometer), 0);
 
         // Step 2.3a: Compute raw residual (everything that isn't trip or company ops)
@@ -416,13 +423,13 @@ export const FuelCalculationService = {
             0;
         const gapAnomalyBuckets = buckets.filter((b) => {
             const dist = b.endOdometer - b.startOdometer;
-            const hasGap = dist > 0 && b.unaccountedDistance > dist * 0.1;
-            const hasOverflow = tankCap > 0 && b.actualFuelLiters > tankCap * 1.05;
+            const hasGap = dist > 0 && b.unaccountedDistance > dist * GAP_ANOMALY_PCT;
+            const hasOverflow = tankCap > 0 && b.actualFuelLiters > tankCap * TANK_OVERFLOW_MULT;
             return b.status === 'Anomaly' && (hasGap || hasOverflow);
         });
         const severeGap = buckets.some((b) => {
             const dist = b.endOdometer - b.startOdometer;
-            return dist > 0 && b.unaccountedDistance > dist * 0.3;
+            return dist > 0 && b.unaccountedDistance > dist * SEVERE_GAP_PCT;
         });
 
         let healthStatus: 'Emerald' | 'Amber' | 'Red' = 'Emerald';
@@ -504,6 +511,7 @@ export const FuelCalculationService = {
             healthStatus,
             healthScore,
             odometerBuckets: buckets,
+            dataQuality: { odometerIncomplete },
             fuelCycles: closedCycles,
             deadheadMeta: deadheadData ? {
                 method: deadheadData.method,
@@ -526,6 +534,7 @@ export const FuelCalculationService = {
                     tripsIncluded: vehicleTrips.length,
                     completedTrips: vehicleTrips.filter(t => t.status === 'Completed').length,
                     cancelledTrips: vehicleTrips.filter(t => t.status === 'Cancelled').length,
+                    odometerIncomplete,
                 },
                 fuelBrain: useBrain && options?.brainClassification
                     ? {
@@ -566,7 +575,7 @@ export const FuelCalculationService = {
           resolved && 'quotaConfig' in resolved ? resolved.quotaConfig : paCtx.quotaConfig;
         if (!config?.enabled) return report;
         const calc = report.metadata?.rideShareCalc || {};
-        const efficiency = Number(calc.observedEfficiency) > 0 ? Number(calc.observedEfficiency) : 10;
+        const efficiency = Number(calc.observedEfficiency) > 0 ? Number(calc.observedEfficiency) : FALLBACK_EFFICIENCY_KM_L;
         const price = Number(calc.actualPricePerLiter) > 0 ? Number(calc.actualPricePerLiter) : 0;
         const ledgerGross = paCtx.ledgerGrossByDriverId?.get(report.driverId);
         const earningsJmd =
@@ -849,11 +858,26 @@ export const FuelCalculationService = {
                 const priceGuess =
                     Number(merged.metadata?.rideShareCalc?.actualPricePerLiter) > 0
                         ? Number(merged.metadata.rideShareCalc.actualPricePerLiter)
-                        : 1.5;
-                const effGuess =
+                        : FALLBACK_PRICE_PER_LITER;
+                const knownEff = Number(merged.metadata?.rideShareCalc?.observedEfficiency);
+                let effGuess =
                     merged.personalDistance > 0 && merged.personalUsageCost > 0
                         ? (merged.personalDistance * priceGuess) / merged.personalUsageCost
-                        : Number(merged.metadata?.rideShareCalc?.observedEfficiency) || 10;
+                        : knownEff;
+                if (!(effGuess > 0) && merged.personalDistance > 0) {
+                    const attributed =
+                        (merged.rideShareCost || 0) +
+                        (merged.companyUsageCost || 0) +
+                        (merged.deadheadCost || 0) +
+                        (merged.miscellaneousCost || 0);
+                    const residualCost = Math.max(0, (merged.totalGasCardCost || 0) - attributed);
+                    if (residualCost > 0 && priceGuess > 0) {
+                        effGuess = (merged.personalDistance * priceGuess) / residualCost;
+                    }
+                }
+                if (!(effGuess > 0)) {
+                    effGuess = knownEff > 0 ? knownEff : FALLBACK_EFFICIENCY_KM_L;
+                }
                 merged.metadata = {
                     ...merged.metadata,
                     rideShareCalc: {
@@ -954,7 +978,7 @@ export const FuelCalculationService = {
             if (cityEff && cityEff > 0) {
                 bucketEfficiencyKmL = 100 / cityEff; // L/100km -> km/L
             } else {
-                bucketEfficiencyKmL = 10; // 10 km/L default
+                bucketEfficiencyKmL = FALLBACK_EFFICIENCY_KM_L;
             }
         }
 

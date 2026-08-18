@@ -159,4 +159,137 @@ describe('generateDriverFleetReport shared car', () => {
     // Quota policy is more company-friendly — driver share of rideShare should be lower for d2 vs flat ratio
     expect(b!.driverShare).toBeLessThanOrEqual(a!.driverShare + 0.01);
   });
+
+  it('flags odometerIncomplete when fills exist but buckets cannot be built', () => {
+    const reports = FuelCalculationService.generateDriverFleetReport(
+      [vehicle],
+      [{ id: 'd1', name: 'Driver A' }],
+      weekStart,
+      weekEnd,
+      [],
+      [
+        {
+          id: 'e-no-odo',
+          vehicleId: 'v1',
+          driverId: 'd1',
+          date: '2026-06-30',
+          amount: 50,
+          type: 'Card_Transaction',
+          entryMode: 'Floating',
+          paymentSource: 'Gas_Card',
+          reconciliationStatus: 'Pending',
+        } as any,
+      ],
+      [],
+      [defaultPolicy],
+    );
+    const row = reports.find((r) => r.driverId === 'd1');
+    expect(row?.dataQuality?.odometerIncomplete).toBe(true);
+  });
+
+  it('multi-vehicle Personal Allowance merge keeps bucket sum equal to total spend', () => {
+    const v1 = {
+      id: 'v1',
+      licensePlate: 'AAA111',
+      currentDriverId: 'd1',
+      fuelSettings: { fuelType: 'Gasoline_87', efficiencyCity: 10, efficiencyHighway: 8, tankCapacity: 40 },
+    } as Vehicle;
+    const v2 = {
+      id: 'v2',
+      licensePlate: 'BBB222',
+      currentDriverId: 'd1',
+      fuelSettings: { fuelType: 'Gasoline_87', efficiencyCity: 10, efficiencyHighway: 8, tankCapacity: 40 },
+    } as Vehicle;
+    const pa = {
+      config: {
+        enabled: true,
+        weeklyQuotaOverrideJmd: 100000,
+        nextWeekBonusKm: 0,
+        bands: [{ minPctInclusive: 0, maxPctExclusive: null, earnedKm: 80 }],
+      },
+      ledgerGrossByDriverId: new Map([['d1', 120000]]),
+    };
+
+    const reports = FuelCalculationService.generateDriverFleetReport(
+      [v1, v2],
+      [{ id: 'd1', name: 'Driver' }],
+      weekStart,
+      weekEnd,
+      [
+        { id: 't1', driverId: 'd1', vehicleId: 'v1', date: '2026-06-30', status: 'Completed', distance: 40 } as any,
+        { id: 't2', driverId: 'd1', vehicleId: 'v2', date: '2026-07-02', status: 'Completed', distance: 30 } as any,
+      ],
+      [
+        {
+          id: 'e1',
+          vehicleId: 'v1',
+          driverId: 'd1',
+          date: '2026-06-30',
+          amount: 60,
+          liters: 30,
+          odometer: 1000,
+          type: 'Card_Transaction',
+          entryMode: 'Anchor',
+          paymentSource: 'Gas_Card',
+          reconciliationStatus: 'Pending',
+        } as any,
+        {
+          id: 'e2',
+          vehicleId: 'v1',
+          driverId: 'd1',
+          date: '2026-07-01',
+          amount: 40,
+          liters: 20,
+          odometer: 1300,
+          type: 'Card_Transaction',
+          entryMode: 'Anchor',
+          paymentSource: 'Gas_Card',
+          reconciliationStatus: 'Pending',
+        } as any,
+        {
+          id: 'e3',
+          vehicleId: 'v2',
+          driverId: 'd1',
+          date: '2026-07-02',
+          amount: 50,
+          liters: 25,
+          odometer: 2000,
+          type: 'Card_Transaction',
+          entryMode: 'Anchor',
+          paymentSource: 'Gas_Card',
+          reconciliationStatus: 'Pending',
+        } as any,
+        {
+          id: 'e4',
+          vehicleId: 'v2',
+          driverId: 'd1',
+          date: '2026-07-04',
+          amount: 50,
+          liters: 25,
+          odometer: 2250,
+          type: 'Card_Transaction',
+          entryMode: 'Anchor',
+          paymentSource: 'Gas_Card',
+          reconciliationStatus: 'Pending',
+        } as any,
+      ],
+      [],
+      [defaultPolicy],
+      undefined,
+      [],
+      undefined,
+      pa,
+    );
+
+    const row = reports.find((r) => r.driverId === 'd1');
+    expect(row).toBeTruthy();
+    const buckets =
+      (row!.rideShareCost || 0) +
+      (row!.companyUsageCost || 0) +
+      (row!.deadheadCost || 0) +
+      (row!.personalUsageCost || 0) +
+      (row!.miscellaneousCost || 0);
+    expect(buckets).toBeCloseTo(row!.totalGasCardCost, 1);
+    expect(row!.driverShare + row!.companyShare).toBeCloseTo(row!.totalGasCardCost, 1);
+  });
 });

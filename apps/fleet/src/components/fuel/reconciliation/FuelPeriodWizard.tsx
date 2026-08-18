@@ -19,7 +19,12 @@ import { DateRange } from 'react-day-picker';
 import { ReconciliationTable } from '../ReconciliationTable';
 import { ScenarioSplitDashboard } from '../ScenarioSplitDashboard';
 import { BucketReconciliationView } from '../BucketReconciliationView';
+import { FuelCoverageMatrix } from '../FuelCoverageMatrix';
 import { FuelPeriodStepper } from './FuelPeriodStepper';
+import { useFuelWeekReports } from '../../../hooks/useFuelWeekReports';
+import { evaluateFuelFinalizeGating } from '../../../utils/fuelFinalizeGating';
+import { FUEL_SPEND_EPS } from '../../../utils/fuelMoneyEpsilon';
+import { Checkbox } from '../../ui/checkbox';
 import {
   canAdvanceFuelStep,
   computeFuelGatedStepStates,
@@ -34,12 +39,11 @@ import { sumPaidByDriverForReport } from '../../../utils/fuelPaidByDriver';
 import { fuelOpsSpendAmount } from '../../../utils/fuelOpsEligibility';
 
 /**
- * Period wizard shell — NOT the production recon entry point.
- * Production uses ReconciliationTable in FuelManagement. Keep attribution helpers
- * identical so this cannot invent a second belonging path if wired later.
+ * Period wizard — production Consumption Reconciliation walkthrough.
  */
 import type {
   FinalizedFuelReport,
+  FuelCard,
   FuelDispute,
   FuelEntry,
   FuelScenario,
@@ -48,9 +52,7 @@ import type {
 } from '../../../types/fuel';
 import type { Trip } from '../../../types/data';
 import type { Vehicle } from '../../../types/vehicle';
-import { getCoverageMatrixRows } from '../../../utils/fuelCoverageSplit';
 import { pickScenarioForDriverMembership, resolveDriverVersionForWeek } from '../../../utils/fuelPolicyVersion';
-import { useFuelReconBusy, FuelReconBusyProvider } from './fuelReconBusyLock';
 
 const STEP_ICONS: Record<FuelStepId, LucideIcon> = {
   'data-quality': AlertTriangle,
@@ -143,17 +145,18 @@ interface FuelPeriodWizardProps {
   disputes: FuelDispute[];
   scenarios: FuelScenario[];
   drivers: any[];
+  fuelCards?: FuelCard[];
   finalizedReports: FinalizedFuelReport[];
   dateRange: DateRange;
   isRefreshing?: boolean;
   onBack: () => void;
   onRefresh: () => void;
-  onFinalize: (reports: WeeklyFuelReport[]) => Promise<void> | void;
+  onFinalize: (reports: WeeklyFuelReport[]) => Promise<boolean | void> | boolean | void;
   onAddAdjustment: () => void;
   onResolveDispute: (dispute: FuelDispute) => void;
   onOpenConfiguration?: () => void;
   onResetPeriod?: () => void;
-  /** Bumps on Reset Period — remounts wizard walkthrough from step 1. */
+  /** Bumps on Reopen week — remounts wizard walkthrough from step 1. */
   sessionKey?: number;
 }
 
@@ -166,6 +169,7 @@ function FuelPeriodWizardInner({
   disputes,
   scenarios,
   drivers,
+  fuelCards = [],
   finalizedReports,
   dateRange,
   isRefreshing,
@@ -178,17 +182,30 @@ function FuelPeriodWizardInner({
   onResetPeriod,
   sessionKey = 0,
 }: FuelPeriodWizardProps) {
-  const { runExclusive } = useFuelReconBusy();
-  const [liveReports, setLiveReports] = useState<WeeklyFuelReport[]>([]);
   const [leakageReviewed, setLeakageReviewed] = useState(false);
   const [showGapDetail, setShowGapDetail] = useState(false);
   const [bucketVehicleId, setBucketVehicleId] = useState<string | null>(null);
   const [activeStepId, setActiveStepId] = useState<FuelStepId>('data-quality');
-  /** Walkthrough cursor — green checks only for steps you've Continued past this session. */
   const [progressIndex, setProgressIndex] = useState(0);
   const [finalizing, setFinalizing] = useState(false);
+  const [financeWarningAcknowledged, setFinanceWarningAcknowledged] = useState(false);
 
   const periodLocked = period.locked;
+
+  const weekReports = useFuelWeekReports({
+    weekStartYmd: period.startDate,
+    weekEndYmd: period.endDate,
+    vehicles,
+    drivers,
+    fuelEntries,
+    adjustments,
+    scenarios,
+    fuelCards,
+    disputes,
+    finalizedReports,
+  });
+  const liveReports = weekReports.reports;
+  const weekTrips = weekReports.trips.length ? weekReports.trips : trips;
 
   const vehicleSnaps = useMemo(() => {
     return vehicles.map((vehicle) => {
@@ -216,7 +233,7 @@ function FuelPeriodWizardInner({
           reportWeekYmdBounds({ weekStart: d.weekStart || start, weekEnd: d.weekEnd }).start === start,
       );
       const driverSpend = report
-        ? sumPaidByDriverForReport(fuelEntries, report, vehicles, { vehicles, trips })
+        ? sumPaidByDriverForReport(fuelEntries, report, vehicles, { vehicles, trips: weekTrips, fuelCards })
         : 0;
       return {
         vehicleId: vehicle.id,
@@ -235,20 +252,21 @@ function FuelPeriodWizardInner({
         plate: vehicle.licensePlate || vehicle.id,
         driverSpend,
         netPay: driverSpend - (report?.driverShare ?? 0),
+        odometerIncomplete: !!report?.dataQuality?.odometerIncomplete,
       };
     });
-  }, [vehicles, liveReports, fuelEntries, disputes, finalizedReports, period, scenarios, trips]);
+  }, [vehicles, liveReports, fuelEntries, disputes, finalizedReports, period, scenarios, weekTrips, fuelCards]);
 
   // Enrich settlement columns from live reports (driver-week Paid by Driver)
   const settlementRows = useMemo(() => {
     return liveReports
-      .filter((r) => r.totalGasCardCost > 0.009)
+      .filter((r) => r.totalGasCardCost > FUEL_SPEND_EPS)
       .map((r) => {
         const v = vehicles.find((x) => x.id === r.vehicleId);
         const driverSpend = sumPaidByDriverForReport(fuelEntries, r, vehicles, {
           vehicles,
-          fuelCards: [],
-          trips,
+          fuelCards,
+          trips: weekTrips,
         });
         return {
           id: r.driverId || r.vehicleId,
@@ -260,13 +278,13 @@ function FuelPeriodWizardInner({
           status: periodLocked ? 'Locked' : (r.pendingCount || 0) > 0 ? 'Pending' : 'Draft',
         };
       });
-  }, [liveReports, vehicles, fuelEntries, periodLocked, trips]);
+  }, [liveReports, vehicles, fuelEntries, periodLocked, weekTrips, fuelCards]);
 
   const counts = useMemo(
     () =>
       buildFuelStepCounts({
         vehicles: vehicleSnaps.filter(
-          (v) => v.totalSpend > 0.009 || v.pendingCount > 0 || v.hasOpenDispute || v.isFinalized,
+          (v) => v.totalSpend > FUEL_SPEND_EPS || v.pendingCount > 0 || v.hasOpenDispute || v.isFinalized,
         ),
         leakageReviewed: leakageReviewed || periodLocked,
       }),
@@ -275,7 +293,7 @@ function FuelPeriodWizardInner({
 
   const gatedStates = useMemo(() => computeFuelGatedStepStates(counts), [counts]);
 
-  // Fresh walkthrough on period open or after Reset Period
+  // Fresh walkthrough on period open or after Reopen week
   useEffect(() => {
     setLeakageReviewed(false);
     setShowGapDetail(false);
@@ -316,7 +334,7 @@ function FuelPeriodWizardInner({
   }, [gatedStates, progressIndex, periodLocked]);
 
   const strip = useMemo(() => {
-    const active = vehicleSnaps.filter((v) => v.totalSpend > 0.009 || v.isFinalized);
+    const active = vehicleSnaps.filter((v) => v.totalSpend > FUEL_SPEND_EPS || v.isFinalized);
     return {
       totalSpend: active.reduce((s, v) => s + v.totalSpend, 0),
       company: active.reduce((s, v) => s + v.companyShare, 0),
@@ -328,7 +346,9 @@ function FuelPeriodWizardInner({
   const qualityRows = vehicleSnaps
     .filter(
       (v) =>
-        v.pendingCount > 0 || (v.healthStatus && v.healthStatus !== 'Emerald'),
+        v.pendingCount > 0 ||
+        (v.healthStatus && v.healthStatus !== 'Emerald') ||
+        v.odometerIncomplete,
     )
     .map((v) => ({
       id: v.vehicleId,
@@ -336,6 +356,7 @@ function FuelPeriodWizardInner({
       subtitle: [
         v.healthStatus && v.healthStatus !== 'Emerald' ? v.healthStatus : null,
         v.pendingCount > 0 ? `${v.pendingCount} pending log(s)` : null,
+        v.odometerIncomplete ? 'Incomplete odometer data — Misc / Leakage may be inflated' : null,
       ]
         .filter(Boolean)
         .join(' · '),
@@ -349,18 +370,22 @@ function FuelPeriodWizardInner({
   );
 
   const leakageRows = vehicleSnaps
-    .filter((v) => v.misc > 0.009)
+    .filter((v) => v.misc > FUEL_SPEND_EPS)
     .map((v) => ({
       id: v.vehicleId,
       title: v.plate,
-      subtitle: v.healthStatus && v.healthStatus !== 'Emerald' ? String(v.healthStatus) : undefined,
+      subtitle: v.odometerIncomplete
+        ? 'Incomplete odometer data — Misc / Leakage may be inflated'
+        : v.healthStatus && v.healthStatus !== 'Emerald'
+          ? String(v.healthStatus)
+          : 'Misc / Leakage',
       right: formatMoney(v.misc),
       badge: 'Leakage',
     }));
 
   const policyRows = useMemo(() => {
     return vehicles
-      .filter((v) => vehicleSnaps.some((s) => s.vehicleId === v.id && s.totalSpend > 0.009))
+      .filter((v) => vehicleSnaps.some((s) => s.vehicleId === v.id && s.totalSpend > FUEL_SPEND_EPS))
       .map((v) => {
         const live = liveReports.find(
           (r) => r.vehicleId === v.id || (r.vehicleIds || []).includes(v.id),
@@ -374,7 +399,7 @@ function FuelPeriodWizardInner({
         return {
           vehicle: v,
           scenario,
-          matrix: getCoverageMatrixRows(fuelRule),
+          fuelRule,
           effectiveFrom: hit?.version.effectiveFrom,
         };
       });
@@ -403,11 +428,26 @@ function FuelPeriodWizardInner({
 
   const handleFinalizeClick = async () => {
     if (periodLocked || liveReports.length === 0) return;
+    const gate = weekReports.gateResult || evaluateFuelFinalizeGating({
+      reports: liveReports,
+      disputes,
+      fuelEntries,
+      finalizedReports,
+      weekStartYmd: period.startDate,
+      weekEndYmd: period.endDate,
+    });
+    if (gate.hasExceptionBlockers) {
+      return;
+    }
+    if (gate.hasBlockingWarnings && !financeWarningAcknowledged) {
+      return;
+    }
     setFinalizing(true);
     try {
-      await runExclusive('Finalizing week…', async () => {
-        await onFinalize(liveReports);
-      });
+      const ok = await onFinalize(liveReports);
+      if (ok) {
+        onBack();
+      }
     } finally {
       setFinalizing(false);
     }
@@ -454,7 +494,7 @@ function FuelPeriodWizardInner({
           onAction: onOpenConfiguration,
         };
       case 'leakage-gap':
-        return strip.leakage > 0.009 && !leakageReviewed
+        return strip.leakage > FUEL_SPEND_EPS && !leakageReviewed
           ? {
               title: 'Review unaccounted fuel',
               body: `Unassigned spend ${formatMoney(strip.leakage)} — charge stop-to-stop gaps if needed, or accept and continue.`,
@@ -463,7 +503,7 @@ function FuelPeriodWizardInner({
             }
           : {
               title: 'Leakage reviewed',
-              body: strip.leakage > 0.009
+              body: strip.leakage > FUEL_SPEND_EPS
                 ? `Unassigned spend ${formatMoney(strip.leakage)} marked reviewed for this week.`
                 : 'No unassigned spend this week.',
               actionLabel: 'Continue',
@@ -480,16 +520,20 @@ function FuelPeriodWizardInner({
         return periodLocked
           ? {
               title: 'Week is locked',
-              body: 'This period is finalized. Use Reset Period above to re-open it.',
-              actionLabel: onResetPeriod ? 'Reset Period' : undefined,
+              body: 'This period is finalized. Use Reopen week above to unlock it.',
+              actionLabel: onResetPeriod ? 'Reopen week' : undefined,
               onAction: onResetPeriod,
             }
           : {
               title: 'Ready to lock this week',
-              body: 'Finalize posts pending fuel to settlements and freezes this week. You can reset later if needed.',
+              body: 'Finalize posts pending fuel to settlements and freezes this week. You can reopen later if needed.',
               actionLabel: finalizing ? 'Finalizing…' : 'Finalize week',
               onAction: handleFinalizeClick,
-              actionDisabled: finalizing || liveReports.length === 0,
+              actionDisabled:
+                finalizing ||
+                liveReports.length === 0 ||
+                !!weekReports.gateResult?.hasExceptionBlockers ||
+                (!!weekReports.gateResult?.hasBlockingWarnings && !financeWarningAcknowledged),
             };
       default:
         return { title: '', body: '' };
@@ -498,24 +542,9 @@ function FuelPeriodWizardInner({
 
   return (
     <div className="space-y-4 pb-20">
-      {/* Hidden calc engine — keeps strip + settlement rows live without cluttering UI */}
-      <div className="hidden" aria-hidden>
-        <ReconciliationTable
-          vehicles={vehicles}
-          trips={trips}
-          fuelEntries={fuelEntries}
-          adjustments={adjustments}
-          disputes={disputes}
-          dateRange={dateRange}
-          scenarios={scenarios}
-          drivers={drivers}
-          finalizedReports={finalizedReports}
-          periodLocked={periodLocked}
-          hideFinalize
-          hideDashboard
-          onReportsChange={setLiveReports}
-        />
-      </div>
+      {weekReports.loading && (
+        <p className="text-sm text-slate-500">Loading week data…</p>
+      )}
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2">
@@ -540,7 +569,7 @@ function FuelPeriodWizardInner({
               onClick={onResetPeriod}
             >
               <RotateCcw className="mr-1 h-4 w-4" />
-              Reset Period
+              Reopen week
             </Button>
           )}
           <Button
@@ -600,7 +629,30 @@ function FuelPeriodWizardInner({
       />
 
       <div className="space-y-3">
-        {activeStepId === 'data-quality' && <CompactVehicleList rows={qualityRows} />}
+        {activeStepId === 'data-quality' && (
+          <div className="space-y-3">
+            <CompactVehicleList rows={qualityRows} />
+            <ReconciliationTable
+              vehicles={vehicles}
+              trips={weekTrips}
+              fuelEntries={fuelEntries}
+              adjustments={adjustments}
+              disputes={disputes}
+              dateRange={dateRange}
+              scenarios={scenarios}
+              drivers={drivers}
+              fuelCards={fuelCards}
+              finalizedReports={finalizedReports}
+              reportsOverride={liveReports}
+              loading={weekReports.loading}
+              periodLocked={periodLocked}
+              hideFinalize
+              hideDashboard
+              onAddAdjustment={onAddAdjustment}
+              onResolveDispute={onResolveDispute}
+            />
+          </div>
+        )}
 
         {activeStepId === 'adjustments-disputes' && (
           <div className="space-y-3">
@@ -638,7 +690,7 @@ function FuelPeriodWizardInner({
             {policyRows.length === 0 ? (
               <CompactVehicleList rows={[]} />
             ) : (
-              policyRows.map(({ vehicle, scenario, matrix, effectiveFrom }) => (
+              policyRows.map(({ vehicle, scenario, fuelRule, effectiveFrom }) => (
                 <Card key={vehicle.id}>
                   <CardContent className="space-y-2 p-4">
                     <div className="font-semibold text-slate-900">
@@ -650,20 +702,7 @@ function FuelPeriodWizardInner({
                         <span className="ml-2 text-xs text-slate-400">· from {effectiveFrom}</span>
                       )}
                     </div>
-                    {matrix.length > 0 && (
-                      <div className="grid grid-cols-2 gap-1 text-[11px] sm:grid-cols-5">
-                        {matrix.map((row) => (
-                          <div key={row.key} className="rounded bg-slate-50 px-2 py-1">
-                            <div className="font-medium text-slate-700">{row.label}</div>
-                            <div className="text-slate-500">
-                              {row.companyPct < 0
-                                ? 'Allowance'
-                                : `Co ${row.companyPct}% / Dr ${row.driverPct}%`}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                    <FuelCoverageMatrix rule={fuelRule} compact />
                   </CardContent>
                 </Card>
               ))
@@ -724,9 +763,10 @@ function FuelPeriodWizardInner({
           <div className="space-y-4">
             {liveReports.length > 0 && (
               <ScenarioSplitDashboard
-                reports={liveReports.filter((r) => r.totalGasCardCost > 0.009)}
+                reports={liveReports.filter((r) => r.totalGasCardCost > FUEL_SPEND_EPS)}
                 scenarios={scenarios}
                 vehicles={vehicles}
+                trips={weekTrips}
               />
             )}
             <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
@@ -762,7 +802,23 @@ function FuelPeriodWizardInner({
         )}
 
         {activeStepId === 'finalize' && (
-          <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+          <div className="space-y-3">
+            {weekReports.gateResult?.hasExceptionBlockers && (
+              <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+                Exception-tier fills must be resolved before this week can be finalized.
+              </p>
+            )}
+            {weekReports.gateResult?.hasBlockingWarnings && !weekReports.gateResult.hasExceptionBlockers && (
+              <label className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                <Checkbox
+                  checked={financeWarningAcknowledged}
+                  onCheckedChange={(v) => setFinanceWarningAcknowledged(!!v)}
+                  className="mt-0.5"
+                />
+                I reviewed data-quality and re-finalize warnings for this week.
+              </label>
+            )}
+            <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
             <table className="w-full text-sm">
               <thead className="border-b border-slate-100 bg-slate-50 text-left text-xs text-slate-500">
                 <tr>
@@ -797,6 +853,7 @@ function FuelPeriodWizardInner({
               </tbody>
             </table>
           </div>
+          </div>
         )}
       </div>
 
@@ -829,9 +886,5 @@ function FuelPeriodWizardInner({
 }
 
 export function FuelPeriodWizard(props: FuelPeriodWizardProps) {
-  return (
-    <FuelReconBusyProvider>
-      <FuelPeriodWizardInner {...props} />
-    </FuelReconBusyProvider>
-  );
+  return <FuelPeriodWizardInner {...props} />;
 }

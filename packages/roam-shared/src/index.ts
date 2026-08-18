@@ -13,6 +13,10 @@ export {
   type JaaMatchApplySummary,
 } from './fuel/jaaFuelStatementMatcher';
 export {
+  blendedDriverShareRatio,
+  blendedDriverShareRatioFromReport,
+} from './fuel/blendedDriverShareRatio';
+export {
   applyFuelCardAssignmentChange,
   ensureOpenAssignmentFromCurrent,
   buildFuelCardAssignmentWindows,

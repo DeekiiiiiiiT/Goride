@@ -3886,43 +3886,31 @@ export const api = {
       const errText = await response.text();
       throw new Error(`Failed to fetch finalized reports: ${errText}`);
     }
-    return response.json();
+    const rows = await response.json();
+    return Array.isArray(rows) ? rows.map((r: any) => this.normalizeFinalizedReport(r)) : [];
   },
 
-  async saveFinalizedReports(reports: any[]): Promise<{ success: boolean; saved: number }> {
+  async saveFinalizedReports(reports: any[]): Promise<{ success: boolean; saved: number; failures?: string[] }> {
     const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/finalized-reports`, {
       method: 'POST',
       headers: await requireAuthHeaders(),
       body: JSON.stringify(reports)
     });
-    if (!response.ok) {
-      const errText = await response.text();
-      throw new Error(`Failed to save finalized reports: ${errText}`);
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok && response.status !== 207) {
+      throw new Error((body as any).error || `Failed to save finalized reports`);
     }
-    return response.json();
+    return body;
   },
 
-  async getFuelReconciliationSettings(): Promise<{ success: boolean; fuelPnlOffsetEnabled: boolean }> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-reconciliation/settings`, {
-      headers: await requireAuthHeaders(null),
-    });
-    if (!response.ok) throw new Error('Failed to fetch fuel reconciliation settings');
-    return response.json();
-  },
-
-  async updateFuelReconciliationSettings(payload: {
-    fuelPnlOffsetEnabled?: boolean;
-  }): Promise<{ success: boolean; fuelPnlOffsetEnabled: boolean }> {
-    const response = await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-reconciliation/settings`, {
-      method: 'PATCH',
-      headers: await requireAuthHeaders(),
-      body: JSON.stringify(payload),
-    });
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      throw new Error((err as any).error || 'Failed to update fuel reconciliation settings');
-    }
-    return response.json();
+  normalizeFinalizedReport(raw: any): any {
+    if (!raw || typeof raw !== 'object') return raw;
+    return {
+      ...raw,
+      companyUsageCost: raw.companyUsageCost ?? raw.companyOpsCost ?? 0,
+      personalUsageCost: raw.personalUsageCost ?? raw.personalCost ?? 0,
+      miscellaneousCost: raw.miscellaneousCost ?? raw.miscCost ?? 0,
+    };
   },
 
   async getFuelReconciliationPeriodsHealth(): Promise<{

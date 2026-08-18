@@ -1,6 +1,4 @@
 import React from 'react';
-import { Fuel } from "lucide-react";
-import { Button } from "../ui/button";
 
 interface FuelLayoutProps {
   children: React.ReactNode;
@@ -18,9 +16,6 @@ export function FuelLayout({ children, onAddTransaction, title = "Fuel Managemen
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">{title}</h1>
           <p className="text-sm text-slate-500 mt-1">{description}</p>
-        </div>
-        <div className="flex items-center gap-2">
-            {/* Manual entries are now consolidated into the "Log Receipt / Manual Entry" flow within the reimbursement section */}
         </div>
       </div>
 

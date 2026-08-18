@@ -1,6 +1,6 @@
 /**
  * Build WeeklyFuelReport[] for one Mon–Sun week — same money engine as
- * ReconciliationTable, without mounting the table (for bulk Finalize).
+ * ReconciliationTable, without mounting the table (wizard + bulk Finalize).
  */
 import { format, parseISO } from 'date-fns';
 import { api } from '../services/api';
@@ -8,12 +8,27 @@ import {
   FuelCalculationService,
   type VehicleDeadheadInput,
   type FuelBrainClassificationInput,
+  type PersonalAllowanceReconContext,
 } from '../services/fuelCalculationService';
 import { classifyWeekForRecon } from '../services/fuelBrainClient';
-import { FLEET_USE_FUEL_BRAIN } from '../utils/fuelBrainFlags';
+import { FLEET_USE_FUEL_BRAIN, FUEL_BRAIN_SHADOW_COMPARE } from '../utils/fuelBrainFlags';
 import { resolveDeadheadHintForBrain, DEFAULT_INDUSTRY_FALLBACK_PCT } from '../utils/deadheadHintForBrain';
 import { sumTripRideshareKm } from '../utils/tripRideshareKm';
-import type { FuelCard, FuelEntry, FuelScenario, MileageAdjustment, WeeklyFuelReport } from '../types/fuel';
+import { mapPool } from './fuelMapPool';
+import { buildPersonalAllowanceReconContext } from './buildPersonalAllowanceReconContext';
+import {
+  evaluateFuelFinalizeGating,
+  type FuelFinalizeGateResult,
+} from './fuelFinalizeGating';
+import type {
+  FuelCard,
+  FuelDispute,
+  FuelEntry,
+  FuelScenario,
+  MileageAdjustment,
+  WeeklyFuelReport,
+  FinalizedFuelReport,
+} from '../types/fuel';
 import type { Trip } from '../types/data';
 import type { Vehicle } from '../types/vehicle';
 
@@ -26,23 +41,13 @@ export type BuildFuelWeekReportsInput = {
   adjustments: MileageAdjustment[];
   scenarios: FuelScenario[];
   fuelCards: FuelCard[];
-  /** When provided, skips trip fetch. */
+  /** When provided and non-empty, skips trip fetch. Empty array is treated as not loaded. */
   trips?: Trip[];
+  disputes?: FuelDispute[];
+  finalizedReports?: FinalizedFuelReport[];
+  personalAllowance?: PersonalAllowanceReconContext;
+  seedPersonalAllowance?: boolean;
 };
-
-async function mapPool<T, R>(items: T[], concurrency: number, fn: (item: T) => Promise<R>): Promise<R[]> {
-  const out: R[] = new Array(items.length);
-  let next = 0;
-  const workers = Array.from({ length: Math.min(concurrency, Math.max(1, items.length)) }, async () => {
-    while (true) {
-      const i = next++;
-      if (i >= items.length) return;
-      out[i] = await fn(items[i]);
-    }
-  });
-  await Promise.all(workers);
-  return out;
-}
 
 export async function fetchTripsForFuelWeek(weekStartYmd: string, weekEndYmd: string): Promise<Trip[]> {
   const response = await api.getTripsFiltered({
@@ -54,7 +59,10 @@ export async function fetchTripsForFuelWeek(weekStartYmd: string, weekEndYmd: st
   return Array.isArray(response?.data) ? (response.data as Trip[]) : [];
 }
 
-async function fetchDeadheadMap(weekStartYmd: string, weekEndYmd: string): Promise<Map<string, VehicleDeadheadInput>> {
+export async function fetchDeadheadMap(
+  weekStartYmd: string,
+  weekEndYmd: string,
+): Promise<Map<string, VehicleDeadheadInput>> {
   const map = new Map<string, VehicleDeadheadInput>();
   try {
     const data = await api.getFleetDeadhead(weekStartYmd, weekEndYmd);
@@ -76,7 +84,7 @@ async function fetchDeadheadMap(weekStartYmd: string, weekEndYmd: string): Promi
   return map;
 }
 
-async function buildBrainMap(opts: {
+export async function buildBrainMap(opts: {
   vehicles: Vehicle[];
   trips: Trip[];
   adjustments: MileageAdjustment[];
@@ -84,7 +92,7 @@ async function buildBrainMap(opts: {
   weekStartYmd: string;
   weekEndYmd: string;
 }): Promise<Map<string, FuelBrainClassificationInput> | undefined> {
-  if (!FLEET_USE_FUEL_BRAIN) return undefined;
+  if (!FLEET_USE_FUEL_BRAIN && !FUEL_BRAIN_SHADOW_COMPARE) return undefined;
   const targets = opts.vehicles.filter((v) => v.currentDriverId);
   const pairs = await mapPool(targets, 3, async (v) => {
     const driverId = String(v.currentDriverId || '');
@@ -149,7 +157,11 @@ export async function buildFuelWeekReportsForFinalize(
   const weekStart = parseISO(`${weekStartYmd}T12:00:00`);
   const weekEnd = parseISO(`${weekEndYmd}T12:00:00`);
 
-  const trips = input.trips ?? (await fetchTripsForFuelWeek(weekStartYmd, weekEndYmd));
+  // [] from a parent still loading must not skip fetch — that zeros ride-share and dumps km into personal/deadhead.
+  const trips =
+    input.trips && input.trips.length > 0
+      ? input.trips
+      : await fetchTripsForFuelWeek(weekStartYmd, weekEndYmd);
   const deadheadMap = await fetchDeadheadMap(weekStartYmd, weekEndYmd);
   const brainByDriverVehicle = await buildBrainMap({
     vehicles: input.vehicles,
@@ -166,6 +178,21 @@ export async function buildFuelWeekReportsForFinalize(
     name: d.name,
   })).filter((d) => d.id);
 
+  let personalAllowance = input.personalAllowance;
+  if (!personalAllowance) {
+    try {
+      const pa = await buildPersonalAllowanceReconContext({
+        weekStartYmd,
+        weekEndYmd,
+        drivers: input.drivers,
+        seedIfMissing: input.seedPersonalAllowance !== false,
+      });
+      personalAllowance = pa.context;
+    } catch (e) {
+      console.warn('[buildFuelWeekReports] PA context failed — continuing without', e);
+    }
+  }
+
   const reports = FuelCalculationService.generateDriverFleetReport(
     input.vehicles,
     drivers,
@@ -177,10 +204,26 @@ export async function buildFuelWeekReportsForFinalize(
     input.scenarios,
     deadheadMap,
     input.fuelCards,
-    brainByDriverVehicle,
+    FLEET_USE_FUEL_BRAIN ? brainByDriverVehicle : undefined,
+    personalAllowance,
   );
 
   return { reports, trips };
+}
+
+export async function buildFuelWeekReportsWithGating(
+  input: BuildFuelWeekReportsInput,
+): Promise<{ reports: WeeklyFuelReport[]; trips: Trip[]; gateResult: FuelFinalizeGateResult }> {
+  const { reports, trips } = await buildFuelWeekReportsForFinalize(input);
+  const gateResult = evaluateFuelFinalizeGating({
+    reports,
+    disputes: input.disputes,
+    fuelEntries: input.fuelEntries,
+    finalizedReports: input.finalizedReports,
+    weekStartYmd: input.weekStartYmd,
+    weekEndYmd: input.weekEndYmd,
+  });
+  return { reports, trips, gateResult };
 }
 
 /** Soft cap — keeps bulk under edge timeout risk (one week per API cycle). */
@@ -194,7 +237,7 @@ export function formatFuelBulkProgress(done: number, total: number, label: strin
 }
 
 export function formatFuelBulkResetProgress(done: number, total: number, label: string): string {
-  return `Resetting ${label} (${done}/${total})…`;
+  return `Reopening ${label} (${done}/${total})…`;
 }
 
 export function fuelBulkConfirmPhrase(count: number): string {
@@ -202,7 +245,7 @@ export function fuelBulkConfirmPhrase(count: number): string {
 }
 
 export function fuelBulkResetConfirmPhrase(count: number): string {
-  return `RESET ${count} WEEKS`;
+  return `REOPEN ${count} WEEKS`;
 }
 
 /** Used only for labels in tests / dialogs. */

@@ -4,13 +4,17 @@ import {
   reportWeekYmdBounds,
   toEntryYmd,
   entriesInFuelWeek,
+  bucketClosesInFuelWeek,
   isSameFuelStatement,
   resolveFuelActivityEarliestMonday,
   buildFuelReconciliationWeekOptions,
+  fuelWeekBucketForDate,
+  generateFuelWeekOptions,
 } from './fuelWeekPeriod';
 import {
   entriesBelongingToDriverWeekReport,
   sumPaidByDriverForReport,
+  sumGasCardSpendForReport,
 } from './fuelPaidByDriver';
 import { resolveActiveFuelPolicyForDriverWeek } from './fuelPolicyVersion';
 import { FuelEntry, FuelScenario, UNASSIGNED_FUEL_DRIVER_ID } from '../types/fuel';
@@ -31,6 +35,26 @@ describe('fuelWeekPeriod YMD helpers', () => {
     expect(isEntryInInclusiveYmdRange('2026-01-12', '2026-01-12', '2026-01-18')).toBe(true);
     expect(
       isEntryInInclusiveYmdRange('2026-01-18T22:00:00.000Z', '2026-01-12', '2026-01-18'),
+    ).toBe(true);
+  });
+
+  it('bucketClosesInFuelWeek uses the closing fill, not overlap', () => {
+    const weekStart = '2026-08-10';
+    const weekEnd = '2026-08-16';
+    expect(
+      bucketClosesInFuelWeek({ endDate: '2026-08-10' }, weekStart, weekEnd),
+    ).toBe(true);
+    expect(
+      bucketClosesInFuelWeek({ endDate: '2026-08-09' }, weekStart, weekEnd),
+    ).toBe(false);
+    expect(
+      bucketClosesInFuelWeek({ endDate: '2026-08-16' }, weekStart, weekEnd),
+    ).toBe(true);
+    expect(
+      bucketClosesInFuelWeek({ endDate: '2026-08-17' }, weekStart, weekEnd),
+    ).toBe(false);
+    expect(
+      bucketClosesInFuelWeek({ endDate: '2026-08-16T22:00:00.000Z' }, weekStart, weekEnd),
     ).toBe(true);
   });
 
@@ -92,6 +116,31 @@ describe('fuelWeekPeriod YMD helpers', () => {
     expect(opts.some((o) => o.startDate === '2025-12-01')).toBe(false);
     expect(opts.some((o) => o.startDate === '2025-12-08')).toBe(false);
     expect(opts.some((o) => o.startDate === '2026-01-12')).toBe(true);
+  });
+});
+
+describe('Jamaica timezone week buckets', () => {
+  it('places a UTC Monday-early instant on the previous Jamaica Sunday week', () => {
+    // 2026-08-10T03:00:00Z = 2026-08-09 22:00 America/Jamaica (Sunday)
+    const bucket = fuelWeekBucketForDate(new Date('2026-08-10T03:00:00.000Z'), 'America/Jamaica');
+    expect(bucket.key).toBe('2026-08-03');
+  });
+
+  it('places a UTC Monday-morning instant on the Jamaica Monday week', () => {
+    // 2026-08-10T06:00:00Z = 2026-08-10 01:00 America/Jamaica (Monday)
+    const bucket = fuelWeekBucketForDate(new Date('2026-08-10T06:00:00.000Z'), 'America/Jamaica');
+    expect(bucket.key).toBe('2026-08-10');
+  });
+
+  it('generateFuelWeekOptions anchors "today" to the Jamaica calendar', () => {
+    const opts = generateFuelWeekOptions(4, 'America/Jamaica');
+    expect(opts.length).toBeGreaterThan(0);
+    expect(opts[0].startDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    // Monday keys only
+    for (const o of opts) {
+      const d = new Date(`${o.startDate}T12:00:00`);
+      expect(d.getDay()).toBe(1);
+    }
   });
 });
 
@@ -178,6 +227,33 @@ describe('enterprise fill attribution', () => {
     // Without trips/cards, untagged falls to currentDriverId (d1) — not unassigned
     const ctx = { vehicles: [{ ...vehicle, currentDriverId: undefined } as Vehicle] };
     expect(sumPaidByDriverForReport(entries, unassignedReport, ctx.vehicles, ctx)).toBe(400);
+  });
+
+  it('does not treat matched gas-card Manual_Entry as Paid by Driver', () => {
+    const entries = [
+      baseEntry({
+        id: 'gc',
+        amount: 34998.8,
+        type: 'Manual_Entry',
+        paymentSource: 'Gas_Card',
+        metadata: { paymentSource: 'company_card', countsInFuelSpend: true },
+      }),
+    ];
+    expect(sumPaidByDriverForReport(entries, report, [vehicle])).toBe(0);
+    expect(sumGasCardSpendForReport(entries, report, [vehicle])).toBe(34998.8);
+  });
+
+  it('still counts RideShare cash Manual_Entry as Paid by Driver', () => {
+    const entries = [
+      baseEntry({
+        id: 'cash',
+        amount: 400,
+        type: 'Manual_Entry',
+        paymentSource: 'RideShare_Cash',
+      }),
+    ];
+    expect(sumPaidByDriverForReport(entries, report, [vehicle])).toBe(400);
+    expect(sumGasCardSpendForReport(entries, report, [vehicle])).toBe(0);
   });
 });
 

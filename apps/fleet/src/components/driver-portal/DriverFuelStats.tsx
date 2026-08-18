@@ -274,7 +274,7 @@ export function DriverFuelStats() {
                             </div>
                             <div>
                                 <p className="text-sm font-medium text-slate-900">Total Fuel Bill</p>
-                                <p className="text-xs text-slate-500">Gas Card Charges</p>
+                                <p className="text-xs text-slate-500">Total spend this week (card and cash)</p>
                             </div>
                         </div>
                         <div className="text-right">

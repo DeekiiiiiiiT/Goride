@@ -359,9 +359,9 @@ export function FinancialSubTabs({
             <CardContent>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <div className="rounded-lg border border-slate-200 p-3">
-                  <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Toll spend</p>
+                  <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Unreimbursed tolls</p>
                   <p className="text-lg font-bold mt-1 text-slate-800">
-                    ${(Number(thisWeekSharedPeriod.tollSpend) || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    ${Math.max(0, (Number(thisWeekSharedPeriod.tollSpend) || 0) - (Number(thisWeekSharedPeriod.tollReimbursed) || 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                   </p>
                 </div>
                 <div className="rounded-lg border border-slate-200 p-3">

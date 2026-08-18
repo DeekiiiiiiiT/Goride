@@ -11,8 +11,12 @@
 
 import * as kv from "./kv_store.tsx";
 import { appendCanonicalLedgerEvents, canonicalEventExistsByIdemKey } from "./ledger_canonical.ts";
+import { blendedDriverShareRatio, blendedDriverShareRatioFromReport } from "./fuel_blended_ratio.ts";
+
+export { blendedDriverShareRatio, blendedDriverShareRatioFromReport };
 
 const MARKER_PREFIX = "fuel_pnl_offset_marker:";
+const LEDGER_EPS = 1e-9;
 
 export type FuelPnlOffsetReason = "driver_share";
 
@@ -112,7 +116,7 @@ export async function emitFuelChargeOffset(
     }
   }
 
-  if (amountAbs <= 1e-9) {
+  if (amountAbs <= LEDGER_EPS) {
     return {
       written: false,
       idempotencyKey: originalExpenseKeyFor(p.fuelEntryId),
@@ -250,12 +254,6 @@ export async function updateFuelReconciliationSettings(
 ): Promise<FuelReconciliationSettings> {
   // No-op write path kept for older clients; flag is permanently on.
   return { fuelPnlOffsetEnabled: true };
-}
-
-/** Blended driver-share ratio — same formula as FuelCalculationService.getBlendedDriverShareRatio. */
-export function blendedDriverShareRatio(driverShare: number, totalGasCardCost: number): number {
-  if (!totalGasCardCost || totalGasCardCost <= 0) return 0;
-  return driverShare / totalGasCardCost;
 }
 
 function round2(n: number): number {

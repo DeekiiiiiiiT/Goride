@@ -11,6 +11,8 @@ import {
   emitFuelChargeOffset,
   blendedDriverShareRatio,
 } from "./fuel_pnl_offset.ts";
+import { validateFinalizedReportForPost } from "./fuel_finalize_validation.ts";
+import { acquireFuelFinalizeLock, releaseFuelFinalizeLock } from "./fuel_finalize_lock.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { fromKvStore } from "./fleet_sql_bridge.ts";
 import * as kv from "./kv_store.tsx";
@@ -784,22 +786,45 @@ function finalizedReportKey(weekKey: string, driverId: string): string {
   return `finalized_report:${weekKey}:${driverId}`;
 }
 
-app.post(`${BASE_PATH}/finalized-reports`, async (c) => {
+app.post(`${BASE_PATH}/finalized-reports`, requirePermission('transactions.edit'), async (c) => {
   try {
     const reports = await c.req.json();
     if (!Array.isArray(reports) || reports.length === 0) {
       return c.json({ error: "Expected a non-empty array of report snapshots." }, 400);
     }
 
+    const rbacUser = c.get("rbacUser") as { id?: string } | null;
+    const holder = `${rbacUser?.id || "admin"}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
     let saved = 0;
     const failures: string[] = [];
     for (const report of reports) {
       if (!report.weekStart || !report.driverId) {
-        console.log(`[FinalizedReports] Skipping report missing weekStart or driverId`);
+        failures.push(`missing weekStart or driverId`);
         continue;
       }
       const weekKey = report.weekStart.split('T')[0];
+      const validation = await validateFinalizedReportForPost(report);
+      if (!validation.ok) {
+        failures.push(`${report.driverId}/${weekKey}: ${validation.error}`);
+        continue;
+      }
+
+      const lock = await acquireFuelFinalizeLock(weekKey, String(report.driverId), holder);
+      if (!lock.ok) {
+        return c.json(
+          {
+            success: false,
+            error: "This driver-week is already being finalized. Retry in a moment.",
+            failures: [`${report.driverId}/${weekKey}: lock held`],
+            saved,
+            retryAfterMs: lock.retryAfterMs,
+          },
+          409,
+        );
+      }
+
       const key = finalizedReportKey(weekKey, report.driverId);
+      try {
       const stamped = { ...report, status: report.status || "Finalized" };
       await kv.set(key, stamped);
       // Drop legacy vehicle-keyed duplicate if present (last-writer-wins on shared cars)
@@ -810,7 +835,7 @@ app.post(`${BASE_PATH}/finalized-reports`, async (c) => {
           /* ignore */
         }
       }
-      // Unified financial ledger + Expenses projection ? must succeed or roll back KV.
+      // Unified financial ledger + Expenses projection — must succeed or roll back KV.
       try {
         await postFuelFinalizedEventsFromReport(stamped);
       } catch (finErr: any) {
@@ -825,9 +850,8 @@ app.post(`${BASE_PATH}/finalized-reports`, async (c) => {
         continue;
       }
 
-      // Canonical P&L offsets ? driver-share portion of each fill (always on).
+      // Canonical P&L offsets — driver-share portion of each fill (always on).
       try {
-        // Prefer stubs from client snapshot ? never scan all fuel_entry:* on Finalize.
         const stubs = Array.isArray(report?.metadata?.settledEntries)
           ? (report.metadata.settledEntries as Array<Record<string, unknown>>)
           : [];
@@ -841,10 +865,9 @@ app.post(`${BASE_PATH}/finalized-reports`, async (c) => {
             vehicleId: s.vehicleId ? String(s.vehicleId) : report.vehicleId ? String(report.vehicleId) : undefined,
           }));
 
-        // Legacy snapshots without stubs: skip (no full scan) ? re-finalize to sync.
         if (weekEntries.length === 0) {
           console.warn(
-            `[FinalizedReports] fuel P&L offset skipped for ${report.driverId}/${weekKey} ? no settledEntries stubs (re-finalize to sync)`,
+            `[FinalizedReports] fuel P&L offset skipped for ${report.driverId}/${weekKey} — no settledEntries stubs (re-finalize to sync)`,
           );
         } else {
           const stats = await syncFuelPnlOffsetsForFinalizedReport(report, weekEntries, c);
@@ -857,16 +880,25 @@ app.post(`${BASE_PATH}/finalized-reports`, async (c) => {
       }
 
       saved++;
+      } finally {
+        await releaseFuelFinalizeLock(weekKey, String(report.driverId), holder);
+      }
     }
 
     console.log(`[FinalizedReports] Saved ${saved} finalized report snapshots (driver-week keys)`);
     if (saved === 0 && failures.length > 0) {
-      return c.json({ error: failures[0], failures, saved: 0 }, 500);
+      return c.json({ success: false, error: failures[0], failures, saved: 0 }, 500);
+    }
+    if (failures.length > 0) {
+      return c.json({
+        success: false,
+        saved,
+        failures,
+      }, 207);
     }
     return c.json({
       success: true,
       saved,
-      ...(failures.length > 0 ? { failures } : {}),
     });
   } catch (e: any) {
     console.log(`[FinalizedReports] POST error: ${e.message}`);

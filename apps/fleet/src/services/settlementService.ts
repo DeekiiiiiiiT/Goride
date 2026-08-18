@@ -13,29 +13,28 @@ import {
   normalizeFuelPaymentSourceEnum,
   fuelPaymentSourceToMeta,
 } from '../utils/fuelPaymentSource';
+import { FUEL_MONEY_EPS } from '../utils/fuelMoneyEpsilon';
+import { mapPool as mapPoolIndexed } from '../utils/fuelMapPool';
+
+export function enterpriseFuelSyncIdempotencyKey(
+  reportId: string,
+  entryId: string,
+  kind: 'credit' | 'deduction',
+): string {
+  return `enterprise_fuel_sync:${reportId}:${entryId}:${kind}:v1`;
+}
 
 /** Calendar day YYYY-MM-DD from stored date/datetime strings. */
 function toYmd(d: string | undefined | null): string {
   return toEntryYmd(d);
 }
 
-/** Bounded parallelism for settlement posts (avoids N serial edge round-trips). */
 async function mapPool<T>(
   items: T[],
   concurrency: number,
   fn: (item: T) => Promise<void>,
 ): Promise<void> {
-  if (items.length === 0) return;
-  const limit = Math.max(1, Math.min(concurrency, items.length));
-  let next = 0;
-  const workers = Array.from({ length: limit }, async () => {
-    while (true) {
-      const i = next++;
-      if (i >= items.length) return;
-      await fn(items[i]);
-    }
-  });
-  await Promise.all(workers);
+  await mapPoolIndexed(items, concurrency, fn);
 }
 
 /**
@@ -195,7 +194,14 @@ export const settlementService = {
           );
         });
 
-        // Parallel posts (was 1 entry at a time → 50–70 serial API calls for a busy week).
+        const txPage = await api.getTransactions(report.driverId, { limit: 5000 }).catch(() => []);
+        const existingTxs: FinancialTransaction[] = Array.isArray(txPage) ? txPage : [];
+        const existingByKey = new Map<string, FinancialTransaction>();
+        for (const tx of existingTxs) {
+          const key = tx.metadata?.idempotencyKey ? String(tx.metadata.idempotencyKey) : '';
+          if (key) existingByKey.set(key, tx);
+        }
+
         await mapPool(toSettle, 5, async (entry) => {
             // Normalize blank payment source before money write
             const paymentSource = normalizeFuelPaymentSourceEnum(
@@ -215,7 +221,7 @@ export const settlementService = {
                     return;
                 }
                 // Case A: Company Paid (Gas Card) — deduct driver share only
-                if (split.driver > 0.01) {
+                if (split.driver > FUEL_MONEY_EPS) {
                     payoutDeduction = {
                         type: 'Expense',
                         category: 'Fuel Deduction',
@@ -235,7 +241,7 @@ export const settlementService = {
                     metadata: { isFuelCredit: true }
                 };
 
-                if (split.driver > 0.01) {
+                if (split.driver > FUEL_MONEY_EPS) {
                     payoutDeduction = {
                         type: 'Expense',
                         category: 'Fuel Deduction',
@@ -251,7 +257,12 @@ export const settlementService = {
                 return;
             }
 
-            const processTx = async (tx: Partial<FinancialTransaction>) => {
+            const processTx = async (tx: Partial<FinancialTransaction>, kind: 'credit' | 'deduction') => {
+                const idempotencyKey = enterpriseFuelSyncIdempotencyKey(report.id, entry.id, kind);
+                const existing = existingByKey.get(idempotencyKey);
+                if (existing) {
+                    return { saved: existing, created: false };
+                }
                 const fullTx = {
                     ...tx,
                     id: crypto.randomUUID(),
@@ -271,42 +282,58 @@ export const settlementService = {
                         driverShare: split.driver,
                         reportId: report.id,
                         workPeriodStart: report.weekStart,
-                        workPeriodEnd: report.weekEnd
+                        workPeriodEnd: report.weekEnd,
+                        idempotencyKey,
                     }
                 };
-                return await api.saveTransaction(fullTx);
+                const saved = await api.saveTransaction(fullTx);
+                existingByKey.set(idempotencyKey, saved);
+                return { saved, created: true };
             };
 
             let savedTxId: string | undefined = undefined;
+            const createdIds: string[] = [];
 
-            if (walletPayment) {
-                const saved = await processTx(walletPayment);
-                savedTxId = saved.id;
-            }
-            if (payoutDeduction) {
-                await processTx(payoutDeduction);
-            }
+            try {
+              if (walletPayment) {
+                  const { saved, created } = await processTx(walletPayment, 'credit');
+                  savedTxId = saved.id;
+                  if (created && saved.id) createdIds.push(saved.id);
+              }
+              if (payoutDeduction) {
+                  const { saved, created } = await processTx(payoutDeduction, 'deduction');
+                  if (created && saved.id) createdIds.push(saved.id);
+              }
 
-            // 4. Update Fuel Entry
-            const updatedEntry = {
-                ...entry,
-                paymentSource,
-                reconciliationStatus: 'Verified',
-                transactionId: savedTxId || entry.transactionId,
-                metadata: {
-                    ...entry.metadata,
-                    paymentSource: fuelPaymentSourceToMeta(paymentSource),
-                    finalizedAt: new Date().toISOString(),
-                    finalizedByReport: report.id,
-                    splitApplied: split
+              const updatedEntry = {
+                  ...entry,
+                  paymentSource,
+                  reconciliationStatus: 'Verified',
+                  transactionId: savedTxId || entry.transactionId,
+                  metadata: {
+                      ...entry.metadata,
+                      paymentSource: fuelPaymentSourceToMeta(paymentSource),
+                      finalizedAt: new Date().toISOString(),
+                      finalizedByReport: report.id,
+                      splitApplied: split
+                  }
+              };
+
+              await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries`, {
+                  method: 'POST',
+                  headers: await requireAuthHeaders(),
+                  body: JSON.stringify(updatedEntry)
+              });
+            } catch (entryErr) {
+              for (const id of createdIds) {
+                try {
+                  await api.deleteTransaction(id);
+                } catch {
+                  /* compensating delete best-effort */
                 }
-            };
-
-            await fetchWithRetry(`${API_ENDPOINTS.fuel}/fuel-entries`, {
-                method: 'POST',
-                headers: await requireAuthHeaders(),
-                body: JSON.stringify(updatedEntry)
-            });
+              }
+              throw entryErr;
+            }
         });
     } catch (error) {
         console.error("Failed to commit weekly statement:", error);

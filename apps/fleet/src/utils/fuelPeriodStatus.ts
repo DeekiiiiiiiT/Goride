@@ -18,6 +18,7 @@ import {
   type PeriodWeekOption,
 } from './fuelWeekPeriod';
 import { fuelOpsSpendAmount } from './fuelOpsEligibility';
+import { FUEL_SPEND_EPS } from './fuelMoneyEpsilon';
 
 export type FuelPeriodStatus = 'outstanding' | 'completed';
 
@@ -87,7 +88,7 @@ export function buildFuelStepCounts(input: BuildFuelStepCountsInput): Record<Fue
       counts['policy-check'].informational += 1;
     }
 
-    if (v.misc > 0.009) {
+    if (v.misc > FUEL_SPEND_EPS) {
       if (leakageReviewed) {
         counts['leakage-gap'].informational += 1;
       } else {
@@ -95,7 +96,7 @@ export function buildFuelStepCounts(input: BuildFuelStepCountsInput): Record<Fue
       }
     }
 
-    if (v.totalSpend > 0.009 && !v.isFinalized) {
+    if (v.totalSpend > FUEL_SPEND_EPS && !v.isFinalized) {
       counts.finalize.actionable += 1;
     } else if (v.isFinalized) {
       counts.finalize.informational += 1;
@@ -197,12 +198,12 @@ export function deriveFuelReconciliationPeriods(input: DeriveFuelPeriodsInput): 
 
     // Only vehicles with activity matter for period presence
     const active = vehicleSnaps.filter(
-      (v) => v.totalSpend > 0.009 || v.pendingCount > 0 || v.hasOpenDispute || v.isFinalized,
+      (v) => v.totalSpend > FUEL_SPEND_EPS || v.pendingCount > 0 || v.hasOpenDispute || v.isFinalized,
     );
 
     const counts = buildFuelStepCounts({ vehicles: active.length ? active : vehicleSnaps.filter((v) => v.totalSpend > 0) });
     const actionableTotal = fuelActionableTotal(counts);
-    const withSpend = active.filter((v) => v.totalSpend > 0.009 || v.isFinalized);
+    const withSpend = active.filter((v) => v.totalSpend > FUEL_SPEND_EPS || v.isFinalized);
     const allFinalized =
       withSpend.length > 0 && withSpend.every((v) => v.isFinalized);
     const locked = allFinalized;
@@ -249,7 +250,7 @@ function isSettlementPostedFuelEntry(e: FuelEntry): boolean {
   return Boolean(status && status !== 'Pending');
 }
 
-/** Inventory mapper for Reset Period dialog. */
+/** Inventory mapper for Reopen week dialog. */
 export function buildFuelPeriodResetInventory(
   periodId: string,
   finalizedReports: FinalizedFuelReport[],

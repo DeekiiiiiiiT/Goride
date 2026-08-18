@@ -49,6 +49,8 @@ No driver toggles. No Unknown purpose bucket. No driving-session evidence produc
 
 Money layer unchanged: receipts + scenario coverage %. Brain only supplies category km.
 
+**Fixed_Amount Ride Share:** if the active fuel scenario uses `coverageType: Fixed_Amount` on Ride Share, that dollar cap is applied to the Ride Share bucket only. Leftover spend still lands in **Misc** (the residual pool) — Misc is not a km type and is not classified by Fuel Brain.
+
 ## Cycle engine (separate from Fuel Brain)
 
 Tank cycles, close policy, and alert tiers live in the **cycle engine** — not Fuel Brain.

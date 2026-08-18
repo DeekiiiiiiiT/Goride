@@ -1260,7 +1260,6 @@ app.post("/make-server-37f42386/admin/fuel-audit/recalculate-all", requireAuth({
 
         const entryUpdates: any[] = [];
         let entryModifiedCount = 0;
-        const auditConfig = await kv.get("config:audit_settings");
 
         for (const [vId, entries] of entriesByVehicle.entries()) {
             const vehicleInfo = vehicleMap.get(vId);

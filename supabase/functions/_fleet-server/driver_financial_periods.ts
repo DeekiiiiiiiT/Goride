@@ -22,6 +22,7 @@ import {
   computeWeekCommissionShare,
   computeWeekCashBase,
 } from "./period_share_cash.ts";
+import { isPlatformReimbursedPlazaToll } from "./toll_platform_reimbursed.ts";
 
 function sb() {
   return createClient(
@@ -314,12 +315,14 @@ export async function rebuildDriverFinancialPeriod(
   let tollReconciledCount = 0;
   let tollUnmatchedCount = 0;
   let tollWorkflowActionable = 0;
+  let plazaReimbursed = 0;
 
   for (const tx of weekTolls) {
     const amt = Math.abs(Number(tx.amount) || 0);
     tollSpend += amt;
     if (isCashPaid(tx)) tollCashSpend += amt;
     else tollTagSpend += amt;
+    if (isPlatformReimbursedPlazaToll(tx)) plazaReimbursed += amt;
     const handled = isHandledToll(tx);
     if (handled) tollReconciledCount++;
     else {
@@ -497,7 +500,7 @@ export async function rebuildDriverFinancialPeriod(
       !reversedIds.has(String(ev.id)),
   );
 
-  let tollReimbursed = 0;
+  let tollReimbursed = round2(plazaReimbursed);
   let fuelDeduction = 0;
   let fuelFleetShare = 0;
   let fuelDriverSpend = 0;

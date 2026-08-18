@@ -11,6 +11,7 @@ import {
   buildCanonicalMaintenanceEvent,
   type MaintenanceLedgerRecordInput,
 } from "../../../apps/fleet/src/utils/canonicalMaintenanceLedger.ts";
+import { normalizeFuelPaymentSourceEnum } from "./fuel_payment_source.ts";
 
 export { buildCanonicalMaintenanceEvent, isMaintenanceLedgerEligible } from "../../../apps/fleet/src/utils/canonicalMaintenanceLedger.ts";
 export type { MaintenanceLedgerRecordInput } from "../../../apps/fleet/src/utils/canonicalMaintenanceLedger.ts";
@@ -237,6 +238,20 @@ export function buildCanonicalTripFareEventsFromTrip(trip: Record<string, unknow
   return events;
 }
 
+/** Who paid at the pump — omit when unknown so we never default gas-card fills to fare cash. */
+function resolveFuelExpensePaymentSource(entry: Record<string, unknown>): string | undefined {
+  const meta =
+    entry.metadata && typeof entry.metadata === "object"
+      ? (entry.metadata as Record<string, unknown>)
+      : {};
+  const raw = entry.paymentSource ?? meta.paymentSource;
+  if (raw != null && String(raw).trim() !== "") {
+    return normalizeFuelPaymentSourceEnum(String(raw));
+  }
+  if (String(entry.type || "") === "Card_Transaction") return "Gas_Card";
+  return undefined;
+}
+
 /** Fuel entry KV shape — amount & driverId required */
 export function buildCanonicalFuelExpenseEvent(entry: Record<string, unknown>): Record<string, unknown> | null {
   const id = String(entry.id ?? "").trim();
@@ -249,6 +264,8 @@ export function buildCanonicalFuelExpenseEvent(entry: Record<string, unknown>): 
 
   const amt = Math.abs(coerceAmount(entry.amount));
   if (amt <= 1e-9) return null;
+
+  const paymentSource = resolveFuelExpensePaymentSource(entry);
 
   return {
     idempotencyKey: `fuel_entry:${id}|fuel_expense`,
@@ -266,7 +283,10 @@ export function buildCanonicalFuelExpenseEvent(entry: Record<string, unknown>): 
     description: typeof entry.vendor === "string" && entry.vendor.trim()
       ? `Fuel — ${entry.vendor.trim()}`
       : "Fuel expense",
-    metadata: { fuelEntryId: id },
+    metadata: {
+      fuelEntryId: id,
+      ...(paymentSource ? { paymentSource } : {}),
+    },
   };
 }
 

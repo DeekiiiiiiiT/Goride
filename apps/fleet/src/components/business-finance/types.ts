@@ -71,6 +71,10 @@ export type PnLTollBreakdown = {
 export type PnLFuelBreakdown = {
   /** All fill spend in the period (gross fuel_expense). */
   grossSpend: number;
+  /** Pump $ on the fleet gas card (when paymentSource is known). */
+  gasCardSpend: number;
+  /** Pump $ the driver paid in cash / fare cash (when paymentSource is known). */
+  driverCashSpend: number;
   /** Driver-share offsets already removed from fleet loss. */
   alreadyCovered: number;
   /** Wallet fuel reimbursements to drivers (memo only; not netted into fleet loss). */

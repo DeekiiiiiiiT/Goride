@@ -173,7 +173,7 @@ export interface WeeklyFuelReport {
   vehicleIds?: string[];
   vehiclePlates?: string[];
 
-  // 1. The Truth (Financial)
+  // 1. The Truth (Financial) — all ops fill $ this week (card + cash). Not card-only.
   totalGasCardCost: number;
   
   // 2. The Operation (Trips) -> Ride Share
@@ -236,6 +236,11 @@ export interface WeeklyFuelReport {
   // These buckets use fuel-entry-only anchors. For unified anchors, BucketReconciliationView
   // fetches its own via odometerService.getUnifiedHistory().
   odometerBuckets?: OdometerBucket[];
+
+  /** Data-quality flags — missing odometer is not the same as real leakage. */
+  dataQuality?: {
+    odometerIncomplete?: boolean;
+  };
 
   /** Closed tank cycles for the week (cycle-health spine). Live drafts may include full transactions. */
   fuelCycles?: FuelCycle[];

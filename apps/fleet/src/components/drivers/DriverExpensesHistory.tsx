@@ -208,7 +208,7 @@ export function DriverExpensesHistory({
           fuelDraftEstimate: 0,
           isFinalized: !!p.fuelFinalized,
           totalExpenses:
-            (Number(p.tollSpend) || 0) +
+            Math.max(0, (Number(p.tollSpend) || 0) - (Number(p.tollReimbursed) || 0)) +
             (Number(p.fuelDeduction) || 0) +
             (Number(p.tollChargedToDriver) || 0),
           transactionCount: reconciled + unmatched,

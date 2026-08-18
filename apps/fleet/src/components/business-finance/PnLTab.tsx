@@ -16,7 +16,7 @@ function TollBreakdownPanel({ breakdown }: { breakdown: PnLTollBreakdown }) {
     },
     {
       label: 'Already covered',
-      hint: 'Cash-wash, personal, refunds — not a fleet loss',
+      hint: 'Matched rider refunds, cash-wash, personal — not a fleet loss',
       amount: breakdown.alreadyCovered,
     },
     {
@@ -72,6 +72,16 @@ function FuelBreakdownPanel({ breakdown }: { breakdown: PnLFuelBreakdown }) {
       amount: breakdown.grossSpend,
     },
     {
+      label: 'Fleet card',
+      hint: 'Company gas card at the pump',
+      amount: breakdown.gasCardSpend,
+    },
+    {
+      label: 'Driver cash at pump',
+      hint: 'RideShare / personal / petty cash — not the card',
+      amount: breakdown.driverCashSpend,
+    },
+    {
       label: 'Already covered',
       hint: 'Driver share after Finalize — not a fleet loss',
       amount: breakdown.alreadyCovered,
@@ -90,7 +100,7 @@ function FuelBreakdownPanel({ breakdown }: { breakdown: PnLFuelBreakdown }) {
   ];
 
   return (
-    <div className="mt-2 mb-1 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="mt-2 mb-1 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
       {rows.map((row) => (
         <div
           key={row.label}
@@ -208,6 +218,8 @@ export function PnLTab({ pnl }: { pnl: BusinessFinancePnL }) {
     if (fuelBreakdown) {
       lines.push(
         `"Fuel spend (gross)",${fuelBreakdown.grossSpend}`,
+        `"Fleet card",${fuelBreakdown.gasCardSpend}`,
+        `"Driver cash at pump",${fuelBreakdown.driverCashSpend}`,
         `"Already covered (driver share)",${fuelBreakdown.alreadyCovered}`,
         `"Reimbursed to drivers",${fuelBreakdown.reimbursedToDrivers}`,
         `"Fleet fuel loss",${fuelBreakdown.fleetLoss}`,
@@ -216,7 +228,7 @@ export function PnLTab({ pnl }: { pnl: BusinessFinancePnL }) {
     if (tollBreakdown) {
       lines.push(
         `"Toll charges (gross)",${tollBreakdown.grossCharges}`,
-        `"Already covered (not fleet loss)",${tollBreakdown.alreadyCovered}`,
+        `"Already covered (matched rider refunds / wash)",${tollBreakdown.alreadyCovered}`,
         `"Charged to drivers",${tollBreakdown.chargedToDrivers}`,
         `"Fleet toll loss",${tollBreakdown.fleetLoss}`,
       );

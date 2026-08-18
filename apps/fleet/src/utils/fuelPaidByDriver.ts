@@ -8,6 +8,10 @@ import { Vehicle } from '../types/vehicle';
 import { Trip } from '../types/data';
 import { resolveFuelFillDriver } from './resolveFuelFillDriver';
 import { isEntryInInclusiveYmdRange, reportWeekYmdBounds } from './fuelWeekPeriod';
+import {
+  isCashStyleFuelPaymentSource,
+  resolveFuelPaymentSource,
+} from './fuelPaymentSource';
 
 const OUT_OF_POCKET_TYPES = new Set(['Reimbursement', 'Manual_Entry', 'Fuel_Manual_Entry']);
 
@@ -17,7 +21,18 @@ export type DriverWeekAttributionContext = {
   trips?: Trip[];
 };
 
+/** Driver cash at the pump — never fleet gas card, even when type is still Manual_Entry after statement match. */
 export function isOutOfPocketFuelEntry(entry: FuelEntry): boolean {
+  if (isGasCardFuelEntry(entry)) return false;
+  const metaPay = (entry.metadata as Record<string, unknown> | undefined)?.paymentSource;
+  const raw =
+    entry.paymentSource ||
+    (typeof metaPay === 'string' ? metaPay : undefined);
+  if (raw) {
+    const resolved = resolveFuelPaymentSource(raw).enum;
+    if (resolved === 'Gas_Card') return false;
+    if (isCashStyleFuelPaymentSource(resolved)) return true;
+  }
   return OUT_OF_POCKET_TYPES.has(entry.type);
 }
 

@@ -16,6 +16,10 @@ import {
   computeFuelFleetLossNetting,
   fuelRecoveredWashedMemo,
 } from '../../utils/fuelFleetLossNetting';
+import {
+  isCashStyleFuelPaymentSource,
+  resolveFuelPaymentSource,
+} from '../../utils/fuelPaymentSource';
 import { recognizePlatformGrossAndFees } from '../../utils/platformFeeRecognition';
 
 type LedgerLike = Record<string, unknown>;
@@ -26,6 +30,19 @@ function eventDate(e: LedgerLike): string {
 
 function eventAmount(e: LedgerLike): number {
   return tollEventAmount(e);
+}
+
+function fuelExpensePumpPay(e: LedgerLike): 'card' | 'cash' | 'unknown' {
+  const meta =
+    e.metadata && typeof e.metadata === 'object'
+      ? (e.metadata as Record<string, unknown>)
+      : {};
+  const raw = e.paymentSource ?? meta.paymentSource;
+  if (raw == null || String(raw).trim() === '') return 'unknown';
+  const enumVal = resolveFuelPaymentSource(String(raw)).enum;
+  if (enumVal === 'Gas_Card') return 'card';
+  if (isCashStyleFuelPaymentSource(enumVal)) return 'cash';
+  return 'unknown';
 }
 
 export function buildPnLFromCanonicalEvents(
@@ -52,6 +69,18 @@ export function buildPnLFromCanonicalEvents(
   const fuel = fuelNet.net;
   const fuelRecoveredMemo = fuelRecoveredWashedMemo(fuelNet);
 
+  let gasCardSpend = 0;
+  let driverCashSpend = 0;
+  for (const e of scoped) {
+    if (String(e.eventType || '') !== 'fuel_expense') continue;
+    const amt = eventAmount(e);
+    const pay = fuelExpensePumpPay(e);
+    if (pay === 'card') gasCardSpend += amt;
+    else if (pay === 'cash') driverCashSpend += amt;
+  }
+  gasCardSpend = round2(gasCardSpend);
+  driverCashSpend = round2(driverCashSpend);
+
   // Wallet reimbursements — shown in Fuel accordion, not netted into fleet loss.
   let reimbursedToDrivers = 0;
   for (const e of scoped) {
@@ -68,6 +97,8 @@ export function buildPnLFromCanonicalEvents(
     fuel > 0.005
       ? {
           grossSpend: fuelNet.gross,
+          gasCardSpend,
+          driverCashSpend,
           alreadyCovered: fuelRecoveredMemo ?? 0,
           reimbursedToDrivers,
           fleetLoss: fuel,

@@ -1,11 +1,10 @@
-import { Check, AlertTriangle, Scale, Shield, Droplets, ClipboardList, Flag, type LucideIcon } from 'lucide-react';
+import { Check, AlertTriangle, Scale, Shield, Droplets, ClipboardList, Flag, Loader2, type LucideIcon } from 'lucide-react';
 import { Card, CardContent } from '../../ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../ui/tabs';
 import { Button } from '../../ui/button';
-import { Loader2 } from 'lucide-react';
+import { Badge } from '../../ui/badge';
 import type { FuelReconciliationPeriod } from '../../../utils/fuelPeriodStatus';
 import { FUEL_STEP_ORDER, type FuelStepId } from '../../../utils/fuelPeriodGating';
-import { FuelReconBusyProvider } from './fuelReconBusyLock';
 
 const STEP_ICONS: Record<FuelStepId, LucideIcon> = {
   'data-quality': AlertTriangle,
@@ -57,7 +56,7 @@ function PeriodCard({
             <span>{period.vehicleCount} vehicle{period.vehicleCount === 1 ? '' : 's'}</span>
             <span>Spend {formatMoney(period.totalSpend)}</span>
             <span className={period.netLeakage > 0 ? 'text-rose-600' : ''}>
-              Net unassigned {formatMoney(period.netLeakage)}
+              Misc / Leakage {formatMoney(period.netLeakage)}
             </span>
           </div>
           <div className="mt-1.5 flex flex-wrap gap-1">
@@ -78,7 +77,7 @@ function PeriodCard({
                 onReset();
               }}
             >
-              Reset
+              Reopen week
             </Button>
           )}
           <button
@@ -109,6 +108,7 @@ interface FuelPeriodLandingPageProps {
   onSelectPeriod: (period: FuelReconciliationPeriod) => void;
   onResetPeriod?: (period: FuelReconciliationPeriod) => void;
   onOpenArchive?: () => void;
+  onBulkFinalize?: () => void;
 }
 
 export function FuelPeriodLandingPage({
@@ -118,6 +118,7 @@ export function FuelPeriodLandingPage({
   onSelectPeriod,
   onResetPeriod,
   onOpenArchive,
+  onBulkFinalize,
 }: FuelPeriodLandingPageProps) {
   if (loading) {
     return (
@@ -132,18 +133,37 @@ export function FuelPeriodLandingPage({
   const defaultTab = outstanding.length > 0 ? 'outstanding' : 'completed';
 
   return (
-    <FuelReconBusyProvider>
     <div className="space-y-6">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="text-2xl font-bold tracking-tight text-slate-900">Consumption Reconciliation</h2>
           <p className="text-slate-500">Close each Monday–Sunday week, step by step.</p>
         </div>
-        {onOpenArchive && (
-          <Button type="button" variant="ghost" size="sm" className="self-start text-slate-600" onClick={onOpenArchive}>
-            Finalized archive
-          </Button>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {onBulkFinalize && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="self-start min-h-10 gap-1.5"
+              disabled={outstanding.length === 0}
+              onClick={onBulkFinalize}
+            >
+              <Flag className="h-4 w-4" />
+              Finalize weeks
+              {outstanding.length > 0 && (
+                <Badge variant="secondary" className="ml-0.5 h-5 min-w-5 px-1.5 text-xs">
+                  {outstanding.length}
+                </Badge>
+              )}
+            </Button>
+          )}
+          {onOpenArchive && (
+            <Button type="button" variant="ghost" size="sm" className="self-start text-slate-600" onClick={onOpenArchive}>
+              Finalized archive
+            </Button>
+          )}
+        </div>
       </div>
 
       {isEmpty ? (
@@ -202,6 +222,5 @@ export function FuelPeriodLandingPage({
         </Tabs>
       )}
     </div>
-    </FuelReconBusyProvider>
   );
 }

@@ -28,8 +28,10 @@ import { emitDriverTollCharge, isUnifiedTollSettlementEnabled } from "./driver_t
 import {
   emitTollChargeOffset,
   reinstateTollCharge,
+  syncPlazaTollPnlOffset,
   type TollPnlOffsetReason,
 } from "./toll_pnl_offset.ts";
+import { isPlatformReimbursedPlazaToll } from "./toll_platform_reimbursed.ts";
 import { mapResolutionReasonToTollResolution } from "./claim_resolution_sync.ts";
 import { classifyTollLedgerEntry } from "./driver_toll_disposition.ts";
 import { demoteSpuriousDeadheadMatch } from "./deadhead_match_guard.ts";
@@ -4750,10 +4752,9 @@ app.post(`${BASE}/match-index/backfill`, async (c) => {
 
 // ─── GET /toll-pnl-offset-backfill/status ─── read-only backfill preview ──
 // Historical tolls resolved as cash_wash/phantom/expense_logged (trip-level)
-// or personal (toll_ledger-level) BEFORE tollPnlOffsetEnabled existed never
-// got a compensating toll_charge_offset event — the Business Finance P&L
-// Tolls line still overstates them. Reports how many + total $, without
-// touching anything. See toll_pnl_offset.ts.
+// or personal / matched-reimbursed (toll_ledger-level) BEFORE the offset
+// existed never got a compensating toll_charge_offset event — the Business
+// Finance P&L Tolls line still overstates them.
 const TOLL_PNL_OFFSET_REASON_BY_TRIP_STATUS: Record<string, TollPnlOffsetReason> = {
   cash_wash: "cash_wash",
   phantom: "phantom",
@@ -4799,7 +4800,7 @@ async function findTollPnlOffsetBackfillCandidates(): Promise<TollPnlOffsetBackf
   }
 
   for (const tx of tollLedgerRecords) {
-    if (tx?.resolution !== "personal") continue;
+    if (tx?.resolution !== "personal" && !isPlatformReimbursedPlazaToll(tx)) continue;
     const amount = Math.abs(Number(tx?.amount) || 0);
     if (amount <= 0.005) continue;
     const marker = await kv.get(`toll_pnl_offset_marker:toll_ledger:${tx.id}`);
@@ -4809,7 +4810,7 @@ async function findTollPnlOffsetBackfillCandidates(): Promise<TollPnlOffsetBackf
     candidates.push({
       sourceType: "toll_ledger",
       id: tx.id,
-      reason: "personal",
+      reason: tx?.resolution === "personal" ? "personal" : "platform_reimbursed",
       amount,
       driverId: tx.driverId || undefined,
       vehicleId: tx.vehicleId || undefined,
@@ -5616,6 +5617,19 @@ async function writeTollLedgerEntry(params: {
   return id;
 }
 
+async function safeSyncPlazaTollPnlOffset(
+  entry: { id?: string; amount?: number; date?: string; driverId?: string | null; vehicleId?: string | null; type?: string | null; resolution?: string | null; tripId?: string | null; isReconciled?: boolean; status?: string | null } | null,
+  c: unknown,
+  label: string,
+): Promise<void> {
+  if (!entry?.id) return;
+  try {
+    await syncPlazaTollPnlOffset(entry, c);
+  } catch (err) {
+    console.error(`[TollReconciliation] ${label} P&L sync failed for ${entry.id}:`, err);
+  }
+}
+
 // ─── POST /reconcile ───────────────────────────────────────────────────
 
 app.post(`${BASE}/reconcile`, requirePermission('toll.manage'), async (c) => {
@@ -5646,7 +5660,7 @@ app.post(`${BASE}/reconcile`, requirePermission('toll.manage'), async (c) => {
     if (!trip) return c.json({ error: `Trip ${tripId} not found` }, 404);
 
     // Phase 6: Write ONLY to toll_ledger (single source of truth)
-    await updateTollLedgerEntry(
+    const reconciledRow = await updateTollLedgerEntry(
       transactionId,
       {
         status: "reconciled",
@@ -5659,6 +5673,7 @@ app.post(`${BASE}/reconcile`, requirePermission('toll.manage'), async (c) => {
       "admin"
     );
     await recomputeAndPersistWorkflowStage(transactionId);
+    await safeSyncPlazaTollPnlOffset(reconciledRow, c, "reconcile");
 
     // Update local tx object for response (not persisted to transaction:*)
     tx.tripId = tripId;
@@ -5735,7 +5750,7 @@ app.post(`${BASE}/unreconcile`, requirePermission('toll.manage'), async (c) => {
     // Phase 6: Write ONLY to toll_ledger (single source of truth)
     // Include autoMatchOverridden flag if this was auto-matched
     const wasAutoMatched = tx.metadata?.reconciledBy === 'system-auto' || tx.metadata?.matchedBy === 'system-auto';
-    await updateTollLedgerEntry(
+    const unmatchedRow = await updateTollLedgerEntry(
       transactionId,
       {
         status: "pending",
@@ -5747,6 +5762,7 @@ app.post(`${BASE}/unreconcile`, requirePermission('toll.manage'), async (c) => {
       "admin"
     );
     await recomputeAndPersistWorkflowStage(transactionId);
+    await safeSyncPlazaTollPnlOffset(unmatchedRow, c, "unreconcile");
 
     // Update local tx object for response (not persisted to transaction:*)
     tx.tripId = null;
@@ -5927,6 +5943,7 @@ export async function executeTollResetForReconciliation(
   if (!updated) {
     throw new Error("Toll entry missing after update");
   }
+  await safeSyncPlazaTollPnlOffset(updated, { get: () => undefined }, "reset-for-reconciliation");
   const tx = tollLedgerToTxShape(updated);
 
   if (previousTripId) {
@@ -6155,8 +6172,9 @@ app.post(`${BASE}/bulk-reconcile`, requirePermission('toll.manage'), async (c) =
 
       // Phase 6: Update toll_ledger entries (primary store)
       for (const { id, updates } of tollLedgerUpdates) {
-        await updateTollLedgerEntry(id, updates, "reconciled", "admin_bulk");
+        const row = await updateTollLedgerEntry(id, updates, "reconciled", "admin_bulk");
         await recomputeAndPersistWorkflowStage(id);
+        await safeSyncPlazaTollPnlOffset(row, c, "bulk-reconcile");
       }
     }
 
@@ -6554,6 +6572,8 @@ app.post(`${BASE}/resolve`, async (c) => {
           resolvedAt: new Date().toISOString(),
         },
       });
+      const fleetRow = await getTollLedgerEntry(transactionId);
+      await safeSyncPlazaTollPnlOffset(fleetRow, c, "resolve-fleet-absorb");
     }
 
     console.log(
@@ -8101,10 +8121,11 @@ async function applyUnlinkedRefundToClaim(
   if (resolvedTollId) {
     try {
       const existingToll = await loadTollForUnlinkedMatch(resolvedTollId);
-      await updateTollLedgerEntry(
+      const linked = await updateTollLedgerEntry(
         resolvedTollId,
         {
           isReconciled: true,
+          tripId: existingToll?.tripId || tripId,
           matchedAt: new Date().toISOString(),
           matchedBy: "unlinked-shortfall",
           unlinkedSourceTripId: tripId,
@@ -8117,6 +8138,7 @@ async function applyUnlinkedRefundToClaim(
         "system-unlinked-shortfall",
       );
       await recomputeAndPersistWorkflowStage(resolvedTollId);
+      await safeSyncPlazaTollPnlOffset(linked, c, "unlinked-shortfall");
     } catch (err: any) {
       console.warn(`[UnlinkedShortfall] toll link warn: ${err?.message}`);
     }
@@ -8311,7 +8333,7 @@ async function clearTollAfterUnlinkedUndo(tollId: string | null, tripId: string)
   if (!tollId) return;
   try {
     const toll = await loadTollForUnlinkedMatch(tollId);
-    await updateTollLedgerEntry(
+    const cleared = await updateTollLedgerEntry(
       tollId,
       {
         unlinkedSourceTripId: null,
@@ -8329,6 +8351,7 @@ async function clearTollAfterUnlinkedUndo(tollId: string | null, tripId: string)
       "undo-unlinked-apply",
     );
     await recomputeAndPersistWorkflowStage(tollId);
+    await safeSyncPlazaTollPnlOffset(cleared, { get: () => undefined }, "unlinked-undo");
   } catch (err: any) {
     console.warn(`[UnlinkedShortfall:Undo] toll clear warn: ${err?.message}`);
   }

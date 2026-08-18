@@ -124,6 +124,18 @@ export function entriesInFuelWeek<T extends { date?: string | null }>(
 }
 
 /**
+ * A stop-to-stop bucket belongs to the week of its closing fill (endDate),
+ * not to every week it merely overlaps. Fuel added at that fill is this week's spend.
+ */
+export function bucketClosesInFuelWeek(
+  bucket: { endDate: string },
+  startYmd: string,
+  endYmd: string,
+): boolean {
+  return isEntryInInclusiveYmdRange(bucket.endDate, startYmd, endYmd);
+}
+
+/**
  * Current Mon–Sun statement week in fleet timezone (falls back to browser local).
  * Same Monday identity as PeriodWeekDropdown options.
  */

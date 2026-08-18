@@ -7,7 +7,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./ErrorBoundary": "./src/ErrorBoundary.tsx",
-    "./fuel": "./src/fuel/jaaFuelStatementMatcher.ts"
+    "./fuel": "./src/fuel/jaaFuelStatementMatcher.ts",
+    "./fuel/blendedDriverShareRatio": "./src/fuel/blendedDriverShareRatio.ts"
   },
   "scripts": {
     "test": "vitest run"

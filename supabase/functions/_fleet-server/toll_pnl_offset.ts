@@ -2,7 +2,8 @@
  * Toll P&L Offset — single consolidated, reversible, versioned compensating
  * entry for tolls that Toll Reconciliation determined are NOT a real,
  * unrecovered business loss (cash_wash / phantom / superseded_by_expense_logged
- * / personal), so the Business Finance P&L's Tolls line stops counting them.
+ * / personal / platform_reimbursed), so the Business Finance P&L's Tolls line
+ * stops counting them.
  *
  * The canonical ledger (`ledger_event:*`) is insert-only — there is no way to
  * update or void a previously-written `toll_charge` event. This module never
@@ -22,6 +23,11 @@
 
 import * as kv from "./kv_store.tsx";
 import { appendCanonicalLedgerEvents, canonicalEventExistsByIdemKey } from "./ledger_canonical.ts";
+import {
+  isFleetAbsorbingTollResolution,
+  isPersonalTollResolution,
+  isPlatformReimbursedPlazaToll,
+} from "./toll_platform_reimbursed.ts";
 
 const MARKER_PREFIX = "toll_pnl_offset_marker:";
 
@@ -31,7 +37,8 @@ export type TollPnlOffsetReason =
   | "cash_wash"
   | "phantom"
   | "superseded_by_expense_logged"
-  | "personal";
+  | "personal"
+  | "platform_reimbursed";
 
 interface TollPnlOffsetMarker {
   active: boolean;
@@ -254,4 +261,55 @@ export async function reinstateTollCharge(
 /** Toll P&L offsets are always on. */
 export async function isTollPnlOffsetEnabled(): Promise<boolean> {
   return true;
+}
+
+export type PlazaTollPnlSyncLike = {
+  id?: string;
+  amount?: number;
+  date?: string;
+  driverId?: string | null;
+  vehicleId?: string | null;
+  type?: string | null;
+  resolution?: string | null;
+  tripId?: string | null;
+  isReconciled?: boolean;
+  status?: string | null;
+};
+
+/**
+ * Keep the plaza/tag canonical charge in sync with Toll Recon:
+ * matched/refunded → offset (not a fleet cost); write-off/business → leave
+ * (or reinstate) as fleet cost; unmatched → reinstate. Personal is owned by
+ * the Charge Driver emitter — never touch that offset here.
+ */
+export async function syncPlazaTollPnlOffset(
+  entry: PlazaTollPnlSyncLike,
+  c: unknown,
+): Promise<void> {
+  const id = String(entry?.id || "").trim();
+  if (!id) return;
+  const kind = String(entry.type || "").toLowerCase().replace("-", "_");
+  if (kind === "top_up" || kind === "refund" || kind === "adjustment") return;
+  if (isPersonalTollResolution(entry.resolution)) return;
+
+  const amount = Math.abs(Number(entry.amount) || 0);
+  if (amount <= 0.005) return;
+  const base = {
+    sourceType: "toll_ledger" as const,
+    sourceId: id,
+    driverId: entry.driverId,
+    vehicleId: entry.vehicleId,
+    date: String(entry.date || new Date().toISOString()),
+    amount,
+  };
+
+  if (isFleetAbsorbingTollResolution(entry.resolution)) {
+    await reinstateTollCharge(base, c);
+    return;
+  }
+  if (isPlatformReimbursedPlazaToll(entry)) {
+    await emitTollChargeOffset({ ...base, reason: "platform_reimbursed" }, c);
+    return;
+  }
+  await reinstateTollCharge(base, c);
 }

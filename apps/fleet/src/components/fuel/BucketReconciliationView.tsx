@@ -40,22 +40,19 @@ import { api } from '../../services/api';
 import { Vehicle } from '../../types/vehicle';
 import { Trip, FinancialTransaction } from '../../types/data';
 import { FuelEntry, MileageAdjustment, OdometerBucket } from '../../types/fuel';
-import { FuelCalculationService } from '../../services/fuelCalculationService';
+import { FuelCalculationService, FALLBACK_EFFICIENCY_KM_L } from '../../services/fuelCalculationService';
 import { settlementService } from '../../services/settlementService';
 import { odometerService } from '../../services/odometerService';
 import { MasterLogTimeline } from '../vehicles/odometer/MasterLogTimeline';
+import { bucketClosesInFuelWeek, toEntryYmd } from '../../utils/fuelWeekPeriod';
+import { ymdToLocalDate } from '../../utils/timezoneDisplay';
 
-/** Normalize ISO or date-only strings to YYYY-MM-DD for Timeline filters. */
-function toYmd(value: string | Date | undefined | null): string {
-    if (!value) return '';
-    if (typeof value === 'string') {
-        const m = value.match(/^(\d{4}-\d{2}-\d{2})/);
-        if (m) return m[1];
-        const d = new Date(value);
-        if (!Number.isNaN(d.getTime())) return format(d, 'yyyy-MM-dd');
-        return '';
-    }
-    return format(value, 'yyyy-MM-dd');
+/** Calendar day label without UTC date-only shift (yyyy-MM-dd must not parse as UTC midnight). */
+function formatBucketDay(value: string): string {
+    const ymd = toEntryYmd(value);
+    const d = ymdToLocalDate(ymd);
+    if (Number.isNaN(d.getTime())) return '';
+    return format(d, 'MMM d');
 }
 
 interface BucketReconciliationViewProps {
@@ -84,7 +81,7 @@ export function BucketReconciliationView({
     const [isPosting, setIsPosting] = React.useState<string | null>(null);
     const [unifiedAnchors, setUnifiedAnchors] = React.useState<{ id: string; date: string; odometer: number }[] | null>(null);
     const [bucketTrips, setBucketTrips] = React.useState<Trip[] | null>(null);
-    // Explain-gap Timeline drill-down (bucket window or full recon week)
+    // Explain-gap Timeline: one bucket window, or the recon week's calendar dates (not overlapping-bucket span)
     const [timelineScope, setTimelineScope] = React.useState<{
         from: string;
         to: string;
@@ -94,15 +91,17 @@ export function BucketReconciliationView({
     const weekTimelineRange = React.useMemo(() => {
         if (!dateRange?.from) return null;
         return {
-            from: toYmd(dateRange.from),
-            to: toYmd(dateRange.to ?? dateRange.from),
+            from: toEntryYmd(dateRange.from),
+            to: toEntryYmd(dateRange.to ?? dateRange.from),
         };
     }, [dateRange?.from, dateRange?.to]);
 
+    const periodYmd = weekTimelineRange;
+
     const openBucketTimeline = (bucket: OdometerBucket) => {
         setTimelineScope({
-            from: toYmd(bucket.startDate),
-            to: toYmd(bucket.endDate),
+            from: toEntryYmd(bucket.startDate),
+            to: toEntryYmd(bucket.endDate),
             label: `${bucket.startOdometer.toLocaleString()} → ${bucket.endOdometer.toLocaleString()} km`,
         });
     };
@@ -111,7 +110,7 @@ export function BucketReconciliationView({
         if (!weekTimelineRange) return;
         setTimelineScope({
             ...weekTimelineRange,
-            label: 'Full recon week',
+            label: 'This recon week',
         });
     };
 
@@ -157,42 +156,6 @@ export function BucketReconciliationView({
     // Use locally-fetched trips (full anchor range) if available, otherwise fall back to parent trips
     const effectiveTrips = bucketTrips ?? trips;
 
-    // Compute the ACTUAL efficiency being used by buildOdometerBuckets — same 3-tier fallback chain
-    const liveEfficiency = useMemo(() => {
-        const allVehicleEntries = fuelEntries.filter(e => e.vehicleId === vehicle.id);
-        const odoEntries = allVehicleEntries
-            .filter(e => e.odometer !== undefined && e.odometer !== null && e.odometer > 0 && (e.liters || 0) > 0)
-            .sort((a, b) => (a.odometer || 0) - (b.odometer || 0));
-
-        const efficiencyFuel = odoEntries.length >= 2
-            ? odoEntries.slice(1).reduce((sum, e) => sum + (e.liters || 0), 0)
-            : 0;
-
-        let kmL = 0;
-        let source: 'odometer' | 'configured' | 'default' = 'default';
-
-        if (odoEntries.length >= 3 && efficiencyFuel > 0) {
-            const odoSpan = (odoEntries[odoEntries.length - 1].odometer || 0) - (odoEntries[0].odometer || 0);
-            if (odoSpan > 0) {
-                kmL = odoSpan / efficiencyFuel;
-                source = 'odometer';
-            }
-        }
-        if (kmL <= 0) {
-            const cityEff = vehicle.fuelSettings?.efficiencyCity;
-            if (cityEff && cityEff > 0) {
-                kmL = 100 / cityEff;
-                source = 'configured';
-            } else {
-                kmL = 10;
-                source = 'default';
-            }
-        }
-
-        const l100km = kmL > 0 ? Number((100 / kmL).toFixed(1)) : 0;
-        return { kmL: Number(kmL.toFixed(2)), l100km, source, odoEntries: odoEntries.length };
-    }, [vehicle, fuelEntries]);
-
     const buckets = useMemo(() => {
         const rawBuckets = FuelCalculationService.calculateOdometerBuckets(
             vehicle,
@@ -216,26 +179,48 @@ export function BucketReconciliationView({
         });
     }, [vehicle, fuelEntries, effectiveTrips, adjustments, transactions, unifiedAnchors]);
 
-    // Filter buckets by date range for display (calculation uses full history for accuracy)
+    // Only buckets whose closing fill is in the selected week. Full history is still used to build the chain.
     const filteredBuckets = useMemo(() => {
-        if (!dateRange?.from) return buckets;
-        
-        return buckets.filter(bucket => {
-            // A bucket overlaps the date range if its endDate >= range.from AND startDate <= range.to
-            const bucketStart = new Date(bucket.startDate);
-            const bucketEnd = new Date(bucket.endDate);
-            bucketStart.setHours(0, 0, 0, 0);
-            bucketEnd.setHours(0, 0, 0, 0);
-            
-            const rangeFrom = new Date(dateRange.from!);
-            rangeFrom.setHours(0, 0, 0, 0);
-            
-            const rangeTo = dateRange.to ? new Date(dateRange.to) : rangeFrom;
-            rangeTo.setHours(0, 0, 0, 0);
-            
-            return bucketEnd >= rangeFrom && bucketStart <= rangeTo;
-        });
-    }, [buckets, dateRange]);
+        if (!periodYmd) return buckets;
+        return buckets.filter((bucket) =>
+            bucketClosesInFuelWeek(bucket, periodYmd.from, periodYmd.to)
+        );
+    }, [buckets, periodYmd]);
+
+    const periodStats = useMemo(() => {
+        const distanceKm = filteredBuckets.reduce(
+            (sum, b) => sum + (b.endOdometer - b.startOdometer),
+            0,
+        );
+        const liters = filteredBuckets.reduce((sum, b) => sum + b.actualFuelLiters, 0);
+        const cost = filteredBuckets.reduce((sum, b) => sum + b.actualFuelCost, 0);
+
+        let kmL = 0;
+        let source: 'period' | 'configured' | 'default' = 'default';
+        if (liters > 0 && distanceKm > 0) {
+            kmL = distanceKm / liters;
+            source = 'period';
+        } else {
+            const cityEff = vehicle.fuelSettings?.efficiencyCity;
+            if (cityEff && cityEff > 0) {
+                kmL = 100 / cityEff;
+                source = 'configured';
+            } else {
+                kmL = FALLBACK_EFFICIENCY_KM_L;
+                source = 'default';
+            }
+        }
+
+        return {
+            distanceKm,
+            liters,
+            cost,
+            kmL: Number(kmL.toFixed(2)),
+            l100km: kmL > 0 ? Number((100 / kmL).toFixed(1)) : 0,
+            source,
+            fillCount: filteredBuckets.length,
+        };
+    }, [filteredBuckets, vehicle]);
 
     const handlePostDeduction = async (bucket: OdometerBucket) => {
         setIsPosting(bucket.id);
@@ -293,9 +278,9 @@ export function BucketReconciliationView({
         return (
             <div className="flex flex-col items-center justify-center p-12 text-center bg-slate-50 rounded-lg border border-dashed border-slate-300">
                 <History className="h-12 w-12 text-slate-300 mb-4" />
-                <h3 className="text-lg font-medium text-slate-900">No Buckets in Selected Period</h3>
+                <h3 className="text-lg font-medium text-slate-900">No fills in this week</h3>
                 <p className="text-sm text-slate-500 max-w-xs mt-2">
-                    No stop-to-stop buckets overlap with the selected week period. Try another week.
+                    No stop-to-stop fills closed in the selected week. Try another week.
                 </p>
                 <p className="text-xs text-slate-400 mt-2">{buckets.length} total bucket{buckets.length !== 1 ? 's' : ''} exist across all time.</p>
             </div>
@@ -309,23 +294,23 @@ export function BucketReconciliationView({
                     <CardContent className="pt-6">
                         <div className="flex items-center gap-2 mb-2">
                             <Gauge className="h-4 w-4 text-blue-500" />
-                            <span className="text-sm font-medium text-slate-500">Efficiency Profile</span>
+                            <span className="text-sm font-medium text-slate-500">This week’s efficiency</span>
                         </div>
                         <p className="text-2xl font-bold text-slate-900">
-                            {liveEfficiency.kmL} <span className="text-sm font-normal text-slate-500">km/L</span>
-                            <span className="text-sm font-normal text-slate-400 ml-1">({liveEfficiency.l100km} L/100km)</span>
+                            {periodStats.kmL} <span className="text-sm font-normal text-slate-500">km/L</span>
+                            <span className="text-sm font-normal text-slate-400 ml-1">({periodStats.l100km} L/100km)</span>
                         </p>
                         <p className="text-xs mt-1">
-                            {liveEfficiency.source === 'odometer' ? (
-                                <span className="text-emerald-600 font-medium">● Live from {liveEfficiency.odoEntries} odometer entries</span>
-                            ) : liveEfficiency.source === 'configured' ? (
-                                <span className="text-amber-600 font-medium">● Configured baseline (insufficient odo data)</span>
+                            {periodStats.source === 'period' ? (
+                                <span className="text-emerald-600 font-medium">● From {periodStats.fillCount} fill{periodStats.fillCount !== 1 ? 's' : ''} in this week</span>
+                            ) : periodStats.source === 'configured' ? (
+                                <span className="text-amber-600 font-medium">● Vehicle baseline (no fills closed this week)</span>
                             ) : (
-                                <span className="text-red-600 font-medium">● System default (no config or odo data)</span>
+                                <span className="text-red-600 font-medium">● System default (no config or fills this week)</span>
                             )}
                         </p>
                         <p className="text-xs text-slate-500 mt-0.5">
-                            {unifiedAnchors ? `${unifiedAnchors.length} unified anchors` : 'Fuel entries only'}
+                            Distance and litres from this week’s fills only.
                         </p>
                     </CardContent>
                 </Card>
@@ -334,12 +319,14 @@ export function BucketReconciliationView({
                     <CardContent className="pt-6">
                         <div className="flex items-center gap-2 mb-2">
                             <Navigation className="h-4 w-4 text-indigo-500" />
-                            <span className="text-sm font-medium text-slate-500">Total Distance</span>
+                            <span className="text-sm font-medium text-slate-500">This week’s distance</span>
                         </div>
                         <p className="text-2xl font-bold text-slate-900">
-                            {(filteredBuckets[filteredBuckets.length - 1].endOdometer - filteredBuckets[0].startOdometer).toLocaleString()} <span className="text-sm font-normal text-slate-500">km</span>
+                            {periodStats.distanceKm.toLocaleString()} <span className="text-sm font-normal text-slate-500">km</span>
                         </p>
-                        <p className="text-xs text-slate-500 mt-1">Spanning {filteredBuckets.length} bucket{filteredBuckets.length !== 1 ? 's' : ''}{dateRange?.from ? ' in period' : ''}</p>
+                        <p className="text-xs text-slate-500 mt-1">
+                            {periodStats.fillCount} fill{periodStats.fillCount !== 1 ? 's' : ''} that closed this week
+                        </p>
                     </CardContent>
                 </Card>
 
@@ -347,12 +334,14 @@ export function BucketReconciliationView({
                     <CardContent className="pt-6">
                         <div className="flex items-center gap-2 mb-2">
                             <Fuel className="h-4 w-4 text-emerald-500" />
-                            <span className="text-sm font-medium text-slate-500">Total Fuel</span>
+                            <span className="text-sm font-medium text-slate-500">This week’s fuel</span>
                         </div>
                         <p className="text-2xl font-bold text-slate-900">
-                            {filteredBuckets.reduce((sum, b) => sum + b.actualFuelLiters, 0).toFixed(1)} <span className="text-sm font-normal text-slate-500">L</span>
+                            {periodStats.liters.toFixed(1)} <span className="text-sm font-normal text-slate-500">L</span>
                         </p>
-                        <p className="text-xs text-slate-500 mt-1">Cost: {formatCurrency(filteredBuckets.reduce((sum, b) => sum + b.actualFuelCost, 0))}</p>
+                        <p className="text-xs text-slate-500 mt-1">
+                            Cost: {formatCurrency(periodStats.cost)} — fills that closed this week
+                        </p>
                     </CardContent>
                 </Card>
             </div>
@@ -362,7 +351,9 @@ export function BucketReconciliationView({
                     <div className="flex items-center justify-between gap-3">
                         <div>
                             <CardTitle className="text-lg">Stop-to-Stop Buckets</CardTitle>
-                            <CardDescription>Precise fuel consumption between odometer anchors</CardDescription>
+                            <CardDescription>
+                                Fills that closed in this week only. Next week’s fills are not included.
+                            </CardDescription>
                         </div>
                         {weekTimelineRange && (
                             <Button
@@ -373,7 +364,7 @@ export function BucketReconciliationView({
                                 onClick={openWeekTimeline}
                             >
                                 <ScanLine className="h-3.5 w-3.5" />
-                                View full week timeline
+                                View week timeline
                             </Button>
                         )}
                     </div>
@@ -403,7 +394,10 @@ export function BucketReconciliationView({
                                                 <span>{bucket.endOdometer.toLocaleString()}</span>
                                             </div>
                                             <span className="text-[10px] text-slate-500 uppercase mt-0.5">
-                                                {format(new Date(bucket.startDate), 'MMM d')} - {format(new Date(bucket.endDate), 'MMM d')}
+                                                Fill {formatBucketDay(bucket.endDate)}
+                                                {toEntryYmd(bucket.startDate) !== toEntryYmd(bucket.endDate)
+                                                    ? ` · from ${formatBucketDay(bucket.startDate)}`
+                                                    : ''}
                                             </span>
                                         </div>
                                     </TableCell>
@@ -590,6 +584,7 @@ export function BucketReconciliationView({
                         <li><strong>Variance</strong> compares the fuel added at the end of the bucket against what the vehicle <em>should</em> have used based on its profile (info only for top-ups).</li>
                         <li><strong>Flagged</strong> means GAP or tank overflow — not normal top-up variance.</li>
                         <li><strong>Explain gap</strong> opens the Unified Timeline for that stop-to-stop window (anchors, trips, personal km).</li>
+                        <li>Cards, table, and week timeline all use this week’s fills only.</li>
                     </ul>
                 </div>
             </div>

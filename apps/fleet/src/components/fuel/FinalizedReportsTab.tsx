@@ -207,10 +207,10 @@ export function FinalizedReportsTab() {
       Driver: r.driverName || 'Unknown',
       TotalSpend: Number((r.totalGasCardCost || 0).toFixed(2)),
       RideShare: Number((r.rideShareCost || 0).toFixed(2)),
-      CompanyOps: Number(((r.companyUsageCost ?? r.companyOpsCost) || 0).toFixed(2)),
+      CompanyOps: Number((r.companyUsageCost || 0).toFixed(2)),
       Deadhead: Number((r.deadheadCost || 0).toFixed(2)),
-      Personal: Number(((r.personalUsageCost ?? r.personalCost) || 0).toFixed(2)),
-      Misc: Number(((r.miscellaneousCost ?? r.miscCost) || 0).toFixed(2)),
+      Personal: Number((r.personalUsageCost || 0).toFixed(2)),
+      Misc: Number((r.miscellaneousCost || 0).toFixed(2)),
       PaidByDriver: Number((r.driverSpend || 0).toFixed(2)),
       Deduction: Number((r.driverShare || 0).toFixed(2)),
       NetPay: Number((r.netPay || 0).toFixed(2)),
@@ -259,7 +259,7 @@ export function FinalizedReportsTab() {
               onClick={() => setBulkResetOpen(true)}
             >
               <Trash2 className="h-4 w-4 mr-2" />
-              Delete weeks
+              Reopen weeks
             </Button>
           )}
           <Button variant="outline" size="sm" onClick={loadReports} disabled={loading}>
@@ -383,16 +383,16 @@ export function FinalizedReportsTab() {
                             {currency.format(r.rideShareCost || 0)}
                           </TableCell>
                           <TableCell className="text-right text-sm">
-                            {currency.format(r.companyUsageCost ?? r.companyOpsCost ?? 0)}
+                            {currency.format(r.companyUsageCost ?? 0)}
                           </TableCell>
                           <TableCell className="text-right text-sm text-amber-600">
                             {currency.format(r.deadheadCost || 0)}
                           </TableCell>
                           <TableCell className="text-right text-sm">
-                            {currency.format(r.personalUsageCost ?? r.personalCost ?? 0)}
+                            {currency.format(r.personalUsageCost ?? 0)}
                           </TableCell>
                           <TableCell className="text-right text-sm">
-                            {currency.format(r.miscellaneousCost ?? r.miscCost ?? 0)}
+                            {currency.format(r.miscellaneousCost ?? 0)}
                           </TableCell>
                           <TableCell className="text-right text-sm">
                             {currency.format(r.driverSpend || 0)}
@@ -438,7 +438,7 @@ export function FinalizedReportsTab() {
                         </TableCell>
                         <TableCell className="text-right">
                           {currency.format(
-                            group.reports.reduce((s: number, r: any) => s + (r.companyUsageCost ?? r.companyOpsCost ?? 0), 0)
+                            group.reports.reduce((s: number, r: any) => s + (r.companyUsageCost ?? 0), 0)
                           )}
                         </TableCell>
                         <TableCell className="text-right text-amber-600">
@@ -448,12 +448,12 @@ export function FinalizedReportsTab() {
                         </TableCell>
                         <TableCell className="text-right">
                           {currency.format(
-                            group.reports.reduce((s: number, r: any) => s + (r.personalUsageCost ?? r.personalCost ?? 0), 0)
+                            group.reports.reduce((s: number, r: any) => s + (r.personalUsageCost ?? 0), 0)
                           )}
                         </TableCell>
                         <TableCell className="text-right">
                           {currency.format(
-                            group.reports.reduce((s: number, r: any) => s + (r.miscellaneousCost ?? r.miscCost ?? 0), 0)
+                            group.reports.reduce((s: number, r: any) => s + (r.miscellaneousCost ?? 0), 0)
                           )}
                         </TableCell>
                         <TableCell className="text-right">
@@ -497,9 +497,9 @@ export function FinalizedReportsTab() {
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Reset this driver for the week?</AlertDialogTitle>
+            <AlertDialogTitle>Reopen this driver week?</AlertDialogTitle>
             <AlertDialogDescription>
-              Resets <strong>{deleteTarget?.label}</strong> for this period only: removes their
+              Reopens <strong>{deleteTarget?.label}</strong> for this driver only: removes their
               finalized snapshot and reverses wallet fuel credits, fuel deductions, and linked fuel
               log finalization. Other drivers in the same week stay finalized.
             </AlertDialogDescription>
@@ -513,10 +513,10 @@ export function FinalizedReportsTab() {
             >
               {isDeleting ? (
                 <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Resetting...
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Reopening…
                 </>
               ) : (
-                'Reset driver week'
+                'Reopen driver week'
               )}
             </AlertDialogAction>
           </AlertDialogFooter>

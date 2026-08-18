@@ -66,6 +66,32 @@ describe('buildPnLFromCanonicalEvents — toll netting', () => {
     });
   });
 
+  it('nets a matched plaza platform_reimbursed offset to $0', () => {
+    const events = [
+      tollCharge({ sourceType: 'transaction', sourceId: 'tag-1', netAmount: 370, grossAmount: 370 }),
+      tollOffset({
+        sourceType: 'transaction',
+        sourceId: 'tag-1',
+        netAmount: 370,
+        grossAmount: 370,
+        metadata: { reason: 'platform_reimbursed' },
+      }),
+    ];
+    const pnl = buildPnLFromCanonicalEvents(events, period);
+    expect(pnl.lines.find((l) => l.id === 'tolls')!.amount).toBe(-0);
+    expect(pnl.tollBreakdown?.fleetLoss).toBe(0);
+    expect(pnl.tollBreakdown?.alreadyCovered).toBe(370);
+  });
+
+  it('keeps a write-off plaza charge as fleet cost when there is no offset', () => {
+    const pnl = buildPnLFromCanonicalEvents(
+      [tollCharge({ sourceType: 'transaction', sourceId: 'wo-1', netAmount: 275, grossAmount: 275 })],
+      period,
+    );
+    expect(pnl.lines.find((l) => l.id === 'tolls')!.amount).toBe(-275);
+    expect(pnl.tollBreakdown?.fleetLoss).toBe(275);
+  });
+
   it('nets a phantom offset to $0', () => {
     const events = [
       tollCharge({ sourceType: 'trip', sourceId: 'trip-2' }),
@@ -290,6 +316,8 @@ describe('buildPnLFromCanonicalEvents — fuel netting', () => {
     expect(pnl.fuelRecoveredWashed).toBe(300);
     expect(pnl.fuelBreakdown).toEqual({
       grossSpend: 1000,
+      gasCardSpend: 0,
+      driverCashSpend: 0,
       alreadyCovered: 300,
       reimbursedToDrivers: 0,
       fleetLoss: 700,
@@ -320,6 +348,29 @@ describe('buildPnLFromCanonicalEvents — fuel netting', () => {
     const pnl = buildPnLFromCanonicalEvents(events, period);
     expect(pnl.lines.find((l) => l.id === 'fuel')!.amount).toBe(-1000);
     expect(pnl.fuelBreakdown?.reimbursedToDrivers).toBe(200);
+  });
+
+  it('splits fleet card vs driver cash at pump when paymentSource is stamped', () => {
+    const events = [
+      fuelExpense({
+        id: 'card-fill',
+        netAmount: 800,
+        grossAmount: 800,
+        metadata: { paymentSource: 'Gas_Card' },
+      }),
+      fuelExpense({
+        id: 'cash-fill',
+        sourceId: 'entry-2',
+        netAmount: 200,
+        grossAmount: 200,
+        metadata: { paymentSource: 'RideShare_Cash' },
+      }),
+    ];
+    const pnl = buildPnLFromCanonicalEvents(events, period);
+    expect(pnl.fuelBreakdown?.gasCardSpend).toBe(800);
+    expect(pnl.fuelBreakdown?.driverCashSpend).toBe(200);
+    expect(pnl.fuelBreakdown?.grossSpend).toBe(1000);
+    expect(pnl.lines.find((l) => l.id === 'fuel')!.amount).toBe(-1000);
   });
 });
 
