@@ -202,6 +202,7 @@ export default function OrderTrackingPage({ orderId, demoPhase, onNavigate }: Pr
           onCancel={handleCancelOrder}
           cancelPending={cancelPending}
           onHelp={handleHelp}
+          onNavigate={(page) => onNavigate(page)}
         />
       );
   }

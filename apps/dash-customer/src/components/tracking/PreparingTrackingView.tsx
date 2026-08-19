@@ -1,4 +1,5 @@
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
+import { PaymentPendingBanner } from '@/components/orders/PaymentPendingBanner';
 import type { TrackingOrder } from '@/lib/trackingContent';
 import { formatJmd, formatPrepEta, remainingPrepMinutes, TRACKING_MAP_IMAGES } from '@/lib/trackingContent';
 import { toast } from '@/lib/toast';
@@ -9,9 +10,10 @@ type Props = {
   onCancel?: () => void | Promise<void>;
   cancelPending?: boolean;
   onHelp?: () => void;
+  onNavigate?: (page: string) => void;
 };
 
-export function PreparingTrackingView({ order, onClose, onCancel, cancelPending, onHelp }: Props) {
+export function PreparingTrackingView({ order, onClose, onCancel, cancelPending, onHelp, onNavigate }: Props) {
   const prepEta = formatPrepEta(
     remainingPrepMinutes({
       nowMs: Date.now(),
@@ -90,6 +92,15 @@ export function PreparingTrackingView({ order, onClose, onCancel, cancelPending,
         </section>
 
         <OrderSummaryAccordion order={order} />
+
+        {onNavigate && (
+          <PaymentPendingBanner
+            orderId={order.id}
+            paymentStatus={order.paymentStatus}
+            paymentMethod={order.paymentMethod}
+            onNavigate={onNavigate}
+          />
+        )}
 
         <section className="flex flex-col gap-2 mb-8">
           {['placed', 'accepted'].includes(order.status) && onCancel ? (

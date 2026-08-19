@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AuthRecoveryGate } from '@roam/auth-client';
 import { Session } from '@supabase/supabase-js';
 import { toast } from 'sonner';
@@ -52,6 +52,7 @@ import { isOnboardingComplete, markOnboardingComplete } from './lib/onboardingSt
 import { hasDeliveryAddress, persistOnboardingAddress, syncAddressesFromBackend } from './lib/addressStorage';
 import { syncProfileFromBackend } from './lib/accountContent';
 import { syncFavoritesFromBackend } from './lib/favoritesStorage';
+import { clearCustomerLocalData } from './lib/customerLocalData';
 import { fetchCustomerOrders } from './lib/customerApi';
 import { isLiveOrderStatus } from './lib/ordersContent';
 import { supabase } from './lib/supabase';
@@ -157,7 +158,8 @@ function paymentCallbackStackPage(): StackPage | null {
 }
 
 function DashCustomerShell() {
-  const { itemCount, subtotal } = useCart();
+  const { itemCount, subtotal, clearCart } = useCart();
+  const queryClient = useQueryClient();
   const { isOnline, wasOffline, clearWasOffline } = useNetworkStatus();
   const [phase, setPhase] = useState<AppPhase>(() => (paymentCallbackStackPage() ? 'app' : 'splash'));
   const [loginSignUp, setLoginSignUp] = useState(true);
@@ -290,10 +292,15 @@ function DashCustomerShell() {
           syncFavoritesFromBackend(),
         ]);
       }
+      if (event === 'SIGNED_OUT') {
+        await clearCustomerLocalData();
+        clearCart();
+        queryClient.clear();
+      }
     });
 
     return () => subscription.unsubscribe();
-  }, [completeOAuthReturn]);
+  }, [completeOAuthReturn, clearCart, queryClient]);
 
   useEffect(() => {
     if (!oauthReturnPending || loading || session) return;

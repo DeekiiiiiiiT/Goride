@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { API_ENDPOINTS } from '@roam/api-client';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { ReorderSheet } from '@/components/orders/ReorderSheet';
+import { PaymentPendingBanner } from '@/components/orders/PaymentPendingBanner';
 import { NewCartModal } from '@/components/restaurant/NewCartModal';
 import { PROFILE_HEADER_AVATAR } from '@/lib/accountContent';
 import {
@@ -286,6 +287,16 @@ export default function OrderDetailsPage({ orderId, onNavigate }: Props) {
               <span>{formatJmd(order.total)}</span>
             </div>
           </div>
+
+          {order.status === 'active' && (
+            <PaymentPendingBanner
+              className="mt-6 border-t border-surface-container-high pt-6"
+              orderId={order.id}
+              paymentStatus={order.paymentStatus}
+              paymentMethod={order.paymentMethod}
+              onNavigate={(page) => onNavigate(page)}
+            />
+          )}
 
           {order.paymentMethod && (
             <div className="mt-6 border-t border-surface-container-high pt-6">

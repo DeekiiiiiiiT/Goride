@@ -5,6 +5,7 @@ import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { FavoriteButton } from '@/components/ui/FavoriteButton';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PullToRefresh } from '@/components/ui/PullToRefresh';
+import { RestaurantCardSkeleton } from '@/components/ui/RestaurantCardSkeleton';
 import { DishResultCard } from '@/components/search/DishResultCard';
 import { FilterSortSheet, sortLabel, type FilterState } from '@/components/search/FilterSortSheet';
 import { useCart } from '@/hooks/useCart';
@@ -62,13 +63,22 @@ export default function SearchResultsPage({
   const [cartConflictOpen, setCartConflictOpen] = useState(false);
   const [pendingDishToAdd, setPendingDishToAdd] = useState<DishSearchResult | null>(null);
 
-  const { data: merchants = [], refetch: refetchMerchants } = useQuery({
+  const {
+    data: merchants = [],
+    refetch: refetchMerchants,
+    isError: merchantsError,
+    isLoading: merchantsLoading,
+  } = useQuery({
     queryKey: ['search-merchants'],
     queryFn: async () => (await fetchDiscoverMerchants()).merchants,
     retry: false,
   });
 
-  const { data: apiSearch, refetch: refetchApiSearch } = useQuery({
+  const {
+    data: apiSearch,
+    refetch: refetchApiSearch,
+    isError: searchApiError,
+  } = useQuery({
     queryKey: ['customer-search', query],
     queryFn: async () => {
       const q = query.trim();
@@ -110,7 +120,14 @@ export default function SearchResultsPage({
   });
 
   const handleRefresh = useCallback(async () => {
-    await Promise.all([refetchMerchants(), refetchApiSearch()]);
+    const [merchantsResult, searchResult] = await Promise.all([
+      refetchMerchants(),
+      refetchApiSearch(),
+    ]);
+    if (merchantsResult.isError || searchResult.isError) {
+      toast.error('Could not refresh results');
+      return;
+    }
     toast.success('Results updated');
   }, [refetchMerchants, refetchApiSearch]);
 
@@ -317,7 +334,25 @@ export default function SearchResultsPage({
 
       <section className="flex flex-col gap-6 px-4 pb-8">
         {activeTab === 'restaurants' ? (
-          filteredResults.length === 0 ? (
+          merchantsLoading && !mocksOk ? (
+            <RestaurantCardSkeleton count={2} />
+          ) : merchantsError && !mocksOk ? (
+            <EmptyState
+              icon="cloud_off"
+              title="Could not load stores"
+              description="Check your connection and try again."
+              actionLabel="Retry"
+              onAction={() => void refetchMerchants()}
+            />
+          ) : searchApiError && query.trim().length >= 2 && !mocksOk ? (
+            <EmptyState
+              icon="cloud_off"
+              title="Search unavailable"
+              description="Check your connection and try again."
+              actionLabel="Retry"
+              onAction={() => void refetchApiSearch()}
+            />
+          ) : filteredResults.length === 0 ? (
             <div className="flex flex-col gap-4">
               <EmptyState
                 icon="search_off"

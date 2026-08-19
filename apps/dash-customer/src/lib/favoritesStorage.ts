@@ -166,37 +166,20 @@ export async function toggleFavoriteItemAsync(merchantId: string, itemId: string
 
 async function syncMerchantFavoritesFromBackend(): Promise<string[]> {
   const remote = await fetchFavoriteMerchantIds();
-  const local = getFavoriteRestaurants();
-  const merged = Array.from(new Set([...remote, ...local]));
-  writeRestaurantIds(merged);
-
-  const missingOnServer = local.filter((id) => !remote.includes(id));
-  await Promise.all(
-    missingOnServer.map((id) => addFavoriteMerchant(id).catch(() => undefined)),
-  );
-  return merged;
+  writeRestaurantIds(remote);
+  return remote;
 }
 
 async function syncItemFavoritesFromBackend(): Promise<FavoriteItemKey[]> {
   const remoteRows = await fetchFavoriteItems();
   const remote = remoteRows.map((row) => toFavoriteItemKey(row.merchantId, row.menuItemId));
-  const local = getFavoriteItems();
-  const merged = Array.from(new Set([...remote, ...local])) as FavoriteItemKey[];
-  writeItemKeys(merged);
-
-  const remoteSet = new Set(remote);
-  const missingOnServer = local.filter((key) => !remoteSet.has(key));
-  await Promise.all(
-    missingOnServer.map((key) => {
-      const parsed = parseFavoriteItemKey(key);
-      if (!parsed) return Promise.resolve();
-      return addFavoriteItem(parsed.merchantId, parsed.itemId).catch(() => undefined);
-    }),
-  );
-  return merged;
+  writeItemKeys(remote);
+  return remote;
 }
 
-/** Pull merchant + item favorites from backend when logged in. */
+let syncInFlight: Promise<{ restaurants: string[]; items: FavoriteItemKey[] }> | null = null;
+
+/** Pull merchant + item favorites from backend when logged in (server-wins). */
 export async function syncFavoritesFromBackend(): Promise<{
   restaurants: string[];
   items: FavoriteItemKey[];
@@ -204,15 +187,31 @@ export async function syncFavoritesFromBackend(): Promise<{
   if (!(await isCustomerLoggedIn())) {
     return { restaurants: getFavoriteRestaurants(), items: getFavoriteItems() };
   }
-  try {
-    const [restaurants, items] = await Promise.all([
-      syncMerchantFavoritesFromBackend(),
-      syncItemFavoritesFromBackend(),
-    ]);
-    return { restaurants, items };
-  } catch {
-    return { restaurants: getFavoriteRestaurants(), items: getFavoriteItems() };
-  }
+  if (syncInFlight) return syncInFlight;
+
+  syncInFlight = (async () => {
+    try {
+      const [restaurants, items] = await Promise.all([
+        syncMerchantFavoritesFromBackend(),
+        syncItemFavoritesFromBackend(),
+      ]);
+      return { restaurants, items };
+    } catch {
+      return { restaurants: getFavoriteRestaurants(), items: getFavoriteItems() };
+    } finally {
+      syncInFlight = null;
+    }
+  })();
+
+  return syncInFlight;
+}
+
+/** Remove cached favorites (sign-out / account switch). */
+export function clearFavoritesLocal(): void {
+  localStorage.removeItem(LEGACY_KEY);
+  localStorage.removeItem(RESTAURANTS_KEY);
+  localStorage.removeItem(ITEMS_KEY);
+  notifyListeners();
 }
 
 export function subscribeFavorites(listener: FavoritesListener): () => void {

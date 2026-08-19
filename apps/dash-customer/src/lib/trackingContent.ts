@@ -49,6 +49,8 @@ export type TrackingOrder = {
   merchantAvgPrepMins?: number | null;
   deliveryPhotoUrl?: string;
   deliveredLabel?: string;
+  paymentStatus?: string;
+  paymentMethod?: string;
   /** Approximate map until live courier GPS (Phase 3) */
   locationApproximate?: boolean;
 };
@@ -204,6 +206,8 @@ export function mapApiOrderToTracking(order: Record<string, unknown>): TrackingO
       merchant.avg_prep_time_mins != null ? Number(merchant.avg_prep_time_mins) : null,
     deliveryPhotoUrl: order.delivery_photo_url ? String(order.delivery_photo_url) : undefined,
     deliveredLabel: formatDeliveredClock(order.delivered_at),
+    paymentStatus: order.payment_status ? String(order.payment_status) : undefined,
+    paymentMethod: order.payment_method ? String(order.payment_method) : undefined,
     locationApproximate: order.courier_lat == null || order.courier_lng == null,
   };
 }
