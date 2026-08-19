@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useRef, useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { StackedProgressStepper } from '@/components/delivery/StackedProgressStepper';
 import { SlideToArrive } from '@/components/delivery/SlideToArrive';
 import type { StackedRouteStop, StackedStopId } from '@/lib/mockStackedRoute';
 import { STACKED_DELIVER_MAP } from '@/lib/mockStackedRoute';
+import { toast } from '@/lib/toast';
 
 type StackedDeliverNavPageProps = {
   stop: StackedRouteStop;
@@ -29,6 +30,10 @@ export function StackedDeliverNavPage({
   onComplete,
 }: StackedDeliverNavPageProps) {
   const customerFirst = stop.customerName ?? 'Customer';
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [photoPath, setPhotoPath] = useState<string | undefined>();
+  const [uploading, setUploading] = useState(false);
+  const canComplete = Boolean(photoPath) && !uploading && !submitting;
 
   return (
     <div className="fixed inset-0 z-[60] bg-background flex flex-col overflow-hidden">
@@ -145,7 +150,7 @@ export function StackedDeliverNavPage({
             </button>
           </div>
 
-          <div className="bg-surface-container-lowest border border-surface-variant rounded-xl p-4 mb-8 flex items-center justify-between">
+          <div className="bg-surface-container-lowest border border-surface-variant rounded-xl p-4 mb-4 flex items-center justify-between">
             <div className="flex items-center gap-4">
               <div className="w-10 h-10 bg-surface-container-high rounded-lg flex items-center justify-center text-on-surface-variant">
                 <MaterialIcon name="shopping_bag" />
@@ -160,11 +165,47 @@ export function StackedDeliverNavPage({
             <MaterialIcon name="chevron_right" className="text-on-surface-variant" />
           </div>
 
+          <section className="mb-6">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                setUploading(true);
+                void import('@/lib/courierFileUpload').then(async ({ uploadAndGetProofUrl }) => {
+                  const url = await uploadAndGetProofUrl(file, 'proofs');
+                  setUploading(false);
+                  if (url) setPhotoPath(url);
+                  else toast.error('Photo upload failed', 'Tap to try again.');
+                });
+              }}
+            />
+            <button
+              type="button"
+              disabled={uploading || submitting}
+              onClick={() => fileInputRef.current?.click()}
+              className={`flex w-full items-center justify-center gap-3 rounded-xl border-2 py-4 transition-colors active:scale-[0.98] disabled:opacity-60 ${
+                photoPath
+                  ? 'border-primary bg-primary/5 text-primary'
+                  : 'border-dashed border-outline-variant text-on-surface-variant'
+              }`}
+            >
+              <MaterialIcon name={photoPath ? 'check_circle' : 'photo_camera'} className="text-[28px]" />
+              <span className="text-sm font-semibold">
+                {uploading ? 'Uploading…' : photoPath ? 'Photo captured' : 'Take proof-of-delivery photo'}
+              </span>
+            </button>
+          </section>
+
           <SlideToArrive
             variant="complete"
             label={submitting ? 'Saving…' : `Swipe to Complete D${deliveryIndex}`}
-            disabled={submitting}
-            onComplete={() => onComplete()}
+            disabled={!canComplete}
+            onComplete={() => photoPath && onComplete(photoPath)}
           />
         </div>
       </div>

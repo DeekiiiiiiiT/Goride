@@ -182,21 +182,9 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
     ) {
       const built = buildStackedOfferFromPending(
         (provider as { getPendingOffers: () => Array<{ id: string; order?: AvailableOrder | null }> }).getPendingOffers(),
+        getProviderLastCoords(),
       );
-      if (built) {
-        return {
-          id: built.id,
-          totalEarnings: built.totalEarnings,
-          estMinutes: built.estMinutes,
-          stops: built.stops.map((s) => ({
-            id: s.id,
-            name: s.name,
-            address: s.address,
-            vertical: s.vertical as StackedOffer['stops'][0]['vertical'],
-            earnings: s.earnings,
-          })),
-        };
-      }
+      if (built) return built;
     }
     return MOCK_STACKED_OFFER;
   })();
@@ -215,6 +203,13 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
       if (built.length > 0) setStackedRoute(built);
     });
   }, [deliveryPhase]);
+
+  // Clear stale delivery UI if dispatch reverts to online without an active leg.
+  useEffect(() => {
+    if (mode === 'online' && deliveryPhase === null && activeDelivery !== null) {
+      setActiveDelivery(null);
+    }
+  }, [mode, deliveryPhase, activeDelivery]);
 
   // Transmit GPS to availability + active order
   useEffect(() => {
@@ -428,6 +423,8 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
         if (result.deliveryPhase === 'stacked-active') {
           toast.success('Stacked offer accepted', 'Follow the route for both pickups.');
           setActiveTab('home');
+        } else {
+          setStackedRoute([]);
         }
       })();
     });
@@ -435,20 +432,28 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
 
   const handleAcceptSingleOffer = useCallback(() => {
     guardAction(() => {
-      feedback.onAccept();
-      const offerId = getProviderOfferId() || currentSingleOffer.id;
-      const pending = getProviderPendingOrder();
-      const lastCoords = getProviderLastCoords();
+      void (async () => {
+        feedback.onAccept();
+        const offerId = getProviderOfferId() || currentSingleOffer.id;
+        const lastCoords = getProviderLastCoords();
+        const result = await dispatch.acceptOffer(offerId);
 
-      if (pending) {
-        setActiveDelivery(mapOrderToActiveDelivery(pending, lastCoords));
-      } else {
-        setActiveDelivery(emptyActiveDelivery());
-      }
+        if (result.deliveryPhase !== 'pickup-nav') {
+          setActiveDelivery(null);
+          setActiveTab('home');
+          return;
+        }
 
-      toast.success('Offer accepted', 'Navigation started to pickup.');
-      dispatch.acceptOffer(offerId);
-      setActiveTab('home');
+        const order = result.order ?? getProviderPendingOrder();
+        if (order) {
+          setActiveDelivery(mapOrderToActiveDelivery(order, lastCoords));
+        } else {
+          setActiveDelivery(emptyActiveDelivery());
+        }
+
+        toast.success('Offer accepted', 'Navigation started to pickup.');
+        setActiveTab('home');
+      })();
     });
   }, [
     feedback,
@@ -729,6 +734,7 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
         <ImmersiveScreen>
           <StackedOfferPage
             offer={currentStackedOffer}
+            initialSeconds={45}
             onTimerExpire={handleOfferTimerExpire}
             onDecline={requestDeclineOffer}
             onAccept={handleAcceptStackedOffer}

@@ -101,7 +101,7 @@ const SESSION_ONLINE_KEY = 'courier:online-since';
 
 export function persistOnlineSince(userId: string, sinceMs: number): void {
   try {
-    sessionStorage.setItem(SESSION_ONLINE_KEY, JSON.stringify({ userId, sinceMs }));
+    localStorage.setItem(SESSION_ONLINE_KEY, JSON.stringify({ userId, sinceMs }));
   } catch {
     // ignore
   }
@@ -109,7 +109,7 @@ export function persistOnlineSince(userId: string, sinceMs: number): void {
 
 export function loadOnlineSince(userId: string): number | null {
   try {
-    const raw = sessionStorage.getItem(SESSION_ONLINE_KEY);
+    const raw = localStorage.getItem(SESSION_ONLINE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as { userId?: string; sinceMs?: number };
     if (parsed.userId !== userId || typeof parsed.sinceMs !== 'number') return null;
@@ -121,7 +121,7 @@ export function loadOnlineSince(userId: string): number | null {
 
 export function clearOnlineSince(): void {
   try {
-    sessionStorage.removeItem(SESSION_ONLINE_KEY);
+    localStorage.removeItem(SESSION_ONLINE_KEY);
   } catch {
     // ignore
   }

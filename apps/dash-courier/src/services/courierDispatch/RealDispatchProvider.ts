@@ -454,8 +454,15 @@ export class RealDispatchProvider implements CourierDispatchService {
     assertOnline();
     this.stopPolling();
     const result = await acceptStackedOffers(offerIds);
-    if (!result.ok || result.orders.length === 0) {
-      toast.error('Could not accept stack', result.ok ? 'No orders returned' : result.error);
+    // Backend rolls back partial accepts; refresh stack state defensively on any failure.
+    if (!result.ok || result.orders.length < 2) {
+      toast.error(
+        'Could not accept stack',
+        result.ok ? 'Both orders must be available' : result.error,
+      );
+      await fetchCourierStack();
+      this.activeOrderIds = [];
+      this.activeOrderId = null;
       this.startPolling();
       return { deliveryPhase: null, acceptedStacked: false };
     }
@@ -482,49 +489,23 @@ export class RealDispatchProvider implements CourierDispatchService {
     return { deliveryPhase: 'stacked-active', acceptedStacked: true };
   }
 
-  acceptOffer(offerId: string): AcceptOfferResult {
+  async acceptOffer(offerId: string): Promise<AcceptOfferResult> {
     assertOnline();
-    void this.acceptOfferAsync(offerId);
-    this.setState({
-      offerPhase: null,
-      mode: 'on-delivery',
-      deliveryPhase: 'pickup-nav',
-      acceptedStacked: false,
-    });
     this.stopPolling();
-    return { deliveryPhase: 'pickup-nav', acceptedStacked: false };
-  }
 
-  private async acceptOfferAsync(offerId: string): Promise<void> {
     const fromOffer = this.pendingOffers.find((o) => o.id === offerId);
     if (fromOffer) {
       const result = await acceptCourierOffer(offerId);
-      if (result.ok) {
-        this.activeOrderId = result.order.id;
-        await putCourierAvailability({
-          isOnline: true,
-          lat: this.lastCoords.lat,
-          lng: this.lastCoords.lng,
-          activeOrderId: result.order.id,
-        });
-        this.startActiveOrderWatch(result.order.id);
-      } else {
-        this.setState({ mode: 'online', deliveryPhase: null });
+      if (!result.ok) {
+        toast.error('Offer unavailable', result.error || 'This offer was already taken.');
+        this.setState({ mode: 'online', deliveryPhase: null, offerPhase: null });
         this.startPolling();
+        return { deliveryPhase: null, acceptedStacked: false };
       }
-      return;
-    }
-
-    const orderId = offerId || this.pendingOrders[0]?.id;
-    if (!orderId) {
-      this.setState({ mode: 'online', deliveryPhase: null });
-      this.startPolling();
-      return;
-    }
-
-    const result = await acceptDeliveryOrder(orderId);
-    if (result.ok) {
       this.activeOrderId = result.order.id;
+      this.pendingOffers = [];
+      this.pendingOrders = [];
+      this.currentOfferId = '';
       await putCourierAvailability({
         isOnline: true,
         lat: this.lastCoords.lat,
@@ -532,10 +513,49 @@ export class RealDispatchProvider implements CourierDispatchService {
         activeOrderId: result.order.id,
       });
       this.startActiveOrderWatch(result.order.id);
-    } else {
-      this.setState({ mode: 'online', deliveryPhase: null });
-      this.startPolling();
+      this.setState({
+        offerPhase: null,
+        mode: 'on-delivery',
+        deliveryPhase: 'pickup-nav',
+        acceptedStacked: false,
+      });
+      return { deliveryPhase: 'pickup-nav', acceptedStacked: false, order: result.order };
     }
+
+    const orderId = offerId || this.pendingOrders[0]?.id;
+    if (!orderId) {
+      toast.error('Offer unavailable', 'No pending offer to accept.');
+      this.setState({ mode: 'online', deliveryPhase: null, offerPhase: null });
+      this.startPolling();
+      return { deliveryPhase: null, acceptedStacked: false };
+    }
+
+    const result = await acceptDeliveryOrder(orderId);
+    if (!result.ok) {
+      toast.error('Offer unavailable', result.error || 'This offer was already taken.');
+      this.setState({ mode: 'online', deliveryPhase: null, offerPhase: null });
+      this.startPolling();
+      return { deliveryPhase: null, acceptedStacked: false };
+    }
+
+    this.activeOrderId = result.order.id;
+    this.pendingOffers = [];
+    this.pendingOrders = [];
+    this.currentOfferId = '';
+    await putCourierAvailability({
+      isOnline: true,
+      lat: this.lastCoords.lat,
+      lng: this.lastCoords.lng,
+      activeOrderId: result.order.id,
+    });
+    this.startActiveOrderWatch(result.order.id);
+    this.setState({
+      offerPhase: null,
+      mode: 'on-delivery',
+      deliveryPhase: 'pickup-nav',
+      acceptedStacked: false,
+    });
+    return { deliveryPhase: 'pickup-nav', acceptedStacked: false, order: result.order };
   }
 
   declineOffer(offerId: string, _reason?: DeclineReasonPayload): void {

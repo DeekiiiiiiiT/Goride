@@ -39,7 +39,6 @@ export type ActiveDelivery = {
   dropoffAddress: string;
   dropoffLat?: number;
   dropoffLng?: number;
-  gateCode: string;
   unit: string;
   deliveryInstructions: string;
   etaMinutes: number;
@@ -68,7 +67,6 @@ export const MOCK_ACTIVE_DELIVERY: ActiveDelivery = {
   customerName: 'Sarah M.',
   customerFirstName: 'Sarah',
   dropoffAddress: '45 Constant Spring Road, Apt 12B',
-  gateCode: '1234',
   unit: 'Apt 12B',
   deliveryInstructions: "Gate code: 1234. Leave at door, don't knock.",
   etaMinutes: 6,
@@ -109,7 +107,6 @@ export const MOCK_GROCERY_PICK_DELIVERY: ActiveDelivery = {
   customerName: 'Sarah M.',
   customerFirstName: 'Sarah',
   dropoffAddress: '45 Constant Spring Road, Apt 12B',
-  gateCode: '1234',
   unit: 'Apt 12B',
   deliveryInstructions: 'Leave at door',
   etaMinutes: 8,

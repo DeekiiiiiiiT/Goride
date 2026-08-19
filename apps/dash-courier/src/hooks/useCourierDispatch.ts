@@ -23,7 +23,10 @@ export function useCourierDispatch(provider: CourierDispatchService = defaultPro
   );
   const showOfferDetails = useCallback(() => provider.showOfferDetails(), [provider]);
   const dismissOfferDetails = useCallback(() => provider.dismissOfferDetails(), [provider]);
-  const acceptOffer = useCallback((id: string) => provider.acceptOffer(id), [provider]);
+  const acceptOffer = useCallback(
+    (id: string) => Promise.resolve(provider.acceptOffer(id)),
+    [provider],
+  );
   const acceptStackedOffer = useCallback(
     (ids: string[]) => provider.acceptStackedOffer(ids),
     [provider],

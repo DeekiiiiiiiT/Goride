@@ -1,3 +1,4 @@
+import type { AvailableOrder } from '@/lib/courierApi';
 import type { DeclineReasonId } from '@/lib/declineReasons';
 import type { SingleOffer, StackedOffer } from '@/lib/mockOffers';
 
@@ -27,6 +28,7 @@ export type DeclineReasonPayload = {
 export type AcceptOfferResult = {
   deliveryPhase: DeliveryPhase;
   acceptedStacked: boolean;
+  order?: AvailableOrder | null;
 };
 
 export type DispatchState = {
@@ -46,7 +48,7 @@ export interface CourierDispatchService {
   receiveOffer(type: 'stacked' | 'single'): void;
   showOfferDetails(): void;
   dismissOfferDetails(): void;
-  acceptOffer(offerId: string): AcceptOfferResult;
+  acceptOffer(offerId: string): AcceptOfferResult | Promise<AcceptOfferResult>;
   acceptStackedOffer(offerIds: string[]): AcceptOfferResult | Promise<AcceptOfferResult>;
   declineOffer(offerId: string, reason?: DeclineReasonPayload): void;
   expireOffer(): void;

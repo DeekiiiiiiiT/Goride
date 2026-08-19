@@ -1,8 +1,9 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { OnboardingHeader } from '@/components/layout/OnboardingHeader';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { uploadAndGetProofUrl } from '@/lib/courierFileUpload';
 import { loadSignupDraft, saveSignupDraft, type SignupDraft } from '@/lib/signupDraft';
+import { validateJamaicanPlate } from '@/lib/validateJamaicanPlate';
 import { toast } from '@/lib/toast';
 
 type VehicleSetupPageProps = {
@@ -30,18 +31,37 @@ export function VehicleSetupPage({ onBack, onContinue }: VehicleSetupPageProps) 
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const objectUrlRef = useRef<string | null>(null);
 
   const showMotorizedFields = vehicleType !== 'bicycle';
+
+  useEffect(() => {
+    return () => {
+      if (objectUrlRef.current) {
+        URL.revokeObjectURL(objectUrlRef.current);
+        objectUrlRef.current = null;
+      }
+    };
+  }, []);
 
   const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current);
+    }
+    const nextUrl = URL.createObjectURL(file);
+    objectUrlRef.current = nextUrl;
     setPhotoFile(file);
-    setPhotoPreview(URL.createObjectURL(file));
+    setPhotoPreview(nextUrl);
   };
 
   const handleContinue = async () => {
     if (showMotorizedFields && (!makeModel.trim() || !licensePlate.trim() || !color)) {
+      return;
+    }
+    if (showMotorizedFields && !validateJamaicanPlate(licensePlate.trim())) {
+      toast.error('Invalid plate', 'Enter a valid plate (e.g. ABC1234) or N/A for bicycle.');
       return;
     }
 

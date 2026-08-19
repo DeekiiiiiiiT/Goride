@@ -1,8 +1,11 @@
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
+import { useCountdown } from '@/hooks/useCountdown';
 import type { StackedOffer } from '@/lib/mockOffers';
 
 const STACKED_MAP =
   'https://lh3.googleusercontent.com/aida-public/AB6AXuBQo5FpPW3-pSVLLvqJo2yyY3muQLypOLZEd9dtuTOfVGOZZEvu6dNHaVwrEhL7eZfKK4Ukdddbbdu1rSsz2PZiL4K1rEXMjWtrDkqN1FeeeOt8T8CwYKZk_ORY7qv9D_nhXk2uCXUJessjR0mY56c0cUeKRJb9q8BSABeTbZyDcEyX8gX_OzvWe1RTghuWQ9mFoIAt_sKnda5kmSaW0LBRtpbvT1doxMC8b-v21ivDVn-0AH12Ts5eO7uvjHcTsMmlqVLu4BIJdzk';
+
+const TIMER_CIRCUMFERENCE = 213.6;
 
 type StackedOfferPageProps = {
   offer: StackedOffer;
@@ -18,7 +21,18 @@ function stopIcon(vertical?: string) {
   return 'storefront';
 }
 
-export function StackedOfferPage({ offer, onDecline, onAccept }: StackedOfferPageProps) {
+export function StackedOfferPage({
+  offer,
+  initialSeconds = 45,
+  onTimerExpire,
+  onDecline,
+  onAccept,
+}: StackedOfferPageProps) {
+  const { seconds, isExpired, expiredRef } = useCountdown(initialSeconds, onTimerExpire);
+  const progress = seconds / initialSeconds;
+  const ringOffset = TIMER_CIRCUMFERENCE * (1 - progress);
+  const urgent = seconds < 10;
+
   return (
     <div className="flex min-h-0 h-full w-full flex-col overflow-hidden bg-background">
       <header className="fixed top-0 z-50 flex h-16 w-full items-center justify-between border-b border-outline-variant bg-surface/80 px-4 pt-safe backdrop-blur-md safe-x">
@@ -36,13 +50,41 @@ export function StackedOfferPage({ offer, onDecline, onAccept }: StackedOfferPag
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-lg flex-1 overflow-y-auto px-4 pb-28 pt-20">
+      <main className="mx-auto w-full max-w-lg flex-1 overflow-y-auto px-4 pb-36 pt-20">
         <div className="relative mb-6 h-48 overflow-hidden rounded-xl border border-outline-variant shadow-sm">
           <img alt="" src={STACKED_MAP} className="h-full w-full object-cover opacity-80" />
           <div className="absolute left-4 top-4">
             <span className="flex items-center gap-1 rounded-full bg-primary px-3 py-1 text-label-md font-semibold text-on-primary shadow-lg">
               <MaterialIcon name="auto_awesome" className="text-sm" />
               Efficient route
+            </span>
+          </div>
+          <div className="absolute right-4 top-4 flex h-14 w-14 items-center justify-center rounded-full bg-surface/90 shadow-md backdrop-blur-sm">
+            <svg className="absolute h-14 w-14 -rotate-90">
+              <circle
+                className="text-surface-container-high"
+                cx="28"
+                cy="28"
+                fill="transparent"
+                r="24"
+                stroke="currentColor"
+                strokeWidth="4"
+              />
+              <circle
+                className={urgent ? 'text-error' : 'text-primary'}
+                cx="28"
+                cy="28"
+                fill="transparent"
+                r="24"
+                stroke="currentColor"
+                strokeDasharray={TIMER_CIRCUMFERENCE * 0.65}
+                strokeDashoffset={ringOffset * 0.65}
+                strokeWidth="4"
+                style={{ transition: 'stroke-dashoffset 1s linear' }}
+              />
+            </svg>
+            <span className={`text-label-lg font-bold ${urgent ? 'text-error' : 'text-primary'}`}>
+              {seconds}
             </span>
           </div>
         </div>
@@ -151,12 +193,18 @@ export function StackedOfferPage({ offer, onDecline, onAccept }: StackedOfferPag
             <MaterialIcon name="info" className="text-primary" />
           </button>
         </div>
+      </main>
 
-        <div className="flex flex-col gap-3">
+      <section className="fixed bottom-0 left-0 right-0 z-50 border-t border-outline-variant/20 bg-surface/80 p-4 pb-safe backdrop-blur-md safe-x">
+        <div className="mx-auto flex max-w-lg flex-col gap-3">
           <button
             type="button"
-            onClick={onAccept}
-            className="flex h-14 w-full items-center justify-center gap-2 rounded-xl bg-primary text-label-lg font-semibold text-on-primary shadow-md transition-all hover:bg-primary/90 active:scale-95"
+            disabled={isExpired}
+            onClick={() => {
+              if (isExpired || expiredRef.current) return;
+              onAccept();
+            }}
+            className="flex h-14 w-full items-center justify-center gap-2 rounded-xl bg-primary text-label-lg font-semibold text-on-primary shadow-md transition-all hover:bg-primary/90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Accept Offer
             <MaterialIcon name="chevron_right" />
@@ -169,7 +217,7 @@ export function StackedOfferPage({ offer, onDecline, onAccept }: StackedOfferPag
             Decline
           </button>
         </div>
-      </main>
+      </section>
     </div>
   );
 }
