@@ -16,7 +16,13 @@ export function DishResultCard({ dish, onAdd, onOpenRestaurant }: Props) {
         onClick={() => onOpenRestaurant(dish.merchantId)}
         className="shrink-0 w-24 h-24 rounded-lg overflow-hidden"
       >
-        <img src={dish.image} alt={dish.name} className="w-full h-full object-cover" />
+        {dish.image ? (
+          <img src={dish.image} alt={dish.name} className="w-full h-full object-cover" />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center bg-surface-container-high">
+            <MaterialIcon name="restaurant" className="text-3xl text-outline" />
+          </div>
+        )}
       </button>
       <div className="flex-1 min-w-0 flex flex-col justify-between py-1">
         <div>

@@ -5,8 +5,11 @@ import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { AddTipSheet } from '@/components/checkout/AddTipSheet';
 import { ScheduleDeliverySheet } from '@/components/checkout/ScheduleDeliverySheet';
 import { useCart } from '@/hooks/useCart';
+import { DeliveryPinMap } from '@/components/home/DeliveryPinMap';
 import { getCheckoutLocation, getSavedAddress } from '@/lib/addressStorage';
-import { resolveCheckoutAddress } from '@/lib/checkoutAddress';
+import { isValidLatLng, openMapsPin } from '@/lib/deliveryPinMap';
+import { buildDeliveryInstructions, resolveCheckoutAddress } from '@/lib/checkoutAddress';
+import { DeliveryInstructionsSheet } from '@/components/cart/DeliveryInstructionsSheet';
 import {
   getApiPaymentMethod,
   getAppliedPromo,
@@ -32,6 +35,9 @@ const TIP_PRESETS = [50, 100, 150, 200];
 export default function CheckoutPage({ onNavigate, session }: Props) {
   const { items, merchantId, clearCart, subtotal } = useCart();
   const savedAddress = getSavedAddress();
+  const pin = getCheckoutLocation();
+  const pinLat = pin.lat ?? savedAddress?.lat;
+  const pinLng = pin.lng ?? savedAddress?.lng;
   const initialPrefs = getCheckoutPreferences();
 
   const [deliveryMode, setDeliveryMode] = useState<'standard' | 'scheduled'>(initialPrefs.deliveryMode);
@@ -48,10 +54,15 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
   const [platformFeeRate, setPlatformFeeRate] = useState(0.05);
   const [merchantDeliveryFee, setMerchantDeliveryFee] = useState(0);
   const [accountSuspended, setAccountSuspended] = useState(false);
+  const [instructionsOpen, setInstructionsOpen] = useState(false);
 
   const resolvedAddress = resolveCheckoutAddress(savedAddress);
   const deliveryAddress = resolvedAddress.address;
-  const instructions = resolvedAddress.instructions;
+  const [instructions, setInstructions] = useState(resolvedAddress.instructions);
+
+  useEffect(() => {
+    setInstructions(resolvedAddress.instructions);
+  }, [resolvedAddress.instructions]);
 
   const appliedPromo = getAppliedPromo();
   const totals = useMemo(
@@ -190,7 +201,7 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
           deliveryAddress,
           deliveryLat: checkoutLocation.lat,
           deliveryLng: checkoutLocation.lng,
-          deliveryInstructions: handoff === 'door' ? instructions : 'Hand it to me',
+          deliveryInstructions: buildDeliveryInstructions(handoff, instructions),
           deliveryFee: totals.deliveryFee,
           tip: totals.tip,
           paymentMethod,
@@ -296,10 +307,20 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
             </button>
           </div>
           <div className="mt-4 h-32 rounded-lg overflow-hidden relative bg-surface-container">
-            <img
-              src="/images/address-map.png"
-              alt="Delivery map"
-              className="absolute inset-0 w-full h-full object-cover"
+            <DeliveryPinMap
+              lat={pinLat}
+              lng={pinLng}
+              className="absolute inset-0"
+              emptyLabel="Add a delivery pin so the courier can find you"
+            />
+            <button
+              type="button"
+              aria-label={isValidLatLng(pinLat, pinLng) ? 'Open delivery pin in maps' : 'Add delivery pin'}
+              onClick={() => {
+                if (isValidLatLng(pinLat, pinLng)) openMapsPin(pinLat!, pinLng!);
+                else onNavigate('address');
+              }}
+              className="absolute inset-0 z-10"
             />
           </div>
         </section>
@@ -357,8 +378,8 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
             <div className="w-full">
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-headline-sm font-semibold text-on-surface">Delivery Instructions</h2>
-                <button type="button" className="text-label-md font-semibold text-primary">
-                  Add instructions
+                <button type="button" onClick={() => setInstructionsOpen(true)} className="text-label-md font-semibold text-primary">
+                  {instructions.trim() ? 'Edit instructions' : 'Add instructions'}
                 </button>
               </div>
               <div className="flex gap-2 mb-4">
@@ -393,7 +414,7 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
               </div>
               <div className="bg-surface-container p-2 rounded-lg flex items-center gap-2">
                 <MaterialIcon name="notes" className="text-on-surface-variant" />
-                <p className="text-body-md text-on-surface-variant">{instructions}</p>
+                <p className="text-body-md text-on-surface-variant">{instructions.trim() || 'No extra notes yet'}</p>
               </div>
             </div>
           </div>
@@ -542,6 +563,13 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
           saveCheckoutPreferences({ tip: amount });
           setShowTipSheet(false);
         }}
+      />
+
+      <DeliveryInstructionsSheet
+        open={instructionsOpen}
+        onClose={() => setInstructionsOpen(false)}
+        value={instructions}
+        onSave={setInstructions}
       />
 
       {showPharmacyNotice && (

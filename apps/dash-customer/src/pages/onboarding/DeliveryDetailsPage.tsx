@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
+import { DeliveryPinMap } from '@/components/home/DeliveryPinMap';
+import { isValidLatLng, openMapsPin } from '@/lib/deliveryPinMap';
 import type { AddressLabel } from '@/lib/addressStorage';
 import { checkDeliveryZoneAsync } from '@/lib/deliveryZones';
 import type { AddressSelection } from './DeliveryAddressPage';
@@ -70,25 +72,22 @@ export function DeliveryDetailsPage({ address, onBack, onSave, onOutOfZone }: De
 
       <main className="flex-1 flex flex-col w-full max-w-[1200px] mx-auto pb-32 min-h-0 overflow-y-auto scrollbar-hide">
         <section className="relative w-full h-48 md:h-64 bg-surface-container overflow-hidden shrink-0">
-          <img alt="Map view" className="w-full h-full object-cover" src="/images/delivery-map.png" />
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="relative flex flex-col items-center -translate-y-1/2">
-              <div className="w-12 h-12 bg-primary rounded-full flex items-center justify-center shadow-lg dash-bounce-slow">
-                <MaterialIcon name="location_on" className="text-on-primary" filled />
-              </div>
-              <div className="w-4 h-1 bg-black/20 rounded-full mt-1 blur-sm" />
-            </div>
-          </div>
-          <button
-            type="button"
-            className="absolute bottom-4 right-4 w-10 h-10 bg-surface text-on-surface rounded-full shadow-md flex items-center justify-center hover:bg-surface-variant transition-colors"
-            aria-hidden
-            tabIndex={-1}
-            disabled
-            title="Location set on previous screen"
-          >
-            <MaterialIcon name="my_location" />
-          </button>
+          <DeliveryPinMap
+            lat={address.lat}
+            lng={address.lng}
+            className="absolute inset-0"
+            emptyLabel="Go back to drop a delivery pin"
+          />
+          {isValidLatLng(address.lat, address.lng) && (
+            <button
+              type="button"
+              className="absolute bottom-4 right-4 z-20 w-10 h-10 bg-surface text-on-surface rounded-full shadow-md flex items-center justify-center hover:bg-surface-variant transition-colors"
+              aria-label="Open pin in maps"
+              onClick={() => openMapsPin(address.lat!, address.lng!)}
+            >
+              <MaterialIcon name="open_in_new" />
+            </button>
+          )}
         </section>
 
         <section className="px-4 pt-6 flex flex-col gap-6">

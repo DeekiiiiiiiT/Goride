@@ -1,5 +1,6 @@
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
-import type { TrackingOrder } from '@/lib/trackingContent';
+import { toast } from '@/lib/toast';
+import { courierPhoneHref, type TrackingOrder } from '@/lib/trackingContent';
 
 type Courier = TrackingOrder['courier'];
 
@@ -46,18 +47,39 @@ export function CourierProfileCard({ courier, compact }: { courier: Courier; com
           </div>
         </div>
       </div>
-      <CourierActions />
+      <CourierActions phone={courier.phone} />
     </div>
   );
 }
 
-export function CourierActions() {
+export function CourierActions({ phone }: { phone?: string }) {
+  const callHref = courierPhoneHref(phone, 'tel');
+  const smsHref = courierPhoneHref(phone, 'sms');
+
+  const openHref = (href: string | null, missing: string) => {
+    if (!href) {
+      toast.info(missing);
+      return;
+    }
+    window.location.href = href;
+  };
+
   return (
     <div className="flex gap-2">
-      <button type="button" aria-label="Message courier" className="w-10 h-10 rounded-full bg-surface-variant flex items-center justify-center">
+      <button
+        type="button"
+        aria-label="Message courier"
+        onClick={() => openHref(smsHref, 'Courier phone is not available yet')}
+        className="w-10 h-10 rounded-full bg-surface-variant flex items-center justify-center"
+      >
         <MaterialIcon name="chat" />
       </button>
-      <button type="button" aria-label="Call courier" className="w-10 h-10 rounded-full bg-primary-container text-on-primary flex items-center justify-center">
+      <button
+        type="button"
+        aria-label="Call courier"
+        onClick={() => openHref(callHref, 'Courier phone is not available yet')}
+        className="w-10 h-10 rounded-full bg-primary-container text-on-primary flex items-center justify-center"
+      >
         <MaterialIcon name="call" />
       </button>
     </div>

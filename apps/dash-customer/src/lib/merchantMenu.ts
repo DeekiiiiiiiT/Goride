@@ -62,10 +62,44 @@ function mapMenuItem(row: Record<string, unknown>): MenuItem {
   };
 }
 
+const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+export function formatHourLabel(time: string | null | undefined): string {
+  if (!time) return '';
+  const [hours, minutes] = time.slice(0, 5).split(':').map(Number);
+  if (!Number.isFinite(hours)) return String(time);
+  const date = new Date();
+  date.setHours(hours, minutes || 0, 0, 0);
+  return date.toLocaleTimeString('en-JM', { hour: 'numeric', minute: '2-digit', hour12: true });
+}
+
+export function mapMerchantHours(rows: unknown): { day: string; open: string; close: string }[] {
+  if (!Array.isArray(rows) || rows.length === 0) return [];
+  return [...rows]
+    .map((raw) => (raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {}))
+    .sort(
+      (a, b) =>
+        Number(a.day_of_week ?? a.dayOfWeek ?? 0) - Number(b.day_of_week ?? b.dayOfWeek ?? 0),
+    )
+    .map((row) => {
+      const dow = Number(row.day_of_week ?? row.dayOfWeek ?? 0);
+      const day = DAY_NAMES[dow] ?? `Day ${dow}`;
+      if (Boolean(row.is_closed ?? row.isClosed)) {
+        return { day, open: 'Closed', close: 'Closed' };
+      }
+      return {
+        day,
+        open: formatHourLabel(String(row.open_time ?? row.openTime ?? '')) || '—',
+        close: formatHourLabel(String(row.close_time ?? row.closeTime ?? '')) || '—',
+      };
+    });
+}
+
 export function mapMerchantMenuResponse(data: {
   merchant?: Record<string, unknown>;
   categories?: Record<string, unknown>[];
   items?: Record<string, unknown>[];
+  hours?: unknown;
 }): RestaurantProfile {
   const merchant = data.merchant ?? {};
   const prep = Number(merchant.avg_prep_time_mins ?? 25);
@@ -103,7 +137,7 @@ export function mapMerchantMenuResponse(data: {
     promoCode: '',
     heroImage: String(merchant.cover_image_url ?? merchant.logo_url ?? ''),
     logoImage: String(merchant.logo_url ?? ''),
-    hours: [],
+    hours: mapMerchantHours(data.hours ?? merchant.business_hours),
     address: String(merchant.address ?? ''),
     phone: String(merchant.phone ?? ''),
     categories,
@@ -122,6 +156,7 @@ export async function fetchMerchantMenu(id: string): Promise<RestaurantProfile> 
       merchant?: Record<string, unknown>;
       categories?: Record<string, unknown>[];
       items?: Record<string, unknown>[];
+      hours?: unknown;
     };
     if (!data.merchant) throw new Error('Merchant not found');
     return mapMerchantMenuResponse(data);

@@ -25,14 +25,15 @@ export default function SearchPage({
   const submitSearch = (value: string) => {
     const trimmed = value.trim();
     if (!trimmed) return;
-    if (trimmed.toLowerCase() === 'pizza' && onOpenCategory) {
-      onOpenCategory('pizza');
-      return;
-    }
     if (!recent.includes(trimmed)) {
       setRecent((items) => [trimmed, ...items].slice(0, 5));
     }
     onSearch(trimmed);
+  };
+
+  const openCategory = (id: string) => {
+    if (onOpenCategory) onOpenCategory(id);
+    else submitSearch(id);
   };
 
   return (
@@ -129,13 +130,7 @@ export default function SearchPage({
               <button
                 key={item.label}
                 type="button"
-                onClick={() => {
-                  if (item.label === 'Pizza' && onOpenCategory) {
-                    onOpenCategory('pizza');
-                  } else {
-                    submitSearch(item.label);
-                  }
-                }}
+                onClick={() => openCategory(item.label.toLowerCase())}
                 className="flex items-center gap-1 px-4 py-2.5 bg-surface-container rounded-full text-sm font-semibold tracking-wide text-on-surface hover:bg-surface-variant active:scale-95 transition-all shadow-sm"
               >
                 <MaterialIcon name={item.icon} className="text-lg text-primary" filled />
@@ -152,7 +147,7 @@ export default function SearchPage({
               <button
                 key={category.label}
                 type="button"
-                onClick={() => submitSearch(category.label)}
+                onClick={() => openCategory(category.label.toLowerCase())}
                 className={`relative rounded-xl overflow-hidden shadow-sm active:scale-[0.98] transition-transform group ${
                   category.large ? 'col-span-2 aspect-[21/9]' : 'aspect-square'
                 }`}
@@ -166,14 +161,12 @@ export default function SearchPage({
                   <span className={`text-white font-semibold ${category.large ? 'text-xl' : 'text-sm tracking-wide'}`}>
                     {category.label}
                   </span>
-                  {'count' in category && category.count && (
-                    <span className="block text-xs text-white/80">{category.count}</span>
-                  )}
                 </div>
               </button>
             ))}
             <button
               type="button"
+              onClick={() => openCategory('all')}
               className="aspect-square rounded-xl overflow-hidden shadow-sm active:scale-[0.98] transition-transform bg-surface-container flex flex-col items-center justify-center gap-2 hover:bg-surface-variant"
             >
               <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">

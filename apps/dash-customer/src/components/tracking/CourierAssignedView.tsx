@@ -6,9 +6,11 @@ import { CourierTrackingMap } from './CourierTrackingMap';
 type Props = {
   order: TrackingOrder;
   onBack: () => void;
+  onHelp?: () => void;
+  onDetails?: () => void;
 };
 
-export function CourierAssignedView({ order, onBack }: Props) {
+export function CourierAssignedView({ order, onBack, onHelp, onDetails }: Props) {
   const hasCourier = Boolean(order.courier?.name);
 
   return (
@@ -18,7 +20,7 @@ export function CourierAssignedView({ order, onBack }: Props) {
           <MaterialIcon name="arrow_back" />
         </button>
         <h1 className="text-headline-md font-semibold">Track Order</h1>
-        <button type="button" className="p-2 -mr-2 rounded-full text-on-surface">
+        <button type="button" onClick={onHelp} className="p-2 -mr-2 rounded-full text-on-surface">
           <MaterialIcon name="help" />
         </button>
       </header>
@@ -55,7 +57,7 @@ export function CourierAssignedView({ order, onBack }: Props) {
               <p className="text-label-sm text-on-surface-variant mb-1">Order #{order.orderNumber}</p>
               <p className="text-body-md text-on-surface">{order.merchantName}</p>
             </div>
-            <button type="button" className="text-label-md font-semibold text-primary">
+            <button type="button" onClick={onDetails} className="text-label-md font-semibold text-primary">
               Details
             </button>
           </div>

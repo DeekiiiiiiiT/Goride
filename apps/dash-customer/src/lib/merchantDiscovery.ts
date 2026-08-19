@@ -7,10 +7,15 @@ import {
   type DiscoverRestaurant,
 } from './discoverContent';
 import { allowMocks } from './mocksGate';
+import { etaMinutes, priceLevelFromCosts } from './searchResults';
 
 export type DiscoverMerchant = DiscoverRestaurant & {
   vertical_type: VerticalType;
   tagline?: string;
+  lat?: number;
+  lng?: number;
+  slug?: string;
+  minOrder?: number;
 };
 
 const ISLAND_GRILL_IMAGE =
@@ -50,8 +55,10 @@ export const HOME_VERTICAL_TABS: {
 function mapApiMerchant(row: Record<string, unknown>): DiscoverMerchant {
   const prep = Number(row.avg_prep_time_mins ?? 25);
   const fee = Number(row.delivery_fee ?? 0);
+  const minOrder = Number(row.min_order_amount ?? 0);
   return {
-    id: String(row.slug ?? row.id ?? ''),
+    id: String(row.id ?? row.slug ?? ''),
+    slug: String(row.slug ?? ''),
     name: String(row.name ?? 'Store'),
     cuisines: String(row.cuisine_type ?? row.description ?? ''),
     rating: Number(row.rating ?? 4.5),
@@ -59,6 +66,10 @@ function mapApiMerchant(row: Record<string, unknown>): DiscoverMerchant {
     delivery: fee === 0 ? 'Free' : `$${fee.toFixed(0)}`,
     image: String(row.cover_image_url ?? row.logo_url ?? ''),
     vertical_type: (row.vertical_type as VerticalType) ?? 'restaurant',
+    lat: row.lat != null ? Number(row.lat) : undefined,
+    lng: row.lng != null ? Number(row.lng) : undefined,
+    minOrder,
+    priceLevel: priceLevelFromCosts(minOrder, fee),
   };
 }
 
@@ -113,4 +124,57 @@ export const VERTICAL_TABS = HOME_VERTICAL_TABS.filter((t) =>
 export function verticalLabel(vertical: VerticalType): string {
   const tab = HOME_VERTICAL_TABS.find((t) => t.id === vertical);
   return tab?.label ?? vertical;
+}
+
+/** Filter live discovery results by a category/search chip (never a fake restaurant list). */
+export function filterMerchantsByCategory(
+  merchants: DiscoverMerchant[],
+  categoryId: string,
+): DiscoverMerchant[] {
+  const q = categoryId.trim().toLowerCase();
+  if (!q || q === 'all') return merchants;
+  return merchants.filter((m) => {
+    const hay = `${m.name} ${m.cuisines} ${m.tagline ?? ''}`.toLowerCase();
+    return hay.includes(q);
+  });
+}
+
+export type CategoryListFilters = {
+  sort: 'rating' | 'fee';
+  minRating4: boolean;
+  under30: boolean;
+  offersOnly: boolean;
+};
+
+export const EMPTY_CATEGORY_FILTERS: CategoryListFilters = {
+  sort: 'rating',
+  minRating4: false,
+  under30: false,
+  offersOnly: false,
+};
+
+function deliverySortKey(merchant: DiscoverMerchant): number {
+  if (!merchant.delivery || /free/i.test(merchant.delivery)) return 0;
+  const n = parseInt(merchant.delivery.replace(/[^\d]/g, ''), 10);
+  return Number.isFinite(n) ? n : 9999;
+}
+
+export function applyCategoryListFilters(
+  merchants: DiscoverMerchant[],
+  filters: CategoryListFilters,
+  offerMerchantIds: Set<string> = new Set(),
+): DiscoverMerchant[] {
+  let list = merchants;
+  if (filters.minRating4) list = list.filter((m) => m.rating >= 4);
+  if (filters.under30) list = list.filter((m) => etaMinutes(m.eta) < 30);
+  if (filters.offersOnly) {
+    list = list.filter((m) => offerMerchantIds.has(m.id) || (m.slug != null && offerMerchantIds.has(m.slug)));
+  }
+  const sorted = [...list];
+  if (filters.sort === 'fee') {
+    sorted.sort((a, b) => deliverySortKey(a) - deliverySortKey(b));
+  } else {
+    sorted.sort((a, b) => b.rating - a.rating);
+  }
+  return sorted;
 }

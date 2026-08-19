@@ -106,6 +106,12 @@ async function notifyCustomerOrderPush(input: {
   }
 }
 
+function prefEnabled(prefs: unknown, key: string, fallback: boolean): boolean {
+  if (!prefs || typeof prefs !== "object") return fallback;
+  const value = (prefs as Record<string, unknown>)[key];
+  return typeof value === "boolean" ? value : fallback;
+}
+
 /** Load customer phone for an order and send status SMS + additive push (best-effort). */
 export async function notifyCustomerOrderStatus(
   // deno-lint-ignore no-explicit-any
@@ -116,7 +122,7 @@ export async function notifyCustomerOrderStatus(
   try {
     const { data: order } = await serviceSb
       .from("orders")
-      .select("id, order_number, customer_id, merchant_id, merchant:merchants(name), customer:customers(phone, name, user_id)")
+      .select("id, order_number, customer_id, merchant_id, merchant:merchants(name), customer:customers(phone, name, user_id, notification_prefs)")
       .eq("id", orderId)
       .single();
 
@@ -124,20 +130,31 @@ export async function notifyCustomerOrderStatus(
     const customer = order.customer as {
       phone?: string | null;
       user_id?: string | null;
+      notification_prefs?: unknown;
     } | null;
     const merchant = order.merchant as { name?: string | null } | null;
     const orderNumber = String(order.order_number || orderId);
     const merchantName = merchant?.name ?? null;
     const phone = customer?.phone ? String(customer.phone) : "";
     const customerUserId = customer?.user_id ? String(customer.user_id) : "";
+    const prefs = customer?.notification_prefs;
+    const smsOn = prefEnabled(prefs, "smsUpdates", true);
+    const pushOn = prefEnabled(prefs, "orderUpdates", true);
 
-    if (phone) {
+    if (phone && smsOn) {
       await sendDashOrderStatusSms({
         to: phone,
         orderNumber,
         status,
         merchantName,
       });
+    } else if (phone && !smsOn) {
+      console.log(JSON.stringify({
+        svc: "dash_order_sms",
+        intent: "sms_skipped_opt_out",
+        orderId,
+        status,
+      }));
     } else {
       console.log(JSON.stringify({
         svc: "dash_order_sms",
@@ -147,7 +164,7 @@ export async function notifyCustomerOrderStatus(
       }));
     }
 
-    if (customerUserId) {
+    if (customerUserId && pushOn) {
       await notifyCustomerOrderPush({
         customerUserId,
         orderId,

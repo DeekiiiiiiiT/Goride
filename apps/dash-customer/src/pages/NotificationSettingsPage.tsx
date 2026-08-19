@@ -9,6 +9,7 @@ import {
   subscribeRushPush,
   unsubscribeRushPush,
 } from '@/lib/rushPushSubscribe';
+import { fetchCustomerProfile, isCustomerLoggedIn, patchCustomerProfile } from '@/lib/customerApi';
 import { toast } from '@/lib/toast';
 
 type Props = {
@@ -26,7 +27,7 @@ const PUSH_ROWS: ToggleRow[] = [
   {
     key: 'orderUpdates',
     title: 'Order updates',
-    description: 'Push alerts for accepted, on the way, and delivered (SMS stays on for critical moments).',
+    description: 'Push alerts when an order is accepted, on the way, or delivered.',
   },
   { key: 'promotions', title: 'Promotions & deals', description: 'Special offers, discounts, and exclusive events.' },
   { key: 'newRestaurants', title: 'New restaurant alerts', description: 'Be the first to know when hot new spots join Roam Rush.' },
@@ -35,7 +36,7 @@ const PUSH_ROWS: ToggleRow[] = [
 
 const CHANNEL_ROWS: ToggleRow[] = [
   { key: 'emailNewsletters', title: 'Email newsletters', description: 'Weekly summaries, receipts, and major announcements.' },
-  { key: 'smsUpdates', title: 'SMS updates', description: 'Text messages for critical delivery moments.' },
+  { key: 'smsUpdates', title: 'SMS updates', description: 'Text messages for order status. Turn off to stop order texts.' },
 ];
 
 export default function NotificationSettingsPage({ onNavigate }: Props) {
@@ -43,6 +44,23 @@ export default function NotificationSettingsPage({ onNavigate }: Props) {
   const [busyKey, setBusyKey] = useState<keyof NotificationPrefs | null>(null);
   const profile = getProfile();
   const pushSupported = isRushPushSupported();
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchCustomerProfile()
+      .then((profile) => {
+        if (cancelled || !profile?.notificationPrefs) return;
+        const next = { ...getNotificationPrefs(), ...profile.notificationPrefs };
+        setPrefs(next);
+        saveNotificationPrefs(next);
+      })
+      .catch(() => {
+        /* stay on local cache */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Align toggle with a real device subscription when prefs say order updates are on.
   useEffect(() => {
@@ -65,10 +83,21 @@ export default function NotificationSettingsPage({ onNavigate }: Props) {
     };
   }, [prefs.orderUpdates, pushSupported]);
 
-  const update = (key: keyof NotificationPrefs, value: boolean) => {
-    const next = { ...prefs, [key]: value };
+  const persistPrefs = (next: NotificationPrefs) => {
     setPrefs(next);
     saveNotificationPrefs(next);
+    void (async () => {
+      if (!(await isCustomerLoggedIn())) return;
+      try {
+        await patchCustomerProfile({ notificationPrefs: next });
+      } catch {
+        toast.error('Could not save notification settings');
+      }
+    })();
+  };
+
+  const update = (key: keyof NotificationPrefs, value: boolean) => {
+    persistPrefs({ ...prefs, [key]: value });
   };
 
   const handleToggle = async (key: keyof NotificationPrefs, value: boolean) => {
@@ -117,7 +146,7 @@ export default function NotificationSettingsPage({ onNavigate }: Props) {
 
       <main className="flex-grow px-4 py-6 max-w-[1200px] mx-auto w-full pb-32">
         <p className="text-body-md text-on-surface-variant mb-6">
-          Manage how Roam Rush communicates with you. SMS remains the primary channel for critical order moments; push is optional and additive.
+          Manage how Roam Rush communicates with you. These choices are saved to your account. SMS and push for orders follow the toggles below.
         </p>
 
         <section className="bg-surface-container-lowest rounded-xl shadow-[0px_4px_20px_rgba(0,0,0,0.04)] p-4 mb-6">

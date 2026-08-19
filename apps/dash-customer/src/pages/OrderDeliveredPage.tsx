@@ -91,12 +91,12 @@ export default function OrderDeliveredPage({
             </div>
             <div>
               <h3 className="text-label-md font-semibold">Courier Tip</h3>
-              <p className="text-body-sm text-on-surface-variant">Currently {formatJmd(tip)}</p>
+              <p className="text-body-sm text-on-surface-variant">
+                {tip > 0 ? `You tipped ${formatJmd(tip)} at checkout` : 'No tip was added at checkout'}
+              </p>
             </div>
           </div>
-          <button type="button" className="text-label-md font-semibold text-primary">
-            Add or adjust
-          </button>
+          <p className="text-label-sm text-on-surface-variant text-right max-w-[9rem]">Tips can&apos;t be changed after delivery</p>
         </section>
       </main>
 
@@ -114,6 +114,7 @@ export default function OrderDeliveredPage({
               merchantName,
               deliveredAt,
               rating,
+              feedbackChips: selectedChips,
             });
           }}
           className="w-full bg-primary text-on-primary font-semibold text-label-md py-4 rounded-lg mb-2 active:scale-[0.98] transition-transform"

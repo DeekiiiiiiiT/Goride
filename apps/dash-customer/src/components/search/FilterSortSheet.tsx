@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 
 export type FilterState = {
@@ -11,35 +11,36 @@ export type FilterState = {
 
 const DEFAULT_FILTERS: FilterState = {
   sort: 'recommended',
-  prices: ['1', '2'],
-  rating: '4.5',
-  dietary: ['vegetarian'],
-  deliveryFee: 'under_100',
+  prices: [],
+  rating: '',
+  dietary: [],
+  deliveryFee: '',
 };
 
 type FilterSortSheetProps = {
   open: boolean;
   onClose: () => void;
   onApply: (filters: FilterState) => void;
+  value?: FilterState;
   resultCount?: number;
 };
 
-const SORT_OPTIONS = [
+export const SORT_OPTIONS = [
   { value: 'recommended', label: 'Recommended' },
   { value: 'fastest', label: 'Fastest Delivery' },
   { value: 'rating', label: 'Rating' },
   { value: 'distance', label: 'Distance' },
-  { value: 'price_asc', label: 'Price: Low to High' },
-  { value: 'price_desc', label: 'Price: High to Low' },
+  { value: 'price_asc', label: 'Lowest delivery fee' },
+  { value: 'price_desc', label: 'Highest delivery fee' },
 ];
 
-const PRICE_OPTIONS = ['$', '$$', '$$$', '$$$$'];
 const RATING_OPTIONS = ['4.5', '4.0', '3.5'];
+const PRICE_OPTIONS = ['$', '$$', '$$$'];
 const DIETARY_OPTIONS = [
   { value: 'vegetarian', label: 'Vegetarian' },
   { value: 'vegan', label: 'Vegan' },
-  { value: 'halal', label: 'Halal' },
   { value: 'gluten_free', label: 'Gluten-free' },
+  { value: 'halal', label: 'Halal' },
 ];
 const DELIVERY_FEE_OPTIONS = [
   { value: 'free', label: 'Free' },
@@ -47,30 +48,24 @@ const DELIVERY_FEE_OPTIONS = [
   { value: 'under_200', label: 'Under J$200' },
 ];
 
-export function FilterSortSheet({ open, onClose, onApply, resultCount = 124 }: FilterSortSheetProps) {
-  const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
+export function sortLabel(sort: string): string {
+  return SORT_OPTIONS.find((option) => option.value === sort)?.label ?? 'Recommended';
+}
+
+export function FilterSortSheet({
+  open,
+  onClose,
+  onApply,
+  value = DEFAULT_FILTERS,
+  resultCount = 0,
+}: FilterSortSheetProps) {
+  const [filters, setFilters] = useState<FilterState>(value);
+
+  useEffect(() => {
+    if (open) setFilters(value);
+  }, [open, value]);
 
   if (!open) return null;
-
-  const togglePrice = (index: string) => {
-    setFilters((prev) => ({
-      ...prev,
-      prices: prev.prices.includes(index)
-        ? prev.prices.filter((p) => p !== index)
-        : [...prev.prices, index],
-    }));
-  };
-
-  const toggleDietary = (value: string) => {
-    setFilters((prev) => ({
-      ...prev,
-      dietary: prev.dietary.includes(value)
-        ? prev.dietary.filter((d) => d !== value)
-        : [...prev.dietary, value],
-    }));
-  };
-
-  const reset = () => setFilters(DEFAULT_FILTERS);
 
   return (
     <div className="fixed inset-0 z-[60]">
@@ -82,7 +77,7 @@ export function FilterSortSheet({ open, onClose, onApply, resultCount = 124 }: F
 
         <div className="px-4 pb-4 flex justify-between items-center border-b border-surface-variant">
           <h2 className="text-2xl font-semibold text-on-surface">Filter &amp; Sort</h2>
-          <button type="button" onClick={reset} className="text-sm font-semibold tracking-wide text-primary">
+          <button type="button" onClick={() => setFilters(DEFAULT_FILTERS)} className="text-sm font-semibold tracking-wide text-primary">
             Reset
           </button>
         </div>
@@ -109,37 +104,15 @@ export function FilterSortSheet({ open, onClose, onApply, resultCount = 124 }: F
           </section>
 
           <section>
-            <h3 className="text-xl font-semibold mb-4">Price range</h3>
-            <div className="flex gap-2">
-              {PRICE_OPTIONS.map((price, index) => {
-                const value = String(index + 1);
-                const active = filters.prices.includes(value);
-                return (
-                  <button
-                    key={price}
-                    type="button"
-                    onClick={() => togglePrice(value)}
-                    className={`flex-1 h-12 rounded-lg border text-lg transition-colors ${
-                      active
-                        ? 'bg-primary-container text-on-primary-container border-primary-container'
-                        : 'border-outline-variant text-on-surface-variant'
-                    }`}
-                  >
-                    {price}
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-
-          <section>
             <h3 className="text-xl font-semibold mb-4">Rating</h3>
             <div className="flex flex-wrap gap-2">
               {RATING_OPTIONS.map((rating) => (
                 <button
                   key={rating}
                   type="button"
-                  onClick={() => setFilters((prev) => ({ ...prev, rating }))}
+                  onClick={() =>
+                    setFilters((prev) => ({ ...prev, rating: prev.rating === rating ? '' : rating }))
+                  }
                   className={`px-4 py-2 rounded-full border text-sm font-semibold tracking-wide flex items-center gap-1 transition-colors ${
                     filters.rating === rating
                       ? 'bg-primary-container text-on-primary-container border-primary-container'
@@ -153,23 +126,55 @@ export function FilterSortSheet({ open, onClose, onApply, resultCount = 124 }: F
           </section>
 
           <section>
-            <h3 className="text-xl font-semibold mb-4">Dietary</h3>
-            <div className="space-y-1">
-              {DIETARY_OPTIONS.map((option, index) => (
-                <label
-                  key={option.value}
-                  className={`flex items-center justify-between py-3 cursor-pointer ${
-                    index < DIETARY_OPTIONS.length - 1 ? 'border-b border-surface-variant' : ''
+            <h3 className="text-xl font-semibold mb-4">Price</h3>
+            <div className="flex flex-wrap gap-2">
+              {PRICE_OPTIONS.map((price) => (
+                <button
+                  key={price}
+                  type="button"
+                  onClick={() =>
+                    setFilters((prev) => ({
+                      ...prev,
+                      prices: prev.prices.includes(price)
+                        ? prev.prices.filter((p) => p !== price)
+                        : [...prev.prices, price],
+                    }))
+                  }
+                  className={`px-4 py-2 rounded-full border text-sm font-semibold tracking-wide transition-colors ${
+                    filters.prices.includes(price)
+                      ? 'bg-primary-container text-on-primary-container border-primary-container'
+                      : 'border-outline-variant text-on-surface-variant'
                   }`}
                 >
-                  <span className="text-base">{option.label}</span>
-                  <input
-                    type="checkbox"
-                    checked={filters.dietary.includes(option.value)}
-                    onChange={() => toggleDietary(option.value)}
-                    className="dash-filter-checkbox"
-                  />
-                </label>
+                  {price}
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <section>
+            <h3 className="text-xl font-semibold mb-4">Dietary</h3>
+            <div className="flex flex-wrap gap-2">
+              {DIETARY_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() =>
+                    setFilters((prev) => ({
+                      ...prev,
+                      dietary: prev.dietary.includes(option.value)
+                        ? prev.dietary.filter((d) => d !== option.value)
+                        : [...prev.dietary, option.value],
+                    }))
+                  }
+                  className={`px-4 py-2 rounded-full border text-sm font-semibold tracking-wide transition-colors ${
+                    filters.dietary.includes(option.value)
+                      ? 'bg-primary-container text-on-primary-container border-primary-container'
+                      : 'border-outline-variant text-on-surface-variant'
+                  }`}
+                >
+                  {option.label}
+                </button>
               ))}
             </div>
           </section>
@@ -181,7 +186,12 @@ export function FilterSortSheet({ open, onClose, onApply, resultCount = 124 }: F
                 <button
                   key={option.value}
                   type="button"
-                  onClick={() => setFilters((prev) => ({ ...prev, deliveryFee: option.value }))}
+                  onClick={() =>
+                    setFilters((prev) => ({
+                      ...prev,
+                      deliveryFee: prev.deliveryFee === option.value ? '' : option.value,
+                    }))
+                  }
                   className={`px-4 py-2 rounded-full border text-sm font-semibold tracking-wide transition-colors ${
                     filters.deliveryFee === option.value
                       ? 'bg-primary-container text-on-primary-container border-primary-container'

@@ -2,7 +2,7 @@ import { FormEvent, useState } from 'react';
 import { reverseGeocode } from '@roam/location';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { AddressAutocomplete } from '@/components/ui/AddressAutocomplete';
-import { ADD_ADDRESS_MAP } from '@/lib/accountContent';
+import { DeliveryPinMap } from '@/components/home/DeliveryPinMap';
 import {
   getSavedAddressById,
   upsertSavedAddressAsync,
@@ -18,6 +18,7 @@ import { toast } from '@/lib/toast';
 
 type Props = {
   addressId?: string;
+  returnTo?: string;
   onNavigate: (page: string, data?: Record<string, unknown>) => void;
 };
 
@@ -27,7 +28,7 @@ const LABEL_OPTIONS: { id: AddressLabel; icon: string; label: string }[] = [
   { id: 'other', icon: 'bookmark', label: 'Other' },
 ];
 
-export default function AddAddressPage({ addressId, onNavigate }: Props) {
+export default function AddAddressPage({ addressId, returnTo = 'saved-addresses', onNavigate }: Props) {
   const existing = addressId ? getSavedAddressById(addressId) : undefined;
 
   const [line1, setLine1] = useState(existing?.line1 ?? '');
@@ -122,7 +123,7 @@ export default function AddAddressPage({ addressId, onNavigate }: Props) {
     setSaving(true);
     try {
       await upsertSavedAddressAsync(address);
-      onNavigate('saved-addresses');
+      onNavigate(returnTo);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not save address');
     } finally {
@@ -136,7 +137,7 @@ export default function AddAddressPage({ addressId, onNavigate }: Props) {
         <button
           type="button"
           aria-label="Go back"
-          onClick={() => onNavigate('saved-addresses')}
+          onClick={() => onNavigate(returnTo)}
           className="p-2 text-on-surface-variant rounded-full"
         >
           <MaterialIcon name="arrow_back" />
@@ -150,20 +151,12 @@ export default function AddAddressPage({ addressId, onNavigate }: Props) {
       <main className="flex-1 flex flex-col relative max-w-md mx-auto w-full min-h-0 overflow-y-auto overscroll-contain">
         {!pinSuccess && (
           <div className="relative h-[309px] w-full bg-surface-container-highest overflow-hidden">
-            <img
-              src={ADD_ADDRESS_MAP}
-              alt="Map"
-              className="absolute inset-0 h-full w-full object-cover opacity-80 mix-blend-multiply"
+            <DeliveryPinMap
+              lat={coords.lat}
+              lng={coords.lng}
+              className="absolute inset-0"
+              emptyLabel="Use current location to drop an exact pin"
             />
-            <div
-              className="absolute top-1/2 left-1/2 flex -translate-x-1/2 -translate-y-full flex-col items-center"
-              style={{ animation: 'bounce 2s 3' }}
-            >
-              <div className="relative z-10 rounded-full bg-primary-container p-2 shadow-[0px_10px_30px_rgba(0,0,0,0.15)]">
-                <MaterialIcon name="location_on" className="text-on-primary" filled />
-              </div>
-              <div className="mt-1 h-2 w-2 rounded-full bg-on-surface/20 shadow-inner" />
-            </div>
             <button
               type="button"
               disabled={locating}
@@ -176,6 +169,11 @@ export default function AddAddressPage({ addressId, onNavigate }: Props) {
               </span>
             </button>
             <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-16 map-gradient" />
+          </div>
+        )}
+        {pinSuccess && (
+          <div className="relative h-28 w-full overflow-hidden">
+            <DeliveryPinMap lat={coords.lat} lng={coords.lng} className="absolute inset-0" />
           </div>
         )}
 

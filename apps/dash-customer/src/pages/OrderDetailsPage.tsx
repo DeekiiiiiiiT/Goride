@@ -6,6 +6,7 @@ import { ReorderSheet } from '@/components/orders/ReorderSheet';
 import { PROFILE_HEADER_AVATAR } from '@/lib/accountContent';
 import {
   buildReorderFromOrder,
+  downloadOrderReceipt,
   getOrderById,
   ISLAND_GRILL_ORDER_DETAIL,
   mapApiOrderToDetails,
@@ -253,6 +254,7 @@ export default function OrderDetailsPage({ orderId, onNavigate }: Props) {
 
           <button
             type="button"
+            onClick={() => downloadOrderReceipt(order)}
             className="mt-6 flex w-full items-center justify-center gap-2 rounded-lg py-3 text-label-md font-semibold text-primary transition-colors hover:bg-surface-container"
           >
             <MaterialIcon name="download" className="text-[20px]" />
@@ -285,6 +287,7 @@ export default function OrderDetailsPage({ orderId, onNavigate }: Props) {
           </button>
           <button
             type="button"
+            onClick={() => onNavigate('report-issue', { orderId: order.id })}
             className="flex w-full items-center justify-center gap-2 bg-transparent py-3 text-label-md font-semibold text-on-surface-variant transition-colors hover:text-primary"
           >
             <MaterialIcon name="help" className="text-[20px]" />

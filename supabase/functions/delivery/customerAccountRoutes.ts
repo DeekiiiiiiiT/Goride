@@ -30,6 +30,15 @@ const PatchProfileBody = z.object({
   phone: z.string().optional(),
   email: z.union([z.string().email(), z.literal("")]).optional(),
   savedAddresses: z.array(SavedAddressSchema).optional(),
+  notificationPrefs: z.object({
+    orderUpdates: z.boolean().optional(),
+    promotions: z.boolean().optional(),
+    newRestaurants: z.boolean().optional(),
+    personalizedPicks: z.boolean().optional(),
+    emailNewsletters: z.boolean().optional(),
+    smsUpdates: z.boolean().optional(),
+  }).optional(),
+  preferredPaymentMethod: z.enum(["wipay", "paypal", "cash"]).optional(),
 }).passthrough();
 
 const FavoriteBody = z.object({
@@ -41,6 +50,13 @@ const FavoriteItemBody = z.object({
   menuItemId: z.string().min(1),
 });
 
+async function resolveMerchantId(serviceSb: SupabaseClient, merchantId: string): Promise<string | null> {
+  const byId = await serviceSb.from("merchants").select("id").eq("id", merchantId).maybeSingle();
+  if (byId.data) return String((byId.data as { id: string }).id);
+  const bySlug = await serviceSb.from("merchants").select("id").eq("slug", merchantId).maybeSingle();
+  return bySlug.data ? String((bySlug.data as { id: string }).id) : null;
+}
+
 type CustomerRow = {
   id: string;
   user_id: string;
@@ -51,6 +67,8 @@ type CustomerRow = {
   default_lat: number | null;
   default_lng: number | null;
   saved_addresses: unknown;
+  notification_prefs?: unknown;
+  preferred_payment_method?: string | null;
   account_status?: string;
   created_at?: string;
   updated_at?: string;
@@ -70,6 +88,36 @@ function splitName(full: string): { firstName: string; lastName: string } {
   return { firstName: parts[0], lastName: parts.slice(1).join(" ") };
 }
 
+function defaultNotificationPrefs() {
+  return {
+    orderUpdates: true,
+    promotions: true,
+    newRestaurants: false,
+    personalizedPicks: true,
+    emailNewsletters: true,
+    smsUpdates: true,
+  };
+}
+
+function mergeNotificationPrefs(raw: unknown) {
+  const base = defaultNotificationPrefs();
+  if (!raw || typeof raw !== "object") return base;
+  const row = raw as Record<string, unknown>;
+  return {
+    orderUpdates: typeof row.orderUpdates === "boolean" ? row.orderUpdates : base.orderUpdates,
+    promotions: typeof row.promotions === "boolean" ? row.promotions : base.promotions,
+    newRestaurants: typeof row.newRestaurants === "boolean" ? row.newRestaurants : base.newRestaurants,
+    personalizedPicks: typeof row.personalizedPicks === "boolean" ? row.personalizedPicks : base.personalizedPicks,
+    emailNewsletters: typeof row.emailNewsletters === "boolean" ? row.emailNewsletters : base.emailNewsletters,
+    smsUpdates: typeof row.smsUpdates === "boolean" ? row.smsUpdates : base.smsUpdates,
+  };
+}
+
+function normalizePreferredPayment(raw: unknown): "wipay" | "paypal" | "cash" {
+  if (raw === "paypal" || raw === "cash" || raw === "wipay") return raw;
+  return "wipay";
+}
+
 function profileDto(row: CustomerRow) {
   const { firstName, lastName } = splitName(row.name || "");
   const savedAddresses = Array.isArray(row.saved_addresses) ? row.saved_addresses : [];
@@ -86,6 +134,8 @@ function profileDto(row: CustomerRow) {
     defaultLng: row.default_lng,
     savedAddresses,
     accountStatus: row.account_status ?? "active",
+    notificationPrefs: mergeNotificationPrefs(row.notification_prefs),
+    preferredPaymentMethod: normalizePreferredPayment(row.preferred_payment_method),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -196,6 +246,17 @@ export function registerCustomerAccountRoutes(app: Hono, deps: CustomerAccountRo
       Object.assign(update, defaultAddressFromSaved(body.savedAddresses));
     }
 
+    if (body.notificationPrefs !== undefined) {
+      update.notification_prefs = mergeNotificationPrefs({
+        ...mergeNotificationPrefs(customer.notification_prefs),
+        ...body.notificationPrefs,
+      });
+    }
+
+    if (body.preferredPaymentMethod !== undefined) {
+      update.preferred_payment_method = body.preferredPaymentMethod;
+    }
+
     const { data: updated, error: updateErr } = await serviceSb
       .from("customers")
       .update(update)
@@ -267,23 +328,19 @@ export function registerCustomerAccountRoutes(app: Hono, deps: CustomerAccountRo
     const { customer, error } = await ensureCustomer(serviceSb, auth.user);
     if (error || !customer) return c.json({ error: error || "profile_unavailable" }, 500);
 
-    const { data: merchant } = await serviceSb
-      .from("merchants")
-      .select("id")
-      .eq("id", body.merchantId)
-      .maybeSingle();
-    if (!merchant) return c.json({ error: "merchant_not_found" }, 404);
+    const merchantId = await resolveMerchantId(serviceSb, body.merchantId);
+    if (!merchantId) return c.json({ error: "merchant_not_found" }, 404);
 
     const { error: insertErr } = await serviceSb
       .from("customer_favorites")
       .upsert(
-        { customer_id: customer.id, merchant_id: body.merchantId },
+        { customer_id: customer.id, merchant_id: merchantId },
         { onConflict: "customer_id,merchant_id", ignoreDuplicates: true },
       );
 
     if (insertErr) return c.json({ error: insertErr.message }, 500);
 
-    return c.json({ ok: true, merchantId: body.merchantId });
+    return c.json({ ok: true, merchantId });
   });
 
   // DELETE /customer/favorites/:merchantId
@@ -298,11 +355,13 @@ export function registerCustomerAccountRoutes(app: Hono, deps: CustomerAccountRo
     const { customer, error } = await ensureCustomer(serviceSb, auth.user);
     if (error || !customer) return c.json({ error: error || "profile_unavailable" }, 500);
 
+    const resolvedId = (await resolveMerchantId(serviceSb, merchantId)) ?? merchantId;
+
     const { error: delErr } = await serviceSb
       .from("customer_favorites")
       .delete()
       .eq("customer_id", customer.id)
-      .eq("merchant_id", merchantId);
+      .eq("merchant_id", resolvedId);
 
     if (delErr) return c.json({ error: delErr.message }, 500);
 

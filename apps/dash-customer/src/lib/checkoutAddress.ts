@@ -43,3 +43,10 @@ export function resolveCheckoutAddress(saved: SavedAddressLike): {
   }
   return { address: null, instructions: '', hasRealAddress: false };
 }
+
+/** Courier-facing note sent with the order. */
+export function buildDeliveryInstructions(handoff: 'hand' | 'door', notes: string): string {
+  const trimmed = notes.trim();
+  if (handoff === 'door') return trimmed || 'Leave at door';
+  return trimmed ? `Hand it to me. ${trimmed}` : 'Hand it to me';
+}

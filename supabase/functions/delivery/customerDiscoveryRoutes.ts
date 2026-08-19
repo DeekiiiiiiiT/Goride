@@ -178,15 +178,15 @@ export function registerCustomerDiscoveryRoutes(app: Hono, deps: CustomerDiscove
     const [merchantsRes, itemsRes] = await Promise.all([
       serviceSb
         .from("merchants")
-        .select("id, name, logo_url, cover_image_url, cuisine_type, rating, avg_prep_time_mins, delivery_fee")
+        .select("id, name, logo_url, cover_image_url, cuisine_type, rating, avg_prep_time_mins, delivery_fee, min_order_amount")
         .eq("is_active", true)
         .eq("is_accepting_orders", true)
-        .ilike("name", pattern)
+        .or(`name.ilike."${pattern}",cuisine_type.ilike."${pattern}"`)
         .limit(20),
       serviceSb
         .from("menu_items")
         .select(
-          "id, name, price, image_url, merchant_id, merchant:merchants!inner(id, name, logo_url, is_active, is_accepting_orders)",
+          "id, name, description, price, image_url, merchant_id, merchant:merchants!inner(id, name, logo_url, is_active, is_accepting_orders)",
         )
         .eq("is_available", true)
         .ilike("name", pattern)
@@ -205,6 +205,7 @@ export function registerCustomerDiscoveryRoutes(app: Hono, deps: CustomerDiscove
       rating: m.rating != null ? Number(m.rating) : null,
       etaMins: m.avg_prep_time_mins != null ? Number(m.avg_prep_time_mins) : null,
       deliveryFee: m.delivery_fee != null ? Number(m.delivery_fee) : null,
+      minOrderAmount: m.min_order_amount != null ? Number(m.min_order_amount) : null,
     }));
 
     const items = (itemsRes.data || [])
@@ -217,6 +218,7 @@ export function registerCustomerDiscoveryRoutes(app: Hono, deps: CustomerDiscove
         return {
           id: String(row.id),
           name: String(row.name ?? ""),
+          description: String(row.description ?? ""),
           price: Number(row.price ?? 0),
           imageUrl: row.image_url ? String(row.image_url) : null,
           merchantId: String(row.merchant_id ?? merchant.id ?? ""),
@@ -226,5 +228,57 @@ export function registerCustomerDiscoveryRoutes(app: Hono, deps: CustomerDiscove
       });
 
     return c.json({ merchants, items, query: q });
+  });
+
+  // Public merchant reviews from completed customer ratings (no fake names)
+  app.get("/merchants/:id/reviews", async (c) => {
+    const rawId = String(c.req.param("id") || "").trim();
+    if (!rawId) return c.json({ error: "Merchant required" }, 400);
+
+    const serviceSb = getServiceSupabase();
+    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawId);
+    const merchantQuery = uuid
+      ? serviceSb.from("merchants").select("id, name, rating").eq("id", rawId)
+      : serviceSb.from("merchants").select("id, name, rating").eq("slug", rawId);
+    const { data: merchant, error: merchantError } = await merchantQuery.maybeSingle();
+    if (merchantError) return c.json({ error: merchantError.message }, 500);
+    if (!merchant) return c.json({ error: "Merchant not found" }, 404);
+
+    const { data: rows, error } = await serviceSb
+      .from("orders")
+      .select("id, customer_rating, customer_review, delivered_at, created_at, review_hidden")
+      .eq("merchant_id", merchant.id)
+      .in("status", ["delivered", "completed"])
+      .not("customer_rating", "is", null)
+      .order("delivered_at", { ascending: false })
+      .limit(50);
+
+    if (error) return c.json({ error: error.message }, 500);
+
+    const reviews = (rows ?? [])
+      .filter((row) => !row.review_hidden)
+      .map((row) => ({
+        id: String(row.id),
+        rating: Number(row.customer_rating),
+        comment: String(row.customer_review || "").trim(),
+        at: String(row.delivered_at || row.created_at || ""),
+      }));
+
+    const ratingSum = reviews.reduce((sum, r) => sum + r.rating, 0);
+    const avgRating = reviews.length
+      ? Math.round((ratingSum / reviews.length) * 10) / 10
+      : Number(merchant.rating ?? 0);
+    const distribution = [5, 4, 3, 2, 1].map(
+      (star) => reviews.filter((r) => r.rating === star).length,
+    );
+
+    return c.json({
+      merchantId: merchant.id,
+      merchantName: merchant.name,
+      rating: avgRating,
+      reviewCount: reviews.length,
+      distribution,
+      reviews,
+    });
   });
 }

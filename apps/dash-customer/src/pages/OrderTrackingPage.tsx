@@ -181,13 +181,18 @@ export default function OrderTrackingPage({ orderId, demoPhase, onNavigate }: Pr
     );
   }
 
+  const handleHelp = () => onNavigate('report-issue', { orderId: order.id });
+  const handleDetails = () => onNavigate('order-details', { orderId: order.id });
+
   switch (phase) {
     case 'courier_assigned':
-      return <CourierAssignedView order={order} onBack={handleClose} />;
+      return (
+        <CourierAssignedView order={order} onBack={handleClose} onHelp={handleHelp} onDetails={handleDetails} />
+      );
     case 'on_the_way':
-      return <OnTheWayView order={order} onBack={handleClose} />;
+      return <OnTheWayView order={order} onBack={handleClose} onHelp={handleHelp} onDetails={handleDetails} />;
     case 'almost_there':
-      return <AlmostThereView order={order} onClose={handleClose} />;
+      return <AlmostThereView order={order} onClose={handleClose} onHelp={handleHelp} />;
     case 'preparing':
     default:
       return (
@@ -196,6 +201,7 @@ export default function OrderTrackingPage({ orderId, demoPhase, onNavigate }: Pr
           onClose={handleClose}
           onCancel={handleCancelOrder}
           cancelPending={cancelPending}
+          onHelp={handleHelp}
         />
       );
   }

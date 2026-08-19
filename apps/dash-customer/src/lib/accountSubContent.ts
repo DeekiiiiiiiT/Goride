@@ -97,38 +97,35 @@ export const EXPIRED_PROMOS = [
   { code: 'FREESIDE', status: 'Redeemed', detail: 'Used on Oct 12' },
 ] as const;
 
-export const FAQ_CATEGORIES = [
-  'Delivery & Tracking',
-  'Refunds & Cancellations',
-  'Roam Rush Pass',
-  'Promos & Credits',
+export const FAQ_ITEMS = [
+  {
+    id: 'tracking',
+    title: 'Delivery & Tracking',
+    body: 'Open Orders and tap an active order to see live tracking. You can call or message the courier once they are assigned. After delivery, rate the order from the same screen.',
+  },
+  {
+    id: 'refunds',
+    title: 'Refunds & Cancellations',
+    body: 'You can cancel from tracking before the restaurant starts preparing. After that, use Order Help to report a problem. Refunds for paid orders are reviewed by support.',
+  },
+  {
+    id: 'pass',
+    title: 'Roam Rush Pass',
+    body: 'Roam Rush Pass is not available yet. Promo codes from restaurants still work at checkout when the partner has an active offer.',
+  },
+  {
+    id: 'promos',
+    title: 'Promos & Credits',
+    body: 'Enter a partner promo code in Cart or Promotions. Invalid or expired codes are rejected before you pay. Credits are applied by support when a report is resolved.',
+  },
 ] as const;
 
 export const HELP_QUICK_ACTIONS = [
   { id: 'order', icon: 'receipt_long', label: 'Order Help', page: 'report-issue' },
-  { id: 'account', icon: 'person', label: 'Account Issues' },
-  { id: 'payment', icon: 'credit_card', label: 'Payment Issues' },
-  { id: 'safety', icon: 'health_and_safety', label: 'Safety' },
+  { id: 'account', icon: 'person', label: 'Account Issues', page: 'edit-profile' },
+  { id: 'payment', icon: 'credit_card', label: 'Payment Issues', page: 'payment-methods' },
+  { id: 'safety', icon: 'health_and_safety', label: 'Safety', page: 'report-issue' },
 ] as const;
-
-export const REPORT_ISSUE_ORDERS = [
-  {
-    id: '84729',
-    merchantName: 'Kiku Sushi Bar',
-    detail: 'Delivered today, 12:45 PM • Order #84729',
-    image:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuCvLbh4mFwJ1qcqh-cbjIgLBbqux__aW8Q9U35KduVso3afZR5VO23XfKczFJaUZZFtcpJa25H6uV-0TRg7doP6RYiZdrQ-e_tGif_nSsx8z0Svml7Nyvh1c00zQ_U6gdeS-cvHWU0azCQG8v932WqzdFipI6LY26hT1j-TibLQYsdXkb9hMkNAQYhYFPBUuQbUN3EAcEr6Y0RNaw9QodjYXwGS_QkwMlTuSrl-Ed5vglO3O8VAzuNCGrCFDk-faUCcyRdDsdkkG2oJ',
-    selected: true,
-  },
-  {
-    id: '84610',
-    merchantName: 'The Burger Joint',
-    detail: 'Oct 24 • Order #84610',
-    image:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuDI_X0U7y_dHuPxJqJxuoR_0FiaSBy6g8oUv2CSDxr0NfA4j3ES4Wg6RQrlmvbY7MXgxdlYXWTnXZ3VIZkhwze1RWCazScuc_nOdIaJc--s44ugkdboVDN_hWCZXTMRkNhgdq3OiYF7DakoATORdXBZ0VuqEkXCMcOUgWB2necv4ksM7wgItkHNhLO2SFM9_4MsAkCKnCG7x8CauASYnUiGElyC5h9VHcJn0Nac6cQcLhokF_Ohbmm9JTji36o5LX_MSy-B59sH2wJx',
-    selected: false,
-  },
-];
 
 export const ISSUE_TYPES = [
   { id: 'missing', icon: 'shopping_bag', label: 'Missing items' },
@@ -154,13 +151,19 @@ export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
   newRestaurants: false,
   personalizedPicks: true,
   emailNewsletters: true,
-  smsUpdates: false,
+  smsUpdates: true,
 };
+
+export function mergeNotificationPrefs(partial?: Partial<NotificationPrefs> | null): NotificationPrefs {
+  return { ...DEFAULT_NOTIFICATION_PREFS, ...(partial ?? {}) };
+}
 
 export function getNotificationPrefs(): NotificationPrefs {
   try {
     const raw = localStorage.getItem(NOTIF_KEY);
-    return raw ? { ...DEFAULT_NOTIFICATION_PREFS, ...(JSON.parse(raw) as Partial<NotificationPrefs>) } : DEFAULT_NOTIFICATION_PREFS;
+    return raw
+      ? mergeNotificationPrefs(JSON.parse(raw) as Partial<NotificationPrefs>)
+      : DEFAULT_NOTIFICATION_PREFS;
   } catch {
     return DEFAULT_NOTIFICATION_PREFS;
   }

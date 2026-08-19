@@ -4,11 +4,14 @@ import { resolveVerticalType } from '@roam/vertical-config';
 import RestaurantPage from './RestaurantPage';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { FavoriteButton } from '@/components/ui/FavoriteButton';
+import { BottomSheet } from '@/components/ui/BottomSheet';
 import { useCart } from '@/hooks/useCart';
 import { allowMocks } from '@/lib/mocksGate';
 import { mapMerchantMenuResponse } from '@/lib/merchantMenu';
 import { formatJmd } from '@/lib/restaurantContent';
 import { getSavedAddress } from '@/lib/addressStorage';
+import { shareStoreLink } from '@/lib/shareStore';
+import { RestaurantMoreInfo } from '@/components/restaurant/RestaurantMoreInfo';
 import { API_ENDPOINTS, supabaseAnonFunctionHeaders } from '@roam/api-client';
 
 type Props = {
@@ -87,6 +90,8 @@ function GroceryStoreView({
   const { addItem, updateQuantity, items, itemCount, subtotal, merchantId: cartMerchantId } = useCart();
   const [activeCategory, setActiveCategory] = useState('');
   const [search, setSearch] = useState('');
+  const [sort, setSort] = useState<'recommended' | 'price_asc' | 'price_desc' | 'name'>('recommended');
+  const [sortOpen, setSortOpen] = useState(false);
   const savedAddress = getSavedAddress();
   const deliveryLabel = savedAddress
     ? `Deliver to · ${savedAddress.line1}`
@@ -150,9 +155,16 @@ function GroceryStoreView({
     });
   }, [activeCategory, search, products]);
 
-  const displayProducts = search.trim()
-    ? products.filter((p) => p.name.toLowerCase().includes(search.trim().toLowerCase()))
-    : filteredProducts;
+  const displayProducts = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    let list = q
+      ? products.filter((p) => p.name.toLowerCase().includes(q))
+      : filteredProducts;
+    if (sort === 'price_asc') list = [...list].sort((a, b) => a.price - b.price);
+    else if (sort === 'price_desc') list = [...list].sort((a, b) => b.price - a.price);
+    else if (sort === 'name') list = [...list].sort((a, b) => a.name.localeCompare(b.name));
+    return list;
+  }, [filteredProducts, products, search, sort]);
 
   const getQty = (productId: string) => {
     const match = items.find((i) => i.itemId === productId && i.merchantId === storeId);
@@ -246,7 +258,12 @@ function GroceryStoreView({
           <span className="text-label-md text-on-surface-variant">{deliveryLabel}</span>
         </div>
         <div className="flex items-center gap-2">
-          <button type="button" className="flex h-10 w-10 items-center justify-center rounded-full hover:bg-surface-container">
+          <button
+            type="button"
+            aria-label="Share store"
+            onClick={() => void shareStoreLink(storeName, storeId)}
+            className="flex h-10 w-10 items-center justify-center rounded-full hover:bg-surface-container"
+          >
             <MaterialIcon name="share" />
           </button>
           <FavoriteButton merchantId={storeId} merchantName={storeName} />
@@ -283,11 +300,22 @@ function GroceryStoreView({
             placeholder="Search products..."
             className="w-full border-none bg-transparent text-body-lg focus:ring-0"
           />
-          <button type="button" className="ml-2 flex h-8 w-8 items-center justify-center rounded-full hover:bg-surface-variant/50">
+          <button
+            type="button"
+            aria-label="Sort products"
+            onClick={() => setSortOpen(true)}
+            className="ml-2 flex h-8 w-8 items-center justify-center rounded-full hover:bg-surface-variant/50"
+          >
             <MaterialIcon name="tune" className="text-on-surface-variant" />
           </button>
         </div>
       </section>
+
+      {menu && (
+        <section className="px-4">
+          <RestaurantMoreInfo restaurant={menu} />
+        </section>
+      )}
 
       {categories.length > 0 && (
         <nav className="no-scrollbar mt-6 flex gap-3 overflow-x-auto px-4">
@@ -402,6 +430,34 @@ function GroceryStoreView({
           </button>
         </div>
       )}
+
+      <BottomSheet open={sortOpen} onClose={() => setSortOpen(false)}>
+        <div className="px-4 pb-safe">
+          <h2 className="text-headline-sm font-semibold mb-4">Sort products</h2>
+          {(
+            [
+              { id: 'recommended', label: 'Recommended' },
+              { id: 'price_asc', label: 'Price: low to high' },
+              { id: 'price_desc', label: 'Price: high to low' },
+              { id: 'name', label: 'Name A–Z' },
+            ] as const
+          ).map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              onClick={() => {
+                setSort(option.id);
+                setSortOpen(false);
+              }}
+              className={`w-full text-left py-3 border-b border-surface-variant text-body-md ${
+                sort === option.id ? 'text-primary font-semibold' : 'text-on-surface'
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </BottomSheet>
     </div>
   );
 }

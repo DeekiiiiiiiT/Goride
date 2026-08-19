@@ -33,6 +33,10 @@ export type OrderHistoryEntry = {
   tip?: number;
 };
 
+export function isLiveOrderStatus(status: string): boolean {
+  return !['completed', 'cancelled', 'delivered'].includes(status.toLowerCase());
+}
+
 export const MERCHANT_LOGOS = {
   islandGrill:
     'https://lh3.googleusercontent.com/aida-public/AB6AXuAMETp9bYVmga6CRJ5Sqk5LPOYS_ssJ8JUmQj9cUCUAPbV1Bkf7AYqTUU3TSC6HUgu7se5VDzgd2SUcHyEMfdkWbR0P-o42wNsLgglB6kf4NtxcC-qcovNLNiNfstob8cru8rsaq4PvJiGxyU4_rB_s8MO7GjRm14EGfpglLCBCBT_FoWwB3XW-yc7VUthlSpu2-dDQssGSDHFUr3VZEuYiX_L3xeey4dx0iTuV_BFAy2OTJr_WcUSPqbavdqyTZ4dNQwViamGoS2aN',
@@ -269,3 +273,39 @@ export function buildReorderCartItems() {
 }
 
 export const ISSUE_CHIPS = ['Missing item', 'Wrong item', 'Cold food', 'Damaged', 'Other'] as const;
+
+export function buildOrderReceiptText(order: OrderHistoryEntry): string {
+  const lines = [
+    'Roam Rush receipt',
+    `Order ${order.orderNumber}`,
+    order.merchantName,
+    `Placed ${new Date(order.placedAt).toLocaleString()}`,
+    '',
+    ...order.items.map((item) => {
+      const note = item.note ? ` (${item.note})` : '';
+      return `${item.quantity}x ${item.name}${note}  J$${item.price.toLocaleString()}`;
+    }),
+    '',
+    order.subtotal != null ? `Subtotal  J$${order.subtotal.toLocaleString()}` : '',
+    order.deliveryFee != null ? `Delivery  J$${order.deliveryFee.toLocaleString()}` : '',
+    order.serviceFee != null ? `Platform fee  J$${order.serviceFee.toLocaleString()}` : '',
+    order.tax ? `Tax  J$${order.tax.toLocaleString()}` : '',
+    order.tip != null ? `Tip  J$${order.tip.toLocaleString()}` : '',
+    `Total  J$${order.total.toLocaleString()}`,
+    order.paymentMethod ? `Paid with ${order.paymentMethod}` : '',
+    order.deliveryAddress ? `Delivered to ${order.deliveryAddress}` : '',
+  ];
+  return lines.filter((line) => line !== '').join('\n');
+}
+
+export function downloadOrderReceipt(order: OrderHistoryEntry): void {
+  const blob = new Blob([buildOrderReceiptText(order)], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `Roam-Rush-${order.orderNumber}.txt`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}

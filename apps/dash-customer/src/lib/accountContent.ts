@@ -1,5 +1,6 @@
 import { allowMocks } from './mocksGate';
 import { fetchCustomerProfile, patchCustomerProfile, isCustomerLoggedIn } from './customerApi';
+import { hydratePreferredPaymentMethod } from './checkoutStorage';
 
 export const PROFILE_AVATAR =
   'https://lh3.googleusercontent.com/aida-public/AB6AXuD91c0rjILQv1vBE3_Geadu5PDiMEoNZAk2l0Ir6ZxWXnjHfgI3QqnMljx6GsduMoKmTzzc7cUl7mnGmz_0nfqqFBATmtZVDRO6Giau6I_eVPdX-ReqQXEWkmU2277bplPpYNnyFwO1ra4gCvi9_sdXWi9G9Y8fEhZHzuKNeqbkV22DvMZjQnoIJNq4TKyM6qCIeYqcPEiMRNjb3ydCAYzZLjrYnz5mh-SPEU6yQt_Erh1M6NAxlVgiLzUXrm_Wh0La_sM1BFI3_jWl';
@@ -77,6 +78,9 @@ export async function syncProfileFromBackend(): Promise<UserProfile> {
       avatarUrl: PROFILE_AVATAR,
     };
     writeLocalProfile(next);
+    if (remote.preferredPaymentMethod) {
+      hydratePreferredPaymentMethod(remote.preferredPaymentMethod);
+    }
     return next;
   } catch {
     return readLocalProfile();
@@ -118,9 +122,3 @@ export const ACCOUNT_MENU = [
   { id: 'help', icon: 'help', label: 'Help & Support', page: 'help' },
   { id: 'about', icon: 'info', label: 'About', page: 'about' },
 ] as const;
-
-export const KINGSTON_MAP_PREVIEW =
-  'https://lh3.googleusercontent.com/aida-public/AB6AXuDABreR1_RpM4HP0OAbC26R60_3fKGG0yiMNQRJV0MIwcYHfoPDJlzR2L3GdVWe5PA0YvmT6a-KgUu_yNHg3N0oftiqGkhIsneGD4WIVsJliUW0W4tQVvHOvz4qsVPLfhvfkWqbDUDgAkAoLSNVwICMOMZRg9YsqR7npLIHtXl-OY-m25T56AaOFmNOQE3-xIk4gKzakIK4pH9muOIWrnZEXq6X7N1Wwv4Pncev5M3aok7YE4GuDSqjhnOEtt5d_Kfviek0Lm155aTD';
-
-export const ADD_ADDRESS_MAP =
-  'https://lh3.googleusercontent.com/aida-public/AB6AXuBBl6-rT1m0shL3xqs9-cHBGnICfmwjyEAMzFOHj7RwjUVyh4wneHLq7h_YgFQzzWX40BW4vAtiH4mwV4XjWIk-W0vf7w0iKJ5kW4gw6uXW7wbsoRvJcksyzidyPqY6znKzfs_cqihBjCjhoxWKRTlnpA0CCPD0vVAbYTorPeRQq0l5fR090LPtYIJkretUxXUuYsvFmAKNZ7avOVvcoC1LTZLwtta1wFl2HdddUP9WfO_ir2OPB66EXPJ6UdIbjKu7if_v5Gj2KejD';

@@ -2,12 +2,13 @@ import { useEffect, useState } from 'react';
 import { API_ENDPOINTS } from '@roam/api-client';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import {
-  getCheckoutPreferences,
   PAYMENT_OPTIONS,
-  saveCheckoutPreferences,
+  getCheckoutPreferences,
   type PaymentMethodId,
 } from '@/lib/checkoutStorage';
+import { persistPreferredPaymentMethod } from '@/lib/paymentPreference';
 import { supabase } from '@/lib/supabase';
+import { toast } from '@/lib/toast';
 
 type VaultMethod = {
   id: string;
@@ -66,7 +67,9 @@ export default function PaymentMethodsPage({ returnTo = 'account', mode = 'manag
   const handleBack = () => onNavigate(returnTo);
 
   const handleConfirm = () => {
-    saveCheckoutPreferences({ paymentMethodId: selected });
+    void persistPreferredPaymentMethod(selected).catch(() => {
+      toast.error('Could not save this payment method');
+    });
     onNavigate(returnTo);
   };
 
@@ -95,7 +98,9 @@ export default function PaymentMethodsPage({ returnTo = 'account', mode = 'manag
                 onClick={() => {
                   setSelected(option.id);
                   if (!isSelectMode) {
-                    saveCheckoutPreferences({ paymentMethodId: option.id });
+                    void persistPreferredPaymentMethod(option.id).catch(() => {
+                      toast.error('Could not save this payment method');
+                    });
                   }
                 }}
                 className={`bg-surface-container-lowest rounded-xl p-4 shadow-[0px_4px_20px_rgba(0,0,0,0.04)] border text-left flex items-center gap-3 ${

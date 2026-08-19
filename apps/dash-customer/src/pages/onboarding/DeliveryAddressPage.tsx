@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { reverseGeocode } from '@roam/location';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { AddressAutocomplete } from '@/components/ui/AddressAutocomplete';
+import { DeliveryPinMap } from '@/components/home/DeliveryPinMap';
 import {
   getSavedAddresses,
   type SavedAddress,
@@ -139,21 +140,17 @@ export function DeliveryAddressPage({ onBack, onConfirm, onOutOfZone }: Delivery
           </section>
 
           <section className="relative w-full h-[220px] min-h-[180px] rounded-[24px] overflow-hidden shadow-sm border border-surface-variant shrink-0">
-            <div
-              className="absolute inset-0 bg-surface-variant bg-cover bg-center"
-              style={{ backgroundImage: "url('/images/address-map.png')" }}
+            <DeliveryPinMap
+              lat={selected?.lat}
+              lng={selected?.lng}
+              className="absolute inset-0"
+              emptyLabel="Use current location to drop your delivery pin"
             />
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center dash-bounce-slow">
-              <div className="bg-primary text-on-primary rounded-full p-2 shadow-lg mb-1">
-                <MaterialIcon name="location_on" filled />
-              </div>
-              <div className="w-2 h-1 bg-black/20 rounded-full blur-[2px]" />
-            </div>
             <button
               type="button"
               disabled={locating}
               onClick={() => void useCurrentLocation()}
-              className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-surface-container-lowest text-primary px-5 py-3 rounded-full shadow-[0px_10px_30px_rgba(0,0,0,0.08)] flex items-center gap-2 active:scale-95 transition-transform duration-200 disabled:opacity-60"
+              className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 bg-surface-container-lowest text-primary px-5 py-3 rounded-full shadow-[0px_10px_30px_rgba(0,0,0,0.08)] flex items-center gap-2 active:scale-95 transition-transform duration-200 disabled:opacity-60"
             >
               <MaterialIcon name="my_location" className="text-[20px]" />
               <span className="text-sm font-semibold tracking-wide">

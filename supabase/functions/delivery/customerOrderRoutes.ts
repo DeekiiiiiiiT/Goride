@@ -281,7 +281,7 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       .from("orders")
       .select(`
       *,
-      merchant:merchants(id, name, logo_url, phone, address),
+      merchant:merchants(id, name, logo_url, phone, address, avg_prep_time_mins),
       customer:customers(id, name, phone, user_id)
     `)
       .eq("id", id)
@@ -568,5 +568,87 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
     }
 
     return c.json({ order: updated, refundQueued });
+  });
+
+  const CUSTOMER_ISSUE_TYPES = new Set(["missing", "wrong", "quality", "other"]);
+
+  // Customer support intake — persists to customer_order_issues (not a fake timeout)
+  app.post("/orders/:id/issue", async (c) => {
+    const authHeader = c.req.header("Authorization");
+    if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
+
+    const supabase = getSupabase(authHeader);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+    const { id } = c.req.param();
+    const body = await c.req.json().catch(() => ({}));
+    const issueType = String(body.issueType || body.issue_type || "").trim().toLowerCase();
+    const notes = typeof body.notes === "string" ? body.notes.trim().slice(0, 2000) : "";
+
+    if (!CUSTOMER_ISSUE_TYPES.has(issueType)) {
+      return c.json({ error: "Invalid issue type" }, 400);
+    }
+    if (notes.length < 8) {
+      return c.json({ error: "Please describe what happened (at least a short sentence)." }, 400);
+    }
+
+    const serviceSb = getServiceSupabase();
+    const { data: customer } = await serviceSb
+      .from("customers")
+      .select("id, email, name")
+      .eq("user_id", user.id)
+      .single();
+
+    if (!customer) return c.json({ error: "Customer not found" }, 404);
+
+    const lookup = ORDER_ID_UUID.test(id)
+      ? serviceSb.from("orders").select("id, customer_id, status, order_number").eq("id", id)
+      : serviceSb.from("orders").select("id, customer_id, status, order_number").eq("order_number", id);
+    const { data: order, error: orderError } = await lookup.maybeSingle();
+
+    if (orderError || !order) return c.json({ error: "Order not found" }, 404);
+    if (order.customer_id !== customer.id) return c.json({ error: "Forbidden" }, 403);
+
+    const { data: issue, error: insertError } = await serviceSb
+      .from("customer_order_issues")
+      .insert({
+        order_id: order.id,
+        customer_id: customer.id,
+        issue_type: issueType,
+        notes,
+      })
+      .select("id, order_id, issue_type, status, created_at")
+      .single();
+
+    if (insertError) return c.json({ error: insertError.message }, 500);
+
+    const issueLabels: Record<string, string> = {
+      missing: "Missing items",
+      wrong: "Wrong items",
+      quality: "Food quality",
+      other: "Order issue",
+    };
+    const orderRef = String(order.order_number || order.id);
+    await serviceSb.from("support_cases").insert({
+      subject: `${issueLabels[issueType] ?? "Order issue"} — ${orderRef}`,
+      body: notes,
+      status: "open",
+      priority: issueType === "quality" || issueType === "missing" ? "high" : "normal",
+      customer_id: customer.id,
+      order_id: order.id,
+      contact_email: (customer.email as string | null) || user.email || null,
+      created_by: user.id,
+    });
+
+    await serviceSb.from("order_events").insert({
+      order_id: order.id,
+      status: "issue_reported",
+      actor_type: "customer",
+      actor_id: user.id,
+      notes: `issue:${issueType}`,
+    });
+
+    return c.json({ issue });
   });
 }

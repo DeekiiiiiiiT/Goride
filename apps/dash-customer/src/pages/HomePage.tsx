@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { API_ENDPOINTS } from '@roam/api-client';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { ActiveOrderBanner } from '@/components/home/ActiveOrderBanner';
 import { QuickReorderSection } from '@/components/home/QuickReorderSection';
 import { DiscoverStoreCard } from '@/components/discovery/DiscoverStoreCard';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PromoCarousel } from '@/components/ui/PromoCarousel';
+import { AddressPickerSheet } from '@/components/home/AddressPickerSheet';
 import { PullToRefresh } from '@/components/ui/PullToRefresh';
 import { RestaurantCardSkeleton } from '@/components/ui/RestaurantCardSkeleton';
 import { toast } from '@/lib/toast';
@@ -16,63 +16,51 @@ import {
   type DiscoverMerchant,
 } from '@/lib/merchantDiscovery';
 import type { VerticalType } from '@roam/types';
-import { getSavedAddress } from '@/lib/addressStorage';
-import { supabase } from '@/lib/supabase';
+import { getSavedAddress, selectSavedAddress } from '@/lib/addressStorage';
+import { fetchCustomerOrders } from '@/lib/customerApi';
+import { isLiveOrderStatus } from '@/lib/ordersContent';
 
 type HomePageProps = {
   onNavigate: (page: string, data?: Record<string, unknown>) => void;
   onSearchFocus?: () => void;
+  onSeeAll?: (vertical: VerticalType) => void;
   showQuickReorder?: boolean;
   onProfileClick?: () => void;
-};
-
-type ApiOrder = {
-  id: string;
-  order_number: string;
-  status: string;
-  merchant: { id: string; name: string; logo_url: string };
 };
 
 export default function HomePage({
   onNavigate,
   onSearchFocus,
+  onSeeAll,
   showQuickReorder,
   onProfileClick,
 }: HomePageProps) {
   const [selectedVertical, setSelectedVertical] = useState<VerticalType>('restaurant');
   const [merchants, setMerchants] = useState<DiscoverMerchant[]>([]);
   const [loading, setLoading] = useState(true);
-  const savedAddress = getSavedAddress();
+  const [addressOpen, setAddressOpen] = useState(false);
+  const [addressTick, setAddressTick] = useState(0);
+  const savedAddress = useMemo(() => getSavedAddress(), [addressTick]);
   const addressLabel = savedAddress
     ? `Deliver to · ${savedAddress.line1}${savedAddress.line2 ? `, ${savedAddress.line2}` : ''}`
     : 'Set delivery address';
 
   const { data: ordersData } = useQuery({
-    queryKey: ['customer-orders', 'home-active'],
-    queryFn: async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session) return { orders: [] as ApiOrder[] };
-      const res = await fetch(`${API_ENDPOINTS.delivery}/customer/orders`, {
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      });
-      if (!res.ok) throw new Error('Failed to fetch orders');
-      return res.json() as Promise<{ orders?: ApiOrder[] }>;
-    },
+    queryKey: ['customer-orders'],
+    queryFn: fetchCustomerOrders,
     retry: false,
   });
 
   const activeOrder = useMemo(() => {
     const rows = ordersData?.orders ?? [];
-    const live = rows.find((o) => !['completed', 'cancelled', 'delivered'].includes(o.status));
+    const live = rows.find((o) => isLiveOrderStatus(o.status));
     if (!live) return null;
     return {
-      id: live.id,
-      orderNumber: live.order_number,
-      merchantName: live.merchant?.name ?? 'Store',
+      id: String(live.id),
+      orderNumber: String(live.order_number ?? ''),
+      merchantName: String(live.merchant?.name ?? 'Store'),
       eta: '15-25 min',
-      trackingStatus: live.status,
+      trackingStatus: String(live.status),
     };
   }, [ordersData]);
 
@@ -109,7 +97,7 @@ export default function HomePage({
       <header className="sticky top-0 z-40 flex min-h-16 w-full items-center justify-between border-b border-outline-variant/30 bg-surface px-4 shadow-sm safe-t">
         <button
           type="button"
-          onClick={() => onNavigate('saved-addresses', { returnTo: 'home' })}
+          onClick={() => setAddressOpen(true)}
           className="flex max-w-[200px] items-center gap-2 rounded-full border border-outline-variant bg-surface-container-low px-3 py-1.5 shadow-sm transition-transform active:scale-95"
         >
           <MaterialIcon name="location_on" className="text-xl text-primary" />
@@ -119,10 +107,11 @@ export default function HomePage({
         <div className="flex items-center gap-3">
           <button
             type="button"
+            aria-label="Notification settings"
+            onClick={() => onNavigate('notification-settings')}
             className="relative flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-surface-container-high"
           >
             <MaterialIcon name="notifications" className="text-on-surface-variant" />
-            <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-error" />
           </button>
           <button
             type="button"
@@ -145,22 +134,26 @@ export default function HomePage({
         )}
 
         <section className="mx-auto mt-6 max-w-[1200px] px-4">
-          <button
-            type="button"
-            onClick={onSearchFocus}
-            className="group relative flex h-14 w-full items-center rounded-xl border border-outline-variant bg-white shadow-sm transition-all"
-          >
-            <MaterialIcon
-              name="search"
-              className="pointer-events-none absolute left-4 text-on-surface-variant"
-            />
-            <span className="pl-12 text-body-md text-on-surface-variant">
-              Search restaurants, groceries, stores...
-            </span>
-            <span className="absolute right-4 rounded-lg p-1 text-primary transition-colors group-hover:bg-surface-container">
+          <div className="relative flex h-14 w-full items-center rounded-xl border border-outline-variant bg-white shadow-sm">
+            <button
+              type="button"
+              onClick={onSearchFocus}
+              className="flex h-full flex-1 items-center pl-4 pr-14 text-left"
+            >
+              <MaterialIcon name="search" className="text-on-surface-variant" />
+              <span className="pl-3 text-body-md text-on-surface-variant">
+                Search restaurants, groceries, stores...
+              </span>
+            </button>
+            <button
+              type="button"
+              aria-label="Browse stores"
+              onClick={() => onSeeAll?.(selectedVertical)}
+              className="absolute right-3 rounded-lg p-2 text-primary transition-colors hover:bg-surface-container"
+            >
               <MaterialIcon name="tune" />
-            </span>
-          </button>
+            </button>
+          </div>
         </section>
 
         <section className="mt-6 overflow-x-auto no-scrollbar">
@@ -190,7 +183,7 @@ export default function HomePage({
           </div>
         </section>
 
-        <PromoCarousel onPromoClick={() => onNavigate('promotions')} />
+        <PromoCarousel onPromoClick={() => onNavigate('promotions', { returnTo: 'home' })} />
 
         {showQuickReorder && (
           <div className="mt-4">
@@ -203,6 +196,7 @@ export default function HomePage({
             <h2 className="text-headline-lg-mobile font-bold text-on-surface">Popular near you</h2>
             <button
               type="button"
+              onClick={() => onSeeAll?.(selectedVertical)}
               className="flex items-center gap-1 text-label-lg font-semibold text-primary"
             >
               See all
@@ -232,6 +226,20 @@ export default function HomePage({
           </div>
         </section>
       </main>
+      <AddressPickerSheet
+        open={addressOpen}
+        onClose={() => setAddressOpen(false)}
+        onSelect={(address) => {
+          void selectSavedAddress(address).then(() => {
+            setAddressTick((n) => n + 1);
+            setAddressOpen(false);
+          });
+        }}
+        onAdd={() => {
+          setAddressOpen(false);
+          onNavigate('add-address', { returnTo: 'home' });
+        }}
+      />
     </PullToRefresh>
   );
 }

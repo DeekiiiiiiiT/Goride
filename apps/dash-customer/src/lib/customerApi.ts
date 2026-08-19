@@ -1,5 +1,6 @@
 import { API_ENDPOINTS } from '@roam/api-client';
 import { supabase } from '@/lib/supabase';
+import type { NotificationPrefs } from '@/lib/accountSubContent';
 
 /** Mirrors delivery.customers.saved_addresses jsonb entries */
 export type CustomerSavedAddressDto = {
@@ -25,6 +26,8 @@ export type CustomerProfileDto = {
   defaultAddress: string | null;
   savedAddresses: CustomerSavedAddressDto[];
   accountStatus: string;
+  notificationPrefs?: NotificationPrefs;
+  preferredPaymentMethod?: 'wipay' | 'paypal' | 'cash';
 };
 
 async function authHeaders(): Promise<Record<string, string> | null> {
@@ -52,6 +55,8 @@ export async function patchCustomerProfile(body: {
   phone?: string;
   email?: string;
   savedAddresses?: CustomerSavedAddressDto[];
+  notificationPrefs?: NotificationPrefs;
+  preferredPaymentMethod?: 'wipay' | 'paypal' | 'cash';
 }): Promise<CustomerProfileDto> {
   const headers = await authHeaders();
   if (!headers) throw new Error('Sign in required');
@@ -133,4 +138,37 @@ export async function removeFavoriteItem(merchantId: string, menuItemId: string)
 export async function isCustomerLoggedIn(): Promise<boolean> {
   const { data: { session } } = await supabase.auth.getSession();
   return Boolean(session?.access_token);
+}
+
+export async function fetchCustomerOrders(): Promise<{
+  orders: Array<{
+    id: string;
+    order_number?: string;
+    status: string;
+    merchant?: { id?: string; name?: string; logo_url?: string };
+    [key: string]: unknown;
+  }>;
+}> {
+  const headers = await authHeaders();
+  if (!headers) return { orders: [] };
+  const res = await fetch(`${API_ENDPOINTS.delivery}/customer/orders`, { headers });
+  if (!res.ok) throw new Error('Failed to fetch orders');
+  return res.json();
+}
+
+export async function submitCustomerOrderIssue(input: {
+  orderId: string;
+  issueType: string;
+  notes: string;
+}): Promise<void> {
+  const headers = await authHeaders();
+  if (!headers) throw new Error('Sign in required');
+  const res = await fetch(`${API_ENDPOINTS.delivery}/orders/${input.orderId}/issue`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ issueType: input.issueType, notes: input.notes }),
+  });
+  if (!res.ok) {
+    throw new Error((await res.json().catch(() => ({}))).error || 'Could not submit report');
+  }
 }

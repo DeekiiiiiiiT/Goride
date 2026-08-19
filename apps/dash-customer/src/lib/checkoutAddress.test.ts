@@ -72,3 +72,19 @@ describe('resolveCheckoutAddress', () => {
     expect(result.hasRealAddress).toBe(false);
   });
 });
+
+describe('buildDeliveryInstructions', () => {
+  it('sends leave-at-door notes as-is', async () => {
+    vi.doMock('./mocksGate', () => ({ allowMocks: () => false }));
+    const { buildDeliveryInstructions } = await import('./checkoutAddress');
+    expect(buildDeliveryInstructions('door', 'Gate code 12')).toBe('Gate code 12');
+    expect(buildDeliveryInstructions('door', '  ')).toBe('Leave at door');
+  });
+
+  it('keeps handoff plus extra notes for hand-it-to-me', async () => {
+    vi.doMock('./mocksGate', () => ({ allowMocks: () => false }));
+    const { buildDeliveryInstructions } = await import('./checkoutAddress');
+    expect(buildDeliveryInstructions('hand', '')).toBe('Hand it to me');
+    expect(buildDeliveryInstructions('hand', 'Call on arrival')).toBe('Hand it to me. Call on arrival');
+  });
+});

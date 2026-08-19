@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildReorderFromOrder, type OrderHistoryEntry } from './ordersContent';
+import { buildOrderReceiptText, buildReorderFromOrder, isLiveOrderStatus, type OrderHistoryEntry } from './ordersContent';
 
 const baseOrder: OrderHistoryEntry = {
   id: '868174d8-bf7f-4afc-9d63-ea34d3d5320a',
@@ -40,5 +40,32 @@ describe('buildReorderFromOrder', () => {
 
   it('returns empty when raw items lack menu ids', () => {
     expect(buildReorderFromOrder(baseOrder, [{ name: 'Mystery item', quantity: 1 }])).toEqual([]);
+  });
+});
+
+describe('buildOrderReceiptText', () => {
+  it('includes order number, merchant, and total', () => {
+    const text = buildOrderReceiptText({
+      ...baseOrder,
+      items: [{ quantity: 1, name: 'Jerk Chicken Meal', price: 1200 }],
+      subtotal: 1200,
+      deliveryFee: 150,
+      serviceFee: 60,
+      tip: 100,
+      total: 1510,
+    });
+    expect(text).toContain('RD-2026-000002');
+    expect(text).toContain('Island Grill');
+    expect(text).toContain('Jerk Chicken Meal');
+    expect(text).toContain('Total  J$1,510');
+  });
+});
+
+describe('isLiveOrderStatus', () => {
+  it('treats in-progress deliveries as live', () => {
+    expect(isLiveOrderStatus('preparing')).toBe(true);
+    expect(isLiveOrderStatus('out_for_delivery')).toBe(true);
+    expect(isLiveOrderStatus('delivered')).toBe(false);
+    expect(isLiveOrderStatus('cancelled')).toBe(false);
   });
 });

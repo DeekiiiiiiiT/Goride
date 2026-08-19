@@ -12,6 +12,7 @@ import { hapticLight, hapticSuccess } from '@/lib/haptics';
 import { fetchMerchantMenu } from '@/lib/merchantMenu';
 import { toast } from '@/lib/toast';
 import { formatJmd, type MenuItem } from '@/lib/restaurantContent';
+import { shareStoreLink } from '@/lib/shareStore';
 
 type Props = {
   merchantId?: string;
@@ -193,6 +194,8 @@ export default function RestaurantPage({ merchantId, onNavigate }: Props) {
         <div className="pointer-events-auto flex gap-2">
           <button
             type="button"
+            aria-label="Share restaurant"
+            onClick={() => void shareStoreLink(restaurant.name, restaurant.id)}
             className="glass-button flex h-10 w-10 items-center justify-center rounded-full text-on-error transition-transform active:scale-95"
           >
             <MaterialIcon name="share" />

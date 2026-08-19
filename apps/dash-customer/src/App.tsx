@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { AuthRecoveryGate } from '@roam/auth-client';
 import { Session } from '@supabase/supabase-js';
 import { toast } from 'sonner';
@@ -45,11 +46,14 @@ import { VerifyPhonePage } from './pages/onboarding/VerifyPhonePage';
 import { DeliveryAddressPage, type AddressSelection } from './pages/onboarding/DeliveryAddressPage';
 import { DeliveryDetailsPage } from './pages/onboarding/DeliveryDetailsPage';
 import { DashAppHeader } from './components/layout/DashAppHeader';
+import { AppNavDrawer } from './components/layout/AppNavDrawer';
 import { DashBottomNav, type DashTab } from './components/layout/DashBottomNav';
 import { isOnboardingComplete, markOnboardingComplete } from './lib/onboardingStorage';
 import { hasDeliveryAddress, persistOnboardingAddress, syncAddressesFromBackend } from './lib/addressStorage';
 import { syncProfileFromBackend } from './lib/accountContent';
 import { syncFavoritesFromBackend } from './lib/favoritesStorage';
+import { fetchCustomerOrders } from './lib/customerApi';
+import { isLiveOrderStatus } from './lib/ordersContent';
 import { supabase } from './lib/supabase';
 import {
   consumeDashCustomerOAuthIntent,
@@ -170,6 +174,18 @@ function DashCustomerShell() {
     () => typeof window !== 'undefined' && !!sessionStorage.getItem(DASH_CUSTOMER_OAUTH_INTENT_KEY),
   );
   const [outOfZoneReturnTo, setOutOfZoneReturnTo] = useState<string>('delivery-address');
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  const { data: ordersPayload } = useQuery({
+    queryKey: ['customer-orders'],
+    queryFn: fetchCustomerOrders,
+    enabled: Boolean(session),
+    retry: false,
+  });
+  const ordersBadge = useMemo(
+    () => (ordersPayload?.orders ?? []).some((order) => isLiveOrderStatus(String(order.status ?? ''))),
+    [ordersPayload],
+  );
 
   useEffect(() => {
     if (wasOffline && isOnline) {
@@ -526,6 +542,7 @@ function DashCustomerShell() {
           <HomePage
             onNavigate={navigate}
             onSearchFocus={() => handleTabChange('search')}
+            onSeeAll={(vertical) => handleOpenCategory(vertical === 'restaurant' ? 'all' : vertical)}
             showQuickReorder={!!session}
             onProfileClick={() => handleTabChange('account')}
           />
@@ -645,6 +662,7 @@ function DashCustomerShell() {
             merchantName={pageData?.merchantName as string | undefined}
             deliveredAt={pageData?.deliveredAt as string | undefined}
             initialRating={pageData?.rating as number | undefined}
+            initialFeedbackChips={pageData?.feedbackChips as string[] | undefined}
           />
         );
       case 'order-details':
@@ -668,12 +686,23 @@ function DashCustomerShell() {
           <AddAddressPage
             onNavigate={navigate}
             addressId={pageData?.addressId as string | undefined}
+            returnTo={(pageData?.returnTo as string | undefined) ?? 'saved-addresses'}
           />
         );
       case 'promotions':
-        return <PromotionsPage onNavigate={navigate} />;
+        return (
+          <PromotionsPage
+            onNavigate={navigate}
+            returnTo={(pageData?.returnTo as string | undefined) ?? 'account'}
+          />
+        );
       case 'favorites':
-        return <FavoritesPage onNavigate={navigate} />;
+        return (
+          <FavoritesPage
+            onNavigate={navigate}
+            returnTo={(pageData?.returnTo as string | undefined) ?? 'account'}
+          />
+        );
       case 'notification-settings':
         return <NotificationSettingsPage onNavigate={navigate} />;
       case 'help':
@@ -681,7 +710,7 @@ function DashCustomerShell() {
       case 'about':
         return <AboutPage onNavigate={navigate} />;
       case 'report-issue':
-        return <ReportIssuePage onNavigate={navigate} />;
+        return <ReportIssuePage onNavigate={navigate} orderId={pageData?.orderId as string | undefined} />;
       case 'restaurant-reviews':
         return (
           <RestaurantReviewsPage
@@ -753,10 +782,17 @@ function DashCustomerShell() {
       <div className="app-shell-frame">
         {showHeader && (
           <DashAppHeader
+            onMenuClick={() => setMenuOpen(true)}
             onProfileClick={() => handleTabChange('account')}
             showProfileImage={!!session}
           />
         )}
+        <AppNavDrawer
+          open={menuOpen}
+          onClose={() => setMenuOpen(false)}
+          onTabChange={handleTabChange}
+          onNavigate={(page) => navigate(page)}
+        />
 
         <main
           className={`flex-1 min-h-0 ${isImmersiveStack ? 'overflow-y-auto overscroll-contain' : ''} ${showBottomNav ? 'pb-nav' : ''}`}
@@ -779,7 +815,7 @@ function DashCustomerShell() {
         <DashBottomNav
           activeTab={activeTab}
           onTabChange={handleTabChange}
-          ordersBadge={!!session}
+          ordersBadge={ordersBadge}
         />
       )}
     </div>

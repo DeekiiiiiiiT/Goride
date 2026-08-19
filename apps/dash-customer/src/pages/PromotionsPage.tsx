@@ -21,9 +21,10 @@ type ApiPromo = {
 
 type Props = {
   onNavigate: (page: string) => void;
+  returnTo?: string;
 };
 
-export default function PromotionsPage({ onNavigate }: Props) {
+export default function PromotionsPage({ onNavigate, returnTo = 'account' }: Props) {
   const { subtotal, merchantId } = useCart();
   const [promoCode, setPromoCode] = useState('');
   const [message, setMessage] = useState('');
@@ -105,7 +106,10 @@ export default function PromotionsPage({ onNavigate }: Props) {
 
   return (
     <div className="bg-surface text-on-surface antialiased pb-24 min-h-dvh">
-      <AccountSubHeader />
+      <AccountSubHeader
+        onBack={() => onNavigate(returnTo)}
+        onNotifications={() => onNavigate('notification-settings')}
+      />
 
       <main className="max-w-[1200px] mx-auto px-4 pt-6 flex flex-col gap-6">
         <div>

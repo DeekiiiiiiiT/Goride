@@ -1,15 +1,27 @@
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import type { TrackingOrder } from '@/lib/trackingContent';
-import { formatJmd, TRACKING_MAP_IMAGES } from '@/lib/trackingContent';
+import { formatJmd, formatPrepEta, remainingPrepMinutes, TRACKING_MAP_IMAGES } from '@/lib/trackingContent';
+import { toast } from '@/lib/toast';
 
 type Props = {
   order: TrackingOrder;
   onClose: () => void;
   onCancel?: () => void | Promise<void>;
   cancelPending?: boolean;
+  onHelp?: () => void;
 };
 
-export function PreparingTrackingView({ order, onClose, onCancel, cancelPending }: Props) {
+export function PreparingTrackingView({ order, onClose, onCancel, cancelPending, onHelp }: Props) {
+  const prepEta = formatPrepEta(
+    remainingPrepMinutes({
+      nowMs: Date.now(),
+      placedAt: order.placedAt,
+      acceptedAt: order.acceptedAt,
+      preparingAt: order.preparingAt,
+      estimatedPrepMins: order.estimatedPrepMins,
+      merchantAvgPrepMins: order.merchantAvgPrepMins,
+    }),
+  );
   return (
     <div className="app-fullscreen-screen safe-x safe-t bg-background flex flex-col">
       <header className="bg-surface shadow-sm flex justify-between items-center safe-x min-h-16 shrink-0 z-40">
@@ -17,7 +29,9 @@ export function PreparingTrackingView({ order, onClose, onCancel, cancelPending 
           <MaterialIcon name="close" />
         </button>
         <h1 className="text-headline-md font-bold text-primary text-center flex-1">Order #{order.orderNumber}</h1>
-        <div className="w-6" />
+        <button type="button" onClick={onHelp} className="text-primary active:scale-95 transition-transform" aria-label="Help">
+          <MaterialIcon name="help" />
+        </button>
       </header>
 
       <main className="flex-1 overflow-y-auto overscroll-contain flex flex-col gap-6 px-4 pt-6 pb-safe">
@@ -52,7 +66,7 @@ export function PreparingTrackingView({ order, onClose, onCancel, cancelPending 
             <span className="text-label-md font-semibold text-on-surface-variant uppercase tracking-wider">
               Estimated Ready
             </span>
-            <p className="text-headline-md font-bold text-primary">15 min</p>
+            <p className="text-headline-md font-bold text-primary">{prepEta}</p>
           </div>
         </section>
 
@@ -64,7 +78,12 @@ export function PreparingTrackingView({ order, onClose, onCancel, cancelPending 
               <p className="text-label-md font-semibold text-on-surface truncate">{order.merchantName}</p>
               <p className="text-body-sm text-on-surface-variant truncate">{order.merchantAddress}</p>
             </div>
-            <button type="button" className="w-8 h-8 rounded-full bg-surface flex items-center justify-center text-primary shadow-sm">
+            <button
+              type="button"
+              aria-label="Open store in maps"
+              onClick={() => openMerchantMap(order.merchantAddress)}
+              className="w-8 h-8 rounded-full bg-surface flex items-center justify-center text-primary shadow-sm"
+            >
               <MaterialIcon name="near_me" className="text-[20px]" />
             </button>
           </div>
@@ -87,7 +106,7 @@ export function PreparingTrackingView({ order, onClose, onCancel, cancelPending 
               Once the restaurant starts preparing, cancel from Help if you need support.
             </p>
           )}
-          <button type="button" className="w-full py-3 text-on-surface-variant text-body-md">
+          <button type="button" onClick={onHelp} className="w-full py-3 text-on-surface-variant text-body-md">
             Need Help?
           </button>
         </section>
@@ -166,3 +185,16 @@ function OrderSummaryAccordion({ order }: { order: TrackingOrder }) {
 }
 
 export { OrderSummaryAccordion };
+
+function openMerchantMap(address: string) {
+  const query = address.trim();
+  if (!query) {
+    toast.error('Store address is not available');
+    return;
+  }
+  window.open(
+    `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`,
+    '_blank',
+    'noopener,noreferrer',
+  );
+}

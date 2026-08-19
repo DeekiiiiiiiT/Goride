@@ -1,13 +1,18 @@
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import type { TrackingOrder } from '@/lib/trackingContent';
-import { TRACKING_MAP_IMAGES } from '@/lib/trackingContent';
+import { parseDeliveryHandoff, TRACKING_MAP_IMAGES } from '@/lib/trackingContent';
+import { CourierActions } from './CourierShared';
 
 type Props = {
   order: TrackingOrder;
   onClose: () => void;
+  onHelp?: () => void;
 };
 
-export function AlmostThereView({ order, onClose }: Props) {
+export function AlmostThereView({ order, onClose, onHelp }: Props) {
+  const handoff = parseDeliveryHandoff(order.deliveryInstructions);
+  const title = handoff.mode === 'hand' ? 'Hand it to you' : 'Leave at door';
+
   return (
     <div className="app-fullscreen-screen safe-x safe-t bg-background flex flex-col relative overflow-hidden">
       <header className="absolute top-0 w-full z-20 px-4 pt-safe pt-4 pb-4 flex justify-between items-center pointer-events-none">
@@ -20,6 +25,7 @@ export function AlmostThereView({ order, onClose }: Props) {
         </button>
         <button
           type="button"
+          onClick={onHelp}
           className="bg-surface-container-lowest px-4 py-2 rounded-full shadow-sm pointer-events-auto flex items-center gap-2"
         >
           <MaterialIcon name="help" filled className="text-primary" />
@@ -70,8 +76,12 @@ export function AlmostThereView({ order, onClose }: Props) {
               <MaterialIcon name="door_front" filled className="text-primary text-lg" />
             </div>
             <div>
-              <p className="text-label-md font-semibold text-on-surface">Courier will leave at door</p>
-              <p className="text-body-sm text-on-surface-variant mt-1">Gate code: 1234</p>
+              <p className="text-label-md font-semibold text-on-surface">Courier will {title.toLowerCase()}</p>
+              {handoff.notes ? (
+                <p className="text-body-sm text-on-surface-variant mt-1">{handoff.notes}</p>
+              ) : (
+                <p className="text-body-sm text-on-surface-variant mt-1">No extra drop-off notes</p>
+              )}
             </div>
           </div>
 
@@ -87,12 +97,7 @@ export function AlmostThereView({ order, onClose }: Props) {
               </div>
             </div>
             <div className="flex gap-2">
-              <button type="button" className="w-12 h-12 rounded-full bg-surface-container border border-outline-variant/30 flex items-center justify-center">
-                <MaterialIcon name="call" />
-              </button>
-              <button type="button" className="w-12 h-12 rounded-full bg-surface-container border border-outline-variant/30 flex items-center justify-center">
-                <MaterialIcon name="chat" />
-              </button>
+              <CourierActions phone={order.courier.phone} />
             </div>
           </div>
         </div>

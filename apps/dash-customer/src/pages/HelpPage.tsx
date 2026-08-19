@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
-import { FAQ_CATEGORIES, HELP_QUICK_ACTIONS } from '@/lib/accountSubContent';
+import { FAQ_ITEMS, HELP_QUICK_ACTIONS } from '@/lib/accountSubContent';
 
 type Props = {
   onNavigate: (page: string, data?: Record<string, unknown>) => void;
@@ -8,6 +8,13 @@ type Props = {
 
 export default function HelpPage({ onNavigate }: Props) {
   const [query, setQuery] = useState('');
+  const [openId, setOpenId] = useState<string | null>(null);
+
+  const faqs = FAQ_ITEMS.filter((item) => {
+    if (!query.trim()) return true;
+    const q = query.toLowerCase();
+    return item.title.toLowerCase().includes(q) || item.body.toLowerCase().includes(q);
+  });
 
   return (
     <div className="font-body-md text-on-surface antialiased min-h-dvh bg-[#FAFAFA]">
@@ -42,7 +49,7 @@ export default function HelpPage({ onNavigate }: Props) {
               <button
                 key={action.id}
                 type="button"
-                onClick={() => 'page' in action && action.page && onNavigate(action.page)}
+                onClick={() => onNavigate(action.page)}
                 className="bg-surface-container-lowest rounded-xl p-4 shadow-[0px_4px_20px_rgba(0,0,0,0.04)] flex flex-col items-center justify-center gap-2 active:scale-95 transition-transform"
               >
                 <MaterialIcon name={action.icon} className="text-primary text-3xl" filled />
@@ -55,21 +62,36 @@ export default function HelpPage({ onNavigate }: Props) {
         <section className="mb-8">
           <h3 className="text-headline-sm font-semibold mb-4">Frequently Asked Questions</h3>
           <div className="bg-surface-container-lowest rounded-xl shadow-[0px_4px_20px_rgba(0,0,0,0.04)] overflow-hidden">
-            <ul>
-              {FAQ_CATEGORIES.filter(cat => !query || cat.toLowerCase().includes(query.toLowerCase())).map((cat, index) => (
-                <li key={cat} className={`mx-4 ${index < FAQ_CATEGORIES.length - 1 ? 'border-b border-[#E5E7EB]' : ''}`}>
-                  <button type="button" className="w-full flex items-center justify-between py-4 hover:opacity-80 transition-opacity">
-                    <span className="text-body-md">{cat}</span>
-                    <MaterialIcon name="chevron_right" className="text-outline" />
-                  </button>
-                </li>
-              ))}
-            </ul>
+            {faqs.length === 0 ? (
+              <p className="px-4 py-6 text-body-md text-on-surface-variant">No matching help topics.</p>
+            ) : (
+              <ul>
+                {faqs.map((item, index) => {
+                  const open = openId === item.id;
+                  return (
+                    <li key={item.id} className={index < faqs.length - 1 ? 'mx-4 border-b border-[#E5E7EB]' : 'mx-4'}>
+                      <button
+                        type="button"
+                        aria-expanded={open}
+                        onClick={() => setOpenId(open ? null : item.id)}
+                        className="w-full flex items-center justify-between py-4 hover:opacity-80 transition-opacity"
+                      >
+                        <span className="text-body-md text-left pr-4">{item.title}</span>
+                        <MaterialIcon name={open ? 'expand_less' : 'expand_more'} className="text-outline shrink-0" />
+                      </button>
+                      {open ? (
+                        <p className="pb-4 text-body-sm text-on-surface-variant">{item.body}</p>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </div>
         </section>
 
         <section className="flex flex-col items-center gap-4 text-center mt-8">
-          <p className="text-body-sm text-on-surface-variant">Still need help? We&apos;re here for you 24/7.</p>
+          <p className="text-body-sm text-on-surface-variant">Still need help? Report a problem from a real order.</p>
           <button
             type="button"
             onClick={() => onNavigate('report-issue')}

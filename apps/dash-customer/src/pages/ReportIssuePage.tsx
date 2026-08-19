@@ -1,20 +1,94 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { API_ENDPOINTS } from '@roam/api-client';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
-import { ISSUE_TYPES, REPORT_ISSUE_ORDERS } from '@/lib/accountSubContent';
+import { ISSUE_TYPES } from '@/lib/accountSubContent';
+import { submitCustomerOrderIssue } from '@/lib/customerApi';
+import { supabase } from '@/lib/supabase';
+import { toast } from '@/lib/toast';
 
 type Props = {
   onNavigate: (page: string) => void;
+  orderId?: string;
 };
 
-export default function ReportIssuePage({ onNavigate }: Props) {
-  const [selectedOrder, setSelectedOrder] = useState(REPORT_ISSUE_ORDERS.find(o => o.selected)?.id ?? REPORT_ISSUE_ORDERS[0].id);
+type ApiOrder = {
+  id: string;
+  order_number: string;
+  status: string;
+  created_at: string;
+  merchant: { name: string; logo_url?: string } | null;
+};
+
+function orderDetailLine(order: ApiOrder): string {
+  const when = new Date(order.created_at).toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+  return `${when} • ${order.order_number}`;
+}
+
+export default function ReportIssuePage({ onNavigate, orderId }: Props) {
+  const [selectedOrder, setSelectedOrder] = useState(orderId ?? '');
   const [issueType, setIssueType] = useState('other');
   const [details, setDetails] = useState('');
+  const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
-  const handleSubmit = () => {
-    setSubmitted(true);
-    setTimeout(() => onNavigate('help'), 1500);
+  const { data, isLoading } = useQuery({
+    queryKey: ['customer-orders'],
+    queryFn: async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session) throw new Error('Not authenticated');
+      const res = await fetch(`${API_ENDPOINTS.delivery}/customer/orders`, {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (!res.ok) throw new Error('Failed to fetch orders');
+      return res.json() as Promise<{ orders: ApiOrder[] }>;
+    },
+    retry: false,
+  });
+
+  const orders = useMemo(
+    () => (data?.orders ?? []).filter(o => o.status !== 'cancelled').slice(0, 20),
+    [data],
+  );
+
+  useEffect(() => {
+    if (selectedOrder) return;
+    if (orderId && orders.some(o => o.id === orderId)) {
+      setSelectedOrder(orderId);
+      return;
+    }
+    if (orders[0]) setSelectedOrder(orders[0].id);
+  }, [orderId, orders, selectedOrder]);
+
+  const handleSubmit = async () => {
+    if (!selectedOrder) {
+      toast.error('Select an order');
+      return;
+    }
+    if (details.trim().length < 8) {
+      toast.error('Please describe what happened');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await submitCustomerOrderIssue({
+        orderId: selectedOrder,
+        issueType,
+        notes: details.trim(),
+      });
+      setSubmitted(true);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not submit report');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (submitted) {
@@ -22,7 +96,16 @@ export default function ReportIssuePage({ onNavigate }: Props) {
       <div className="min-h-dvh flex flex-col items-center justify-center px-4 bg-background">
         <MaterialIcon name="check_circle" className="text-primary text-[64px] mb-4" filled />
         <h2 className="text-headline-md font-semibold mb-2">Report submitted</h2>
-        <p className="text-body-md text-on-surface-variant text-center">We&apos;ll respond within 24 hours.</p>
+        <p className="text-body-md text-on-surface-variant text-center mb-6">
+          We saved this against your order. Support will follow up.
+        </p>
+        <button
+          type="button"
+          onClick={() => onNavigate('help')}
+          className="text-primary font-semibold"
+        >
+          Back to Help
+        </button>
       </div>
     );
   }
@@ -30,16 +113,11 @@ export default function ReportIssuePage({ onNavigate }: Props) {
   return (
     <div className="text-on-surface antialiased bg-background pb-[100px] min-h-dvh">
       <header className="bg-surface w-full top-0 sticky shadow-sm z-40 safe-t">
-        <div className="flex items-center justify-between px-4 py-2 w-full max-w-[600px] mx-auto min-h-16">
-          <div className="flex items-center gap-4">
-            <button type="button" onClick={() => onNavigate('help')} aria-label="Go back" className="w-10 h-10 flex items-center justify-center rounded-full">
-              <MaterialIcon name="arrow_back" />
-            </button>
-            <h1 className="text-headline-sm font-semibold text-primary">Report an Issue</h1>
-          </div>
-          <button type="button" aria-label="Support" className="w-10 h-10 flex items-center justify-center rounded-full">
-            <MaterialIcon name="help" />
+        <div className="flex items-center px-4 py-2 w-full max-w-[600px] mx-auto min-h-16">
+          <button type="button" onClick={() => onNavigate('help')} aria-label="Go back" className="w-10 h-10 flex items-center justify-center rounded-full">
+            <MaterialIcon name="arrow_back" />
           </button>
+          <h1 className="text-headline-sm font-semibold text-primary">Report an Issue</h1>
         </div>
       </header>
 
@@ -53,36 +131,46 @@ export default function ReportIssuePage({ onNavigate }: Props) {
 
         <section className="flex flex-col gap-2">
           <h3 className="text-label-md font-semibold uppercase tracking-wider">Select Order</h3>
-          {REPORT_ISSUE_ORDERS.map(order => {
-            const selected = selectedOrder === order.id;
-            return (
-              <button
-                key={order.id}
-                type="button"
-                onClick={() => setSelectedOrder(order.id)}
-                className={`bg-surface-container-lowest rounded-xl p-4 flex items-center gap-4 text-left transition-colors ${
-                  selected
-                    ? 'border border-outline-variant shadow-[0px_4px_20px_rgba(0,0,0,0.04)]'
-                    : 'border border-transparent opacity-70 hover:bg-surface-container-low'
-                }`}
-              >
-                <div className={`${selected ? 'w-16 h-16' : 'w-12 h-12'} rounded-lg bg-surface-container-high overflow-hidden shrink-0`}>
-                  <img src={order.image} alt={order.merchantName} className="w-full h-full object-cover" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h4 className={`${selected ? 'text-headline-sm font-semibold' : 'text-body-lg'} line-clamp-1`}>
-                    {order.merchantName}
-                  </h4>
-                  <p className="text-body-sm text-on-surface-variant">{order.detail}</p>
-                </div>
-                {selected ? (
-                  <MaterialIcon name="check_circle" className="text-primary" filled />
-                ) : (
-                  <MaterialIcon name="chevron_right" className="text-outline" />
-                )}
-              </button>
-            );
-          })}
+          {isLoading ? (
+            <p className="text-body-sm text-on-surface-variant">Loading your orders…</p>
+          ) : orders.length === 0 ? (
+            <p className="text-body-sm text-on-surface-variant">
+              No recent orders to report on.
+            </p>
+          ) : (
+            orders.map(order => {
+              const selected = selectedOrder === order.id;
+              return (
+                <button
+                  key={order.id}
+                  type="button"
+                  onClick={() => setSelectedOrder(order.id)}
+                  className={`bg-surface-container-lowest rounded-xl p-4 flex items-center gap-4 text-left transition-colors ${
+                    selected
+                      ? 'border border-outline-variant shadow-[0px_4px_20px_rgba(0,0,0,0.04)]'
+                      : 'border border-transparent opacity-70 hover:bg-surface-container-low'
+                  }`}
+                >
+                  <div className={`${selected ? 'w-16 h-16' : 'w-12 h-12'} rounded-lg bg-surface-container-high overflow-hidden shrink-0`}>
+                    {order.merchant?.logo_url ? (
+                      <img src={order.merchant.logo_url} alt="" className="w-full h-full object-cover" />
+                    ) : null}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h4 className={`${selected ? 'text-headline-sm font-semibold' : 'text-body-lg'} line-clamp-1`}>
+                      {order.merchant?.name ?? 'Restaurant'}
+                    </h4>
+                    <p className="text-body-sm text-on-surface-variant">{orderDetailLine(order)}</p>
+                  </div>
+                  {selected ? (
+                    <MaterialIcon name="check_circle" className="text-primary" filled />
+                  ) : (
+                    <MaterialIcon name="chevron_right" className="text-outline" />
+                  )}
+                </button>
+              );
+            })
+          )}
         </section>
 
         <div className="h-px w-full bg-outline-variant opacity-30" />
@@ -113,41 +201,24 @@ export default function ReportIssuePage({ onNavigate }: Props) {
           <textarea
             value={details}
             onChange={e => setDetails(e.target.value)}
-            placeholder="Describe issue (e.g., The spicy tuna roll was missing from the bag...)"
+            placeholder="Describe issue (e.g., The festival was missing from the bag...)"
             className="w-full bg-[#F3F4F6] border-none rounded-lg p-4 text-body-md focus:bg-surface-container-lowest focus:border-2 focus:border-primary transition-all resize-none min-h-[120px] placeholder:text-outline"
           />
-        </section>
-
-        <section className="flex flex-col gap-2">
-          <h3 className="text-label-md font-semibold uppercase tracking-wider">Attachments</h3>
-          <button
-            type="button"
-            className="w-full bg-surface-container-lowest border border-dashed border-outline-variant rounded-lg p-6 flex flex-col items-center justify-center gap-2 hover:bg-surface-container-low transition-colors"
-          >
-            <div className="w-12 h-12 rounded-full bg-surface-container flex items-center justify-center">
-              <MaterialIcon name="add_a_photo" className="text-primary" />
-            </div>
-            <div className="text-center">
-              <span className="text-body-md font-medium block">Upload a photo</span>
-              <span className="text-body-sm text-on-surface-variant block mt-1">
-                Optional, but helps us resolve it faster
-              </span>
-            </div>
-          </button>
         </section>
 
         <section className="flex flex-col gap-4">
           <button
             type="button"
-            onClick={handleSubmit}
-            className="w-full bg-primary text-on-primary text-headline-sm font-semibold py-4 rounded-lg shadow-md flex justify-center items-center gap-2"
+            disabled={submitting || orders.length === 0}
+            onClick={() => void handleSubmit()}
+            className="w-full bg-primary text-on-primary text-headline-sm font-semibold py-4 rounded-lg shadow-md flex justify-center items-center gap-2 disabled:opacity-50"
           >
-            Submit Report
+            {submitting ? 'Submitting…' : 'Submit Report'}
             <MaterialIcon name="send" className="text-[20px]" />
           </button>
           <p className="text-center text-body-sm text-on-surface-variant flex items-center justify-center gap-1">
             <MaterialIcon name="schedule" className="text-[16px]" />
-            We&apos;ll respond within 24 hours
+            Support will follow up on this order
           </p>
         </section>
       </main>

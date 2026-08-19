@@ -164,26 +164,32 @@ app.get("/merchants", async (c) => {
 
     const merchantId = String(merchant.id);
 
-    const { data: categories } = await supabase
-      .from("menu_categories")
-      .select("*")
-      .eq("merchant_id", merchantId)
-      .eq("is_active", true)
-      .order("sort_order");
-
-    const { data: items } = await supabase
-      .from("menu_items")
-      .select("*")
-      .eq("merchant_id", merchantId)
-      .eq("is_available", true)
-      .order("sort_order");
-
-    const feeResolved = await resolveFeeRateForMerchant(supabase, merchantId);
+    const [{ data: categories }, { data: items }, { data: hours }, feeResolved] = await Promise.all([
+      supabase
+        .from("menu_categories")
+        .select("*")
+        .eq("merchant_id", merchantId)
+        .eq("is_active", true)
+        .order("sort_order"),
+      supabase
+        .from("menu_items")
+        .select("*")
+        .eq("merchant_id", merchantId)
+        .eq("is_available", true)
+        .order("sort_order"),
+      supabase
+        .from("merchant_hours")
+        .select("day_of_week, open_time, close_time, is_closed")
+        .eq("merchant_id", merchantId)
+        .order("day_of_week"),
+      resolveFeeRateForMerchant(supabase, merchantId),
+    ]);
 
     return c.json({
       merchant,
       categories: categories || [],
       items: items || [],
+      hours: hours || [],
       platform_fee_rate: feeResolved.rate,
     });
   });
@@ -356,11 +362,21 @@ async function requireOwnedMerchant(
 app.get("/merchants/:id/hours", async (c) => {
   const supabase = getServiceSupabase();
   const { id } = c.req.param();
-  
+
+  let merchantId = id;
+  const byId = await supabase.from("merchants").select("id").eq("id", id).maybeSingle();
+  if (byId.data) {
+    merchantId = String((byId.data as { id: string }).id);
+  } else {
+    const bySlug = await supabase.from("merchants").select("id").eq("slug", id).maybeSingle();
+    if (!bySlug.data) return c.json({ error: "Merchant not found" }, 404);
+    merchantId = String((bySlug.data as { id: string }).id);
+  }
+
   const { data: hours, error } = await supabase
     .from("merchant_hours")
     .select("*")
-    .eq("merchant_id", id)
+    .eq("merchant_id", merchantId)
     .order("day_of_week");
   
   if (error) return c.json({ error: error.message }, 500);

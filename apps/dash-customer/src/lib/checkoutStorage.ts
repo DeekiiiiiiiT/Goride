@@ -26,7 +26,7 @@ const DEFAULTS: CheckoutPreferences = {
   paymentMethodId: 'wipay',
 };
 
-function normalizePaymentMethodId(id: unknown): PaymentMethodId {
+export function normalizePaymentMethodId(id: unknown): PaymentMethodId {
   if (id === 'paypal' || id === 'cash' || id === 'wipay') return id;
   // Migrate legacy fake card ids → wipay
   return 'wipay';
@@ -92,6 +92,13 @@ export function getPaymentLabel(id: PaymentMethodId): string {
 
 export function getApiPaymentMethod(id: PaymentMethodId): 'cash' | 'wipay' | 'paypal' {
   return id;
+}
+
+/** Apply a server-saved default rail to local checkout prefs. */
+export function hydratePreferredPaymentMethod(id: unknown): PaymentMethodId {
+  const paymentMethodId = normalizePaymentMethodId(id);
+  saveCheckoutPreferences({ paymentMethodId });
+  return paymentMethodId;
 }
 
 export type ScheduleDate = {

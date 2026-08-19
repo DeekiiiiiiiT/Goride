@@ -185,6 +185,10 @@ export function getSavedAddress(): DeliveryAddress | null {
   }
 }
 
+export async function selectSavedAddress(address: SavedAddress): Promise<void> {
+  await upsertSavedAddressAsync({ ...address, isDefault: true });
+}
+
 export function saveDeliveryAddress(address: DeliveryAddress): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(address));

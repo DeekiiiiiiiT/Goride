@@ -1,7 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { API_ENDPOINTS } from '@roam/api-client';
-import { supabase } from '@/lib/supabase';
+import { fetchCustomerOrders } from '@/lib/customerApi';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PullToRefresh } from '@/components/ui/PullToRefresh';
@@ -74,18 +73,7 @@ export default function OrdersPage({ onNavigate }: Props) {
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['customer-orders'],
-    queryFn: async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session) throw new Error('Not authenticated');
-
-      const res = await fetch(`${API_ENDPOINTS.delivery}/customer/orders`, {
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      });
-      if (!res.ok) throw new Error('Failed to fetch orders');
-      return res.json();
-    },
+    queryFn: fetchCustomerOrders,
     retry: false,
   });
 

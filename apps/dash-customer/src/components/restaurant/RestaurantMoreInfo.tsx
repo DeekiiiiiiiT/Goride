@@ -28,23 +28,33 @@ export function RestaurantMoreInfo({ restaurant }: Props) {
         <div className="mt-4 space-y-4 text-body-sm text-on-surface-variant">
           <div>
             <h4 className="text-label-sm font-semibold text-on-surface uppercase tracking-wider mb-2">Hours</h4>
-            <ul className="space-y-1">
-              {restaurant.hours.map((row) => (
-                <li key={row.day} className="flex justify-between gap-4">
-                  <span>{row.day}</span>
-                  <span className="text-on-surface">{row.open} – {row.close}</span>
-                </li>
-              ))}
-            </ul>
+            {restaurant.hours.length === 0 ? (
+              <p>Hours not published yet</p>
+            ) : (
+              <ul className="space-y-1">
+                {restaurant.hours.map((row) => (
+                  <li key={row.day} className="flex justify-between gap-4">
+                    <span>{row.day}</span>
+                    <span className="text-on-surface">
+                      {row.open === 'Closed' || row.close === 'Closed' ? 'Closed' : `${row.open} – ${row.close}`}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
-          <div className="flex items-start gap-2">
-            <MaterialIcon name="location_on" className="text-primary shrink-0 text-[18px]" />
-            <span>{restaurant.address}</span>
-          </div>
-          <a href={`tel:${restaurant.phone.replace(/\s/g, '')}`} className="flex items-center gap-2 text-primary font-semibold">
-            <MaterialIcon name="call" className="text-[18px]" />
-            {restaurant.phone}
-          </a>
+          {restaurant.address ? (
+            <div className="flex items-start gap-2">
+              <MaterialIcon name="location_on" className="text-primary shrink-0 text-[18px]" />
+              <span>{restaurant.address}</span>
+            </div>
+          ) : null}
+          {restaurant.phone ? (
+            <a href={`tel:${restaurant.phone.replace(/\s/g, '')}`} className="flex items-center gap-2 text-primary font-semibold">
+              <MaterialIcon name="call" className="text-[18px]" />
+              {restaurant.phone}
+            </a>
+          ) : null}
         </div>
       )}
     </div>

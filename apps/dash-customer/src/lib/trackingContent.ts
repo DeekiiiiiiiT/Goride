@@ -34,9 +34,18 @@ export type TrackingOrder = {
     avatar: string;
     vehicle: string;
     plate: string;
+    phone?: string;
   };
   courierLat?: number | null;
   courierLng?: number | null;
+  deliveryLat?: number | null;
+  deliveryLng?: number | null;
+  placedAt?: string;
+  acceptedAt?: string;
+  preparingAt?: string;
+  estimatedPrepMins?: number | null;
+  estimatedDeliveryAt?: string | null;
+  merchantAvgPrepMins?: number | null;
   deliveryPhotoUrl?: string;
   deliveredLabel?: string;
   /** Approximate map until live courier GPS (Phase 3) */
@@ -160,12 +169,13 @@ export function mapApiOrderToTracking(order: Record<string, unknown>): TrackingO
     items,
     courier: courier
       ? {
-          name: String(courier.name ?? 'Courier'),
+          name: String(courier.display_name ?? courier.name ?? 'Courier'),
           rating: Number(courier.rating ?? 0),
           deliveries: '',
           avatar: String(courier.avatar_url ?? ''),
           vehicle: String(courier.vehicle_type ?? ''),
           plate: String(courier.vehicle_plate ?? ''),
+          phone: courier.phone ? String(courier.phone) : undefined,
         }
       : {
           name: 'Courier',
@@ -177,8 +187,111 @@ export function mapApiOrderToTracking(order: Record<string, unknown>): TrackingO
         },
     courierLat: order.courier_lat != null ? Number(order.courier_lat) : null,
     courierLng: order.courier_lng != null ? Number(order.courier_lng) : null,
+    deliveryLat: order.delivery_lat != null ? Number(order.delivery_lat) : null,
+    deliveryLng: order.delivery_lng != null ? Number(order.delivery_lng) : null,
+    placedAt: order.placed_at ? String(order.placed_at) : undefined,
+    acceptedAt: order.accepted_at ? String(order.accepted_at) : undefined,
+    preparingAt: order.preparing_at ? String(order.preparing_at) : undefined,
+    estimatedPrepMins:
+      order.estimated_prep_time_mins != null ? Number(order.estimated_prep_time_mins) : null,
+    estimatedDeliveryAt: order.estimated_delivery_at ? String(order.estimated_delivery_at) : null,
+    merchantAvgPrepMins:
+      merchant.avg_prep_time_mins != null ? Number(merchant.avg_prep_time_mins) : null,
     deliveryPhotoUrl: order.delivery_photo_url ? String(order.delivery_photo_url) : undefined,
     deliveredLabel: formatDeliveredClock(order.delivered_at),
     locationApproximate: order.courier_lat == null || order.courier_lng == null,
   };
+}
+
+export type DeliveryHandoff = {
+  mode: 'hand' | 'door';
+  notes: string;
+};
+
+/** Checkout stores "Hand it to me" vs free-text door instructions. Never invent a gate code. */
+export function parseDeliveryHandoff(instructions: string | null | undefined): DeliveryHandoff {
+  const raw = (instructions ?? '').trim();
+  if (!raw) return { mode: 'door', notes: '' };
+  if (/^hand it to me/i.test(raw)) {
+    const notes = raw.replace(/^hand it to me[.!\s-]*/i, '').trim();
+    return { mode: 'hand', notes };
+  }
+  return { mode: 'door', notes: raw };
+}
+
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+export function remainingPrepMinutes(opts: {
+  nowMs: number;
+  placedAt?: string;
+  acceptedAt?: string;
+  preparingAt?: string;
+  estimatedPrepMins?: number | null;
+  merchantAvgPrepMins?: number | null;
+}): number | null {
+  const prep = opts.estimatedPrepMins ?? opts.merchantAvgPrepMins;
+  if (prep == null || !Number.isFinite(prep) || prep <= 0) return null;
+  const anchor = opts.preparingAt || opts.acceptedAt || opts.placedAt;
+  if (!anchor) return Math.ceil(prep);
+  const start = new Date(anchor).getTime();
+  if (Number.isNaN(start)) return Math.ceil(prep);
+  return Math.max(0, Math.ceil(prep - (opts.nowMs - start) / 60_000));
+}
+
+export function remainingDeliveryMinutes(opts: {
+  nowMs: number;
+  estimatedDeliveryAt?: string | null;
+  courierLat?: number | null;
+  courierLng?: number | null;
+  deliveryLat?: number | null;
+  deliveryLng?: number | null;
+}): number | null {
+  if (opts.estimatedDeliveryAt) {
+    const t = new Date(opts.estimatedDeliveryAt).getTime();
+    if (!Number.isNaN(t)) return Math.max(0, Math.ceil((t - opts.nowMs) / 60_000));
+  }
+  const { courierLat, courierLng, deliveryLat, deliveryLng } = opts;
+  if (
+    courierLat == null ||
+    courierLng == null ||
+    deliveryLat == null ||
+    deliveryLng == null ||
+    !Number.isFinite(courierLat) ||
+    !Number.isFinite(courierLng) ||
+    !Number.isFinite(deliveryLat) ||
+    !Number.isFinite(deliveryLng)
+  ) {
+    return null;
+  }
+  const km = haversineKm(courierLat, courierLng, deliveryLat, deliveryLng);
+  if (km < 0.08) return 0;
+  return Math.max(1, Math.round(km * 3 + 2));
+}
+
+export function formatPrepEta(mins: number | null): string {
+  if (mins == null) return 'Restaurant is preparing';
+  if (mins <= 0) return 'Almost ready';
+  return `${mins} min`;
+}
+
+export function formatArrivalEta(mins: number | null): string {
+  if (mins == null) return 'On the way';
+  if (mins <= 0) return 'Arriving now';
+  return `Arriving in ${mins} min`;
+}
+
+export function courierPhoneHref(phone: string | undefined, scheme: 'tel' | 'sms'): string | null {
+  if (!phone) return null;
+  const cleaned = phone.replace(/[^\d+]/g, '');
+  const digits = cleaned.replace(/\D/g, '');
+  if (digits.length < 7) return null;
+  return `${scheme}:${cleaned}`;
 }

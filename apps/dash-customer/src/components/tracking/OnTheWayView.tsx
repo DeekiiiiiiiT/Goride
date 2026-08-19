@@ -1,15 +1,29 @@
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { DEFAULT_ORDER_STEPS, OrderStatusStepper } from '@/components/ui/OrderStatusStepper';
 import type { TrackingOrder } from '@/lib/trackingContent';
+import { formatArrivalEta, remainingDeliveryMinutes } from '@/lib/trackingContent';
 import { CourierActions, CourierProfileCard } from './CourierShared';
 import { CourierTrackingMap } from './CourierTrackingMap';
 
 type Props = {
   order: TrackingOrder;
   onBack: () => void;
+  onHelp?: () => void;
+  onDetails?: () => void;
 };
 
-export function OnTheWayView({ order, onBack }: Props) {
+export function OnTheWayView({ order, onBack, onHelp, onDetails }: Props) {
+  const arrival = formatArrivalEta(
+    remainingDeliveryMinutes({
+      nowMs: Date.now(),
+      estimatedDeliveryAt: order.estimatedDeliveryAt,
+      courierLat: order.courierLat,
+      courierLng: order.courierLng,
+      deliveryLat: order.deliveryLat,
+      deliveryLng: order.deliveryLng,
+    }),
+  );
+
   return (
     <div className="app-fullscreen-screen safe-x safe-t bg-background w-full overflow-hidden flex flex-col relative">
       <CourierTrackingMap order={order} className="absolute inset-0 z-0" preferCourier />
@@ -19,7 +33,7 @@ export function OnTheWayView({ order, onBack }: Props) {
           <button type="button" onClick={onBack} className="w-10 h-10 bg-surface rounded-full shadow flex items-center justify-center">
             <MaterialIcon name="arrow_back" />
           </button>
-          <button type="button" className="px-4 py-2 bg-surface rounded-full shadow text-label-sm text-primary flex items-center gap-2">
+          <button type="button" onClick={onHelp} className="px-4 py-2 bg-surface rounded-full shadow text-label-sm text-primary flex items-center gap-2">
             <span>Help</span>
             <MaterialIcon name="help_outline" className="text-[16px]" />
           </button>
@@ -30,7 +44,16 @@ export function OnTheWayView({ order, onBack }: Props) {
             <div>
               <h1 className="text-headline-sm font-semibold mb-1">{order.courier.name} is on the way!</h1>
               <p className="text-body-sm text-on-surface-variant">
-                Arriving in <span className="text-label-md font-semibold text-primary">12 min</span>
+                {arrival.startsWith('Arriving in ') ? (
+                  <>
+                    Arriving in{' '}
+                    <span className="text-label-md font-semibold text-primary">
+                      {arrival.replace('Arriving in ', '')}
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-label-md font-semibold text-primary">{arrival}</span>
+                )}
               </p>
             </div>
             <div className="bg-surface-variant px-3 py-1 rounded-full">
@@ -57,10 +80,10 @@ export function OnTheWayView({ order, onBack }: Props) {
 
           <div className="flex items-center justify-between mb-6">
             <CourierProfileCard courier={order.courier} compact />
-            <CourierActions />
+            <CourierActions phone={order.courier.phone} />
           </div>
 
-          <button type="button" className="w-full flex justify-between items-center border-t border-surface-variant pt-4">
+          <button type="button" onClick={onDetails} className="w-full flex justify-between items-center border-t border-surface-variant pt-4">
             <div className="text-left">
               <h4 className="text-label-md font-semibold">Order #ROAM-{order.orderNumber}</h4>
               <p className="text-body-sm text-on-surface-variant mt-1">

@@ -1,3 +1,5 @@
+import { API_ENDPOINTS, supabaseAnonFunctionHeaders } from '@roam/api-client';
+
 export type ReviewSort = 'recent' | 'highest' | 'lowest';
 
 export type RestaurantReview = {
@@ -19,43 +21,66 @@ export type RestaurantReviewsSummary = {
   reviews: RestaurantReview[];
 };
 
-const ISLAND_GRILL_REVIEWS: RestaurantReviewsSummary = {
-  merchantId: 'island-grill',
-  merchantName: 'Island Grill',
-  rating: 4.8,
-  reviewCount: 2341,
-  distribution: [85, 10, 3, 1, 1],
-  reviews: [
-    {
-      id: 'review-1',
-      author: 'Sarah J.',
-      initial: 'S',
-      avatarClass: 'bg-secondary-container text-on-secondary-container',
-      rating: 5,
-      date: '2 days ago',
-      comment: 'Best jerk chicken in Kingston! Always fresh and delivery is fast.',
-    },
-    {
-      id: 'review-2',
-      author: 'Michael R.',
-      initial: 'M',
+type MerchantReviewsApi = {
+  merchantId: string;
+  merchantName: string;
+  rating: number;
+  reviewCount: number;
+  distribution: number[];
+  reviews: Array<{ id: string; rating: number; comment: string; at: string }>;
+};
+
+function formatReviewDate(iso: string): string {
+  if (!iso) return '';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleDateString('en-JM', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function emptySummary(merchantId: string): RestaurantReviewsSummary {
+  return {
+    merchantId,
+    merchantName: 'Restaurant',
+    rating: 0,
+    reviewCount: 0,
+    distribution: [0, 0, 0, 0, 0],
+    reviews: [],
+  };
+}
+
+export async function fetchMerchantReviews(merchantId: string): Promise<RestaurantReviewsSummary> {
+  const res = await fetch(
+    `${API_ENDPOINTS.delivery}/merchants/${encodeURIComponent(merchantId)}/reviews`,
+    { headers: supabaseAnonFunctionHeaders() },
+  );
+  if (!res.ok) throw new Error('Failed to load reviews');
+  const data = (await res.json()) as MerchantReviewsApi;
+  const counts = data.distribution ?? [0, 0, 0, 0, 0];
+  const total = Math.max(1, data.reviewCount || 0);
+  const distribution = [0, 1, 2, 3, 4].map((i) =>
+    Math.round(((counts[i] ?? 0) / total) * 100),
+  ) as RestaurantReviewsSummary['distribution'];
+
+  return {
+    merchantId: data.merchantId,
+    merchantName: data.merchantName || 'Restaurant',
+    rating: data.rating ?? 0,
+    reviewCount: data.reviewCount ?? 0,
+    distribution,
+    reviews: (data.reviews ?? []).map((row) => ({
+      id: row.id,
+      author: 'Customer',
+      initial: 'C',
       avatarClass: 'bg-primary-container/20 text-primary',
-      rating: 4,
-      date: '1 week ago',
-      comment: 'Great flavors, though the festival was slightly cold.',
-    },
-  ],
-};
+      rating: row.rating,
+      date: formatReviewDate(row.at),
+      comment: row.comment,
+    })),
+  };
+}
 
-const REVIEWS_BY_MERCHANT: Record<string, RestaurantReviewsSummary> = {
-  'island-grill': ISLAND_GRILL_REVIEWS,
-};
-
-export function getRestaurantReviews(merchantId?: string): RestaurantReviewsSummary {
-  if (merchantId && REVIEWS_BY_MERCHANT[merchantId]) {
-    return REVIEWS_BY_MERCHANT[merchantId];
-  }
-  return ISLAND_GRILL_REVIEWS;
+export function emptyMerchantReviews(merchantId?: string): RestaurantReviewsSummary {
+  return emptySummary(merchantId || '');
 }
 
 export function sortReviews(reviews: RestaurantReview[], sort: ReviewSort): RestaurantReview[] {
