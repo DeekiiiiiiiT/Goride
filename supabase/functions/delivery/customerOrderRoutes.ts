@@ -17,6 +17,7 @@ import {
   resolveDashPlatformFeeRate,
 } from "./platformFeeRate.ts";
 import { assertMerchantAcceptingOrders } from "./merchantOpenCheck.ts";
+import { ORDER_CUSTOMER_EMBED_WITH_USER } from "./orderSelectEmbeds.ts";
 
 function asCoord(value: unknown): number | null {
   if (value == null || value === "") return null;
@@ -383,7 +384,7 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       .select(`
       *,
       merchant:merchants(id, name, logo_url, phone, address, avg_prep_time_mins),
-      customer:customers(id, name, phone, user_id)
+      ${ORDER_CUSTOMER_EMBED_WITH_USER}
     `)
       .eq("id", id)
       .single();
