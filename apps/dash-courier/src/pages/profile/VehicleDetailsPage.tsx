@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { SubPageHeader } from '@/components/layout/SubPageHeader';
-import { loadPrimaryVehicle, type CourierVehicleRow } from '@/lib/courierVehicleService';
-import { loadSignupDraft, saveSignupDraft } from '@/lib/signupDraft';
+import { loadPrimaryVehicle, upsertCourierVehicle, type CourierVehicleRow } from '@/lib/courierVehicleService';
+import { updateCourierProfile } from '@/lib/courierProfileService';
+import { toast } from '@/lib/toast';
 
 type VehicleDetailsPageProps = {
   onBack: () => void;
@@ -57,13 +58,26 @@ export function VehicleDetailsPage({ onBack, onEditVehicle }: VehicleDetailsPage
     };
   }, []);
 
-  const handleSwitchType = (type: 'bicycle' | 'motorcycle' | 'car') => {
-    saveSignupDraft({ vehicleType: type });
+  const handleSwitchType = async (type: 'bicycle' | 'motorcycle' | 'car') => {
+    if (!vehicle) return;
+    const result = await upsertCourierVehicle({
+      makeModel: `${vehicle.make} ${vehicle.model}`.trim(),
+      licensePlate: vehicle.license_plate,
+      color: vehicle.color || '',
+      vehicleType: type,
+    });
+    if (!result.ok) {
+      toast.error('Could not switch vehicle', result.error);
+      return;
+    }
+    await updateCourierProfile({ vehicle_type: type });
+    setVehicle({ ...vehicle, ...result.vehicle, vehicle_type: type });
     setSwitchOpen(false);
+    toast.success('Vehicle type updated');
   };
 
-  const colorLabel = vehicle?.color || loadSignupDraft().color || '—';
-  const colorHex = colorToHex(vehicle?.color || loadSignupDraft().color);
+  const colorLabel = vehicle?.color || '—';
+  const colorHex = colorToHex(vehicle?.color);
 
   return (
     <div className="fixed inset-0 z-[70] bg-background flex flex-col overflow-hidden">
@@ -158,7 +172,7 @@ export function VehicleDetailsPage({ onBack, onEditVehicle }: VehicleDetailsPage
               <button
                 key={opt.type}
                 type="button"
-                onClick={() => handleSwitchType(opt.type)}
+                onClick={() => void handleSwitchType(opt.type)}
                 className="w-full flex items-center gap-3 p-4 rounded-xl bg-surface-container-low hover:bg-surface-container active:scale-[0.98]"
               >
                 <MaterialIcon name={opt.icon} className="text-primary" />

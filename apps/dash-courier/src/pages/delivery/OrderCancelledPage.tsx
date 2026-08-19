@@ -1,13 +1,48 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
-import { MOCK_ORDER_CANCELLATION, formatJmd } from '@/lib/mockPromotions';
+import { fetchCourierOrderDetail } from '@/lib/courierApi';
+import { ISSUE_CATEGORIES } from '@/lib/mockPromotions';
 
 type OrderCancelledPageProps = {
+  orderId?: string;
   onBackToDash: () => void;
 };
 
-export function OrderCancelledPage({ onBackToDash }: OrderCancelledPageProps) {
-  const cancellation = MOCK_ORDER_CANCELLATION;
+const ACTOR_LABELS: Record<string, string> = {
+  customer: 'Customer',
+  courier: 'You',
+  merchant: 'Restaurant',
+  merchant_device: 'Restaurant',
+  admin: 'Roam',
+};
+
+function actorLabel(raw: string | null | undefined): string {
+  if (!raw) return 'Unknown';
+  const key = raw.trim().toLowerCase();
+  return ACTOR_LABELS[key] || raw;
+}
+
+function reasonLabel(raw: string | null | undefined): string {
+  if (!raw) return 'No reason provided';
+  const key = raw.trim();
+  const match = ISSUE_CATEGORIES.find((c) => c.id === key);
+  if (match) return match.label;
+  if (key === 'courier_unassign') return 'Unassigned by courier';
+  return key.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
+}
+
+export function OrderCancelledPage({ orderId, onBackToDash }: OrderCancelledPageProps) {
+  const [cancelledBy, setCancelledBy] = useState('Unknown');
+  const [reason, setReason] = useState('No reason provided');
+
+  useEffect(() => {
+    if (!orderId) return;
+    void fetchCourierOrderDetail(orderId).then((payload) => {
+      if (!payload?.order) return;
+      setCancelledBy(actorLabel(payload.order.cancelled_by as string | undefined));
+      setReason(reasonLabel(payload.order.cancellation_reason as string | undefined));
+    });
+  }, [orderId]);
 
   return (
     <div className="fixed inset-0 z-[80] bg-surface flex flex-col overflow-hidden">
@@ -24,11 +59,11 @@ export function OrderCancelledPage({ onBackToDash }: OrderCancelledPageProps) {
         <div className="w-full max-w-md bg-background rounded-xl p-6 shadow-sm border border-surface-variant flex flex-col gap-4">
           <div className="flex justify-between items-center py-2 border-b border-surface-variant">
             <span className="text-sm text-muted">Cancelled by</span>
-            <span className="text-xl font-semibold text-on-surface">{cancellation.cancelledBy}</span>
+            <span className="text-xl font-semibold text-on-surface">{cancelledBy}</span>
           </div>
           <div className="flex flex-col gap-1 py-2">
             <span className="text-sm text-muted">Reason</span>
-            <span className="text-base text-on-surface">{cancellation.reason}</span>
+            <span className="text-base text-on-surface">{reason}</span>
           </div>
         </div>
 
@@ -37,11 +72,7 @@ export function OrderCancelledPage({ onBackToDash }: OrderCancelledPageProps) {
             <MaterialIcon name="info" className="text-primary text-xl" />
           </div>
           <p className="text-sm text-on-surface-variant pt-2">
-            You&apos;ll receive{' '}
-            <span className="text-xs font-semibold uppercase tracking-wide text-primary">
-              J${formatJmd(cancellation.compensation)}
-            </span>{' '}
-            for your time.
+            Cancelled orders are not paid. Head back to dash to keep receiving offers.
           </p>
         </div>
 

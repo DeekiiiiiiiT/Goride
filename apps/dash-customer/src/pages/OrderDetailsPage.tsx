@@ -6,7 +6,7 @@ import { ReorderSheet } from '@/components/orders/ReorderSheet';
 import { PROFILE_HEADER_AVATAR } from '@/lib/accountContent';
 import {
   buildReorderFromOrder,
-  downloadOrderReceipt,
+  shareOrderReceipt,
   getOrderById,
   ISLAND_GRILL_ORDER_DETAIL,
   mapApiOrderToDetails,
@@ -15,6 +15,7 @@ import {
 import { allowMocks } from '@/lib/mocksGate';
 import { formatJmd } from '@/lib/restaurantContent';
 import { supabase } from '@/lib/supabase';
+import { toast } from '@/lib/toast';
 import { useCart } from '@/hooks/useCart';
 
 type Props = {
@@ -254,7 +255,14 @@ export default function OrderDetailsPage({ orderId, onNavigate }: Props) {
 
           <button
             type="button"
-            onClick={() => downloadOrderReceipt(order)}
+            onClick={() => {
+              void shareOrderReceipt(order)
+                .then((result) => {
+                  if (result === 'downloaded') toast.success('Receipt downloaded');
+                  if (result === 'copied') toast.success('Receipt copied');
+                })
+                .catch(() => toast.error('Could not share this receipt'));
+            }}
             className="mt-6 flex w-full items-center justify-center gap-2 rounded-lg py-3 text-label-md font-semibold text-primary transition-colors hover:bg-surface-container"
           >
             <MaterialIcon name="download" className="text-[20px]" />
@@ -287,7 +295,13 @@ export default function OrderDetailsPage({ orderId, onNavigate }: Props) {
           </button>
           <button
             type="button"
-            onClick={() => onNavigate('report-issue', { orderId: order.id })}
+            onClick={() =>
+              onNavigate('report-issue', {
+                orderId: order.id,
+                returnTo: 'order-details',
+                issueType: 'other',
+              })
+            }
             className="flex w-full items-center justify-center gap-2 bg-transparent py-3 text-label-md font-semibold text-on-surface-variant transition-colors hover:text-primary"
           >
             <MaterialIcon name="help" className="text-[20px]" />

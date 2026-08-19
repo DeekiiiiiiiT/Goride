@@ -2,6 +2,8 @@ import React, { useRef, useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import type { ActiveDelivery, DropoffMethod } from '@/lib/mockActiveDelivery';
 import { CUSTOMER_AVATAR } from '@/lib/mockActiveDelivery';
+import { parseDeliveryHandoff } from '@/lib/deliveryHandoff';
+import { openPhoneCall, openSmsMessage, toDialablePhone } from '@/lib/contactLinks';
 import { useVisualViewport } from '@/hooks/useVisualViewport';
 
 type AtCustomerPageProps = {
@@ -17,13 +19,20 @@ export function AtCustomerPage({
   onComplete,
   onCustomerUnavailable,
 }: AtCustomerPageProps) {
-  const [method, setMethod] = useState<DropoffMethod>('leave-at-door');
+  const handoff = parseDeliveryHandoff(delivery.deliveryInstructions);
+  const [method, setMethod] = useState<DropoffMethod>(
+    handoff.mode === 'hand' ? 'hand-to-customer' : 'leave-at-door',
+  );
   const [hasPhoto, setHasPhoto] = useState(false);
   const [photoUrl, setPhotoUrl] = useState<string | undefined>();
   const [note, setNote] = useState('');
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const keyboardOffset = useVisualViewport();
+  const customerPhone = toDialablePhone(delivery.customerPhone);
+  const instructionText = (delivery.deliveryInstructions || '').trim() || 'No special instructions';
+  const gateCode = (delivery.gateCode || '').trim();
+  const unit = (delivery.unit || '').trim();
 
   const canComplete = method === 'hand-to-customer' || hasPhoto;
 
@@ -70,18 +79,28 @@ export function AtCustomerPage({
             </div>
           </div>
           <div className="flex gap-2">
-            <button
-              type="button"
-              className="w-12 h-12 rounded-full bg-surface-container flex items-center justify-center border border-surface-dim active:scale-90"
-            >
-              <MaterialIcon name="chat" />
-            </button>
-            <button
-              type="button"
-              className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary border border-primary/20 active:scale-90"
-            >
-              <MaterialIcon name="call" filled />
-            </button>
+            {customerPhone && (
+              <button
+                type="button"
+                onClick={() =>
+                  openSmsMessage(customerPhone, 'Hi, your Roam Rush courier is at your door.')
+                }
+                aria-label="Message customer"
+                className="w-12 h-12 rounded-full bg-surface-container flex items-center justify-center border border-surface-dim active:scale-90"
+              >
+                <MaterialIcon name="chat" />
+              </button>
+            )}
+            {customerPhone && (
+              <button
+                type="button"
+                onClick={() => openPhoneCall(customerPhone)}
+                aria-label="Call customer"
+                className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary border border-primary/20 active:scale-90"
+              >
+                <MaterialIcon name="call" filled />
+              </button>
+            )}
           </div>
         </section>
 
@@ -97,25 +116,35 @@ export function AtCustomerPage({
                 <MaterialIcon name="sensor_door" className="text-xl" />
               </div>
               <span className="text-base font-semibold text-on-surface pt-2">
-                Leave at door, don&apos;t knock
+                {instructionText}
               </span>
             </div>
+            {(gateCode || unit) && (
             <div className="grid grid-cols-2 gap-3">
+              {gateCode ? (
               <div className="flex items-center gap-3 bg-surface-container-low p-3 rounded-xl border border-outline-variant/20">
                 <MaterialIcon name="dialpad" className="text-muted text-xl shrink-0" />
                 <div>
                   <span className="text-[10px] text-muted uppercase block">Gate Code</span>
-                  <span className="text-sm font-semibold text-on-surface">{delivery.gateCode}</span>
+                  <span className="text-sm font-semibold text-on-surface">{gateCode}</span>
                 </div>
               </div>
+              ) : (
+                <div />
+              )}
+              {unit ? (
               <div className="flex items-center gap-3 bg-surface-container-low p-3 rounded-xl border border-outline-variant/20">
                 <MaterialIcon name="apartment" className="text-muted text-xl shrink-0" />
                 <div>
                   <span className="text-[10px] text-muted uppercase block">Unit</span>
-                  <span className="text-sm font-semibold text-on-surface">{delivery.unit}</span>
+                  <span className="text-sm font-semibold text-on-surface">{unit}</span>
                 </div>
               </div>
+              ) : (
+                <div />
+              )}
             </div>
+            )}
           </div>
         </section>
 

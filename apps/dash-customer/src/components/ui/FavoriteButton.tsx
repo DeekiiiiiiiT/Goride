@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
-import { isFavorite, subscribeFavorites, toggleFavorite } from '@/lib/favoritesStorage';
+import {
+  isFavorite,
+  isFavoriteItem,
+  subscribeFavorites,
+  toggleFavoriteAsync,
+  toggleFavoriteItemAsync,
+} from '@/lib/favoritesStorage';
 import { hapticMedium } from '@/lib/haptics';
 import { toast } from '@/lib/toast';
 import { useLongPress } from '@/hooks/useLongPress';
@@ -8,22 +14,44 @@ import { useLongPress } from '@/hooks/useLongPress';
 type Props = {
   merchantId: string;
   merchantName: string;
+  itemId?: string;
+  itemName?: string;
   className?: string;
 };
 
-export function FavoriteButton({ merchantId, merchantName, className = '' }: Props) {
-  const [favorited, setFavorited] = useState(() => isFavorite(merchantId));
+export function FavoriteButton({
+  merchantId,
+  merchantName,
+  itemId,
+  itemName,
+  className = '',
+}: Props) {
+  const label = itemName || merchantName;
+  const [favorited, setFavorited] = useState(() =>
+    itemId ? isFavoriteItem(merchantId, itemId) : isFavorite(merchantId),
+  );
 
   useEffect(() => {
-    return subscribeFavorites(() => setFavorited(isFavorite(merchantId)));
-  }, [merchantId]);
+    const read = () =>
+      setFavorited(itemId ? isFavoriteItem(merchantId, itemId) : isFavorite(merchantId));
+    read();
+    return subscribeFavorites(read);
+  }, [merchantId, itemId]);
 
   const handleToggle = () => {
-    const added = toggleFavorite(merchantId);
-    setFavorited(added);
-    hapticMedium();
-    if (added) toast.favoriteAdded(merchantName);
-    else toast.favoriteRemoved(merchantName);
+    void (async () => {
+      try {
+        const added = itemId
+          ? await toggleFavoriteItemAsync(merchantId, itemId)
+          : await toggleFavoriteAsync(merchantId);
+        setFavorited(added);
+        hapticMedium();
+        if (added) toast.favoriteAdded(label);
+        else toast.favoriteRemoved(label);
+      } catch {
+        toast.error('Could not update favorites');
+      }
+    })();
   };
 
   const longPress = useLongPress(handleToggle);
@@ -31,8 +59,9 @@ export function FavoriteButton({ merchantId, merchantName, className = '' }: Pro
   return (
     <button
       type="button"
-      aria-label={favorited ? 'Remove from favorites' : 'Add to favorites'}
+      aria-label={favorited ? `Remove ${label} from favorites` : `Save ${label} to favorites`}
       onClick={(e) => {
+        e.preventDefault();
         e.stopPropagation();
         if (!longPress.wasLongPress()) handleToggle();
       }}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildOrderReceiptText, buildReorderFromOrder, isLiveOrderStatus, type OrderHistoryEntry } from './ordersContent';
+import { buildOrderReceiptText, buildReorderFromOrder, isLiveOrderStatus, issueTypeFromChips, type OrderHistoryEntry } from './ordersContent';
 
 const baseOrder: OrderHistoryEntry = {
   id: '868174d8-bf7f-4afc-9d63-ea34d3d5320a',
@@ -58,6 +58,16 @@ describe('buildOrderReceiptText', () => {
     expect(text).toContain('Island Grill');
     expect(text).toContain('Jerk Chicken Meal');
     expect(text).toContain('Total  J$1,510');
+  });
+});
+
+describe('issueTypeFromChips', () => {
+  it('maps a problem chip to a support type', () => {
+    expect(issueTypeFromChips(['Great food', 'Item missing'])).toBe('missing');
+  });
+
+  it('returns null when only positive chips are selected', () => {
+    expect(issueTypeFromChips(['Fast delivery'])).toBeNull();
   });
 });
 

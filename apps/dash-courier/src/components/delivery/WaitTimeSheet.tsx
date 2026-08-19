@@ -47,8 +47,7 @@ export function WaitTimeSheet({ open, onClose, onWait, onUnassign }: WaitTimeShe
           </div>
 
           <p className="text-sm text-muted mb-4">
-            Letting us know helps update the customer and adjust future prep times for this
-            restaurant.
+            We&apos;ll log this wait so dispatch can see you&apos;re still on the job.
           </p>
 
           <div className="grid grid-cols-3 gap-2 mb-8">

@@ -7,9 +7,6 @@ type Props = {
   onRetry?: () => void;
 };
 
-const OFFLINE_ILLUSTRATION =
-  'https://lh3.googleusercontent.com/aida-public/AB6AXuDlnNwj8IhTvJ9h5iBedC9AdJl50xCeKiABr5T5Wkjuy9P_ecK50XbBjYkuvt-kmnfg8gGGt6yMJba_I2oooyL9gpp5QwcaYhXDJ2QlEcxqFIsjs0QbF2MEDeh2pU32fGreVG6lViwJ4hPYjQDOb8tHJYcOpl5VYbCCaw_sm83PXTqH0ZH_paSmu8rLeRE3LGyJe_XcvTg-oGkEqMm0L2SMIZKP-gKNYQBRTqV42A1LKEgxuyhuWBT5gNXnzykioQgWYKTgmTSKVX1u';
-
 export default function ConnectionErrorPage({
   onNavigate,
   hasActiveOrder = false,
@@ -27,12 +24,8 @@ export default function ConnectionErrorPage({
   return (
     <div className="bg-background min-h-dvh flex flex-col items-center justify-between p-4 pt-safe pb-safe antialiased">
       <div className="flex-1 w-full max-w-sm flex flex-col items-center justify-center text-center">
-        <div className="w-48 h-48 mb-6 rounded-full overflow-hidden shadow-sm bg-surface-container flex items-center justify-center relative">
-          <img
-            src={OFFLINE_ILLUSTRATION}
-            alt=""
-            className="absolute inset-0 w-full h-full object-cover opacity-90 mix-blend-multiply"
-          />
+        <div className="w-48 h-48 mb-6 rounded-full overflow-hidden shadow-sm bg-surface-container flex items-center justify-center">
+          <MaterialIcon name="wifi_off" className="text-on-surface-variant text-[64px]" />
         </div>
 
         <h1 className="text-headline-lg-mobile font-bold text-on-background mb-2">Something went wrong</h1>

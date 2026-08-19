@@ -1,10 +1,14 @@
 import React from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { loadSignupDraft } from '@/lib/signupDraft';
+import { formatJmd } from '@/lib/formatMoney';
 
 type HomeOfflinePageProps = {
   onGoOnline: () => void;
   courierName?: string;
+  todayEarned?: number;
+  todayDeliveries?: number;
+  acceptanceRate?: number | null;
 };
 
 function getGreeting(): string {
@@ -14,9 +18,16 @@ function getGreeting(): string {
   return 'Good evening';
 }
 
-export function HomeOfflinePage({ onGoOnline, courierName }: HomeOfflinePageProps) {
+export function HomeOfflinePage({
+  onGoOnline,
+  courierName,
+  todayEarned = 0,
+  todayDeliveries = 0,
+  acceptanceRate = null,
+}: HomeOfflinePageProps) {
   const draft = loadSignupDraft();
   const displayName = courierName ?? draft.displayName?.split(' ')[0] ?? draft.fullName?.split(' ')[0] ?? 'Courier';
+  const acceptanceLabel = acceptanceRate != null ? `${Math.round(acceptanceRate)}%` : '—';
 
   return (
     <main className="max-w-md mx-auto px-[var(--spacing-edge)] pt-[calc(56px+env(safe-area-inset-top)+24px)] pb-24 flex flex-col gap-6">
@@ -63,7 +74,7 @@ export function HomeOfflinePage({ onGoOnline, courierName }: HomeOfflinePageProp
             <MaterialIcon name="payments" className="text-[20px]" />
             <span className="text-xs font-semibold uppercase tracking-wide">Today&apos;s Earnings</span>
           </div>
-          <div className="text-[28px] leading-9 font-bold text-on-background">J$0.00</div>
+          <div className="text-[28px] leading-9 font-bold text-on-background">J${formatJmd(todayEarned)}</div>
         </div>
 
         <div className="flex flex-col gap-4">
@@ -72,13 +83,13 @@ export function HomeOfflinePage({ onGoOnline, courierName }: HomeOfflinePageProp
               <MaterialIcon name="local_shipping" className="text-[20px]" />
               <span className="text-xs font-semibold uppercase tracking-wide">Deliveries</span>
             </div>
-            <div className="text-[28px] leading-9 font-bold text-on-background">0</div>
+            <div className="text-[28px] leading-9 font-bold text-on-background">{todayDeliveries}</div>
           </div>
           <div className="bg-surface-bright rounded-xl p-3 border border-outline-variant flex items-center justify-between">
             <span className="text-xs font-semibold text-on-surface-variant">Acceptance Rate</span>
             <span className="inline-flex items-center gap-1 bg-surface-container-low text-primary px-2 py-1 rounded-full text-xs font-semibold">
               <MaterialIcon name="verified" className="text-[14px]" />
-              92%
+              {acceptanceLabel}
             </span>
           </div>
         </div>

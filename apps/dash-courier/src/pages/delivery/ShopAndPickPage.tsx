@@ -3,6 +3,9 @@ import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { SlideToConfirm } from '@/components/ui/SlideToConfirm';
 import { FRESH_MART_LOGO, type ActiveDelivery } from '@/lib/mockActiveDelivery';
 import { openPhoneCall, openSmsMessage, toDialablePhone } from '@/lib/contactLinks';
+import { submitCourierIssue } from '@/lib/courierApi';
+import { toast } from '@/lib/toast';
+import { realDispatchProvider } from '@/services/courierDispatch/RealDispatchProvider';
 
 type ShopAndPickPageProps = {
   delivery: ActiveDelivery;
@@ -25,12 +28,13 @@ export function ShopAndPickPage({
   const [picked, setPicked] = useState<Record<string, boolean>>(() => {
     const initial: Record<string, boolean> = {};
     delivery.checklist.forEach((item) => {
-      if (item.status === 'found' || item.status === 'substitute') {
+      if (item.status === 'found') {
         initial[item.id] = true;
       }
     });
     return initial;
   });
+  const [reportingId, setReportingId] = useState<string | null>(null);
 
   const pickedCount = useMemo(
     () => Object.values(picked).filter(Boolean).length,
@@ -44,18 +48,34 @@ export function ShopAndPickPage({
     setPicked((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
+  const handleCantFind = async (item: { id: string; label: string }) => {
+    const orderId = realDispatchProvider.activeOrderId || delivery.orderId;
+    setReportingId(item.id);
+    const ok = await submitCourierIssue(orderId, 'wrong_items', `cant_find:${item.label}`);
+    setReportingId(null);
+    if (ok) {
+      toast.success("Can't find logged", item.label);
+    } else {
+      toast.error('Could not log item', 'Try Report issue instead.');
+    }
+    if (customerPhone) {
+      openSmsMessage(
+        customerPhone,
+        `Hi, this is your Roam Rush courier. I can't find ${item.label} in the store.`,
+      );
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-[60] flex flex-col overflow-hidden bg-background">
       <header className="sticky top-0 z-50 flex h-16 w-full shrink-0 items-center justify-between border-b border-outline-variant bg-surface/80 px-4 pt-safe backdrop-blur-md">
-        <button type="button" onClick={onClose} aria-label="Menu" className="rounded-full p-2 text-primary">
-          <MaterialIcon name="menu" />
+        <button type="button" onClick={onClose} aria-label="Close" className="rounded-full p-2 text-primary">
+          <MaterialIcon name="close" />
         </button>
         <div className="rounded-full bg-primary-container px-3 py-1 text-label-lg font-semibold uppercase tracking-wider text-on-primary-container">
           Shopping
         </div>
-        <button type="button" className="rounded-full p-2 text-primary">
-          <MaterialIcon name="account_balance_wallet" />
-        </button>
+        <div className="w-10" aria-hidden />
       </header>
 
       <main className="mx-auto w-full max-w-2xl flex-1 space-y-6 overflow-y-auto px-4 pb-52 pt-4">
@@ -98,50 +118,7 @@ export function ShopAndPickPage({
 
           <div className="space-y-2">
             {delivery.checklist.map((item) => {
-              const isFound = item.status === 'found' || picked[item.id];
-              const isSubstitute = item.status === 'substitute';
-
-              if (isSubstitute) {
-                return (
-                  <div
-                    key={item.id}
-                    className="flex flex-col gap-4 rounded-xl border-2 border-tertiary-container bg-surface p-4 shadow-md"
-                  >
-                    <div className="flex items-center gap-4">
-                      {item.image && (
-                        <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-surface-container">
-                          <img alt={item.label} src={item.image} className="h-full w-full object-cover" />
-                        </div>
-                      )}
-                      <div className="flex-1">
-                        <p className="text-body-lg font-semibold text-on-surface">{item.label}</p>
-                        <div className="mt-2 flex gap-2">
-                          <button
-                            type="button"
-                            className="flex-1 rounded-lg border border-outline-variant bg-surface-container-high py-2 text-label-lg font-semibold text-on-surface-variant"
-                          >
-                            Can&apos;t find
-                          </button>
-                          <button
-                            type="button"
-                            className="flex-1 rounded-lg bg-tertiary py-2 text-label-lg font-semibold text-on-tertiary shadow-sm active:scale-95"
-                          >
-                            Substitute
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                    {item.substituteLabel && (
-                      <div className="flex items-center gap-2 rounded-lg border border-tertiary-container/30 bg-tertiary-container/10 p-2">
-                        <MaterialIcon name="swap_horiz" className="text-tertiary" />
-                        <p className="text-label-md text-on-tertiary-fixed-variant">
-                          Substituted: <span className="font-bold">{item.substituteLabel}</span>
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                );
-              }
+              const isFound = Boolean(picked[item.id]);
 
               return (
                 <div
@@ -177,11 +154,32 @@ export function ShopAndPickPage({
                         Found
                       </span>
                     ) : (
-                      item.note && <p className="text-label-md text-on-surface-variant">{item.note}</p>
+                      <>
+                        {item.note && <p className="text-label-md text-on-surface-variant">{item.note}</p>}
+                        <button
+                          type="button"
+                          disabled={reportingId === item.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void handleCantFind(item);
+                          }}
+                          className="mt-2 rounded-lg border border-outline-variant bg-surface-container-high px-3 py-1.5 text-label-lg font-semibold text-on-surface-variant disabled:opacity-60"
+                        >
+                          {reportingId === item.id ? 'Logging…' : "Can't find"}
+                        </button>
+                      </>
                     )}
                   </div>
                   {isFound ? (
-                    <button type="button" className="text-outline transition-colors hover:text-primary">
+                    <button
+                      type="button"
+                      aria-label="Mark as not found"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        togglePicked(item.id);
+                      }}
+                      className="text-outline transition-colors hover:text-primary"
+                    >
                       <MaterialIcon name="edit" />
                     </button>
                   ) : (

@@ -6,9 +6,10 @@ type OfflineModePageProps = {
   delivery: CachedDelivery;
   onRetry: () => void;
   onProfileClick?: () => void;
+  onMenuClick?: () => void;
 };
 
-export function OfflineModePage({ delivery, onRetry, onProfileClick }: OfflineModePageProps) {
+export function OfflineModePage({ delivery, onRetry, onProfileClick, onMenuClick }: OfflineModePageProps) {
   return (
     <div className="fixed inset-0 z-[75] bg-background flex flex-col overflow-hidden select-none">
       <div className="w-full bg-warning text-on-primary text-xs font-semibold uppercase tracking-wide py-2 px-[var(--spacing-edge)] pt-safe flex items-center justify-center gap-1 shadow-md">
@@ -19,6 +20,7 @@ export function OfflineModePage({ delivery, onRetry, onProfileClick }: OfflineMo
       <header className="w-full bg-surface shadow-sm flex items-center justify-between px-[var(--spacing-edge)] h-14">
         <button
           type="button"
+          onClick={onMenuClick}
           className="text-primary p-2 rounded-full hover:bg-surface-container-low active:scale-95 transition-colors"
           aria-label="Menu"
         >

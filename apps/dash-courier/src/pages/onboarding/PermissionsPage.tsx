@@ -5,6 +5,7 @@ import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import {
   canContinueCourierPermissions,
   checkCourierPermission,
+  openCourierAppSettings,
   requestCourierPermission,
   type CourierPermissionId,
   type PermissionGrantState,
@@ -112,17 +113,10 @@ export function PermissionsPage({ onBack, onContinue }: PermissionsPageProps) {
     try {
       // After a hard deny, Android won't re-show the dialog — send user to app settings.
       if (id === 'location' && granted.location === 'denied' && Capacitor.isNativePlatform()) {
-        try {
-          const { NativeSettings, AndroidSettings, IOSSettings } = await import(
-            'capacitor-native-settings'
-          );
-          if (Capacitor.getPlatform() === 'ios') {
-            await NativeSettings.openIOS({ option: IOSSettings.App });
-          } else {
-            await NativeSettings.openAndroid({ option: AndroidSettings.ApplicationDetails });
-          }
+        const opened = await openCourierAppSettings();
+        if (opened) {
           toast.info('Enable Location', "Set location to 'Allow all the time', then return here.");
-        } catch {
+        } else {
           toast.info(
             'Enable Location',
             "Open phone Settings → Apps → Roam Rush Courier → Permissions → Location → Allow all the time.",
@@ -212,7 +206,7 @@ export function PermissionsPage({ onBack, onContinue }: PermissionsPageProps) {
             type="button"
             disabled={!canContinue}
             onClick={() => {
-              void ensureCourierProfile().finally(onContinue);
+              void ensureCourierProfile({ markComplete: true }).finally(onContinue);
             }}
             className="w-full bg-primary-container text-on-primary-container font-semibold text-xl py-4 rounded-xl shadow-[0_6px_12px_rgba(16,185,129,0.1)] hover:bg-primary-container/90 transition-all active:scale-[0.98] flex items-center justify-center gap-2 min-h-[56px] disabled:opacity-50"
           >

@@ -9,8 +9,9 @@ import { DishResultCard } from '@/components/search/DishResultCard';
 import { FilterSortSheet, sortLabel, type FilterState } from '@/components/search/FilterSortSheet';
 import { useCart } from '@/hooks/useCart';
 import { toast } from '@/lib/toast';
-import { RECENT_SEARCHES, SEARCH_RESULTS } from '@/lib/discoverContent';
+import { SEARCH_RESULTS } from '@/lib/discoverContent';
 import { allowMocks } from '@/lib/mocksGate';
+import { getRecentSearches } from '@/lib/searchRecents';
 import { fetchDiscoverMerchants, type DiscoverMerchant } from '@/lib/merchantDiscovery';
 import { getCheckoutLocation } from '@/lib/addressStorage';
 import {
@@ -175,7 +176,7 @@ export default function SearchResultsPage({
     toast.itemAdded(dish.name);
   };
 
-  const suggestions = RECENT_SEARCHES;
+  const suggestions = getRecentSearches();
 
   return (
     <PullToRefresh onRefresh={handleRefresh} className="flex min-h-full flex-col bg-background pb-24">
@@ -285,7 +286,7 @@ export default function SearchResultsPage({
                 actionLabel="Clear search"
                 onAction={onClear}
               />
-              {mocksOk && (
+              {suggestions.length > 0 && (
                 <div className="flex flex-wrap justify-center gap-2">
                   {suggestions.map((s) => (
                     <button

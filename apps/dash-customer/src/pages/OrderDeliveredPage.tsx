@@ -3,7 +3,8 @@ import { toast } from 'sonner';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { DeliveryPhotoViewer } from '@/components/ui/DeliveryPhotoViewer';
 import { StarRating } from '@/components/rating/StarRating';
-import { FEEDBACK_CHIPS, formatJmd } from '@/lib/trackingContent';
+import { ORDER_FEEDBACK_CHIPS } from '@/lib/ordersContent';
+import { formatJmd } from '@/lib/trackingContent';
 
 type Props = {
   orderId?: string;
@@ -67,18 +68,20 @@ export default function OrderDeliveredPage({
           <h2 className="text-headline-md font-semibold text-center mb-4">Rate your experience</h2>
           <StarRating value={rating} onChange={setRating} className="justify-center mb-6" />
           <div className="flex flex-wrap justify-center gap-2">
-            {FEEDBACK_CHIPS.map(chip => (
+            {ORDER_FEEDBACK_CHIPS.map((chip) => (
               <button
-                key={chip}
+                key={chip.label}
                 type="button"
-                onClick={() => toggleChip(chip)}
+                onClick={() => toggleChip(chip.label)}
                 className={`px-4 py-2 rounded-full border font-semibold text-label-md transition-all ${
-                  selectedChips.includes(chip)
-                    ? 'bg-primary-container/10 border-primary-container text-primary'
+                  selectedChips.includes(chip.label)
+                    ? chip.issueType
+                      ? 'bg-tertiary-container border-tertiary-container text-on-tertiary-container'
+                      : 'bg-primary-container/10 border-primary-container text-primary'
                     : 'border-outline-variant text-on-surface-variant'
                 }`}
               >
-                {chip}
+                {chip.label}
               </button>
             ))}
           </div>

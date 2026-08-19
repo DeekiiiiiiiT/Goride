@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { OnboardingHeader } from '@/components/layout/OnboardingHeader';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { loadSignupDraft, saveSignupDraft } from '@/lib/signupDraft';
 import { syncCourierProfileFromDraft } from '@/lib/ensureCourierProfile';
+import { uploadAndGetProofUrl } from '@/lib/courierFileUpload';
+import { toast } from '@/lib/toast';
 import { useVisualViewport } from '@/hooks/useVisualViewport';
 
 type ProfileSetupPageProps = {
@@ -17,11 +19,36 @@ export function ProfileSetupPage({ onBack, onContinue }: ProfileSetupPageProps) 
   const [phone, setPhone] = useState(
     draft.phone ? `${draft.countryCode} ${draft.phone}` : '+1 ',
   );
+  const [photoPreview, setPhotoPreview] = useState<string | null>(draft.profilePhotoUrl || null);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const keyboardOffset = useVisualViewport();
 
-  const handleContinue = () => {
-    saveSignupDraft({ fullName, displayName, phone });
-    void syncCourierProfileFromDraft().finally(onContinue);
+  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPhotoFile(file);
+    setPhotoPreview(URL.createObjectURL(file));
+  };
+
+  const handleContinue = async () => {
+    setUploading(true);
+    let profilePhotoUrl = draft.profilePhotoUrl;
+    if (photoFile) {
+      const url = await uploadAndGetProofUrl(photoFile, 'avatars');
+      if (!url) {
+        setUploading(false);
+        toast.error('Upload failed', 'Could not save your profile photo. Try again.');
+        return;
+      }
+      profilePhotoUrl = url;
+    }
+
+    saveSignupDraft({ fullName, displayName, phone, profilePhotoUrl });
+    await syncCourierProfileFromDraft();
+    setUploading(false);
+    onContinue();
   };
 
   return (
@@ -41,16 +68,28 @@ export function ProfileSetupPage({ onBack, onContinue }: ProfileSetupPageProps) 
 
           <div className="flex flex-col gap-6 flex-1">
             <div className="flex justify-center mb-4">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handlePhotoSelect}
+              />
               <button
                 type="button"
+                onClick={() => fileInputRef.current?.click()}
                 className="relative group cursor-pointer"
                 aria-label="Upload profile photo"
               >
                 <div className="w-[120px] h-[120px] rounded-full bg-surface-container border-2 border-dashed border-outline-variant flex items-center justify-center overflow-hidden transition-all duration-200 group-hover:border-primary group-hover:bg-surface-container-low shadow-sm">
-                  <MaterialIcon
-                    name="person_add"
-                    className="text-[40px] text-muted group-hover:text-primary transition-colors"
-                  />
+                  {photoPreview ? (
+                    <img src={photoPreview} alt="Profile" className="w-full h-full object-cover" />
+                  ) : (
+                    <MaterialIcon
+                      name="person_add"
+                      className="text-[40px] text-muted group-hover:text-primary transition-colors"
+                    />
+                  )}
                 </div>
                 <div className="absolute bottom-0 right-0 w-10 h-10 bg-primary rounded-full flex items-center justify-center text-on-primary shadow-md border-2 border-surface hover:scale-105 active:scale-95 transition-transform duration-100">
                   <MaterialIcon name="photo_camera" className="text-[20px]" filled />
@@ -117,11 +156,12 @@ export function ProfileSetupPage({ onBack, onContinue }: ProfileSetupPageProps) 
         >
           <button
             type="button"
-            onClick={handleContinue}
-            className="w-full h-14 bg-primary-container hover:bg-primary-container/90 text-on-primary rounded-xl font-semibold text-xl flex items-center justify-center gap-2 shadow-[0_6px_12px_rgba(16,185,129,0.2)] active:scale-[0.98] transition-all duration-200"
+            onClick={() => void handleContinue()}
+            disabled={uploading}
+            className="w-full h-14 bg-primary-container hover:bg-primary-container/90 text-on-primary rounded-xl font-semibold text-xl flex items-center justify-center gap-2 shadow-[0_6px_12px_rgba(16,185,129,0.2)] active:scale-[0.98] transition-all duration-200 disabled:opacity-60"
           >
-            Continue
-            <MaterialIcon name="arrow_forward" />
+            {uploading ? 'Saving…' : 'Continue'}
+            {!uploading && <MaterialIcon name="arrow_forward" />}
           </button>
         </div>
       </div>

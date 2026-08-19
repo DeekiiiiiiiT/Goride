@@ -1,6 +1,14 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { ChangeEvent, FormEvent, useEffect, useRef, useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
-import { DEFAULT_PROFILE, getProfile, persistProfile, syncProfileFromBackend, type UserProfile } from '@/lib/accountContent';
+import {
+  DEFAULT_PROFILE,
+  getProfile,
+  persistProfile,
+  persistProfilePhoto,
+  syncProfileFromBackend,
+  type UserProfile,
+} from '@/lib/accountContent';
+import { CUSTOMER_AVATAR_ACCEPT } from '@/lib/profileAvatar';
 import { toast } from '@/lib/toast';
 
 type Props = {
@@ -14,7 +22,9 @@ export default function EditProfilePage({ onNavigate }: Props) {
   const [email, setEmail] = useState(profile.email);
   const [phone, setPhone] = useState(profile.phone);
   const [saving, setSaving] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [loading, setLoading] = useState(true);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -47,6 +57,26 @@ export default function EditProfilePage({ onNavigate }: Props) {
     }
   };
 
+  const handlePhotoPick = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    const preview = URL.createObjectURL(file);
+    setProfile((prev) => ({ ...prev, avatarUrl: preview }));
+    setUploadingPhoto(true);
+    try {
+      const next = await persistProfilePhoto(file);
+      setProfile(next);
+      toast.success('Photo updated');
+    } catch (err) {
+      setProfile(getProfile());
+      toast.error(err instanceof Error ? err.message : 'Could not update photo');
+    } finally {
+      URL.revokeObjectURL(preview);
+      setUploadingPhoto(false);
+    }
+  };
+
   return (
     <div className="bg-surface text-on-surface min-h-dvh flex flex-col">
       <header className="bg-surface w-full top-0 sticky shadow-sm z-50 safe-t">
@@ -66,7 +96,20 @@ export default function EditProfilePage({ onNavigate }: Props) {
 
       <main className="flex-grow w-full max-w-[1200px] mx-auto px-4 pt-6 pb-8">
         <div className="flex flex-col items-center justify-center mb-8">
-          <div className="relative group cursor-pointer">
+          <input
+            ref={fileRef}
+            type="file"
+            accept={CUSTOMER_AVATAR_ACCEPT}
+            className="hidden"
+            onChange={(e) => void handlePhotoPick(e)}
+          />
+          <button
+            type="button"
+            aria-label="Change profile photo"
+            disabled={uploadingPhoto || loading}
+            onClick={() => fileRef.current?.click()}
+            className="relative group disabled:opacity-70"
+          >
             <div className="w-32 h-32 rounded-full overflow-hidden shadow-sm">
               <img
                 src={profile.avatarUrl || DEFAULT_PROFILE.avatarUrl}
@@ -74,14 +117,14 @@ export default function EditProfilePage({ onNavigate }: Props) {
                 className="w-full h-full object-cover"
               />
             </div>
-            <div className="absolute inset-0 bg-black/40 rounded-full flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="absolute inset-0 bg-black/40 rounded-full flex flex-col items-center justify-center opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
               <MaterialIcon name="photo_camera" className="text-white mb-1" filled />
-              <span className="text-white text-label-sm">Edit</span>
+              <span className="text-white text-label-sm">{uploadingPhoto ? 'Uploading…' : 'Edit'}</span>
             </div>
             <div className="absolute bottom-0 right-0 bg-primary text-white p-2 rounded-full shadow-md border-2 border-surface md:hidden">
               <MaterialIcon name="edit" className="text-sm" filled />
             </div>
-          </div>
+          </button>
         </div>
 
         {loading ? (

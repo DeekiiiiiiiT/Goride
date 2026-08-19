@@ -1,20 +1,43 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
-import { FAQ_ITEMS, HELP_QUICK_ACTIONS } from '@/lib/accountSubContent';
+import {
+  FAQ_ITEMS,
+  HELP_QUICK_ACTIONS,
+  faqsForTopic,
+  type HelpTopicId,
+} from '@/lib/accountSubContent';
 
 type Props = {
   onNavigate: (page: string, data?: Record<string, unknown>) => void;
 };
 
+const TOPIC_CTA: Record<
+  HelpTopicId,
+  { reportType: string; extra?: { label: string; page: string } }
+> = {
+  order: { reportType: 'other' },
+  account: { reportType: 'account', extra: { label: 'Edit profile', page: 'edit-profile' } },
+  payment: { reportType: 'payment', extra: { label: 'Payment methods', page: 'payment-methods' } },
+  safety: { reportType: 'safety' },
+};
+
 export default function HelpPage({ onNavigate }: Props) {
   const [query, setQuery] = useState('');
+  const [topic, setTopic] = useState<HelpTopicId | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
 
-  const faqs = FAQ_ITEMS.filter((item) => {
-    if (!query.trim()) return true;
-    const q = query.toLowerCase();
-    return item.title.toLowerCase().includes(q) || item.body.toLowerCase().includes(q);
-  });
+  const faqs = useMemo(() => faqsForTopic(topic, query), [topic, query]);
+  const cta = topic ? TOPIC_CTA[topic] : null;
+
+  const selectTopic = (id: HelpTopicId) => {
+    const next = topic === id ? null : id;
+    setTopic(next);
+    const first = FAQ_ITEMS.find((item) => !next || item.topic === next);
+    setOpenId(first?.id ?? null);
+    window.setTimeout(() => {
+      document.getElementById('help-faqs')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 0);
+  };
 
   return (
     <div className="font-body-md text-on-surface antialiased min-h-dvh bg-[#FAFAFA]">
@@ -35,7 +58,7 @@ export default function HelpPage({ onNavigate }: Props) {
             <input
               aria-label="Search for help"
               value={query}
-              onChange={e => setQuery(e.target.value)}
+              onChange={(e) => setQuery(e.target.value)}
               placeholder="Search for help..."
               className="w-full pl-12 pr-4 py-3 bg-[#F3F4F6] border-transparent focus:border-primary focus:bg-white rounded-lg text-body-md transition-colors"
             />
@@ -45,21 +68,27 @@ export default function HelpPage({ onNavigate }: Props) {
         <section className="mb-8">
           <h3 className="text-headline-sm font-semibold mb-4">Quick Actions</h3>
           <div className="grid grid-cols-2 gap-4">
-            {HELP_QUICK_ACTIONS.map(action => (
-              <button
-                key={action.id}
-                type="button"
-                onClick={() => onNavigate(action.page)}
-                className="bg-surface-container-lowest rounded-xl p-4 shadow-[0px_4px_20px_rgba(0,0,0,0.04)] flex flex-col items-center justify-center gap-2 active:scale-95 transition-transform"
-              >
-                <MaterialIcon name={action.icon} className="text-primary text-3xl" filled />
-                <span className="text-label-md font-semibold text-center">{action.label}</span>
-              </button>
-            ))}
+            {HELP_QUICK_ACTIONS.map((action) => {
+              const active = topic === action.id;
+              return (
+                <button
+                  key={action.id}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => selectTopic(action.id)}
+                  className={`rounded-xl p-4 shadow-[0px_4px_20px_rgba(0,0,0,0.04)] flex flex-col items-center justify-center gap-2 active:scale-95 transition-transform ${
+                    active ? 'bg-primary-container/20 border-2 border-primary' : 'bg-surface-container-lowest border-2 border-transparent'
+                  }`}
+                >
+                  <MaterialIcon name={action.icon} className="text-primary text-3xl" filled />
+                  <span className="text-label-md font-semibold text-center">{action.label}</span>
+                </button>
+              );
+            })}
           </div>
         </section>
 
-        <section className="mb-8">
+        <section id="help-faqs" className="mb-8">
           <h3 className="text-headline-sm font-semibold mb-4">Frequently Asked Questions</h3>
           <div className="bg-surface-container-lowest rounded-xl shadow-[0px_4px_20px_rgba(0,0,0,0.04)] overflow-hidden">
             {faqs.length === 0 ? (
@@ -90,15 +119,33 @@ export default function HelpPage({ onNavigate }: Props) {
           </div>
         </section>
 
-        <section className="flex flex-col items-center gap-4 text-center mt-8">
-          <p className="text-body-sm text-on-surface-variant">Still need help? Report a problem from a real order.</p>
+        <section className="flex flex-col items-center gap-3 text-center mt-8">
+          <p className="text-body-sm text-on-surface-variant">
+            {topic === 'safety'
+              ? 'If you are in immediate danger, call local emergency services first.'
+              : 'Still need help? Report a problem from a real order.'}
+          </p>
+          {cta?.extra ? (
+            <button
+              type="button"
+              onClick={() => onNavigate(cta.extra!.page)}
+              className="w-full max-w-sm border border-primary text-primary font-semibold text-label-md py-4 px-6 rounded-lg"
+            >
+              {cta.extra.label}
+            </button>
+          ) : null}
           <button
             type="button"
-            onClick={() => onNavigate('report-issue')}
+            onClick={() =>
+              onNavigate('report-issue', {
+                issueType: cta?.reportType ?? 'other',
+                returnTo: 'help',
+              })
+            }
             className="w-full max-w-sm bg-primary text-on-primary font-semibold text-label-md py-4 px-6 rounded-lg shadow-sm flex items-center justify-center gap-2"
           >
             <MaterialIcon name="support_agent" />
-            Contact Support
+            {topic === 'safety' ? 'Report a safety issue' : 'Contact Support'}
           </button>
         </section>
       </main>

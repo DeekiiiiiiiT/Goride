@@ -1,23 +1,25 @@
 import React from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
-import { BusyZoneShader } from '@/components/map/BusyZoneShader';
 import { DeliveryMap } from '@/components/map/DeliveryMap';
 import { LocationRippleShader } from '@/components/map/LocationRippleShader';
+import { formatJmd } from '@/lib/formatMoney';
 
 type HomeOnlinePageProps = {
   onRequestEndDash: () => void;
   onOfferReceived?: () => void;
-  onViewPromotions?: () => void;
   courierLat?: number | null;
   courierLng?: number | null;
+  todayEarned?: number;
+  todayDeliveries?: number;
 };
 
 export function HomeOnlinePage({
   onRequestEndDash,
   onOfferReceived: _onOfferReceived,
-  onViewPromotions,
   courierLat,
   courierLng,
+  todayEarned = 0,
+  todayDeliveries = 0,
 }: HomeOnlinePageProps) {
   // Offers arrive via RealDispatchProvider polling / Realtime — no fake timer.
   void _onOfferReceived;
@@ -47,18 +49,6 @@ export function HomeOnlinePage({
               <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDuration: '1.5s' }} />
             </div>
           </div>
-
-          <button
-            type="button"
-            onClick={onViewPromotions}
-            className="bg-[#FFFBEB] border border-[#FDE68A] rounded-lg shadow-sm p-2 flex items-center gap-2 overflow-hidden relative w-full text-left active:scale-[0.98] transition-transform"
-          >
-            <div className="absolute left-0 top-0 bottom-0 w-1 bg-warning" />
-            <span className="text-lg pl-1">🔥</span>
-            <span className="text-xs font-semibold uppercase tracking-wide text-[#B45309] flex-1">
-              Peak Pay: +J$50 per delivery until 8pm
-            </span>
-          </button>
         </div>
 
         <div className="absolute inset-0 z-0 pointer-events-none flex items-center justify-center">
@@ -68,26 +58,21 @@ export function HomeOnlinePage({
               <div className="w-2 h-2 bg-surface rounded-full" />
             </div>
           </div>
-
-          <BusyZoneShader className="top-[30%] right-[15%]" />
         </div>
 
         <div className="w-full max-w-md mx-auto space-y-4 pointer-events-auto">
           <div className="bg-surface rounded-xl shadow-[0_8px_24px_rgba(0,0,0,0.08)] border border-surface-container-high p-4">
             <div className="flex justify-between items-center mb-2">
-              <span className="text-[11px] text-muted uppercase tracking-wider font-medium">Today&apos;s Shift</span>
-              <span className="text-xs font-semibold uppercase tracking-wide text-primary bg-primary-container/20 px-2 py-1 rounded-md">
-                4h 12m
-              </span>
+              <span className="text-[11px] text-muted uppercase tracking-wider font-medium">Today</span>
             </div>
             <div className="flex divide-x divide-outline-variant/30">
               <div className="flex-1 pr-4">
                 <p className="text-sm text-muted">Earned</p>
-                <p className="text-xl font-semibold text-on-surface mt-1">J$2,450</p>
+                <p className="text-xl font-semibold text-on-surface mt-1">J${formatJmd(todayEarned)}</p>
               </div>
               <div className="flex-1 pl-4">
                 <p className="text-sm text-muted">Deliveries</p>
-                <p className="text-xl font-semibold text-on-surface mt-1">6</p>
+                <p className="text-xl font-semibold text-on-surface mt-1">{todayDeliveries}</p>
               </div>
             </div>
           </div>

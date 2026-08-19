@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import type { CourierProfile } from '@/lib/mockProfile';
 import { loadCourierProfile } from '@/lib/courierProfileService';
+import { resolveCourierFileUrl } from '@/lib/courierFileUpload';
 
 export type ProfileDestination =
   | 'edit-profile'
@@ -17,6 +18,7 @@ type AccountPageProps = {
   onNavigate: (destination: ProfileDestination) => void;
   onSignOut: () => void;
   onRatingTap?: () => void;
+  onNotificationsClick?: () => void;
 };
 
 type MenuItem = {
@@ -80,20 +82,24 @@ function MenuGroup({ items, onNavigate }: { items: MenuItem[]; onNavigate: Accou
   );
 }
 
-export function AccountPage({ onNavigate, onSignOut, onRatingTap }: AccountPageProps) {
+export function AccountPage({ onNavigate, onSignOut, onRatingTap, onNotificationsClick }: AccountPageProps) {
   const [profile, setProfile] = useState<CourierProfile>(EMPTY_PROFILE);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    void loadCourierProfile().then((row) => {
-      setLoading(false);
-      if (!row) return;
+    void loadCourierProfile().then(async (row) => {
+      if (!row) {
+        setLoading(false);
+        return;
+      }
+      const rawPhoto = row.profile_photo_url || '';
+      const avatarUrl = rawPhoto ? (await resolveCourierFileUrl(rawPhoto)) || rawPhoto : '';
       setProfile({
         fullName: row.display_name || '',
         displayName: row.display_name || '',
         phone: row.phone || '',
         email: row.email || '',
-        avatarUrl: '',
+        avatarUrl,
         memberSince: '',
         rating: row.rating ?? 0,
         acceptanceRate: row.acceptance_rate_pct ?? 0,
@@ -101,6 +107,7 @@ export function AccountPage({ onNavigate, onSignOut, onRatingTap }: AccountPageP
         totalDeliveries: row.total_deliveries ?? 0,
         verified: row.background_check_status === 'approved' || row.status === 'active',
       });
+      setLoading(false);
     });
   }, []);
 
@@ -115,17 +122,12 @@ export function AccountPage({ onNavigate, onSignOut, onRatingTap }: AccountPageP
     <div className="min-h-full pb-24">
       <header className="sticky top-0 bg-surface z-40 shadow-soft pt-safe px-[var(--spacing-edge)]">
         <div className="flex justify-between items-center h-16">
-          <button
-            type="button"
-            aria-label="Menu"
-            className="p-2 -ml-2 text-primary hover:bg-surface-container-low rounded-full active:scale-95"
-          >
-            <MaterialIcon name="menu" />
-          </button>
+          <div className="w-11" aria-hidden />
           <h1 className="text-xl font-bold text-primary">Account</h1>
           <button
             type="button"
-            aria-label="Notifications"
+            aria-label="Notification settings"
+            onClick={() => onNotificationsClick?.()}
             className="p-2 -mr-2 text-primary hover:bg-surface-container-low rounded-full active:scale-95"
           >
             <MaterialIcon name="notifications" />

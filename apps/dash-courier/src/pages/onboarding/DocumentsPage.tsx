@@ -1,100 +1,113 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ROAM_LEGAL } from '@roam/business-config/legalUrls';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
+import {
+  listCourierDocuments,
+  uploadCourierDocument,
+  type CourierDocType,
+  type CourierDocumentRow,
+} from '@/lib/courierDocumentService';
+import { ensureCourierProfile } from '@/lib/ensureCourierProfile';
 import { loadSignupDraft } from '@/lib/signupDraft';
-
-type DocumentStatus = 'verified' | 'pending' | 'upload' | 'rejected';
-
-type DocumentItem = {
-  id: string;
-  icon: string;
-  title: string;
-  subtitle: string;
-  status: DocumentStatus;
-  errorNote?: string;
-  accent: string;
-  border?: string;
-};
-
-const BASE_DOCUMENTS: DocumentItem[] = [
-  {
-    id: 'license-front',
-    icon: 'id_card',
-    title: "Driver's license (Front)",
-    subtitle: 'Clear photo of front',
-    status: 'verified',
-    accent: 'bg-success',
-  },
-  {
-    id: 'license-back',
-    icon: 'id_card',
-    title: "Driver's license (Back)",
-    subtitle: 'Clear photo of back',
-    status: 'pending',
-    accent: 'bg-warning',
-  },
-  {
-    id: 'registration',
-    icon: 'directions_car',
-    title: 'Vehicle registration',
-    subtitle: 'Current year',
-    status: 'pending',
-    accent: 'bg-warning',
-  },
-  {
-    id: 'insurance',
-    icon: 'health_and_safety',
-    title: 'Insurance cert',
-    subtitle: 'Valid policy',
-    status: 'upload',
-    accent: 'bg-primary-container',
-    border: 'border-primary-container',
-  },
-  {
-    id: 'national-id',
-    icon: 'badge',
-    title: 'National ID / TRN',
-    subtitle: 'Image blurry',
-    status: 'rejected',
-    errorNote: 'Image blurry',
-    accent: 'bg-error',
-    border: 'border-error',
-  },
-];
-
-function getDocumentsForVehicle(vehicleType: string): DocumentItem[] {
-  const motorizedIds = new Set(['registration', 'insurance']);
-  if (vehicleType === 'bicycle') {
-    return BASE_DOCUMENTS.filter((doc) => !motorizedIds.has(doc.id));
-  }
-  return BASE_DOCUMENTS;
-}
-
-const STATUS_STYLES: Record<DocumentStatus, string> = {
-  verified: 'bg-success/10 text-success',
-  pending: 'bg-warning/10 text-warning',
-  upload: 'bg-surface-container text-muted',
-  rejected: 'bg-error/10 text-error',
-};
-
-const STATUS_LABELS: Record<DocumentStatus, string> = {
-  verified: 'Verified',
-  pending: 'Pending',
-  upload: 'Upload',
-  rejected: 'Rejected',
-};
+import { toast } from '@/lib/toast';
 
 type DocumentsPageProps = {
   onBack: () => void;
   onContinue: () => void;
 };
 
+const DOC_DEFS: Array<{
+  docType: CourierDocType;
+  title: string;
+  subtitle: string;
+  icon: string;
+  actionLabel: string;
+  motorizedOnly?: boolean;
+  required: boolean;
+}> = [
+  {
+    docType: 'drivers_license',
+    title: "Driver's licence",
+    subtitle: 'Clear photo of your licence',
+    icon: 'badge',
+    actionLabel: 'Upload licence',
+    required: true,
+  },
+  {
+    docType: 'insurance',
+    title: 'Vehicle insurance',
+    subtitle: 'Valid policy document',
+    icon: 'policy',
+    actionLabel: 'Upload insurance',
+    motorizedOnly: true,
+    required: true,
+  },
+  {
+    docType: 'background_check',
+    title: 'Background check',
+    subtitle: 'Optional — you can add this later',
+    icon: 'verified_user',
+    actionLabel: 'Upload document',
+    required: false,
+  },
+];
+
+function isSubmitted(row: CourierDocumentRow | undefined): boolean {
+  return Boolean(row?.file_url);
+}
+
+function statusLabel(row: CourierDocumentRow | undefined): string {
+  if (!row?.status) return 'Upload';
+  if (row.status === 'approved') return 'Verified';
+  return row.status.charAt(0).toUpperCase() + row.status.slice(1);
+}
+
+function statusAccent(row: CourierDocumentRow | undefined): string {
+  if (!row?.file_url) return 'bg-primary-container';
+  if (row.status === 'approved') return 'bg-success';
+  if (row.status === 'rejected' || row.status === 'expired') return 'bg-error';
+  return 'bg-warning';
+}
+
 export function DocumentsPage({ onBack, onContinue }: DocumentsPageProps) {
   const draft = loadSignupDraft();
-  const documents = getDocumentsForVehicle(draft.vehicleType);
+  const isBicycle = draft.vehicleType === 'bicycle';
+  const defs = DOC_DEFS.filter((def) => !def.motorizedOnly || !isBicycle);
   const [consent, setConsent] = useState(false);
-  const [activeUpload, setActiveUpload] = useState<string | null>('insurance');
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [docs, setDocs] = useState<CourierDocumentRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [uploadingType, setUploadingType] = useState<CourierDocType | null>(null);
+  const fileRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  const reload = async () => {
+    const rows = await listCourierDocuments();
+    setDocs(rows);
+  };
+
+  useEffect(() => {
+    void (async () => {
+      await ensureCourierProfile();
+      await reload();
+      setLoading(false);
+    })();
+  }, []);
+
+  const handleUpload = async (docType: CourierDocType, file: File) => {
+    setUploadingType(docType);
+    const result = await uploadCourierDocument(docType, file);
+    setUploadingType(null);
+    if (!result.ok) {
+      toast.error('Upload failed', result.error);
+      return;
+    }
+    toast.success('Document submitted', 'Pending review.');
+    await reload();
+  };
+
+  const requiredOk = defs
+    .filter((def) => def.required)
+    .every((def) => isSubmitted(docs.find((d) => d.doc_type === def.docType)));
+  const canContinue = consent && requiredOk && !uploadingType;
 
   return (
     <div className="bg-background text-on-background min-h-full flex flex-col antialiased">
@@ -122,70 +135,73 @@ export function DocumentsPage({ onBack, onContinue }: DocumentsPageProps) {
           </p>
         </div>
 
+        {loading && <p className="text-sm text-muted mb-4">Loading documents…</p>}
+
         <div className="space-y-4">
-          {documents.map((doc) => {
-            const isExpanded = activeUpload === doc.id && doc.status === 'upload';
+          {defs.map((def) => {
+            const row = docs.find((d) => d.doc_type === def.docType);
+            const submitted = isSubmitted(row);
             return (
-              <button
-                key={doc.id}
-                type="button"
-                onClick={() => doc.status === 'upload' && setActiveUpload(doc.id)}
-                className={`w-full text-left bg-surface rounded-xl p-4 shadow-soft border relative overflow-hidden transition-colors ${
-                  doc.border ?? 'border-surface-container-high hover:border-primary-container'
-                }`}
+              <article
+                key={def.docType}
+                className="w-full text-left bg-surface rounded-xl p-4 shadow-soft border border-surface-container-high relative overflow-hidden"
               >
-                <div className={`absolute left-0 top-0 bottom-0 w-1 ${doc.accent}`} />
+                <div className={`absolute left-0 top-0 bottom-0 w-1 ${statusAccent(row)}`} />
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-4 min-w-0">
-                    <div
-                      className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${
-                        doc.status === 'rejected'
-                          ? 'bg-error/10 text-error'
-                          : doc.status === 'upload'
-                            ? 'bg-primary-container/10 text-primary-container'
-                            : 'bg-surface-container text-primary'
-                      }`}
-                    >
-                      <MaterialIcon name={doc.icon} />
+                    <div className="w-12 h-12 rounded-full flex items-center justify-center shrink-0 bg-surface-container text-primary">
+                      <MaterialIcon name={def.icon} />
                     </div>
                     <div className="min-w-0">
-                      <h3 className="text-xl font-semibold text-on-surface">{doc.title}</h3>
-                      <p
-                        className={`text-sm truncate ${
-                          doc.status === 'rejected' ? 'text-error' : 'text-muted'
-                        }`}
-                      >
-                        {doc.errorNote ?? doc.subtitle}
-                      </p>
+                      <h3 className="text-xl font-semibold text-on-surface">{def.title}</h3>
+                      <p className="text-sm truncate text-muted">{def.subtitle}</p>
                     </div>
                   </div>
                   <span
-                    className={`px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wide shrink-0 ${STATUS_STYLES[doc.status]}`}
+                    className={`px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wide shrink-0 ${
+                      submitted
+                        ? row?.status === 'approved'
+                          ? 'bg-success/10 text-success'
+                          : row?.status === 'rejected'
+                            ? 'bg-error/10 text-error'
+                            : 'bg-warning/10 text-warning'
+                        : 'bg-surface-container text-muted'
+                    }`}
                   >
-                    {STATUS_LABELS[doc.status]}
+                    {statusLabel(row)}
                   </span>
                 </div>
-
-                {isExpanded && (
-                  <div
-                    className="mt-3 border-2 border-dashed border-outline-variant rounded-lg p-4 text-center bg-surface-container-low"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      fileInputRef.current?.click();
+                <div className="mt-3 flex justify-end">
+                  <input
+                    ref={(el) => {
+                      fileRefs.current[def.docType] = el;
                     }}
-                    onKeyDown={() => {}}
-                    role="presentation"
+                    type="file"
+                    accept="image/*,application/pdf"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) void handleUpload(def.docType, file);
+                      e.target.value = '';
+                    }}
+                  />
+                  <button
+                    type="button"
+                    disabled={uploadingType === def.docType}
+                    onClick={() => fileRefs.current[def.docType]?.click()}
+                    className="h-12 px-4 rounded-full text-xs font-semibold uppercase tracking-wide flex items-center justify-center bg-primary text-on-primary shadow-primary active:scale-95 disabled:opacity-60"
                   >
-                    <MaterialIcon name="cloud_upload" className="text-muted mb-1" />
-                    <p className="text-sm text-muted">Tap to take photo</p>
-                  </div>
-                )}
-              </button>
+                    {uploadingType === def.docType
+                      ? 'Uploading…'
+                      : submitted
+                        ? 'Replace'
+                        : def.actionLabel}
+                  </button>
+                </div>
+              </article>
             );
           })}
         </div>
-
-        <input ref={fileInputRef} type="file" accept="image/*" capture="environment" className="hidden" />
 
         <div className="mt-8 bg-surface p-4 rounded-xl shadow-soft">
           <label className="flex items-start gap-2 cursor-pointer">
@@ -216,7 +232,7 @@ export function DocumentsPage({ onBack, onContinue }: DocumentsPageProps) {
         <button
           type="button"
           onClick={onContinue}
-          disabled={!consent}
+          disabled={!canContinue}
           className="w-full max-w-md mx-auto h-14 bg-primary-container text-on-primary font-semibold text-xl rounded-xl shadow-primary active:scale-[0.98] transition-transform flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Continue

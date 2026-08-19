@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { SubPageHeader } from '@/components/layout/SubPageHeader';
-import { EDIT_PROFILE_PHOTO, MOCK_EDIT_PROFILE_DRAFT } from '@/lib/mockProfile';
+import { MOCK_EDIT_PROFILE_DRAFT } from '@/lib/mockProfile';
 import { loadCourierProfile, updateCourierProfile } from '@/lib/courierProfileService';
+import { uploadAndGetProofUrl, resolveCourierFileUrl } from '@/lib/courierFileUpload';
 import { toast } from '@/lib/toast';
 
 type EditProfilePageProps = {
@@ -28,9 +29,13 @@ const FIELDS: FieldConfig[] = [
 export function EditProfilePage({ onBack, onSave }: EditProfilePageProps) {
   const [form, setForm] = useState(MOCK_EDIT_PROFILE_DRAFT);
   const [saving, setSaving] = useState(false);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [existingPhotoUrl, setExistingPhotoUrl] = useState<string | undefined>();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    void loadCourierProfile().then((row) => {
+    void loadCourierProfile().then(async (row) => {
       if (!row) return;
       setForm((prev) => ({
         ...prev,
@@ -39,16 +44,43 @@ export function EditProfilePage({ onBack, onSave }: EditProfilePageProps) {
         phone: row.phone ?? prev.phone,
         email: row.email ?? prev.email,
       }));
+      const raw = row.profile_photo_url || '';
+      if (raw) {
+        const resolved = (await resolveCourierFileUrl(raw)) || raw;
+        setExistingPhotoUrl(raw);
+        setPhotoPreview(resolved);
+      }
     });
   }, []);
 
+  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPhotoFile(file);
+    setPhotoPreview(URL.createObjectURL(file));
+  };
+
   const handleSave = async () => {
     setSaving(true);
-    const ok = await updateCourierProfile({
+    let profilePhotoUrl = existingPhotoUrl;
+    if (photoFile) {
+      const url = await uploadAndGetProofUrl(photoFile, 'avatars');
+      if (!url) {
+        setSaving(false);
+        toast.error('Upload failed', 'Could not save your profile photo. Try again.');
+        return;
+      }
+      profilePhotoUrl = url;
+    }
+    const patch: Parameters<typeof updateCourierProfile>[0] = {
       display_name: form.displayName || form.fullName,
       phone: form.phone,
       email: form.email,
-    });
+    };
+    if (profilePhotoUrl) {
+      patch.profile_photo_url = profilePhotoUrl;
+    }
+    const ok = await updateCourierProfile(patch);
     setSaving(false);
     if (ok) {
       toast.success('Profile updated');
@@ -64,16 +96,33 @@ export function EditProfilePage({ onBack, onSave }: EditProfilePageProps) {
 
       <main className="flex-1 overflow-y-auto px-[var(--spacing-edge)] py-6 pb-32">
         <section className="flex flex-col items-center mb-8">
-          <div className="relative group cursor-pointer mb-2">
-            <div className="w-24 h-24 rounded-full overflow-hidden border-4 border-surface shadow-soft bg-surface-container">
-              <img src={EDIT_PROFILE_PHOTO} alt="" className="w-full h-full object-cover" />
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handlePhotoSelect}
+          />
+          <div className="relative group mb-2">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="w-24 h-24 rounded-full overflow-hidden border-4 border-surface shadow-soft bg-surface-container flex items-center justify-center"
+              aria-label="Change photo"
+            >
+              {photoPreview ? (
+                <img src={photoPreview} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <MaterialIcon name="person" className="text-4xl text-muted" />
+              )}
               <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                 <MaterialIcon name="photo_camera" className="text-white" filled />
               </div>
-            </div>
+            </button>
             <button
               type="button"
               aria-label="Change photo"
+              onClick={() => fileInputRef.current?.click()}
               className="absolute bottom-0 right-0 w-8 h-8 bg-surface rounded-full flex items-center justify-center shadow-primary text-primary hover:bg-surface-container-low active:scale-90"
             >
               <MaterialIcon name="edit" className="text-lg" filled />
@@ -81,6 +130,7 @@ export function EditProfilePage({ onBack, onSave }: EditProfilePageProps) {
           </div>
           <button
             type="button"
+            onClick={() => fileInputRef.current?.click()}
             className="text-primary text-xs font-semibold uppercase tracking-wide py-2 px-4 rounded-full hover:bg-surface-container-low active:scale-95"
           >
             Change Photo

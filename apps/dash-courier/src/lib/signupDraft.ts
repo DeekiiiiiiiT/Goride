@@ -9,6 +9,7 @@ export type SignupDraft = {
   licensePlate: string;
   color: string;
   equipmentPhotoUrl?: string;
+  profilePhotoUrl?: string;
 };
 
 const STORAGE_KEY = 'roam-dash-courier-signup-draft';

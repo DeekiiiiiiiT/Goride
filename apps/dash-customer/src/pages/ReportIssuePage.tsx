@@ -1,15 +1,18 @@
-import { useEffect, useMemo, useState } from 'react';
+import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { API_ENDPOINTS } from '@roam/api-client';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { ISSUE_TYPES } from '@/lib/accountSubContent';
-import { submitCustomerOrderIssue } from '@/lib/customerApi';
+import { submitCustomerOrderIssue, uploadCustomerIssuePhoto } from '@/lib/customerApi';
+import { assertCustomerAvatarFile, CUSTOMER_AVATAR_ACCEPT } from '@/lib/profileAvatar';
 import { supabase } from '@/lib/supabase';
 import { toast } from '@/lib/toast';
 
 type Props = {
-  onNavigate: (page: string) => void;
+  onNavigate: (page: string, data?: Record<string, unknown>) => void;
   orderId?: string;
+  issueType?: string;
+  returnTo?: string;
 };
 
 type ApiOrder = {
@@ -30,12 +33,23 @@ function orderDetailLine(order: ApiOrder): string {
   return `${when} • ${order.order_number}`;
 }
 
-export default function ReportIssuePage({ onNavigate, orderId }: Props) {
+export default function ReportIssuePage({
+  onNavigate,
+  orderId,
+  issueType: initialIssueType,
+  returnTo = 'help',
+}: Props) {
   const [selectedOrder, setSelectedOrder] = useState(orderId ?? '');
-  const [issueType, setIssueType] = useState('other');
+  const [issueType, setIssueType] = useState(
+    ISSUE_TYPES.some((type) => type.id === initialIssueType) ? initialIssueType! : 'other',
+  );
   const [details, setDetails] = useState('');
+  const [photoPath, setPhotoPath] = useState('');
+  const [photoPreview, setPhotoPreview] = useState('');
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ['customer-orders'],
@@ -67,6 +81,14 @@ export default function ReportIssuePage({ onNavigate, orderId }: Props) {
     if (orders[0]) setSelectedOrder(orders[0].id);
   }, [orderId, orders, selectedOrder]);
 
+  const goBack = () => {
+    if (returnTo === 'order-details' || returnTo === 'tracking') {
+      onNavigate(returnTo, { orderId: selectedOrder || orderId });
+      return;
+    }
+    onNavigate(returnTo);
+  };
+
   const handleSubmit = async () => {
     if (!selectedOrder) {
       toast.error('Select an order');
@@ -82,12 +104,36 @@ export default function ReportIssuePage({ onNavigate, orderId }: Props) {
         orderId: selectedOrder,
         issueType,
         notes: details.trim(),
+        photoPath: photoPath || undefined,
       });
       setSubmitted(true);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not submit report');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handlePhotoPick = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      assertCustomerAvatarFile(file);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not attach photo');
+      return;
+    }
+    setUploadingPhoto(true);
+    try {
+      const uploaded = await uploadCustomerIssuePhoto(file);
+      setPhotoPath(uploaded.path);
+      setPhotoPreview(uploaded.signedUrl);
+      toast.success('Photo attached');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not attach photo');
+    } finally {
+      setUploadingPhoto(false);
     }
   };
 
@@ -101,10 +147,10 @@ export default function ReportIssuePage({ onNavigate, orderId }: Props) {
         </p>
         <button
           type="button"
-          onClick={() => onNavigate('help')}
+          onClick={goBack}
           className="text-primary font-semibold"
         >
-          Back to Help
+          Back to {returnTo === 'help' || !returnTo ? 'Help' : 'order'}
         </button>
       </div>
     );
@@ -114,7 +160,7 @@ export default function ReportIssuePage({ onNavigate, orderId }: Props) {
     <div className="text-on-surface antialiased bg-background pb-[100px] min-h-dvh">
       <header className="bg-surface w-full top-0 sticky shadow-sm z-40 safe-t">
         <div className="flex items-center px-4 py-2 w-full max-w-[600px] mx-auto min-h-16">
-          <button type="button" onClick={() => onNavigate('help')} aria-label="Go back" className="w-10 h-10 flex items-center justify-center rounded-full">
+          <button type="button" onClick={goBack} aria-label="Go back" className="w-10 h-10 flex items-center justify-center rounded-full">
             <MaterialIcon name="arrow_back" />
           </button>
           <h1 className="text-headline-sm font-semibold text-primary">Report an Issue</h1>
@@ -206,10 +252,47 @@ export default function ReportIssuePage({ onNavigate, orderId }: Props) {
           />
         </section>
 
+        <section className="flex flex-col gap-2">
+          <h3 className="text-label-md font-semibold uppercase tracking-wider">Photo (optional)</h3>
+          <input
+            ref={fileRef}
+            type="file"
+            accept={CUSTOMER_AVATAR_ACCEPT}
+            className="hidden"
+            onChange={(e) => void handlePhotoPick(e)}
+          />
+          {photoPreview ? (
+            <div className="relative w-full max-w-[220px]">
+              <img src={photoPreview} alt="Attached evidence" className="w-full h-36 object-cover rounded-lg" />
+              <button
+                type="button"
+                onClick={() => {
+                  setPhotoPath('');
+                  setPhotoPreview('');
+                }}
+                className="absolute top-2 right-2 bg-surface rounded-full p-1 shadow"
+                aria-label="Remove photo"
+              >
+                <MaterialIcon name="close" className="text-sm" />
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              disabled={uploadingPhoto}
+              onClick={() => fileRef.current?.click()}
+              className="w-full border border-dashed border-outline-variant rounded-lg py-6 text-body-md text-on-surface-variant flex flex-col items-center gap-2 disabled:opacity-50"
+            >
+              <MaterialIcon name="add_a_photo" className="text-primary" />
+              {uploadingPhoto ? 'Uploading…' : 'Add a photo'}
+            </button>
+          )}
+        </section>
+
         <section className="flex flex-col gap-4">
           <button
             type="button"
-            disabled={submitting || orders.length === 0}
+            disabled={submitting || uploadingPhoto || orders.length === 0}
             onClick={() => void handleSubmit()}
             className="w-full bg-primary text-on-primary text-headline-sm font-semibold py-4 rounded-lg shadow-md flex justify-center items-center gap-2 disabled:opacity-50"
           >

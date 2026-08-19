@@ -1,4 +1,5 @@
 import { API_ENDPOINTS, supabaseAnonFunctionHeaders } from '@roam/api-client';
+import { supabase } from './supabase';
 
 export type ReviewSort = 'recent' | 'highest' | 'lowest';
 
@@ -9,7 +10,10 @@ export type RestaurantReview = {
   avatarClass: string;
   rating: number;
   date: string;
+  at: string;
   comment: string;
+  helpfulCount: number;
+  voted: boolean;
 };
 
 export type RestaurantReviewsSummary = {
@@ -27,8 +31,24 @@ type MerchantReviewsApi = {
   rating: number;
   reviewCount: number;
   distribution: number[];
-  reviews: Array<{ id: string; rating: number; comment: string; at: string }>;
+  reviews: Array<{
+    id: string;
+    rating: number;
+    comment: string;
+    at: string;
+    helpfulCount?: number;
+    voted?: boolean;
+  }>;
 };
+
+export function anonymousReviewer(orderId: string): { author: string; initial: string } {
+  let hash = 0;
+  for (const ch of orderId) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
+  return {
+    author: 'Verified customer',
+    initial: String.fromCharCode(65 + (hash % 26)),
+  };
+}
 
 function formatReviewDate(iso: string): string {
   if (!iso) return '';
@@ -49,9 +69,15 @@ function emptySummary(merchantId: string): RestaurantReviewsSummary {
 }
 
 export async function fetchMerchantReviews(merchantId: string): Promise<RestaurantReviewsSummary> {
+  const headers: Record<string, string> = { ...supabaseAnonFunctionHeaders() };
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (session?.access_token) headers.Authorization = `Bearer ${session.access_token}`;
+
   const res = await fetch(
     `${API_ENDPOINTS.delivery}/merchants/${encodeURIComponent(merchantId)}/reviews`,
-    { headers: supabaseAnonFunctionHeaders() },
+    { headers },
   );
   if (!res.ok) throw new Error('Failed to load reviews');
   const data = (await res.json()) as MerchantReviewsApi;
@@ -67,15 +93,21 @@ export async function fetchMerchantReviews(merchantId: string): Promise<Restaura
     rating: data.rating ?? 0,
     reviewCount: data.reviewCount ?? 0,
     distribution,
-    reviews: (data.reviews ?? []).map((row) => ({
-      id: row.id,
-      author: 'Customer',
-      initial: 'C',
-      avatarClass: 'bg-primary-container/20 text-primary',
-      rating: row.rating,
-      date: formatReviewDate(row.at),
-      comment: row.comment,
-    })),
+    reviews: (data.reviews ?? []).map((row) => {
+      const who = anonymousReviewer(row.id);
+      return {
+        id: row.id,
+        author: who.author,
+        initial: who.initial,
+        avatarClass: 'bg-primary-container/20 text-primary',
+        rating: row.rating,
+        date: formatReviewDate(row.at),
+        at: row.at,
+        comment: row.comment,
+        helpfulCount: row.helpfulCount ?? 0,
+        voted: Boolean(row.voted),
+      };
+    }),
   };
 }
 
@@ -85,7 +117,7 @@ export function emptyMerchantReviews(merchantId?: string): RestaurantReviewsSumm
 
 export function sortReviews(reviews: RestaurantReview[], sort: ReviewSort): RestaurantReview[] {
   const copy = [...reviews];
-  if (sort === 'highest') return copy.sort((a, b) => b.rating - a.rating);
-  if (sort === 'lowest') return copy.sort((a, b) => a.rating - b.rating);
-  return copy;
+  if (sort === 'highest') return copy.sort((a, b) => b.rating - a.rating || b.at.localeCompare(a.at));
+  if (sort === 'lowest') return copy.sort((a, b) => a.rating - b.rating || b.at.localeCompare(a.at));
+  return copy.sort((a, b) => b.at.localeCompare(a.at));
 }

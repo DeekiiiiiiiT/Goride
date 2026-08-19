@@ -174,8 +174,6 @@ export const SEARCH_RESULTS: DiscoverRestaurant[] = [
   },
 ];
 
-export const RECENT_SEARCHES = ['Jerk chicken', 'Pizza', 'Island Grill'];
-
 export const TRENDING_SEARCHES = [
   { label: 'Pizza', icon: 'local_pizza' },
   { label: 'Sushi', icon: 'ramen_dining' },

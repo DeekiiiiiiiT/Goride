@@ -4,7 +4,12 @@
  */
 import type { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { detectFileMagicBytes, extForMime, IMAGE_MIMES } from "../_shared/fileMagic.ts";
 import { validateBody, z } from "../_shared/validateBody.ts";
+
+const AVATAR_BUCKET = "customer-avatars";
+const ISSUE_PHOTO_BUCKET = "customer-issue-photos";
+const AVATAR_MAX_BYTES = 2 * 1024 * 1024;
 
 export type CustomerAccountRoutesDeps = {
   getSupabase: (authHeader: string) => SupabaseClient;
@@ -69,6 +74,8 @@ type CustomerRow = {
   saved_addresses: unknown;
   notification_prefs?: unknown;
   preferred_payment_method?: string | null;
+  avatar_url?: string | null;
+  avatar_path?: string | null;
   account_status?: string;
   created_at?: string;
   updated_at?: string;
@@ -136,6 +143,7 @@ function profileDto(row: CustomerRow) {
     accountStatus: row.account_status ?? "active",
     notificationPrefs: mergeNotificationPrefs(row.notification_prefs),
     preferredPaymentMethod: normalizePreferredPayment(row.preferred_payment_method),
+    avatarUrl: row.avatar_url || null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -462,5 +470,118 @@ export function registerCustomerAccountRoutes(app: Hono, deps: CustomerAccountRo
     if (delErr) return c.json({ error: delErr.message }, 500);
 
     return c.json({ ok: true, merchantId, menuItemId });
+  });
+
+  // POST /customer/avatar — magic-byte check, then service-role write to customer-avatars
+  app.post("/customer/avatar", async (c) => {
+    const auth = await requireUser(c.req.header("Authorization"), getSupabase);
+    if ("error" in auth) return c.json({ error: auth.error }, auth.status);
+
+    const form = await c.req.parseBody();
+    const file = form.file;
+    if (!(file instanceof File)) {
+      return c.json({ error: "file is required" }, 400);
+    }
+    if (file.size > AVATAR_MAX_BYTES) {
+      return c.json({ error: "Photo must be 2MB or smaller" }, 413);
+    }
+
+    const buffer = new Uint8Array(await file.arrayBuffer());
+    const detected = detectFileMagicBytes(buffer);
+    if (!detected || !IMAGE_MIMES.has(detected)) {
+      return c.json({ error: "Use a JPEG, PNG, or WebP photo" }, 400);
+    }
+
+    const serviceSb = getServiceSupabase();
+    const { customer, error } = await ensureCustomer(serviceSb, auth.user);
+    if (error || !customer) return c.json({ error: error || "profile_unavailable" }, 500);
+
+    const path = `${auth.user.id}/avatars/${crypto.randomUUID()}.${extForMime(detected)}`;
+    const storage = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+    const { error: uploadError } = await storage.storage.from(AVATAR_BUCKET).upload(path, buffer, {
+      contentType: detected,
+      cacheControl: "3600",
+      upsert: false,
+    });
+    if (uploadError) {
+      return c.json({ error: uploadError.message }, 500);
+    }
+
+    const previousPath = customer.avatar_path;
+    if (previousPath && previousPath.startsWith(`${auth.user.id}/`)) {
+      await storage.storage.from(AVATAR_BUCKET).remove([previousPath]);
+    }
+
+    const { data: { publicUrl } } = storage.storage.from(AVATAR_BUCKET).getPublicUrl(path);
+    const { data: updated, error: updateErr } = await serviceSb
+      .from("customers")
+      .update({ avatar_url: publicUrl, avatar_path: path })
+      .eq("id", customer.id)
+      .select("*")
+      .single();
+
+    if (updateErr || !updated) {
+      return c.json({ error: updateErr?.message || "update_failed" }, 500);
+    }
+
+    try {
+      const admin = getAuthAdmin();
+      const { data: authUser } = await admin.auth.admin.getUserById(auth.user.id);
+      const prev = (authUser?.user?.user_metadata ?? {}) as Record<string, unknown>;
+      await admin.auth.admin.updateUserById(auth.user.id, {
+        user_metadata: { ...prev, avatar_url: publicUrl },
+      });
+    } catch {
+      // Profile row is source of truth
+    }
+
+    return c.json({ profile: profileDto(updated as CustomerRow) }, 201);
+  });
+
+  // POST /customer/issue-photo — private evidence; signed URL for preview only
+  app.post("/customer/issue-photo", async (c) => {
+    const auth = await requireUser(c.req.header("Authorization"), getSupabase);
+    if ("error" in auth) return c.json({ error: auth.error }, auth.status);
+
+    const form = await c.req.parseBody();
+    const file = form.file;
+    if (!(file instanceof File)) {
+      return c.json({ error: "file is required" }, 400);
+    }
+    if (file.size > AVATAR_MAX_BYTES) {
+      return c.json({ error: "Photo must be 2MB or smaller" }, 413);
+    }
+
+    const buffer = new Uint8Array(await file.arrayBuffer());
+    const detected = detectFileMagicBytes(buffer);
+    if (!detected || !IMAGE_MIMES.has(detected)) {
+      return c.json({ error: "Use a JPEG, PNG, or WebP photo" }, 400);
+    }
+
+    const path = `${auth.user.id}/issues/${crypto.randomUUID()}.${extForMime(detected)}`;
+    const storage = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+    const { error: uploadError } = await storage.storage.from(ISSUE_PHOTO_BUCKET).upload(path, buffer, {
+      contentType: detected,
+      cacheControl: "3600",
+      upsert: false,
+    });
+    if (uploadError) {
+      return c.json({ error: uploadError.message }, 500);
+    }
+
+    const { data: signed, error: signErr } = await storage.storage
+      .from(ISSUE_PHOTO_BUCKET)
+      .createSignedUrl(path, 60 * 60 * 24 * 7);
+    if (signErr || !signed?.signedUrl) {
+      return c.json({ error: signErr?.message || "Could not sign photo" }, 500);
+    }
+
+    return c.json({ path, signedUrl: signed.signedUrl }, 201);
   });
 }

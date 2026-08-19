@@ -8,6 +8,8 @@ import { NavigationPickerSheet } from '@/components/ui/NavigationPickerSheet';
 import type { ActiveDelivery } from '@/lib/mockActiveDelivery';
 import { openPhoneCall, toDialablePhone } from '@/lib/contactLinks';
 import { openNavigationApp } from '@/lib/navigationUrls';
+import { submitCourierIssue } from '@/lib/courierApi';
+import { toast } from '@/lib/toast';
 import { realDispatchProvider } from '@/services/courierDispatch/RealDispatchProvider';
 import { ShopAndPickPage } from './ShopAndPickPage';
 
@@ -263,7 +265,17 @@ export function AtStorePage({
       <WaitTimeSheet
         open={waitSheetOpen}
         onClose={() => setWaitSheetOpen(false)}
-        onWait={() => setWaitSheetOpen(false)}
+        onWait={(minutes) => {
+          const orderId = realDispatchProvider.activeOrderId || delivery.orderId;
+          void submitCourierIssue(orderId, 'long_wait', `wait:${minutes}min`).then((ok) => {
+            if (ok) {
+              toast.success('Wait logged', `We'll note a ${minutes}-minute wait.`);
+            } else {
+              toast.error('Could not log wait', 'Try again or report an issue.');
+            }
+          });
+          setWaitSheetOpen(false);
+        }}
         onUnassign={() => {
           setWaitSheetOpen(false);
           onRequestUnassign();

@@ -7,6 +7,7 @@ import { validateBody, z } from "../_shared/validateBody.ts";
 
 export type CustomerDiscoveryDeps = {
   getServiceSupabase: () => SupabaseClient;
+  getSupabase: (authHeader: string) => SupabaseClient;
 };
 
 function roundMoney(value: number) {
@@ -91,7 +92,7 @@ const RedeemBody = z.object({
 });
 
 export function registerCustomerDiscoveryRoutes(app: Hono, deps: CustomerDiscoveryDeps) {
-  const { getServiceSupabase } = deps;
+  const { getServiceSupabase, getSupabase } = deps;
 
   // Active merchant promotions (customer-facing)
   app.get("/promotions", async (c) => {
@@ -255,14 +256,49 @@ export function registerCustomerDiscoveryRoutes(app: Hono, deps: CustomerDiscove
 
     if (error) return c.json({ error: error.message }, 500);
 
-    const reviews = (rows ?? [])
-      .filter((row) => !row.review_hidden)
-      .map((row) => ({
-        id: String(row.id),
-        rating: Number(row.customer_rating),
-        comment: String(row.customer_review || "").trim(),
-        at: String(row.delivered_at || row.created_at || ""),
-      }));
+    const visible = (rows ?? []).filter((row) => !row.review_hidden);
+    const ids = visible.map((row) => String(row.id));
+
+    const helpfulCounts = new Map<string, number>();
+    const votedIds = new Set<string>();
+    if (ids.length) {
+      const { data: votes } = await serviceSb
+        .from("review_votes")
+        .select("order_id, customer_id")
+        .in("order_id", ids);
+      for (const vote of votes ?? []) {
+        const orderId = String((vote as { order_id: string }).order_id);
+        helpfulCounts.set(orderId, (helpfulCounts.get(orderId) ?? 0) + 1);
+      }
+
+      const authHeader = c.req.header("Authorization");
+      if (authHeader) {
+        const { data: { user } } = await getSupabase(authHeader).auth.getUser();
+        if (user) {
+          const { data: customer } = await serviceSb
+            .from("customers")
+            .select("id")
+            .eq("user_id", user.id)
+            .maybeSingle();
+          if (customer) {
+            for (const vote of votes ?? []) {
+              if (String((vote as { customer_id: string }).customer_id) === String(customer.id)) {
+                votedIds.add(String((vote as { order_id: string }).order_id));
+              }
+            }
+          }
+        }
+      }
+    }
+
+    const reviews = visible.map((row) => ({
+      id: String(row.id),
+      rating: Number(row.customer_rating),
+      comment: String(row.customer_review || "").trim(),
+      at: String(row.delivered_at || row.created_at || ""),
+      helpfulCount: helpfulCounts.get(String(row.id)) ?? 0,
+      voted: votedIds.has(String(row.id)),
+    }));
 
     const ratingSum = reviews.reduce((sum, r) => sum + r.rating, 0);
     const avgRating = reviews.length
@@ -280,5 +316,100 @@ export function registerCustomerDiscoveryRoutes(app: Hono, deps: CustomerDiscove
       distribution,
       reviews,
     });
+  });
+
+  async function requireCustomer(authHeader: string | undefined) {
+    if (!authHeader) return { error: "Unauthorized" as const, status: 401 as const };
+    const { data: { user } } = await getSupabase(authHeader).auth.getUser();
+    if (!user) return { error: "Unauthorized" as const, status: 401 as const };
+    const serviceSb = getServiceSupabase();
+    const { data: customer } = await serviceSb
+      .from("customers")
+      .select("id, email")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (!customer) return { error: "Customer not found" as const, status: 404 as const };
+    return { user, customer, serviceSb };
+  }
+
+  app.post("/merchants/:id/reviews/:orderId/helpful", async (c) => {
+    const auth = await requireCustomer(c.req.header("Authorization"));
+    if ("error" in auth) return c.json({ error: auth.error }, auth.status);
+
+    const orderId = String(c.req.param("orderId") || "").trim();
+    const merchantId = String(c.req.param("id") || "").trim();
+    if (!orderId || !merchantId) return c.json({ error: "Review required" }, 400);
+
+    const { data: order } = await auth.serviceSb
+      .from("orders")
+      .select("id, merchant_id, customer_id, customer_rating, review_hidden")
+      .eq("id", orderId)
+      .maybeSingle();
+    if (!order || !order.customer_rating || order.review_hidden) {
+      return c.json({ error: "Review not found" }, 404);
+    }
+    if (String(order.customer_id) === String(auth.customer.id)) {
+      return c.json({ error: "You cannot mark your own review helpful" }, 400);
+    }
+
+    const { data: existing } = await auth.serviceSb
+      .from("review_votes")
+      .select("order_id")
+      .eq("order_id", order.id)
+      .eq("customer_id", auth.customer.id)
+      .maybeSingle();
+
+    if (existing) {
+      await auth.serviceSb
+        .from("review_votes")
+        .delete()
+        .eq("order_id", order.id)
+        .eq("customer_id", auth.customer.id);
+    } else {
+      const { error } = await auth.serviceSb.from("review_votes").insert({
+        order_id: order.id,
+        customer_id: auth.customer.id,
+      });
+      if (error) return c.json({ error: error.message }, 500);
+    }
+
+    const { count } = await auth.serviceSb
+      .from("review_votes")
+      .select("order_id", { count: "exact", head: true })
+      .eq("order_id", order.id);
+
+    return c.json({ voted: !existing, helpfulCount: count ?? 0 });
+  });
+
+  app.post("/merchants/:id/reviews/:orderId/report", async (c) => {
+    const auth = await requireCustomer(c.req.header("Authorization"));
+    if ("error" in auth) return c.json({ error: auth.error }, auth.status);
+
+    const orderId = String(c.req.param("orderId") || "").trim();
+    if (!orderId) return c.json({ error: "Review required" }, 400);
+
+    const { data: order } = await auth.serviceSb
+      .from("orders")
+      .select("id, merchant_id, order_number, customer_rating")
+      .eq("id", orderId)
+      .maybeSingle();
+    if (!order || order.customer_rating == null) return c.json({ error: "Review not found" }, 404);
+
+    const body = await c.req.json().catch(() => ({}));
+    const reason = typeof body.reason === "string" ? body.reason.trim().slice(0, 500) : "";
+
+    const { error } = await auth.serviceSb.from("support_cases").insert({
+      subject: `Reported review — ${order.order_number || order.id}`,
+      body: reason || "Customer reported a store review as inappropriate.",
+      status: "open",
+      priority: "normal",
+      customer_id: auth.customer.id,
+      order_id: order.id,
+      contact_email: (auth.customer.email as string | null) || auth.user.email || null,
+      created_by: auth.user.id,
+    });
+    if (error) return c.json({ error: error.message }, 500);
+
+    return c.json({ ok: true });
   });
 }

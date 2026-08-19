@@ -26,7 +26,6 @@ import { StackedDeliveryFlow } from '@/pages/delivery/stacked/StackedDeliveryFlo
 import { UnassignConfirmModal } from '@/components/delivery/UnassignConfirmModal';
 import { OfferPushBanner } from '@/components/ui/OfferPushBanner';
 import { EarningsPage } from '@/pages/earnings/EarningsPage';
-import { PromotionsPage } from '@/pages/earnings/PromotionsPage';
 import { DeliveryDetailPage } from '@/pages/earnings/DeliveryDetailPage';
 import { DashSummaryPage } from '@/pages/home/DashSummaryPage';
 import { ActivityPage } from '@/pages/activity/ActivityPage';
@@ -58,7 +57,9 @@ import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { useCourierDispatch } from '@/hooks/useCourierDispatch';
 import { OfflineError, assertOnline } from '@/lib/networkGuard';
 import { loadCourierProfile } from '@/lib/courierProfileService';
+import { openCourierAppSettings } from '@/lib/courierPermissions';
 import {
+  fetchCourierEarnings,
   patchCourierLocation,
   putCourierAvailability,
   submitCourierIssue,
@@ -99,13 +100,15 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
   const [showUnassignModal, setShowUnassignModal] = useState(false);
   const [reportIssueOpen, setReportIssueOpen] = useState(false);
   const [dashSummaryOpen, setDashSummaryOpen] = useState(false);
-  const [promotionsOpen, setPromotionsOpen] = useState(false);
   const [locationIssueOpen, setLocationIssueOpen] = useState(false);
   const [ageVerifyOpen, setAgeVerifyOpen] = useState(false);
   const [declineReasonOpen, setDeclineReasonOpen] = useState(false);
   const [pushBannerOpen, setPushBannerOpen] = useState(false);
   const [courierName, setCourierName] = useState<string | undefined>();
   const [completionRate, setCompletionRate] = useState<number | null>(null);
+  const [acceptanceRate, setAcceptanceRate] = useState<number | null>(null);
+  const [todayEarned, setTodayEarned] = useState(0);
+  const [todayDeliveries, setTodayDeliveries] = useState(0);
   const [activeDelivery, setActiveDelivery] = useState<ActiveDelivery | null>(null);
   const delivery = activeDelivery ?? emptyActiveDelivery();
   const hasActiveDeliveryData = Boolean(activeDelivery?.orderId);
@@ -183,22 +186,31 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
     }
   }, [mode, offerPhase, feedback]);
 
-  useEffect(() => {
+  const refreshTodayStats = useCallback(() => {
     void loadCourierProfile().then((profile) => {
       if (profile?.display_name) setCourierName(profile.display_name);
       if (profile?.completion_rate_pct != null) {
         setCompletionRate(profile.completion_rate_pct);
       }
+      setAcceptanceRate(profile?.acceptance_rate_pct ?? null);
+    });
+    void fetchCourierEarnings('today').then((data) => {
+      if (!data) return;
+      setTodayEarned(data.total);
+      setTodayDeliveries(data.deliveryCount);
     });
   }, []);
+
+  useEffect(() => {
+    refreshTodayStats();
+  }, [refreshTodayStats]);
 
   const hasActiveOffer = offerPhase !== null;
   const isOnDelivery = mode === 'on-delivery' && deliveryPhase !== null;
   const hasOverlay =
     selectedDeliveryId !== null ||
     profileScreen !== null ||
-    dashSummaryOpen ||
-    promotionsOpen;
+    dashSummaryOpen;
   const showBottomNav =
     !hasActiveOffer && !isOnDelivery && !hasOverlay && !networkOffline && !declineReasonOpen;
 
@@ -208,7 +220,6 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
     networkOffline ||
     locationIssueOpen ||
     dashSummaryOpen ||
-    promotionsOpen ||
     reportIssueOpen ||
     showUnassignModal ||
     declineReasonOpen;
@@ -239,7 +250,14 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
     dispatch.finishDelivery();
     setActiveDelivery(null);
     setActiveTab('home');
-  }, [feedback, dispatch]);
+    refreshTodayStats();
+  }, [feedback, dispatch, refreshTodayStats]);
+
+  const dismissCancelled = useCallback(() => {
+    dispatch.finishDelivery();
+    setActiveDelivery(null);
+    setActiveTab('home');
+  }, [dispatch]);
 
   const handleOfferReceived = useCallback(() => {
     if (mode === 'online' && offerPhase === null) {
@@ -438,7 +456,6 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
     isOnDelivery ||
     hasOverlay ||
     dashSummaryOpen ||
-    promotionsOpen ||
     networkOffline ||
     locationIssueOpen ||
     activeTab === 'earnings' ||
@@ -453,6 +470,8 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
           hasActiveDelivery={isOnDelivery && hasActiveDeliveryData}
           onDeliverySelect={setSelectedDeliveryId}
           onViewActiveDelivery={resumeActiveDelivery}
+          onMenuClick={() => setActiveTab('account')}
+          onNotificationsClick={() => setProfileScreen('notifications')}
         />
       );
     }
@@ -461,7 +480,6 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
         <EarningsPage
           onDeliverySelect={setSelectedDeliveryId}
           onViewAllHistory={() => setActiveTab('activity')}
-          onViewPromotions={() => setPromotionsOpen(true)}
         />
       );
     }
@@ -471,6 +489,7 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
           onNavigate={handleProfileNavigate}
           onSignOut={() => onSignOut?.()}
           onRatingTap={() => setProfileScreen('ratings')}
+          onNotificationsClick={() => setProfileScreen('notifications')}
         />
       );
     }
@@ -484,14 +503,23 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
         <HomeOnlinePage
           onRequestEndDash={() => setDashSummaryOpen(true)}
           onOfferReceived={handleOfferReceived}
-          onViewPromotions={() => setPromotionsOpen(true)}
           courierLat={coords?.lat}
           courierLng={coords?.lng}
+          todayEarned={todayEarned}
+          todayDeliveries={todayDeliveries}
         />
       );
     }
 
-    return <HomeOfflinePage onGoOnline={handleGoOnline} courierName={courierName} />;
+    return (
+      <HomeOfflinePage
+        onGoOnline={handleGoOnline}
+        courierName={courierName}
+        todayEarned={todayEarned}
+        todayDeliveries={todayDeliveries}
+        acceptanceRate={acceptanceRate}
+      />
+    );
   };
 
   return (
@@ -501,6 +529,7 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
           statusLabel={headerStatus.label}
           statusTone={headerStatus.tone}
           hideStatus={hideMainHeader}
+          onMenuClick={() => setActiveTab('account')}
         />
 
         {renderTabContent()}
@@ -639,7 +668,10 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
       )}
 
       {deliveryPhase === 'order-cancelled' && (
-        <OrderCancelledPage onBackToDash={finishDelivery} />
+        <OrderCancelledPage
+          orderId={realDispatchProvider.activeOrderId || delivery.orderId}
+          onBackToDash={dismissCancelled}
+        />
       )}
 
       {ageVerifyOpen && (
@@ -679,13 +711,17 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
             dispatch.goOffline();
           }}
           onStayOnline={() => setDashSummaryOpen(false)}
+          todayEarned={todayEarned}
+          todayDeliveries={todayDeliveries}
+          acceptanceRate={acceptanceRate}
         />
       )}
 
-      {promotionsOpen && <PromotionsPage onBack={() => setPromotionsOpen(false)} />}
-
       {selectedDeliveryId && (
-        <DeliveryDetailPage onBack={() => setSelectedDeliveryId(null)} />
+        <DeliveryDetailPage
+          deliveryId={selectedDeliveryId}
+          onBack={() => setSelectedDeliveryId(null)}
+        />
       )}
 
       {pushBannerOpen && (
@@ -779,7 +815,17 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
 
       {locationIssueOpen && (
         <LocationIssueSheet
-          onOpenSettings={() => window.alert('Open device location settings')}
+          onOpenSettings={() => {
+            void (async () => {
+              const opened = await openCourierAppSettings();
+              if (!opened) {
+                toast.info(
+                  'Enable Location',
+                  "Open phone Settings → Apps → Roam Rush Courier → Permissions → Location → Allow all the time.",
+                );
+              }
+            })();
+          }}
           onRetry={handleLocationRetry}
         />
       )}
@@ -789,6 +835,7 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
           delivery={MOCK_CACHED_DELIVERY}
           onRetry={handleRetryConnection}
           onProfileClick={() => setActiveTab('account')}
+          onMenuClick={() => setActiveTab('account')}
         />
       )}
     </AppShell>

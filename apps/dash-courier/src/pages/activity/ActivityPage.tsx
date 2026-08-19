@@ -22,6 +22,8 @@ type ActivityPageProps = {
   onBack?: () => void;
   onDeliverySelect: (deliveryId: string) => void;
   onViewActiveDelivery?: () => void;
+  onMenuClick?: () => void;
+  onNotificationsClick?: () => void;
 };
 
 const HISTORY_FILTERS: { id: HistoryFilter; label: string }[] = [
@@ -143,6 +145,8 @@ export function ActivityPage({
   onBack,
   onDeliverySelect,
   onViewActiveDelivery,
+  onMenuClick,
+  onNotificationsClick,
 }: ActivityPageProps) {
   const [tab, setTab] = useState<ActivityTab>(initialTab);
   const [filter, setFilter] = useState<HistoryFilter>('all');
@@ -209,6 +213,7 @@ export function ActivityPage({
             <button
               type="button"
               aria-label="Menu"
+              onClick={onMenuClick}
               className="p-2 rounded-full text-primary hover:bg-surface-container-low active:scale-95 -ml-2"
             >
               <MaterialIcon name="menu" />
@@ -217,7 +222,8 @@ export function ActivityPage({
           <h1 className="text-xl font-bold text-primary flex-1 text-center">Activity</h1>
           <button
             type="button"
-            aria-label="Notifications"
+            aria-label="Notification settings"
+            onClick={onNotificationsClick}
             className="p-2 rounded-full text-primary hover:bg-surface-container-low active:scale-95 -mr-2"
           >
             <MaterialIcon name="notifications" />

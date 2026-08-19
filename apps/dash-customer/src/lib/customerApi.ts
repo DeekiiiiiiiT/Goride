@@ -28,6 +28,7 @@ export type CustomerProfileDto = {
   accountStatus: string;
   notificationPrefs?: NotificationPrefs;
   preferredPaymentMethod?: 'wipay' | 'paypal' | 'cash';
+  avatarUrl?: string | null;
 };
 
 async function authHeaders(): Promise<Record<string, string> | null> {
@@ -68,6 +69,31 @@ export async function patchCustomerProfile(body: {
   if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Failed to save profile');
   const data = await res.json();
   return data.profile as CustomerProfileDto;
+}
+
+export async function uploadCustomerAvatar(file: File): Promise<CustomerProfileDto> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) throw new Error('Sign in required');
+  const form = new FormData();
+  form.append('file', file);
+  const res = await fetch(`${API_ENDPOINTS.delivery}/customer/avatar`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${session.access_token}` },
+    body: form,
+  });
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Failed to update photo');
+  const data = await res.json();
+  return data.profile as CustomerProfileDto;
+}
+
+export async function getAuthAvatarHint(): Promise<string | null> {
+  const { data: { user } } = await supabase.auth.getUser();
+  const meta = (user?.user_metadata ?? {}) as Record<string, unknown>;
+  for (const key of ['avatar_url', 'picture', 'avatar'] as const) {
+    const value = meta[key];
+    if (typeof value === 'string' && value.startsWith('http')) return value;
+  }
+  return null;
 }
 
 export async function fetchFavoriteMerchantIds(): Promise<string[]> {
@@ -160,15 +186,56 @@ export async function submitCustomerOrderIssue(input: {
   orderId: string;
   issueType: string;
   notes: string;
+  photoPath?: string;
 }): Promise<void> {
   const headers = await authHeaders();
   if (!headers) throw new Error('Sign in required');
   const res = await fetch(`${API_ENDPOINTS.delivery}/orders/${input.orderId}/issue`, {
     method: 'POST',
     headers,
-    body: JSON.stringify({ issueType: input.issueType, notes: input.notes }),
+    body: JSON.stringify({
+      issueType: input.issueType,
+      notes: input.notes,
+      photoPath: input.photoPath || undefined,
+    }),
   });
   if (!res.ok) {
     throw new Error((await res.json().catch(() => ({}))).error || 'Could not submit report');
   }
+}
+
+export async function uploadCustomerIssuePhoto(file: File): Promise<{ path: string; signedUrl: string }> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) throw new Error('Sign in required');
+  const form = new FormData();
+  form.append('file', file);
+  const res = await fetch(`${API_ENDPOINTS.delivery}/customer/issue-photo`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${session.access_token}` },
+    body: form,
+  });
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Failed to attach photo');
+  const data = await res.json();
+  return { path: String(data.path), signedUrl: String(data.signedUrl) };
+}
+
+export async function toggleReviewHelpful(merchantId: string, orderId: string): Promise<{ voted: boolean; helpfulCount: number }> {
+  const headers = await authHeaders();
+  if (!headers) throw new Error('Sign in required');
+  const res = await fetch(
+    `${API_ENDPOINTS.delivery}/merchants/${encodeURIComponent(merchantId)}/reviews/${encodeURIComponent(orderId)}/helpful`,
+    { method: 'POST', headers },
+  );
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Could not save vote');
+  return res.json() as Promise<{ voted: boolean; helpfulCount: number }>;
+}
+
+export async function reportMerchantReview(merchantId: string, orderId: string): Promise<void> {
+  const headers = await authHeaders();
+  if (!headers) throw new Error('Sign in required');
+  const res = await fetch(
+    `${API_ENDPOINTS.delivery}/merchants/${encodeURIComponent(merchantId)}/reviews/${encodeURIComponent(orderId)}/report`,
+    { method: 'POST', headers, body: JSON.stringify({ reason: 'Inappropriate review' }) },
+  );
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Could not report review');
 }

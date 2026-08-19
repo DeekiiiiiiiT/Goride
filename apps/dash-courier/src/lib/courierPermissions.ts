@@ -176,3 +176,22 @@ export function canContinueCourierPermissions(
   if (granted.notifications === 'unsupported') return true;
   return granted.notifications === 'granted';
 }
+
+/** Opens iOS App / Android Application Details so the courier can re-enable Location. */
+export async function openCourierAppSettings(): Promise<boolean> {
+  try {
+    const { Capacitor } = await import('@capacitor/core');
+    if (!Capacitor.isNativePlatform()) return false;
+    const { NativeSettings, AndroidSettings, IOSSettings } = await import(
+      'capacitor-native-settings'
+    );
+    if (Capacitor.getPlatform() === 'ios') {
+      await NativeSettings.openIOS({ option: IOSSettings.App });
+    } else {
+      await NativeSettings.openAndroid({ option: AndroidSettings.ApplicationDetails });
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}

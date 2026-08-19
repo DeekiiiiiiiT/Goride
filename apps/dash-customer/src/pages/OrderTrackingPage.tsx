@@ -181,7 +181,7 @@ export default function OrderTrackingPage({ orderId, demoPhase, onNavigate }: Pr
     );
   }
 
-  const handleHelp = () => onNavigate('report-issue', { orderId: order.id });
+  const handleHelp = () => onNavigate('report-issue', { orderId: order.id, returnTo: 'tracking' });
   const handleDetails = () => onNavigate('order-details', { orderId: order.id });
 
   switch (phase) {

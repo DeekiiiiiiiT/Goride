@@ -1,6 +1,13 @@
 import { allowMocks } from './mocksGate';
-import { fetchCustomerProfile, patchCustomerProfile, isCustomerLoggedIn } from './customerApi';
+import {
+  fetchCustomerProfile,
+  getAuthAvatarHint,
+  isCustomerLoggedIn,
+  patchCustomerProfile,
+  uploadCustomerAvatar,
+} from './customerApi';
 import { hydratePreferredPaymentMethod } from './checkoutStorage';
+import { assertCustomerAvatarFile, resolveProfileAvatarUrl } from './profileAvatar';
 
 export const PROFILE_AVATAR =
   'https://lh3.googleusercontent.com/aida-public/AB6AXuD91c0rjILQv1vBE3_Geadu5PDiMEoNZAk2l0Ir6ZxWXnjHfgI3QqnMljx6GsduMoKmTzzc7cUl7mnGmz_0nfqqFBATmtZVDRO6Giau6I_eVPdX-ReqQXEWkmU2277bplPpYNnyFwO1ra4gCvi9_sdXWi9G9Y8fEhZHzuKNeqbkV22DvMZjQnoIJNq4TKyM6qCIeYqcPEiMRNjb3ydCAYzZLjrYnz5mh-SPEU6yQt_Erh1M6NAxlVgiLzUXrm_Wh0La_sM1BFI3_jWl';
@@ -35,11 +42,15 @@ const EMPTY_PROFILE: UserProfile = {
   avatarUrl: PROFILE_AVATAR,
 };
 
+function withAvatar(profile: UserProfile): UserProfile {
+  return { ...profile, avatarUrl: resolveProfileAvatarUrl(profile.avatarUrl, PROFILE_AVATAR) };
+}
+
 function readLocalProfile(): UserProfile {
   try {
     const raw = localStorage.getItem(PROFILE_KEY);
     if (raw) {
-      return { ...EMPTY_PROFILE, ...(JSON.parse(raw) as Partial<UserProfile>), avatarUrl: PROFILE_AVATAR };
+      return withAvatar({ ...EMPTY_PROFILE, ...(JSON.parse(raw) as Partial<UserProfile>) });
     }
   } catch {
     // fall through
@@ -61,7 +72,7 @@ export function getProfile(): UserProfile {
 
 export function saveProfile(profile: Partial<UserProfile>): void {
   const current = readLocalProfile();
-  writeLocalProfile({ ...current, ...profile, avatarUrl: PROFILE_AVATAR });
+  writeLocalProfile(withAvatar({ ...current, ...profile }));
 }
 
 /** Pull profile from delivery edge when logged in; cache locally for UX. */
@@ -75,7 +86,10 @@ export async function syncProfileFromBackend(): Promise<UserProfile> {
       lastName: remote.lastName || '',
       email: remote.email || '',
       phone: remote.phone || '',
-      avatarUrl: PROFILE_AVATAR,
+      avatarUrl: resolveProfileAvatarUrl(
+        remote.avatarUrl || (await getAuthAvatarHint()),
+        PROFILE_AVATAR,
+      ),
     };
     writeLocalProfile(next);
     if (remote.preferredPaymentMethod) {
@@ -89,7 +103,7 @@ export async function syncProfileFromBackend(): Promise<UserProfile> {
 
 /** Persist profile to backend + local cache. Local-only when signed out. */
 export async function persistProfile(profile: Partial<UserProfile>): Promise<UserProfile> {
-  const merged = { ...readLocalProfile(), ...profile, avatarUrl: PROFILE_AVATAR };
+  const merged = withAvatar({ ...readLocalProfile(), ...profile });
   writeLocalProfile(merged);
 
   if (!(await isCustomerLoggedIn())) return merged;
@@ -107,8 +121,25 @@ export async function persistProfile(profile: Partial<UserProfile>): Promise<Use
     lastName: remote.lastName || merged.lastName,
     email: remote.email || merged.email,
     phone: remote.phone || merged.phone,
-    avatarUrl: PROFILE_AVATAR,
+    avatarUrl: resolveProfileAvatarUrl(remote.avatarUrl || merged.avatarUrl, PROFILE_AVATAR),
   };
+  writeLocalProfile(next);
+  return next;
+}
+
+export async function persistProfilePhoto(file: File): Promise<UserProfile> {
+  assertCustomerAvatarFile(file);
+  if (!(await isCustomerLoggedIn())) throw new Error('Sign in to change your photo');
+  const remote = await uploadCustomerAvatar(file);
+  const current = readLocalProfile();
+  const next = withAvatar({
+    ...current,
+    firstName: remote.firstName || current.firstName,
+    lastName: remote.lastName || current.lastName,
+    email: remote.email || current.email,
+    phone: remote.phone || current.phone,
+    avatarUrl: remote.avatarUrl || '',
+  });
   writeLocalProfile(next);
   return next;
 }

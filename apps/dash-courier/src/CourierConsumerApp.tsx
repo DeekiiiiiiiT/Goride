@@ -39,7 +39,7 @@ export function CourierConsumerApp() {
   const [phase, setPhase] = useState<AppPhase>('splash');
 
   const finishOnboarding = useCallback(() => {
-    void ensureCourierProfile().finally(() => {
+    void ensureCourierProfile({ markComplete: true }).finally(() => {
       markOnboardingComplete();
       clearSignupDraft();
       setPhase('app');

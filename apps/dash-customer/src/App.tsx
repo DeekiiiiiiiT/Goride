@@ -542,7 +542,7 @@ function DashCustomerShell() {
           <HomePage
             onNavigate={navigate}
             onSearchFocus={() => handleTabChange('search')}
-            onSeeAll={(vertical) => handleOpenCategory(vertical === 'restaurant' ? 'all' : vertical)}
+            onSeeAll={handleOpenCategory}
             showQuickReorder={!!session}
             onProfileClick={() => handleTabChange('account')}
           />
@@ -590,7 +590,13 @@ function DashCustomerShell() {
       case 'account':
         return <AccountPage session={session} onNavigate={navigate} />;
       default:
-        return <HomePage onNavigate={navigate} onSearchFocus={() => handleTabChange('search')} />;
+        return (
+          <HomePage
+            onNavigate={navigate}
+            onSearchFocus={() => handleTabChange('search')}
+            onSeeAll={handleOpenCategory}
+          />
+        );
     }
   };
 
@@ -710,7 +716,14 @@ function DashCustomerShell() {
       case 'about':
         return <AboutPage onNavigate={navigate} />;
       case 'report-issue':
-        return <ReportIssuePage onNavigate={navigate} orderId={pageData?.orderId as string | undefined} />;
+        return (
+          <ReportIssuePage
+            onNavigate={navigate}
+            orderId={pageData?.orderId as string | undefined}
+            issueType={pageData?.issueType as string | undefined}
+            returnTo={pageData?.returnTo as string | undefined}
+          />
+        );
       case 'restaurant-reviews':
         return (
           <RestaurantReviewsPage

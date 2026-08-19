@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   courierPhoneHref,
+  destinationPinLabel,
   formatArrivalEta,
   formatPrepEta,
   mapApiOrderToTracking,
@@ -33,6 +34,7 @@ describe('mapApiOrderToTracking', () => {
     expect(mapped.merchantName).toBe('Island Grill');
     expect(mapped.deliveryPhotoUrl).toBe('https://example.com/pod.png');
     expect(mapped.deliveredLabel).toBeTruthy();
+    expect(mapped.deliveryAddress).toBe('');
   });
 
   it('maps courier display name and phone from the order payload', () => {
@@ -96,6 +98,22 @@ describe('tracking ETAs', () => {
 
   it('returns null for delivery ETA when there is no timestamp or GPS', () => {
     expect(remainingDeliveryMinutes({ nowMs: Date.now() })).toBeNull();
+  });
+});
+
+describe('destinationPinLabel', () => {
+  const saved = [
+    { label: 'home', line1: '45 Constant Spring Rd, Apt 12B' },
+    { label: 'work', line1: '123 Business Park, Suite 4' },
+  ];
+
+  it('uses Work when the order street matches a saved work place', () => {
+    expect(destinationPinLabel('123 Business Park, Suite 4', saved)).toBe('Work');
+  });
+
+  it('falls back to Drop-off instead of inventing Home', () => {
+    expect(destinationPinLabel('99 Unknown Lane', saved)).toBe('Drop-off');
+    expect(destinationPinLabel('', saved)).toBe('Drop-off');
   });
 });
 

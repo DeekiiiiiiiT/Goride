@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { API_ENDPOINTS } from '@roam/api-client';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { StarRating } from '@/components/rating/StarRating';
-import { ISSUE_CHIPS } from '@/lib/ordersContent';
+import { submitCustomerOrderIssue } from '@/lib/customerApi';
+import { ISSUE_CHIPS, issueTypeFromChips, splitFeedbackChips } from '@/lib/ordersContent';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 
@@ -23,13 +24,14 @@ export default function RateOrderPage({
   initialFeedbackChips = [],
   onNavigate,
 }: Props) {
+  const split = splitFeedbackChips(initialFeedbackChips);
   const [overall, setOverall] = useState(initialRating >= 1 && initialRating <= 5 ? initialRating : 0);
   const [foodQuality, setFoodQuality] = useState(4);
   const [deliverySpeed, setDeliverySpeed] = useState(5);
   const [feedback, setFeedback] = useState(
-    initialFeedbackChips.length ? initialFeedbackChips.join(', ') : '',
+    split.positive.length ? split.positive.join(', ') : '',
   );
-  const [issues, setIssues] = useState<string[]>([]);
+  const [issues, setIssues] = useState<string[]>(split.issues);
   const [submitting, setSubmitting] = useState(false);
 
   const toggleIssue = (chip: string) => {
@@ -79,6 +81,26 @@ export default function RateOrderPage({
       if (!res.ok) {
         const err = (await res.json().catch(() => ({}))) as { error?: string };
         throw new Error(err.error || 'Failed to submit rating');
+      }
+
+      const issueType = issueTypeFromChips(issues);
+      if (issueType) {
+        const notes = [
+          issues.join(', '),
+          feedback.trim(),
+          `Rated ${overall}/5 after delivery`,
+        ]
+          .filter(Boolean)
+          .join('. ');
+        try {
+          await submitCustomerOrderIssue({
+            orderId,
+            issueType,
+            notes: notes.length >= 8 ? notes : `${notes}. Please review this order.`,
+          });
+        } catch {
+          toast.error('Rating saved. Could not open a support ticket — use Get Help if you still need one.');
+        }
       }
 
       toast.success('Thanks for your feedback');

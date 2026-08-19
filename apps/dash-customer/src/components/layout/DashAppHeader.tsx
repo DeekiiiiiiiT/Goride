@@ -1,5 +1,6 @@
 import React from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
+import { getProfile, PROFILE_AVATAR } from '@/lib/accountContent';
 
 type DashAppHeaderProps = {
   onMenuClick?: () => void;
@@ -30,7 +31,7 @@ export function DashAppHeader({
         className="btn-touch min-w-11 min-h-11 hover:opacity-80 transition-opacity active:scale-95 rounded-full overflow-hidden w-10 h-10 bg-surface-container-high border border-outline-variant flex items-center justify-center"
       >
         {showProfileImage ? (
-          <img alt="Profile" className="w-full h-full object-cover" src="/images/avatar.png" />
+          <img alt="Profile" className="w-full h-full object-cover" src={getProfile().avatarUrl || PROFILE_AVATAR} />
         ) : (
           <MaterialIcon name="person" className="text-on-surface-variant" filled />
         )}

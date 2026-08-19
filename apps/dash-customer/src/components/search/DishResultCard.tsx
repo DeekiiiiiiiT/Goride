@@ -1,4 +1,5 @@
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
+import { FavoriteButton } from '@/components/ui/FavoriteButton';
 import { formatJmd } from '@/lib/restaurantContent';
 import type { DishSearchResult } from '@/lib/searchDishes';
 
@@ -25,15 +26,24 @@ export function DishResultCard({ dish, onAdd, onOpenRestaurant }: Props) {
         )}
       </button>
       <div className="flex-1 min-w-0 flex flex-col justify-between py-1">
-        <div>
-          <h3 className="text-headline-sm font-semibold text-on-surface truncate">{dish.name}</h3>
-          <button
-            type="button"
-            onClick={() => onOpenRestaurant(dish.merchantId)}
-            className="text-body-sm text-on-surface-variant hover:text-primary truncate text-left"
-          >
-            {dish.merchantName}
-          </button>
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <h3 className="text-headline-sm font-semibold text-on-surface truncate">{dish.name}</h3>
+            <button
+              type="button"
+              onClick={() => onOpenRestaurant(dish.merchantId)}
+              className="text-body-sm text-on-surface-variant hover:text-primary truncate text-left"
+            >
+              {dish.merchantName}
+            </button>
+          </div>
+          <FavoriteButton
+            merchantId={dish.merchantId}
+            merchantName={dish.merchantName}
+            itemId={dish.itemId}
+            itemName={dish.name}
+            className="!h-8 !w-8 shrink-0"
+          />
         </div>
         <div className="flex items-center justify-between mt-2">
           <span className="text-headline-sm font-semibold">{formatJmd(dish.price)}</span>

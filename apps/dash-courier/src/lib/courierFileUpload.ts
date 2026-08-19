@@ -12,7 +12,7 @@ async function getUserId(): Promise<string | null> {
 /** Upload under `{userId}/{folder}/{filename}` in courier-documents bucket; return signed URL. */
 export async function uploadAndGetProofUrl(
   file: File,
-  folder: 'proofs' | 'issues' | 'docs' | 'vehicles' = 'proofs',
+  folder: 'proofs' | 'issues' | 'docs' | 'vehicles' | 'avatars' = 'proofs',
 ): Promise<string | null> {
   const userId = await getUserId();
   if (!userId) return null;

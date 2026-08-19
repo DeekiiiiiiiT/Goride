@@ -406,8 +406,8 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
     if (!customer) return c.json({ error: "Customer not found" }, 404);
 
     const lookup = ORDER_ID_UUID.test(id)
-      ? serviceSb.from("orders").select("id, customer_id, status, customer_rating").eq("id", id)
-      : serviceSb.from("orders").select("id, customer_id, status, customer_rating").eq("order_number", id);
+      ? serviceSb.from("orders").select("id, customer_id, merchant_id, status, customer_rating").eq("id", id)
+      : serviceSb.from("orders").select("id, customer_id, merchant_id, status, customer_rating").eq("order_number", id);
     const { data: order, error: orderError } = await lookup.maybeSingle();
 
     if (orderError || !order) return c.json({ error: "Order not found" }, 404);
@@ -443,6 +443,22 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
         actor_id: user.id,
         notes: "Customer submitted rating",
       });
+    }
+
+    if (order.merchant_id) {
+      const { data: rated } = await serviceSb
+        .from("orders")
+        .select("customer_rating")
+        .eq("merchant_id", order.merchant_id)
+        .not("customer_rating", "is", null)
+        .eq("review_hidden", false);
+      const ratings = (rated ?? [])
+        .map((row) => Number((row as { customer_rating: number }).customer_rating))
+        .filter((n) => n >= 1 && n <= 5);
+      if (ratings.length) {
+        const avg = Math.round((ratings.reduce((sum, n) => sum + n, 0) / ratings.length) * 10) / 10;
+        await serviceSb.from("merchants").update({ rating: avg, updated_at: now }).eq("id", order.merchant_id);
+      }
     }
 
     return c.json({ order: updated });
@@ -570,7 +586,15 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
     return c.json({ order: updated, refundQueued });
   });
 
-  const CUSTOMER_ISSUE_TYPES = new Set(["missing", "wrong", "quality", "other"]);
+  const CUSTOMER_ISSUE_TYPES = new Set([
+    "missing",
+    "wrong",
+    "quality",
+    "payment",
+    "safety",
+    "account",
+    "other",
+  ]);
 
   // Customer support intake — persists to customer_order_issues (not a fake timeout)
   app.post("/orders/:id/issue", async (c) => {
@@ -585,12 +609,20 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
     const body = await c.req.json().catch(() => ({}));
     const issueType = String(body.issueType || body.issue_type || "").trim().toLowerCase();
     const notes = typeof body.notes === "string" ? body.notes.trim().slice(0, 2000) : "";
+    const photoPath = typeof body.photoPath === "string"
+      ? body.photoPath.trim()
+      : typeof body.photo_path === "string"
+      ? body.photo_path.trim()
+      : "";
 
     if (!CUSTOMER_ISSUE_TYPES.has(issueType)) {
       return c.json({ error: "Invalid issue type" }, 400);
     }
     if (notes.length < 8) {
       return c.json({ error: "Please describe what happened (at least a short sentence)." }, 400);
+    }
+    if (photoPath && !photoPath.startsWith(`${user.id}/issues/`)) {
+      return c.json({ error: "Invalid photo" }, 400);
     }
 
     const serviceSb = getServiceSupabase();
@@ -617,6 +649,7 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
         customer_id: customer.id,
         issue_type: issueType,
         notes,
+        photo_url: photoPath || null,
       })
       .select("id, order_id, issue_type, status, created_at")
       .single();
@@ -627,14 +660,17 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
       missing: "Missing items",
       wrong: "Wrong items",
       quality: "Food quality",
+      payment: "Payment issue",
+      safety: "Safety issue",
+      account: "Account issue",
       other: "Order issue",
     };
     const orderRef = String(order.order_number || order.id);
     await serviceSb.from("support_cases").insert({
       subject: `${issueLabels[issueType] ?? "Order issue"} — ${orderRef}`,
-      body: notes,
+      body: photoPath ? `${notes}\n\nPhoto attached.` : notes,
       status: "open",
-      priority: issueType === "quality" || issueType === "missing" ? "high" : "normal",
+      priority: issueType === "quality" || issueType === "missing" || issueType === "safety" ? "high" : "normal",
       customer_id: customer.id,
       order_id: order.id,
       contact_email: (customer.email as string | null) || user.email || null,

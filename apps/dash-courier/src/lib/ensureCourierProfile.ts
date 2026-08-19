@@ -7,9 +7,10 @@ import { syncVehicleFromSignupDraft } from '@/lib/courierVehicleService';
 
 /**
  * Ensures a delivery.courier_profiles row exists for the signed-in courier.
- * Called after onboarding permissions or OAuth signup completes.
+ * New rows must insert as onboarding_complete=false (RLS). Only mark complete
+ * when the signup wizard actually finishes.
  */
-export async function ensureCourierProfile(): Promise<void> {
+export async function ensureCourierProfile(opts?: { markComplete?: boolean }): Promise<void> {
   const {
     data: { session },
   } = await supabase.auth.getSession();
@@ -44,29 +45,38 @@ export async function ensureCourierProfile(): Promise<void> {
     .eq('user_id', user.id)
     .maybeSingle();
 
-  const payload = {
+  const payload: Record<string, unknown> = {
     user_id: user.id,
     email: user.email ?? draft.email ?? null,
     phone,
     display_name: displayName,
     vehicle_type: draft.vehicleType ?? null,
-    onboarding_complete: true,
     status: 'pending' as const,
     updated_at: new Date().toISOString(),
   };
+  if (draft.profilePhotoUrl) {
+    payload.profile_photo_url = draft.profilePhotoUrl;
+  }
 
   if (existing) {
-    // Do not overwrite status on existing profiles
+    // Do not overwrite status on existing profiles; do not flip complete mid-wizard.
     const { status: _status, ...safePayload } = payload;
+    if (opts?.markComplete) {
+      safePayload.onboarding_complete = true;
+    }
     await delivery.from('courier_profiles').update(safePayload).eq('user_id', user.id);
   } else {
-    await delivery.from('courier_profiles').upsert(payload, { onConflict: 'user_id' });
+    await delivery.from('courier_profiles').upsert(
+      { ...payload, onboarding_complete: false },
+      { onConflict: 'user_id' },
+    );
   }
 
   await syncVehicleFromSignupDraft();
 }
 
 export async function syncCourierProfileFromDraft(): Promise<void> {
+  await ensureCourierProfile();
   const draft = loadSignupDraft();
   const delivery = await getDeliveryClient();
   if (!delivery) return;
@@ -76,15 +86,17 @@ export async function syncCourierProfileFromDraft(): Promise<void> {
   } = await supabase.auth.getSession();
   if (!session?.user) return;
 
-  await delivery
-    .from('courier_profiles')
-    .update({
-      display_name: draft.displayName || draft.fullName || null,
-      phone: draft.phone ? toE164JamaicaPhone(draft.phone) : null,
-      vehicle_type: draft.vehicleType,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('user_id', session.user.id);
+  const patch: Record<string, unknown> = {
+    display_name: draft.displayName || draft.fullName || null,
+    phone: draft.phone ? toE164JamaicaPhone(draft.phone) : null,
+    vehicle_type: draft.vehicleType,
+    updated_at: new Date().toISOString(),
+  };
+  if (draft.profilePhotoUrl) {
+    patch.profile_photo_url = draft.profilePhotoUrl;
+  }
+
+  await delivery.from('courier_profiles').update(patch).eq('user_id', session.user.id);
 }
 
 async function getDeliveryClient() {

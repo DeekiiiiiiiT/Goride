@@ -100,37 +100,91 @@ export const EXPIRED_PROMOS = [
 export const FAQ_ITEMS = [
   {
     id: 'tracking',
+    topic: 'order',
     title: 'Delivery & Tracking',
     body: 'Open Orders and tap an active order to see live tracking. You can call or message the courier once they are assigned. After delivery, rate the order from the same screen.',
   },
   {
     id: 'refunds',
+    topic: 'order',
     title: 'Refunds & Cancellations',
     body: 'You can cancel from tracking before the restaurant starts preparing. After that, use Order Help to report a problem. Refunds for paid orders are reviewed by support.',
   },
   {
+    id: 'account-login',
+    topic: 'account',
+    title: 'Sign-in & profile',
+    body: 'Use Google to sign in. Name, phone, and email are saved on Edit Profile. If you cannot get in, report an account issue from this Help screen and we will look it up.',
+  },
+  {
+    id: 'account-addresses',
+    topic: 'account',
+    title: 'Saved addresses',
+    body: 'Addresses live under Account → Addresses. Set a default pin so checkout and couriers use the right drop-off. You can add Home, Work, or Other.',
+  },
+  {
+    id: 'payment-charge',
+    topic: 'payment',
+    title: 'Charges & refunds',
+    body: 'WiPay and PayPal charges happen on their hosted checkout. Cash is collected by the courier. If you were charged twice or the amount looks wrong, report a payment issue from this screen with the order number.',
+  },
+  {
+    id: 'payment-methods',
+    topic: 'payment',
+    title: 'Cards & payment methods',
+    body: 'Choose WiPay, PayPal, or cash as your default under Account → Payment Methods. Cards are saved during hosted checkout — there is no separate Add Card form.',
+  },
+  {
+    id: 'safety-courier',
+    topic: 'safety',
+    title: 'Courier safety',
+    body: 'If something feels unsafe during delivery, stay inside, do not share extra personal details, and report a safety issue from this screen. Call local emergency services if you are in immediate danger.',
+  },
+  {
+    id: 'safety-food',
+    topic: 'safety',
+    title: 'Food safety',
+    body: 'Report spilled, unsealed, or spoiled food as a safety issue on the order. Take a photo if you can. Support reviews these before a refund is issued.',
+  },
+  {
     id: 'pass',
+    topic: 'payment',
     title: 'Roam Rush Pass',
     body: 'Roam Rush Pass is not available yet. Promo codes from restaurants still work at checkout when the partner has an active offer.',
   },
   {
     id: 'promos',
+    topic: 'payment',
     title: 'Promos & Credits',
     body: 'Enter a partner promo code in Cart or Promotions. Invalid or expired codes are rejected before you pay. Credits are applied by support when a report is resolved.',
   },
 ] as const;
 
 export const HELP_QUICK_ACTIONS = [
-  { id: 'order', icon: 'receipt_long', label: 'Order Help', page: 'report-issue' },
-  { id: 'account', icon: 'person', label: 'Account Issues', page: 'edit-profile' },
-  { id: 'payment', icon: 'credit_card', label: 'Payment Issues', page: 'payment-methods' },
-  { id: 'safety', icon: 'health_and_safety', label: 'Safety', page: 'report-issue' },
+  { id: 'order', icon: 'receipt_long', label: 'Order Help' },
+  { id: 'account', icon: 'person', label: 'Account Issues' },
+  { id: 'payment', icon: 'credit_card', label: 'Payment Issues' },
+  { id: 'safety', icon: 'health_and_safety', label: 'Safety' },
 ] as const;
+
+export type HelpTopicId = (typeof HELP_QUICK_ACTIONS)[number]['id'];
+
+export function faqsForTopic(topic: string | null, query = ''): typeof FAQ_ITEMS[number][] {
+  const q = query.trim().toLowerCase();
+  return FAQ_ITEMS.filter((item) => {
+    if (topic && item.topic !== topic) return false;
+    if (!q) return true;
+    return item.title.toLowerCase().includes(q) || item.body.toLowerCase().includes(q);
+  });
+}
 
 export const ISSUE_TYPES = [
   { id: 'missing', icon: 'shopping_bag', label: 'Missing items' },
   { id: 'wrong', icon: 'swap_horiz', label: 'Wrong items' },
   { id: 'quality', icon: 'restaurant', label: 'Food quality' },
+  { id: 'payment', icon: 'credit_card', label: 'Payment' },
+  { id: 'safety', icon: 'health_and_safety', label: 'Safety' },
+  { id: 'account', icon: 'person', label: 'Account' },
   { id: 'other', icon: 'help_outline', label: 'Other' },
 ] as const;
 

@@ -26,6 +26,7 @@ export type TrackingOrder = {
   fees: number;
   tip: number;
   deliveryInstructions: string;
+  deliveryAddress?: string;
   items: TrackingOrderItem[];
   courier: {
     name: string;
@@ -68,6 +69,7 @@ export const MOCK_TRACKING_ORDER: TrackingOrder = {
   fees: 425,
   tip: 400,
   deliveryInstructions: 'Leave at door • Gate code: 1234',
+  deliveryAddress: '45 Constant Spring Rd, Apt 12B',
   items: [
     { name: 'Jerk Chicken Platter', quantity: 1, price: 1850, note: 'Extra plantains' },
     { name: 'Mango Smoothies', quantity: 2, price: 1200 },
@@ -103,7 +105,9 @@ export const FEEDBACK_CHIPS = [
   'Fast delivery',
   'Great food',
   'Friendly courier',
-  'Careful handling',
+  'Item missing',
+  'Wrong item',
+  'Cold food',
 ] as const;
 
 export function getTrackingPhase(status: string): TrackingPhase {
@@ -166,6 +170,7 @@ export function mapApiOrderToTracking(order: Record<string, unknown>): TrackingO
     fees: Number(order.delivery_fee ?? 0) + Number(order.platform_fee ?? 0) + Number(order.tax ?? 0),
     tip: Number(order.tip ?? 0),
     deliveryInstructions: String(order.delivery_instructions ?? ''),
+    deliveryAddress: stringifyDeliveryAddress(order.delivery_address),
     items,
     courier: courier
       ? {
@@ -207,6 +212,33 @@ export type DeliveryHandoff = {
   mode: 'hand' | 'door';
   notes: string;
 };
+
+export function stringifyDeliveryAddress(raw: unknown): string {
+  if (typeof raw === 'string') return raw.trim();
+  if (raw && typeof raw === 'object') {
+    const row = raw as Record<string, unknown>;
+    return String(row.line1 ?? row.address ?? '').trim();
+  }
+  return '';
+}
+
+/** Pin caption: saved Home/Work/Other, never a fake Home. */
+export function destinationPinLabel(
+  deliveryAddress: string | null | undefined,
+  saved: Array<{ label: string; line1: string }>,
+): string {
+  const needle = (deliveryAddress ?? '').trim().toLowerCase();
+  if (!needle) return 'Drop-off';
+  const match = saved.find((place) => {
+    const line = place.line1.trim().toLowerCase();
+    if (!line) return false;
+    return needle === line || needle.includes(line) || line.includes(needle);
+  });
+  if (match?.label === 'home') return 'Home';
+  if (match?.label === 'work') return 'Work';
+  if (match?.label === 'other') return 'Other';
+  return 'Drop-off';
+}
 
 /** Checkout stores "Hand it to me" vs free-text door instructions. Never invent a gate code. */
 export function parseDeliveryHandoff(instructions: string | null | undefined): DeliveryHandoff {

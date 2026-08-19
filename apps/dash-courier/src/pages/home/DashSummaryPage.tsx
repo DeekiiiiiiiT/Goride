@@ -1,14 +1,23 @@
 import React from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
-import { MOCK_DASH_SUMMARY, formatJmd } from '@/lib/mockPromotions';
+import { formatJmd } from '@/lib/formatMoney';
 
 type DashSummaryPageProps = {
   onEndDash: () => void;
   onStayOnline: () => void;
+  todayEarned?: number;
+  todayDeliveries?: number;
+  acceptanceRate?: number | null;
 };
 
-export function DashSummaryPage({ onEndDash, onStayOnline }: DashSummaryPageProps) {
-  const summary = MOCK_DASH_SUMMARY;
+export function DashSummaryPage({
+  onEndDash,
+  onStayOnline,
+  todayEarned = 0,
+  todayDeliveries = 0,
+  acceptanceRate = null,
+}: DashSummaryPageProps) {
+  const acceptanceLabel = acceptanceRate != null ? `${Math.round(acceptanceRate)}%` : '—';
 
   return (
     <div className="fixed inset-0 z-[65] bg-background flex flex-col overflow-hidden">
@@ -35,7 +44,7 @@ export function DashSummaryPage({ onEndDash, onStayOnline }: DashSummaryPageProp
             </div>
             <div className="relative z-10 mt-4">
               <span className="text-[28px] font-bold text-on-primary-container tracking-tight">
-                J${formatJmd(summary.totalEarned)}
+                J${formatJmd(todayEarned)}
               </span>
             </div>
           </div>
@@ -43,32 +52,17 @@ export function DashSummaryPage({ onEndDash, onStayOnline }: DashSummaryPageProp
           <div className="bg-surface rounded-xl p-4 shadow-soft border border-surface-variant/50 flex flex-col justify-between min-h-[120px]">
             <MaterialIcon name="local_mall" className="text-muted text-xl mb-2" />
             <div>
-              <p className="text-xl font-semibold text-on-surface mb-1">{summary.deliveries}</p>
+              <p className="text-xl font-semibold text-on-surface mb-1">{todayDeliveries}</p>
               <p className="text-[11px] text-muted uppercase tracking-wider">Deliveries</p>
             </div>
           </div>
 
           <div className="bg-surface rounded-xl p-4 shadow-soft border border-surface-variant/50 flex flex-col justify-between min-h-[120px]">
-            <MaterialIcon name="directions_bike" className="text-muted text-xl mb-2" />
+            <MaterialIcon name="verified" className="text-muted text-xl mb-2" />
             <div>
-              <p className="text-xl font-semibold text-on-surface mb-1">{summary.activeTime}</p>
-              <p className="text-[11px] text-muted uppercase tracking-wider">Active Time</p>
+              <p className="text-xl font-semibold text-on-surface mb-1">{acceptanceLabel}</p>
+              <p className="text-[11px] text-muted uppercase tracking-wider">Acceptance Rate</p>
             </div>
-          </div>
-
-          <div className="col-span-2 bg-surface-container-lowest rounded-xl p-4 shadow-soft border border-surface-variant/50 flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center">
-                <MaterialIcon name="timer" className="text-muted text-xl" />
-              </div>
-              <div>
-                <p className="text-[11px] text-muted uppercase tracking-wider mb-0.5">Online Time</p>
-                <p className="text-xl font-semibold text-on-surface">{summary.onlineTime}</p>
-              </div>
-            </div>
-            <span className="text-[11px] text-success bg-success/10 px-2 py-1 rounded-full font-medium">
-              {summary.activePercent}% Active
-            </span>
           </div>
         </div>
       </main>

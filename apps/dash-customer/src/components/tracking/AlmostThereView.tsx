@@ -1,6 +1,7 @@
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
+import { getSavedAddresses } from '@/lib/addressStorage';
 import type { TrackingOrder } from '@/lib/trackingContent';
-import { parseDeliveryHandoff, TRACKING_MAP_IMAGES } from '@/lib/trackingContent';
+import { destinationPinLabel, parseDeliveryHandoff, TRACKING_MAP_IMAGES } from '@/lib/trackingContent';
 import { CourierActions } from './CourierShared';
 
 type Props = {
@@ -12,6 +13,7 @@ type Props = {
 export function AlmostThereView({ order, onClose, onHelp }: Props) {
   const handoff = parseDeliveryHandoff(order.deliveryInstructions);
   const title = handoff.mode === 'hand' ? 'Hand it to you' : 'Leave at door';
+  const pinLabel = destinationPinLabel(order.deliveryAddress, getSavedAddresses());
 
   return (
     <div className="app-fullscreen-screen safe-x safe-t bg-background flex flex-col relative overflow-hidden">
@@ -45,7 +47,7 @@ export function AlmostThereView({ order, onClose, onHelp }: Props) {
               <div className="w-2 h-2 rounded-full bg-primary" />
             </div>
           </div>
-          <div className="mt-1 bg-surface-container-lowest px-2 py-1 rounded-md shadow-sm text-label-sm">Home</div>
+          <div className="mt-1 bg-surface-container-lowest px-2 py-1 rounded-md shadow-sm text-label-sm">{pinLabel}</div>
         </div>
         <div className="absolute top-[50%] left-[60%] -translate-x-1/2 -translate-y-1/2">
           <div className="w-10 h-10 rounded-full bg-surface-container-lowest shadow-lg border-2 border-primary flex items-center justify-center">

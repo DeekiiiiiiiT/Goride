@@ -11,7 +11,6 @@ import { toast } from '@/lib/toast';
 type EarningsPageProps = {
   onDeliverySelect: (deliveryId: string) => void;
   onViewAllHistory?: () => void;
-  onViewPromotions?: () => void;
 };
 
 type EarningsPeriod = 'today' | 'week' | 'month';
@@ -22,7 +21,7 @@ const PERIOD_TABS: { id: EarningsPeriod; label: string }[] = [
   { id: 'month', label: 'This Month' },
 ];
 
-export function EarningsPage({ onDeliverySelect, onViewAllHistory, onViewPromotions }: EarningsPageProps) {
+export function EarningsPage({ onDeliverySelect, onViewAllHistory }: EarningsPageProps) {
   const [period, setPeriod] = useState<EarningsPeriod>('today');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -123,17 +122,6 @@ export function EarningsPage({ onDeliverySelect, onViewAllHistory, onViewPromoti
                 <span className="text-[11px] text-muted mt-1 uppercase tracking-wider">Avg/Delivery</span>
               </div>
             </section>
-
-            {onViewPromotions && (
-              <button
-                type="button"
-                onClick={onViewPromotions}
-                className="w-full bg-surface border border-outline-variant rounded-full px-6 py-3 flex items-center justify-center gap-2"
-              >
-                <MaterialIcon name="star" className="text-warning" filled />
-                <span className="text-xs font-semibold uppercase tracking-wide">View promotions</span>
-              </button>
-            )}
 
             <section className="bg-surface rounded-xl shadow-soft overflow-hidden">
               <div className="flex justify-between items-center px-4 py-3 border-b border-surface-variant">

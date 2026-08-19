@@ -161,6 +161,27 @@ export async function fetchCourierOrderStatus(
   return status ? { status } : null;
 }
 
+export type CourierOrderDetailResponse = {
+  order: Record<string, unknown> & { id: string; status?: string };
+  events: Array<{ id?: string; status?: string; created_at?: string; notes?: string }>;
+};
+
+/** Full assigned-order payload for delivery history detail. */
+export async function fetchCourierOrderDetail(
+  orderId: string,
+): Promise<CourierOrderDetailResponse | null> {
+  const headers = await authHeaders();
+  if (!headers) return null;
+  const res = await fetch(`${BASE}/orders/${orderId}`, { headers });
+  if (!res.ok) return null;
+  const json = (await res.json()) as {
+    order?: CourierOrderDetailResponse['order'];
+    events?: CourierOrderDetailResponse['events'];
+  };
+  if (!json.order?.id) return null;
+  return { order: json.order, events: json.events || [] };
+}
+
 export async function patchCourierLocation(
   orderId: string,
   lat: number,

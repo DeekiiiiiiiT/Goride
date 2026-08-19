@@ -536,7 +536,13 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
     if (shouldAbort) {
       await serviceSb
         .from("orders")
-        .update({ status: "cancelled", updated_at: new Date().toISOString() })
+        .update({
+          status: "cancelled",
+          cancelled_by: "courier",
+          cancellation_reason: notes || issueType,
+          cancelled_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
         .eq("id", orderId)
         .eq("courier_id", auth.userId);
 

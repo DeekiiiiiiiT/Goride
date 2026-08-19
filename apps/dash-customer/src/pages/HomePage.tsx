@@ -17,16 +17,19 @@ import {
 } from '@/lib/merchantDiscovery';
 import type { VerticalType } from '@roam/types';
 import { getSavedAddress, selectSavedAddress } from '@/lib/addressStorage';
+import { getProfile, PROFILE_AVATAR } from '@/lib/accountContent';
 import { fetchCustomerOrders } from '@/lib/customerApi';
 import { isLiveOrderStatus } from '@/lib/ordersContent';
 
 type HomePageProps = {
   onNavigate: (page: string, data?: Record<string, unknown>) => void;
   onSearchFocus?: () => void;
-  onSeeAll?: (vertical: VerticalType) => void;
+  onSeeAll: (categoryId: VerticalType | 'all') => void;
   showQuickReorder?: boolean;
   onProfileClick?: () => void;
 };
+
+const POPULAR_PREVIEW = 4;
 
 export default function HomePage({
   onNavigate,
@@ -118,7 +121,7 @@ export default function HomePage({
             onClick={onProfileClick}
             className="h-9 w-9 overflow-hidden rounded-full border border-outline-variant"
           >
-            <img alt="Profile" className="h-full w-full object-cover" src="/images/avatar.png" />
+            <img alt="Profile" className="h-full w-full object-cover" src={getProfile().avatarUrl || PROFILE_AVATAR} />
           </button>
         </div>
       </header>
@@ -147,8 +150,8 @@ export default function HomePage({
             </button>
             <button
               type="button"
-              aria-label="Browse stores"
-              onClick={() => onSeeAll?.(selectedVertical)}
+              aria-label="Browse all stores"
+              onClick={() => onSeeAll('all')}
               className="absolute right-3 rounded-lg p-2 text-primary transition-colors hover:bg-surface-container"
             >
               <MaterialIcon name="tune" />
@@ -196,7 +199,7 @@ export default function HomePage({
             <h2 className="text-headline-lg-mobile font-bold text-on-surface">Popular near you</h2>
             <button
               type="button"
-              onClick={() => onSeeAll?.(selectedVertical)}
+              onClick={() => onSeeAll(selectedVertical)}
               className="flex items-center gap-1 text-label-lg font-semibold text-primary"
             >
               See all
@@ -215,7 +218,7 @@ export default function HomePage({
                 onAction={() => setSelectedVertical('restaurant')}
               />
             ) : (
-              filteredPopular.map((merchant) => (
+              filteredPopular.slice(0, POPULAR_PREVIEW).map((merchant) => (
                 <DiscoverStoreCard
                   key={merchant.id}
                   merchant={merchant}

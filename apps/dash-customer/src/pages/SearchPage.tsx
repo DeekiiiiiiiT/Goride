@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
+import { BROWSE_CATEGORIES, TRENDING_SEARCHES } from '@/lib/discoverContent';
 import {
-  BROWSE_CATEGORIES,
-  RECENT_SEARCHES,
-  TRENDING_SEARCHES,
-} from '@/lib/discoverContent';
+  clearRecentSearches,
+  getRecentSearches,
+  pushRecentSearch,
+  removeRecentSearch,
+} from '@/lib/searchRecents';
 
 type SearchPageProps = {
   onSearch: (query: string) => void;
@@ -20,14 +22,12 @@ export default function SearchPage({
   initialQuery = '',
 }: SearchPageProps) {
   const [query, setQuery] = useState(initialQuery);
-  const [recent, setRecent] = useState(RECENT_SEARCHES);
+  const [recent, setRecent] = useState(getRecentSearches);
 
   const submitSearch = (value: string) => {
     const trimmed = value.trim();
     if (!trimmed) return;
-    if (!recent.includes(trimmed)) {
-      setRecent((items) => [trimmed, ...items].slice(0, 5));
-    }
+    setRecent(pushRecentSearch(trimmed));
     onSearch(trimmed);
   };
 
@@ -86,42 +86,44 @@ export default function SearchPage({
           </section>
         )}
 
-        <section className={`${onOpenDeals ? 'mt-6' : 'mt-4'} px-4`}>
-          <div className="flex justify-between items-center mb-2">
-            <h2 className="text-sm font-semibold tracking-wide text-on-surface-variant uppercase">Recent</h2>
-            <button
-              type="button"
-              onClick={() => setRecent([])}
-              className="text-xs font-medium text-primary hover:opacity-80"
-            >
-              Clear
-            </button>
-          </div>
-          <ul className="flex flex-col">
-            {recent.map((item, index) => (
-              <li key={item}>
-                <div className="flex items-center justify-between py-4 border-b border-surface-container-highest/50 last:border-0">
-                  <button
-                    type="button"
-                    onClick={() => submitSearch(item)}
-                    className="flex items-center gap-4 flex-1 text-left group"
-                  >
-                    <MaterialIcon name="history" className="text-outline group-hover:text-primary transition-colors" />
-                    <span className="text-base text-on-surface">{item}</span>
-                  </button>
-                  <button
-                    type="button"
-                    aria-label={`Remove ${item}`}
-                    onClick={() => setRecent((items) => items.filter((_, i) => i !== index))}
-                    className="text-outline hover:text-error p-2 -mr-2"
-                  >
-                    <MaterialIcon name="close" />
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </section>
+        {recent.length > 0 && (
+          <section className={`${onOpenDeals ? 'mt-6' : 'mt-4'} px-4`}>
+            <div className="flex justify-between items-center mb-2">
+              <h2 className="text-sm font-semibold tracking-wide text-on-surface-variant uppercase">Recent</h2>
+              <button
+                type="button"
+                onClick={() => setRecent(clearRecentSearches())}
+                className="text-xs font-medium text-primary hover:opacity-80"
+              >
+                Clear
+              </button>
+            </div>
+            <ul className="flex flex-col">
+              {recent.map((item) => (
+                <li key={item}>
+                  <div className="flex items-center justify-between py-4 border-b border-surface-container-highest/50 last:border-0">
+                    <button
+                      type="button"
+                      onClick={() => submitSearch(item)}
+                      className="flex items-center gap-4 flex-1 text-left group"
+                    >
+                      <MaterialIcon name="history" className="text-outline group-hover:text-primary transition-colors" />
+                      <span className="text-base text-on-surface">{item}</span>
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Remove ${item}`}
+                      onClick={() => setRecent(removeRecentSearch(item))}
+                      className="text-outline hover:text-error p-2 -mr-2"
+                    >
+                      <MaterialIcon name="close" />
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         <section className="mt-6 px-4">
           <h2 className="text-sm font-semibold tracking-wide text-on-surface-variant uppercase mb-4">Trending</h2>

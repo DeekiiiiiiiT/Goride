@@ -2238,7 +2238,7 @@ import { registerOpsAdminRoutes } from "./admin/opsRoutes.ts";
 import { registerSupportAdminRoutes } from "./admin/supportRoutes.ts";
 registerCustomerOrderRoutes(app, { getSupabase, getServiceSupabase });
 registerCustomerAccountRoutes(app, { getSupabase, getServiceSupabase });
-registerCustomerDiscoveryRoutes(app, { getServiceSupabase });
+registerCustomerDiscoveryRoutes(app, { getServiceSupabase, getSupabase });
 registerCourierConsumerRoutes(app, { getSupabase, getServiceSupabase });
 registerDashHealthRoutes(app, { getServiceSupabase });
 registerStripeConnectRoutes(app, { getSupabase, getServiceSupabase });

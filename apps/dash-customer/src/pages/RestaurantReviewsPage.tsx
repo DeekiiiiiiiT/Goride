@@ -2,12 +2,14 @@ import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { reportMerchantReview, toggleReviewHelpful } from '@/lib/customerApi';
 import {
   emptyMerchantReviews,
   fetchMerchantReviews,
   sortReviews,
   type ReviewSort,
 } from '@/lib/reviewsContent';
+import { toast } from '@/lib/toast';
 
 type Props = {
   merchantId?: string;
@@ -37,13 +39,43 @@ function StarRow({ rating, size = 'md' }: { rating: number; size?: 'sm' | 'md' }
 
 export default function RestaurantReviewsPage({ merchantId, onNavigate }: Props) {
   const [sort, setSort] = useState<ReviewSort>('recent');
+  const [menuId, setMenuId] = useState<string | null>(null);
+  const [votes, setVotes] = useState<Record<string, { helpfulCount: number; voted: boolean }>>({});
   const { data, isLoading } = useQuery({
     queryKey: ['merchant-reviews', merchantId],
     queryFn: () => fetchMerchantReviews(merchantId!),
     enabled: Boolean(merchantId),
   });
   const summary = data ?? emptyMerchantReviews(merchantId);
-  const reviews = useMemo(() => sortReviews(summary.reviews, sort), [summary.reviews, sort]);
+  const reviews = useMemo(
+    () =>
+      sortReviews(summary.reviews, sort).map((review) => ({
+        ...review,
+        ...(votes[review.id] ?? {}),
+      })),
+    [summary.reviews, sort, votes],
+  );
+
+  const handleHelpful = async (orderId: string) => {
+    if (!merchantId) return;
+    try {
+      const next = await toggleReviewHelpful(merchantId, orderId);
+      setVotes((prev) => ({ ...prev, [orderId]: next }));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Sign in to mark a review helpful');
+    }
+  };
+
+  const handleReport = async (orderId: string) => {
+    if (!merchantId) return;
+    setMenuId(null);
+    try {
+      await reportMerchantReview(merchantId, orderId);
+      toast.success('Thanks — we will review this');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Sign in to report a review');
+    }
+  };
 
   return (
     <div className="bg-surface text-on-surface antialiased pb-28 min-h-dvh">
@@ -139,11 +171,44 @@ export default function RestaurantReviewsPage({ merchantId, onNavigate }: Props)
                           <p className="text-label-sm text-on-surface-variant">{review.date}</p>
                         </div>
                       </div>
+                      <div className="relative">
+                        <button
+                          type="button"
+                          aria-label="Review options"
+                          onClick={() => setMenuId(menuId === review.id ? null : review.id)}
+                          className="w-8 h-8 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-variant"
+                        >
+                          <MaterialIcon name="more_vert" />
+                        </button>
+                        {menuId === review.id ? (
+                          <div className="absolute right-0 top-9 z-10 min-w-[10rem] rounded-lg bg-surface-container-lowest shadow-lg border border-outline-variant py-1">
+                            <button
+                              type="button"
+                              onClick={() => void handleReport(review.id)}
+                              className="w-full text-left px-3 py-2 text-body-sm hover:bg-surface-container"
+                            >
+                              Report review
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
                     </div>
                     <StarRow rating={review.rating} size="sm" />
                     {review.comment ? (
                       <p className="text-body-md text-on-surface my-4">&ldquo;{review.comment}&rdquo;</p>
                     ) : null}
+                    <button
+                      type="button"
+                      onClick={() => void handleHelpful(review.id)}
+                      className={`mt-1 inline-flex items-center gap-1 rounded-full px-3 py-1 text-label-sm font-semibold ${
+                        review.voted
+                          ? 'bg-primary-container/20 text-primary'
+                          : 'bg-surface-container text-on-surface-variant'
+                      }`}
+                    >
+                      <MaterialIcon name="thumb_up" className="text-[16px]" filled={review.voted} />
+                      Helpful{review.helpfulCount ? ` · ${review.helpfulCount}` : ''}
+                    </button>
                   </article>
                 ))}
               </div>

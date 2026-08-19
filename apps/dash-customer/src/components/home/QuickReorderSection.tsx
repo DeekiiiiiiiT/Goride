@@ -3,11 +3,8 @@ import { useQuery } from '@tanstack/react-query';
 import { API_ENDPOINTS } from '@roam/api-client';
 import { ReorderSheet } from '@/components/orders/ReorderSheet';
 import { useCart } from '@/hooks/useCart';
-import { allowMocks } from '@/lib/mocksGate';
 import {
-  buildReorderCartItems,
   buildReorderFromOrder,
-  MOCK_ORDERS,
   type OrderHistoryEntry,
 } from '@/lib/ordersContent';
 import { formatJmd } from '@/lib/restaurantContent';
@@ -88,52 +85,36 @@ export function QuickReorderSection({ onNavigate }: Props) {
   });
 
   const orders = useMemo(() => {
-    const mapped = (data?.orders ?? []).map(mapApiOrder).filter((o) => o.status === 'delivered');
-    if (mapped.length) return mapped.slice(0, 2);
-    if (allowMocks()) return MOCK_ORDERS.filter((o) => o.status === 'delivered').slice(0, 2);
-    return [];
+    return (data?.orders ?? [])
+      .map(mapApiOrder)
+      .filter((o) => o.status === 'delivered')
+      .slice(0, 2);
   }, [data]);
 
   const handleReorderAdd = useCallback(() => {
-    if (selected) {
-      const rawItems = (data?.orders ?? []).find((o) => o.id === selected.id)?.items as
-        | Array<Record<string, unknown>>
-        | undefined;
-      const lines = buildReorderFromOrder(selected, rawItems);
-      if (!lines.length) {
-        toast.error('Cannot reorder — menu items are unavailable');
-        return;
-      }
-      lines.forEach((line, index) => {
-        addItem(
-          {
-            itemId: line.itemId,
-            merchantId: selected.merchantId,
-            name: line.name,
-            price: line.price,
-            quantity: line.quantity,
-            imageUrl: line.imageUrl,
-          },
-          selected.merchantName,
-          { replace: index === 0 },
-        );
-      });
-    } else if (allowMocks()) {
-      buildReorderCartItems().forEach(({ item, quantity, merchantName }, index) => {
-        addItem(
-          {
-            itemId: item.id,
-            merchantId: 'island-grill',
-            name: item.name,
-            price: item.price,
-            quantity,
-            imageUrl: item.image,
-          },
-          merchantName,
-          { replace: index === 0 },
-        );
-      });
+    if (!selected) return;
+    const rawItems = (data?.orders ?? []).find((o) => o.id === selected.id)?.items as
+      | Array<Record<string, unknown>>
+      | undefined;
+    const lines = buildReorderFromOrder(selected, rawItems);
+    if (!lines.length) {
+      toast.error('Cannot reorder — menu items are unavailable');
+      return;
     }
+    lines.forEach((line, index) => {
+      addItem(
+        {
+          itemId: line.itemId,
+          merchantId: selected.merchantId,
+          name: line.name,
+          price: line.price,
+          quantity: line.quantity,
+          imageUrl: line.imageUrl,
+        },
+        selected.merchantName,
+        { replace: index === 0 },
+      );
+    });
     toast.success('Items added to cart');
     setReorderOpen(false);
     onNavigate('cart');

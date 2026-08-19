@@ -272,7 +272,38 @@ export function buildReorderCartItems() {
   ];
 }
 
-export const ISSUE_CHIPS = ['Missing item', 'Wrong item', 'Cold food', 'Damaged', 'Other'] as const;
+export const ORDER_FEEDBACK_CHIPS = [
+  { label: 'Fast delivery', issueType: null },
+  { label: 'Great food', issueType: null },
+  { label: 'Friendly courier', issueType: null },
+  { label: 'Item missing', issueType: 'missing' },
+  { label: 'Wrong item', issueType: 'wrong' },
+  { label: 'Cold food', issueType: 'quality' },
+  { label: 'Damaged', issueType: 'quality' },
+] as const;
+
+export const ISSUE_CHIPS = ORDER_FEEDBACK_CHIPS.filter((chip) => chip.issueType).map(
+  (chip) => chip.label,
+);
+
+export function issueTypeFromChips(chips: string[]): string | null {
+  for (const label of chips) {
+    const match = ORDER_FEEDBACK_CHIPS.find((chip) => chip.label === label && chip.issueType);
+    if (match?.issueType) return match.issueType;
+  }
+  return null;
+}
+
+export function splitFeedbackChips(chips: string[]): { positive: string[]; issues: string[] } {
+  const positive: string[] = [];
+  const issues: string[] = [];
+  for (const label of chips) {
+    const match = ORDER_FEEDBACK_CHIPS.find((chip) => chip.label === label);
+    if (match?.issueType) issues.push(label);
+    else if (match) positive.push(label);
+  }
+  return { positive, issues };
+}
 
 export function buildOrderReceiptText(order: OrderHistoryEntry): string {
   const lines = [
@@ -308,4 +339,31 @@ export function downloadOrderReceipt(order: OrderHistoryEntry): void {
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
+}
+
+export type ReceiptShareResult = 'shared' | 'downloaded' | 'copied' | 'cancelled';
+
+/** Share sheet first (phones), then file download, then clipboard. */
+export async function shareOrderReceipt(order: OrderHistoryEntry): Promise<ReceiptShareResult> {
+  const text = buildOrderReceiptText(order);
+  const title = `Roam Rush receipt ${order.orderNumber}`;
+
+  if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+    try {
+      await navigator.share({ title, text });
+      return 'shared';
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') return 'cancelled';
+    }
+  }
+
+  try {
+    downloadOrderReceipt(order);
+    return 'downloaded';
+  } catch {
+    /* fall through to copy */
+  }
+
+  await navigator.clipboard.writeText(text);
+  return 'copied';
 }
