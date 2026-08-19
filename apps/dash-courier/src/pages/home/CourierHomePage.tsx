@@ -26,7 +26,11 @@ import { StackedDeliveryFlow } from '@/pages/delivery/stacked/StackedDeliveryFlo
 import { UnassignConfirmModal } from '@/components/delivery/UnassignConfirmModal';
 import { OfferPushBanner } from '@/components/ui/OfferPushBanner';
 import { EarningsPage } from '@/pages/earnings/EarningsPage';
+import { PromotionsPage } from '@/pages/earnings/PromotionsPage';
 import { DeliveryDetailPage } from '@/pages/earnings/DeliveryDetailPage';
+import { hydrateCourierSettingsFromCloud } from '@/lib/courierSettingsSync';
+import { buildStackedRouteFromLegs } from '@/lib/stackedRouteBuilder';
+import type { StackedRouteStop } from '@/lib/mockStackedRoute';
 import { DashSummaryPage } from '@/pages/home/DashSummaryPage';
 import { ActivityPage } from '@/pages/activity/ActivityPage';
 import { AccountPage, type ProfileDestination } from '@/pages/profile/AccountPage';
@@ -48,9 +52,9 @@ import type { DeclineReasonId } from '@/lib/declineReasons';
 import { persistDeclineReason } from '@/lib/declineReasonStorage';
 import type { ActiveDelivery, DropoffMethod } from '@/lib/mockActiveDelivery';
 import { emptyActiveDelivery, mapOrderToActiveDelivery } from '@/lib/mapOrderToActiveDelivery';
-import { mapOrderToSingleOffer } from '@/lib/mapOrderToSingleOffer';
+import { emptySingleOffer, mapOrderToSingleOffer } from '@/lib/mapOrderToSingleOffer';
 import { mapActiveDeliveryToCached } from '@/lib/mockCachedDelivery';
-import { MOCK_SINGLE_OFFER, MOCK_STACKED_OFFER, type SingleOffer } from '@/lib/mockOffers';
+import { MOCK_STACKED_OFFER, type SingleOffer } from '@/lib/mockOffers';
 import { useCourierFeedback } from '@/hooks/useCourierFeedback';
 import { useBackgroundLocation } from '@/hooks/useBackgroundLocation';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
@@ -62,6 +66,7 @@ import { formatElapsed } from '@/lib/formatElapsed';
 import { openCourierAppSettings } from '@/lib/courierPermissions';
 import {
   fetchCourierEarnings,
+  fetchCourierStack,
   patchCourierLocation,
   putCourierAvailability,
   submitCourierIssue,
@@ -115,6 +120,8 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
   const [todayEarned, setTodayEarned] = useState(0);
   const [todayDeliveries, setTodayDeliveries] = useState(0);
   const [activeDelivery, setActiveDelivery] = useState<ActiveDelivery | null>(null);
+  const [stackedRoute, setStackedRoute] = useState<StackedRouteStop[]>([]);
+  const [promotionsOpen, setPromotionsOpen] = useState(false);
   const delivery = activeDelivery ?? emptyActiveDelivery();
   const hasActiveDeliveryData = Boolean(activeDelivery?.orderId);
     const locationSeqRef = useRef(0);
@@ -160,8 +167,21 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
   const currentSingleOffer: SingleOffer = (() => {
     const pending = getProviderPendingOrder();
     const mapped = mapOrderToSingleOffer(pending, getProviderLastCoords());
-    return mapped || MOCK_SINGLE_OFFER;
+    return mapped || emptySingleOffer();
   })();
+  // Cloud settings + stacked route bootstrap
+  useEffect(() => {
+    void hydrateCourierSettingsFromCloud();
+  }, []);
+
+  useEffect(() => {
+    if (deliveryPhase !== 'stacked-active') return;
+    void fetchCourierStack().then((legs) => {
+      const built = buildStackedRouteFromLegs(legs);
+      if (built.length > 0) setStackedRoute(built);
+    });
+  }, [deliveryPhase]);
+
   // Transmit GPS to availability + active order
   useEffect(() => {
     if (!coords || !isOnline) return;
@@ -240,7 +260,8 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
   const hasOverlay =
     selectedDeliveryId !== null ||
     profileScreen !== null ||
-    dashSummaryOpen;
+    dashSummaryOpen ||
+    promotionsOpen;
   const showBottomNav =
     !hasActiveOffer && !isOnDelivery && !hasOverlay && !networkOffline && !declineReasonOpen;
 
@@ -293,11 +314,16 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
     if (mode === 'online' && offerPhase === null) {
       feedback.onOfferReceived();
       toast.info('New offer incoming', 'Tap to view before it expires.');
-      // Stacked multi-order offers are not backend-backed yet — always single.
+      // When two pending offers exist, RealDispatchProvider surfaces stacked phase.
+      const stacked =
+        'getPendingOfferIds' in provider &&
+        typeof (provider as { getPendingOfferIds?: () => string[] }).getPendingOfferIds ===
+          'function' &&
+        (provider as { getPendingOfferIds: () => string[] }).getPendingOfferIds().length >= 2;
       if (document.hidden) {
         setPushBannerOpen(true);
       } else {
-        dispatch.receiveOffer('single');
+        dispatch.receiveOffer(stacked ? 'stacked' : 'single');
       }
     }
   }, [mode, offerPhase, feedback, dispatch]);
@@ -330,11 +356,21 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
   const handleAcceptStackedOffer = useCallback(() => {
     guardAction(() => {
       feedback.onAccept();
-      toast.success('Offer accepted', 'Head to the restaurant to pick up.');
-      dispatch.acceptOffer(MOCK_STACKED_OFFER.id);
+      const offerIds =
+        'getPendingOfferIds' in provider &&
+        typeof (provider as { getPendingOfferIds?: () => string[] }).getPendingOfferIds ===
+          'function'
+          ? (provider as { getPendingOfferIds: () => string[] }).getPendingOfferIds()
+          : [];
+      if (offerIds.length >= 2) {
+        dispatch.acceptStackedOffer(offerIds.slice(0, 2));
+      } else {
+        dispatch.acceptStackedOffer([MOCK_STACKED_OFFER.id]);
+      }
+      toast.success('Stacked offer accepted', 'Follow the route for both pickups.');
       setActiveTab('home');
     });
-  }, [feedback, dispatch, guardAction]);
+  }, [feedback, dispatch, guardAction, provider]);
 
   const handleAcceptSingleOffer = useCallback(() => {
     guardAction(() => {
@@ -510,6 +546,7 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
         <EarningsPage
           onDeliverySelect={setSelectedDeliveryId}
           onViewAllHistory={() => setActiveTab('activity')}
+          onViewPromotions={() => setPromotionsOpen(true)}
         />
       );
     }
@@ -570,9 +607,7 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
 
       {showBottomNav && <CourierBottomNav active={activeTab} onChange={setActiveTab} />}
 
-      {/* Stacked multi-order UI deferred — no backend order "stack" yet.
-          offerPhase === 'stacked' is never set by RealDispatchProvider. */}
-      {false && offerPhase === 'stacked' && (
+      {offerPhase === 'stacked' && (
         <ImmersiveScreen>
           <StackedOfferPage
             offer={MOCK_STACKED_OFFER}
@@ -615,10 +650,10 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
         onSubmit={(reasonId) => finishDeclineOffer(reasonId)}
       />
 
-      {/* Multi-order stacked delivery deferred until backend stacks exist */}
-      {false && deliveryPhase === 'stacked-active' && (
+      {deliveryPhase === 'stacked-active' && (
         <ImmersiveScreen>
           <StackedDeliveryFlow
+            route={stackedRoute}
             onComplete={finishStackedDelivery}
             onRequestUnassign={handleRequestUnassign}
             onReportIssue={() => setReportIssueOpen(true)}
@@ -671,6 +706,7 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
           onBack={() => dispatch.setDeliveryPhase('en-route')}
           onComplete={handleAtCustomerComplete}
           onCustomerUnavailable={() => dispatch.setDeliveryPhase('customer-unavailable')}
+          onHelpClick={() => setProfileScreen('help')}
         />
       )}
 
@@ -735,6 +771,10 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
         onConfirm={handleUnassign}
         onCancel={() => setShowUnassignModal(false)}
       />
+
+      {promotionsOpen && (
+        <PromotionsPage onBack={() => setPromotionsOpen(false)} />
+      )}
 
       {dashSummaryOpen && (
         <DashSummaryPage

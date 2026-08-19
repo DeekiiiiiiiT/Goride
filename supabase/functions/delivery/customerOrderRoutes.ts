@@ -243,6 +243,7 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
         discount,
         total,
         delivery_address: body.deliveryAddress,
+        delivery_address_line2: body.deliveryAddressLine2 ?? body.delivery_address_line2 ?? null,
         delivery_lat: hasDropoffPin ? dropoffLat : null,
         delivery_lng: hasDropoffPin ? dropoffLng : null,
         delivery_instructions: body.deliveryInstructions,
@@ -686,5 +687,86 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
     });
 
     return c.json({ issue });
+  });
+
+  // Customer approve/reject grocery substitute proposal
+  app.post("/orders/:id/substitutions/:subId/respond", async (c) => {
+    const authHeader = c.req.header("Authorization");
+    if (!authHeader) return c.json({ error: "Unauthorized" }, 401);
+
+    const supabase = getSupabase(authHeader);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return c.json({ error: "Unauthorized" }, 401);
+
+    const { id, subId } = c.req.param();
+    const body = await c.req.json().catch(() => ({}));
+    const approve = Boolean(body.approve ?? body.approved);
+
+    const serviceSb = getServiceSupabase();
+    const { data: customer } = await serviceSb
+      .from("customers")
+      .select("id")
+      .eq("user_id", user.id)
+      .single();
+    if (!customer) return c.json({ error: "Customer not found" }, 404);
+
+    const { data: order } = await serviceSb
+      .from("orders")
+      .select("id, customer_id, subtotal, total, items")
+      .eq("id", id)
+      .maybeSingle();
+    if (!order || order.customer_id !== customer.id) {
+      return c.json({ error: "Forbidden" }, 403);
+    }
+
+    const { data: sub } = await serviceSb
+      .from("order_item_substitutions")
+      .select("*")
+      .eq("id", subId)
+      .eq("order_id", id)
+      .maybeSingle();
+    if (!sub || sub.substitution_status !== "pending") {
+      return c.json({ error: "Substitution not pending" }, 400);
+    }
+
+    if (!approve) {
+      const { data: updated } = await serviceSb
+        .from("order_item_substitutions")
+        .update({ substitution_status: "rejected" })
+        .eq("id", subId)
+        .select()
+        .single();
+      return c.json({ substitution: updated });
+    }
+
+    const priceDelta = sub.substitute_price != null ? Number(sub.substitute_price) : 0;
+    const newSubtotal = Math.round((Number(order.subtotal || 0) + priceDelta) * 100) / 100;
+    const newTotal = Math.round((Number(order.total || 0) + priceDelta) * 100) / 100;
+
+    const { data: updated } = await serviceSb
+      .from("order_item_substitutions")
+      .update({
+        substitution_status: "approved",
+        approved_at: new Date().toISOString(),
+        price_delta: priceDelta,
+      })
+      .eq("id", subId)
+      .select()
+      .single();
+
+    await serviceSb
+      .from("orders")
+      .update({ subtotal: newSubtotal, total: newTotal })
+      .eq("id", id);
+
+    await serviceSb.from("order_events").insert({
+      order_id: id,
+      status: "substitution_approved",
+      actor_type: "customer",
+      actor_id: user.id,
+      notes: sub.substitute_label,
+    });
+
+    return c.json({ substitution: updated, subtotal: newSubtotal, total: newTotal });
   });
 }

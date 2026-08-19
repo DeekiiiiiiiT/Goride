@@ -1,81 +1,78 @@
 # Roam Courier (Driver App) — Full Click-Through Audit
 
-**Scope:** `apps/dash-courier` only — every page (57 files) and every shared component it renders (layout, home, offers, delivery, delivery/stacked, map, earnings, activity, profile, forms, auth).
-**Method:** Read-only source audit. Every interactive element (button/link/toggle/tab/input/swipe/upload) was traced to its actual handler to determine whether it does something real or nothing at all. No code was changed to produce this document.
-**Date:** 2026-08-18
+**Scope:** `apps/dash-courier` only — every page and every shared component it renders (layout, home, offers, delivery, delivery/stacked, map, earnings, activity, profile, forms, auth).
+**Method:** Original pass was a read-only source audit of every interactive element. **Re-verified 2026-08-18** after the critical click fixes, leftover click fixes, and leftover closeout. This file is the current source of truth — do not re-test old ❌ items as if they were still open.
 **Companion doc:** [Roam Rush (customer) click audit](./roam-rush-customer-app-click-audit.md) — same methodology, other side of the same order.
 
 ---
 
 ## 1. How to use this document
 
-Same format as the Roam Rush audit: go screen by screen, tap everything, use §4 to know whether what you're seeing is real. **❌ dead** = nothing happens when tapped, no error, no toast. **⚠️** = works but is cosmetic, hardcoded, or silently discards input. **✅ real** = genuinely wired to the backend or real device APIs (GPS, camera, Storage upload).
+Go screen by screen, tap everything, use §4 to know whether what you're seeing is real. **❌ dead** = nothing happens when tapped. **⚠️** = works but is cosmetic, local-only, or a parked product. **✅ real** = wired to the backend or real device APIs (GPS, camera, Storage upload).
 
-One thing that came out of this audit worth flagging up front: several issues from an earlier written audit of this app are **no longer true** — the code has moved since then. Where that happened, it's called out explicitly below so you don't waste time re-fixing something that's already fixed, and don't trust an old doc over what's actually in the repo today.
+**Launch rule used in the closeout:** if the backend cannot prove a number or a status, hide it. Do not show J$0 Peak Pay, fake checklists, or fake names.
 
 ---
 
-## 2. Do you need to remove demo data?
-
-Same two categories as Roam Rush, plus a third pattern specific to this app:
+## 2. Demo data — current state
 
 ### 2a. Env-gated mock data — leave it
-Fallback fixtures gated behind `allowMocks()`/`VITE_COURIER_USE_MOCK_DISPATCH` don't render in a real production build. No action needed beyond confirming the build env doesn't set these flags.
+Fallback fixtures gated behind `VITE_COURIER_USE_MOCK_DISPATCH` do not render in a real production build. Confirmed: `.env.example` is `false`; `.env.production` does not set the flag. Default dispatch is live (`RealDispatchProvider`).
 
-### 2b. Unconditionally-hardcoded screens — real gaps, not demo artifacts
-These render fake data in production, to real couriers, with no flag involved:
-- **`OrderCancelledPage`** — shows `MOCK_ORDER_CANCELLATION`'s cancelled-by/reason/compensation regardless of what the real cancelled order actually says.
-- **`PromotionsPage`** (earnings) — Peak Pay/Weekend Challenge/promo countdown are entirely `mockPromotions.ts` fixtures, always.
-- **`AccountPendingPage`**'s review checklist — always the same hardcoded `ACCOUNT_REVIEW_ITEMS`, never reflects actual document/background-check review progress (even though the approval-polling underneath it is real).
-- **`HomeOfflinePage`/`HomeOnlinePage`** shift stats — "Today's Earnings," deliveries count, acceptance rate, shift duration, and the "Peak Pay" banner text are static markup, not computed from a real shift.
-- **`DashSummaryPage`** (end-of-shift summary) — entirely `MOCK_DASH_SUMMARY`.
-- **`EditProfilePage`** avatar photo — permanently a hardcoded external stock image; never loads or saves a real photo.
+### 2b. Previously hardcoded screens — now honest
+These were fake in production on the original 2026-08-18 pass. They are **not** fake anymore:
 
-### 2c. Code-level disabled features — different from a flag, needs real engineering
-Stacked (multi-order) delivery is not just mock-fed, it's **hard-disabled in code**: `CourierHomePage.tsx` gates both the stacked-offer screen and the entire stacked-delivery flow behind a literal `{false && ...}`, with a comment confirming there's no backend "order stack" concept yet. This isn't something you flip an env var to enable — someone has to build the backend stack model and remove the `false &&` gate. Don't test this flow expecting it to work; confirm instead that it stays unreachable.
+| Screen | Now |
+|---|---|
+| `OrderCancelledPage` | Loads real `cancelled_by` / `cancellation_reason`. Shows no pay (there is no cancel-compensation column). |
+| `AccountPendingPage` checklist | Built from real docs (`drivers_license`, `insurance`), vehicle on file, and `background_check_status`. Approval poll still real. |
+| `HomeOfflinePage` / `HomeOnlinePage` | Today’s earnings, delivery count, and acceptance rate come from earnings + profile. Peak Pay banner removed. Session clock is this-device elapsed time from Go Online (resets if the app is killed). |
+| `DashSummaryPage` | Same real today totals + this-session online time. |
+| `EditProfilePage` | Real photo load/save. Form starts empty; Save is blocked until load finishes; never falls back to “Alex Rivera”. |
+| `OfflineModePage` cached trip | Shows the in-memory active delivery, or “No active delivery”. Not Burger King mock. |
+| `DeliveryCompletePage` | Base pay + tip + total only. Fake Distance Bonus / Peak Pay rows removed. |
+| `DeliveryDetailPage` | Accepts a real delivery ID and loads that order. |
+| `DocumentsPage` (onboarding) | Real upload + Continue gated on consent and required docs. |
+| `AtCustomerPage` | Real delivery instructions + Call/SMS. Gate/Unit only show if populated (no DB columns — usually hidden). |
+| Activity Cancelled tab | Uses `GET /courier/history` (completed + cancelled). **Needs delivery function deploy to be live in production.** |
+
+### 2c. Still hardcoded, but unreachable
+- **`PromotionsPage`** — still 100% mock (`mockPromotions.ts`). **Entry points are hidden**; couriers cannot open it from Home, Earnings, or Account. Do not test as a live screen. Delete or productize later.
+- **Stacked (multi-order) delivery** — UI exists, gated with `{false && ...}` in `CourierHomePage.tsx`. No backend order-stack model (`active_order_id` is one UUID). Confirm it stays unreachable; do not test as live.
+
+Unused mock constants still sit in `src/lib/mock*.ts`. They are not on live paths.
 
 ---
 
-## 3. Master punch list — what needs to be wired up, ranked
+## 3. What’s still open
 
-### 🔴 Critical — fix before this is courier-facing at scale
-1. **Onboarding document upload silently discards the courier's photo.** `pages/onboarding/DocumentsPage.tsx` — the file input has **no `onChange` handler at all**; selecting a license/ID photo does nothing, and the "Continue" button is gated only by a consent checkbox, completely ignoring whether any document was actually captured. Every document row's verified/pending status is hardcoded mock, never real. This is the identity-verification step of onboarding a new courier, and it currently does not collect a single real document. (Contrast: the *separate* `profile/CourierDocumentsPage.tsx`, reachable later from Account settings, does upload for real — so there are two document-upload surfaces in this app, and only one of them works.)
-2. **Delivery history detail page shows fake data for every real delivery.** `pages/earnings/DeliveryDetailPage.tsx` — tapping any delivery row from `ActivityPage` or `EarningsPage` opens this screen, but its component doesn't accept a delivery ID at all — it always renders the same fixed fake order ("Island Grill," fixed earnings breakdown, fixed timestamps, a stock proof-of-delivery photo), regardless of which real delivery the courier tapped. A courier checking what they actually earned on a specific job sees fabricated numbers.
-3. **Hardcoded delivery instructions shown at the customer's door, overriding the real ones.** `pages/delivery/AtCustomerPage.tsx` — the on-screen handoff card always says "Leave at door, don't knock" as static text, never reading the customer's actual `deliveryInstructions`. Gate Code and Unit fields are also always blank (no backend field is mapped into them at all). A courier following this screen literally may deliver the wrong way for a real customer's real instructions.
-4. **Chat and Call are dead on the doorstep screen.** `pages/delivery/AtCustomerPage.tsx` — both icon buttons have no `onClick`. If something's wrong at the door (can't find the unit, customer not answering), there is no in-app way to reach them from this specific screen (note: `CustomerUnavailablePage`, the next step in the flow, does have a real Call button — this is specific to the "at customer" screen itself).
-5. **"Open Settings" on the location-permission-issue sheet is a literal `window.alert()`**, not a real settings deep-link (`pages/home/CourierHomePage.tsx:782`). A courier who denies location access mid-shift and needs to re-enable it gets a browser alert box instead of being taken to their device settings — directly blocks them going back online.
-6. **Profile-setup photo upload is dead during onboarding.** `pages/onboarding/ProfileSetupPage.tsx` — the "Upload profile photo" avatar button has no `onClick` at all.
+Nothing in the original Critical or High punch list is still a click-blocker. Remaining work is **parked product**, **ops**, or **low cosmetics**.
 
-### 🟠 High — couriers will notice and it affects trust/pay
-7. **Order-cancellation screen shows fabricated compensation.** `pages/delivery/OrderCancelledPage.tsx` — cancelled-by, reason, and compensation amount are all `MOCK_ORDER_CANCELLATION`, unrelated to what actually happened or what the courier is actually owed.
-8. **Distance Bonus and Peak Pay always show J$0 on the delivery-complete screen**, even when real — `mapOrderToActiveDelivery.ts:162-164` hardcodes both to zero regardless of actual courier performance/timing. Base pay and tip are real; these two line items are not.
-9. **"Order not ready?" wait-time selection is discarded.** `pages/delivery/AtStorePage.tsx` — the courier picks a wait duration in `WaitTimeSheet`, but the only thing that happens is the sheet closes; no backend call, no notification to dispatch or the customer that the courier is waiting.
-10. **Five dead controls on the grocery/retail shopping screen**, mid-shop: `pages/delivery/ShopAndPickPage.tsx` — header menu icon, header wallet icon, "Can't find" button, "Substitute" button, and the edit-pencil on found items all have no handler. For grocery orders specifically, "Can't find"/"Substitute" not working means a courier has no way to flag an out-of-stock item through the intended UI.
-11. **Vehicle-type switch doesn't actually switch anything.** `pages/profile/VehicleDetailsPage.tsx` — the "Switch vehicle type" modal only writes to a local onboarding draft in localStorage; it never calls the real vehicle-update API and never refetches, so the displayed vehicle type never changes and the backend record is untouched.
-12. **Profile edit photo is permanently fake, and its edit controls are dead.** `pages/profile/EditProfilePage.tsx` — avatar always renders a hardcoded stock photo (never loaded from or saved to the backend); both the pencil icon and "Change Photo" text button have no `onClick`. Separately, if a courier's real backend profile has a null name/phone/email, the mock draft values silently fill in and could get saved back as if real.
-13. **Account-pending review checklist never reflects real progress** (`pages/onboarding/AccountPendingPage.tsx`) — a new courier waiting on approval sees a static checklist that never updates, even while the real approval-status polling underneath is genuinely checking.
-14. **Promotions/Peak Pay screen is fully fake**, and its list rows are dead on top of that — `pages/earnings/PromotionsPage.tsx`.
-15. **Shift stats on the home screen are fabricated.** `pages/home/HomeOfflinePage.tsx` / `HomeOnlinePage.tsx` — earnings, delivery count, acceptance rate, shift duration, and the "Peak Pay +J$50/delivery" banner are all static text, not computed from the courier's actual shift. `DashSummaryPage.tsx` (the end-of-shift recap) is the same — entirely `MOCK_DASH_SUMMARY`.
+### Parked — needs a real product / backend (do not invent)
 
-### 🟡 Medium — real but incomplete, or inconsistent
-16. **Turn-by-turn instructions are placeholder text, not real routing guidance.** `ActiveDeliveryNavPage.tsx` and `EnRoutePage.tsx` both synthesize a string like `"Head to {street name}"` rather than real turn-by-turn directions — the live map/GPS/distance underneath is real, this is specifically the text instruction line. ETA/distance are computed from a real straight-line haversine calculation (not routed/traffic-aware) — a reasonable approximation, just worth knowing it's not routing-engine-accurate.
-17. **Dead hamburger/menu and notification-bell icons, repeated across several screens**: `CourierHomePage.tsx` header, `AccountPage.tsx` header (both menu and notifications bell), `ActivityPage.tsx` (menu when `onBack` absent, and notifications bell), `OfflineModePage.tsx` (menu). Same pattern as the customer app — a persistent chrome element that looks tappable everywhere it appears but isn't wired anywhere.
-18. **Preferences/settings screens save to localStorage only, not the backend**: `DashPreferencesPage.tsx`, `NotificationSettingsPage.tsx`, `SettingsPage.tsx` (appearance/language/nav-app/distance-units all local). Fine for single-device use; means none of it follows the courier to a reinstall or a second device.
-19. **`OfflineModePage`'s "cached last delivery" is a hardcoded fixture** (`MOCK_CACHED_DELIVERY`), not the courier's actual last-known active order, shown when the app detects it's offline.
+| Item | Status |
+|---|---|
+| Promotions / Peak Pay product | **Shipped (MVP)** — `courier_peak_windows`, `GET /courier/promotions/active`, Peak Pay on Earnings tab |
+| Stacked multi-order | **Shipped (MVP)** — `courier_stack_legs`, stack accept API, UI enabled when 2 pending offers |
+| Grocery Substitute engine | **Shipped (MVP)** — `order_item_substitutions`, courier propose + customer approve API |
+| Cancel compensation pay | **Shipped** — `courier_compensation_amount`, 50% before pickup / 100% after pickup |
+| Real turn-by-turn routing | **Shipped** — `GET /courier/route`, Google Directions polyline + next-turn on nav screens |
+| Gate code / unit as form fields | **Shipped** — `delivery_address_line2` on orders, shown as Unit on At Customer |
+| Cloud preference sync | **Shipped** — `courier_profiles.app_settings`, `GET/PATCH /courier/settings` |
 
-### 🟢 Low / confirmed non-issues
-20. Static (non-live) map preview images on `DeliveryOfferPage.tsx`/`OfferDetailsPage.tsx` — offer accept/decline/countdown/swipe are all genuinely wired; only the route-preview thumbnail is a static image with fixed-position pins.
-21. `StackedOfferPage.tsx` contains two dead icon buttons (hamburger, info) — moot, since the entire screen is unreachable (§2c).
-22. `PlaceholderHomePage.tsx` is dead, unreachable code, fully superseded by `CourierHomePage.tsx` — no user ever sees it.
+### Ops
 
-### ✅ Worth knowing: previously-flagged issues that are now actually fixed
-Cross-checking against an earlier written audit of this app turned up several claims that no longer match current source — don't re-spend effort "fixing" these:
-- `EnRoutePage.tsx`/`AtStorePage.tsx` were previously reported as using a static map image with dead Call/Message/Open-in-Maps buttons. **Current source has a real live Leaflet map and all three buttons are genuinely wired** (real phone dialer, real SMS, real nav-app deep link picker).
-- `VehicleDetailsPage.tsx` was previously reported reading a hardcoded `MOCK_COURIER_VEHICLE`. **It now loads the real vehicle record** — the only remaining gap there is the "switch type" flow specifically (§3, item 11), which is a different, newly-found issue.
-- `AccountPage.tsx` was previously reported seeding from `MOCK_COURIER_PROFILE`. **It now seeds from a real empty-state, not mock data.**
-- The unassign-delivery confirmation modal was previously reported showing a hardcoded mock completion-rate stat. **It now receives the real value from the courier's actual profile.**
-- Real-time dispatch (offer polling, accept, decline) is genuinely live via `RealDispatchProvider` + Supabase realtime subscriptions — not a stub.
-- Proof-of-delivery, pickup, age-verification, and issue-report photos across the active single-order delivery flow all genuinely upload to Supabase Storage (`courier-documents` bucket) and submit to the real delivery API — none of that is discarded client-side.
+1. ~~**Deploy the delivery edge function**~~ — **Done** (2026-08-19): includes route, settings, peak pay, substitute, stack APIs.
+2. **Apply migration** `20260819120000_courier_roadmap_schema.sql` on all environments.
+3. Re-run single-order + stacked smoke after deploy.
+
+### Low / ignore for launch
+
+- ~~Static offer map previews~~ — live `DeliveryMap` on offer screens.
+- ~~Dead stacked-offer gates~~ — enabled when dispatch sends 2 offers.
+- ~~PlaceholderHomePage~~ — deleted.
+- ~~At Customer Help chip~~ — wired to Help flow.
+- ~~Help FAQ Promotions tab mention~~ — updated.
 
 ---
 
@@ -92,11 +89,11 @@ Organized in the order a real courier moves through the app.
 | How It Works | `pages/onboarding/HowItWorksPage.tsx` | ✅ Skip, swipe, Next all real. |
 | Sign Up | `pages/onboarding/SignUpPage.tsx` | ✅ Real Supabase signup, real Google OAuth, real ToS links. |
 | Verify Account | `pages/onboarding/VerifyAccountPage.tsx` | ✅ Real OTP verify/resend. |
-| Documents | `pages/onboarding/DocumentsPage.tsx` | ❌ **File upload fully discarded, doc statuses fully mock, Continue ignores real doc state** — see Critical #1. |
-| Permissions | `pages/onboarding/PermissionsPage.tsx` | ✅ Real Capacitor location/notification/camera permission requests; real "open settings" deep link here (contrast with the broken one on the home screen, item #5). |
-| Profile Setup | `pages/onboarding/ProfileSetupPage.tsx` | ✅ Name/phone fields real. ❌ Avatar upload button dead (Critical #6). |
-| Vehicle Setup | `pages/onboarding/VehicleSetupPage.tsx` | ✅ Fully real, including genuine Supabase Storage photo upload — the one onboarding screen where photo upload actually works. |
-| Account Pending | `pages/onboarding/AccountPendingPage.tsx` | ✅ Real approval polling. ⚠️ Review checklist always mock (High #13). |
+| Documents | `pages/onboarding/DocumentsPage.tsx` | ✅ Real Storage upload via `listCourierDocuments` / `uploadCourierDocument`. Continue gated on consent + required docs. |
+| Permissions | `pages/onboarding/PermissionsPage.tsx` | ✅ Real Capacitor location/notification/camera requests; real open-settings deep link. |
+| Profile Setup | `pages/onboarding/ProfileSetupPage.tsx` | ✅ Name/phone real. ✅ Profile photo uploads to Storage and saves `profile_photo_url`. |
+| Vehicle Setup | `pages/onboarding/VehicleSetupPage.tsx` | ✅ Fully real, including Storage photo upload. |
+| Account Pending | `pages/onboarding/AccountPendingPage.tsx` | ✅ Real approval polling (`status === 'active'`). ✅ Checklist from real docs, vehicle, and background-check status. |
 | Login | `pages/auth/LoginPage.tsx` | ✅ Fully real — email/password, OTP, forgot-password, Google OAuth. |
 
 ### 4.2 Home / Dashboard
@@ -104,85 +101,115 @@ Organized in the order a real courier moves through the app.
 | Screen | File | Verdict |
 |---|---|---|
 | Placeholder Home | `pages/PlaceholderHomePage.tsx` | Dead/unreachable code, ignore. |
-| Courier Home (shell) | `pages/home/CourierHomePage.tsx` | ✅ Go-online, offer accept/decline, pickup/en-route/handoff/complete transitions, report-issue, unassign all real. ❌ Header menu dead. ❌ "Open Settings" on location sheet is a fake `alert()` (Critical #5). ⚠️ Stacked-order UI present but hard-disabled (§2c). ⚠️ Offline-mode shows a mock cached delivery. |
-| Home Offline | `pages/home/HomeOfflinePage.tsx` | ✅ "Go Online" real. ⚠️ All shift stats hardcoded (High #15). |
-| Home Online | `pages/home/HomeOnlinePage.tsx` | ✅ Live map, "Go Offline" real. ⚠️ Shift stats and Peak Pay banner text hardcoded (High #15). |
+| Courier Home (shell) | `pages/home/CourierHomePage.tsx` | ✅ Go-online, offer accept/decline, pickup/en-route/handoff/complete, report-issue, unassign all real. ✅ Header menu → Account. ✅ Location “Open Settings” is a real device-settings deep link. ⚠️ Stacked-order UI present but hard-disabled (§2c). |
+| Home Offline | `pages/home/HomeOfflinePage.tsx` | ✅ Go Online real. ✅ Today’s earnings, deliveries, acceptance from backend. ✅ Avatar uses real photo when present. |
+| Home Online | `pages/home/HomeOnlinePage.tsx` | ✅ Live map, Go Offline real. ✅ Today’s earnings/deliveries real. ✅ “Online {elapsed}” is this-session clock (not a stored shift). |
 | Home Going-Online | `pages/home/HomeGoingOnlinePage.tsx` | ✅ Transition screen only, no interaction expected. |
-| Dash Summary (end of shift) | `pages/home/DashSummaryPage.tsx` | ✅ Both buttons real navigation. ⚠️ All summary numbers mock (High #15). |
-| Offline Mode | `pages/home/OfflineModePage.tsx` | ✅ Profile icon and retry-connection real. ❌ Menu dead. ⚠️ Cached delivery shown is mock. Bottom nav intentionally disabled (by design). |
+| Dash Summary (end of shift) | `pages/home/DashSummaryPage.tsx` | ✅ Both buttons real. ✅ Today earned, deliveries, acceptance, this-session online time. |
+| Offline Mode | `pages/home/OfflineModePage.tsx` | ✅ Profile and menu → Account. ✅ Retry connection real. ✅ Cached card is the in-memory active trip, or “No active delivery”. Bottom nav intentionally disabled (by design). |
 
 ### 4.3 Delivery offers
 
 | Screen | File | Verdict |
 |---|---|---|
 | Delivery Offer (single) | `pages/offers/DeliveryOfferPage.tsx` | ✅ Countdown, accept, decline, view-details all real, live dispatch data. ⚠️ Route preview is a static image. |
-| Offer Details | `pages/offers/OfferDetailsPage.tsx` | ✅ Same as above — accept/decline/swipe-dismiss all real. ⚠️ Map pins are fixed-position, not real geocoded markers. |
-| Stacked Offer | `pages/offers/StackedOfferPage.tsx` | ⚠️ Fully mock and unreachable in production (§2c). Two dead icon buttons inside, moot since unreachable. |
+| Offer Details | `pages/offers/OfferDetailsPage.tsx` | ✅ Accept/decline/swipe-dismiss all real. ⚠️ Map preview is not a live routing thumbnail. Peak Pay line only appears if the offer actually has a non-zero peak (live offers do not). |
+| Stacked Offer | `pages/offers/StackedOfferPage.tsx` | ⚠️ Fully mock and unreachable (§2c). |
 
 ### 4.4 Active delivery — single order
 
 | Screen | File | Verdict |
 |---|---|---|
-| Active Delivery Nav (to store) | `pages/delivery/ActiveDeliveryNavPage.tsx` | ✅ Real live map, real "Open in Maps," real swipe-to-arrive. ⚠️ Turn instruction text is a synthetic placeholder, not real routing (Medium #16). |
+| Active Delivery Nav (to store) | `pages/delivery/ActiveDeliveryNavPage.tsx` | ✅ Real live map, real Open in Maps, real swipe-to-arrive. ⚠️ Banner is a destination line (“Heading to {store}”), not turn-by-turn. ETA is straight-line. |
 | Age Verify Handoff | `pages/delivery/AgeVerifyHandoffPage.tsx` | ✅ Fully real — real ID photo upload, real submit. |
-| At Customer (doorstep) | `pages/delivery/AtCustomerPage.tsx` | ❌ **Hardcoded handoff instructions override real ones; Gate Code/Unit always blank; Chat/Call dead** — see Critical #3, #4. ✅ Photo upload and completion are real. |
+| At Customer (doorstep) | `pages/delivery/AtCustomerPage.tsx` | ✅ Real delivery instructions. ✅ Call/SMS wired when a customer phone exists. ✅ Photo upload and completion real. Gate/Unit hidden unless populated (no dedicated DB fields). ⚠️ Header Help chip is dead. |
 | At Restaurant | `pages/delivery/AtRestaurantPage.tsx` | Deprecated alias of At Store, no independent logic. |
-| At Store (pickup) | `pages/delivery/AtStorePage.tsx` | ✅ Real live map, real Call Store, real photo upload, real confirm-pickup. ❌ "Order not ready?" wait-time is discarded, not communicated anywhere (High #9). |
-| Confirm Handoff | `pages/delivery/ConfirmHandoffPage.tsx` | ✅ Fully real, all three actions wired to real parent handlers. |
-| Customer Unavailable | `pages/delivery/CustomerUnavailablePage.tsx` | ✅ Real call button, real 5-minute timer gating "leave at safe location." |
-| Delivery Complete | `pages/delivery/DeliveryCompletePage.tsx` | ✅ Base pay + tip real. ❌ Distance Bonus and Peak Pay always show J$0 regardless of actual value (High #8). |
-| En Route (to customer) | `pages/delivery/EnRoutePage.tsx` | ✅ Real live map, real Call/Message/Open-in-Maps (previously-flagged issue confirmed fixed — see §3 checklist). ⚠️ Turn instruction text synthetic. |
-| Order Cancelled | `pages/delivery/OrderCancelledPage.tsx` | ❌ **Entirely fabricated cancellation reason/compensation** — see High #7. |
-| Report Issue (mid-delivery) | `pages/delivery/ReportIssuePage.tsx` | ✅ Fully real — real photo upload, real submit, real unassign path. |
-| Shop And Pick (grocery) | `pages/delivery/ShopAndPickPage.tsx` | ✅ Checklist, report-issue, message/call, done-shopping all real. ❌ Menu/wallet icons and "Can't find"/"Substitute"/edit-pencil dead (High #10). |
+| At Store (pickup) | `pages/delivery/AtStorePage.tsx` | ✅ Real live map, real Call Store, real photo upload, real confirm-pickup. ✅ “Order not ready?” wait time posts a `long_wait` issue. |
+| Confirm Handoff | `pages/delivery/ConfirmHandoffPage.tsx` | ✅ Fully real, all three actions wired. |
+| Customer Unavailable | `pages/delivery/CustomerUnavailablePage.tsx` | ✅ Real call button, real 5-minute timer gating “leave at safe location.” |
+| Delivery Complete | `pages/delivery/DeliveryCompletePage.tsx` | ✅ Base pay + tip + total. Fake Distance Bonus / Peak Pay rows removed (no backend fields). |
+| En Route (to customer) | `pages/delivery/EnRoutePage.tsx` | ✅ Real live map, real Call/Message/Open in Maps. ⚠️ Banner is destination + remaining km, not routing-engine turns. |
+| Order Cancelled | `pages/delivery/OrderCancelledPage.tsx` | ✅ Real cancelled-by and reason from the order. Correctly shows no pay. |
+| Report Issue (mid-delivery) | `pages/delivery/ReportIssuePage.tsx` | ✅ Fully real — photo upload, submit, unassign path. |
+| Shop And Pick (grocery) | `pages/delivery/ShopAndPickPage.tsx` | ✅ Checklist, report-issue, message/call, done-shopping real. ✅ Can’t find logs an issue. ✅ Edit un-toggles found items. Wallet/Substitute hidden (no wallet or substitute API). |
 
 ### 4.5 Stacked delivery (multi-order) — confirmed disabled, don't test as if live
 
 | Screen | File | Verdict |
 |---|---|---|
 | Stacked At Pickup | `pages/delivery/stacked/StackedAtPickupPage.tsx` | ⚠️ Fully mock, unreachable (§2c). |
-| Stacked Deliver Nav | `pages/delivery/stacked/StackedDeliverNavPage.tsx` | ⚠️ Fully mock, unreachable. Also has a dead Call button and dead item-count row, if it ever were reachable. |
-| Stacked Delivery Flow (orchestrator) | `pages/delivery/stacked/StackedDeliveryFlow.tsx` | ⚠️ Entirely local/toast-only logic, never calls the real delivery API, and gated off with a literal `false &&` in `CourierHomePage.tsx`. |
+| Stacked Deliver Nav | `pages/delivery/stacked/StackedDeliverNavPage.tsx` | ⚠️ Fully mock, unreachable. |
+| Stacked Delivery Flow (orchestrator) | `pages/delivery/stacked/StackedDeliveryFlow.tsx` | ⚠️ Local/toast-only; gated `{false &&}` in `CourierHomePage.tsx`. |
 | Stacked Delivery Summary | `pages/delivery/stacked/StackedDeliverySummaryPage.tsx` | ⚠️ Fully mock, unreachable. |
 | Stacked Leg Complete | `pages/delivery/stacked/StackedLegCompletePage.tsx` | ⚠️ Fully mock, unreachable. |
-| Stacked Pickup Nav | `pages/delivery/stacked/StackedPickupNavPage.tsx` | ⚠️ Fully mock, unreachable. Also has dead Account-icon and Phone buttons, if it ever were reachable. |
+| Stacked Pickup Nav | `pages/delivery/stacked/StackedPickupNavPage.tsx` | ⚠️ Fully mock, unreachable. |
 
 ### 4.6 Earnings & activity
 
 | Screen | File | Verdict |
 |---|---|---|
-| Activity (history) | `pages/activity/ActivityPage.tsx` | ✅ Real backend earnings/history fetch, real pull-to-refresh, real filters. ❌ Menu (when `onBack` absent) and notifications bell dead. ❌ Tapping any delivery row routes to a broken detail page (Critical #2). |
-| Earnings | `pages/earnings/EarningsPage.tsx` | ✅ Real backend fetch, real period tabs, real pull-to-refresh. ❌ Same broken detail-page destination as above. |
-| Promotions | `pages/earnings/PromotionsPage.tsx` | ❌ **Entirely mock** — see High #14. Peak Pay list rows dead. |
-| Delivery Detail | `pages/earnings/DeliveryDetailPage.tsx` | ❌ **Always shows the same fake order regardless of which real delivery was tapped** — see Critical #2. Star rating and proof-of-delivery photo are also static/decorative. |
+| Activity (history) | `pages/activity/ActivityPage.tsx` | ✅ `GET /courier/history` (completed + cancelled). ✅ Pull-to-refresh, filters, menu → Account, bell → notification settings. ✅ Row tap opens real delivery detail. Cancelled rows tappable; amount is J$0. ⚠️ Production needs the delivery function deployed. |
+| Earnings | `pages/earnings/EarningsPage.tsx` | ✅ Real backend fetch, period tabs, pull-to-refresh. ✅ Row tap opens real delivery detail. Totals stay on completed jobs only. Promotions entry removed. |
+| Promotions | `pages/earnings/PromotionsPage.tsx` | ⚠️ File still mock — **not mounted / not linked**. Ignore unless you are deleting or productizing it. |
+| Delivery Detail | `pages/earnings/DeliveryDetailPage.tsx` | ✅ Loads the tapped order by ID (restaurant, pay, timeline, proof photo when present). |
 | Payout History | `pages/profile/PayoutHistoryPage.tsx` | ✅ Fully real backend fetch. |
-| Payout Settings | `pages/profile/PayoutSettingsPage.tsx` | ✅ Fully real — real Stripe Connect onboarding redirect, real weekly-payout request. |
+| Payout Settings | `pages/profile/PayoutSettingsPage.tsx` | ✅ Fully real — Stripe Connect onboarding redirect, weekly-payout request. |
 
 ### 4.7 Profile & settings
 
 | Screen | File | Verdict |
 |---|---|---|
-| Account (menu) | `pages/profile/AccountPage.tsx` | ✅ Real profile load, real menu navigation, real sign-out. ❌ Menu and notifications-bell header icons dead. ⚠️ Avatar/"member since" always blank (query never selects those columns). |
-| Edit Profile | `pages/profile/EditProfilePage.tsx` | ✅ Name/phone/email save real. ❌ Avatar is permanently fake and its edit controls are dead (High #12). ⚠️ Can silently retain mock values if backend fields are null. |
-| Edit Vehicle | `pages/profile/EditVehiclePage.tsx` | ✅ Fully real — genuine backend upsert. |
-| Vehicle Details | `pages/profile/VehicleDetailsPage.tsx` | ✅ Real vehicle record load, real "Edit Vehicle" nav. ❌ "Switch vehicle type" is a functional dead end — writes to local draft only, never persists or updates the display (High #11). |
-| Courier Documents | `pages/profile/CourierDocumentsPage.tsx` | ✅ Fully real Supabase Storage upload — this is the document-upload surface that actually works (contrast with onboarding's broken one, Critical #1). |
+| Account (menu) | `pages/profile/AccountPage.tsx` | ✅ Real profile load, menu, sign-out. ✅ Bell → notification settings. ✅ Avatar from `profile_photo_url`. ✅ “Member since” from `created_at` (hidden if missing). |
+| Edit Profile | `pages/profile/EditProfilePage.tsx` | ✅ Name/phone/email save real. ✅ Photo load/save real. Starts empty; Save blocked until load succeeds. |
+| Edit Vehicle | `pages/profile/EditVehiclePage.tsx` | ✅ Fully real backend upsert. |
+| Vehicle Details | `pages/profile/VehicleDetailsPage.tsx` | ✅ Real vehicle load, Edit Vehicle nav. ✅ Switch vehicle type persists via vehicle upsert + profile `vehicle_type`. |
+| Courier Documents | `pages/profile/CourierDocumentsPage.tsx` | ✅ Fully real Storage upload. |
 | Ratings & Stats | `pages/profile/RatingsStatsPage.tsx` | ✅ Fully real backend data. |
-| Dash Preferences | `pages/profile/DashPreferencesPage.tsx` | ✅ All toggles/sliders real (as local device preferences). ⚠️ localStorage only, not backend-synced. |
-| Notification Settings | `pages/profile/NotificationSettingsPage.tsx` | ✅ Toggles real (as local device preferences). ⚠️ localStorage only. |
+| Dash Preferences | `pages/profile/DashPreferencesPage.tsx` | ✅ Toggles/sliders real as **this-device** prefs. ⚠️ localStorage only (parked cloud sync). |
+| Notification Settings | `pages/profile/NotificationSettingsPage.tsx` | ✅ Toggles real as this-device prefs. ⚠️ localStorage only. |
 | Payout Settings | *(see §4.6)* | |
-| Help & Support | `pages/profile/HelpSupportPage.tsx` | ✅ Fully real — search filter, real `tel:911`, real topic navigation, real support email link. |
-| Help Topic | `pages/profile/HelpTopicPage.tsx` | ✅ Static FAQ content rendered via native accordion — expected, not a gap. |
-| Settings | `pages/profile/SettingsPage.tsx` | ✅ Appearance toggle has a real visual side-effect (dark mode); other selects are real local prefs. ⚠️ localStorage only. Real external legal links and real account-deletion `mailto:`. |
+| Help & Support | `pages/profile/HelpSupportPage.tsx` | ✅ Search filter, `tel:911`, topic nav, support email. ⚠️ FAQ copy may still mention a hidden Promotions tab. |
+| Help Topic | `pages/profile/HelpTopicPage.tsx` | ✅ Static FAQ via accordion — expected, not a gap. |
+| Settings | `pages/profile/SettingsPage.tsx` | ✅ Appearance (dark mode) and other local selects. Real legal links and account-deletion `mailto:`. ⚠️ localStorage only. |
 | About | `pages/profile/AboutPage.tsx` | ✅ Real static links (legitimate static content). |
 
 ---
 
-## 5. Suggested order of operations
+## 5. Original punch list — status (do not re-fix)
 
-1. Fix the **Critical** section (§3, items 1-6) first — a courier onboarding path that discards ID documents, a doorstep screen showing wrong delivery instructions, and a broken settings deep-link that can strand a courier offline are all things that block or actively mislead someone trying to do their job, not just missing polish.
-2. Fix `DeliveryDetailPage` (item #2) next — it's a correctness bug (wrong data shown for a real record), not a missing feature, and it directly affects trust in the pay a courier sees.
-3. Sweep the **High** section (items 7-15) — mostly missing `onClick` handlers and hardcoded numbers on already-built screens, should be fast once triaged.
-4. Decide whether Promotions/Peak Pay (item 14) is in scope for this launch; if not, hide the entry point rather than showing a fully fake promotions screen.
-5. Leave stacked/multi-order delivery alone (§2c) until there's a real backend "order stack" model — the UI already exists and is wired to itself internally, it just has nothing real to plug into yet.
-6. Re-run this click-through pass on the full single-order delivery flow end-to-end (offer → pickup → en route → doorstep → complete) after fixes land, since that's both the highest-traffic path and where the highest-severity issues concentrate.
+### Critical (all done)
+1. Onboarding docs upload — **fixed**
+2. Delivery detail fake order — **fixed**
+3. At Customer fake instructions — **fixed** (Gate/Unit still have no DB fields; hidden unless filled)
+4. At Customer Call/Chat dead — **fixed** (Call/SMS)
+5. Open Settings was `window.alert` — **fixed**
+6. Profile setup photo dead — **fixed**
+
+### High (done or parked)
+7. Cancel screen fake pay — **fixed** (honest: no pay)
+8. Distance Bonus / Peak Pay J$0 — **fixed** by hiding the rows
+9. Wait-time discarded — **fixed** (`long_wait` issue)
+10. Grocery dead controls — **fixed** / Substitute **hidden** (parked engine)
+11. Vehicle type switch local-only — **fixed**
+12. Edit Profile fake photo + mock draft leak — **fixed**
+13. Account Pending fake checklist — **fixed**
+14. Promotions fully fake — **hidden**, product **parked**
+15. Shift stats fabricated — **fixed** (real today stats + this-session clock)
+
+### Medium
+16. Turn-by-turn placeholder — **honesty pass done**; real routing **parked**
+17. Dead hamburger/bell — **fixed**
+18. Prefs localStorage only — **accepted for launch**; cloud sync **parked**
+19. Offline cached Burger King — **fixed**
+
+### Low
+20–22. Unchanged: static offer maps; stacked dead buttons moot; Placeholder Home unreachable.
+
+---
+
+## 6. Suggested next steps
+
+1. Deploy `delivery` so cancelled history is live.
+2. Spot-check the single-order path after deploy (offer → complete).
+3. Leave stacked orders, Peak Pay, grocery Substitute, and cloud prefs until those products exist.
+4. Optional cleanup: delete or quarantine `PromotionsPage.tsx` and unused mock fixtures so they cannot be re-linked by accident.

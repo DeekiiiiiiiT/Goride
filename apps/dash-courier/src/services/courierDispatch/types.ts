@@ -47,6 +47,7 @@ export interface CourierDispatchService {
   showOfferDetails(): void;
   dismissOfferDetails(): void;
   acceptOffer(offerId: string): AcceptOfferResult;
+  acceptStackedOffer(offerIds: string[]): AcceptOfferResult;
   declineOffer(offerId: string, reason?: DeclineReasonPayload): void;
   expireOffer(): void;
   setDeliveryPhase(phase: DeliveryPhase): void;

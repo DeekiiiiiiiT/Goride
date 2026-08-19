@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { ToggleSwitch } from '@/components/forms/ToggleSwitch';
 import { SubPageHeader } from '@/components/layout/SubPageHeader';
-import { loadNotificationSettings, saveNotificationSettings } from '@/lib/courierStorage';
+import { loadNotificationSettings } from '@/lib/courierStorage';
+import { saveNotificationSettingsSynced } from '@/lib/courierSettingsSync';
 import { toast } from '@/lib/toast';
 
 type NotificationSettingsPageProps = {
@@ -114,7 +115,7 @@ export function NotificationSettingsPage({ onBack }: NotificationSettingsPagePro
         <button
           type="button"
           onClick={() => {
-            saveNotificationSettings(settings);
+            saveNotificationSettingsSynced(settings);
             toast.success('Notification settings saved');
             onBack();
           }}

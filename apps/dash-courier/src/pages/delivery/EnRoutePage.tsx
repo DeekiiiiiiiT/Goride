@@ -7,16 +7,36 @@ import type { ActiveDelivery } from '@/lib/mockActiveDelivery';
 import { openPhoneCall, openSmsMessage, toDialablePhone } from '@/lib/contactLinks';
 import { openNavigationApp } from '@/lib/navigationUrls';
 import { realDispatchProvider } from '@/services/courierDispatch/RealDispatchProvider';
+import { useCourierRoute } from '@/hooks/useCourierRoute';
 
 type EnRoutePageProps = {
   delivery: ActiveDelivery;
   onArrived: () => void;
 };
 
+function formatTurnDistance(meters?: number): string {
+  if (meters == null || !Number.isFinite(meters)) return '';
+  if (meters >= 1000) return `${(meters / 1000).toFixed(1)} km`;
+  return `${Math.round(meters)} m`;
+}
+
 export function EnRoutePage({ delivery, onArrived }: EnRoutePageProps) {
   const [navPickerOpen, setNavPickerOpen] = useState(false);
   const customerPhone = toDialablePhone(delivery.customerPhone);
   const gps = realDispatchProvider.getLastCoords();
+  const route = useCourierRoute({
+    fromLat: gps.lat,
+    fromLng: gps.lng,
+    toLat: delivery.dropoffLat,
+    toLng: delivery.dropoffLng,
+  });
+
+  const turnDistance = formatTurnDistance(route.nextTurnDistanceM) ||
+    delivery.dropoffTurnDistance ||
+    `${delivery.dropoffDistanceKm} km`;
+  const turnInstruction = route.nextTurnInstruction || delivery.dropoffTurnInstruction;
+  const etaMinutes = route.durationMinutes ?? delivery.dropoffEtaMinutes;
+  const distanceKm = route.distanceKm ?? delivery.dropoffDistanceKm;
 
   return (
     <div className="fixed inset-0 z-[60] bg-background flex flex-col overflow-hidden">
@@ -28,6 +48,8 @@ export function EnRoutePage({ delivery, onArrived }: EnRoutePageProps) {
           destinationLat={delivery.dropoffLat}
           destinationLng={delivery.dropoffLng}
           destinationLabel={delivery.customerFirstName || 'Customer'}
+          routePolyline={route.polyline}
+          interactive={false}
         />
       </div>
 
@@ -38,10 +60,10 @@ export function EnRoutePage({ delivery, onArrived }: EnRoutePageProps) {
           </div>
           <div className="flex-1 min-w-0">
             <div className="text-[28px] leading-9 font-bold text-inverse-on-surface mb-1">
-              {delivery.dropoffTurnDistance || `${delivery.dropoffDistanceKm} km`}
+              {turnDistance}
             </div>
             <div className="text-sm text-surface-variant opacity-80 truncate">
-              {delivery.dropoffTurnInstruction}
+              {turnInstruction}
             </div>
           </div>
         </div>
@@ -60,9 +82,9 @@ export function EnRoutePage({ delivery, onArrived }: EnRoutePageProps) {
               <div className="text-sm text-on-surface-variant mt-1 leading-snug">{delivery.dropoffAddress}</div>
             </div>
             <div className="flex flex-col items-end shrink-0 border-l border-outline-variant/30 pl-4">
-              <div className="text-2xl font-semibold text-primary">{delivery.dropoffEtaMinutes} min</div>
+              <div className="text-2xl font-semibold text-primary">{etaMinutes} min</div>
               <div className="text-xs font-semibold uppercase tracking-wide text-muted mt-0.5">
-                ({delivery.dropoffDistanceKm} km)
+                ({distanceKm} km)
               </div>
             </div>
           </div>

@@ -6,15 +6,34 @@ import { NavigationPickerSheet } from '@/components/ui/NavigationPickerSheet';
 import type { ActiveDelivery } from '@/lib/mockActiveDelivery';
 import { openNavigationApp } from '@/lib/navigationUrls';
 import { realDispatchProvider } from '@/services/courierDispatch/RealDispatchProvider';
+import { useCourierRoute } from '@/hooks/useCourierRoute';
 
 type ActiveDeliveryNavPageProps = {
   delivery: ActiveDelivery;
   onArrived: () => void;
 };
 
+function formatTurnDistance(meters?: number, fallbackKm?: number): string {
+  if (meters != null && Number.isFinite(meters)) {
+    if (meters >= 1000) return `${(meters / 1000).toFixed(1)} km`;
+    return `${Math.round(meters)} m`;
+  }
+  if (fallbackKm != null && fallbackKm > 0) return `${fallbackKm} km`;
+  return '';
+}
+
 export function ActiveDeliveryNavPage({ delivery, onArrived }: ActiveDeliveryNavPageProps) {
   const [navPickerOpen, setNavPickerOpen] = useState(false);
   const gps = realDispatchProvider.getLastCoords();
+  const route = useCourierRoute({
+    fromLat: gps.lat,
+    fromLng: gps.lng,
+    toLat: delivery.pickupLat,
+    toLng: delivery.pickupLng,
+  });
+  const turnInstruction = route.nextTurnInstruction || delivery.turnInstruction;
+  const etaMinutes = route.durationMinutes ?? delivery.etaMinutes;
+  const distanceKm = route.distanceKm ?? delivery.distanceKm;
 
   return (
     <div className="flex flex-col flex-1 min-h-0 h-full w-full overflow-hidden bg-surface-container">
@@ -26,6 +45,8 @@ export function ActiveDeliveryNavPage({ delivery, onArrived }: ActiveDeliveryNav
           destinationLat={delivery.pickupLat}
           destinationLng={delivery.pickupLng}
           destinationLabel={delivery.storeName ?? delivery.restaurant}
+          routePolyline={route.polyline}
+          interactive={false}
         />
       </div>
 
@@ -44,10 +65,10 @@ export function ActiveDeliveryNavPage({ delivery, onArrived }: ActiveDeliveryNav
             </div>
             <div className="flex flex-col items-end shrink-0 border-l border-surface-variant pl-4">
               <div className="bg-primary-container/20 rounded-lg px-3 py-1.5 flex flex-col items-center min-w-[56px]">
-                <span className="text-xl font-bold text-primary leading-tight">{delivery.etaMinutes}</span>
+                <span className="text-xl font-bold text-primary leading-tight">{etaMinutes}</span>
                 <span className="text-[11px] text-primary uppercase font-medium">min</span>
               </div>
-              <p className="text-[11px] text-muted mt-1.5 font-semibold">{delivery.distanceKm} km</p>
+              <p className="text-[11px] text-muted mt-1.5 font-semibold">{distanceKm} km</p>
             </div>
           </div>
         </div>
@@ -57,8 +78,13 @@ export function ActiveDeliveryNavPage({ delivery, onArrived }: ActiveDeliveryNav
             <MaterialIcon name="near_me" className="text-[28px]" filled />
           </div>
           <p className="text-lg leading-6 text-on-surface font-semibold tracking-tight flex-1">
-            {delivery.turnInstruction}
+            {turnInstruction}
           </p>
+          {formatTurnDistance(route.nextTurnDistanceM, distanceKm) && (
+            <span className="text-sm text-muted shrink-0">
+              {formatTurnDistance(route.nextTurnDistanceM, distanceKm)}
+            </span>
+          )}
         </div>
       </div>
 

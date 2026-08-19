@@ -23,6 +23,7 @@ export type DeliveryMapProps = {
   destinationLat?: number | null;
   destinationLng?: number | null;
   destinationLabel?: string;
+  routePolyline?: Array<{ lat: number; lng: number }>;
   height?: string;
   className?: string;
   /** When false, map is display-only (no pinch/drag). Default true. */
@@ -36,6 +37,7 @@ export function DeliveryMap({
   destinationLat,
   destinationLng,
   destinationLabel = 'Destination',
+  routePolyline,
   height = '100%',
   className = '',
   interactive = true,
@@ -141,13 +143,18 @@ export function DeliveryMap({
     }
 
     if (hasCourier && hasDest) {
-      routeLayerRef.current = L.polyline(
-        [
-          [Number(courierLat), Number(courierLng)],
-          [Number(destinationLat), Number(destinationLng)],
-        ],
-        { color: '#10b981', weight: 4, opacity: 0.75 },
-      ).addTo(map);
+      const routePoints: [number, number][] =
+        routePolyline && routePolyline.length >= 2
+          ? routePolyline.map((p) => [p.lat, p.lng] as [number, number])
+          : [
+              [Number(courierLat), Number(courierLng)],
+              [Number(destinationLat), Number(destinationLng)],
+            ];
+      routeLayerRef.current = L.polyline(routePoints, {
+        color: '#10b981',
+        weight: 4,
+        opacity: 0.75,
+      }).addTo(map);
     }
 
     if (positions.length === 1) {
@@ -165,6 +172,7 @@ export function DeliveryMap({
     destinationLat,
     destinationLng,
     destinationLabel,
+    routePolyline,
     isMounted,
   ]);
 

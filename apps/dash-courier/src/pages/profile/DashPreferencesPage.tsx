@@ -3,7 +3,8 @@ import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { ToggleSwitch } from '@/components/forms/ToggleSwitch';
 import { SubPageHeader } from '@/components/layout/SubPageHeader';
 import { DEFAULT_DASH_PREFERENCES, PREFERRED_AREAS } from '@/lib/mockSettings';
-import { loadDashPreferences, saveDashPreferences } from '@/lib/courierStorage';
+import { loadDashPreferences } from '@/lib/courierStorage';
+import { saveDashPreferencesSynced } from '@/lib/courierSettingsSync';
 import { toast } from '@/lib/toast';
 
 type DashPreferencesPageProps = {
@@ -162,7 +163,7 @@ export function DashPreferencesPage({ onBack }: DashPreferencesPageProps) {
         <button
           type="button"
           onClick={() => {
-            saveDashPreferences(prefs);
+            saveDashPreferencesSynced(prefs);
             toast.success('Preferences saved');
             onBack();
           }}

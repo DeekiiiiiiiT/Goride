@@ -6,8 +6,10 @@ type OrderLike = AvailableOrder & {
   items?: Array<{ name?: string; quantity?: number; note?: string }>;
   customer_name?: string;
   delivery_instructions?: string;
+  delivery_address_line2?: string;
   delivery_fee?: number;
   tip?: number;
+  peak_pay_amount?: number;
   total?: number;
   customer?: { name?: string | null; phone?: string | null } | null;
 };
@@ -69,6 +71,7 @@ export function mapOrderToActiveDelivery(
   const dropoff = String(order.delivery_address || '');
   const tip = Math.max(0, Number(order.tip || 0));
   const basePay = Math.max(0, Number(order.delivery_fee || 0));
+  const peakPay = Math.max(0, Number(order.peak_pay_amount || 0));
   const customerName = String(
     order.customer_name || order.customer?.name || 'Customer',
   );
@@ -146,7 +149,7 @@ export function mapOrderToActiveDelivery(
     dropoffLat,
     dropoffLng,
     gateCode: '',
-    unit: '',
+    unit: String(order.delivery_address_line2 || '').trim(),
     deliveryInstructions: String(order.delivery_instructions || ''),
     etaMinutes,
     distanceKm,
@@ -157,13 +160,12 @@ export function mapOrderToActiveDelivery(
     turnInstruction: `Heading to ${storeName}`,
     itemCount: checklist.length || items.reduce((n, i) => n + Number(i.quantity || 1), 0),
     checklist,
-    // Peak/distance bonuses have no backend fields — keep zeros off the complete screen.
     earnings: {
       basePay,
       distanceBonus: 0,
       tip,
-      peakPay: 0,
-      total: basePay + tip,
+      peakPay,
+      total: basePay + tip + peakPay,
     },
     tripDistanceKm,
     tripMinutes,

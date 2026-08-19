@@ -3,7 +3,7 @@ import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { SlideToConfirm } from '@/components/ui/SlideToConfirm';
 import { FRESH_MART_LOGO, type ActiveDelivery } from '@/lib/mockActiveDelivery';
 import { openPhoneCall, openSmsMessage, toDialablePhone } from '@/lib/contactLinks';
-import { submitCourierIssue } from '@/lib/courierApi';
+import { submitCourierIssue, proposeItemSubstitute } from '@/lib/courierApi';
 import { toast } from '@/lib/toast';
 import { realDispatchProvider } from '@/services/courierDispatch/RealDispatchProvider';
 
@@ -35,6 +35,7 @@ export function ShopAndPickPage({
     return initial;
   });
   const [reportingId, setReportingId] = useState<string | null>(null);
+  const [substitutingId, setSubstitutingId] = useState<string | null>(null);
 
   const pickedCount = useMemo(
     () => Object.values(picked).filter(Boolean).length,
@@ -46,6 +47,24 @@ export function ShopAndPickPage({
 
   const togglePicked = (id: string) => {
     setPicked((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const handleSubstitute = async (item: { id: string; label: string }, index: number) => {
+    const substituteLabel = window.prompt(`Substitute for ${item.label}?`, '');
+    if (!substituteLabel?.trim()) return;
+    const orderId = realDispatchProvider.activeOrderId || delivery.orderId;
+    setSubstitutingId(item.id);
+    const ok = await proposeItemSubstitute(orderId, {
+      itemIndex: index,
+      itemLabel: item.label,
+      substituteLabel: substituteLabel.trim(),
+    });
+    setSubstitutingId(null);
+    if (ok) {
+      toast.success('Substitute sent', 'Waiting for customer approval.');
+    } else {
+      toast.error('Could not propose substitute', 'Try again or use Report issue.');
+    }
   };
 
   const handleCantFind = async (item: { id: string; label: string }) => {
@@ -117,7 +136,7 @@ export function ShopAndPickPage({
           </div>
 
           <div className="space-y-2">
-            {delivery.checklist.map((item) => {
+            {delivery.checklist.map((item, index) => {
               const isFound = Boolean(picked[item.id]);
 
               return (
@@ -156,17 +175,30 @@ export function ShopAndPickPage({
                     ) : (
                       <>
                         {item.note && <p className="text-label-md text-on-surface-variant">{item.note}</p>}
-                        <button
-                          type="button"
-                          disabled={reportingId === item.id}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            void handleCantFind(item);
-                          }}
-                          className="mt-2 rounded-lg border border-outline-variant bg-surface-container-high px-3 py-1.5 text-label-lg font-semibold text-on-surface-variant disabled:opacity-60"
-                        >
-                          {reportingId === item.id ? 'Logging…' : "Can't find"}
-                        </button>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            disabled={reportingId === item.id}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void handleCantFind(item);
+                            }}
+                            className="rounded-lg border border-outline-variant bg-surface-container-high px-3 py-1.5 text-label-lg font-semibold text-on-surface-variant disabled:opacity-60"
+                          >
+                            {reportingId === item.id ? 'Logging…' : "Can't find"}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={substitutingId === item.id}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void handleSubstitute(item, index);
+                            }}
+                            className="rounded-lg border border-primary/30 bg-primary-container/20 px-3 py-1.5 text-label-lg font-semibold text-primary disabled:opacity-60"
+                          >
+                            {substitutingId === item.id ? 'Sending…' : 'Substitute'}
+                          </button>
+                        </div>
                       </>
                     )}
                   </div>

@@ -103,6 +103,17 @@ export class MockDispatchProvider implements CourierDispatchService {
     return { deliveryPhase: 'pickup-nav', acceptedStacked: false };
   }
 
+  acceptStackedOffer(_offerIds: string[]): AcceptOfferResult {
+    assertOnline();
+    this.setState({
+      offerPhase: null,
+      mode: 'on-delivery',
+      deliveryPhase: 'stacked-active',
+      acceptedStacked: true,
+    });
+    return { deliveryPhase: 'stacked-active', acceptedStacked: true };
+  }
+
   declineOffer(_offerId: string, _reason?: DeclineReasonPayload): void {
     this.setState({ offerPhase: null });
   }

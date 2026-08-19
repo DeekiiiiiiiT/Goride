@@ -38,7 +38,7 @@ export const HELP_ARTICLES: Record<string, HelpArticle[]> = {
     {
       id: 'peak-pay',
       question: 'What is peak pay?',
-      answer: 'Peak pay is extra earnings during busy periods. Check the Promotions tab for active boosts.',
+      answer: 'Peak pay bonuses appear on offers during busy periods and are included in your earnings when shown on the offer card.',
     },
   ],
   account: [

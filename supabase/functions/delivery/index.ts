@@ -42,6 +42,8 @@ import {
   requireActiveCourier,
   COURIER_TRANSITIONS,
   dispatchOffersForOrder,
+  applyCancelCompensation,
+  completeStackLeg,
 } from "./courierConsumerRoutes.ts";
 import { registerDashHealthRoutes } from "./dashHealthRoutes.ts";
 import { registerStripeConnectRoutes } from "./stripeConnectRoutes.ts";
@@ -853,6 +855,9 @@ app.put("/orders/:id/status", async (c) => {
       orderRow.courier_id as string | null | undefined,
       id,
     );
+    if (status === "cancelled") {
+      await applyCancelCompensation(serviceSb, id, String(actorType));
+    }
 
     const shiftHeader = c.req.header("X-Staff-Shift-Token");
     let teamMemberId: string | null = null;
@@ -916,6 +921,7 @@ app.put("/orders/:id/status", async (c) => {
       updateData.cancelled_at = new Date().toISOString();
       updateData.cancelled_by = "courier";
       updateData.cancellation_reason = notes;
+      updateData.courier_compensation_amount = 0;
     }
 
     const { data: updatedOrder, error: updateError } = await serviceSb
@@ -941,6 +947,9 @@ app.put("/orders/:id/status", async (c) => {
         .from("courier_availability")
         .update({ active_order_id: null })
         .eq("driver_id", user.id);
+      if (status === "delivered") {
+        await completeStackLeg(serviceSb, user.id, id);
+      }
     }
 
     await notifyCustomerOrderStatus(serviceSb, id, status);
@@ -1003,6 +1012,15 @@ app.put("/orders/:id/status", async (c) => {
     (order as { courier_id?: string | null }).courier_id,
     id,
   );
+  if (status === "cancelled") {
+    await applyCancelCompensation(serviceSb, id, String(actorType));
+    const courierId = (order as { courier_id?: string | null }).courier_id;
+    if (courierId) await completeStackLeg(serviceSb, String(courierId), id);
+  }
+  if (status === "delivered") {
+    const courierId = (order as { courier_id?: string | null }).courier_id;
+    if (courierId) await completeStackLeg(serviceSb, String(courierId), id);
+  }
 
   // Soft-launch: when merchant marks ready, fan out courier offers
   if (status === "ready" && actorType === "merchant") {

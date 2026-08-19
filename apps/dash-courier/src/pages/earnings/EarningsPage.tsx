@@ -11,6 +11,7 @@ import { toast } from '@/lib/toast';
 type EarningsPageProps = {
   onDeliverySelect: (deliveryId: string) => void;
   onViewAllHistory?: () => void;
+  onViewPromotions?: () => void;
 };
 
 type EarningsPeriod = 'today' | 'week' | 'month';
@@ -21,7 +22,7 @@ const PERIOD_TABS: { id: EarningsPeriod; label: string }[] = [
   { id: 'month', label: 'This Month' },
 ];
 
-export function EarningsPage({ onDeliverySelect, onViewAllHistory }: EarningsPageProps) {
+export function EarningsPage({ onDeliverySelect, onViewAllHistory, onViewPromotions }: EarningsPageProps) {
   const [period, setPeriod] = useState<EarningsPeriod>('today');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -71,6 +72,15 @@ export function EarningsPage({ onDeliverySelect, onViewAllHistory }: EarningsPag
       <div className="sticky top-0 bg-surface z-40 pt-safe px-[var(--spacing-edge)] pb-2 shadow-sm">
         <div className="flex items-center justify-between h-14">
           <h1 className="text-2xl font-semibold text-on-surface">Earnings</h1>
+          {onViewPromotions && (
+            <button
+              type="button"
+              onClick={onViewPromotions}
+              className="text-xs font-semibold uppercase tracking-wide text-primary px-3 py-2 rounded-full border border-primary/30"
+            >
+              Peak Pay
+            </button>
+          )}
         </div>
         <div className="flex gap-4 mt-2 border-b border-surface-variant">
           {PERIOD_TABS.map((tab) => (

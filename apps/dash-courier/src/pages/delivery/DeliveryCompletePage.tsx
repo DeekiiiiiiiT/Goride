@@ -64,6 +64,12 @@ export function DeliveryCompletePage({ delivery, onBackToDash }: DeliveryComplet
               </span>
               <span>J${earnings.tip}</span>
             </div>
+            {earnings.peakPay > 0 && (
+              <div className="flex justify-between text-sm text-on-surface-variant">
+                <span>Peak Pay</span>
+                <span>J${earnings.peakPay}</span>
+              </div>
+            )}
           </div>
           <div className="flex justify-between items-center pt-2 border-t border-surface-variant text-2xl font-semibold text-primary">
             <span>Total</span>

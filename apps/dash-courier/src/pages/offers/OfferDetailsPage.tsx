@@ -1,11 +1,10 @@
 import React, { useRef } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { CountdownRing } from '@/components/ui/CountdownRing';
+import { DeliveryMap } from '@/components/map/DeliveryMap';
 import { useCountdown } from '@/hooks/useCountdown';
 import type { SingleOffer } from '@/lib/mockOffers';
-
-const ROUTE_MAP =
-  'https://lh3.googleusercontent.com/aida-public/AB6AXuAmG81cDRs_EbNGa5z8Sog8gNE_hPjDEyeAnUB9IALOjRy7xeP33kq2Drb1fOQXWBnbz0PA64TqezF3cqwgNUk5ok1tf2YQhED9idlaER0Vt4GPpRD5npWy1tnDrcxxnnnDnP2lQZ9JBkTLkSXw13nMWHguWMwJnVYaWnCgvE5XQ1RBMQGu-UDG-vPSTWMfwmun_NBeBfjsaQpffU3W9jOTBJQ4osxYPl5VqENWH-Kb95tHNrIwRDfWh0bKrIY-kEXqjvrpi-JJhMg';
+import { realDispatchProvider } from '@/services/courierDispatch/RealDispatchProvider';
 
 type OfferDetailsPageProps = {
   offer: SingleOffer;
@@ -82,21 +81,16 @@ export function OfferDetailsPage({
         </div>
 
         <div className="rounded-xl overflow-hidden mb-4 h-48 relative shadow-sm border border-outline-variant/30">
-          <div
-            className="absolute inset-0 bg-cover bg-center"
-            style={{ backgroundImage: `url('${ROUTE_MAP}')` }}
+          <DeliveryMap
+            className="h-full w-full"
+            courierLat={realDispatchProvider.getLastCoords().lat}
+            courierLng={realDispatchProvider.getLastCoords().lng}
+            destinationLat={offer.pickupLat}
+            destinationLng={offer.pickupLng}
+            destinationLabel={offer.storeName ?? offer.restaurant}
+            interactive={false}
+            height="100%"
           />
-          <div className="absolute top-[30%] left-[20%]">
-            <div className="w-8 h-8 bg-surface rounded-full shadow-md flex items-center justify-center border-2 border-primary">
-              <MaterialIcon name="restaurant" className="text-primary text-lg" filled />
-            </div>
-          </div>
-          <div className="absolute top-[60%] right-[30%]">
-            <div className="absolute w-8 h-8 bg-tertiary rounded-full courier-pulse-circle" />
-            <div className="w-8 h-8 bg-tertiary rounded-full shadow-md flex items-center justify-center relative z-10 border-2 border-surface">
-              <MaterialIcon name="home" className="text-on-primary text-lg" filled />
-            </div>
-          </div>
         </div>
 
         <div className="bg-surface rounded-xl shadow-soft mb-4 relative overflow-hidden">

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { fetchCourierOrderDetail } from '@/lib/courierApi';
-import { ISSUE_CATEGORIES } from '@/lib/mockPromotions';
+import { ISSUE_CATEGORIES } from '@/lib/issueCategories';
 
 type OrderCancelledPageProps = {
   orderId?: string;
@@ -34,6 +34,7 @@ function reasonLabel(raw: string | null | undefined): string {
 export function OrderCancelledPage({ orderId, onBackToDash }: OrderCancelledPageProps) {
   const [cancelledBy, setCancelledBy] = useState('Unknown');
   const [reason, setReason] = useState('No reason provided');
+  const [compensation, setCompensation] = useState(0);
 
   useEffect(() => {
     if (!orderId) return;
@@ -41,6 +42,7 @@ export function OrderCancelledPage({ orderId, onBackToDash }: OrderCancelledPage
       if (!payload?.order) return;
       setCancelledBy(actorLabel(payload.order.cancelled_by as string | undefined));
       setReason(reasonLabel(payload.order.cancellation_reason as string | undefined));
+      setCompensation(Math.max(0, Number(payload.order.courier_compensation_amount || 0)));
     });
   }, [orderId]);
 
@@ -72,7 +74,9 @@ export function OrderCancelledPage({ orderId, onBackToDash }: OrderCancelledPage
             <MaterialIcon name="info" className="text-primary text-xl" />
           </div>
           <p className="text-sm text-on-surface-variant pt-2">
-            Cancelled orders are not paid. Head back to dash to keep receiving offers.
+            {compensation > 0
+              ? `You earned J$${compensation} cancel compensation for this trip. Head back to dash for more offers.`
+              : 'Cancelled orders are not paid unless cancel compensation applies. Head back to dash to keep receiving offers.'}
           </p>
         </div>
 

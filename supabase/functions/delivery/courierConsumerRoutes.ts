@@ -4,6 +4,9 @@
 import type { Hono } from "https://deno.land/x/hono@v4.3.11/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { dualWriteDashPayment } from "../_shared/unifiedLedger/dualWriteDash.ts";
+import { getCourierRouteEstimate } from "../_shared/directionsRoute.ts";
+import { computeCourierCancelCompensation } from "../_shared/courierCancelCompensation.ts";
+import { resolvePeakPayBonus } from "../_shared/courierPeakPay.ts";
 
 type Sb = ReturnType<typeof createClient>;
 
@@ -61,6 +64,82 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
 const DISPATCH_RADIUS_KM = Number(Deno.env.get("COURIER_DISPATCH_RADIUS_KM") || 12);
 const DISPATCH_MAX_OFFERS = Number(Deno.env.get("COURIER_DISPATCH_MAX_OFFERS") || 15);
 const DISPATCH_OFFER_TTL_MS = Number(Deno.env.get("COURIER_DISPATCH_OFFER_TTL_MS") || 90_000);
+const STACK_CAPACITY = 2;
+
+async function activeStackCount(serviceSb: Sb, courierId: string): Promise<number> {
+  const { count } = await serviceSb
+    .from("courier_stack_legs")
+    .select("id", { count: "exact", head: true })
+    .eq("courier_id", courierId)
+    .eq("leg_status", "active");
+  return count ?? 0;
+}
+
+async function courierHasStackCapacity(serviceSb: Sb, courierId: string): Promise<boolean> {
+  return (await activeStackCount(serviceSb, courierId)) < STACK_CAPACITY;
+}
+
+async function attachStackLeg(
+  serviceSb: Sb,
+  courierId: string,
+  orderId: string,
+): Promise<void> {
+  const active = await activeStackCount(serviceSb, courierId);
+  let stackGroupId = crypto.randomUUID();
+  if (active > 0) {
+    const { data: existing } = await serviceSb
+      .from("courier_stack_legs")
+      .select("stack_group_id")
+      .eq("courier_id", courierId)
+      .eq("leg_status", "active")
+      .order("sequence", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (existing?.stack_group_id) stackGroupId = String(existing.stack_group_id);
+  }
+  await serviceSb.from("courier_stack_legs").upsert(
+    {
+      courier_id: courierId,
+      order_id: orderId,
+      stack_group_id: stackGroupId,
+      sequence: active + 1,
+      leg_status: "active",
+    },
+    { onConflict: "courier_id,order_id" },
+  );
+}
+
+async function completeStackLeg(serviceSb: Sb, courierId: string, orderId: string): Promise<void> {
+  await serviceSb
+    .from("courier_stack_legs")
+    .update({ leg_status: "completed", completed_at: new Date().toISOString() })
+    .eq("courier_id", courierId)
+    .eq("order_id", orderId)
+    .eq("leg_status", "active");
+}
+
+async function applyCancelCompensation(
+  serviceSb: Sb,
+  orderId: string,
+  cancelledBy: string,
+): Promise<void> {
+  const { data: order } = await serviceSb
+    .from("orders")
+    .select("id, delivery_fee, picked_up_at, courier_id")
+    .eq("id", orderId)
+    .maybeSingle();
+  if (!order) return;
+  const amount = computeCourierCancelCompensation({
+    deliveryFee: Number(order.delivery_fee || 0),
+    cancelledBy,
+    pickedUpAt: order.picked_up_at,
+    hadCourier: Boolean(order.courier_id),
+  });
+  await serviceSb
+    .from("orders")
+    .update({ courier_compensation_amount: amount })
+    .eq("id", orderId);
+}
 
 /** Fan out pending offers to nearby online couriers (proximity-ranked, capped). */
 async function dispatchOffersForOrder(
@@ -91,12 +170,13 @@ async function dispatchOffersForOrder(
     .from("courier_availability")
     .select("driver_id, current_lat, current_lng")
     .eq("is_online", true)
-    .is("active_order_id", null)
     .limit(80);
 
   type Ranked = { driver_id: string; km: number };
   const ranked: Ranked[] = [];
   for (const row of online || []) {
+    const hasCapacity = await courierHasStackCapacity(serviceSb, String(row.driver_id));
+    if (!hasCapacity) continue;
     const lat = Number(row.current_lat);
     const lng = Number(row.current_lng);
     if (!Number.isFinite(originLat) || !Number.isFinite(originLng)) {
@@ -275,7 +355,8 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
         *,
         order:orders(
           id, order_number, status, total, delivery_fee, tip, delivery_address,
-          delivery_lat, delivery_lng, ready_at, delivery_instructions, items,
+          delivery_address_line2, delivery_lat, delivery_lng, ready_at, delivery_instructions, items,
+          peak_pay_amount,
           merchant:merchants(id, name, address, lat, lng, phone, vertical_type, fulfillment_type),
           customer:customers(name, phone)
         )
@@ -343,12 +424,29 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
       return c.json({ error: "Offer expired" }, 400);
     }
 
+    const hasCapacity = await courierHasStackCapacity(serviceSb, auth.userId);
+    if (!hasCapacity) {
+      return c.json({ error: "Active delivery stack is full" }, 400);
+    }
+
+    const { data: avail } = await serviceSb
+      .from("courier_availability")
+      .select("current_lat, current_lng")
+      .eq("driver_id", auth.userId)
+      .maybeSingle();
+    const peak = await resolvePeakPayBonus(
+      serviceSb,
+      avail?.current_lat != null ? Number(avail.current_lat) : null,
+      avail?.current_lng != null ? Number(avail.current_lng) : null,
+    );
+
     const { data: order, error } = await serviceSb
       .from("orders")
       .update({
         courier_id: auth.userId,
         status: "assigned",
         assigned_at: new Date().toISOString(),
+        peak_pay_amount: peak.bonus,
       })
       .eq("id", offer.order_id)
       .eq("status", "ready")
@@ -381,6 +479,8 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
       .from("courier_availability")
       .update({ active_order_id: offer.order_id, is_online: true })
       .eq("driver_id", auth.userId);
+
+    await attachStackLeg(serviceSb, auth.userId, String(offer.order_id));
 
     // Best-effort push notify stub
     try {
@@ -541,10 +641,13 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
           cancelled_by: "courier",
           cancellation_reason: notes || issueType,
           cancelled_at: new Date().toISOString(),
+          courier_compensation_amount: 0,
           updated_at: new Date().toISOString(),
         })
         .eq("id", orderId)
         .eq("courier_id", auth.userId);
+
+      await completeStackLeg(serviceSb, auth.userId, orderId);
 
       // Clear by active_order_id so a mismatched courier_id cannot leave the courier stuck
       await serviceSb
@@ -594,7 +697,7 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
     const { data: orders, error } = await serviceSb
       .from("orders")
       .select(`
-        id, order_number, status, delivery_fee, tip, delivered_at, delivery_address,
+        id, order_number, status, delivery_fee, tip, peak_pay_amount, delivered_at, delivery_address,
         merchant:merchants(name)
       `)
       .eq("courier_id", auth.userId)
@@ -609,7 +712,8 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
     const deliveries = rows.map((o) => {
       const fee = Number(o.delivery_fee || 0);
       const tip = Number(o.tip || 0);
-      const amount = fee + tip;
+      const peak = Number((o as { peak_pay_amount?: number }).peak_pay_amount || 0);
+      const amount = fee + tip + peak;
       total += amount;
       const merchant = o.merchant as { name?: string } | null;
       return {
@@ -657,7 +761,8 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
     }
     const startIso = start.toISOString();
     const select = `
-      id, order_number, status, delivery_fee, tip, delivered_at, cancelled_at, delivery_address,
+      id, order_number, status, delivery_fee, tip, peak_pay_amount, courier_compensation_amount,
+      delivered_at, cancelled_at, delivery_address,
       merchant:merchants(name)
     `;
 
@@ -685,12 +790,15 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
       const merchant = o.merchant as { name?: string } | null;
       const fee = Number(o.delivery_fee || 0);
       const tip = Number(o.tip || 0);
+      const peak = Number(o.peak_pay_amount || 0);
+      const compensation = Number(o.courier_compensation_amount || 0);
       return {
         id: o.id,
         orderNumber: o.order_number,
         restaurant: merchant?.name || "Merchant",
         dropoff: o.delivery_address,
-        amount: kind === "cancelled" ? 0 : fee + tip,
+        amount: kind === "cancelled" ? compensation : fee + tip + peak,
+        compensation: kind === "cancelled" ? compensation : 0,
         time: kind === "cancelled" ? o.cancelled_at : o.delivered_at,
         status: kind,
       };
@@ -791,6 +899,247 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
     }
     return c.json({ payout });
   });
+
+  // Turn-by-turn route segment (Google Directions with haversine fallback)
+  app.get("/courier/route", async (c) => {
+    const auth = await requireCourierUser(c.req.header("Authorization"), getSupabase);
+    if (auth instanceof Response) return auth;
+
+    const fromLat = Number(c.req.query("fromLat"));
+    const fromLng = Number(c.req.query("fromLng"));
+    const toLat = Number(c.req.query("toLat"));
+    const toLng = Number(c.req.query("toLng"));
+    if (![fromLat, fromLng, toLat, toLng].every(Number.isFinite)) {
+      return c.json({ error: "fromLat, fromLng, toLat, toLng required" }, 400);
+    }
+
+    const route = await getCourierRouteEstimate(fromLat, fromLng, toLat, toLng);
+    return c.json({ route });
+  });
+
+  // Cloud-synced courier app settings (merge patch, last-write-wins)
+  app.get("/courier/settings", async (c) => {
+    const auth = await requireCourierUser(c.req.header("Authorization"), getSupabase);
+    if (auth instanceof Response) return auth;
+    const serviceSb = getServiceSupabase();
+    const { data, error } = await serviceSb
+      .from("courier_profiles")
+      .select("app_settings")
+      .eq("user_id", auth.userId)
+      .maybeSingle();
+    if (error) return c.json({ error: error.message }, 500);
+    const settings = (data?.app_settings && typeof data.app_settings === "object")
+      ? data.app_settings
+      : {};
+    return c.json({ settings });
+  });
+
+  app.patch("/courier/settings", async (c) => {
+    const auth = await requireCourierUser(c.req.header("Authorization"), getSupabase);
+    if (auth instanceof Response) return auth;
+    const body = await c.req.json().catch(() => ({}));
+    const patch = (body.settings && typeof body.settings === "object") ? body.settings : body;
+    if (!patch || typeof patch !== "object") {
+      return c.json({ error: "settings object required" }, 400);
+    }
+    const serviceSb = getServiceSupabase();
+    const { data: existing } = await serviceSb
+      .from("courier_profiles")
+      .select("app_settings")
+      .eq("user_id", auth.userId)
+      .maybeSingle();
+    const merged = {
+      ...((existing?.app_settings && typeof existing.app_settings === "object")
+        ? existing.app_settings as Record<string, unknown>
+        : {}),
+      ...patch,
+    };
+    const { error } = await serviceSb
+      .from("courier_profiles")
+      .update({ app_settings: merged, updated_at: new Date().toISOString() })
+      .eq("user_id", auth.userId);
+    if (error) return c.json({ error: error.message }, 500);
+    return c.json({ settings: merged });
+  });
+
+  // Active peak pay windows
+  app.get("/courier/promotions/active", async (c) => {
+    const auth = await requireCourierUser(c.req.header("Authorization"), getSupabase);
+    if (auth instanceof Response) return auth;
+    const serviceSb = getServiceSupabase();
+    const nowIso = new Date().toISOString();
+    const { data, error } = await serviceSb
+      .from("courier_peak_windows")
+      .select("id, label, starts_at, ends_at, bonus_amount, all_kingston")
+      .eq("active", true)
+      .lte("starts_at", nowIso)
+      .gte("ends_at", nowIso)
+      .order("bonus_amount", { ascending: false });
+    if (error) return c.json({ error: error.message }, 500);
+    return c.json({ promotions: data || [] });
+  });
+
+  // Grocery substitute proposal
+  app.post("/orders/:id/substitute", async (c) => {
+    const auth = await requireCourierUser(c.req.header("Authorization"), getSupabase);
+    if (auth instanceof Response) return auth;
+    const orderId = c.req.param("id");
+    const body = await c.req.json().catch(() => ({}));
+    const itemIndex = Number(body.itemIndex ?? body.item_index);
+    const itemLabel = String(body.itemLabel || body.item_label || "").trim();
+    const substituteLabel = String(body.substituteLabel || body.substitute_label || "").trim();
+    const substitutePrice = body.substitutePrice ?? body.substitute_price;
+    const photoUrl = body.photoUrl || body.photo_url || null;
+    if (!Number.isFinite(itemIndex) || !itemLabel || !substituteLabel) {
+      return c.json({ error: "itemIndex, itemLabel, substituteLabel required" }, 400);
+    }
+
+    const serviceSb = getServiceSupabase();
+    const { data: order } = await serviceSb
+      .from("orders")
+      .select("id, courier_id, items, subtotal")
+      .eq("id", orderId)
+      .maybeSingle();
+    if (!order || order.courier_id !== auth.userId) {
+      return c.json({ error: "Forbidden" }, 403);
+    }
+
+    const { data, error } = await serviceSb
+      .from("order_item_substitutions")
+      .upsert({
+        order_id: orderId,
+        item_index: itemIndex,
+        item_label: itemLabel,
+        substitute_label: substituteLabel,
+        substitute_price: substitutePrice != null ? Number(substitutePrice) : null,
+        substitution_status: "pending",
+        proposed_at: new Date().toISOString(),
+        photo_url: photoUrl,
+      }, { onConflict: "order_id,item_index" })
+      .select()
+      .single();
+    if (error) return c.json({ error: error.message }, 500);
+
+    try {
+      const notifUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/notifications/customer-order`;
+      await fetch(notifUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+        },
+        body: JSON.stringify({
+          orderId,
+          event: "substitution_proposed",
+          substitutionId: data.id,
+        }),
+      });
+    } catch {
+      // non-fatal
+    }
+
+    return c.json({ substitution: data });
+  });
+
+  // Active stacked delivery legs
+  app.get("/courier/stack", async (c) => {
+    const auth = await requireCourierUser(c.req.header("Authorization"), getSupabase);
+    if (auth instanceof Response) return auth;
+    const serviceSb = getServiceSupabase();
+    const { data: legs, error } = await serviceSb
+      .from("courier_stack_legs")
+      .select(`
+        id, order_id, stack_group_id, sequence, leg_status,
+        order:orders(
+          id, order_number, status, delivery_fee, tip, peak_pay_amount, delivery_address,
+          delivery_address_line2, delivery_lat, delivery_lng, delivery_instructions, items,
+          merchant:merchants(id, name, address, lat, lng, phone, vertical_type, fulfillment_type),
+          customer:customers(name, phone)
+        )
+      `)
+      .eq("courier_id", auth.userId)
+      .eq("leg_status", "active")
+      .order("sequence", { ascending: true });
+    if (error) return c.json({ error: error.message }, 500);
+    return c.json({ legs: legs || [] });
+  });
+
+  // Accept two offers as a stack (batch accept)
+  app.post("/courier/offers/stack/accept", async (c) => {
+    const auth = await requireCourierUser(c.req.header("Authorization"), getSupabase);
+    if (auth instanceof Response) return auth;
+    const body = await c.req.json().catch(() => ({}));
+    const offerIds = Array.isArray(body.offerIds) ? body.offerIds.map(String) : [];
+    if (offerIds.length < 1 || offerIds.length > 2) {
+      return c.json({ error: "offerIds must contain 1–2 offer ids" }, 400);
+    }
+
+    const serviceSb = getServiceSupabase();
+    const gate = await requireActiveCourier(serviceSb, auth.userId);
+    if (!gate.ok) return c.json({ error: gate.error }, gate.status);
+
+    const activeCount = await activeStackCount(serviceSb, auth.userId);
+    if (activeCount + offerIds.length > STACK_CAPACITY) {
+      return c.json({ error: "Stack capacity exceeded" }, 400);
+    }
+
+    const acceptedOrders: unknown[] = [];
+    for (const offerId of offerIds) {
+      const { data: offer } = await serviceSb
+        .from("courier_offers")
+        .select("id, order_id, status, expires_at, courier_user_id")
+        .eq("id", offerId)
+        .maybeSingle();
+      if (!offer || offer.courier_user_id !== auth.userId || offer.status !== "pending") {
+        return c.json({ error: `Offer ${offerId} not available` }, 400);
+      }
+      if (new Date(offer.expires_at).getTime() < Date.now()) {
+        return c.json({ error: `Offer ${offerId} expired` }, 400);
+      }
+
+      const { data: avail } = await serviceSb
+        .from("courier_availability")
+        .select("current_lat, current_lng")
+        .eq("driver_id", auth.userId)
+        .maybeSingle();
+      const peak = await resolvePeakPayBonus(
+        serviceSb,
+        avail?.current_lat != null ? Number(avail.current_lat) : null,
+        avail?.current_lng != null ? Number(avail.current_lng) : null,
+      );
+
+      const { data: order, error } = await serviceSb
+        .from("orders")
+        .update({
+          courier_id: auth.userId,
+          status: "assigned",
+          assigned_at: new Date().toISOString(),
+          peak_pay_amount: peak.bonus,
+        })
+        .eq("id", offer.order_id)
+        .eq("status", "ready")
+        .is("courier_id", null)
+        .select()
+        .maybeSingle();
+      if (error || !order) {
+        return c.json({ error: `Order for offer ${offerId} not available` }, 400);
+      }
+
+      await serviceSb.from("courier_offers").update({ status: "accepted" }).eq("id", offerId);
+      await attachStackLeg(serviceSb, auth.userId, String(offer.order_id));
+      acceptedOrders.push(order);
+    }
+
+    if (acceptedOrders.length > 0) {
+      const firstOrderId = (acceptedOrders[0] as { id: string }).id;
+      await serviceSb
+        .from("courier_availability")
+        .update({ active_order_id: firstOrderId, is_online: true })
+        .eq("driver_id", auth.userId);
+    }
+
+    return c.json({ orders: acceptedOrders });
+  });
 }
 
 function createPaymentsClient() {
@@ -802,4 +1151,4 @@ function createPaymentsClient() {
 }
 
 // Re-export for status handler use
-export { COURIER_TRANSITIONS, requireActiveCourier, dispatchOffersForOrder, redispatchExpiredOffers };
+export { COURIER_TRANSITIONS, requireActiveCourier, dispatchOffersForOrder, redispatchExpiredOffers, applyCancelCompensation, completeStackLeg, attachStackLeg };

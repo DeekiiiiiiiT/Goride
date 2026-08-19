@@ -2,9 +2,10 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { toast } from '@/lib/toast';
 import {
   MOCK_STACKED_ROUTE,
-  getCompletedStopIds,
+  type StackedRouteStop,
   type StackedStopId,
 } from '@/lib/mockStackedRoute';
+import { getCompletedStopIdsFromRoute } from '@/lib/stackedRouteBuilder';
 import { StackedPickupNavPage } from '@/pages/delivery/stacked/StackedPickupNavPage';
 import { StackedAtPickupPage } from '@/pages/delivery/stacked/StackedAtPickupPage';
 import { StackedDeliverNavPage } from '@/pages/delivery/stacked/StackedDeliverNavPage';
@@ -19,35 +20,40 @@ type StackedFlowPhase =
   | 'summary';
 
 type StackedDeliveryFlowProps = {
+  route?: StackedRouteStop[];
   onComplete: () => void;
   onRequestUnassign: () => void;
   onReportIssue?: () => void;
 };
 
 export function StackedDeliveryFlow({
+  route: routeProp,
   onComplete,
   onRequestUnassign,
   onReportIssue,
 }: StackedDeliveryFlowProps) {
+  const route = routeProp && routeProp.length > 0 ? routeProp : MOCK_STACKED_ROUTE;
   const [stopIndex, setStopIndex] = useState(0);
   const [phase, setPhase] = useState<StackedFlowPhase>('pickup-nav');
 
-  const currentStop = MOCK_STACKED_ROUTE[stopIndex];
+  const currentStop = route[stopIndex];
   const completedStopIds = useMemo(
-    () => getCompletedStopIds(stopIndex),
-    [stopIndex],
+    () => getCompletedStopIdsFromRoute(route, stopIndex),
+    [route, stopIndex],
   );
+
+  if (!currentStop) return null;
 
   const advanceStop = useCallback(() => {
     const nextIndex = stopIndex + 1;
-    if (nextIndex >= MOCK_STACKED_ROUTE.length) {
+    if (nextIndex >= route.length) {
       setPhase('summary');
       return;
     }
     setStopIndex(nextIndex);
-    const next = MOCK_STACKED_ROUTE[nextIndex];
+    const next = route[nextIndex];
     setPhase(next.type === 'pickup' ? 'pickup-nav' : 'deliver-nav');
-  }, [stopIndex]);
+  }, [stopIndex, route]);
 
   const handleConfirmPickup = useCallback(() => {
     toast.success('Pickup confirmed', `Order from ${currentStop.name} loaded.`);

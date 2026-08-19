@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { SubPageHeader } from '@/components/layout/SubPageHeader';
 import { ROAM_LEGAL, accountDeletionMailto } from '@roam/business-config/legalUrls';
-import { loadAppSettings, saveAppSettings, type CourierAppSettings } from '@/lib/courierStorage';
+import { loadAppSettings, type CourierAppSettings } from '@/lib/courierStorage';
+import { saveAppSettingsSynced } from '@/lib/courierSettingsSync';
 
 type SettingsPageProps = {
   onBack: () => void;
@@ -74,7 +75,7 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
   const update = (patch: Partial<CourierAppSettings>) => {
     const next = { ...settings, ...patch };
     setSettings(next);
-    saveAppSettings(next);
+    saveAppSettingsSynced(next);
   };
 
   return (

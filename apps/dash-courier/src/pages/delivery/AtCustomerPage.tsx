@@ -11,6 +11,7 @@ type AtCustomerPageProps = {
   onBack: () => void;
   onComplete: (method: DropoffMethod, hasPhoto: boolean, photoUrl?: string) => void;
   onCustomerUnavailable: () => void;
+  onHelpClick?: () => void;
 };
 
 export function AtCustomerPage({
@@ -18,6 +19,7 @@ export function AtCustomerPage({
   onBack,
   onComplete,
   onCustomerUnavailable,
+  onHelpClick,
 }: AtCustomerPageProps) {
   const handoff = parseDeliveryHandoff(delivery.deliveryInstructions);
   const [method, setMethod] = useState<DropoffMethod>(
@@ -54,6 +56,7 @@ export function AtCustomerPage({
         </div>
         <button
           type="button"
+          onClick={onHelpClick}
           className="h-10 px-3 rounded-full bg-surface-container flex items-center justify-center -mr-2 active:scale-95"
         >
           <span className="text-xs font-semibold uppercase tracking-widest text-primary">Help</span>

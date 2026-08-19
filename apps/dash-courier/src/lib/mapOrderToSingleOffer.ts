@@ -57,7 +57,8 @@ export function mapOrderToSingleOffer(
   const totalDistanceKm = roundKm(pickupDistanceKm + dropoffDistanceKm);
   const estMinutes = estimateEtaMinutes(totalDistanceKm || dropoffDistanceKm || pickupDistanceKm);
   const distanceFare = 0;
-  const earnings = baseFare + tip + distanceFare;
+  const peakPay = Math.max(0, Number((order as { peak_pay_amount?: number }).peak_pay_amount || 0));
+  const earnings = baseFare + tip + distanceFare + peakPay;
 
   return {
     id: String(order.id),
@@ -75,10 +76,36 @@ export function mapOrderToSingleOffer(
     tip,
     baseFare,
     distanceFare,
+    peakPay: peakPay > 0 ? peakPay : undefined,
     itemCount,
     items: offerItems,
     dropoffNotes: order.delivery_instructions
       ? [String(order.delivery_instructions)]
       : [],
+    pickupLat: pickupLat ?? undefined,
+    pickupLng: pickupLng ?? undefined,
+    dropoffLat: dropoffLat ?? undefined,
+    dropoffLng: dropoffLng ?? undefined,
+  };
+}
+
+/** Safe empty card when no pending offer (never show mock Island Grill). */
+export function emptySingleOffer(): SingleOffer {
+  return {
+    id: '',
+    restaurant: '',
+    pickupAddress: '',
+    pickupDistanceKm: 0,
+    dropoffLabel: '',
+    dropoffDistanceKm: 0,
+    totalDistanceKm: 0,
+    estMinutes: 0,
+    earnings: 0,
+    tip: 0,
+    baseFare: 0,
+    distanceFare: 0,
+    itemCount: 0,
+    items: [],
+    dropoffNotes: [],
   };
 }

@@ -2,9 +2,11 @@ import { assertOnline } from '@/lib/networkGuard';
 import {
   acceptCourierOffer,
   acceptDeliveryOrder,
+  acceptStackedOffers,
   declineCourierOffer,
   fetchAvailableOrders,
   fetchCourierOffers,
+  fetchCourierStack,
   fetchCourierOrderStatus,
   putCourierAvailability,
   subscribeCourierPush,
@@ -74,6 +76,10 @@ export class RealDispatchProvider implements CourierDispatchService {
 
   getCurrentOfferId(): string {
     return this.currentOfferId;
+  }
+
+  getPendingOfferIds(): string[] {
+    return this.pendingOffers.map((o) => o.id);
   }
 
   getPendingOrder(): AvailableOrder | null {
@@ -375,6 +381,13 @@ export class RealDispatchProvider implements CourierDispatchService {
     if (this.state.mode !== 'online' || this.state.offerPhase !== null) return;
 
     const offers = await fetchCourierOffers();
+    if (offers.length >= 2) {
+      this.pendingOffers = offers.slice(0, 2);
+      this.pendingOrders = [];
+      this.currentOfferId = offers[0].id;
+      this.setState({ offerPhase: 'stacked' });
+      return;
+    }
     if (offers.length > 0) {
       this.pendingOffers = offers;
       this.pendingOrders = [];
@@ -406,6 +419,36 @@ export class RealDispatchProvider implements CourierDispatchService {
   dismissOfferDetails(): void {
     if (this.state.offerPhase === 'details') {
       this.setState({ offerPhase: 'single' });
+    }
+  }
+
+  acceptStackedOffer(offerIds: string[]): AcceptOfferResult {
+    assertOnline();
+    void this.acceptStackedOfferAsync(offerIds);
+    this.setState({
+      offerPhase: null,
+      mode: 'on-delivery',
+      deliveryPhase: 'stacked-active',
+      acceptedStacked: true,
+    });
+    this.stopPolling();
+    return { deliveryPhase: 'stacked-active', acceptedStacked: true };
+  }
+
+  private async acceptStackedOfferAsync(offerIds: string[]): Promise<void> {
+    const result = await acceptStackedOffers(offerIds);
+    if (result.ok && result.orders.length > 0) {
+      this.activeOrderId = result.orders[0].id;
+      await putCourierAvailability({
+        isOnline: true,
+        lat: this.lastCoords.lat,
+        lng: this.lastCoords.lng,
+        activeOrderId: result.orders[0].id,
+      });
+      this.startActiveOrderWatch(result.orders[0].id);
+    } else {
+      this.setState({ mode: 'online', deliveryPhase: null, acceptedStacked: false });
+      this.startPolling();
     }
   }
 

@@ -24,6 +24,10 @@ export function useCourierDispatch(provider: CourierDispatchService = defaultPro
   const showOfferDetails = useCallback(() => provider.showOfferDetails(), [provider]);
   const dismissOfferDetails = useCallback(() => provider.dismissOfferDetails(), [provider]);
   const acceptOffer = useCallback((id: string) => provider.acceptOffer(id), [provider]);
+  const acceptStackedOffer = useCallback(
+    (ids: string[]) => provider.acceptStackedOffer(ids),
+    [provider],
+  );
   const declineOffer = useCallback(
     (id: string, reason?: Parameters<CourierDispatchService['declineOffer']>[1]) =>
       provider.declineOffer(id, reason),
@@ -47,6 +51,7 @@ export function useCourierDispatch(provider: CourierDispatchService = defaultPro
     showOfferDetails,
     dismissOfferDetails,
     acceptOffer,
+    acceptStackedOffer,
     declineOffer,
     expireOffer,
     setDeliveryPhase,

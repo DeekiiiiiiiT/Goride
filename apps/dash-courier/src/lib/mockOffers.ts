@@ -26,6 +26,10 @@ export type SingleOffer = {
   itemCount: number;
   items: OfferItem[];
   dropoffNotes: string[];
+  pickupLat?: number;
+  pickupLng?: number;
+  dropoffLat?: number;
+  dropoffLng?: number;
 };
 
 export type StackedStop = {

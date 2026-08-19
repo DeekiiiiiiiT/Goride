@@ -33,6 +33,7 @@ export type AvailableOrder = {
   delivery_fee?: number;
   tip?: number;
   delivery_address?: string;
+  delivery_address_line2?: string;
   delivery_lat?: number;
   delivery_lng?: number;
   delivery_instructions?: string;
@@ -354,4 +355,126 @@ export async function subscribeCourierPush(
     body: JSON.stringify(body),
   });
   return res.ok || res.status === 202;
+}
+
+export type CourierRouteResponse = {
+  distanceKm: number;
+  durationMinutes: number;
+  source: 'google_directions' | 'haversine_fallback';
+  trafficAware?: boolean;
+  encodedPolyline?: string;
+  nextTurn?: { instruction: string; distanceM: number };
+};
+
+export async function fetchCourierRoute(input: {
+  fromLat: number;
+  fromLng: number;
+  toLat: number;
+  toLng: number;
+}): Promise<CourierRouteResponse | null> {
+  const headers = await authHeaders(false);
+  if (!headers) return null;
+  const q = new URLSearchParams({
+    fromLat: String(input.fromLat),
+    fromLng: String(input.fromLng),
+    toLat: String(input.toLat),
+    toLng: String(input.toLng),
+  });
+  const res = await fetch(`${BASE}/courier/route?${q}`, { headers });
+  if (!res.ok) return null;
+  const body = (await res.json()) as { route?: CourierRouteResponse };
+  return body.route ?? null;
+}
+
+export type CourierCloudSettings = Record<string, unknown>;
+
+export async function fetchCourierSettings(): Promise<CourierCloudSettings | null> {
+  const headers = await authHeaders(false);
+  if (!headers) return null;
+  const res = await fetch(`${BASE}/courier/settings`, { headers });
+  if (!res.ok) return null;
+  const body = (await res.json()) as { settings?: CourierCloudSettings };
+  return body.settings ?? {};
+}
+
+export async function patchCourierSettings(patch: CourierCloudSettings): Promise<boolean> {
+  const headers = await authHeaders();
+  if (!headers) return false;
+  const res = await fetch(`${BASE}/courier/settings`, {
+    method: 'PATCH',
+    headers,
+    body: JSON.stringify({ settings: patch }),
+  });
+  return res.ok;
+}
+
+export type PeakPromotion = {
+  id: string;
+  label: string;
+  starts_at: string;
+  ends_at: string;
+  bonus_amount: number;
+  all_kingston?: boolean;
+};
+
+export async function fetchActivePromotions(): Promise<PeakPromotion[]> {
+  const headers = await authHeaders(false);
+  if (!headers) return [];
+  const res = await fetch(`${BASE}/courier/promotions/active`, { headers });
+  if (!res.ok) return [];
+  const body = (await res.json()) as { promotions?: PeakPromotion[] };
+  return body.promotions ?? [];
+}
+
+export async function proposeItemSubstitute(
+  orderId: string,
+  input: {
+    itemIndex: number;
+    itemLabel: string;
+    substituteLabel: string;
+    substitutePrice?: number;
+    photoUrl?: string;
+  },
+): Promise<boolean> {
+  const headers = await authHeaders();
+  if (!headers) return false;
+  const res = await fetch(`${BASE}/orders/${orderId}/substitute`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(input),
+  });
+  return res.ok;
+}
+
+export type StackLeg = {
+  id: string;
+  order_id: string;
+  stack_group_id: string;
+  sequence: number;
+  leg_status: string;
+  order?: AvailableOrder | null;
+};
+
+export async function fetchCourierStack(): Promise<StackLeg[]> {
+  const headers = await authHeaders(false);
+  if (!headers) return [];
+  const res = await fetch(`${BASE}/courier/stack`, { headers });
+  if (!res.ok) return [];
+  const body = (await res.json()) as { legs?: StackLeg[] };
+  return body.legs ?? [];
+}
+
+export async function acceptStackedOffers(
+  offerIds: string[],
+): Promise<{ ok: true; orders: AvailableOrder[] } | { ok: false; error: string }> {
+  const headers = await authHeaders();
+  if (!headers) return { ok: false, error: 'Not signed in' };
+  const res = await fetch(`${BASE}/courier/offers/stack/accept`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ offerIds }),
+  });
+  if (!res.ok) return { ok: false, error: await parseError(res) };
+  const body = (await res.json()) as { orders: AvailableOrder[] };
+  return { ok: true, orders: body.orders || [] };
 }

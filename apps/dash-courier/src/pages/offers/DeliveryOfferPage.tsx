@@ -1,10 +1,9 @@
 import { useEffect, useRef } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
+import { DeliveryMap } from '@/components/map/DeliveryMap';
 import { useCountdown } from '@/hooks/useCountdown';
 import type { SingleOffer } from '@/lib/mockOffers';
-
-const MAP_PREVIEW =
-  'https://lh3.googleusercontent.com/aida-public/AB6AXuBgOYXXmKCfXKrKEf-fZhopfbu7TV6DxKUOSjQ8zqx5RIccJsmpZvb-o6rDmSgKgHEwhY7ViLdPaCUhll0wv7XSV2EItA63XgyykoD_6seB2gWcsLrQeIiKiSBCu5w9e7Vv7Vj-Qs5b_VOJCLvblF23KRKLzF6FhZUchZzC-4Di0GeVmEq4uHdILyfyhLurN1v3kgTmL3p1NnWux-HEF3sdqyWYIMAeXjoLTt2Fp8WFdHYYshZqlhhBPUM-4l332fNcOocDdN2tShw';
+import { realDispatchProvider } from '@/services/courierDispatch/RealDispatchProvider';
 
 const TIMER_CIRCUMFERENCE = 213.6;
 
@@ -47,8 +46,17 @@ export function DeliveryOfferPage({
   return (
     <div className="mx-auto flex h-full min-h-0 w-full max-w-[430px] flex-col overflow-hidden bg-surface-container-lowest shadow-2xl">
       <div className="relative h-48 shrink-0">
-        <img alt="" src={MAP_PREVIEW} className="h-full w-full object-cover opacity-80" />
-        <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-surface-container-lowest" />
+        <DeliveryMap
+          className="h-full w-full"
+          courierLat={realDispatchProvider.getLastCoords().lat}
+          courierLng={realDispatchProvider.getLastCoords().lng}
+          destinationLat={offer.pickupLat}
+          destinationLng={offer.pickupLng}
+          destinationLabel={storeName}
+          interactive={false}
+          height="100%"
+        />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-surface-container-lowest pointer-events-none" />
         <div className="absolute left-4 right-4 top-4 z-10 flex justify-between">
           <div className="flex items-center gap-2 rounded-full border border-outline-variant/30 bg-surface/90 px-3 py-1.5 shadow-sm backdrop-blur-md">
             <MaterialIcon name="navigation" className="text-lg text-primary" />

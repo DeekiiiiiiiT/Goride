@@ -199,6 +199,7 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
             options: item.options,
           })),
           deliveryAddress,
+          deliveryAddressLine2: savedAddress?.line2?.trim() || undefined,
           deliveryLat: checkoutLocation.lat,
           deliveryLng: checkoutLocation.lng,
           deliveryInstructions: buildDeliveryInstructions(handoff, instructions),

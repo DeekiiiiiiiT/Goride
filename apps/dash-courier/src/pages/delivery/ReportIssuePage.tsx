@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import type { ActiveDelivery } from '@/lib/mockActiveDelivery';
-import { ISSUE_CATEGORIES } from '@/lib/mockPromotions';
+import { ISSUE_CATEGORIES } from '@/lib/issueCategories';
 import { uploadAndGetProofUrl } from '@/lib/courierFileUpload';
 import { toast } from '@/lib/toast';
 import { useVisualViewport } from '@/hooks/useVisualViewport';
