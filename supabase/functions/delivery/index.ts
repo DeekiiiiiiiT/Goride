@@ -1068,7 +1068,41 @@ app.put("/orders/:id/status", async (c) => {
   return c.json({ order: updatedOrder });
 });
 
-// Merchant incoming orders
+import { ORDER_CUSTOMER_EMBED, ORDER_CUSTOMER_EMBED_MINIMAL, isCustomerEmbedError } from "./orderSelectEmbeds.ts";
+
+async function attachCustomersToOrders(
+  sb: ReturnType<typeof getServiceSupabase>,
+  orders: Record<string, unknown>[],
+) {
+  const customerIds = [
+    ...new Set(
+      orders
+        .map((order) => order.customer_id)
+        .filter((id): id is string => typeof id === "string" && id.length > 0),
+    ),
+  ];
+  if (!customerIds.length) return orders;
+
+  const { data: customers, error } = await sb
+    .from("customers")
+    .select("id, name, phone")
+    .in("id", customerIds);
+  if (error) {
+    console.error("[merchant/orders] customer lookup failed:", error.message);
+    return orders;
+  }
+
+  const customerById = new Map(
+    (customers || []).map((row) => [String((row as Record<string, unknown>).id), row]),
+  );
+  return orders.map((order) => {
+    const customerId = order.customer_id ? String(order.customer_id) : null;
+    if (!customerId) return order;
+    const customer = customerById.get(customerId);
+    return customer ? { ...order, customer } : order;
+  });
+}
+
 async function enrichOrdersWithLastHandledBy(
   sb: ReturnType<typeof getServiceSupabase>,
   merchantId: string,
@@ -1159,10 +1193,7 @@ app.get("/merchant/orders", async (c) => {
 
   let query = queryClient
     .from("orders")
-    .select(`
-      *,
-      customer:customers(id, name, phone)
-    `)
+    .select(`*, ${ORDER_CUSTOMER_EMBED}`)
     .eq("merchant_id", merchantId);
 
   const channelFilter = channel ?? null;
@@ -1203,8 +1234,53 @@ app.get("/merchant/orders", async (c) => {
     }
   }
   
-  const { data: orders, error } = await query.order("created_at", { ascending: true });
-  
+  let { data: orders, error } = await query.order("created_at", { ascending: true });
+
+  if (error && isCustomerEmbedError(error)) {
+    console.warn("[merchant/orders] customer embed failed, falling back:", error.message);
+    let fallbackQuery = queryClient
+      .from("orders")
+      .select("*")
+      .eq("merchant_id", merchantId);
+
+    if (channelFilter === "in_store") {
+      fallbackQuery = fallbackQuery.eq("channel", "in_store");
+    } else if (channelFilter === "roam_app") {
+      fallbackQuery = fallbackQuery.eq("channel", "roam_app");
+    }
+    fallbackQuery = fallbackQuery.or("payment_method.not.in.(wipay,paypal),payment_status.neq.pending");
+    if (status) {
+      fallbackQuery = fallbackQuery.eq("status", status);
+    } else {
+      const activeStatuses =
+        channelFilter === "in_store"
+          ? ["paid", "preparing", "ready"]
+          : channelFilter === "all"
+            ? ["placed", "accepted", "preparing", "ready", "paid"]
+            : ["placed", "accepted", "preparing", "ready"];
+      fallbackQuery = fallbackQuery.in("status", activeStatuses);
+    }
+    if (from) fallbackQuery = fallbackQuery.gte("placed_at", from);
+    if (to) {
+      const toDate = new Date(to);
+      toDate.setHours(23, 59, 59, 999);
+      fallbackQuery = fallbackQuery.lte("placed_at", toDate.toISOString());
+    }
+    if (limit) {
+      const parsedLimit = parseInt(limit, 10);
+      if (!Number.isNaN(parsedLimit) && parsedLimit > 0) {
+        fallbackQuery = fallbackQuery.limit(parsedLimit);
+      }
+    }
+
+    const fallback = await fallbackQuery.order("created_at", { ascending: true });
+    orders = fallback.data;
+    error = fallback.error;
+    if (!error && orders?.length) {
+      orders = await attachCustomersToOrders(queryClient, orders as Record<string, unknown>[]);
+    }
+  }
+
   if (error) return c.json({ error: error.message }, 500);
   const enriched = await enrichOrdersWithLastHandledBy(
     getServiceSupabase(),
@@ -1232,7 +1308,7 @@ app.get("/courier/available-orders", async (c) => {
     .select(`
       *,
       merchant:merchants(id, name, address, lat, lng, phone, vertical_type, fulfillment_type),
-      customer:customers(name, phone)
+      ${ORDER_CUSTOMER_EMBED_MINIMAL}
     `)
     .eq("status", "ready")
     .is("courier_id", null)

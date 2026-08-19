@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { API_ENDPOINTS } from '@roam/api-client';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { ReorderSheet } from '@/components/orders/ReorderSheet';
+import { NewCartModal } from '@/components/restaurant/NewCartModal';
 import { PROFILE_HEADER_AVATAR } from '@/lib/accountContent';
 import {
   buildReorderFromOrder,
@@ -25,7 +26,8 @@ type Props = {
 
 export default function OrderDetailsPage({ orderId, onNavigate }: Props) {
   const [reorderOpen, setReorderOpen] = useState(false);
-  const { addItem } = useCart();
+  const [cartConflictOpen, setCartConflictOpen] = useState(false);
+  const { addItem, clearCart, merchantName } = useCart();
   const mocksOk = allowMocks();
 
   const { data, isLoading, error, refetch } = useQuery({
@@ -57,7 +59,7 @@ export default function OrderDetailsPage({ orderId, onNavigate }: Props) {
 
   const rawApiItems = (data?.order as { items?: Array<Record<string, unknown>> } | undefined)?.items;
 
-  const handleReorderAdd = () => {
+  const addReorderLines = (replace = false) => {
     if (!order) return;
     const lines = buildReorderFromOrder(order, rawApiItems);
     if (lines.length === 0) {
@@ -76,9 +78,54 @@ export default function OrderDetailsPage({ orderId, onNavigate }: Props) {
           imageUrl: line.imageUrl,
         },
         order.merchantName,
-        { replace: index === 0 },
+        { replace: replace && index === 0 },
       );
     });
+    setReorderOpen(false);
+    setCartConflictOpen(false);
+    onNavigate('cart');
+  };
+
+  const handleReorderAdd = () => {
+    if (!order) return;
+    const lines = buildReorderFromOrder(order, rawApiItems);
+    if (lines.length === 0) {
+      setReorderOpen(false);
+      onNavigate('restaurant', { merchantId: order.merchantId });
+      return;
+    }
+    const first = lines[0];
+    const result = addItem(
+      {
+        itemId: first.itemId,
+        merchantId: order.merchantId,
+        name: first.name,
+        price: first.price,
+        quantity: first.quantity,
+        imageUrl: first.imageUrl,
+      },
+      order.merchantName,
+    );
+    if (result === 'conflict') {
+      setReorderOpen(false);
+      setCartConflictOpen(true);
+      return;
+    }
+    if (lines.length > 1) {
+      lines.slice(1).forEach((line) => {
+        addItem(
+          {
+            itemId: line.itemId,
+            merchantId: order.merchantId,
+            name: line.name,
+            price: line.price,
+            quantity: line.quantity,
+            imageUrl: line.imageUrl,
+          },
+          order.merchantName,
+        );
+      });
+    }
     setReorderOpen(false);
     onNavigate('cart');
   };
@@ -123,6 +170,15 @@ export default function OrderDetailsPage({ orderId, onNavigate }: Props) {
 
   return (
     <div className="min-h-dvh bg-surface pb-32 text-on-surface">
+      <NewCartModal
+        open={cartConflictOpen}
+        currentRestaurant={merchantName || order?.merchantName || 'Restaurant'}
+        onConfirm={() => {
+          clearCart();
+          addReorderLines(true);
+        }}
+        onCancel={() => setCartConflictOpen(false)}
+      />
       <header className="sticky top-0 z-50 w-full bg-surface shadow-sm safe-t">
         <div className="mx-auto flex w-full max-w-[1200px] items-center justify-between px-4 py-2 min-h-14">
           <button

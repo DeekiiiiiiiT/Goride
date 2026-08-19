@@ -38,6 +38,12 @@ export function registerDashHealthRoutes(
       .is("courier_id", null)
       .lt("ready_at", cutoff);
 
+    const { error: idempotencyTableError } = await sb
+      .from("order_idempotency_keys")
+      .select("id", { count: "exact", head: true })
+      .limit(1);
+    const idempotencyTableOk = !idempotencyTableError;
+
     const vapidOk = Boolean(Deno.env.get("VAPID_PUBLIC_KEY") && Deno.env.get("VAPID_PRIVATE_KEY"));
     const stripeOk = Boolean(Deno.env.get("STRIPE_SECRET_KEY"));
     const smsOk = Boolean(
@@ -50,6 +56,7 @@ export function registerDashHealthRoutes(
     if ((readyNoCourier ?? 0) > 0) alerts.push(`ready_no_courier:${readyNoCourier}`);
     if (!vapidOk) alerts.push("vapid_missing");
     if (!smsOk) alerts.push("sms_carrier_missing");
+    if (!idempotencyTableOk) alerts.push("order_idempotency_keys_missing");
 
     const ok = alerts.length === 0;
     return c.json({
@@ -61,6 +68,7 @@ export function registerDashHealthRoutes(
         vapidConfigured: vapidOk,
         stripeConfigured: stripeOk,
         smsConfigured: smsOk,
+        orderIdempotencyTable: idempotencyTableOk,
         stuckThresholdMinutes: STUCK_ORDER_MINUTES,
       },
     }, ok ? 200 : 503);

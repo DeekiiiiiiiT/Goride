@@ -28,6 +28,16 @@ function asCoord(value: unknown): number | null {
 const ORDER_ID_UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/** Returns 503 body code when idempotency migration has not been applied yet. */
+function idempotencyInfrastructureError(error: { message?: string } | null | undefined): string | null {
+  const msg = String(error?.message ?? "").toLowerCase();
+  if (!msg.includes("order_idempotency_keys")) return null;
+  if (msg.includes("does not exist") || msg.includes("schema cache")) {
+    return "orders_idempotency_not_ready";
+  }
+  return null;
+}
+
 const PlaceOrderBody = z.object({
   merchantId: z.string().min(1),
   items: z.array(z.unknown()).min(1),
@@ -252,13 +262,18 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
 
     if (idempotencyKey) {
       const nowIso = new Date().toISOString();
-      const { data: existingMapping } = await serviceSb
+      const { data: existingMapping, error: lookupError } = await serviceSb
         .from("order_idempotency_keys")
         .select("order_id")
         .eq("customer_id", customer.id)
         .eq("idempotency_key", idempotencyKey)
         .gt("expires_at", nowIso)
         .maybeSingle();
+
+      const lookupInfra = idempotencyInfrastructureError(lookupError);
+      if (lookupInfra) {
+        return c.json({ error: lookupInfra }, 503);
+      }
 
       if (existingMapping?.order_id) {
         const existingOrder = await waitForOrderById(String(existingMapping.order_id));
@@ -290,6 +305,11 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
         if (racedMapping?.order_id) {
           const existingOrder = await waitForOrderById(String(racedMapping.order_id));
           if (existingOrder) return c.json({ order: existingOrder }, 200);
+        }
+
+        const mappingInfra = idempotencyInfrastructureError(mappingError);
+        if (mappingInfra) {
+          return c.json({ error: mappingInfra }, 503);
         }
 
         return c.json({ error: mappingError.message }, 500);

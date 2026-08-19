@@ -30,6 +30,7 @@ import PauseOrdersSheet, {
   PauseDuration,
   PauseOrdersPayload,
 } from '../components/PauseOrdersSheet';
+import QueryErrorState from '../components/QueryErrorState';
 import { MaterialIcon } from '../signup/components/MaterialIcon';
 import { formatElapsedTimer, formatJmd, formatTimeAgo, PartnerTab } from '../lib/partner-utils';
 
@@ -111,7 +112,7 @@ export default function DashboardPage({ merchant, onNavigate, onOpenMobileNav }:
   const isTabVisible = usePageVisibility();
   const { realtimeStatus } = useMerchantOrdersRealtime({ merchantId: merchant.id });
 
-  const { orders: activeOrders } = useMerchantActiveOrders({
+  const { orders: activeOrders, isError: ordersError, isLoading: ordersLoading, refetch: refetchOrders, isInitialLoading: ordersInitialLoading } = useMerchantActiveOrders({
     realtimeStatus,
     isTabVisible,
   });
@@ -533,7 +534,19 @@ export default function DashboardPage({ merchant, onNavigate, onOpenMobileNav }:
           </div>
 
           <div className="flex flex-col gap-inset-sm">
-            {previewOrders.length === 0 ? (
+            {ordersError ? (
+              <QueryErrorState
+                title="Could not load active orders"
+                onRetry={() => void refetchOrders()}
+              />
+            ) : ordersInitialLoading || ordersLoading ? (
+              [1, 2].map((item) => (
+                <div
+                  key={item}
+                  className="h-28 animate-pulse rounded-lg border border-outline-variant bg-surface"
+                />
+              ))
+            ) : previewOrders.length === 0 ? (
               <div className="rounded-lg border border-outline-variant bg-surface-container-lowest p-inset-md text-center text-body-sm text-on-surface-variant shadow-sm">
                 No active orders right now.
               </div>

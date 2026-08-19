@@ -25,6 +25,7 @@ interface CartContextType {
   items: CartItem[];
   merchantId: string | null;
   merchantName: string | null;
+  cartHydrated: boolean;
   addItem: (item: Omit<CartItem, 'id'>, merchantName: string, options?: { replace?: boolean }) => 'added' | 'conflict';
   removeItem: (cartItemId: string) => void;
   updateQuantity: (cartItemId: string, quantity: number) => void;
@@ -49,35 +50,63 @@ const getOptionsHash = (options?: ItemOption[]) => {
   })));
 };
 
+type StoredCart = {
+  items: CartItem[];
+  merchantId: string | null;
+  merchantName: string | null;
+};
+
+function readStoredCart(): StoredCart {
+  if (typeof window === 'undefined') {
+    return { items: [], merchantId: null, merchantName: null };
+  }
+  const saved = localStorage.getItem(CART_STORAGE_KEY);
+  if (!saved) {
+    return { items: [], merchantId: null, merchantName: null };
+  }
+  try {
+    const parsed = JSON.parse(saved) as Partial<StoredCart>;
+    return {
+      items: Array.isArray(parsed.items) ? parsed.items : [],
+      merchantId: parsed.merchantId ?? null,
+      merchantName: parsed.merchantName ?? null,
+    };
+  } catch (e) {
+    console.error('Failed to parse cart from storage', e);
+    return { items: [], merchantId: null, merchantName: null };
+  }
+}
+
+function normalizeMerchantId(id: string): string {
+  return id.trim().toLowerCase();
+}
+
+function isSameMerchant(cartMerchantId: string, itemMerchantId: string): boolean {
+  return normalizeMerchantId(cartMerchantId) === normalizeMerchantId(itemMerchantId);
+}
+
 export function CartProvider({ children }: { children: ReactNode }) {
-  const [items, setItems] = useState<CartItem[]>([]);
-  const [merchantId, setMerchantId] = useState<string | null>(null);
-  const [merchantName, setMerchantName] = useState<string | null>(null);
+  const [storedCart] = useState(readStoredCart);
+  const [items, setItems] = useState<CartItem[]>(storedCart.items);
+  const [merchantId, setMerchantId] = useState<string | null>(storedCart.merchantId);
+  const [merchantName, setMerchantName] = useState<string | null>(storedCart.merchantName);
+  const [cartHydrated, setCartHydrated] = useState(false);
 
   useEffect(() => {
-    const saved = localStorage.getItem(CART_STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        setItems(parsed.items || []);
-        setMerchantId(parsed.merchantId || null);
-        setMerchantName(parsed.merchantName || null);
-      } catch (e) {
-        console.error('Failed to parse cart from storage', e);
-      }
-    }
+    setCartHydrated(true);
   }, []);
 
   useEffect(() => {
+    if (!cartHydrated) return;
     localStorage.setItem(CART_STORAGE_KEY, JSON.stringify({ items, merchantId, merchantName }));
-  }, [items, merchantId, merchantName]);
+  }, [items, merchantId, merchantName, cartHydrated]);
 
   const addItem = (item: Omit<CartItem, 'id'>, mName: string, options?: { replace?: boolean }): 'added' | 'conflict' => {
-    if (merchantId && merchantId !== item.merchantId && !options?.replace) {
+    if (merchantId && !isSameMerchant(merchantId, item.merchantId) && !options?.replace) {
       return 'conflict';
     }
 
-    if (merchantId && merchantId !== item.merchantId && options?.replace) {
+    if (merchantId && !isSameMerchant(merchantId, item.merchantId) && options?.replace) {
       setItems([{ ...item, id: generateCartItemId() }]);
       setMerchantId(item.merchantId);
       setMerchantName(mName);
@@ -86,10 +115,10 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
     setItems(prev => {
       const newOptionsHash = getOptionsHash(item.options);
-      const existing = prev.find(i => 
+      const existing = prev.find(i =>
         i.itemId === item.itemId && getOptionsHash(i.options) === newOptionsHash
       );
-      
+
       if (existing) {
         return prev.map(i =>
           i.id === existing.id
@@ -158,6 +187,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         items,
         merchantId,
         merchantName,
+        cartHydrated,
         addItem,
         removeItem,
         updateQuantity,

@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { AccountSubHeader } from '@/components/account/AccountSubHeader';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { NewCartModal } from '@/components/restaurant/NewCartModal';
 import { useCart } from '@/hooks/useCart';
 import {
   toggleFavorite,
@@ -23,7 +24,16 @@ type Tab = 'restaurants' | 'items';
 export default function FavoritesPage({ onNavigate, returnTo = 'account' }: Props) {
   const [tab, setTab] = useState<Tab>('restaurants');
   const { restaurantIds, itemKeys } = useFavorites();
-  const { addItem } = useCart();
+  const { addItem, clearCart, merchantName } = useCart();
+  const [cartConflictOpen, setCartConflictOpen] = useState(false);
+  const [pendingItem, setPendingItem] = useState<{
+    itemId: string;
+    merchantId: string;
+    name: string;
+    price: number;
+    image?: string;
+    merchantName: string;
+  } | null>(null);
 
   const restaurantKey = useMemo(() => restaurantIds.join('|'), [restaurantIds]);
   const itemKey = useMemo(() => itemKeys.join('|'), [itemKeys]);
@@ -41,7 +51,7 @@ export default function FavoritesPage({ onNavigate, returnTo = 'account' }: Prop
   });
 
   const handleAddItem = (item: (typeof items)[number]) => {
-    addItem(
+    const result = addItem(
       {
         itemId: item.itemId,
         merchantId: item.merchantId,
@@ -52,11 +62,51 @@ export default function FavoritesPage({ onNavigate, returnTo = 'account' }: Prop
       },
       item.merchantName,
     );
+
+    if (result === 'conflict') {
+      setPendingItem(item);
+      setCartConflictOpen(true);
+      return;
+    }
+
+    toast.itemAdded(item.name);
     onNavigate('cart');
+  };
+
+  const handleCartConflictConfirm = () => {
+    if (!pendingItem) return;
+    clearCart();
+    addItem(
+      {
+        itemId: pendingItem.itemId,
+        merchantId: pendingItem.merchantId,
+        name: pendingItem.name,
+        price: pendingItem.price,
+        quantity: 1,
+        imageUrl: pendingItem.image,
+      },
+      pendingItem.merchantName,
+      { replace: true },
+    );
+    setCartConflictOpen(false);
+    setPendingItem(null);
+    toast.itemAdded(pendingItem.name);
+    onNavigate('cart');
+  };
+
+  const handleCartConflictCancel = () => {
+    setCartConflictOpen(false);
+    setPendingItem(null);
   };
 
   return (
     <div className="bg-background text-on-background min-h-dvh pb-24">
+      <NewCartModal
+        open={cartConflictOpen}
+        currentRestaurant={merchantName || pendingItem?.merchantName || 'Restaurant'}
+        onConfirm={handleCartConflictConfirm}
+        onCancel={handleCartConflictCancel}
+      />
       <AccountSubHeader
         onBack={() => onNavigate(returnTo)}
         onNotifications={() => onNavigate('notification-settings')}

@@ -7,6 +7,7 @@ import { dualWriteDashPayment } from "../_shared/unifiedLedger/dualWriteDash.ts"
 import { getCourierRouteEstimate } from "../_shared/directionsRoute.ts";
 import { computeCourierCancelCompensation } from "../_shared/courierCancelCompensation.ts";
 import { resolvePeakPayBonus } from "../_shared/courierPeakPay.ts";
+import { ORDER_CUSTOMER_EMBED_MINIMAL } from "./orderSelectEmbeds.ts";
 
 type Sb = ReturnType<typeof createClient>;
 
@@ -393,7 +394,7 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
           delivery_address_line2, delivery_lat, delivery_lng, ready_at, delivery_instructions, items,
           peak_pay_amount,
           merchant:merchants(id, name, address, lat, lng, phone, vertical_type, fulfillment_type),
-          customer:customers(name, phone)
+          ${ORDER_CUSTOMER_EMBED_MINIMAL}
         )
       `)
       .eq("courier_user_id", auth.userId)
@@ -1117,7 +1118,7 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
           id, order_number, status, delivery_fee, tip, peak_pay_amount, delivery_address,
           delivery_address_line2, delivery_lat, delivery_lng, delivery_instructions, items,
           merchant:merchants(id, name, address, lat, lng, phone, vertical_type, fulfillment_type),
-          customer:customers(name, phone)
+          ${ORDER_CUSTOMER_EMBED_MINIMAL}
         )
       `)
       .eq("courier_id", auth.userId)
