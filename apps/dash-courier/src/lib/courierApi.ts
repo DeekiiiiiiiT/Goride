@@ -273,6 +273,27 @@ export async function fetchCourierEarnings(period: 'today' | 'week' | 'month') {
   };
 }
 
+export type CourierHistoryRow = {
+  id: string;
+  orderNumber?: string;
+  restaurant: string;
+  dropoff: string;
+  amount: number;
+  time?: string;
+  status: 'completed' | 'cancelled';
+};
+
+export async function fetchCourierHistory(period: 'today' | 'week' | 'month') {
+  const headers = await authHeaders(false);
+  if (!headers) return null;
+  const res = await fetch(`${BASE}/courier/history?period=${period}`, { headers });
+  if (!res.ok) return null;
+  return (await res.json()) as {
+    period: string;
+    deliveries: CourierHistoryRow[];
+  };
+}
+
 export async function fetchCourierConnectStatus(): Promise<CourierConnectStatus | null> {
   const headers = await authHeaders(false);
   if (!headers) return null;

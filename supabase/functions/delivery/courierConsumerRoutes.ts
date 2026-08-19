@@ -639,6 +639,71 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
     });
   });
 
+  // Completed + cancelled jobs for Activity history (earnings totals stay on completed only)
+  app.get("/courier/history", async (c) => {
+    const auth = await requireCourierUser(c.req.header("Authorization"), getSupabase);
+    if (auth instanceof Response) return auth;
+    const serviceSb = getServiceSupabase();
+    const period = String(c.req.query("period") || "week");
+
+    const now = new Date();
+    let start = new Date(now);
+    start.setHours(0, 0, 0, 0);
+    if (period === "week") {
+      const day = start.getDay();
+      start.setDate(start.getDate() - day);
+    } else if (period === "month") {
+      start = new Date(now.getFullYear(), now.getMonth(), 1);
+    }
+    const startIso = start.toISOString();
+    const select = `
+      id, order_number, status, delivery_fee, tip, delivered_at, cancelled_at, delivery_address,
+      merchant:merchants(name)
+    `;
+
+    const [completedRes, cancelledRes] = await Promise.all([
+      serviceSb
+        .from("orders")
+        .select(select)
+        .eq("courier_id", auth.userId)
+        .in("status", ["delivered", "completed"])
+        .gte("delivered_at", startIso)
+        .order("delivered_at", { ascending: false }),
+      serviceSb
+        .from("orders")
+        .select(select)
+        .eq("courier_id", auth.userId)
+        .eq("status", "cancelled")
+        .gte("cancelled_at", startIso)
+        .order("cancelled_at", { ascending: false }),
+    ]);
+
+    if (completedRes.error) return c.json({ error: completedRes.error.message }, 500);
+    if (cancelledRes.error) return c.json({ error: cancelledRes.error.message }, 500);
+
+    const mapRow = (o: Record<string, unknown>, kind: "completed" | "cancelled") => {
+      const merchant = o.merchant as { name?: string } | null;
+      const fee = Number(o.delivery_fee || 0);
+      const tip = Number(o.tip || 0);
+      return {
+        id: o.id,
+        orderNumber: o.order_number,
+        restaurant: merchant?.name || "Merchant",
+        dropoff: o.delivery_address,
+        amount: kind === "cancelled" ? 0 : fee + tip,
+        time: kind === "cancelled" ? o.cancelled_at : o.delivered_at,
+        status: kind,
+      };
+    };
+
+    const deliveries = [
+      ...(completedRes.data || []).map((o) => mapRow(o as Record<string, unknown>, "completed")),
+      ...(cancelledRes.data || []).map((o) => mapRow(o as Record<string, unknown>, "cancelled")),
+    ].sort((a, b) => String(b.time || "").localeCompare(String(a.time || "")));
+
+    return c.json({ period, deliveries });
+  });
+
   // Ops: create a payout period row from completed deliveries (idempotent per courier+period)
   app.post("/courier/payouts/close-period", async (c) => {
     const auth = await requireCourierUser(c.req.header("Authorization"), getSupabase);

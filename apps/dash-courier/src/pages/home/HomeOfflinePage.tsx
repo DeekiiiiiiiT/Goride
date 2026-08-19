@@ -6,6 +6,7 @@ import { formatJmd } from '@/lib/formatMoney';
 type HomeOfflinePageProps = {
   onGoOnline: () => void;
   courierName?: string;
+  avatarUrl?: string | null;
   todayEarned?: number;
   todayDeliveries?: number;
   acceptanceRate?: number | null;
@@ -21,6 +22,7 @@ function getGreeting(): string {
 export function HomeOfflinePage({
   onGoOnline,
   courierName,
+  avatarUrl,
   todayEarned = 0,
   todayDeliveries = 0,
   acceptanceRate = null,
@@ -38,15 +40,26 @@ export function HomeOfflinePage({
           </h1>
           <p className="text-base text-muted mt-1">Ready to start earning?</p>
         </div>
-        <div className="w-12 h-12 rounded-full overflow-hidden shadow-sm border-2 border-surface shrink-0">
-          <img
-            src="/images/courier-avatar.png"
-            alt="Your profile"
-            className="w-full h-full object-cover"
-            onError={(e) => {
-              (e.target as HTMLImageElement).style.display = 'none';
-            }}
-          />
+        <div className="w-12 h-12 rounded-full overflow-hidden shadow-sm border-2 border-surface shrink-0 bg-surface-container flex items-center justify-center">
+          {avatarUrl ? (
+            <img
+              src={avatarUrl}
+              alt="Your profile"
+              className="w-full h-full object-cover"
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.display = 'none';
+              }}
+            />
+          ) : (
+            <img
+              src="/images/courier-avatar.png"
+              alt="Your profile"
+              className="w-full h-full object-cover"
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.display = 'none';
+              }}
+            />
+          )}
         </div>
       </section>
 

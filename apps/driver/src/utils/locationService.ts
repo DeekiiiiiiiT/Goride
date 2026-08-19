@@ -1,5 +1,32 @@
 import { TripStop, RoutePoint } from '../types/tripSession';
 import { projectId, publicAnonKey } from './supabase/info';
+import { looksLikePlusCodeAddress } from './plusCode';
+
+const REVERSE_GEOCODE_TIMEOUT_MS = 8000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return Promise.race([
+    promise.finally(() => {
+      if (timer) clearTimeout(timer);
+    }),
+    new Promise<T>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(message)), ms);
+    }),
+  ]);
+}
+
+function pickBestFormattedAddress(results: Array<{ formatted_address?: string; types?: string[] }> | null | undefined): string | null {
+  if (!results?.length) return null;
+  for (const result of results) {
+    const address = result.formatted_address;
+    if (!address) continue;
+    if (result.types?.includes('plus_code')) continue;
+    if (looksLikePlusCodeAddress(address)) continue;
+    return address;
+  }
+  return results[0]?.formatted_address || null;
+}
 
 export interface GeoCoordinates {
   latitude: number;
@@ -174,48 +201,41 @@ export const getCurrentPosition = (): Promise<GeoCoordinates> => {
 };
 
 /**
- * Convert coordinates to address using Google Maps Geocoder
+ * Convert coordinates to address using Google Maps Geocoder.
+ * Times out so Trip Analytics / trip complete cannot hang on a missing callback.
  */
 export const reverseGeocode = async (
   lat: number,
   lon: number
 ): Promise<string> => {
-  try {
+  const run = async (): Promise<string> => {
     await loadGoogleMapsApi();
-    
-    // Check if importLibrary is available
-    if (window.google?.maps?.importLibrary) {
-        const { Geocoder } = await google.maps.importLibrary("geocoding") as any;
-        const geocoder = new Geocoder();
-        return new Promise((resolve, reject) => {
-            geocoder.geocode({ location: { lat, lng: lon } }, (results: any[], status: string) => {
-                if (status === 'OK' && results[0]) {
-                resolve(results[0].formatted_address);
-                } else {
-                reject(new Error("Address not found"));
-                }
-            });
-        });
-    }
 
-    // Fallback for legacy
-    if (!window.google?.maps?.Geocoder) {
-         throw new Error("Google Maps Geocoder not available");
-    }
-    const geocoder = new window.google.maps.Geocoder();
-    return new Promise((resolve, reject) => {
+    const runGeocoder = (geocoder: { geocode: Function }): Promise<string> =>
+      new Promise((resolve, reject) => {
         geocoder.geocode({ location: { lat, lng: lon } }, (results: any[], status: string) => {
-            if (status === 'OK' && results[0]) {
-                resolve(results[0].formatted_address);
-            } else {
-                reject(new Error("Address not found"));
-            }
+          const address = status === 'OK' ? pickBestFormattedAddress(results) : null;
+          if (address) resolve(address);
+          else reject(new Error(status === 'OK' ? 'Address not found' : status || 'Address not found'));
         });
-    });
+      });
 
+    if (window.google?.maps?.importLibrary) {
+      const { Geocoder } = await google.maps.importLibrary('geocoding') as { Geocoder: new () => { geocode: Function } };
+      return runGeocoder(new Geocoder());
+    }
+
+    if (!window.google?.maps?.Geocoder) {
+      throw new Error('Google Maps Geocoder not available');
+    }
+    return runGeocoder(new window.google.maps.Geocoder());
+  };
+
+  try {
+    return await withTimeout(run(), REVERSE_GEOCODE_TIMEOUT_MS, 'Reverse geocode timed out');
   } catch (error) {
-    console.error("Reverse geocoding error:", error);
-    throw new Error("Failed to convert coordinates to address");
+    console.error('Reverse geocoding error:', error);
+    throw new Error('Failed to convert coordinates to address');
   }
 };
 

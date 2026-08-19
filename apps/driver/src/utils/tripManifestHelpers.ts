@@ -1,4 +1,5 @@
 import { Trip } from '../types/data';
+import { encodePlusCode } from './plusCode';
 
 export type VehicleOption = {
   id: string;
@@ -35,16 +36,67 @@ function findDriverForTrip(trip: Trip, drivers: DriverOption[]): DriverOption | 
   );
 }
 
+function isUsableCoord(value: number | undefined | null): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value !== 0;
+}
+
+function readPointLon(point?: { lon?: number; lng?: number }): number | undefined {
+  const lon = point?.lon ?? point?.lng;
+  return isUsableCoord(lon) ? lon : undefined;
+}
+
+export function isPlaceholderAddress(location?: string): boolean {
+  const loc = location?.trim();
+  return !loc || loc === 'Manual Entry' || loc.startsWith('Lat:');
+}
+
+export function formatCoordsAsPlusCode(lat: number, lng: number): string {
+  try {
+    return encodePlusCode(lat, lng, 10);
+  } catch {
+    return `Lat: ${lat.toFixed(5)}, Lon: ${lng.toFixed(5)}`;
+  }
+}
+
+export function getTripStartCoords(trip: Trip): { lat: number; lng: number } | null {
+  if (isUsableCoord(trip.startLat) && isUsableCoord(trip.startLng)) {
+    return { lat: trip.startLat, lng: trip.startLng };
+  }
+  const first = trip.route?.[0];
+  const lon = readPointLon(first);
+  if (first && isUsableCoord(first.lat) && lon != null) {
+    return { lat: first.lat, lng: lon };
+  }
+  return null;
+}
+
+export function getTripEndCoords(trip: Trip): { lat: number; lng: number } | null {
+  if (isUsableCoord(trip.endLat) && isUsableCoord(trip.endLng)) {
+    return { lat: trip.endLat, lng: trip.endLng };
+  }
+  const last = trip.route?.[trip.route.length - 1];
+  const lon = readPointLon(last);
+  if (last && isUsableCoord(last.lat) && lon != null) {
+    return { lat: last.lat, lng: lon };
+  }
+  return null;
+}
+
+export function getTripEndpointLabel(
+  stored: string | undefined,
+  area: string | undefined,
+  coords: { lat: number; lng: number } | null,
+  unknownLabel: string
+): string {
+  if (!isPlaceholderAddress(stored)) return area || stored || unknownLabel;
+  if (coords) return formatCoordsAsPlusCode(coords.lat, coords.lng);
+  return unknownLabel;
+}
+
 export function tripNeedsAddressResolution(trip: Trip): boolean {
-  const hasMissingPickup =
-    !trip.pickupLocation ||
-    trip.pickupLocation === 'Manual Entry' ||
-    trip.pickupLocation.startsWith('Lat:');
-  const hasMissingDropoff =
-    !trip.dropoffLocation || trip.dropoffLocation.startsWith('Lat:');
-  const hasCoords =
-    (trip.startLat && trip.startLng) || (trip.endLat && trip.endLng);
-  return !!hasCoords && (hasMissingPickup || hasMissingDropoff);
+  const missingPickup = isPlaceholderAddress(trip.pickupLocation);
+  const missingDropoff = isPlaceholderAddress(trip.dropoffLocation);
+  return (missingPickup && !!getTripStartCoords(trip)) || (missingDropoff && !!getTripEndCoords(trip));
 }
 
 export function getUnresolvedTripKey(trips: Trip[]): string {

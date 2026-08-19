@@ -59,18 +59,10 @@ export function DeliveryCompletePage({ delivery, onBackToDash }: DeliveryComplet
               <span>J${earnings.basePay}</span>
             </div>
             <div className="flex justify-between text-sm text-on-surface-variant">
-              <span>Distance bonus</span>
-              <span>J${earnings.distanceBonus}</span>
-            </div>
-            <div className="flex justify-between text-sm text-on-surface-variant">
               <span className="flex items-center gap-1">
                 Tip <MaterialIcon name="thumb_up" className="text-sm text-primary" />
               </span>
               <span>J${earnings.tip}</span>
-            </div>
-            <div className="flex justify-between text-sm text-on-surface-variant opacity-50">
-              <span>Peak pay</span>
-              <span>J${earnings.peakPay}</span>
             </div>
           </div>
           <div className="flex justify-between items-center pt-2 border-t border-surface-variant text-2xl font-semibold text-primary">

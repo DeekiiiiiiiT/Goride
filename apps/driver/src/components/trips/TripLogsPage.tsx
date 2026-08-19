@@ -35,7 +35,7 @@ import { createManualTrip, ManualTripInput } from '../../utils/tripFactory';
 import { startOfDay, endOfDay, subDays, startOfWeek, startOfMonth, format } from 'date-fns';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { useTripAddressResolution } from '../../hooks/useTripAddressResolution';
-import { getTripVehicleLabel } from '../../utils/tripManifestHelpers';
+import { getTripEndCoords, getTripEndpointLabel, getTripStartCoords, getTripVehicleLabel } from '../../utils/tripManifestHelpers';
 
 // Helper to parse "YYYY-MM-DD" as local midnight to avoid UTC conversion issues
 const parseLocalDate = (dateStr: string) => {
@@ -470,28 +470,16 @@ export function TripLogsPage() {
                                 <div className="flex flex-col gap-1">
                                     <div className="flex items-start gap-2 text-sm">
                                         <div className="mt-1 h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
-                                        {(!trip.pickupLocation || trip.pickupLocation === 'Manual Entry' || trip.pickupLocation.startsWith('Lat:')) && !!trip.startLat ? (
-                                            <span className="text-amber-600 text-xs flex items-center gap-1.5 animate-pulse">
-                                                <Loader2 className="h-3 w-3 animate-spin" /> Resolving...
-                                            </span>
-                                        ) : (
-                                            <span className="text-slate-700 truncate" title={trip.pickupLocation}>
-                                                {trip.pickupArea || trip.pickupLocation || 'Unknown Pickup'}
-                                            </span>
-                                        )}
+                                        <span className="text-slate-700 truncate" title={getTripEndpointLabel(trip.pickupLocation, trip.pickupArea, getTripStartCoords(trip), 'Unknown Pickup')}>
+                                            {getTripEndpointLabel(trip.pickupLocation, trip.pickupArea, getTripStartCoords(trip), 'Unknown Pickup')}
+                                        </span>
                                     </div>
                                     <div className="pl-0.5 ml-0.5 border-l-2 border-slate-100 h-3" />
                                     <div className="flex items-start gap-2 text-sm">
                                         <div className="mt-1 h-2 w-2 rounded-full bg-rose-500 shrink-0" />
-                                        {(!trip.dropoffLocation || trip.dropoffLocation.startsWith('Lat:')) && !!trip.endLat ? (
-                                            <span className="text-amber-600 text-xs flex items-center gap-1.5 animate-pulse">
-                                                <Loader2 className="h-3 w-3 animate-spin" /> Resolving...
-                                            </span>
-                                        ) : (
-                                            <span className="text-slate-700 truncate" title={trip.dropoffLocation}>
-                                                {trip.dropoffArea || trip.dropoffLocation || 'Unknown Dropoff'}
-                                            </span>
-                                        )}
+                                        <span className="text-slate-700 truncate" title={getTripEndpointLabel(trip.dropoffLocation, trip.dropoffArea, getTripEndCoords(trip), 'Unknown Dropoff')}>
+                                            {getTripEndpointLabel(trip.dropoffLocation, trip.dropoffArea, getTripEndCoords(trip), 'Unknown Dropoff')}
+                                        </span>
                                     </div>
                                 </div>
                               </TableCell>

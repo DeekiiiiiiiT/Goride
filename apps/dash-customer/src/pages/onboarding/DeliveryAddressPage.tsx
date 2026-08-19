@@ -78,44 +78,52 @@ export function DeliveryAddressPage({ onBack, onConfirm, onOutOfZone }: Delivery
 
   const useCurrentLocation = async () => {
     setLocating(true);
+    let lat: number;
+    let lng: number;
     try {
       const perm = await requestRushGeolocationPermission();
-      if (perm !== 'granted') {
+      if (perm === 'denied' || perm === 'unsupported') {
         toast.error('Location permission is required to use your current location.');
         return;
       }
-      const coords = await getRushCurrentPosition();
-      let line =
-        `${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}`;
-      try {
-        const geo = await reverseGeocode(coords.lat, coords.lng);
-        line = geo.streetAddress || geo.formattedAddress || line;
-      } catch {
-        // keep coordinate label so the pin is still usable
-      }
-      const next: AddressSelection = {
-        line1: line,
-        lat: coords.lat,
-        lng: coords.lng,
-      };
-      setSelectedId('current');
-      setLine1(next.line1);
-      setSelected(next);
+      ({ lat, lng } = await getRushCurrentPosition());
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not get current location');
+      return;
+    } finally {
+      setLocating(false);
+    }
+
+    let line = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+    const next: AddressSelection = { line1: line, lat, lng };
+    setSelectedId('current');
+    setLine1(line);
+    setSelected(next);
+
+    try {
+      const geo = await Promise.race([
+        reverseGeocode(lat, lng),
+        new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error('reverse geocode timeout')), 12_000);
+        }),
+      ]);
+      line = geo.streetAddress || geo.formattedAddress || line;
+      const resolved = { line1: line, lat, lng };
+      setLine1(line);
+      setSelected(resolved);
 
       const zone = await checkDeliveryZoneAsync({
-        line1: next.line1,
-        lat: next.lat,
-        lng: next.lng,
+        line1: resolved.line1,
+        lat: resolved.lat,
+        lng: resolved.lng,
       });
       if (!zone.inZone) {
-        onOutOfZone?.(next);
+        onOutOfZone?.(resolved);
         return;
       }
       toast.success('Location pinned — you’re in our delivery area');
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not get current location');
-    } finally {
-      setLocating(false);
+    } catch {
+      toast.success('Location pinned');
     }
   };
 

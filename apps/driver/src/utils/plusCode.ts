@@ -196,6 +196,13 @@ export function isValidPlusCode(code: string): boolean {
   return true;
 }
 
+/** True when Google/local reverse geocode returned a Plus Code instead of a street address. */
+export function looksLikePlusCodeAddress(addr: string): boolean {
+  if (!addr || typeof addr !== 'string') return false;
+  const first = addr.trim().split(',')[0].trim();
+  return isValidPlusCode(first);
+}
+
 /**
  * Check if a Plus Code is a full code (not shortened/compound)
  */

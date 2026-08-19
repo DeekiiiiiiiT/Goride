@@ -303,10 +303,25 @@ export function DriverSettlementsPage({
   });
 
   const txsQuery = useQuery({
-    queryKey: ['driverSettlementsTransactions'],
+    queryKey: ['driverSettlementsTransactions', weekFrom, weekTo],
     queryFn: async () => {
-      const page = await api.getTransactions(undefined, { limit: 5000, offset: 0 });
-      return (Array.isArray(page) ? page : page?.data || []) as FinancialTransaction[];
+      const all: FinancialTransaction[] = [];
+      const pageSize = 5000;
+      let offset = 0;
+      while (offset < 50000) {
+        const page = await api.getTransactions(undefined, {
+          limit: pageSize,
+          offset,
+          startDate: weekFrom,
+          endDate: weekTo,
+          desk: 'settlements',
+        });
+        const batch = (Array.isArray(page) ? page : page?.data || []) as FinancialTransaction[];
+        all.push(...batch.filter(Boolean));
+        if (batch.length < pageSize) break;
+        offset += pageSize;
+      }
+      return all;
     },
   });
 

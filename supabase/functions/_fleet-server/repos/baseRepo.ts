@@ -60,6 +60,7 @@ export type FleetQueryFilter =
   | { op: "in"; col: string; value: unknown[] }
   | { op: "like"; col: string; value: string }
   | { op: "is"; col: string; value: null }
+  | { op: "or"; value: string }
   | { op: "orOrg"; orgId: string }; // organization_id = org OR null OR roam-default-org
 
 export type FleetQueryOpts = {
@@ -96,6 +97,9 @@ function nextYmd(ymd: string): string {
 }
 
 function applyFilter(q: any, f: FleetQueryFilter): any {
+  if (f.op === "or") {
+    return q.or(f.value);
+  }
   if (f.op === "orOrg") {
     return q.or(
       `organization_id.eq.${f.orgId},organization_id.is.null,organization_id.eq.roam-default-org`,

@@ -47,33 +47,48 @@ export default function AddAddressPage({ addressId, returnTo = 'saved-addresses'
 
   const useCurrentLocation = async () => {
     setLocating(true);
+    let lat: number;
+    let lng: number;
     try {
       const perm = await requestRushGeolocationPermission();
-      if (perm !== 'granted') {
+      if (perm === 'denied' || perm === 'unsupported') {
         toast.error('Allow location access so we can pin your exact spot for the courier.');
         return;
       }
-      const { lat, lng } = await getRushCurrentPosition();
-      setCoords({ lat, lng });
+      ({ lat, lng } = await getRushCurrentPosition());
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not get current location');
+      return;
+    } finally {
+      setLocating(false);
+    }
 
-      // Jamaica house numbers often miss Places — GPS is the courier pin; label stays editable
-      let guessed = `Pinned location (${lat.toFixed(5)}, ${lng.toFixed(5)})`;
-      let resolvedCity = city;
-      try {
-        const geo = await reverseGeocode(lat, lng);
-        guessed =
-          geo.streetAddress || geo.formattedAddress || guessed;
-        if (geo.city) {
-          resolvedCity = geo.city;
-          setCity(geo.city);
-        }
-      } catch {
-        // keep coordinate label
+    // Pin immediately after GPS — do not block the spinner on geocoding or zone checks.
+    const coordLabel = `Pinned location (${lat.toFixed(5)}, ${lng.toFixed(5)})`;
+    setCoords({ lat, lng });
+    setLine1(coordLabel);
+    setPinSuccess(true);
+
+    let guessed = coordLabel;
+    let resolvedCity = city;
+    try {
+      const geo = await Promise.race([
+        reverseGeocode(lat, lng),
+        new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error('reverse geocode timeout')), 12_000);
+        }),
+      ]);
+      guessed = geo.streetAddress || geo.formattedAddress || guessed;
+      if (geo.city) {
+        resolvedCity = geo.city;
+        setCity(geo.city);
       }
       setLine1(guessed);
-      setPinSuccess(true);
+    } catch {
+      // keep coordinate label so the pin is still usable
+    }
 
-      // Confirm coverage against live Ops zones while the pin is fresh
+    try {
       const zone = await checkDeliveryZoneAsync({
         line1: guessed,
         city: resolvedCity || undefined,
@@ -85,10 +100,8 @@ export default function AddAddressPage({ addressId, returnTo = 'saved-addresses'
         return;
       }
       toast.success('Location pinned — you’re in our delivery area');
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not get current location');
-    } finally {
-      setLocating(false);
+    } catch {
+      toast.success('Location pinned');
     }
   };
 

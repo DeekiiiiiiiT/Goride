@@ -6,6 +6,7 @@ type CourierAppHeaderProps = {
   statusTone?: 'offline' | 'online' | 'connecting';
   onMenuClick?: () => void;
   hideStatus?: boolean;
+  avatarUrl?: string | null;
 };
 
 export function CourierAppHeader({
@@ -13,6 +14,7 @@ export function CourierAppHeader({
   statusTone = 'offline',
   onMenuClick,
   hideStatus = false,
+  avatarUrl,
 }: CourierAppHeaderProps) {
   if (hideStatus) return null;
 
@@ -41,7 +43,7 @@ export function CourierAppHeader({
           </span>
           <div className="w-6 h-6 rounded-full overflow-hidden bg-surface-variant flex items-center justify-center relative">
             <img
-              src="/images/courier-avatar.png"
+              src={avatarUrl || '/images/courier-avatar.png'}
               alt=""
               className="w-full h-full object-cover"
               onError={(e) => {

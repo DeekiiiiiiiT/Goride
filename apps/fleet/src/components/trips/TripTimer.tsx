@@ -201,7 +201,7 @@ export function TripTimer({ onComplete }: TripTimerProps) {
       
       if (currentLocation) {
           fallbackLat = currentLocation.lat;
-          fallbackLon = currentLocation.lng;
+          fallbackLon = currentLocation.lon;
       }
       
       const fallbackStop = createStop("Location Unknown", { lat: fallbackLat, lon: fallbackLon });
@@ -414,8 +414,11 @@ export function TripTimer({ onComplete }: TripTimerProps) {
         // Fallback: use last point from route if available
         if (route.length > 0) {
             const lastPoint = route[route.length - 1];
-            endCoordsObj = { lat: lastPoint.lat, lon: lastPoint.lng };
-            endLocationStr = `Lat: ${lastPoint.lat.toFixed(5)}, Lon: ${lastPoint.lng.toFixed(5)}`;
+            const lastLon = lastPoint.lon ?? (lastPoint as { lng?: number }).lng;
+            if (Number.isFinite(lastPoint.lat) && Number.isFinite(lastLon)) {
+              endCoordsObj = { lat: lastPoint.lat, lon: lastLon as number };
+              endLocationStr = `Lat: ${lastPoint.lat.toFixed(5)}, Lon: ${(lastLon as number).toFixed(5)}`;
+            }
         }
     }
 

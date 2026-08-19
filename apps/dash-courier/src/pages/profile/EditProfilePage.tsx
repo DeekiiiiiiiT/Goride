@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { SubPageHeader } from '@/components/layout/SubPageHeader';
-import { MOCK_EDIT_PROFILE_DRAFT } from '@/lib/mockProfile';
 import { loadCourierProfile, updateCourierProfile } from '@/lib/courierProfileService';
 import { uploadAndGetProofUrl, resolveCourierFileUrl } from '@/lib/courierFileUpload';
 import { toast } from '@/lib/toast';
@@ -11,8 +10,22 @@ type EditProfilePageProps = {
   onSave: () => void;
 };
 
+type ProfileForm = {
+  fullName: string;
+  displayName: string;
+  phone: string;
+  email: string;
+};
+
+const EMPTY_FORM: ProfileForm = {
+  fullName: '',
+  displayName: '',
+  phone: '',
+  email: '',
+};
+
 type FieldConfig = {
-  id: keyof typeof MOCK_EDIT_PROFILE_DRAFT;
+  id: keyof ProfileForm;
   label: string;
   icon: string;
   type: string;
@@ -27,7 +40,8 @@ const FIELDS: FieldConfig[] = [
 ];
 
 export function EditProfilePage({ onBack, onSave }: EditProfilePageProps) {
-  const [form, setForm] = useState(MOCK_EDIT_PROFILE_DRAFT);
+  const [form, setForm] = useState<ProfileForm>(EMPTY_FORM);
+  const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [saving, setSaving] = useState(false);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
@@ -35,22 +49,31 @@ export function EditProfilePage({ onBack, onSave }: EditProfilePageProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    let cancelled = false;
     void loadCourierProfile().then(async (row) => {
-      if (!row) return;
-      setForm((prev) => ({
-        ...prev,
-        fullName: row.display_name ?? prev.fullName,
-        displayName: row.display_name ?? prev.displayName,
-        phone: row.phone ?? prev.phone,
-        email: row.email ?? prev.email,
-      }));
+      if (cancelled) return;
+      if (!row) {
+        setLoadState('error');
+        return;
+      }
+      setForm({
+        fullName: row.display_name || '',
+        displayName: row.display_name || '',
+        phone: row.phone || '',
+        email: row.email || '',
+      });
       const raw = row.profile_photo_url || '';
       if (raw) {
         const resolved = (await resolveCourierFileUrl(raw)) || raw;
+        if (cancelled) return;
         setExistingPhotoUrl(raw);
         setPhotoPreview(resolved);
       }
+      setLoadState('ready');
     });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -61,6 +84,7 @@ export function EditProfilePage({ onBack, onSave }: EditProfilePageProps) {
   };
 
   const handleSave = async () => {
+    if (loadState !== 'ready') return;
     setSaving(true);
     let profilePhotoUrl = existingPhotoUrl;
     if (photoFile) {
@@ -95,6 +119,12 @@ export function EditProfilePage({ onBack, onSave }: EditProfilePageProps) {
       <SubPageHeader title="Edit Profile" onBack={onBack} />
 
       <main className="flex-1 overflow-y-auto px-[var(--spacing-edge)] py-6 pb-32">
+        {loadState === 'loading' && (
+          <p className="text-sm text-muted mb-4">Loading your profile…</p>
+        )}
+        {loadState === 'error' && (
+          <p className="text-sm text-error mb-4">Could not load your profile. Go back and try again.</p>
+        )}
         <section className="flex flex-col items-center mb-8">
           <input
             ref={fileInputRef}
@@ -163,7 +193,7 @@ export function EditProfilePage({ onBack, onSave }: EditProfilePageProps) {
         <button
           type="button"
           onClick={() => void handleSave()}
-          disabled={saving}
+          disabled={saving || loadState !== 'ready'}
           className="w-full h-14 bg-primary text-on-primary rounded-xl text-xs font-semibold uppercase tracking-wide flex items-center justify-center shadow-primary active:scale-[0.98] transition-transform disabled:opacity-60"
         >
           {saving ? 'Saving…' : 'Save Changes'}

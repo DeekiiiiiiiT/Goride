@@ -34,11 +34,11 @@ export function EnRoutePage({ delivery, onArrived }: EnRoutePageProps) {
       <div className="relative z-20 flex flex-col w-full flex-1">
         <div className="w-full bg-inverse-surface shadow-md rounded-b-[24px] pt-safe pb-4 px-[var(--spacing-edge)] flex items-center gap-4">
           <div className="w-12 h-12 bg-surface/10 rounded-full flex items-center justify-center shrink-0">
-            <MaterialIcon name="turn_right" className="text-inverse-on-surface text-[32px]" />
+            <MaterialIcon name="near_me" className="text-inverse-on-surface text-[32px]" />
           </div>
           <div className="flex-1 min-w-0">
             <div className="text-[28px] leading-9 font-bold text-inverse-on-surface mb-1">
-              {delivery.dropoffTurnDistance}
+              {delivery.dropoffTurnDistance || `${delivery.dropoffDistanceKm} km`}
             </div>
             <div className="text-sm text-surface-variant opacity-80 truncate">
               {delivery.dropoffTurnInstruction}

@@ -5,8 +5,9 @@ import { PullToRefresh } from '@/components/ui/PullToRefresh';
 import { SkeletonEarnings } from '@/components/ui/Skeleton';
 import { ErrorScreen } from '@/components/ui/ErrorScreen';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
-import { fetchCourierEarnings } from '@/lib/courierApi';
+import { fetchCourierHistory } from '@/lib/courierApi';
 import { toast } from '@/lib/toast';
+import { mapCourierHistoryToActivity } from '@/lib/courierActivityHistory';
 import {
   formatJmd,
   groupHistoryByDate,
@@ -32,46 +33,6 @@ const HISTORY_FILTERS: { id: HistoryFilter; label: string }[] = [
   { id: 'cancelled', label: 'Cancelled' },
 ];
 
-function formatDeliveryTime(iso?: string): string {
-  if (!iso) return '';
-  return new Date(iso).toLocaleTimeString('en-JM', { hour: 'numeric', minute: '2-digit' });
-}
-
-function dateGroupLabel(iso?: string): string {
-  if (!iso) return 'Unknown';
-  const d = new Date(iso);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
-  const day = new Date(d);
-  day.setHours(0, 0, 0, 0);
-  if (day.getTime() === today.getTime()) return 'Today';
-  if (day.getTime() === yesterday.getTime()) return 'Yesterday';
-  return d.toLocaleDateString('en-JM', { weekday: 'long', month: 'short', day: 'numeric' });
-}
-
-function mapDeliveriesToHistory(
-  rows: Array<{
-    id: string;
-    restaurant: string;
-    dropoff: string;
-    amount: number;
-    time?: string;
-  }>,
-): HistoryDelivery[] {
-  return rows.map((row) => ({
-    id: row.id,
-    restaurant: row.restaurant,
-    dropoff: row.dropoff,
-    time: formatDeliveryTime(row.time),
-    amount: row.amount,
-    status: 'completed' as const,
-    icon: 'restaurant',
-    dateGroup: dateGroupLabel(row.time),
-  }));
-}
-
 function HistoryCard({
   delivery,
   onSelect,
@@ -85,7 +46,6 @@ function HistoryCard({
     <button
       type="button"
       onClick={onSelect}
-      disabled={cancelled}
       className={`bg-surface rounded-xl p-4 shadow-soft w-full text-left active:bg-surface-container-low transition-colors ${
         cancelled ? 'opacity-75' : ''
       }`}
@@ -157,13 +117,13 @@ export function ActivityPage({
   const load = useCallback(async () => {
     setLoading(true);
     setError(false);
-    const data = await fetchCourierEarnings('week');
+    const data = await fetchCourierHistory('week');
     setLoading(false);
     if (!data) {
       setError(true);
       return;
     }
-    setHistory(mapDeliveriesToHistory(data.deliveries));
+    setHistory(mapCourierHistoryToActivity(data.deliveries));
   }, []);
 
   useEffect(() => {
@@ -315,7 +275,11 @@ export function ActivityPage({
               <EmptyState
                 icon="history"
                 title="No deliveries yet"
-                description="Your completed deliveries from this week will appear here."
+                description={
+                  filter === 'cancelled'
+                    ? 'Cancelled jobs from this week will appear here.'
+                    : 'Your completed deliveries from this week will appear here.'
+                }
               />
             ) : (
               <div className="flex flex-col gap-4">

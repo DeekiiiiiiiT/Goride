@@ -51,9 +51,10 @@ export function useTripAddressResolution(
           queryClient.invalidateQueries({ queryKey: ['trips'] });
         }
       })
-      .catch((err) =>
-        console.error('[TripLogs] Background address resolution failed:', err)
-      );
+      .catch((err) => {
+        pendingTrips.forEach((trip) => attemptedAddressRef.current.delete(trip.id));
+        console.error('[TripLogs] Background address resolution failed:', err);
+      });
 
     return () => {
       cancelled = true;

@@ -54,7 +54,7 @@ export function ActiveDeliveryNavPage({ delivery, onArrived }: ActiveDeliveryNav
 
         <div className="bg-surface/95 rounded-xl shadow-[0_4px_24px_rgba(0,0,0,0.08)] p-4 flex items-center gap-4 pointer-events-auto border-l-4 border-l-success backdrop-blur-sm">
           <div className="w-12 h-12 rounded-full bg-success/15 flex items-center justify-center text-success shrink-0">
-            <MaterialIcon name="turn_right" className="text-[28px]" filled />
+            <MaterialIcon name="near_me" className="text-[28px]" filled />
           </div>
           <p className="text-lg leading-6 text-on-surface font-semibold tracking-tight flex-1">
             {delivery.turnInstruction}

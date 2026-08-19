@@ -18,6 +18,7 @@ export type CourierProfileRow = {
   acceptance_rate_pct: number | null;
   completion_rate_pct: number | null;
   profile_photo_url: string | null;
+  created_at: string | null;
 };
 
 async function getDeliveryClient() {
@@ -46,7 +47,7 @@ export async function loadCourierProfile(): Promise<CourierProfileRow | null> {
   const { data, error } = await delivery
     .from('courier_profiles')
     .select(
-      'user_id, display_name, phone, email, status, onboarding_complete, vehicle_type, background_check_status, rating, total_deliveries, acceptance_rate_pct, completion_rate_pct, profile_photo_url',
+      'user_id, display_name, phone, email, status, onboarding_complete, vehicle_type, background_check_status, rating, total_deliveries, acceptance_rate_pct, completion_rate_pct, profile_photo_url, created_at',
     )
     .eq('user_id', session.user.id)
     .maybeSingle();

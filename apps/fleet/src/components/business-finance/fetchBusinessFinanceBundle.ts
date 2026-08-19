@@ -161,7 +161,7 @@ export async function fetchBusinessFinanceBundle(
 
   const pnl = buildPnLFromCanonicalEvents(ledgerEvents, period, {
     driverCommission: driverCommissionFromPeriods,
-    cashWriteOffs,
+    cashWriteOffs: cashWrittenOff,
     basis: opts.basis === 'cash' ? 'cash' : 'accrual',
   });
   const expenseAgg = sumExpenseRowsFromEvents(ledgerEvents, period);

@@ -8,6 +8,7 @@ type DashSummaryPageProps = {
   todayEarned?: number;
   todayDeliveries?: number;
   acceptanceRate?: number | null;
+  sessionElapsed?: string | null;
 };
 
 export function DashSummaryPage({
@@ -16,6 +17,7 @@ export function DashSummaryPage({
   todayEarned = 0,
   todayDeliveries = 0,
   acceptanceRate = null,
+  sessionElapsed,
 }: DashSummaryPageProps) {
   const acceptanceLabel = acceptanceRate != null ? `${Math.round(acceptanceRate)}%` : '—';
 
@@ -64,6 +66,16 @@ export function DashSummaryPage({
               <p className="text-[11px] text-muted uppercase tracking-wider">Acceptance Rate</p>
             </div>
           </div>
+
+          {sessionElapsed ? (
+            <div className="col-span-2 bg-surface rounded-xl p-4 shadow-soft border border-surface-variant/50 flex items-center justify-between">
+              <div>
+                <p className="text-[11px] text-muted uppercase tracking-wider">Online this session</p>
+                <p className="text-xl font-semibold text-on-surface mt-1">{sessionElapsed}</p>
+              </div>
+              <MaterialIcon name="schedule" className="text-muted text-xl" />
+            </div>
+          ) : null}
         </div>
       </main>
 

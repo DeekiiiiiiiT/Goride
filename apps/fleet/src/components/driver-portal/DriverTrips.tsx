@@ -21,6 +21,7 @@ import { api } from '../../services/api';
 import { Trip } from '../../types/data';
 import { getDriverPortalTripEarnings } from '../../utils/tripEarnings';
 import { normalizePlatform } from '../../utils/normalizePlatform';
+import { getTripEndCoords, getTripEndpointLabel, getTripStartCoords } from '../../utils/tripManifestHelpers';
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { Calendar } from "../ui/calendar";
 import { Button } from "../ui/button";
@@ -353,10 +354,8 @@ function TripCard({ trip, onClick }: { trip: Trip, onClick: () => void }) {
    const amount = getDriverPortalTripEarnings(trip);
    const isCash = (Math.abs(Number(trip.cashCollected || 0)) > 0) || amount < 0 || ['goride', 'roam', 'private', 'cash'].includes((trip.platform || '').toLowerCase());
    const date = new Date(trip.date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
-
-   const isResolving = (loc: string | undefined, lat: number | undefined) => {
-       return (!loc || loc === 'Manual Entry' || loc.startsWith('Lat:')) && !!lat;
-   };
+   const pickupLabel = getTripEndpointLabel(trip.pickupLocation, trip.pickupArea, getTripStartCoords(trip), 'Unknown');
+   const dropoffLabel = getTripEndpointLabel(trip.dropoffLocation, trip.dropoffArea, getTripEndCoords(trip), 'Unknown');
 
    return (
       <Card 
@@ -400,25 +399,11 @@ function TripCard({ trip, onClick }: { trip: Trip, onClick: () => void }) {
                
                <div className="flex items-start gap-3">
                   <div className="h-2.5 w-2.5 rounded-full bg-red-500 mt-1.5 shrink-0 relative z-10" />
-                  {isResolving(trip.pickupLocation, trip.startLat) ? (
-                      <div className="flex items-center gap-1.5 text-xs text-amber-600 animate-pulse font-medium">
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                          Resolving location...
-                      </div>
-                  ) : (
-                      <p className="text-sm text-slate-600 dark:text-slate-400 truncate">{trip.pickupLocation || 'Unknown'}</p>
-                  )}
+                  <p className="text-sm text-slate-600 dark:text-slate-400 truncate" title={pickupLabel}>{pickupLabel}</p>
                </div>
                <div className="flex items-start gap-3">
                   <div className="h-2.5 w-2.5 rounded-full bg-emerald-500 mt-1.5 shrink-0 relative z-10" />
-                  {isResolving(trip.dropoffLocation, trip.endLat) ? (
-                      <div className="flex items-center gap-1.5 text-xs text-amber-600 animate-pulse font-medium">
-                          <Loader2 className="h-3 w-3 animate-spin" />
-                          Resolving location...
-                      </div>
-                  ) : (
-                      <p className="text-sm text-slate-600 dark:text-slate-400 truncate">{trip.dropoffLocation || 'Unknown'}</p>
-                  )}
+                  <p className="text-sm text-slate-600 dark:text-slate-400 truncate" title={dropoffLabel}>{dropoffLabel}</p>
                </div>
             </div>
          </CardContent>

@@ -870,7 +870,7 @@ export const api = {
     );
   },
 
-  async getTransactions(driverIdOrIds?: string | string[], options?: { limit?: number; offset?: number; startDate?: string; endDate?: string }) {
+  async getTransactions(driverIdOrIds?: string | string[], options?: { limit?: number; offset?: number; startDate?: string; endDate?: string; desk?: 'settlements' }) {
     let url = `${API_ENDPOINTS.financial}/transactions`;
     const params = new URLSearchParams();
     if (driverIdOrIds) {
@@ -883,6 +883,7 @@ export const api = {
     if (options?.offset !== undefined) params.set('offset', String(options.offset));
     if (options?.startDate) params.set('startDate', options.startDate);
     if (options?.endDate) params.set('endDate', options.endDate);
+    if (options?.desk) params.set('desk', options.desk);
     const qs = params.toString();
     if (qs) url += `?${qs}`;
     // Phase 1: Use JWT for proper org scoping

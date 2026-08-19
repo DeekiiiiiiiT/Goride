@@ -11,6 +11,7 @@ type HomeOnlinePageProps = {
   courierLng?: number | null;
   todayEarned?: number;
   todayDeliveries?: number;
+  sessionElapsed?: string | null;
 };
 
 export function HomeOnlinePage({
@@ -20,6 +21,7 @@ export function HomeOnlinePage({
   courierLng,
   todayEarned = 0,
   todayDeliveries = 0,
+  sessionElapsed,
 }: HomeOnlinePageProps) {
   // Offers arrive via RealDispatchProvider polling / Realtime — no fake timer.
   void _onOfferReceived;
@@ -64,6 +66,9 @@ export function HomeOnlinePage({
           <div className="bg-surface rounded-xl shadow-[0_8px_24px_rgba(0,0,0,0.08)] border border-surface-container-high p-4">
             <div className="flex justify-between items-center mb-2">
               <span className="text-[11px] text-muted uppercase tracking-wider font-medium">Today</span>
+              {sessionElapsed ? (
+                <span className="text-[11px] text-muted">Online {sessionElapsed}</span>
+              ) : null}
             </div>
             <div className="flex divide-x divide-outline-variant/30">
               <div className="flex-1 pr-4">

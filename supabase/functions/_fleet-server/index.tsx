@@ -2935,8 +2935,11 @@ app.get("/make-server-37f42386/transactions", requireAuth({ requireOrg: true }),
     }
 
     const isDriverScoped = idsToFilter.size > 0;
+    const isSettlementDesk = c.req.query("desk") === "settlements";
 
     // Unscoped list reads must be dated — all-time dumps are the egress leak.
+    // Settlement desk always sends the Week from/to range so Done/Awaiting are not
+    // silently clamped to the current Monday–Sunday.
     if (!isDriverScoped && !startDate) {
       const tz = await getFleetTimezone();
       startDate = await periodAnchorFor(new Date(), tz);
@@ -2945,11 +2948,16 @@ app.get("/make-server-37f42386/transactions", requireAuth({ requireOrg: true }),
 
     const TX_UNSCOPED_MAX = 500;
     const TX_DRIVER_MAX = 5000;
+    const TX_SETTLEMENT_MAX = 5000;
     const parsedLimit = limitParam ? parseInt(limitParam, 10) : NaN;
     const requested = Number.isFinite(parsedLimit) && parsedLimit > 0
       ? parsedLimit
-      : (isDriverScoped ? 5000 : 100);
-    const limit = Math.min(requested, isDriverScoped ? TX_DRIVER_MAX : TX_UNSCOPED_MAX);
+      : (isDriverScoped || isSettlementDesk ? 5000 : 100);
+    const cap = isSettlementDesk ? TX_SETTLEMENT_MAX : (isDriverScoped ? TX_DRIVER_MAX : TX_UNSCOPED_MAX);
+    const limit = Math.min(requested, cap);
+
+    const SETTLEMENT_KV_OR =
+      "value->>type.eq.Payment_Received,value->>type.eq.Payout,value->>type.eq.Cash_Write_Off,value->>category.eq.Cash Collection,value->>category.eq.Driver Payouts,value->>category.eq.Cash Write Off";
 
     const { shouldReadTable, queryFleet } = await import("./repos/baseRepo.ts");
     if (shouldReadTable("transactions")) {
@@ -2957,6 +2965,13 @@ app.get("/make-server-37f42386/transactions", requireAuth({ requireOrg: true }),
       const filters: import("./repos/baseRepo.ts").FleetQueryFilter[] = [];
       if (isDriverScoped) {
         filters.push({ op: "in", col: "driver_id", value: Array.from(idsToFilter) });
+      }
+      if (isSettlementDesk) {
+        filters.push({
+          op: "or",
+          value:
+            'type.in.(Payment_Received,Payout,Cash_Write_Off),category.in.("Cash Collection","Driver Payouts","Cash Write Off")',
+        });
       }
       const res = await queryFleet("transactions", {
         org: orgId || undefined,
@@ -2981,6 +2996,9 @@ app.get("/make-server-37f42386/transactions", requireAuth({ requireOrg: true }),
             .map(id => `value->>driverId.eq.${id}`)
             .join(',');
         query = query.or(orConditions);
+    }
+    if (isSettlementDesk) {
+        query = query.or(SETTLEMENT_KV_OR);
     }
     if (startDate) query = query.gte("value->>date", startDate);
     if (endDate) query = query.lte("value->>date", `${endDate}T23:59:59.999`);

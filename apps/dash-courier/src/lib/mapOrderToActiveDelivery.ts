@@ -152,11 +152,12 @@ export function mapOrderToActiveDelivery(
     distanceKm,
     dropoffEtaMinutes,
     dropoffDistanceKm,
-    dropoffTurnDistance: dropoffDistanceKm > 0 ? `${Math.round(dropoffDistanceKm * 1000)}m` : '',
-    dropoffTurnInstruction: dropoff ? `Head to ${dropoff.split(',')[0]?.trim() || 'customer'}` : '',
-    turnInstruction: pickup ? `Head to ${storeName}` : '',
+    dropoffTurnDistance: dropoffDistanceKm > 0 ? `${dropoffDistanceKm} km` : '',
+    dropoffTurnInstruction: `Heading to ${customerName.split(/\s+/)[0] || 'customer'}`,
+    turnInstruction: `Heading to ${storeName}`,
     itemCount: checklist.length || items.reduce((n, i) => n + Number(i.quantity || 1), 0),
     checklist,
+    // Peak/distance bonuses have no backend fields — keep zeros off the complete screen.
     earnings: {
       basePay,
       distanceBonus: 0,

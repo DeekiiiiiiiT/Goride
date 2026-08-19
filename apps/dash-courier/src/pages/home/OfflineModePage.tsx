@@ -3,7 +3,7 @@ import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import type { CachedDelivery } from '@/lib/mockCachedDelivery';
 
 type OfflineModePageProps = {
-  delivery: CachedDelivery;
+  delivery: CachedDelivery | null;
   onRetry: () => void;
   onProfileClick?: () => void;
   onMenuClick?: () => void;
@@ -62,6 +62,7 @@ export function OfflineModePage({ delivery, onRetry, onProfileClick, onMenuClick
 
         <div className="w-full border-t border-surface-variant" />
 
+        {delivery ? (
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between px-1">
             <h3 className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">
@@ -108,6 +109,9 @@ export function OfflineModePage({ delivery, onRetry, onProfileClick, onMenuClick
             </div>
           </div>
         </div>
+        ) : (
+          <p className="text-sm text-muted text-center">No active delivery.</p>
+        )}
       </main>
 
       <nav className="fixed bottom-0 w-full bg-surface rounded-t-xl shadow-[0_-4px_12px_rgba(0,108,73,0.1)] h-16 flex justify-around items-center px-4 pb-safe opacity-50 grayscale pointer-events-none">

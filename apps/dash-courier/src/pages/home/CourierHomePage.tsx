@@ -49,7 +49,7 @@ import { persistDeclineReason } from '@/lib/declineReasonStorage';
 import type { ActiveDelivery, DropoffMethod } from '@/lib/mockActiveDelivery';
 import { emptyActiveDelivery, mapOrderToActiveDelivery } from '@/lib/mapOrderToActiveDelivery';
 import { mapOrderToSingleOffer } from '@/lib/mapOrderToSingleOffer';
-import { MOCK_CACHED_DELIVERY } from '@/lib/mockCachedDelivery';
+import { mapActiveDeliveryToCached } from '@/lib/mockCachedDelivery';
 import { MOCK_SINGLE_OFFER, MOCK_STACKED_OFFER, type SingleOffer } from '@/lib/mockOffers';
 import { useCourierFeedback } from '@/hooks/useCourierFeedback';
 import { useBackgroundLocation } from '@/hooks/useBackgroundLocation';
@@ -57,6 +57,8 @@ import { useNetworkStatus } from '@/hooks/useNetworkStatus';
 import { useCourierDispatch } from '@/hooks/useCourierDispatch';
 import { OfflineError, assertOnline } from '@/lib/networkGuard';
 import { loadCourierProfile } from '@/lib/courierProfileService';
+import { resolveCourierFileUrl } from '@/lib/courierFileUpload';
+import { formatElapsed } from '@/lib/formatElapsed';
 import { openCourierAppSettings } from '@/lib/courierPermissions';
 import {
   fetchCourierEarnings,
@@ -105,6 +107,9 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
   const [declineReasonOpen, setDeclineReasonOpen] = useState(false);
   const [pushBannerOpen, setPushBannerOpen] = useState(false);
   const [courierName, setCourierName] = useState<string | undefined>();
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [onlineSinceMs, setOnlineSinceMs] = useState<number | null>(null);
+  const [sessionElapsed, setSessionElapsed] = useState<string | null>(null);
   const [completionRate, setCompletionRate] = useState<number | null>(null);
   const [acceptanceRate, setAcceptanceRate] = useState<number | null>(null);
   const [todayEarned, setTodayEarned] = useState(0);
@@ -187,12 +192,18 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
   }, [mode, offerPhase, feedback]);
 
   const refreshTodayStats = useCallback(() => {
-    void loadCourierProfile().then((profile) => {
+    void loadCourierProfile().then(async (profile) => {
       if (profile?.display_name) setCourierName(profile.display_name);
       if (profile?.completion_rate_pct != null) {
         setCompletionRate(profile.completion_rate_pct);
       }
       setAcceptanceRate(profile?.acceptance_rate_pct ?? null);
+      const raw = profile?.profile_photo_url || '';
+      if (!raw) {
+        setAvatarUrl(null);
+        return;
+      }
+      setAvatarUrl((await resolveCourierFileUrl(raw)) || raw);
     });
     void fetchCourierEarnings('today').then((data) => {
       if (!data) return;
@@ -204,6 +215,25 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
   useEffect(() => {
     refreshTodayStats();
   }, [refreshTodayStats]);
+
+  useEffect(() => {
+    if (mode === 'online' || mode === 'on-delivery' || mode === 'going-online') {
+      setOnlineSinceMs((prev) => prev ?? Date.now());
+    } else {
+      setOnlineSinceMs(null);
+    }
+  }, [mode]);
+
+  useEffect(() => {
+    if (onlineSinceMs == null) {
+      setSessionElapsed(null);
+      return;
+    }
+    const tick = () => setSessionElapsed(formatElapsed(Date.now() - onlineSinceMs));
+    tick();
+    const id = window.setInterval(tick, 30_000);
+    return () => window.clearInterval(id);
+  }, [onlineSinceMs]);
 
   const hasActiveOffer = offerPhase !== null;
   const isOnDelivery = mode === 'on-delivery' && deliveryPhase !== null;
@@ -507,6 +537,7 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
           courierLng={coords?.lng}
           todayEarned={todayEarned}
           todayDeliveries={todayDeliveries}
+          sessionElapsed={sessionElapsed}
         />
       );
     }
@@ -515,6 +546,7 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
       <HomeOfflinePage
         onGoOnline={handleGoOnline}
         courierName={courierName}
+        avatarUrl={avatarUrl}
         todayEarned={todayEarned}
         todayDeliveries={todayDeliveries}
         acceptanceRate={acceptanceRate}
@@ -530,6 +562,7 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
           statusTone={headerStatus.tone}
           hideStatus={hideMainHeader}
           onMenuClick={() => setActiveTab('account')}
+          avatarUrl={avatarUrl}
         />
 
         {renderTabContent()}
@@ -714,6 +747,7 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
           todayEarned={todayEarned}
           todayDeliveries={todayDeliveries}
           acceptanceRate={acceptanceRate}
+          sessionElapsed={sessionElapsed}
         />
       )}
 
@@ -832,7 +866,11 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
 
       {networkOffline && (
         <OfflineModePage
-          delivery={MOCK_CACHED_DELIVERY}
+          delivery={
+            hasActiveDeliveryData && activeDelivery
+              ? mapActiveDeliveryToCached(activeDelivery)
+              : null
+          }
           onRetry={handleRetryConnection}
           onProfileClick={() => setActiveTab('account')}
           onMenuClick={() => setActiveTab('account')}

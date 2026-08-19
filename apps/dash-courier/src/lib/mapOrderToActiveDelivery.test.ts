@@ -50,6 +50,10 @@ describe('mapOrderToActiveDelivery', () => {
     expect(delivery.dropoffLng).toBe(-76.79);
     expect(delivery.customerPhone).toBe('+18765550200');
     expect(delivery.storePhone).toBe('+18765550100');
+    expect(delivery.turnInstruction).toBe('Heading to Island Grill');
+    expect(delivery.earnings.total).toBe(420);
+    expect(delivery.earnings.basePay).toBe(350);
+    expect(delivery.earnings.tip).toBe(70);
   });
 
   it('falls back to pickup→dropoff when courier coords missing', () => {

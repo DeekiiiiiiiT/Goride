@@ -3,6 +3,7 @@ import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import type { CourierProfile } from '@/lib/mockProfile';
 import { loadCourierProfile } from '@/lib/courierProfileService';
 import { resolveCourierFileUrl } from '@/lib/courierFileUpload';
+import { formatMemberSince } from '@/lib/formatElapsed';
 
 export type ProfileDestination =
   | 'edit-profile'
@@ -100,7 +101,7 @@ export function AccountPage({ onNavigate, onSignOut, onRatingTap, onNotification
         phone: row.phone || '',
         email: row.email || '',
         avatarUrl,
-        memberSince: '',
+        memberSince: formatMemberSince(row.created_at),
         rating: row.rating ?? 0,
         acceptanceRate: row.acceptance_rate_pct ?? 0,
         completionRate: row.completion_rate_pct ?? 0,
