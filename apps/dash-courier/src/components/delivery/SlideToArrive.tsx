@@ -71,12 +71,30 @@ export function SlideToArrive({
             : 'h-16 bg-surface-container rounded-full border border-surface-variant/50'
       } ${disabled ? 'pointer-events-none opacity-50' : ''}`}
       onPointerDown={(e) => {
-        e.currentTarget.setPointerCapture(e.pointerId);
+        try {
+          e.currentTarget.setPointerCapture(e.pointerId);
+        } catch {
+          /* Synthetic / stale pointer during HMR or automation — still allow drag. */
+        }
         handleStart(e.clientX);
       }}
       onPointerMove={(e) => handleMove(e.clientX)}
-      onPointerUp={handleEnd}
-      onPointerCancel={handleEnd}
+      onPointerUp={(e) => {
+        try {
+          e.currentTarget.releasePointerCapture(e.pointerId);
+        } catch {
+          /* ignore */
+        }
+        handleEnd();
+      }}
+      onPointerCancel={(e) => {
+        try {
+          e.currentTarget.releasePointerCapture(e.pointerId);
+        } catch {
+          /* ignore */
+        }
+        handleEnd();
+      }}
     >
       {isEnRoute && (
         <div className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/20 to-transparent courier-shimmer" />

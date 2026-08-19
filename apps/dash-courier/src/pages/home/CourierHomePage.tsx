@@ -1,3 +1,4 @@
+// @refresh reset — mid-HMR can leave offer/promotion state undefined (ROAM-DASH-COURIER-2/6/8).
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { CourierAppHeader } from '@/components/layout/CourierAppHeader';
 import { AppShell } from '@/components/layout/AppShell';
