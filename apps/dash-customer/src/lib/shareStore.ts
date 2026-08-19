@@ -1,7 +1,20 @@
-import { toast } from '@/lib/toast';
+import { isNativeCapacitorPlatform } from '@roam/types';
+import { DASH_CUSTOMER_PRODUCTION_ORIGIN } from './dashCustomerAuth';
+import { toast } from './toast';
+
+/** Public store link a friend can open in the Rush app or on the web. */
+export function storeShareUrl(merchantId: string, origin?: string): string {
+  const base = (
+    isNativeCapacitorPlatform()
+      ? DASH_CUSTOMER_PRODUCTION_ORIGIN
+      : origin ??
+        (typeof window !== 'undefined' ? window.location.origin : DASH_CUSTOMER_PRODUCTION_ORIGIN)
+  ).replace(/\/$/, '');
+  return `${base}/?merchant=${encodeURIComponent(merchantId.trim())}`;
+}
 
 export async function shareStoreLink(name: string, merchantId: string): Promise<void> {
-  const url = `${window.location.origin}${window.location.pathname}?merchant=${encodeURIComponent(merchantId)}`;
+  const url = storeShareUrl(merchantId);
   const title = name;
   const text = `Order from ${name} on Roam Rush`;
 

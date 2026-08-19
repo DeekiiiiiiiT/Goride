@@ -3,7 +3,7 @@ import { getProfile, PROFILE_HEADER_AVATAR } from '@/lib/accountContent';
 
 type Props = {
   onBack?: () => void;
-  onNotifications?: () => void;
+  onNotifications: () => void;
 };
 
 export function AccountSubHeader({ onBack, onNotifications }: Props) {
