@@ -29,7 +29,11 @@ import { EarningsPage } from '@/pages/earnings/EarningsPage';
 import { PromotionsPage } from '@/pages/earnings/PromotionsPage';
 import { DeliveryDetailPage } from '@/pages/earnings/DeliveryDetailPage';
 import { hydrateCourierSettingsFromCloud } from '@/lib/courierSettingsSync';
-import { buildStackedRouteFromLegs } from '@/lib/stackedRouteBuilder';
+import { buildStackedRouteFromLegs, buildStackedOfferFromPending } from '@/lib/stackedRouteBuilder';
+import { isCourierStackedEnabled } from '@/lib/courierFeatureFlags';
+import { commitCancel, commitDelivered, commitPickup } from '@/lib/orderMutation';
+import { loadOnlineSince, persistOnlineSince } from '@/lib/courierStorage';
+import { supabase } from '@/lib/supabase';
 import type { StackedRouteStop } from '@/lib/mockStackedRoute';
 import { DashSummaryPage } from '@/pages/home/DashSummaryPage';
 import { ActivityPage } from '@/pages/activity/ActivityPage';
@@ -54,7 +58,7 @@ import type { ActiveDelivery, DropoffMethod } from '@/lib/mockActiveDelivery';
 import { emptyActiveDelivery, mapOrderToActiveDelivery } from '@/lib/mapOrderToActiveDelivery';
 import { emptySingleOffer, mapOrderToSingleOffer } from '@/lib/mapOrderToSingleOffer';
 import { mapActiveDeliveryToCached } from '@/lib/mockCachedDelivery';
-import { MOCK_STACKED_OFFER, type SingleOffer } from '@/lib/mockOffers';
+import { MOCK_STACKED_OFFER, type SingleOffer, type StackedOffer } from '@/lib/mockOffers';
 import { useCourierFeedback } from '@/hooks/useCourierFeedback';
 import { useBackgroundLocation } from '@/hooks/useBackgroundLocation';
 import { useNetworkStatus } from '@/hooks/useNetworkStatus';
@@ -70,7 +74,6 @@ import {
   patchCourierLocation,
   putCourierAvailability,
   submitCourierIssue,
-  updateCourierOrderStatus,
   type AvailableOrder,
 } from '@/lib/courierApi';
 import { nextClientSeq } from '@/lib/locationSeq';
@@ -122,6 +125,8 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
   const [activeDelivery, setActiveDelivery] = useState<ActiveDelivery | null>(null);
   const [stackedRoute, setStackedRoute] = useState<StackedRouteStop[]>([]);
   const [promotionsOpen, setPromotionsOpen] = useState(false);
+  const [mutationSubmitting, setMutationSubmitting] = useState(false);
+  const [sessionRestoredApprox, setSessionRestoredApprox] = useState(false);
   const delivery = activeDelivery ?? emptyActiveDelivery();
   const hasActiveDeliveryData = Boolean(activeDelivery?.orderId);
     const locationSeqRef = useRef(0);
@@ -169,9 +174,38 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
     const mapped = mapOrderToSingleOffer(pending, getProviderLastCoords());
     return mapped || emptySingleOffer();
   })();
+
+  const currentStackedOffer: StackedOffer = (() => {
+    if (
+      'getPendingOffers' in provider &&
+      typeof (provider as { getPendingOffers?: () => Array<{ id: string; order?: AvailableOrder | null }> }).getPendingOffers === 'function'
+    ) {
+      const built = buildStackedOfferFromPending(
+        (provider as { getPendingOffers: () => Array<{ id: string; order?: AvailableOrder | null }> }).getPendingOffers(),
+      );
+      if (built) {
+        return {
+          id: built.id,
+          totalEarnings: built.totalEarnings,
+          estMinutes: built.estMinutes,
+          stops: built.stops.map((s) => ({
+            id: s.id,
+            name: s.name,
+            address: s.address,
+            vertical: s.vertical as StackedOffer['stops'][0]['vertical'],
+            earnings: s.earnings,
+          })),
+        };
+      }
+    }
+    return MOCK_STACKED_OFFER;
+  })();
+
   // Cloud settings + stacked route bootstrap
   useEffect(() => {
-    void hydrateCourierSettingsFromCloud();
+    void supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user?.id) void hydrateCourierSettingsFromCloud(session.user.id);
+    });
   }, []);
 
   useEffect(() => {
@@ -238,9 +272,28 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
 
   useEffect(() => {
     if (mode === 'online' || mode === 'on-delivery' || mode === 'going-online') {
-      setOnlineSinceMs((prev) => prev ?? Date.now());
+      void supabase.auth.getSession().then(({ data: { session } }) => {
+        const userId = session?.user?.id;
+        if (!userId) return;
+        setOnlineSinceMs((prev) => {
+          if (prev != null) {
+            persistOnlineSince(userId, prev);
+            return prev;
+          }
+          const restored = loadOnlineSince(userId);
+          if (restored != null) {
+            setSessionRestoredApprox(true);
+            persistOnlineSince(userId, restored);
+            return restored;
+          }
+          const now = Date.now();
+          persistOnlineSince(userId, now);
+          return now;
+        });
+      });
     } else {
       setOnlineSinceMs(null);
+      setSessionRestoredApprox(false);
     }
   }, [mode]);
 
@@ -293,10 +346,11 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
 
   const finishStackedDelivery = useCallback(() => {
     feedback.onComplete();
-    toast.success('Stacked route complete!', 'J$1,120 added to your balance.');
     dispatch.finishDelivery();
+    setStackedRoute([]);
     setActiveTab('home');
-  }, [feedback, dispatch]);
+    refreshTodayStats();
+  }, [feedback, dispatch, refreshTodayStats]);
 
   const finishDelivery = useCallback(() => {
     feedback.onComplete();
@@ -319,6 +373,7 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
       toast.info('New offer incoming', 'Tap to view before it expires.');
       // When two pending offers exist, RealDispatchProvider surfaces stacked phase.
       const stacked =
+        isCourierStackedEnabled() &&
         'getPendingOfferIds' in provider &&
         typeof (provider as { getPendingOfferIds?: () => string[] }).getPendingOfferIds ===
           'function' &&
@@ -343,35 +398,38 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
   const finishDeclineOffer = useCallback(
     (reasonId?: DeclineReasonId) => {
       setDeclineReasonOpen(false);
-      const offerId =
-        offerPhase === 'stacked'
-          ? MOCK_STACKED_OFFER.id
-          : getProviderOfferId() || currentSingleOffer.id;
+      const offerId = getProviderOfferId() || currentSingleOffer.id;
       if (reasonId) {
         persistDeclineReason({ reasonId, offerId });
         toast.success('Feedback recorded', 'Thanks for letting us know.');
       }
       dispatch.declineOffer(offerId, reasonId ? { reasonId, offerId } : undefined);
     },
-    [dispatch, offerPhase, getProviderOfferId, currentSingleOffer.id],
+    [dispatch, getProviderOfferId, currentSingleOffer.id],
   );
 
   const handleAcceptStackedOffer = useCallback(() => {
     guardAction(() => {
-      feedback.onAccept();
-      const offerIds =
-        'getPendingOfferIds' in provider &&
-        typeof (provider as { getPendingOfferIds?: () => string[] }).getPendingOfferIds ===
-          'function'
-          ? (provider as { getPendingOfferIds: () => string[] }).getPendingOfferIds()
-          : [];
-      if (offerIds.length >= 2) {
-        dispatch.acceptStackedOffer(offerIds.slice(0, 2));
-      } else {
-        dispatch.acceptStackedOffer([MOCK_STACKED_OFFER.id]);
-      }
-      toast.success('Stacked offer accepted', 'Follow the route for both pickups.');
-      setActiveTab('home');
+      void (async () => {
+        feedback.onAccept();
+        const offerIds =
+          'getPendingOfferIds' in provider &&
+          typeof (provider as { getPendingOfferIds?: () => string[] }).getPendingOfferIds ===
+            'function'
+            ? (provider as { getPendingOfferIds: () => string[] }).getPendingOfferIds()
+            : [];
+        if (offerIds.length < 2) {
+          toast.error('Offer unavailable', 'Stacked offer expired or unavailable.');
+          return;
+        }
+        const result = await (
+          provider as { acceptStackedOffer: (ids: string[]) => Promise<{ deliveryPhase: string | null }> }
+        ).acceptStackedOffer(offerIds.slice(0, 2));
+        if (result.deliveryPhase === 'stacked-active') {
+          toast.success('Stacked offer accepted', 'Follow the route for both pickups.');
+          setActiveTab('home');
+        }
+      })();
     });
   }, [feedback, dispatch, guardAction, provider]);
 
@@ -403,24 +461,45 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
   ]);
 
   const handleReportIssueSubmit = useCallback(
-    (issueId: string, notes?: string, photoUrl?: string) => {
+    async (issueId: string, notes?: string, photoUrl?: string) => {
       const orderId = realDispatchProvider.activeOrderId || delivery.orderId;
-      void submitCourierIssue(orderId, issueId, notes, photoUrl);
-      setReportIssueOpen(false);
-      if (issueId === 'restaurant_closed' || issueId === 'customer_unavailable') {
-        dispatch.setDeliveryPhase('order-cancelled');
-        void updateCourierOrderStatus(orderId, 'cancelled', issueId);
+      setMutationSubmitting(true);
+      const issueOk = await submitCourierIssue(orderId, issueId, notes, photoUrl);
+      if (!issueOk) {
+        setMutationSubmitting(false);
+        toast.error('Could not report issue', 'Check your connection and try again.');
+        return;
       }
+      if (issueId === 'restaurant_closed' || issueId === 'customer_unavailable') {
+        const cancelResult = await commitCancel(orderId, issueId);
+        setMutationSubmitting(false);
+        if (!cancelResult.ok) {
+          toast.error('Cancel failed', cancelResult.error);
+          return;
+        }
+        setReportIssueOpen(false);
+        dispatch.setDeliveryPhase('order-cancelled');
+        return;
+      }
+      setMutationSubmitting(false);
+      setReportIssueOpen(false);
     },
     [dispatch, delivery.orderId],
   );
 
-  const handleUnassign = useCallback(() => {
+  const handleUnassign = useCallback(async () => {
     setShowUnassignModal(false);
     setReportIssueOpen(false);
     const orderId = realDispatchProvider.activeOrderId || delivery.orderId;
-    void updateCourierOrderStatus(orderId, 'cancelled', 'courier_unassign');
+    setMutationSubmitting(true);
+    const result = await commitCancel(orderId, 'courier_unassign');
+    setMutationSubmitting(false);
+    if (!result.ok) {
+      toast.error('Unassign failed', result.error);
+      return;
+    }
     dispatch.cancelDelivery();
+    setActiveDelivery(null);
   }, [dispatch, delivery.orderId]);
 
   const handleRequestUnassign = useCallback(() => {
@@ -435,7 +514,7 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
       if (mode === 'going-online' && !hasResolvedLocation.current && !coords) {
         setLocationIssueOpen(true);
       }
-    }, 8000);
+    }, 15000);
 
     return () => window.clearTimeout(timer);
   }, [mode, coords]);
@@ -445,10 +524,8 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
   }, [coords]);
 
   const handleLocationRetry = useCallback(() => {
-    hasResolvedLocation.current = true;
     setLocationIssueOpen(false);
-    dispatch.setMode('online');
-    toast.success('Location found', 'You are now online and receiving offers.');
+    dispatch.goOnline();
   }, [dispatch]);
 
   const handleRetryConnection = useCallback(() => {
@@ -459,31 +536,69 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
     }
   }, []);
 
-  const persistDelivered = useCallback(() => {
-    const orderId = realDispatchProvider.activeOrderId || delivery.orderId;
-    if (orderId) void updateCourierOrderStatus(orderId, 'delivered');
-  }, [delivery.orderId, realDispatchProvider.activeOrderId]);
-
   const handleAtCustomerComplete = useCallback(
-    (method: DropoffMethod, _hasPhoto: boolean, photoUrl?: string) => {
+    async (method: DropoffMethod, _hasPhoto: boolean, photoPath?: string, courierNotes?: string) => {
       const orderId = realDispatchProvider.activeOrderId || delivery.orderId;
-      if (photoUrl) {
-        void import('@/lib/courierApi').then(({ submitCourierProof }) =>
-          submitCourierProof(orderId, 'delivery', photoUrl),
-        );
-      }
       if (method === 'hand-to-customer') {
         if (delivery.vertical_type === 'alcohol') {
           setAgeVerifyOpen(true);
           return;
         }
         dispatch.setDeliveryPhase('confirm-handoff');
-      } else {
-        void updateCourierOrderStatus(orderId, 'delivered');
-        dispatch.setDeliveryPhase('complete');
+        return;
       }
+      setMutationSubmitting(true);
+      const result = await commitDelivered(orderId, photoPath, courierNotes);
+      setMutationSubmitting(false);
+      if (!result.ok) {
+        toast.error('Delivery failed', result.error);
+        return;
+      }
+      dispatch.setDeliveryPhase('complete');
     },
     [dispatch, delivery.vertical_type, delivery.orderId],
+  );
+
+  const handleConfirmHandoff = useCallback(async () => {
+    const orderId = realDispatchProvider.activeOrderId || delivery.orderId;
+    setMutationSubmitting(true);
+    const result = await commitDelivered(orderId);
+    setMutationSubmitting(false);
+    if (!result.ok) {
+      toast.error('Delivery failed', result.error);
+      return;
+    }
+    dispatch.setDeliveryPhase('complete');
+  }, [dispatch, delivery.orderId]);
+
+  const handleLeaveAtSafeLocation = useCallback(
+    async (photoPath: string) => {
+      const orderId = realDispatchProvider.activeOrderId || delivery.orderId;
+      setMutationSubmitting(true);
+      const result = await commitDelivered(orderId, photoPath);
+      setMutationSubmitting(false);
+      if (!result.ok) {
+        toast.error('Delivery failed', result.error);
+        return;
+      }
+      dispatch.setDeliveryPhase('complete');
+    },
+    [dispatch, delivery.orderId],
+  );
+
+  const handleConfirmPickup = useCallback(
+    async (pickupPhotoPath?: string) => {
+      const orderId = realDispatchProvider.activeOrderId || delivery.orderId;
+      setMutationSubmitting(true);
+      const result = await commitPickup(orderId, pickupPhotoPath);
+      setMutationSubmitting(false);
+      if (!result.ok) {
+        toast.error('Pickup failed', result.error);
+        return;
+      }
+      dispatch.setDeliveryPhase('en-route');
+    },
+    [dispatch, delivery.orderId],
   );
 
   const handleProfileNavigate = useCallback((destination: ProfileDestination) => {
@@ -610,10 +725,10 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
 
       {showBottomNav && <CourierBottomNav active={activeTab} onChange={setActiveTab} />}
 
-      {offerPhase === 'stacked' && (
+      {offerPhase === 'stacked' && isCourierStackedEnabled() && (
         <ImmersiveScreen>
           <StackedOfferPage
-            offer={MOCK_STACKED_OFFER}
+            offer={currentStackedOffer}
             onTimerExpire={handleOfferTimerExpire}
             onDecline={requestDeclineOffer}
             onAccept={handleAcceptStackedOffer}
@@ -653,7 +768,7 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
         onSubmit={(reasonId) => finishDeclineOffer(reasonId)}
       />
 
-      {deliveryPhase === 'stacked-active' && (
+      {deliveryPhase === 'stacked-active' && isCourierStackedEnabled() && stackedRoute.length > 0 && (
         <ImmersiveScreen>
           <StackedDeliveryFlow
             route={stackedRoute}
@@ -679,16 +794,7 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
           onClose={handleRequestUnassign}
           onConfirmPickup={(pickupPhotoUrl) =>
             guardAction(() => {
-              const orderId = realDispatchProvider.activeOrderId || delivery.orderId;
-              if (pickupPhotoUrl) {
-                void import('@/lib/courierApi').then(({ submitCourierProof }) =>
-                  submitCourierProof(orderId, 'pickup', pickupPhotoUrl),
-                );
-              }
-              void updateCourierOrderStatus(orderId, 'picked_up').then(() =>
-                updateCourierOrderStatus(orderId, 'in_transit'),
-              );
-              dispatch.setDeliveryPhase('en-route');
+              void handleConfirmPickup(pickupPhotoUrl);
             })
           }
           onRequestUnassign={handleRequestUnassign}
@@ -716,10 +822,7 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
       {deliveryPhase === 'confirm-handoff' && !acceptedStacked && hasActiveDeliveryData && (
         <ConfirmHandoffPage
           onBack={() => dispatch.setDeliveryPhase('at-customer')}
-          onComplete={() => {
-            persistDelivered();
-            dispatch.setDeliveryPhase('complete');
-          }}
+          onComplete={() => void handleConfirmHandoff()}
           onCustomerUnavailable={() => dispatch.setDeliveryPhase('customer-unavailable')}
         />
       )}
@@ -728,10 +831,7 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
         <CustomerUnavailablePage
           customerPhone={delivery.customerPhone}
           onClose={() => dispatch.setDeliveryPhase('at-customer')}
-          onLeaveAtSafeLocation={() => {
-            persistDelivered();
-            dispatch.setDeliveryPhase('complete');
-          }}
+          onLeaveAtSafeLocation={(photoPath) => void handleLeaveAtSafeLocation(photoPath)}
         />
       )}
 

@@ -45,7 +45,10 @@ export function HelpSupportPage({ onBack, onTopicSelect }: HelpSupportPageProps)
 
         <button
           type="button"
-          onClick={() => window.open('tel:911')}
+          onClick={() => {
+            const choice = window.confirm('Call Police (119) or Fire/Ambulance (110)?\n\nOK = Police 119\nCancel = Fire/Ambulance 110');
+            window.open(choice ? 'tel:119' : 'tel:110');
+          }}
           className="w-full bg-error-container text-on-error-container p-4 rounded-xl flex items-center justify-between mb-6 shadow-[0_6px_12px_rgba(186,26,26,0.1)] active:scale-95 transition-transform min-h-14"
         >
           <div className="flex items-center gap-3 text-left">
@@ -54,7 +57,7 @@ export function HelpSupportPage({ onBack, onTopicSelect }: HelpSupportPageProps)
             </div>
             <div>
               <h2 className="text-xl font-semibold text-error">Call emergency services</h2>
-              <p className="text-sm opacity-90">For immediate safety concerns</p>
+              <p className="text-sm opacity-90">Police 119 · Fire/Ambulance 110</p>
             </div>
           </div>
           <MaterialIcon name="chevron_right" className="text-error" />

@@ -1,11 +1,18 @@
-export type StackedStopId = 'p1' | 'p2' | 'd1' | 'd2';
+export type StackedStopId = string;
 
 export type StackedRouteStop = {
   id: StackedStopId;
   type: 'pickup' | 'delivery';
   name: string;
   address: string;
+  /** Display label (order number) */
   orderId: string;
+  /** Backend UUID for status updates */
+  backendOrderId: string;
+  merchantPhone?: string;
+  customerPhone?: string;
+  lat?: number;
+  lng?: number;
   customerName?: string;
   expectedBy?: string;
   itemCount?: number;
@@ -39,6 +46,7 @@ export const MOCK_STACKED_ROUTE: StackedRouteStop[] = [
     name: 'Island Grill',
     address: '12 Hope Road, Kingston',
     orderId: 'IG-1041',
+    backendOrderId: 'mock-order-p1',
     expectedBy: '12:30 PM',
     earnings: 0,
   },
@@ -48,6 +56,7 @@ export const MOCK_STACKED_ROUTE: StackedRouteStop[] = [
     name: 'Juici Patties',
     address: '123 Main St',
     orderId: 'JP-992',
+    backendOrderId: 'mock-order-p2',
     expectedBy: '12:45 PM',
     earnings: 0,
   },
@@ -57,6 +66,7 @@ export const MOCK_STACKED_ROUTE: StackedRouteStop[] = [
     name: "Sarah's Order",
     address: '12 Hope Rd, Apt 4B',
     orderId: 'RD-1041',
+    backendOrderId: 'mock-order-d1',
     customerName: 'Sarah',
     itemCount: 3,
     instructions: 'Leave at door',
@@ -71,6 +81,7 @@ export const MOCK_STACKED_ROUTE: StackedRouteStop[] = [
     name: "Marcus's Order",
     address: '45 Constant Spring Rd, Apt 8A',
     orderId: 'RD-1042',
+    backendOrderId: 'mock-order-d2',
     customerName: 'Marcus',
     itemCount: 4,
     instructions: 'Hand to customer',

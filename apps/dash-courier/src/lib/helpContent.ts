@@ -59,7 +59,7 @@ export const HELP_ARTICLES: Record<string, HelpArticle[]> = {
     {
       id: 'emergency',
       question: 'What if I feel unsafe?',
-      answer: 'Use the emergency button in Help & Support or call local emergency services immediately.',
+      answer: 'Use Help & Support → Call emergency services: Police 119 or Fire/Ambulance 110.',
     },
   ],
 };

@@ -1,9 +1,11 @@
 import { assertOnline } from '@/lib/networkGuard';
+import { isCourierStackedEnabled } from '@/lib/courierFeatureFlags';
 import {
   acceptCourierOffer,
   acceptDeliveryOrder,
   acceptStackedOffers,
   declineCourierOffer,
+  declineStackedOffers,
   fetchAvailableOrders,
   fetchCourierOffers,
   fetchCourierStack,
@@ -46,6 +48,19 @@ export class RealDispatchProvider implements CourierDispatchService {
   private currentOfferId = '';
   private lastCoords: { lat?: number; lng?: number } = {};
   activeOrderId: string | null = null;
+  activeOrderIds: string[] = [];
+
+  getActiveOrderIds(): string[] {
+    return [...this.activeOrderIds];
+  }
+
+  getPendingOffers(): CourierOfferRow[] {
+    return [...this.pendingOffers];
+  }
+
+  getPendingOrders(): AvailableOrder[] {
+    return [...this.pendingOrders];
+  }
 
   getState(): DispatchState {
     return { ...this.state };
@@ -109,7 +124,9 @@ export class RealDispatchProvider implements CourierDispatchService {
         this.setLastCoords(pos.coords.latitude, pos.coords.longitude);
         return 'granted';
       } catch {
-        // Permission granted but GPS timed out — still allow online; coords optional on API.
+        if (this.lastCoords.lat == null || this.lastCoords.lng == null) {
+          return 'unavailable';
+        }
         return 'granted';
       }
     }
@@ -118,8 +135,19 @@ export class RealDispatchProvider implements CourierDispatchService {
 
   private async completeGoOnline(): Promise<void> {
     const loc = await this.ensureGoOnlineLocation();
-    if (loc === 'denied') {
-      toast.error('Location required', 'Allow location access to go online and get delivery offers.');
+    if (loc === 'denied' || loc === 'unavailable') {
+      toast.error(
+        'Location required',
+        loc === 'denied'
+          ? 'Allow location access to go online and get delivery offers.'
+          : 'Could not get your GPS fix. Try again in an open area.',
+      );
+      this.setState({ mode: 'offline' });
+      return;
+    }
+
+    if (this.lastCoords.lat == null || this.lastCoords.lng == null) {
+      toast.error('Location required', 'Could not get your GPS fix. Try again.');
       this.setState({ mode: 'offline' });
       return;
     }
@@ -381,7 +409,7 @@ export class RealDispatchProvider implements CourierDispatchService {
     if (this.state.mode !== 'online' || this.state.offerPhase !== null) return;
 
     const offers = await fetchCourierOffers();
-    if (offers.length >= 2) {
+    if (isCourierStackedEnabled() && offers.length >= 2) {
       this.pendingOffers = offers.slice(0, 2);
       this.pendingOrders = [];
       this.currentOfferId = offers[0].id;
@@ -422,34 +450,36 @@ export class RealDispatchProvider implements CourierDispatchService {
     }
   }
 
-  acceptStackedOffer(offerIds: string[]): AcceptOfferResult {
+  async acceptStackedOffer(offerIds: string[]): Promise<AcceptOfferResult> {
     assertOnline();
-    void this.acceptStackedOfferAsync(offerIds);
+    this.stopPolling();
+    const result = await acceptStackedOffers(offerIds);
+    if (!result.ok || result.orders.length === 0) {
+      toast.error('Could not accept stack', result.ok ? 'No orders returned' : result.error);
+      this.startPolling();
+      return { deliveryPhase: null, acceptedStacked: false };
+    }
+
+    this.activeOrderIds = result.orders.map((o) => o.id);
+    this.activeOrderId = result.orders[0]?.id ?? null;
+    await putCourierAvailability({
+      isOnline: true,
+      lat: this.lastCoords.lat,
+      lng: this.lastCoords.lng,
+      activeOrderId: this.activeOrderId,
+    });
+    if (this.activeOrderId) this.startActiveOrderWatch(this.activeOrderId);
+
+    this.pendingOffers = [];
+    this.pendingOrders = [];
+    this.currentOfferId = '';
     this.setState({
       offerPhase: null,
       mode: 'on-delivery',
       deliveryPhase: 'stacked-active',
       acceptedStacked: true,
     });
-    this.stopPolling();
     return { deliveryPhase: 'stacked-active', acceptedStacked: true };
-  }
-
-  private async acceptStackedOfferAsync(offerIds: string[]): Promise<void> {
-    const result = await acceptStackedOffers(offerIds);
-    if (result.ok && result.orders.length > 0) {
-      this.activeOrderId = result.orders[0].id;
-      await putCourierAvailability({
-        isOnline: true,
-        lat: this.lastCoords.lat,
-        lng: this.lastCoords.lng,
-        activeOrderId: result.orders[0].id,
-      });
-      this.startActiveOrderWatch(result.orders[0].id);
-    } else {
-      this.setState({ mode: 'online', deliveryPhase: null, acceptedStacked: false });
-      this.startPolling();
-    }
   }
 
   acceptOffer(offerId: string): AcceptOfferResult {
@@ -509,6 +539,16 @@ export class RealDispatchProvider implements CourierDispatchService {
   }
 
   declineOffer(offerId: string, _reason?: DeclineReasonPayload): void {
+    const stackedIds = this.pendingOffers.map((o) => o.id);
+    if (this.state.offerPhase === 'stacked' && stackedIds.length >= 2) {
+      void declineStackedOffers(stackedIds, _reason?.reasonId);
+      this.pendingOffers = [];
+      this.pendingOrders = [];
+      this.currentOfferId = '';
+      this.setState({ offerPhase: null });
+      return;
+    }
+
     const id = offerId || this.currentOfferId;
     if (this.pendingOffers.some((o) => o.id === id)) {
       void declineCourierOffer(id, _reason?.reasonId);
@@ -531,6 +571,7 @@ export class RealDispatchProvider implements CourierDispatchService {
   finishDelivery(): void {
     this.stopActiveOrderWatch();
     this.activeOrderId = null;
+    this.activeOrderIds = [];
     void putCourierAvailability({
       isOnline: true,
       lat: this.lastCoords.lat,
@@ -548,6 +589,7 @@ export class RealDispatchProvider implements CourierDispatchService {
   cancelDelivery(): void {
     this.stopActiveOrderWatch();
     this.activeOrderId = null;
+    this.activeOrderIds = [];
     void putCourierAvailability({
       isOnline: true,
       lat: this.lastCoords.lat,

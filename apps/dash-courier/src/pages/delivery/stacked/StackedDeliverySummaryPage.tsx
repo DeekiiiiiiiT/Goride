@@ -1,14 +1,24 @@
 import React from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
-import { MOCK_STACKED_SUMMARY } from '@/lib/mockStackedRoute';
+
+type SummaryLeg = {
+  id: string;
+  label: string;
+  customerName: string;
+  earnings: number;
+};
 
 type StackedDeliverySummaryPageProps = {
+  totalEarnings: number;
+  legs: SummaryLeg[];
   onBackToDash: () => void;
 };
 
-export function StackedDeliverySummaryPage({ onBackToDash }: StackedDeliverySummaryPageProps) {
-  const summary = MOCK_STACKED_SUMMARY;
-
+export function StackedDeliverySummaryPage({
+  totalEarnings,
+  legs,
+  onBackToDash,
+}: StackedDeliverySummaryPageProps) {
   return (
     <div className="fixed inset-0 z-[80] bg-background flex flex-col overflow-hidden">
       <header className="bg-surface shadow-soft pt-safe shrink-0">
@@ -24,7 +34,7 @@ export function StackedDeliverySummaryPage({ onBackToDash }: StackedDeliverySumm
           </div>
           <h2 className="text-2xl font-semibold text-on-background">Multiple Deliveries Complete!</h2>
           <p className="text-base text-on-surface-variant">
-            Great job completing your stacked route.
+            J${totalEarnings.toLocaleString('en-JM')} added to your balance.
           </p>
         </div>
 
@@ -34,24 +44,19 @@ export function StackedDeliverySummaryPage({ onBackToDash }: StackedDeliverySumm
             Total Earned
           </p>
           <h3 className="text-[32px] font-bold text-primary tracking-tight mt-1">
-            J${summary.totalEarnings.toLocaleString('en-JM')}
+            J${totalEarnings.toLocaleString('en-JM')}
           </h3>
           <div className="flex gap-4 pt-4 mt-4 border-t border-surface-variant">
             <div className="flex-1">
               <p className="text-[11px] text-on-surface-variant">Deliveries</p>
-              <p className="text-xl font-semibold text-on-background">{summary.deliveries}</p>
-            </div>
-            <div className="w-px bg-surface-variant" />
-            <div className="flex-1 pl-2">
-              <p className="text-[11px] text-on-surface-variant">Distance</p>
-              <p className="text-xl font-semibold text-on-background">{summary.distanceKm} km</p>
+              <p className="text-xl font-semibold text-on-background">{legs.length}</p>
             </div>
           </div>
         </div>
 
         <div className="space-y-3">
           <h4 className="text-xl font-semibold text-on-background">Earnings Breakdown</h4>
-          {summary.legs.map((leg) => (
+          {legs.map((leg) => (
             <div
               key={leg.id}
               className="bg-surface rounded-xl shadow-soft p-4 flex items-center justify-between border-l-4 border-primary"
@@ -62,16 +67,7 @@ export function StackedDeliverySummaryPage({ onBackToDash }: StackedDeliverySumm
                 </div>
                 <div className="min-w-0">
                   <p className="text-base font-medium text-on-background">{leg.label}</p>
-                  {leg.rating != null ? (
-                    <div className="flex items-center text-warning mt-1">
-                      {Array.from({ length: 5 }).map((_, i) => (
-                        <MaterialIcon key={i} name="star" className="text-sm" filled />
-                      ))}
-                      <span className="text-xs text-on-surface-variant ml-2">{leg.rating}.0</span>
-                    </div>
-                  ) : (
-                    <p className="text-sm text-on-surface-variant mt-1">Rating pending</p>
-                  )}
+                  <p className="text-sm text-on-surface-variant mt-1">Rating pending</p>
                 </div>
               </div>
               <p className="text-xl font-semibold text-on-background shrink-0 ml-2">

@@ -4,12 +4,13 @@ import type { ActiveDelivery, DropoffMethod } from '@/lib/mockActiveDelivery';
 import { CUSTOMER_AVATAR } from '@/lib/mockActiveDelivery';
 import { parseDeliveryHandoff } from '@/lib/deliveryHandoff';
 import { openPhoneCall, openSmsMessage, toDialablePhone } from '@/lib/contactLinks';
+import { toast } from '@/lib/toast';
 import { useVisualViewport } from '@/hooks/useVisualViewport';
 
 type AtCustomerPageProps = {
   delivery: ActiveDelivery;
   onBack: () => void;
-  onComplete: (method: DropoffMethod, hasPhoto: boolean, photoUrl?: string) => void;
+  onComplete: (method: DropoffMethod, hasPhoto: boolean, photoUrl?: string, courierNotes?: string) => void;
   onCustomerUnavailable: () => void;
   onHelpClick?: () => void;
 };
@@ -33,7 +34,6 @@ export function AtCustomerPage({
   const keyboardOffset = useVisualViewport();
   const customerPhone = toDialablePhone(delivery.customerPhone);
   const instructionText = (delivery.deliveryInstructions || '').trim() || 'No special instructions';
-  const gateCode = (delivery.gateCode || '').trim();
   const unit = (delivery.unit || '').trim();
 
   const canComplete = method === 'hand-to-customer' || hasPhoto;
@@ -122,20 +122,8 @@ export function AtCustomerPage({
                 {instructionText}
               </span>
             </div>
-            {(gateCode || unit) && (
-            <div className="grid grid-cols-2 gap-3">
-              {gateCode ? (
-              <div className="flex items-center gap-3 bg-surface-container-low p-3 rounded-xl border border-outline-variant/20">
-                <MaterialIcon name="dialpad" className="text-muted text-xl shrink-0" />
-                <div>
-                  <span className="text-[10px] text-muted uppercase block">Gate Code</span>
-                  <span className="text-sm font-semibold text-on-surface">{gateCode}</span>
-                </div>
-              </div>
-              ) : (
-                <div />
-              )}
-              {unit ? (
+            {unit && (
+            <div className="grid grid-cols-1 gap-3">
               <div className="flex items-center gap-3 bg-surface-container-low p-3 rounded-xl border border-outline-variant/20">
                 <MaterialIcon name="apartment" className="text-muted text-xl shrink-0" />
                 <div>
@@ -143,9 +131,6 @@ export function AtCustomerPage({
                   <span className="text-sm font-semibold text-on-surface">{unit}</span>
                 </div>
               </div>
-              ) : (
-                <div />
-              )}
             </div>
             )}
           </div>
@@ -233,7 +218,10 @@ export function AtCustomerPage({
                 void import('@/lib/courierFileUpload').then(async ({ uploadAndGetProofUrl }) => {
                   const url = await uploadAndGetProofUrl(file, 'proofs');
                   setUploading(false);
-                  if (!url) return;
+                  if (!url) {
+                    toast.error('Photo upload failed', 'Tap to try again.');
+                    return;
+                  }
                   setPhotoUrl(url);
                   setHasPhoto(true);
                 });
@@ -297,7 +285,7 @@ export function AtCustomerPage({
       >
         <button
           type="button"
-          onClick={() => onComplete(method, hasPhoto, photoUrl)}
+          onClick={() => onComplete(method, hasPhoto, photoUrl, note.trim() || undefined)}
           disabled={!canComplete || uploading}
           className="w-full h-[60px] rounded-[20px] bg-primary text-on-primary text-lg font-semibold tracking-wide flex items-center justify-center gap-3 shadow-[0_8px_20px_rgba(0,108,73,0.3)] active:scale-[0.97] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
         >

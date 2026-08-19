@@ -29,7 +29,7 @@ export function DeliveryOfferPage({
   onOfferShown,
 }: DeliveryOfferPageProps) {
   const shownRef = useRef(false);
-  const { seconds } = useCountdown(initialSeconds, onTimerExpire);
+  const { seconds, isExpired, expiredRef } = useCountdown(initialSeconds, onTimerExpire);
   const progress = seconds / initialSeconds;
   const ringOffset = TIMER_CIRCUMFERENCE * (1 - progress);
   const urgent = seconds < 10;
@@ -190,8 +190,12 @@ export function DeliveryOfferPage({
           </button>
           <button
             type="button"
-            onClick={onAccept}
-            className="flex flex-[2] items-center justify-center gap-2 rounded-xl bg-primary text-label-lg font-semibold text-on-primary shadow-lg shadow-primary/20 transition-all hover:brightness-110 active:scale-[0.98]"
+            disabled={isExpired}
+            onClick={() => {
+              if (isExpired || expiredRef.current) return;
+              onAccept();
+            }}
+            className="flex flex-[2] items-center justify-center gap-2 rounded-xl bg-primary text-label-lg font-semibold text-on-primary shadow-lg shadow-primary/20 transition-all hover:brightness-110 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <MaterialIcon name="check_circle" />
             Accept Offer

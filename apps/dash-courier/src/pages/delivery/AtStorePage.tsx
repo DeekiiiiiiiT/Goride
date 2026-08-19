@@ -48,7 +48,7 @@ export function AtStorePage({
   const [checked, setChecked] = useState<Record<string, boolean>>(() => {
     const initial: Record<string, boolean> = {};
     delivery.checklist.forEach((item) => {
-      initial[item.id] = true;
+      initial[item.id] = Boolean(item.confirmed);
     });
     return initial;
   });
@@ -227,6 +227,7 @@ export function AtStorePage({
                 const url = await uploadAndGetProofUrl(file, 'proofs');
                 setUploadingPhoto(false);
                 if (url) setPickupPhotoUrl(url);
+                else toast.error('Photo upload failed', 'Tap to try again.');
               });
             }}
           />

@@ -11,8 +11,11 @@ import { PermissionsPage } from '@/pages/onboarding/PermissionsPage';
 import { AccountPendingPage } from '@/pages/onboarding/AccountPendingPage';
 import { LoginPage } from '@/pages/auth/LoginPage';
 import { CourierHomePage } from '@/pages/home/CourierHomePage';
+import { SessionExpiredSheet } from '@/components/auth/SessionExpiredSheet';
 import { isOnboardingComplete, markOnboardingComplete, resetOnboarding, syncOnboardingFromProfile, isProfilePending } from '@/lib/onboardingStorage';
 import { clearSignupDraft, saveSignupDraft } from '@/lib/signupDraft';
+import { clearCourierLocalState } from '@/lib/courierStorage';
+import { cancelCourierSettingsSave } from '@/lib/courierSettingsSync';
 import {
   COURIER_OAUTH_INTENT_KEY,
   COURIER_OAUTH_INTENT_LOGIN,
@@ -20,6 +23,7 @@ import {
 } from '@/lib/courierAuth';
 import { supabase } from '@/lib/supabase';
 import { ensureCourierProfile } from '@/lib/ensureCourierProfile';
+import { realDispatchProvider } from '@/services/courierDispatch/RealDispatchProvider';
 
 type AppPhase =
   | 'splash'
@@ -37,6 +41,7 @@ type AppPhase =
 
 export function CourierConsumerApp() {
   const [phase, setPhase] = useState<AppPhase>('splash');
+  const [sessionExpired, setSessionExpired] = useState(false);
 
   const finishOnboarding = useCallback(() => {
     void ensureCourierProfile({ markComplete: true }).finally(() => {
@@ -72,7 +77,6 @@ export function CourierConsumerApp() {
       setPhase('welcome');
       return;
     }
-    // Local "onboarding complete" is not enough — need an active courier_profiles row.
     await ensureCourierProfile();
     const synced = await syncOnboardingFromProfile();
     if (synced) {
@@ -123,23 +127,32 @@ export function CourierConsumerApp() {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_IN' && session) {
+        setSessionExpired(false);
         void completeOAuthIfNeeded();
+      }
+      if (event === 'SIGNED_OUT' || (event === 'TOKEN_REFRESHED' && !session)) {
+        realDispatchProvider.goOffline();
+        if (phase === 'app') setSessionExpired(true);
       }
     });
 
     return () => {
       subscription.unsubscribe();
     };
-  }, [finishOnboarding, finishLogin]);
+  }, [finishOnboarding, finishLogin, phase]);
 
   const handleSignOut = useCallback(async () => {
+    cancelCourierSettingsSave();
+    clearCourierLocalState();
     resetOnboarding();
     clearSignupDraft();
+    realDispatchProvider.goOffline();
     try {
       await supabase.auth.signOut();
     } catch (e) {
       console.warn('courier signOut:', e);
     }
+    setSessionExpired(false);
     setPhase('welcome');
   }, []);
 
@@ -219,7 +232,7 @@ export function CourierConsumerApp() {
   if (phase === 'account-pending') {
     return (
       <AccountPendingPage
-        onLogOut={() => setPhase('welcome')}
+        onLogOut={() => void handleSignOut()}
         onContactSupport={() => window.open('mailto:support@roam.app', '_blank')}
         onApproved={finishOnboarding}
       />
@@ -236,5 +249,12 @@ export function CourierConsumerApp() {
     );
   }
 
-  return <CourierHomePage onSignOut={handleSignOut} />;
+  return (
+    <>
+      <CourierHomePage onSignOut={handleSignOut} />
+      {sessionExpired && (
+        <SessionExpiredSheet onSignIn={() => void handleSignOut()} />
+      )}
+    </>
+  );
 }

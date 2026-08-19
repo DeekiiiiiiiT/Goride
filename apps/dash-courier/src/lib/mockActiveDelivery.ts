@@ -5,6 +5,7 @@ export type ChecklistItem = {
   image?: string;
   status?: 'pending' | 'found' | 'substitute';
   substituteLabel?: string;
+  confirmed?: boolean;
 };
 
 export type DropoffMethod = 'leave-at-door' | 'hand-to-customer';

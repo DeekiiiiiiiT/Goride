@@ -59,9 +59,9 @@ export function AgeVerifyHandoffPage({
   const handleConfirm = async () => {
     if (!photoUrl || !orderId) return;
     setSubmitting(true);
-    const ok = await submitCourierProof(orderId, 'age_verify', photoUrl);
+    const result = await submitCourierProof(orderId, 'age_verify', photoUrl);
     setSubmitting(false);
-    if (!ok) {
+    if (!result.ok) {
       toast.error('Verification failed', 'Could not record ID verification. Try again.');
       return;
     }

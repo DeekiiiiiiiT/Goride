@@ -80,6 +80,7 @@ export function mapOrderToActiveDelivery(
     id: String(i + 1),
     label: `${item.name || 'Item'}${item.quantity && item.quantity > 1 ? ` x${item.quantity}` : ''}`,
     note: item.note,
+    confirmed: Boolean((item as { confirmed?: boolean }).confirmed),
   }));
 
   const pickupPin = pinFrom(order.merchant?.lat, order.merchant?.lng);

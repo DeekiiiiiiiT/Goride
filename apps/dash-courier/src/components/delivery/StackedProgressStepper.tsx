@@ -2,28 +2,33 @@ import React from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import type { StackedStopId } from '@/lib/mockStackedRoute';
 
-const STOP_META: { id: StackedStopId; short: string; icon: string; deliveryIcon?: string }[] = [
-  { id: 'p1', short: 'P1', icon: 'check' },
-  { id: 'p2', short: 'P2', icon: 'restaurant' },
-  { id: 'd1', short: 'D1', icon: 'home' },
-  { id: 'd2', short: 'D2', icon: 'home' },
-];
+const DEFAULT_STOP_IDS: StackedStopId[] = ['p1', 'p2', 'd1', 'd2'];
+
+function stopShort(id: StackedStopId, index: number): string {
+  if (id.startsWith('p-')) return `P${index + 1}`;
+  if (id.startsWith('d-')) return `D${index - 1}`;
+  if (id.startsWith('p')) return id.toUpperCase();
+  if (id.startsWith('d')) return id.toUpperCase();
+  return String(index + 1);
+}
 
 type StackedProgressStepperProps = {
   activeStopId: StackedStopId;
   completedStopIds: StackedStopId[];
+  stopIds?: StackedStopId[];
   compact?: boolean;
 };
 
 export function StackedProgressStepper({
   activeStopId,
   completedStopIds,
+  stopIds = DEFAULT_STOP_IDS,
   compact = false,
 }: StackedProgressStepperProps) {
-  const activeIndex = STOP_META.findIndex((s) => s.id === activeStopId);
+  const activeIndex = stopIds.findIndex((s) => s === activeStopId);
   const progressPct =
-    STOP_META.length > 1
-      ? (Math.max(0, activeIndex) / (STOP_META.length - 1)) * 100
+    stopIds.length > 1
+      ? (Math.max(0, activeIndex) / (stopIds.length - 1)) * 100
       : 0;
 
   return (
@@ -34,13 +39,14 @@ export function StackedProgressStepper({
         style={{ width: `calc(${Math.min(progressPct, 100)}% - 12px)` }}
       />
 
-      {STOP_META.map((step) => {
-        const isCompleted = completedStopIds.includes(step.id);
-        const isActive = step.id === activeStopId;
-        const isDelivery = step.id.startsWith('d');
+      {stopIds.map((stepId, index) => {
+        const isCompleted = completedStopIds.includes(stepId);
+        const isActive = stepId === activeStopId;
+        const isDelivery = stepId.startsWith('d');
+        const short = stopShort(stepId, index);
 
         return (
-          <div key={step.id} className="flex flex-col items-center gap-1 relative z-10 bg-surface px-0.5">
+          <div key={stepId} className="flex flex-col items-center gap-1 relative z-10 bg-surface px-0.5">
             <div
               className={`rounded-full flex items-center justify-center border-2 transition-colors ${
                 compact ? 'w-6 h-6' : isActive && !isCompleted ? 'w-8 h-8' : 'w-6 h-6'
@@ -56,14 +62,12 @@ export function StackedProgressStepper({
             >
               {isCompleted ? (
                 <MaterialIcon name="check" className={compact ? 'text-[14px]' : 'text-base'} filled />
-              ) : isActive && step.id === 'p2' ? (
+              ) : isActive && !isDelivery ? (
                 <MaterialIcon name="restaurant" className="text-base" filled />
               ) : isActive && isDelivery ? (
                 <div className="w-2.5 h-2.5 bg-primary rounded-full" />
-              ) : isActive ? (
-                <MaterialIcon name="restaurant" className="text-base" filled />
               ) : (
-                <span className="text-[11px] font-semibold">{step.short}</span>
+                <span className="text-[11px] font-semibold">{short}</span>
               )}
             </div>
             <span
@@ -71,7 +75,7 @@ export function StackedProgressStepper({
                 isActive ? 'text-primary font-bold' : isCompleted ? 'text-on-surface' : 'text-muted'
               }`}
             >
-              {step.short}
+              {short}
             </span>
           </div>
         );

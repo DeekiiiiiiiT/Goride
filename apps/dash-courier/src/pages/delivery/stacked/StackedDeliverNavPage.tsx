@@ -9,17 +9,19 @@ type StackedDeliverNavPageProps = {
   stop: StackedRouteStop;
   completedStopIds: StackedStopId[];
   deliveryIndex: 1 | 2;
+  submitting?: boolean;
   onBack: () => void;
   onHelp?: () => void;
   onMessage: () => void;
   onNavigate: () => void;
-  onComplete: () => void;
+  onComplete: (photoPath?: string) => void;
 };
 
 export function StackedDeliverNavPage({
   stop,
   completedStopIds,
   deliveryIndex,
+  submitting,
   onBack,
   onHelp,
   onMessage,
@@ -160,8 +162,9 @@ export function StackedDeliverNavPage({
 
           <SlideToArrive
             variant="complete"
-            label={`Swipe to Complete D${deliveryIndex}`}
-            onComplete={onComplete}
+            label={submitting ? 'Saving…' : `Swipe to Complete D${deliveryIndex}`}
+            disabled={submitting}
+            onComplete={() => onComplete()}
           />
         </div>
       </div>

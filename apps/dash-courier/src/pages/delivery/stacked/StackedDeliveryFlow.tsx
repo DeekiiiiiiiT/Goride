@@ -1,10 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { toast } from '@/lib/toast';
-import {
-  MOCK_STACKED_ROUTE,
-  type StackedRouteStop,
-  type StackedStopId,
-} from '@/lib/mockStackedRoute';
+import { commitDelivered, commitPickup } from '@/lib/orderMutation';
+import type { StackedRouteStop, StackedStopId } from '@/lib/mockStackedRoute';
 import { getCompletedStopIdsFromRoute } from '@/lib/stackedRouteBuilder';
 import { StackedPickupNavPage } from '@/pages/delivery/stacked/StackedPickupNavPage';
 import { StackedAtPickupPage } from '@/pages/delivery/stacked/StackedAtPickupPage';
@@ -20,21 +17,22 @@ type StackedFlowPhase =
   | 'summary';
 
 type StackedDeliveryFlowProps = {
-  route?: StackedRouteStop[];
+  route: StackedRouteStop[];
   onComplete: () => void;
   onRequestUnassign: () => void;
   onReportIssue?: () => void;
 };
 
 export function StackedDeliveryFlow({
-  route: routeProp,
+  route,
   onComplete,
   onRequestUnassign,
   onReportIssue,
 }: StackedDeliveryFlowProps) {
-  const route = routeProp && routeProp.length > 0 ? routeProp : MOCK_STACKED_ROUTE;
   const [stopIndex, setStopIndex] = useState(0);
   const [phase, setPhase] = useState<StackedFlowPhase>('pickup-nav');
+  const [submitting, setSubmitting] = useState(false);
+  const [completedDeliveryStops, setCompletedDeliveryStops] = useState<StackedRouteStop[]>([]);
 
   const currentStop = route[stopIndex];
   const completedStopIds = useMemo(
@@ -42,7 +40,9 @@ export function StackedDeliveryFlow({
     [route, stopIndex],
   );
 
-  if (!currentStop) return null;
+  const deliveryStops = useMemo(() => route.filter((s) => s.type === 'delivery'), [route]);
+
+  if (!currentStop || route.length === 0) return null;
 
   const advanceStop = useCallback(() => {
     const nextIndex = stopIndex + 1;
@@ -55,38 +55,88 @@ export function StackedDeliveryFlow({
     setPhase(next.type === 'pickup' ? 'pickup-nav' : 'deliver-nav');
   }, [stopIndex, route]);
 
-  const handleConfirmPickup = useCallback(() => {
-    toast.success('Pickup confirmed', `Order from ${currentStop.name} loaded.`);
-    advanceStop();
-  }, [advanceStop, currentStop.name]);
+  const handleConfirmPickup = useCallback(
+    async (photoPath?: string) => {
+      if (submitting) return;
+      setSubmitting(true);
+      const result = await commitPickup(currentStop.backendOrderId, photoPath);
+      setSubmitting(false);
+      if (!result.ok) {
+        toast.error('Pickup failed', result.error);
+        return;
+      }
+      toast.success('Pickup confirmed', `Order from ${currentStop.name} loaded.`);
+      advanceStop();
+    },
+    [advanceStop, currentStop, submitting],
+  );
 
-  const handleDeliveryComplete = useCallback(() => {
-    if (currentStop.id === 'd1') {
-      setPhase('leg-complete');
-      return;
-    }
-    setPhase('summary');
-  }, [currentStop.id]);
+  const handleDeliveryComplete = useCallback(
+    async (photoPath?: string) => {
+      if (submitting) return;
+      setSubmitting(true);
+      const result = await commitDelivered(currentStop.backendOrderId, photoPath);
+      setSubmitting(false);
+      if (!result.ok) {
+        toast.error('Delivery failed', result.error);
+        return;
+      }
+      setCompletedDeliveryStops((prev) => [...prev, currentStop]);
+      const completedCount = completedDeliveryStops.length + 1;
+      if (completedCount < deliveryStops.length) {
+        const nextDelivery = deliveryStops[completedCount];
+        if (nextDelivery) {
+          setPhase('leg-complete');
+          return;
+        }
+      }
+      setPhase('summary');
+    },
+    [submitting, currentStop, completedDeliveryStops.length, deliveryStops],
+  );
 
   const handleContinueAfterLeg = useCallback(() => {
-    setStopIndex(3);
-    setPhase('deliver-nav');
-  }, []);
+    const nextDeliveryIndex = route.findIndex(
+      (s, i) => i > stopIndex && s.type === 'delivery',
+    );
+    if (nextDeliveryIndex >= 0) {
+      setStopIndex(nextDeliveryIndex);
+      setPhase('deliver-nav');
+    } else {
+      setPhase('summary');
+    }
+  }, [route, stopIndex]);
 
   const handleNavigate = useCallback(() => {
     toast.info('Opening navigation', currentStop.address);
   }, [currentStop.address]);
 
+  const totalEarnings = useMemo(
+    () => completedDeliveryStops.reduce((sum, s) => sum + s.earnings, 0),
+    [completedDeliveryStops],
+  );
+
   if (phase === 'summary') {
-    return <StackedDeliverySummaryPage onBackToDash={onComplete} />;
+    return (
+      <StackedDeliverySummaryPage
+        totalEarnings={totalEarnings}
+        legs={completedDeliveryStops.map((s) => ({
+          id: s.id,
+          label: s.name,
+          customerName: s.customerName || s.name,
+          earnings: s.earnings,
+        }))}
+        onBackToDash={onComplete}
+      />
+    );
   }
 
-  if (phase === 'leg-complete' && currentStop.id === 'd1') {
-    const nextStop = MOCK_STACKED_ROUTE[3];
+  if (phase === 'leg-complete') {
+    const nextDelivery = deliveryStops[completedDeliveryStops.length];
     return (
       <StackedLegCompletePage
         stop={currentStop}
-        nextCustomerName={nextStop.customerName}
+        nextCustomerName={nextDelivery?.customerName}
         onContinue={handleContinueAfterLeg}
       />
     );
@@ -97,6 +147,7 @@ export function StackedDeliveryFlow({
       return (
         <StackedAtPickupPage
           stop={currentStop}
+          submitting={submitting}
           onBack={() => setPhase('pickup-nav')}
           onConfirmPickup={handleConfirmPickup}
         />
@@ -115,13 +166,14 @@ export function StackedDeliveryFlow({
     );
   }
 
-  const deliveryIndex: 1 | 2 = currentStop.id === 'd1' ? 1 : 2;
+  const deliveryIndex = (deliveryStops.findIndex((s) => s.id === currentStop.id) + 1) as 1 | 2;
 
   return (
     <StackedDeliverNavPage
       stop={currentStop}
       completedStopIds={completedStopIds}
       deliveryIndex={deliveryIndex}
+      submitting={submitting}
       onBack={onRequestUnassign}
       onHelp={onReportIssue}
       onMessage={() => toast.info('Message', `Chat with ${currentStop.customerName}`)}

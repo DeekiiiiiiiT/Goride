@@ -19,6 +19,19 @@ const STORAGE_KEYS = {
 
 let saveTimer: number | null = null;
 let hydrating = false;
+let hydrationUserId: string | null = null;
+let settingsHydrated = false;
+
+export function isCourierSettingsHydrated(): boolean {
+  return settingsHydrated;
+}
+
+export function cancelCourierSettingsSave(): void {
+  if (saveTimer != null) {
+    window.clearTimeout(saveTimer);
+    saveTimer = null;
+  }
+}
 
 function readCloudSlice(settings: Record<string, unknown>, key: string): unknown {
   const slice = settings[key];
@@ -26,11 +39,13 @@ function readCloudSlice(settings: Record<string, unknown>, key: string): unknown
 }
 
 /** Pull cloud settings into localStorage on login/boot. */
-export async function hydrateCourierSettingsFromCloud(): Promise<void> {
+export async function hydrateCourierSettingsFromCloud(userId: string): Promise<void> {
+  hydrationUserId = userId;
+  settingsHydrated = false;
   hydrating = true;
   try {
     const cloud = await fetchCourierSettings();
-    if (!cloud) return;
+    if (!cloud || hydrationUserId !== userId) return;
 
     const prefs = readCloudSlice(cloud, STORAGE_KEYS.preferences) as DashPreferences | undefined;
     if (prefs) saveDashPreferences({ ...loadDashPreferences(), ...prefs });
@@ -40,6 +55,8 @@ export async function hydrateCourierSettingsFromCloud(): Promise<void> {
 
     const app = readCloudSlice(cloud, STORAGE_KEYS.settings) as Partial<CourierAppSettings> | undefined;
     if (app) saveAppSettings({ ...loadAppSettings(), ...app });
+
+    if (hydrationUserId === userId) settingsHydrated = true;
   } finally {
     hydrating = false;
   }
@@ -55,7 +72,7 @@ function buildCloudPatch(): Record<string, unknown> {
 
 /** Debounced PATCH after local toggle changes. */
 export function scheduleCourierSettingsSave(): void {
-  if (hydrating) return;
+  if (hydrating || !settingsHydrated) return;
   if (saveTimer != null) window.clearTimeout(saveTimer);
   saveTimer = window.setTimeout(() => {
     saveTimer = null;

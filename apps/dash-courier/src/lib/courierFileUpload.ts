@@ -9,7 +9,7 @@ async function getUserId(): Promise<string | null> {
   return session?.user?.id ?? null;
 }
 
-/** Upload under `{userId}/{folder}/{filename}` in courier-documents bucket; return signed URL. */
+import { normalizeStoragePath } from '@/lib/normalizeStoragePath';
 export async function uploadAndGetProofUrl(
   file: File,
   folder: 'proofs' | 'issues' | 'docs' | 'vehicles' | 'avatars' = 'proofs',
@@ -25,17 +25,13 @@ export async function uploadAndGetProofUrl(
     contentType: file.type || 'image/jpeg',
   });
   if (error) return null;
-
-  const { data, error: signError } = await supabase.storage
-    .from(BUCKET)
-    .createSignedUrl(path, 60 * 60 * 24 * 7);
-  if (signError || !data?.signedUrl) return path;
-  return data.signedUrl;
+  return path;
 }
 
 export async function resolveCourierFileUrl(pathOrUrl: string): Promise<string | null> {
-  if (pathOrUrl.startsWith('http')) return pathOrUrl;
-  const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(pathOrUrl, 60 * 60);
+  const path = normalizeStoragePath(pathOrUrl);
+  if (path.startsWith('http')) return path;
+  const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(path, 60 * 60);
   if (error || !data?.signedUrl) return null;
   return data.signedUrl;
 }

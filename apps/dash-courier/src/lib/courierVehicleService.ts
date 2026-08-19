@@ -37,6 +37,9 @@ function splitMakeModel(makeModel: string): { make: string; model: string } {
   return { make: parts[0], model: parts.slice(1).join(' ') };
 }
 
+import { validateJamaicanPlate } from '@/lib/validateJamaicanPlate';
+export { validateJamaicanPlate } from '@/lib/validateJamaicanPlate';
+
 export async function loadPrimaryVehicle(): Promise<CourierVehicleRow | null> {
   const client = await getDeliveryClient();
   if (!client) return null;
@@ -63,6 +66,9 @@ export async function upsertCourierVehicle(input: {
 
   const plate = input.licensePlate.trim().toUpperCase();
   if (!plate) return { ok: false, error: 'License plate required' };
+  if (!validateJamaicanPlate(plate)) {
+    return { ok: false, error: 'Enter a valid plate (e.g. ABC1234) or N/A for bicycle' };
+  }
 
   const { make, model } = splitMakeModel(input.makeModel);
   const payload = {

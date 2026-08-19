@@ -23,7 +23,7 @@ export function OfferDetailsPage({
   onDecline,
   onAccept,
 }: OfferDetailsPageProps) {
-  const { seconds } = useCountdown(initialSeconds, onTimerExpire);
+  const { seconds, isExpired, expiredRef } = useCountdown(initialSeconds, onTimerExpire);
   const touchStartY = useRef(0);
   const dragging = useRef(false);
 
@@ -199,8 +199,12 @@ export function OfferDetailsPage({
           </button>
           <button
             type="button"
-            onClick={onAccept}
-            className="flex-[2] bg-primary text-on-primary text-xl font-semibold h-14 rounded-xl shadow-[0_6px_12px_rgba(0,108,73,0.2)] flex items-center justify-center gap-2 hover:bg-primary/90 active:scale-95"
+            disabled={isExpired}
+            onClick={() => {
+              if (isExpired || expiredRef.current) return;
+              onAccept();
+            }}
+            className="flex-[2] bg-primary text-on-primary text-xl font-semibold h-14 rounded-xl shadow-[0_6px_12px_rgba(0,108,73,0.2)] flex items-center justify-center gap-2 hover:bg-primary/90 active:scale-95 disabled:opacity-50"
           >
             Accept Delivery
             <MaterialIcon name="arrow_forward" className="text-2xl" />

@@ -118,6 +118,41 @@ async function completeStackLeg(serviceSb: Sb, courierId: string, orderId: strin
     .eq("leg_status", "active");
 }
 
+async function rollbackStackAccept(
+  serviceSb: Sb,
+  courierId: string,
+  orderIds: string[],
+  offerIds: string[],
+): Promise<void> {
+  for (const orderId of orderIds) {
+    await serviceSb
+      .from("courier_stack_legs")
+      .delete()
+      .eq("courier_id", courierId)
+      .eq("order_id", orderId);
+    await serviceSb
+      .from("orders")
+      .update({ courier_id: null, status: "ready", assigned_at: null, peak_pay_amount: 0 })
+      .eq("id", orderId)
+      .eq("courier_id", courierId);
+  }
+  for (const offerId of offerIds) {
+    await serviceSb
+      .from("courier_offers")
+      .update({ status: "pending" })
+      .eq("id", offerId)
+      .eq("courier_user_id", courierId);
+  }
+}
+
+function stackOrderEarnings(order: Record<string, unknown>): number {
+  return (
+    Number(order.delivery_fee || 0) +
+    Number(order.tip || 0) +
+    Number(order.peak_pay_amount || 0)
+  );
+}
+
 async function applyCancelCompensation(
   serviceSb: Sb,
   orderId: string,
@@ -578,10 +613,38 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
       status: order.status,
       actor_type: "courier",
       actor_id: auth.userId,
-      notes: `proof:${kind}:${photoUrl.slice(0, 200)}`,
+      notes: `proof:${kind}`,
     });
 
     return c.json({ order: updated });
+  });
+
+  app.post("/orders/:id/courier-notes", async (c) => {
+    const auth = await requireCourierUser(c.req.header("Authorization"), getSupabase);
+    if (auth instanceof Response) return auth;
+    const orderId = c.req.param("id");
+    const body = await c.req.json().catch(() => ({}));
+    const notes = String(body.notes || "").trim();
+    if (!notes) return c.json({ error: "notes required" }, 400);
+
+    const serviceSb = getServiceSupabase();
+    const { data: order } = await serviceSb
+      .from("orders")
+      .select("id, courier_id")
+      .eq("id", orderId)
+      .maybeSingle();
+
+    if (!order || order.courier_id !== auth.userId) {
+      return c.json({ error: "Forbidden" }, 403);
+    }
+
+    const { error } = await serviceSb
+      .from("orders")
+      .update({ courier_notes: notes })
+      .eq("id", orderId);
+
+    if (error) return c.json({ error: error.message }, 500);
+    return c.json({ ok: true });
   });
 
   app.post("/orders/:id/courier-issue", async (c) => {
@@ -1084,6 +1147,9 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
     }
 
     const acceptedOrders: unknown[] = [];
+    const acceptedOfferIds: string[] = [];
+    const acceptedOrderIds: string[] = [];
+
     for (const offerId of offerIds) {
       const { data: offer } = await serviceSb
         .from("courier_offers")
@@ -1091,10 +1157,19 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
         .eq("id", offerId)
         .maybeSingle();
       if (!offer || offer.courier_user_id !== auth.userId || offer.status !== "pending") {
-        return c.json({ error: `Offer ${offerId} not available` }, 400);
+        if (acceptedOrderIds.length > 0) {
+          await rollbackStackAccept(serviceSb, auth.userId, acceptedOrderIds, acceptedOfferIds);
+        }
+        return c.json({
+          error: `Offer ${offerId} not available`,
+          partialOrders: acceptedOrders,
+        }, 400);
       }
       if (new Date(offer.expires_at).getTime() < Date.now()) {
-        return c.json({ error: `Offer ${offerId} expired` }, 400);
+        if (acceptedOrderIds.length > 0) {
+          await rollbackStackAccept(serviceSb, auth.userId, acceptedOrderIds, acceptedOfferIds);
+        }
+        return c.json({ error: `Offer ${offerId} expired`, partialOrders: acceptedOrders }, 400);
       }
 
       const { data: avail } = await serviceSb
@@ -1122,12 +1197,20 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
         .select()
         .maybeSingle();
       if (error || !order) {
-        return c.json({ error: `Order for offer ${offerId} not available` }, 400);
+        if (acceptedOrderIds.length > 0) {
+          await rollbackStackAccept(serviceSb, auth.userId, acceptedOrderIds, acceptedOfferIds);
+        }
+        return c.json({
+          error: `Order for offer ${offerId} not available`,
+          partialOrders: acceptedOrders,
+        }, 400);
       }
 
       await serviceSb.from("courier_offers").update({ status: "accepted" }).eq("id", offerId);
       await attachStackLeg(serviceSb, auth.userId, String(offer.order_id));
       acceptedOrders.push(order);
+      acceptedOfferIds.push(offerId);
+      acceptedOrderIds.push(String(offer.order_id));
     }
 
     if (acceptedOrders.length > 0) {
@@ -1138,7 +1221,40 @@ export function registerCourierConsumerRoutes(app: Hono, deps: Deps) {
         .eq("driver_id", auth.userId);
     }
 
-    return c.json({ orders: acceptedOrders });
+    const totalEarnings = acceptedOrders.reduce(
+      (sum, o) => sum + stackOrderEarnings(o as Record<string, unknown>),
+      0,
+    );
+
+    return c.json({ orders: acceptedOrders, totalEarnings });
+  });
+
+  app.post("/courier/offers/stack/decline", async (c) => {
+    const auth = await requireCourierUser(c.req.header("Authorization"), getSupabase);
+    if (auth instanceof Response) return auth;
+    const body = await c.req.json().catch(() => ({}));
+    const offerIds = Array.isArray(body.offerIds) ? body.offerIds.map(String) : [];
+    if (offerIds.length < 1) {
+      return c.json({ error: "offerIds required" }, 400);
+    }
+
+    const serviceSb = getServiceSupabase();
+    for (const offerId of offerIds) {
+      const { data: offer } = await serviceSb
+        .from("courier_offers")
+        .select("id, courier_user_id, status")
+        .eq("id", offerId)
+        .maybeSingle();
+      if (!offer || offer.courier_user_id !== auth.userId || offer.status !== "pending") {
+        continue;
+      }
+      await serviceSb
+        .from("courier_offers")
+        .update({ status: "declined" })
+        .eq("id", offerId);
+    }
+
+    return c.json({ ok: true, reason: body.reasonId ?? null });
   });
 }
 

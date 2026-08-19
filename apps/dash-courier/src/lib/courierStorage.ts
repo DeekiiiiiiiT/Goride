@@ -96,3 +96,45 @@ export function appendDeclineReason(entry: Omit<DeclineReasonEntry, 'timestamp'>
 export function loadDeclineReasons(): DeclineReasonEntry[] {
   return readJson<DeclineReasonEntry[]>(KEYS.declineReasons, []);
 }
+
+const SESSION_ONLINE_KEY = 'courier:online-since';
+
+export function persistOnlineSince(userId: string, sinceMs: number): void {
+  try {
+    sessionStorage.setItem(SESSION_ONLINE_KEY, JSON.stringify({ userId, sinceMs }));
+  } catch {
+    // ignore
+  }
+}
+
+export function loadOnlineSince(userId: string): number | null {
+  try {
+    const raw = sessionStorage.getItem(SESSION_ONLINE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { userId?: string; sinceMs?: number };
+    if (parsed.userId !== userId || typeof parsed.sinceMs !== 'number') return null;
+    return parsed.sinceMs;
+  } catch {
+    return null;
+  }
+}
+
+export function clearOnlineSince(): void {
+  try {
+    sessionStorage.removeItem(SESSION_ONLINE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+/** Remove all courier-scoped local state on sign-out. */
+export function clearCourierLocalState(): void {
+  Object.values(KEYS).forEach((key) => {
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      // ignore
+    }
+  });
+  clearOnlineSince();
+}

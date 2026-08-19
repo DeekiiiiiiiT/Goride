@@ -4,11 +4,17 @@ import type { StackedRouteStop } from '@/lib/mockStackedRoute';
 
 type StackedAtPickupPageProps = {
   stop: StackedRouteStop;
+  submitting?: boolean;
   onBack: () => void;
-  onConfirmPickup: () => void;
+  onConfirmPickup: (photoPath?: string) => void;
 };
 
-export function StackedAtPickupPage({ stop, onBack, onConfirmPickup }: StackedAtPickupPageProps) {
+export function StackedAtPickupPage({
+  stop,
+  submitting,
+  onBack,
+  onConfirmPickup,
+}: StackedAtPickupPageProps) {
   return (
     <div className="fixed inset-0 z-[60] bg-background flex flex-col overflow-hidden">
       <header className="bg-surface shadow-sm flex justify-between items-center px-[var(--spacing-edge)] h-14 pt-safe shrink-0">
@@ -44,10 +50,11 @@ export function StackedAtPickupPage({ stop, onBack, onConfirmPickup }: StackedAt
       <div className="fixed bottom-0 left-0 w-full bg-surface p-[var(--spacing-edge)] pb-safe border-t border-surface-variant shadow-[0_-4px_12px_rgba(0,0,0,0.04)]">
         <button
           type="button"
-          onClick={onConfirmPickup}
-          className="w-full min-h-14 bg-primary text-on-primary rounded-xl text-xs font-semibold uppercase tracking-wider shadow-[0_6px_12px_rgba(0,108,73,0.1)] active:scale-[0.98]"
+          disabled={submitting}
+          onClick={() => onConfirmPickup()}
+          className="w-full min-h-14 bg-primary text-on-primary rounded-xl text-xs font-semibold uppercase tracking-wider shadow-[0_6px_12px_rgba(0,108,73,0.1)] active:scale-[0.98] disabled:opacity-60"
         >
-          Confirm Pickup
+          {submitting ? 'Confirming…' : 'Confirm Pickup'}
         </button>
       </div>
     </div>

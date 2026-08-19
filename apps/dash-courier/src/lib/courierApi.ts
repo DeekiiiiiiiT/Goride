@@ -138,15 +138,16 @@ export async function updateCourierOrderStatus(
   orderId: string,
   status: string,
   notes?: string,
-): Promise<boolean> {
+): Promise<{ ok: boolean; error?: string }> {
   const headers = await authHeaders();
-  if (!headers) return false;
+  if (!headers) return { ok: false, error: 'Not signed in' };
   const res = await fetch(`${BASE}/orders/${orderId}/status`, {
     method: 'PUT',
     headers,
     body: JSON.stringify({ status, notes, actorType: 'courier' }),
   });
-  return res.ok;
+  if (!res.ok) return { ok: false, error: await parseError(res) };
+  return { ok: true };
 }
 
 /** Poll active delivery order status (detect merchant/admin remote cancel). */
@@ -207,15 +208,31 @@ export async function submitCourierProof(
   orderId: string,
   kind: 'age_verify' | 'pickup' | 'delivery',
   photoUrl: string,
-): Promise<boolean> {
+): Promise<{ ok: boolean; error?: string }> {
   const headers = await authHeaders();
-  if (!headers) return false;
+  if (!headers) return { ok: false, error: 'Not signed in' };
   const res = await fetch(`${BASE}/orders/${orderId}/courier-proof`, {
     method: 'POST',
     headers,
     body: JSON.stringify({ kind, photoUrl }),
   });
-  return res.ok;
+  if (!res.ok) return { ok: false, error: await parseError(res) };
+  return { ok: true };
+}
+
+export async function submitCourierNotes(
+  orderId: string,
+  notes: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const headers = await authHeaders();
+  if (!headers) return { ok: false, error: 'Not signed in' };
+  const res = await fetch(`${BASE}/orders/${orderId}/courier-notes`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ notes }),
+  });
+  if (!res.ok) return { ok: false, error: await parseError(res) };
+  return { ok: true };
 }
 
 export async function submitCourierIssue(
@@ -466,7 +483,10 @@ export async function fetchCourierStack(): Promise<StackLeg[]> {
 
 export async function acceptStackedOffers(
   offerIds: string[],
-): Promise<{ ok: true; orders: AvailableOrder[] } | { ok: false; error: string }> {
+): Promise<
+  | { ok: true; orders: AvailableOrder[]; totalEarnings: number }
+  | { ok: false; error: string; partialOrders?: AvailableOrder[] }
+> {
   const headers = await authHeaders();
   if (!headers) return { ok: false, error: 'Not signed in' };
   const res = await fetch(`${BASE}/courier/offers/stack/accept`, {
@@ -474,7 +494,41 @@ export async function acceptStackedOffers(
     headers,
     body: JSON.stringify({ offerIds }),
   });
+  const body = (await res.json().catch(() => ({}))) as {
+    orders?: AvailableOrder[];
+    totalEarnings?: number;
+    partialOrders?: AvailableOrder[];
+    error?: string;
+  };
+  if (!res.ok) {
+    return {
+      ok: false,
+      error: body.error || `HTTP ${res.status}`,
+      partialOrders: body.partialOrders,
+    };
+  }
+  return {
+    ok: true,
+    orders: body.orders || [],
+    totalEarnings: body.totalEarnings ?? 0,
+  };
+}
+
+export async function declineStackedOffers(
+  offerIds: string[],
+  reasonId?: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const headers = await authHeaders();
+  if (!headers) return { ok: false, error: 'Not signed in' };
+  const res = await fetch(`${BASE}/courier/offers/stack/decline`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ offerIds, reasonId }),
+  });
   if (!res.ok) return { ok: false, error: await parseError(res) };
-  const body = (await res.json()) as { orders: AvailableOrder[] };
-  return { ok: true, orders: body.orders || [] };
+  return { ok: true };
+}
+
+export function orderEarnings(order: AvailableOrder): number {
+  return (order.delivery_fee ?? 0) + (order.tip ?? 0) + ((order as { peak_pay_amount?: number }).peak_pay_amount ?? 0);
 }

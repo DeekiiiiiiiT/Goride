@@ -1,11 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { openPhoneCall, toDialablePhone } from '@/lib/contactLinks';
+import { uploadAndGetProofUrl } from '@/lib/courierFileUpload';
+import { toast } from '@/lib/toast';
 
 type CustomerUnavailablePageProps = {
   customerPhone?: string | null;
   onClose: () => void;
-  onLeaveAtSafeLocation: () => void;
+  onLeaveAtSafeLocation: (photoPath: string) => void;
 };
 
 const INITIAL_SECONDS = 300;
@@ -22,6 +24,10 @@ export function CustomerUnavailablePage({
   onLeaveAtSafeLocation,
 }: CustomerUnavailablePageProps) {
   const [secondsLeft, setSecondsLeft] = useState(INITIAL_SECONDS);
+  const [photoPath, setPhotoPath] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [showPhotoStep, setShowPhotoStep] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const timerExpired = secondsLeft <= 0;
   const dialable = toDialablePhone(customerPhone);
 
@@ -30,6 +36,19 @@ export function CustomerUnavailablePage({
     const timer = window.setInterval(() => setSecondsLeft((s) => s - 1), 1000);
     return () => window.clearInterval(timer);
   }, [secondsLeft]);
+
+  const handleCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    const path = await uploadAndGetProofUrl(file, 'proofs');
+    setUploading(false);
+    if (!path) {
+      toast.error('Photo upload failed', 'Tap to try again.');
+      return;
+    }
+    setPhotoPath(path);
+  };
 
   return (
     <div className="fixed inset-0 z-[80] bg-background flex flex-col">
@@ -85,29 +104,58 @@ export function CustomerUnavailablePage({
             Resolution Options
           </h3>
 
-          <button
-            type="button"
-            onClick={onLeaveAtSafeLocation}
-            disabled={!timerExpired}
-            className={`flex items-center justify-between w-full bg-surface p-4 rounded-xl shadow-soft text-left border border-transparent ${
-              timerExpired
-                ? 'hover:border-outline-variant active:scale-95'
-                : 'opacity-50 cursor-not-allowed'
-            }`}
-          >
-            <div className="flex items-center gap-4">
-              <div className="bg-surface-container-low p-2 rounded-full text-primary">
-                <MaterialIcon name="place" filled />
+          {!showPhotoStep ? (
+            <button
+              type="button"
+              onClick={() => timerExpired && setShowPhotoStep(true)}
+              disabled={!timerExpired}
+              className={`flex items-center justify-between w-full bg-surface p-4 rounded-xl shadow-soft text-left border border-transparent ${
+                timerExpired
+                  ? 'hover:border-outline-variant active:scale-95'
+                  : 'opacity-50 cursor-not-allowed'
+              }`}
+            >
+              <div className="flex items-center gap-4">
+                <div className="bg-surface-container-low p-2 rounded-full text-primary">
+                  <MaterialIcon name="place" filled />
+                </div>
+                <div>
+                  <span className="block text-base font-semibold text-on-surface">
+                    Leave at safe location
+                  </span>
+                  <span className="block text-sm text-muted">Requires a photo</span>
+                </div>
               </div>
-              <div>
-                <span className="block text-base font-semibold text-on-surface">
-                  Leave at safe location
-                </span>
-                <span className="block text-sm text-muted">Requires a photo</span>
-              </div>
+              <MaterialIcon name="chevron_right" className="text-muted" />
+            </button>
+          ) : (
+            <div className="bg-surface p-4 rounded-xl shadow-soft space-y-4">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={handleCapture}
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full h-32 rounded-xl border-2 border-dashed border-primary/40 flex flex-col items-center justify-center gap-2 text-primary"
+              >
+                <MaterialIcon name={photoPath ? 'check_circle' : 'photo_camera'} />
+                <span>{uploading ? 'Uploading…' : photoPath ? 'Photo captured' : 'Take proof photo'}</span>
+              </button>
+              <button
+                type="button"
+                disabled={!photoPath || uploading}
+                onClick={() => photoPath && onLeaveAtSafeLocation(photoPath)}
+                className="w-full min-h-12 bg-primary text-on-primary rounded-xl font-semibold disabled:opacity-50"
+              >
+                Complete delivery
+              </button>
             </div>
-            <MaterialIcon name="chevron_right" className="text-muted" />
-          </button>
+          )}
         </section>
       </main>
     </div>
