@@ -63,13 +63,40 @@ These are **UI-only** — ask your AI to “run customer browser smoke”:
 
 | Say this | Script | What it checks |
 |----------|--------|----------------|
-| Order queue | `scripts/smoke-merchant-orders.mjs` | Partner login, profile merchant ID, paid orders in API vs database |
+| **Full partner API pack** | `scripts/smoke-merchant-all.mjs` | Runs all partner scripts below in order |
+| Login & profile | `scripts/smoke-merchant-auth.mjs` | Sign in, load profile, application status |
+| Menu | `scripts/smoke-merchant-menu.mjs` | Load categories and menu items |
+| Order queue | `scripts/smoke-merchant-orders.mjs` | Paid orders in API vs database |
+| Analytics | `scripts/smoke-merchant-analytics.mjs` | Dashboard stats |
+| Earnings | `scripts/smoke-merchant-earnings.mjs` | Balance and weekly summary |
+| Promotions | `scripts/smoke-merchant-promotions.mjs` | Promo list |
+| Settings | `scripts/smoke-merchant-settings.mjs` | Delivery settings + notification prefs |
+| Hours | `scripts/smoke-merchant-hours.mjs` | Regular + special hours |
+| Team | `scripts/smoke-merchant-team.mjs` | Staff list + pending invites |
+| Notifications | `scripts/smoke-merchant-notifications.mjs` | Notification feed |
+| Stripe Connect | `scripts/smoke-merchant-connect.mjs` | Payout onboarding status |
+| Pause orders | `scripts/smoke-merchant-pause.mjs` | Pause/resume accepting orders (restores state) |
+| Order flow | `scripts/smoke-merchant-order-flow.mjs` | Accept → preparing → ready (creates test order) |
 
 **Test account:** `seed-island-grill@roamrush.app` / `RoamRushPartner2026!`
 
+**Run one script:**
 ```bash
-node scripts/smoke-merchant-orders.mjs
+node scripts/smoke-merchant-order-flow.mjs
 ```
+
+**Run everything:**
+```bash
+node scripts/smoke-merchant-all.mjs
+```
+
+### Partner tests that still need the browser
+
+Ask your AI to “run partner browser smoke”:
+
+- Dashboard order cards + drag between columns
+- Menu editor UI
+- Go-live / pause orders toggle on dashboard
 
 ---
 
@@ -77,28 +104,56 @@ node scripts/smoke-merchant-orders.mjs
 
 | Say this | Script | What it checks |
 |----------|--------|----------------|
-| Full delivery flow | `scripts/smoke-e2e-delivery.mjs` | Customer order → merchant accept/ready → courier accept → delivered → completed |
+| **Full courier API pack** | `scripts/smoke-courier-all.mjs` | Runs all courier scripts below in order |
+| Login & settings | `scripts/smoke-courier-auth.mjs` | Sign in, load settings |
+| Go online / offline | `scripts/smoke-courier-availability.mjs` | Online toggle + GPS |
+| App settings sync | `scripts/smoke-courier-settings.mjs` | Load and save cloud settings |
+| Peak promotions | `scripts/smoke-courier-promotions.mjs` | Active peak-pay windows |
+| Route estimate | `scripts/smoke-courier-route.mjs` | Directions between two points |
+| Earnings | `scripts/smoke-courier-earnings.mjs` | Week earnings summary |
+| Activity history | `scripts/smoke-courier-history.mjs` | Completed/cancelled jobs |
+| Delivery stack | `scripts/smoke-courier-stack.mjs` | Active stacked legs (empty OK) |
+| Poll offers | `scripts/smoke-courier-offers.mjs` | List pending offers (empty OK) |
+| Decline offer | `scripts/smoke-courier-decline.mjs` | Decline one offer (creates test order) |
+| Full delivery | `scripts/smoke-courier-delivery.mjs` | Accept → deliver → complete (creates test order) |
+| Report issue | `scripts/smoke-courier-issue.mjs` | Log delivery issue mid-run (creates test order) |
+| **Cross-app E2E** | `scripts/smoke-e2e-delivery.mjs` | Customer + partner + courier in one script |
 
-**Test accounts:** customer, Island Grill partner, and courier seed accounts (see provision scripts in `scripts/`).
+**Test account:** `seed-courier@roamrush.app` / `RoamRushCourier2026!`
 
+**Run one script:**
 ```bash
-node scripts/smoke-e2e-delivery.mjs
+node scripts/smoke-courier-delivery.mjs
 ```
+
+**Run everything:**
+```bash
+node scripts/smoke-courier-all.mjs
+```
+
+### Courier tests that still need the browser
+
+Ask your AI to “run courier browser smoke”:
+
+- Go Online button + map
+- Offer card countdown / accept-decline UI
+- Active delivery navigation screens
+- Proof-of-delivery photo upload
 
 ---
 
 ## Suggested order for a big release check
 
 1. `node scripts/smoke-customer-all.mjs`
-2. `node scripts/smoke-merchant-orders.mjs`
-3. `node scripts/smoke-e2e-delivery.mjs`
-4. Ask AI for **browser smoke** on cart conflict + dashboard UI
+2. `node scripts/smoke-merchant-all.mjs`
+3. `node scripts/smoke-courier-all.mjs`
+4. Ask AI for **browser smoke** on cart conflict, partner dashboard, and courier offer UI
 
 ---
 
 ## Notes
 
-- **Checkout / cancel / E2E scripts create real test orders** on the GoRide test backend.
+- **Checkout / cancel / courier delivery scripts create real test orders** on the GoRide test backend.
 - **Signup smoke** creates a temporary user and deletes it afterward.
 - **Issue smoke** creates a real support ticket (marked as smoke in the note).
 - Scripts target project `csfllzzastacofsvcdsc` (GoRide remote).
@@ -122,8 +177,34 @@ ROAM RUSH (Customer)
 - smoke-customer-review.mjs — rate order
 
 ROAM RUSH PARTNER
-- smoke-merchant-orders.mjs — partner order queue
+- smoke-merchant-all.mjs — run all partner API tests
+- smoke-merchant-auth.mjs — login & profile
+- smoke-merchant-menu.mjs — menu
+- smoke-merchant-orders.mjs — order queue vs DB
+- smoke-merchant-analytics.mjs — analytics
+- smoke-merchant-earnings.mjs — earnings
+- smoke-merchant-promotions.mjs — promotions
+- smoke-merchant-settings.mjs — settings
+- smoke-merchant-hours.mjs — business hours
+- smoke-merchant-team.mjs — team
+- smoke-merchant-notifications.mjs — notifications
+- smoke-merchant-connect.mjs — Stripe Connect
+- smoke-merchant-pause.mjs — pause/resume orders
+- smoke-merchant-order-flow.mjs — accept → ready
 
-ROAM RUSH COURIER / FULL FLOW
-- smoke-e2e-delivery.mjs — customer → merchant → courier delivery
+ROAM RUSH COURIER
+- smoke-courier-all.mjs — run all courier API tests
+- smoke-courier-auth.mjs — login & settings
+- smoke-courier-availability.mjs — go online / offline
+- smoke-courier-settings.mjs — cloud settings sync
+- smoke-courier-promotions.mjs — peak pay promos
+- smoke-courier-route.mjs — route estimate
+- smoke-courier-earnings.mjs — earnings
+- smoke-courier-history.mjs — activity history
+- smoke-courier-stack.mjs — stacked deliveries
+- smoke-courier-offers.mjs — poll offers
+- smoke-courier-decline.mjs — decline offer
+- smoke-courier-delivery.mjs — full delivery
+- smoke-courier-issue.mjs — report delivery issue
+- smoke-e2e-delivery.mjs — customer + partner + courier together
 ```
