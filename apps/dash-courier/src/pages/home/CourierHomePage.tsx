@@ -273,7 +273,10 @@ export function CourierHomePage({ onSignOut }: CourierHomePageProps) {
     dashSummaryOpen ||
     reportIssueOpen ||
     showUnassignModal ||
-    declineReasonOpen;
+    declineReasonOpen ||
+    promotionsOpen ||
+    selectedDeliveryId !== null ||
+    profileScreen !== null;
 
   useImmersiveMode(isImmersive);
 

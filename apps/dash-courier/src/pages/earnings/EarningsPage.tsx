@@ -69,7 +69,7 @@ export function EarningsPage({ onDeliverySelect, onViewAllHistory, onViewPromoti
 
   return (
     <div className="min-h-full pb-24">
-      <div className="sticky top-0 bg-surface z-40 pt-safe px-[var(--spacing-edge)] pb-2 shadow-sm">
+      <div className="sticky top-0 bg-surface z-40 pt-safe px-[var(--spacing-edge)] pb-2 shadow-sm safe-x">
         <div className="flex items-center justify-between h-14">
           <h1 className="text-2xl font-semibold text-on-surface">Earnings</h1>
           {onViewPromotions && (

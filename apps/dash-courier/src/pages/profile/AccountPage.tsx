@@ -121,7 +121,7 @@ export function AccountPage({ onNavigate, onSignOut, onRatingTap, onNotification
 
   return (
     <div className="min-h-full pb-24">
-      <header className="sticky top-0 bg-surface z-40 shadow-soft pt-safe px-[var(--spacing-edge)]">
+      <header className="sticky top-0 bg-surface z-40 shadow-soft pt-safe px-[var(--spacing-edge)] safe-x">
         <div className="flex justify-between items-center h-16">
           <div className="w-11" aria-hidden />
           <h1 className="text-xl font-bold text-primary">Account</h1>

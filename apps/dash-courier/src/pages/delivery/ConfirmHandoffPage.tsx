@@ -14,7 +14,7 @@ export function ConfirmHandoffPage({
 }: ConfirmHandoffPageProps) {
   return (
     <div className="fixed inset-0 z-[70] bg-background flex flex-col">
-      <header className="bg-surface shadow-sm fixed top-0 w-full z-50 flex justify-between items-center px-[var(--spacing-edge)] h-14 pt-safe">
+      <header className="bg-surface shadow-sm fixed top-0 w-full z-50 flex justify-between items-center px-[var(--spacing-edge)] h-14 pt-safe safe-x">
         <button
           type="button"
           onClick={onBack}

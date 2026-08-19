@@ -93,8 +93,8 @@ select {
 }
 
 .safe-x {
-  padding-left: max(1rem, env(safe-area-inset-left, 0px));
-  padding-right: max(1rem, env(safe-area-inset-right, 0px));
+  padding-left: max(var(--spacing-edge), env(safe-area-inset-left, 0px));
+  padding-right: max(var(--spacing-edge), env(safe-area-inset-right, 0px));
 }
 
 .safe-t {

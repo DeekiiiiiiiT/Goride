@@ -21,7 +21,7 @@ function stopIcon(vertical?: string) {
 export function StackedOfferPage({ offer, onDecline, onAccept }: StackedOfferPageProps) {
   return (
     <div className="flex min-h-0 h-full w-full flex-col overflow-hidden bg-background">
-      <header className="fixed top-0 z-50 flex h-16 w-full items-center justify-between border-b border-outline-variant bg-surface/80 px-4 pt-safe backdrop-blur-md">
+      <header className="fixed top-0 z-50 flex h-16 w-full items-center justify-between border-b border-outline-variant bg-surface/80 px-4 pt-safe backdrop-blur-md safe-x">
         <div className="flex items-center gap-4">
           <button type="button" className="rounded-full p-2 text-primary transition-transform active:scale-95">
             <MaterialIcon name="menu" />

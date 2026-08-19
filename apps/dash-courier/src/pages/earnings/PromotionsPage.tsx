@@ -27,7 +27,7 @@ export function PromotionsPage({ onBack }: PromotionsPageProps) {
 
   return (
     <div className="fixed inset-0 z-[65] bg-background flex flex-col overflow-hidden">
-      <header className="sticky top-0 bg-surface z-40 shadow-sm pt-safe shrink-0">
+      <header className="sticky top-0 bg-surface z-40 shadow-sm pt-safe safe-x shrink-0">
         <div className="flex items-center justify-between px-[var(--spacing-edge)] h-14">
           <button
             type="button"

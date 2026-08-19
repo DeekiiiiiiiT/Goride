@@ -20,7 +20,7 @@ export function OfferPushBanner({
     <button
       type="button"
       onClick={onTap}
-      className="fixed top-0 left-0 right-0 z-[100] mx-3 mt-safe bg-surface rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.18)] border border-surface-variant overflow-hidden text-left active:scale-[0.99] transition-transform animate-in slide-in-from-top"
+      className="fixed top-0 left-0 right-0 z-[100] mt-safe safe-x bg-surface rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.18)] border border-surface-variant overflow-hidden text-left active:scale-[0.99] transition-transform animate-in slide-in-from-top"
     >
       <div className="flex items-stretch">
         <div className="w-1 bg-primary shrink-0" />

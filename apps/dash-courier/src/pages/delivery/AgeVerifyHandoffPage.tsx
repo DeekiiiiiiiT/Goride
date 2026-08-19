@@ -70,7 +70,7 @@ export function AgeVerifyHandoffPage({
 
   return (
     <div className="fixed inset-0 z-[70] flex flex-col bg-background">
-      <nav className="fixed top-0 z-50 flex min-h-16 pt-safe w-full items-center justify-between border-b border-outline-variant bg-surface/80 px-4 backdrop-blur-md">
+      <nav className="fixed top-0 z-50 flex min-h-16 pt-safe w-full items-center justify-between border-b border-outline-variant bg-surface/80 px-4 backdrop-blur-md safe-x">
         <div className="flex items-center gap-4">
           <button type="button" onClick={onBack} className="rounded-full p-2 text-primary hover:bg-surface-container">
             <MaterialIcon name="arrow_back" />

@@ -87,7 +87,7 @@ export function ShopAndPickPage({
 
   return (
     <div className="fixed inset-0 z-[60] flex flex-col overflow-hidden bg-background">
-      <header className="sticky top-0 z-50 flex h-16 w-full shrink-0 items-center justify-between border-b border-outline-variant bg-surface/80 px-4 pt-safe backdrop-blur-md">
+      <header className="sticky top-0 z-50 flex h-16 w-full shrink-0 items-center justify-between border-b border-outline-variant bg-surface/80 px-4 pt-safe backdrop-blur-md safe-x">
         <button type="button" onClick={onClose} aria-label="Close" className="rounded-full p-2 text-primary">
           <MaterialIcon name="close" />
         </button>

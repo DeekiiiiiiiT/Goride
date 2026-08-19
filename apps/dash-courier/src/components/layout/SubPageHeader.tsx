@@ -9,7 +9,7 @@ type SubPageHeaderProps = {
 
 export function SubPageHeader({ title, onBack, backLabel = 'Go back' }: SubPageHeaderProps) {
   return (
-    <header className="w-full sticky top-0 bg-surface shadow-soft z-50 pt-safe shrink-0">
+    <header className="w-full sticky top-0 bg-surface shadow-soft z-50 pt-safe safe-x shrink-0">
       <div className="flex justify-between items-center h-16 px-[var(--spacing-edge)]">
         <button
           type="button"

@@ -69,7 +69,7 @@ export function AtStorePage({
 
   return (
     <div className="fixed inset-0 z-[60] flex flex-col overflow-hidden bg-background">
-      <nav className="fixed top-0 z-50 flex min-h-16 pt-safe w-full items-center justify-between bg-surface/80 px-4 backdrop-blur-md">
+      <nav className="fixed top-0 z-50 flex min-h-16 pt-safe w-full items-center justify-between bg-surface/80 px-4 backdrop-blur-md safe-x">
         <button
           type="button"
           onClick={onClose}

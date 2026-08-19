@@ -28,7 +28,7 @@ export function ReportIssuePage({
 
   return (
     <div className="fixed inset-0 z-[75] bg-background flex flex-col overflow-hidden">
-      <header className="w-full sticky top-0 z-40 bg-surface shadow-sm pt-safe shrink-0">
+      <header className="w-full sticky top-0 z-40 bg-surface shadow-sm pt-safe safe-x shrink-0">
         <div className="flex items-center justify-between px-[var(--spacing-edge)] h-14">
           <button
             type="button"

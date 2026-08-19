@@ -21,7 +21,7 @@ export function CourierAppHeader({
   const isOnline = statusTone === 'online' || statusTone === 'connecting';
 
   return (
-    <header className="fixed top-0 left-0 right-0 w-full bg-surface shadow-sm z-50 flex justify-between items-center px-[var(--spacing-edge)] min-h-14 pt-safe">
+    <header className="fixed top-0 left-0 right-0 w-full bg-surface shadow-sm z-50 flex justify-between items-center px-[var(--spacing-edge)] min-h-14 pt-safe safe-x">
       <button
         type="button"
         onClick={onMenuClick}

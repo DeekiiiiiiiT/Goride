@@ -158,7 +158,7 @@ export function ActivityPage({
 
   return (
     <div className={shellClass}>
-      <header className="w-full sticky top-0 bg-surface shadow-soft z-40 pt-safe shrink-0">
+      <header className="w-full sticky top-0 bg-surface shadow-soft z-40 pt-safe safe-x shrink-0">
         <div className="flex justify-between items-center h-16 px-[var(--spacing-edge)]">
           {onBack ? (
             <button

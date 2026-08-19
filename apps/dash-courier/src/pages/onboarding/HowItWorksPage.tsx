@@ -73,7 +73,7 @@ export function HowItWorksPage({ onComplete, onSkip }: HowItWorksPageProps) {
 
   return (
     <div className="bg-background text-on-background h-full flex flex-col relative overflow-x-hidden">
-      <div className="fixed top-0 w-full flex justify-end items-center px-[var(--spacing-edge)] h-14 z-50 pt-safe">
+      <div className="fixed top-0 w-full flex justify-end items-center px-[var(--spacing-edge)] h-14 z-50 pt-safe safe-x">
         <button
           type="button"
           onClick={onSkip}

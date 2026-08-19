@@ -10,7 +10,7 @@ type OnboardingHeaderProps = {
 export function OnboardingHeader({ title, onBack, variant = 'simple' }: OnboardingHeaderProps) {
   if (variant === 'centered') {
     return (
-      <header className="flex items-center justify-between px-[var(--spacing-edge)] min-h-14 pt-safe w-full z-50 bg-surface shrink-0">
+      <header className="flex items-center justify-between px-[var(--spacing-edge)] min-h-14 pt-safe w-full z-50 bg-surface shrink-0 safe-x">
         <button
           type="button"
           onClick={onBack}
@@ -26,7 +26,7 @@ export function OnboardingHeader({ title, onBack, variant = 'simple' }: Onboardi
   }
 
   return (
-    <header className="fixed top-0 w-full bg-background z-50 pt-safe flex items-center px-[var(--spacing-edge)] min-h-14">
+    <header className="fixed top-0 w-full bg-background z-50 pt-safe flex items-center px-[var(--spacing-edge)] min-h-14 safe-x">
       <button
         type="button"
         onClick={onBack}
