@@ -1,4 +1,6 @@
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
+import { useNetworkStatus } from '@/hooks/useNetworkStatus';
+import { toast } from '@/lib/toast';
 
 type Props = {
   onNavigate: (page: string, data?: Record<string, unknown>) => void;
@@ -13,7 +15,13 @@ export default function ConnectionErrorPage({
   activeOrderId,
   onRetry,
 }: Props) {
+  const online = useNetworkStatus();
+
   const handleRetry = () => {
+    if (!online) {
+      toast.error('You are still offline. Check your connection and try again.');
+      return;
+    }
     if (onRetry) {
       onRetry();
       return;
@@ -30,7 +38,9 @@ export default function ConnectionErrorPage({
 
         <h1 className="text-headline-lg-mobile font-bold text-on-background mb-2">Something went wrong</h1>
         <p className="text-body-md text-on-surface-variant max-w-[280px] mx-auto mb-8">
-          We&apos;re having trouble connecting to our servers. Please check your internet connection and try again.
+          {online
+            ? "We're having trouble connecting to our servers. Please try again."
+            : 'You appear to be offline. Check your internet connection and try again.'}
         </p>
 
         <button
@@ -49,25 +59,11 @@ export default function ConnectionErrorPage({
           onClick={() => onNavigate('tracking', { orderId: activeOrderId })}
           className="w-full max-w-sm bg-surface-container-lowest shadow-[0px_10px_30px_rgba(0,0,0,0.08)] rounded-xl p-4 flex items-center justify-between border border-surface-variant mt-6 active:scale-[0.98] transition-transform text-left"
         >
-          <div className="flex items-center gap-2">
-            <div className="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center text-primary">
-              <MaterialIcon name="local_dining" filled />
-            </div>
-            <div className="flex flex-col">
-              <span className="text-[10px] font-medium text-on-surface-variant uppercase tracking-wider mb-0.5">
-                Active Order
-              </span>
-              <span className="text-label-md font-semibold tracking-wide text-on-background">View your order</span>
-              <div className="flex items-center gap-1 mt-0.5">
-                <div className="w-2 h-2 rounded-full bg-primary-container animate-pulse" />
-                <span className="text-label-sm font-medium text-primary-container">In progress</span>
-              </div>
-            </div>
+          <div>
+            <p className="text-label-md font-semibold text-on-surface">Track active order</p>
+            <p className="text-body-sm text-on-surface-variant">Your delivery may still be on the way</p>
           </div>
-          <div className="flex items-center text-primary">
-            <span className="text-label-sm font-medium mr-1">View Details</span>
-            <MaterialIcon name="chevron_right" size={16} />
-          </div>
+          <MaterialIcon name="chevron_right" className="text-on-surface-variant" />
         </button>
       )}
     </div>

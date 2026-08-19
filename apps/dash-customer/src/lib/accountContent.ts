@@ -7,6 +7,7 @@ import {
   uploadCustomerAvatar,
 } from './customerApi';
 import { hydratePreferredPaymentMethod } from './checkoutStorage';
+import { saveNotificationPrefs } from './accountSubContent';
 import { assertCustomerAvatarFile, resolveProfileAvatarUrl } from './profileAvatar';
 
 export const PROFILE_AVATAR =
@@ -94,6 +95,9 @@ export async function syncProfileFromBackend(): Promise<UserProfile> {
     writeLocalProfile(next);
     if (remote.preferredPaymentMethod) {
       hydratePreferredPaymentMethod(remote.preferredPaymentMethod);
+    }
+    if (remote.notificationPrefs) {
+      saveNotificationPrefs(remote.notificationPrefs);
     }
     return next;
   } catch {

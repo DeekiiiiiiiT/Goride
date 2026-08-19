@@ -357,6 +357,41 @@ app.post("/intents", async (c) => {
   
   const serviceSupabase = getServiceSupabase();
   
+  // Reuse an existing pending (non-completed) payment intent for the same order/provider.
+  // This prevents double-charges if the client double-taps "Place Order" or resumes mid-flow.
+  const orderPaymentStatus = String(order.payment_status ?? "").toLowerCase();
+  if (orderPaymentStatus === "paid") {
+    return c.json({ error: "Order already paid" }, 409);
+  }
+
+  const nowIso = new Date().toISOString();
+  const { data: existingIntent } = await serviceSupabase
+    .schema("payments")
+    .from("payment_intents")
+    .select("*")
+    .eq("order_id", orderId)
+    .eq("customer_id", owned.customerId)
+    .eq("provider", provider)
+    .gt("expires_at", nowIso)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (existingIntent) {
+    const intentStatus = String(existingIntent.status ?? "").toLowerCase();
+    if (intentStatus === "completed" || intentStatus === "paid") {
+      return c.json({ error: "Order already paid" }, 409);
+    }
+
+    return c.json({
+      intentId: existingIntent.id,
+      clientSecret: existingIntent.client_secret,
+      provider: existingIntent.provider,
+      amount: existingIntent.amount,
+      currency: existingIntent.currency,
+    }, 200);
+  }
+
   let clientSecret = null;
   let providerIntentId = null;
   let providerData = {};

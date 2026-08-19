@@ -15,6 +15,7 @@ type Props = {
   initialQuantity?: number;
   initialInstructions?: string;
   submitLabel?: string;
+  addDisabled?: boolean;
   onAdd: (payload: {
     quantity: number;
     selections: Selections;
@@ -92,6 +93,7 @@ export function ItemDetailSheet({
   initialQuantity = 1,
   initialInstructions = '',
   submitLabel,
+  addDisabled = false,
   onAdd,
 }: Props) {
   const [quantity, setQuantity] = useState(1);
@@ -202,8 +204,9 @@ export function ItemDetailSheet({
             <QuantityStepper value={quantity} onChange={setQuantity} />
             <button
               type="button"
+              disabled={addDisabled}
               onClick={handleAdd}
-              className={`flex-1 rounded-lg py-4 px-6 flex justify-between items-center font-label-md text-label-md transition-transform duration-150 active:scale-95 shadow-sm ${
+              className={`flex-1 rounded-lg py-4 px-6 flex justify-between items-center font-label-md text-label-md transition-transform duration-150 active:scale-95 shadow-sm disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100 ${
                 errorGroupId
                   ? 'bg-error text-on-error'
                   : 'bg-primary text-on-primary hover:shadow-md'

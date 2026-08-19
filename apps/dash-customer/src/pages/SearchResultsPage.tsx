@@ -14,6 +14,7 @@ import { allowMocks } from '@/lib/mocksGate';
 import { getRecentSearches } from '@/lib/searchRecents';
 import { fetchDiscoverMerchants, type DiscoverMerchant } from '@/lib/merchantDiscovery';
 import { getCheckoutLocation } from '@/lib/addressStorage';
+import { NewCartModal } from '@/components/restaurant/NewCartModal';
 import {
   applyDishFilters,
   applyRestaurantFilters,
@@ -56,12 +57,14 @@ export default function SearchResultsPage({
   const [activeTab, setActiveTab] = useState<'restaurants' | 'dishes'>('restaurants');
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [filters, setFilters] = useState<FilterState>(EMPTY_SEARCH_FILTERS);
-  const { addItem } = useCart();
+  const { addItem, clearCart, merchantName } = useCart();
   const mocksOk = allowMocks();
+  const [cartConflictOpen, setCartConflictOpen] = useState(false);
+  const [pendingDishToAdd, setPendingDishToAdd] = useState<DishSearchResult | null>(null);
 
   const { data: merchants = [], refetch: refetchMerchants } = useQuery({
     queryKey: ['search-merchants'],
-    queryFn: () => fetchDiscoverMerchants(),
+    queryFn: async () => (await fetchDiscoverMerchants()).merchants,
     retry: false,
   });
 
@@ -161,7 +164,7 @@ export default function SearchResultsPage({
       return;
     }
     hapticLight();
-    addItem(
+    const result = addItem(
       {
         itemId: dish.itemId,
         merchantId: dish.merchantId,
@@ -172,14 +175,55 @@ export default function SearchResultsPage({
       },
       dish.merchantName || 'Restaurant',
     );
+
+    if (result === 'conflict') {
+      setPendingDishToAdd(dish);
+      setCartConflictOpen(true);
+      return;
+    }
+
     hapticSuccess();
     toast.itemAdded(dish.name);
+  };
+
+  const handleCartConflictConfirm = () => {
+    if (!pendingDishToAdd) return;
+    const dish = pendingDishToAdd;
+    clearCart();
+    // After clearing, the new dish can be added safely. Passing replace keeps intent explicit.
+    addItem(
+      {
+        itemId: dish.itemId,
+        merchantId: dish.merchantId,
+        name: dish.name,
+        price: dish.price,
+        quantity: 1,
+        imageUrl: dish.image,
+      },
+      dish.merchantName || 'Restaurant',
+      { replace: true },
+    );
+    setCartConflictOpen(false);
+    setPendingDishToAdd(null);
+    hapticSuccess();
+    toast.itemAdded(dish.name);
+  };
+
+  const handleCartConflictCancel = () => {
+    setCartConflictOpen(false);
+    setPendingDishToAdd(null);
   };
 
   const suggestions = getRecentSearches();
 
   return (
     <PullToRefresh onRefresh={handleRefresh} className="flex min-h-full flex-col bg-background pb-24">
+      <NewCartModal
+        open={cartConflictOpen}
+        currentRestaurant={merchantName || pendingDishToAdd?.merchantName || 'Restaurant'}
+        onConfirm={handleCartConflictConfirm}
+        onCancel={handleCartConflictCancel}
+      />
       <section className="sticky top-16 z-30 bg-background px-4 pt-4 pb-4">
         <div className="group relative mb-4 w-full">
           <MaterialIcon name="search" className="absolute top-1/2 left-3 ml-1 -translate-y-1/2 text-outline" />

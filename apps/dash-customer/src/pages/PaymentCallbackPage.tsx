@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Session } from '@supabase/supabase-js';
 import { API_ENDPOINTS, supabaseAnonFunctionHeaders } from '@roam/api-client';
 import { CheckCircle, XCircle, Loader2 } from 'lucide-react';
@@ -12,6 +12,19 @@ interface PaymentCallbackPageProps {
 export default function PaymentCallbackPage({ onNavigate, session, provider }: PaymentCallbackPageProps) {
   const [status, setStatus] = useState<'processing' | 'success' | 'failed'>('processing');
   const [orderId, setOrderId] = useState<string | null>(null);
+  const [timedOut, setTimedOut] = useState(false);
+  const captureStartedRef = useRef(false);
+
+  useEffect(() => {
+    if (provider !== 'paypal' || status !== 'processing') return;
+
+    const timeout = window.setTimeout(() => {
+      setTimedOut(true);
+      setStatus('failed');
+    }, 45000);
+
+    return () => window.clearTimeout(timeout);
+  }, [provider, status]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -26,11 +39,12 @@ export default function PaymentCallbackPage({ onNavigate, session, provider }: P
         return;
       }
 
-      if (paypalOrderId && orderIdParam && session) {
+      if (!session) return;
+
+      if (paypalOrderId && orderIdParam && !captureStartedRef.current) {
+        captureStartedRef.current = true;
         void capturePayPalPayment(paypalOrderId, orderIdParam);
-      } else if (!session) {
-        return;
-      } else {
+      } else if (!paypalOrderId || !orderIdParam) {
         setStatus('failed');
       }
       return;
@@ -139,14 +153,18 @@ export default function PaymentCallbackPage({ onNavigate, session, provider }: P
     <div className="min-h-dvh flex flex-col items-center justify-center p-4">
       <XCircle className="w-20 h-20 text-red-500 mb-4" />
       <h1 className="text-2xl font-bold text-gray-900 mb-2">Payment Failed</h1>
-      <p className="text-gray-500 mb-8">Something went wrong with your payment</p>
+      <p className="text-gray-500 mb-8">
+        {timedOut
+          ? 'Payment confirmation is taking longer than expected. You can retry from your orders.'
+          : 'Something went wrong with your payment'}
+      </p>
       <div className="flex gap-4">
         <button
           type="button"
-          onClick={() => onNavigate('cart')}
+          onClick={() => onNavigate(timedOut ? 'orders' : 'cart')}
           className="px-6 py-3 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200"
         >
-          Try Again
+          {timedOut ? 'View Orders' : 'Try Again'}
         </button>
         <button
           type="button"

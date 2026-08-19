@@ -100,6 +100,8 @@ export function mapMerchantMenuResponse(data: {
   categories?: Record<string, unknown>[];
   items?: Record<string, unknown>[];
   hours?: unknown;
+  is_accepting_orders_now?: boolean;
+  accepting_orders_error?: string;
 }): RestaurantProfile {
   const merchant = data.merchant ?? {};
   const prep = Number(merchant.avg_prep_time_mins ?? 25);
@@ -142,6 +144,10 @@ export function mapMerchantMenuResponse(data: {
     phone: String(merchant.phone ?? ''),
     categories,
     items,
+    isAcceptingOrdersNow: data.is_accepting_orders_now !== false,
+    acceptingOrdersError: data.accepting_orders_error
+      ? String(data.accepting_orders_error)
+      : undefined,
   };
 }
 
@@ -157,6 +163,8 @@ export async function fetchMerchantMenu(id: string): Promise<RestaurantProfile> 
       categories?: Record<string, unknown>[];
       items?: Record<string, unknown>[];
       hours?: unknown;
+      is_accepting_orders_now?: boolean;
+      accepting_orders_error?: string;
     };
     if (!data.merchant) throw new Error('Merchant not found');
     return mapMerchantMenuResponse(data);

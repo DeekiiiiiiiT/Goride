@@ -102,7 +102,7 @@ export function resolveFavoriteItemFromMenus(
 /** Live lookup for Favorites. Falls back to mock menus only when allowMocks(). */
 export async function resolveFavoriteRestaurants(ids: string[]): Promise<ResolvedFavoriteRestaurant[]> {
   if (ids.length === 0) return [];
-  const merchants = await fetchDiscoverMerchants();
+  const { merchants } = await fetchDiscoverMerchants();
   const resolved: ResolvedFavoriteRestaurant[] = [];
   for (const id of ids) {
     const fromCatalog = resolveFavoriteRestaurantFromCatalog(id, merchants);

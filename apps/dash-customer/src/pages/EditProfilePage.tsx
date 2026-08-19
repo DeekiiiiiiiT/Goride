@@ -10,10 +10,22 @@ import {
 } from '@/lib/accountContent';
 import { CUSTOMER_AVATAR_ACCEPT } from '@/lib/profileAvatar';
 import { toast } from '@/lib/toast';
+import { PhoneInput, formatJamaicaPhone, toE164JamaicaPhone } from '@/components/forms/PhoneInput';
 
 type Props = {
   onNavigate: (page: string) => void;
 };
+
+function isValidEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
+function isValidJamaicaPhone(value: string): boolean {
+  const digits = value.replace(/\D/g, '');
+  if (digits.startsWith('1876') && digits.length === 11) return true;
+  if (digits.startsWith('876') && digits.length === 10) return true;
+  return digits.length === 10;
+}
 
 export default function EditProfilePage({ onNavigate }: Props) {
   const [profile, setProfile] = useState<UserProfile>(getProfile);
@@ -45,9 +57,24 @@ export default function EditProfilePage({ onNavigate }: Props) {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    const trimmedEmail = email.trim();
+    if (!isValidEmail(trimmedEmail)) {
+      toast.error('Enter a valid email address');
+      return;
+    }
+    if (!isValidJamaicaPhone(phone)) {
+      toast.error('Enter a valid Jamaica phone number');
+      return;
+    }
+
     setSaving(true);
     try {
-      await persistProfile({ firstName, lastName, email, phone });
+      await persistProfile({
+        firstName,
+        lastName,
+        email: trimmedEmail,
+        phone: toE164JamaicaPhone(phone),
+      });
       toast.success('Profile saved');
       onNavigate('account');
     } catch (err) {
@@ -176,17 +203,11 @@ export default function EditProfilePage({ onNavigate }: Props) {
                 <label htmlFor="phone" className="block text-label-md font-semibold text-on-surface-variant mb-2">
                   Phone number
                 </label>
-                <div className="relative">
-                  <MaterialIcon name="phone" className="absolute left-4 top-1/2 -translate-y-1/2 text-outline" />
-                  <input
-                    id="phone"
-                    type="tel"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    className="input-field w-full rounded-lg pl-12 pr-4 py-3 text-body-md"
-                    required
-                  />
-                </div>
+                <PhoneInput
+                  value={phone}
+                  onChange={(value) => setPhone(formatJamaicaPhone(value))}
+                  required
+                />
               </div>
             </div>
 

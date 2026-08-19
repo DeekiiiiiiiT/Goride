@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { API_ENDPOINTS, supabaseAnonFunctionHeaders } from '@roam/api-client';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
@@ -33,10 +33,24 @@ function categoryTitle(categoryId: string): string {
 
 export default function CategoryPage({ categoryId, onNavigate, onBack }: Props) {
   const [filters, setFilters] = useState<CategoryListFilters>(EMPTY_CATEGORY_FILTERS);
-  const { data = [], isLoading } = useQuery({
-    queryKey: ['discover-merchants', 'category'],
-    queryFn: () => fetchDiscoverMerchants(),
+  const [offset, setOffset] = useState(0);
+  const [allMerchants, setAllMerchants] = useState<DiscoverMerchant[]>([]);
+  const pageSize = 20;
+  const { data, isLoading, isError, refetch, isFetching } = useQuery({
+    queryKey: ['discover-merchants', 'category', categoryId, offset],
+    queryFn: () => fetchDiscoverMerchants(undefined, { limit: pageSize, offset }),
   });
+  const hasMore = data?.hasMore ?? false;
+
+  useEffect(() => {
+    setOffset(0);
+    setAllMerchants([]);
+  }, [categoryId]);
+
+  useEffect(() => {
+    if (!data?.merchants) return;
+    setAllMerchants((prev) => (offset === 0 ? data.merchants : [...prev, ...data.merchants]));
+  }, [data, offset]);
   const { data: promoData } = useQuery({
     queryKey: ['customer-promotions'],
     queryFn: async () => {
@@ -55,10 +69,10 @@ export default function CategoryPage({ categoryId, onNavigate, onBack }: Props) 
 
   const restaurants = useMemo(() => {
     const scoped: DiscoverMerchant[] = VERTICAL_IDS.has(categoryId as VerticalType)
-      ? data.filter((m) => m.vertical_type === categoryId)
-      : filterMerchantsByCategory(data, categoryId);
+      ? allMerchants.filter((m) => m.vertical_type === categoryId)
+      : filterMerchantsByCategory(allMerchants, categoryId);
     return applyCategoryListFilters(scoped, filters, offerIds);
-  }, [data, categoryId, filters, offerIds]);
+  }, [allMerchants, categoryId, filters, offerIds]);
 
   const title = categoryTitle(categoryId);
 
@@ -135,6 +149,14 @@ export default function CategoryPage({ categoryId, onNavigate, onBack }: Props) 
       <div className="flex flex-col gap-6 p-4">
         {isLoading ? (
           <RestaurantCardSkeleton count={2} />
+        ) : isError ? (
+          <EmptyState
+            icon="cloud_off"
+            title="Could not load stores"
+            description="Check your connection and try again."
+            actionLabel="Retry"
+            onAction={() => void refetch()}
+          />
         ) : restaurants.length === 0 ? (
           <EmptyState
             icon="restaurant"
@@ -146,13 +168,25 @@ export default function CategoryPage({ categoryId, onNavigate, onBack }: Props) 
             }
           />
         ) : (
-          restaurants.map((merchant) => (
-            <DiscoverStoreCard
-              key={merchant.id}
-              merchant={merchant}
-              onClick={() => onNavigate('restaurant', { merchantId: merchant.id })}
-            />
-          ))
+          <>
+            {restaurants.map((merchant) => (
+              <DiscoverStoreCard
+                key={merchant.id}
+                merchant={merchant}
+                onClick={() => onNavigate('restaurant', { merchantId: merchant.id })}
+              />
+            ))}
+            {hasMore && (
+              <button
+                type="button"
+                disabled={isFetching}
+                onClick={() => setOffset((prev) => prev + pageSize)}
+                className="rounded-lg border border-primary py-3 text-label-md font-semibold text-primary disabled:opacity-50"
+              >
+                {isFetching ? 'Loading…' : 'Load more'}
+              </button>
+            )}
+          </>
         )}
       </div>
     </div>

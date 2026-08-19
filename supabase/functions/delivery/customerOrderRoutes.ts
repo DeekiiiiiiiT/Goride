@@ -66,6 +66,12 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
     const body = await validateBody(c, PlaceOrderBody);
     if (body instanceof Response) return body;
 
+    const idempotencyKeyRaw = c.req.header("Idempotency-Key") ?? c.req.header("idempotency-key");
+    const idempotencyKey = idempotencyKeyRaw?.trim() ? idempotencyKeyRaw.trim() : null;
+    if (idempotencyKey && (idempotencyKey.length < 8 || idempotencyKey.length > 128)) {
+      return c.json({ error: "Invalid idempotency key" }, 400);
+    }
+
     // Enforce accepting + hours + holiday specials before pricing/insert
     const openCheck = await assertMerchantAcceptingOrders(getServiceSupabase(), body.merchantId);
     if (!openCheck.ok) {
@@ -229,31 +235,105 @@ export function registerCustomerOrderRoutes(app: Hono, deps: CustomerOrderRoutes
     const dropoffLng = asCoord(body.deliveryLng) ?? asCoord(customerRow.default_lng);
     const hasDropoffPin = dropoffLat != null && dropoffLng != null && !(dropoffLat === 0 && dropoffLng === 0);
 
+    async function waitForOrderById(orderId: string) {
+      for (let attempt = 0; attempt < 10; attempt++) {
+        const { data: existing } = await serviceSb
+          .from("orders")
+          .select("*")
+          .eq("id", orderId)
+          .maybeSingle();
+        if (existing) return existing;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      return null;
+    }
+
+    let idempotencyOrderId: string | null = null;
+
+    if (idempotencyKey) {
+      const nowIso = new Date().toISOString();
+      const { data: existingMapping } = await serviceSb
+        .from("order_idempotency_keys")
+        .select("order_id")
+        .eq("customer_id", customer.id)
+        .eq("idempotency_key", idempotencyKey)
+        .gt("expires_at", nowIso)
+        .maybeSingle();
+
+      if (existingMapping?.order_id) {
+        const existingOrder = await waitForOrderById(String(existingMapping.order_id));
+        if (existingOrder) return c.json({ order: existingOrder }, 200);
+        return c.json({ error: "Order placement is still in progress; please retry." }, 409);
+      }
+
+      idempotencyOrderId = crypto.randomUUID();
+
+      const { error: mappingError } = await serviceSb
+        .from("order_idempotency_keys")
+        .insert({
+          customer_id: customer.id,
+          idempotency_key: idempotencyKey,
+          order_id: idempotencyOrderId,
+        })
+        .select()
+        .single();
+
+      if (mappingError) {
+        // Likely a concurrent request won the race and inserted the mapping first.
+        const { data: racedMapping } = await serviceSb
+          .from("order_idempotency_keys")
+          .select("order_id")
+          .eq("customer_id", customer.id)
+          .eq("idempotency_key", idempotencyKey)
+          .maybeSingle();
+
+        if (racedMapping?.order_id) {
+          const existingOrder = await waitForOrderById(String(racedMapping.order_id));
+          if (existingOrder) return c.json({ order: existingOrder }, 200);
+        }
+
+        return c.json({ error: mappingError.message }, 500);
+      }
+    }
+
+    const insertPayload: Record<string, unknown> = {
+      customer_id: customer.id,
+      merchant_id: body.merchantId,
+      items: orderItems,
+      subtotal: pricing.subtotal,
+      delivery_fee: deliveryFee,
+      platform_fee: platformFee,
+      tax: pricing.tax,
+      tip,
+      discount,
+      total,
+      delivery_address: body.deliveryAddress,
+      delivery_address_line2: body.deliveryAddressLine2 ?? body.delivery_address_line2 ?? null,
+      delivery_lat: hasDropoffPin ? dropoffLat : null,
+      delivery_lng: hasDropoffPin ? dropoffLng : null,
+      delivery_instructions: body.deliveryInstructions,
+      payment_method: body.paymentMethod || "cash",
+      payment_status: (body.paymentMethod || "cash") === "cash" ? "paid" : "pending",
+      ...(appliedPromoCode ? { promo_code: appliedPromoCode } : {}),
+    };
+
+    if (idempotencyOrderId) {
+      // If we get here, our mapping was created; pin the order row to that mapping order_id.
+      insertPayload.id = idempotencyOrderId;
+    }
+
     const { data: order, error: orderError } = await serviceSb
       .from("orders")
-      .insert({
-        customer_id: customer.id,
-        merchant_id: body.merchantId,
-        items: orderItems,
-        subtotal: pricing.subtotal,
-        delivery_fee: deliveryFee,
-        platform_fee: platformFee,
-        tax: pricing.tax,
-        tip,
-        discount,
-        total,
-        delivery_address: body.deliveryAddress,
-        delivery_address_line2: body.deliveryAddressLine2 ?? body.delivery_address_line2 ?? null,
-        delivery_lat: hasDropoffPin ? dropoffLat : null,
-        delivery_lng: hasDropoffPin ? dropoffLng : null,
-        delivery_instructions: body.deliveryInstructions,
-        payment_method: body.paymentMethod || "cash",
-        ...(appliedPromoCode ? { promo_code: appliedPromoCode } : {}),
-      })
+      .insert(insertPayload)
       .select()
       .single();
 
-    if (orderError) return c.json({ error: orderError.message }, 500);
+    if (orderError) {
+      if (idempotencyKey && idempotencyOrderId) {
+        await serviceSb.from("order_idempotency_keys").delete().eq("customer_id", customer.id).eq("idempotency_key", idempotencyKey).eq("order_id", idempotencyOrderId);
+      }
+      return c.json({ error: orderError.message }, 500);
+    }
 
     // Create initial order event
     await serviceSb.from("order_events").insert({

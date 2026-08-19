@@ -13,9 +13,11 @@ import { getSavedAddress } from '@/lib/addressStorage';
 import { shareStoreLink } from '@/lib/shareStore';
 import { RestaurantMoreInfo } from '@/components/restaurant/RestaurantMoreInfo';
 import { API_ENDPOINTS, supabaseAnonFunctionHeaders } from '@roam/api-client';
+import { NewCartModal } from '@/components/restaurant/NewCartModal';
 
 type Props = {
   merchantId?: string;
+  itemId?: string;
   verticalType?: string;
   onNavigate: (page: string, data?: Record<string, unknown>) => void;
 };
@@ -87,7 +89,16 @@ function GroceryStoreView({
   onNavigate: (page: string, data?: Record<string, unknown>) => void;
 }) {
   const storeLookup = merchantId ?? '';
-  const { addItem, updateQuantity, items, itemCount, subtotal, merchantId: cartMerchantId } = useCart();
+  const {
+    addItem,
+    updateQuantity,
+    items,
+    itemCount,
+    subtotal,
+    merchantId: cartMerchantId,
+    merchantName,
+    clearCart,
+  } = useCart();
   const [activeCategory, setActiveCategory] = useState('');
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<'recommended' | 'price_asc' | 'price_desc' | 'name'>('recommended');
@@ -96,6 +107,9 @@ function GroceryStoreView({
   const deliveryLabel = savedAddress
     ? `Deliver to · ${savedAddress.line1}`
     : 'Set delivery address';
+
+  const [cartConflictOpen, setCartConflictOpen] = useState(false);
+  const [pendingProductToAdd, setPendingProductToAdd] = useState<GroceryProduct | null>(null);
 
   const { data: menu, isLoading, isError, refetch } = useQuery({
     queryKey: ['merchant-menu', storeLookup, 'grocery'],
@@ -145,6 +159,32 @@ function GroceryStoreView({
   const heroImage = menu?.heroImage || GROCERY_HERO;
   const rating = menu?.rating ? String(menu.rating) : '—';
   const eta = menu?.eta || '—';
+  const acceptingOrders = menu?.isAcceptingOrdersNow !== false;
+
+  const handleCartConflictConfirm = () => {
+    if (!pendingProductToAdd) return;
+    const product = pendingProductToAdd;
+    clearCart();
+    addItem(
+      {
+        itemId: product.id,
+        merchantId: storeId,
+        name: product.name,
+        price: product.price,
+        quantity: 1,
+        imageUrl: product.image,
+      },
+      storeName,
+      { replace: true },
+    );
+    setPendingProductToAdd(null);
+    setCartConflictOpen(false);
+  };
+
+  const handleCartConflictCancel = () => {
+    setPendingProductToAdd(null);
+    setCartConflictOpen(false);
+  };
 
   const filteredProducts = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -175,6 +215,8 @@ function GroceryStoreView({
     items.find((i) => i.itemId === productId && i.merchantId === storeId)?.id;
 
   const changeQty = (product: GroceryProduct, delta: number) => {
+    if (delta > 0 && !acceptingOrders) return;
+
     const current = getQty(product.id);
     const next = current + delta;
     const cartItemId = getCartItemId(product.id);
@@ -185,7 +227,7 @@ function GroceryStoreView({
     }
 
     if (current === 0 && delta > 0) {
-      addItem(
+      const result = addItem(
         {
           itemId: product.id,
           merchantId: storeId,
@@ -196,6 +238,10 @@ function GroceryStoreView({
         },
         storeName,
       );
+      if (result === 'conflict') {
+        setPendingProductToAdd(product);
+        setCartConflictOpen(true);
+      }
       return;
     }
 
@@ -246,6 +292,12 @@ function GroceryStoreView({
 
   return (
     <div className="min-h-full bg-background pb-36">
+      <NewCartModal
+        open={cartConflictOpen}
+        currentRestaurant={merchantName || 'Restaurant'}
+        onConfirm={handleCartConflictConfirm}
+        onCancel={handleCartConflictCancel}
+      />
       <header className="sticky top-0 z-50 flex min-h-16 w-full items-center justify-between border-b border-outline-variant/30 bg-surface px-4 shadow-sm safe-t">
         <div className="flex items-center gap-3">
           <button
@@ -290,6 +342,20 @@ function GroceryStoreView({
           </div>
         </div>
       </section>
+
+      {!acceptingOrders && (
+        <section className="px-4 mt-4">
+          <div className="rounded-xl border border-error/30 bg-error-container/20 px-4 py-3">
+            <p className="text-label-md font-semibold text-error flex items-center gap-2">
+              <MaterialIcon name="schedule" className="text-[18px]" />
+              Not accepting orders right now
+            </p>
+            {menu?.acceptingOrdersError && (
+              <p className="mt-1 text-body-sm text-on-surface-variant">{menu.acceptingOrdersError}</p>
+            )}
+          </div>
+        </section>
+      )}
 
       <section className="relative z-10 -mt-6 px-4">
         <div className="flex h-14 items-center rounded-xl border border-outline-variant bg-surface-container-lowest px-4 shadow-lg">
@@ -395,8 +461,9 @@ function GroceryStoreView({
                         <span className="px-3 text-label-lg font-semibold">{qty}</span>
                         <button
                           type="button"
+                          disabled={!acceptingOrders}
                           onClick={() => changeQty(product, 1)}
-                          className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-on-primary transition-all active:scale-90"
+                          className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-on-primary transition-all active:scale-90 disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100"
                         >
                           <MaterialIcon name="add" className="text-sm font-bold" />
                         </button>
@@ -462,7 +529,7 @@ function GroceryStoreView({
   );
 }
 
-export default function StorePage({ merchantId, verticalType, onNavigate }: Props) {
+export default function StorePage({ merchantId, itemId, verticalType, onNavigate }: Props) {
   const vertical = resolveVerticalType(verticalType);
 
   useEffect(() => {
@@ -473,5 +540,5 @@ export default function StorePage({ merchantId, verticalType, onNavigate }: Prop
     return <GroceryStoreView merchantId={merchantId} onNavigate={onNavigate} />;
   }
 
-  return <RestaurantPage merchantId={merchantId} onNavigate={onNavigate} />;
+  return <RestaurantPage merchantId={merchantId} itemId={itemId} onNavigate={onNavigate} />;
 }

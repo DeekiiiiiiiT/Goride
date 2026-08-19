@@ -1,6 +1,8 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { fetchCustomerOrders } from '@/lib/customerApi';
+import { supabase } from '@/lib/supabase';
+import { API_ENDPOINTS, supabaseAnonFunctionHeaders } from '@roam/api-client';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PullToRefresh } from '@/components/ui/PullToRefresh';
@@ -29,6 +31,8 @@ type ApiOrder = {
   created_at: string;
   merchant_id?: string;
   merchant: { id: string; name: string; logo_url: string };
+  payment_status?: string;
+  payment_method?: string;
   items: Array<{
     name: string;
     quantity: number;
@@ -48,6 +52,8 @@ function mapApiOrder(order: ApiOrder): OrderHistoryEntry {
     merchantName: order.merchant.name,
     merchantLogo: order.merchant.logo_url,
     status: order.status === 'cancelled' ? 'cancelled' : active ? 'active' : 'delivered',
+    paymentMethod: order.payment_method ? String(order.payment_method) : undefined,
+    paymentStatus: order.payment_status ? String(order.payment_status) : undefined,
     items: order.items.map(i => ({
       quantity: i.quantity,
       name: i.name,
@@ -70,6 +76,7 @@ export default function OrdersPage({ onNavigate }: Props) {
   const { itemCount, addItem } = useCart();
   const [reorderOpen, setReorderOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<OrderHistoryEntry | null>(null);
+  const [resumingPaymentForOrderId, setResumingPaymentForOrderId] = useState<string | null>(null);
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['customer-orders'],
@@ -134,6 +141,50 @@ export default function OrdersPage({ onNavigate }: Props) {
     onNavigate('cart');
   };
 
+  const handleResumePayment = useCallback(async (order: OrderHistoryEntry) => {
+    const provider = order.paymentMethod;
+    if (!provider || !['wipay', 'paypal'].includes(provider)) return;
+
+    const { data: { session } } = await supabase.auth.getSession();
+    const accessToken = session?.access_token;
+    if (!accessToken) {
+      toast.error('Please sign in to complete payment');
+      onNavigate('login');
+      return;
+    }
+
+    try {
+      setResumingPaymentForOrderId(order.id);
+      const paymentRes = await fetch(`${API_ENDPOINTS.payments}/intents`, {
+        method: 'POST',
+        headers: supabaseAnonFunctionHeaders({
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        }),
+        body: JSON.stringify({
+          orderId: order.id,
+          provider,
+          returnOrigin: window.location.origin,
+        }),
+      });
+
+      if (!paymentRes.ok) {
+        const paymentError = await paymentRes.json().catch(() => ({}));
+        throw new Error(
+          (paymentError as { error?: string }).error || 'Failed to resume payment',
+        );
+      }
+
+      const { clientSecret } = await paymentRes.json();
+      window.location.href = clientSecret;
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Failed to resume payment';
+      toast.error(message);
+    } finally {
+      setResumingPaymentForOrderId(null);
+    }
+  }, [onNavigate]);
+
   const handleRefresh = useCallback(async () => {
     await refetch();
     toast.success('Orders updated');
@@ -191,9 +242,27 @@ export default function OrdersPage({ onNavigate }: Props) {
                   style={{ width: `${order.progress ?? 66}%` }}
                 />
               </div>
+              {order.paymentStatus &&
+                order.paymentStatus !== 'paid' &&
+                (order.paymentMethod === 'wipay' || order.paymentMethod === 'paypal') && (
+                <div className="mt-3 mb-4">
+                  <p className="text-label-md font-semibold text-primary flex items-center gap-1 mb-2">
+                    <MaterialIcon name="schedule" className="text-[14px]" />
+                    Payment pending
+                  </p>
+                  <button
+                    type="button"
+                    disabled={resumingPaymentForOrderId === order.id}
+                    onClick={() => void handleResumePayment(order)}
+                    className="w-full bg-primary text-on-primary font-semibold text-label-md py-3 rounded-lg shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50 disabled:hover:opacity-50"
+                  >
+                    Complete payment
+                  </button>
+                </div>
+              )}
               <button
                 type="button"
-                onClick={() => onNavigate('tracking', { orderId: order.orderNumber })}
+                onClick={() => onNavigate('tracking', { orderId: order.id })}
                 className="w-full bg-primary text-on-primary font-semibold text-label-md py-3 rounded-lg shadow-sm hover:opacity-90 transition-opacity"
               >
                 Track Order

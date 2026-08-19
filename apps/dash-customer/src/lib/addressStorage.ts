@@ -69,18 +69,42 @@ function readLocalAddresses(): SavedAddress[] | null {
 function writeLocalAddresses(addresses: SavedAddress[]): void {
   try {
     localStorage.setItem(ADDRESSES_KEY, JSON.stringify(addresses));
-    const defaultAddr = addresses.find((a) => a.isDefault) ?? addresses[0];
-    if (defaultAddr) {
-      saveDeliveryAddress({
-        label: defaultAddr.label,
-        line1: defaultAddr.line1,
-        line2: defaultAddr.line2,
-        instructions: defaultAddr.instructions,
-      });
+    if (addresses.length === 0) {
+      localStorage.removeItem(STORAGE_KEY);
+      return;
     }
+
+    let defaultAddr = addresses.find((a) => a.isDefault);
+    if (!defaultAddr) {
+      defaultAddr = { ...addresses[0], isDefault: true };
+      addresses[0] = defaultAddr;
+      localStorage.setItem(ADDRESSES_KEY, JSON.stringify(addresses));
+    }
+
+    saveDeliveryAddress({
+      label: defaultAddr.label,
+      line1: defaultAddr.line1,
+      line2: defaultAddr.line2,
+      instructions: defaultAddr.instructions,
+    });
   } catch {
     // ignore
   }
+}
+
+function finalizeAddressListAfterDelete(
+  addresses: SavedAddress[],
+  deletedId: string,
+): SavedAddress[] {
+  const next = addresses.filter((a) => a.id !== deletedId);
+  if (next.length === 0) return next;
+
+  const deletedWasDefault = addresses.find((a) => a.id === deletedId)?.isDefault;
+  const hasDefault = next.some((a) => a.isDefault);
+  if (deletedWasDefault || !hasDefault) {
+    return next.map((a, index) => ({ ...a, isDefault: index === 0 }));
+  }
+  return next;
 }
 
 export function getSavedAddresses(): SavedAddress[] {
@@ -154,11 +178,13 @@ export async function upsertSavedAddressAsync(address: SavedAddress): Promise<vo
 }
 
 export function deleteSavedAddress(id: string): void {
-  saveSavedAddresses(getSavedAddresses().filter((a) => a.id !== id));
+  const next = finalizeAddressListAfterDelete(getSavedAddresses(), id);
+  writeLocalAddresses(next);
+  void syncAddressesToBackend(next);
 }
 
 export async function deleteSavedAddressAsync(id: string): Promise<void> {
-  const next = getSavedAddresses().filter((a) => a.id !== id);
+  const next = finalizeAddressListAfterDelete(getSavedAddresses(), id);
   writeLocalAddresses(next);
   if (await isCustomerLoggedIn()) {
     await patchCustomerProfile({ savedAddresses: next });

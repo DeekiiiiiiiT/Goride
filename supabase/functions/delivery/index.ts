@@ -33,6 +33,7 @@ import {
   registerMerchantRestaurantRoutes,
   roamStatusTransitions,
 } from "./merchantRestaurantRoutes.ts";
+import { assertMerchantAcceptingOrders } from "./merchantOpenCheck.ts";
 import { registerMerchantInventoryRoutes } from "./merchantInventoryRoutes.ts";
 import { registerCustomerOrderRoutes } from "./customerOrderRoutes.ts";
 import { registerCustomerAccountRoutes } from "./customerAccountRoutes.ts";
@@ -69,6 +70,7 @@ applyCors(app, {
     "x-client-info",
     "accept-profile",
     "prefer",
+    "Idempotency-Key",
     "X-Staff-Shift-Token",
     "X-Station-Device-Token",
   ],
@@ -122,7 +124,9 @@ app.get("/health", (c) => c.json({ service: "delivery", status: "ok", timestamp:
 // List active merchants (public)
 app.get("/merchants", async (c) => {
   const supabase = getServiceSupabase();
-  const { cuisine, lat, lng, radius, vertical } = c.req.query();
+  const { cuisine, lat, lng, radius, vertical, limit: limitRaw, offset: offsetRaw } = c.req.query();
+  const limit = Math.min(Math.max(Number.parseInt(String(limitRaw ?? "50"), 10) || 50, 1), 100);
+  const offset = Math.max(Number.parseInt(String(offsetRaw ?? "0"), 10) || 0, 0);
   
   let query = supabase
     .from("merchants")
@@ -138,10 +142,17 @@ app.get("/merchants", async (c) => {
     query = query.eq("vertical_type", vertical);
   }
   
-  const { data, error } = await query.order("rating", { ascending: false });
+  const { data, error } = await query
+    .order("rating", { ascending: false })
+    .range(offset, offset + limit - 1);
   
   if (error) return c.json({ error: error.message }, 500);
-  return c.json({ merchants: data });
+  return c.json({
+    merchants: data,
+    limit,
+    offset,
+    hasMore: (data?.length ?? 0) === limit,
+  });
 });
 
   // Get merchant details with menu (UUID or slug)
@@ -187,12 +198,16 @@ app.get("/merchants", async (c) => {
       resolveFeeRateForMerchant(supabase, merchantId),
     ]);
 
+    const acceptingNow = await assertMerchantAcceptingOrders(supabase, merchantId);
+
     return c.json({
       merchant,
       categories: categories || [],
       items: items || [],
       hours: hours || [],
       platform_fee_rate: feeResolved.rate,
+      is_accepting_orders_now: acceptingNow.ok,
+      accepting_orders_error: acceptingNow.ok ? undefined : acceptingNow.error,
     });
   });
 

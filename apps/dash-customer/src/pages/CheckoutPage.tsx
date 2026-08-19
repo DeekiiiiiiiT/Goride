@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Session } from '@supabase/supabase-js';
 import { API_ENDPOINTS, supabaseAnonFunctionHeaders } from '@roam/api-client';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
@@ -50,6 +50,8 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
   const [showTipSheet, setShowTipSheet] = useState(false);
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
+  const submitLockRef = useRef(false);
+  const idempotencyKeyRef = useRef<string | null>(null);
   const [showPharmacyNotice, setShowPharmacyNotice] = useState(false);
   const [platformFeeRate, setPlatformFeeRate] = useState(0.05);
   const [merchantDeliveryFee, setMerchantDeliveryFee] = useState(0);
@@ -176,6 +178,11 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
       return;
     }
 
+    // Synchronous lock so double-taps can't trigger another request before React re-renders.
+    if (submitLockRef.current) return;
+    submitLockRef.current = true;
+    if (!idempotencyKeyRef.current) idempotencyKeyRef.current = crypto.randomUUID();
+
     setIsPlacingOrder(true);
     const paymentMethod = getApiPaymentMethod(getCheckoutPreferences().paymentMethodId);
     const checkoutLocation = getCheckoutLocation();
@@ -186,6 +193,7 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${session.access_token}`,
+          'Idempotency-Key': idempotencyKeyRef.current ?? undefined,
         },
         body: JSON.stringify({
           merchantId,
@@ -243,12 +251,14 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
           );
         }
         const { clientSecret } = await paymentRes.json();
+        idempotencyKeyRef.current = null;
         clearCart();
         window.location.href = clientSecret;
         return;
       }
 
       const orderNumber = order.order_number ?? `RD-${String(order.id).slice(-4).padStart(4, '0')}`;
+      idempotencyKeyRef.current = null;
       clearCart();
       onNavigate('order-confirmation', {
         orderId: order.id,
@@ -265,6 +275,7 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
       const message = error instanceof Error ? error.message : 'Failed to place order';
       toast.error(message);
     } finally {
+      submitLockRef.current = false;
       setIsPlacingOrder(false);
     }
   };
@@ -558,6 +569,8 @@ export default function CheckoutPage({ onNavigate, session }: Props) {
         open={showTipSheet}
         subtotal={subtotal}
         initialTip={tip}
+        maxTip={Math.max(10000, Math.round(totals.total * 2))}
+        highTipThreshold={Math.max(3000, Math.round(totals.total * 0.5))}
         onClose={() => setShowTipSheet(false)}
         onConfirm={amount => {
           setTip(amount);

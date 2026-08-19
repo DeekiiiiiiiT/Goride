@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { DeliveryPinMap } from '@/components/home/DeliveryPinMap';
 import { isValidLatLng, openMapsPin } from '@/lib/deliveryPinMap';
@@ -31,26 +31,36 @@ export function DeliveryDetailsPage({ address, onBack, onSave, onOutOfZone }: De
   const [line2, setLine2] = useState(address.line2 ?? '');
   const [instructions, setInstructions] = useState('');
   const [label, setLabel] = useState<AddressLabel>('home');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const submitLockRef = useRef(false);
 
   const handleSave = async () => {
-    const zone = await checkDeliveryZoneAsync({
-      line1,
-      line2,
-      lat: address.lat,
-      lng: address.lng,
-    });
-    if (!zone.inZone) {
-      onOutOfZone?.({ line1, line2, lat: address.lat, lng: address.lng });
-      return;
+    if (submitLockRef.current) return;
+    submitLockRef.current = true;
+    setIsSubmitting(true);
+    try {
+      const zone = await checkDeliveryZoneAsync({
+        line1,
+        line2,
+        lat: address.lat,
+        lng: address.lng,
+      });
+      if (!zone.inZone) {
+        onOutOfZone?.({ line1, line2, lat: address.lat, lng: address.lng });
+        return;
+      }
+      onSave({
+        line1,
+        line2: line2 || undefined,
+        instructions: instructions || undefined,
+        label,
+        lat: address.lat,
+        lng: address.lng,
+      });
+    } finally {
+      submitLockRef.current = false;
+      setIsSubmitting(false);
     }
-    onSave({
-      line1,
-      line2: line2 || undefined,
-      instructions: instructions || undefined,
-      label,
-      lat: address.lat,
-      lng: address.lng,
-    });
   };
 
   return (
@@ -171,10 +181,10 @@ export function DeliveryDetailsPage({ address, onBack, onSave, onOutOfZone }: De
           <button
             type="button"
             onClick={() => void handleSave()}
-            disabled={!line1.trim()}
+            disabled={!line1.trim() || isSubmitting}
             className="w-full bg-primary text-on-primary rounded-lg py-4 text-sm font-semibold tracking-wide flex justify-center items-center shadow-sm active:scale-[0.98] transition-transform duration-200 disabled:opacity-50"
           >
-            Save Address
+            {isSubmitting ? 'Saving…' : 'Save Address'}
           </button>
         </div>
       </div>

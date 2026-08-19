@@ -1,14 +1,13 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { API_ENDPOINTS } from '@roam/api-client';
 import { ReorderSheet } from '@/components/orders/ReorderSheet';
 import { useCart } from '@/hooks/useCart';
+import { fetchCustomerOrders } from '@/lib/customerApi';
 import {
   buildReorderFromOrder,
   type OrderHistoryEntry,
 } from '@/lib/ordersContent';
 import { formatJmd } from '@/lib/restaurantContent';
-import { supabase } from '@/lib/supabase';
 import { toast } from '@/lib/toast';
 
 type Props = {
@@ -69,18 +68,8 @@ export function QuickReorderSection({ onNavigate }: Props) {
   const { addItem } = useCart();
 
   const { data } = useQuery({
-    queryKey: ['customer-orders', 'quick-reorder'],
-    queryFn: async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session) return { orders: [] as ApiOrder[] };
-      const res = await fetch(`${API_ENDPOINTS.delivery}/customer/orders`, {
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      });
-      if (!res.ok) throw new Error('Failed to fetch orders');
-      return res.json() as Promise<{ orders: ApiOrder[] }>;
-    },
+    queryKey: ['customer-orders'],
+    queryFn: fetchCustomerOrders,
     retry: false,
   });
 

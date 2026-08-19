@@ -42,6 +42,9 @@ export type RestaurantProfile = {
   phone: string;
   categories: { id: string; label: string; emoji?: string }[];
   items: MenuItem[];
+  /** Server-computed: merchant is open and accepting orders right now. */
+  isAcceptingOrdersNow?: boolean;
+  acceptingOrdersError?: string;
 };
 
 export const ISLAND_GRILL: RestaurantProfile = {

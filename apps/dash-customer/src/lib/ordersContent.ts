@@ -25,6 +25,7 @@ export type OrderHistoryEntry = {
   eta?: string;
   progress?: number;
   paymentMethod?: string;
+  paymentStatus?: string;
   deliveryAddress?: string;
   subtotal?: number;
   deliveryFee?: number;
@@ -205,6 +206,7 @@ export function mapApiOrderToDetails(order: Record<string, unknown>): OrderHisto
     deliveredAt,
     deliveredLabel,
     paymentMethod: order.payment_method ? String(order.payment_method) : undefined,
+    paymentStatus: order.payment_status ? String(order.payment_status) : undefined,
     deliveryAddress: order.delivery_address ? String(order.delivery_address) : undefined,
     subtotal: Number(order.subtotal ?? 0),
     deliveryFee: Number(order.delivery_fee ?? 0),

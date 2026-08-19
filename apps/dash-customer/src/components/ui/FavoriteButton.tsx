@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import {
   isFavorite,
@@ -38,7 +38,11 @@ export function FavoriteButton({
     return subscribeFavorites(read);
   }, [merchantId, itemId]);
 
+  const inFlightRef = useRef(false);
+
   const handleToggle = () => {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     void (async () => {
       try {
         const added = itemId
@@ -50,6 +54,8 @@ export function FavoriteButton({
         else toast.favoriteRemoved(label);
       } catch {
         toast.error('Could not update favorites');
+      } finally {
+        inFlightRef.current = false;
       }
     })();
   };

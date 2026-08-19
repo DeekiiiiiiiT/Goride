@@ -5,16 +5,29 @@ type Props = {
   open: boolean;
   subtotal: number;
   initialTip: number;
+  maxTip?: number;
+  highTipThreshold?: number;
   onClose: () => void;
   onConfirm: (tip: number) => void;
 };
 
 const PRESETS = [10, 15, 20] as const;
 
-export function AddTipSheet({ open, subtotal, initialTip, onClose, onConfirm }: Props) {
+export function AddTipSheet({
+  open,
+  subtotal,
+  initialTip,
+  maxTip,
+  highTipThreshold,
+  onClose,
+  onConfirm,
+}: Props) {
   const [tip, setTip] = useState(initialTip);
   const [preset, setPreset] = useState<number | null>(null);
   const [customMode, setCustomMode] = useState(false);
+  const [confirmHighTip, setConfirmHighTip] = useState(false);
+  const tipCap = maxTip ?? 99999;
+  const highTipFloor = highTipThreshold ?? Math.max(5000, Math.round(subtotal * 0.5));
 
   useEffect(() => {
     if (open) {
@@ -22,6 +35,7 @@ export function AddTipSheet({ open, subtotal, initialTip, onClose, onConfirm }: 
       const match = PRESETS.find(p => Math.round(subtotal * (p / 100)) === initialTip);
       setPreset(match ?? null);
       setCustomMode(!match && initialTip > 0);
+      setConfirmHighTip(false);
     }
   }, [open, initialTip, subtotal]);
 
@@ -43,7 +57,15 @@ export function AddTipSheet({ open, subtotal, initialTip, onClose, onConfirm }: 
       return;
     }
     const digit = parseInt(key, 10);
-    setTip(prev => Math.min(99999, prev * 10 + digit));
+    setTip(prev => Math.min(tipCap, prev * 10 + digit));
+  };
+
+  const handleConfirmTip = () => {
+    if (tip >= highTipFloor && !confirmHighTip) {
+      setConfirmHighTip(true);
+      return;
+    }
+    onConfirm(tip);
   };
 
   return (
@@ -120,12 +142,18 @@ export function AddTipSheet({ open, subtotal, initialTip, onClose, onConfirm }: 
             </button>
           </div>
 
+          {confirmHighTip && (
+            <p className="text-body-sm text-error text-center mb-4">
+              This is a large tip (J${tip.toLocaleString()}). Tap again to confirm.
+            </p>
+          )}
+
           <button
             type="button"
-            onClick={() => onConfirm(tip)}
+            onClick={handleConfirmTip}
             className="w-full bg-primary text-on-primary rounded-lg py-4 text-headline-sm font-bold active:scale-[0.98] transition-transform mb-4"
           >
-            Add Tip
+            {confirmHighTip ? 'Confirm Tip' : 'Add Tip'}
           </button>
         </div>
       </div>

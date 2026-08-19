@@ -16,12 +16,13 @@ import { shareStoreLink } from '@/lib/shareStore';
 
 type Props = {
   merchantId?: string;
+  itemId?: string;
   onNavigate: (page: string, data?: Record<string, unknown>) => void;
 };
 
 type PendingAdd = Omit<CartItem, 'id'>;
 
-export default function RestaurantPage({ merchantId, onNavigate }: Props) {
+export default function RestaurantPage({ merchantId, itemId, onNavigate }: Props) {
   const lookupId = merchantId ?? '';
   const { addItem, merchantName } = useCart();
   const parallaxOffset = useParallaxHero();
@@ -47,6 +48,14 @@ export default function RestaurantPage({ merchantId, onNavigate }: Props) {
     }
   }, [restaurant]);
 
+  useEffect(() => {
+    if (!restaurant || !itemId) return;
+    const item = restaurant.items.find((row) => row.id === itemId);
+    if (!item) return;
+    setSelectedItem(item);
+    setSheetOpen(true);
+  }, [restaurant, itemId]);
+
   const itemsByCategory = useMemo(() => {
     if (!restaurant) return {};
     const map: Record<string, typeof restaurant.items> = {};
@@ -68,6 +77,10 @@ export default function RestaurantPage({ merchantId, onNavigate }: Props) {
 
   const tryAddToCart = (payload: PendingAdd, itemName: string) => {
     if (!restaurant) return;
+    if (restaurant.isAcceptingOrdersNow === false) {
+      toast.error(restaurant.acceptingOrdersError || 'This restaurant is not accepting orders right now');
+      return;
+    }
     const result = addItem(payload, restaurant.name);
     if (result === 'conflict') {
       setPendingAdd(payload);
@@ -262,6 +275,20 @@ export default function RestaurantPage({ merchantId, onNavigate }: Props) {
         </div>
       </section>
 
+      {restaurant.isAcceptingOrdersNow === false && (
+        <section className="px-4 mb-4">
+          <div className="rounded-xl border border-error/30 bg-error-container/20 px-4 py-3">
+            <p className="text-label-md font-semibold text-error flex items-center gap-2">
+              <MaterialIcon name="schedule" className="text-[18px]" />
+              Not accepting orders right now
+            </p>
+            {restaurant.acceptingOrdersError && (
+              <p className="mt-1 text-body-sm text-on-surface-variant">{restaurant.acceptingOrdersError}</p>
+            )}
+          </div>
+        </section>
+      )}
+
       {restaurant.categories.length > 0 && (
         <div className="sticky top-0 z-30 -mx-4 scroll-mt-16 border-b border-outline-variant/30 bg-background/80 px-4 py-3 backdrop-blur-md">
           <div className="no-scrollbar flex w-max gap-2 overflow-x-auto">
@@ -318,8 +345,9 @@ export default function RestaurantPage({ merchantId, onNavigate }: Props) {
                           <span className="text-headline-md font-bold text-primary">{formatJmd(item.price)}</span>
                           <button
                             type="button"
+                            disabled={restaurant.isAcceptingOrdersNow === false}
                             onClick={() => handleQuickAdd(item)}
-                            className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-on-primary shadow-md transition-transform active:scale-90"
+                            className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-on-primary shadow-md transition-transform active:scale-90 disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100"
                           >
                             <MaterialIcon name="add" />
                           </button>
@@ -352,6 +380,7 @@ export default function RestaurantPage({ merchantId, onNavigate }: Props) {
         open={sheetOpen}
         onClose={() => setSheetOpen(false)}
         onAdd={handleSheetAdd}
+        addDisabled={restaurant.isAcceptingOrdersNow === false}
       />
 
       <NewCartModal

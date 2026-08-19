@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { reverseGeocode } from '@roam/location';
 import { MaterialIcon } from '@/components/icons/MaterialIcon';
 import { AddressAutocomplete } from '@/components/ui/AddressAutocomplete';
@@ -45,6 +45,8 @@ export function DeliveryAddressPage({ onBack, onConfirm, onOutOfZone }: Delivery
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [saved, setSaved] = useState<SavedAddress[]>([]);
   const [locating, setLocating] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const submitLockRef = useRef(false);
 
   useEffect(() => {
     setSaved(getSavedAddresses());
@@ -63,17 +65,25 @@ export function DeliveryAddressPage({ onBack, onConfirm, onOutOfZone }: Delivery
 
   const handleConfirm = async () => {
     if (!selected?.line1.trim()) return;
-    const zone = await checkDeliveryZoneAsync({
-      line1: selected.line1,
-      line2: selected.line2,
-      lat: selected.lat,
-      lng: selected.lng,
-    });
-    if (!zone.inZone) {
-      onOutOfZone?.(selected);
-      return;
+    if (submitLockRef.current) return;
+    submitLockRef.current = true;
+    setIsSubmitting(true);
+    try {
+      const zone = await checkDeliveryZoneAsync({
+        line1: selected.line1,
+        line2: selected.line2,
+        lat: selected.lat,
+        lng: selected.lng,
+      });
+      if (!zone.inZone) {
+        onOutOfZone?.(selected);
+        return;
+      }
+      onConfirm(selected);
+    } finally {
+      submitLockRef.current = false;
+      setIsSubmitting(false);
     }
-    onConfirm(selected);
   };
 
   const useCurrentLocation = async () => {
@@ -231,10 +241,10 @@ export function DeliveryAddressPage({ onBack, onConfirm, onOutOfZone }: Delivery
           <button
             type="button"
             onClick={() => void handleConfirm()}
-            disabled={!selected?.line1.trim()}
+            disabled={!selected?.line1.trim() || isSubmitting}
             className="w-full bg-primary text-on-primary text-sm font-semibold tracking-wide py-4 rounded-xl shadow-md active:scale-[0.98] transition-transform duration-200 flex justify-center items-center disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Confirm Address
+            {isSubmitting ? 'Checking…' : 'Confirm Address'}
           </button>
         </div>
       </main>

@@ -41,6 +41,7 @@ export default function HomePage({
   const [selectedVertical, setSelectedVertical] = useState<VerticalType>('restaurant');
   const [merchants, setMerchants] = useState<DiscoverMerchant[]>([]);
   const [loading, setLoading] = useState(true);
+  const [discoveryError, setDiscoveryError] = useState<string | null>(null);
   const [addressOpen, setAddressOpen] = useState(false);
   const [addressTick, setAddressTick] = useState(0);
   const savedAddress = useMemo(() => getSavedAddress(), [addressTick]);
@@ -69,9 +70,16 @@ export default function HomePage({
 
   const loadMerchants = useCallback(async (vertical: VerticalType) => {
     setLoading(true);
-    const data = await fetchDiscoverMerchants(vertical);
-    setMerchants(data);
-    setLoading(false);
+    setDiscoveryError(null);
+    try {
+      const { merchants: data } = await fetchDiscoverMerchants(vertical);
+      setMerchants(data);
+    } catch {
+      setMerchants([]);
+      setDiscoveryError('Could not load stores. Check your connection and try again.');
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -209,6 +217,14 @@ export default function HomePage({
           <div className="flex flex-col gap-6">
             {loading ? (
               <RestaurantCardSkeleton count={2} />
+            ) : discoveryError ? (
+              <EmptyState
+                icon="cloud_off"
+                title="Could not load stores"
+                description={discoveryError}
+                actionLabel="Retry"
+                onAction={() => void loadMerchants(selectedVertical)}
+              />
             ) : filteredPopular.length === 0 ? (
               <EmptyState
                 icon="storefront"

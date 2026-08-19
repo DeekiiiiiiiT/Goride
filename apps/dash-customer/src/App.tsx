@@ -298,16 +298,36 @@ function DashCustomerShell() {
   useEffect(() => {
     if (!oauthReturnPending || loading || session) return;
 
-    const timeout = window.setTimeout(() => {
-      if (!sessionStorage.getItem(DASH_CUSTOMER_OAUTH_INTENT_KEY)) return;
-      consumeDashCustomerOAuthIntent();
-      setOauthReturnPending(false);
-      toast.error('Google sign-in could not be completed. Please try again.');
-      setPhase('login');
-    }, 8000);
+    let cancelled = false;
+    const startedAt = Date.now();
+    const maxWaitMs = 20000;
+    let timer: number | undefined;
 
-    return () => window.clearTimeout(timeout);
-  }, [oauthReturnPending, loading, session]);
+    const pollForSession = async () => {
+      if (cancelled) return;
+      const { data: { session: activeSession } } = await supabase.auth.getSession();
+      if (activeSession) {
+        await completeOAuthReturn(activeSession);
+        return;
+      }
+      if (Date.now() - startedAt >= maxWaitMs) {
+        if (!sessionStorage.getItem(DASH_CUSTOMER_OAUTH_INTENT_KEY)) return;
+        consumeDashCustomerOAuthIntent();
+        setOauthReturnPending(false);
+        toast.error('Google sign-in could not be completed. Please try again.');
+        setPhase('login');
+        return;
+      }
+      timer = window.setTimeout(() => void pollForSession(), 2000);
+    };
+
+    void pollForSession();
+
+    return () => {
+      cancelled = true;
+      if (timer) window.clearTimeout(timer);
+    };
+  }, [oauthReturnPending, loading, session, completeOAuthReturn]);
 
   useEffect(() => {
     const path = window.location.pathname;
@@ -606,6 +626,7 @@ function DashCustomerShell() {
         return (
           <StorePage
             merchantId={pageData?.merchantId as string | undefined}
+            itemId={pageData?.itemId as string | undefined}
             verticalType={pageData?.verticalType as string | undefined}
             onNavigate={navigate}
           />

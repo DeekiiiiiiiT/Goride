@@ -97,24 +97,36 @@ function mockMerchants(vertical?: VerticalType): DiscoverMerchant[] {
   return deduped.filter((m) => m.vertical_type === vertical);
 }
 
-export async function fetchDiscoverMerchants(vertical?: VerticalType): Promise<DiscoverMerchant[]> {
-  try {
-    const qs = vertical ? `?vertical=${encodeURIComponent(vertical)}` : '';
-    const res = await fetch(`${API_ENDPOINTS.delivery}/merchants${qs}`, {
-      headers: supabaseAnonFunctionHeaders(),
-    });
-    if (!res.ok) throw new Error('fetch failed');
-    const data = (await res.json()) as { merchants?: Record<string, unknown>[] };
-    const rows = data.merchants ?? [];
-    if (!rows.length) {
-      if (allowMocks()) return mockMerchants(vertical);
-      return [];
+export async function fetchDiscoverMerchants(
+  vertical?: VerticalType,
+  options?: { limit?: number; offset?: number },
+): Promise<{ merchants: DiscoverMerchant[]; hasMore: boolean }> {
+  const params = new URLSearchParams();
+  if (vertical) params.set('vertical', vertical);
+  if (options?.limit != null) params.set('limit', String(options.limit));
+  if (options?.offset != null) params.set('offset', String(options.offset));
+  const qs = params.toString() ? `?${params.toString()}` : '';
+
+  const res = await fetch(`${API_ENDPOINTS.delivery}/merchants${qs}`, {
+    headers: supabaseAnonFunctionHeaders(),
+  });
+  if (!res.ok) throw new Error('Could not load stores');
+  const data = (await res.json()) as {
+    merchants?: Record<string, unknown>[];
+    hasMore?: boolean;
+  };
+  const rows = data.merchants ?? [];
+  if (!rows.length) {
+    if (allowMocks()) {
+      const mocked = mockMerchants(vertical);
+      return { merchants: mocked, hasMore: false };
     }
-    return rows.map(mapApiMerchant);
-  } catch {
-    if (allowMocks()) return mockMerchants(vertical);
-    return [];
+    return { merchants: [], hasMore: false };
   }
+  return {
+    merchants: rows.map(mapApiMerchant),
+    hasMore: Boolean(data.hasMore),
+  };
 }
 
 export const VERTICAL_TABS = HOME_VERTICAL_TABS.filter((t) =>
