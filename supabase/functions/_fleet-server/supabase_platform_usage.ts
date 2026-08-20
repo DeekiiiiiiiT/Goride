@@ -51,7 +51,7 @@ export interface UsageMeter {
   available: boolean;
 }
 
-export interface UsageSnapshot {
+export type UsageSnapshot = {
   syncedAt: string;
   periodStart: string;
   periodEnd: string;
@@ -62,7 +62,8 @@ export interface UsageSnapshot {
   meters: UsageMeter[];
   alertStatus: "ok" | "warn" | "critical";
   alertMessages: string[];
-}
+  notes?: string[];
+};
 
 export interface AlertConfig {
   warnPct: number;
@@ -207,6 +208,35 @@ export function getPat(): string {
   return (Deno.env.get("ROAM_MGMT_PAT") || Deno.env.get("SUPABASE_PAT") || "").trim();
 }
 
+/** Project anon/service JWTs look like eyJ… — those are NOT Management Access Tokens. */
+function describePatProblem(pat: string): string | null {
+  if (!pat) return "ROAM_MGMT_PAT is empty.";
+  if (pat.startsWith("eyJ")) {
+    return "ROAM_MGMT_PAT looks like a project API key (anon/service_role). Replace it with an Account Access Token from https://supabase.com/dashboard/account/tokens (usually starts with sbp_).";
+  }
+  if (pat.includes(" ") || pat.includes("\n")) {
+    return "ROAM_MGMT_PAT has spaces/newlines — paste the token only, no extra characters.";
+  }
+  return null;
+}
+
+async function assertPatWorks(pat: string, projectRef: string): Promise<void> {
+  const problem = describePatProblem(pat);
+  if (problem) throw new Error(problem);
+
+  const res = await fetch(`https://api.supabase.com/v1/projects/${projectRef}`, {
+    headers: { Authorization: `Bearer ${pat}`, Accept: "application/json" },
+  });
+  if (res.ok) return;
+  const body = await res.text();
+  if (res.status === 401 || res.status === 403) {
+    throw new Error(
+      `ROAM_MGMT_PAT was rejected by Supabase Management API (${res.status}). Create a new token at Account → Access Tokens and set secret ROAM_MGMT_PAT. Detail: ${body.slice(0, 200)}`,
+    );
+  }
+  // 404 etc. — token may still be valid for org endpoints
+}
+
 async function resolveOrgSlug(pat: string): Promise<string> {
   const fromEnv = (Deno.env.get("ROAM_ORG_SLUG") || Deno.env.get("SUPABASE_ORG_SLUG") || "").trim();
   if (fromEnv) return fromEnv;
@@ -222,9 +252,6 @@ async function resolveOrgSlug(pat: string): Promise<string> {
   }
   const orgs = await res.json();
   const list = Array.isArray(orgs) ? orgs : [];
-  const projectRef = getProjectRef();
-  // Prefer org that owns our project when Management API returns projects nested;
-  // otherwise first org.
   let slug = list[0]?.id || list[0]?.slug || "";
   for (const o of list) {
     if (o?.id || o?.slug) {
@@ -232,9 +259,7 @@ async function resolveOrgSlug(pat: string): Promise<string> {
       break;
     }
   }
-  // Soft fallback used in this workspace
   if (!slug) slug = "tllnqjkyfrlvvdgovaui";
-  void projectRef;
   return String(slug);
 }
 
@@ -399,7 +424,7 @@ function buildMeters(
 }
 
 // ---------------------------------------------------------------------------
-// Sync from platform usage API
+// Sync from platform usage API (JWT) or composed Management API + DB (PAT)
 // ---------------------------------------------------------------------------
 
 interface OrgUsageRow {
@@ -408,6 +433,190 @@ interface OrgUsageRow {
   usage_original: number;
   available_in_plan?: boolean;
   pricing_free_units?: number;
+}
+
+function rowsToRawByMetric(usages: OrgUsageRow[]): {
+  rawByMetric: Record<string, { usage: number; usage_original: number; available?: boolean }>;
+  includedFromApi: Partial<Record<MeterKey, number>>;
+} {
+  const rawByMetric: Record<string, { usage: number; usage_original: number; available?: boolean }> = {};
+  const includedFromApi: Partial<Record<MeterKey, number>> = {};
+  for (const u of usages) {
+    if (!u?.metric) continue;
+    rawByMetric[u.metric] = {
+      usage: Number(u.usage) || 0,
+      usage_original: Number(u.usage_original) || Number(u.usage) || 0,
+      available: u.available_in_plan !== false,
+    };
+    for (const key of Object.keys(METER_META) as MeterKey[]) {
+      if (METER_META[key].metric !== u.metric) continue;
+      if (u.pricing_free_units != null && Number(u.pricing_free_units) > 0) {
+        const free = Number(u.pricing_free_units);
+        includedFromApi[key] = BYTE_METRICS.has(u.metric)
+          ? free >= 10_000
+            ? free / BYTES_PER_GB
+            : free
+          : free;
+      }
+    }
+  }
+  return { rawByMetric, includedFromApi };
+}
+
+async function tryPlatformOrgUsage(
+  pat: string,
+  orgSlug: string,
+  projectRef: string,
+  period: { start: string; end: string },
+): Promise<OrgUsageRow[] | null> {
+  // Dashboard /platform routes expect a user session JWT (eyJ…), not sbp_ PATs.
+  if (!pat.startsWith("eyJ")) return null;
+
+  const qs = new URLSearchParams({
+    project_ref: projectRef,
+    start: period.start,
+    end: period.end,
+  });
+  const url = `https://api.supabase.com/platform/organizations/${encodeURIComponent(orgSlug)}/usage?${qs}`;
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${pat}`, Accept: "application/json" },
+  });
+  if (!res.ok) return null;
+  const payload = await res.json();
+  return Array.isArray(payload?.usages) ? payload.usages : [];
+}
+
+/** Compose meters using Management API (PAT) + service-role reads — works with sbp_ tokens. */
+async function composeUsageRows(
+  pat: string,
+  projectRef: string,
+  period: { start: string; end: string },
+): Promise<{ rows: OrgUsageRow[]; notes: string[] }> {
+  const notes: string[] = [];
+  const rows: OrgUsageRow[] = [];
+  const push = (metric: string, usage: number, usage_original = usage) => {
+    rows.push({ metric, usage, usage_original, available_in_plan: true });
+  };
+
+  // Prometheus scrape (PAT) — DB size when available
+  try {
+    const metricsUrl = `https://api.supabase.com/v1/projects/${projectRef}/analytics/endpoints/metrics`;
+    const mRes = await fetch(metricsUrl, {
+      headers: { Authorization: `Bearer ${pat}`, Accept: "text/plain" },
+    });
+    if (mRes.ok) {
+      const text = await mRes.text();
+      const dbMatch = text.match(/pg_database_size_bytes\{[^}]*\}\s+(\d+)/) ||
+        text.match(/pg_database_size_bytes\s+(\d+)/);
+      if (dbMatch) {
+        const bytes = Number(dbMatch[1]);
+        push("DATABASE_SIZE", bytes / BYTES_PER_GB, bytes);
+      }
+    }
+  } catch {
+    notes.push("Prometheus metrics scrape unavailable.");
+  }
+
+  // Storage + MAU via service role
+  try {
+    const { createClient } = await import("jsr:@supabase/supabase-js@2.49.8");
+    const url = Deno.env.get("SUPABASE_URL") || "";
+    const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+    if (url && key) {
+      const sb = createClient(url, key, { auth: { persistSession: false } });
+
+      const { data: objects, error: objErr } = await sb
+        .schema("storage")
+        .from("objects")
+        .select("metadata")
+        .limit(10000);
+      if (!objErr && Array.isArray(objects)) {
+        let bytes = 0;
+        for (const o of objects) {
+          const size = Number((o as any)?.metadata?.size ?? (o as any)?.metadata?.contentLength ?? 0);
+          if (Number.isFinite(size)) bytes += size;
+        }
+        push("STORAGE_SIZE", bytes / BYTES_PER_GB, bytes);
+      }
+
+      const { data: usersData, error: usersErr } = await sb.auth.admin.listUsers({
+        page: 1,
+        perPage: 1000,
+      });
+      if (!usersErr && usersData?.users) {
+        const startMs = new Date(period.start).getTime();
+        const mau = usersData.users.filter((u) => {
+          const last = u.last_sign_in_at ? new Date(u.last_sign_in_at).getTime() : 0;
+          return last >= startMs;
+        }).length;
+        push("MONTHLY_ACTIVE_USERS", mau, mau);
+        push("MONTHLY_ACTIVE_SSO_USERS", 0, 0);
+        push("MONTHLY_ACTIVE_THIRD_PARTY_USERS", 0, 0);
+        notes.push("MAU is approximated from Auth last-sign-in this billing month.");
+      }
+    }
+  } catch (e: any) {
+    notes.push(`Live storage/MAU sample failed: ${e?.message || e}`);
+  }
+
+  // Function invocations + egress estimate from analytics logs (PAT)
+  try {
+    const fnSql = `
+      select count() as requests
+      from logs
+      where source = 'function_edge_logs'
+    `.trim();
+    const edgeSql = `
+      select
+        count() as requests,
+        sum(toUInt64OrZero(log_attributes['response.headers.content_length'])) as bytes
+      from logs
+      where source = 'edge_logs'
+    `.trim();
+
+    const [fnRows, edgeRows] = await Promise.all([
+      queryAnalyticsLogs(pat, projectRef, fnSql, period.start, period.end).catch(() => []),
+      queryAnalyticsLogs(pat, projectRef, edgeSql, period.start, period.end).catch(() => []),
+    ]);
+
+    const invocations = Number(fnRows?.[0]?.requests) || 0;
+    push("FUNCTION_INVOCATIONS", invocations, invocations);
+
+    const egressBytes = Number(edgeRows?.[0]?.bytes) || 0;
+    push("EGRESS", egressBytes / BYTES_PER_GB, egressBytes);
+    push("CACHED_EGRESS", 0, 0);
+    if (egressBytes > 0) {
+      notes.push(
+        "Egress estimated from API Content-Length in logs (may differ slightly from Supabase billable GB).",
+      );
+    } else {
+      notes.push("Egress estimate was 0 from logs — compare with Supabase Usage for official GB.");
+    }
+  } catch (e: any) {
+    notes.push(`Analytics compose failed: ${e?.message || e}`);
+  }
+
+  const have = new Set(rows.map((r) => r.metric));
+  for (const key of Object.keys(METER_META) as MeterKey[]) {
+    const metric = METER_META[key].metric;
+    if (!have.has(metric)) {
+      rows.push({ metric, usage: 0, usage_original: 0, available_in_plan: true });
+    }
+  }
+
+  const days = Math.max(1, new Date().getUTCDate());
+  const microIdx = rows.findIndex((r) => r.metric === "COMPUTE_HOURS_XS");
+  if (microIdx >= 0) {
+    rows[microIdx] = {
+      metric: "COMPUTE_HOURS_XS",
+      usage: days * 24,
+      usage_original: days * 24,
+      available_in_plan: true,
+    };
+    notes.push("Micro Compute Hours estimated as days-so-far × 24 (always-on Micro).");
+  }
+
+  return { rows, notes };
 }
 
 export async function syncUsageSnapshot(opts?: { force?: boolean }): Promise<{
@@ -426,6 +635,11 @@ export async function syncUsageSnapshot(opts?: { force?: boolean }): Promise<{
     };
   }
 
+  const formatProblem = describePatProblem(pat);
+  if (formatProblem) {
+    return { ok: false, reason: "bad-token", detail: formatProblem };
+  }
+
   const lastSync: string | null = await kv.get(KV_LAST_SYNC);
   if (!opts?.force && lastSync) {
     const elapsed = Date.now() - new Date(lastSync).getTime();
@@ -440,6 +654,12 @@ export async function syncUsageSnapshot(opts?: { force?: boolean }): Promise<{
     }
   }
 
+  try {
+    await assertPatWorks(pat, projectRef);
+  } catch (e: any) {
+    return { ok: false, reason: "pat-invalid", detail: e?.message || String(e) };
+  }
+
   let orgSlug: string;
   try {
     orgSlug = await resolveOrgSlug(pat);
@@ -452,54 +672,18 @@ export async function syncUsageSnapshot(opts?: { force?: boolean }): Promise<{
   const alerts = await getAlertConfig();
   const period = billingPeriodBounds();
 
-  const qs = new URLSearchParams({
-    project_ref: projectRef,
-    start: period.start,
-    end: period.end,
-  });
-  const url = `https://api.supabase.com/platform/organizations/${encodeURIComponent(orgSlug)}/usage?${qs}`;
-  const res = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${pat}`,
-      Accept: "application/json",
-    },
-  });
+  let usages: OrgUsageRow[] | null = await tryPlatformOrgUsage(pat, orgSlug, projectRef, period);
+  let source: UsageSnapshot["source"] = "org_usage";
+  let notes: string[] = [];
 
-  if (!res.ok) {
-    const body = await res.text();
-    return {
-      ok: false,
-      reason: "upstream-error",
-      detail: `Org usage API ${res.status}: ${body.slice(0, 500)}`,
-    };
+  if (!usages || usages.length === 0) {
+    const composed = await composeUsageRows(pat, projectRef, period);
+    usages = composed.rows;
+    notes = composed.notes;
+    source = "composed";
   }
 
-  const payload = await res.json();
-  const usages: OrgUsageRow[] = Array.isArray(payload?.usages) ? payload.usages : [];
-  const rawByMetric: Record<string, { usage: number; usage_original: number; available?: boolean }> = {};
-  const includedFromApi: Partial<Record<MeterKey, number>> = {};
-
-  for (const u of usages) {
-    if (!u?.metric) continue;
-    rawByMetric[u.metric] = {
-      usage: Number(u.usage) || 0,
-      usage_original: Number(u.usage_original) || Number(u.usage) || 0,
-      available: u.available_in_plan !== false,
-    };
-    // Map free units onto our meter keys when Supabase reports them
-    for (const key of Object.keys(METER_META) as MeterKey[]) {
-      if (METER_META[key].metric !== u.metric) continue;
-      if (u.pricing_free_units != null && Number(u.pricing_free_units) > 0) {
-        const free = Number(u.pricing_free_units);
-        includedFromApi[key] = BYTE_METRICS.has(u.metric)
-          ? free >= 10_000
-            ? free / BYTES_PER_GB
-            : free
-          : free;
-      }
-    }
-  }
-
+  const { rawByMetric, includedFromApi } = rowsToRawByMetric(usages);
   const planMerged: PlanQuotas = {
     ...plan,
     included: { ...plan.included, ...includedFromApi },
@@ -519,11 +703,12 @@ export async function syncUsageSnapshot(opts?: { force?: boolean }): Promise<{
     periodEnd: period.end,
     projectRef,
     orgSlug,
-    source: "org_usage",
+    source,
     raw,
     meters,
     alertStatus,
-    alertMessages,
+    alertMessages: [...alertMessages, ...notes],
+    notes,
   };
 
   await kv.set(KV_LATEST, snapshot);

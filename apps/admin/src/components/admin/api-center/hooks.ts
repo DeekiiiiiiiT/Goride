@@ -365,7 +365,14 @@ export function useSyncSupabaseUsage() {
         method: 'POST',
         headers: authHeaders(token),
       });
-      return readJsonOrThrow(res);
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(body?.detail || body?.error || body?.reason || `HTTP ${res.status}`);
+      }
+      if (body?.ok === false) {
+        throw new Error(body?.detail || body?.reason || 'Sync failed');
+      }
+      return body;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['api-center', 'supabase'] });

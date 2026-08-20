@@ -1,13 +1,14 @@
 /**
  * SupabasePlatformTab.tsx
  *
- * Plan gauges (Usage Summary style) + leak radar + alert thresholds.
+ * Usage Summary with circular progress gauges (Supabase-style) + leak radar + alerts.
  */
 
 import React, { useMemo, useState } from 'react';
 import {
   AlertCircle,
   CheckCircle2,
+  ChevronRight,
   Database,
   ExternalLink,
   Loader2,
@@ -26,26 +27,82 @@ import { fmtNum } from './providers';
 
 type RadarRange = '24h' | '7d';
 
-function fmtMeter(m: SupabaseUsageMeter): string {
+function fmtUsed(m: SupabaseUsageMeter): string {
   if (m.used == null || !m.available) return '—';
-  if (m.unit === 'gb') return `${m.used < 1 ? m.used.toFixed(3) : m.used.toFixed(2)} GB`;
-  if (m.unit === 'hours') return `${m.used.toFixed(0)} h`;
+  if (m.unit === 'gb') return m.used < 1 ? m.used.toFixed(3) : m.used.toFixed(2);
+  if (m.unit === 'hours') return `${Math.round(m.used)} hours`;
   if (m.key.toLowerCase().includes('users')) return `${fmtNum(Math.round(m.used))} MAU`;
   return fmtNum(Math.round(m.used));
 }
 
-function fmtIncluded(m: SupabaseUsageMeter): string {
-  if (m.included == null) return 'Unlimited / n/a';
+function fmtCap(m: SupabaseUsageMeter): string {
+  if (m.included == null) return '';
   if (m.unit === 'gb') return `${m.included} GB`;
-  if (m.unit === 'hours') return `${fmtNum(m.included)} h`;
+  if (m.unit === 'hours') return '';
+  if (m.key.toLowerCase().includes('users')) return `${fmtNum(m.included)} MAU`;
   return fmtNum(m.included);
 }
 
-function statusTone(status: SupabaseUsageMeter['status']) {
-  if (status === 'critical') return 'border-red-500/40 bg-red-500/10';
-  if (status === 'warn') return 'border-amber-500/40 bg-amber-500/10';
-  if (status === 'unavailable') return 'border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900/40';
-  return 'border-emerald-500/25 bg-white dark:bg-slate-900/50';
+function fmtRatio(m: SupabaseUsageMeter): string {
+  const used = fmtUsed(m);
+  const cap = fmtCap(m);
+  if (!cap) {
+    if (m.unit === 'gb' && m.used != null) return `${used} GB`;
+    return used;
+  }
+  if (m.unit === 'gb') return `${used} / ${cap}`;
+  return `${used} / ${cap}`;
+}
+
+function pctLabel(m: SupabaseUsageMeter): string {
+  if (m.pct == null) return '';
+  if (m.pct < 1) return '<1%';
+  return `${m.pct.toFixed(0)}%`;
+}
+
+function ringColor(status: SupabaseUsageMeter['status']) {
+  if (status === 'critical') return '#ef4444';
+  if (status === 'warn') return '#f59e0b';
+  if (status === 'unavailable') return '#94a3b8';
+  return '#14b8a6';
+}
+
+/** Circular progress ring — mirrors Supabase Usage Summary. */
+function UsageRing({ pct, status }: { pct: number | null; status: SupabaseUsageMeter['status'] }) {
+  const size = 44;
+  const stroke = 3.5;
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const p = Math.min(100, Math.max(0, pct ?? 0));
+  // Show a tiny visible arc even at <1% so the ring isn't empty like "broken"
+  const visual = p > 0 && p < 1.5 ? 1.5 : p;
+  const offset = c - (visual / 100) * c;
+  const color = ringColor(status);
+
+  return (
+    <svg width={size} height={size} className="shrink-0 -rotate-90" aria-hidden>
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={r}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={stroke}
+        className="text-slate-200 dark:text-slate-700"
+      />
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={r}
+        fill="none"
+        stroke={color}
+        strokeWidth={stroke}
+        strokeLinecap="round"
+        strokeDasharray={c}
+        strokeDashoffset={pct == null || pct <= 0 ? c : offset}
+      />
+    </svg>
+  );
 }
 
 function classBadge(c: RadarPathRow['classification']) {
@@ -54,12 +111,34 @@ function classBadge(c: RadarPathRow['classification']) {
   return 'bg-sky-500/15 text-sky-300 border-sky-500/30';
 }
 
+/** Horizontal bar chart under each meter for “used vs included”. */
+function UsageBar({ m }: { m: SupabaseUsageMeter }) {
+  const pct = Math.min(100, Math.max(0, m.pct ?? 0));
+  const fill =
+    m.status === 'critical' ? 'bg-red-500' : m.status === 'warn' ? 'bg-amber-500' : 'bg-teal-500';
+  return (
+    <div className="mt-3">
+      <div className="flex justify-between text-[10px] text-slate-500 dark:text-slate-400 mb-1">
+        <span>Used</span>
+        <span>{pctLabel(m) || (m.included == null ? 'n/a' : '0%')}</span>
+      </div>
+      <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all ${fill}`}
+          style={{ width: `${m.included == null ? 0 : Math.max(pct > 0 ? pct : 0, pct > 0 && pct < 1 ? 2 : pct)}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
 export function SupabasePlatformTab() {
   const [radarRange, setRadarRange] = useState<RadarRange>('24h');
-  const { data, isLoading, error } = useSupabasePlatformSummary();
+  const { data, isLoading, error, refetch } = useSupabasePlatformSummary();
   const { data: radar, isLoading: radarLoading, error: radarError } = useSupabaseRadar(radarRange);
   const syncMut = useSyncSupabaseUsage();
   const saveAlerts = useSaveSupabaseAlerts();
+  const [syncOk, setSyncOk] = useState<string | null>(null);
 
   const [warnPct, setWarnPct] = useState<number | null>(null);
   const [criticalPct, setCriticalPct] = useState<number | null>(null);
@@ -72,30 +151,30 @@ export function SupabasePlatformTab() {
 
   const meters = data?.snapshot?.meters || [];
   const primaryKeys = useMemo(
-    () =>
-      new Set([
-        'egressGb',
-        'cachedEgressGb',
-        'functionInvocations',
-        'storageSizeGb',
-        'databaseSizeGb',
-        'monthlyActiveUsers',
-        'realtimePeakConnections',
-        'realtimeMessages',
-        'microComputeHours',
-        'storageImageTransformations',
-        'logDrainEvents',
-        'monthlyActiveSsoUsers',
-        'monthlyActiveThirdPartyUsers',
-      ]),
+    () => [
+      'realtimePeakConnections',
+      'functionInvocations',
+      'storageSizeGb',
+      'egressGb',
+      'monthlyActiveUsers',
+      'cachedEgressGb',
+      'monthlyActiveSsoUsers',
+      'monthlyActiveThirdPartyUsers',
+      'storageImageTransformations',
+      'realtimeMessages',
+      'logDrainEvents',
+      'microComputeHours',
+      'databaseSizeGb',
+    ],
     [],
   );
   const orderedMeters = useMemo(
-    () => [...meters].sort((a, b) => {
-      const ai = [...primaryKeys].indexOf(a.key);
-      const bi = [...primaryKeys].indexOf(b.key);
-      return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
-    }),
+    () =>
+      [...meters].sort((a, b) => {
+        const ai = primaryKeys.indexOf(a.key);
+        const bi = primaryKeys.indexOf(b.key);
+        return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+      }),
     [meters, primaryKeys],
   );
 
@@ -105,8 +184,14 @@ export function SupabasePlatformTab() {
     : 'https://supabase.com/dashboard/org/_/usage';
 
   const onSync = async () => {
+    setSyncOk(null);
     try {
-      await syncMut.mutateAsync(true);
+      const result = await syncMut.mutateAsync(true);
+      if (result?.ok === false) {
+        throw new Error(result.detail || result.reason || 'Sync failed');
+      }
+      setSyncOk(result?.reason === 'rate-limited' ? 'Already synced recently — showing cached meters.' : 'Synced. Gauges updated.');
+      await refetch();
     } catch {
       /* surfaced via syncMut.error */
     }
@@ -137,7 +222,7 @@ export function SupabasePlatformTab() {
           <div>
             <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Supabase Platform</h2>
             <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">
-              Billable meters vs plan caps, plus leak radar for noisy paths. Plan tier:{' '}
+              Same meters as Supabase Usage Summary. Plan:{' '}
               <span className="text-amber-300 font-medium uppercase">{data?.plan?.tier || 'pro'}</span>
             </p>
           </div>
@@ -171,6 +256,13 @@ export function SupabasePlatformTab() {
               (syncMut.error as Error)?.message ||
               (saveAlerts.error as Error)?.message}
           </span>
+        </div>
+      )}
+
+      {syncOk && (
+        <div className="flex items-start gap-2 bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 rounded-lg px-4 py-3 text-sm">
+          <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0" />
+          <span>{syncOk}</span>
         </div>
       )}
 
@@ -213,7 +305,7 @@ export function SupabasePlatformTab() {
         </ul>
       ) : null}
 
-      {/* Gauges */}
+      {/* Gauges — Supabase Usage Summary layout */}
       <section className="space-y-3">
         <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 border-b border-slate-200 dark:border-slate-800 pb-2">
           Usage Summary
@@ -224,42 +316,50 @@ export function SupabasePlatformTab() {
           </div>
         )}
         {!isLoading && orderedMeters.length === 0 && (
-          <p className="text-sm text-slate-500">No snapshot yet — click Sync now.</p>
+          <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 dark:border-slate-700 dark:bg-slate-900/40 px-6 py-10 text-center space-y-3">
+            <p className="text-sm text-slate-700 dark:text-slate-300">No usage data yet — this page stays blank until the first sync.</p>
+            <p className="text-xs text-slate-500">Click Sync now (top right). After that you’ll see circular gauges + bars for every meter.</p>
+            <button
+              type="button"
+              onClick={onSync}
+              disabled={syncMut.isPending}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-amber-500/20 text-amber-200 border border-amber-500/40 text-sm rounded-lg hover:bg-amber-500/30 disabled:opacity-50"
+            >
+              {syncMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+              Sync now
+            </button>
+          </div>
         )}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {orderedMeters.map((m) => (
-            <div key={m.key} className={`rounded-xl border px-4 py-3 ${statusTone(m.status)}`}>
-              <div className="text-[11px] uppercase tracking-wider text-slate-500">{m.label}</div>
-              <div className="mt-1 text-xl font-semibold text-slate-900 dark:text-white">{fmtMeter(m)}</div>
-              <div className="mt-1 text-[11px] text-slate-500">
-                Included: {fmtIncluded(m)}
-                {m.pct != null ? ` · ${m.pct.toFixed(0)}%` : ''}
+            <div
+              key={m.key}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-3 flex flex-col dark:border-slate-800 dark:bg-slate-900/50"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1 text-sm font-medium text-slate-900 dark:text-slate-100">
+                    <span className="truncate">{m.label}</span>
+                    <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                  </div>
+                  <div className="mt-1 text-sm text-slate-600 dark:text-slate-300 tabular-nums">
+                    {fmtRatio(m)}
+                    {pctLabel(m) ? (
+                      <span className="text-slate-500"> ({pctLabel(m)})</span>
+                    ) : null}
+                  </div>
+                  {m.projected != null && m.included != null && (
+                    <div className="mt-0.5 text-[11px] text-slate-500">
+                      Projected month-end:{' '}
+                      {m.unit === 'gb'
+                        ? `${m.projected.toFixed(2)} GB`
+                        : fmtNum(Math.round(m.projected))}
+                    </div>
+                  )}
+                </div>
+                <UsageRing pct={m.pct} status={m.status} />
               </div>
-              {m.projected != null && m.included != null && (
-                <div className="mt-0.5 text-[11px] text-slate-500">
-                  Projected month-end:{' '}
-                  {m.unit === 'gb'
-                    ? `${m.projected.toFixed(2)} GB`
-                    : fmtNum(Math.round(m.projected))}
-                </div>
-              )}
-              {m.status === 'unavailable' && (
-                <div className="mt-1 text-[11px] text-slate-500">Unavailable from API</div>
-              )}
-              {m.included != null && m.included > 0 && m.used != null && (
-                <div className="relative h-1.5 bg-slate-200 dark:bg-slate-800 rounded-full mt-2 overflow-hidden">
-                  <div
-                    className={`absolute inset-y-0 left-0 ${
-                      m.status === 'critical'
-                        ? 'bg-red-400'
-                        : m.status === 'warn'
-                          ? 'bg-amber-400'
-                          : 'bg-emerald-400'
-                    }`}
-                    style={{ width: `${Math.min(100, m.pct || 0)}%` }}
-                  />
-                </div>
-              )}
+              <UsageBar m={m} />
             </div>
           ))}
         </div>
@@ -369,7 +469,7 @@ function RadarTable({ title, rows }: { title: string; rows: RadarPathRow[] }) {
         {title}
       </div>
       {rows.length === 0 ? (
-        <div className="px-3 py-6 text-sm text-slate-500">No data</div>
+        <div className="px-3 py-6 text-sm text-slate-500">No data yet — sync first, then refresh this range.</div>
       ) : (
         <ul className="divide-y divide-slate-200 dark:divide-slate-800 max-h-80 overflow-auto">
           {rows.map((r) => (
