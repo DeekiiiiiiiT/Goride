@@ -26,10 +26,12 @@ curl -sS -X POST \
 
 ## Required secrets
 
-- `SUPABASE_PAT` — Management / platform access token (needs org usage + analytics read)
-- `SUPABASE_PROJECT_REF` — GoRide project ref (or derived from `SUPABASE_URL`)
-- `SUPABASE_ORG_SLUG` — optional; auto-resolved from Management API when omitted
+- `ROAM_MGMT_PAT` — Management / platform access token (needs org usage + analytics read)
+- `ROAM_PROJECT_REF` — optional GoRide project ref (else derived from platform `SUPABASE_URL`)
+- `ROAM_ORG_SLUG` — optional; auto-resolved from Management API when omitted
 - `FLEET_CRON_SECRET` or `RIDES_CRON_SECRET`
+
+**Note:** Do not name these `SUPABASE_*` — the dashboard rejects that prefix for custom secrets.
 
 ## Notes
 

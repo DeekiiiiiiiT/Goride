@@ -176,8 +176,8 @@ export function SupabasePlatformTab() {
 
       {!data?.configured && (
         <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
-          Set <code className="text-xs">SUPABASE_PAT</code> and <code className="text-xs">SUPABASE_PROJECT_REF</code> (optional{' '}
-          <code className="text-xs">SUPABASE_ORG_SLUG</code>) as edge secrets, then Sync.
+          Set <code className="text-xs">ROAM_MGMT_PAT</code> (optional{' '}
+          <code className="text-xs">ROAM_ORG_SLUG</code> / <code className="text-xs">ROAM_PROJECT_REF</code>) as edge secrets, then Sync.
         </div>
       )}
 

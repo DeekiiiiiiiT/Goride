@@ -4,7 +4,8 @@
  * Pulls Supabase org/project usage meters (same class as dashboard Usage Summary),
  * caches snapshots in KV, and builds a leak-radar from analytics logs.
  *
- * Auth: SUPABASE_PAT (server-side only) + SUPABASE_PROJECT_REF / SUPABASE_ORG_SLUG.
+ * Auth: ROAM_MGMT_PAT (server-side only) + ROAM_PROJECT_REF / ROAM_ORG_SLUG.
+ * (Dashboard forbids custom secrets named SUPABASE_* — those prefixes are reserved.)
  */
 
 import * as kv from "./kv_store.tsx";
@@ -195,18 +196,19 @@ const HEAVY_PATH_RE =
 
 export function getProjectRef(): string {
   return (
-    Deno.env.get("SUPABASE_PROJECT_REF") ||
+    Deno.env.get("ROAM_PROJECT_REF") ||
+    Deno.env.get("SUPABASE_PROJECT_REF") || // legacy alias if ever set via CLI
     (Deno.env.get("SUPABASE_URL") || "").replace(/^https?:\/\//, "").split(".")[0] ||
     ""
   );
 }
 
 export function getPat(): string {
-  return (Deno.env.get("SUPABASE_PAT") || "").trim();
+  return (Deno.env.get("ROAM_MGMT_PAT") || Deno.env.get("SUPABASE_PAT") || "").trim();
 }
 
 async function resolveOrgSlug(pat: string): Promise<string> {
-  const fromEnv = (Deno.env.get("SUPABASE_ORG_SLUG") || "").trim();
+  const fromEnv = (Deno.env.get("ROAM_ORG_SLUG") || Deno.env.get("SUPABASE_ORG_SLUG") || "").trim();
   if (fromEnv) return fromEnv;
 
   const cached: PlanQuotas & { orgSlug?: string } | null = await kv.get(KV_PLAN);
@@ -420,7 +422,7 @@ export async function syncUsageSnapshot(opts?: { force?: boolean }): Promise<{
     return {
       ok: false,
       reason: "not-configured",
-      detail: "Set SUPABASE_PAT and SUPABASE_PROJECT_REF (or SUPABASE_URL) as function secrets.",
+      detail: "Set ROAM_MGMT_PAT (and optionally ROAM_PROJECT_REF / ROAM_ORG_SLUG) as function secrets.",
     };
   }
 
@@ -641,7 +643,7 @@ export async function buildRadar(range: "24h" | "7d"): Promise<RadarResult> {
       generatedAt: new Date().toISOString(),
       rest: [],
       functions: [],
-      notes: ["SUPABASE_PAT / project ref not configured — radar unavailable."],
+      notes: ["ROAM_MGMT_PAT not configured — radar unavailable."],
     };
   }
 

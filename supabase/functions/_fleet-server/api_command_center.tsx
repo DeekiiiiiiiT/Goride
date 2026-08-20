@@ -350,8 +350,11 @@ app.post(`${BASE}/api-center/keys/rotate`, requireAuth(), requirePlatform("write
     }
 
     // Step 2 — push to Supabase Management API.
-    const pat = Deno.env.get("SUPABASE_PAT");
-    const projectRef = Deno.env.get("SUPABASE_PROJECT_REF") ||
+    // Dashboard forbids custom secrets named SUPABASE_* — use ROAM_* names.
+    const pat = Deno.env.get("ROAM_MGMT_PAT") || Deno.env.get("SUPABASE_PAT");
+    const projectRef =
+      Deno.env.get("ROAM_PROJECT_REF") ||
+      Deno.env.get("SUPABASE_PROJECT_REF") ||
       (Deno.env.get("SUPABASE_URL") || "").replace(/^https?:\/\//, "").split(".")[0];
 
     if (!pat || !projectRef) {
@@ -359,7 +362,7 @@ app.post(`${BASE}/api-center/keys/rotate`, requireAuth(), requirePlatform("write
         {
           error: "Rotation backend not configured",
           detail:
-            "Set SUPABASE_PAT (Personal Access Token) and SUPABASE_PROJECT_REF as function secrets to enable key rotation.",
+            "Set ROAM_MGMT_PAT (Personal Access Token) as a function secret to enable key rotation. Optional: ROAM_PROJECT_REF.",
         },
         503
       );

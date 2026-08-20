@@ -146,9 +146,9 @@ Two problems stacked on each other: (1) `SHA256(secret + data)` is a known-broke
 
 `apps/driver`, `apps/rides-passenger`, and `apps/dash-merchant` have one. `apps/fleet`, `apps/admin`, `apps/dash-courier`, `apps/dash-customer`, `apps/enterprise`, and `apps/haul` do not, and neither does the repo root for the Supabase Edge Function secrets (see command list below).
 
-### 6. `SUPABASE_PAT` (Management API token) is the most dangerous secret in this repo — treat it accordingly
+### 6. `ROAM_MGMT_PAT` (Management API token) is the most dangerous secret in this repo — treat it accordingly
 
-`apps/fleet/src/supabase/functions/server/api_command_center.tsx:319` reads `Deno.env.get("SUPABASE_PAT")`. This isn't a per-project key — it's a **Supabase account-level Personal Access Token**, which can create/delete/reconfigure *any* project in the Supabase organization, not just this one. It's correctly kept server-side and not referenced anywhere in frontend code (confirmed by grep) — good. But because the blast radius of this one leaking is "someone can take down the whole Supabase org," it deserves: (a) its own restricted-scope token if Supabase's dashboard allows scoping, (b) a calendar reminder to rotate it periodically, (c) never logging it, ever (see finding 8 below — confirmed clean today, but this is the one to keep watching).
+Edge Functions read `Deno.env.get("ROAM_MGMT_PAT")` (legacy alias `SUPABASE_PAT` if present). Custom secrets **cannot** be named `SUPABASE_*` in the dashboard — that prefix is reserved. This isn't a per-project key — it's a **Supabase account-level Personal Access Token**, which can create/delete/reconfigure *any* project in the Supabase organization, not just this one. It's correctly kept server-side and not referenced anywhere in frontend code — good. But because the blast radius of this one leaking is "someone can take down the whole Supabase org," it deserves: (a) its own restricted-scope token if Supabase's dashboard allows scoping, (b) a calendar reminder to rotate it periodically, (c) never logging it, ever.
 
 ### 7. No null-checks around a couple of Deno.env.get() calls that could crash a live payment path
 
@@ -240,12 +240,13 @@ RIDES_CRON_SECRET=
 MATCHING_CRON_SECRET=
 
 # Supabase Management API (org-level — extremely sensitive, see finding 6)
-SUPABASE_PAT=
-SUPABASE_PROJECT_REF=
-SUPABASE_ORG_SLUG=
+# Dashboard forbids custom secret names starting with SUPABASE_
+ROAM_MGMT_PAT=
+ROAM_PROJECT_REF=
+ROAM_ORG_SLUG=
 ```
 
-`SUPABASE_PAT` is also used by **API Command Center → Supabase Platform** to pull org usage meters (`/platform/organizations/{slug}/usage`) and analytics leak-radar logs. Prefer a token with analytics/usage read (plus secrets write if you still use key rotation). Never expose it to the browser.
+`ROAM_MGMT_PAT` is also used by **API Command Center → Supabase Platform** to pull org usage meters (`/platform/organizations/{slug}/usage`) and analytics leak-radar logs. Prefer a token with analytics/usage read (plus secrets write if you still use key rotation). Never expose it to the browser. `ROAM_PROJECT_REF` is optional when `SUPABASE_URL` is already injected by the platform.
 
 ### Split environments — dev/staging/prod aren't separated today
 
@@ -319,8 +320,10 @@ supabase secrets set RIDES_CRON_SECRET=<value>
 supabase secrets set MATCHING_CRON_SECRET=<value>
 
 # Supabase Management API — handle with extreme care, see finding 6
-supabase secrets set SUPABASE_PAT=<value>
-supabase secrets set SUPABASE_PROJECT_REF=<value>
+# (Dashboard rejects names starting with SUPABASE_)
+supabase secrets set ROAM_MGMT_PAT=<value>
+supabase secrets set ROAM_PROJECT_REF=<value>
+supabase secrets set ROAM_ORG_SLUG=<value>
 
 # Verify what's actually set in production (does NOT print values, just names):
 supabase secrets list
@@ -362,6 +365,6 @@ git commit -m "stop tracking .env.local files; add .env ignore rules"
 | Audit sign-report uses service-role SHA256 | High | **Fixed** | Wave 3 | HMAC + `AUDIT_HMAC_SECRET` + `requireAuth` + `data.export` |
 | Missing `.env.example` files | High | **Fixed** | Wave 3 | Fleet, supabase, admin, enterprise, haul, dash-customer, dash-courier |
 | PayPal missing-config error | High | **Fixed** | Wave 3 | Clear secrets-set message |
-| `SUPABASE_PAT` blast radius | High | **Documented** | — | Rotate on calendar; never log |
+| `ROAM_MGMT_PAT` blast radius | High | **Documented** | — | Rotate on calendar; never log |
 
 **Ops follow-ups:** set/rotate brain secrets + `WIPAY_CALLBACK_SECRET`; redeploy `toll-brain`, `fuel-brain`, `payments`, `make-server-37f42386`, and Fleet UI.
