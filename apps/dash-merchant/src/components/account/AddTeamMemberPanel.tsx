@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { MaterialIcon } from '../../signup/components/MaterialIcon';
-import JobStationPicker from '../staff-ops/shared/JobStationPicker';
 import {
   defaultJobStationForRole,
   jobStationFromApi,
@@ -10,15 +9,15 @@ import {
   STATION_LABELS,
   TEAM_PERMISSIONS,
   TEAM_ROLE_OPTIONS,
-  type JobStation,
   type JobStationSelection,
   type TeamPermission,
   type TeamRole,
 } from '../../types/team';
 
 interface AddTeamMemberPanelProps {
-  pinSignInEnabled: boolean;
+  pinSignInEnabled?: boolean;
   inStoreEnabled?: boolean;
+  partnerOnly?: boolean;
   onAddRoster: (payload: {
     name: string;
     role: 'staff' | 'manager';
@@ -51,8 +50,9 @@ const FLOOR_STAFF_ROLES = TEAM_ROLE_OPTIONS.filter(
 );
 
 export default function AddTeamMemberPanel({
-  pinSignInEnabled,
+  pinSignInEnabled = false,
   inStoreEnabled = false,
+  partnerOnly = false,
   onAddRoster,
   onSendInvite,
   isSaving = false,
@@ -61,12 +61,14 @@ export default function AddTeamMemberPanel({
   const [name, setName] = useState('');
   const [displayTitle, setDisplayTitle] = useState('');
   const [email, setEmail] = useState('');
-  const [role, setRole] = useState<TeamRole>('staff');
+  const [role, setRole] = useState<TeamRole>(partnerOnly ? 'admin' : 'staff');
   const [jobStation, setJobStation] = useState<JobStationSelection>('none');
-  const [permissions, setPermissions] = useState<TeamPermission[]>(ROLE_DEFAULT_PERMISSIONS.staff);
+  const [permissions, setPermissions] = useState<TeamPermission[]>(
+    ROLE_DEFAULT_PERMISSIONS[partnerOnly ? 'admin' : 'staff'],
+  );
 
-  const usesEmail = !pinSignInEnabled || role === 'admin';
-  const usesPin = pinSignInEnabled && (role === 'staff' || role === 'manager');
+  const usesEmail = partnerOnly || !pinSignInEnabled || role === 'admin';
+  const usesPin = !partnerOnly && pinSignInEnabled && (role === 'staff' || role === 'manager');
   const showDisplayTitle = usesPin || venueOpsV2;
   const allowedStations = resolveAllowedJobStations({ venueOpsV2, inStoreEnabled });
   const permissionOptions = inStoreEnabled
@@ -243,11 +245,21 @@ export default function AddTeamMemberPanel({
           </select>
         </div>
       ) : (
-        <JobStationPicker
-          value={jobStation}
-          onChange={setJobStation}
-          allowedStations={allowedStations}
-        />
+        !partnerOnly && (
+          <select
+            id="team-job-station"
+            value={jobStation}
+            onChange={(event) => setJobStation(event.target.value as JobStationSelection)}
+            className={inputClass}
+          >
+            <option value="none">No station</option>
+            {allowedStations.map((station) => (
+              <option key={station} value={station}>
+                {STATION_LABELS[station]}
+              </option>
+            ))}
+          </select>
+        )
       )}
 
       {!pinSignInEnabled && (

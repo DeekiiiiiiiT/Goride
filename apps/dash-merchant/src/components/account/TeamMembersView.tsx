@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
 
 import QueryErrorState from '../QueryErrorState';
 
@@ -14,21 +13,13 @@ import EditTeamMemberSheet from './EditTeamMemberSheet';
 import AddTeamMemberPanel from './AddTeamMemberPanel';
 
 import {
-
   formatAccessSummary,
-
   formatRoleLabel,
-
   formatPinStatusLabel,
+  formatJobStationLabel,
   TeamMember,
   TeamRole,
 } from '../../types/team';
-
-import JobStationBadge from '../staff-ops/shared/JobStationBadge';
-import StoreTabletSettingsSection from '../store-tablet/StoreTabletSettingsSection';
-import { getStoreTabletPairing } from '../../lib/partner-api';
-
-import { readFlag } from '../../lib/partner-feature-flags';
 
 
 
@@ -117,8 +108,10 @@ export default function TeamMembersView({
   merchantId,
   inStoreEnabled = false,
   initialTab = 'devices',
+  partnerOnly = false,
+  opsMode = false,
   onBack,
-}: TeamMembersViewProps) {
+}: TeamMembersViewProps & { partnerOnly?: boolean; opsMode?: boolean }) {
 
   const {
 
@@ -152,28 +145,33 @@ export default function TeamMembersView({
 
   } = useTeamMembers(merchantId);
 
-  const pairingFlagsQuery = useQuery({
-    queryKey: ['store-tablet-pairing', merchantId],
-    queryFn: getStoreTabletPairing,
-  });
-
-  const staffOpsEnabled =
-    pairingFlagsQuery.data?.staffOperationsEnabled ??
-    readFlag(merchantId, 'staffOperationsV1');
-  const staffPinEnabled =
-    pairingFlagsQuery.data?.staffStationPinEnabled ??
-    readFlag(merchantId, 'staffStationPinV1');
-  const pinSignInEnabled = staffOpsEnabled && staffPinEnabled;
-  const venueOpsV2 = readFlag(merchantId, 'venueOpsV2');
+  const pinSignInEnabled = !partnerOnly && opsMode;
+  const venueOpsV2 = opsMode;
 
   const [editingMember, setEditingMember] = useState<TeamMember | null>(null);
   const [activeTab, setActiveTab] = useState<'devices' | 'add' | 'team'>(initialTab);
 
-  const teamTabs = [
-    { key: 'devices' as const, label: 'Devices', icon: 'tablet' },
-    { key: 'add' as const, label: 'Add team member', icon: 'person_add' },
-    { key: 'team' as const, label: 'Current team', icon: 'groups' },
-  ];
+  const displayMembers = opsMode
+    ? members.filter((member) => member.loginType === 'roster')
+    : members.filter((member) => member.loginType !== 'roster' || member.isOwner);
+  const displayInvites = opsMode ? [] : pendingInvites;
+
+  const teamTabs = partnerOnly
+    ? [
+        { key: 'add' as const, label: 'Invite member', icon: 'person_add' },
+        { key: 'team' as const, label: 'Current team', icon: 'groups' },
+      ]
+    : opsMode
+      ? [
+          { key: 'devices' as const, label: 'Devices', icon: 'tablet' },
+          { key: 'add' as const, label: 'Add floor staff', icon: 'person_add' },
+          { key: 'team' as const, label: 'Roster', icon: 'groups' },
+        ]
+      : [
+          { key: 'devices' as const, label: 'Devices', icon: 'tablet' },
+          { key: 'add' as const, label: 'Add team member', icon: 'person_add' },
+          { key: 'team' as const, label: 'Current team', icon: 'groups' },
+        ];
 
 
 
@@ -293,11 +291,16 @@ export default function TeamMembersView({
 
       <main className="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col gap-inset-lg overflow-y-auto p-margin-mobile pb-[var(--app-bottom-nav-total)] md:p-margin-tablet">
 
-        {activeTab === 'devices' && <StoreTabletSettingsSection merchantId={merchantId} />}
+        {activeTab === 'devices' && opsMode && (
+          <p className="text-body-sm text-on-surface-variant">
+            Manage tablets and pairing in Roam Command → Team → Devices.
+          </p>
+        )}
 
         {activeTab === 'add' && (
 
           <AddTeamMemberPanel
+            partnerOnly={partnerOnly}
 
             pinSignInEnabled={pinSignInEnabled}
 
@@ -333,13 +336,13 @@ export default function TeamMembersView({
 
             <div className="space-y-inset-md rounded-xl border border-outline-variant bg-surface-container-lowest p-inset-md shadow-sm">
 
-              {pendingInvites.length === 0 ? (
+              {displayInvites.length === 0 ? (
 
                 <p className="text-body-sm text-on-surface-variant">No pending invites</p>
 
               ) : (
 
-                pendingInvites.map((invite) => (
+                displayInvites.map((invite) => (
 
                   <div
 
@@ -357,7 +360,11 @@ export default function TeamMembersView({
 
                         <RoleBadge role={invite.role} filled />
 
-                        <JobStationBadge station={invite.jobStation} />
+                        {invite.jobStation ? (
+                          <span className="text-label-sm text-on-surface-variant">
+                            {formatJobStationLabel(invite.jobStation)}
+                          </span>
+                        ) : null}
 
                         <span className="text-xs text-tertiary">Pending</span>
 
@@ -417,7 +424,7 @@ export default function TeamMembersView({
 
           <div className="grid grid-cols-1 gap-inset-md md:grid-cols-2 lg:grid-cols-3">
 
-            {members.map((member) => (
+            {displayMembers.map((member) => (
 
               <div
 
@@ -449,7 +456,11 @@ export default function TeamMembersView({
 
                       <div className="mt-1 flex flex-wrap items-center gap-1">
 
-                        <JobStationBadge station={member.jobStation} />
+                        {member.jobStation ? (
+                          <span className="text-label-sm text-on-surface-variant">
+                            {formatJobStationLabel(member.jobStation)}
+                          </span>
+                        ) : null}
 
                         {member.loginType === 'roster' && pinSignInEnabled && (
 

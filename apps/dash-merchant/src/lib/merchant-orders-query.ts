@@ -1,16 +1,12 @@
 import { API_ENDPOINTS, supabaseAnonFunctionHeaders } from '@roam/api-client';
 import type { Session } from '@supabase/supabase-js';
 import { normalizeOrder, type Order } from '../types/order';
-import { getStationAuthHeaders } from './partner-api';
-import { isStoreTabletContext } from './storeTabletUrl';
-import { readDeviceSession } from './store-tablet-session';
 
 /**
  * Query key inventory (invalidation uses prefix ['merchant-orders']):
  * - active: OrdersPage, DashboardPage (shared active queue)
  * - history delivered/cancelled: OrdersPage, DashboardPage
  * - order detail: OrderDetailPage ['order', orderId]
- * Legacy removed: merchant-orders-all, merchant-orders + filter tab
  */
 export type MerchantOrdersHistoryStatus = 'delivered' | 'cancelled';
 
@@ -29,7 +25,6 @@ export const merchantOrdersKeys = {
 
 export type MerchantOrdersChannel = 'roam_app' | 'in_store' | 'all';
 
-/** Omit channel for legacy API (pre-migration). Pass explicitly when restaurant mgmt is enabled. */
 export async function fetchMerchantActiveOrders(
   session?: Session | null,
   channel?: MerchantOrdersChannel,
@@ -43,13 +38,6 @@ export async function fetchMerchantActiveOrders(
           ? 'channel=roam_app'
           : '';
   const queryString = channelQuery ? `?${channelQuery}` : '';
-  const device = isStoreTabletContext() ? readDeviceSession() : null;
-  if (device) {
-    const headers = await getStationAuthHeaders('');
-    const res = await fetch(`${API_ENDPOINTS.delivery}/merchant/orders${queryString}`, { headers });
-    if (!res.ok) throw new Error('Failed to fetch orders');
-    return normalizeOrdersResponse(await res.json());
-  }
   if (!session) throw new Error('Not authenticated');
   const res = await fetch(`${API_ENDPOINTS.delivery}/merchant/orders${queryString}`, {
     headers: supabaseAnonFunctionHeaders({
@@ -80,8 +68,13 @@ function normalizeOrdersResponse(data: MerchantOrdersResponse): MerchantOrdersRe
   };
 }
 
-export function invalidateAllMerchantOrders(
-  queryClient: { invalidateQueries: (opts: { queryKey: readonly string[] }) => Promise<void> },
-) {
-  return queryClient.invalidateQueries({ queryKey: merchantOrdersKeys.all });
+export async function fetchMerchantOrder(session: Session, orderId: string): Promise<Order> {
+  const res = await fetch(`${API_ENDPOINTS.delivery}/merchant/orders/${orderId}`, {
+    headers: supabaseAnonFunctionHeaders({
+      Authorization: `Bearer ${session.access_token}`,
+    }),
+  });
+  if (!res.ok) throw new Error('Failed to fetch order');
+  const data = await res.json();
+  return normalizeOrder(data.order);
 }

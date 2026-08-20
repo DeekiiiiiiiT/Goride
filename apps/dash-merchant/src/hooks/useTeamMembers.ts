@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { createRosterMember, deliveryFetch, resetMemberPin } from '../lib/partner-api';
+import { deliveryFetch } from '../lib/partner-api';
 import {
   ROLE_DEFAULT_PERMISSIONS,
   TeamData,
@@ -134,24 +134,20 @@ export function useTeamMembers(_merchantId: string) {
   });
 
   const createRosterMutation = useMutation({
-    mutationFn: async (payload: {
+    mutationFn: async (_payload: {
       name: string;
       role: 'staff' | 'manager';
       jobStation: JobStation | null;
       displayTitle?: string | null;
-    }) => createRosterMember(payload),
-    onSuccess: () => {
-      invalidate();
-      toast.success('Team member added');
+    }) => {
+      throw new Error('Add floor staff in Roam Command');
     },
     onError: (error: Error) => toast.error(error.message),
   });
 
   const resetPinMutation = useMutation({
-    mutationFn: async (memberId: string) => resetMemberPin(memberId),
-    onSuccess: () => {
-      invalidate();
-      toast.success('PIN reset — staff must create a new PIN on the tablet');
+    mutationFn: async (_memberId: string) => {
+      throw new Error('Manage staff PINs in Roam Command');
     },
     onError: (error: Error) => toast.error(error.message),
   });

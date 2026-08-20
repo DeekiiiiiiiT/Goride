@@ -33,6 +33,15 @@ import {
   VALID_JOB_STATIONS,
 } from "./merchantTeam.ts";
 
+function resolvePairingOrigin(requestOrigin: string | undefined): string {
+  const fromEnv = Deno.env.get("COMMAND_PUBLIC_ORIGIN")?.trim();
+  if (fromEnv) return fromEnv.replace(/\/$/, "");
+  if (requestOrigin?.includes("partner.")) {
+    return requestOrigin.replace("partner.", "command.");
+  }
+  return requestOrigin || "https://command.roamrush.app";
+}
+
 type StationDeps = {
   getSupabase: (authHeader: string | null) => SupabaseClient;
   getServiceSupabase: () => SupabaseClient;
@@ -534,7 +543,7 @@ export function registerMerchantStationRoutes(app: Hono, deps: StationDeps) {
     const merchant = access.resolved.merchant as Record<string, unknown>;
     const code = await ensurePairingCode(sb, merchantId);
 
-    const origin = c.req.header("origin") || "https://partner.roamrush.app";
+    const origin = resolvePairingOrigin(c.req.header("origin") ?? undefined);
     const stationLinks = pairingStationLinks(origin, code, merchant);
 
     return c.json({
@@ -577,7 +586,7 @@ export function registerMerchantStationRoutes(app: Hono, deps: StationDeps) {
     if (error) return c.json({ error: error.message }, 500);
     const row = data as Record<string, unknown>;
     const code = String(row.kiosk_pairing_code || await ensurePairingCode(sb, merchantId));
-    const origin = c.req.header("origin") || "https://partner.roamrush.app";
+    const origin = resolvePairingOrigin(c.req.header("origin") ?? undefined);
 
     return c.json({
       storeName: String(row.name || "Store"),
@@ -617,7 +626,7 @@ export function registerMerchantStationRoutes(app: Hono, deps: StationDeps) {
 
     if (error) return c.json({ error: error.message }, 500);
     const row = data as Record<string, unknown>;
-    const origin = c.req.header("origin") || "https://partner.roamrush.app";
+    const origin = resolvePairingOrigin(c.req.header("origin") ?? undefined);
 
     return c.json({
       storeName: String(row.name || "Store"),
@@ -684,6 +693,13 @@ export function registerMerchantStationRoutes(app: Hono, deps: StationDeps) {
 
     const capabilities = Array.isArray(row.capabilities) ? row.capabilities as string[] : [];
     const inStoreOperationsEnabled = capabilities.includes("in_store_operations");
+
+    if (!inStoreOperationsEnabled) {
+      return c.json({
+        error: "In-store operations are not enabled for this store.",
+        code: "COMMAND_NOT_ENABLED",
+      }, 403);
+    }
 
     if (prepStationId) {
       if (station !== "kitchen") {

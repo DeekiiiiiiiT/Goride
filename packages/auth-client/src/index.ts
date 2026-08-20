@@ -9,6 +9,7 @@ export {
   supabaseRidesAdmin,
   supabaseDashAdmin,
   supabaseDashPartner,
+  supabaseDashCommand,
   supabaseDashCustomer,
   supabaseFleetAdmin,
   supabaseEnterpriseApp,

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Roam Command</string>
+    <string name="title_activity_main">Roam Command</string>
+    <string name="package_name">app.roamrush.command</string>
+    <string name="custom_url_scheme">app.roamrush.command</string>
+</resources>

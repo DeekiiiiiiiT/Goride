@@ -15,8 +15,6 @@ import {
   JobStation,
   JobStationSelection,
 } from '../../types/team';
-import JobStationPicker from '../staff-ops/shared/JobStationPicker';
-import TeamMemberPinSection from '../staff-ops/station/TeamMemberPinSection';
 
 interface EditTeamMemberSheetProps {
   member: TeamMember;
@@ -153,14 +151,11 @@ export default function EditTeamMemberSheet({
             </select>
           </div>
 
-          {venueOpsV2 || isRoster ? (
+          {(venueOpsV2 || isRoster) && (
             <div className="space-y-inset-xs">
               <label className="text-label-md text-on-surface-variant" htmlFor="member-station">
                 Default station
               </label>
-              <p className="text-body-sm text-on-surface-variant">
-                Where they appear first on the tablet staff picker — not the same as role.
-              </p>
               <select
                 id="member-station"
                 value={jobStation}
@@ -175,12 +170,6 @@ export default function EditTeamMemberSheet({
                 ))}
               </select>
             </div>
-          ) : (
-            <JobStationPicker
-              value={jobStation}
-              onChange={setJobStation}
-              allowedStations={allowedStations}
-            />
           )}
 
           {!isRoster && (
@@ -199,21 +188,6 @@ export default function EditTeamMemberSheet({
             </div>
           )}
 
-          {isRoster && onResetPin && (
-            <div className="space-y-inset-sm">
-              <TeamMemberPinSection
-                pinStatus={member.pinStatus}
-                onResetPin={handleResetPin}
-                isResetting={isResettingPin}
-              />
-              {confirmReset && (
-                <p className="text-body-sm text-on-surface-variant">
-                  Tap Reset PIN again to confirm. They will need to create a new PIN on the store
-                  tablet.
-                </p>
-              )}
-            </div>
-          )}
         </div>
 
         <div className="mt-inset-lg flex gap-inset-sm">

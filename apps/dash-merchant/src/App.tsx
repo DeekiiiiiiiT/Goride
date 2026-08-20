@@ -1,3 +1,4 @@
+import { redirectPartnerTabletToCommand } from '@roam/merchant-ops';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { BrowserRouter } from 'react-router-dom';
 import { supabase, ensureValidPartnerSession, migrateLegacyPartnerSession } from './lib/partner-supabase';
@@ -6,11 +7,6 @@ import { Session } from '@supabase/supabase-js';
 import { toast } from 'sonner';
 import DashboardPage from './pages/DashboardPage';
 import OrdersPage from './pages/OrdersPage';
-import CounterOrdersPage from './pages/staff-ops/CounterOrdersPage';
-import KitchenQueuePage from './pages/staff-ops/KitchenQueuePage';
-import PosRegisterPage from './pages/restaurant-mgmt/PosRegisterPage';
-import { resolveStaffOpsRoute } from './lib/staff-ops-routing';
-import { hasCapability, CAPABILITY_IN_STORE } from './lib/merchant-capabilities';
 import MenuPage from './pages/MenuPage';
 import EarningsPage from './pages/EarningsPage';
 import SettingsPage from './pages/SettingsPage';
@@ -47,8 +43,7 @@ import {
   consumePartnerOAuthIntent,
   PARTNER_OAUTH_INTENT_KEY,
 } from './lib/partnerAuth';
-import StoreTabletApp from './components/store-tablet/StoreTabletApp';
-import { isTabletEntryPath, captureTabletReturnUrl, clearTabletReturnUrl } from './lib/storeTabletUrl';
+import { getCommandOrigin } from '@roam/merchant-ops';
 import { resetPartnerScroll } from './lib/reset-partner-scroll';
 import QueryErrorState from './components/QueryErrorState';
 import { useNetworkStatus } from './hooks/useNetworkStatus';
@@ -100,6 +95,10 @@ function DashMerchantApp() {
     clearPartnerOAuthUrl();
     setOauthReturnPending(false);
     return true;
+  }, []);
+
+  useEffect(() => {
+    redirectPartnerTabletToCommand();
   }, []);
 
   useEffect(() => {
@@ -231,11 +230,6 @@ function DashMerchantApp() {
   }, [session?.user?.id, merchant, merchantError]);
 
   useEffect(() => {
-    if (!session?.user || isTabletEntryPath()) return;
-    captureTabletReturnUrl();
-  }, [session?.user?.id, currentPage]);
-
-  useEffect(() => {
     if (!merchant?.id) return;
     if (hasRestaurantSetupInProgress(merchant.id)) {
       setSetupMenuMode(true);
@@ -295,10 +289,6 @@ function DashMerchantApp() {
     return <PartnerBootLoadingPage />;
   }
 
-  if (isTabletEntryPath()) {
-    return <StoreTabletApp />;
-  }
-
   if (!session) {
     return (
       <PartnerAuthFlow
@@ -309,11 +299,7 @@ function DashMerchantApp() {
           setSession(nextSession);
           setCurrentPage('dashboard');
         }}
-        onStoreTablet={() => {
-          clearTabletReturnUrl();
-          window.history.replaceState({}, '', '/tablet');
-          window.location.reload();
-        }}
+        commandOrigin={getCommandOrigin()}
       />
     );
   }
@@ -437,39 +423,7 @@ function DashMerchantApp() {
             onOpenMobileNav={openMobileNav}
           />
         );
-      case 'orders': {
-        const staffRoute = merchant
-          ? resolveStaffOpsRoute(merchant.id, membership ?? undefined)
-          : null;
-        const staffName = session.user.user_metadata?.name as string | undefined;
-
-        if (staffRoute === 'counter') {
-          return (
-            <CounterOrdersPage
-              merchant={merchant}
-              staffName={staffName}
-              onNavigate={handlePartnerNavigate}
-              onOpenMobileNav={openMobileNav}
-            />
-          );
-        }
-        if (staffRoute === 'kitchen') {
-          return (
-            <KitchenQueuePage
-              merchant={merchant}
-              onNavigate={handlePartnerNavigate}
-              onOpenMobileNav={openMobileNav}
-            />
-          );
-        }
-        if (staffRoute === 'pos') {
-          return (
-            <PosRegisterPage
-              merchant={merchant}
-              useApi={hasCapability(merchant, CAPABILITY_IN_STORE)}
-            />
-          );
-        }
+      case 'orders':
         return (
           <OrdersPage
             merchant={merchant}
@@ -477,7 +431,6 @@ function DashMerchantApp() {
             onOpenMobileNav={openMobileNav}
           />
         );
-      }
       case 'menu':
         return (
           <MenuPage

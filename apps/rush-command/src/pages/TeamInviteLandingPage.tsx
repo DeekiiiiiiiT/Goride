@@ -1,0 +1,206 @@
+import { useEffect, useRef, useState } from 'react';
+import { Session } from '@supabase/supabase-js';
+import { toast } from 'sonner';
+import { supabase } from '../lib/partner-supabase';
+import { MaterialIcon } from '../signup/components/MaterialIcon';
+import PartnerAuthFlow from '../components/PartnerAuthFlow';
+import {
+  acceptTeamInviteByToken,
+  fetchTeamInvitePreview,
+  type TeamInvitePreviewData,
+} from '../lib/partner-api';
+import {
+  clearTeamInvitePath,
+  clearTeamInviteToken,
+  parseTeamInviteTokenFromPath,
+  persistTeamInviteToken,
+  readTeamInviteToken,
+} from '../lib/teamInviteSession';
+import { formatRoleLabel, TeamRole } from '../types/team';
+
+interface TeamInviteLandingPageProps {
+  session: Session | null;
+  inviteToken?: string | null;
+  onAccepted: () => void;
+}
+
+export default function TeamInviteLandingPage({
+  session,
+  inviteToken: inviteTokenProp,
+  onAccepted,
+}: TeamInviteLandingPageProps) {
+  const [preview, setPreview] = useState<TeamInvitePreviewData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [claiming, setClaiming] = useState(false);
+  const [wrongAccount, setWrongAccount] = useState(false);
+  const [expired, setExpired] = useState(false);
+  const [showAuth, setShowAuth] = useState(false);
+  const acceptAttempted = useRef(false);
+
+  const token =
+    inviteTokenProp ||
+    parseTeamInviteTokenFromPath() ||
+    readTeamInviteToken();
+
+  useEffect(() => {
+    if (!token) {
+      setLoading(false);
+      return;
+    }
+    persistTeamInviteToken(token);
+    void fetchTeamInvitePreview(token)
+      .then((res) => {
+        setPreview(res.invite);
+        setExpired(!!res.invite?.isExpired);
+      })
+      .catch((err) => {
+        const message = err instanceof Error ? err.message : 'Invite not found';
+        if (message.toLowerCase().includes('expired')) {
+          setExpired(true);
+          toast.error('This invite has expired. Ask your store owner to send a new one.');
+        } else {
+          toast.error(message);
+        }
+      })
+      .finally(() => setLoading(false));
+  }, [token]);
+
+  useEffect(() => {
+    if (!session?.user || !token || !preview || expired || acceptAttempted.current) return;
+    if (!session.user.email_confirmed_at) {
+      toast.error('Confirm your email, then reopen this invite link.');
+      return;
+    }
+    acceptAttempted.current = true;
+    void (async () => {
+      setClaiming(true);
+      setWrongAccount(false);
+      try {
+        await acceptTeamInviteByToken(token);
+        clearTeamInviteToken();
+        clearTeamInvitePath();
+        toast.success(`You joined ${preview.merchantName}`);
+        onAccepted();
+      } catch (err) {
+        acceptAttempted.current = false;
+        const message = err instanceof Error ? err.message : 'Could not accept invite';
+        if (message.includes('email address that received this invite')) {
+          setWrongAccount(true);
+          return;
+        }
+        if (message.toLowerCase().includes('expired')) {
+          setExpired(true);
+        }
+        toast.error(message);
+      } finally {
+        setClaiming(false);
+      }
+    })();
+  }, [session?.user, token, preview, expired, onAccepted]);
+
+  const handleSignOut = async () => {
+    acceptAttempted.current = false;
+    setWrongAccount(false);
+    await supabase.auth.signOut();
+  };
+
+  if (loading) {
+    return (
+      <div className="flex min-h-dvh items-center justify-center bg-background">
+        <p className="text-body-lg text-on-surface-variant">Loading invite…</p>
+      </div>
+    );
+  }
+
+  if (!token) {
+    return (
+      <div className="flex min-h-dvh flex-col items-center justify-center bg-background px-margin-mobile py-inset-lg">
+        <p className="text-body-lg text-on-surface">
+          Open the invite link from your email. Joining by email alone is not allowed.
+        </p>
+      </div>
+    );
+  }
+
+  if (showAuth && !session) {
+    return (
+      <PartnerAuthFlow
+        inviteMode
+        onCancel={() => setShowAuth(false)}
+        onLoginSuccess={() => setShowAuth(false)}
+      />
+    );
+  }
+
+  return (
+    <div className="flex min-h-dvh flex-col items-center justify-center bg-background px-margin-mobile py-inset-lg text-on-background">
+      <div className="w-full max-w-md space-y-inset-lg rounded-xl border border-outline-variant bg-surface-container-lowest p-inset-lg shadow-sm">
+        <div className="flex items-center gap-inset-sm">
+          <MaterialIcon name="people" className="text-primary" />
+          <h1 className="text-headline-md font-bold text-primary">Team invite</h1>
+        </div>
+
+        {expired ? (
+          <div className="space-y-inset-sm">
+            <p className="text-body-lg text-on-surface">
+              This invite has expired{preview?.merchantName ? ` for ${preview.merchantName}` : ''}.
+            </p>
+            <p className="text-body-sm text-on-surface-variant">
+              Ask your store owner or admin to revoke the old invite and send a new link.
+            </p>
+          </div>
+        ) : preview ? (
+          <>
+            <p className="text-body-lg">
+              You&apos;ve been invited to join <strong>{preview.merchantName}</strong> as{' '}
+              <strong>{formatRoleLabel(preview.role as TeamRole)}</strong>.
+            </p>
+            <p className="text-body-sm text-on-surface-variant">
+              Invite sent to {preview.inviteeEmailMasked}
+              {preview.expiresAt
+                ? ` · Expires ${new Date(preview.expiresAt).toLocaleString()}`
+                : ''}
+            </p>
+          </>
+        ) : (
+          <p className="text-body-sm text-on-surface-variant">This invite link is invalid or expired.</p>
+        )}
+
+        {wrongAccount && preview && !expired && (
+          <div className="space-y-inset-sm rounded-lg border border-error/30 bg-error-container/20 p-inset-md">
+            <p className="text-body-sm text-on-surface">
+              You&apos;re signed in as <strong>{session?.user?.email}</strong>, but this invite was sent to{' '}
+              <strong>{preview.inviteeEmailMasked}</strong>.
+            </p>
+            <button
+              type="button"
+              onClick={() => void handleSignOut()}
+              className="min-h-[44px] w-full rounded-lg border border-outline-variant bg-surface px-inset-md py-2 text-body-md font-semibold text-primary"
+            >
+              Sign out and use invited email
+            </button>
+          </div>
+        )}
+
+        {!session && preview && !expired && (
+          <>
+            <p className="text-body-sm text-on-surface-variant">
+              Sign in or create an account with the email you were invited with, then confirm your email.
+            </p>
+            <button
+              type="button"
+              onClick={() => setShowAuth(true)}
+              className="min-h-[48px] w-full rounded-lg bg-primary-container px-inset-lg py-3 text-headline-md font-bold text-on-primary shadow-sm"
+            >
+              Sign in to join team
+            </button>
+          </>
+        )}
+
+        {session && claiming && !expired && (
+          <p className="text-body-sm text-on-surface-variant">Joining team…</p>
+        )}
+      </div>
+    </div>
+  );
+}

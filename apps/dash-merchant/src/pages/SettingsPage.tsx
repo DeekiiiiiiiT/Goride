@@ -11,10 +11,6 @@ import TeamMembersView from '../components/account/TeamMembersView';
 import NotificationSettingsView from '../components/account/NotificationSettingsView';
 import HelpSupportView from '../components/account/HelpSupportView';
 import PromotionsView from '../components/account/PromotionsView';
-import RestaurantMgmtFlow from './restaurant-mgmt/RestaurantMgmtFlow';
-import OperationsHub from '../components/venue-ops/OperationsHub';
-import type { RestaurantMgmtModule } from '../components/restaurant-mgmt/RestaurantMgmtHub';
-import { CAPABILITY_IN_STORE, hasCapability } from '../lib/merchant-capabilities';
 
 interface SettingsPageProps {
   merchant: Merchant;
@@ -34,8 +30,6 @@ export default function SettingsPage({
   notificationCount = 0,
 }: SettingsPageProps) {
   const [activeSection, setActiveSection] = useState<AccountSection | null>(null);
-  const [restaurantMgmtSection, setRestaurantMgmtSection] = useState<RestaurantMgmtModule | undefined>();
-  const [teamInitialTab, setTeamInitialTab] = useState<'devices' | 'add' | 'team'>('devices');
 
   useEffect(() => {
     if (activeSection === 'team' && !isOwner) {
@@ -128,12 +122,9 @@ export default function SettingsPage({
     return (
       <TeamMembersView
         merchantId={merchant.id}
-        inStoreEnabled={hasCapability(merchant, CAPABILITY_IN_STORE)}
-        initialTab={teamInitialTab}
-        onBack={() => {
-          setTeamInitialTab('devices');
-          setActiveSection(null);
-        }}
+        partnerOnly
+        initialTab="add"
+        onBack={() => setActiveSection(null)}
       />
     );
   }
@@ -162,37 +153,6 @@ export default function SettingsPage({
       <PromotionsView
         merchantId={merchant.id}
         onBack={() => setActiveSection(null)}
-      />
-    );
-  }
-
-  if (activeSection === 'restaurant-mgmt') {
-    return (
-      <RestaurantMgmtFlow
-        merchant={merchant}
-        initialSection={restaurantMgmtSection}
-        onBack={() => {
-          setRestaurantMgmtSection(undefined);
-          setActiveSection(null);
-        }}
-      />
-    );
-  }
-
-  if (activeSection === 'venue-ops') {
-    return (
-      <OperationsHub
-        merchantId={merchant.id}
-        merchant={merchant}
-        onBack={() => setActiveSection(null)}
-        onOpenRestaurantMgmt={() => {
-          setRestaurantMgmtSection(undefined);
-          setActiveSection('restaurant-mgmt');
-        }}
-        onOpenTeam={(tab) => {
-          setTeamInitialTab(tab ?? 'devices');
-          setActiveSection('team');
-        }}
       />
     );
   }

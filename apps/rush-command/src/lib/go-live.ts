@@ -1,0 +1,88 @@
+import type { Merchant } from '../hooks/useMerchant';
+import { fetchApplicationStatus } from './partner-api';
+import { resolveGoLiveRule } from '@roam/vertical-config';
+
+export function goLiveStorageKey(merchantId: string) {
+  return `roam_go_live_complete_${merchantId}`;
+}
+
+export function hasCompletedGoLive(merchantId: string) {
+  return localStorage.getItem(goLiveStorageKey(merchantId)) === '1';
+}
+
+export function markGoLiveComplete(merchantId: string) {
+  localStorage.setItem(goLiveStorageKey(merchantId), '1');
+  clearRestaurantSetupInProgress(merchantId);
+  localStorage.removeItem(goLiveDismissedKey(merchantId));
+}
+
+export function goLiveDismissedKey(merchantId: string) {
+  return `roam_go_live_dismissed_${merchantId}`;
+}
+
+/** Owner finished setup but chose dashboard over going live yet. */
+export function dismissGoLiveScreen(merchantId: string) {
+  localStorage.setItem(goLiveDismissedKey(merchantId), '1');
+}
+
+export function hasDismissedGoLiveScreen(merchantId: string) {
+  return localStorage.getItem(goLiveDismissedKey(merchantId)) === '1';
+}
+
+export function restaurantSetupInProgressKey(merchantId: string) {
+  return `roam_restaurant_setup_${merchantId}`;
+}
+
+/** Owner left the approved screen to set up menu/catalog in the partner app. */
+export function markRestaurantSetupInProgress(merchantId: string) {
+  localStorage.setItem(restaurantSetupInProgressKey(merchantId), '1');
+}
+
+export function hasRestaurantSetupInProgress(merchantId: string) {
+  return localStorage.getItem(restaurantSetupInProgressKey(merchantId)) === '1';
+}
+
+export function clearRestaurantSetupInProgress(merchantId: string) {
+  localStorage.removeItem(restaurantSetupInProgressKey(merchantId));
+}
+
+/** Post-approval go-live screen — skip when already live or owner finished the gate. */
+export function shouldShowGoLiveScreen(
+  merchant: Pick<
+    Merchant,
+    'id' | 'verification_status' | 'verified_at' | 'is_accepting_orders'
+  >,
+): boolean {
+  if (merchant.verification_status !== 'approved') return false;
+  if (!merchant.verified_at) return false;
+  if (merchant.is_accepting_orders) return false;
+  if (hasCompletedGoLive(merchant.id)) return false;
+  return true;
+}
+
+/** Allow main app navigation instead of the full-screen go-live gate. */
+export function shouldBypassGoLiveGate(merchantId: string): boolean {
+  return hasDismissedGoLiveScreen(merchantId) || hasRestaurantSetupInProgress(merchantId);
+}
+
+export async function isVerticalGoLiveReady(
+  merchant: Pick<Merchant, 'go_live_rule'>,
+): Promise<boolean> {
+  const status = await fetchApplicationStatus();
+  const rule = resolveGoLiveRule(merchant.go_live_rule ?? status.merchant?.go_live_rule);
+  const c = status.checklist;
+  if (rule === 'catalog_imported' || rule === 'pos_connected') {
+    return c.catalogComplete && c.profileComplete && c.hoursComplete && c.bankComplete;
+  }
+  return c.menuComplete && c.profileComplete && c.hoursComplete && c.bankComplete;
+}
+
+/** Owner has not finished the partner onboarding application. */
+export function needsOwnerOnboarding(
+  merchant: Pick<Merchant, 'submitted_at' | 'name' | 'onboarding_status'>,
+): boolean {
+  if (merchant.onboarding_status === 'draft') return true;
+  if (!merchant.submitted_at) return true;
+  if (!merchant.name?.trim()) return true;
+  return false;
+}

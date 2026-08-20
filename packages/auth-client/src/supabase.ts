@@ -77,6 +77,11 @@ export const supabaseDashCustomer = createRoamAuthClient(`sb-${projectId}-auth-d
 export const supabaseDashPartner = createRoamAuthClient(`sb-${projectId}-auth-dash-partner`);
 
 /**
+ * Roam Rush Command (in-store ops) app. Isolated from partner dash session.
+ */
+export const supabaseDashCommand = createRoamAuthClient(`sb-${projectId}-auth-dash-command`);
+
+/**
  * Roam Fleet product admin portal (`/admin`).
  */
 export const supabaseFleetAdmin = createRoamAuthClient(`sb-${projectId}-auth-fleet-admin`);

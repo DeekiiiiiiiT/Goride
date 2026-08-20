@@ -55,7 +55,8 @@ Full ops runbook: [`docs/enterprise-intl-freight-pipeline.md`](../enterprise-int
 | Domain | Audience | Admin |
 |--------|----------|-------|
 | [roamrush.app](https://roamrush.app) | Customers & ops | `/admin` — rush product ops |
-| [partner.roamrush.app](https://partner.roamrush.app) | Merchants (Partner) | Partner portal + embedded admin |
+| [partner.roamrush.app](https://partner.roamrush.app) | Merchants (Partner) — delivery orders only | Partner portal + embedded admin |
+| [command.roamrush.app](https://command.roamrush.app) | Merchants (Command) — in-store ops, invite-only | POS, inventory, staff tablets |
 | [courier.roamrush.app](https://courier.roamrush.app) | Couriers | `/admin` — courier product ops |
 
 ## Shared backend

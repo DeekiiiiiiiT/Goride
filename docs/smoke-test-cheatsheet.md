@@ -97,6 +97,28 @@ Ask your AI to “run partner browser smoke”:
 - Dashboard order cards + drag between columns
 - Menu editor UI
 - Go-live / pause orders toggle on dashboard
+- **No** in-store ops screens (Operations Hub, tablet pairing, kitchen stations) — those live in Command
+
+---
+
+## Roam Command (In-store ops)
+
+**URL:** `command.roamrush.app` (local dev: `pnpm dev:command` → port **5176**)
+
+**Access:** Invite-only — merchant must have `in_store_operations` enabled in Rush admin.
+
+| Browser check | What to verify |
+|---------------|----------------|
+| Rush-only merchant login | Shows “Not invited” — no POS/inventory |
+| Invited merchant login | Operations Hub loads; inventory + POS reachable |
+| Tablet pairing | QR/link opens `command.roamrush.app/tablet?code=…` |
+| Old Partner tablet URL | `partner.roamrush.app/tablet?code=…` redirects to Command with same query |
+| Partner Orders tab | Always Rush delivery queue — never kitchen/counter view |
+| Partner Account | “Open Roam Command” when invited; no ops settings inside Partner |
+
+**Tablet re-pair:** Required after cutover — sessions are origin-scoped. See `docs/roam-command-cutover.md`.
+
+**Native:** `app.roamrush.command` — `pnpm cap:command:sync`
 
 ---
 

@@ -1,11 +1,8 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { API_ENDPOINTS } from '@roam/api-client';
+import { API_ENDPOINTS, supabaseAnonFunctionHeaders } from '@roam/api-client';
 import { toast } from 'sonner';
 import { merchantOrdersKeys } from '../lib/merchant-orders-query';
-import { getStationAuthHeaders } from '../lib/partner-api';
-import { readShift, resolveShiftSurface } from '../lib/station-shift-session';
-import { isStoreTabletContext } from '../lib/storeTabletUrl';
-import { readDeviceSession } from '../lib/store-tablet-session';
+import { getAuthHeaders } from '../lib/partner-api';
 import { supabase } from '../lib/partner-supabase';
 
 export interface OrderStatusUpdate {
@@ -23,44 +20,29 @@ export function useOrderStatusMutation(options?: {
 
   return useMutation({
     mutationFn: async ({ orderId, status, notes, estimatedPrepTimeMins }: OrderStatusUpdate) => {
-      const device = isStoreTabletContext() ? readDeviceSession() : null;
-      if (!device?.deviceToken) {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-        if (!session) throw new Error('Not authenticated');
-      }
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session) throw new Error('Not authenticated');
 
-      const headers = await getStationAuthHeaders();
-      const merchantId = options?.merchantId ?? device?.merchantId;
-      const shift = merchantId != null ? readShift(merchantId, resolveShiftSurface()) : null;
-      if (shift?.token) {
-        headers['X-Staff-Shift-Token'] = shift.token;
-      }
-
-      const res = await fetch(`${API_ENDPOINTS.delivery}/orders/${orderId}/status`, {
-        method: 'PUT',
+      const headers = await getAuthHeaders();
+      const res = await fetch(`${API_ENDPOINTS.delivery}/merchant/orders/${orderId}/status`, {
+        method: 'POST',
         headers,
-        body: JSON.stringify({
-          status,
-          actorType: 'merchant',
-          notes,
-          estimatedPrepTimeMins,
-        }),
+        body: JSON.stringify({ status, notes, estimatedPrepTimeMins }),
       });
-
       if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || 'Failed to update order');
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || 'Failed to update order');
       }
       return res.json();
     },
-    onSuccess: (_, variables) => {
+    onSuccess: (_data, variables) => {
       void queryClient.invalidateQueries({ queryKey: merchantOrdersKeys.all });
       options?.onSuccess?.(variables);
     },
     onError: (error: Error) => {
-      toast.error(error.message);
+      toast.error(error.message || 'Could not update order');
     },
   });
 }

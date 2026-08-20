@@ -1,4 +1,5 @@
 import { toast } from 'sonner';
+import { canAccessCommand, getCommandOrigin } from '@roam/merchant-ops';
 import { Merchant } from '../../hooks/useMerchant';
 import { MaterialIcon } from '../../signup/components/MaterialIcon';
 import { useAcceptingOrdersToggle } from '../../hooks/useAcceptingOrdersToggle';
@@ -6,10 +7,6 @@ import StoreStatusToggle from '../layout/StoreStatusToggle';
 import { getStoreStatus, PartnerTab } from '../../lib/partner-utils';
 import { formatMemberSince } from '../../hooks/useMerchantSettings';
 import SettingsMenuRow from './SettingsMenuRow';
-import RestaurantMgmtOptInCard from '../restaurant-mgmt/RestaurantMgmtOptInCard';
-import OperationsHubCard from '../venue-ops/OperationsHubCard';
-import { canAccessRestaurantMgmt } from '../../lib/merchant-capabilities';
-import { readFlag } from '../../lib/partner-feature-flags';
 
 export type AccountSection =
   | 'profile'
@@ -20,9 +17,7 @@ export type AccountSection =
   | 'notifications'
   | 'help'
   | 'legal'
-  | 'promotions'
-  | 'restaurant-mgmt'
-  | 'venue-ops';
+  | 'promotions';
 
 interface AccountSettingsHubProps {
   merchant: Merchant;
@@ -48,14 +43,14 @@ export default function AccountSettingsHub({
   const { isAcceptingOrders, toggleAcceptingOrders, isPending: togglePending } =
     useAcceptingOrdersToggle(merchant);
   const storeStatus = getStoreStatus(merchant.is_active, isAcceptingOrders);
-  const venueOpsEnabled = readFlag(merchant.id, 'venueOpsV2');
-  const canRestaurantMgmt = canAccessRestaurantMgmt(merchant.id, merchant);
-  const showRestaurantMgmt = canRestaurantMgmt && !venueOpsEnabled;
-  const showRestaurantMgmtAdmin = canRestaurantMgmt && venueOpsEnabled;
-  const showOperationsHub = venueOpsEnabled || canRestaurantMgmt;
+  const hasCommand = canAccessCommand(merchant.id, merchant);
 
   const handlePlaceholder = (label: string) => {
     toast.info(`${label} is coming soon`);
+  };
+
+  const openCommand = () => {
+    window.open(getCommandOrigin(), '_blank', 'noopener,noreferrer');
   };
 
   return (
@@ -63,23 +58,23 @@ export default function AccountSettingsHub({
       <header className="safe-t sticky top-0 z-50 w-full shrink-0 border-b border-outline-variant bg-surface shadow-sm">
         <div className="safe-x relative flex h-16 w-full items-center justify-between gap-inset-xs md:px-margin-tablet">
           <div className="z-10 flex shrink-0 items-center">
-          <button
-            type="button"
-            onClick={onOpenMobileNav}
-            className={`btn-touch flex h-12 w-12 items-center justify-center rounded-full text-on-surface-variant transition-colors hover:bg-surface-container-high active:scale-95 lg:hidden ${onOpenMobileNav ? '' : 'invisible'}`}
-            aria-label="Open navigation"
-            disabled={!onOpenMobileNav}
-          >
-            <MaterialIcon name="menu" size={24} />
-          </button>
-          <button
-            type="button"
-            onClick={() => onNavigate('dashboard')}
-            className="hidden h-12 w-12 items-center justify-center rounded-full text-primary transition-colors hover:bg-surface-container-high active:scale-95 lg:flex"
-            aria-label="Dashboard"
-          >
-            <MaterialIcon name="storefront" />
-          </button>
+            <button
+              type="button"
+              onClick={onOpenMobileNav}
+              className={`btn-touch flex h-12 w-12 items-center justify-center rounded-full text-on-surface-variant transition-colors hover:bg-surface-container-high active:scale-95 lg:hidden ${onOpenMobileNav ? '' : 'invisible'}`}
+              aria-label="Open navigation"
+              disabled={!onOpenMobileNav}
+            >
+              <MaterialIcon name="menu" size={24} />
+            </button>
+            <button
+              type="button"
+              onClick={() => onNavigate('dashboard')}
+              className="hidden h-12 w-12 items-center justify-center rounded-full text-primary transition-colors hover:bg-surface-container-high active:scale-95 lg:flex"
+              aria-label="Dashboard"
+            >
+              <MaterialIcon name="storefront" />
+            </button>
           </div>
 
           <h1 className="pointer-events-none absolute left-1/2 -translate-x-1/2 text-headline-md font-bold text-primary">
@@ -87,23 +82,23 @@ export default function AccountSettingsHub({
           </h1>
 
           <div className="z-10 flex shrink-0 items-center gap-1">
-          <StoreStatusToggle
-            storeStatus={storeStatus}
-            isAcceptingOrders={isAcceptingOrders}
-            onToggle={toggleAcceptingOrders}
-            pending={togglePending}
-          />
-          <button
-            type="button"
-            onClick={() => onNavigate('orders')}
-            className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-primary transition-colors hover:bg-surface-container-high active:scale-95"
-            aria-label="Notifications"
-          >
-            <MaterialIcon name="notifications" />
-            {notificationCount > 0 && (
-              <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-error" />
-            )}
-          </button>
+            <StoreStatusToggle
+              storeStatus={storeStatus}
+              isAcceptingOrders={isAcceptingOrders}
+              onToggle={toggleAcceptingOrders}
+              pending={togglePending}
+            />
+            <button
+              type="button"
+              onClick={() => onNavigate('orders')}
+              className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-primary transition-colors hover:bg-surface-container-high active:scale-95"
+              aria-label="Notifications"
+            >
+              <MaterialIcon name="notifications" />
+              {notificationCount > 0 && (
+                <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-error" />
+              )}
+            </button>
           </div>
         </div>
       </header>
@@ -143,34 +138,23 @@ export default function AccountSettingsHub({
           </div>
         </section>
 
-        {showRestaurantMgmt && (
-          <RestaurantMgmtOptInCard
-            merchant={merchant}
-            onOpenRestaurantMgmt={() => onOpenSection('restaurant-mgmt')}
-          />
-        )}
-
-        {showOperationsHub && isOwner && (
-          <OperationsHubCard onOpenOperations={() => onOpenSection('venue-ops')} />
-        )}
-
-        {showRestaurantMgmtAdmin && isOwner && (
+        {hasCommand && isOwner && (
           <section className="overflow-hidden rounded-xl border border-outline-variant bg-surface-container-lowest shadow-sm">
             <button
               type="button"
-              onClick={() => onOpenSection('restaurant-mgmt')}
+              onClick={openCommand}
               className="flex w-full items-center gap-inset-md p-inset-md text-left transition-colors hover:bg-surface-container-low"
             >
               <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary-container/15 text-primary-container">
-                <MaterialIcon name="inventory_2" />
+                <MaterialIcon name="hub" />
               </div>
               <div className="min-w-0 flex-1">
-                <h3 className="text-title-md font-semibold text-on-surface">Restaurant Management</h3>
+                <h3 className="text-title-md font-semibold text-on-surface">Open Roam Command</h3>
                 <p className="mt-1 text-body-sm text-on-surface-variant">
-                  Inventory, reports, and store settings — POS runs on tablets.
+                  POS, inventory, staff stations, and tablets
                 </p>
               </div>
-              <MaterialIcon name="chevron_right" className="text-on-surface-variant" />
+              <MaterialIcon name="open_in_new" className="text-on-surface-variant" />
             </button>
           </section>
         )}
@@ -196,20 +180,6 @@ export default function AccountSettingsHub({
             label="Bank & Payouts"
             onClick={() => onNavigate('earnings')}
           />
-          {isOwner && showOperationsHub && (
-            <SettingsMenuRow
-              icon="hub"
-              label="Operations Hub"
-              onClick={() => onOpenSection('venue-ops')}
-            />
-          )}
-          {isOwner && showRestaurantMgmtAdmin && (
-            <SettingsMenuRow
-              icon="inventory_2"
-              label="Restaurant Management"
-              onClick={() => onOpenSection('restaurant-mgmt')}
-            />
-          )}
           {isOwner && (
             <SettingsMenuRow
               icon="people"
