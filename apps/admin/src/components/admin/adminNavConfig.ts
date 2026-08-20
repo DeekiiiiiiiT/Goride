@@ -156,6 +156,7 @@ export const ROAM_HAUL_CHILDREN: NavChild[] = [
 export const API_CENTER_CHILDREN: NavChild[] = [
   { id: 'api-center-overview', label: 'Overview', icon: Gauge },
   { id: 'api-center-usage', label: 'Usage & Costs', icon: BarChart3 },
+  { id: 'api-center-supabase', label: 'Supabase Platform', icon: Database },
   { id: 'api-center-keys', label: 'API Keys', icon: KeyRound },
   { id: 'api-center-budgets', label: 'Budgets & Limits', icon: ShieldAlert },
   { id: 'api-center-logs', label: 'Call Log', icon: ClipboardList },
@@ -218,6 +219,7 @@ export const PLATFORM_ROLE_PAGES: Record<string, string[]> = {
     'api-center',
     'api-center-overview',
     'api-center-usage',
+    'api-center-supabase',
     'api-center-keys',
     'api-center-budgets',
     'api-center-logs',
@@ -235,6 +237,7 @@ export const PLATFORM_ROLE_PAGES: Record<string, string[]> = {
     'api-center',
     'api-center-overview',
     'api-center-usage',
+    'api-center-supabase',
     'api-center-logs',
   ],
 };

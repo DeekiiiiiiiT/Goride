@@ -24,6 +24,13 @@ import type {
   KillswitchConfig,
   ProviderAggregate,
 } from "./api_usage_logger.ts";
+import {
+  buildRadar,
+  getAlertConfig,
+  getLatestSummary,
+  saveAlertConfig,
+  syncUsageSnapshot,
+} from "./supabase_platform_usage.ts";
 
 const app = new Hono();
 const BASE = "/make-server-37f42386";
@@ -541,6 +548,88 @@ app.get(`${BASE}/api-center/billing/status`, requireAuth(), requirePlatform("rea
     },
     supportedProviders: SUPPORTED_PROVIDERS,
   });
+});
+
+// ---------------------------------------------------------------------------
+// Supabase Platform Usage — gauges, sync, radar, alerts
+// ---------------------------------------------------------------------------
+app.get(`${BASE}/api-center/supabase/summary`, requireAuth(), requirePlatform("read"), async (c) => {
+  try {
+    const summary = await getLatestSummary();
+    return c.json(summary);
+  } catch (e: any) {
+    return c.json({ error: e?.message || "Failed to load Supabase usage summary" }, 500);
+  }
+});
+
+app.post(`${BASE}/api-center/supabase/sync`, requireAuth(), requirePlatform("write"), async (c) => {
+  try {
+    const force = c.req.query("force") === "1";
+    const result = await syncUsageSnapshot({ force });
+    if (!result.ok && result.reason === "not-configured") {
+      return c.json(result, 503);
+    }
+    if (!result.ok) return c.json(result, 502);
+    const user = c.get("rbacUser") as RbacUser;
+    await logAdminAction({
+      actorId: user.userId,
+      actorName: user.email || user.userId,
+      action: "SUPABASE_USAGE_SYNC",
+      targetId: "supabase",
+      targetEmail: result.snapshot?.orgSlug || "supabase",
+      details: `reason=${result.reason || "ok"} syncedAt=${result.snapshot?.syncedAt || ""}`,
+    }).catch(() => {});
+    return c.json(result);
+  } catch (e: any) {
+    return c.json({ ok: false, reason: "error", detail: e?.message || String(e) }, 500);
+  }
+});
+
+/** Hourly cron — Authorization via FLEET_CRON_SECRET / RIDES_CRON_SECRET */
+app.post(`${BASE}/api-center/supabase/sync-cron`, async (c) => {
+  try {
+    const secret = Deno.env.get("FLEET_CRON_SECRET") || Deno.env.get("RIDES_CRON_SECRET");
+    if (!secret) return c.json({ error: "Cron secret not configured" }, 503);
+    const hdr =
+      c.req.header("X-Fleet-Cron-Secret") ||
+      c.req.header("X-Rides-Cron-Secret") ||
+      c.req.header("Authorization")?.replace(/^Bearer\s+/i, "");
+    if (hdr !== secret) return c.json({ error: "Unauthorized" }, 401);
+    const result = await syncUsageSnapshot({ force: true });
+    return c.json(result, result.ok ? 200 : 502);
+  } catch (e: any) {
+    return c.json({ ok: false, reason: "error", detail: e?.message || String(e) }, 500);
+  }
+});
+
+app.get(`${BASE}/api-center/supabase/radar`, requireAuth(), requirePlatform("read"), async (c) => {
+  try {
+    const range = (c.req.query("range") || "24h").toLowerCase() === "7d" ? "7d" : "24h";
+    const radar = await buildRadar(range);
+    return c.json(radar);
+  } catch (e: any) {
+    return c.json({ error: e?.message || "Failed to build leak radar" }, 500);
+  }
+});
+
+app.get(`${BASE}/api-center/supabase/alerts`, requireAuth(), requirePlatform("read"), async (c) => {
+  try {
+    const alerts = await getAlertConfig();
+    return c.json({ alerts });
+  } catch (e: any) {
+    return c.json({ error: e?.message || "Failed to load alerts" }, 500);
+  }
+});
+
+app.put(`${BASE}/api-center/supabase/alerts`, requireAuth(), requirePlatform("write"), async (c) => {
+  try {
+    const user = c.get("rbacUser") as RbacUser;
+    const body = await c.req.json().catch(() => ({}));
+    const alerts = await saveAlertConfig(body || {}, user.email || user.userId);
+    return c.json({ alerts });
+  } catch (e: any) {
+    return c.json({ error: e?.message || "Failed to save alerts" }, 400);
+  }
 });
 
 export default app;

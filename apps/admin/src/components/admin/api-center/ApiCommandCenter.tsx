@@ -6,6 +6,7 @@ import { KeysTab } from './KeysTab';
 import { BudgetsTab } from './BudgetsTab';
 import { CallLogTab } from './CallLogTab';
 import { ProviderBillingTab } from './ProviderBillingTab';
+import { SupabasePlatformTab } from './SupabasePlatformTab';
 
 export interface ApiCommandCenterProps {
   activeTab?: string;
@@ -29,6 +30,7 @@ export function ApiCommandCenter({ activeTab = 'overview', onNavigate }: ApiComm
 
       {activeTab === 'overview' && <OverviewTab onNavigate={onNavigate} />}
       {activeTab === 'usage' && <UsageTab />}
+      {activeTab === 'supabase' && <SupabasePlatformTab />}
       {activeTab === 'keys' && <KeysTab />}
       {activeTab === 'budgets' && <BudgetsTab />}
       {activeTab === 'logs' && <CallLogTab />}

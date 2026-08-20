@@ -279,3 +279,146 @@ export function useRunBillingSync() {
     },
   });
 }
+
+// ---------------------------------------------------------------------------
+// Supabase Platform Usage
+// ---------------------------------------------------------------------------
+export type MeterStatus = 'ok' | 'warn' | 'critical' | 'unavailable';
+export type MeterUnit = 'gb' | 'count' | 'hours';
+
+export interface SupabaseUsageMeter {
+  key: string;
+  label: string;
+  unit: MeterUnit;
+  used: number | null;
+  included: number | null;
+  pct: number | null;
+  projected: number | null;
+  status: MeterStatus;
+  available: boolean;
+}
+
+export interface SupabaseUsageSnapshot {
+  syncedAt: string;
+  periodStart: string;
+  periodEnd: string;
+  projectRef: string;
+  orgSlug: string;
+  source: string;
+  meters: SupabaseUsageMeter[];
+  alertStatus: 'ok' | 'warn' | 'critical';
+  alertMessages: string[];
+}
+
+export interface SupabaseAlertConfig {
+  warnPct: number;
+  criticalPct: number;
+  invocationSpikeMult: number;
+  updatedAt?: string;
+  updatedBy?: string;
+}
+
+export interface SupabasePlatformSummary {
+  snapshot: SupabaseUsageSnapshot | null;
+  plan: { tier: string; included: Record<string, number>; orgSlug?: string };
+  alerts: SupabaseAlertConfig;
+  configured: boolean;
+}
+
+export interface RadarPathRow {
+  path: string;
+  requests: number;
+  classification: 'tiny' | 'heavy' | 'normal';
+  spike: boolean;
+  priorRequests: number;
+}
+
+export interface SupabaseRadar {
+  range: '24h' | '7d';
+  generatedAt: string;
+  rest: RadarPathRow[];
+  functions: RadarPathRow[];
+  notes: string[];
+}
+
+export function useSupabasePlatformSummary() {
+  const { session } = useAuth();
+  const token = session?.access_token;
+  return useQuery({
+    queryKey: ['api-center', 'supabase', 'summary', !!token],
+    enabled: !!token,
+    queryFn: async () => {
+      const res = await fetch(`${BASE}/supabase/summary`, { headers: authHeaders(token, false) });
+      return readJsonOrThrow(res) as Promise<SupabasePlatformSummary>;
+    },
+    staleTime: 30 * 1000,
+  });
+}
+
+export function useSyncSupabaseUsage() {
+  const { session } = useAuth();
+  const token = session?.access_token;
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (force = false) => {
+      const res = await fetch(`${BASE}/supabase/sync${force ? '?force=1' : ''}`, {
+        method: 'POST',
+        headers: authHeaders(token),
+      });
+      return readJsonOrThrow(res);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['api-center', 'supabase'] });
+    },
+  });
+}
+
+export function useSupabaseRadar(range: '24h' | '7d' = '24h') {
+  const { session } = useAuth();
+  const token = session?.access_token;
+  return useQuery({
+    queryKey: ['api-center', 'supabase', 'radar', range, !!token],
+    enabled: !!token,
+    queryFn: async () => {
+      const res = await fetch(`${BASE}/supabase/radar?range=${range}`, {
+        headers: authHeaders(token, false),
+      });
+      return readJsonOrThrow(res) as Promise<SupabaseRadar>;
+    },
+    staleTime: 60 * 1000,
+  });
+}
+
+export function useSupabaseAlerts() {
+  const { session } = useAuth();
+  const token = session?.access_token;
+  return useQuery({
+    queryKey: ['api-center', 'supabase', 'alerts', !!token],
+    enabled: !!token,
+    queryFn: async () => {
+      const res = await fetch(`${BASE}/supabase/alerts`, { headers: authHeaders(token, false) });
+      const body = await readJsonOrThrow(res);
+      return body.alerts as SupabaseAlertConfig;
+    },
+  });
+}
+
+export function useSaveSupabaseAlerts() {
+  const { session } = useAuth();
+  const token = session?.access_token;
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (patch: Partial<SupabaseAlertConfig>) => {
+      const res = await fetch(`${BASE}/supabase/alerts`, {
+        method: 'PUT',
+        headers: authHeaders(token),
+        body: JSON.stringify(patch),
+      });
+      const body = await readJsonOrThrow(res);
+      return body.alerts as SupabaseAlertConfig;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['api-center', 'supabase'] });
+    },
+  });
+}

@@ -5,7 +5,7 @@ export const PROVIDER_META: Record<Provider, { label: string; color: string; ico
   openai:      { label: 'OpenAI',       color: 'text-emerald-400', icon: Sparkles,     description: 'GPT-4o vision + chat for OCR, document parsing, toll parsing.' },
   gemini:      { label: 'Google AI',    color: 'text-sky-400',     icon: BrainCircuit, description: 'Gemini text/vision + Imagen for vehicle image generation.' },
   google_maps: { label: 'Google Maps',  color: 'text-amber-400',   icon: MapIcon,      description: 'Maps JS, Geocoding, Static Maps, Places.' },
-  supabase:    { label: 'Supabase',     color: 'text-teal-400',    icon: Database,     description: 'Storage, Edge Functions, service-role operations.' },
+  supabase:    { label: 'Supabase',     color: 'text-teal-400',    icon: Database,     description: 'Platform egress, storage, Edge Functions, and MAU quotas.' },
   uber:        { label: 'Uber',         color: 'text-slate-300',   icon: Car,          description: 'OAuth integration for driver/trip imports.' },
 };
 

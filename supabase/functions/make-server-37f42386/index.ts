@@ -18,6 +18,8 @@ import "../_fleet-server/driver_period_settlement.ts";
 import "../_fleet-server/fleet_admin_storage_routes.ts";
 import "../_fleet-server/fleet_sql_bridge.ts";
 import "../_fleet-server/fleet_select.ts";
+import "../_fleet-server/supabase_platform_usage.ts";
+import "../_fleet-server/api_command_center.tsx";
 import "../../../apps/fleet/src/utils/businessTransactionAccounting.ts";
 import "../../../apps/fleet/src/utils/fixedExpenseOccurrences.ts";
 import "../_fleet-server/index.tsx";

@@ -242,7 +242,10 @@ MATCHING_CRON_SECRET=
 # Supabase Management API (org-level — extremely sensitive, see finding 6)
 SUPABASE_PAT=
 SUPABASE_PROJECT_REF=
+SUPABASE_ORG_SLUG=
 ```
+
+`SUPABASE_PAT` is also used by **API Command Center → Supabase Platform** to pull org usage meters (`/platform/organizations/{slug}/usage`) and analytics leak-radar logs. Prefer a token with analytics/usage read (plus secrets write if you still use key rotation). Never expose it to the browser.
 
 ### Split environments — dev/staging/prod aren't separated today
 

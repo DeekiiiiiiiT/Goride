@@ -234,10 +234,12 @@ function ProviderCard({
 
       <div className="flex items-center justify-between px-4 py-3 mt-3 border-t border-slate-200 dark:border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900/60">
         <button
-          onClick={() => onNavigate?.('api-center-usage')}
+          onClick={() =>
+            onNavigate?.(provider === 'supabase' ? 'api-center-supabase' : 'api-center-usage')
+          }
           className="inline-flex items-center gap-1.5 text-[11px] font-medium text-slate-400 hover:text-amber-300 transition-colors"
         >
-          View usage <ArrowUpRight className="w-3 h-3" />
+          {provider === 'supabase' ? 'Platform usage' : 'View usage'} <ArrowUpRight className="w-3 h-3" />
         </button>
         <button
           onClick={() => onNavigate?.('api-center-budgets')}

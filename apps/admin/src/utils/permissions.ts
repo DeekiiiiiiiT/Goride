@@ -552,6 +552,7 @@ export const PAGE_PERMISSIONS: Record<string, DominionPageSensitivity> = {
   'api-center': 'standard',
   'api-center-overview': 'standard',
   'api-center-usage': 'standard',
+  'api-center-supabase': 'standard',
   'api-center-keys': 'standard',
   'api-center-budgets': 'standard',
   'api-center-logs': 'standard',
