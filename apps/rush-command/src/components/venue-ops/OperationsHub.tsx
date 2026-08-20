@@ -10,6 +10,7 @@ import StationToggles from './StationToggles';
 import OperationsHubAdminLinks from './OperationsHubAdminLinks';
 import OperationsHubTabletPairing from './OperationsHubTabletPairing';
 import OperationsHubTeamSummary from './OperationsHubTeamSummary';
+import PrepStationsPanel from './PrepStationsPanel';
 
 interface OperationsHubProps {
   merchantId: string;
@@ -96,6 +97,7 @@ export default function OperationsHub({
               onChange={handleStationsChange}
               disabled={isSaving}
             />
+            <PrepStationsPanel merchantId={merchantId} merchant={merchant} />
             {showAdminModules && (
               <OperationsHubAdminLinks onOpenRestaurantMgmt={() => onOpenRestaurantMgmt?.()} />
             )}

@@ -7,20 +7,7 @@ export type MerchantOpenCheckResult =
   | { ok: true }
   | { ok: false; status: 400 | 403 | 404 | 409; error: string };
 
-type Sb = {
-  from: (table: string) => {
-    select: (cols: string) => {
-      eq: (col: string, val: string) => {
-        maybeSingle: () => Promise<{ data: Record<string, unknown> | null; error: { message: string } | null }>;
-        order?: (col: string) => Promise<{ data: Record<string, unknown>[] | null; error: { message: string } | null }>;
-      } & {
-        gte?: (col: string, val: string) => {
-          lte: (col: string, val: string) => Promise<{ data: Record<string, unknown>[] | null; error: { message: string } | null }>;
-        };
-      };
-    };
-  };
-};
+const JAMAICA_TZ = "America/Jamaica";
 
 function parseTimeToMinutes(time: string): number {
   const [hours, minutes] = time.split(":").map(Number);
@@ -50,8 +37,69 @@ function todayDateString(now: Date): string {
   return `${y}-${m}-${d}`;
 }
 
+/** Calendar YYYY-MM-DD in America/Jamaica. */
+function jamaicaDateString(now: Date): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: JAMAICA_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now);
+}
+
+/** Start of Jamaica calendar day as ISO (Jamaica has no DST; UTC-5 year-round). */
+function jamaicaDayStartIso(now: Date): string {
+  return `${jamaicaDateString(now)}T00:00:00-05:00`;
+}
+
+async function assertDailyCapacity(
+  serviceSb: { from: (t: string) => any },
+  merchantId: string,
+  now: Date,
+): Promise<MerchantOpenCheckResult> {
+  const { data: settings, error: settingsErr } = await serviceSb
+    .from("merchant_settings")
+    .select("max_daily_capacity")
+    .eq("merchant_id", merchantId)
+    .maybeSingle();
+
+  if (settingsErr) {
+    return { ok: false, status: 400, error: settingsErr.message };
+  }
+
+  const raw = settings?.max_daily_capacity;
+  const cap = raw == null || raw === "" ? null : Number(raw);
+  if (cap == null || !Number.isFinite(cap) || cap <= 0) {
+    return { ok: true };
+  }
+
+  const dayStart = jamaicaDayStartIso(now);
+  // Count non-cancelled orders placed (or created) since Jamaica midnight
+  const { count, error: countErr } = await serviceSb
+    .from("orders")
+    .select("id", { count: "exact", head: true })
+    .eq("merchant_id", merchantId)
+    .neq("status", "cancelled")
+    .or(`placed_at.gte.${dayStart},and(placed_at.is.null,created_at.gte.${dayStart})`);
+
+  if (countErr) {
+    return { ok: false, status: 400, error: countErr.message };
+  }
+
+  if ((count ?? 0) >= Math.floor(cap)) {
+    return {
+      ok: false,
+      status: 409,
+      error: "This store has reached its order capacity for today",
+    };
+  }
+
+  return { ok: true };
+}
+
 /**
- * Rejects orders when merchant inactive, not accepting, on special closed day, or outside hours.
+ * Rejects orders when merchant inactive, not accepting, on special closed day, outside hours,
+ * or at max daily order capacity.
  * If no merchant_hours rows exist, hours check is skipped (legacy merchants) but accepting/active still enforced.
  */
 export async function assertMerchantAcceptingOrders(
@@ -108,7 +156,7 @@ export async function assertMerchantAcceptingOrders(
     ) {
       return { ok: false, status: 409, error: "This store is currently closed" };
     }
-    return { ok: true };
+    return assertDailyCapacity(serviceSb, merchantId, now);
   }
 
   const { data: hours } = await serviceSb
@@ -124,7 +172,7 @@ export async function assertMerchantAcceptingOrders(
   }>;
 
   if (hoursList.length === 0) {
-    return { ok: true };
+    return assertDailyCapacity(serviceSb, merchantId, now);
   }
 
   const day = now.getDay();
@@ -136,5 +184,5 @@ export async function assertMerchantAcceptingOrders(
     return { ok: false, status: 409, error: "This store is currently closed" };
   }
 
-  return { ok: true };
+  return assertDailyCapacity(serviceSb, merchantId, now);
 }

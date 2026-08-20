@@ -39,9 +39,9 @@
 | POS add note + Settings; notifications icon removed | Done |
 
 ### Explicit follow-ups
-1. **Capacity enforcement** — refuse/over-cap new orders when `max_daily_capacity` is set.
+1. ~~**Capacity enforcement**~~ — **Done 2026-08-20** (`assertMerchantAcceptingOrders` counts Jamaica-day non-cancelled orders vs `max_daily_capacity`; customer browse/checkout 409).
 2. **Full `rush-command` click-audit** — parity with Rush / Courier / Partner audits.
-3. **Prep-station kind UI** — API ready; add picker on venue-ops prep-station management screen when built.
+3. ~~**Prep-station kind UI**~~ — **Done 2026-08-20** (Operations Hub Prep Stations panel with Kitchen/Bar/Other).
 4. Labeled “coming soon” (Download Statement, Legal & Terms, Live Chat) — intentionally unchanged.
 
 ---
@@ -57,7 +57,7 @@ Orders queue regression (`POST /merchant/orders/.../status`) and payouts loop we
 ### Critical
 1. ~~Orders queue wrong endpoint~~ — **Done** (`useOrderStatusMutation` → `PUT /orders/{id}/status` + `actorType: 'merchant'`).
 2. ~~Bank/payout unreachable after first order~~ — **Done** (Settings + Earnings open `PayoutSetupSheet`).
-3. ~~Max daily capacity discarded~~ — **Done** (persisted). Enforcement follow-up open.
+3. ~~Max daily capacity discarded~~ — **Done** (persisted + enforced on customer `POST /orders` / browse).
 4. ~~Recipe / UOM (moved to Command)~~ — **Done** in `rush-command`.
 
 ### High
@@ -111,4 +111,4 @@ Phases 0–4 of the remediation plan shipped 2026-08-20. Remaining work is the *
 - `@roam/merchant-ops` subpath exports + CI smoke typecheck (`pnpm --filter @roam/rush-command typecheck`).
 
 ### Still recommended
-Schedule a dedicated full `rush-command` click-audit; add prep-station **kind** picker UI when that management screen exists.
+Schedule a dedicated full `rush-command` click-audit. Prep-station kind picker ships on Operations Hub (Kitchen / Bar / Other).

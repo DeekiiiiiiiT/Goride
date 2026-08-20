@@ -65,7 +65,7 @@ export default function KitchenQueuePage({
   const deviceSession = readDeviceSession();
   const prepStationId =
     prepStationIdProp ?? deviceSession?.prepStationId ?? null;
-  const { prepStations } = usePrepStations(merchant.id);
+  const { prepStations } = usePrepStations(merchant.id, merchant);
   const prepStationName = prepStationId
     ? prepStations.find((station) => station.id === prepStationId)?.name
     : null;

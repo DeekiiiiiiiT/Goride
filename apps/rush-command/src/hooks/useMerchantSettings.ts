@@ -336,11 +336,19 @@ export function useMerchantSettings(merchant: Merchant) {
 
   useEffect(() => {
     if (!serverSettings?.settings) return;
-    const { allows_pickup, allows_scheduled } = serverSettings.settings;
+    const { allows_pickup, allows_scheduled, max_daily_capacity } = serverSettings.settings as {
+      allows_pickup: boolean;
+      allows_scheduled: boolean;
+      max_daily_capacity?: number | null;
+    };
     setFormData((prev) => ({
       ...prev,
       acceptsPickup: allows_pickup,
       acceptsScheduled: allows_scheduled,
+      maxDailyCapacity:
+        max_daily_capacity != null && max_daily_capacity > 0
+          ? String(max_daily_capacity)
+          : prev.maxDailyCapacity,
     }));
 
     const migrated = localStorage.getItem(settingsMigratedKey(merchant.id));
@@ -357,6 +365,9 @@ export function useMerchantSettings(merchant: Merchant) {
     void saveMerchantSettings({
       allows_pickup: localExtras.acceptsPickup,
       allows_scheduled: localExtras.acceptsScheduled,
+      max_daily_capacity: localExtras.maxDailyCapacity
+        ? Number(localExtras.maxDailyCapacity) || null
+        : null,
     })
       .then(() => {
         localStorage.setItem(settingsMigratedKey(merchant.id), '1');
@@ -586,9 +597,11 @@ export function useMerchantSettings(merchant: Merchant) {
   };
 
   const saveDelivery = async () => {
+    const capacity = formData.maxDailyCapacity.trim();
     await saveMerchantSettings({
       allows_pickup: formData.acceptsPickup,
       allows_scheduled: formData.acceptsScheduled,
+      max_daily_capacity: capacity ? Number(capacity) || null : null,
     });
     localStorage.setItem(settingsMigratedKey(merchant.id), '1');
     localStorage.removeItem(deliveryExtrasKey(merchant.id));

@@ -7,6 +7,8 @@ import {
   updatePrepStation,
 } from '../lib/partner-api';
 import { readFlag } from '../lib/partner-feature-flags';
+import { canAccessRestaurantMgmt } from '../lib/merchant-capabilities';
+import type { Merchant } from '../hooks/useMerchant';
 import { FIXTURE_PREP_STATIONS, type PrepStation } from '../lib/venue-ops-presets';
 
 export const prepStationKeys = {
@@ -14,8 +16,9 @@ export const prepStationKeys = {
   merchant: (merchantId: string) => ['prep-stations', merchantId] as const,
 };
 
-export function usePrepStations(merchantId: string) {
-  const useApi = readFlag(merchantId, 'prepStationsV1');
+export function usePrepStations(merchantId: string, merchant?: Merchant | null) {
+  const useApi =
+    canAccessRestaurantMgmt(merchantId, merchant) || readFlag(merchantId, 'prepStationsV1');
   const queryClient = useQueryClient();
 
   const query = useQuery({
@@ -68,21 +71,21 @@ export function usePrepStations(merchantId: string) {
     isLoading: useApi && query.isLoading,
     updatePrepStation: (id: string, patch: { name?: string; sortOrder?: number; kind?: PrepStation['kind'] }) => {
       if (!useApi) {
-        toast.info('Enable prep stations preview to save changes');
+        toast.info('In-store operations is not enabled for this store');
         return;
       }
       updateMutation.mutate({ id, patch });
     },
     createPrepStation: (name: string, kind?: PrepStation['kind']) => {
       if (!useApi) {
-        toast.info('Enable prep stations preview to save changes');
+        toast.info('In-store operations is not enabled for this store');
         return;
       }
       createMutation.mutate({ name, kind });
     },
     deletePrepStation: (id: string) => {
       if (!useApi) {
-        toast.info('Enable prep stations preview to save changes');
+        toast.info('In-store operations is not enabled for this store');
         return;
       }
       deleteMutation.mutate(id);

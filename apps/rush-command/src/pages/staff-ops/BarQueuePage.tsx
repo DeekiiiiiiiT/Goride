@@ -34,7 +34,7 @@ export default function BarQueuePage({ merchant, staffName }: BarQueuePageProps)
   const showChannelBadge = hasCapability(merchant, CAPABILITY_IN_STORE);
   const restaurantSettings = useRestaurantSettings(merchant);
   const menuQuery = useMerchantMenu(merchant.id);
-  const { prepStations } = usePrepStations(merchant.id);
+  const { prepStations } = usePrepStations(merchant.id, merchant);
   const itemPrepLookup = useMemo(
     () => buildItemPrepStationLookup(menuQuery.data?.items ?? []),
     [menuQuery.data?.items],

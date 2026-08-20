@@ -258,6 +258,10 @@ export default function DeliverySettingsView({
               placeholder="No limit"
               className={inputClass}
             />
+            <p className="text-body-sm text-on-surface-variant">
+              When this limit is reached, customers cannot place new delivery orders until tomorrow.
+              In-store POS is not limited.
+            </p>
           </div>
         </section>
       </main>
